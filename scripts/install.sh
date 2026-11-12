@@ -120,9 +120,11 @@ if [ -n "$release_image" ]; then
   # From here the files on disk belong to this release until the run finishes, so backup and restore wait for that.
   rm -f .install-release
   # The image carries what a checkout holds for the install: migrations, database and gateway files, lib/install-env.mjs.
-  # The migrations are replaced, not merged, so a rolled-back release leaves none of its own to apply again.
+  # The migrations are replaced, not merged, so a rolled-back release leaves none of its own to apply again. The folder is
+  # emptied, never removed, and files are overwritten in place: the running db and gateway bind-mount these by inode, so a
+  # folder made anew would leave psql reading the old, deleted one.
   docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/install" "$release_image" \
-    sh -ec 'rm -rf /install/supabase/migrations; cp -R /app/install/. /install/'
+    sh -ec 'mkdir -p /install/supabase/migrations; find /install/supabase/migrations -mindepth 1 -delete; cp -R /app/install/. /install/'
 fi
 if [ ! -f .env.install ]; then
   docker run --rm -v "$PWD/lib:/code:ro" "$node_image" node /code/install-env.mjs generate > .env.install.tmp

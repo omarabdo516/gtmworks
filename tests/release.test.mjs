@@ -1,11 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, cpSync, rmSync, existsSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, cpSync, rmSync, existsSync, statSync, openSync, closeSync, fstatSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { load } from 'js-yaml';
-import { releaseCompose, releaseInstaller, writeReleaseAssets } from '../scripts/release-assets.mjs';
+import { releaseCompose, releaseInstaller, writeReleaseAssets, localDigest } from '../scripts/release-assets.mjs';
 
 // Every release publishes one tested image and a GitHub Release whose compose file and install script are all an
 // install needs (#49). The source install keeps building from a checkout until a later ticket switches it.
@@ -51,6 +51,19 @@ test('the release files are written together, resolving a digest once for each i
  assert.deepEqual(readdirSync(directory).sort(),['docker-compose.install.yml','install.sh']);
  assert.equal(readFileSync(join(directory,'docker-compose.install.yml'),'utf8'),releaseCompose(sourceCompose,app,digests));
  assert.equal(readFileSync(join(directory,'install.sh'),'utf8'),releaseInstaller(sourceInstaller,app));
+});
+
+test('a release can name a registry with a port, and pin images by the digests already pulled on the machine', () => {
+ const local='localhost:5000/gtmworks@sha256:'+'d'.repeat(64);
+ assert.match(releaseCompose(sourceCompose,local,digests),new RegExp(`image: ${local.replace(/[.]/g,'\\.')}\\n`));
+ assert.match(releaseInstaller(sourceInstaller,local),new RegExp(`^release_image=${local.replace(/[.]/g,'\\.')}$`,'m'));
+ assert.throws(()=>releaseCompose(sourceCompose,'gtmworks@sha256:'+'d'.repeat(64),digests),/digest/);
+ // The CI install test resolves from the images its install pulled: the repo digest for the image's own name.
+ const digest='sha256:'+'e'.repeat(64);
+ assert.equal(localDigest('supabase/postgres:17.6.1.136',['other/postgres@sha256:'+'f'.repeat(64),`supabase/postgres@${digest}`]),digest);
+ assert.equal(localDigest('nginx:1.28.0-alpine',[`nginx@${digest}`]),digest);
+ assert.throws(()=>localDigest('nginx:1.28.0-alpine',[]),/nginx/);
+ assert.throws(()=>localDigest('nginx:1.28.0-alpine',[`nginx@${digest}`,'nginx@sha256:'+'f'.repeat(64)]),/nginx/);
 });
 
 test('the release install script is the source installer with the released image set, and nothing else', () => {
@@ -251,6 +264,69 @@ test('a release install backs up and restores only with the files of the release
  assert.equal(updated.status,0,updated.stderr);
  assert.equal(release.installed(),`${next}\n`);
  assert.equal(release.run('backup').status,0);
+});
+
+test('a release update replaces the mounted install files in place, so the running database and gateway see them', t => {
+ const release=releaseDirectory(t);
+ assert.equal(release.run().status,0);
+ // The running db and gateway containers hold bind mounts of these: the folder and each file, by inode. A folder or file
+ // made anew would be invisible to them, and psql would read the old, deleted migrations folder before compose up.
+ const mounted=Object.values(load(sourceCompose).services).flatMap(service=>service.volumes||[])
+  .map(volume=>volume.split(':')[0]).filter(source=>source.startsWith('./')).map(source=>source.slice(2));
+ assert.ok(mounted.includes('supabase/migrations')&&mounted.includes('scripts/install-nginx.conf'));
+ // Held open like a bind mount holds them, so a deleted inode cannot be reused, and read back through that handle: what
+ // the running container sees.
+ const held=Object.fromEntries(mounted.map(path=>[path,openSync(join(release.directory,path),'r')]));
+ t.after(()=>Object.values(held).forEach(fd=>closeSync(fd)));
+ const seen=path=>`/proc/self/fd/${held[path]}`;
+ const inodes=()=>Object.fromEntries(mounted.map(path=>[path,statSync(join(release.directory,path)).ino]));
+ const before=Object.fromEntries(mounted.map(path=>[path,fstatSync(held[path]).ino]));
+ assert.deepEqual(inodes(),before);
+ const nextRoot=mkdtempSync(join(tmpdir(),'gtmworks-next-image-'));
+ t.after(()=>rmSync(nextRoot,{recursive:true,force:true}));
+ cpSync(release.imageRoot,nextRoot,{recursive:true});
+ writeFileSync(join(nextRoot,'supabase/migrations/99999999999999_next.sql'),'select 1;');
+ writeFileSync(join(nextRoot,'scripts/install-nginx.conf'),'# next gateway\n');
+ const next=app.replace(/a{64}$/,'c'.repeat(64));
+ release.use(next);
+ const updated=release.runWith({IMAGE_ROOT:nextRoot},'update');
+ assert.equal(updated.status,0,updated.stderr);
+ assert.deepEqual(inodes(),before);
+ assert.ok(readdirSync(seen('supabase/migrations')).includes('99999999999999_next.sql'));
+ assert.equal(readFileSync(seen('scripts/install-nginx.conf'),'utf8'),'# next gateway\n');
+ // Rolling back empties the same folder of the next release's migrations.
+ release.use(app);
+ assert.equal(release.run('update').status,0);
+ assert.deepEqual(inodes(),before);
+ assert.equal(readdirSync(seen('supabase/migrations')).includes('99999999999999_next.sql'),false);
+ assert.ok(readdirSync(seen('supabase/migrations')).length>0);
+});
+
+test('CI updates a release install on a real database, applying a new migration through the running bind mount', () => {
+ const install=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install;
+ const source=install.steps.findIndex(step=>step.env?.INSTALL_REF);
+ const index=install.steps.findIndex(step=>/release install and update/.test(step.name||''));
+ assert.ok(source>=0&&index>source,'runs after the source install checks, which it leaves unchanged');
+ const step=install.steps[index];
+ assert.equal(step.env.DOCKER_HOST,'tcp://127.0.0.1:2375');
+ const run=step.run;
+ for(const pattern of [
+  /compose down -v \|\| fail/,
+  /registry:2\.8\.3/,
+  /docker tag gtmworks-local:237 localhost:5000\/gtmworks:0\.0\.0-ci/,
+  // The next release carries one migration more, which the update must read through the running db's /migrations.
+  /FROM gtmworks-local:237\nRUN echo .*> \/app\/install\/supabase\/migrations\/99999999999998_release_update_probe\.sql/,
+  /node scripts\/release-assets\.mjs "\$first" release-first --local-digests/,
+  /node scripts\/release-assets\.mjs "\$next" release-next --local-digests/,
+  /\[\[ \$\(ls -A "\$dir" \| wc -l\) == 2 \]\]/,
+  /sh "\$dir\/install\.sh" \|\| fail 'release install'/,
+  /sh "\$dir\/install\.sh" update \|\| fail 'release update'/,
+  /to_regclass\('gtmworks_install\.release_update_probe'\)/,
+  /exec -T db ls \/migrations/,
+  /\.install-release/,
+  /\/api\/health \/sign-in/,
+ ]) assert.match(run,pattern);
+ assert.ok(run.indexOf("update || fail 'release update'")>run.indexOf("|| fail 'release install'"));
 });
 
 test('the source installer still builds from its checkout', () => {

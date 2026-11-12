@@ -6,7 +6,8 @@ import { pathToFileURL } from 'node:url';
 // The two files a release install needs (#49): the install compose file with every image pinned by digest and the
 // app image set to the released one, and the source installer with that image named, which turns on its release mode.
 const digestPattern = /^sha256:[a-f0-9]{64}$/;
-const appPattern = /^[a-z0-9][a-z0-9._/-]*(:[\w.-]+)?@sha256:[a-f0-9]{64}$/;
+// A registry host, optionally with a port (CI's local registry is localhost:5000), then the repository path.
+const appPattern = /^[a-z0-9][a-z0-9._-]*(:\d+)?(\/[a-z0-9._-]+)+(:[\w.-]+)?@sha256:[a-f0-9]{64}$/;
 const localApp = /^gtmworks-local:/;
 const imageLine = /^(\s*image:\s*)(\S+)\s*$/;
 
@@ -53,6 +54,19 @@ function resolveDigest(image) {
  return manifest.digest;
 }
 
+// The digest an image was pulled by on this machine, from its RepoDigests: CI's install test pins the images its own
+// install already pulled, with no registry query.
+export function localDigest(image, repoDigests) {
+ const name = image.replace(/:[^/:]+$/, '');
+ const found = [...new Set((repoDigests || []).filter(entry => entry.startsWith(`${name}@`)).map(entry => entry.slice(name.length + 1)))];
+ if (found.length !== 1 || !digestPattern.test(found[0])) throw new Error(`${image} has no single pulled digest: ${found.join(', ')}`);
+ return found[0];
+}
+
+function resolveLocalDigest(image) {
+ return localDigest(image, JSON.parse(execFileSync('docker', ['image', 'inspect', '--format', '{{json .RepoDigests}}', image], { encoding: 'utf8' })));
+}
+
 export function writeReleaseAssets(app, directory, resolve = resolveDigest) {
  const compose = readFileSync('docker-compose.install.yml', 'utf8');
  const unpinned = [...new Set(compose.split('\n').map(line => imageLine.exec(line)?.[2])
@@ -64,10 +78,10 @@ export function writeReleaseAssets(app, directory, resolve = resolveDigest) {
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
- const [app, directory] = process.argv.slice(2);
- if (!app || !directory) {
-  console.error('usage: node scripts/release-assets.mjs <image>:<tag>@sha256:<digest> <directory>');
+ const [app, directory, option] = process.argv.slice(2);
+ if (!app || !directory || (option && option !== '--local-digests')) {
+  console.error('usage: node scripts/release-assets.mjs <image>:<tag>@sha256:<digest> <directory> [--local-digests]');
   process.exit(2);
  }
- writeReleaseAssets(app, directory);
+ writeReleaseAssets(app, directory, option ? resolveLocalDigest : resolveDigest);
 }
