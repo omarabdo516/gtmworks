@@ -263,6 +263,8 @@ test('on a narrow screen the sidebar collapses behind the menu button and slides
  // While open it holds the keyboard: focus starts inside it, and Tab and Shift+Tab wrap inside it.
  const inside=()=>page.evaluate(()=>!!document.activeElement?.closest('.sidebar'));
  expect(await inside()).toBe(true);
+ // The page behind the open drawer is inert, so assistive technology does not reach it either.
+ await expect(page.locator('.app-content')).toHaveJSProperty('inert',true);
  const count=await sidebar.locator('a[href],button:not([disabled])').count();
  for(let step=0;step<count+2;step++) { await page.keyboard.press('Tab'); expect(await inside(),`Tab ${step}`).toBe(true); }
  for(let step=0;step<count+2;step++) { await page.keyboard.press('Shift+Tab'); expect(await inside(),`Shift+Tab ${step}`).toBe(true); }
@@ -270,6 +272,7 @@ test('on a narrow screen the sidebar collapses behind the menu button and slides
  await page.keyboard.press('Escape');
  await expect(sidebar).toBeHidden();
  await expect(page.locator('.mobile-menu')).toBeFocused();
+ await expect(page.locator('.app-content')).toHaveJSProperty('inert',false);
  // Tapping the scrim closes it and also gives focus back; following a link closes it on the new page.
  await page.locator('.mobile-menu').click();
  await page.locator('.scrim').click({position:{x:380,y:450}});
