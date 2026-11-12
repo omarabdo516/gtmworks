@@ -8,7 +8,7 @@ export async function approvalQueue(db:Awaited<ReturnType<typeof supabase>>,comp
  const steps=(stepResult.data || []) as Step[];
  const cards=(waitingResult.data || []).filter(card=>{
   const step=steps.find(step=>step.id===card.approval_step_id);
-  return step && ['owner','manager','reviewer'].includes(role) && (step.person_id===person || (!step.person_id && step.role===role));
+  return step && ['owner','manager'].includes(role) && (step.person_id===person || (!step.person_id && step.role===role));
  }) as ApprovalCard[];
  return {steps,cards,available:!stepResult.error&&!waitingResult.error};
 }

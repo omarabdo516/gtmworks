@@ -16,7 +16,7 @@ function AgentPicker({name,label,choices,onChange}:{name:string,label:string,cho
   </DropdownMenuRadioGroup></DropdownMenuContent>
  </DropdownMenu></>;
 }
-export default function CompanyHermesAgents({company,slug,agency,initial,connections}:{company:string,slug:string,agency:boolean,initial:Agent[],connections:Connection[]}) {
+export default function CompanyHermesAgents({company,slug,owner,initial,connections}:{company:string,slug:string,owner:boolean,initial:Agent[],connections:Connection[]}) {
  const {t}=useI18n(); const [agents,setAgents]=useState(initial); const [error,setError]=useState(''); const [sharing,setSharing]=useState(false); const [pending,setPending]=useState(false); const [profileChosen,setProfileChosen]=useState(false);
  async function submit(event:FormEvent<HTMLFormElement>) {
   event.preventDefault(); const form=event.currentTarget; const fields=Object.fromEntries([...new FormData(form)].filter(([,value])=>value!==''));
@@ -33,13 +33,13 @@ export default function CompanyHermesAgents({company,slug,agency,initial,connect
   {error&&<p role="alert">{t(error)}</p>}
   <div className="detail-rows">{agents.length===0?<p className="empty">{t('noAgentsYet')}</p>:agents.map(agent=><div className="detail-row flex-wrap" key={agent.id}>
    <div className="flex flex-1 items-center gap-3"><AgentFace id={agent.connection_id} role="account_manager" name={agent.name}/><div className="agent-row-main"><strong dir="auto" className="break-words">{agent.name}</strong><p dir="auto">{agent.speciality}</p>{agent.is_default&&<p>{t('hermesDefaultAgent')}</p>}</div></div>
-   {agency&&<div className="stack w-full sm:w-auto">{!agent.is_default&&<form onSubmit={submit}><input type="hidden" name="agent" value={agent.id}/><input type="hidden" name="intent" value="default"/><button className="button" disabled={pending}>{t('hermesMakeDefault')}</button></form>}
+   {owner&&<div className="stack w-full sm:w-auto">{!agent.is_default&&<form onSubmit={submit}><input type="hidden" name="agent" value={agent.id}/><input type="hidden" name="intent" value="default"/><button className="button" disabled={pending}>{t('hermesMakeDefault')}</button></form>}
     <form onSubmit={submit} className="agent-webhook-form"><input type="hidden" name="agent" value={agent.id}/><input type="hidden" name="intent" value="remove"/>
      {agent.is_default&&agents.length>1&&<div><p>{t('hermesNextDefault')}</p><AgentPicker name="replacement" label={t('hermesNextDefault')} choices={agents.filter(next=>next.id!==agent.id).map(next=>({id:next.id,name:next.name,faceId:next.connection_id}))}/></div>}
      <button className="button" disabled={pending} aria-label={t('hermesRemoveAgentNamed',agent.name)}>{t('hermesRemoveAgent')}</button>
     </form></div>}
   </div>)}</div>
-  {agency&&<>{connections.length?<form key={agents.map(agent=>agent.id).join(':')} className="agent-webhook-form" onSubmit={submit}>
+  {owner&&<>{connections.length?<form key={agents.map(agent=>agent.id).join(':')} className="agent-webhook-form" onSubmit={submit}>
    <input type="hidden" name="intent" value="attach"/>
    <div><p>{t('hermesConnectedProfile')}</p><AgentPicker name="connection" label={t('hermesConnectedProfile')} choices={connections.map(connection=>({id:connection.id,name:`${connection.profile} — ${connection.address}`,faceId:connection.id}))} onChange={()=>{setProfileChosen(true);setSharing(false);setError('');}}/></div>
    <label>{t('hermesAgentName')}<input className="field" name="name" dir="auto" maxLength={100} required/></label>

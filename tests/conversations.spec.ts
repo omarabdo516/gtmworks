@@ -2,28 +2,15 @@ import { test, expect, type Page, type Request } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { fakeHermes } from './fake-hermes.mjs';
 import { execFileSync } from 'node:child_process';
-import { createHmac } from 'node:crypto';
 import { signIn } from './sign-in';
 import { createClient } from '@supabase/supabase-js';
 import { closeOpenRuns } from '../lib/conversation-runs.mjs';
 
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
-function totp(secret:string) {
- const bits=[...secret.toUpperCase()].map(character=>'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'.indexOf(character).toString(2).padStart(5,'0')).join('');
- const key=Buffer.from(bits.match(/.{8}/g)!.map(byte=>parseInt(byte,2)));
- const counter=Buffer.alloc(8); counter.writeBigUInt64BE(BigInt(Math.floor(Date.now()/30000)));
- const digest=createHmac('sha1',key).update(counter).digest();
- return String((digest.readUInt32BE(digest[19]&15)&0x7fffffff)%1000000).padStart(6,'0');
-}
-// Omar signs in and enrols an authenticator, so the session has Agency access (two-step verified).
-async function agencySignIn(page:Page) {
- query(`delete from auth.mfa_factors where user_id='20000000-0000-0000-0000-000000000001'`);
+// Omar signs in as the Owner of RS Learning, who connects and attaches its agents.
+async function ownerSignIn(page:Page) {
  query(`update public.people set language='en' where id='20000000-0000-0000-0000-000000000001'`);
- await signIn(page,'omar@example.com','/all-brands');
- await page.getByRole('button',{name:'Set up authenticator'}).click();
- await page.getByLabel('Verification code').fill(totp((await page.locator('code').textContent())!));
- await page.getByRole('button',{name:'Verify',exact:true}).click();
- await expect(page.locator('.company-card')).toHaveCount(3);
+ await signIn(page,'omar@example.com','/c/rs-learning/home');
 }
 
 const company='10000000-0000-0000-0000-000000000001';
@@ -55,13 +42,13 @@ function detach(agents:Record<string,{id:string,connection:string}>) {
 test.use({actionTimeout:15000});
 const send=(page:Page,data:object)=>page.request.post('/api/conversations',{data:{company,...data}});
 
-test('An Agency person starts a private conversation from the board and from Home, and the reply arrives without a reload',async({page})=>{
+test('The Owner starts a private conversation from the board and from Home, and the reply arrives without a reload',async({page})=>{
  test.setTimeout(120000);
  const fake=await fakeHermes(); fake.settings.key=`hermes-key-${randomUUID()}`; fake.settings.pendingReads=2;
  let agents={};
  const responses:Promise<string>[]=[];
  try {
-  await agencySignIn(page); agents=await attachAgents(page,fake);
+  await ownerSignIn(page); agents=await attachAgents(page,fake);
   const {Nour,Mona}=agents as Record<string,{profile:string}>;
   // Only finished requests: a still-open stream (the dev server's or a prefetch) has no complete body to read.
   const record=(request:Request)=>{responses.push(request.response().then(response=>response?response.text():'').catch(()=>''));};
@@ -105,7 +92,7 @@ test('An Agency person starts a private conversation from the board and from Hom
 test('integration: the same send runs once, and the record is append-only and names who wrote each message',async({page})=>{
  const fake=await fakeHermes(); let agents={};
  try {
-  await agencySignIn(page); agents=await attachAgents(page,fake);
+  await ownerSignIn(page); agents=await attachAgents(page,fake);
   const {Mona}=agents as Record<string,{id:string,profile:string}>;
   const conversation=randomUUID(); const message={conversation,agent:Mona.id,message:'Write the teaser',sendKey:randomUUID()};
   expect((await send(page,message)).status()).toBe(200);
@@ -132,7 +119,7 @@ test('isolation: another member and another company get not found, and a company
  test.setTimeout(120000);
  const fake=await fakeHermes(); let agents={};
  try {
-  await agencySignIn(page); agents=await attachAgents(page,fake);
+  await ownerSignIn(page); agents=await attachAgents(page,fake);
   const conversation=randomUUID();
   expect((await send(page,{conversation,message:'Private plan',sendKey:randomUUID()})).status()).toBe(200);
   expect((await page.request.get(`/api/conversations?company=${other}&conversation=${conversation}`)).status()).toBe(404);
@@ -151,14 +138,14 @@ test('isolation: another member and another company get not found, and a company
  } finally { detach(agents); await fake.close(); }
 });
 
-// #287: a Contributor (no Agency access) talks to the company's agent, whose Connection an Agency owner attached.
+// #287: a Contributor talks to the company's agent, whose Connection the company's Owner attached.
 test('A Contributor starts a conversation and gets the reply; nobody else reads it',async({page,browser})=>{
  test.setTimeout(120000);
  const fake=await fakeHermes(); fake.settings.key=`hermes-key-${randomUUID()}`; let agents={};
  const contributor='20000000-0000-0000-0000-000000000005';
  query(`update public.members set role='contributor' where company_id='${company}' and person_id='${contributor}'`);
  try {
-  await agencySignIn(page); agents=await attachAgents(page,fake);
+  await ownerSignIn(page); agents=await attachAgents(page,fake);
   const {Mona}=agents as Record<string,{profile:string}>;
   const context=await browser.newContext(); const member=await context.newPage();
   try {
@@ -176,18 +163,18 @@ test('A Contributor starts a conversation and gets the reply; nobody else reads 
    await expect(member.getByLabel('Message',{exact:true})).toBeVisible();
    expect(fake.settings.runs.map(run=>run.session)).toEqual([conversation]);
    expect(fake.settings.requests.filter(request=>request.method==='POST').at(-1)!.path).toBe(`/p/${Mona.profile}/v1/runs`);
-   // The company's Owner (Omar here, with Agency access too) cannot read it.
+   // The company's Owner (Omar here) cannot read it.
    expect((await page.request.get(`/api/conversations?company=${company}&conversation=${conversation}`)).status()).toBe(404);
    expect((await page.goto(`/c/rs-learning/conversations/${conversation}`))!.status()).toBe(404);
   } finally { await context.close(); }
- } finally { query(`update public.members set role='reviewer' where company_id='${company}' and person_id='${contributor}'`); detach(agents); await fake.close(); }
+ } finally { query(`update public.members set role='contributor' where company_id='${company}' and person_id='${contributor}'`); detach(agents); await fake.close(); }
 });
 
 test('A Viewer has no composer and the server refuses their message',async({page,browser})=>{
  test.setTimeout(120000);
  const fake=await fakeHermes(); let agents={};
  try {
-  await agencySignIn(page); agents=await attachAgents(page,fake);
+  await ownerSignIn(page); agents=await attachAgents(page,fake);
   const context=await browser.newContext(); const viewer=await context.newPage();
   try {
    await signIn(viewer,'viewer@example.com','/c/rs-learning/home');
@@ -217,7 +204,7 @@ test('Closing the page mid-reply and reopening the conversation shows the comple
  test.setTimeout(120000);
  const fake=await fakeHermes(); fake.settings.key=`hermes-key-${randomUUID()}`; fake.settings.pendingReads=1e9; let agents={};
  try {
-  await agencySignIn(page); agents=await attachAgents(page,fake);
+  await ownerSignIn(page); agents=await attachAgents(page,fake);
   await page.goto('/c/rs-learning/home');
   await page.locator('.nav').getByRole('button',{name:'New',exact:true}).click();
   const dialog=page.getByRole('dialog',{name:'New conversation'});
@@ -241,7 +228,7 @@ test('Closing the page mid-reply and reopening the conversation shows the comple
 test('integration: after gtmworks restarts during a run, the reconciler completes the record from Hermes once',async({page})=>{
  const fake=await fakeHermes(); fake.settings.pendingReads=1e9; let agents={};
  try {
-  await agencySignIn(page); agents=await attachAgents(page,fake);
+  await ownerSignIn(page); agents=await attachAgents(page,fake);
   const conversation=randomUUID(); const reconcile=reconciler();
   expect((await send(page,{conversation,message:'Write the long report',sendKey:randomUUID()})).status()).toBe(200);
   expect(await reconcile(conversation)).toBe(0);
@@ -260,7 +247,7 @@ test('integration: after gtmworks restarts during a run, the reconciler complete
 test('integration: a run unknown to Hermes is recorded as lost and the conversation accepts a new message',async({page})=>{
  const fake=await fakeHermes(); fake.settings.pendingReads=1e9; let agents={};
  try {
-  await agencySignIn(page); agents=await attachAgents(page,fake);
+  await ownerSignIn(page); agents=await attachAgents(page,fake);
   const conversation=randomUUID();
   expect((await send(page,{conversation,message:'First try',sendKey:randomUUID()})).status()).toBe(200);
   // Hermes forgets the run: it now answers not found for it.
@@ -285,7 +272,7 @@ test('With Hermes unreachable, sending keeps the text in the composer and says s
  test.setTimeout(120000);
  const fake=await fakeHermes(); let agents={};
  try {
-  await agencySignIn(page); agents=await attachAgents(page,fake);
+  await ownerSignIn(page); agents=await attachAgents(page,fake);
   const conversation=randomUUID();
   expect((await send(page,{conversation,message:'Before the outage',sendKey:randomUUID()})).status()).toBe(200);
   await expect.poll(()=>agentRows(conversation).length,{timeout:30000}).toBe(1);

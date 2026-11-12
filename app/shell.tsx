@@ -20,14 +20,14 @@ import { SidebarSection } from '@/components/paperclip/SidebarSection';
 import { Search, House, Inbox, Columns3, Folder, Repeat, Target, Library, Send, Users, ChartColumn, Lightbulb, Bot, Sparkles, Unplug, History, Settings, MessagesSquare } from 'lucide-react';
 type Company = {id:string,slug:string,name:string};
 const icons={search:Search,home:House,approvals:Inbox,'work/board':Columns3,projects:Folder,recurring:Repeat,campaigns:Target,library:Library,publishing:Send,sales:Users,performance:ChartColumn,strategy:Lightbulb,agents:Bot,skills:Sparkles,connections:Unplug,history:History,settings:Settings};
-export default async function Shell({company,companies,section,title,crumbs,personName,role,agency,children,approvalCount=0,cardId}:{company?:Company,companies:Company[],section:string,title:string,crumbs?:Crumb[],personName:string,role:string,agency:boolean,children:ReactNode,approvalCount?:number,cardId?:number}) { const {t,theme}=await getI18n();
+export default async function Shell({company,companies,section,title,crumbs,personName,role,children,approvalCount=0,cardId}:{company?:Company,companies:Company[],section:string,title:string,crumbs?:Crumb[],personName:string,role:string,children:ReactNode,approvalCount?:number,cardId?:number}) { const {t,theme}=await getI18n();
  const slug=company?.slug;
  function item([path,label]:readonly [string,string]) {
   const active=path==='work/board'?section.startsWith('work/')&&section!=='work/new':path==='settings'?section.startsWith('settings'):section===path;
   const Icon=icons[path as keyof typeof icons];
   return <SidebarNavItem key={path} active={active} href={`/c/${slug}/${path}`} icon={<Icon className="icon h-4 w-4" aria-hidden="true"/>} badge={path==='approvals'?approvalCount:undefined}>{t(label)}</SidebarNavItem>;
  }
- const sidebar=<aside className="sidebar"><div className="brand">gtm<span>works</span></div>{company&&<div className="switch-wrap"><Switcher companies={companies} slug={section==='all-brands'?'':company.slug} agency={agency} section={section==='all-brands'?'home':section}/></div>}<nav className="nav" aria-label={t('mainNavigation')}>{slug&&<>
+ const sidebar=<aside className="sidebar"><div className="brand">gtm<span>works</span></div>{company&&<div className="switch-wrap"><Switcher companies={companies} slug={company.slug} section={section}/></div>}<nav className="nav" aria-label={t('mainNavigation')}>{slug&&<>
   <div className="nav-primary">{company?.id&&<NewConversation slug={slug} company={company.id}/>}{primaryNav.map(item)}</div>
   {navGroups.map(group=><SidebarSection key={group.label} label={t(group.label)}>{group.items.map(item)}</SidebarSection>)}
   <SidebarSection label={t('agents')}><Link href={`/c/${slug}/agents`}><MessagesSquare className="icon h-4 w-4" aria-hidden="true"/>{t('companyChat')}</Link>{roleAgents.map(agent=><Link key={agent.key} className="role-agent" aria-label={t(agent.name)} href={`/c/${slug}/agents`}><AgentRoleFace agent={agent}/>{t(agent.name)}</Link>)}</SidebarSection>

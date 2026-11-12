@@ -16,11 +16,12 @@ test('UI source uses the glossary term for cards', () => {
  }
 });
 
-test('card creation allows editing roles or full agency access', async () => {
+test('card creation allows editing roles only', async () => {
  const {canCreateCard}=await import('../lib/card-permissions.mjs');
- for(const role of ['owner','manager','contributor']) assert.equal(canCreateCard({role,agencyAccess:false}),true,role);
- for(const role of ['reviewer','viewer','unknown','',undefined]) assert.equal(canCreateCard({role,agencyAccess:false}),false,role);
- for(const role of ['owner','manager','contributor','reviewer','viewer','unknown','',undefined]) assert.equal(canCreateCard({role,agencyAccess:true}),true,role);
+ for(const role of ['owner','manager','contributor']) assert.equal(canCreateCard({role}),true,role);
+ for(const role of ['reviewer','viewer','unknown','',undefined]) assert.equal(canCreateCard({role}),false,role);
+ // The removed Agency access (ADR 0012) grants nothing: only the Role decides.
+ for(const role of ['viewer','unknown','',undefined]) assert.equal(canCreateCard(/** @type {any} */({role,agencyAccess:true})),false,role);
 });
 
 test('app motion contains no broad transitions or page entrance animations', () => {
@@ -28,9 +29,10 @@ test('app motion contains no broad transitions or page entrance animations', () 
   assert.doesNotMatch(readFileSync(`app/${file}`, 'utf8'), /transition\s*:\s*all\b|work-enter|work-in|view-transition|420ms|veil-out|card-close|modal-wrap\.closing/, file);
  }
 });
-test('the five roles and independent grants are documented', () => {
+test('the four roles and independent grants are documented', () => {
  const glossary=readFileSync('GLOSSARY.md','utf8');
- for(const value of ['Owner, Manager, Contributor, Reviewer, or Viewer','publishing, money figures, or customer data']) assert.ok(glossary.includes(value));
+ assert.ok(!/reviewer/i.test(glossary),'the reviewer Role is gone');
+ for(const value of ['Owner, Manager, Contributor, or Viewer','publishing, money figures, or customer data']) assert.ok(glossary.includes(value));
 });
 test('schema prevents contributor and viewer approval', () => {
  const sql=readFileSync('supabase/migrations/20261104000000_foundation.sql','utf8');

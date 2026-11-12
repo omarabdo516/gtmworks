@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { firstRunInput } from '../lib/first-run-input.mjs';
 
 test('first-run accepts authored names and the chosen language, ignoring extra fields', () => {
- assert.deepEqual(firstRunInput(new FormDataBuilder({name:' عمر ',email:' OWNER@example.com ',company:' الشركة الأولى ',language:'ar',agency_owner:'false'})),
+ assert.deepEqual(firstRunInput(new FormDataBuilder({name:' عمر ',email:' OWNER@example.com ',company:' الشركة الأولى ',language:'ar',role:'viewer'})),
   {name:'عمر',email:'owner@example.com',company:'الشركة الأولى',language:'ar'});
 });
 test('first-run refuses invalid or unbounded input before provisioning', () => {

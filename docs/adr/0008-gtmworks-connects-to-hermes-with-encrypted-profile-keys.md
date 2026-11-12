@@ -8,6 +8,8 @@ Partly superseded by [ADR 0009](0009-conversations-run-on-engines-behind-one-eng
 
 Omar's direction change on #184 (2026-11-09), approved ticket #241 (2026-11-11), supersedes the runtime-neutral dispatch direction in ADR 0006/0007. gtmworks is self-hosted beside Hermes and runs no model or agent engine.
 
+Partly superseded by [ADR 0012](0012-no-agency-layer-the-company-owner-manages-the-company.md) (#7): every Agency owner below is now the Company's Owner, with no two-step verification, and a Connection's `agency_owner_id` is `owner_id`.
+
 - An Agency owner, after two-step verification, connects an HTTP(S) address, profile and bearer key. Private and loopback addresses are allowed. Redirects are not followed with a key.
 - Hermes keys are not model credentials. They are encrypted with AES-256-GCM using the install's existing `WEBHOOK_ENCRYPTION_KEY`; the web server decrypts only to call Hermes. Backups require that encryption key. No saved key, suffix, ciphertext or remote error body is returned or logged.
 - All outgoing Hermes API calls belong in `lib/hermes.mjs`. Connect and Test connection read `/p/<profile>/v1/capabilities` and `/p/<profile>/health` (the version source; capabilities has no version, as verified in the installed Hermes API server source). Only the live-checked v0.23.0 contract is enabled; other or missing versions fail closed with an untested-version state and no offered agent features.

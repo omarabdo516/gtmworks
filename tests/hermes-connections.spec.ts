@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
-import { createHmac, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fakeHermes } from './fake-hermes.mjs';
 import { signIn } from './sign-in';
@@ -11,29 +11,16 @@ const owner='20000000-0000-0000-0000-000000000001';
 const endpoint='/api/hermes-connections';
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const rows=(sql:string)=>JSON.parse(query(sql));
-function totp(secret:string) {
- const bits=[...secret.toUpperCase()].map(character=>'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'.indexOf(character).toString(2).padStart(5,'0')).join('');
- const key=Buffer.from(bits.match(/.{8}/g)!.map(byte=>parseInt(byte,2)));
- const counter=Buffer.alloc(8); counter.writeBigUInt64BE(BigInt(Math.floor(Date.now()/30000)));
- const digest=createHmac('sha1',key).update(counter).digest();
- return String((digest.readUInt32BE(digest[19]&15)&0x7fffffff)%1000000).padStart(6,'0');
-}
-
-async function signInAgency(page:Page) {
- query(`delete from auth.mfa_factors where user_id='${owner}'`);
+// Omar is RS Learning's Owner, so he manages its agent engine with no extra step.
+async function signInOwner(page:Page) {
  query(`update public.people set language='en' where id='${owner}'`);
- await signIn(page,'omar@example.com','/all-brands');
- await page.getByRole('button',{name:'Set up authenticator'}).click();
- await page.getByLabel('Verification code').fill(totp((await page.locator('code').textContent())!));
- await page.getByRole('button',{name:'Verify',exact:true}).click();
- await expect(page.locator('.company-card')).toHaveCount(3);
- await page.goto('/c/rs-learning/settings/agents');
+ await signIn(page,'omar@example.com','/c/rs-learning/settings/agents');
 }
 
 test('saving a public HTTP Hermes connection requires HTTPS without contacting Hermes',async({page})=>{
  const fake=await fakeHermes(); const profile=`blocked-${randomUUID()}`;
  try {
-  await signInAgency(page);
+  await signInOwner(page);
   for(const language of ['en','ar'] as const) {
    query(`update public.people set language='${language}' where id='${owner}'`);
    await page.reload();
@@ -53,7 +40,6 @@ test('saving a public HTTP Hermes connection requires HTTPS without contacting H
   }
  } finally {
   query(`delete from public.hermes_connections where company_id='${company}' and profile='${profile}'`);
-  query(`delete from auth.mfa_factors where user_id='${owner}'`);
   query(`update public.people set language='en' where id='${owner}'`);
   await fake.close();
  }
@@ -62,9 +48,9 @@ test('saving a public HTTP Hermes connection requires HTTPS without contacting H
 test('testing a saved public HTTP Hermes connection refuses before decrypting or sending its key',async({page})=>{
  const fake=await fakeHermes(); const id=randomUUID();
  try {
-  await signInAgency(page);
+  await signInOwner(page);
   // Invalid ciphertext makes an attempted decryption fail with the generic error instead.
-  query(`insert into public.hermes_connections(id,company_id,agency_owner_id,address,profile,key_encrypted,state) values ('${id}','${company}','${owner}','http://example.com','writer','invalid-ciphertext','connected')`);
+  query(`insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('${id}','${company}','${owner}','http://example.com','writer','invalid-ciphertext','connected')`);
   const response=await page.request.post(endpoint,{data:{company,id,intent:'test'}});
   expect(response.status()).toBe(400);
   expect(await response.json()).toEqual({error:'hermesHttpsRequired'});
@@ -72,7 +58,6 @@ test('testing a saved public HTTP Hermes connection refuses before decrypting or
   expect(rows(`select state from public.hermes_connections where id='${id}'`)).toEqual([{state:'connected'}]);
  } finally {
   query(`delete from public.hermes_connections where id='${id}'`);
-  query(`delete from auth.mfa_factors where user_id='${owner}'`);
   await fake.close();
  }
 });
@@ -84,16 +69,9 @@ test('save, replace, retest and remove a write-only Hermes Connection; refuse wr
  const post=async(body:object)=>{
   const response=await page.request.post(endpoint,{data:{company,...body}}); captured.push(await response.text()); return response;
  };
- query(`delete from auth.mfa_factors where user_id='${owner}'`);
- query(`update public.people set language='en' where id='${owner}'`);
  let id='';
  try {
-  await signIn(page,'omar@example.com','/c/rs-learning/settings/agents');
-  expect((await post({intent:'save',address:fake.address,profile:'writer',key:savedKey})).status()).toBe(403);
-  await page.goto('/all-brands'); await page.getByRole('button',{name:'Set up authenticator'}).click();
-  await page.getByLabel('Verification code').fill(totp((await page.locator('code').textContent())!));
-  await page.getByRole('button',{name:'Verify',exact:true}).click(); await expect(page.locator('.company-card')).toHaveCount(3);
-  await page.goto('/c/rs-learning/settings/agents');
+  await signInOwner(page);
   const panel=page.getByRole('region',{name:'Agent engine connection'});
   await panel.getByLabel('Agent engine address').fill(fake.address); await panel.getByLabel('Profile name').fill('writer'); await panel.getByLabel('Profile API key').fill(savedKey);
   const responsePromise=page.waitForResponse(response=>response.url().endsWith(endpoint)&&response.request().method()==='POST');
@@ -128,15 +106,17 @@ test('save, replace, retest and remove a write-only Hermes Connection; refuse wr
   expect(captured.some(text=>text.includes(savedKey)||text.includes(replacementKey))).toBe(false);
  } finally {
   if(id) query(`delete from public.hermes_connections where id='${id}'`);
-  query(`delete from auth.mfa_factors where user_id='${owner}'`); await fake.close();
+  await fake.close();
  }
 });
 
-test('company Owner reads only state; other roles and another Agency cannot mutate or discover a Connection',async({browser})=>{
+test('any Owner of the company reads and manages a Connection; other roles and an Owner of another company cannot mutate or discover it',async({browser})=>{
  test.setTimeout(120000);
  const id=randomUUID();
- query(`insert into public.hermes_connections(id,company_id,agency_owner_id,address,profile,key_encrypted,state) values ('${id}','${company}','${owner}','http://127.0.0.1','writer','ciphertext','connected')`);
- const roles=[['manager@example.com','20000000-0000-0000-0000-000000000002','owner'],['manager@example.com','20000000-0000-0000-0000-000000000002','manager'],['agent1@example.com','30000000-0000-0000-0000-000000000001','contributor'],['reviewer@example.com','20000000-0000-0000-0000-000000000003','reviewer'],['viewer@example.com','20000000-0000-0000-0000-000000000004','viewer']];
+ const manager='20000000-0000-0000-0000-000000000002',multi='20000000-0000-0000-0000-000000000005',aleem='10000000-0000-0000-0000-000000000003';
+ query(`insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('${id}','${company}','${owner}','http://127.0.0.1','writer','ciphertext','connected')`);
+ // The Owner comes last: it removes the Connection that Omar, another Owner, made.
+ const roles=[['manager@example.com',manager,'manager'],['agent1@example.com','30000000-0000-0000-0000-000000000001','contributor'],['reviewer@example.com','20000000-0000-0000-0000-000000000003','contributor'],['viewer@example.com','20000000-0000-0000-0000-000000000004','viewer'],['manager@example.com',manager,'owner']];
  try {
   for(const [email,person,role] of roles) {
    query(`update public.members set role='${role}' where company_id='${company}' and person_id='${person}'`);
@@ -145,24 +125,36 @@ test('company Owner reads only state; other roles and another Agency cannot muta
     await signIn(page,email,'/c/rs-learning/settings/agents');
     const response=await page.request.get(`${endpoint}?company=${company}&id=${id}`);
     expect(response.status()).toBe(role==='owner'?200:404);
-    if(role==='owner') { expect(Object.hasOwn((await response.json()).connection,'key_encrypted')).toBe(false); await expect(page.getByText('Connected',{exact:true})).toBeVisible(); }
+    if(role==='owner') {
+     expect(Object.hasOwn((await response.json()).connection,'key_encrypted')).toBe(false); await expect(page.getByText('Connected',{exact:true})).toBeVisible();
+     const removed=await page.request.post(endpoint,{data:{company,id,intent:'remove'}});
+     expect(removed.status()).toBe(200);
+     expect(rows(`select id from public.hermes_connections where id='${id}'`)).toEqual([]);
+     continue;
+    }
+    if(role==='manager') await expect(page.getByText('Only an Owner of this company can manage the agent engine.')).toBeVisible();
     for(const intent of ['save','test','remove']) {
      const denied=await page.request.post(endpoint,{data:{company,id,intent,address:'http://127.0.0.1',profile:'writer',key:'forbidden'}});
-     expect(denied.status()).toBe(role==='owner'?403:404);
+     expect(denied.status()).toBe(404);
     }
-    expect((await page.request.post(endpoint,{data:{company,intent:'save',address:'http://127.0.0.1',profile:'writer',key:'forbidden'}})).status()).toBe(403);
+    const refused=await page.request.post(endpoint,{data:{company,intent:'save',address:'http://127.0.0.1',profile:'writer',key:'forbidden'}});
+    expect(refused.status()).toBe(403); expect(await refused.json()).toEqual({error:'hermesNotAllowed'});
+    expect(rows(`select id from public.hermes_connections where id='${id}'`)).toEqual([{id}]);
    } finally { await context.close(); }
   }
-  query(`update public.people set agency_owner=true where id='20000000-0000-0000-0000-000000000002'`);
+  // An Owner of another company (Aleem) who is only a Contributor here neither finds nor changes this company's Connection.
+  query(`insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('${id}','${company}','${owner}','http://127.0.0.1','writer','ciphertext','connected')`);
+  query(`update public.members set role='owner' where company_id='${aleem}' and person_id='${multi}'`);
   const context=await browser.newContext(); const page=await context.newPage();
   try {
-   await signIn(page,'manager@example.com','/c/rs-learning/settings/agents');
+   await signIn(page,'multi@example.com','/c/aleem/settings/agents');
    expect((await page.request.get(`${endpoint}?company=${company}&id=${id}`)).status()).toBe(404);
    for(const intent of ['save','test','remove']) expect((await page.request.post(endpoint,{data:{company,id,intent}})).status()).toBe(404);
+   expect(rows(`select id from public.hermes_connections where id='${id}'`)).toEqual([{id}]);
   } finally { await context.close(); }
  } finally {
   query(`delete from public.hermes_connections where id='${id}'`);
-  query(`update public.people set agency_owner=false where id='20000000-0000-0000-0000-000000000002'`);
-  query(`update public.members set role='manager' where company_id='${company}' and person_id='20000000-0000-0000-0000-000000000002'`);
+  query(`update public.members set role='contributor' where company_id='${aleem}' and person_id='${multi}'`);
+  query(`update public.members set role='manager' where company_id='${company}' and person_id='${manager}'`);
  }
 });

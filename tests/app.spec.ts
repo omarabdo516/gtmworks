@@ -216,18 +216,18 @@ test('an expired session is refreshed and the rotated cookies survive another re
  await expect(page).toHaveURL(/\/c\/rs-learning\/home/);
 });
 
-test('members controls, viewer access, and agency gate',async({page,context})=>{
+test('members controls, the Role list, viewer access, and no all-companies list',async({page,context})=>{
  await signIn(page,'omar@example.com','/c/rs-learning/settings/members');
  await expect(page.getByRole('heading',{name:"Team members"})).toBeVisible();
  const owner=page.locator('.member-row').filter({has:page.locator('strong',{hasText:/^عمر$/})}); await owner.getByRole('button',{name:"Remove"}).click(); await expect(page.getByRole('status')).toContainText('The last owner');
- const viewer=page.locator('.member-row').filter({has:page.locator('strong',{hasText:/^مشاهد$/})}); await viewer.getByLabel("Role").selectOption('reviewer'); await viewer.getByLabel("Publishing").check(); await viewer.getByRole('button',{name:"Save"}).click(); await expect(page.getByRole('status')).toContainText('Change saved.'); const changed=page.locator('.member-row').filter({has:page.locator('strong',{hasText:/^مشاهد$/})}); await expect(changed.getByLabel("Role")).toHaveValue('reviewer'); await changed.getByLabel("Role").selectOption('viewer'); await changed.getByRole('button',{name:"Save"}).click();
- await page.goto('/all-brands'); await expect(page.getByRole('heading',{name:"Two-step verification"})).toBeVisible(); await expect(page.locator('.company-card')).toHaveCount(0);
+ const viewer=page.locator('.member-row').filter({has:page.locator('strong',{hasText:/^مشاهد$/})}); const roles=await viewer.getByLabel("Role").locator('option').evaluateAll(options=>options.map(option=>(option as HTMLOptionElement).value)); expect(roles).toContain('contributor'); expect(roles).not.toContain('reviewer'); await viewer.getByLabel("Role").selectOption('contributor'); await viewer.getByLabel("Publishing").check(); await viewer.getByRole('button',{name:"Save"}).click(); await expect(page.getByRole('status')).toContainText('Change saved.'); const changed=page.locator('.member-row').filter({has:page.locator('strong',{hasText:/^مشاهد$/})}); await expect(changed.getByLabel("Role")).toHaveValue('contributor'); await changed.getByLabel("Role").selectOption('viewer'); await changed.getByRole('button',{name:"Save"}).click();
+ expect((await page.goto('/all-brands'))?.status()).toBe(404);
  await context.clearCookies(); await signIn(page,'viewer@example.com','/c/rs-learning/settings/members'); await expect(page.getByRole('heading',{name:"Team members"})).toBeVisible(); await expect(page.getByRole('button',{name:"Remove"})).toHaveCount(0); await expect(page.locator('.member-row').filter({has:page.locator('strong',{hasText:/^مشاهد$/})})).toContainText("Viewer"); const res=await page.goto('/all-brands'); expect(res?.status()).toBe(404);
 });
 
 test('screenshots for unit routes',async({page})=>{
  await signIn(page,'omar@example.com','/c/rs-learning/settings/members'); await mkdir('test-results/screenshots',{recursive:true});
- for(const width of [1440,390]) { await page.setViewportSize({width,height:900}); for(const path of ['/c/rs-learning/settings/members','/c/rs-learning/settings/agents','/all-brands']) { await page.goto(path); await page.screenshot({path:`test-results/screenshots/${path.slice(1).replaceAll('/','-')}-${width}.png`,fullPage:true}); } }
+ for(const width of [1440,390]) { await page.setViewportSize({width,height:900}); for(const path of ['/c/rs-learning/settings/members','/c/rs-learning/settings/agents']) { await page.goto(path); await page.screenshot({path:`test-results/screenshots/${path.slice(1).replaceAll('/','-')}-${width}.png`,fullPage:true}); } }
 });
 
 test('invite link signs the new member into the company',async({page,context})=>{
@@ -238,16 +238,9 @@ test('invite link signs the new member into the company',async({page,context})=>
  expect(link).toBeTruthy(); await context.clearCookies(); await page.goto(link); await expect(page).toHaveURL(/\/c\/rs-learning\/settings\/members/); await expect(page.getByRole('heading',{name:"Team members"})).toBeVisible();
 });
 
-function totp(secret:string) {
- const alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'; let bits=''; for(const c of secret.replace(/=+$/,'').toUpperCase()) bits+=alphabet.indexOf(c).toString(2).padStart(5,'0');
- const key=Buffer.from(bits.match(/.{8}/g)?.map(b=>parseInt(b,2)) || []); const counter=Buffer.alloc(8); counter.writeBigUInt64BE(BigInt(Math.floor(Date.now()/30000))); const hash=createHmac('sha1',key).update(counter).digest(); const offset=hash[19]&15; return String((hash.readUInt32BE(offset)&0x7fffffff)%1000000).padStart(6,'0');
-}
-test('agency owner enrols TOTP and sees all companies after verification',async({page})=>{
- await signIn(page,'omar@example.com','/c/rs-learning/settings'); await page.goto('/all-brands'); await expect(page.getByRole('heading',{name:"Two-step verification"})).toBeVisible();
- await page.getByRole('button',{name:"Set up authenticator"}).click(); const secret=await page.locator('code').textContent(); expect(secret).toBeTruthy(); await page.getByLabel("Verification code").fill(totp(secret!)); await page.getByRole('button',{name:"Verify",exact:true}).click(); await expect(page.locator('.company-card')).toHaveCount(3);
- await mkdir('test-results/screenshots',{recursive:true});
- for(const width of [1440,390]) { await page.setViewportSize({width,height:900}); await page.screenshot({path:`test-results/screenshots/all-brands-verified-${width}.png`,fullPage:true}); }
- await page.getByRole('link',{name:/RS Learning/}).last().click(); await expect(page).toHaveURL(/\/c\/rs-learning\/home/);
+test('the Owner of every company opens each one with no extra verification step',async({page})=>{
+ await signIn(page,'omar@example.com','/c/rs-learning/home'); await expect(page.locator('.home-dashboard')).toBeVisible();
+ for(const slug of ['rs-consultations','aleem']) { await chooseCompany(page,slug); await expect(page).toHaveURL(new RegExp(`/c/${slug}/home$`)); await expect(page.locator('.home-dashboard')).toBeVisible(); }
 });
 
 test('member and invitation controls have mobile touch targets',async({page})=>{
@@ -509,7 +502,7 @@ test('mobile card shows workflow controls first', async ({ page }, info) => {
  await page.reload();
  await expect(page.locator('.card-stage-line')).toContainText('مراجعة');
  const box = async (locator: ReturnType<Page['locator']>) => { await expect(locator).toBeVisible(); return (await locator.boundingBox())!; };
- // A card waiting for this reviewer keeps the decision after the record, below the edit form.
+ // A card waiting for this approver keeps the decision after the record, below the edit form.
  const waiting = [await box(page.locator('[data-card-section="labels"]')), await box(page.locator('.modal-grid > div form').first()), await box(page.locator('[data-card-section="review"]'))];
  expect(waiting[0].y + waiting[0].height).toBeLessThanOrEqual(waiting[1].y);
  expect(waiting[2].y).toBeGreaterThan(waiting[1].y + waiting[1].height);

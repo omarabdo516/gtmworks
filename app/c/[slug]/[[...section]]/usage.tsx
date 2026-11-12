@@ -3,8 +3,8 @@ import Link from '@/lib/link';
 
 export type UsageDay={company_id:string,company_name:string,day:string,input_tokens:number,output_tokens:number,runs:number,unknown_runs:number};
 
-// Tokens per company per day, as the database allows this person to see them (usage_by_day): the Agency sees every
-// company, a company Owner only their own. Token counts only; prices depend on each install's model plan.
+// Tokens per company per day, as the database allows this person to see them (usage_by_day): a company Owner sees
+// the companies they own. Token counts only; prices depend on each install's model plan.
 export default async function Usage({rows,slug}:{rows:UsageDay[],slug:string}) {
  const {t,locale}=await getI18n(); const count=(value:number)=>new Intl.NumberFormat(locale).format(value);
  return <><div className="tabs"><Link className="button" href={`/c/${slug}/settings`}>{t('general')}</Link><Link className="button active" href={`/c/${slug}/usage`}>{t('usage')}</Link></div>

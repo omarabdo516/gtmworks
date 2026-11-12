@@ -5,7 +5,7 @@ import { agentDate } from '@/lib/agent-date.mjs';
 import type { HermesState } from '@/lib/hermes.mjs';
 
 export type Connection=HermesState&{id:string,address:string,profile:string,unreachable_since:string|null};
-export default function HermesConnections({company,agency,initial}:{company:string,agency:boolean,initial:Connection[]}) {
+export default function HermesConnections({company,owner,initial}:{company:string,owner:boolean,initial:Connection[]}) {
  const {t:translate,language}=useI18n(); const [connections,setConnections]=useState(initial); const [error,setError]=useState(''); const [pending,setPending]=useState(false);
  async function submit(event:FormEvent<HTMLFormElement>) {
   event.preventDefault(); const form=event.currentTarget; const fields=Object.fromEntries(new FormData(form));
@@ -33,8 +33,8 @@ export default function HermesConnections({company,agency,initial}:{company:stri
   {error&&<p role="alert">{translate(error)}</p>}
   {connections.map(connection=><div className="detail-row" key={connection.id}>
    <div className="agent-row-main"><strong dir="auto">{connection.profile}</strong><p role="status">{translate(`hermesState_${connection.state}`)}{connection.unreachable_since&&<> <time dateTime={connection.unreachable_since}>{agentDate(connection.unreachable_since,language)}</time></>}</p>
-   {connection.version&&<p dir="auto">{translate('hermesVersion',connection.version)}</p>}{agency&&editor(connection)}</div>
+   {connection.version&&<p dir="auto">{translate('hermesVersion',connection.version)}</p>}{owner&&editor(connection)}</div>
   </div>)}
-  {agency?editor():<p>{translate('hermesAgencyOnly')}</p>}
+  {owner?editor():<p>{translate('hermesNotAllowed')}</p>}
  </section>;
 }

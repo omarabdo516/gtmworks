@@ -18,7 +18,7 @@ select ok(not public.setup_is_open(),'successful setup closes the install');
 select throws_ok($$select public.complete_setup('90000000-0000-0000-0000-000000000238','Other owner','Other Company','en')$$,'P0001','Setup closed','a later submission is refused');
 reset role;
 select is((select count(*)::int from auth.users),1,'the existing Auth user is kept');
-select ok((select agency_owner and language='ar' and name='First owner' from public.people where id='90000000-0000-0000-0000-000000000238'),'the Auth user becomes the Agency owner in the chosen language');
+select ok((select language='ar' and name='First owner' from public.people where id='90000000-0000-0000-0000-000000000238'),'the Auth user becomes a person in the chosen language');
 select ok((select slug ~ '^first-company-[a-f0-9]{8}$' and name='First Company' from public.companies),'the first company has its Home slug');
 select ok((select role='owner' and grant_publishing and grant_money_figures and grant_customer_data and removed_at is null from public.members where person_id='90000000-0000-0000-0000-000000000238'),'the new owner has all company grants');
 select is((select count(*)::int from public.work_stages),9,'the company trigger creates the workflow');

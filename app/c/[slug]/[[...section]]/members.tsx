@@ -4,7 +4,7 @@ import { changeMember } from './actions';
 import { roleAgents } from '@/lib/role-agents';
 import { agentIdentities } from '@/lib/agent-identities';
 import { Avatar, type WorkMember } from '@/lib/work-activity';
-const roles:Record<string,string>={owner:'owner',manager:'manager',contributor:'contributor',reviewer:'reviewer',viewer:'viewer'};
+const roles:Record<string,string>={owner:'owner',manager:'manager',contributor:'contributor',viewer:'viewer'};
 type Member=WorkMember & {role:string,agent_role:string|null,grant_publishing:boolean,grant_money_figures:boolean,grant_customer_data:boolean};
 function auditValue(key:string,field:unknown, t: import('@/lib/i18n.mjs').I18n['t']) {
  if(key==='role') return roles[String(field)] ? t(roles[String(field)]) : '—';

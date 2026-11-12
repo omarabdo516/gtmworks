@@ -33,9 +33,9 @@ begin
   company=gen_random_uuid();
   insert into public.companies(id,slug,name) values(company,'rs-learning','RS Learning');
  end if;
- -- OWNER_EMAIL is Omar: the existing TOTP enrollment UI requires this flag.
- insert into public.people(id,name,agency_owner) values(person,split_part(mail,'@',1),true)
- on conflict(id) do update set agency_owner=true;
+ -- OWNER_EMAIL is Omar: the Owner Membership below is what lets him manage the company and its agent engine.
+ insert into public.people(id,name) values(person,split_part(mail,'@',1))
+ on conflict(id) do nothing;
  insert into public.members(company_id,person_id,role,grant_publishing,grant_money_figures,grant_customer_data)
  values(company,person,'owner',true,true,true)
  on conflict(company_id,person_id) do update set role='owner',removed_at=null,grant_publishing=true,grant_money_figures=true,grant_customer_data=true;

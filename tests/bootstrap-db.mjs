@@ -22,7 +22,7 @@ select is((select count(*)::int from public.companies where slug='rs-learning'),
 select is((select name from public.companies where slug='rs-learning'),'RS Learning','company name');
 select is((select count(*)::int from public.members m join public.companies c on c.id=m.company_id where c.slug='rs-learning' and m.role='owner' and m.removed_at is null),1,'one active Owner');
 select ok((select grant_publishing and grant_money_figures and grant_customer_data from public.members m join public.companies c on c.id=m.company_id where c.slug='rs-learning'),'all Owner grants');
-select ok((select agency_owner from public.people where id='90000000-0000-0000-0000-000000000001'),'Omar can enroll TOTP through the existing settings screen');
+select is((select name from public.people where id='90000000-0000-0000-0000-000000000001'),'bootstrap-owner','the Owner is a person named from the email');
 select is((select count(*)::int from public.approval_steps s join public.companies c on c.id=s.company_id where c.slug='rs-learning' and s.role='owner'),1,'Owner-only default approval');
 select set_config('test.bootstrap_before', (select md5(jsonb_build_object(
  'company',(select to_jsonb(c) from public.companies c where slug='rs-learning'),
