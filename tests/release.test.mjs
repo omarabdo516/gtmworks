@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { load } from 'js-yaml';
-import { releaseCompose, releaseInstaller, writeReleaseAssets, localDigest } from '../scripts/release-assets.mjs';
+import { releaseCompose, releaseInstaller, writeReleaseAssets } from '../scripts/release-assets.mjs';
 
 // Every release publishes one tested image and a GitHub Release whose compose file and install script are all an
 // install needs (#49). The source install keeps building from a checkout until a later ticket switches it.
@@ -13,11 +13,27 @@ const app='ghcr.io/omarabdo516/gtmworks:1.2.3@sha256:'+'a'.repeat(64);
 const sourceCompose=readFileSync('docker-compose.install.yml','utf8');
 const sourceInstaller=readFileSync('scripts/install.sh','utf8');
 const pinnedImages=load(sourceCompose).services;
-const digests=Object.fromEntries(Object.values(pinnedImages).map(service=>service.image)
- .filter(image=>!image.includes('@')&&!image.startsWith('gtmworks-local:')).map((image,index)=>[image,'sha256:'+String(index).repeat(64)]));
+
+test('the source compose file pins every upstream image to a reviewed multi-platform index digest', () => {
+ // A tag such as supabase/gotrue:v2.197.0 can be pushed again upstream; a digest names the reviewed bytes, for both the
+ // source install and every release. The index digest (not one platform's) keeps amd64 and arm64 installs on it.
+ for(const [name,service] of Object.entries(pinnedImages)) {
+  if(service.image.startsWith('gtmworks-local:')) continue;
+  assert.match(service.image,/^[a-z0-9][\w./-]*:[\w.-]+@sha256:[a-f0-9]{64}$/,`${name}: ${service.image}`);
+ }
+});
+
+test('a release refuses an upstream image the source compose file does not pin, and never resolves a tag', () => {
+ const compose='services:\n  web:\n    image: gtmworks-local:237\n  auth:\n    image: supabase/gotrue:v2.197.0\n';
+ assert.throws(()=>releaseCompose(compose,app),/supabase\/gotrue:v2\.197\.0 is not pinned/);
+ assert.throws(()=>releaseCompose(compose.replace('v2.197.0','v2.197.0@sha256:short'),app),/supabase\/gotrue:v2\.197\.0@sha256:short is not pinned/);
+ // Neither the release workflow nor CI may turn a tag into a digest when it writes the release files.
+ assert.doesNotMatch(readFileSync('scripts/release-assets.mjs','utf8'),/imagetools|RepoDigests|child_process/);
+ assert.doesNotMatch(readFileSync('.github/workflows/ci.yml','utf8'),/--local-digests/);
+});
 
 test('the release compose file pins every image by digest and runs the released app image', () => {
- const text=releaseCompose(sourceCompose,app,digests);
+ const text=releaseCompose(sourceCompose,app);
  const images=text.split('\n').filter(line=>/^\s*image:/.test(line));
  assert.equal(images.length,Object.keys(pinnedImages).length);
  for(const line of images) assert.match(line,/@sha256:[a-f0-9]{64}$/,line);
@@ -25,45 +41,34 @@ test('the release compose file pins every image by digest and runs the released 
  assert.equal(yaml.services.web.image,app);
  assert.equal(yaml.services.worker.image,app);
  assert.equal(yaml.services.web.build,undefined);
- for(const [image,digest] of Object.entries(digests)) assert.ok(text.includes(`image: ${image}@${digest}\n`),image);
- assert.equal(yaml.services.hermes.image,pinnedImages.hermes.image);
+ // Every upstream image is the reviewed one from the source compose file, byte for byte.
+ for(const [name,service] of Object.entries(pinnedImages)) if(!service.image.startsWith('gtmworks-local:')) assert.equal(yaml.services[name].image,service.image,name);
  // Everything else is the source install exactly: the same volumes, mounts, ports and settings.
  const withoutImage=service=>Object.fromEntries(Object.entries(service).filter(([key])=>key!=='image'&&key!=='build'));
  for(const [name,service] of Object.entries(load(sourceCompose).services)) assert.deepEqual(withoutImage(yaml.services[name]),withoutImage(service),name);
  assert.deepEqual(yaml.volumes,load(sourceCompose).volumes);
 });
 
-test('the release compose file refuses an image it cannot pin or an app reference without a digest', () => {
- const [first]=Object.keys(digests);
- assert.throws(()=>releaseCompose(sourceCompose,app,{...digests,[first]:undefined}),new RegExp(first.replace(/[.]/g,'\\.')));
- assert.throws(()=>releaseCompose(sourceCompose,app,{...digests,[first]:'sha256:short'}),/digest/);
+test('the release compose file refuses an app reference without a digest', () => {
  for(const reference of ['ghcr.io/omarabdo516/gtmworks:1.2.3','ghcr.io/omarabdo516/gtmworks@sha256:abc','x y@sha256:'+'a'.repeat(64)])
-  assert.throws(()=>releaseCompose(sourceCompose,reference,digests),/digest/);
- assert.throws(()=>releaseCompose(sourceCompose.replace('build: .','build: ./other'),app,digests),/build/);
+  assert.throws(()=>releaseCompose(sourceCompose,reference),/digest/);
+ assert.throws(()=>releaseCompose(sourceCompose.replace('build: .','build: ./other'),app),/build/);
 });
 
-test('the release files are written together, resolving a digest once for each image the compose file pins by tag only', t => {
+test('the release files are written together from the source files alone', t => {
  const directory=mkdtempSync(join(tmpdir(),'gtmworks-assets-'));
  t.after(()=>rmSync(directory,{recursive:true,force:true}));
- const asked=[];
- writeReleaseAssets(app,directory,image=>{ asked.push(image); return digests[image]; });
- assert.deepEqual(asked.sort(),Object.keys(digests).sort());
+ writeReleaseAssets(app,directory);
  assert.deepEqual(readdirSync(directory).sort(),['docker-compose.install.yml','install.sh']);
- assert.equal(readFileSync(join(directory,'docker-compose.install.yml'),'utf8'),releaseCompose(sourceCompose,app,digests));
+ assert.equal(readFileSync(join(directory,'docker-compose.install.yml'),'utf8'),releaseCompose(sourceCompose,app));
  assert.equal(readFileSync(join(directory,'install.sh'),'utf8'),releaseInstaller(sourceInstaller,app));
 });
 
-test('a release can name a registry with a port, and pin images by the digests already pulled on the machine', () => {
+test('a release can name a registry with a port', () => {
  const local='localhost:5000/gtmworks@sha256:'+'d'.repeat(64);
- assert.match(releaseCompose(sourceCompose,local,digests),new RegExp(`image: ${local.replace(/[.]/g,'\\.')}\\n`));
+ assert.match(releaseCompose(sourceCompose,local),new RegExp(`image: ${local.replace(/[.]/g,'\\.')}\\n`));
  assert.match(releaseInstaller(sourceInstaller,local),new RegExp(`^release_image=${local.replace(/[.]/g,'\\.')}$`,'m'));
- assert.throws(()=>releaseCompose(sourceCompose,'gtmworks@sha256:'+'d'.repeat(64),digests),/digest/);
- // The CI install test resolves from the images its install pulled: the repo digest for the image's own name.
- const digest='sha256:'+'e'.repeat(64);
- assert.equal(localDigest('supabase/postgres:17.6.1.136',['other/postgres@sha256:'+'f'.repeat(64),`supabase/postgres@${digest}`]),digest);
- assert.equal(localDigest('nginx:1.28.0-alpine',[`nginx@${digest}`]),digest);
- assert.throws(()=>localDigest('nginx:1.28.0-alpine',[]),/nginx/);
- assert.throws(()=>localDigest('nginx:1.28.0-alpine',[`nginx@${digest}`,'nginx@sha256:'+'f'.repeat(64)]),/nginx/);
+ assert.throws(()=>releaseCompose(sourceCompose,'gtmworks@sha256:'+'d'.repeat(64)),/digest/);
 });
 
 test('the release install script is the source installer with the released image set, and nothing else', () => {
@@ -121,7 +126,7 @@ case "$*" in
  *'exec -T db psql'*) cat > "$MIGRATION_SQL"; exit "\${MIGRATION_EXIT:-0}";;
 esac
 `;
-function releaseDirectory(t,{compose=releaseCompose(sourceCompose,app,digests)}={}) {
+function releaseDirectory(t,{compose=releaseCompose(sourceCompose,app)}={}) {
  const directory=mkdtempSync(join(tmpdir(),'gtmworks-release-'));
  t.after(()=>rmSync(directory,{recursive:true,force:true}));
  writeFileSync(join(directory,'docker-compose.install.yml'),compose);
@@ -135,7 +140,7 @@ function releaseDirectory(t,{compose=releaseCompose(sourceCompose,app,digests)}=
   commands:()=>existsSync(env.COMMANDS)?readFileSync(env.COMMANDS,'utf8'):'',sql:()=>readFileSync(env.MIGRATION_SQL,'utf8'),
   installed:()=>existsSync(join(directory,'.install-release'))?readFileSync(join(directory,'.install-release'),'utf8'):null,
   use:image=>{
-   writeFileSync(join(directory,'docker-compose.install.yml'),releaseCompose(sourceCompose,image,digests));
+   writeFileSync(join(directory,'docker-compose.install.yml'),releaseCompose(sourceCompose,image));
    writeFileSync(join(directory,'install.sh'),releaseInstaller(sourceInstaller,image));
   }};
 }
@@ -166,7 +171,7 @@ test('a release install pulls the image by digest, takes its install files from 
 });
 
 test('a release install refuses a compose file from another release and an update that names a source version', t => {
- const other=releaseCompose(sourceCompose,app.replace(/a{64}$/,'b'.repeat(64)),digests);
+ const other=releaseCompose(sourceCompose,app.replace(/a{64}$/,'b'.repeat(64)));
  const mismatched=releaseDirectory(t,{compose:other});
  const refused=mismatched.run();
  assert.notEqual(refused.status,0);
@@ -316,8 +321,8 @@ test('CI updates a release install on a real database, applying a new migration 
   /docker tag gtmworks-local:237 localhost:5000\/gtmworks:0\.0\.0-ci/,
   // The next release carries one migration more, which the update must read through the running db's /migrations.
   /FROM gtmworks-local:237\nRUN echo .*> \/app\/install\/supabase\/migrations\/99999999999998_release_update_probe\.sql/,
-  /node scripts\/release-assets\.mjs "\$first" release-first --local-digests/,
-  /node scripts\/release-assets\.mjs "\$next" release-next --local-digests/,
+  /node scripts\/release-assets\.mjs "\$first" release-first \|\|/,
+  /node scripts\/release-assets\.mjs "\$next" release-next \|\|/,
   /\[\[ \$\(ls -A "\$dir" \| wc -l\) == 2 \]\]/,
   /sh "\$dir\/install\.sh" \|\| fail 'release install'/,
   /sh "\$dir\/install\.sh" update \|\| fail 'release update'/,

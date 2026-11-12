@@ -346,8 +346,8 @@ jobs:
           DOCKERFILE
           next=$(publish 0.0.1-ci) || fail 'push the next release image'
           echo "first release: $first; next release: $next"
-          node scripts/release-assets.mjs "$first" release-first --local-digests || fail 'first release files'
-          node scripts/release-assets.mjs "$next" release-next --local-digests || fail 'next release files'
+          node scripts/release-assets.mjs "$first" release-first || fail 'first release files'
+          node scripts/release-assets.mjs "$next" release-next || fail 'next release files'
           dir="$PWD/release-install"
           mkdir "$dir" && cp release-first/docker-compose.install.yml release-first/install.sh "$dir/" || fail 'release install directory'
           [[ $(ls -A "$dir" | wc -l) == 2 ]] || fail 'the release install directory holds only the two release files'
