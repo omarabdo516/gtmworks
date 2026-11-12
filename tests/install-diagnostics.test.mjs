@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, copyFileSync, rmSync } from 'node:fs';
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, copyFileSync, cpSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -48,7 +48,9 @@ function sandbox(t) {
  const directory=mkdtempSync(join(tmpdir(),'gtmworks-install-diagnostics-'));
  t.after(()=>rmSync(directory,{recursive:true,force:true}));
  for(const folder of ['scripts','lib','bin','app/sign-in','app/c/[slug]']) mkdirSync(join(directory,folder),{recursive:true});
- for(const file of ['scripts/install-diagnostics.sh','scripts/log-summary.mjs','lib/install-env.mjs','lib/settings.mjs','package.json']) copyFileSync(file,join(directory,file));
+ for(const file of ['scripts/install-diagnostics.sh','scripts/log-summary.mjs','package.json']) copyFileSync(file,join(directory,file));
+ // The whole lib/, as the real container mounts the whole checkout: install-env.mjs imports its neighbours.
+ cpSync('lib',join(directory,'lib'),{recursive:true});
  // The real install has this file; here it holds no secret, since the summary never reads it.
  writeFileSync(join(directory,'.env.install'),'APP_ORIGIN=http://localhost:3000\n',{mode:0o600});
  // Docker stands in: `compose logs` prints the marker log, a node container runs the summary here with its mount mapped,

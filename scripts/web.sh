@@ -10,6 +10,11 @@ local_jwt_secret=$(printf '%s\n' "$status" | sed -n 's/^JWT_SECRET="\(.*\)"$/\1/
 export SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET:-${local_jwt_secret:-super-secret-jwt-token-with-at-least-32-characters-long}}
 export WEBHOOK_ENCRYPTION_KEY=${WEBHOOK_ENCRYPTION_KEY:-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=}
 export APP_ORIGIN=${APP_ORIGIN:-http://127.0.0.1:3000}
+# First run opens only with the setup code (issue #50); a local run without one gets a fresh code and its link.
+if [[ -z "${SETUP_CODE:-}" ]]; then
+ export SETUP_CODE=$(node -e 'process.stdout.write(require("crypto").randomBytes(32).toString("hex"))')
+ echo "Local setup link: $APP_ORIGIN/first-run#code=$SETUP_CODE"
+fi
 # Production e2e uses the local stack while retaining the production settings guard. Links are built on APP_ORIGIN, so it
 # is the address the browser uses; the guard accepts a plain-http loopback origin only in the local install's shape.
 if [[ "${1:-dev}" == "production" ]]; then

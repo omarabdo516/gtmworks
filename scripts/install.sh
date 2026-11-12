@@ -128,8 +128,12 @@ else
   compose up -d --wait --wait-timeout 300
 fi
 compose exec -T web node -e "for(const url of ['http://gateway:8080/api/health','http://gateway:8080/sign-in','http://hermes:8642/health']) { const response=await fetch(url); if(response.status!==200) throw new Error(url+' returned '+response.status); }" --input-type=module
-echo 'gtmworks is ready: http://localhost:3000/sign-in (mail: http://localhost:8025)'
+# Whether first run is still open, asked through the app's service role; it answers open or closed and nothing else.
+setup=$(compose exec -T web node -e "const key=process.env.SUPABASE_SERVICE_ROLE_KEY; const response=await fetch('http://gateway:8080/rest/v1/rpc/setup_is_open',{method:'POST',headers:{apikey:key,authorization:'Bearer '+key}}); if(!response.ok) throw new Error('setup_is_open returned '+response.status); console.log(await response.json()===true?'open':'closed');" --input-type=module)
+echo 'Mail: http://localhost:8025'
 echo 'One install serves one company until each company gets its own agent engine home: companies on the bundled agent engine share one agent memory, so an agent can repeat facts from one company to people in another.'
+# The last line: the one-time setup link while first run is open (issue #50), the sign-in address after.
+docker run --rm --env-file .env.install -v "$PWD/lib:/code:ro" "$node_image" node /code/install-env.mjs ready "$setup"
 exit 0
 }
 main "$@"
