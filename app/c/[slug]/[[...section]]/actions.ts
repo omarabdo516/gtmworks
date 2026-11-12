@@ -1,12 +1,12 @@
 'use server';
 import { withActionLog, logActionFailure } from '@/lib/diagnostics.mjs';
 import { getI18n } from '@/lib/i18n-server';
-import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { createClient } from '@supabase/supabase-js';
 import { supabaseConfig } from '@/lib/supabase-config';
+import { appUrl } from '@/lib/app-origin.mjs';
 export const changeMember=withActionLog('changeMember',async function changeMember(form: FormData) { const {t}=await getI18n();
  const db=await supabase(); const slug=String(form.get('slug')); const company=String(form.get('company')); const person=String(form.get('person')); const op=String(form.get('op'));
  const values={role:String(form.get('role')),grant_publishing:form.has('publishing'),grant_money_figures:form.has('money'),grant_customer_data:form.has('customer')};
@@ -15,7 +15,7 @@ export const changeMember=withActionLog('changeMember',async function changeMemb
   const email=String(form.get('email')).trim().toLowerCase();
   ({error}=await db.from('member_invitations').upsert({company_id:company,email,claimed_at:null,...values},{onConflict:'company_id,email'}));
   if(!error) {
-   const origin=(await headers()).get('origin') || 'http://localhost:3000'; const emailRedirectTo=`${origin}/auth/accept?next=${encodeURIComponent(`/c/${slug}/settings/members`)}`;
+   const emailRedirectTo=appUrl(`/auth/accept?next=${encodeURIComponent(`/c/${slug}/settings/members`)}`).href;
    // The caller's own permissions were just checked by the invitation row above. Production has sign-ups off, so a sign-in link
    // is never sent to an address with no account; the server's own key invites it instead. Someone who already has an account
    // gets an ordinary sign-in link.
