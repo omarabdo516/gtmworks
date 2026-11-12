@@ -105,6 +105,9 @@ chmod 600 .env.install
 complete_env "$PWD/.env.install"
 echo 'Validating install configuration...'
 docker run --rm --env-file .env.install -v "$PWD/lib:/code:ro" "$node_image" node /code/install-env.mjs validate complete
+# A broken gateway config stops here, before migrations or any container changes, while the old version still serves.
+echo 'Checking gateway configuration...'
+compose run --rm --no-deps gateway nginx -t
 if [ "$operation" = install ]; then compose up -d --wait db auth rest storage mail; fi
 {
   printf '%s\n' 'select pg_advisory_xact_lock(237);' 'create schema if not exists gtmworks_install;' \
@@ -128,6 +131,9 @@ if [ "$operation" = update ]; then
 else
   compose up -d --wait --wait-timeout 300
 fi
+# Compose does not recreate a container when only a file it mounts changed: recreate the gateway so its new config (the
+# X-Real-IP the auth rate limit counts by, issue #41) is the one that serves.
+compose up -d --no-deps --force-recreate --wait --wait-timeout 300 gateway
 compose exec -T web node -e "for(const url of ['http://gateway:8080/api/health','http://gateway:8080/sign-in','http://hermes:8642/health']) { const response=await fetch(url); if(response.status!==200) throw new Error(url+' returned '+response.status); }" --input-type=module
 # Whether first run is still open, asked through the app's service role; it answers open or closed and nothing else.
 setup=$(compose exec -T web node -e "const key=process.env.SUPABASE_SERVICE_ROLE_KEY; const response=await fetch('http://gateway:8080/rest/v1/rpc/setup_is_open',{method:'POST',headers:{apikey:key,authorization:'Bearer '+key}}); if(!response.ok) throw new Error('setup_is_open returned '+response.status); console.log(await response.json()===true?'open':'closed');" --input-type=module)

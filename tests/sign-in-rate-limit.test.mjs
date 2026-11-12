@@ -276,7 +276,7 @@ test('the install job proves the limit behind the HTTPS proxy: the page, a secon
  assert.match(readFileSync('playwright.install.config.ts','utf8'),/ignoreHTTPSErrors: true/);
  // After the proxied first run made the Owner, in this order, before the failed-update check.
  const proxied=at(/node --input-type=module - < scripts\/check-install-proxy\.mjs \|\| \{ docker logs install-proxy/).index;
- const update=at(/old_web=\$\(compose ps -q web\)/).index;
+ const update=at(/cp scripts\/install-failing-migration\.sql/).index;
  assert.ok(proxied<page.index && page.index<fresh.index && fresh.index<untrusted.index && untrusted.index<limited.index && limited.index<update);
  assert.equal([...run.matchAll(/check-install-rate-limit\.mjs|playwright\.install\.config\.ts/g)].length,4,'the limit is checked only behind the proxy');
 });
