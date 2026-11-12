@@ -59,8 +59,8 @@ no screen.
   `test-results/screenshots/visual/`, which CI uploads in the `route-screenshots`
   artifact.
 - When a change intentionally alters a screen, refresh its approved images with
-  `Visual baselines`. It runs `./ci.sh visual-update` on the same Linux runner and
-  Node version as CI, with a fresh database, and uploads only changed or new images.
+  `Visual baselines`. It runs `./ci.sh visual-update` on the same GitHub-hosted runner
+  (`ubuntu-latest`) and Node version as CI, with a fresh database, and uploads only changed or new images.
   Start it on the PR branch, then download the artifact from that run:
 
   ```sh
