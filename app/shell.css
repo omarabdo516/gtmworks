@@ -50,6 +50,13 @@
   }
 }
 
+/* The product's global button look (app/globals.css: border, padding, 36px floor, half opacity when disabled) is not
+   the reference's; the shell's buttons start bare, as the reference's do. */
+.gw :is(.circle-btn, .me, .menu__item, .composer__send) { border: 0; padding: 0; min-height: 0; font-size: inherit; font-weight: inherit; }
+.gw :is(.circle-btn, .me, .menu__item, .composer__send):disabled { opacity: 1; }
+.gw .me { padding: 4px; min-height: 44px; background: transparent; }
+.gw .menu__item { padding: 4px 10px; min-height: 32px; background: transparent; justify-content: flex-start; }
+
 /* ---------- frame ---------- */
 .gw.app-layout { display: grid; grid-template-columns: var(--gw-sidebar-w) minmax(0, 1fr); height: 100vh; height: 100dvh; overflow: hidden; }
 .gw .shell { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
@@ -127,7 +134,7 @@
   width: 36px; height: 36px; border-radius: 50%; flex: none; background: var(--gw-bg-active); box-shadow: var(--gw-border-3) 0 0 0 0.5px inset;
   color: var(--gw-text-2); display: inline-flex; align-items: center; justify-content: center; font-size: var(--gw-fs-base); font-weight: 600;
 }
-.gw .me__name { font-size: var(--gw-fs-base); line-height: 1.35; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.gw .me__name { text-align: match-parent; font-size: var(--gw-fs-base); line-height: 1.35; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .gw .me__role { font-size: var(--gw-fs-xs); color: var(--gw-text-3); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .gw .menu {
   position: absolute; z-index: 30; inset-inline: 12px; bottom: calc(100% - 4px); max-height: min(440px, 62vh); overflow-y: auto;
