@@ -23,6 +23,23 @@ test('the source compose file pins every upstream image to a reviewed multi-plat
  }
 });
 
+test('the Dockerfile pins every external base image to a reviewed multi-platform index digest', () => {
+ // A base tag such as node:22-bookworm-slim can be pushed again upstream, and the release build runs with the job's
+ // package-write token; a digest names the reviewed bytes. A FROM naming an earlier stage builds on that stage.
+ const stages=new Set();
+ const bases=[...readFileSync('Dockerfile','utf8').matchAll(/^FROM\s+(\S+)(?:\s+AS\s+(\S+))?\s*$/gim)];
+ assert.ok(bases.length>0,'the scan finds the FROM lines');
+ let external=0;
+ for(const [line,base,stage] of bases) {
+  if(!stages.has(base)) {
+   external++;
+   assert.match(base,/^[a-z0-9][\w./-]*:[\w.-]+@sha256:[a-f0-9]{64}$/,line);
+  }
+  if(stage) stages.add(stage);
+ }
+ assert.ok(external>0,'the scan finds an external base image');
+});
+
 test('a release refuses an upstream image the source compose file does not pin, and never resolves a tag', () => {
  const compose='services:\n  web:\n    image: gtmworks-local:237\n  auth:\n    image: supabase/gotrue:v2.197.0\n';
  assert.throws(()=>releaseCompose(compose,app),/supabase\/gotrue:v2\.197\.0 is not pinned/);
