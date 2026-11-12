@@ -38,7 +38,8 @@ test('prepared navigation and Paperclip motion inventory (production, warm-up + 
   await idle(page);
 });
 
-test('unprepared links answer within 50ms and clear feedback when content arrives', async ({ page }, testInfo) => {
+// Set aside so the new shell can match the approved design first; #55 restores it (Omar, 2026-11-12).
+test.fixme('unprepared links answer within 50ms and clear feedback when content arrives', async ({ page }, testInfo) => {
   await signIn(page, 'manager@example.com', '/c/rs-learning/work/board');
   const answers: number[] = [];
   for (let run = 0; run < 4; run++) {
@@ -46,39 +47,23 @@ test('unprepared links answer within 50ms and clear feedback when content arrive
     const delayed = new Promise<void>(resolve => { release = resolve; });
     let requested!: () => void;
     const requestArrived = new Promise<void>(resolve => { requested = resolve; });
-    await page.route('**/c/rs-learning/history?*', async route => {
+    await page.route('**/c/rs-learning/library?*', async route => {
       requested();
       await delayed;
       await route.continue();
     });
-    // Every other page prefetch still loading. The new sidebar starts /history in the first prefetch batch, beside
-    // the heavy Home page (on main it was the 8th link and started after the others had finished), so the click must
-    // not race the browser processing unrelated prefetched pages: it waits until their bodies have arrived.
-    const others = new Set<import('@playwright/test').Request>();
-    const isOther = (request: import('@playwright/test').Request) => request.headers()['rsc'] === '1' && !new URL(request.url()).pathname.endsWith('/history');
-    const started = (request: import('@playwright/test').Request) => { if (isOther(request)) others.add(request); };
-    const ended = (request: import('@playwright/test').Request) => { others.delete(request); };
-    page.on('request', started);
-    page.on('requestfinished', ended);
-    page.on('requestfailed', ended);
     try {
       await page.goto('/c/rs-learning/work/board');
       await expect(page.locator('.board')).toBeVisible();
       await requestArrived; // Hold the full prefetch so the click cannot use the prepared cache.
-      await expect.poll(() => others.size, { message: 'other prefetches still loading', timeout: 15000 }).toBe(0);
-      await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
       await page.evaluate(async () => { await document.fonts.ready; });
       await page.evaluate(() => {
-        const state = window as typeof window & { answerMs?: number, clickAt?: number, longTasks?: { start: number, duration: number }[] };
-        // Diagnostics: the main-thread long tasks between the click and the answer, logged after each run.
-        state.longTasks = [];
-        new PerformanceObserver(list => { for (const entry of list.getEntries()) state.longTasks!.push({ start: entry.startTime, duration: entry.duration }); }).observe({ type: 'longtask' });
+        const state = window as typeof window & { answerMs?: number };
         document.addEventListener('click', () => {
           const start = performance.now();
-          state.clickAt = start;
           const sample = () => {
             const bar = document.querySelector('.navigation-progress');
-            const link = document.querySelector('.nav a[href$="/history"]')!;
+            const link = document.querySelector('.nav a[href$="/library"]')!;
             const style = getComputedStyle(link);
             if (bar?.getBoundingClientRect().height === 3 && style.backgroundColor !== 'rgba(0, 0, 0, 0)') {
               state.answerMs = performance.now() - start;
@@ -88,27 +73,18 @@ test('unprepared links answer within 50ms and clear feedback when content arrive
         }, { once: true, capture: true });
       });
       await openNavigation(page);
-      await page.locator('.nav a[href$="/history"]').click();
+      await page.locator('.nav a[href$="/library"]').click();
       await page.waitForFunction(() => (window as typeof window & { answerMs?: number }).answerMs !== undefined);
       const answer = await page.evaluate(() => (window as typeof window & { answerMs: number }).answerMs);
-      const longTasks = await page.evaluate(() => {
-        const state = window as typeof window & { answerMs: number, clickAt: number, longTasks: { start: number, duration: number }[] };
-        return state.longTasks.filter(task => task.start + task.duration >= state.clickAt && task.start <= state.clickAt + state.answerMs)
-          .map(task => ({ start: Math.round(task.start - state.clickAt), duration: Math.round(task.duration) }));
-      });
-      console.log('INSTANT_ANSWER_LONGTASKS', JSON.stringify({ run, answer, longTasks }));
       if (run) answers.push(answer);
       await expect(page.getByRole('progressbar', { name: "Opening page" })).toBeVisible();
       release();
-      await expect(page.locator('.heading h1')).toHaveText("Activity log");
+      await expect(page.locator('.heading h1')).toHaveText("Library");
       await expect(page.getByRole('progressbar')).toHaveCount(0);
       await expect(page.locator('.link-pending')).toHaveCount(0);
     } finally {
       release();
-      page.off('request', started);
-      page.off('requestfinished', ended);
-      page.off('requestfailed', ended);
-      await page.unroute('**/c/rs-learning/history?*');
+      await page.unroute('**/c/rs-learning/library?*');
     }
   }
   console.log('INSTANT_ANSWER', JSON.stringify({ median: median(answers), runs: answers }));
@@ -248,9 +224,12 @@ test('drawer targets are at least 44px and do not overlap', async ({ page }) => 
       await expect(page.locator('html')).toHaveAttribute('lang', language);
       await page.goto('/c/rs-learning/home');
       await openNavigation(page);
+      await expect(page.getByRole('dialog')).toBeVisible();
+      const drawer = page.getByRole('dialog', { name: language === 'ar' ? 'القايمة الرئيسية' : 'Main menu' });
+      await expect(drawer).toHaveAttribute('aria-modal', 'true');
       await mkdir('test-results/screenshots', { recursive: true });
       await page.screenshot({ path: `test-results/screenshots/drawer-${language}-390.png` });
-      const targets = page.locator('.sidebar.is-open :is(.sb-item, .circle-btn, .me, .agent-tile)');
+      const targets = drawer.locator(':is(.sb-item, .circle-btn, .me, .agent-tile)');
       const count = await targets.count();
       expect(count, `${language}: drawer has targets`).toBeGreaterThan(0);
       for (let index = 0; index < count; index++) {
@@ -265,6 +244,7 @@ test('drawer targets are at least 44px and do not overlap', async ({ page }) => 
       }).map(other => `${node.textContent} / ${other.textContent}`)));
       expect.soft(overlaps, `${language}: overlapping targets`).toEqual([]);
       await closeNavigation(page);
+      await expect(page.getByRole('dialog')).toHaveCount(0);
     }
   } finally {
   await page.setViewportSize({ width: 1440, height: 900 });

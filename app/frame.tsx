@@ -24,7 +24,8 @@ export function Frame({sidebar,title,breadcrumb,chat=false,children}:{sidebar:Re
  const covered=open&&narrow;
  const wasOpen=useRef(false);
  // While the drawer covers the page it holds the keyboard: focus moves into it, Tab and Shift+Tab wrap inside it,
- // Escape closes it, and closing it in any way gives focus back to the menu button.
+ // Escape closes it, and closing it in any way gives focus back to the menu button. While it covers the page it is
+ // announced as a modal dialog; beside the page it stays a labelled landmark.
  useEffect(()=>{
   if(!open) { if(wasOpen.current) menu.current?.focus(); wasOpen.current=false; return; }
   wasOpen.current=true;
@@ -42,7 +43,7 @@ export function Frame({sidebar,title,breadcrumb,chat=false,children}:{sidebar:Re
   return ()=>document.removeEventListener('keydown',keys);
  },[open]);
  return <div className={`gw app-layout bg-background${chat?' is-chat':''}`}>
-  <aside ref={drawer} id="sidebar" className={`sidebar${open?' is-open':''}`} aria-label={t('mainMenu')}>{sidebar}</aside>
+  <aside ref={drawer} id="sidebar" className={`sidebar${open?' is-open':''}`} aria-label={t('mainMenu')} role={covered?'dialog':undefined} aria-modal={covered||undefined}>{sidebar}</aside>
   <div className="scrim" hidden={!open} onClick={()=>setOpen(false)}/>
   <div className="shell">
    <header className="topbar h-(--sz-60px) shrink-0 flex items-center gap-2 border-b border-border px-4 md:px-6">
