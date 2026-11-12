@@ -9,8 +9,11 @@ import { load } from 'js-yaml';
 // Here it runs against a stand-in for that install, once as the app now answers and once with the reported fault.
 const slug='proxy-company-1', next=encodeURIComponent(`/c/${slug}/home`);
 // trustForwardedHost: Auth builds the link from a client's X-Forwarded-Host, as it could if the gateway passed one on.
-function install({signInAt,verifyAt='/auth/v1/verify',trustForwardedHost=false}) {
+// checksCode and closes: first run opens only with the setup code and only once (issue #50), unless a fault is staged.
+const setupCode='5e7c0de'.padEnd(64,'0');
+function install({signInAt,verifyAt='/auth/v1/verify',trustForwardedHost=false,checksCode=true,closes=true}) {
  const mailbox=[];
+ let setUp=false;
  const server=createServer(async (request,response)=>{
   const base=`http://127.0.0.1:${server.address().port}`, url=new URL(request.url,base);
   const cookie=request.headers.cookie || '';
@@ -20,8 +23,13 @@ function install({signInAt,verifyAt='/auth/v1/verify',trustForwardedHost=false})
   // The inbox lists the newest message first, as the install's does.
   const mail=(to,at,type,redirect)=>mailbox.unshift({ID:String(mailbox.length+1),To:[{Address:to}],
    HTML:`<a href="${at}${verifyAt}?token=t&amp;type=${type}&amp;redirect_to=${encodeURIComponent(redirect)}">Open</a>`});
-  if(url.pathname==='/first-run') return send(200);
+  const coded=code=>!checksCode || code===setupCode;
+  if(url.pathname==='/first-run' && setUp && closes) return send(404);
+  if(url.pathname==='/first-run') return send(200,{},coded(url.searchParams.get('code'))?'<input name="company">':'<p role="alert">Use the setup link</p>');
   if(url.pathname==='/first-run/submit' && request.method==='POST') {
+   if(setUp && closes) return send(404);
+   if(!coded(new URLSearchParams(body).get('code'))) return send(403);
+   setUp=true;
    mail('proxy-owner@example.com',base,'magiclink',`${base}/auth/callback?next=${next}`);
    return send(303,{location:`${signInAt(base)}/sign-in?next=${next}&message=sent&language=en`,'set-cookie':'verifier=v; Path=/'});
   }
@@ -49,7 +57,7 @@ function install({signInAt,verifyAt='/auth/v1/verify',trustForwardedHost=false})
 async function check(server) {
  const origin=`http://127.0.0.1:${server.address().port}`;
  const child=spawn(process.execPath,['--input-type=module','-'],{env:{...process.env,APP_ORIGIN:origin,MAIL_URL:`${origin}/mail`,
-  NEXT_PUBLIC_SUPABASE_ANON_KEY:'anon',SUPABASE_SERVICE_ROLE_KEY:'service'}});
+  NEXT_PUBLIC_SUPABASE_ANON_KEY:'anon',SUPABASE_SERVICE_ROLE_KEY:'service',SETUP_CODE:setupCode}});
  let output=''; child.stdout.on('data',data=>output+=data); child.stderr.on('data',data=>output+=data);
  child.stdin.end(readFileSync('scripts/check-install-proxy.mjs'));
  const status=await new Promise(resolve=>child.on('close',resolve));
@@ -63,6 +71,18 @@ test('the proxied install check follows first run and the emailed link to the Co
  assert.match(output,new RegExp(`Reached http://127\\.0\\.0\\.1:\\d+/c/${slug}/home`));
  assert.match(output,new RegExp(`Invitation returned to http://127\\.0\\.0\\.1:\\d+/auth/accept\\?next=${encodeURIComponent(`/c/${slug}/settings/members`)}`));
  assert.match(output,/Sign-in link on http:\/\/127\.0\.0\.1:\d+ despite X-Forwarded-Host: evil\.example/);
+});
+
+test('the install check fails when first run opens without the setup code', async () => {
+ const {status,output}=await check(await install({signInAt:base=>base,checksCode:false}));
+ assert.equal(status,1);
+ assert.match(output,/first run without the setup code shows no form/);
+});
+
+test('the install check fails when the setup code still works after setup', async () => {
+ const {status,output}=await check(await install({signInAt:base=>base,closes:false}));
+ assert.equal(status,1);
+ assert.match(output,/a second submission with the setup code is refused/);
 });
 
 test('the install check fails, naming the link, when the emailed sign-in link follows a forged X-Forwarded-Host', async () => {

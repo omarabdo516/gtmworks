@@ -27,6 +27,9 @@ registerHooks({resolve(specifier,context,next) {
 
 process.env.NEXT_PUBLIC_SUPABASE_URL='http://auth.test';
 process.env.SUPABASE_SERVICE_ROLE_KEY='service-role-test-key';
+// The one-time code the installer prints in the setup link (issue #50).
+const code='0123456789abcdef'.repeat(4);
+process.env.SETUP_CODE=code;
 const {NextRequest}=await import('next/server');
 const submit=(await import('../app/first-run/submit/route.ts')).POST;
 const callback=(await import('../app/auth/callback/route.ts')).GET;
@@ -50,7 +53,7 @@ function server() {
  return requests;
 }
 const form=values=>{ const body=new FormData(); for(const [name,value] of Object.entries(values)) body.set(name,value); return body; };
-const owner={name:'Owner',email:'owner@example.test',company:'First Company',language:'en'};
+const owner={name:'Owner',email:'owner@example.test',company:'First Company',language:'en',code};
 
 test('first run redirects and emails links on APP_ORIGIN, not on the forwarded request', async () => {
  process.env.APP_ORIGIN=origin;
@@ -68,7 +71,7 @@ test('first run sends invalid input back to the form on APP_ORIGIN', async () =>
  server();
  const response=await submit(new NextRequest('http://gateway:8080/first-run/submit',{method:'POST',headers:inside,body:form({...owner,name:'',language:'ar'})}));
  assert.equal(response.status,303);
- assert.equal(response.headers.get('location'),`${origin}/first-run?invalid=1&language=ar`);
+ assert.equal(response.headers.get('location'),`${origin}/first-run?invalid=1&language=ar&code=${code}`);
 });
 
 test('the auth callback redirects on APP_ORIGIN after the code is exchanged and when it is not', async () => {

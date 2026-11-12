@@ -386,6 +386,7 @@
   "firstCompanyName": "First company name",
   "createAndSendLink": "Create and send sign-in link",
   "setupInvalid": "Check the names and email address, then try again.",
+  "setupNeedsLink": "Setup opens only from the link the installer printed on your server. Run the installer again there to see it.",
   "conversations": "Conversations",
   "conversationNew": "New",
   "conversationNewTitle": "New conversation",

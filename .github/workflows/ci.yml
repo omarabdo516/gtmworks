@@ -219,28 +219,43 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           fail() { echo "install check failed: $1" >&2; exit 1; }
+          # An install piped into tee keeps its own exit status.
+          set -o pipefail
           docker --host unix:///var/run/docker.sock run -d --privileged --name install-docker \
             -e DOCKER_TLS_CERTDIR= -p 127.0.0.1:2375:2375 \
             -v "$PWD:$PWD" docker:28.5.1-dind
           trap 'docker --host unix:///var/run/docker.sock rm -fv install-docker' EXIT
           for attempt in $(seq 1 60); do docker info >/dev/null 2>&1 && break; sleep 1; done
           docker info >/dev/null || fail 'DinD readiness'
-          sh scripts/install.sh || fail 'first install'
+          { sh scripts/install.sh || fail 'first install'; } 2>&1 | tee first-install.log
           compose() { docker compose --env-file .env.install -f docker-compose.install.yml "$@"; }
           db() { compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 -At "$@"; }
           [[ $(stat -c %a .env.install) == 600 ]] || fail '.env.install permissions (expected 600)'
+          # First run opens only through the setup link (issue #50): the first install ends with it, its code is in no
+          # other line, and a repeat install while setup is still open prints the same link.
+          code=$(sed -n 's/^SETUP_CODE=//p' .env.install)
+          [[ $code =~ ^[a-f0-9]{64}$ ]] || fail 'the install generates a setup code'
+          link="Set up gtmworks with this one-time link: http://localhost:3000/first-run?code=$code"
+          [[ $(tail -n 1 first-install.log) == "$link" ]] || fail 'the first install ends with the setup link'
+          [[ $(grep -cF "$code" first-install.log) == 1 ]] || fail 'the setup code appears only in the setup link'
+          { sh scripts/install.sh || fail 'repeat install before setup'; } 2>&1 | tee repeat-before-setup.log
+          [[ $(tail -n 1 repeat-before-setup.log) == "$link" ]] || fail 'a repeat install before setup prints the same setup link'
           # The local install on http://localhost:3000, straight to the gateway, while first run is still open: the emailed
           # sign-in link reaches the Company home, an invitation link returns to the app, and a sign-in request with a forged
           # X-Forwarded-Host still gets a link on APP_ORIGIN (issue #40). The keys pass as an env file, so none is printed.
-          docker run --rm -i --network host --env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY)=' .env.install) \
+          docker run --rm -i --network host --env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY)=' .env.install) --env-file <(grep -E '^SETUP_CODE=' .env.install) \
             -e APP_ORIGIN=http://localhost:3000 -e MAIL_URL=http://127.0.0.1:8025 \
             node:22.14.0-alpine3.21 node --input-type=module - < scripts/check-install-proxy.mjs || fail 'emailed sign-in and invitation links on the local install'
+          logs=$(compose logs 2>&1) || fail 'read container logs'
+          if grep -qF "$code" <<< "$logs"; then fail 'the setup code must not appear in a container log'; fi
           cp .env.install .env.install.before
           db -c "insert into public.companies (id,slug,name) values ('00000000-0000-4000-8000-000000000237','install-probe','Keep me');" || fail 'insert persistence probe'
           db -c 'select name from gtmworks_install.schema_migrations order by name' > before || fail 'read initial migrations'
           find supabase/migrations -name '*.sql' ! -name '*.verify.sql' -printf '%f\n' | sort > expected
           diff -u expected before || fail 'applied migrations match migration files'
-          sh scripts/install.sh || fail 'repeat install'
+          { sh scripts/install.sh || fail 'repeat install'; } 2>&1 | tee repeat-after-setup.log
+          [[ $(tail -n 1 repeat-after-setup.log) == 'gtmworks is ready: http://localhost:3000/sign-in' ]] || fail 'a repeat install after setup prints the sign-in address'
+          if grep -qF "$code" repeat-after-setup.log; then fail 'a repeat install after setup prints no setup code'; fi
           cmp .env.install.before .env.install || fail '.env.install unchanged after repeat install'
           db -c 'select name from gtmworks_install.schema_migrations order by name' > after || fail 'read migrations after repeat install'
           diff -u before after || fail 'migrations unchanged after repeat install'
@@ -303,13 +318,14 @@ jobs:
           public=https://app.gtmworks.test:4443
           compose down -v || fail 'remove restored install'
           sed -i -e "s#^APP_ORIGIN=.*#APP_ORIGIN=$public#" -e "s#^SUPABASE_PUBLIC_URL=.*#SUPABASE_PUBLIC_URL=$public#" .env.install || fail 'set the public origin'
-          sh scripts/install.sh || fail 'proxied install'
+          { sh scripts/install.sh || fail 'proxied install'; } 2>&1 | tee proxied-install.log
+          [[ $(tail -n 1 proxied-install.log) == "Set up gtmworks with this one-time link: $public/first-run?code=$code" ]] || fail 'the proxied install prints its setup link on the public origin'
           printf '%s\n' '{' '  local_certs' '  auto_https disable_redirects' '}' 'app.gtmworks.test:4443 {' '  reverse_proxy 127.0.0.1:3000' '}' > Caddyfile
           docker run -d --name install-proxy --network host -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2 >/dev/null || fail 'start the HTTPS proxy'
           for attempt in $(seq 1 60); do docker exec install-proxy cat /data/caddy/pki/authorities/local/root.crt > ca.crt 2>/dev/null && [[ -s ca.crt ]] && break; sleep 1; done
           [[ -s ca.crt ]] || { docker logs install-proxy; fail 'HTTPS proxy certificate authority'; }
           docker run --rm -i --network host --add-host app.gtmworks.test:127.0.0.1 -v "$PWD/ca.crt:/ca.crt:ro" \
-            --env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY)=' .env.install) \
+            --env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY)=' .env.install) --env-file <(grep -E '^SETUP_CODE=' .env.install) \
             -e NODE_EXTRA_CA_CERTS=/ca.crt -e APP_ORIGIN="$public" -e MAIL_URL=http://127.0.0.1:8025 \
             node:22.14.0-alpine3.21 node --input-type=module - < scripts/check-install-proxy.mjs || { docker logs install-proxy; fail 'first run, sign-in and invitation links through the HTTPS proxy'; }
           old_web=$(compose ps -q web)

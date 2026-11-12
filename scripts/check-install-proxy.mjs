@@ -55,9 +55,21 @@ async function emailedLink(email,what) {
  assert.fail(`the ${what} email arrived`);
 }
 
-const start=await follow(`${origin}/first-run`);
-assert.equal(start.response.status,200,'first run opens on an empty install');
-const sent=await follow(`${origin}/first-run/submit`,{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams(owner).toString()});
+// First run opens only through the setup link the installer printed (issue #50): without its code, or with a wrong
+// one, the page shows no form and a submission is refused.
+const code=process.env.SETUP_CODE;
+assert.ok(code,'SETUP_CODE is set');
+const submit=values=>follow(`${origin}/first-run/submit`,{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams(values).toString()});
+const closed=await follow(`${origin}/first-run`);
+assert.equal(closed.response.status,200,'first run answers on an empty install');
+assert.ok(!(await closed.response.text()).includes('name="company"'),'first run without the setup code shows no form');
+for(const values of [owner,{...owner,code:'0'.repeat(63)+'1'}]) {
+ assert.equal((await submit(values)).response.status,403,`a submission ${values.code?'with a wrong':'without the'} setup code is refused`);
+}
+const start=await follow(`${origin}/first-run?code=${encodeURIComponent(code)}`);
+assert.equal(start.response.status,200,'first run opens with the setup code');
+assert.ok((await start.response.text()).includes('name="company"'),'first run with the setup code shows the form');
+const sent=await submit({...owner,code});
 assert.equal(new URL(sent.url).pathname,'/sign-in');
 assert.equal(new URL(sent.url).searchParams.get('message'),'sent',sent.url);
 assert.equal(sent.response.status,200);
@@ -72,6 +84,7 @@ assert.match(new URL(home.url).pathname,/^\/c\/[^/]+\/home$/,`the emailed link $
 assert.equal(home.response.status,200,`the emailed link ${link} reached ${home.url}`);
 assert.ok((await home.response.text()).includes(owner.company),'the Company home names the company');
 console.log(`Reached ${home.url}`);
+assert.equal((await submit({...owner,email:'second-owner@example.com',code})).response.status,404,'a second submission with the setup code is refused');
 
 // An invitation as the members page sends one (inviteUserByEmail with the service role key). Auth answers its link with
 // a redirect to /auth/accept, the session in the fragment; that page then runs in the browser, which this client is not.

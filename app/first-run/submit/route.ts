@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { notFound } from 'next/navigation';
 import { setupAdmin, setupIsOpen } from '@/lib/first-run';
 import { firstRunInput } from '@/lib/first-run-input.mjs';
+import { setupCodeMatches } from '@/lib/setup-code.mjs';
+import { i18n } from '@/lib/i18n.mjs';
 import { supabase } from '@/lib/supabase';
 import { logActionFailure } from '@/lib/diagnostics.mjs';
 import { appUrl } from '@/lib/app-origin.mjs';
@@ -11,8 +13,13 @@ export async function POST(request:NextRequest) {
   logActionFailure('first_run_setup_closed',new Error('Setup closed at start'));
   notFound();
  }
- const form=await request.formData(), input=firstRunInput(form);
- const invalid=appUrl(`/first-run?invalid=1&language=${form.get('language')==='ar'?'ar':'en'}`);
+ const form=await request.formData(), input=firstRunInput(form), code=form.get('code'), language=form.get('language')==='ar'?'ar':'en';
+ // Only the link the installer printed opens setup (issue #50): nothing is created without its code.
+ if(!setupCodeMatches(code)) {
+  logActionFailure('first_run_wrong_code',new Error('Setup code missing or wrong'));
+  return new NextResponse(i18n(language).t('setupNeedsLink'),{status:403,headers:{'content-type':'text/plain; charset=utf-8'}});
+ }
+ const invalid=appUrl(`/first-run?invalid=1&language=${language}&code=${code}`);
  if(!input) {
   logActionFailure('first_run_invalid_input',new Error('Invalid setup input'));
   return NextResponse.redirect(invalid,303);

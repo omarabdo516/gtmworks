@@ -4,7 +4,9 @@ import { join } from 'node:path';
 import { localQuery, resetFirstRun } from '../scripts/first-run-db.mjs';
 import { followSignInLink } from './sign-in';
 
-const input={name:'First owner',email:'first-owner@example.test',company:'First Company',language:'en'};
+// The install's setup code (playwright.config.ts), as the installer's setup link carries it (issue #50).
+const code=process.env.SETUP_CODE!;
+const input={name:'First owner',email:'first-owner@example.test',company:'First Company',language:'en',code};
 const counts=(baseURL:string)=>localQuery(`select
  (select count(*)::int from auth.users) accounts,
  (select count(*)::int from public.people) people,
@@ -26,6 +28,10 @@ test('empty install creates its Agency owner and first company, then opens Home 
  await page.request.delete('http://127.0.0.1:54324/api/v1/messages');
  await page.goto('/');
  await expect(page).toHaveURL('/first-run');
+ // Without the setup link's code the page says where the link comes from and shows no form.
+ await expect(page.getByRole('alert')).toHaveText('Setup opens only from the link the installer printed on your server. Run the installer again there to see it.');
+ await expect(page.getByLabel('Your name')).toHaveCount(0);
+ await page.goto(`/first-run?code=${code}`);
  await page.getByLabel('Your name').fill(input.name);
  await page.getByLabel('Email',{exact:true}).fill(input.email);
  await page.getByLabel('First company name').fill(input.company);
@@ -40,6 +46,21 @@ test('empty install creates its Agency owner and first company, then opens Home 
  expect(counts(baseURL!)).toEqual({accounts:1,people:1,companies:1,owners:1});
  expect(localQuery('select agency_owner,language from public.people',baseURL)[0]).toEqual({agency_owner:true,language:'ar'});
  expect((await page.request.get('/first-run')).status()).toBe(404);
+ // The code worked once: after setup the same link and a second submission with it are refused.
+ expect((await page.request.get(`/first-run?code=${code}`)).status()).toBe(404);
+ expect((await page.request.post('/first-run/submit',{form:{...input,email:'second@example.test'},maxRedirects:0})).status()).toBe(404);
+ expect(counts(baseURL!)).toEqual({accounts:1,people:1,companies:1,owners:1});
+});
+
+test('a submission with no setup code or a wrong one is refused and creates no account or company',async({request,baseURL})=>{
+ const noCode={name:input.name,email:input.email,company:input.company,language:input.language};
+ for(const form of [noCode,{...input,code:'0'.repeat(64)},{...input,code:code.slice(0,-1)}]) {
+  const refused=await request.post('/first-run/submit',{form,maxRedirects:0});
+  expect(refused.status()).toBe(403);
+  expect(await refused.text()).toBe('Setup opens only from the link the installer printed on your server. Run the installer again there to see it.');
+ }
+ expect(localQuery('select (select count(*)::int from auth.users) accounts, (select count(*)::int from public.companies) companies',baseURL)[0]).toEqual({accounts:0,companies:0});
+ expect(counts(baseURL!)).toEqual({accounts:0,people:0,companies:0,owners:0});
 });
 
 test('concurrent submissions leave exactly one account, person, company and Owner; every later submission is 404',async({request,baseURL})=>{
@@ -57,10 +78,12 @@ test('invalid input creates nothing and a populated installation refuses setup',
  const invalid=await request.post('/first-run/submit',{form:{...input,name:'',language:'ar'},maxRedirects:0});
  expect(invalid.status()).toBe(303);
  expect(invalid.headers().location).toContain('language=ar');
+ expect(invalid.headers().location).toContain(`code=${code}`);
  expect(counts(baseURL!)).toEqual({accounts:0,people:0,companies:0,owners:0});
  resetFirstRun(baseURL,true);
  const before=counts(baseURL!);
  expect((await request.get('/first-run')).status()).toBe(404);
+ expect((await request.get(`/first-run?code=${code}`)).status()).toBe(404);
  expect((await request.post('/first-run/submit',{form:input,maxRedirects:0})).status()).toBe(404);
  expect(counts(baseURL!)).toEqual(before);
 });
