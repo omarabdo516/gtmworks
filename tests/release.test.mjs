@@ -627,3 +627,26 @@ test('the release workflow writes packages with the job token only and runs on s
  assert.deepEqual(secrets,[]);
  for(const [name,job] of Object.entries(workflow.jobs)) assert.equal(job['runs-on'],'ubuntu-latest',name);
 });
+
+test('every action the release runs is pinned to a reviewed commit, named by its exact release tag', () => {
+ // A tag such as @v6 can be moved upstream to any code, which would then run with packages or contents write and could
+ // push another image. The install test feeds the published Release, so its actions are pinned too. Each commit is the
+ // one the tag named when reviewed (git ls-remote --tags, 2026-11-13); changing one is a reviewed edit of this list.
+ const reviewed={
+  'actions/checkout':['11d5960a326750d5838078e36cf38b85af677262','v4.4.0'],
+  'actions/setup-node':['49933ea5288caeca8642d1e84afbd3f7d6820020','v4.4.0'],
+  'actions/upload-artifact':['ea165f8d65b6e75b540449e92b4886f43607fa02','v4.6.2'],
+  'actions/download-artifact':['d3f86a106a0bac45b974a628896c90dbdf5c8093','v4.3.0'],
+  'docker/setup-qemu-action':['c7c53464625b32c7a7e944ae62b3e17d2b600130','v3.7.0'],
+  'docker/setup-buildx-action':['8d2750c68a42422c14e847fe6c8ac0403b4cbd6f','v3.12.0'],
+  'docker/login-action':['c94ce9fb468520275223c153574b00df6fe4bcc9','v3.7.0'],
+  'docker/build-push-action':['10e90e3645eae34f1e60eeb005ba3a3d33f178e8','v6.19.2'],
+ };
+ const lines=workflowText.split('\n').filter(line=>/^\s*(- )?uses:/.test(line));
+ assert.equal(lines.length,Object.values(workflow.jobs).flatMap(job=>job.steps.filter(step=>step.uses)).length);
+ for(const line of lines) {
+  const [,action,sha,tag]=line.match(/uses: ([\w-]+\/[\w-]+)@(\S+)(?: # (\S+))?$/)||[];
+  assert.deepEqual([sha,tag],reviewed[action],`${line.trim()} is not pinned to its reviewed commit and tag`);
+ }
+ for(const job of ['image','release','promote']) assert.ok(workflow.jobs[job].steps.some(step=>step.uses),job);
+});
