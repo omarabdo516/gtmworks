@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { companyProfile, engineSignIn } from '../lib/hermes.mjs';
+import { companyProfile, engineSignIn, engineSignInsWaiting } from '../lib/hermes.mjs';
+import { busy, signInLimits, subscriptionAction } from '../lib/subscription-sign-in.mjs';
 import { bundledHermesManagement } from '../lib/bundled-hermes.mjs';
 
 // A company connects its own ChatGPT subscription through the bundled Engine's management listener (#3, ADR 0012): one
@@ -23,7 +24,9 @@ async function fakeManagement() {
  const requests=/** @type {{method:string,path:string,profile:string|null,body:string}[]} */([]);
  const sessions=new Map(); const answers=/** @type {string[]} */([]);
  // gone: profiles still listed whose home the OAuth routes no longer find (removed in between).
- const settings={created:/** @type {any[]} */([]),wait:0,gone:new Set()};
+ // pollFailures: how many polls answer 500 next; pollStatus: a status every poll answers instead of the session's;
+ // expiresIn: the lifetime /start reports for a sign-in, in seconds; cancelFailures: how many cancels answer 500 next.
+ const settings={created:/** @type {any[]} */([]),wait:0,gone:new Set(),pollFailures:0,pollStatus:/** @type {string|null} */(null),expiresIn:900,cancelFailures:0};
  const loggedIn=(name,provider)=>!!(profiles.get(name)?.store[provider]?.length||profiles.get('default')?.store[provider]?.length);
  const server=createServer((request,response)=>{
   let raw=''; request.on('data',chunk=>{ raw+=chunk; }); request.on('end',async()=>{
@@ -45,6 +48,7 @@ async function fakeManagement() {
    if(url.pathname==='/api/providers/oauth'&&request.method==='GET') return send(200,{providers:['openai-codex','anthropic'].map(id=>({id,flow:id==='anthropic'?'external':'device_code',status:{logged_in:loggedIn(home,id),token_preview:loggedIn(home,id)?'...cret':null}}))});
    const cancel=url.pathname.match(/^\/api\/providers\/oauth\/sessions\/([^/]+)$/);
    if(cancel&&request.method==='DELETE') {
+    if(settings.cancelFailures>0) { settings.cancelFailures--; return send(500,{detail:'Internal Server Error'}); }
     const session=sessions.get(cancel[1]); if(!session) return send(200,{ok:false,message:'session not found'});
     if(session.profile!==profile) return send(400,{detail:'OAuth session profile mismatch'});
     session.status='cancelled'; sessions.delete(cancel[1]); return send(200,{ok:true,session_id:cancel[1]});
@@ -52,10 +56,12 @@ async function fakeManagement() {
    if(oauth&&oauth[2]==='start'&&request.method==='POST') {
     if(oauth[1]!=='openai-codex') return send(400,{detail:`${oauth[1]} uses an external CLI; run \`hermes auth add ${oauth[1]}\` manually`});
     const id=randomBytes(16).toString('base64url'); sessions.set(id,{profile,provider:oauth[1],status:'pending'});
-    return send(200,{session_id:id,flow:'device_code',user_code:'WXYZ-4K8M',verification_url:'https://auth.openai.com/codex/device',expires_in:900,poll_interval:5});
+    return send(200,{session_id:id,flow:'device_code',user_code:'WXYZ-4K8M',verification_url:'https://auth.openai.com/codex/device',expires_in:settings.expiresIn,poll_interval:5});
    }
    if(oauth&&oauth[2]==='submit') return send(400,{detail:`submit not supported for ${oauth[1]}`});
    if(oauth&&oauth[2]==='poll'&&request.method==='GET') {
+    if(settings.pollFailures>0) { settings.pollFailures--; return send(500,{detail:'Internal Server Error'}); }
+    if(settings.pollStatus) return send(200,{session_id:oauth[3],status:settings.pollStatus});
     const session=sessions.get(oauth[3]); if(!session) return send(404,{detail:'Session not found or expired'});
     if(session.profile!==profile) return send(400,{detail:'OAuth session profile mismatch'});
     return send(200,{session_id:oauth[3],status:session.status});
@@ -239,5 +245,84 @@ test('a wrong key, an address outside the allowed ones or an unknown provider fa
   assert.deepEqual(await engineSignIn(connect(fake),a).start('gemini'),{state:'failed'});
   assert.deepEqual(await engineSignIn(connect(fake),'not-a-company').state('openai-codex'),{state:'failed'});
   assert.equal(fake.requests.filter(request=>request.path.startsWith('/api/providers/')).length,0);
+ } finally { await fake.close(); }
+});
+
+test('a poll the listener cannot answer keeps the sign-in: it is not disconnected, and disconnect still cancels it by its id',async()=>{
+ const fake=await fakeManagement();
+ try {
+  const signIn=engineSignIn(connect(fake),a);
+  const started=await signIn.start('openai-codex');
+  assert.equal(started.state,'pending');
+  const session=[...fake.sessions.keys()][0];
+  // A 500, then an answer the driver does not know: the sign-in is still Hermes's, so it is failed for now, never disconnected.
+  fake.settings.pollFailures=1;
+  assert.deepEqual(await signIn.state('openai-codex'),{state:'failed'});
+  assert.deepEqual(await signIn.state('openai-codex'),started);
+  fake.settings.pollStatus='thinking';
+  assert.deepEqual(await signIn.state('openai-codex'),{state:'failed'});
+  fake.settings.pollStatus=null;
+  // A second connect finds the same sign-in and starts none.
+  assert.deepEqual(await signIn.start('openai-codex'),started);
+  assert.equal(fake.requests.filter(request=>request.path.endsWith('/start')).length,1);
+  fake.settings.pollFailures=1;
+  assert.deepEqual(await signIn.disconnect('openai-codex'),{state:'disconnected'});
+  const cancelled=fake.requests.filter(request=>request.method==='DELETE'&&request.path.startsWith('/api/providers/oauth/sessions/'));
+  assert.deepEqual(cancelled.map(request=>[request.path,request.profile]),[[`/api/providers/oauth/sessions/${session}`,companyProfile(a)]]);
+  // Approving the original link after the disconnect saves nothing.
+  fake.approve();
+  assert.deepEqual(fake.profiles.get(String(companyProfile(a)))?.store,{});
+  assert.deepEqual(await signIn.state('openai-codex'),{state:'disconnected'});
+ } finally { await fake.close(); }
+});
+
+test('a disconnect whose cancel Hermes refuses keeps the sign-in, and the next disconnect cancels it',async()=>{
+ const fake=await fakeManagement();
+ try {
+  const signIn=engineSignIn(connect(fake),a);
+  const started=await signIn.start('openai-codex');
+  fake.settings.cancelFailures=1;
+  assert.deepEqual(await signIn.disconnect('openai-codex'),{state:'failed'});
+  assert.deepEqual(await signIn.state('openai-codex'),started);
+  assert.deepEqual(await signIn.disconnect('openai-codex'),{state:'disconnected'});
+  assert.equal(fake.sessions.size,0);
+ } finally { await fake.close(); }
+});
+
+test('a recognized end of the sign-in in Hermes ends it here, and the stored state is read again',async()=>{
+ const fake=await fakeManagement();
+ try {
+  const signIn=engineSignIn(connect(fake),a);
+  for(const ending of ['approved','denied','expired','error','cancelled']) {
+   assert.equal((await signIn.start('openai-codex')).state,'pending',ending);
+   fake.settings.pollStatus=ending;
+   assert.deepEqual(await signIn.state('openai-codex'),{state:'disconnected'},ending);
+   fake.settings.pollStatus=null;
+  }
+  assert.equal(fake.requests.filter(request=>request.path.endsWith('/start')).length,5);
+ } finally { await fake.close(); }
+});
+
+test('sign-ins abandoned past their lifetime stop counting toward the waiting limit, and are cancelled in Hermes',async()=>{
+ const fake=await fakeManagement();
+ try {
+  fake.settings.expiresIn=0.2;
+  const companies=Array.from({length:16},(_,index)=>`20000000-0000-0000-0000-${String(index+1).padStart(12,'0')}`);
+  const before=engineSignInsWaiting();
+  for(const company of companies) assert.equal((await engineSignIn(connect(fake),company).start('openai-codex')).state,'pending');
+  assert.equal(engineSignInsWaiting(),before+16);
+  // Nobody reads those companies again; the limit is full, so a new connect is refused before it reaches Hermes.
+  const limits=signInLimits({waiting:before+16});
+  const fresh='30000000-0000-0000-0000-000000000001';
+  assert.equal(await subscriptionAction(engineSignIn(connect(fake),fresh),{company:fresh,caller:'owner',provider:'openai-codex',intent:'connect',limits}),busy);
+  await new Promise(resolve=>setTimeout(resolve,300));
+  fake.settings.expiresIn=900;
+  assert.equal(engineSignInsWaiting(),before);
+  assert.equal((await subscriptionAction(engineSignIn(connect(fake),fresh),{company:fresh,caller:'owner',provider:'openai-codex',intent:'connect',limits})).state,'pending');
+  // Each expired sign-in was cancelled in its own company's profile (best effort, by its stored id).
+  const until=Date.now()+2000; while(fake.sessions.size>1&&Date.now()<until) await new Promise(resolve=>setTimeout(resolve,20));
+  const cancelled=fake.requests.filter(request=>request.method==='DELETE'&&request.path.startsWith('/api/providers/oauth/sessions/'));
+  assert.deepEqual(cancelled.map(request=>request.profile).sort(),companies.map(company=>companyProfile(company)).sort());
+  assert.equal(fake.sessions.size,1);
  } finally { await fake.close(); }
 });
