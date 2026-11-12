@@ -22,7 +22,7 @@ function triggers(yaml) {
 
 test('the scan sees every workflow', () => {
  const paths = workflows.map(file => file.path);
- for (const path of ['ci.yml', 'design-compare.yml', 'visual-baselines.yml']) assert.ok(paths.includes(`${dir}/${path}`), path);
+ for (const path of ['ci.yml', 'design-compare.yml', 'release.yml', 'visual-baselines.yml']) assert.ok(paths.includes(`${dir}/${path}`), path);
 });
 
 test('no workflow names the paid runner', () => {

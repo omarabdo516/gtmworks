@@ -23,6 +23,11 @@ COPY --from=build --chown=node:node /app/lib ./lib
 COPY --from=build --chown=node:node /app/package.json ./package.json
 COPY --from=build --chown=node:node /app/THIRD_PARTY_NOTICES.md ./THIRD_PARTY_NOTICES.md
 COPY --from=build --chown=node:node /app/components/paperclip/fonts/*.txt /app/components/paperclip/fonts/NOTICE.md ./licenses/paperclip/fonts/
+# Everything an install reads from a source checkout, so a release install needs only its compose file and install
+# script: in release mode scripts/install.sh copies /app/install into the install directory (#49).
+COPY --from=build --chown=node:node /app/lib ./install/lib
+COPY --from=build --chown=node:node /app/scripts/install-db.sql /app/scripts/local-default-privileges.sql /app/scripts/install-key.sh /app/scripts/install-nginx.conf ./install/scripts/
+COPY --from=build --chown=node:node /app/supabase/migrations ./install/supabase/migrations
 USER node
 EXPOSE 3000
 CMD ["node", "server.js"]

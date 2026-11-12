@@ -94,6 +94,26 @@ empty install's volumes and `.env.install`, including its keys and origin settin
 and restarts the stack. This is a full-install backup, not a company export; it
 does not back up the agent engine's data volume. Do not use it to change the pinned Postgres version.
 
+## Releases
+
+Each tag `vX.Y.Z` publishes the image `ghcr.io/omarabdo516/gtmworks:X.Y.Z` for
+`linux/amd64` and `linux/arm64`, and a GitHub Release with two files:
+`docker-compose.install.yml`, which pins every image by digest, and `install.sh`.
+In a directory holding only those two files, `sh install.sh` pulls the image and
+takes the migrations and install files from it; nothing is built on the server.
+`stable` and `latest` move to a release only after that install passes on its exact
+image; `main` follows each main commit whose CI passed. A release install updates
+when both files are replaced with the next release's and `sh install.sh update` runs.
+Back up before replacing them: backup and restore refuse to run with the files of a
+release the install does not run yet.
+
+The first push creates the package `ghcr.io/omarabdo516/gtmworks` **private**, and
+nothing in the workflow can change that. Its owner makes it public once: on GitHub,
+open the package's **Package settings**, choose **Change visibility** and set it to
+**Public**. Until then a release's install test stops on its anonymous read, and
+`stable`, `latest` and the GitHub Release are not published; afterwards, re-run that
+workflow run's failed jobs.
+
 ## Licence
 
 gtmworks is released under the MIT License. See [LICENSE](LICENSE).

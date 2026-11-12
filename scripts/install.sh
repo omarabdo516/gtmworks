@@ -3,7 +3,10 @@ set +x
 set -eu
 # Read the function before an update replaces this script on disk.
 main() {
-cd "$(dirname "$0")/.."
+# A release's install script names its image by digest (scripts/release-assets.mjs) and sits beside its compose file;
+# in a source checkout this stays empty and the image is built from the checkout.
+release_image=
+if [ -n "$release_image" ]; then cd "$(dirname "$0")"; else cd "$(dirname "$0")/.."; fi
 umask 077
 mkdir .install-lock || { echo 'Another install is running (or remove stale .install-lock).' >&2; exit 1; }
 resume=no
@@ -31,6 +34,16 @@ volumes() {
   docker run --rm --volumes-from "$(compose ps -aq db)" --volumes-from "$(compose ps -aq storage)" "$@"
 }
 operation=${1:-install}
+if [ -n "$release_image" ]; then
+  # A compose file from another release would migrate one version and start another.
+  grep -qF "image: $release_image" docker-compose.install.yml || {
+    echo "docker-compose.install.yml is not from the release of $release_image: download both files of one release." >&2; exit 1; }
+  # Backup and restore restart the stack without migrating, so they run only with the files of the release it runs.
+  case "$operation" in backup|restore)
+    test "$(cat .install-release 2>/dev/null)" = "$release_image" || {
+      echo "This install does not run $release_image yet: run sh install.sh update first, or use the files of the release it runs." >&2; exit 1; };;
+  esac
+fi
 if [ "$operation" = backup ]; then
   test -f .env.install || { echo 'Install first.' >&2; exit 1; }
   destination=${2:-backups}
@@ -78,6 +91,9 @@ elif [ "$operation" = restore ]; then
   mv .env.install.tmp .env.install
   compose up -d --force-recreate --wait --wait-timeout 300
   return
+elif [ "$operation" = update ] && [ -n "$release_image" ]; then
+  test -f .env.install || { echo 'Install first.' >&2; exit 1; }
+  test -z "${2:-}" || { echo 'A release install updates to the next release: put its docker-compose.install.yml and install.sh here, then run sh install.sh update.' >&2; exit 1; }
 elif [ "$operation" = update ]; then
   test -f .env.install || { echo 'Install first.' >&2; exit 1; }
   ref=${2:-main}
@@ -95,6 +111,11 @@ elif [ "$operation" = update ]; then
   ' sh "$ref"
 elif [ "$operation" != install ]; then
   echo 'Usage: sh scripts/install.sh [update [ref] | backup [directory] | restore <archive>]' >&2; exit 1
+fi
+if [ -n "$release_image" ]; then
+  docker pull "$release_image"
+  # The image carries what a checkout holds for the install: migrations, database and gateway files, lib/install-env.mjs.
+  docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/install" "$release_image" cp -R /app/install/. /install/
 fi
 if [ ! -f .env.install ]; then
   docker run --rm -v "$PWD/lib:/code:ro" "$node_image" node /code/install-env.mjs generate > .env.install.tmp
@@ -121,13 +142,14 @@ if [ "$operation" = install ]; then compose up -d --wait db auth rest storage ma
   done
   printf "notify pgrst, 'reload schema';\n"
 } | compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 --single-transaction
-compose build web
+if [ -z "$release_image" ]; then compose build web; fi
 if [ "$operation" = update ]; then
   compose up -d --no-deps --wait --wait-timeout 300 hermes web worker
 else
   compose up -d --wait --wait-timeout 300
 fi
-compose exec -T web node -e "for(const url of ['http://gateway:8080/api/health','http://gateway:8080/sign-in','http://hermes:8642/health']) { const response=await fetch(url); if(response.status!==200) throw new Error(url+' returned '+response.status); }" --input-type=module
+compose exec -T web node -e "for(const url of ['http://gateway:8080/api/health','http://gateway:8080/sign-in','http://hermes:8642/health']) { const response=await fetch(url); if(response.status!==200) throw new Error(url+' returned '+response.status); console.log(url+' '+response.status); }" --input-type=module
+if [ -n "$release_image" ]; then printf '%s\n' "$release_image" > .install-release; fi
 echo 'gtmworks is ready: http://localhost:3000/sign-in (mail: http://localhost:8025)'
 echo 'One install serves one company until each company gets its own agent engine home: companies on the bundled agent engine share one agent memory, so an agent can repeat facts from one company to people in another.'
 exit 0

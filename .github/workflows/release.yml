@@ -1,0 +1,173 @@
+# One tested gtmworks image per release, pulled by installs instead of built on the server (#49).
+# A tag vX.Y.Z builds linux/amd64 and linux/arm64 and pushes X.Y.Z, installs on a fresh runner from the two release files
+# alone, and only then moves stable and latest to that exact digest and publishes the GitHub Release with both files.
+# A main push whose CI passed publishes the tag main.
+# The first push creates the package private. Its owner makes it public once (README, Releases); until then the install
+# test stops on the anonymous read below, and stable, latest and the GitHub Release are not published.
+name: Release
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+# CI runs main pushes one at a time in push order, and a newer pending run replaces an older one here too.
+concurrency:
+  group: release-${{ github.event_name == 'workflow_run' && 'main' || github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  image:
+    if: ${{ github.event_name == 'push' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push') }}
+    runs-on: ubuntu-latest
+    # arm64 is built under emulation on the standard runner.
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - name: image tag
+        id: tag
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [[ "$EVENT_NAME" == push ]]; then
+            [[ "$REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "not a release tag: $REF_NAME" >&2; exit 1; }
+            echo "tag=${REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=main" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ github.token }}
+      - name: build and push linux/amd64 and linux/arm64
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.IMAGE }}:${{ steps.tag.outputs.tag }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha,scope=release
+          cache-to: type=gha,mode=max,scope=release
+      - name: both platform digests pushed
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          docker manifest inspect "$IMAGE:$TAG" | tee manifest.json
+          for arch in amd64 arm64; do
+            digest=$(jq -r --arg arch "$arch" '.manifests[] | select(.platform.os == "linux" and .platform.architecture == $arch) | .digest' manifest.json)
+            [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]] || { echo "no single linux/$arch image in $IMAGE:$TAG" >&2; exit 1; }
+            echo "linux/$arch: $IMAGE@$digest"
+          done
+          echo "index: $IMAGE:$TAG@$DIGEST"
+
+  install-test:
+    needs: image
+    if: ${{ github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # No packages permission and no login: the pull below is what an install with no account does.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: release files pinned by digest
+        env:
+          TAG: ${{ needs.image.outputs.tag }}
+          DIGEST: ${{ needs.image.outputs.digest }}
+        run: |
+          node scripts/release-assets.mjs "$IMAGE:$TAG@$DIGEST" release
+          grep -n 'image:' release/docker-compose.install.yml
+          if grep 'image:' release/docker-compose.install.yml | grep -v '@sha256:'; then echo 'an image is not pinned by digest' >&2; exit 1; fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-files
+          path: release/
+          if-no-files-found: error
+          retention-days: 30
+      - name: the image reads with no account
+        env:
+          DIGEST: ${{ needs.image.outputs.digest }}
+        run: |
+          if ! docker manifest inspect "$IMAGE@$DIGEST" > /dev/null; then
+            settings="https://github.com/users/$GITHUB_REPOSITORY_OWNER/packages/container/${GITHUB_REPOSITORY#*/}/settings"
+            echo "::error::$IMAGE cannot be read without an account. Its owner sets it to Public once ($settings, Change visibility), then re-runs this workflow's failed jobs."
+            exit 1
+          fi
+      - name: install from only the compose file and install script
+        run: |
+          dir="$RUNNER_TEMP/gtmworks"
+          mkdir "$dir"
+          cp release/docker-compose.install.yml release/install.sh "$dir/"
+          cd "$dir"
+          ls -A
+          [[ $(ls -A | wc -l) == 2 ]] || { echo 'the install directory must hold only the two release files' >&2; exit 1; }
+          sh install.sh
+          for path in /api/health /sign-in; do
+            status=$(curl -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:3000$path")
+            echo "http://127.0.0.1:3000$path $status"
+            [[ $status == 200 ]] || exit 1
+          done
+
+  publish:
+    needs: [image, install-test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ github.token }}
+      - name: move stable and latest to ${{ needs.image.outputs.digest }}
+        env:
+          DIGEST: ${{ needs.image.outputs.digest }}
+        run: |
+          digest() { docker buildx imagetools inspect "$1" --format '{{json .Manifest}}' | jq -r .digest; }
+          # The read-back must name the release digest itself before stable and latest move.
+          [[ $(digest "$IMAGE@$DIGEST") == "$DIGEST" ]] || { echo "the digest read-back does not name $DIGEST" >&2; exit 1; }
+          docker buildx imagetools create -t "$IMAGE:stable" -t "$IMAGE:latest" "$IMAGE@$DIGEST"
+          for tag in stable latest; do
+            moved=$(digest "$IMAGE:$tag")
+            echo "$IMAGE:$tag -> $moved"
+            [[ "$moved" == "$DIGEST" ]] || { echo "$tag points at $moved, not $DIGEST" >&2; exit 1; }
+          done
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-files
+          path: release
+      - name: GitHub Release with the compose file and install script
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.ref_name }}
+          APP_IMAGE: ${{ env.IMAGE }}:${{ needs.image.outputs.tag }}@${{ needs.image.outputs.digest }}
+        run: |
+          gh release create "$TAG_NAME" release/docker-compose.install.yml release/install.sh -R "$GITHUB_REPOSITORY" \
+            --verify-tag --title "$TAG_NAME" \
+            --notes "Image: $APP_IMAGE. Put both files in an empty directory and run: sh install.sh"
