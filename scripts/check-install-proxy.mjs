@@ -53,9 +53,10 @@ for(let attempt=0; attempt<30 && !link; attempt++) {
 assert.ok(link,'the sign-in email arrived with a link');
 assert.ok(onOrigin(link),`the emailed link is on ${origin}: ${link}`);
 assert.ok(onOrigin(new URL(link).searchParams.get('redirect_to') || ''),`the emailed link returns to ${origin}: ${link}`);
+assert.equal(new URL(link).pathname,'/auth/v1/verify',`the emailed link opens Auth behind the gateway: ${link}`);
 
 const home=await follow(link);
-assert.match(new URL(home.url).pathname,/^\/c\/[^/]+\/home$/,home.url);
-assert.equal(home.response.status,200);
+assert.match(new URL(home.url).pathname,/^\/c\/[^/]+\/home$/,`the emailed link ${link} reached ${home.url}`);
+assert.equal(home.response.status,200,`the emailed link ${link} reached ${home.url}`);
 assert.ok((await home.response.text()).includes(owner.company),'the Company home names the company');
 console.log(`Reached ${home.url}`);
