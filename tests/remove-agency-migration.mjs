@@ -6,12 +6,17 @@ import { spawnSync } from 'node:child_process';
 // The Agency and the reviewer Role are removed (#7, ADR 0012). The database is put back in its earlier shape inside
 // the transaction (the reviewer Role, the Agency flag, a policy using the bypass), a reviewer is seeded, and the real
 // migration runs on it; the verify file is red before and green after. Everything rolls back.
+// The migration runs as the installer runs it: inside one explicit transaction, followed by its history row in that same
+// transaction. A refused migration rolls back to the savepoint throws_ok makes, so it leaves no change and no history row.
 const migration=readFileSync('supabase/migrations/20261204000000_remove_agency.sql','utf8');
+const name='20261204000000_remove_agency.sql';
+const applied=`${migration}\ninsert into pg_temp.migration_history values ('${name}');`;
 const verify=readFileSync('supabase/migrations/20261204000000_remove_agency.verify.sql','utf8').trim().replace(/;$/,'');
 const rs='10000000-0000-0000-0000-000000000001', omar='20000000-0000-0000-0000-000000000001', manager='20000000-0000-0000-0000-000000000002', reviewer='20000000-0000-0000-0000-000000000003', aleem='10000000-0000-0000-0000-000000000003';
 const sql=`begin;
 create extension if not exists pgtap with schema extensions;
-select plan(17);
+select plan(19);
+create temporary table migration_history(name text primary key);
 -- The earlier shape: the role type with reviewer, the Agency flag and functions, and a policy that uses them.
 drop policy agent_keys_owner_read on public.agent_keys; drop policy agent_keys_owner_create on public.agent_keys; drop policy agent_keys_owner_update on public.agent_keys;
 drop policy agent_refusals_owner_read on public.agent_refusals; drop policy agent_webhooks_owner on public.agent_webhooks; drop policy webhook_deliveries_owner_read on public.webhook_deliveries;
@@ -53,14 +58,16 @@ select is((select string_agg(key,',' order by key) from (${verify}) v, json_each
 -- migration stops and nothing changes. throws_ok runs it in a savepoint, so the earlier shape is still here afterwards.
 insert into public.members(company_id,person_id,role,removed_at) values ('${aleem}','${manager}','manager',now());
 insert into public.approval_steps(id,company_id,name,position,role) overriding system value values (970003,'${aleem}','Aleem reviewers',90,'reviewer');
-select throws_ok($migration$${migration}$migration$,'P0001','Approval steps for reviewers have no active Manager to take them in: aleem. Make a Member of each of these Companies a Manager, then update again.','with no active Manager to take a reviewer step the migration fails');
+select throws_ok($migration$${applied}$migration$,'P0001','Approval steps for reviewers have no active Manager to take them in: aleem. Make a Member of each of these Companies a Manager, then update again.','with no active Manager to take a reviewer step the migration fails');
 select is((select string_agg(coalesce(role::text,'-')||':'||coalesce(person_id::text,'-'),',' order by id) from public.approval_steps where id in (970001,970002,970003)),'reviewer:-,-:${reviewer},reviewer:-','the failed migration leaves every step as it was');
 select is((select role::text from public.members where company_id='${rs}' and person_id='${reviewer}'),'reviewer','the failed migration leaves the reviewer as they were');
 select is((select next_actor from public.work_cards where approval_step_id=970002),'${reviewer}'::uuid,'the failed migration leaves the waiting card as it was');
 select ok(to_regprocedure('public.agency_access()') is not null,'the failed migration leaves the Agency functions in place');
+select is((select count(*)::int from pg_temp.migration_history),0,'the failed migration records no history');
 -- A removed step needs no Manager: it is converted, never refused.
 update public.approval_steps set removed_at=now() where id=970003;
-${migration}
+${applied}
+select is((select string_agg(name,',') from pg_temp.migration_history),'${name}','the applied migration records its history in the same transaction');
 select is((select role::text from public.approval_steps where id=970003),'manager','a removed reviewer step is converted without a Manager');
 select is((select role::text from public.members where company_id='${rs}' and person_id='${reviewer}'),'contributor','a former reviewer is a Contributor');
 select is((select role::text from public.member_invitations where email='former-reviewer@example.com'),'contributor','an open reviewer invitation becomes a Contributor invitation');

@@ -11,8 +11,12 @@
 -- card can change between this check and the conversion below. A live step addressed to reviewers, or to one person
 -- who is a reviewer, goes to the Company's Managers; with no active Manager its cards would wait for nobody. Then the
 -- update stops here and, being one transaction, changes nothing: the install keeps serving the previous version.
-lock table public.members, public.member_invitations, public.approval_steps, public.work_cards, public.role_permissions in share row exclusive mode;
+-- The lock is taken inside this block: a top-level LOCK TABLE needs a transaction block, which the installer has
+-- (psql --single-transaction) and the Supabase CLI does not (SQLSTATE 25P01). Taken here it needs none, and it holds
+-- until the transaction that runs it ends: for the installer, the one transaction of every pending migration and its
+-- history row, which is where a previous app version is still serving. The CLI builds local and CI databases only.
 do $$ declare stranded text; begin
+ lock table public.members, public.member_invitations, public.approval_steps, public.work_cards, public.role_permissions in share row exclusive mode;
  select string_agg(distinct co.slug,', ' order by co.slug) into stranded
   from public.approval_steps s join public.companies co on co.id=s.company_id
   where s.removed_at is null

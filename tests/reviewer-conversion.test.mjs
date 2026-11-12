@@ -8,9 +8,11 @@ import { readFileSync } from 'node:fs';
 const migration=readFileSync('supabase/migrations/20261204000000_remove_agency.sql','utf8').replace(/--.*$/gm,'');
 
 test('the migration locks what the reviewer conversion reads and checks for a Manager before any change', () => {
- const start=migration.match(/^\s*(lock table [^;]+;)\s*(do \$\$[\s\S]*?\nend \$\$;)/);
- assert.ok(start,'the migration opens with the lock, then the check');
- const [,lock,check]=start;
+ // One DO block opens the migration: the lock first, inside it, so that it needs no transaction block of its own and
+ // holds until the transaction around the migration ends (tests/migration-statements.test.mjs), then the check.
+ const start=migration.match(/^\s*(do \$\$[^;]*;\s*begin\s+(lock table [^;]+;)[\s\S]*?\nend \$\$;)/);
+ assert.ok(start,'the migration opens with one block that takes the lock, then checks');
+ const [,check,lock]=start;
  for(const table of ['public.members','public.member_invitations','public.approval_steps','public.work_cards','public.role_permissions']) assert.ok(lock.includes(table),`${table} is locked`);
  assert.match(lock,/in (share row exclusive|exclusive|access exclusive) mode;$/);
  assert.match(check,/raise exception 'Approval steps for reviewers/);
