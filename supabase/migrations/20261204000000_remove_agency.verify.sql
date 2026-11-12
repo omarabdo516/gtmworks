@@ -5,6 +5,8 @@ select json_build_object(
   and not exists(select 1 from pg_constraint where conrelid='public.approval_steps'::regclass and contype='c' and pg_get_constraintdef(oid) like '%reviewer%')
   and position('reviewer' in pg_get_functiondef('public.approval_holds(uuid,bigint)'::regprocedure))=0
   and position('reviewer' in pg_get_functiondef('public.approval_actor(uuid,bigint)'::regprocedure))=0,
+ 'role_checks_kept',exists(select 1 from pg_constraint where conrelid='public.members'::regclass and conname='members_agent_role_check')
+  and exists(select 1 from pg_constraint where conrelid='public.role_permissions'::regclass and conname='no_contributor_viewer_approval'),
  'approval_step_saving',has_function_privilege('authenticated','public.save_approval_step(uuid,bigint,text,integer,uuid,public.member_role)','execute')
   and not has_function_privilege('anon','public.save_approval_step(uuid,bigint,text,integer,uuid,public.member_role)','execute'),
  'no_agency_functions',to_regprocedure('public.agency_access()') is null and to_regprocedure('public.is_agency_owner()') is null,

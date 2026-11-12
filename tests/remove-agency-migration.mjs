@@ -17,6 +17,8 @@ drop policy agent_keys_owner_read on public.agent_keys; drop policy agent_keys_o
 drop policy agent_refusals_owner_read on public.agent_refusals; drop policy agent_webhooks_owner on public.agent_webhooks; drop policy webhook_deliveries_owner_read on public.webhook_deliveries;
 drop policy invitation_insert on public.member_invitations; drop policy invitation_update on public.member_invitations;
 alter table public.approval_steps drop constraint approval_steps_approver_role;
+-- A CHECK constraint naming the type in a literal is re-read with the renamed type, so these two go and come back.
+alter table public.members drop constraint members_agent_role_check; alter table public.role_permissions drop constraint no_contributor_viewer_approval;
 drop function public.save_approval_step(uuid,bigint,text,integer,uuid,public.member_role);
 alter type public.member_role rename to member_role_current;
 create type public.member_role as enum ('owner','manager','contributor','reviewer','viewer');
@@ -26,6 +28,8 @@ alter table public.role_permissions alter column role type public.member_role us
 alter table public.approval_steps alter column role type public.member_role using role::text::public.member_role;
 drop type public.member_role_current;
 alter table public.approval_steps add check (role is null or role in ('owner','manager','reviewer'));
+alter table public.members add constraint members_agent_role_check check (agent_role is null or role='contributor');
+alter table public.role_permissions add constraint no_contributor_viewer_approval check (not (role in ('contributor','viewer') and permission in ('approve','reject') and allowed));
 create function public.save_approval_step(c uuid, step bigint, step_name text, step_position integer, member uuid, member_role public.member_role) returns void language sql as $legacy$ select $legacy$;
 alter table public.people add column agency_owner boolean not null default false;
 alter table public.hermes_connections rename column owner_id to agency_owner_id;

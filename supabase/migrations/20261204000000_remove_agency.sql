@@ -284,7 +284,15 @@ update public.member_invitations set role='contributor' where role='reviewer';
 delete from public.role_permissions where role='reviewer';
 
 -- Rebuild the type without reviewer. A column used in a policy cannot change type, so those policies are dropped and
--- created again unchanged; the step check names the approver Roles that remain.
+-- created again unchanged. A CHECK constraint is re-read from its text when its column changes type, and that text
+-- names the old type in its literals (members_agent_role_check: role='contributor'), so every CHECK constraint on the
+-- four role columns that names the type is kept here, dropped, and added again after the columns change, except the
+-- step check that names reviewer: approval_steps_approver_role replaces it.
+create temporary table former_role_checks as
+ select conrelid::regclass::text as tbl, conname, pg_get_constraintdef(oid) as def from pg_constraint
+ where contype='c' and conrelid in ('public.members'::regclass,'public.member_invitations'::regclass,'public.role_permissions'::regclass,'public.approval_steps'::regclass)
+  and pg_get_constraintdef(oid) like '%member_role%';
+do $$ declare c record; begin for c in select * from former_role_checks loop execute format('alter table %s drop constraint %I',c.tbl,c.conname); end loop; end $$;
 drop policy if exists agent_keys_owner_read on public.agent_keys;
 drop policy if exists agent_keys_owner_create on public.agent_keys;
 drop policy if exists agent_keys_owner_update on public.agent_keys;
@@ -293,13 +301,15 @@ drop policy if exists agent_webhooks_owner on public.agent_webhooks;
 drop policy if exists webhook_deliveries_owner_read on public.webhook_deliveries;
 drop policy if exists invitation_insert on public.member_invitations;
 drop policy if exists invitation_update on public.member_invitations;
-do $$ declare k name; begin for k in select conname from pg_constraint where conrelid='public.approval_steps'::regclass and contype='c' and pg_get_constraintdef(oid) like '%reviewer%' loop execute format('alter table public.approval_steps drop constraint %I',k); end loop; end $$;
 alter type public.member_role rename to member_role_with_reviewer;
 create type public.member_role as enum ('owner', 'manager', 'contributor', 'viewer');
 alter table public.members alter column role type public.member_role using role::text::public.member_role;
 alter table public.member_invitations alter column role type public.member_role using role::text::public.member_role;
 alter table public.role_permissions alter column role type public.member_role using role::text::public.member_role;
 alter table public.approval_steps alter column role type public.member_role using role::text::public.member_role;
+-- The kept text was read before the rename, so its literals name member_role: now the new type.
+do $$ declare c record; begin for c in select * from former_role_checks where def not like '%reviewer%' loop execute format('alter table %s add constraint %I %s',c.tbl,c.conname,c.def); end loop; end $$;
+drop table former_role_checks;
 alter table public.approval_steps add constraint approval_steps_approver_role check (role is null or role in ('owner','manager'));
 drop function public.save_approval_step(uuid,bigint,text,integer,uuid,public.member_role_with_reviewer);
 drop type public.member_role_with_reviewer;
