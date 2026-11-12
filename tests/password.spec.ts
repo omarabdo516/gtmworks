@@ -42,8 +42,10 @@ test('Forgot password emails a link that opens only the set-password page, works
  const value=status();
  const service=createClient(value('API_URL'),value('SERVICE_ROLE_KEY'),{auth:{persistSession:false,autoRefreshToken:false}});
  const email=`reset-${Date.now()}@example.com`;
- const {error:created}=await service.auth.admin.createUser({email,password:'old-password-41',email_confirm:true});
+ const {data:{user},error:created}=await service.auth.admin.createUser({email,password:'old-password-41',email_confirm:true});
  expect(created).toBeNull();
+ // Every account gtmworks makes has its person (first run, invitations); a signed-in page reads its language there.
+ query(`insert into public.people(id,name) values ('${user!.id}','Reset person')`);
  await page.request.delete(inbox);
  await page.goto('/sign-in');
  await page.getByRole('link',{name:'Forgot password?'}).click();
