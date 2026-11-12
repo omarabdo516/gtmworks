@@ -129,6 +129,7 @@ else
 fi
 compose exec -T web node -e "for(const url of ['http://gateway:8080/api/health','http://gateway:8080/sign-in','http://hermes:8642/health']) { const response=await fetch(url); if(response.status!==200) throw new Error(url+' returned '+response.status); }" --input-type=module
 echo 'gtmworks is ready: http://localhost:3000/sign-in (mail: http://localhost:8025)'
+echo 'One install serves one company until each company gets its own agent engine home: companies on the bundled agent engine share one agent memory, so an agent can repeat facts from one company to people in another.'
 exit 0
 }
 main "$@"

@@ -30,6 +30,9 @@ people or companies are created, and no SMTP account is needed for the local inb
 The command builds the web image and starts the web app, worker, Postgres,
 GoTrue, PostgREST, file Storage, an Nginx gateway, the local mail inbox and the
 Hermes agent engine, which is reachable only inside the install.
+One install serves one company until each company gets its own agent engine home:
+companies on the bundled agent engine share one agent memory, so an agent can
+repeat facts from one company to people in another.
 Realtime, Studio, analytics and edge functions are not installed. Service settings
 follow the [official Supabase self-hosted stack](https://github.com/supabase/supabase/blob/master/docker/docker-compose.yml).
 

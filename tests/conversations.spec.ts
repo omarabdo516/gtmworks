@@ -128,7 +128,7 @@ test('integration: the same send runs once, and the record is append-only and na
  } finally { detach(agents); await fake.close(); }
 });
 
-test('isolation: another member and another company get not found, and a company Owner cannot start a conversation',async({page,browser})=>{
+test('isolation: another member and another company get not found, and a company Owner cannot read or write in another person\'s conversation',async({page,browser})=>{
  test.setTimeout(120000);
  const fake=await fakeHermes(); let agents={};
  try {
@@ -144,16 +144,62 @@ test('isolation: another member and another company get not found, and a company
    await signIn(owner,'manager@example.com','/c/rs-learning/home');
    expect((await owner.request.get(`/api/conversations?company=${company}&conversation=${conversation}`)).status()).toBe(404);
    expect((await owner.goto(`/c/rs-learning/conversations/${conversation}`))!.status()).toBe(404);
-   const refused=await send(owner,{conversation:randomUUID(),message:'Hello',sendKey:randomUUID()});
-   expect(refused.status()).toBe(403); expect((await refused.json()).error).toBe('conversationAgencyOnly');
-   expect((await send(owner,{conversation,message:'Hello',sendKey:randomUUID()})).status()).toBe(403);
-   await owner.goto('/c/rs-learning/home');
-   await owner.locator('.nav').getByRole('button',{name:'New',exact:true}).click();
-   const dialog=owner.getByRole('dialog',{name:'New conversation'});
-   await expect(dialog.getByRole('note')).toContainText('Only Agency people can chat with agents for now.');
-   await expect(dialog.getByLabel('Message',{exact:true})).toHaveCount(0);
+   const refused=await send(owner,{conversation,message:'Hello',sendKey:randomUUID()});
+   expect(refused.status()).toBe(404); expect((await refused.json()).error).toBe('conversationNotFound');
   } finally { await context.close(); query(`update public.members set role='manager' where company_id='${company}' and person_id='${manager}'`); }
   expect(fake.settings.runs).toHaveLength(1);
+ } finally { detach(agents); await fake.close(); }
+});
+
+// #287: a Contributor (no Agency access) talks to the company's agent, whose Connection an Agency owner attached.
+test('A Contributor starts a conversation and gets the reply; nobody else reads it',async({page,browser})=>{
+ test.setTimeout(120000);
+ const fake=await fakeHermes(); fake.settings.key=`hermes-key-${randomUUID()}`; let agents={};
+ const contributor='20000000-0000-0000-0000-000000000005';
+ query(`update public.members set role='contributor' where company_id='${company}' and person_id='${contributor}'`);
+ try {
+  await agencySignIn(page); agents=await attachAgents(page,fake);
+  const {Mona}=agents as Record<string,{profile:string}>;
+  const context=await browser.newContext(); const member=await context.newPage();
+  try {
+   await signIn(member,'multi@example.com','/c/rs-learning/home');
+   await member.locator('.nav').getByRole('button',{name:'New',exact:true}).click();
+   const dialog=member.getByRole('dialog',{name:'New conversation'});
+   await expect(dialog.getByRole('button',{name:'Agent',exact:true})).toContainText('Mona');
+   const text=`Draft the course teaser ${Date.now()}`;
+   await dialog.getByLabel('Message',{exact:true}).fill(text);
+   await dialog.getByRole('button',{name:'Send',exact:true}).click();
+   await expect(member).toHaveURL(/\/c\/rs-learning\/conversations\/[0-9a-f-]{36}$/);
+   const conversation=member.url().split('/').pop()!;
+   await expect(member.locator('.msg[data-author=person]')).toContainText(text);
+   await expect(member.locator('.msg[data-author=agent]')).toContainText(`Reply to: ${text}`);
+   await expect(member.getByLabel('Message',{exact:true})).toBeVisible();
+   expect(fake.settings.runs.map(run=>run.session)).toEqual([conversation]);
+   expect(fake.settings.requests.filter(request=>request.method==='POST').at(-1)!.path).toBe(`/p/${Mona.profile}/v1/runs`);
+   // The company's Owner (Omar here, with Agency access too) cannot read it.
+   expect((await page.request.get(`/api/conversations?company=${company}&conversation=${conversation}`)).status()).toBe(404);
+   expect((await page.goto(`/c/rs-learning/conversations/${conversation}`))!.status()).toBe(404);
+  } finally { await context.close(); }
+ } finally { query(`update public.members set role='reviewer' where company_id='${company}' and person_id='${contributor}'`); detach(agents); await fake.close(); }
+});
+
+test('A Viewer has no composer and the server refuses their message',async({page,browser})=>{
+ test.setTimeout(120000);
+ const fake=await fakeHermes(); let agents={};
+ try {
+  await agencySignIn(page); agents=await attachAgents(page,fake);
+  const context=await browser.newContext(); const viewer=await context.newPage();
+  try {
+   await signIn(viewer,'viewer@example.com','/c/rs-learning/home');
+   await viewer.locator('.nav').getByRole('button',{name:'New',exact:true}).click();
+   const dialog=viewer.getByRole('dialog',{name:'New conversation'});
+   await expect(dialog.getByRole('note')).toContainText('Viewers can read but cannot chat with agents.');
+   await expect(dialog.getByLabel('Message',{exact:true})).toHaveCount(0);
+   await expect(dialog.getByRole('button',{name:'Send',exact:true})).toHaveCount(0);
+   const refused=await send(viewer,{conversation:randomUUID(),message:'Hello',sendKey:randomUUID()});
+   expect(refused.status()).toBe(403); expect((await refused.json()).error).toBe('conversationNotAllowed');
+  } finally { await context.close(); }
+  expect(fake.settings.runs).toHaveLength(0);
  } finally { detach(agents); await fake.close(); }
 });
 

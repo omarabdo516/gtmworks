@@ -44,6 +44,16 @@ function attachAgent() {
  query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('${agent}','${company}','${connection}','Faye','Marketing')`);
  return {connection,agent,detach:()=>{ query(`delete from public.hermes_agents where id='${agent}'`); query(`delete from public.hermes_connections where id='${connection}'`); }};
 }
+// A Member's own session, signed in with no two-step verification (so no Agency access).
+async function memberClient(email:string) {
+ const value=status();
+ const service=createClient(value('API_URL'),value('SERVICE_ROLE_KEY'),{auth:{persistSession:false,autoRefreshToken:false}});
+ const person=createClient(value('API_URL'),value('ANON_KEY'),{auth:{persistSession:false,autoRefreshToken:false}});
+ const {data:link,error:linked}=await service.auth.admin.generateLink({type:'magiclink',email});
+ expect(linked).toBeNull();
+ expect((await person.auth.verifyOtp({type:'email',token_hash:link.properties!.hashed_token})).error).toBeNull();
+ return {service,person};
+}
 const agentRows=(conversation:string)=>JSON.parse(query(`select body from public.conversation_messages where conversation_id='${conversation}' and author='agent' order by id`));
 const usageRows=(conversation:string)=>JSON.parse(query(`select outcome,input_tokens,output_tokens from public.conversation_usage where conversation_id='${conversation}' order by recorded_at,run_id`));
 
@@ -94,4 +104,26 @@ test('integration: on the fake engine a failed run and a stopped run end with th
   expect(await send('Never started')).toEqual({error:'conversationHermesFailed',status:502});
   expect(JSON.parse(query(`select count(*)::int as n from public.conversation_messages where conversation_id='${conversation}'`))[0].n).toBe(2);
  } finally { detach(); }
+});
+
+// #287: a Contributor, with no Agency access, gets a reply on the fake engine through the company agent's Connection
+// (an Agency owner's), and a Viewer is refused by the database before the engine is called.
+test('integration: a Contributor gets a reply on the fake engine and a Viewer is refused',async()=>{
+ test.setTimeout(120000);
+ const fake=fakeEngine(); const {agent,detach}=attachAgent();
+ const contributor='20000000-0000-0000-0000-000000000005';
+ query(`update public.members set role='contributor' where company_id='${company}' and person_id='${contributor}'`);
+ try {
+  const {service,person}=await memberClient('multi@example.com');
+  const conversation=randomUUID();
+  expect(await sendMessage(person,service,{person:contributor,company,conversation,sendKey:randomUUID(),agent,message:'Draft the teaser',encryptionKey,engineFor:fake.engineFor})).toEqual({conversation});
+  expect(fake.connections[0]).toMatchObject({address:'http://127.0.0.1:9',key:'fake-engine-key'});
+  expect(await closeOpenRuns(service,{encryptionKey,conversation,owner:contributor,engineFor:fake.engineFor})).toBe(1);
+  const {data:record}=await person.from('conversation_messages').select('author,body').eq('conversation_id',conversation).order('id');
+  expect(record).toEqual([{author:'person',body:'Draft the teaser'},{author:'agent',body:'Reply to: Draft the teaser'}]);
+
+  const viewer=(await memberClient('viewer@example.com')).person;
+  expect(await sendMessage(viewer,service,{person:'20000000-0000-0000-0000-000000000004',company,conversation:randomUUID(),sendKey:randomUUID(),agent,message:'Hello',encryptionKey,engineFor:fake.engineFor})).toEqual({code:'42501'});
+  expect(fake.runs).toHaveLength(1);
+ } finally { query(`update public.members set role='reviewer' where company_id='${company}' and person_id='${contributor}'`); detach(); }
 });
