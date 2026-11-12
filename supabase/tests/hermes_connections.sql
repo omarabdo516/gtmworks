@@ -31,6 +31,8 @@ select is((select count(id)::int from public.hermes_connections),0,'Contributor 
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
 select is((select count(id)::int from public.hermes_connections),0,'Viewer cannot read Connections');
 reset role;
+-- Aleem's Owner makes the Manager an Owner there (guard_member: only an Owner assigns Owner).
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 insert into public.members(company_id,person_id,role) values ('10000000-0000-0000-0000-000000000003','20000000-0000-0000-0000-000000000002','owner');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
