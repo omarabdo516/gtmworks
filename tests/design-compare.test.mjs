@@ -21,8 +21,8 @@ test('a full set of arguments gives the options with per-screen defaults', () =>
   assert.deepEqual([custom.builtPath, custom.builtUrl, custom.signIn, custom.out, custom.referenceOnly], ['/c/x/home', 'http://localhost:4000', 'a@b.c', 'x.png', true]);
 });
 
-test('the main screen of the reference is named home and maps to the built Home', () => {
-  assert.equal(screens.home.builtPath, '/c/rs-learning/home');
+test('the main screen of the reference is named home and maps to the built Conversation with the main Agent', () => {
+  assert.equal(screens.home.builtPath, '/c/rs-learning/chat');
   assert.deepEqual(screens.home.reference.steps, [], 'home is the state the prototype opens on');
 });
 

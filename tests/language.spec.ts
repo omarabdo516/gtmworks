@@ -140,7 +140,7 @@ test('English default, account language across sessions/devices, automatic conte
     if(section.startsWith('settings/')) await expect(page.locator('.topbar [data-slot="breadcrumb"]')).toContainText(t(sections[section]));
     else await expect(page.locator('.topbar')).toHaveText(t(sections[section]));
     await expect(page.locator('html')).toHaveAttribute('lang',language);
-    await expect(page.locator('.sidebar-bottom a')).toContainText(t('settings'));
+    await expect(page.locator('.sidebar .sb-nav .sb-item').first()).toHaveText(t('chats'));
    }
    await page.goto('/c/rs-learning/work/board');
    for(const [index,title] of titles.entries()) {
@@ -217,7 +217,7 @@ test('English default, account language across sessions/devices, automatic conte
    await expect(other.locator('html')).toHaveAttribute('lang','ar');
    await expect(other.locator('html')).toHaveAttribute('dir','rtl');
    await expect(other.locator('.topbar')).toHaveText('الرئيسية');
-   expect((await other.locator('.sidebar').boundingBox())!.x).toBe(1440-240);
+   expect((await other.locator('.sidebar').boundingBox())!.x).toBe(1440-300);
    await other.goto('/no-company');
    await expect(other.getByRole('heading',{level:1})).toHaveText('لا توجد شركة بعد');
   } finally {await second.close();}

@@ -4,7 +4,7 @@ A marketing operating system that Omar's agency runs for many client companies a
 
 ## Language
 
-The UI defaults to English and ships a complete Modern Standard Arabic translation. Each person chooses their account language. Direction follows that language; authored content keeps its own direction. Every new interface string is added to both catalogues.
+The UI defaults to English and ships a complete Arabic translation in Egyptian Arabic, worded as in the approved reference. Each person chooses their account language. Direction follows that language; authored content keeps its own direction. Every new interface string is added to both catalogues.
 
 Sidebar labels: Search / بحث; Home / الرئيسية; Inbox / الوارد; Work / الشغل (Work / العمل, Projects / المشاريع, Routines / المهام المتكررة, Campaigns / الحملات, Library / المكتبة, Publishing / النشر); Results / النتائج; Team / الفريق (Agents / الوكلاء والأتمتة, Skills / المهارات, Connections / الربط, Activity log / السجل); Agents / الوكلاء (Company chat / محادثة الشركة, Account manager / مدير الحساب, Writer / الكاتب, Designer / المصمم, Critic / الناقد); Recent / آخر البطاقات.
 

@@ -13,7 +13,7 @@ const settings = [{ click: '#btn-me' }, { click: '[data-action="sov-open"]' }, {
 const settingsSection = section => [...settings, { click: `#sov-nav-${section}` }, { waitFor: `#sov-nav-${section}[aria-current]` }];
 export const screens = {
   // The prototype's main screen: the Conversation with the main Agent, Lead, which it opens on.
-  home: { reference: { steps: [] }, builtPath: '/c/rs-learning/home' },
+  home: { reference: { steps: [] }, builtPath: '/c/rs-learning/chat' },
   board: { reference: { steps: [{ click: '#sb-nav [data-view="board"]' }, { waitFor: '#board-cols' }] }, builtPath: '/c/rs-learning/work/board' },
   // "Waiting on you" is the board's first column in the prototype; the product gathers it on Approvals.
   waiting: { reference: { steps: [{ click: '#sb-nav [data-view="board"]' }, { waitFor: '#board-cols' }, { scrollTo: '#col-waiting' }] }, builtPath: '/c/rs-learning/approvals' },

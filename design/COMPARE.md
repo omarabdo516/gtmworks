@@ -37,7 +37,7 @@ npm run design:compare -- --screen NAME --width PX --lang ar|en --theme light|da
 
 The tool prints the image path. It also writes the two single captures next to the image, as `...-reference.png` and `...-built.png`. Each side has a caption strip naming it (`reference` or `built`) with the width, language and theme. The prototype loads IBM Plex from Google Fonts; offline, the tool warns and the reference is drawn with fallback fonts.
 
-Example, the reference's main screen against the current Home:
+Example, the reference's main screen against the built Conversation with the main Agent:
 
 ```sh
 npm run design:compare -- --screen home --width 1440 --lang ar --theme dark --sign-in omar@example.com
@@ -49,7 +49,7 @@ The prototype has no URL routes. Its sidebar switches between four views (`data-
 
 | Name | Reference screen | Built default |
 | --- | --- | --- |
-| `home` | The screen the prototype opens on: the Conversation with the main Agent, Lead | `/c/rs-learning/home` |
+| `home` | The screen the prototype opens on: the Conversation with the main Agent, Lead | `/c/rs-learning/chat` |
 | `board` | Sidebar, Marketing board | `/c/rs-learning/work/board` |
 | `waiting` | The board scrolled to its "Waiting on you" column | `/c/rs-learning/approvals` |
 | `numbers` | Sidebar, Numbers (the dashboard) | none |

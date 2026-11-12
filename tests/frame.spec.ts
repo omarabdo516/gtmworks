@@ -8,13 +8,13 @@ import { sections } from '../lib/navigation';
 
 const quote=(sql:string|number)=>`'${String(sql).replaceAll("'","''")}'`;
 
-const groups=["Work","Results","Team","Agents"];
-const labels=["Search","Home","Inbox","Work","Projects","Routines","Campaigns","Library","Publishing","Sales and customers","Performance","Strategy and learning","Agents","Skills","Connections","Activity log","Company chat","Account manager","Writer","Designer","Critic"];
+// The approved reference's sidebar (#284): four entries, then the Agents with Lead first, then recent chats.
+const labels=["Chats","Marketing board","Numbers","Activity log"];
 async function navLabels(page:import('@playwright/test').Page) {
  await openNavigation(page);
- return page.locator('.nav a').evaluateAll(links=>links.filter(link=>!link.closest('.recent-cards')).map(link=>Array.from(link.childNodes).filter(node=>node.nodeType===Node.TEXT_NODE).map(node=>node.textContent).join('').trim()));
+ return page.locator('.sidebar .sb-nav .sb-item').allInnerTexts();
 }
-for(const width of [1440,390]) test(`company frame order, placeholders, LTR and shared agent identity at ${width}px`,async({page})=>{
+for(const width of [1440,390]) test(`company frame order, placeholders, LTR and every section inside the new shell at ${width}px`,async({page})=>{
  test.setTimeout(180000);
  await page.setViewportSize({width,height:900});
  await signIn(page,'manager@example.com','/c/rs-learning/home');
@@ -23,25 +23,20 @@ for(const width of [1440,390]) test(`company frame order, placeholders, LTR and 
  await expect(page.locator('.topbar')).toHaveText("Home");
  await expect(page.locator('.topbar .mobile-menu')).toHaveCount(1);
  expect(await navLabels(page)).toEqual(labels);
- expect(await page.locator('.nav-group:not(.recent-cards) h2').allTextContents()).toEqual(groups);
- const agents=await page.locator('.nav .role-agent').evaluateAll(rows=>rows.map(row=>({name:row.textContent,icon:row.querySelector('.agent-face')?.innerHTML,color:row.querySelector('.agent-face > g')?.getAttribute('fill')})));
- const home=await page.locator('.home-agents .role-agent').evaluateAll(rows=>rows.map(row=>({name:row.querySelector('h2')?.textContent,icon:row.querySelector('.agent-face')?.innerHTML,color:row.querySelector('.agent-face > g')?.getAttribute('fill')})));
- expect(home).toEqual(agents);
- expect(new Set(agents.map(a=>a.icon)).size).toBe(4);
- expect(new Set(agents.map(a=>a.color)).size).toBe(4);
+ await expect(page.locator('.sidebar .sb-label').first()).toHaveText("Agents");
+ await expect(page.locator('.sidebar .sb-nav a[aria-current=page]')).toHaveText("Numbers");
  const layout=await page.locator('.sidebar').evaluate(sidebar=>{
-  const nav=sidebar.querySelector('.nav')!,active=nav.querySelector('.active')!,icon=active.querySelector('.icon')!;
-  const title=Array.from(active.childNodes).find(node=>node.nodeType===Node.TEXT_NODE)!;
-  const range=document.createRange();range.selectNode(title);
-  return {left:sidebar.getBoundingClientRect().left,dir:getComputedStyle(nav).direction,flex:getComputedStyle(nav).flexDirection,marker:getComputedStyle(active).borderInlineStartWidth,iconLeft:icon.getBoundingClientRect().right<=range.getBoundingClientRect().left};
+  const active=sidebar.querySelector('.sb-nav [aria-current=page]')!,icon=active.querySelector('svg')!,label=active.querySelector('.od-fill')!;
+  return {left:sidebar.getBoundingClientRect().left,dir:getComputedStyle(sidebar).direction,iconLeft:icon.getBoundingClientRect().right<=label.getBoundingClientRect().left};
  });
- expect(layout).toMatchObject({left:0,dir:'ltr',flex:'column',marker:'0px',iconLeft:true});
+ expect(layout).toMatchObject({left:0,dir:'ltr',iconLeft:true});
  await closeNavigation(page);
  await page.screenshot({path:`test-results/screenshots/frame-home-${width}.png`,fullPage:true});
  const routes=Object.keys(sections).filter(path=>path!=='work/new');
  for(const path of routes) {
   await page.goto(`/c/rs-learning/${path}`);
   expect(await navLabels(page),path).toEqual(labels);
+  await closeNavigation(page);
   const leaf={'settings/members':'members','settings/work':'workSettings','settings/agents':'agents'}[path as string];
   if(leaf) {
    const crumbs=page.locator('.topbar [data-slot="breadcrumb"] li:not([role="presentation"])');
@@ -51,38 +46,41 @@ for(const width of [1440,390]) test(`company frame order, placeholders, LTR and 
    await expect(crumbs.nth(1).locator('a'),path).toHaveAttribute('href','/c/rs-learning/settings');
   } else await expect(page.locator('.topbar'),path).toHaveText(i18n().t(sections[path]));
  }
- const placeholders=[['recurring',"No routines yet"],['skills',"No skills yet"],['connections',"No connections yet"],['history',"No activity log yet"],['search',"Search is not available yet"]];
+ // Sections without a sidebar entry still open, by their address, inside the same shell.
+ const placeholders=[['recurring',"No routines yet"],['skills',"No skills yet"],['connections',"No connections yet"],['search',"Search is not available yet"]];
  for(const [path,text] of placeholders) {
-  await openNavigation(page);
-  await page.locator(`.nav a[href$="/${path}"]`).click();
+  await page.goto(`/c/rs-learning/${path}`);
   await expect(page.locator('.content .empty')).toHaveText(text);
- }
- for(const name of ["Company chat","Account manager","Writer","Designer","Critic"]) {
-  await openNavigation(page);
-  await page.locator('.nav').getByRole('link',{name,exact:true}).click();
-  await expect(page).toHaveURL(/\/agents$/);
+  expect(await navLabels(page),path).toEqual(labels);
+  await closeNavigation(page);
  }
  await openNavigation(page);
- await page.locator('.sidebar-bottom').getByRole('link',{name:"Settings",exact:true}).click();
+ await page.locator('.sidebar .sb-nav').getByRole('link',{name:"Activity log",exact:true}).click();
+ await expect(page.locator('.content .empty')).toHaveText("No activity log yet");
+ await openNavigation(page);
+ await page.locator('.sidebar .sb-nav').getByRole('link',{name:"Marketing board",exact:true}).click();
+ await expect(page).toHaveURL(/\/work\/board$/);
+ await openNavigation(page);
+ await page.getByRole('button',{name:"Account menu",exact:true}).click();
+ await page.getByRole('menu').getByRole('menuitem',{name:/^Settings/}).click();
  await expect(page).toHaveURL(/\/settings$/);
+ // New chat opens the main Agent's empty Conversation (or says no agent is attached yet).
  await openNavigation(page);
- // New opens the conversation composer over the page; a company member is told why they cannot chat yet (#190).
- await page.locator('.nav').getByRole('button',{name:"New",exact:true}).click();
- await expect(page.getByRole('dialog',{name:"New conversation"}).getByRole('note')).toBeVisible();
- await page.keyboard.press('Escape');
- await expect(page.getByRole('dialog',{name:"New conversation"})).toHaveCount(0);
- await closeNavigation(page);
+ await page.getByRole('link',{name:"New chat",exact:true}).click();
+ await expect(page).toHaveURL(/\/c\/rs-learning\/chat$/);
+ await expect(page.locator('.chat .empty-chat')).toBeVisible();
+ await expect(page.locator('.sidebar .sb-nav a[aria-current=page]')).toHaveText("Chats");
  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(width);
 });
 
-test('Viewer has the same navigation, New included, without new card on every company section',async({page})=>{
+test('Viewer has the same navigation, New chat included, without new card on every company section',async({page})=>{
  test.setTimeout(180000);
  await signIn(page,'viewer@example.com','/c/rs-learning/home');
  for(const path of Object.keys(sections)) {
   await page.goto(`/c/rs-learning/${path}`);
   expect(await navLabels(page),path).toEqual(labels);
-  await expect(page.locator('.nav').getByRole('button',{name:"New",exact:true})).toBeVisible();
-  await expect(page.locator('.nav').getByText("New card",{exact:true})).toHaveCount(0);
+  await expect(page.locator('.sidebar').getByRole('link',{name:"New chat",exact:true})).toBeVisible();
+  await expect(page.locator('.sidebar').getByText("New card",{exact:true})).toHaveCount(0);
   await expect(page.getByRole('button',{name:"+ New card",exact:true})).toHaveCount(0);
   await expect(page.getByLabel('Message',{exact:true})).toHaveCount(0);
  }
@@ -110,14 +108,21 @@ test('Home has four parts in order and missing sources show unavailable, never z
  await page.goto('/c/rs-learning/work/list');
  const assigned=page.locator('.table tbody tr').filter({has:page.locator(`a[href="${cardPath}"]`)});
  await expect(assigned.locator('td').last()).toHaveText('وكيل المحتوى');
- await openNavigation(page);
- await page.locator('.nav a[href$="/approvals"]').click();
- await expect(page.locator('.nav a[href$="/approvals"]')).toContainText("Inbox");
+ // The Inbox count sits on the Marketing board entry and opens the Inbox.
+ await page.goto('/c/rs-learning/approvals');
  await expect(page.locator('.approvals')).toBeVisible();
  const count=await page.locator('.approval-card').count();
- await expect(page.locator('.nav a[href$="/approvals"] .badge')).toHaveText(String(count));
+ const badge=page.locator('.sidebar .sb-count[href$="/approvals"]');
+ if(count) {
+  await expect(badge).toHaveText(String(count));
+  await expect(badge).toHaveAccessibleName(`${count} things waiting on you`);
+  await page.goto('/c/rs-learning/work/board');
+  await openNavigation(page);
+  await badge.click();
+  await expect(page).toHaveURL(/\/approvals$/);
+ } else await expect(badge).toHaveCount(0);
  await openNavigation(page);
- await page.locator('.nav a[href$="/home"]').click();
+ await page.locator('.sidebar .sb-nav a[href$="/home"]').click();
  await expect(page.locator('.stats strong').first()).toHaveText(String(count));
 });
 
@@ -232,37 +237,42 @@ test('agency list keeps the current company actions and inbox count in the sideb
  await signIn(page,'omar@example.com','/c/rs-learning/home');
  await chooseCompany(page,'');
  await expect(page).toHaveURL(/\/all-brands$/);
- await expect(page.locator('.nav').getByRole('button',{name:"New",exact:true})).toBeVisible();
- const count=await page.locator('.nav a[href$="/approvals"] .badge').textContent();
- await openNavigation(page);
- await page.locator('.nav a[href$="/approvals"]').click();
+ await expect(page.locator('.sidebar').getByRole('link',{name:"New chat",exact:true})).toBeVisible();
+ const badge=page.locator('.sidebar .sb-count[href$="/approvals"]');
+ const count=await badge.count()?Number(await badge.textContent()):0;
+ await page.goto('/c/rs-learning/approvals');
  await expect(page.locator('.approvals')).toBeVisible();
- expect(await page.locator('.approval-card').count()).toBe(Number(count));
+ expect(await page.locator('.approval-card').count()).toBe(count);
  await page.goto('/all-brands');
  await openNavigation(page);
- await page.locator('.nav').getByRole('button',{name:"New",exact:true}).click();
- await expect(page.getByRole('dialog',{name:"New conversation"})).toBeVisible();
+ await page.locator('.sidebar').getByRole('link',{name:"New chat",exact:true}).click();
+ await expect(page).toHaveURL(/\/c\/rs-learning\/chat$/);
 });
 
-test('Paperclip mobile navigation hides on deliberate scrolling, returns on upward scrolling and opens the drawer once',async({page})=>{
+test('on a narrow screen the sidebar collapses behind the menu button and slides in over a scrim',async({page})=>{
  await page.setViewportSize({width:390,height:900});
  await signIn(page,'manager@example.com','/c/rs-learning/home');
- const nav=page.getByRole('navigation',{name:'Mobile navigation'});
- await expect(nav).toHaveAttribute('data-visible','true');
- await page.locator('.app-content').evaluate(node=>{node.scrollTop=150;});
- await expect(page.locator('.mobile-bottom-nav')).toHaveAttribute('data-visible','false');
- await page.locator('.app-content').evaluate(node=>{node.scrollTop=100;});
- await expect(nav).toHaveAttribute('data-visible','true');
- await openNavigation(page);
- await expect(page.locator('.sidebar')).toHaveCount(1);
- await expect(page.getByRole('dialog')).toBeVisible();
- await page.getByRole('button',{name:'Collapse Work',exact:true}).click();
- await expect(page.locator('.nav a[href$="/work/board"]')).toHaveCount(0);
- await page.getByRole('button',{name:'Expand Work',exact:true}).click();
- await expect(page.locator('.nav a[href$="/work/board"]')).toBeVisible();
- await closeNavigation(page);
- await expect(page.getByRole('dialog')).toHaveCount(0);
+ const sidebar=page.locator('.sidebar');
+ await expect(sidebar).toHaveCount(1);
+ await expect(sidebar).toBeHidden();
+ await expect(page.locator('.scrim')).toBeHidden();
+ await page.locator('.mobile-menu').click();
+ await expect(page.locator('.mobile-menu')).toHaveAttribute('aria-expanded','true');
+ await expect(sidebar).toBeVisible();
+ await expect(page.locator('.scrim')).toBeVisible();
+ // Escape closes it and gives focus back to the menu button.
+ await page.keyboard.press('Escape');
+ await expect(sidebar).toBeHidden();
  await expect(page.locator('.mobile-menu')).toBeFocused();
+ // Tapping the scrim closes it; following a link closes it on the new page.
+ await page.locator('.mobile-menu').click();
+ await page.locator('.scrim').click({position:{x:380,y:450}});
+ await expect(sidebar).toBeHidden();
+ await page.locator('.mobile-menu').click();
+ await sidebar.getByRole('link',{name:"Marketing board",exact:true}).click();
+ await expect(page).toHaveURL(/\/work\/board$/);
+ await expect(sidebar).toBeHidden();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);
 });
 
 test('mobile recent cards record opens while the drawer stays closed',async({page})=>{
@@ -276,7 +286,8 @@ test('mobile recent cards record opens while the drawer stays closed',async({pag
   await page.locator('.close-card').click();
   await expect(page.locator('.modal')).toHaveCount(0);
  }
- await page.getByRole('navigation',{name:'Mobile navigation'}).getByRole('link',{name:'Home',exact:true}).click();
+ await openNavigation(page);
+ await page.locator('.sidebar .sb-nav a[href$="/home"]').click();
  await openNavigation(page);
  await expect(page.locator('.recent-cards a').first()).toHaveAttribute('href','/c/rs-learning/work/board/4');
  expect(await page.locator('.recent-cards a').evaluateAll(links=>links.slice(0,2).map(link=>link.getAttribute('href')))).toEqual([4,3].map(id=>`/c/rs-learning/work/board/${id}`));

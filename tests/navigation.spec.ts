@@ -46,7 +46,7 @@ test('unprepared links answer within 50ms and clear feedback when content arrive
     const delayed = new Promise<void>(resolve => { release = resolve; });
     let requested!: () => void;
     const requestArrived = new Promise<void>(resolve => { requested = resolve; });
-    await page.route('**/c/rs-learning/library?*', async route => {
+    await page.route('**/c/rs-learning/history?*', async route => {
       requested();
       await delayed;
       await route.continue();
@@ -62,7 +62,7 @@ test('unprepared links answer within 50ms and clear feedback when content arrive
           const start = performance.now();
           const sample = () => {
             const bar = document.querySelector('.navigation-progress');
-            const link = document.querySelector('.nav a[href$="/library"]')!;
+            const link = document.querySelector('.nav a[href$="/history"]')!;
             const style = getComputedStyle(link);
             if (bar?.getBoundingClientRect().height === 3 && style.backgroundColor !== 'rgba(0, 0, 0, 0)') {
               state.answerMs = performance.now() - start;
@@ -72,18 +72,18 @@ test('unprepared links answer within 50ms and clear feedback when content arrive
         }, { once: true, capture: true });
       });
       await openNavigation(page);
-      await page.locator('.nav a[href$="/library"]').click();
+      await page.locator('.nav a[href$="/history"]').click();
       await page.waitForFunction(() => (window as typeof window & { answerMs?: number }).answerMs !== undefined);
       const answer = await page.evaluate(() => (window as typeof window & { answerMs: number }).answerMs);
       if (run) answers.push(answer);
       await expect(page.getByRole('progressbar', { name: "Opening page" })).toBeVisible();
       release();
-      await expect(page.locator('.heading h1')).toHaveText("Library");
+      await expect(page.locator('.heading h1')).toHaveText("Activity log");
       await expect(page.getByRole('progressbar')).toHaveCount(0);
       await expect(page.locator('.link-pending')).toHaveCount(0);
     } finally {
       release();
-      await page.unroute('**/c/rs-learning/library?*');
+      await page.unroute('**/c/rs-learning/history?*');
     }
   }
   console.log('INSTANT_ANSWER', JSON.stringify({ median: median(answers), runs: answers }));
@@ -175,7 +175,7 @@ test('own comments, moves and approvals invalidate prepared pages immediately', 
   await page.locator('.close-card').click();
   await expect(page.locator('.column[data-stage-name="مراجعة"] .card').filter({ hasText: title })).toBeVisible();
   await openNavigation(page);
-  await page.locator('.nav').getByRole('link', { name: /^Inbox/ }).click();
+  await page.locator('.sidebar .sb-count[href$="/approvals"]').click();
   const queued = page.locator('.approval-card').filter({ hasText: title });
   await expect(queued).toBeVisible();
   await queued.locator('.approval-expand > summary').click();
@@ -212,7 +212,7 @@ test('every company route loads at most 230 KiB gzip of JavaScript', async ({ pa
   await testInfo.attach('js-gzip.json', { body: JSON.stringify(sizes, null, 2), contentType: 'application/json' });
 });
 
-test('drawer group toggles have 44px targets', async ({ page }) => {
+test('drawer targets are at least 44px and do not overlap', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await signIn(page, 'manager@example.com', '/c/rs-learning/home');
   try {
@@ -223,32 +223,22 @@ test('drawer group toggles have 44px targets', async ({ page }) => {
       await expect(page.locator('html')).toHaveAttribute('lang', language);
       await page.goto('/c/rs-learning/home');
       await openNavigation(page);
-      await expect(page.getByRole('dialog')).toBeVisible();
       await mkdir('test-results/screenshots', { recursive: true });
       await page.screenshot({ path: `test-results/screenshots/drawer-${language}-390.png` });
-      const toggles = page.locator('[data-slot=sheet-content] .nav-group button[aria-expanded]');
-      const count = await toggles.count();
-      expect(count, `${language}: drawer has group toggles`).toBeGreaterThan(0);
+      const targets = page.locator('.sidebar.is-open :is(.sb-item, .circle-btn, .me, .agent-tile)');
+      const count = await targets.count();
+      expect(count, `${language}: drawer has targets`).toBeGreaterThan(0);
       for (let index = 0; index < count; index++) {
-        const toggle = toggles.nth(index);
-        const box = (await toggle.boundingBox())!;
-        expect.soft(box.width, `${language} toggle ${index}: width`).toBeGreaterThanOrEqual(44);
-        expect.soft(box.height, `${language} toggle ${index}: height`).toBeGreaterThanOrEqual(44);
-        // The bigger tap area must not sit on top of a link.
-        const covered = await toggle.evaluate(node => {
-          const a = node.getBoundingClientRect();
-          return Array.from(node.closest('[data-slot=sheet-content]')!.querySelectorAll('.nav a')).filter(link => {
-            const b = link.getBoundingClientRect();
-            return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
-          }).map(link => link.textContent);
-        });
-        expect.soft(covered, `${language} toggle ${index}: links under the tap area`).toEqual([]);
-        await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-        await toggle.click();
-        await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-        await toggle.click();
-        await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        const box = (await targets.nth(index).boundingBox())!;
+        expect.soft(box.height, `${language} target ${index}: height`).toBeGreaterThanOrEqual(44);
+        expect.soft(box.width, `${language} target ${index}: width`).toBeGreaterThanOrEqual(44);
       }
+      // No tap area sits on top of another one.
+      const overlaps = await targets.evaluateAll(nodes => nodes.flatMap((node, index) => nodes.slice(index + 1).filter(other => {
+        const a = node.getBoundingClientRect(), b = other.getBoundingClientRect();
+        return !node.contains(other) && !other.contains(node) && a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+      }).map(other => `${node.textContent} / ${other.textContent}`)));
+      expect.soft(overlaps, `${language}: overlapping targets`).toEqual([]);
       await closeNavigation(page);
     }
   } finally {
