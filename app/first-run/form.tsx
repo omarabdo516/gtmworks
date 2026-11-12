@@ -1,5 +1,5 @@
 'use client';
-import { useState, useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { useI18n } from '@/lib/i18n-client';
 import { setupCodeFromHash } from '@/lib/setup-link.mjs';
 import { Button } from '@/components/paperclip/ui/button';
@@ -10,8 +10,22 @@ export default function FirstRunForm({invalid}:{invalid:boolean}) {
  const [pending,setPending]=useState(false);
  // The setup link's code, from its fragment (issue #50); null on the server, which never sees the fragment.
  const code=useSyncExternalStore(onHashChange,()=>setupCodeFromHash(window.location.hash),()=>null);
- if(code===null) return null;
- if(!code) return <p role="alert" className="mt-6">{t('setupNeedsLink')}</p>;
+ const [checked,setChecked]=useState<{code:string,state:'open'|'refused'}>();
+ // The server confirms the code before the form shows. It is asked in the body of a submit request, as the submission
+ // carries the code, so no request address or log line holds it; a check creates nothing.
+ useEffect(()=>{
+  if(!code) return;
+  let current=true;
+  const body=new URLSearchParams();
+  body.set('code',code);
+  body.set('check','1');
+  fetch('/first-run/submit',{method:'POST',body}).then(response=>response.status===204,()=>false).then(open=>{
+   if(current) setChecked({code,state:open?'open':'refused'});
+  });
+  return ()=>{ current=false; };
+ },[code]);
+ if(code===null || code && checked?.code!==code) return null;
+ if(!code || checked?.state!=='open') return <p role="alert" className="mt-6">{t('setupNeedsLink')}</p>;
  return <form action="/first-run/submit" method="post" onSubmit={()=>setPending(true)} className="mt-6 space-y-4">
   <input type="hidden" name="language" value={language}/>
   <input type="hidden" name="code" value={code}/>

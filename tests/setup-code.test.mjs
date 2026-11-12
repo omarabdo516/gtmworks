@@ -76,6 +76,25 @@ test('the first-run form sends the code only as a field of its POST body, read f
  assert.doesNotMatch(route,/searchParams|nextUrl/);
 });
 
+test('the first-run form shows only after the server confirms the code, asked in the body of a submit request', () => {
+ const form=readFileSync('app/first-run/form.tsx','utf8');
+ // The check goes to the submit route as a POST body, like the submission itself: no other request carries the code.
+ assert.match(form,/fetch\('\/first-run\/submit',\{method:'POST',body\}\)/);
+ assert.match(form,/body\.set\('code',code\)/);
+ assert.match(form,/body\.set\('check','1'\)/);
+ assert.doesNotMatch(form,/console\.|fetch\(`/);
+ // Nothing renders the form until the answer for this exact code is "open"; a missing or refused code gets the message.
+ const gate=form.indexOf("if(!code || checked?.state!=='open') return <p role=\"alert\"");
+ assert.ok(gate>0,'the form waits for the server to accept the code');
+ assert.ok(gate<form.indexOf('<form action="/first-run/submit"'));
+ // The route answers the check only after the code matched, and before it reads the details or creates anything.
+ const route=readFileSync('app/first-run/submit/route.ts','utf8');
+ const answer=route.indexOf("if(form.get('check')==='1') return new NextResponse(null,{status:204});");
+ assert.ok(answer>route.indexOf('if(!setupCodeMatches(code))'),'the check is answered after the code comparison');
+ assert.ok(answer<route.indexOf('firstRunInput(form)'),'the check is answered before the details are read');
+ assert.ok(answer<route.indexOf('createUser'));
+});
+
 // A Docker stand-in: runs lib/install-env.mjs for real with the --env-file it was given, and answers the installer's
 // question to the app with SETUP_STATE. Every command is recorded in COMMANDS.
 const dockerShim=`#!/bin/sh

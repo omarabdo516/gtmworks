@@ -13,12 +13,15 @@ export async function POST(request:NextRequest) {
   logActionFailure('first_run_setup_closed',new Error('Setup closed at start'));
   notFound();
  }
- const form=await request.formData(), input=firstRunInput(form), code=form.get('code'), language=form.get('language')==='ar'?'ar':'en';
+ const form=await request.formData(), code=form.get('code'), language=form.get('language')==='ar'?'ar':'en';
  // Only the link the installer printed opens setup (issue #50): nothing is created without its code.
  if(!setupCodeMatches(code)) {
   logActionFailure('first_run_wrong_code',new Error('Setup code missing or wrong'));
   return new NextResponse(i18n(language).t('setupNeedsLink'),{status:403,headers:{'content-type':'text/plain; charset=utf-8'}});
  }
+ // The page asks whether its link's code is right before it shows the form; the answer creates nothing.
+ if(form.get('check')==='1') return new NextResponse(null,{status:204});
+ const input=firstRunInput(form);
  // Back to the form with the code in the fragment, as the setup link carries it, so the next request does not.
  const invalid=appUrl(`/first-run?invalid=1&language=${language}#code=${code}`);
  if(!input) {

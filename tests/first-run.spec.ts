@@ -43,9 +43,10 @@ test('empty install creates its Agency owner and first company, then opens Home 
  await page.getByRole('button',{name:'إنشاء وإرسال رابط تسجيل الدخول'}).click();
  await expect(page.locator('html')).toHaveAttribute('lang','ar');
  await expect(page.getByRole('status')).toHaveText('تحقق من بريدك الإلكتروني للحصول على رابط تسجيل الدخول.');
+ // Two requests carry it, both in a submit body: the page's check that the code is right, then the submission.
  const carrying=requests.filter(request=>request.url.includes(code) || request.body?.includes(code));
- expect(carrying.map(request=>request.url)).toEqual([`${baseURL}/first-run/submit`]);
- expect(new URLSearchParams(carrying[0].body!).get('code')).toBe(code);
+ expect(carrying.map(request=>request.url)).toEqual([`${baseURL}/first-run/submit`,`${baseURL}/first-run/submit`]);
+ for(const request of carrying) expect(new URLSearchParams(request.body!).get('code')).toBe(code);
  await followSignInLink(page,input.email);
  await expect(page).toHaveURL(/\/c\/first-company-[a-f0-9]{8}\/home$/);
  await expect(page.locator('.home-dashboard')).toBeVisible();
@@ -59,9 +60,42 @@ test('empty install creates its Agency owner and first company, then opens Home 
  expect(counts(baseURL!)).toEqual({accounts:1,people:1,companies:1,owners:1});
 });
 
+test('the page shows the form only for the setup link with the right code',async({page,baseURL})=>{
+ const needsLink='Setup opens only from the link the installer printed on your server. Run the installer again there to see it.';
+ const requests:{url:string,body:string|null}[]=[];
+ page.on('request',request=>requests.push({url:request.url(),body:request.postData()}));
+ const wrong=['0'.repeat(64),code.slice(0,-1),`${code.slice(0,-1)}${code.endsWith('0')?'1':'0'}`,'not-a-code'];
+ for(const fragment of ['','#code=',...wrong.map(value=>`#code=${value}`)]) {
+  // A full load for each link, so the previous link's message cannot answer for this one.
+  await page.goto('about:blank');
+  await page.goto(`/first-run${fragment}`);
+  await expect(page.getByRole('main').getByRole('alert'),fragment).toHaveText(needsLink);
+  await expect(page.getByLabel('Your name'),fragment).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Create and send sign-in link'}),fragment).toHaveCount(0);
+ }
+ // A code reaches the server only in one check's body, and the check creates nothing. Bodies are matched on their exact
+ // code field: one wrong code is a prefix of the next, so a substring match would count both.
+ const checks=(value:string)=>requests.filter(request=>new URLSearchParams(request.body ?? '').get('code')===value);
+ for(const value of wrong) {
+  expect(requests.filter(request=>request.url.includes(value)).map(request=>request.url),value).toEqual([]);
+  const carrying=checks(value);
+  expect(carrying.map(request=>request.url),value).toEqual([`${baseURL}/first-run/submit`]);
+  expect(Object.fromEntries(new URLSearchParams(carrying[0].body!)),value).toEqual({code:value,check:'1'});
+ }
+ await page.goto(`/first-run#code=${code}`);
+ await expect(page.getByLabel('Your name')).toBeVisible();
+ await expect(page.getByRole('button',{name:'Create and send sign-in link'})).toBeVisible();
+ await expect(page.getByRole('main').getByRole('alert')).toHaveCount(0);
+ expect(requests.filter(request=>request.url.includes(code)).map(request=>request.url)).toEqual([]);
+ expect(checks(code).map(request=>Object.fromEntries(new URLSearchParams(request.body!)))).toEqual([{code,check:'1'}]);
+ expect(counts(baseURL!)).toEqual({accounts:0,people:0,companies:0,owners:0});
+});
+
 test('a submission with no setup code or a wrong one is refused and creates no account or company',async({request,baseURL})=>{
  const noCode={name:input.name,email:input.email,company:input.company,language:input.language};
- for(const form of [noCode,{...input,code:'0'.repeat(64)},{...input,code:code.slice(0,-1)}]) {
+ // The page's check is refused the same way, and with the right code it answers without creating anything.
+ expect((await request.post('/first-run/submit',{form:{code,check:'1'},maxRedirects:0})).status()).toBe(204);
+ for(const form of <Record<string,string>[]>[noCode,{...input,code:'0'.repeat(64)},{...input,code:code.slice(0,-1)},{check:'1'},{code:'0'.repeat(64),check:'1'},{code:code.slice(0,-1),check:'1'}]) {
   const refused=await request.post('/first-run/submit',{form,maxRedirects:0});
   expect(refused.status()).toBe(403);
   expect(await refused.text()).toBe('Setup opens only from the link the installer printed on your server. Run the installer again there to see it.');
