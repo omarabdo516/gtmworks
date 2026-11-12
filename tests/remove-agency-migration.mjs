@@ -38,6 +38,8 @@ alter table public.role_permissions add constraint no_contributor_viewer_approva
 create function public.save_approval_step(c uuid, step bigint, step_name text, step_position integer, member uuid, member_role public.member_role) returns void language sql as $legacy$ select $legacy$;
 alter table public.people add column agency_owner boolean not null default false;
 alter table public.hermes_connections rename column owner_id to agency_owner_id;
+-- Connections could be retargeted before this migration: its destination guard did not exist yet.
+drop trigger hermes_retarget_refused on public.hermes_connections; drop function public.keep_hermes_destination();
 create function public.is_agency_owner() returns boolean language sql stable security definer set search_path='' as $legacy$ select exists(select 1 from public.people where id=auth.uid() and agency_owner) $legacy$;
 create function public.agency_access() returns boolean language sql stable security definer set search_path='' as $legacy$ select public.is_agency_owner() and coalesce(auth.jwt()->>'aal','')='aal2' $legacy$;
 create policy company_agency_read on public.companies for select to authenticated using (public.agency_access());
