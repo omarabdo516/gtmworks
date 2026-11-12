@@ -127,6 +127,10 @@ if [ "$operation" = update ]; then
 else
   compose up -d --wait --wait-timeout 300
 fi
+# The gateway reads install-nginx.conf through a bind mount fixed when its container was made, and an update replaces the
+# file on disk; Compose does not see that change. Recreate it so the current log rules, which keep the setup code out of
+# the gateway's logs (issue #50), apply before the health check and the setup link.
+compose up -d --no-deps --force-recreate --wait --wait-timeout 300 gateway
 compose exec -T web node -e "for(const url of ['http://gateway:8080/api/health','http://gateway:8080/sign-in','http://hermes:8642/health']) { const response=await fetch(url); if(response.status!==200) throw new Error(url+' returned '+response.status); }" --input-type=module
 # Whether first run is still open, asked through the app's service role; it answers open or closed and nothing else.
 setup=$(compose exec -T web node -e "const key=process.env.SUPABASE_SERVICE_ROLE_KEY; const response=await fetch('http://gateway:8080/rest/v1/rpc/setup_is_open',{method:'POST',headers:{apikey:key,authorization:'Bearer '+key}}); if(!response.ok) throw new Error('setup_is_open returned '+response.status); console.log(await response.json()===true?'open':'closed');" --input-type=module)
