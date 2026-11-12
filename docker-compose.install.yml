@@ -137,6 +137,9 @@ services:
     env_file: .env.install
     environment:
       GTMWORKS_SELF_HOSTED: "true"
+      # A company's subscription sign-in runs in its own profile on the Engine's management listener (ADR 0012), on
+      # the compose network only, with the install key from .env.install. The Run API address stays the worker's.
+      BUNDLED_HERMES_MANAGEMENT_URL: http://hermes:9119
     command: [sh, -c, "node lib/install-env.mjs validate && exec node server.js"]
     healthcheck:
       test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/api/health').then(response=>process.exit(response.ok?0:1)).catch(()=>process.exit(1))"]

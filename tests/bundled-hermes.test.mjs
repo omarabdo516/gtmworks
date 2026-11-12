@@ -261,3 +261,17 @@ test('the Engine management listener is on for web and worker with the install k
  assert.match(install,/http:\/\/127\.0\.0\.1:3000\/api\/profiles/);
  assert.match(install,/http:\/\/127\.0\.0\.1:9119\/api\/profiles/);
 });
+
+test('the web app reaches the Engine management listener for subscription sign-in, and CI proves it on the pinned release', () => {
+ const web=compose.services.web;
+ // The listener's address only (ADR 0012): the Run API address stays the worker's, and no port is published.
+ assert.equal(web.environment.BUNDLED_HERMES_MANAGEMENT_URL,'http://hermes:9119');
+ assert.equal(isHermesAddressAllowed(web.environment.BUNDLED_HERMES_MANAGEMENT_URL),true);
+ assert.equal(web.environment.BUNDLED_HERMES_URL,undefined);
+ assert.equal(web.ports,undefined);
+ assert.equal(compose.services.worker.environment.BUNDLED_HERMES_MANAGEMENT_URL,undefined);
+ const install=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install.steps.map(step=>step.run||'').join('\n');
+ const agent=install.indexOf('scripts/check-install-agent.mjs');
+ const subscription=install.indexOf('compose exec -T web node --input-type=module - < scripts/check-install-subscription.mjs');
+ assert.ok(agent>0&&subscription>agent);
+});
