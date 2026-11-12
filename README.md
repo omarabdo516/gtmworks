@@ -18,8 +18,10 @@ No host Node.js, Git, Supabase CLI, cloud project or external account is require
 These are initial sizing recommendations, not measured capacity guarantees.
 
 On a fresh install, the installer's last line is a one-time **setup link**:
-`<APP_ORIGIN>/first-run?code=<code>` (http://localhost:3000 unless you set
-`APP_ORIGIN`). The code is generated on this server and kept in `.env.install`;
+`<APP_ORIGIN>/first-run#code=<code>` (http://localhost:3000 unless you set
+`APP_ORIGIN`). The code is generated on this server and kept in `.env.install`.
+It sits after `#`, a part of the address the browser keeps to itself, so no proxy
+or server request log ever receives it; the page sends it only with the setup form.
 first-run setup opens only through that link, so whoever runs the installer sets
 the install up, not whoever reaches the address first. Lost it? Run
 `sh scripts/install.sh` again: until setup is finished it prints the same link,

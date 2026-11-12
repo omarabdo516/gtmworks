@@ -19,7 +19,8 @@ export async function POST(request:NextRequest) {
   logActionFailure('first_run_wrong_code',new Error('Setup code missing or wrong'));
   return new NextResponse(i18n(language).t('setupNeedsLink'),{status:403,headers:{'content-type':'text/plain; charset=utf-8'}});
  }
- const invalid=appUrl(`/first-run?invalid=1&language=${language}&code=${code}`);
+ // Back to the form with the code in the fragment, as the setup link carries it, so the next request does not.
+ const invalid=appUrl(`/first-run?invalid=1&language=${language}#code=${code}`);
  if(!input) {
   logActionFailure('first_run_invalid_input',new Error('Invalid setup input'));
   return NextResponse.redirect(invalid,303);

@@ -71,7 +71,17 @@ test('first run sends invalid input back to the form on APP_ORIGIN', async () =>
  server();
  const response=await submit(new NextRequest('http://gateway:8080/first-run/submit',{method:'POST',headers:inside,body:form({...owner,name:'',language:'ar'})}));
  assert.equal(response.status,303);
- assert.equal(response.headers.get('location'),`${origin}/first-run?invalid=1&language=ar&code=${code}`);
+ // The code returns in the fragment (issue #50), so the browser's next request to /first-run does not carry it.
+ assert.equal(response.headers.get('location'),`${origin}/first-run?invalid=1&language=ar#code=${code}`);
+});
+
+test('first run takes the setup code only from the submitted body, never from the address', async () => {
+ process.env.APP_ORIGIN=origin;
+ const requests=server();
+ const noCode={...owner}; delete noCode.code;
+ const response=await submit(new NextRequest(`http://gateway:8080/first-run/submit?code=${code}`,{method:'POST',headers:inside,body:form(noCode)}));
+ assert.equal(response.status,403);
+ assert.deepEqual(requests.map(url=>url.pathname),['/rest/v1/rpc/setup_is_open'],'nothing is created');
 });
 
 test('the auth callback redirects on APP_ORIGIN after the code is exchanged and when it is not', async () => {

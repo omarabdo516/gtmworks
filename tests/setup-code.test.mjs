@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { generateSetupCode, setupCodeMatches } from '../lib/setup-code.mjs';
+import { setupCodeFromHash, setupLink } from '../lib/setup-link.mjs';
 import { generateInstallEnv, validateInstallEnv, missingInstallEnv, readyLine } from '../lib/install-env.mjs';
 
 // First-run setup works only through the one-time link the installer prints (issue #50): whoever runs the installer on
@@ -44,12 +45,35 @@ test('a new install gets a setup code; an older one gains it; a bad one is refus
  assert.deepEqual(missingInstallEnv(env),{});
 });
 
-test('the ready line is the setup link while setup is open and the sign-in address after', () => {
+// The code travels after `#` (Omar, 2026-11-12): a browser never sends the fragment in a request, so no proxy or server
+// request log receives it; the page reads it and sends it only in the submit request's body.
+test('the ready line is the setup link, its code in the fragment, while setup is open and the sign-in address after', () => {
  const env={...generateInstallEnv(),APP_ORIGIN:'https://app.example.test'};
- assert.equal(readyLine(env,'open'),`Set up gtmworks with this one-time link: https://app.example.test/first-run?code=${env.SETUP_CODE}`);
+ assert.equal(readyLine(env,'open'),`Set up gtmworks with this one-time link: https://app.example.test/first-run#code=${env.SETUP_CODE}`);
+ assert.equal(new URL(readyLine(env,'open').split(' ').at(-1)).search,'','no query string');
  for(const state of ['closed','',undefined]) {
   assert.equal(readyLine(env,state),'gtmworks is ready: https://app.example.test/sign-in');
  }
+});
+
+test('the page reads the code from the link fragment only', () => {
+ const code=generateSetupCode();
+ assert.equal(setupCodeFromHash(`#code=${code}`),code);
+ assert.equal(setupCodeFromHash(setupLink('https://app.example.test',code).slice('https://app.example.test/first-run'.length)),code);
+ for(const hash of ['','#','#code=','#other=1',`?code=${code}`]) assert.equal(setupCodeFromHash(hash),undefined,hash);
+});
+
+test('the first-run form sends the code only as a field of its POST body, read from the fragment', () => {
+ const form=readFileSync('app/first-run/form.tsx','utf8');
+ assert.match(form,/<form action="\/first-run\/submit" method="post"/);
+ assert.match(form,/<input type="hidden" name="code" value=\{code\}\/>/);
+ assert.match(form,/setupCodeFromHash\(window\.location\.hash\)/);
+ // The server page no longer looks for a code: it cannot see the fragment, and a query string would reach the logs.
+ assert.doesNotMatch(readFileSync('app/first-run/page.tsx','utf8'),/code/i);
+ // The submit route reads the code from the body, never from the request address.
+ const route=readFileSync('app/first-run/submit/route.ts','utf8');
+ assert.match(route,/code=form\.get\('code'\)/);
+ assert.doesNotMatch(route,/searchParams|nextUrl/);
 });
 
 // A Docker stand-in: runs lib/install-env.mjs for real with the --env-file it was given, and answers the installer's
@@ -86,7 +110,7 @@ test('the installer ends with the setup link, prints the code nowhere else, repe
  const code=install.code();
  assert.ok(code,'the first install writes a setup code to .env.install');
  const lines=first.stdout.trimEnd().split('\n');
- const link=`Set up gtmworks with this one-time link: http://localhost:3000/first-run?code=${code}`;
+ const link=`Set up gtmworks with this one-time link: http://localhost:3000/first-run#code=${code}`;
  assert.equal(lines.at(-1),link);
  assert.equal((first.stdout+first.stderr).split(code).length-1,1,'the code appears only in the setup link');
  const again=install.run('open');
@@ -99,21 +123,18 @@ test('the installer ends with the setup link, prints the code nowhere else, repe
  assert.ok(!(after.stdout+after.stderr).includes(code));
 });
 
-// The gateway reads install-nginx.conf once, through a bind mount fixed when its container is made, and an update
-// starts only hermes, web and worker. Without a recreated gateway, an upgraded install keeps the old log format, which
-// writes the setup link's code to the access log (Codex review of issue #50's pull request).
-test('install and update recreate the gateway, so the new nginx configuration applies before the link is printed', t => {
+// The worker reaches the database through the gateway (NEXT_PUBLIC_SUPABASE_URL). Recreating the gateway once the worker
+// runs makes its loops log `Webhook worker: fetch failed`, which the install job reads as a worker refusing its
+// configuration. With the code in the fragment no request line carries it, so the gateway needs no new log rules.
+test('install and update restart no service once the worker runs', t => {
  const install=installDirectory(t);
  for(const args of [[],['update','main']]) {
   const result=install.run('open',...args);
   assert.equal(result.status,0,`${args.join(' ')||'install'}: ${result.stderr}`);
   const commands=install.commands();
-  const recreate=commands.findIndex(command=>/compose .* up -d --no-deps --force-recreate --wait --wait-timeout 300 gateway$/.test(command));
-  const ready=commands.findIndex(command=>/install-env\.mjs ready open$/.test(command));
-  assert.ok(recreate>=0,`${args.join(' ')||'install'} recreates the gateway:\n${commands.join('\n')}`);
-  assert.ok(recreate<ready,'before the setup link is printed');
-  // The app is up first, so the recreated gateway has something to route to.
-  assert.ok(commands.findIndex(command=>/up -d (--no-deps )?--wait --wait-timeout 300( hermes web worker)?$/.test(command))<recreate);
+  const started=commands.findIndex(command=>/compose .* up -d (--no-deps )?--wait --wait-timeout 300( hermes web worker)?$/.test(command));
+  assert.ok(started>=0,commands.join('\n'));
+  assert.deepEqual(commands.slice(started+1).filter(command=>/ (up|restart|stop|down)\b|--force-recreate/.test(command)),[],`${args.join(' ')||'install'}:\n${commands.join('\n')}`);
  }
 });
 
@@ -131,59 +152,31 @@ test('the install job checks the setup link before and after setup, and that no 
  const localCheck=run.indexOf('-e APP_ORIGIN=http://localhost:3000 -e MAIL_URL');
  // The first install ends with the link, its code in no other line; a repeat before setup prints the same link.
  assert.ok(at("{ sh scripts/install.sh || fail 'first install'; } 2>&1 | tee first-install.log")<at("code=$(sed -n 's/^SETUP_CODE=//p' .env.install)"));
- at('link="Set up gtmworks with this one-time link: http://localhost:3000/first-run?code=$code"');
+ at('link="Set up gtmworks with this one-time link: http://localhost:3000/first-run#code=$code"');
  at('[[ $(tail -n 1 first-install.log) == "$link" ]]');
  at('[[ $(grep -cF "$code" first-install.log) == 1 ]]');
+ at("if grep -qF '?code=' first-install.log; then fail");
  assert.ok(at('[[ $(tail -n 1 repeat-before-setup.log) == "$link" ]]')<localCheck,'repeated while setup is still open');
  // The links check completes setup with the code; afterwards no container log holds it and a repeat prints sign-in.
  assert.ok(localCheck<at('if grep -qF "$code" <<< "$logs"; then fail'));
  assert.ok(localCheck<at("[[ $(tail -n 1 repeat-after-setup.log) == 'gtmworks is ready: http://localhost:3000/sign-in' ]]"));
  at('if grep -qF "$code" repeat-after-setup.log; then fail');
- at('[[ $(tail -n 1 proxied-install.log) == "Set up gtmworks with this one-time link: $public/first-run?code=$code" ]]');
+ at('[[ $(tail -n 1 proxied-install.log) == "Set up gtmworks with this one-time link: $public/first-run#code=$code" ]]');
+ assert.doesNotMatch(run,/first-run\?code=/,'no link in the job carries the code in its query string');
  const checks=[...run.matchAll(/docker run [^\n]*(?:\\\n[^\n]*)*node --input-type=module - < scripts\/check-install-proxy\.mjs/g)];
  assert.equal(checks.length,2);
  for(const {0:command} of checks) assert.ok(command.includes("--env-file <(grep -E '^SETUP_CODE=' .env.install)"),command);
 });
 
-test('the gateway log keeps the path and drops the query string and Referer, where the setup code travels', () => {
- const conf=readFileSync('scripts/install-nginx.conf','utf8');
- const format=/log_format\s+(\w+)\s+'([^;]*)';/.exec(conf);
- assert.ok(format,'the gateway defines its own log format');
- assert.match(conf,new RegExp(`access_log\\s+\\S+\\s+${format[1]};`));
- assert.match(format[2],/\$uri/);
- assert.doesNotMatch(format[2],/\$request\b|\$request_uri|\$args|\$query_string|\$http_referer/);
-});
-
-// nginx's error log has a fixed format: on an upstream error it writes the request line and the Referer, query string
-// included (CodeRabbit review of issue #50's pull request). The setup link logs no error, and its page sends no Referer to later requests.
-test('the setup link logs no gateway error and its page sends no Referer, so no error line can carry the code', () => {
- const conf=readFileSync('scripts/install-nginx.conf','utf8');
- const block=/location = \/first-run \{([^}]*)\}/.exec(conf)?.[1];
- assert.ok(block!==undefined,'the gateway has an exact location for the setup link');
- assert.match(block,/error_log\s+\S+\s+emerg;/);
- assert.match(block,/add_header\s+Referrer-Policy\s+no-referrer\s+always;/);
- // It routes exactly as / does, and sets no proxy header of its own, so it inherits the server's (issue #40).
- const root=/location \/ \{([^}]*)\}/.exec(conf)?.[1];
- assert.match(conf.replace(/location [^{]*\{[^}]*\}/g,''),/^\s*set \$web web:3000;$/m);
- assert.match(root,/^ proxy_pass http:\/\/\$web; $/);
- assert.match(block,/ proxy_pass http:\/\/\$web; $/);
- assert.doesNotMatch(block,/proxy_set_header/);
- // No server-wide error_log is lowered: every other path still logs its errors.
- assert.doesNotMatch(conf.replace(/location [^{]*\{[^}]*\}/g,''),/error_log/);
-});
-
-test('the install job proves the gateway logs errors, but none for the setup link, and reloads a changed configuration', async () => {
+// The issue's check for the fragment decision: the gateway's access log, written while the local check opens first run
+// and completes setup with the code, never holds the code; it did log those requests, so the search is not of nothing.
+test('the install job reads the gateway access log after setup and finds the setup requests but not the code', async () => {
  const {load}=await import('js-yaml');
  const run=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install.steps.find(step=>step.env?.INSTALL_REF).run;
  const at=text=>{ const index=run.indexOf(text); assert.notEqual(index,-1,text); return index; };
- // With web stopped both requests fail at the gateway; the probe's error line shows errors are logged at all.
- const stop=at("compose stop web || fail 'stop web for the gateway error check'");
- assert.ok(stop<at('"http://127.0.0.1:3000/first-run?code=$code"'));
- assert.ok(stop<at('"http://127.0.0.1:3000/sign-in?probe=gateway-error-probe"'));
- assert.ok(at('grep -qF gateway-error-probe <<< "$gateway_logs" || fail')<at('if grep -qF "$code" <<< "$gateway_logs"; then fail'));
- at('referrer-policy: no-referrer');
- // An update replaces install-nginx.conf on disk; the installer that follows serves the new file.
- const marker=at("'# changed by an update'");
- assert.ok(marker<at("{ sh scripts/install.sh || fail 'repeat install before setup'; }"));
- assert.ok(at("{ sh scripts/install.sh || fail 'repeat install before setup'; }")<at('compose exec -T gateway head -n 1 /etc/nginx/conf.d/default.conf'));
+ const localCheck=at('-e APP_ORIGIN=http://localhost:3000 -e MAIL_URL');
+ const read=at("gateway_logs=$(compose logs gateway 2>&1) || fail 'read gateway logs'");
+ assert.ok(localCheck<read,'read after setup is completed');
+ assert.ok(read<at("grep -qF 'POST /first-run/submit' <<< \"$gateway_logs\" || fail"));
+ assert.ok(read<at('if grep -qF "$code" <<< "$gateway_logs"; then fail'));
 });

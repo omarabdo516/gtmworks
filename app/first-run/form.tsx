@@ -1,11 +1,16 @@
 'use client';
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { useI18n } from '@/lib/i18n-client';
+import { setupCodeFromHash } from '@/lib/setup-link.mjs';
 import { Button } from '@/components/paperclip/ui/button';
 import { Input } from '@/components/paperclip/ui/input';
-export default function FirstRunForm({code,invalid}:{code?:string,invalid:boolean}) {
+const onHashChange=(changed:()=>void)=>{ window.addEventListener('hashchange',changed); return ()=>window.removeEventListener('hashchange',changed); };
+export default function FirstRunForm({invalid}:{invalid:boolean}) {
  const {t,language}=useI18n();
  const [pending,setPending]=useState(false);
+ // The setup link's code, from its fragment (issue #50); null on the server, which never sees the fragment.
+ const code=useSyncExternalStore(onHashChange,()=>setupCodeFromHash(window.location.hash),()=>null);
+ if(code===null) return null;
  if(!code) return <p role="alert" className="mt-6">{t('setupNeedsLink')}</p>;
  return <form action="/first-run/submit" method="post" onSubmit={()=>setPending(true)} className="mt-6 space-y-4">
   <input type="hidden" name="language" value={language}/>

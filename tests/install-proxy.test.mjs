@@ -25,7 +25,8 @@ function install({signInAt,verifyAt='/auth/v1/verify',trustForwardedHost=false,c
    HTML:`<a href="${at}${verifyAt}?token=t&amp;type=${type}&amp;redirect_to=${encodeURIComponent(redirect)}">Open</a>`});
   const coded=code=>!checksCode || code===setupCode;
   if(url.pathname==='/first-run' && setUp && closes) return send(404);
-  if(url.pathname==='/first-run') return send(200,{},coded(url.searchParams.get('code'))?'<input name="company">':'<p role="alert">Use the setup link</p>');
+  // The code is in the link's fragment, which no request carries: the server's page is the same for every visitor.
+  if(url.pathname==='/first-run') return send(200,{},'<p role="alert">Use the setup link</p>');
   if(url.pathname==='/first-run/submit' && request.method==='POST') {
    if(setUp && closes) return send(404);
    if(!coded(new URLSearchParams(body).get('code'))) return send(403);
@@ -76,7 +77,7 @@ test('the proxied install check follows first run and the emailed link to the Co
 test('the install check fails when first run opens without the setup code', async () => {
  const {status,output}=await check(await install({signInAt:base=>base,checksCode:false}));
  assert.equal(status,1);
- assert.match(output,/first run without the setup code shows no form/);
+ assert.match(output,/a submission without the setup code is refused/);
 });
 
 test('the install check fails when the setup code still works after setup', async () => {

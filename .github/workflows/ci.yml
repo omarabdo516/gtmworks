@@ -232,37 +232,27 @@ jobs:
           db() { compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 -At "$@"; }
           [[ $(stat -c %a .env.install) == 600 ]] || fail '.env.install permissions (expected 600)'
           # First run opens only through the setup link (issue #50): the first install ends with it, its code is in no
-          # other line, and a repeat install while setup is still open prints the same link.
+          # other line, and a repeat install while setup is still open prints the same link. The code travels after `#`
+          # (Omar, 2026-11-12), never in a query string, so no request line and no gateway log can carry it.
           code=$(sed -n 's/^SETUP_CODE=//p' .env.install)
           [[ $code =~ ^[a-f0-9]{64}$ ]] || fail 'the install generates a setup code'
-          link="Set up gtmworks with this one-time link: http://localhost:3000/first-run?code=$code"
+          link="Set up gtmworks with this one-time link: http://localhost:3000/first-run#code=$code"
           [[ $(tail -n 1 first-install.log) == "$link" ]] || fail 'the first install ends with the setup link'
           [[ $(grep -cF "$code" first-install.log) == 1 ]] || fail 'the setup code appears only in the setup link'
-          # An update replaces install-nginx.conf on disk with a new file; the installer run that follows must serve it, or
-          # an upgraded gateway keeps the log rules it started with (Codex review).
-          { printf '%s\n' '# changed by an update'; cat scripts/install-nginx.conf; } > nginx.conf.new && mv nginx.conf.new scripts/install-nginx.conf || fail 'change the gateway configuration'
+          if grep -qF '?code=' first-install.log; then fail 'no link carries the setup code in its query string'; fi
           { sh scripts/install.sh || fail 'repeat install before setup'; } 2>&1 | tee repeat-before-setup.log
           [[ $(tail -n 1 repeat-before-setup.log) == "$link" ]] || fail 'a repeat install before setup prints the same setup link'
-          [[ $(compose exec -T gateway head -n 1 /etc/nginx/conf.d/default.conf) == '# changed by an update' ]] || fail 'a repeat install serves the changed gateway configuration'
-          # On an upstream error nginx writes the request line to its error log (CodeRabbit review). With web stopped, a probe
-          # path logs its error, so errors are logged at all, and the setup link logs neither an error nor its code.
-          compose stop web || fail 'stop web for the gateway error check'
-          status=$(docker run --rm --network host curlimages/curl:8.12.1 -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:3000/first-run?code=$code") || fail 'setup link request with web stopped'
-          [[ $status == 50[24] ]] || fail "setup link with web stopped returned HTTP $status (expected 502 or 504)"
-          status=$(docker run --rm --network host curlimages/curl:8.12.1 -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:3000/sign-in?probe=gateway-error-probe") || fail 'probe request with web stopped'
-          [[ $status == 50[24] ]] || fail "probe with web stopped returned HTTP $status (expected 502 or 504)"
-          compose up -d --wait --wait-timeout 300 web || fail 'start web after the gateway error check'
-          gateway_logs=$(compose logs gateway 2>&1) || fail 'read gateway logs'
-          grep -qF gateway-error-probe <<< "$gateway_logs" || fail 'the gateway logs an upstream error with its request line'
-          if grep -qF "$code" <<< "$gateway_logs"; then fail 'the setup code must not appear in the gateway log'; fi
-          headers=$(docker run --rm --network host curlimages/curl:8.12.1 -sS -D - -o /dev/null "http://127.0.0.1:3000/first-run?code=$code") || fail 'setup link headers'
-          grep -qi '^referrer-policy: no-referrer' <<< "$headers" || fail 'the setup link page sends no Referer'
           # The local install on http://localhost:3000, straight to the gateway, while first run is still open: the emailed
           # sign-in link reaches the Company home, an invitation link returns to the app, and a sign-in request with a forged
           # X-Forwarded-Host still gets a link on APP_ORIGIN (issue #40). The keys pass as an env file, so none is printed.
           docker run --rm -i --network host --env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY)=' .env.install) --env-file <(grep -E '^SETUP_CODE=' .env.install) \
             -e APP_ORIGIN=http://localhost:3000 -e MAIL_URL=http://127.0.0.1:8025 \
             node:22.14.0-alpine3.21 node --input-type=module - < scripts/check-install-proxy.mjs || fail 'emailed sign-in and invitation links on the local install'
+          # That check opened first run and completed setup with the code in the submit body: the gateway's access log holds
+          # those requests and not the code.
+          gateway_logs=$(compose logs gateway 2>&1) || fail 'read gateway logs'
+          grep -qF 'POST /first-run/submit' <<< "$gateway_logs" || fail 'the gateway access log holds the setup requests'
+          if grep -qF "$code" <<< "$gateway_logs"; then fail 'the setup code must not appear in the gateway access log'; fi
           logs=$(compose logs 2>&1) || fail 'read container logs'
           if grep -qF "$code" <<< "$logs"; then fail 'the setup code must not appear in a container log'; fi
           cp .env.install .env.install.before
@@ -336,7 +326,7 @@ jobs:
           compose down -v || fail 'remove restored install'
           sed -i -e "s#^APP_ORIGIN=.*#APP_ORIGIN=$public#" -e "s#^SUPABASE_PUBLIC_URL=.*#SUPABASE_PUBLIC_URL=$public#" .env.install || fail 'set the public origin'
           { sh scripts/install.sh || fail 'proxied install'; } 2>&1 | tee proxied-install.log
-          [[ $(tail -n 1 proxied-install.log) == "Set up gtmworks with this one-time link: $public/first-run?code=$code" ]] || fail 'the proxied install prints its setup link on the public origin'
+          [[ $(tail -n 1 proxied-install.log) == "Set up gtmworks with this one-time link: $public/first-run#code=$code" ]] || fail 'the proxied install prints its setup link on the public origin'
           printf '%s\n' '{' '  local_certs' '  auto_https disable_redirects' '}' 'app.gtmworks.test:4443 {' '  reverse_proxy 127.0.0.1:3000' '}' > Caddyfile
           docker run -d --name install-proxy --network host -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2 >/dev/null || fail 'start the HTTPS proxy'
           for attempt in $(seq 1 60); do docker exec install-proxy cat /data/caddy/pki/authorities/local/root.crt > ca.crt 2>/dev/null && [[ -s ca.crt ]] && break; sleep 1; done

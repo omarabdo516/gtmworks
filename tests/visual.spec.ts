@@ -249,7 +249,7 @@ test.describe('first-run screens', () => {
     test(`first-run ${language} ${width}`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 });
       // The form shows only through the installer's setup link (issue #50); the screen is the same.
-      await page.goto(`${screen.path}?code=${process.env.SETUP_CODE}`);
+      await page.goto(`${screen.path}#code=${process.env.SETUP_CODE}`);
       await page.locator('select').selectOption(language);
       await expect(page.locator('html')).toHaveAttribute('lang', language);
       await expect(page.locator('html')).toHaveAttribute('dir', language === 'ar' ? 'rtl' : 'ltr');

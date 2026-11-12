@@ -55,8 +55,10 @@ async function emailedLink(email,what) {
  assert.fail(`the ${what} email arrived`);
 }
 
-// First run opens only through the setup link the installer printed (issue #50): without its code, or with a wrong
-// one, the page shows no form and a submission is refused.
+// First run opens only through the setup link the installer printed (issue #50). Its code is in the link's fragment,
+// which no request carries, so the server's page has no form; the browser shows it from the fragment
+// (tests/first-run.spec.ts). Here the code goes only in the submit body, and without it, or with a wrong one, a
+// submission is refused.
 const code=process.env.SETUP_CODE;
 assert.ok(code,'SETUP_CODE is set');
 const submit=values=>follow(`${origin}/first-run/submit`,{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams(values).toString()});
@@ -66,9 +68,6 @@ assert.ok(!(await closed.response.text()).includes('name="company"'),'first run 
 for(const values of [owner,{...owner,code:'0'.repeat(63)+'1'}]) {
  assert.equal((await submit(values)).response.status,403,`a submission ${values.code?'with a wrong':'without the'} setup code is refused`);
 }
-const start=await follow(`${origin}/first-run?code=${encodeURIComponent(code)}`);
-assert.equal(start.response.status,200,'first run opens with the setup code');
-assert.ok((await start.response.text()).includes('name="company"'),'first run with the setup code shows the form');
 const sent=await submit({...owner,code});
 assert.equal(new URL(sent.url).pathname,'/sign-in');
 assert.equal(new URL(sent.url).searchParams.get('message'),'sent',sent.url);

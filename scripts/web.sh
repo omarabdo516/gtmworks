@@ -13,7 +13,7 @@ export APP_ORIGIN=${APP_ORIGIN:-http://127.0.0.1:3000}
 # First run opens only with the setup code (issue #50); a local run without one gets a fresh code and its link.
 if [[ -z "${SETUP_CODE:-}" ]]; then
  export SETUP_CODE=$(node -e 'process.stdout.write(require("crypto").randomBytes(32).toString("hex"))')
- echo "Local setup link: $APP_ORIGIN/first-run?code=$SETUP_CODE"
+ echo "Local setup link: $APP_ORIGIN/first-run#code=$SETUP_CODE"
 fi
 # Production e2e uses the local stack while retaining the production settings guard. Links are built on APP_ORIGIN, so it
 # is the address the browser uses; the guard accepts a plain-http loopback origin only in the local install's shape.

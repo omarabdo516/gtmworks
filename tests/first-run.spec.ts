@@ -28,10 +28,14 @@ test('empty install creates its Agency owner and first company, then opens Home 
  await page.request.delete('http://127.0.0.1:54324/api/v1/messages');
  await page.goto('/');
  await expect(page).toHaveURL('/first-run');
- // Without the setup link's code the page says where the link comes from and shows no form.
- await expect(page.getByRole('alert')).toHaveText('Setup opens only from the link the installer printed on your server. Run the installer again there to see it.');
+ // Without the setup link's code the page says where the link comes from and shows no form. Next's route announcer is
+ // an alert too, outside the page's main landmark.
+ await expect(page.getByRole('main').getByRole('alert')).toHaveText('Setup opens only from the link the installer printed on your server. Run the installer again there to see it.');
  await expect(page.getByLabel('Your name')).toHaveCount(0);
- await page.goto(`/first-run?code=${code}`);
+ // The code is in the link's fragment (issue #50): no request the browser makes carries it except the submit body.
+ const requests:{url:string,body:string|null}[]=[];
+ page.on('request',request=>requests.push({url:request.url(),body:request.postData()}));
+ await page.goto(`/first-run#code=${code}`);
  await page.getByLabel('Your name').fill(input.name);
  await page.getByLabel('Email',{exact:true}).fill(input.email);
  await page.getByLabel('First company name').fill(input.company);
@@ -39,6 +43,9 @@ test('empty install creates its Agency owner and first company, then opens Home 
  await page.getByRole('button',{name:'إنشاء وإرسال رابط تسجيل الدخول'}).click();
  await expect(page.locator('html')).toHaveAttribute('lang','ar');
  await expect(page.getByRole('status')).toHaveText('تحقق من بريدك الإلكتروني للحصول على رابط تسجيل الدخول.');
+ const carrying=requests.filter(request=>request.url.includes(code) || request.body?.includes(code));
+ expect(carrying.map(request=>request.url)).toEqual([`${baseURL}/first-run/submit`]);
+ expect(new URLSearchParams(carrying[0].body!).get('code')).toBe(code);
  await followSignInLink(page,input.email);
  await expect(page).toHaveURL(/\/c\/first-company-[a-f0-9]{8}\/home$/);
  await expect(page.locator('.home-dashboard')).toBeVisible();
@@ -78,7 +85,8 @@ test('invalid input creates nothing and a populated installation refuses setup',
  const invalid=await request.post('/first-run/submit',{form:{...input,name:'',language:'ar'},maxRedirects:0});
  expect(invalid.status()).toBe(303);
  expect(invalid.headers().location).toContain('language=ar');
- expect(invalid.headers().location).toContain(`code=${code}`);
+ expect(invalid.headers().location).toContain(`#code=${code}`);
+ expect(invalid.headers().location).not.toContain(`?code=`);
  expect(counts(baseURL!)).toEqual({accounts:0,people:0,companies:0,owners:0});
  resetFirstRun(baseURL,true);
  const before=counts(baseURL!);
