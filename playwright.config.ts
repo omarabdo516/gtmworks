@@ -1,4 +1,7 @@
+import { randomBytes } from 'node:crypto';
 import { defineConfig } from '@playwright/test';
+// First run opens only with the install's setup code (issue #50). The web server and the test workers inherit this one.
+process.env.SETUP_CODE ||= randomBytes(32).toString('hex');
 export default defineConfig({
   testDir: './tests',
   testMatch: '*.spec.ts',
