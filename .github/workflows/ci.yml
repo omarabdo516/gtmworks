@@ -286,6 +286,8 @@ jobs:
           # The Engine's management listener (ADR 0011): an Agent made through the contract runs, the worker reaches it with
           # the install key, and it is never public: the gateway routes only to the app, and no host port is published.
           compose exec -T web node --input-type=module - < scripts/check-install-agent.mjs || fail 'Agent created in the bundled Engine and a Run started for it'
+          # A company's subscription sign-in (ADR 0012) runs in that company's own profile on the same listener.
+          compose exec -T web node --input-type=module - < scripts/check-install-subscription.mjs || fail 'company subscription sign-in scoped to its own Engine profile'
           compose exec -T worker node -e "fetch('http://hermes:9119/api/profiles',{headers:{Authorization:'Bearer '+process.env.HERMES_API_KEY}}).then(response=>process.exit(response.status===200?0:1)).catch(()=>process.exit(1))" || fail 'worker reaches the Engine management listener with the install key'
           body=$(docker run --rm --network host curlimages/curl:8.12.1 -sS http://127.0.0.1:3000/api/profiles) || fail 'management path request on install host port 3000'
           status=$(docker run --rm --network host curlimages/curl:8.12.1 -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/api/profiles) || fail 'management path status on install host port 3000'

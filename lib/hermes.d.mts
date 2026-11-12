@@ -9,4 +9,12 @@ export function readRun(run:HermesConnection&{run:string}):Promise<{status:'runn
 export function stopRun(run:HermesConnection&{run:string}):Promise<boolean>;
 export function createAgent(connection:import('./engine.mjs').EngineConnection,agent:import('./engine.mjs').AgentRequest):Promise<import('./engine.mjs').CreatedAgent>;
 export function readAgent(connection:import('./engine.mjs').EngineConnection,name:string):Promise<import('./engine.mjs').FoundAgent>;
+export function companyProfile(company:unknown):string|null;
+export function engineSignInsWaiting():number;
+export function engineSignIn(connection:{address:string,managementAddress?:string,key:string},company:string):{
+ start(provider:string):Promise<import('./hermes-sign-in.mjs').SignInState>,
+ state(provider:string):Promise<import('./hermes-sign-in.mjs').SignInState>,
+ disconnect(provider:string):Promise<import('./hermes-sign-in.mjs').SignInState>,
+ complete(provider:string,authorizationCode?:unknown):Promise<import('./hermes-sign-in.mjs').SignInState>,
+};
 export function hermesEngine(connection:import('./engine.mjs').EngineConnection):import('./engine.mjs').Engine;

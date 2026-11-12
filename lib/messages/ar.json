@@ -437,5 +437,7 @@
   "subscriptionPasteHelp": "بعد الموافقة، يعرض لك Claude رمزًا. الصقه هنا لإكمال تسجيل الدخول.",
   "subscriptionPasteCode": "رمز التفويض",
   "subscriptionSubmitCode": "إكمال تسجيل الدخول",
-  "subscriptionCodeRejected": "لم يُقبل الرمز. اربط مرة أخرى للحصول على رمز جديد."
+  "subscriptionCodeRejected": "لم يُقبل الرمز. اربط مرة أخرى للحصول على رمز جديد.",
+  "subscriptionState_unavailable": "لا يستطيع محرك الوكلاء في هذا التثبيت ربط هذا الاشتراك للشركة.",
+  "subscriptionBusy": "طلبات تسجيل دخول كثيرة في الوقت نفسه. انتظر قليلًا ثم حاول مرة أخرى."
 }

@@ -1,6 +1,7 @@
 export type SignInProvider='openai-codex'|'anthropic';
-export type SignInState={state:'pending',link:string,code:string|null,needsCode?:true}|{state:'connected'|'disconnected'|'failed'};
+export type SignInState={state:'pending',link:string,code:string|null,needsCode?:true}|{state:'connected'|'disconnected'|'failed'|'unavailable'};
 export const signInProviders:SignInProvider[];
+export function signInsWaiting():number;
 export function credentialIds(output:string,provider:string):string[]|null;
 export function deviceCode(text:string):string|null;
 export function companyHermesHome(company:string,env?:Record<string,string|undefined>):string|null;
