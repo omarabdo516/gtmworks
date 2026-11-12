@@ -260,14 +260,21 @@ test('on a narrow screen the sidebar collapses behind the menu button and slides
  await expect(page.locator('.mobile-menu')).toHaveAttribute('aria-expanded','true');
  await expect(sidebar).toBeVisible();
  await expect(page.locator('.scrim')).toBeVisible();
+ // While open it holds the keyboard: focus starts inside it, and Tab and Shift+Tab wrap inside it.
+ const inside=()=>page.evaluate(()=>!!document.activeElement?.closest('.sidebar'));
+ expect(await inside()).toBe(true);
+ const count=await sidebar.locator('a[href],button:not([disabled])').count();
+ for(let step=0;step<count+2;step++) { await page.keyboard.press('Tab'); expect(await inside(),`Tab ${step}`).toBe(true); }
+ for(let step=0;step<count+2;step++) { await page.keyboard.press('Shift+Tab'); expect(await inside(),`Shift+Tab ${step}`).toBe(true); }
  // Escape closes it and gives focus back to the menu button.
  await page.keyboard.press('Escape');
  await expect(sidebar).toBeHidden();
  await expect(page.locator('.mobile-menu')).toBeFocused();
- // Tapping the scrim closes it; following a link closes it on the new page.
+ // Tapping the scrim closes it and also gives focus back; following a link closes it on the new page.
  await page.locator('.mobile-menu').click();
  await page.locator('.scrim').click({position:{x:380,y:450}});
  await expect(sidebar).toBeHidden();
+ await expect(page.locator('.mobile-menu')).toBeFocused();
  await page.locator('.mobile-menu').click();
  await sidebar.getByRole('link',{name:"Marketing board",exact:true}).click();
  await expect(page).toHaveURL(/\/work\/board$/);

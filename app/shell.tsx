@@ -29,9 +29,10 @@ export default async function Shell({company,companies,section,title,crumbs,pers
  const db=await supabase();
  const agents=company?.id?orderAgents(((await db.from('hermes_agents').select('id,connection_id,name,speciality,is_default').eq('company_id',company.id).order('name')).data||[]) as Agent[]):[];
  const conversations=company?.id?(await db.from('conversations').select('id,agent_name,created_at').eq('company_id',company.id).order('created_at',{ascending:false}).limit(20)).data||[]:[];
- const firsts=conversations.length?(await db.from('conversation_messages').select('conversation_id,body').in('conversation_id',conversations.map(c=>c.id)).eq('author','person').order('id').limit(500)).data||[]:[];
+ // Each listed chat reads its own first message, so a long chat never crowds another out of the titles.
+ const firsts=await Promise.all(conversations.map(async c=>(await db.from('conversation_messages').select('body').eq('conversation_id',c.id).eq('author','person').order('id').limit(1).maybeSingle()).data?.body as string|undefined));
  // A chat is named by the first line of its first message, as its own page names it (lib/conversations titleOf).
- const chats=conversations.map(c=>({id:c.id,created_at:c.created_at,title:firsts.find(m=>m.conversation_id===c.id)?.body.split('\n')[0]||c.agent_name}));
+ const chats=conversations.map((c,index)=>({id:c.id,created_at:c.created_at,title:firsts[index]?.split('\n')[0]||c.agent_name}));
  const active=(path:string)=>path==='chat'?chat:path==='work/board'?section.startsWith('work/'):section===path;
  const sidebar=<>
   <div className="sb-top">

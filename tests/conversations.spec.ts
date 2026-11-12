@@ -379,14 +379,14 @@ test('the shell opens an Agent, sends a message, switches language and theme, an
   await expect(page.locator('html')).toHaveAttribute('dir','rtl');
   await expect(page.locator('.sidebar')).toHaveCSS('direction','rtl');
   await expect(page.locator('.sidebar .sb-nav .sb-item').first()).toHaveText('المحادثات');
-  await expect(page.getByLabel('Message',{exact:true})).toHaveAttribute('placeholder','اكتب لـ Nour…');
+  await expect(page.getByLabel('الرسالة',{exact:true})).toHaveAttribute('placeholder','اكتب لـ Nour…');
   await expect(mine).toHaveCSS('direction','rtl');
   expect((await page.locator('.sidebar').boundingBox())!.x).toBe(1440-300);
   at=await sides();
   expect([at.personLeft,at.agentRight]).toEqual([at.columnLeft,at.columnRight]);
   // An English message keeps left to right inside the Arabic shell.
   const english=`Plan the launch week ${Date.now()}`;
-  await page.getByLabel('Message',{exact:true}).fill(english);
+  await page.getByLabel('الرسالة',{exact:true}).fill(english);
   await page.getByRole('button',{name:'ابعت',exact:true}).click();
   await expect(page.locator('.msg[data-author=person] .bubble').last()).toHaveText(english);
   await expect(page.locator('.msg[data-author=person] .bubble').last()).toHaveCSS('direction','ltr');
@@ -394,7 +394,8 @@ test('the shell opens an Agent, sends a message, switches language and theme, an
   for(const language of ['ar','en'] as const) {
    if(language==='en') {
     await page.setViewportSize({width:1440,height:900});
-    await page.getByRole('button',{name:'Account menu',exact:true}).click();
+    // The page is still in Arabic here, so the account button carries its Arabic label.
+    await page.getByRole('button',{name:'قائمة الحساب',exact:true}).click();
     await page.getByRole('menuitemradio').filter({hasText:'English'}).click();
     await expect(page.locator('html')).toHaveAttribute('lang','en');
    }
