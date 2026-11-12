@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { crossSiteWrite } from '@/lib/app-origin.mjs';
 
 const columns='id,company_id,connection_id,name,speciality,is_default';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -9,7 +10,7 @@ async function respond(request:NextRequest) {
   const db=await supabase(); const {data:{user}}=await db.auth.getUser();
   if(!user) return reply({error:'hermesAgencyOnly'},401);
   const writing=request.method==='POST';
-  if(writing&&(!request.headers.get('content-type')?.startsWith('application/json')||(request.headers.get('origin')&&new URL(request.headers.get('origin')!).host!==request.headers.get('host')))) return reply({error:'hermesAgencyOnly'},403);
+  if(writing&&(!request.headers.get('content-type')?.startsWith('application/json')||crossSiteWrite(request.headers))) return reply({error:'hermesAgencyOnly'},403);
   const raw=writing?await request.text():''; if(raw.length>4000) return reply({error:'hermesAgentFailed'},400);
   const body=writing?JSON.parse(raw):Object.fromEntries(request.nextUrl.searchParams);
   if(typeof body.company!=='string'||!uuid.test(body.company)) return reply({error:'hermesAgentFailed'},400);

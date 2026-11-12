@@ -92,7 +92,7 @@ async function expectNumberOrder(title:Locator,arabic=false) {
 async function signOut(page:Page) {
  const config=await (await page.request.get('/api/config')).json();
  const cookies=await page.context().cookies();
- const db=createServerClient(config.url,config.anonKey,{cookies:{getAll:()=>cookies,setAll:()=>{}}});
+ const db=createServerClient(config.url,config.anonKey,{cookieOptions:config.cookieOptions,cookies:{getAll:()=>cookies,setAll:()=>{}}});
  const {error}=await db.auth.signOut();
  expect(error).toBeNull();
  await page.context().clearCookies();

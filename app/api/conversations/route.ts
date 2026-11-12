@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { supabaseConfig } from '@/lib/supabase-config';
 import { closeOpenRuns, sendMessage } from '@/lib/conversation-runs.mjs';
 import { logActionFailure } from '@/lib/diagnostics.mjs';
+import { crossSiteWrite } from '@/lib/app-origin.mjs';
 import { conversationColumns, faceOf, latestEnded, messageColumns, shown, totalOf, usageColumns, uuid, waiting, type RunUsage } from '@/lib/conversations';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
@@ -42,7 +43,7 @@ async function respond(request:NextRequest) {
   const db=await supabase(); const {data:{user}}=await db.auth.getUser();
   if(!user) return refuse('conversationNotFound',401);
   const writing=request.method==='POST';
-  if(writing&&(!request.headers.get('content-type')?.startsWith('application/json')||(request.headers.get('origin')&&new URL(request.headers.get('origin')!).host!==request.headers.get('host')))) return refuse('conversationNotAllowed',403);
+  if(writing&&(!request.headers.get('content-type')?.startsWith('application/json')||crossSiteWrite(request.headers))) return refuse('conversationNotAllowed',403);
   const raw=writing?await request.text():''; if(raw.length>24000) return refuse('conversationFailed',400);
   const body=writing?JSON.parse(raw):Object.fromEntries(request.nextUrl.searchParams);
   if(typeof body.company!=='string'||!uuid.test(body.company)) return refuse('conversationFailed',400);
