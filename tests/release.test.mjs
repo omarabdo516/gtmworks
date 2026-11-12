@@ -161,7 +161,7 @@ test('a release install pulls the image by digest, takes its install files from 
  assert.ok(index(/install-env\.mjs generate/)<index(/exec -T db psql/));
  assert.equal(index(/\bbuild\b/),-1);
  assert.equal(index(/\blogin\b/),-1);
- assert.match(commands.at(-3),/up -d --wait --wait-timeout 300$/);
+ assert.ok(index(/exec -T db psql/)<index(/up -d --wait --wait-timeout 300$/));
  // The files the compose file mounts are in place before anything starts, and the migrations come from the image.
  for(const path of checkoutPaths()) assert.ok(existsSync(join(release.directory,path)),path);
  assert.equal(statSync(join(release.directory,'scripts/install-key.sh')).mode & 0o111,0o111);

@@ -17,14 +17,24 @@ Requirements: Docker Engine with Docker Compose v2.20+ (`docker compose`), POSIX
 No host Node.js, Git, Supabase CLI, cloud project or external account is required.
 These are initial sizing recommendations, not measured capacity guarantees.
 
-Open **http://localhost:3000/**. Port **3000** (app and Supabase gateway)
+On a fresh install, the installer's last line is a one-time **setup link**:
+`<APP_ORIGIN>/first-run#code=<code>` (http://localhost:3000 unless you set
+`APP_ORIGIN`). The code is generated on this server and kept in `.env.install`.
+It sits after `#`, a part of the address the browser keeps to itself, so no proxy
+or server request log ever receives it; the page sends it only with the setup form.
+first-run setup opens only through that link, so whoever runs the installer sets
+the install up, not whoever reaches the address first. Lost it? Run
+`sh scripts/install.sh` again: until setup is finished it prints the same link,
+and afterwards the sign-in address instead.
+
+Port **3000** (app and Supabase gateway)
 and **8025** (local email inbox) must be free; both bind **only to 127.0.0.1**.
 For a remote server, forward them over SSH (`ssh -L 3000:localhost:3000
--L 8025:localhost:8025 your-server`) and open the local URL. Do not expose the
-mailbox publicly. On a fresh install, enter your name, email and first company
+-L 8025:localhost:8025 your-server`) and open the setup link there. Do not expose the
+mailbox publicly. Open the setup link, enter your name, email and first company
 name, then follow the sign-in link in the local inbox at http://localhost:8025.
 You become the Agency owner and the first company's Owner. Setup then closes
-permanently; later visits use sign-in. Public sign-ups stay disabled. No demo
+permanently and the setup link stops working; later visits use sign-in. Public sign-ups stay disabled. No demo
 people or companies are created, and no SMTP account is needed for the local inbox.
 
 The command builds the web image and starts the web app, worker, Postgres,
