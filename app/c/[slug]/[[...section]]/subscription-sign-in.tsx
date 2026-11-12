@@ -5,9 +5,10 @@ import type { SignInState } from '@/lib/hermes-sign-in.mjs';
 
 // The company's own model subscriptions, signed in through Hermes in the company's Hermes home (#3). Shown to the Owner
 // and the Agency only; the route refuses anyone else. While a sign-in waits for the person, the state is checked again
-// every few seconds, so the panel says Connected once they finish. A Claude sign-in asks for the code Claude shows the
-// person after they approve; it is pasted here and sent once. A provider the install's Engine cannot connect for the
-// company (ADR 0012) says so and offers no Connect.
+// every few seconds, so the panel says Connected once they finish; a sign-in whose state the Engine could not read just
+// then stays pending (`unknown`), so the link, the code and Disconnect stay and the checks go on. A Claude sign-in asks
+// for the code Claude shows the person after they approve; it is pasted here and sent once. A provider the install's
+// Engine cannot connect for the company (ADR 0012) says so and offers no Connect.
 const providers=[['openai-codex','subscriptionChatGPT'],['anthropic','subscriptionClaude']] as const;
 const endpoint='/api/subscription-sign-in';
 export default function SubscriptionSignIn({company}:{company:string}) {
