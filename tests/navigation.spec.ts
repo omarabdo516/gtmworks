@@ -51,15 +51,31 @@ test('unprepared links answer within 50ms and clear feedback when content arrive
       await delayed;
       await route.continue();
     });
+    // Every other page prefetch still loading. The new sidebar starts /history in the first prefetch batch, beside
+    // the heavy Home page (on main it was the 8th link and started after the others had finished), so the click must
+    // not race the browser processing unrelated prefetched pages: it waits until their bodies have arrived.
+    const others = new Set<import('@playwright/test').Request>();
+    const isOther = (request: import('@playwright/test').Request) => request.headers()['rsc'] === '1' && !new URL(request.url()).pathname.endsWith('/history');
+    const started = (request: import('@playwright/test').Request) => { if (isOther(request)) others.add(request); };
+    const ended = (request: import('@playwright/test').Request) => { others.delete(request); };
+    page.on('request', started);
+    page.on('requestfinished', ended);
+    page.on('requestfailed', ended);
     try {
       await page.goto('/c/rs-learning/work/board');
       await expect(page.locator('.board')).toBeVisible();
       await requestArrived; // Hold the full prefetch so the click cannot use the prepared cache.
+      await expect.poll(() => others.size, { message: 'other prefetches still loading', timeout: 15000 }).toBe(0);
+      await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
       await page.evaluate(async () => { await document.fonts.ready; });
       await page.evaluate(() => {
-        const state = window as typeof window & { answerMs?: number };
+        const state = window as typeof window & { answerMs?: number, clickAt?: number, longTasks?: { start: number, duration: number }[] };
+        // Diagnostics: the main-thread long tasks between the click and the answer, logged after each run.
+        state.longTasks = [];
+        new PerformanceObserver(list => { for (const entry of list.getEntries()) state.longTasks!.push({ start: entry.startTime, duration: entry.duration }); }).observe({ type: 'longtask' });
         document.addEventListener('click', () => {
           const start = performance.now();
+          state.clickAt = start;
           const sample = () => {
             const bar = document.querySelector('.navigation-progress');
             const link = document.querySelector('.nav a[href$="/history"]')!;
@@ -75,6 +91,12 @@ test('unprepared links answer within 50ms and clear feedback when content arrive
       await page.locator('.nav a[href$="/history"]').click();
       await page.waitForFunction(() => (window as typeof window & { answerMs?: number }).answerMs !== undefined);
       const answer = await page.evaluate(() => (window as typeof window & { answerMs: number }).answerMs);
+      const longTasks = await page.evaluate(() => {
+        const state = window as typeof window & { answerMs: number, clickAt: number, longTasks: { start: number, duration: number }[] };
+        return state.longTasks.filter(task => task.start + task.duration >= state.clickAt && task.start <= state.clickAt + state.answerMs)
+          .map(task => ({ start: Math.round(task.start - state.clickAt), duration: Math.round(task.duration) }));
+      });
+      console.log('INSTANT_ANSWER_LONGTASKS', JSON.stringify({ run, answer, longTasks }));
       if (run) answers.push(answer);
       await expect(page.getByRole('progressbar', { name: "Opening page" })).toBeVisible();
       release();
@@ -83,6 +105,9 @@ test('unprepared links answer within 50ms and clear feedback when content arrive
       await expect(page.locator('.link-pending')).toHaveCount(0);
     } finally {
       release();
+      page.off('request', started);
+      page.off('requestfinished', ended);
+      page.off('requestfailed', ended);
       await page.unroute('**/c/rs-learning/history?*');
     }
   }
