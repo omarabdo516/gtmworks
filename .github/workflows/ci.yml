@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   changes:
-    runs-on: ubicloud-standard-2
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: read
@@ -54,7 +54,7 @@ jobs:
           echo "docs_only=$docs_only" >> "$GITHUB_OUTPUT"
 
   static:
-    runs-on: ubicloud-standard-2
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read
@@ -70,7 +70,7 @@ jobs:
   integration:
     needs: [changes]
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.docs_only != 'true') }}
-    runs-on: ubicloud-standard-2
+    runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
       contents: read
@@ -123,7 +123,7 @@ jobs:
   compare-failures:
     needs: [integration]
     if: ${{ always() && github.event_name == 'pull_request' && needs.integration.result == 'failure' }}
-    runs-on: ubicloud-standard-2
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: read
@@ -167,7 +167,7 @@ jobs:
   flaky-tests:
     needs: [integration]
     if: ${{ always() && needs.integration.result != 'skipped' }}
-    runs-on: ubicloud-standard-2
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: read
@@ -206,7 +206,7 @@ jobs:
   install:
     needs: [changes]
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.docs_only != 'true') }}
-    runs-on: ubicloud-standard-2
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read
@@ -304,7 +304,7 @@ jobs:
   check:
     needs: [changes, static, integration, install]
     if: ${{ always() }}
-    runs-on: ubicloud-standard-2
+    runs-on: ubuntu-latest
     steps:
       - name: all required stages green
         env:
