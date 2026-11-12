@@ -9,7 +9,7 @@ type Conversation={id:string,agent_name:string,face:string};
 
 // The reply is collected by the server from Hermes; the page asks again until it is in the record. Each send restarts
 // the asking, so an answer about an earlier run cannot stop it before the new reply arrives.
-export default function ConversationView({company,companyName,conversation,initial,usage:initialUsage,failed:initialFailed,pending:initialPending,agency}:{company:string,companyName:string,conversation:Conversation,initial:Message[],usage:UsageTotal,failed:boolean,pending:boolean,agency:boolean}) {
+export default function ConversationView({company,companyName,conversation,initial,usage:initialUsage,failed:initialFailed,pending:initialPending,writer}:{company:string,companyName:string,conversation:Conversation,initial:Message[],usage:UsageTotal,failed:boolean,pending:boolean,writer:boolean}) {
  const {t,language}=useI18n(); const [messages,setMessages]=useState(initial); const [usage,setUsage]=useState(initialUsage); const [pending,setPending]=useState(initialPending); const [sent,setSent]=useState(0); const [failed,setFailed]=useState(initialFailed);
  useEffect(()=>{
   if(!pending) return;
@@ -37,7 +37,7 @@ export default function ConversationView({company,companyName,conversation,initi
    {pending&&<p className="convo-status" role="status">{t('conversationWorking',conversation.agent_name)}</p>}
    {failed&&<p className="convo-status" role="alert">{t('conversationReplyFailed')}</p>}
   </div></div>
-  {agency&&<div className="dock"><MessageBox rows={2} placeholder={t('conversationReplyPlaceholder',conversation.agent_name)} send={async(message,sendKey)=>{
+  {writer&&<div className="dock"><MessageBox rows={2} placeholder={t('conversationReplyPlaceholder',conversation.agent_name)} send={async(message,sendKey)=>{
    const failure=await postMessage({company,conversation:conversation.id,message,sendKey});
    if(!failure) { setPending(true); setSent(count=>count+1); }
    return failure;

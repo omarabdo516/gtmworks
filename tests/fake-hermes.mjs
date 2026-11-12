@@ -1,5 +1,8 @@
 import { createServer } from 'node:http';
+import { randomUUID } from 'node:crypto';
 export async function fakeHermes() {
+ // Run ids are unique across fakes, as Hermes's are: the database refuses a Member's run already used elsewhere (#287).
+ const instance=randomUUID().slice(0,8);
  // runs: one entry per run Hermes created; the same Idempotency-Key replays the same run.
  const settings={version:'0.23.0',status:200,key:'test-only-key',features:{run_submission:true,run_events_sse:true},requests:/** @type {{method?:string,path?:string,authorization?:string,session?:string,idempotency?:string}[]} */([]),runs:/** @type {{id:string,key?:string,session?:string,input:string,reads:number}[]} */([]),pendingReads:0,reply:input=>`Reply to: ${input}`,
   // How a finished run ends and the usage it reports; a run cleared from runs is one Hermes lost (404).
@@ -21,7 +24,7 @@ export async function fakeHermes() {
    if(runPath&&request.method==='POST'&&!runPath[1]) {
     const key=request.headers['idempotency-key'];
     let run=settings.runs.find(run=>key&&run.key===key);
-    if(!run) { run={id:`run_${settings.runs.length+1}`,key,session:request.headers['x-hermes-session-key'],input:JSON.parse(raw).input,reads:0}; settings.runs.push(run); }
+    if(!run) { run={id:`run_${instance}_${settings.runs.length+1}`,key,session:request.headers['x-hermes-session-key'],input:JSON.parse(raw).input,reads:0}; settings.runs.push(run); }
     return send(response,202,{run_id:run.id,status:'started',replayed:run.reads>0});
    }
    if(runPath&&request.method==='GET') {

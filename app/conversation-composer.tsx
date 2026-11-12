@@ -38,16 +38,16 @@ export async function postMessage(body:object) {
 
 export function NewConversation({slug,company,mobile=false}:{slug:string,company:string,mobile?:boolean}) {
  const {t,language}=useI18n(); const router=useRouter();
- const [open,setOpen]=useState(false); const [agency,setAgency]=useState<boolean|null>(null); const [agents,setAgents]=useState<Agent[]|null>(null); const [chosen,setChosen]=useState(''); const [conversation,setConversation]=useState(newId);
+ const [open,setOpen]=useState(false); const [writer,setWriter]=useState<boolean|null>(null); const [agents,setAgents]=useState<Agent[]|null>(null); const [chosen,setChosen]=useState(''); const [conversation,setConversation]=useState(newId);
  async function load(next:boolean) {
   setOpen(next); if(!next) return;
   setConversation(newId()); setAgents(null);
   try {
    const response=await fetch(`/api/conversations?company=${company}`,{cache:'no-store'});
-   const result=response.ok?await response.json():{agency:false,agents:[]};
+   const result=response.ok?await response.json():{writer:false,agents:[]};
    const list=result.agents as Agent[];
-   setAgency(result.agency); setAgents(list); setChosen(list.find(agent=>agent.is_default)?.id||list[0]?.id||'');
-  } catch { setAgency(true); setAgents([]); }
+   setWriter(result.writer); setAgents(list); setChosen(list.find(agent=>agent.is_default)?.id||list[0]?.id||'');
+  } catch { setWriter(true); setAgents([]); }
  }
  const agent=agents?.find(item=>item.id===chosen);
  const trigger=mobile?<button type="button" data-slot="new-conversation" className="relative flex min-w-0 flex-col items-center justify-center gap-1 rounded-md text-[10px] font-medium text-muted-foreground transition-colors hover:text-foreground"><SquarePen className="h-[18px] w-[18px]" aria-hidden="true"/><span className="truncate">{t('conversationNew')}</span></button>
@@ -57,7 +57,7 @@ export function NewConversation({slug,company,mobile=false}:{slug:string,company
   <DialogContent aria-describedby={undefined} className="conversation-dialog sm:max-w-[640px] gap-0 p-0">
    <DialogTitle className="dlg-title">{t('conversationNewTitle')}</DialogTitle>
    {agents===null?<p className="composer-note" role="status">{t('conversationLoadingAgents')}</p>
-    :!agency?<p className="composer-note" role="note">{t('conversationAgencyOnlyHelp')}</p>
+    :!writer?<p className="composer-note" role="note">{t('conversationViewerHelp')}</p>
     :!agent?<p className="composer-note" role="note">{t('conversationNoAgent')}</p>
     :<><div className="dlg-head"><DropdownMenu dir={language==='ar'?'rtl':'ltr'}>
       <DropdownMenuTrigger asChild><button type="button" className="pill" aria-label={t('conversationAgent')}><AgentFace id={agent.connection_id} role="account_manager" name={agent.name} size={20}/><bdi>{agent.name}</bdi><ChevronDown className="h-3.5 w-3.5" aria-hidden="true"/></button></DropdownMenuTrigger>
