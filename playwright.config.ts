@@ -1,4 +1,10 @@
 import { defineConfig } from '@playwright/test';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+// The app signs a company in to its model subscription through the `hermes` command (#3); in tests a fake stands in
+// for it, with one Hermes home per company under a scratch folder. The web server and the specs read the same values.
+process.env.HERMES_COMMAND ??= `${process.execPath} ${resolve('tests/fake-hermes-cli.mjs')}`;
+process.env.HERMES_COMPANY_HOMES ??= join(tmpdir(),'gtmworks-hermes-homes');
 export default defineConfig({
   testDir: './tests',
   testMatch: '*.spec.ts',

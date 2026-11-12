@@ -418,5 +418,20 @@
   "usageUnknown": "استهلاك غير معروف",
   "usageNone": "لا يوجد استهلاك لعرضه. يرى المالك شركته فقط، وترى الوكالة كل الشركات.",
   "conversationUsage": "استُخدم {0} رمز ({1} إدخال، {2} إخراج)",
-  "usageUnknownRuns": "الاستهلاك غير معروف لـ {0} من الردود"
+  "usageUnknownRuns": "الاستهلاك غير معروف لـ {0} من الردود",
+  "subscriptionTitle": "اشتراك النموذج",
+  "subscriptionHelp": "اربط اشتراك ChatGPT أو Claude الخاص بهذه الشركة بمحرك الوكلاء الخاص بها. يبقى تسجيل الدخول في محرك الوكلاء الخاص بهذه الشركة، ولا يطّلع عليه gtmworks أبدًا.",
+  "subscriptionChatGPT": "ChatGPT",
+  "subscriptionClaude": "Claude",
+  "subscriptionConnect": "ربط {0}",
+  "subscriptionDisconnect": "فصل {0}",
+  "subscriptionCode": "أدخل هذا الرمز:",
+  "subscriptionLink": "افتح هذا الرابط لإكمال تسجيل الدخول:",
+  "subscriptionState_connected": "متصل",
+  "subscriptionState_disconnected": "غير متصل",
+  "subscriptionState_pending": "في انتظار إكمال تسجيل الدخول",
+  "subscriptionState_failed": "لم يستجب محرك الوكلاء. حاول مرة أخرى.",
+  "subscriptionOwnerOnly": "يمكن لمالك الشركة وحده ربط اشتراكها.",
+  "subscriptionUnavailable": "لا يمنح هذا التثبيت كل شركة مساحة خاصة بها في محرك الوكلاء بعد، لذلك لا يمكن ربط اشتراك هنا.",
+  "subscriptionFailed": "تعذّر بدء تسجيل الدخول أو إنهاؤه. حاول مرة أخرى."
 }
