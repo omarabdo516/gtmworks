@@ -31,11 +31,15 @@ Port **3000** (app and Supabase gateway)
 and **8025** (local email inbox) must be free; both bind **only to 127.0.0.1**.
 For a remote server, forward them over SSH (`ssh -L 3000:localhost:3000
 -L 8025:localhost:8025 your-server`) and open the setup link there. Do not expose the
-mailbox publicly. Open the setup link, enter your name, email and first company
-name, then follow the sign-in link in the local inbox at http://localhost:8025.
-You become the Agency owner and the first company's Owner. Setup then closes
-permanently and the setup link stops working; later visits use sign-in. Public sign-ups stay disabled. No demo
-people or companies are created, and no SMTP account is needed for the local inbox.
+mailbox publicly. On a fresh install, enter your name, email, a password of at
+least 10 characters (twice) and your first company name; you are signed in
+at once, with no email step. You become the Agency owner and the first company's
+Owner. Setup then closes permanently and the setup link stops working; later
+visits sign in with email and password, and a sign-in lasts 30 days on that
+browser unless you sign out. Public sign-ups stay disabled. No demo people or
+companies are created.
+The local inbox at http://localhost:8025 receives password reset links and invitations.
+No SMTP account is needed for it.
 
 The command builds the web image and starts the web app, worker, Postgres,
 GoTrue, PostgREST, file Storage, an Nginx gateway, the local mail inbox and the

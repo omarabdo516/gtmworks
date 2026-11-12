@@ -52,6 +52,11 @@ services:
       GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: /auth/v1/verify
       GOTRUE_MFA_TOTP_ENROLL_ENABLED: "true"
       GOTRUE_MFA_TOTP_VERIFY_ENABLED: "true"
+      # Passwords: the rule gtmworks shows (lib/password.mjs), a reset link that works for 24 hours, and a sign-in that
+      # lasts 30 days. Repeated wrong passwords are limited by GoTrue's own sign-in rate limit.
+      GOTRUE_PASSWORD_MIN_LENGTH: "10"
+      GOTRUE_MAILER_OTP_EXP: "86400"
+      GOTRUE_SESSIONS_TIMEBOX: 720h
     healthcheck:
       test: [CMD, wget, -q, --spider, http://127.0.0.1:9999/health]
       interval: 5s

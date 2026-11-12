@@ -1,16 +1,16 @@
 // CI runs this on stdin in a Node container on the install machine's network, twice: on the local install
 // (APP_ORIGIN http://localhost:3000, straight to the gateway) and through an HTTPS proxy in front of the gateway, with
 // APP_ORIGIN set to the proxy's public origin (README: a remote server). It goes the way a browser on that origin goes:
-// first run, the emailed sign-in link, then the Company home; an invitation, whose emailed link returns to the app; and
-// a sign-in request with a forged X-Forwarded-Host. Every redirect and link must stay on the public origin; one built
-// from the request inside the install says http and breaks the browser (issue #40).
+// first run with a password, straight to the Company home (issue #41); an invitation, whose emailed link returns to the
+// app; and a sign-in request with a forged X-Forwarded-Host. Every redirect and link must stay on the public origin; one
+// built from the request inside the install says http and breaks the browser (issue #40).
 import assert from 'node:assert/strict';
 
 const origin=process.env.APP_ORIGIN, mail=process.env.MAIL_URL;
 const anon=process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY, service=process.env.SUPABASE_SERVICE_ROLE_KEY;
 assert.ok(origin && mail,'APP_ORIGIN and MAIL_URL are set');
 assert.ok(anon && service,'NEXT_PUBLIC_SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY are set');
-const owner={name:'Proxy Owner',email:'proxy-owner@example.com',company:'Proxy Company',language:'en'};
+const owner={name:'Proxy Owner',email:'proxy-owner@example.com',company:'Proxy Company',language:'en',password:'proxy-owner-password',confirm:'proxy-owner-password'};
 const invitee='proxy-invitee@example.com';
 const onOrigin=url=>url===origin || url.startsWith(`${origin}/`);
 const cookies=new Map();
@@ -68,19 +68,10 @@ assert.ok(!(await closed.response.text()).includes('name="company"'),'first run 
 for(const values of [owner,{...owner,code:'0'.repeat(63)+'1'}]) {
  assert.equal((await submit(values)).response.status,403,`a submission ${values.code?'with a wrong':'without the'} setup code is refused`);
 }
-const sent=await submit({...owner,code});
-assert.equal(new URL(sent.url).pathname,'/sign-in');
-assert.equal(new URL(sent.url).searchParams.get('message'),'sent',sent.url);
-assert.equal(sent.response.status,200);
-
-const link=await emailedLink(owner.email,'sign-in');
-assert.ok(onOrigin(link),`the emailed link is on ${origin}: ${link}`);
-assert.ok(onOrigin(new URL(link).searchParams.get('redirect_to') || ''),`the emailed link returns to ${origin}: ${link}`);
-assert.equal(new URL(link).pathname,'/auth/v1/verify',`the emailed link opens Auth behind the gateway: ${link}`);
-
-const home=await follow(link);
-assert.match(new URL(home.url).pathname,/^\/c\/[^/]+\/home$/,`the emailed link ${link} reached ${home.url}`);
-assert.equal(home.response.status,200,`the emailed link ${link} reached ${home.url}`);
+// First run signs the Owner in with the password just chosen: no email step.
+const home=await submit({...owner,code});
+assert.match(new URL(home.url).pathname,/^\/c\/[^/]+\/home$/,`first run reached ${home.url}`);
+assert.equal(home.response.status,200,`first run reached ${home.url}`);
 assert.ok((await home.response.text()).includes(owner.company),'the Company home names the company');
 console.log(`Reached ${home.url}`);
 assert.equal((await submit({...owner,email:'second-owner@example.com',code})).response.status,404,'a second submission with the setup code is refused');

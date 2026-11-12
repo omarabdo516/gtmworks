@@ -7,7 +7,7 @@ import { load } from 'js-yaml';
 
 // scripts/check-install-proxy.mjs runs in the install job against a real install behind an HTTPS proxy (issue #40).
 // Here it runs against a stand-in for that install, once as the app now answers and once with the reported fault.
-const slug='proxy-company-1', next=encodeURIComponent(`/c/${slug}/home`);
+const slug='proxy-company-1';
 // trustForwardedHost: Auth builds the link from a client's X-Forwarded-Host, as it could if the gateway passed one on.
 // checksCode and closes: first run opens only with the setup code and only once (issue #50), unless a fault is staged.
 const setupCode='5e7c0de'.padEnd(64,'0');
@@ -30,9 +30,10 @@ function install({signInAt,verifyAt='/auth/v1/verify',trustForwardedHost=false,c
   if(url.pathname==='/first-run/submit' && request.method==='POST') {
    if(setUp && closes) return send(404);
    if(!coded(new URLSearchParams(body).get('code'))) return send(403);
+   // First run signs the Owner in with the chosen password and opens the Company home, with no email (issue #41).
+   if(!new URLSearchParams(body).get('password')) return send(400);
    setUp=true;
-   mail('proxy-owner@example.com',base,'magiclink',`${base}/auth/callback?next=${next}`);
-   return send(303,{location:`${signInAt(base)}/sign-in?next=${next}&message=sent&language=en`,'set-cookie':'verifier=v; Path=/'});
+   return send(303,{location:`${signInAt(base)}/c/${slug}/home`,'set-cookie':'session=s; Path=/'});
   }
   if(url.pathname==='/sign-in') return send(200);
   if(url.pathname==='/mail/api/v1/messages') return json({messages:mailbox.map(({ID,To})=>({ID,To}))});
@@ -49,8 +50,7 @@ function install({signInAt,verifyAt='/auth/v1/verify',trustForwardedHost=false,c
   if(url.pathname==='/auth/v1/verify' && url.searchParams.get('type')==='invite') return send(303,{location:`${url.searchParams.get('redirect_to')}#access_token=a&refresh_token=r&type=invite`});
   if(url.pathname==='/auth/v1/verify') return send(303,{location:`${url.searchParams.get('redirect_to')}&code=c`});
   if(url.pathname==='/auth/accept') return send(200);
-  if(url.pathname==='/auth/callback' && cookie.includes('verifier=v')) return send(307,{location:`${base}/c/${slug}/home`,'set-cookie':['verifier=; Path=/; Max-Age=0','session=s; Path=/']});
-  if(url.pathname===`/c/${slug}/home` && cookie.includes('session=s') && !cookie.includes('verifier')) return send(200,{},'<h1>Proxy Company</h1>');
+  if(url.pathname===`/c/${slug}/home` && cookie.includes('session=s')) return send(200,{},'<h1>Proxy Company</h1>');
   send(404);
  });
  return new Promise(resolve=>server.listen(0,'127.0.0.1',()=>resolve(server)));
@@ -66,7 +66,7 @@ async function check(server) {
  return {status,output};
 }
 
-test('the proxied install check follows first run and the emailed link to the Company home', async () => {
+test('the proxied install check follows the password first run to the Company home', async () => {
  const {status,output}=await check(await install({signInAt:base=>base}));
  assert.equal(status,0,output);
  assert.match(output,new RegExp(`Reached http://127\\.0\\.0\\.1:\\d+/c/${slug}/home`));
@@ -95,13 +95,13 @@ test('the install check fails, naming the link, when the emailed sign-in link fo
 test('the proxied install check fails when a redirect leaves the public origin for the inside of the install', async () => {
  const {status,output}=await check(await install({signInAt:()=>'http://inside.internal:8080'}));
  assert.equal(status,1);
- assert.match(output,/stays on http:\/\/127\.0\.0\.1:\d+: http:\/\/inside\.internal:8080\/sign-in/);
+ assert.match(output,new RegExp(`stays on http://127\\.0\\.0\\.1:\\d+: http://inside\\.internal:8080/c/${slug}/home`));
 });
 
 test('the proxied install check fails, naming the link, when the emailed link misses the Auth path behind the gateway', async () => {
  const {status,output}=await check(await install({signInAt:base=>base,verifyAt:'/verify'}));
  assert.equal(status,1);
- assert.match(output,/the emailed link opens Auth behind the gateway: http:\/\/127\.0\.0\.1:\d+\/verify\?token=t&type=magiclink&redirect_to=/);
+ assert.match(output,/the invitation link opens Auth behind the gateway: http:\/\/127\.0\.0\.1:\d+\/verify\?token=t&type=invite&redirect_to=/);
 });
 
 // Auth builds an emailed link by resolving its path against API_EXTERNAL_URL; an absolute path replaces the URL's own

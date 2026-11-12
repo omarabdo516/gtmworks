@@ -4,6 +4,7 @@ import { setupAdmin, setupIsOpen } from '@/lib/first-run';
 import { firstRunInput } from '@/lib/first-run-input.mjs';
 import { setupCodeMatches } from '@/lib/setup-code.mjs';
 import { i18n } from '@/lib/i18n.mjs';
+import { passwordProblem } from '@/lib/password.mjs';
 import { supabase } from '@/lib/supabase';
 import { logActionFailure } from '@/lib/diagnostics.mjs';
 import { appUrl } from '@/lib/app-origin.mjs';
@@ -23,13 +24,14 @@ export async function POST(request:NextRequest) {
  if(form.get('check')==='1') return new NextResponse(null,{status:204});
  const input=firstRunInput(form);
  // Back to the form with the code in the fragment, as the setup link carries it, so the next request does not.
- const invalid=appUrl(`/first-run?invalid=1&language=${language}#code=${code}`);
+ // A password problem gets its own message; the password itself never leaves this request except to the auth service.
+ const invalid=appUrl(`/first-run?invalid=${passwordProblem(form.get('password'),form.get('confirm') ?? '') ?? '1'}&language=${language}#code=${code}`);
  if(!input) {
   logActionFailure('first_run_invalid_input',new Error('Invalid setup input'));
   return NextResponse.redirect(invalid,303);
  }
  const admin=setupAdmin();
- const {data:created,error}=await admin.auth.admin.createUser({email:input.email,email_confirm:true});
+ const {data:created,error}=await admin.auth.admin.createUser({email:input.email,password:input.password,email_confirm:true});
  if(error || !created.user) {
   logActionFailure('first_run_createUser',error?{name:error.name,code:error.code,status:error.status,message:error.message.replace(/\S+@\S+/g,'[redacted]')}:new Error('Auth returned no user'));
   if(!await setupIsOpen()) {
@@ -49,7 +51,13 @@ export async function POST(request:NextRequest) {
   }
   notFound();
  }
+ // The Owner is signed in with the password just chosen, so no email step is needed. Should that fail, setup is still done
+ // and the sign-in page opens on the new Company's home.
  const next=`/c/${slug}/home`, db=await supabase();
- const {error:mail}=await db.auth.signInWithOtp({email:input.email,options:{shouldCreateUser:false,emailRedirectTo:appUrl(`/auth/callback?next=${encodeURIComponent(next)}`).href}});
- return NextResponse.redirect(appUrl(`/sign-in?next=${encodeURIComponent(next)}&message=${mail?'failed':'sent'}&language=${input.language}`),303);
+ const {error:signIn}=await db.auth.signInWithPassword({email:input.email,password:input.password});
+ if(signIn) {
+  logActionFailure('first_run_signIn',{name:signIn.name,code:signIn.code,status:signIn.status,message:signIn.message.replace(/\S+@\S+/g,'[redacted]')});
+  return NextResponse.redirect(appUrl(`/sign-in?next=${encodeURIComponent(next)}&language=${input.language}`),303);
+ }
+ return NextResponse.redirect(appUrl(next),303);
 }

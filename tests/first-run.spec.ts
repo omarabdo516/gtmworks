@@ -1,12 +1,12 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { localQuery, resetFirstRun } from '../scripts/first-run-db.mjs';
-import { followSignInLink } from './sign-in';
+import { signIn } from './sign-in';
 
 // The install's setup code (playwright.config.ts), as the installer's setup link carries it (issue #50).
 const code=process.env.SETUP_CODE!;
-const input={name:'First owner',email:'first-owner@example.test',company:'First Company',language:'en',code};
+const input={name:'First owner',email:'first-owner@example.test',company:'First Company',language:'en',code,password:'first-owner-password',confirm:'first-owner-password'};
 const counts=(baseURL:string)=>localQuery(`select
  (select count(*)::int from auth.users) accounts,
  (select count(*)::int from public.people) people,
@@ -24,8 +24,17 @@ test.afterEach(async({},testInfo)=>{
 });
 test.afterAll(({baseURL})=>resetFirstRun(baseURL,true));
 
-test('empty install creates its Agency owner and first company, then opens Home through the email link',async({page,baseURL})=>{
- await page.request.delete('http://127.0.0.1:54324/api/v1/messages');
+const inbox='http://127.0.0.1:54324/api/v1/messages';
+async function fillFirstRun(page:Page,values:typeof input) {
+ await page.getByLabel(/^(Your name|اسمك)$/).fill(values.name);
+ await page.getByLabel(/^(Email|البريد الإلكتروني)$/).fill(values.email);
+ await page.getByLabel(/^(Password|كلمة المرور)$/).fill(values.password);
+ await page.getByLabel(/^(Confirm password|تأكيد كلمة المرور)$/).fill(values.confirm);
+ await page.getByLabel(/^(First company name|اسم الشركة الأولى)$/).fill(values.company);
+}
+
+test('empty install creates its Agency owner and first company with a password and opens Home signed in, with no email',async({page,baseURL})=>{
+ await page.request.delete(inbox);
  await page.goto('/');
  await expect(page).toHaveURL('/first-run');
  // Without the setup link's code the page says where the link comes from and shows no form. Next's route announcer is
@@ -36,28 +45,27 @@ test('empty install creates its Agency owner and first company, then opens Home 
  const requests:{url:string,body:string|null}[]=[];
  page.on('request',request=>requests.push({url:request.url(),body:request.postData()}));
  await page.goto(`/first-run#code=${code}`);
- await page.getByLabel('Your name').fill(input.name);
- await page.getByLabel('Email',{exact:true}).fill(input.email);
- await page.getByLabel('First company name').fill(input.company);
  await page.locator('select').selectOption('ar');
- await page.getByRole('button',{name:'إنشاء وإرسال رابط تسجيل الدخول'}).click();
- await expect(page.locator('html')).toHaveAttribute('lang','ar');
- await expect(page.getByRole('status')).toHaveText('تحقق من بريدك الإلكتروني للحصول على رابط تسجيل الدخول.');
- // Two requests carry it, both in a submit body: the page's check that the code is right, then the submission.
- const carrying=requests.filter(request=>request.url.includes(code) || request.body?.includes(code));
- expect(carrying.map(request=>request.url)).toEqual([`${baseURL}/first-run/submit`,`${baseURL}/first-run/submit`]);
- for(const request of carrying) expect(new URLSearchParams(request.body!).get('code')).toBe(code);
- await followSignInLink(page,input.email);
+ await fillFirstRun(page,input);
+ await page.getByRole('button',{name:'إنشاء وتسجيل الدخول'}).click();
  await expect(page).toHaveURL(/\/c\/first-company-[a-f0-9]{8}\/home$/);
+ await expect(page.locator('html')).toHaveAttribute('lang','ar');
  await expect(page.locator('.home-dashboard')).toBeVisible();
  await expect(page.getByLabel('اختيار الشركة')).toContainText(input.company);
  expect(counts(baseURL!)).toEqual({accounts:1,people:1,companies:1,owners:1});
  expect(localQuery('select agency_owner,language from public.people',baseURL)[0]).toEqual({agency_owner:true,language:'ar'});
  expect((await page.request.get('/first-run')).status()).toBe(404);
+ // Two requests carry it, both in a submit body: the page's check that the code is right, then the submission.
+ const carrying=requests.filter(request=>request.url.includes(code) || request.body?.includes(code));
+ expect(carrying.map(request=>request.url)).toEqual([`${baseURL}/first-run/submit`,`${baseURL}/first-run/submit`]);
+ for(const request of carrying) expect(new URLSearchParams(request.body!).get('code')).toBe(code);
  // The code worked once: after setup the same link and a second submission with it are refused.
  expect((await page.request.get(`/first-run?code=${code}`)).status()).toBe(404);
  expect((await page.request.post('/first-run/submit',{form:{...input,email:'second@example.test'},maxRedirects:0})).status()).toBe(404);
  expect(counts(baseURL!)).toEqual({accounts:1,people:1,companies:1,owners:1});
+ // No email step: the local inbox stays empty.
+ const mailbox=await (await page.request.get(inbox)).json();
+ expect(mailbox.messages ?? []).toHaveLength(0);
 });
 
 test('the page shows the form only for the setup link with the right code',async({page,baseURL})=>{
@@ -71,7 +79,7 @@ test('the page shows the form only for the setup link with the right code',async
   await page.goto(`/first-run${fragment}`);
   await expect(page.getByRole('main').getByRole('alert'),fragment).toHaveText(needsLink);
   await expect(page.getByLabel('Your name'),fragment).toHaveCount(0);
-  await expect(page.getByRole('button',{name:'Create and send sign-in link'}),fragment).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Create and sign in'}),fragment).toHaveCount(0);
  }
  // A code reaches the server only in one check's body, and the check creates nothing. Bodies are matched on their exact
  // code field: one wrong code is a prefix of the next, so a substring match would count both.
@@ -84,7 +92,7 @@ test('the page shows the form only for the setup link with the right code',async
  }
  await page.goto(`/first-run#code=${code}`);
  await expect(page.getByLabel('Your name')).toBeVisible();
- await expect(page.getByRole('button',{name:'Create and send sign-in link'})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Create and sign in'})).toBeVisible();
  await expect(page.getByRole('main').getByRole('alert')).toHaveCount(0);
  expect(requests.filter(request=>request.url.includes(code)).map(request=>request.url)).toEqual([]);
  expect(checks(code).map(request=>Object.fromEntries(new URLSearchParams(request.body!)))).toEqual([{code,check:'1'}]);
@@ -102,6 +110,48 @@ test('a submission with no setup code or a wrong one is refused and creates no a
  }
  expect(localQuery('select (select count(*)::int from auth.users) accounts, (select count(*)::int from public.companies) companies',baseURL)[0]).toEqual({accounts:0,companies:0});
  expect(counts(baseURL!)).toEqual({accounts:0,people:0,companies:0,owners:0});
+});
+
+test('a password shorter than 10 characters is refused with a clear message in English and in Arabic, and creates nothing',async({page,baseURL})=>{
+ for(const [language,message] of [['en','Use at least 10 characters for your password.'],['ar','استخدم 10 أحرف على الأقل لكلمة المرور.']]) {
+  await page.goto(`/first-run?language=${language}#code=${code}`);
+  await fillFirstRun(page,{...input,password:'short-pw1',confirm:'short-pw1'});
+  await page.getByRole('button',{name:/^(Create and sign in|إنشاء وتسجيل الدخول)$/}).click();
+  await expect(page).toHaveURL(new RegExp(`/first-run\\?invalid=passwordTooShort&language=${language}#code=${code}$`));
+  await expect(page.getByRole('alert').filter({hasText:message})).toHaveText(message);
+ }
+ await fillFirstRun(page,{...input,confirm:'another-password'});
+ await page.getByRole('button',{name:'إنشاء وتسجيل الدخول'}).click();
+ await expect(page.getByRole('alert').filter({hasText:'كلمتا المرور غير متطابقتين.'})).toBeVisible();
+ expect(counts(baseURL!)).toEqual({accounts:0,people:0,companies:0,owners:0});
+});
+
+test('no password appears in the web or worker log or in any public table after sign-up and sign-in',async({page,context,baseURL})=>{
+ const marker=`marker-${Date.now()}-pw`;
+ await page.goto(`/first-run#code=${code}`);
+ await fillFirstRun(page,{...input,password:marker,confirm:marker});
+ await page.getByRole('button',{name:'Create and sign in'}).click();
+ await expect(page).toHaveURL(/\/c\/first-company-[a-f0-9]{8}\/home$/);
+ await context.clearCookies();
+ await signIn(page,input.email,'/sign-in',marker);
+ await expect(page).toHaveURL(/\/c\/first-company-[a-f0-9]{8}\/home$/);
+ // A wrong attempt that includes the marker goes through the same path and must not be logged either.
+ await context.clearCookies();
+ await page.goto('/sign-in');
+ await page.getByLabel('Email',{exact:true}).fill(input.email);
+ await page.getByLabel('Password',{exact:true}).fill(`${marker}-wrong`);
+ await page.getByRole('button',{name:'Sign in',exact:true}).click();
+ await expect(page.getByRole('alert').filter({hasText:'Wrong email or password.'})).toBeVisible();
+ // The web server and the worker both write to this log (playwright.config.ts, scripts/web.sh).
+ const log=await readFile(join(process.cwd(),'playwright-report/server.log'),'utf8');
+ expect(log.length).toBeGreaterThan(0);
+ expect(log.includes(marker)).toBe(false);
+ // Every row of every public table, read as text; the check proves itself on a value that is there (the email).
+ const tablesWith=(needle:string)=>localQuery(`select t.table_name from information_schema.tables t
+  where t.table_schema='public' and t.table_type='BASE TABLE'
+  and (xpath('/row/n/text()',query_to_xml(format('select count(*) as n from public.%I r where r::text like %L',t.table_name,'%${needle}%'),false,true,'')))[1]::text::int>0`,baseURL).map(row=>row.table_name);
+ expect(tablesWith(input.company)).toContain('companies');
+ expect(tablesWith(marker)).toEqual([]);
 });
 
 test('concurrent submissions leave exactly one account, person, company and Owner; every later submission is 404',async({request,baseURL})=>{
