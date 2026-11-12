@@ -1,10 +1,17 @@
 import { defineConfig } from '@playwright/test';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 // The app signs a company in to its model subscription through the `hermes` command (#3); in tests a fake stands in
-// for it, with one Hermes home per company under a scratch folder. The web server and the specs read the same values.
-process.env.HERMES_COMMAND ??= `${process.execPath} ${resolve('tests/fake-hermes-cli.mjs')}`;
-process.env.HERMES_COMPANY_HOMES ??= join(tmpdir(),'gtmworks-hermes-homes');
+// for it, with one Hermes home per company. Both live in a scratch folder made for this run (the workers and the web
+// server inherit it), and they always replace any configured Hermes, so a test never touches a real one or its homes.
+// HERMES_COMMAND is one program path: a launcher that runs the fake with Node, every path quoted.
+process.env.GTMWORKS_TEST_HERMES_ROOT ??= mkdtempSync(join(tmpdir(),'gtmworks-fake-hermes-'));
+const fakeHermes=process.env.GTMWORKS_TEST_HERMES_ROOT;
+const quoted=(text:string)=>`'${text.replaceAll("'","'\\''")}'`;
+process.env.HERMES_COMMAND=join(fakeHermes,'hermes');
+process.env.HERMES_COMPANY_HOMES=join(fakeHermes,'homes');
+writeFileSync(process.env.HERMES_COMMAND,`#!/bin/sh\nexec ${quoted(process.execPath)} ${quoted(resolve('tests/fake-hermes-cli.mjs'))} "$@"\n`,{mode:0o755});
 export default defineConfig({
   testDir: './tests',
   testMatch: '*.spec.ts',

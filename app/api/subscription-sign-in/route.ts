@@ -5,7 +5,8 @@ import { logActionFailure } from '@/lib/diagnostics.mjs';
 
 // A company's Owner (or the Agency) connects the company's own ChatGPT or Claude subscription through Hermes's own
 // sign-in, in that company's Hermes home (#3). Only the state, the link and the code leave this route; the credential
-// stays in the home and is never read here.
+// stays in the home and is never read here. A Claude sign-in is finished with the authorization code the Owner pastes
+// (`complete`), which is passed to Hermes and nothing else.
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const reply=(body:object,status=200)=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store'}});
 const failure=(status:number)=>reply({error:status===403?'subscriptionOwnerOnly':status===503?'subscriptionUnavailable':'subscriptionFailed'},status);
@@ -29,9 +30,11 @@ async function signInRequest(request:NextRequest) {
  if(!home) return failure(503);
  const signIn=hermesSignIn({home});
  if(!writing) return reply({providers:Object.fromEntries(await Promise.all(signInProviders.map(async provider=>[provider,await signIn.state(provider)])))});
- if(!signInProviders.includes(body.provider)||!['connect','disconnect'].includes(body.intent)) return failure(400);
- const state=body.intent==='connect'?await signIn.start(body.provider):await signIn.disconnect(body.provider);
- return state.state==='failed'?failure(502):reply({provider:body.provider,...state});
+ if(!signInProviders.includes(body.provider)||!['connect','disconnect','complete'].includes(body.intent)) return failure(400);
+ // The pasted authorization code goes only to the waiting sign-in's input; it is not kept, logged or sent back.
+ const state=body.intent==='connect'?await signIn.start(body.provider):body.intent==='complete'?await signIn.complete(body.provider,body.authorizationCode):await signIn.disconnect(body.provider);
+ if(state.state==='failed') return body.intent==='complete'?reply({error:'subscriptionCodeRejected'},502):failure(502);
+ return reply({provider:body.provider,...state});
 }
 
 async function respond(request:NextRequest) {

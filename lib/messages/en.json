@@ -433,5 +433,9 @@
   "subscriptionState_failed": "The agent engine did not answer. Try again.",
   "subscriptionOwnerOnly": "Only the company's Owner can connect its subscription.",
   "subscriptionUnavailable": "This install does not give each company its own agent engine home yet, so a subscription cannot be connected here.",
-  "subscriptionFailed": "The sign-in could not be started or ended. Try again."
+  "subscriptionFailed": "The sign-in could not be started or ended. Try again.",
+  "subscriptionPasteHelp": "After you approve, Claude shows you a code. Paste it here to finish.",
+  "subscriptionPasteCode": "Authorization code",
+  "subscriptionSubmitCode": "Finish signing in",
+  "subscriptionCodeRejected": "The code was not accepted. Connect again to get a new one."
 }

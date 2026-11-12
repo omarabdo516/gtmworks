@@ -433,5 +433,9 @@
   "subscriptionState_failed": "لم يستجب محرك الوكلاء. حاول مرة أخرى.",
   "subscriptionOwnerOnly": "يمكن لمالك الشركة وحده ربط اشتراكها.",
   "subscriptionUnavailable": "لا يمنح هذا التثبيت كل شركة مساحة خاصة بها في محرك الوكلاء بعد، لذلك لا يمكن ربط اشتراك هنا.",
-  "subscriptionFailed": "تعذّر بدء تسجيل الدخول أو إنهاؤه. حاول مرة أخرى."
+  "subscriptionFailed": "تعذّر بدء تسجيل الدخول أو إنهاؤه. حاول مرة أخرى.",
+  "subscriptionPasteHelp": "بعد الموافقة، يعرض لك Claude رمزًا. الصقه هنا لإكمال تسجيل الدخول.",
+  "subscriptionPasteCode": "رمز التفويض",
+  "subscriptionSubmitCode": "إكمال تسجيل الدخول",
+  "subscriptionCodeRejected": "لم يُقبل الرمز. اربط مرة أخرى للحصول على رمز جديد."
 }
