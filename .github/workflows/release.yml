@@ -1,30 +1,102 @@
 # One tested gtmworks image per release, pulled by installs instead of built on the server (#49).
-# A tag vX.Y.Z builds linux/amd64 and linux/arm64 and pushes X.Y.Z, installs on a fresh runner from the two release files
-# alone, and only then moves stable and latest to that exact digest and publishes the GitHub Release with both files.
-# A main push whose CI passed publishes the tag main.
+# It runs only on workflow_run, so GitHub always runs this reviewed copy from main: a tag push runs the workflow file of
+# the tagged commit, so a tag only starts release-tag.yml, which holds no permission. Before anything is published,
+# provenance proves the exact commit: a tag must name a commit on main whose required CI check passed on a push to main;
+# main publishes only its current head, once that check passed.
+# A release builds linux/amd64 and linux/arm64 and pushes X.Y.Z, installs on a fresh runner from the two release files
+# alone, and only then publishes the GitHub Release with both files and moves stable and latest, one promotion at a
+# time, to the highest published release (so an older or hotfix tag finishing last never moves them back).
 # The first push creates the package private. Its owner makes it public once (README, Releases); until then the install
 # test stops on the anonymous read below, and stable, latest and the GitHub Release are not published.
 name: Release
 
 on:
-  push:
-    tags: ['v[0-9]+.[0-9]+.[0-9]+']
   workflow_run:
-    workflows: [CI]
+    workflows: [CI, Release tag]
     types: [completed]
-    branches: [main]
 
-# CI runs main pushes one at a time in push order, and a newer pending run replaces an older one here too.
+# Main runs one at a time in CI's push order (a newer pending run replaces an older one); each tag runs on its own.
 concurrency:
-  group: release-${{ github.event_name == 'workflow_run' && 'main' || github.ref }}
+  group: release-${{ github.event.workflow_run.path == '.github/workflows/ci.yml' && 'main' || github.event.workflow_run.head_branch }}
   cancel-in-progress: false
 
 env:
   IMAGE: ghcr.io/${{ github.repository }}
 
 jobs:
+  provenance:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      sha: ${{ steps.provenance.outputs.sha }}
+      tag: ${{ steps.provenance.outputs.tag }}
+      release: ${{ steps.provenance.outputs.release }}
+    steps:
+      - name: the exact commit is reviewed and passed the required CI check
+        id: provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_PATH: ${{ github.event.workflow_run.path }}
+          EVENT: ${{ github.event.workflow_run.event }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          fail() { echo "::error::$1" >&2; exit 1; }
+          [[ "$EVENT" == push ]] || fail "only a push starts a release, not $EVENT"
+          [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "not a commit SHA: $HEAD_SHA"
+          case "$WORKFLOW_PATH" in
+            .github/workflows/ci.yml)
+              [[ "$HEAD_BRANCH" == main ]] || fail "CI ran for $HEAD_BRANCH, not main"
+              # A re-run of an old main run, or an older commit whose CI finished late, must not move main back.
+              # Main runs are serialised (concurrency above), so the head checked here is the newest a run can publish.
+              main=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+              if [[ "$main" != "$HEAD_SHA" ]]; then
+                echo "::notice::$HEAD_SHA is no longer the head of main ($main); main is not published from it."
+                printf '%s\n' sha= tag= release= >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+              tag=main release=
+              ;;
+            .github/workflows/release-tag.yml)
+              [[ "$HEAD_BRANCH" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "not a release tag: $HEAD_BRANCH"
+              # The tag must still name this exact commit: a moved tag, or a re-run after it moved, publishes nothing.
+              object=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$HEAD_BRANCH" --jq '.object.type + " " + .object.sha') \
+                || fail "tag $HEAD_BRANCH not found"
+              if [[ "$object" == "tag "* ]]; then
+                object=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/${object#tag }" --jq '.object.type + " " + .object.sha') \
+                  || fail "annotated tag $HEAD_BRANCH not found"
+              fi
+              [[ "$object" == "commit $HEAD_SHA" ]] || fail "$HEAD_BRANCH names $object, not commit $HEAD_SHA"
+              # Reviewed: the commit is on main, which is ahead of it or is it.
+              status=$(gh api "repos/$GITHUB_REPOSITORY/compare/$HEAD_SHA...main" --jq .status)
+              [[ "$status" == ahead || "$status" == identical ]] || fail "$HEAD_SHA is not on main (compare: $status)"
+              tag=${HEAD_BRANCH#v} release=$HEAD_BRANCH
+              ;;
+            *) fail "a release starts only from CI or Release tag, not $WORKFLOW_PATH";;
+          esac
+          # The required check passed for this exact commit on a push to main, in this repository, on the latest attempt
+          # of its CI run. Every page of runs and jobs is read.
+          runs=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?event=push&branch=main&head_sha=$HEAD_SHA&per_page=100" \
+            | jq -rs --arg sha "$HEAD_SHA" --arg repo "$GITHUB_REPOSITORY" '.[].workflow_runs[]
+                | select(.head_sha == $sha and .event == "push" and .head_branch == "main"
+                    and .head_repository.full_name == $repo and .conclusion == "success") | .id')
+          proven=
+          for run in $runs; do
+            check=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$run/jobs?filter=latest&per_page=100" \
+              | jq -rs '[.[].jobs[] | select(.name == "check")] | if length == 1 then .[0].conclusion else "missing" end')
+            if [[ "$check" == success ]]; then proven=$run; break; fi
+          done
+          [[ -n "$proven" ]] || fail "no CI run in $GITHUB_REPOSITORY passed its required check for $HEAD_SHA on a push to main"
+          echo "provenance: $HEAD_SHA passed the required check in CI run $proven on a push to main"
+          printf '%s\n' "sha=$HEAD_SHA" "tag=$tag" "release=$release" >> "$GITHUB_OUTPUT"
+
   image:
-    if: ${{ github.event_name == 'push' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push') }}
+    needs: provenance
+    if: ${{ needs.provenance.outputs.tag != '' }}
     runs-on: ubuntu-latest
     # arm64 is built under emulation on the standard runner.
     timeout-minutes: 120
@@ -32,24 +104,11 @@ jobs:
       contents: read
       packages: write
     outputs:
-      tag: ${{ steps.tag.outputs.tag }}
       digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-      - name: image tag
-        id: tag
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          REF_NAME: ${{ github.ref_name }}
-        run: |
-          if [[ "$EVENT_NAME" == push ]]; then
-            [[ "$REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "not a release tag: $REF_NAME" >&2; exit 1; }
-            echo "tag=${REF_NAME#v}" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=main" >> "$GITHUB_OUTPUT"
-          fi
+          ref: ${{ needs.provenance.outputs.sha }}
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
@@ -64,13 +123,13 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ env.IMAGE }}:${{ steps.tag.outputs.tag }}
+          tags: ${{ env.IMAGE }}:${{ needs.provenance.outputs.tag }}
           labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
           cache-from: type=gha,scope=release
           cache-to: type=gha,mode=max,scope=release
       - name: both platform digests pushed
         env:
-          TAG: ${{ steps.tag.outputs.tag }}
+          TAG: ${{ needs.provenance.outputs.tag }}
           DIGEST: ${{ steps.build.outputs.digest }}
         run: |
           docker manifest inspect "$IMAGE:$TAG" | tee manifest.json
@@ -82,8 +141,8 @@ jobs:
           echo "index: $IMAGE:$TAG@$DIGEST"
 
   install-test:
-    needs: image
-    if: ${{ github.event_name == 'push' }}
+    needs: [provenance, image]
+    if: ${{ needs.provenance.outputs.release != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # No packages permission and no login: the pull below is what an install with no account does.
@@ -91,12 +150,14 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.provenance.outputs.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - name: release files pinned by digest
         env:
-          TAG: ${{ needs.image.outputs.tag }}
+          TAG: ${{ needs.provenance.outputs.tag }}
           DIGEST: ${{ needs.image.outputs.digest }}
         run: |
           node scripts/release-assets.mjs "$IMAGE:$TAG@$DIGEST" release
@@ -132,32 +193,13 @@ jobs:
             [[ $status == 200 ]] || exit 1
           done
 
-  publish:
-    needs: [image, install-test]
+  release:
+    needs: [provenance, image, install-test]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: write
-      packages: write
     steps:
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ github.token }}
-      - name: move stable and latest to ${{ needs.image.outputs.digest }}
-        env:
-          DIGEST: ${{ needs.image.outputs.digest }}
-        run: |
-          digest() { docker buildx imagetools inspect "$1" --format '{{json .Manifest}}' | jq -r .digest; }
-          # The read-back must name the release digest itself before stable and latest move.
-          [[ $(digest "$IMAGE@$DIGEST") == "$DIGEST" ]] || { echo "the digest read-back does not name $DIGEST" >&2; exit 1; }
-          docker buildx imagetools create -t "$IMAGE:stable" -t "$IMAGE:latest" "$IMAGE@$DIGEST"
-          for tag in stable latest; do
-            moved=$(digest "$IMAGE:$tag")
-            echo "$IMAGE:$tag -> $moved"
-            [[ "$moved" == "$DIGEST" ]] || { echo "$tag points at $moved, not $DIGEST" >&2; exit 1; }
-          done
       - uses: actions/download-artifact@v4
         with:
           name: release-files
@@ -165,9 +207,57 @@ jobs:
       - name: GitHub Release with the compose file and install script
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG_NAME: ${{ github.ref_name }}
-          APP_IMAGE: ${{ env.IMAGE }}:${{ needs.image.outputs.tag }}@${{ needs.image.outputs.digest }}
+          TAG_NAME: ${{ needs.provenance.outputs.release }}
+          APP_IMAGE: ${{ env.IMAGE }}:${{ needs.provenance.outputs.tag }}@${{ needs.image.outputs.digest }}
         run: |
-          gh release create "$TAG_NAME" release/docker-compose.install.yml release/install.sh -R "$GITHUB_REPOSITORY" \
-            --verify-tag --title "$TAG_NAME" \
-            --notes "Image: $APP_IMAGE. Put both files in an empty directory and run: sh install.sh"
+          # A re-run of a tag rebuilds and re-tests its image; its Release then carries the files of that tested image.
+          if gh release view "$TAG_NAME" -R "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release upload "$TAG_NAME" release/docker-compose.install.yml release/install.sh -R "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$TAG_NAME" release/docker-compose.install.yml release/install.sh -R "$GITHUB_REPOSITORY" \
+              --verify-tag --title "$TAG_NAME" \
+              --notes "Image: $APP_IMAGE. Put both files in an empty directory and run: sh install.sh"
+          fi
+
+  promote:
+    needs: [provenance, image, release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # One promotion at a time, across every tag, each to the highest published release: whichever runs last leaves stable
+    # and latest there. A promotion still waiting when a newer one queues is cancelled; the newer one covers it.
+    concurrency:
+      group: release-promote
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ github.token }}
+      - name: move stable and latest to the highest published release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ needs.provenance.outputs.release }}
+          DIGEST: ${{ needs.image.outputs.digest }}
+        run: |
+          digest() { docker buildx imagetools inspect "$1" --format '{{json .Manifest}}' | jq -r .digest; }
+          highest=$(gh release list -R "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases --limit 1000 --json tagName --jq '.[].tagName' \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1) || true
+          [[ -n "$highest" ]] || { echo 'no published vX.Y.Z release to promote' >&2; exit 1; }
+          # The digest that release's install test passed on, read from its own compose file.
+          pinned=$(gh release download "$highest" -R "$GITHUB_REPOSITORY" -p docker-compose.install.yml -O - \
+            | grep -oE "image: $IMAGE:${highest#v}@sha256:[a-f0-9]{64}" | sort -u)
+          [[ $(grep -c . <<< "$pinned") == 1 ]] || { echo "$highest names no single gtmworks image" >&2; exit 1; }
+          target=${pinned##*@}
+          echo "this run: $TAG_NAME $IMAGE@$DIGEST; highest release: $highest $IMAGE@$target"
+          # The read-back must name the target digest itself before stable and latest move.
+          [[ $(digest "$IMAGE@$target") == "$target" ]] || { echo "the digest read-back does not name $target" >&2; exit 1; }
+          docker buildx imagetools create -t "$IMAGE:stable" -t "$IMAGE:latest" "$IMAGE@$target"
+          for tag in stable latest; do
+            moved=$(digest "$IMAGE:$tag")
+            echo "$IMAGE:$tag -> $moved"
+            [[ "$moved" == "$target" ]] || { echo "$tag points at $moved, not $target" >&2; exit 1; }
+          done

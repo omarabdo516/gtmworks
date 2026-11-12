@@ -96,16 +96,23 @@ does not back up the agent engine's data volume. Do not use it to change the pin
 
 ## Releases
 
-Each tag `vX.Y.Z` publishes the image `ghcr.io/omarabdo516/gtmworks:X.Y.Z` for
+A tag `vX.Y.Z` publishes only a commit that is on `main` and whose required CI
+check passed on its push to `main`; any other tag publishes nothing. Each such tag
+publishes the image `ghcr.io/omarabdo516/gtmworks:X.Y.Z` for
 `linux/amd64` and `linux/arm64`, and a GitHub Release with two files:
 `docker-compose.install.yml`, which pins every image by digest, and `install.sh`.
 In a directory holding only those two files, `sh install.sh` pulls the image and
 takes the migrations and install files from it; nothing is built on the server.
-`stable` and `latest` move to a release only after that install passes on its exact
-image; `main` follows each main commit whose CI passed. A release install updates
-when both files are replaced with the next release's and `sh install.sh update` runs.
-Back up before replacing them: backup and restore refuse to run with the files of a
-release the install does not run yet.
+`stable` and `latest` move only after a release's install passes on its exact image,
+and always to the highest published release, so an older or hotfix tag never moves
+them back; `main` follows the head of main once its CI passed. A release install
+updates when both files are replaced with the next release's and `sh install.sh
+update` runs; it applies the new migrations, then recreates every service whose
+image changed. Back up before replacing them: backup and restore refuse to run with
+the files of a release the install does not run yet, and after an update that did
+not finish. If an update fails, the previous app keeps serving; put the previous
+release's two files back and run `sh install.sh update` to return to it (migrations
+already applied stay, as they move only forward).
 
 The first push creates the package `ghcr.io/omarabdo516/gtmworks` **private**, and
 nothing in the workflow can change that. Its owner makes it public once: on GitHub,

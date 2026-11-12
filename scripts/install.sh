@@ -35,6 +35,9 @@ volumes() {
 }
 operation=${1:-install}
 if [ -n "$release_image" ]; then
+  # Release mode replaces the install files below; a checkout's own copies of them are source code.
+  test ! -e scripts/install.sh || {
+    echo 'A release install runs in its own directory, not in a source checkout: run sh scripts/install.sh here.' >&2; exit 1; }
   # A compose file from another release would migrate one version and start another.
   grep -qF "image: $release_image" docker-compose.install.yml || {
     echo "docker-compose.install.yml is not from the release of $release_image: download both files of one release." >&2; exit 1; }
@@ -114,8 +117,12 @@ elif [ "$operation" != install ]; then
 fi
 if [ -n "$release_image" ]; then
   docker pull "$release_image"
+  # From here the files on disk belong to this release until the run finishes, so backup and restore wait for that.
+  rm -f .install-release
   # The image carries what a checkout holds for the install: migrations, database and gateway files, lib/install-env.mjs.
-  docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/install" "$release_image" cp -R /app/install/. /install/
+  # The migrations are replaced, not merged, so a rolled-back release leaves none of its own to apply again.
+  docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/install" "$release_image" \
+    sh -ec 'rm -rf /install/supabase/migrations; cp -R /app/install/. /install/'
 fi
 if [ ! -f .env.install ]; then
   docker run --rm -v "$PWD/lib:/code:ro" "$node_image" node /code/install-env.mjs generate > .env.install.tmp
@@ -143,11 +150,14 @@ if [ "$operation" = install ]; then compose up -d --wait db auth rest storage ma
   printf "notify pgrst, 'reload schema';\n"
 } | compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 --single-transaction
 if [ -z "$release_image" ]; then compose build web; fi
-if [ "$operation" = update ]; then
+if [ "$operation" = update ] && [ -z "$release_image" ]; then
   compose up -d --no-deps --wait --wait-timeout 300 hermes web worker
 else
+  # A release pins every service by digest: compose recreates each one the release changed and leaves the rest running.
   compose up -d --wait --wait-timeout 300
 fi
+# The extraction replaced the gateway configuration in place; Nginx reads it again without dropping connections.
+if [ "$operation" = update ] && [ -n "$release_image" ]; then compose exec -T gateway nginx -s reload; fi
 compose exec -T web node -e "for(const url of ['http://gateway:8080/api/health','http://gateway:8080/sign-in','http://hermes:8642/health']) { const response=await fetch(url); if(response.status!==200) throw new Error(url+' returned '+response.status); console.log(url+' '+response.status); }" --input-type=module
 if [ -n "$release_image" ]; then printf '%s\n' "$release_image" > .install-release; fi
 echo 'gtmworks is ready: http://localhost:3000/sign-in (mail: http://localhost:8025)'
