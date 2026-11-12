@@ -28,7 +28,7 @@ test('device default, server-rendered theme and saved choice across sessions and
   await expect(page.locator('.app-layout')).toHaveCSS('background-color', 'rgb(250, 250, 250)');
   const config = await (await page.request.get('/api/config')).json();
   const cookies = await page.context().cookies();
-  const db = createServerClient(config.url, config.anonKey, { cookies: { getAll: () => cookies, setAll: () => {} } });
+  const db = createServerClient(config.url, config.anonKey, { cookieOptions: config.cookieOptions, cookies: { getAll: () => cookies, setAll: () => {} } });
   expect((await db.auth.signOut()).error).toBeNull();
   await page.context().clearCookies();
   await serverTheme('/sign-in', 'device');

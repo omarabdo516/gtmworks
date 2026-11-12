@@ -1,13 +1,12 @@
 'use server';
 import { withActionLog, logActionFailure } from '@/lib/diagnostics.mjs';
 import { getI18n } from '@/lib/i18n-server';
-import { headers } from 'next/headers';
 import { supabase } from '@/lib/supabase';
 import { safeNext } from '@/lib/navigation';
+import { appUrl } from '@/lib/app-origin.mjs';
 export const signIn=withActionLog('signIn',async function signIn(_state: string, form: FormData) { const {t}=await getI18n();
  const email=String(form.get('email')||'').trim(); const next=safeNext(String(form.get('next')||''));
- const origin=(await headers()).get('origin') || 'http://localhost:3000';
- const db=await supabase(); const {error}=await db.auth.signInWithOtp({email,options:{emailRedirectTo:`${origin}/auth/callback?next=${encodeURIComponent(next)}`}});
+ const db=await supabase(); const {error}=await db.auth.signInWithOtp({email,options:{emailRedirectTo:appUrl(`/auth/callback?next=${encodeURIComponent(next)}`).href}});
  if(error) logActionFailure('signIn',error);
  return error ? t('couldNotSendTheLinkTryAgain') : t('checkYourEmailForASigninLink');
 });
