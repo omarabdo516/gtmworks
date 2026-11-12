@@ -97,7 +97,13 @@ does not back up the agent engine's data volume. Do not use it to change the pin
 ## Releases
 
 A tag `vX.Y.Z` publishes only a commit that is on `main` and whose required CI
-check passed on its push to `main`; any other tag publishes nothing. Each such tag
+check passed on its push to `main`; any other tag publishes nothing through this
+release workflow. A collaborator with write access can still run workflows of their
+own from any commit they push, and publish with them: only repository access and
+rules on tags and branches limit that, not a workflow file. The repository's active
+tag ruleset `release tags: admins only` lets only repository admins create, move or
+delete a `v*` tag; the release workflow relies on that rule and adds no credential
+of its own. Each such tag
 publishes the image `ghcr.io/omarabdo516/gtmworks:X.Y.Z` for
 `linux/amd64` and `linux/arm64`, and a GitHub Release with two files:
 `docker-compose.install.yml`, which pins every image by digest, and `install.sh`.

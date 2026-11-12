@@ -1,6 +1,8 @@
-# A tag vX.Y.Z only requests a release. A tag push runs the workflow file of the tagged commit, which an unreviewed
-# commit could rewrite, so this workflow holds no permission and publishes nothing. Its completion starts the Release
-# workflow (release.yml) as main's reviewed copy, which proves the tagged commit before anything is published.
+# A tag vX.Y.Z only requests a release: this file publishes nothing and asks for no permission. It guards nothing either.
+# GitHub runs a tag push's workflows from the tagged commit, so an unreviewed commit runs whatever workflows it holds,
+# as any pushed commit can; only repository access and rules limit that (README, Releases). The guard is the Release
+# workflow (release.yml): its completion trigger runs main's reviewed copy, which takes only this run's identifiers and
+# proves the tagged commit itself before anything is published.
 name: Release tag
 
 on:

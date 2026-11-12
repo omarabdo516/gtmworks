@@ -1,6 +1,8 @@
 # One tested gtmworks image per release, pulled by installs instead of built on the server (#49).
-# It runs only on workflow_run, so GitHub always runs this reviewed copy from main: a tag push runs the workflow file of
-# the tagged commit, so a tag only starts release-tag.yml, which holds no permission. Before anything is published,
+# It runs only on workflow_run, so GitHub always runs this reviewed copy from main: a tag push runs the workflow files of
+# the tagged commit, which may be unreviewed, so this workflow follows only release-tag.yml, and nothing from that run is
+# used here but its conclusion and event (job conditions), its identifiers in the concurrency group, and the identifiers
+# provenance checks (no inline expression in a script, no artifact). Before anything is published,
 # provenance proves the exact commit: a tag must name a commit on main whose required CI check passed on a push to main;
 # main publishes only its current head, once that check passed.
 # A release builds linux/amd64 and linux/arm64 and pushes X.Y.Z, installs on a fresh runner from the two release files

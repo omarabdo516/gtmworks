@@ -329,6 +329,23 @@ test('CI updates a release install on a real database, applying a new migration 
  assert.ok(run.indexOf("update || fail 'release update'")>run.indexOf("|| fail 'release install'"));
 });
 
+test('the install job keeps one Docker daemon for both install steps and removes it only after the last', () => {
+ // The release step reuses the source install's daemon and its built image; an EXIT trap in a step fires when that
+ // step ends, so a step that removes the daemon must be the job's last and run even after a failure.
+ const steps=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install.steps;
+ const at=test=>steps.findIndex(test);
+ const start=at(step=>/run -d --privileged --name install-docker/.test(step.run||''));
+ const source=at(step=>step.env?.INSTALL_REF);
+ const release=at(step=>/release install and update/.test(step.name||''));
+ const removes=steps.flatMap((step,index)=>/rm -fv install-docker/.test(step.run||'')?[index]:[]);
+ assert.ok(start>=0&&start<source&&source<release,'the daemon starts in its own step before the source install');
+ assert.equal(steps[start].env?.DOCKER_HOST,undefined,'the start step talks to the runner Docker');
+ assert.match(steps[start].run,/docker --host tcp:\/\/127\.0\.0\.1:2375 info/,'the start step waits for the daemon');
+ assert.deepEqual(removes,[steps.length-1],'only the last step removes the daemon');
+ assert.equal(steps.at(-1).if,'${{ always() }}');
+ for(const step of steps.slice(0,-1)) assert.doesNotMatch(step.run||'',/trap .*install-docker/,step.name);
+});
+
 test('the source installer still builds from its checkout', () => {
  assert.match(sourceInstaller,/^release_image=$/m);
  assert.match(sourceInstaller,/compose build web/);
@@ -455,6 +472,26 @@ test('stable and latest always end on the highest published release, whichever t
  assert.equal(none.stable,null);
 });
 
+test('the release workflow takes nothing from the run that started it but the identifiers provenance checks', () => {
+ // That run may be one an unreviewed commit wrote. Its fields reach a script only through the provenance step's env,
+ // never inline in a script, and no artifact or output of that run is read.
+ const fields=/github\.event\.workflow_run\.(\w+)/g;
+ const used=[];
+ for(const [name,job] of Object.entries(workflow.jobs)) {
+  for(const match of JSON.stringify({...job,if:undefined}).matchAll(fields)) used.push(`${name}:${match[1]}`);
+  for(const step of job.steps) {
+   assert.doesNotMatch(step.run||'',/\$\{\{/,`${name}: ${step.name||step.uses} puts an expression inline in a script`);
+   if(step.uses?.startsWith('actions/download-artifact@')) {
+    assert.equal(step.with?.['run-id'],undefined,name);
+    assert.equal(step.with?.['github-token'],undefined,name);
+   }
+  }
+ }
+ assert.deepEqual(used.sort(),['provenance:event','provenance:head_branch','provenance:head_sha','provenance:path']);
+ assert.equal(Object.keys(workflow.jobs.provenance.steps.find(step=>step.id==='provenance').env).filter(key=>key!=='GH_TOKEN').length,4);
+ assert.doesNotMatch(workflowText,/artifacts_url|workflow_run\.id\b|logs_url/);
+});
+
 // Runs the provenance step with gh replaced by GitHub's API answers from files; a list answer is a stream of pages.
 const repo='omarabdo516/gtmworks',sha='1'.repeat(40),other='2'.repeat(40);
 const ghShim=`gh() {
@@ -574,6 +611,14 @@ test('the README names the one-time step that makes the private package public, 
  assert.match(releases,/Change visibility/);
  assert.match(releases,/re-run/i);
  assert.match(releases,/[Bb]ack up before/);
+});
+
+test('the README says the release workflow relies on the active admin-only tag ruleset, not a credential', () => {
+ const releases=readFileSync('README.md','utf8').split(/^## Releases$/m)[1]?.split(/^## /m)[0];
+ assert.match(releases,/`release tags: admins only`/);
+ assert.match(releases,/\bactive\b[^.]*ruleset|ruleset[^.]*\bactive\b/);
+ assert.match(releases,/`v\*`/);
+ assert.match(releases,/admins?\b[^.]*(creat|mov|delet)/i);
 });
 
 test('the release workflow writes packages with the job token only and runs on standard runners', () => {

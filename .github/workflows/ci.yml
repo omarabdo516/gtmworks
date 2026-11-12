@@ -213,6 +213,15 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      # One isolated Docker machine for both install steps below: the release step reuses the source install's image.
+      # The last step removes it, also after a failure.
+      - name: start the isolated Docker machine
+        run: |
+          docker run -d --privileged --name install-docker \
+            -e DOCKER_TLS_CERTDIR= -p 127.0.0.1:2375:2375 \
+            -v "$PWD:$PWD" docker:28.5.1-dind
+          for attempt in $(seq 1 60); do docker --host tcp://127.0.0.1:2375 info >/dev/null 2>&1 && break; sleep 1; done
+          docker --host tcp://127.0.0.1:2375 info >/dev/null || { echo 'install check failed: DinD readiness' >&2; exit 1; }
       - name: isolated Docker-only install, repeat and verify
         env:
           DOCKER_HOST: tcp://127.0.0.1:2375
@@ -220,12 +229,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           fail() { echo "install check failed: $1" >&2; exit 1; }
-          docker --host unix:///var/run/docker.sock run -d --privileged --name install-docker \
-            -e DOCKER_TLS_CERTDIR= -p 127.0.0.1:2375:2375 \
-            -v "$PWD:$PWD" docker:28.5.1-dind
-          trap 'docker --host unix:///var/run/docker.sock rm -fv install-docker' EXIT
-          for attempt in $(seq 1 60); do docker info >/dev/null 2>&1 && break; sleep 1; done
-          docker info >/dev/null || fail 'DinD readiness'
           sh scripts/install.sh || fail 'first install'
           compose() { docker compose --env-file .env.install -f docker-compose.install.yml "$@"; }
           db() { compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 -At "$@"; }
@@ -362,6 +365,9 @@ jobs:
             status=$(docker run --rm --network host curlimages/curl:8.12.1 -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:3000$path") || fail "$path request"
             [[ $status == 200 ]] || fail "$path returned HTTP $status after the release update (expected 200)"
           done
+      - name: remove the isolated Docker machine
+        if: ${{ always() }}
+        run: docker rm -fv install-docker || true
 
   check:
     needs: [changes, static, integration, install]
