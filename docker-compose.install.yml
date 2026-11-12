@@ -1,0 +1,154 @@
+name: gtmworks-install
+services:
+  db:
+    image: supabase/postgres:17.6.1.136
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run scripts/install.sh}
+      PGSODIUM_ROOT_KEY: ${PGSODIUM_ROOT_KEY:?Run scripts/install.sh}
+      POSTGRES_DB: postgres
+      JWT_SECRET: ${SUPABASE_JWT_SECRET:?Run scripts/install.sh}
+      JWT_EXP: 3600
+    volumes:
+      - database:/var/lib/postgresql/data
+      - database-config:/etc/postgresql-custom
+      - ./scripts/install-db.sql:/docker-entrypoint-initdb.d/init-scripts/99-install.sql:ro
+      - ./scripts/local-default-privileges.sql:/bootstrap-grants.sql:ro
+      - ./scripts/install-key.sh:/install-key.sh:ro
+      - ./supabase/migrations:/migrations:ro
+    command: [postgres, -c, config_file=/etc/postgresql/postgresql.conf, -c, pgsodium.getkey_script=/install-key.sh]
+    healthcheck:
+      test: [CMD, pg_isready, -h, 127.0.0.1, -U, postgres]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+  auth:
+    image: supabase/gotrue:v2.197.0
+    restart: unless-stopped
+    depends_on:
+      db: {condition: service_healthy}
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      API_EXTERNAL_URL: ${SUPABASE_PUBLIC_URL}/auth/v1
+      GOTRUE_SITE_URL: ${APP_ORIGIN}
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${POSTGRES_PASSWORD}@db:5432/postgres
+      GOTRUE_JWT_SECRET: ${SUPABASE_JWT_SECRET}
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_DISABLE_SIGNUP: "true"
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_MAILER_AUTOCONFIRM: "true"
+      GOTRUE_SMTP_HOST: mail
+      GOTRUE_SMTP_PORT: 1025
+      GOTRUE_SMTP_ADMIN_EMAIL: no-reply@gtmworks.local
+      GOTRUE_MFA_TOTP_ENROLL_ENABLED: "true"
+      GOTRUE_MFA_TOTP_VERIFY_ENABLED: "true"
+    healthcheck:
+      test: [CMD, wget, -q, --spider, http://127.0.0.1:9999/health]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+  rest:
+    image: postgrest/postgrest:v14.18
+    restart: unless-stopped
+    depends_on:
+      db: {condition: service_healthy}
+    environment:
+      PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD}@db:5432/postgres
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_EXTRA_SEARCH_PATH: public,extensions
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${SUPABASE_JWT_SECRET}
+  storage:
+    image: supabase/storage-api:v1.89.12
+    restart: unless-stopped
+    depends_on:
+      db: {condition: service_healthy}
+    environment:
+      ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      SERVICE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      AUTH_JWT_SECRET: ${SUPABASE_JWT_SECRET}
+      POSTGREST_URL: http://rest:3000
+      DATABASE_URL: postgres://supabase_storage_admin:${POSTGRES_PASSWORD}@db:5432/postgres
+      STORAGE_BACKEND: file
+      FILE_STORAGE_BACKEND_PATH: /var/lib/storage
+      FILE_SIZE_LIMIT: 52428800
+      TENANT_ID: gtmworks
+      REGION: local
+      GLOBAL_S3_BUCKET: gtmworks
+      ENABLE_IMAGE_TRANSFORMATION: "false"
+      S3_PROTOCOL_ENABLED: "false"
+    volumes:
+      - files:/var/lib/storage
+    healthcheck:
+      test: [CMD, wget, -q, --spider, http://127.0.0.1:5000/status]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+  mail:
+    image: axllent/mailpit:v1.27.10
+    restart: unless-stopped
+    ports: [127.0.0.1:8025:8025]
+  gateway:
+    image: nginx:1.28.0-alpine
+    restart: unless-stopped
+    ports: [127.0.0.1:3000:8080]
+    volumes:
+      - ./scripts/install-nginx.conf:/etc/nginx/conf.d/default.conf:ro
+  hermes:
+    # The agent engine ships inside the install (ADR 0010). Bump it here, by tag and digest, together with the version
+    # the driver accepts (lib/hermes.mjs); tests/bundled-hermes.test.mjs and the install test check both.
+    image: nousresearch/hermes-agent:v0.23.0@sha256:adb7890916de63245523492be8f68f9d2095fecbec4e2a6dab7960381f0fc002
+    restart: unless-stopped
+    # The key is empty, never required, when unset: compose reads this service even when it starts only web and worker,
+    # as the installer before ADR 0010 does on update. Hermes then refuses to start rather than serve an API with no key;
+    # scripts/install.sh adds the key and checks it before it starts Hermes.
+    command: [sh, -ec, 'test -n "$${API_SERVER_KEY}" || { echo "HERMES_API_KEY is not set: run sh scripts/install.sh update" >&2; exit 1; }; exec hermes gateway run']
+    # No ports: the API server listens on the compose network only; web and worker reach it as http://hermes:8642.
+    # The management listener (Hermes's dashboard, ADR 0011) starts beside it on 9119, also on the compose network only
+    # and never routed by the public gateway; it takes the same install key as its session token.
+    environment:
+      API_SERVER_HOST: 0.0.0.0
+      API_SERVER_PORT: 8642
+      API_SERVER_KEY: ${HERMES_API_KEY:-}
+      HERMES_DASHBOARD: "1"
+      HERMES_DASHBOARD_SESSION_TOKEN: ${HERMES_API_KEY:-}
+    volumes:
+      - hermes:/opt/data
+    healthcheck:
+      test: [CMD, /opt/hermes/.venv/bin/python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8642/health', timeout=5)"]
+      interval: 5s
+      timeout: 10s
+      start_period: 120s
+      retries: 60
+  web:
+    build: .
+    image: gtmworks-local:237
+    restart: unless-stopped
+    env_file: .env.install
+    environment:
+      GTMWORKS_SELF_HOSTED: "true"
+    command: [sh, -c, "node lib/install-env.mjs validate && exec node server.js"]
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/api/health').then(response=>process.exit(response.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 10s
+      retries: 60
+  worker:
+    image: gtmworks-local:237
+    restart: unless-stopped
+    depends_on:
+      hermes: {condition: service_healthy}
+    env_file: .env.install
+    environment:
+      GTMWORKS_SELF_HOSTED: "true"
+      BUNDLED_HERMES_URL: http://hermes:8642
+    command: [sh, -c, "node lib/install-env.mjs validate && exec node worker/index.mjs"]
+volumes:
+  database:
+  database-config:
+  files:
+  hermes:

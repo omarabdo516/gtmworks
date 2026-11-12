@@ -1,0 +1,519 @@
+openapi: 3.1.0
+info:
+  title: gtmworks agent API
+  version: 1.6.0
+  description: Runtime-neutral HTTP API; Hermes is the first client. Planned paths are not implemented. See README.md for version policy and current authentication.
+servers:
+  - url: /api/v1/companies/{slug}
+    variables:
+      slug:
+        default: rs-learning
+security:
+  - bearerAuth: []
+paths:
+  /cards:
+    get:
+      summary: List cards assigned to this agent as next actor
+      description: Returns {cards} containing work_cards rows enriched with stage, checklist, labels (including work_labels), and creatives with versions, and attachments (the files and reference images people attached to the card's messages, each with id, comment_id, name, content_type, size and created_at). Each version has a signed URL valid for one hour, or null if signing failed. Read an attachment with GET /cards/{card}/files/{file}. No single-card GET exists today.
+      parameters:
+        - in: query
+          name: next_actor
+          required: true
+          schema:
+            const: me
+      responses:
+        '200':
+          description: Cards with work details and signed creative URLs
+          content:
+            application/json:
+              schema: { type: object, required: [cards], properties: { cards: { type: array, items: { type: object, additionalProperties: true } } } }
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      summary: Create a card, or send a message to an agent
+      description: 'A body with title and stage creates a card in that stage. A body with message, agent and mode creates a card in the Ideas stage of the company together with its first message and its assignment to that agent, which must be a role agent the company has granted. Both forms are idempotent for the same Idempotency-Key.'
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  required: [title, stage]
+                  properties:
+                    title: { type: string }
+                    stage: { type: integer }
+                    template: { type: string, description: 'Known templates: reel, carosel (current spelling), static; other strings create no checklist.' }
+                    evidence: { type: string }
+                - type: object
+                  required: [message, agent, mode]
+                  properties:
+                    message: { type: string, description: 'Free text. The first line becomes the card title (at most 80 characters); the whole text is the first message on the card.' }
+                    agent: { type: string, format: uuid, description: 'Person ID of the agent member the card is assigned to.' }
+                    mode: { type: string, enum: [plan, do, answer], description: 'plan: write a plan and wait for approval. do: do the work now. answer: only answer.' }
+      responses:
+        '201': { $ref: '#/components/responses/Id' }
+        default: { $ref: '#/components/responses/Error' }
+  /cards/{card}:
+    parameters:
+      - $ref: '#/components/parameters/Card'
+    patch:
+      summary: Edit brief and caption fields
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fields:
+                  type: object
+                  description: 'Editable text: title, offering, segment, hook, channel, format, goal, caption. Null text values preserve the old value; go_live accepts a timestamp, null or empty string to clear. project_id files the card into a project of the same company (an empty string or null takes it out of its project; a project of another company is 404). Other fields are ignored.'
+                  properties:
+                    title: { type: [string, 'null'] }
+                    offering: { type: [string, 'null'] }
+                    segment: { type: [string, 'null'] }
+                    hook: { type: [string, 'null'] }
+                    channel: { type: [string, 'null'] }
+                    format: { type: [string, 'null'] }
+                    goal: { type: [string, 'null'] }
+                    caption: { type: [string, 'null'] }
+                    go_live: { type: [string, 'null'] }
+                    project_id: { type: [integer, string, 'null'] }
+                evidence: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/Empty' }
+        default: { $ref: '#/components/responses/Error' }
+  /cards/{card}/comment:
+    parameters:
+      - $ref: '#/components/parameters/Card'
+    post:
+      summary: Comment with an evidence link or file
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body: { type: string }
+                evidence: { type: string, description: Evidence text; not URI-validated }
+          multipart/form-data:
+            schema:
+              type: object
+              required: [body, file]
+              properties:
+                body: { type: string }
+                file: { type: string, format: binary, description: Nonempty file up to 20 MiB }
+      responses:
+        '200': { $ref: '#/components/responses/Id' }
+        default: { $ref: '#/components/responses/Error' }
+  /cards/{card}/upload:
+    parameters:
+      - $ref: '#/components/parameters/Card'
+    post:
+      summary: Upload a creative version
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary, description: Nonempty file up to 20 MiB }
+                creative: { type: integer, minimum: 0, description: Existing creative ID; omit or use zero for a new creative }
+                evidence: { type: string }
+      responses:
+        '201': { $ref: '#/components/responses/Id' }
+        default: { $ref: '#/components/responses/Error' }
+  /cards/{card}/{operation}:
+    parameters:
+      - $ref: '#/components/parameters/Card'
+      - in: path
+        name: operation
+        required: true
+        schema:
+          enum: [move, actor, assignee, label, check, comment]
+    post:
+      summary: Change a card
+      description: 'move takes stage; actor takes person (UUID or empty string to clear); assignee takes person (UUID); label takes label (integer); check takes item (integer) and done (boolean); comment takes body (string). All accept evidence text. move returns {}; the others return {id}, null for actor/check, otherwise the inserted row ID.'
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                stage: { type: integer }
+                person: { type: string }
+                label: { type: integer }
+                item: { type: integer }
+                done: { type: boolean }
+                body: { type: string }
+                evidence: { type: string }
+      responses:
+        '200': { description: 'JSON {} for move, otherwise {id} (integer or null)' }
+        default: { $ref: '#/components/responses/Error' }
+  /cards/{card}/files/{file}:
+    parameters:
+      - $ref: '#/components/parameters/Card'
+      - in: path
+        name: file
+        required: true
+        schema: { type: integer }
+        description: Attachment ID, from the card's attachments list.
+    get:
+      summary: Download a file attached to a message of this card
+      description: >-
+        Returns the file's bytes. A run key reaches the files of its own card only; any other card returns 403.
+        A file that does not exist on this card, or belongs to another company, returns 404.
+        Raster images (png, jpeg, gif, webp) are returned with their type; every other file is returned as
+        application/octet-stream with Content-Disposition: attachment. Responses are never cached.
+      responses:
+        '200':
+          description: The file
+          content:
+            image/png: { schema: { type: string, format: binary } }
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/gif: { schema: { type: string, format: binary } }
+            image/webp: { schema: { type: string, format: binary } }
+            application/octet-stream: { schema: { type: string, format: binary } }
+        default: { $ref: '#/components/responses/Error' }
+  /cards/{card}/run-keys:
+    parameters:
+      - $ref: '#/components/parameters/Card'
+    post:
+      summary: Issue a short-lived run key for this card
+      description: >-
+        Assigning a card to an agent makes it eligible for a run key. When the company has a webhook, the key is pushed in the `assigned` webhook (see the README); otherwise the agent pulls it here. It works with a company key (not a run key) of an agent the card is currently assigned to, as next actor or assignee, whether or not the company has a webhook; this is also the way to get another key.
+        Returns a `gtmw_run_` key once; gtmworks stores only its SHA-256 hash. The key works only on this card, only until
+        `expires_at`, and stops at once when the agent's company grant is revoked. Optional `ttl_seconds` is 1 to 86400 (default 3600).
+        Any card not assigned to the calling agent returns 403.
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { ttl_seconds: { type: integer, minimum: 1, maximum: 86400 } } }
+      responses:
+        '201':
+          description: The run key, shown once
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { type: object, required: [key, card, expires_at], properties: { key: { type: string }, card: { type: integer }, expires_at: { type: string, format: date-time } } }
+        default: { $ref: '#/components/responses/Error' }
+    delete:
+      summary: Revoke run keys for this card before they expire
+      description: >-
+        A run key calling this ends itself. A company key of the agent ends all of its live run keys for the card. Revoking the
+        agent's company grant, or an Owner revoking its company key, also ends them.
+      responses:
+        '200':
+          description: How many run keys were revoked
+          content:
+            application/json:
+              schema: { type: object, required: [revoked], properties: { revoked: { type: integer } } }
+  /skills:
+    get:
+      summary: Read the skills enabled for this agent in this company
+      description: >-
+        Returns {skills}: the latest stored version of every skill a person enabled for this agent in this company,
+        each with slug, version, name, description, declared permissions, the SKILL.md text and its sha256. Instructions
+        come only from the stored skill; no request field, card or message adds to them. Only a run key reads skills:
+        each read is recorded against that run (see /skill-loads), and a company key returns 403.
+      responses:
+        '200':
+          description: The enabled skills, possibly an empty list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [skills]
+                properties:
+                  skills:
+                    type: array
+                    items:
+                      type: object
+                      required: [slug, version, name, description, permissions, content, sha256]
+                      properties:
+                        slug: { type: string }
+                        version: { type: integer }
+                        name: { type: string }
+                        description: { type: string }
+                        permissions: { type: array, items: { type: string } }
+                        content: { type: string }
+                        sha256: { type: string }
+        default: { $ref: '#/components/responses/Error' }
+  /skill-loads:
+    get:
+      summary: List the skill versions this run has loaded
+      description: >-
+        Returns {loads}, one entry per skill version the calling run key read through /skills, so a run can show exactly which versions it followed. Each run has its own history. A company key returns 403.
+      responses:
+        '200':
+          description: Skill versions loaded by this key
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [loads]
+                properties:
+                  loads:
+                    type: array
+                    items:
+                      type: object
+                      required: [slug, version, sha256, loaded_at]
+                      properties:
+                        slug: { type: string }
+                        version: { type: integer }
+                        sha256: { type: string }
+                        loaded_at: { type: string, format: date-time }
+        default: { $ref: '#/components/responses/Error' }
+  /skills/{skill}/lessons:
+    parameters:
+      - in: path
+        name: skill
+        required: true
+        schema: { type: string }
+        description: The slug of a skill enabled for this agent in this company
+    post:
+      summary: Propose a lesson as an addition to one of this agent's skills
+      description: >-
+        Only a run key proposes; the card it was learned on is the run's own card, never read from the body (a company key returns 403).
+        The lesson is one line (line breaks become spaces) of at most 500 characters and the reason at most 1000. The proposal waits in the
+        company's Inbox for a person who manages the company; nothing is added to the skill until one approves it, and a rejected lesson
+        is never added. At most ten proposals wait at once for one skill from one agent. Returns the proposal's id and status.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lesson, reason]
+              properties:
+                lesson: { type: string, minLength: 1, maxLength: 500, description: What to add to the skill }
+                reason: { type: string, minLength: 1, maxLength: 1000, description: Why the agent learned it }
+      responses:
+        '201':
+          description: The proposal, waiting for a person (a repeated request key returns the first proposal)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, status]
+                properties:
+                  id: { type: integer }
+                  status: { type: string, enum: [pending, approved, rejected] }
+        default: { $ref: '#/components/responses/Error' }
+  /cards/{card}/runs:
+    x-status: planned
+    parameters: [{ $ref: '#/components/parameters/Card' }]
+    post:
+      description: >-
+        PLANNED, not implemented: create a run for a granted agent on this card;
+        issue an expiring credential limited to company, card and run. The next
+        run's payload includes resume entries for answered or abandoned interrupts
+        on the same card. No answer is never yes; an open interrupt blocks progress
+        until it is answered or abandoned. Route and payload remain proposals.
+      responses:
+        '201':
+          description: Planned run and scoped credential; proposed run payload fields below
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { $ref: '#/components/schemas/RunStatus' }
+                  resume:
+                    type: array
+                    items: { $ref: '#/components/schemas/RunResume' }
+  /runs/{run}/claim:
+    x-status: planned
+    parameters: [{ $ref: '#/components/parameters/Run' }]
+    post:
+      description: >-
+        PLANNED, not implemented: claim a run using a dispatch key and receive a
+        fenced lease and its payload, including resume entries for answered or
+        abandoned interrupts on the same card. Agents claim work and write
+        through this API; gtmworks does not call or execute the agent. Route and
+        payload are proposals.
+      responses: { '200': { description: Planned lease } }
+  /runs/{run}/heartbeat:
+    x-status: planned
+    parameters: [{ $ref: '#/components/parameters/Run' }]
+    post:
+      description: 'PLANNED, not implemented: renew the current fenced lease with the run credential; reject stale attempts. Route and payload are proposals.'
+      responses: { '200': { description: Planned lease renewal } }
+  /runs/{run}/complete:
+    x-status: planned
+    parameters: [{ $ref: '#/components/parameters/Run' }]
+    post:
+      description: >-
+        PLANNED, not implemented: report the outcome under the current fenced
+        lease; never approve, reject, publish or spend. Run statuses are queued,
+        running, waiting, done, failed and cancelled. Outcomes map success to done,
+        interrupt to waiting, cancelled to cancelled and error to failed.
+        An agent reports only that it is waiting for a person; it never records
+        an answer. With interrupt, provide one or more interrupts as described by
+        RunInterrupt. For version_approval, id equals the version id.
+        Answers arrive as resume entries {interruptId, status, payload}, with
+        status resolved or abandoned, in the existing approved/rejected/commented
+        webhook and the payload of the next run on the same card. This delivery
+        is planned; today's webhook has no resume field. No answer is never yes.
+        A run cannot continue past an open interrupt until answered or abandoned;
+        abandonment does not approve a version or authorize publishing or spending.
+        The planned watchdog (#84) never fails a waiting run for missed heartbeats
+        or an expired lease; it may fail it only after an open interrupt's
+        expiresAt has passed. Expiry never supplies an answer or approval.
+        Explicit retry stays on the same card. Route and payload are proposals.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RunCompletion' }
+      responses:
+        '200':
+          description: Planned run status after recording the outcome
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { $ref: '#/components/schemas/RunStatus' }
+components:
+  schemas:
+    RunStatus:
+      type: string
+      enum: [queued, running, waiting, done, failed, cancelled]
+      description: >-
+        PLANNED run lifecycle: queued awaits an agent; running holds an active
+        lease; waiting has delivered a version or asked a question and awaits a
+        person; done finished successfully; failed ended with an error; cancelled
+        was stopped by a person or gtmworks. Waiting is not an execution failure.
+    RunCompletion:
+      type: object
+      required: [outcome]
+      additionalProperties: false
+      properties:
+        outcome:
+          type: string
+          enum: [success, interrupt, cancelled, error]
+          description: 'PLANNED: success -> done; interrupt -> waiting; cancelled -> cancelled; error -> failed.'
+        interrupts:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/RunInterrupt' }
+          description: Required with outcome interrupt; reports a wait, never an answer.
+      if:
+        properties:
+          outcome: { const: interrupt }
+      then:
+        required: [interrupts]
+      else:
+        not:
+          required: [interrupts]
+    RunInterrupt:
+      type: object
+      required: [id, reason, message, responseSchema, expiresAt]
+      additionalProperties: false
+      properties:
+        id:
+          type: [string, integer]
+          description: Interrupt identifier; for version_approval this is the same integer as versionId.
+        reason:
+          type: string
+          enum: [version_approval, question]
+        message:
+          type: string
+          description: The version approval request or question shown to a person.
+        responseSchema:
+          type: object
+          additionalProperties: true
+          description: JSON Schema describing the expected human answer payload; it is not an answer.
+        expiresAt:
+          type: string
+          format: date-time
+          description: Deadline for this open interrupt; expiry never implies consent.
+        versionId:
+          type: integer
+          description: Required for version_approval; the exact version awaiting a person's approval, equal to id.
+      if:
+        properties:
+          reason: { const: version_approval }
+      then:
+        required: [versionId]
+        properties:
+          id: { type: integer }
+    RunResume:
+      type: object
+      required: [interruptId, status, payload]
+      additionalProperties: false
+      description: >-
+        PLANNED answer delivery from gtmworks to the agent, never agent input to
+        completion. The existing approved/rejected/commented webhook will carry
+        a resume array of these entries, also included in the next run's payload
+        on the same card. No answer is never yes; an open interrupt blocks progress
+        until answered or abandoned. A resolved rejection is not approval.
+      properties:
+        interruptId:
+          type: [string, integer]
+          description: Matches the original interrupt id, including its type.
+        status:
+          type: string
+          enum: [resolved, abandoned]
+          description: Resolved carries a person's answer; abandoned closes the wait without an answer or consent.
+        payload:
+          description: Human answer matching responseSchema when resolved; null when abandoned. Approval remains a person's decision on the exact version.
+      if:
+        properties:
+          status: { const: abandoned }
+      then:
+        properties:
+          payload: { type: 'null' }
+  responses:
+    Id:
+      description: 'JSON {id}: created card, comment, creative or version ID; a new creative upload returns its creative ID, an existing creative upload its version ID.'
+      content:
+        application/json:
+          schema: { type: object, required: [id], properties: { id: { type: integer } } }
+    Empty:
+      description: Updated
+      content:
+        application/json:
+          schema: { type: object, maxProperties: 0 }
+    Error:
+      description: '400 invalid input or upload failure; 401 missing, unknown, revoked or expired key (always the same body); 403 also for a run key used outside its card; 403 forbidden operation or inaccessible upload card; 404 company mismatch or missing row; 409 idempotency conflict; 429 over 120 requests/minute/key (Retry-After 60); 500 read/write failure; 503 authentication unavailable. Unsupported routes are refused with 403, not a planned implementation.'
+      headers:
+        Retry-After: { description: Present on 429; seconds before retry, schema: { type: integer, const: 60 } }
+      content:
+        application/json:
+          schema: { type: object, required: [error], properties: { error: { type: string } } }
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, description: 'A gtmw_agt_ company key, or a gtmw_run_ key that reaches one card until it expires. The older agt_ company keys still work and every response to one carries `Deprecation: true` and `X-GTMWorks-Key: legacy`. Planned paths do not define their final authentication yet.' }
+  parameters:
+    Run: { in: path, name: run, required: true, schema: { type: string }, description: Planned run identifier }
+    Card:
+      in: path
+      name: card
+      required: true
+      schema: { type: integer }
+    IdempotencyKey:
+      in: header
+      name: Idempotency-Key
+      required: true
+      description: Scoped to company and member. Retry identical method, relative path and body bytes; changed input returns 409. Multipart identity uses file digest/name, creative, evidence and trimmed body.
+      schema: { type: string, minLength: 1, maxLength: 200 }

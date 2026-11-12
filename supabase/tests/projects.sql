@@ -1,0 +1,26 @@
+begin;
+create extension if not exists pgtap with schema extensions;
+select plan(15);
+-- Company 1 is RS Learning, company 3 is Aleem. The manager belongs to company 1 only; the owner belongs to both.
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select lives_ok($$insert into public.work_projects(company_id,name,goal) values ('10000000-0000-0000-0000-000000000001','Spring launch','Sell the spring course')$$,'a manager creates a project with a goal');
+select is((select status from public.work_projects where name='Spring launch'),'active','a new project is active');
+select throws_ok($$insert into public.work_projects(company_id,name) values ('10000000-0000-0000-0000-000000000001','   ')$$,'23514',null,'a project needs a name');
+select throws_ok($$insert into public.work_projects(company_id,name) values ('10000000-0000-0000-0000-000000000003','Not mine')$$,'42501',null,'a person cannot create a project in a company they do not belong to');
+select lives_ok($$select public.edit_work_card('10000000-0000-0000-0000-000000000001',(select min(id) from public.work_cards where company_id='10000000-0000-0000-0000-000000000001'),jsonb_build_object('project_id',(select id from public.work_projects where name='Spring launch')))$$,'a card is filed into a project');
+select is((select count(*)::int from public.work_cards c join public.work_projects p on p.company_id=c.company_id and p.id=c.project_id where p.name='Spring launch'),1,'the card carries the project');
+select is((select count(*)::int from public.work_activity where action='card_changed' and details->>'field'='project_id' and details->>'new_name'='Spring launch'),1,'the card activity names the project');
+select lives_ok($$select public.agent_write('10000000-0000-0000-0000-000000000001','project-1','fp-project-1','edit',(select min(id) from public.work_cards where company_id='10000000-0000-0000-0000-000000000001'),jsonb_build_object('fields',jsonb_build_object('project_id','')))$$,'an agent write takes the card out of its project');
+select is((select count(*)::int from public.work_cards where project_id is not null),0,'the card has no project again');
+select throws_ok($$update public.work_projects set company_id='10000000-0000-0000-0000-000000000003' where name='Spring launch'$$,'42501',null,'a project never changes company');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select lives_ok($$insert into public.work_projects(company_id,name) values ('10000000-0000-0000-0000-000000000003','Aleem project')$$,'an owner of both companies creates a project in the second');
+select throws_ok($$select public.edit_work_card('10000000-0000-0000-0000-000000000001',(select min(id) from public.work_cards where company_id='10000000-0000-0000-0000-000000000001'),jsonb_build_object('project_id',(select id from public.work_projects where name='Aleem project')))$$,null,'project not found','a company A card cannot be filed into a company B project');
+select throws_ok($$update public.work_cards set project_id=(select id from public.work_projects where name='Aleem project') where id=(select min(id) from public.work_cards where company_id='10000000-0000-0000-0000-000000000001')$$,'23503',null,'a direct write cannot cross companies either');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select is((select count(*)::int from public.work_projects where company_id='10000000-0000-0000-0000-000000000003'),0,'a person outside the company cannot read its projects');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
+select throws_ok($$select public.edit_work_card('10000000-0000-0000-0000-000000000001',(select min(id) from public.work_cards where company_id='10000000-0000-0000-0000-000000000001'),jsonb_build_object('project_id',(select id from public.work_projects where name='Spring launch')))$$,null,null,'a viewer cannot file a card');
+select * from finish();
+rollback;

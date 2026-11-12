@@ -1,0 +1,40 @@
+# Updates the approved screen images in the CI environment (#103). Run it from the Actions tab (or
+# `gh workflow run visual-baselines.yml --ref <branch>`), download the `visual-baselines` artifact and commit the
+# images it contains with the change that caused them. It runs the same command as `./ci.sh visual-update`.
+name: Visual baselines
+on:
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubicloud-standard-2
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: update the approved images
+        run: ./ci.sh visual-update
+      - name: list what changed
+        if: always()
+        run: git status --short --untracked-files=all -- tests/visual.spec.ts-snapshots
+      - name: collect the changed images
+        if: always()
+        run: |
+          mkdir -p visual-baselines
+          git ls-files --modified --others --exclude-standard -z -- 'tests/visual.spec.ts-snapshots/*.png' |
+            while IFS= read -r -d '' image; do
+              if [[ -f "$image" ]]; then cp -- "$image" visual-baselines/; fi
+            done
+      - name: upload the changed images
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-baselines
+          path: visual-baselines/
+          if-no-files-found: ignore
+          retention-days: 14

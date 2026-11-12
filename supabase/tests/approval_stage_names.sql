@@ -1,0 +1,18 @@
+begin;
+create extension if not exists pgtap with schema extensions;
+select plan(7);
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+update public.work_stages set name='مرحلة ' || stage_key where company_id='10000000-0000-0000-0000-000000000002' and stage_key is not null;
+insert into public.work_cards(company_id,stage_id,title) select company_id,id,'اختبار النص' from public.work_stages where company_id='10000000-0000-0000-0000-000000000002' and kind='review';
+select lives_ok($$select public.decide_approval('10000000-0000-0000-0000-000000000002',(select id from public.work_cards where title='اختبار النص'),'reject','تصحيح النص',true,false)$$,'reject caption with renamed stages');
+select is((select s.stage_key from public.work_cards w join public.work_stages s on s.id=w.stage_id where w.title='اختبار النص'),'writing','caption uses writing identity');
+insert into public.work_cards(company_id,stage_id,title) select company_id,id,'اختبار التصميم' from public.work_stages where company_id='10000000-0000-0000-0000-000000000002' and kind='review';
+select lives_ok($$select public.decide_approval('10000000-0000-0000-0000-000000000002',(select id from public.work_cards where title='اختبار التصميم'),'reject','تصحيح التصميم',false,true)$$,'reject design with renamed stages');
+select is((select s.stage_key from public.work_cards w join public.work_stages s on s.id=w.stage_id where w.title='اختبار التصميم'),'design','design uses design identity');
+insert into public.work_cards(company_id,stage_id,title,go_live) select company_id,id,'اختبار الموعد',now() from public.work_stages where company_id='10000000-0000-0000-0000-000000000002' and kind='review';
+select lives_ok($$select public.decide_approval('10000000-0000-0000-0000-000000000002',(select id from public.work_cards where title='اختبار الموعد'),'approve')$$,'approve with renamed stages');
+select is((select s.stage_key from public.work_cards w join public.work_stages s on s.id=w.stage_id where w.title='اختبار الموعد'),'scheduled','approved card uses scheduled identity');
+select throws_ok($$update public.work_stages set stage_key='writing' where company_id='10000000-0000-0000-0000-000000000002' and stage_key='design'$$,'P0001','stage identity cannot change','stage identity cannot be edited');
+select * from finish();
+rollback;

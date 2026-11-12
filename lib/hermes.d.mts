@@ -1,0 +1,12 @@
+export const hermesVersion:string;
+export type HermesState={state:'connected'|'refused'|'unreachable'|'untested_version',version:string|null,features:string[]};
+export function isHermesAddressAllowed(address:string):boolean;
+export function testHermes(connection:{address:string,profile:string,key:string}):Promise<HermesState>;
+export type HermesConnection={address:string,profile:string,key:string};
+export function startRun(message:HermesConnection&{input:string,sessionKey:string,idempotencyKey:string}):Promise<string|null>;
+export type RunUsage={input:number,output:number};
+export function readRun(run:HermesConnection&{run:string}):Promise<{status:'running'|'completed'|'failed'|'cancelled'|'interrupted'|'lost'|'unreachable',output:string|null,session:string|null,usage:RunUsage|null}>;
+export function stopRun(run:HermesConnection&{run:string}):Promise<boolean>;
+export function createAgent(connection:import('./engine.mjs').EngineConnection,agent:import('./engine.mjs').AgentRequest):Promise<import('./engine.mjs').CreatedAgent>;
+export function readAgent(connection:import('./engine.mjs').EngineConnection,name:string):Promise<import('./engine.mjs').FoundAgent>;
+export function hermesEngine(connection:import('./engine.mjs').EngineConnection):import('./engine.mjs').Engine;

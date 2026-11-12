@@ -1,0 +1,9 @@
+export function hashKey(key:string):string;
+export function newKey(kind:'agent'|'run'):{key:string,hash:string};
+export function sameHash(a:unknown,b:unknown):boolean;
+export function fingerprint(method:string,path:string,body:string):string;
+export function signature(secret:string,body:string):string;
+export function encryptSecret(value:string,key:string|undefined):string;
+export function decryptSecret(value:string,key:string|undefined):string;
+export function retryAt(createdAt:string,attempts:number,now?:number):string|null;
+export function rateWindow(start:number,count:number,now:number):{start:number,count:number,limited:boolean};

@@ -1,0 +1,522 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-10T01:20:25Z",
+  "title": "Design System: gtmworks Look",
+  "extensions": {
+    "colorMeta": {
+      "canvas": {
+        "role": "neutral",
+        "displayName": "Shell Canvas",
+        "canonical": "#fafafa"
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Shell Ink",
+        "canonical": "#262626"
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Card Surface",
+        "canonical": "#ffffff"
+      },
+      "sidebar-grey": {
+        "role": "neutral",
+        "displayName": "Sidebar Grey",
+        "canonical": "#f1f1f1"
+      },
+      "sidebar-hover": {
+        "role": "neutral",
+        "displayName": "Sidebar Hover",
+        "canonical": "#e3e3e3"
+      },
+      "sidebar-hover-ink": {
+        "role": "neutral",
+        "displayName": "Sidebar Hover Ink",
+        "canonical": "#202020"
+      },
+      "hairline": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "#dedede"
+      },
+      "muted-fill": {
+        "role": "neutral",
+        "displayName": "Muted Fill",
+        "canonical": "#eeeeee"
+      },
+      "muted-ink": {
+        "role": "neutral",
+        "displayName": "Muted Ink",
+        "canonical": "#5c5c5c"
+      },
+      "hover-fill": {
+        "role": "neutral",
+        "displayName": "Hover Fill",
+        "canonical": "#ebebeb"
+      },
+      "primary": {
+        "role": "primary",
+        "displayName": "Graphite",
+        "canonical": "oklch(0.205 0 0)"
+      },
+      "primary-foreground": {
+        "role": "neutral",
+        "displayName": "Near White",
+        "canonical": "oklch(0.985 0 0)"
+      },
+      "portal-surface": {
+        "role": "neutral",
+        "displayName": "Portal Surface",
+        "canonical": "oklch(1 0 0)"
+      },
+      "portal-ink": {
+        "role": "neutral",
+        "displayName": "Portal Ink",
+        "canonical": "oklch(0.145 0 0)"
+      },
+      "portal-muted-ink": {
+        "role": "neutral",
+        "displayName": "Portal Muted Ink",
+        "canonical": "oklch(0.47 0 0)"
+      },
+      "portal-muted-fill": {
+        "role": "neutral",
+        "displayName": "Portal Muted Fill",
+        "canonical": "oklch(0.97 0 0)"
+      },
+      "portal-hairline": {
+        "role": "neutral",
+        "displayName": "Portal Hairline",
+        "canonical": "oklch(0.922 0 0)"
+      },
+      "focus-ring": {
+        "role": "neutral",
+        "displayName": "Focus Ring",
+        "canonical": "oklch(0.708 0 0)"
+      },
+      "destructive": {
+        "role": "feedback",
+        "displayName": "Alarm Red",
+        "canonical": "oklch(0.577 0.245 27.325)"
+      },
+      "scrollbar-thumb": {
+        "role": "neutral",
+        "displayName": "Scrollbar Thumb",
+        "canonical": "oklch(0.7 0 0)"
+      },
+      "role-account-manager": {
+        "role": "secondary",
+        "displayName": "Account Manager Blue",
+        "canonical": "#a9c7dc"
+      },
+      "role-writer": {
+        "role": "secondary",
+        "displayName": "Writer Mint",
+        "canonical": "#b5d9cf"
+      },
+      "role-designer": {
+        "role": "secondary",
+        "displayName": "Designer Clay",
+        "canonical": "#d8baa9"
+      },
+      "role-critic": {
+        "role": "secondary",
+        "displayName": "Critic Lilac",
+        "canonical": "#c5b8dc"
+      },
+      "role-arrow-agent": {
+        "role": "secondary",
+        "displayName": "Arrow Agent Gold",
+        "canonical": "#e5cb8d"
+      },
+      "stage-amber": {
+        "role": "tertiary",
+        "displayName": "Stage Amber",
+        "canonical": "oklch(55.5% 0.163 48.998)",
+        "tonalRamp": [
+          "oklch(55.5% 0.163 48.998)",
+          "oklch(76.9% 0.188 70.08)",
+          "oklch(98.7% 0.022 95.277)"
+        ]
+      },
+      "stage-blue": {
+        "role": "tertiary",
+        "displayName": "Stage Blue",
+        "canonical": "oklch(48.8% 0.243 264.376)",
+        "tonalRamp": [
+          "oklch(48.8% 0.243 264.376)",
+          "oklch(62.3% 0.214 259.815)",
+          "oklch(97% 0.014 254.604)"
+        ]
+      },
+      "stage-violet": {
+        "role": "tertiary",
+        "displayName": "Stage Violet",
+        "canonical": "oklch(49.1% 0.27 292.581)",
+        "tonalRamp": [
+          "oklch(49.1% 0.27 292.581)",
+          "oklch(60.6% 0.25 292.717)",
+          "oklch(96.9% 0.016 293.756)"
+        ]
+      },
+      "stage-green": {
+        "role": "tertiary",
+        "displayName": "Stage Green",
+        "canonical": "oklch(52.7% 0.154 150.069)",
+        "tonalRamp": [
+          "oklch(52.7% 0.154 150.069)",
+          "oklch(72.3% 0.219 149.579)",
+          "oklch(98.2% 0.018 155.826)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "body": {
+        "displayName": "Body",
+        "purpose": "All running text and form fields."
+      },
+      "page-title": {
+        "displayName": "Page Title",
+        "purpose": "One h1 per screen."
+      },
+      "section-title": {
+        "displayName": "Section Title",
+        "purpose": "Panel and group headings (h2)."
+      },
+      "subsection-title": {
+        "displayName": "Subsection Title",
+        "purpose": "h3, including card-detail section headings."
+      },
+      "nav-item": {
+        "displayName": "Navigation Item",
+        "purpose": "Sidebar links."
+      },
+      "nav-group-label": {
+        "displayName": "Navigation Group Label",
+        "purpose": "Mono uppercase group label, English only; the copied SidebarSection heading (no padding, line height 1.5)."
+      },
+      "nav-group-label-recent": {
+        "displayName": "Navigation Group Label (Recent)",
+        "purpose": "The fallback .nav-group h2 rule, still used by the Recent group: 24px line height, 6px 12px padding."
+      },
+      "column-title": {
+        "displayName": "Column Title",
+        "purpose": "Board column header."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "Dates, channels, helper lines and chips."
+      },
+      "identifier": {
+        "displayName": "Identifier",
+        "purpose": "Card ids in Paper Mono."
+      },
+      "stat-figure": {
+        "displayName": "Stat Figure",
+        "purpose": "The four Home work figures."
+      },
+      "brand": {
+        "displayName": "Brand",
+        "purpose": "The gtmworks wordmark."
+      },
+      "page-title-mobile": {
+        "displayName": "Page Title (phone)",
+        "purpose": "h1 and card dialog title below 768px."
+      },
+      "stat-figure-mobile": {
+        "displayName": "Stat Figure (phone)",
+        "purpose": "Home work figures below 768px."
+      },
+      "stat-figure-unavailable": {
+        "displayName": "Stat Figure (unavailable)",
+        "purpose": "A figure with no data yet, in muted ink."
+      },
+      "stat-figure-unavailable-mobile": {
+        "displayName": "Stat Figure (unavailable, phone)",
+        "purpose": "Unavailable figure below 768px."
+      },
+      "acceptance-figure": {
+        "displayName": "Acceptance Figure",
+        "purpose": "The acceptance meter percentage."
+      },
+      "micro": {
+        "displayName": "Micro",
+        "purpose": "Author chip on the card conversation."
+      }
+    },
+    "shadows": [
+      {
+        "name": "hint",
+        "value": "0 1px 2px 0 rgb(0 0 0 / 0.05)",
+        "purpose": "Outline buttons and text inputs, at rest (Tailwind shadow-xs)."
+      },
+      {
+        "name": "pickup",
+        "value": "0 1px 3px #0002",
+        "purpose": "Stylesheet fallback for a board card on hover (app/globals.css .card:hover); the live KanbanCard also sets hover:shadow-sm, which wins."
+      },
+      {
+        "name": "card-hover",
+        "value": "0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)",
+        "purpose": "Live board card on hover (KanbanCard hover:shadow-sm, Tailwind shadow-sm)."
+      },
+      {
+        "name": "lift",
+        "value": "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
+        "purpose": "Interactive Paperclip card on hover (shadow-md)."
+      },
+      {
+        "name": "overlay",
+        "value": "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)",
+        "purpose": "Dialogs over a 50% black scrim (shadow-lg)."
+      },
+      {
+        "name": "focus-halo",
+        "value": "0 0 0 3px color-mix(in srgb, oklch(0.708 0 0) 20%, transparent)",
+        "purpose": "Root variable --focus-ring-halo (theme.css): a 3px halo at 20% of the ring colour. Defined but not applied by the copied Button and Input, which use a 3px ring at 50% (ring-ring/50; the destructive Button variant uses ring-destructive/20)."
+      }
+    ],
+    "motion": [
+      {
+        "name": "duration-instant",
+        "value": "80ms",
+        "purpose": "Smallest state change."
+      },
+      {
+        "name": "duration-fast",
+        "value": "160ms",
+        "purpose": "Hover, colour and border transitions on controls and board cards."
+      },
+      {
+        "name": "duration-base",
+        "value": "240ms",
+        "purpose": "Mobile bottom bar exit."
+      },
+      {
+        "name": "duration-slow",
+        "value": "360ms",
+        "purpose": "Mobile bottom bar enter."
+      },
+      {
+        "name": "duration-deliberate",
+        "value": "520ms",
+        "purpose": "Deliberate pane motion."
+      },
+      {
+        "name": "ease-out-expo",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Entrances."
+      },
+      {
+        "name": "ease-standard",
+        "value": "cubic-bezier(0.4, 0, 0.2, 1)",
+        "purpose": "Exits."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "phone",
+        "value": "max-width: 767px"
+      },
+      {
+        "name": "home-grid",
+        "value": "max-width: 1100px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Button",
+      "kind": "button",
+      "refersTo": "button",
+      "description": "Raw product button (button:not([data-slot]) / .button): canvas fill, hairline border, 36px minimum height, 14px medium text. Shell scope colours.",
+      "html": "<button class=\"ds-btn\">Save</button>",
+      "css": ".ds-btn{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:36px;padding:7px 12px;border:1px solid var(--border,#dedede);border-radius:var(--radius-md,6.4px);background:var(--background,#fafafa);color:inherit;font-family:var(--font-sans,\"InterVariable\",\"Inter\",var(--font-arabic),ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif);font-size:14px;font-weight:500;line-height:1.5;cursor:pointer;touch-action:manipulation;transition:background-color var(--motion-duration-fast,160ms),color var(--motion-duration-fast,160ms),border-color var(--motion-duration-fast,160ms)}.ds-btn:hover{background:var(--accent,#ebebeb)}.ds-btn:disabled{opacity:.5;cursor:default}.ds-btn:focus-visible{outline:2px solid var(--ring,oklch(0.708 0 0));outline-offset:2px}@media(prefers-reduced-motion:reduce){.ds-btn{transition-duration:0ms!important}}"
+    },
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Raw button.primary: graphite fill, near-white text. Hover changes only the fill (the generic button hover), as in the stylesheet.",
+      "html": "<button class=\"ds-btn-primary\">Save changes</button>",
+      "css": ".ds-btn-primary{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:36px;padding:7px 12px;border:1px solid var(--primary,oklch(0.205 0 0));border-radius:var(--radius-md,6.4px);background:var(--primary,oklch(0.205 0 0));color:var(--primary-foreground,oklch(0.985 0 0));font-family:var(--font-sans,\"InterVariable\",\"Inter\",var(--font-arabic),ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif);font-size:14px;font-weight:500;line-height:1.5;cursor:pointer;touch-action:manipulation;transition:background-color var(--motion-duration-fast,160ms),color var(--motion-duration-fast,160ms),border-color var(--motion-duration-fast,160ms)}.ds-btn-primary:hover{background:var(--accent,#ebebeb)}.ds-btn-primary:disabled{opacity:.5;cursor:default}.ds-btn-primary:focus-visible{outline:2px solid var(--ring,oklch(0.708 0 0));outline-offset:2px}@media(prefers-reduced-motion:reduce){.ds-btn-primary{transition-duration:0ms!important}}"
+    },
+    {
+      "name": "Toolbar Primary Button",
+      "kind": "button",
+      "refersTo": "button-toolbar-primary",
+      "description": "The New card action on the Work toolbar (button.primary with data-toolbar-primary): ink fill, canvas text, 44px high, 7px block and 12px inline padding, semibold; hover mixes 10% toward the surface.",
+      "html": "<div class=\"ds-toolbar\"><button class=\"ds-btn-toolbar\">New card</button></div>",
+      "css": ".ds-toolbar{box-sizing:border-box;display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;justify-content:flex-start;column-gap:8px;row-gap:16px;min-width:0}.ds-btn-toolbar{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:var(--design-page-control-gap,8px);height:var(--collection-toolbar-height,44px);min-height:36px;margin-inline-start:0;padding:7px var(--collection-toolbar-padding,12px);border:1px solid var(--collection-toolbar-border,color-mix(in srgb,oklch(0.145 0 0) 15%,color-mix(in oklab,oklch(0.145 0 0) 4%,oklch(1 0 0))));border-radius:var(--collection-toolbar-radius,6.4px);background:var(--foreground,#262626);color:var(--background,#fafafa);font-family:var(--font-sans,\"InterVariable\",\"Inter\",var(--font-arabic),ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif);font-size:var(--design-page-type-size,14px);font-weight:600;line-height:var(--design-page-type-leading,20px);cursor:pointer;touch-action:manipulation;transition:background-color var(--motion-duration-fast,160ms),color var(--motion-duration-fast,160ms),border-color var(--motion-duration-fast,160ms)}.ds-btn-toolbar:hover{background:color-mix(in oklab,var(--foreground,#262626) 90%,var(--task-list-surface,var(--background,#fafafa)));color:var(--background,#fafafa)}.ds-btn-toolbar:disabled{opacity:.5;cursor:default}.ds-btn-toolbar:focus-visible{outline:2px solid var(--ring,oklch(0.708 0 0));outline-offset:2px}@media(prefers-reduced-motion:reduce){.ds-btn-toolbar{transition-duration:0ms!important}}"
+    },
+    {
+      "name": "Paperclip Button: default",
+      "kind": "button",
+      "description": "Copied ui/button.tsx, variant default, default size (40px): primary fill, hover at 90% (only on hover-capable pointers). Every variant has a ring-coloured border and a 3px ring on keyboard focus (at 50% ring colour, except destructive, whose ring is destructive at 20%), a destructive border with a 20% destructive ring when aria-invalid, and 50% opacity with no pointer events when disabled. The source's dark: utilities apply only under .dark, which nothing sets, so they are omitted.",
+      "html": "<button class=\"ds-pc-default\">Default</button>",
+      "css": ".ds-pc-default{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:8px;flex-shrink:0;white-space:nowrap;height:40px;padding:8px 16px;border:0 solid var(--border,#dedede);border-radius:var(--radius-md,6.4px);background:transparent;color:inherit;font-family:var(--font-sans,\"InterVariable\",\"Inter\",var(--font-arabic),ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif);font-size:14px;font-weight:500;line-height:20px;cursor:pointer;touch-action:manipulation;outline:none;transition-property:color,background-color,border-color,box-shadow,opacity;transition-duration:150ms;transition-timing-function:cubic-bezier(0.4,0,0.2,1);background:var(--primary,oklch(0.205 0 0));color:var(--primary-foreground,oklch(0.985 0 0))}@media(hover:hover){.ds-pc-default:hover{background:color-mix(in oklab,var(--primary,oklch(0.205 0 0)) 90%,transparent)}}.ds-pc-default:focus-visible{border-color:var(--ring,oklch(0.708 0 0));box-shadow:0 0 0 3px color-mix(in oklab,var(--ring,oklch(0.708 0 0)) 50%,transparent)}.ds-pc-default[aria-invalid=true]{border-color:var(--destructive,oklch(0.577 0.245 27.325))}.ds-pc-default[aria-invalid=true]:focus-visible{box-shadow:0 0 0 3px color-mix(in oklab,var(--destructive,oklch(0.577 0.245 27.325)) 20%,transparent)}.ds-pc-default:disabled{pointer-events:none;opacity:.5;cursor:default}@media(prefers-reduced-motion:reduce){.ds-pc-default{transition-duration:0ms!important}}"
+    },
+    {
+      "name": "Paperclip Button: cta",
+      "kind": "button",
+      "description": "Variant cta: foreground fill with background text (ink on canvas in the shell), hover at 90%.",
+      "html": "<button class=\"ds-pc-cta\">Call to action</button>",
+      "css": ".ds-pc-cta{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:8px;flex-shrink:0;white-space:nowrap;height:40px;padding:8px 16px;border:0 solid var(--border,#dedede);border-radius:var(--radius-md,6.4px);background:transparent;color:inherit;font-family:var(--font-sans,\"InterVariable\",\"Inter\",var(--font-arabic),ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif);font-size:14px;font-weight:500;line-height:20px;cursor:pointer;touch-action:manipulation;outline:none;transition-property:color,background-color,border-color,box-shadow,opacity;transition-duration:150ms;transition-timing-function:cubic-bezier(0.4,0,0.2,1);background:var(--foreground,#262626);color:var(--background,#fafafa)}@media(hover:hover){.ds-pc-cta:hover{background:color-mix(in oklab,var(--foreground,#262626) 90%,transparent)}}.ds-pc-cta:focus-visible{border-color:var(--ring,oklch(0.708 0 0));box-shadow:0 0 0 3px color-mix(in oklab,var(--ring,oklch(0.708 0 0)) 50%,transparent)}.ds-pc-cta[aria-invalid=true]{border-color:var(--destructive,oklch(0.577 0.245 27.325))}.ds-pc-cta[aria-invalid=true]:focus-visible{box-shadow:0 0 0 3px color-mix(in oklab,var(--destructive,oklch(0.577 0.245 27.325)) 20%,transparent)}.ds-pc-cta:disabled{pointer-events:none;opacity:.5;cursor:default}@media(prefers-reduced-motion:reduce){.ds-pc-cta{transition-duration:0ms!important}}"
+    },
+    {
+      "name": "Paperclip Button: destructive",
+      "kind": "button",
+      "description": "Variant destructive: destructive fill, white text, hover at 90%; its focus ring and aria-invalid ring use destructive at 20%.",
+      "html": "<button class=\"ds-pc-destructive\">Delete</button>",
+      "css": ".ds-pc-destructive{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:8px;flex-shrink:0;white-space:nowrap;height:40px;padding:8px 16px;border:0 solid var(--border,#dedede);border-radius:var(--radius-md,6.4px);background:transparent;color:inherit;font-family:var(--font-sans,\"InterVariable\",\"Inter\",var(--font-arabic),ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif);font-size:14px;font-weight:500;line-height:20px;cursor:pointer;touch-action:manipulation;outline:none;transition-property:color,background-color,border-color,box-shadow,opacity;transition-duration:150ms;transition-timing-function:cubic-bezier(0.4,0,0.2,1);background:var(--destructive,oklch(0.577 0.245 27.325));color:#fff}@media(hover:hover){.ds-pc-destructive:hover{background:color-mix(in oklab,var(--destructive,oklch(0.577 0.245 27.325)) 90%,transparent)}}.ds-pc-destructive:focus-visible{border-color:var(--ring,oklch(0.708 0 0));box-shadow:0 0 0 3px color-mix(in oklab,var(--destructive,oklch(0.577 0.245 27.325)) 20%,transparent)}.ds-pc-destructive[aria-invalid=true]{border-color:var(--destructive,oklch(0.577 0.245 27.325))}.ds-pc-destructive[aria-invalid=true]:focus-visible{box-shadow:0 0 0 3px color-mix(in oklab,var(--destructive,oklch(0.577 0.245 27.325)) 20%,transparent)}.ds-pc-destructive:disabled{pointer-events:none;opacity:.5;cursor:default}@media(prefers-reduced-motion:reduce){.ds-pc-destructive{transition-duration:0ms!important}}"
+    },
+    {
+      "name": "Paperclip Button: outline",
+      "kind": "button",
+      "description": "Variant outline: 1px border, background fill and the Hint shadow at rest; hover fills with accent.",
+      "html": "<button class=\"ds-pc-outline\">Outline</button>",
+      "css": ".ds-pc-outline{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:8px;flex-shrink:0;white-space:nowrap;height:40px;padding:8px 16px;border:0 solid var(--border,#dedede);border-radius:var(--radius-md,6.4px);background:transparent;color:inherit;font-family:var(--font-sans,\"InterVariable\",\"Inter\",var(--font-arabic),ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif);font-size:14px;font-weight:500;line-height:20px;cursor:pointer;touch-action:manipulation;outline:none;transition-property:color,background-color,border-color,box-shadow,opacity;transition-duration:150ms;transition-timing-function:cubic-bezier(0.4,0,0.2,1);border-width:1px;background:var(--background,#fafafa);box-shadow:0 1px 2px 0 rgb(0 0 0 / 0.05)}@media(hover:hover){.ds-pc-outline:hover{background:var(--accent,#ebebeb);color:var(--accent-foreground,var(--foreground,#262626))}}.ds-pc-outline:focus-visible{border-color:var(--ring,oklch(0.708 0 0));box-shadow:0 0 0 3px color-mix(in oklab,var(--ring,oklch(0.708 0 0)) 50%,transparent),0 1px 2px 0 rgb(0 0 0 / 0.05)}.ds-pc-outline[aria-invalid=true]{border-color:var(--destructive,oklch(0.577 0.245 27.325))}.ds-pc-outline[aria-invalid=true]:focus-visible{box-shadow:0 0 0 3px color-mix(in oklab,var(--destructive,oklch(0.577 0.245 27.325)) 20%,transparent),0 1px 2px 0 rgb(0 0 0 / 0.05)}.ds-pc-outline:disabled{pointer-events:none;opacity:.5;cursor:default}@media(prefers-reduced-motion:reduce){.ds-pc-outline{transition-duration:0ms!important}}"
+    },
+    {
+      "name": "Paperclip Button: secondary",
+      "kind": "button",
+      "description": "Variant secondary: secondary fill, hover at 80%.",
+      "html": "<button class=\"ds-pc-secondary\">Secondary</button>",
+      "css": ".ds-pc-secondary{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:8px;flex-shrink:0;white-space:nowrap;height:40px;padding:8px 16px;border:0 solid var(--border,#dedede);border-radius:var(--radius-md,6.4px);background:transparent;color:inherit;font-family:var(--font-sans,\"InterVariable\",\"Inter\",var(--font-arabic),ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif);font-size:14px;font-weight:500;line-height:20px;cursor:pointer;touch-action:manipulation;outline:none;transition-property:color,background-color,border-color,box-shadow,opacity;transition-duration:150ms;transition-timing-function:cubic-bezier(0.4,0,0.2,1);background:var(--secondary,oklch(0.97 0 0));color:var(--secondary-foreground,oklch(0.205 0 0))}@media(hover:hover){.ds-pc-secondary:hover{background:color-mix(in oklab,var(--secondary,oklch(0.97 0 0)) 80%,transparent)}}.ds-pc-secondary:focus-visible{border-color:var(--ring,oklch(0.708 0 0));box-shadow:0 0 0 3px color-mix(in oklab,var(--ring,oklch(0.708 0 0)) 50%,transparent)}.ds-pc-secondary[aria-invalid=true]{border-color:var(--destructive,oklch(0.577 0.245 27.325))}.ds-pc-secondary[aria-invalid=true]:focus-visible{box-shadow:0 0 0 3px color-mix(in oklab,var(--destructive,oklch(0.577 0.245 27.325)) 20%,transparent)}.ds-pc-secondary:disabled{pointer-events:none;opacity:.5;cursor:default}@media(prefers-reduced-motion:reduce){.ds-pc-secondary{transition-duration:0ms!important}}"
+    },
+    {
+      "name": "Paperclip Button: ghost",
+      "kind": "button",
+      "description": "Variant ghost: no fill; hover fills with accent.",
+      "html": "<button class=\"ds-pc-ghost\">Ghost</button>",
+      "css": ".ds-pc-ghost{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:8px;flex-shrink:0;white-space:nowrap;height:40px;padding:8px 16px;border:0 solid var(--border,#dedede);border-radius:var(--radius-md,6.4px);background:transparent;color:inherit;font-family:var(--font-sans,\"InterVariable\",\"Inter\",var(--font-arabic),ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif);font-size:14px;font-weight:500;line-height:20px;cursor:pointer;touch-action:manipulation;outline:none;transition-property:color,background-color,border-color,box-shadow,opacity;transition-duration:150ms;transition-timing-function:cubic-bezier(0.4,0,0.2,1);}@media(hover:hover){.ds-pc-ghost:hover{background:var(--accent,#ebebeb);color:var(--accent-foreground,var(--foreground,#262626))}}.ds-pc-ghost:focus-visible{border-color:var(--ring,oklch(0.708 0 0));box-shadow:0 0 0 3px color-mix(in oklab,var(--ring,oklch(0.708 0 0)) 50%,transparent)}.ds-pc-ghost[aria-invalid=true]{border-color:var(--destructive,oklch(0.577 0.245 27.325))}.ds-pc-ghost[aria-invalid=true]:focus-visible{box-shadow:0 0 0 3px color-mix(in oklab,var(--destructive,oklch(0.577 0.245 27.325)) 20%,transparent)}.ds-pc-ghost:disabled{pointer-events:none;opacity:.5;cursor:default}@media(prefers-reduced-motion:reduce){.ds-pc-ghost{transition-duration:0ms!important}}"
+    },
+    {
+      "name": "Paperclip Button: link",
+      "kind": "button",
+      "description": "Variant link: primary-coloured text, underline on hover with a 4px offset.",
+      "html": "<button class=\"ds-pc-link\">Link</button>",
+      "css": ".ds-pc-link{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:8px;flex-shrink:0;white-space:nowrap;height:40px;padding:8px 16px;border:0 solid var(--border,#dedede);border-radius:var(--radius-md,6.4px);background:transparent;color:inherit;font-family:var(--font-sans,\"InterVariable\",\"Inter\",var(--font-arabic),ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif);font-size:14px;font-weight:500;line-height:20px;cursor:pointer;touch-action:manipulation;outline:none;transition-property:color,background-color,border-color,box-shadow,opacity;transition-duration:150ms;transition-timing-function:cubic-bezier(0.4,0,0.2,1);color:var(--primary,oklch(0.205 0 0));text-underline-offset:4px}@media(hover:hover){.ds-pc-link:hover{text-decoration-line:underline}}.ds-pc-link:focus-visible{border-color:var(--ring,oklch(0.708 0 0));box-shadow:0 0 0 3px color-mix(in oklab,var(--ring,oklch(0.708 0 0)) 50%,transparent)}.ds-pc-link[aria-invalid=true]{border-color:var(--destructive,oklch(0.577 0.245 27.325))}.ds-pc-link[aria-invalid=true]:focus-visible{box-shadow:0 0 0 3px color-mix(in oklab,var(--destructive,oklch(0.577 0.245 27.325)) 20%,transparent)}.ds-pc-link:disabled{pointer-events:none;opacity:.5;cursor:default}@media(prefers-reduced-motion:reduce){.ds-pc-link{transition-duration:0ms!important}}"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Raw product field (the :where(select,input,textarea) rule): transparent fill, 1px input border, 36px minimum height, 6px 12px padding.",
+      "html": "<input class=\"ds-input\" placeholder=\"Card title\">",
+      "css": ".ds-input{box-sizing:border-box;min-width:0;min-height:36px;padding:6px 12px;border:1px solid var(--input,oklch(0.922 0 0));border-radius:var(--radius-md,6.4px);background:transparent;color:inherit;font-family:var(--font-sans,\"InterVariable\",\"Inter\",var(--font-arabic),ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif);font-size:14px;line-height:1.5;touch-action:manipulation}.ds-input::placeholder{color:var(--muted-foreground,#5c5c5c);opacity:1}.ds-input:focus-visible{outline:2px solid var(--ring,oklch(0.708 0 0));outline-offset:2px}.ds-input:-webkit-autofill,.ds-input:-webkit-autofill:hover,.ds-input:-webkit-autofill:focus,.ds-input:-webkit-autofill:active{-webkit-text-fill-color:var(--foreground,#262626);caret-color:var(--foreground,#262626);box-shadow:inset 0 0 0 1000px var(--muted,#eeeeee);transition:background-color 100000s ease-in-out 0s}"
+    },
+    {
+      "name": "Paperclip Input",
+      "kind": "input",
+      "description": "Copied ui/input.tsx: 36px high (h-9), full width, transparent fill, Hint shadow at rest; 16px / 24px text below 768px and 14px / 20px from 768px; focus swaps the border to the ring colour and adds a 3px ring at 50%; aria-invalid uses a destructive border and a 20% destructive ring; disabled is 50% opaque with a not-allowed cursor. The source's dark: utilities apply only under .dark, which nothing sets, so they are omitted.",
+      "html": "<input class=\"ds-pc-input\" placeholder=\"Search\">",
+      "css": ".ds-pc-input{box-sizing:border-box;width:100%;min-width:0;height:36px;padding:4px 12px;border:1px solid var(--input,oklch(0.922 0 0));border-radius:var(--radius-md,6.4px);background:transparent;color:inherit;font-family:var(--font-sans,\"InterVariable\",\"Inter\",var(--font-arabic),ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif);font-size:16px;line-height:24px;box-shadow:0 1px 2px 0 rgb(0 0 0 / 0.05);outline:none;touch-action:manipulation;transition-property:color,box-shadow;transition-duration:150ms;transition-timing-function:cubic-bezier(0.4,0,0.2,1)}@media(min-width:48rem){.ds-pc-input{font-size:14px;line-height:20px}}.ds-pc-input::placeholder{color:var(--muted-foreground,#5c5c5c);opacity:1}.ds-pc-input::selection{background:var(--primary,oklch(0.205 0 0));color:var(--primary-foreground,oklch(0.985 0 0))}.ds-pc-input:focus-visible{border-color:var(--ring,oklch(0.708 0 0));box-shadow:0 0 0 3px color-mix(in oklab,var(--ring,oklch(0.708 0 0)) 50%,transparent),0 1px 2px 0 rgb(0 0 0 / 0.05)}.ds-pc-input[aria-invalid=true]{border-color:var(--destructive,oklch(0.577 0.245 27.325))}.ds-pc-input[aria-invalid=true]:focus-visible{box-shadow:0 0 0 3px color-mix(in oklab,var(--destructive,oklch(0.577 0.245 27.325)) 20%,transparent),0 1px 2px 0 rgb(0 0 0 / 0.05)}.ds-pc-input:disabled{pointer-events:none;cursor:not-allowed;opacity:.5}.ds-pc-input:-webkit-autofill,.ds-pc-input:-webkit-autofill:hover,.ds-pc-input:-webkit-autofill:focus,.ds-pc-input:-webkit-autofill:active{-webkit-text-fill-color:var(--foreground,#262626);caret-color:var(--foreground,#262626)}@media(prefers-reduced-motion:reduce){.ds-pc-input{transition-duration:0ms!important}}"
+    },
+    {
+      "name": "Navigation Item",
+      "kind": "nav",
+      "refersTo": "nav-item",
+      "description": "Sidebar link (.nav a): 13px medium, 8px radius, 6px 8px padding, 32px minimum height; hover and the current page use the sidebar accent.",
+      "html": "<a class=\"ds-nav\" href=\"#\">Work</a><a class=\"ds-nav\" href=\"#\" aria-current=\"page\">Inbox</a>",
+      "css": ".ds-nav{box-sizing:border-box;display:flex;align-items:center;gap:10px;min-height:32px;margin-inline:8px;padding:6px 8px;border-radius:var(--radius-lg,8px);color:color-mix(in oklab,var(--foreground,#262626) 80%,transparent);font-family:var(--font-sans,\"InterVariable\",\"Inter\",var(--font-arabic),ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif);font-size:13px;font-weight:500;line-height:1.5;text-decoration:none;white-space:nowrap;touch-action:manipulation;transition-property:color,background-color,border-color,outline-color,text-decoration-color,fill,stroke,--tw-gradient-from,--tw-gradient-via,--tw-gradient-to;transition-duration:150ms;transition-timing-function:cubic-bezier(0.4,0,0.2,1)}.ds-nav:hover,.ds-nav[aria-current=page]{background:var(--sidebar-accent,#e3e3e3)}.ds-nav[aria-current=page]{color:var(--sidebar-accent-foreground,#202020)}@media(hover:hover){.ds-nav:hover{color:var(--sidebar-accent-foreground,#202020)}}.ds-nav:has(.link-pending){background:var(--sidebar-accent,#e3e3e3)!important;color:var(--sidebar-accent-foreground,#202020)!important}.ds-nav:focus-visible{outline:2px solid var(--ring,oklch(0.708 0 0));outline-offset:2px}@media(prefers-reduced-motion:reduce){.ds-nav{transition-duration:0ms!important}}"
+    },
+    {
+      "name": "Panel",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "White surface (.panel): 1px hairline, 8px corners, 24px padding; title 16px semibold over muted body text.",
+      "html": "<section class=\"ds-panel\"><h2>Approvals</h2><p>Nothing waiting.</p></section>",
+      "css": ".ds-panel,.ds-panel>*{box-sizing:border-box}.ds-panel{padding:24px;border:1px solid var(--border,#dedede);border-radius:var(--radius-lg,8px);background:var(--card,#ffffff);color:var(--card-foreground,var(--foreground,#262626));font-family:var(--font-sans,\"InterVariable\",\"Inter\",var(--font-arabic),ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif);font-size:14px;line-height:1.5}.ds-panel>h2{margin:0 0 16px;font-size:16px;line-height:24px;font-weight:600;text-wrap:balance}.ds-panel>p{margin:0;color:var(--muted-foreground,#5c5c5c);overflow-wrap:anywhere}"
+    },
+    {
+      "name": "Board Card",
+      "kind": "card",
+      "refersTo": "board-card",
+      "description": "A card in a 260px board column (8px column padding): mono id, title, caption; hover shows the live hover:shadow-sm (a 150ms box-shadow transition, the winning transition-shadow utility); the cursor is grab, and grabbing while pressed; keyboard focus shows the 2px ring outline. The card being dragged is 30% opaque (.ds-card--dragging), and the drag overlay copy has the large shadow and a 1px primary ring at 20% instead of the hover shadow (.ds-card--overlay). The inline transform and transition that Sortable (dnd-kit) writes onto the card are not represented.",
+      "html": "<div class=\"ds-col\"><div class=\"ds-card\" data-card-id=\"42\" tabindex=\"0\"><div class=\"ds-id\" dir=\"ltr\">#42</div><a class=\"ds-title\" href=\"#\"><strong>Spring launch reel</strong></a><p>Jun 12 · Instagram</p></div></div>",
+      "css": ".ds-col,.ds-col *{box-sizing:border-box}.ds-col{width:260px;padding:8px}.ds-card{display:block;flex-direction:column;gap:24px;margin-bottom:4px;padding:10px;border:1px solid var(--border,#dedede);border-radius:var(--radius-lg,8px);background:var(--card,#ffffff);color:var(--card-foreground,var(--foreground,#262626));cursor:grab;font-family:var(--font-sans,\"InterVariable\",\"Inter\",var(--font-arabic),ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif);font-size:14px;line-height:1.5;transition-property:box-shadow;transition-duration:150ms;transition-timing-function:cubic-bezier(0.4,0,0.2,1)}.ds-card:not(.ds-card--overlay):hover{box-shadow:0 1px 3px #0002}@media(hover:hover){.ds-card:not(.ds-card--overlay):hover{box-shadow:0 1px 3px 0 rgb(0 0 0 / 0.1),0 1px 2px -1px rgb(0 0 0 / 0.1)}}.ds-card--dragging{opacity:.3}.ds-card--overlay{box-shadow:0 0 0 1px color-mix(in oklab,var(--primary,oklch(0.205 0 0)) 20%,transparent),0 10px 15px -3px rgb(0 0 0 / 0.1),0 4px 6px -4px rgb(0 0 0 / 0.1)}.ds-card:active{cursor:grabbing}.ds-card:focus-visible{outline:2px solid var(--ring,oklch(0.708 0 0));outline-offset:2px}@media(pointer:coarse){.ds-card[data-card-id]{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}.ds-card[data-card-id] a,.ds-card[data-card-id] img{-webkit-user-drag:none}}@media(prefers-reduced-motion:reduce){.ds-card{transition-duration:0ms!important}}.ds-id{flex-shrink:0;margin-bottom:6px;font:12px/16px var(--font-paper-mono,\"Paper Mono\",ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace);color:var(--muted-foreground,#5c5c5c)}.ds-title{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;color:inherit;text-align:start;text-decoration:none;overflow-wrap:anywhere;touch-action:manipulation}.ds-card strong{font-size:14px;font-weight:400;line-height:1.375}.ds-card p{margin:8px 0 0;font-size:12px;color:var(--muted-foreground,#5c5c5c);overflow-wrap:anywhere}"
+    },
+    {
+      "name": "Label Chip",
+      "kind": "chip",
+      "refersTo": "label-chip",
+      "description": "Card label (.label-chip): 1px border in the label's own colour (company data set inline on the element; this static preview follows the text colour instead), 4.8px corners, 2px 8px padding, 12px text.",
+      "html": "<div class=\"ds-chips\"><span class=\"ds-chip\" dir=\"auto\">Launch</span></div>",
+      "css": ".ds-chips{box-sizing:border-box;display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.ds-chip{box-sizing:border-box;display:inline-flex;align-items:center;gap:6px;padding:2px 8px;border:1px solid;border-radius:var(--radius-sm,4.8px);color:inherit;font-family:var(--font-sans,\"InterVariable\",\"Inter\",var(--font-arabic),ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif);font-size:12px;line-height:1.5}"
+    },
+    {
+      "name": "Table Header",
+      "kind": "custom",
+      "refersTo": "table-header",
+      "description": "List view header (.table th): muted fill, muted-ink medium text, 10px 12px padding; the sortable title is a 12px button; rows highlight on hover.",
+      "html": "<div class=\"ds-table-wrap\"><table class=\"ds-table\"><thead><tr><th><button type=\"button\">Title ↕</button></th><th><button type=\"button\">Stage ↕</button></th></tr></thead><tbody dir=\"auto\"><tr><td>Spring launch reel</td><td>Draft</td></tr></tbody></table></div>",
+      "css": ".ds-table-wrap,.ds-table-wrap *{box-sizing:border-box}.ds-table-wrap{overflow-x:auto;margin-inline:-8px;padding:0}@media(min-width:40rem){.ds-table-wrap{margin-inline:0}}.ds-table{width:100%;border-collapse:collapse;font-family:var(--font-sans,\"InterVariable\",\"Inter\",var(--font-arabic),ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif);font-size:14px;line-height:calc(1.25 / 0.875)}@media(max-width:767px){.ds-table{min-width:650px}}.ds-table th,.ds-table td{padding:10px 12px;border-bottom:1px solid var(--border,#dedede);text-align:start}.ds-table th{background:var(--muted,#eeeeee);color:var(--muted-foreground,#5c5c5c);font-weight:500}.ds-table td:first-child{min-width:260px}.ds-table th button{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:24px;padding:0;border:0;border-radius:var(--radius-md,6.4px);background:none;color:inherit;font:inherit;font-size:12px;font-weight:500;cursor:pointer;touch-action:manipulation;transition:background-color var(--motion-duration-fast,160ms),color var(--motion-duration-fast,160ms),border-color var(--motion-duration-fast,160ms)}.ds-table th button:hover{background:var(--accent,#ebebeb)}.ds-table th button:disabled{opacity:.5;cursor:default}.ds-table th button:focus-visible{outline:2px solid var(--ring,oklch(0.708 0 0));outline-offset:2px}@media(prefers-reduced-motion:reduce){.ds-table th button{transition-duration:0ms!important}}.ds-table tbody tr{position:relative;border-bottom:1px solid var(--border,#dedede);color:inherit;font-size:14px;line-height:calc(1.25 / 0.875)}.ds-table tbody tr:last-child{border-bottom-width:0}@media(hover:hover){.ds-table tbody tr:hover{background:color-mix(in oklab,var(--accent,#ebebeb) 50%,transparent)}}.ds-table tr:hover td{background:var(--accent,#ebebeb)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Quiet Control Room",
+    "overview": "**Creative North Star: \"The Quiet Control Room\"**\n\ngtmworks is an Operate-mode product: people direct agents, approve their work and read the numbers (`PRODUCT.md`). The look serves that job and gets out of the way. It is Paperclip's UI, a neutral monochrome workspace where white cards sit on an off-white canvas, colour is rare and always means something (a board stage, an agent's role, a label, an error). Existing screens are refined inside this identity, never redesigned.\n\nThe look is Paperclip's UI at commit `dc1adb7209bf8077983fdde8c1e8ab18405403b7` (`ui/`). Copy its code, colours, spacing, radius, Inter and Paper Mono fonts, Tailwind stack, Radix/shadcn primitives, shell, controls, menus, dialogs and motion. The former prototype and its motion limits are retired. `components/paperclip/` contains the scoped copies; `THIRD_PARTY_NOTICES.md` identifies every file, its source, adaptations and licences. Keep the MIT notice until the last substantial copy is replaced.\n\nOnly existing screens are ported: sign-in, company shell, Home, Work board/list/calendar, card creation/detail, Inbox, Agents and settings (including language and members), company selection and existing empty routes. Do not add Paperclip's org chart, costs, budgets, terminal, AI execution or other products. The database, permission rules, API and runs remain governed by the ADRs.",
+    "keyCharacteristics": [
+      "Paperclip at the pinned commit is the stated source of the look: its code, colours, spacing, radius, fonts, Tailwind stack, Radix/shadcn primitives, shell, controls, menus, dialogs and motion are copied, not re-drawn.",
+      "Neutral greys carry the whole interface; the only hues are the four board-stage tones, the agents' role identity colours, the user-chosen label colours and the destructive red.",
+      "One radius knob (8px) sets the corner ladder; Tailwind's 4px unit underlies the spacing, with a few product gaps between its steps (see Layout).",
+      "English-first with a complete Modern Standard Arabic mirror: the layout flips at the inline axis, authored content keeps its own direction.",
+      "Every interactive target is at least 44px on mobile, contrast meets WCAG AA, and reduced motion is respected.",
+      "Every departure from Paperclip is listed with its reason in \"Deviations and their reasons\" below."
+    ],
+    "rules": [
+      {
+        "name": "The Neutral Canvas Rule",
+        "body": "Chrome is grey. A hue appears only as a board-stage tone, a role identity, a user-chosen label colour or the destructive red of an error or destructive action; never as decoration or as a brand accent.",
+        "section": "colors"
+      },
+      {
+        "name": "The Two Scopes Rule",
+        "body": "Shell surfaces use the Coordinator tokens; anything rendered in a portal uses the root tokens, exactly as upstream does. Do not copy a shell colour into a portal or the reverse.",
+        "section": "colors"
+      },
+      {
+        "name": "The Defined-But-Dormant Rule",
+        "body": "A dark theme is defined in `components/paperclip/theme.css` (the `.dark` scope) but no code applies the class, so the shipped look is light only. The chart tokens `--chart-1` to `--chart-5` are mapped but have no values; bar charts fall back to the foreground colour (`app/globals.css`, `.bar-track i`). Neither is a designed feature to extend without a decision.",
+        "section": "colors"
+      },
+      {
+        "name": "The Language Font Rule",
+        "body": "Vazirmatn is used for Arabic only; English stays on Inter. Digits keep Western order in both languages.",
+        "section": "typography"
+      },
+      {
+        "name": "The Mono Is For Identifiers Rule",
+        "body": "Paper Mono marks ids and navigation group labels, never body copy.",
+        "section": "typography"
+      },
+      {
+        "name": "The Logical Axis Rule",
+        "body": "Prefer inline-start and inline-end properties to left and right, so one stylesheet serves both languages. Physical coordinates stay only where they are already a mirrored pair or a centring idiom: the copied dialog centres with `left: 50%` and a -50% translate (`components/paperclip/ui/dialog.tsx`), and the native select places its caret from the left or the right according to `:dir(rtl)` (`components/paperclip/theme.css`).",
+        "section": "layout"
+      },
+      {
+        "name": "The Flat-By-Default Rule",
+        "body": "A surface is flat at rest. A shadow answers a state (hover, pickup, overlay), with one standing exception: the copied outline button and text input carry the Hint shadow at rest.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** read a value from `components/paperclip/theme.css` or the copied component before inventing one; the pinned Paperclip commit is the source.",
+      "**Do** keep chrome grey and use a hue only for stage, role, label or error meaning.",
+      "**Do** use logical properties and check every new screen mirrored in Arabic as well as in English; add every interface string to both catalogues.",
+      "**Do** keep targets at 44px or more on mobile and text at WCAG AA contrast.",
+      "**Do** put a new Paperclip-less screen (conversation, agent face, agent page) on the same tokens and radius ladder, with design freedom inside them (`PRODUCT.md`).",
+      "**Do** record any new departure from Paperclip under \"Deviations and their reasons\" with its reason."
+    ],
+    "donts": [
+      "**Don't** add Paperclip's org chart, costs, budgets, terminal, AI execution or other products; only existing screens are ported.",
+      "**Don't** add an upstream feature to manufacture parity with Paperclip.",
+      "**Don't** introduce a brand accent colour: the identity is Paperclip's (`PRODUCT.md`, Brand Commitments).",
+      "**Don't** hard-code a radius or colour that a token already carries.",
+      "**Don't** raise the JavaScript budget to fit a feature; load what only appears after a click or a drag lazily (see \"JavaScript budget\").",
+      "**Don't** present a redrawn picture as Paperclip reference evidence; reference screenshots come from the local upstream run."
+    ]
+  }
+}

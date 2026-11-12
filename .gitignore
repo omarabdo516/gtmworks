@@ -1,0 +1,20 @@
+node_modules/
+.next/
+test-results/
+playwright-report/
+supabase/.temp/
+*.tsbuildinfo
+prod.env
+.env.local
+.env.production.local
+.env.install
+.env.install.tmp
+.install-lock/
+backups/
+
+# Impeccable: commit PRODUCT.md, DESIGN.md and .impeccable/config.json (plus surfaces/, design.json, live/config.json, critique/ignore.md when they exist); keep the per-developer file and runtime folders out
+.impeccable/config.local.json
+.impeccable/hook.cache.json
+.impeccable/questions/
+.impeccable/mocks/
+.impeccable/review/

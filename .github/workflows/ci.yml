@@ -1,0 +1,323 @@
+# Static always runs; document-only PRs and main pushes skip integration and install.
+# Only design/, docs/ and Markdown qualify (except public/ files read by a browser test).
+# Required `check` fails on classification/static errors and requires both long stages otherwise.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  changes:
+    runs-on: ubicloud-standard-2
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      docs_only: ${{ steps.classify.outputs.docs_only }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: classify changed files (unknown history runs everything)
+        id: classify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          docs_only=false
+          if [[ "$EVENT_NAME" == push ]]; then
+            BASE_SHA=$(gh run list -R "$GITHUB_REPOSITORY" -w CI -b main -e push -s success -L 1 --json headSha -q '.[0].headSha') || BASE_SHA=
+          fi
+          if [[ "$BASE_SHA" =~ ^[a-f0-9]{40}$ && ! "$BASE_SHA" =~ ^0+$ && "$HEAD_SHA" =~ ^[a-f0-9]{40}$ ]] && git cat-file -e "$BASE_SHA^{commit}"; then
+            if [[ "$EVENT_NAME" == pull_request ]]; then
+              range="$BASE_SHA...$HEAD_SHA"
+            else
+              range="$BASE_SHA..$HEAD_SHA"
+            fi
+            # No rename detection: a move must check both its old and new paths.
+            if git diff --no-ext-diff --no-renames --name-only -z "$range" -- > "$RUNNER_TEMP/changed-files"; then
+              docs_only=$(node scripts/docs-only.mjs < "$RUNNER_TEMP/changed-files")
+            fi
+          fi
+          echo "docs_only=$docs_only" >> "$GITHUB_OUTPUT"
+
+  static:
+    runs-on: ubicloud-standard-2
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: static
+        run: ./ci.sh static
+
+  integration:
+    needs: [changes]
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.docs_only != 'true') }}
+    runs-on: ubicloud-standard-2
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: docker/setup-buildx-action@v3
+      - name: build image (layer cache)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          push: false
+          tags: gtmworks:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: integration
+        env:
+          CI_IMAGE_PREBUILT: "true"
+        run: ./ci.sh integration
+      # PR #32 (issue #27) writes every Route's screenshot at 1440 and 390 wide here; upload them so a review can see them.
+      - name: upload route screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: route-screenshots
+          path: test-results/screenshots/
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: mark Playwright as not run when no report exists
+        if: always()
+        run: |
+          # ci.sh can stop on an earlier step; the artifact then says so instead of being missing.
+          mkdir -p playwright-report
+          [[ -f playwright-report/results.json ]] || echo '{"notRun":true,"suites":[]}' > playwright-report/results.json
+      - name: upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/results.json
+          if-no-files-found: error
+          retention-days: 30
+
+  # Failing PR tests that are also red on the latest completed main run are named "inherited from main" (#157).
+  # Posts nothing when no Playwright test failed.
+  compare-failures:
+    needs: [integration]
+    if: ${{ always() && github.event_name == 'pull_request' && needs.integration.result == 'failure' }}
+    runs-on: ubicloud-standard-2
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: this run's report
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: playwright-report
+          path: pr-report
+      - name: latest completed main run's report
+        id: main
+        continue-on-error: true
+        run: |
+          run=$(gh run list -R "$GITHUB_REPOSITORY" --workflow ci.yml --branch main --status completed --limit 1 --json databaseId,url \
+            --jq '.[0] | "\(.databaseId) \(.url)"')
+          echo "url=${run#* }" >> "$GITHUB_OUTPUT"
+          gh run download "${run%% *}" -R "$GITHUB_REPOSITORY" -n playwright-report -D main-report || true
+      - name: compare
+        run: node scripts/compare-failures.mjs pr-report/results.json main-report/results.json "${{ steps.main.outputs.url }}" comment.md
+      - name: one PR comment, updated in place
+        run: |
+          [[ -f comment.md ]] || exit 0
+          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/${{ github.event.pull_request.number }}/comments" --paginate \
+            --jq '.[] | select(.body | startswith("<!-- ci-main-failures -->")) | .id' | sed -n 1p)
+          if [[ -n "$id" ]]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@comment.md
+          else
+            gh api "repos/$GITHUB_REPOSITORY/issues/${{ github.event.pull_request.number }}/comments" -F body=@comment.md
+          fi
+
+  # A test that failed and then passed on its CI retry: listed in the run summary, one `flaky` issue per test title (#158).
+  flaky-tests:
+    needs: [integration]
+    if: ${{ always() && needs.integration.result != 'skipped' }}
+    runs-on: ubicloud-standard-2
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: this run's report
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: playwright-report
+          path: report
+      - name: list flaky tests
+        run: node scripts/flaky-tests.mjs report/results.json "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" flaky.json
+      - name: one issue per flaky test, updated when it flakes again
+        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+        run: |
+          [[ "$(jq length flaky.json)" -gt 0 ]] || exit 0
+          gh label create flaky --description "A test that passed only on its CI retry" --color FBCA04 2>/dev/null || true
+          jq -c '.[]' flaky.json | while read -r item; do
+            title=$(jq -r .issueTitle <<<"$item"); body=$(jq -r .issueBody <<<"$item")
+            number=$(gh issue list --label flaky --state open --limit 200 --json number,title | jq -r --arg t "$title" '.[] | select(.title == $t) | .number' | sed -n 1p)
+            if [[ -n "$number" ]]; then
+              gh issue comment "$number" --body "$body"
+            else
+              gh issue create --label flaky --title "$title" --body "$body"
+            fi
+          done
+
+  install:
+    needs: [changes]
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.docs_only != 'true') }}
+    runs-on: ubicloud-standard-2
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: isolated Docker-only install, repeat and verify
+        env:
+          DOCKER_HOST: tcp://127.0.0.1:2375
+          INSTALL_REF: ${{ github.event.pull_request.head.sha || github.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          fail() { echo "install check failed: $1" >&2; exit 1; }
+          docker --host unix:///var/run/docker.sock run -d --privileged --name install-docker \
+            -e DOCKER_TLS_CERTDIR= -p 127.0.0.1:2375:2375 \
+            -v "$PWD:$PWD" docker:28.5.1-dind
+          trap 'docker --host unix:///var/run/docker.sock rm -fv install-docker' EXIT
+          for attempt in $(seq 1 60); do docker info >/dev/null 2>&1 && break; sleep 1; done
+          docker info >/dev/null || fail 'DinD readiness'
+          sh scripts/install.sh || fail 'first install'
+          compose() { docker compose --env-file .env.install -f docker-compose.install.yml "$@"; }
+          db() { compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 -At "$@"; }
+          [[ $(stat -c %a .env.install) == 600 ]] || fail '.env.install permissions (expected 600)'
+          cp .env.install .env.install.before
+          db -c "insert into public.companies (id,slug,name) values ('00000000-0000-4000-8000-000000000237','install-probe','Keep me');" || fail 'insert persistence probe'
+          db -c 'select name from gtmworks_install.schema_migrations order by name' > before || fail 'read initial migrations'
+          find supabase/migrations -name '*.sql' ! -name '*.verify.sql' -printf '%f\n' | sort > expected
+          diff -u expected before || fail 'applied migrations match migration files'
+          sh scripts/install.sh || fail 'repeat install'
+          cmp .env.install.before .env.install || fail '.env.install unchanged after repeat install'
+          db -c 'select name from gtmworks_install.schema_migrations order by name' > after || fail 'read migrations after repeat install'
+          diff -u before after || fail 'migrations unchanged after repeat install'
+          [[ $(db -c "select name from public.companies where slug='install-probe'") == 'Keep me' ]] || fail 'company preserved after repeat install'
+          for path in /api/health /sign-in; do
+            # The install machine is DinD; its published loopback port lives in that network namespace.
+            status=$(docker run --rm --network host curlimages/curl:8.12.1 \
+              -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:3000$path") || fail "$path request on install host port 3000"
+            [[ $status == 200 ]] || fail "$path returned HTTP $status (expected 200)"
+          done
+          for file in supabase/migrations/*.verify.sql scripts/check-rls.sql; do
+            result=$(compose exec -T -e PGOPTIONS='-c default_transaction_read_only=on' db \
+              psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 -At < "$file") || fail "execute $file"
+            printf '[%s]\n' "$result" | docker run --rm -i -v "$PWD/scripts:/scripts:ro" \
+              node:22.14.0-alpine3.21 node /scripts/verify-db.mjs "$file" || fail "database verification: $file"
+          done
+          [[ $(compose exec -T worker node -e 'console.log(process.pid>0)') == true ]] || fail 'worker process running'
+          worker_logs=$(compose logs worker) || fail 'read worker logs'
+          if grep -q 'Webhook worker:' <<< "$worker_logs"; then fail 'worker must refuse missing webhook configuration'; fi
+          lifecycle() { compose exec -T web node --input-type=module - "$1" < scripts/check-install.mjs; }
+          lifecycle seed > data.before || fail 'create and read people, companies, cards and files through APIs'
+          sh scripts/install.sh backup || fail 'backup'
+          backup=$(find backups -name '*.tgz' -print -quit)
+          [[ $(stat -c %a "$backup") == 600 ]] || fail 'private backup permissions'
+          if sh scripts/install.sh restore "$backup"; then fail 'restore must refuse an occupied install'; fi
+          compose down -v || fail 'remove first install'
+          rm .env.install
+          sh scripts/install.sh || fail 'fresh empty install'
+          sh scripts/install.sh restore "$backup" || fail 'restore'
+          cmp .env.install.before .env.install || fail 'restore encryption and signing keys'
+          lifecycle verify > data.after || fail 'read restored people, companies, cards and files through APIs'
+          diff -u data.before data.after || fail 'restored identities match'
+          db -c 'select name from gtmworks_install.schema_migrations order by name' > restored
+          diff -u before restored || fail 'restored migration history'
+          # Hermes ships inside the install (ADR 0010): no host port, and an Arabic message gets its reply with no manual
+          # connection step. A fake model provider served from the web container stands in for a subscription.
+          hermes=$(compose ps -q hermes) || fail 'bundled Hermes container'
+          [[ -n $hermes && $(docker inspect -f '{{json .NetworkSettings.Ports}}' "$hermes") != *HostPort* ]] || fail 'bundled Hermes publishes no host port'
+          compose exec -T hermes sh -ec 'cat > /opt/data/config.yaml; chown hermes:hermes /opt/data/config.yaml' <<'YAML' || fail 'point the bundled Hermes at the fake model'
+          model:
+            provider: custom
+            default: fake-model
+            base_url: http://web:8080/v1
+            api_key: fake-model-key
+            context_length: 128000
+          YAML
+          compose restart hermes && compose up -d --wait --wait-timeout 300 hermes || fail 'bundled Hermes healthy after configuration'
+          compose exec -T web node --input-type=module - < scripts/check-install-conversation.mjs || fail 'Arabic conversation answered by the bundled Hermes'
+          # The Engine's management listener (ADR 0011): an Agent made through the contract runs, the worker reaches it with
+          # the install key, and it is never public: the gateway routes only to the app, and no host port is published.
+          compose exec -T web node --input-type=module - < scripts/check-install-agent.mjs || fail 'Agent created in the bundled Engine and a Run started for it'
+          compose exec -T worker node -e "fetch('http://hermes:9119/api/profiles',{headers:{Authorization:'Bearer '+process.env.HERMES_API_KEY}}).then(response=>process.exit(response.status===200?0:1)).catch(()=>process.exit(1))" || fail 'worker reaches the Engine management listener with the install key'
+          body=$(docker run --rm --network host curlimages/curl:8.12.1 -sS http://127.0.0.1:3000/api/profiles) || fail 'management path request on install host port 3000'
+          status=$(docker run --rm --network host curlimages/curl:8.12.1 -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/api/profiles) || fail 'management path status on install host port 3000'
+          [[ $status == 404 && $body != *is_default* ]] || fail "public gateway must not reach the management listener (HTTP $status)"
+          if docker run --rm --network host curlimages/curl:8.12.1 -sS -o /dev/null --max-time 5 http://127.0.0.1:9119/api/profiles; then fail 'management listener must not be published on the host'; fi
+          old_web=$(compose ps -q web)
+          cp scripts/install-failing-migration.sql supabase/migrations/99999999999999_failure.sql
+          fail_update() { cat update.log >&2; fail "$1"; }
+          if sh scripts/install.sh update "$INSTALL_REF" > update.log 2>&1; then fail_update 'update must fail'; fi
+          grep -Fq 'Applying migration: 99999999999999_failure.sql' update.log || fail_update 'failed migration name'
+          [[ $(compose ps -q web) == "$old_web" ]] || fail_update 'old web container still serving'
+          [[ $(db -c "select to_regclass('public.update_should_rollback') is null") == t ]] || fail_update 'migration transaction rolled back'
+          status=$(docker run --rm --network host curlimages/curl:8.12.1 -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/api/health) || fail_update 'old version health request'
+          [[ $status == 200 ]] || fail_update 'old version healthy after failed update'
+
+  check:
+    needs: [changes, static, integration, install]
+    if: ${{ always() }}
+    runs-on: ubicloud-standard-2
+    steps:
+      - name: all required stages green
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          DOCS_ONLY: ${{ needs.changes.outputs.docs_only }}
+          STATIC_RESULT: ${{ needs.static.result }}
+          INTEGRATION_RESULT: ${{ needs.integration.result }}
+          INSTALL_RESULT: ${{ needs.install.result }}
+        run: |
+          echo "changes=$CHANGES_RESULT docs_only=$DOCS_ONLY static=$STATIC_RESULT integration=$INTEGRATION_RESULT install=$INSTALL_RESULT"
+          [[ "$CHANGES_RESULT" == success && "$STATIC_RESULT" == success ]] || exit 1
+          if [[ "$DOCS_ONLY" == true ]]; then
+            [[ "$INTEGRATION_RESULT" == skipped && "$INSTALL_RESULT" == skipped ]]
+          else
+            [[ "$DOCS_ONLY" == false && "$INTEGRATION_RESULT" == success && "$INSTALL_RESULT" == success ]]
+          fi

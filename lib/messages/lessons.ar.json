@@ -1,0 +1,13 @@
+{
+  "lessonsAwaitingApproval": "دروس تنتظر الموافقة",
+  "lessonsIntro": "الوكلاء يقترحون ما تعلّموه كسطر واحد يُضاف إلى مهارة. لا يُضاف شيء إلى أي مهارة قبل موافقتك.",
+  "lessonFor": "درس لمهارة {0}",
+  "lessonAddsTo": "يُضاف هذا السطر إلى قسم Lessons في {0}:",
+  "lessonReason": "السبب:",
+  "lessonLearnedOn": "تعلّمه الوكيل في البطاقة:",
+  "approveLesson": "موافقة",
+  "rejectLesson": "رفض",
+  "approveLessonFor": "الموافقة على الدرس الخاص بـ {0}",
+  "rejectLessonFor": "رفض الدرس الخاص بـ {0}",
+  "lessonCouldNotBeDecided": "تعذّر قبول هذا الدرس أو رفضه. ربما تم البت فيه بالفعل."
+}

@@ -1,0 +1,11 @@
+type Write = (line: string) => void;
+type Env = Record<string, string | undefined>;
+export function redact(value: unknown, env?: Env, limit?: number): string;
+type Form = { get(name: string): unknown } | null | undefined;
+export function companyContext(form: Form): { company: string | null; slug: string | null };
+export function actionFailureLine(action: string, error: unknown, options?: { outcome?: 'threw' | 'returned'; env?: Env; now?: Date; form?: Form }): string;
+export function logActionFailure(action: string, error: unknown, options?: { outcome?: 'threw' | 'returned'; write?: Write; env?: Env; form?: Form }): void;
+export function withActionLog<A extends unknown[], R>(action: string, run: (...args: A) => Promise<R>, options?: { write?: Write; env?: Env }): (...args: A) => Promise<R>;
+export function clientErrorLine(body: unknown, options?: { env?: Env; userAgent?: string; now?: Date }): string | null;
+export function limiter(max?: number, windowMs?: number, clock?: () => number): () => boolean;
+export function clientErrorResponse(request: Request, options?: { write?: Write; env?: Env; allowed?: () => boolean }): Promise<Response>;

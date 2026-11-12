@@ -1,0 +1,13 @@
+{
+  "lessonsAwaitingApproval": "Lessons awaiting approval",
+  "lessonsIntro": "Agents propose what they learned as one line added to a skill. Nothing is added to a skill until you approve it.",
+  "lessonFor": "Lesson for {0}",
+  "lessonAddsTo": "Adds this line to the Lessons section of {0}:",
+  "lessonReason": "Why:",
+  "lessonLearnedOn": "Learned on card:",
+  "approveLesson": "Approve",
+  "rejectLesson": "Reject",
+  "approveLessonFor": "Approve the lesson for {0}",
+  "rejectLessonFor": "Reject the lesson for {0}",
+  "lessonCouldNotBeDecided": "This lesson could not be approved or rejected. It may already have been decided."
+}

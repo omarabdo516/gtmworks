@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: en-US
+reviews:
+  profile: quiet
+  poem: false
+  in_progress_fortune: false
+  auto_review:
+    enabled: true
+    drafts: false
+    auto_incremental_review: false
+  path_filters:
+    - "!tests/**/*-snapshots/**"
+    - "!package-lock.json"
+  path_instructions:
+    - path: "tests/**"
+      instructions: |
+        A changed or deleted existing test must still prove what it proved before. Flag a test that was
+        loosened, skipped or deleted to make a failing run pass.
+    - path: "supabase/**"
+      instructions: |
+        Every table carries the company on each row and is protected by row-level security. Flag a migration
+        that drops or rewrites existing data, and any policy that lets one company read another's rows.
+  finishing_touches:
+    docstrings:
+      enabled: false
+    unit_tests:
+      enabled: false
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "AGENTS.md"
+      - "GLOSSARY.md"
+      - "docs/adr/*.md"

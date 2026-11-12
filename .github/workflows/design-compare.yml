@@ -1,0 +1,70 @@
+# Produces a side-by-side image of a design reference screen and the same built screen where the seeded database
+# exists (#285). Run it from the Actions tab (or `gh workflow run design-compare.yml --ref <branch>`); it also runs
+# on pull requests that change the tool or the reference, with the default inputs. Download the `design-compare`
+# artifact. Flags and screen names: design/COMPARE.md.
+name: Design compare
+on:
+  pull_request:
+    paths:
+      - .github/workflows/design-compare.yml
+      - scripts/design-compare.mjs
+      - scripts/design-compare-lib.mjs
+      - design-reference/**
+  workflow_dispatch:
+    inputs:
+      screen:
+        description: Reference screen name (scripts/design-compare-lib.mjs)
+        default: home
+      width:
+        description: Width in pixels
+        default: '1440'
+      lang:
+        description: ar or en
+        default: ar
+      theme:
+        description: light or dark
+        default: dark
+
+jobs:
+  compare:
+    runs-on: ubicloud-standard-2
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: bash scripts/local-db.sh
+      - name: start the production app
+        run: |
+          mkdir -p playwright-report
+          nohup bash scripts/web.sh production > playwright-report/server.log 2>&1 &
+          for _ in $(seq 240); do
+            if curl -fsS -o /dev/null http://127.0.0.1:3000/sign-in; then exit 0; fi
+            sleep 1
+          done
+          cat playwright-report/server.log
+          exit 1
+      - name: capture the reference and the built screen
+        env:
+          # A pull_request run has no inputs; it uses the same defaults as a manual run.
+          SCREEN: ${{ inputs.screen || 'home' }}
+          WIDTH: ${{ inputs.width || '1440' }}
+          LANGUAGE: ${{ inputs.lang || 'ar' }}
+          THEME: ${{ inputs.theme || 'dark' }}
+        run: npm run design:compare -- --screen "$SCREEN" --width "$WIDTH" --lang "$LANGUAGE" --theme "$THEME" --sign-in omar@example.com
+      - name: upload the images
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: design-compare
+          path: |
+            test-results/design-compare/
+            playwright-report/server.log
+          if-no-files-found: ignore
+          retention-days: 14

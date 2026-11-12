@@ -1,0 +1,4 @@
+agents
+companies
+people
+setup_claim

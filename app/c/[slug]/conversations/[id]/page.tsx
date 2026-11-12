@@ -1,0 +1,30 @@
+import { notFound, redirect } from 'next/navigation';
+import { getI18n } from '@/lib/i18n-server';
+import { supabase } from '@/lib/supabase';
+import Shell from '@/app/shell';
+import { approvalQueue } from '@/lib/approval-queue';
+import ConversationView from './conversation';
+import { conversationColumns, faceOf, latestEnded, messageColumns, shown, titleOf, totalOf, usageColumns, uuid, waiting, type RunUsage } from '@/lib/conversations';
+
+// Only the person who started a conversation can read it; everyone else, in this company or another, gets not found.
+export default async function ConversationPage({params}:{params:Promise<{slug:string,id:string}>}) {
+ const {t}=await getI18n(); const {slug,id}=await params;
+ const db=await supabase(); const {data:{user}}=await db.auth.getUser();
+ if(!user) redirect(`/sign-in?next=${encodeURIComponent(`/c/${slug}/conversations/${id}`)}`);
+ const {data:companies}=await db.from('companies').select('id,slug,name').order('name'); const company=companies?.find(c=>c.slug===slug);
+ if(!company||!uuid.test(id)) notFound();
+ const {data:conversation}=await db.from('conversations').select(conversationColumns).eq('id',id).eq('company_id',company.id).maybeSingle();
+ if(!conversation) notFound();
+ // Usage first: a run the worker closes between the two reads then shows its reply too (one transaction writes both).
+ const usage=((await db.from('conversation_usage').select(usageColumns).eq('conversation_id',id)).data||[]) as RunUsage[];
+ const {data:rows}=await db.from('conversation_messages').select(messageColumns).eq('conversation_id',id).order('id');
+ const {data:person}=await db.from('people').select('name,agency_owner').eq('id',user.id).single();
+ const {data:membership}=await db.from('members').select('role').eq('company_id',company.id).eq('person_id',user.id).is('removed_at',null).maybeSingle();
+ const {data:assurance}=await db.auth.mfa.getAuthenticatorAssuranceLevel(); const agencyAccess=!!person?.agency_owner&&assurance?.currentLevel==='aal2';
+ const {cards}=await approvalQueue(db,company.id,user.id,membership?.role||'');
+ const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),reviewer:t('reviewer'),viewer:t('viewer')};
+ const messages=shown(rows||[],usage); const title=titleOf(messages,conversation.agent_name);
+ return <Shell company={company} companies={companies||[]} section="conversations" title={title} crumbs={[{label:t('conversations')},{label:title}]} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||t('agencyOwner')} agency={!!person?.agency_owner} approvalCount={cards.length}>
+  <main className="content convo-page"><ConversationView company={company.id} companyName={company.name} conversation={{id,agent_name:conversation.agent_name,face:faceOf(conversation)}} initial={messages} usage={totalOf(usage)} failed={latestEnded(rows||[],usage)} pending={agencyAccess&&waiting(rows||[],usage).length>0} agency={agencyAccess}/></main>
+ </Shell>;
+}

@@ -1,0 +1,26 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "pulsing-dot",
+        "value": "*",
+        "files": [
+          "index.html"
+        ],
+        "createdAt": "2026-11-11T13:35:38.340Z",
+        "reason": "agent decided: the only pulsing dots are the typing indicator (.thinking__dots), rendered only while an agent reply is actually pending (~1s), and the stream caret; both are tied to real changing state"
+      },
+      {
+        "rule": "marquee",
+        "value": "*",
+        "files": [
+          "index.html"
+        ],
+        "createdAt": "2026-11-11T13:35:38.355Z",
+        "reason": "agent decided: the only infinite translateX animation is the skeleton shimmer (.sk::after), shown only during the 0.4-0.7s loading state; no auto-scrolling content exists"
+      }
+    ]
+  }
+}

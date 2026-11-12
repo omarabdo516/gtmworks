@@ -1,0 +1,12 @@
+.git
+.github
+node_modules
+.next
+.env*
+.install-lock
+backups
+prod.env
+test-results
+playwright-report
+supabase/.temp
+*.tsbuildinfo

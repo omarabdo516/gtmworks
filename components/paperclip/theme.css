@@ -1,0 +1,346 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+@font-face {
+  font-family: "InterVariable";
+  src: url("./fonts/InterVariable.woff2") format("woff2");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 100 900;
+}
+
+@font-face {
+  font-family: "InterVariable";
+  src: url("./fonts/InterVariable-Italic.woff2") format("woff2");
+  font-display: swap;
+  font-style: italic;
+  font-weight: 100 900;
+}
+
+@font-face {
+  font-family: "Paper Mono";
+  src: url("./fonts/PaperMono-Variable.woff2") format("woff2");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 100 800;
+}
+
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) { @slot; }
+  @media (prefers-color-scheme: dark) {
+    &:where([data-theme="device"], [data-theme="device"] *) { @slot; }
+  }
+}
+
+@theme inline {
+  --font-sans: "InterVariable", "Inter", var(--font-arabic), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-highlight: var(--muted-highlight);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  /* Multiplicative radius ladder (modern shadcn/Tailwind v4 mapping):
+     sm/md/lg/xl/2xl/3xl/4xl = 0.6/0.8/1.0/1.4/1.8/2.2/2.6 x the single
+     --radius knob (base anchor 0.5rem = 8px; rounded-lg IS the anchor).
+     Replaces the additive +/-px ladder (DECISION-SHEET B4 → Run 3 review):
+     retune the whole app's corner language by editing --radius alone. */
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --font-heading: var(--font-sans);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* Use bundled Paper Mono for all monospace surfaces, including portals. */
+@theme {
+  --font-mono: var(--font-paper-mono);
+}
+:root {
+  color-scheme: light;
+  --font-paper-mono: "Paper Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --native-select-caret-half: calc(var(--spacing) * 1.5);
+  --native-select-caret-inset: calc(var(--spacing) * 3);
+  --native-select-caret-stroke: 1.5px;
+  --native-select-end-padding: calc(var(--spacing) * 9);
+  --radius: 0.5rem;
+  --background: light-dark(oklch(1 0 0), oklch(0.235 0 0));
+  --background-alt: light-dark(var(--muted), oklch(0.145 0 0));
+  --foreground: light-dark(oklch(0.145 0 0), oklch(0.985 0 0));
+  --card: light-dark(oklch(1 0 0), oklch(0.235 0 0));
+  --card-foreground: light-dark(oklch(0.145 0 0), oklch(0.985 0 0));
+  --popover: light-dark(oklch(1 0 0), oklch(0.235 0 0));
+  --popover-foreground: light-dark(oklch(0.145 0 0), oklch(0.985 0 0));
+  --primary: light-dark(oklch(0.205 0 0), oklch(0.922 0 0));
+  --primary-foreground: light-dark(oklch(0.985 0 0), oklch(0.205 0 0));
+  --secondary: light-dark(oklch(0.97 0 0), oklch(0.29 0 0));
+  --secondary-foreground: light-dark(oklch(0.205 0 0), oklch(0.985 0 0));
+  --muted: light-dark(oklch(0.97 0 0), oklch(0.29 0 0));
+  --muted-highlight: light-dark(var(--muted), #333333);
+  --muted-foreground: light-dark(oklch(0.47 0 0), oklch(0.74 0 0));
+  --accent: light-dark(oklch(0.97 0 0), oklch(0.29 0 0));
+  --accent-foreground: light-dark(oklch(0.205 0 0), oklch(0.985 0 0));
+  --destructive: light-dark(oklch(0.577 0.245 27.325), oklch(0.704 0.191 22.216));
+  --destructive-foreground: light-dark(oklch(0.985 0 0), oklch(0.205 0 0));
+  --border: light-dark(oklch(0.922 0 0), oklch(1 0 0 / 12%));
+  --input: light-dark(oklch(0.922 0 0), oklch(1 0 0 / 15%));
+  --ring: light-dark(oklch(0.708 0 0), oklch(0.556 0 0));
+  --focus-ring-stroke-width: 1px;
+  --focus-ring-halo-width: 3px;
+  --focus-ring-halo: color-mix(in srgb, var(--ring) 20%, transparent);
+  --focus-ring-shadow: 0 0 0 var(--focus-ring-halo-width) var(--focus-ring-halo);
+  --scrollbar-thumb: light-dark(oklch(0.7 0 0), oklch(0.4 0 0));
+  --scrollbar-thumb-hover: light-dark(oklch(0.6 0 0), oklch(0.5 0 0));
+  --scrollbar-size: 8px;
+  --scrollbar-radius: 999px;
+  --sidebar: light-dark(oklch(0.985 0 0), oklch(0.205 0 0));
+  --primary-sidebar-background: light-dark(color-mix(in srgb, var(--border) 50%, var(--background)), oklch(0.215 0 0));
+  --sidebar-foreground: light-dark(oklch(0.145 0 0), oklch(0.985 0 0));
+  --sidebar-primary: light-dark(oklch(0.205 0 0), oklch(0.922 0 0));
+  --sidebar-primary-foreground: light-dark(oklch(0.985 0 0), oklch(0.205 0 0));
+  --sidebar-accent: light-dark(oklch(0.88 0 0), oklch(0.32 0 0));
+  --sidebar-accent-foreground: light-dark(oklch(0.205 0 0), oklch(0.985 0 0));
+  --sidebar-border: light-dark(oklch(0.922 0 0), oklch(1 0 0 / 10%));
+  --sidebar-ring: light-dark(oklch(0.708 0 0), oklch(0.556 0 0));
+  --motion-duration-base: 240ms;
+  --motion-duration-slow: 360ms;
+  --motion-duration-deliberate: 520ms;
+  --motion-ease-scroll-pill-in: cubic-bezier(0.23, 1, 0.32, 1);
+  --motion-ease-scroll-pill-out: cubic-bezier(0.7, 0, 0.84, 0);
+  --motion-ease-pane-reveal: var(--motion-ease-out-expo);
+  --motion-ease-pane-width-reset: ease-in-out;
+  --sidebar-nav-action-fade-width: calc(var(--spacing) * 4);
+  --motion-ease-primary-crown-burst: cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+/* Paperclip's app shell at the pinned commit runs in its Coordinator workspace scope (ui/src/index.css, .coordinator-workspace):
+   an off-white canvas, white cards and neutral greys. Dialogs, menus and drawers render in portals outside the shell and keep the root tokens, as upstream. */
+.app-layout {
+  --background: light-dark(#fafafa, oklch(0.185 0 0));
+  --task-list-surface: var(--background);
+  --foreground: light-dark(#262626, oklch(0.96 0 0));
+  --card: light-dark(#ffffff, oklch(0.235 0 0));
+  --card-foreground: var(--foreground);
+  --sidebar: light-dark(#f1f1f1, oklch(0.215 0 0));
+  --sidebar-accent: light-dark(#e3e3e3, oklch(0.32 0 0));
+  --sidebar-accent-foreground: light-dark(#202020, oklch(0.985 0 0));
+  --border: light-dark(#dedede, oklch(1 0 0 / 11%));
+  --muted: light-dark(#eeeeee, oklch(0.29 0 0));
+  --muted-foreground: light-dark(#5c5c5c, oklch(0.74 0 0));
+  --accent: light-dark(#ebebeb, oklch(0.29 0 0));
+  --accent-foreground: var(--foreground);
+}
+:root[data-theme="dark"] { color-scheme: dark; }
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="device"] { color-scheme: dark; }
+}
+@layer base {
+  /*
+    Autofill, in the app's own colours.
+
+    Chrome paints an autofilled field with a fixed blue-tinted fill of its own —
+    it ignores `background-color` entirely, which is why nothing in the token
+    layer reached it and a filled email field came out blue on an otherwise
+    monochrome screen. `box-shadow` is the one property that does reach it: an
+    inset shadow thick enough to cover the field repaints the surface, and
+    `-webkit-text-fill-color` does the same job for the text.
+
+    The transition delay is the standard trick for keeping it: Chrome re-applies
+    its own fill on interaction, and a delay long enough to outlast the frame is
+    what stops it flashing back.
+  */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  input:-webkit-autofill:active,
+  textarea:-webkit-autofill,
+  select:-webkit-autofill {
+    -webkit-text-fill-color: var(--foreground);
+    caret-color: var(--foreground);
+    box-shadow: inset 0 0 0 1000px var(--muted);
+    transition: background-color 100000s ease-in-out 0s;
+  }
+
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    height: 100%;
+    -webkit-tap-highlight-color: color-mix(in oklab, var(--foreground) 20%, transparent);
+    @apply font-sans;
+  }
+  body {
+    @apply antialiased bg-background text-foreground;
+    font-family: var(--font-sans);
+    height: 100%;
+    overflow: hidden;
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  /* Prevent double-tap-to-zoom on interactive elements for mobile */
+  a,
+  button,
+  [role="button"],
+  input,
+  select,
+  textarea,
+  label {
+    touch-action: manipulation;
+  }
+  @media (pointer: coarse) {
+    input,
+    select,
+    textarea,
+    [contenteditable=""],
+    [contenteditable="true"],
+    [contenteditable="plaintext-only"] {
+      font-size: max(var(--text-base), 1em);
+    }
+  }
+  /* Let font-mono (utilities layer) override for monospace editors */
+}
+/* Native dropdowns: move the browser's arrow. Keep native menus/keyboard behavior and leave
+   listboxes and controls with their own appearance-none icon untouched.
+   This rule is outside layers so per-field px-* utilities cannot erase the
+   space reserved for the caret. currentColor follows every app theme. */
+select:where(:not([multiple]):not(.appearance-none)):where(:not([size]), [size="0"], [size="1"]) {
+  appearance: none;
+  padding-inline-end: var(--native-select-end-padding);
+  background-image:
+    linear-gradient(45deg, transparent calc(50% - var(--native-select-caret-stroke) / 2), currentColor calc(50% - var(--native-select-caret-stroke) / 2), currentColor calc(50% + var(--native-select-caret-stroke) / 2), transparent calc(50% + var(--native-select-caret-stroke) / 2)),
+    linear-gradient(135deg, transparent calc(50% - var(--native-select-caret-stroke) / 2), currentColor calc(50% - var(--native-select-caret-stroke) / 2), currentColor calc(50% + var(--native-select-caret-stroke) / 2), transparent calc(50% + var(--native-select-caret-stroke) / 2));
+  background-position: right calc(var(--native-select-caret-inset) + var(--native-select-caret-half)) center, right var(--native-select-caret-inset) center;
+  background-size: var(--native-select-caret-half) var(--native-select-caret-half);
+  background-repeat: no-repeat;
+}
+select:where(:not([multiple]):not(.appearance-none)):where(:not([size]), [size="0"], [size="1"]):dir(rtl) {
+  background-position: left var(--native-select-caret-inset) center, left calc(var(--native-select-caret-inset) + var(--native-select-caret-half)) center;
+}
+@media (forced-colors: active) {
+  select:where(:not([multiple]):not(.appearance-none)):where(:not([size]), [size="0"], [size="1"]) {
+    appearance: auto;
+    background-image: none;
+  }
+}
+
+:root { --sz-260px:260px; --sz-120px:120px; --sz-60px:60px; --sz-calc-26:calc(var(--spacing) * 6.5); --sz-calc-25:calc(100% - 2rem); --pct-50:50%; --pct-neg-50:-50%; --rad-3:3px; --e-cubic-bezier-0_16-1-0_3-1:cubic-bezier(0.16,1,0.3,1); --tp-color-background-color-border-color-box-shadow-opacity:color,background-color,border-color,box-shadow,opacity; --tp-color-box-shadow:color,box-shadow; }
+
+:root { --sz-8rem:8rem; --text-micro:11px; --text-compact:13px; --text-nano:10px; }
+
+:root {
+ --motion-ease-out-expo:cubic-bezier(0.16,1,0.3,1);
+ --motion-ease-standard:cubic-bezier(0.4,0,0.2,1);
+ --motion-duration-instant:80ms;
+ --motion-duration-fast:160ms;
+ --mobile-nav-scroll-top-zone:24px;
+ --mobile-nav-scroll-hide-distance:32px;
+ --mobile-nav-scroll-show-distance:16px;
+ --motion-mobile-nav-enter:var(--motion-duration-slow);
+ --motion-mobile-nav-exit:var(--motion-duration-base);
+}
+.mobile-bottom-nav {
+ transform:translateY(0);
+ transition:transform var(--motion-mobile-nav-enter) var(--motion-ease-out-expo);
+ will-change:transform;
+}
+.mobile-bottom-nav[data-visible="false"] {
+ transform:translateY(100%);
+ transition-duration:var(--motion-mobile-nav-exit);
+ transition-timing-function:var(--motion-ease-standard);
+ pointer-events:none;
+}
+
+:root {
+ --task-row-height-comfortable:calc(var(--spacing) * 11);
+ --task-row-rule-width:1px;
+ --design-page-control-height:var(--task-row-height-comfortable);
+ --design-page-control-radius:var(--radius-md);
+ --design-page-control-padding:calc(var(--spacing) * 3);
+ --design-page-control-gap:calc(var(--spacing) * 2);
+ --design-page-toolbar-gap:calc(var(--spacing) * 4);
+ --task-list-surface:var(--background);
+ --design-page-control-surface:color-mix(in oklab,var(--foreground) 4%,var(--task-list-surface));
+ --design-page-control-border:color-mix(in srgb,var(--foreground) 15%,var(--design-page-control-surface));
+ --design-page-type-size:var(--text-sm);
+ --design-page-type-leading:calc(var(--spacing) * 5);
+}
+:root {
+  --collection-toolbar-height: var(--design-page-control-height);
+  --collection-toolbar-gap: calc(var(--spacing) * 2);
+  --collection-toolbar-radius: var(--design-page-control-radius);
+  --collection-toolbar-border: var(--design-page-control-border);
+  --collection-toolbar-padding: var(--design-page-control-padding);
+}
+[data-canonical-toolbar] {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  column-gap: var(--collection-toolbar-gap);
+  row-gap: var(--design-page-toolbar-gap);
+  min-width: 0;
+}
+[data-canonical-toolbar] :is(.design-toolbar-controls, .design-toolbar-actions, [role="tablist"]:not([data-canonical-tabs])) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--collection-toolbar-gap);
+}
+[data-canonical-toolbar] :is(button:not([data-toolbar-clear], .canonical-tab), a[data-slot="button"], select, [data-toolbar-control]) {
+  height: var(--collection-toolbar-height);
+  border: var(--task-row-rule-width) solid var(--collection-toolbar-border);
+  border-radius: var(--collection-toolbar-radius);
+  padding-inline: var(--collection-toolbar-padding);
+  gap: var(--design-page-control-gap);
+  font-size: var(--design-page-type-size);
+  line-height: var(--design-page-type-leading);
+  font-weight: var(--font-weight-normal);
+  background: var(--design-page-control-surface);
+  color: var(--muted-foreground);
+}
+[data-canonical-toolbar] :is(button:not([data-toolbar-clear], .canonical-tab), a[data-slot="button"], select, [data-toolbar-control]):is(:hover, [aria-pressed="true"], [aria-selected="true"], [data-active="true"], [data-state="open"]) {
+  color: var(--foreground);
+  background: var(--muted-highlight);
+}
+[data-canonical-toolbar] button:is([data-toolbar-primary], .design-new-task) {
+  margin-inline-start: 0;
+  background: var(--foreground);
+  color: var(--background);
+  font-weight: var(--font-weight-semibold);
+}
+[data-canonical-toolbar] button:is([data-toolbar-primary], .design-new-task):hover {
+  background: color-mix(in oklab, var(--foreground) 90%, var(--task-list-surface));
+  color: var(--background);
+}
