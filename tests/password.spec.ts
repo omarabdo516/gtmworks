@@ -1,6 +1,5 @@
 import { test, expect, type Page, type BrowserContext } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
 import { signIn, emailLink, seededPassword } from './sign-in';
 
@@ -9,11 +8,11 @@ const inbox='http://127.0.0.1:54324/api/v1/messages';
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const status=()=>{ const env=execFileSync('npx',['--no-install','supabase','status','-o','env'],{encoding:'utf8'}); return (name:string)=>env.match(new RegExp(`^${name}="(.*)"$`,'m'))![1]; };
 const sessionCookies=async(context:BrowserContext)=>(await context.cookies()).filter(cookie=>/^sb-.*-auth-token/.test(cookie.name));
-// Fill and send the sign-in form; returns the server action's response.
+// Fill and send the sign-in form; returns the auth service's answer, which the browser asks for itself.
 async function attempt(page:Page,email:string,password:string) {
  await page.getByLabel('Email',{exact:true}).fill(email);
  await page.getByLabel('Password',{exact:true}).fill(password);
- const response=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname==='/sign-in');
+ const response=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname.endsWith('/auth/v1/token'));
  await page.getByRole('button',{name:'Sign in',exact:true}).click();
  return response;
 }
@@ -117,37 +116,4 @@ test('a signed-in person changes their own password in settings and signs in wit
   // Later tests sign in with the seeded password.
   query(`update auth.users set encrypted_password=extensions.crypt('${seededPassword}',extensions.gen_salt('bf')) where email='viewer@example.com'`);
  }
-});
-
-// Runs last in this file: it spends the address's sign-in allowance on purpose. tests/sign-in.ts waits for it to refill.
-test('integration: repeated wrong passwords hit the auth service\'s own rate limit and the page says to try again later',async({page,context})=>{
- test.setTimeout(240000);
- const config=readFileSync('supabase/config.toml','utf8');
- const limit=(name:string)=>Number(config.match(new RegExp(`^${name} = (\\d+)$`,'m'))![1]);
- const configured=limit('sign_in_sign_ups');
- expect(configured).toBeGreaterThan(0);
- const value=status();
- // Wrong passwords straight to the auth service until it answers 429; never more than twice the larger of the two limits
- // that can cover this endpoint, so a missing limit fails instead of hanging.
- async function exhaust() {
-  for(let sent=0,max=2*Math.max(configured,limit('token_refresh'))+10; sent<max; sent++) {
-   const response=await page.request.post(`${value('API_URL')}/auth/v1/token?grant_type=password`,{headers:{apikey:value('ANON_KEY')},data:{email:'manager@example.com',password:`wrong-password-${sent}`}});
-   if(response.status()===429) return {sent,body:await response.json() as {error_code?:string}};
-   expect(response.status()).toBe(400);
-  }
-  return null;
- }
- const limited=await exhaust();
- expect(limited,'the auth service never answered 429').not.toBeNull();
- expect(limited!.body.error_code).toBe('over_request_rate_limit');
- // The allowance refills slowly, so one page attempt may still get through as an ordinary wrong password: drain it again
- // and retry. The page shows the limit as its own message, not as a wrong password, and opens no session.
- await page.goto('/sign-in');
- await expect(async()=>{
-  expect(await exhaust()).not.toBeNull();
-  await attempt(page,'manager@example.com','still-the-wrong-password');
-  await expect(alertWith(page,'Too many sign-in attempts. Try again later.')).toBeVisible({timeout:3000});
- }).toPass({timeout:180000});
- await expect(page).toHaveURL(/\/sign-in/);
- expect(await sessionCookies(context)).toEqual([]);
 });

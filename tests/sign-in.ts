@@ -3,8 +3,8 @@ import { expect, type Page } from '@playwright/test';
 export const seededPassword='local-seed-password';
 export async function signIn(page:Page,email:string,path:string,password=seededPassword) {
  await page.request.delete('http://127.0.0.1:54324/api/v1/messages'); await page.goto(path); await expect(page).toHaveURL(/sign-in/);
- // A wrong password fails at once. Only the auth service's rate limit is waited out: tests/password.spec.ts goes past it on
- // purpose, and the allowance refills within seconds.
+ // A wrong password fails at once. Only the auth service's rate limit is waited out: every test signs in from this one
+ // address, and the allowance refills within seconds. The install job goes past the limit on purpose (issue #41).
  for(let attempt=1;;attempt++) {
   await page.getByLabel('Email',{exact:true}).fill(email);
   await page.getByLabel('Password',{exact:true}).fill(password);

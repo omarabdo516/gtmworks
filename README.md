@@ -56,6 +56,15 @@ delete or regenerate this file for an existing database. `.env.install.example`
 documents the keys but deliberately cannot start the app. Public HTTP is rejected;
 HTTP is allowed only for this install's loopback origin. For a public deployment,
 put HTTPS in front and set `APP_ORIGIN` and `SUPABASE_PUBLIC_URL` to that origin.
+Run that proxy on the install machine, pointed at `127.0.0.1:3000`, and have it put
+each visitor's address in `X-Forwarded-For` (Caddy's `reverse_proxy` does this by
+default; an Nginx `$proxy_add_x_forwarded_for` works too). The gateway reads the
+last address in that header, so repeated wrong passwords are limited per visitor
+rather than for everyone behind the proxy. It believes the header only from
+connections that come from the install machine itself; a container on the install
+network is never believed. Every process on the install machine is trusted to name
+a visitor this way, so do not run untrusted programs on it. With no such header,
+every visitor behind the proxy shares one sign-in allowance.
 
 Run the same command again to resume an interrupted install or start it again.
 It preserves secrets and data, and applies only unrecorded migrations, in filename
