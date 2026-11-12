@@ -171,7 +171,7 @@ test('owner assigns a new Contributor agent through settings, Home follows renam
   await expect(assigned.locator('td').last()).toHaveText(renamed);
   await page.goto('/c/rs-learning/settings/members');
   const renamedMember=page.locator('.member-row').filter({has:page.locator('strong',{hasText:new RegExp(`^${renamed}$`)})});
-  await renamedMember.getByRole('combobox',{name:"Role",exact:true}).selectOption('viewer');
+  await renamedMember.getByRole('combobox',{name:"Member role",exact:true}).selectOption('viewer');
   await renamedMember.getByRole('button',{name:"Save",exact:true}).click();
   await expect(page.getByRole('status')).toHaveText("Change saved.");
   await expect(renamedMember.getByRole('combobox',{name:"Agent role",exact:true})).toHaveCount(0);
