@@ -123,7 +123,8 @@ if [ "$operation" = install ]; then compose up -d --wait db auth rest storage ma
 } | compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 --single-transaction
 compose build web
 if [ "$operation" = update ]; then
-  compose up -d --no-deps --wait --wait-timeout 300 hermes web worker
+  # auth is recreated when its settings changed (password rules, reset-link lifetime, session length) and must be healthy.
+  compose up -d --no-deps --wait --wait-timeout 300 auth hermes web worker
 else
   compose up -d --wait --wait-timeout 300
 fi
