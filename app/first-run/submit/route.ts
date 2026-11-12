@@ -4,17 +4,15 @@ import { setupAdmin, setupIsOpen } from '@/lib/first-run';
 import { firstRunInput } from '@/lib/first-run-input.mjs';
 import { supabase } from '@/lib/supabase';
 import { logActionFailure } from '@/lib/diagnostics.mjs';
+import { appUrl } from '@/lib/app-origin.mjs';
 
 export async function POST(request:NextRequest) {
  if(!await setupIsOpen()) {
   logActionFailure('first_run_setup_closed',new Error('Setup closed at start'));
   notFound();
  }
- const host=request.headers.get('x-forwarded-host') ?? request.headers.get('host');
- const protocol=request.headers.get('x-forwarded-proto') ?? request.nextUrl.protocol.replace(':','');
- const origin=host?`${protocol}://${host}`:request.nextUrl.origin;
  const form=await request.formData(), input=firstRunInput(form);
- const invalid=new URL(`/first-run?invalid=1&language=${form.get('language')==='ar'?'ar':'en'}`,origin);
+ const invalid=appUrl(`/first-run?invalid=1&language=${form.get('language')==='ar'?'ar':'en'}`);
  if(!input) {
   logActionFailure('first_run_invalid_input',new Error('Invalid setup input'));
   return NextResponse.redirect(invalid,303);
@@ -41,6 +39,6 @@ export async function POST(request:NextRequest) {
   notFound();
  }
  const next=`/c/${slug}/home`, db=await supabase();
- const {error:mail}=await db.auth.signInWithOtp({email:input.email,options:{shouldCreateUser:false,emailRedirectTo:`${origin}/auth/callback?next=${encodeURIComponent(next)}`}});
- return NextResponse.redirect(new URL(`/sign-in?next=${encodeURIComponent(next)}&message=${mail?'failed':'sent'}&language=${input.language}`,origin),303);
+ const {error:mail}=await db.auth.signInWithOtp({email:input.email,options:{shouldCreateUser:false,emailRedirectTo:appUrl(`/auth/callback?next=${encodeURIComponent(next)}`).href}});
+ return NextResponse.redirect(appUrl(`/sign-in?next=${encodeURIComponent(next)}&message=${mail?'failed':'sent'}&language=${input.language}`),303);
 }

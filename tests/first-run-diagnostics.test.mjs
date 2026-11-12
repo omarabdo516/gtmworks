@@ -6,6 +6,7 @@ import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import { firstRunInput } from '../lib/first-run-input.mjs';
 import { logActionFailure } from '../lib/diagnostics.mjs';
+import { appUrl } from '../lib/app-origin.mjs';
 
 const require=createRequire(import.meta.url);
 // Execute the real route and hook with only their I/O replaced; no server or database.
@@ -42,6 +43,7 @@ test('first-run refusals log distinct causes and retain their responses and acco
    '@/lib/first-run-input.mjs':{firstRunInput},
    '@/lib/supabase':{supabase:async()=>({auth:{signInWithOtp:async()=>({error:null})}})},
    '@/lib/diagnostics.mjs':{logActionFailure:(action,error)=>logActionFailure(action,error,{write:line=>lines.push(line)})},
+   '@/lib/app-origin.mjs':{appUrl},
   });
   const {NextRequest}=require('next/server');
   const request=new NextRequest('http://127.0.0.1:3000/first-run/submit',{method:'POST',body:new URLSearchParams(scenario.input ?? input)});

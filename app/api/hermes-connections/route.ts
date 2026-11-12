@@ -5,6 +5,7 @@ import { supabaseConfig } from '@/lib/supabase-config';
 import { encryptSecret, decryptSecret } from '@/lib/agent-crypto.mjs';
 import { isHermesAddressAllowed, testHermes } from '@/lib/hermes.mjs';
 import { logActionFailure } from '@/lib/diagnostics.mjs';
+import { crossSiteWrite } from '@/lib/app-origin.mjs';
 
 const columns='id,company_id,owner_id,address,profile,state,version,features,unreachable_since';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -15,7 +16,7 @@ async function connectionRequest(request:NextRequest) {
  const database=await supabase(); const {data:{user}}=await database.auth.getUser();
  if(!user) return failure(401);
  const writing=request.method==='POST';
- if(writing&&(!request.headers.get('content-type')?.startsWith('application/json')||(request.headers.get('origin')&&new URL(request.headers.get('origin')!).host!==request.headers.get('host')))) return failure(403);
+ if(writing&&(!request.headers.get('content-type')?.startsWith('application/json')||crossSiteWrite(request.headers))) return failure(403);
  const raw=writing?await request.text():''; if(raw.length>12000) return failure(400);
  const body=writing?JSON.parse(raw):Object.fromEntries(request.nextUrl.searchParams);
  const company=body.company; const id=body.id;
