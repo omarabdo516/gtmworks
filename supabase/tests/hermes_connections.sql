@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(24);
+select plan(28);
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
 select throws_ok($$insert into public.hermes_connections(company_id,owner_id,address,profile,key_encrypted,state) values ('10000000-0000-0000-0000-000000000001',auth.uid(),'http://localhost','writer','ciphertext','connected')$$,'42501',null,'a Manager cannot connect');
@@ -9,6 +9,10 @@ select lives_ok($$insert into public.hermes_connections(id,company_id,owner_id,a
 select is((select count(id)::int from public.hermes_connections),1,'the Owner reads their Company''s Connection');
 select throws_ok($$select key_encrypted from public.hermes_connections$$,'42501',null,'even the Owner cannot read ciphertext');
 select lives_ok($$update public.hermes_connections set key_encrypted='replacement' where id='c0000000-0000-0000-0000-000000000001'$$,'the Owner replaces the key');
+-- The kept key goes only where it was entered: no company agent uses this Connection, and it still cannot be retargeted.
+select lives_ok($$update public.hermes_connections set address='http://localhost',profile='writer',key_encrypted='rotated' where id='c0000000-0000-0000-0000-000000000001'$$,'a rotation that repeats the address and profile is kept');
+select throws_ok($$update public.hermes_connections set address='https://elsewhere.example' where id='c0000000-0000-0000-0000-000000000001'$$,'42501','hermesDestinationFixed','the Owner cannot point a saved Connection at another address');
+select throws_ok($$update public.hermes_connections set profile='other' where id='c0000000-0000-0000-0000-000000000001'$$,'42501','hermesDestinationFixed','the Owner cannot point a saved Connection at another profile');
 select throws_ok($$update public.hermes_connections set owner_id='20000000-0000-0000-0000-000000000002'$$,'42501',null,'ownership cannot be reassigned');
 select lives_ok($$insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('c0000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000002',auth.uid(),'http://localhost','writer','ciphertext','connected')$$,'the Owner connects in another Company they own');
 reset role;
@@ -46,6 +50,7 @@ set local role anon;
 select throws_ok($$select id from public.hermes_connections$$,'42501',null,'anonymous callers cannot read');
 reset role;
 select ok(not has_column_privilege('authenticated','public.hermes_connections','company_id','update'),'company cannot be changed');
+select throws_ok($$update public.hermes_connections set address='https://elsewhere.example' where id='c0000000-0000-0000-0000-000000000002'$$,'42501','hermesDestinationFixed','direct database access cannot retarget a Connection either');
 select ok((select relrowsecurity from pg_class where oid='public.hermes_connections'::regclass),'RLS protects Connections');
 select * from finish();
 rollback;

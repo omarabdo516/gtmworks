@@ -6,6 +6,23 @@
 -- to reviewers, or to one person who was a reviewer, is addressed to the Company's Managers; reviewer permission rows go.
 -- The previous app version's Agency screens and Agency-only calls refuse from here on; its other screens keep working.
 
+-- Preflight, before any change and on the schema as it was. The previous app version still serves while this runs, so
+-- what the reviewer conversion reads is locked against writes for the whole migration: no Member, invitation, step or
+-- card can change between this check and the conversion below. A live step addressed to reviewers, or to one person
+-- who is a reviewer, goes to the Company's Managers; with no active Manager its cards would wait for nobody. Then the
+-- update stops here and, being one transaction, changes nothing: the install keeps serving the previous version.
+lock table public.members, public.member_invitations, public.approval_steps, public.work_cards, public.role_permissions in share row exclusive mode;
+do $$ declare stranded text; begin
+ select string_agg(distinct co.slug,', ' order by co.slug) into stranded
+  from public.approval_steps s join public.companies co on co.id=s.company_id
+  where s.removed_at is null
+   and (s.role::text='reviewer' or exists(select 1 from public.members r where r.company_id=s.company_id and r.person_id=s.person_id and r.role::text='reviewer'))
+   and not exists(select 1 from public.members m where m.company_id=s.company_id and m.role::text='manager' and m.removed_at is null);
+ if stranded is not null then
+  raise exception 'Approval steps for reviewers have no active Manager to take them in: %. Make a Member of each of these Companies a Manager, then update again.', stranded;
+ end if;
+end $$;
+
 -- An active Owner of the Company: the one check every former Agency-only action now makes.
 create or replace function public.is_company_owner(c uuid) returns boolean language sql stable security definer set search_path='' as $$
  select exists(select 1 from public.members where company_id=c and person_id=auth.uid() and removed_at is null and role='owner');
@@ -98,6 +115,16 @@ alter policy hermes_read on public.hermes_connections using (public.is_company_o
 alter policy hermes_create on public.hermes_connections with check (public.is_company_owner(company_id) and owner_id=auth.uid());
 alter policy hermes_replace on public.hermes_connections using (public.is_company_owner(company_id)) with check (public.is_company_owner(company_id));
 alter policy hermes_remove on public.hermes_connections using (public.is_company_owner(company_id));
+-- Any Owner may now write a Connection, so its kept key must only ever reach the address and profile it was entered
+-- for: those never change on a saved row, for every writer, attached or not. A new key (rotation) is still saved; another
+-- destination is a new Connection. Named to run after hermes_profile_in_use, whose message an attached row keeps.
+create function public.keep_hermes_destination() returns trigger language plpgsql set search_path='' as $$
+begin
+ if (new.address,new.profile) is distinct from (old.address,old.profile) then raise exception 'hermesDestinationFixed' using errcode='42501'; end if;
+ return new;
+end $$;
+revoke all on function public.keep_hermes_destination() from public,anon,authenticated,service_role;
+create trigger hermes_retarget_refused before update on public.hermes_connections for each row execute function public.keep_hermes_destination();
 
 -- The Company's Owner manages its agents. A Connection is attached only by an Owner of the Company it was made in, so an
 -- Owner of two Companies may still share one profile between them (the sharing warning is unchanged).
@@ -274,7 +301,8 @@ drop function if exists public.agency_access();
 drop function if exists public.is_agency_owner();
 alter table public.people drop column if exists agency_owner;
 
--- The reviewer Role. Steps first, while the people who were reviewers can still be told apart.
+-- The reviewer Role, under the locks and the Manager check at the top. Steps first, while the people who were reviewers
+-- can still be told apart.
 create temporary table former_reviewer_steps as
  select s.id from public.approval_steps s where s.role='reviewer'
   or (s.removed_at is null and exists(select 1 from public.members m where m.company_id=s.company_id and m.person_id=s.person_id and m.role='reviewer'));

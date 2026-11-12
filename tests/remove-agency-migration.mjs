@@ -8,10 +8,10 @@ import { spawnSync } from 'node:child_process';
 // migration runs on it; the verify file is red before and green after. Everything rolls back.
 const migration=readFileSync('supabase/migrations/20261204000000_remove_agency.sql','utf8');
 const verify=readFileSync('supabase/migrations/20261204000000_remove_agency.verify.sql','utf8').trim().replace(/;$/,'');
-const rs='10000000-0000-0000-0000-000000000001', omar='20000000-0000-0000-0000-000000000001', manager='20000000-0000-0000-0000-000000000002', reviewer='20000000-0000-0000-0000-000000000003';
+const rs='10000000-0000-0000-0000-000000000001', omar='20000000-0000-0000-0000-000000000001', manager='20000000-0000-0000-0000-000000000002', reviewer='20000000-0000-0000-0000-000000000003', aleem='10000000-0000-0000-0000-000000000003';
 const sql=`begin;
 create extension if not exists pgtap with schema extensions;
-select plan(11);
+select plan(17);
 -- The earlier shape: the role type with reviewer, the Agency flag and functions, and a policy that uses them.
 drop policy agent_keys_owner_read on public.agent_keys; drop policy agent_keys_owner_create on public.agent_keys; drop policy agent_keys_owner_update on public.agent_keys;
 drop policy agent_refusals_owner_read on public.agent_refusals; drop policy agent_webhooks_owner on public.agent_webhooks; drop policy webhook_deliveries_owner_read on public.webhook_deliveries;
@@ -49,7 +49,19 @@ update public.work_cards set approval_step_id=970002, next_actor='${reviewer}' w
 select set_config('approval.internal','',true);
 insert into public.hermes_connections(id,company_id,agency_owner_id,address,profile,key_encrypted,state) values ('f7000000-0000-0000-0000-000000000001','${rs}','${omar}','http://localhost','former-agency','ciphertext','connected');
 select is((select string_agg(key,',' order by key) from (${verify}) v, json_each_text(v.json_build_object) where key in ('roles','no_agency_flag','no_agency_functions','no_agency_policy','connection_owner') and value='false'),'connection_owner,no_agency_flag,no_agency_functions,no_agency_policy,roles','the verify file is red on the earlier shape');
+-- Aleem has no active Manager (a removed one does not count): its live reviewer step would wait for nobody, so the whole
+-- migration stops and nothing changes. throws_ok runs it in a savepoint, so the earlier shape is still here afterwards.
+insert into public.members(company_id,person_id,role,removed_at) values ('${aleem}','${manager}','manager',now());
+insert into public.approval_steps(id,company_id,name,position,role) overriding system value values (970003,'${aleem}','Aleem reviewers',90,'reviewer');
+select throws_ok($migration$${migration}$migration$,'P0001','Approval steps for reviewers have no active Manager to take them in: aleem. Make a Member of each of these Companies a Manager, then update again.','with no active Manager to take a reviewer step the migration fails');
+select is((select string_agg(coalesce(role::text,'-')||':'||coalesce(person_id::text,'-'),',' order by id) from public.approval_steps where id in (970001,970002,970003)),'reviewer:-,-:${reviewer},reviewer:-','the failed migration leaves every step as it was');
+select is((select role::text from public.members where company_id='${rs}' and person_id='${reviewer}'),'reviewer','the failed migration leaves the reviewer as they were');
+select is((select next_actor from public.work_cards where approval_step_id=970002),'${reviewer}'::uuid,'the failed migration leaves the waiting card as it was');
+select ok(to_regprocedure('public.agency_access()') is not null,'the failed migration leaves the Agency functions in place');
+-- A removed step needs no Manager: it is converted, never refused.
+update public.approval_steps set removed_at=now() where id=970003;
 ${migration}
+select is((select role::text from public.approval_steps where id=970003),'manager','a removed reviewer step is converted without a Manager');
 select is((select role::text from public.members where company_id='${rs}' and person_id='${reviewer}'),'contributor','a former reviewer is a Contributor');
 select is((select role::text from public.member_invitations where email='former-reviewer@example.com'),'contributor','an open reviewer invitation becomes a Contributor invitation');
 select is((select count(*)::int from public.role_permissions where company_id='${rs}' and role::text not in ('owner','manager','contributor','viewer')),0,'no permission row is left for the reviewer Role');

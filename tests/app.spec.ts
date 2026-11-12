@@ -3,6 +3,7 @@ import { mkdir, readdir, readFile } from 'node:fs/promises';
 import { createHmac } from 'node:crypto';
 import { signIn, chooseCompany, openNavigation } from './sign-in';
 import { idle } from './navigation-measure';
+import { recordTouchDiagnostics, formatTouchDiagnostics, touchDiagnosticsKey, touchDiagnosticsLimit } from './touch-diagnostics.mjs';
 test('public contains no font files, including renamed font binaries',async()=>{
  const entries=await readdir('public',{recursive:true,withFileTypes:true}).catch(error=>{if(error.code==='ENOENT') return []; throw error;});
  for(const entry of entries.filter(entry=>entry.isFile())) {
@@ -313,6 +314,16 @@ test('board moves, date filtering, creative versions and shared card views',asyn
 
 test.describe('touch board',()=>{
  test.use({hasTouch:true,viewport:{width:390,height:844}});
+ // CI keeps no trace of functional tests, so there a failure prints what the page recorded during its touches: numbers
+ // and fixed words only (tests/touch-diagnostics.mjs). The recorder listens passively and changes no input or wait.
+ test.beforeEach(async({page})=>{
+  if(process.env.CI) await page.addInitScript(recordTouchDiagnostics,{cardId:1,key:touchDiagnosticsKey,limit:touchDiagnosticsLimit});
+ });
+ test.afterEach(async({page},testInfo)=>{
+  if(!process.env.CI||testInfo.status===testInfo.expectedStatus) return;
+  const stored=await page.evaluate(key=>sessionStorage.getItem(key),touchDiagnosticsKey).catch(()=>null);
+  for(const line of formatTouchDiagnostics(stored)) console.log(line);
+ });
  test('touch drag moves a card on a phone',async({page})=>{
   await signIn(page,'omar@example.com','/c/rs-learning/work/board');
   const card=page.locator('.card[data-card-id="1"]');

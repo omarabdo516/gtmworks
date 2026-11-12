@@ -62,6 +62,25 @@ test('testing a saved public HTTP Hermes connection refuses before decrypting or
  }
 });
 
+test('a saved Connection keeps its address and profile: replacing either is refused before any engine is contacted',async({page})=>{
+ const first=await fakeHermes(),second=await fakeHermes(); const id=randomUUID();
+ try {
+  await signInOwner(page);
+  // No company agent uses this Connection, so nothing but the fixed destination stops a retarget.
+  query(`insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('${id}','${company}','${owner}','${first.address}','writer','invalid-ciphertext','connected')`);
+  for(const change of [{address:second.address,profile:'writer'},{address:first.address,profile:'other'}]) {
+   const response=await page.request.post(endpoint,{data:{company,id,intent:'save',key:randomUUID(),...change}});
+   expect(response.status()).toBe(409);
+   expect(await response.json()).toEqual({error:'hermesDestinationFixed'});
+  }
+  expect(first.settings.requests).toEqual([]); expect(second.settings.requests).toEqual([]);
+  expect(rows(`select address,profile from public.hermes_connections where id='${id}'`)).toEqual([{address:first.address,profile:'writer'}]);
+ } finally {
+  query(`delete from public.hermes_connections where id='${id}'`);
+  await first.close(); await second.close();
+ }
+});
+
 test('save, replace, retest and remove a write-only Hermes Connection; refuse wrong keys, outages and untested versions',async({page})=>{
  const fake=await fakeHermes(); const savedKey=randomUUID(),replacementKey=randomUUID(); fake.settings.key=savedKey;
  const captured:string[]=[];

@@ -43,6 +43,8 @@ async function connectionRequest(request:NextRequest) {
   if(!['http:','https:'].includes(url.protocol)||url.username||url.password||url.search||url.hash||typeof body.profile!=='string'||!/^[a-zA-Z0-9_-]{1,100}$/.test(body.profile)||typeof body.key!=='string'||!body.key.trim()||body.key.length>4096||/[\r\n]/.test(body.key)) return failure(400);
   if(!isHermesAddressAllowed(url.href)) return reply({error:'hermesHttpsRequired'},400);
   address=url.toString().replace(/\/$/,''); profile=body.profile; key=body.key;
+  // A saved Connection keeps its address and profile (the database refuses a change too); another one is a new Connection.
+  if(connection&&(connection.address!==address||connection.profile!==profile)) return reply({error:'hermesDestinationFixed'},409);
  } else {
   if(!isHermesAddressAllowed(address)) return reply({error:'hermesHttpsRequired'},400);
   const server=createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false}});
