@@ -93,6 +93,8 @@
 }
 .gw .sb-item .gw-icon { color: var(--gw-text-2); }
 .gw .sb-item[aria-current="page"], .gw .sb-item[aria-current="true"] { background: var(--gw-bg-active); }
+/* A link that is opening its page answers at once (lib/link.tsx, app/globals.css a:has(.link-pending)), without a fade. */
+.gw a:has(.link-pending) { transition: none; }
 .gw .sb-item .od-fill { flex: 1 1 0; min-width: 0; }
 .gw .sb-count {
   position: absolute; inset-inline-end: 12px; min-width: 20px; height: 20px; padding: 0 6px; border-radius: var(--gw-r-full);

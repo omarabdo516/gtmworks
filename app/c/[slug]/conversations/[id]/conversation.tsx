@@ -33,7 +33,7 @@ export default function ConversationView({company,conversation,initial,usage:ini
  return <div className="chat">
   <div className="chat__top"><h1 className="head-pill">{face(24)}<span className="head-pill__title" dir="auto">{titleOf(messages,conversation.agent_name)}</span></h1></div>
   <div className="transcript"><div className="transcript__col">
-   <ol className="turns" aria-label={t('conversationMessages')}>{messages.map(message=>message.author==='person'?<li key={message.id} className="turn turn--user msg me" data-author="person">
+   <ol className="turns" aria-label={t('conversationMessages')}>{messages.map(message=>message.author==='person'?<li key={message.id} className="turn turn--user msg" data-author="person">
     <div className="bubble-row"><time className="bubble__time" dateTime={message.created_at}>{time(message.created_at)}</time><div className="bubble bubble--user" dir="auto">{message.body}</div></div>
     {message.lost&&<p className="note" data-outcome="lost">{t('conversationRunLost')}</p>}
    </li>:<li key={message.id} className="turn turn--agent msg" data-author="agent">

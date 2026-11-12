@@ -42,7 +42,7 @@ export function Frame({sidebar,title,breadcrumb,chat=false,children}:{sidebar:Re
   return ()=>document.removeEventListener('keydown',keys);
  },[open]);
  return <div className={`gw app-layout bg-background${chat?' is-chat':''}`}>
-  <aside ref={drawer} id="sidebar" className={`sidebar${open?' is-open':''}`} aria-label={t('mainMenu')} onClick={event=>{if((event.target as HTMLElement).closest('a')) setOpen(false);}}>{sidebar}</aside>
+  <aside ref={drawer} id="sidebar" className={`sidebar${open?' is-open':''}`} aria-label={t('mainMenu')}>{sidebar}</aside>
   <div className="scrim" hidden={!open} onClick={()=>setOpen(false)}/>
   <div className="shell">
    <header className="topbar h-(--sz-60px) shrink-0 flex items-center gap-2 border-b border-border px-4 md:px-6">
