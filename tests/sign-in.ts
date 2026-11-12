@@ -3,13 +3,20 @@ import { expect, type Page } from '@playwright/test';
 export const seededPassword='local-seed-password';
 export async function signIn(page:Page,email:string,path:string,password=seededPassword) {
  await page.request.delete('http://127.0.0.1:54324/api/v1/messages'); await page.goto(path); await expect(page).toHaveURL(/sign-in/);
- // tests/password.spec.ts drives the auth service past its sign-in rate limit on purpose; a later sign-in waits it out.
- await expect(async()=>{
+ // A wrong password fails at once. Only the auth service's rate limit is waited out: tests/password.spec.ts goes past it on
+ // purpose, and the allowance refills within seconds.
+ for(let attempt=1;;attempt++) {
   await page.getByLabel('Email',{exact:true}).fill(email);
   await page.getByLabel('Password',{exact:true}).fill(password);
   await page.getByRole('button',{name:'Sign in',exact:true}).click();
-  await expect(page).not.toHaveURL(/\/sign-in/,{timeout:5000});
- }).toPass({intervals:[3000],timeout:60000});
+  const outcome=async()=>!new URL(page.url()).pathname.startsWith('/sign-in')?'signed in':await page.getByText('Wrong email or password.').isVisible()?'wrong':await page.getByText('Too many sign-in attempts. Try again later.').isVisible()?'limited':'waiting';
+  await expect.poll(outcome,{timeout:15000}).not.toBe('waiting');
+  const result=await outcome();
+  if(result==='signed in') return;
+  if(result==='wrong') throw new Error(`Sign-in refused for ${email}: wrong email or password`);
+  if(attempt>=20) throw new Error(`Sign-in for ${email} still rate limited after ${attempt} attempts`);
+  await page.waitForTimeout(3000); await page.reload();
+ }
 }
 
 export async function followSignInLink(page:Page,email:string) {

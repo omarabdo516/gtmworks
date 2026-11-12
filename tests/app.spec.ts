@@ -36,7 +36,7 @@ test('sign-in artwork renders, animates and respects reduced motion in both lang
   await expect(artwork).toContainText('╭');
   await page.setViewportSize({width:390,height:900});
   await expect(artwork).toBeHidden();
-  await expect(page.getByRole('textbox')).toBeInViewport({ratio:1});
+  await expect(page.locator('input[name=email]')).toBeInViewport({ratio:1});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);
   await page.screenshot({path:`test-results/screenshots/sign-in-${language}-390.png`});
   await page.setViewportSize({width:1440,height:900});

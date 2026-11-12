@@ -47,11 +47,13 @@ test('Forgot password emails a link that opens only the set-password page, works
  await page.request.delete(inbox);
  await page.goto('/sign-in');
  await page.getByRole('link',{name:'Forgot password?'}).click();
- await expect(page).toHaveURL(/\/forgot-password$/);
+ await expect(page).toHaveURL(/\/forgot-password\?language=en$/);
  await page.getByLabel('Email',{exact:true}).fill(email);
  await page.getByRole('button',{name:'Send reset link'}).click();
  await expect(page.getByRole('status')).toHaveText('If an account uses this email, a link to set a new password is on its way.');
  const link=await emailLink(page,email);
+ // The link works without anything the asking browser kept: it may be opened on another device.
+ await context.clearCookies();
  await page.goto(link);
  await expect(page).toHaveURL(/\/reset-password$/);
  await expect(page.getByRole('heading',{name:'Set a new password'})).toBeVisible();

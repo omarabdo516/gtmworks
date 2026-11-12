@@ -8,10 +8,7 @@ insert into auth.users (instance_id,id,aud,role,email,email_confirmed_at,created
 ('00000000-0000-0000-0000-000000000000','20000000-0000-0000-0000-000000000003','authenticated','authenticated','reviewer@example.com',now(),now(),now(),'{"provider":"email","providers":["email"]}','{}','','','',''),
 ('00000000-0000-0000-0000-000000000000','20000000-0000-0000-0000-000000000004','authenticated','authenticated','viewer@example.com',now(),now(),now(),'{"provider":"email","providers":["email"]}','{}','','','',''),
 ('00000000-0000-0000-0000-000000000000','20000000-0000-0000-0000-000000000005','authenticated','authenticated','multi@example.com',now(),now(),now(),'{"provider":"email","providers":["email"]}','{}','','','','');
-insert into auth.identities (id,user_id,identity_data,provider,provider_id,last_sign_in_at,created_at,updated_at) select id,id,jsonb_build_object('sub',id::text,'email',email),'email',email,now(),now(),now() from auth.users where id::text like '20000000-%';
--- Local demo people sign in with one known password (tests/sign-in.ts). The install never applies this seed.
-update auth.users set encrypted_password=extensions.crypt('local-seed-password',extensions.gen_salt('bf')) where id::text like '20000000-%';
-insert into public.people (id,name,agency_owner) values ('20000000-0000-0000-0000-000000000001','عمر',true),('20000000-0000-0000-0000-000000000002','مدير',false),('20000000-0000-0000-0000-000000000003','مراجع',false),('20000000-0000-0000-0000-000000000004','مشاهد',false),('20000000-0000-0000-0000-000000000005','عضو',false);
+insert into auth.identities (id,user_id,identity_data,provider,provider_id,last_sign_in_at,created_at,updated_at) select id,id,jsonb_build_object('sub',id::text,'email',email),'email',email,now(),now(),now() from auth.users where id::text like '20000000-%';insert into public.people (id,name,agency_owner) values ('20000000-0000-0000-0000-000000000001','عمر',true),('20000000-0000-0000-0000-000000000002','مدير',false),('20000000-0000-0000-0000-000000000003','مراجع',false),('20000000-0000-0000-0000-000000000004','مشاهد',false),('20000000-0000-0000-0000-000000000005','عضو',false);
 insert into public.members (company_id,person_id,role,grant_publishing,grant_money_figures,grant_customer_data) select id,'20000000-0000-0000-0000-000000000001','owner',true,true,true from public.companies;
 update public.approval_steps set person_id='20000000-0000-0000-0000-000000000001',role=null where company_id='10000000-0000-0000-0000-000000000001';
 insert into public.members (company_id,person_id,role) values
@@ -26,6 +23,9 @@ select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001'
 update public.members set grant_publishing=true where company_id='10000000-0000-0000-0000-000000000001' and person_id='20000000-0000-0000-0000-000000000003';
 select set_config('request.jwt.claim.sub','',false);
 insert into auth.users (instance_id,id,aud,role,email,email_confirmed_at,created_at,updated_at,raw_app_meta_data,raw_user_meta_data,confirmation_token,email_change,email_change_token_new,recovery_token) select '00000000-0000-0000-0000-000000000000',('30000000-0000-0000-0000-00000000000'||n)::uuid,'authenticated','authenticated','agent'||n||'@example.com',now(),now(),now(),'{"provider":"email","providers":["email"]}','{}','','','','' from generate_series(1,5) n;
+-- Every local demo account, people and agents alike, signs in with one known password (tests/sign-in.ts). The install never
+-- applies this seed.
+update auth.users set encrypted_password=extensions.crypt('local-seed-password',extensions.gen_salt('bf')) where id::text like '20000000-%' or id::text like '30000000-%';
 insert into public.people(id,name) select ('30000000-0000-0000-0000-00000000000'||n)::uuid, name from unnest(array['وكيل المحتوى','المصمم','الناقد','وكيل الإعلانات','Lead']) with ordinality x(name,n);
 insert into public.members(company_id,person_id,role,agent_role) select '10000000-0000-0000-0000-000000000001',p.id,'contributor',x.agent_role::public.member_agent_role from (values (1,'writer'),(2,'designer'),(3,'critic'),(4,null),(5,'account_manager')) x(n,agent_role) join public.people p on p.id=('30000000-0000-0000-0000-00000000000'||x.n)::uuid;
 select set_config('request.jwt.claim.sub','30000000-0000-0000-0000-000000000001',false);

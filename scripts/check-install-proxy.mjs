@@ -1,9 +1,9 @@
 // CI runs this on stdin in a Node container on the install machine's network, twice: on the local install
 // (APP_ORIGIN http://localhost:3000, straight to the gateway) and through an HTTPS proxy in front of the gateway, with
 // APP_ORIGIN set to the proxy's public origin (README: a remote server). It goes the way a browser on that origin goes:
-// first run with a password, straight to the Company home (issue #41); an invitation, whose emailed link returns to the
-// app; and a sign-in request with a forged X-Forwarded-Host. Every redirect and link must stay on the public origin; one
-// built from the request inside the install says http and breaks the browser (issue #40).
+// first run with a password, straight to the Company home (issue #41); an invitation and a password reset, whose emailed
+// links return to the app; and a sign-in request with a forged X-Forwarded-Host. Every redirect and link must stay on
+// the public origin; one built from the request inside the install says http and breaks the browser (issue #40).
 import assert from 'node:assert/strict';
 
 const origin=process.env.APP_ORIGIN, mail=process.env.MAIL_URL;
@@ -95,6 +95,23 @@ assert.equal(back.searchParams.get('next'),`/c/${slug}/settings/members`,`the in
 assert.ok(new URLSearchParams(back.hash.slice(1)).get('access_token'),'the invitation link signs the invitee in');
 assert.equal((await visit(returned.split('#')[0])).status,200,'the accept page opens');
 console.log(`Invitation returned to ${accept}`);
+
+// A password reset as "Forgot password?" asks for one (implicit flow): its link returns to /auth/reset with the session
+// in the fragment, and that page runs in the browser.
+const reset=`${origin}/auth/reset`;
+const recovered=await visit(`${origin}/auth/v1/recover?redirect_to=${encodeURIComponent(reset)}`,{method:'POST',
+ headers:{apikey:anon,'content-type':'application/json'},body:JSON.stringify({email:owner.email})});
+assert.equal(recovered.status,200,`Auth sends the reset link (HTTP ${recovered.status})`);
+const resetLink=await emailedLink(owner.email,'reset');
+assert.ok(onOrigin(resetLink),`the reset link is on ${origin}: ${resetLink}`);
+assert.equal(new URL(resetLink).pathname,'/auth/v1/verify',`the reset link opens Auth behind the gateway: ${resetLink}`);
+const opened=await visit(resetLink);
+const landed=opened.headers.get('location') || '';
+assert.ok(opened.status>=300 && opened.status<400 && onOrigin(landed),`the reset link ${resetLink} returns to ${origin}: ${landed}`);
+assert.equal(landed.split('#')[0],reset,`the reset link returns to the reset page: ${landed}`);
+assert.equal(new URLSearchParams(new URL(landed).hash.slice(1)).get('type'),'recovery','the reset link carries a recovery session');
+assert.equal((await visit(reset)).status,200,'the reset page opens');
+console.log(`Reset link returned to ${reset}`);
 
 // A sign-in request whose client names another host: the emailed link still opens on APP_ORIGIN.
 const forged=await visit(`${origin}/auth/v1/otp`,{method:'POST',
