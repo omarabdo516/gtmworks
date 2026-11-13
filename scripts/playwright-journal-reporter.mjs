@@ -39,7 +39,8 @@ export default class PlaywrightJournal {
   identity(test) {
     const titles = [test.title];
     for (let suite = test.parent; suite?.type === 'describe'; suite = suite.parent) titles.unshift(suite.title);
-    return { project: test.parent?.project()?.name ?? '', file: repoPath(this.root, test.location.file), line: test.location.line, title: titles.join(' › ') };
+    // repeatEachIndex tells repetitions apart (--repeat-each); retries of one repetition share it.
+    return { project: test.parent?.project()?.name ?? '', file: repoPath(this.root, test.location.file), line: test.location.line, title: titles.join(' › '), repeatEachIndex: test.repeatEachIndex };
   }
 
   onBegin(config, suite) {

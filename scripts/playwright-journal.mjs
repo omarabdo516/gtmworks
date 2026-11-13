@@ -10,7 +10,10 @@ export const JOURNAL_VERSION = 1;
 
 // The only fields a record may carry. The reporter builds every record from this list, and the reader drops a record
 // with any other field, so an error, console line, attachment, parameter or environment value has nowhere to go.
-const identity = ['project', 'file', 'line', 'title'];
+// repeatEachIndex (Playwright's TestCase.repeatEachIndex) is a compatible v1 extension: a record written before it
+// existed lacks it, and that repetition stays unobserved (null), never assumed to be 0.
+const identity = ['project', 'file', 'line', 'title', 'repeatEachIndex'];
+const OPTIONAL_FIELDS = ['repeatEachIndex'];
 export const ALLOWED_FIELDS = {
   launch: ['v', 'kind', 'invocation', 'run'],
   begin: ['v', 'kind', 'invocation', 'root', 'selected'],
@@ -19,8 +22,10 @@ export const ALLOWED_FIELDS = {
   finished: ['v', 'kind', ...identity, 'retry', 'status', 'expected', 'duration'],
   end: ['v', 'kind', 'status'],
 };
+// A test result's status (TestResult.status) and the run's (FullResult.status) spell a timeout differently.
 export const TEST_STATUSES = ['passed', 'failed', 'timedOut', 'skipped', 'interrupted'];
-export const RUN_STATUSES = ['passed', 'failed', 'timedOut', 'interrupted'];
+export const RUN_STATUSES = ['passed', 'failed', 'timedout', 'interrupted'];
+const isKind = (kind) => typeof kind === 'string' && Object.hasOwn(ALLOWED_FIELDS, kind);
 const MAX_TEXT = 500;
 
 const text = (value) => (typeof value === 'string' ? value.slice(0, MAX_TEXT) : null);
@@ -33,8 +38,10 @@ export function runIdentity(env = process.env) {
   return { id: pattern(env.GITHUB_RUN_ID, /^\d{1,20}$/), attempt: pattern(env.GITHUB_RUN_ATTEMPT, /^\d{1,5}$/), sha: pattern(env.GITHUB_SHA, /^[0-9a-f]{40}$/) };
 }
 
-// One record, reduced to its kind's allowed fields with every value checked for type and range.
+// One record, reduced to its kind's allowed fields with every value checked for type and range. An optional field
+// without a valid value is left out rather than written as null.
 export function record(kind, fields) {
+  if (!isKind(kind)) throw new Error('playwright-journal: not a journal record kind');
   const clean = {
     v: JOURNAL_VERSION,
     kind,
@@ -46,17 +53,30 @@ export function record(kind, fields) {
     file: text(fields.file),
     line: count(fields.line),
     title: text(fields.title),
+    repeatEachIndex: count(fields.repeatEachIndex),
     retries: count(fields.retries),
     retry: count(fields.retry),
     status: oneOf(fields.status, kind === 'end' ? RUN_STATUSES : TEST_STATUSES),
     expected: oneOf(fields.expected, TEST_STATUSES),
     duration: count(fields.duration),
   };
-  return Object.fromEntries(ALLOWED_FIELDS[kind].map((key) => [key, clean[key]]));
+  return Object.fromEntries(ALLOWED_FIELDS[kind].filter((key) => !(OPTIONAL_FIELDS.includes(key) && clean[key] === null)).map((key) => [key, clean[key]]));
 }
 
-// Every complete line that is exactly what record() writes; anything else (a line cut off by a killed process, another
-// version, an extra field or an out-of-range value) is counted as malformed and ignored.
+// True only for a line that is exactly what record() writes: an object of one of the journal's own kinds (an inherited
+// name such as "__proto__" or "toString" is not one), with every required field, no other field, and every value as
+// record() checks it. A present optional field must hold a valid value.
+function wellFormed(value) {
+  if (value === null || typeof value !== 'object' || Array.isArray(value) || !isKind(value.kind) || value.v !== JOURNAL_VERSION) return false;
+  const allowed = ALLOWED_FIELDS[value.kind];
+  const keys = Object.keys(value);
+  if (keys.some((key) => !allowed.includes(key)) || allowed.some((key) => !OPTIONAL_FIELDS.includes(key) && !Object.hasOwn(value, key))) return false;
+  const clean = record(value.kind, value);
+  return keys.length === Object.keys(clean).length && keys.every((key) => JSON.stringify(clean[key]) === JSON.stringify(value[key]));
+}
+
+// Every well-formed line; anything else (a line cut off by a killed process, another version, an unknown kind, an extra
+// field or an out-of-range value) is counted as malformed and skipped, and the lines after it are still read.
 export function parseJournal(journal) {
   const records = [];
   let malformed = 0;
@@ -64,15 +84,14 @@ export function parseJournal(journal) {
     if (!line.trim()) continue;
     let value;
     try { value = JSON.parse(line); } catch { malformed += 1; continue; }
-    const allowed = ALLOWED_FIELDS[value?.kind];
-    const same = allowed && value.v === JOURNAL_VERSION && JSON.stringify(record(value.kind, value)) === JSON.stringify(Object.fromEntries(allowed.map((key) => [key, value[key]])));
-    if (!same || Object.keys(value).length !== allowed.length) { malformed += 1; continue; }
-    records.push(value);
+    if (wellFormed(value)) records.push(value);
+    else malformed += 1;
   }
   return { records, malformed };
 }
 
-const keyOf = (r) => JSON.stringify([r.project, r.file, r.line, r.title]);
+// One case is one repetition of one test; its retries are attempts of that case.
+const keyOf = (r) => JSON.stringify([r.project, r.file, r.line, r.title, r.repeatEachIndex ?? null]);
 
 // A case's outcome from its observed attempts only. Playwright's own words for a final outcome (expected, unexpected,
 // flaky, skipped); interrupted, retry-pending and not-started are unknown and never counted as passed or failed.
@@ -93,7 +112,7 @@ export function summarizeJournal(journal) {
   let launched = null, began = null, ended = null;
   let cases = new Map();
   const caseFor = (r) => {
-    if (!cases.has(keyOf(r))) cases.set(keyOf(r), { project: r.project, file: r.file, line: r.line, title: r.title, retries: null, attempts: new Map() });
+    if (!cases.has(keyOf(r))) cases.set(keyOf(r), { project: r.project, file: r.file, line: r.line, title: r.title, repeatEachIndex: r.repeatEachIndex ?? null, retries: null, attempts: new Map() });
     return cases.get(keyOf(r));
   };
   for (const r of records) {
@@ -114,6 +133,9 @@ export function summarizeJournal(journal) {
     endStatus: ended?.status ?? null,
     root: began?.root ?? null,
     selected: began?.selected ?? null,
+    // Selected cases whose identity was never written (the process stopped while writing the selection): unknown,
+    // and never named, started or given an outcome. null while the selection itself is unknown.
+    unrecordedSelected: Number.isSafeInteger(began?.selected) ? Math.max(0, began.selected - cases.size) : null,
     started: 0,
     outcomes: { expected: 0, unexpected: 0, flaky: 0, skipped: 0 },
     unknown: { interrupted: 0, retryPending: 0, notStarted: 0 },
@@ -130,9 +152,9 @@ export function summarizeJournal(journal) {
     summary.attempts.finished += attempts.filter((a) => a.status).length;
     if (unknownKey[result]) summary.unknown[unknownKey[result]] += 1;
     else summary.outcomes[result] += 1;
-    summary.cases.push({ project: c.project, file: c.file, line: c.line, title: c.title, outcome: result, attempts: attempts.filter((a) => a.status).map(({ retry, status, duration }) => ({ retry, status, duration })) });
+    summary.cases.push({ project: c.project, file: c.file, line: c.line, title: c.title, repeatEachIndex: c.repeatEachIndex, outcome: result, attempts: attempts.filter((a) => a.status).map(({ retry, status, duration }) => ({ retry, status, duration })) });
   }
-  summary.unknownCases = summary.cases.filter((c) => unknownKey[c.outcome]).map(({ project, file, line, title, outcome: o }) => ({ project, file, line, title, outcome: o }));
+  summary.unknownCases = summary.cases.filter((c) => unknownKey[c.outcome]).map(({ project, file, line, title, repeatEachIndex, outcome: o }) => ({ project, file, line, title, repeatEachIndex, outcome: o }));
   return summary;
 }
 
@@ -152,7 +174,7 @@ export function adaptReport(summary, execution = { v: JOURNAL_VERSION, run: summ
       title: c.title,
       file,
       line: c.line,
-      tests: [{ projectName: c.project, status: ['expected', 'unexpected', 'flaky', 'skipped'].includes(c.outcome) ? c.outcome : 'unknown', results: c.attempts }],
+      tests: [{ projectName: c.project, repeatEachIndex: c.repeatEachIndex, status: ['expected', 'unexpected', 'flaky', 'skipped'].includes(c.outcome) ? c.outcome : 'unknown', results: c.attempts }],
     });
   }
   return { source: 'journal', execution, suites: [...files.values()] };
@@ -165,13 +187,18 @@ export function reportState(report) {
   return report?.execution?.invocations?.main?.state ?? 'complete';
 }
 
+// How many cases of a summary have no final outcome: the named unknown ones plus the selected ones never recorded by name.
+export function withoutFinalOutcome(s) {
+  return s.unknown.interrupted + s.unknown.retryPending + s.unknown.notStarted + (s.unrecordedSelected ?? 0);
+}
+
 // The invocations other than main that started, as one line each: "proxy: complete (failed), 0 expected, 1 unexpected, …".
 export function otherInvocations(report) {
   return Object.entries(report?.execution?.invocations ?? {})
     .filter(([name, s]) => name !== 'main' && s.state !== 'not-started')
     .map(([name, s]) => {
-      const unknown = s.unknown.interrupted + s.unknown.retryPending + s.unknown.notStarted;
-      return `${name}: ${s.state}${s.endStatus ? ` (${s.endStatus})` : ''}, ${s.outcomes.expected} expected, ${s.outcomes.unexpected} unexpected, ${s.outcomes.flaky} flaky, ${s.outcomes.skipped} skipped, ${unknown} without a final outcome`;
+      const unrecorded = s.unrecordedSelected ? ` (${s.unrecordedSelected} selected but never recorded by name)` : '';
+      return `${name}: ${s.state}${s.endStatus ? ` (${s.endStatus})` : ''}, ${s.outcomes.expected} expected, ${s.outcomes.unexpected} unexpected, ${s.outcomes.flaky} flaky, ${s.outcomes.skipped} skipped, ${withoutFinalOutcome(s)} without a final outcome${unrecorded}`;
     });
 }
 
@@ -217,6 +244,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.ar
   if (!dir) { console.error('usage: playwright-journal.mjs <report-dir>'); process.exit(2); }
   const { invocations } = finalize(dir);
   for (const [name, s] of Object.entries(invocations)) {
-    console.log(`${name}: ${s.state}${s.endStatus ? ` (${s.endStatus})` : ''}, selected ${s.selected ?? 'unknown'}, final ${JSON.stringify(s.outcomes)}, unknown ${JSON.stringify(s.unknown)}, malformed ${s.malformed}`);
+    console.log(`${name}: ${s.state}${s.endStatus ? ` (${s.endStatus})` : ''}, selected ${s.selected ?? 'unknown'}, final ${JSON.stringify(s.outcomes)}, unknown ${JSON.stringify(s.unknown)}, selected but never recorded by name ${s.unrecordedSelected ?? 'unknown'}, malformed ${s.malformed}`);
   }
 }

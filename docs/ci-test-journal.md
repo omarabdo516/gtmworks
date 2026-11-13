@@ -19,12 +19,22 @@ parameters, URLs and environment values are never written.
 | --- | --- | --- |
 | `launch` | Playwright starts, before its web server | `invocation`, `run` (`id`, `attempt`, `sha`: the CI run, its attempt and the commit; `null` outside CI or when not in the expected shape) |
 | `begin` | the tests are selected | `invocation`, `root` (the test directory), `selected` (how many) |
-| `selected` | once per selected test | `project`, `file` (repository-relative), `line`, `title` (describe titles and the test title, joined by ` › `), `retries` |
+| `selected` | once per selected test | `project`, `file` (repository-relative), `line`, `title` (describe titles and the test title, joined by ` › `), `repeatEachIndex`, `retries` |
 | `started` | an attempt starts | the test's identity, `retry` |
-| `finished` | an attempt ends | the test's identity, `retry`, `status`, `expected` (the status Playwright expected), `duration` (ms) |
-| `end` | the run ends | `status` (`passed`, `failed`, `timedOut`, `interrupted`) |
+| `finished` | an attempt ends | the test's identity, `retry`, `status` (`passed`, `failed`, `timedOut`, `skipped`, `interrupted`), `expected` (the status Playwright expected), `duration` (ms) |
+| `end` | the run ends | `status` (`passed`, `failed`, `timedout` when the run reached its global time limit, `interrupted`) |
 
-A line cut off by a killed process, or any line that is not exactly such a record, is counted as `malformed` and ignored.
+A test's timeout is `timedOut` and the run's is `timedout`: Playwright's own spellings (`TestResult.status` and
+`FullResult.status`). Each is accepted only in its own record kind.
+
+A test's identity is `project`, `file`, `line`, `title` and `repeatEachIndex` (Playwright's `TestCase.repeatEachIndex`,
+0 unless `--repeat-each` runs a test more than once). Each repetition is its own case; `retry` counts the attempts of
+one repetition. `repeatEachIndex` is a compatible addition to version 1: a line written before it existed lacks the
+field and is still read, with the repetition unobserved (`null`), never assumed to be 0. A line that has the field with
+anything but a non-negative whole number is malformed.
+
+A line cut off by a killed process, or any line that is not exactly such a record (including one whose `kind` is not
+one of the six above), is counted as `malformed` and ignored; the lines after it are still read.
 
 ## States
 
@@ -37,7 +47,13 @@ Each selected test gets one outcome, from its observed attempts only:
 - final: `expected`, `unexpected`, `flaky`, `skipped` (Playwright's own words);
 - unknown: `interrupted` (its last attempt started and did not finish, or Playwright marked it interrupted),
   `retry-pending` (it failed with a retry left and the run did not complete: no `end`, or an `interrupted` or
-  `timedOut` end, which stops scheduling and so cannot show the retry was never due), `not-started`.
+  `timedout` end, which stops scheduling and so cannot show the retry was never due), `not-started` (its identity
+  was recorded but no attempt started).
+
+A run can also stop while it is still writing its `selected` lines. `unrecordedSelected` counts the selected cases
+whose identity was never written (`selected` minus the cases recorded by name; `null` before `begin`, while the
+selection itself is unknown). They are unknown too, but nothing is said about them: no name, start or outcome. So
+final outcomes + named unknown outcomes + `unrecordedSelected` = `selected`.
 
 An unknown outcome is never counted as passed or failed.
 
@@ -53,9 +69,13 @@ An unknown outcome is never counted as passed or failed.
   without a final outcome have status `unknown`, which `compare-failures` and `flaky-tests` read as neither failed,
   passed nor flaky, and both say the run stopped before it finished.
 
-`execution.json` (and the `execution` field) holds, per invocation: `state`, `endStatus`, `selected`, `started`,
-`outcomes`, `unknown` counts, `attempts`, `malformed` and `unknownCases` (the identity and outcome of every case without a
-final outcome).
+`execution.json` (and the `execution` field) holds, per invocation: `state`, `endStatus`, `selected`,
+`unrecordedSelected`, `started`, `outcomes`, `unknown` counts, `attempts`, `malformed` and `unknownCases` (the identity
+and outcome of every recorded case without a final outcome).
+
+When the latest main run was interrupted, `compare-failures` names a PR failure that main also showed failing as
+inherited, and one main never showed as **unknown on main**, a separate list and section: main stopped before it had an
+outcome there, so it is not called this PR's own. Against a complete main run the two lists are as before.
 
 The journal records evidence only. The required `check` still follows the `integration` job's own result, so an
 interrupted or failed suite stays red.
