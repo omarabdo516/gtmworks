@@ -154,11 +154,14 @@ if [ "$operation" = install ]; then compose up -d --wait db auth rest storage ma
   done
   printf "notify pgrst, 'reload schema';\n"
 } | compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 --single-transaction
-if [ -z "$release_image" ]; then compose build web; fi
-# Compose does not recreate a container when only a file it mounts changed: recreate the gateway so its new config (the
-# X-Real-IP the auth rate limit counts by, issue #41) is the one that serves. Before the app starts: the worker reaches
-# the database through the gateway, so nothing restarts once the worker runs.
-compose up -d --no-deps --force-recreate --wait --wait-timeout 300 gateway
+if [ -z "$release_image" ]; then
+  compose build web
+  # Compose does not recreate a container when only a file it mounts changed: recreate the gateway so its new config (the
+  # X-Real-IP the auth rate limit counts by, issue #41) is the one that serves. Before the app starts: the worker reaches
+  # the database through the gateway, so nothing restarts once the worker runs. A release install lets compose recreate
+  # what its pinned files changed and reloads the gateway below.
+  compose up -d --no-deps --force-recreate --wait --wait-timeout 300 gateway
+fi
 if [ "$operation" = update ] && [ -z "$release_image" ]; then
   # auth is recreated when its settings changed (password rules, reset-link lifetime, session length) and must be healthy.
   compose up -d --no-deps --wait --wait-timeout 300 auth hermes web worker

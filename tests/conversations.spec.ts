@@ -305,7 +305,7 @@ test('the shell opens an Agent, sends a message, switches language and theme, an
  test.setTimeout(240000);
  const fake=await fakeHermes(); let agents={};
  try {
-  await agencySignIn(page); agents=await attachAgents(page,fake);
+  await ownerSignIn(page); agents=await attachAgents(page,fake);
   omarSetting('theme','light');
   await page.setViewportSize({width:1440,height:900});
   await page.goto('/c/rs-learning/home');
@@ -430,7 +430,7 @@ for(const width of [1440,390]) test(`a real Agent keeps one identity across the 
  test.setTimeout(180000);
  const fake=await fakeHermes(); let agents={};
  try {
-  await agencySignIn(page); agents=await attachAgents(page,fake);
+  await ownerSignIn(page); agents=await attachAgents(page,fake);
   const fixture=agents as Record<'Mona'|'Nour',{id:string,connection:string}>;
   await page.setViewportSize({width,height:900});
   const face=(svg:Locator)=>svg.evaluate(node=>({icon:node.innerHTML,color:node.querySelector(':scope > g')?.getAttribute('fill')}));

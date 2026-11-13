@@ -208,7 +208,8 @@ test('a release install refuses a compose file from another release and an updat
  const commands=release.commands().split('\n');
  const up=commands.findIndex(line=>/ up -d /.test(line));
  assert.match(commands[up],/ up -d --wait --wait-timeout 300$/);
- assert.doesNotMatch(release.commands(),/--no-deps/);
+ // No `up` limits itself to some services (the gateway's config check, `run --rm --no-deps gateway nginx -t`, starts none).
+ assert.doesNotMatch(release.commands(),/ up [^\n]*--no-deps/);
  assert.ok(commands.findIndex(line=>/exec -T gateway nginx -s reload$/.test(line))>up);
 });
 

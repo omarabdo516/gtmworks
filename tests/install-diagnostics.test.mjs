@@ -116,13 +116,18 @@ test('a failed install check prints the web and gateway summaries before teardow
  const order=readFileSync(commands,'utf8').split('\n');
  const at=pattern=>order.findIndex(line=>pattern.test(line));
  assert.ok(at(/compose .*logs .*web$/)>=0 && at(/compose .*logs .*gateway$/)>=0,'web and gateway logs are read');
- assert.ok(at(/compose .*logs .*gateway$/)<at(/rm -fv install-docker/),'logs are read before the install is torn down');
+ // The install and release steps share one Docker machine (#49); a later step removes it, also after a failure, so the
+ // logs the trap reads always come before the teardown.
+ assert.equal(at(/rm -fv install-docker/),-1,'the install step leaves the machine to the teardown step');
+ const steps=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install.steps;
+ const teardown=steps.findIndex(s=>/docker rm -fv install-docker/.test(s.run||''));
+ assert.ok(teardown>steps.indexOf(step),'logs are read before the install is torn down');
+ assert.match(String(steps[teardown].if),/always\(\)/,'the teardown runs after a failure too');
 
  writeFileSync(commands,'');
  const passed=run(until(0));
  assert.equal(passed.status,0,passed.stderr);
  assert.doesNotMatch(readFileSync(commands,'utf8'),/logs/);
- assert.match(readFileSync(commands,'utf8'),/rm -fv install-docker/);
 
  // Diagnostics that cannot run never print a raw log and never change the status.
  rmSync(join(directory,'app'),{recursive:true});

@@ -77,7 +77,7 @@ registerHooks({resolve(specifier,context,next) {
 test('the page after sign-in stays inside gtmworks', async () => {
  const {safeNext}=await import('../lib/navigation.ts');
  assert.equal(safeNext('/c/rs-learning/home'),'/c/rs-learning/home');
- assert.equal(safeNext('/all-brands'),'/all-brands');
+ assert.equal(safeNext('/c/aleem/work/board'),'/c/aleem/work/board');
  for(const outside of ['//evil.example/c/x/','https://evil.example/c/x/','/c/x/..\\..\\\\evil.example','/\\evil.example',null,'']) assert.equal(safeNext(outside),'/',String(outside));
 });
 
