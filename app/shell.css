@@ -63,6 +63,14 @@
 .gw .me { padding: 4px; min-height: 44px; background: transparent; }
 .gw .menu__item { padding: 4px 10px; min-height: 32px; background: transparent; justify-content: flex-start; }
 
+/* The reference's thin scrollbars: no arrows, a 10px track, the thumb shows on hover (design-reference: base). */
+.gw ::-webkit-scrollbar { width: 10px; height: 10px; background: transparent; }
+.gw ::-webkit-scrollbar-track, .gw ::-webkit-scrollbar-corner { background: transparent; }
+.gw ::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+.gw ::-webkit-scrollbar-thumb { background: transparent; border-radius: var(--gw-r-full); border: 3px solid transparent; background-clip: padding-box; }
+.gw :hover::-webkit-scrollbar-thumb { background-color: #1C1C1C2E; }
+:root[data-theme="dark"] .gw :hover::-webkit-scrollbar-thumb { background-color: #F5F5F52E; }
+
 /* ---------- frame ---------- */
 .gw.app-layout { display: grid; grid-template-columns: var(--gw-sidebar-w) minmax(0, 1fr); height: 100vh; height: 100dvh; overflow: hidden; }
 .gw .shell { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
@@ -177,7 +185,7 @@
   width: 36px; height: 36px; border-radius: 50%; flex: none; background: var(--gw-bg-active); box-shadow: var(--gw-border-3) 0 0 0 0.5px inset;
   color: var(--gw-text-2); display: inline-flex; align-items: center; justify-content: center; font-size: var(--gw-fs-base); font-weight: 600;
 }
-.gw .me__name { text-align: match-parent; font-size: var(--gw-fs-base); line-height: 1.35; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.gw .me__name { text-align: start; font-size: var(--gw-fs-base); line-height: 1.35; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .gw .me__role { font-size: var(--gw-fs-xs); color: var(--gw-text-3); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .gw .menu {
   position: absolute; z-index: 30; inset-inline: 12px; bottom: calc(100% - 4px); max-height: min(440px, 62vh); overflow-y: auto;
@@ -345,7 +353,7 @@
   .gw .circle-btn { width: 44px; height: 44px; }
   .gw .sb-item { height: 44px; }
   .gw .menu__item { min-height: 44px; }
-  .gw .sb-add { width: 44px; height: 44px; margin: -14px -8px -6px; }
+  .gw .sb-add { width: 44px; height: 44px; margin: -14px 0 -6px; }
   /* The approvals count gets its own 44px square beside Marketing board instead of sitting on top of it, and the
      company picker is as tall as the rows below it. */
   .gw .sb-row .sb-item { flex: 1 1 0; min-width: 0; }

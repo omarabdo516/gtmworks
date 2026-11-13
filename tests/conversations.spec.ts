@@ -477,3 +477,85 @@ for(const width of [1440,390]) test(`a real Agent keeps one identity across the 
   }
  } finally { detach(agents); await fake.close(); }
 });
+
+// #8, the rest of the approved reference's shell and chat: the Agent's details beside the chat (over it below 1024px),
+// the chat search, and the parts not built yet (channels, Connect apps, the composer's extras and dictation, the
+// details tabs) drawn as the reference draws them but disabled with "Soon", with no invented counts.
+test('the Agent details panel, the chat search, the account menu sections and the not-built-yet parts follow the reference',async({page})=>{
+ test.setTimeout(180000);
+ const fake=await fakeHermes(); let agents={};
+ try {
+  await ownerSignIn(page); agents=await attachAgents(page,fake);
+  const fixture=agents as Record<'Mona'|'Nour',{id:string}>;
+  await page.setViewportSize({width:1440,height:900});
+  await page.goto(`/c/rs-learning/chat/${fixture.Mona.id}`);
+  // Beside the chat at 1440: the details are open, named for the Agent, with its main mark and speciality.
+  const pill=page.locator('.chat .head-pill');
+  const details=page.getByRole('complementary',{name:'Details: Mona',exact:true});
+  await expect(details).toBeVisible();
+  await expect(pill).toHaveAttribute('aria-expanded','true');
+  await expect(details.locator('.dp-id__name')).toHaveText('MonaMain');
+  await expect(details.locator('.dp-id__role')).toHaveText('Marketing');
+  await expect(details.getByRole('link',{name:'Settings for Mona',exact:true})).toHaveAttribute('href','/c/rs-learning/agents');
+  // The five tabs are drawn, each disabled and saying "Soon".
+  const tabs=details.locator('.dp-tabs button');
+  await expect(tabs).toHaveText(['Activity · Soon','Tasks · Soon','Files · Soon','Memory · Soon','Log · Soon']);
+  for(const tab of await tabs.all()) { await expect(tab).toHaveAttribute('aria-disabled','true'); await expect(tab).toHaveAttribute('title','Soon'); }
+  // The title pill hides and shows the details; the close button hides them and gives the focus back to the pill.
+  await pill.click(); await expect(details).toBeHidden(); await expect(pill).toHaveAttribute('aria-expanded','false');
+  await pill.click(); await expect(details).toBeVisible();
+  await details.getByRole('button',{name:'Close details',exact:true}).click();
+  await expect(details).toBeHidden(); await expect(pill).toBeFocused();
+  // Below 1024px the details start closed and slide over the chat; Escape closes them.
+  await page.setViewportSize({width:900,height:900});
+  await page.reload();
+  await expect(details).toBeHidden();
+  await pill.click();
+  await expect(page.locator('.details.is-open')).toBeVisible();
+  await expect(details.getByRole('button',{name:'Close details',exact:true})).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.details.is-open')).toHaveCount(0); await expect(details).toBeHidden(); await expect(pill).toBeFocused();
+  await page.setViewportSize({width:1440,height:900});
+  // The composer's extras and dictation are drawn but disabled; the text and send still work (tests above).
+  for(const name of ['More · Soon','Voice dictation · Soon']) {
+   const control=page.locator('.composer').getByRole('button',{name,exact:true});
+   await expect(control).toHaveAttribute('aria-disabled','true'); await expect(control).toHaveAttribute('title','Soon');
+  }
+  // Channels: the general channel and the Owner's new-channel button, disabled, with no unread number.
+  const sidebar=page.locator('.sidebar');
+  await expect(sidebar.locator('#lbl-ch')).toHaveText('Channels');
+  const general=sidebar.locator('.ch-item');
+  await expect(general).toHaveText('general · Soon'); await expect(general).toHaveAttribute('aria-disabled','true');
+  await expect(sidebar.getByRole('button',{name:'New channel · Soon',exact:true})).toHaveAttribute('aria-disabled','true');
+  await expect(sidebar.locator('.sb-unread')).toHaveCount(0);
+  // Connect apps: disabled, "Soon" where the reference counts connected apps.
+  const apps=sidebar.locator('#btn-apps');
+  await expect(apps).toHaveText('Connect appsSoon'); await expect(apps).toHaveAttribute('aria-disabled','true');
+  // Search: the magnifier opens a field that narrows the recent chats by title; Escape empties it, then closes it.
+  const text=`Search check ${Date.now()}`;
+  const started=await send(page,{conversation:randomUUID(),agent:fixture.Nour.id,message:text,sendKey:randomUUID()});
+  expect(started.status()).toBe(200);
+  await page.reload();
+  await sidebar.getByRole('button',{name:'Search chats',exact:true}).click();
+  const field=sidebar.getByRole('searchbox',{name:'Search chats'});
+  await expect(field).toBeFocused();
+  await field.fill('no chat is called this');
+  await expect(sidebar.locator('.thread-item:not(.ch-item)')).toHaveCount(0);
+  await expect(sidebar.locator('.sb-empty')).toHaveText('No chats match “no chat is called this”');
+  await field.fill(text.slice(0,12).toUpperCase());
+  await expect(sidebar.locator('.thread-item:not(.ch-item)').filter({hasText:text})).toHaveCount(1);
+  await field.press('Escape'); await expect(field).toHaveValue('');
+  await field.press('Escape'); await expect(field).toHaveCount(0);
+  await expect(sidebar.getByRole('button',{name:'Search chats',exact:true})).toHaveAttribute('aria-expanded','false');
+  // The account menu: Connect apps disabled, and "More sections" reaches the sections the reference has no place for.
+  await page.getByRole('button',{name:'Account menu',exact:true}).click();
+  const menu=page.getByRole('menu');
+  await expect(menu.getByRole('menuitem',{name:/^Connect apps/})).toHaveAttribute('aria-disabled','true');
+  const more=menu.getByRole('group',{name:'More sections',exact:true}).getByRole('menuitem');
+  await expect(more).toHaveText(['Home','Projects','Skills','Approvals','Usage','Members','Work settings','Agent keys','Agents']);
+  expect(await more.evaluateAll(links=>links.map(link=>link.getAttribute('href')))).toEqual(['home','projects','skills','approvals','usage','settings/members','settings/work','settings/agents','agents'].map(path=>`/c/rs-learning/${path}`));
+  await more.filter({hasText:'Members'}).click();
+  await expect(page).toHaveURL(/\/c\/rs-learning\/settings\/members$/);
+  await expect(page.getByRole('menu')).toHaveCount(0);
+ } finally { detach(agents); await fake.close(); }
+});

@@ -9,6 +9,6 @@ export const navGroups = [
  {label:'team',items:[['agents','teamAgents'],['skills','skills'],['connections','connections'],['history','activityLog']]},
 ] as const;
 export const nav = [...primaryNav,...navGroups.flatMap<readonly [string,string]>(group=>group.items),['settings','settings']] as const;
-export const sections: Record<string,string> = Object.fromEntries([...nav, ['work/new','newCard'], ['work/calendar','work'], ['work/list','work'], ['settings/members','settings'], ['settings/work','workSettings'], ['settings/agents','settings'], ['usage','usage']]);
+export const sections: Record<string,string> = Object.fromEntries([...nav, ['work/board','marketingBoard'], ['approvals','marketingBoard'], ['work/new','newCard'], ['work/calendar','work'], ['work/list','work'], ['settings/members','settings'], ['settings/work','workSettings'], ['settings/agents','settings'], ['usage','usage']]);
 export const placeholders: Record<string,string> = {search:'searchIsNotAvailableYet',recurring:'noRoutinesYet',connections:'noConnectionsYet',history:'noActivityLogYet'};
 export function safeNext(value: string | null) { return value && /^\/c\/[^/]+\//.test(value) && !value.startsWith('//') && !value.includes('\\') ? value : '/'; }

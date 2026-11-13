@@ -3,7 +3,7 @@
 Every reference screen and every issue taken in the one-session build (branch `gtmworks/one-session`). An item stays
 `passes: false` until its proof is written next to it: a command and its result, or a screenshot path. Items are never
 deleted; only `passes` flips. Screens are compared reference-left, app-right in Arabic at each width; the pairs are
-saved under `/home/omar/.hermes/cache/scratch/gtm-session/shots/`.
+saved in the session's shots folder outside the repository.
 
 ## Reference screens
 

@@ -45,7 +45,7 @@ export default function AccountMenu({slug,personName,role,theme,companyName,sett
  const initial=personName.trim().slice(0,1).toUpperCase();
  return <div ref={box} className="contents">
   {open&&<div className="menu me-menu" id="me-menu" role="menu" aria-labelledby="btn-me">
-   <div className="me-menu__head"><span className="me__av" aria-hidden="true">{initial}</span><span className="me__text"><bdi className="me__name">{personName}</bdi><span className="me__role">{role}{companyName&&<> · <bdi>{companyName}</bdi></>}</span></span></div>
+   <div className="me-menu__head"><span className="me__av" aria-hidden="true">{initial}</span><span className="me__text"><span className="me__name"><bdi>{personName}</bdi></span><span className="me__role">{role}{companyName&&<> · <bdi>{companyName}</bdi></>}</span></span></div>
    {settingsHref&&<><div className="menu__sep" role="separator"/>
     <Link className="menu__item" role="menuitem" href={settingsHref} onClick={()=>setOpen(false)}><ShellIcon name="gear"/><span className="menu__t">{t('settings')}<span className="menu__d">{t('settingsMenuDescription')}</span></span></Link></>}
    <div className="menu__sep" role="separator"/>
@@ -67,7 +67,7 @@ export default function AccountMenu({slug,personName,role,theme,companyName,sett
   </div>}
   <button ref={button} type="button" className="me" id="btn-me" aria-haspopup="menu" aria-expanded={open} aria-controls="me-menu" aria-label={t('accountMenu')} onClick={()=>setOpen(value=>!value)}>
    <span className="me__av" aria-hidden="true">{initial}</span>
-   <span className="me__text"><bdi className="me__name">{personName}</bdi><span className="me__role">{role}</span></span>
+   <span className="me__text"><span className="me__name"><bdi>{personName}</bdi></span><span className="me__role">{role}</span></span>
    <span className="me__chev" aria-hidden="true"><ShellIcon name="up"/></span>
   </button>
   {error&&<p role="alert" className="sr-only">{error}</p>}

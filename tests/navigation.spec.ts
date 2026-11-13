@@ -43,8 +43,11 @@ test.afterAll(async ({ browser }) => {
     // as the seed's single step needs (the same flow as "own comments, moves and approvals ...").
     if (await card.count()) {
       expect(await card.count(), 'only the card this run created').toBe(1);
-      await card.locator('.approval-expand > summary').click();
-      await card.getByRole('button', { name: "Approve", exact: true }).click();
+      // The waiting column lists the card; its decision is taken inside the card (#16).
+      await card.getByRole('link', { name: created.title }).click();
+      await page.locator('[data-card-section="review"]').getByRole('button', { name: "Approve", exact: true }).click();
+      await expect(page.locator('.card-stage-line')).toContainText('معتمد');
+      await page.goto('/c/rs-learning/approvals');
       await expect(card).toHaveCount(0);
     }
     inboxFixture = undefined;
@@ -228,8 +231,11 @@ test('own comments, moves and approvals invalidate prepared pages immediately', 
   await page.locator('.sidebar .sb-count[href$="/approvals"]').click();
   const queued = page.locator('.approval-card').filter({ hasText: title });
   await expect(queued).toBeVisible();
-  await queued.locator('.approval-expand > summary').click();
-  await queued.getByRole('button', { name: "Approve", exact: true }).click();
+  await queued.getByRole('link', { name: title }).click();
+  await page.locator('[data-card-section="review"]').getByRole('button', { name: "Approve", exact: true }).click();
+  await expect(page.locator('.card-stage-line')).toContainText('معتمد');
+  await openNavigation(page);
+  await page.locator('.sidebar .sb-count[href$="/approvals"]').click();
   await expect(queued).toHaveCount(0);
   await openNavigation(page);
   await page.locator('.nav a[href$="/work/board"]').click();

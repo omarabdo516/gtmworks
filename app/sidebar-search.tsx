@@ -23,6 +23,6 @@ export function SearchBox() {
  const {t}=useI18n(); const {open,query,setQuery,toggle}=useContext(SearchContext);
  return <div className="sb-search" id="sb-search" hidden={!open}>{open&&<>
   <label className="sr-only" htmlFor="sb-q">{t('searchChats')}</label>
-  <input autoFocus type="search" id="sb-q" autoComplete="off" dir="auto" placeholder={t('searchChats')} value={query} onChange={event=>setQuery(event.target.value)} onKeyDown={event=>{if(event.key==='Escape'&&query){event.stopPropagation();setQuery('');}else if(event.key==='Escape'){event.stopPropagation();toggle();document.getElementById('btn-search')?.focus();}}}/>
+  <input autoFocus type="search" id="sb-q" autoComplete="off" dir={query?'auto':undefined} placeholder={t('searchChats')} value={query} onChange={event=>setQuery(event.target.value)} onKeyDown={event=>{if(event.key==='Escape'&&query){event.stopPropagation();setQuery('');}else if(event.key==='Escape'){event.stopPropagation();toggle();document.getElementById('btn-search')?.focus();}}}/>
  </>}</div>;
 }
