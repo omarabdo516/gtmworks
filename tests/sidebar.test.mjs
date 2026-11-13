@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { orderAgents, groupRecents, waitingLabel, themeChoices, companyAgents } from '../lib/sidebar.mjs';
+import { orderAgents, groupRecents, waitingLabel, themeChoices, companyAgents, matchChats, moreSections } from '../lib/sidebar.mjs';
+import { readFileSync } from 'node:fs';
 
 test('the Inbox entry is named at zero too, so it stays reachable when nothing waits', () => {
  assert.deepEqual(waitingLabel(0), ['nothingWaitingOnYou']);
@@ -52,4 +53,21 @@ test('a day with no chats has no group', () => {
  const now = new Date(2026, 10, 12, 9, 0);
  assert.deepEqual(groupRecents([], now), []);
  assert.deepEqual(groupRecents([{ id: 'x', created_at: new Date(2026, 10, 1).toISOString() }], now).map(group => group.day), ['earlier']);
+});
+
+test('the sidebar search narrows chats by title, ignoring case and surrounding space, and an empty search keeps all', () => {
+ const chats = [{ id: 1, title: 'خطة حملة Meta' }, { id: 2, title: 'Weekly report' }];
+ assert.deepEqual(matchChats(chats, '').map(chat => chat.id), [1, 2]);
+ assert.deepEqual(matchChats(chats, '   ').map(chat => chat.id), [1, 2]);
+ assert.deepEqual(matchChats(chats, ' meta ').map(chat => chat.id), [1]);
+ assert.deepEqual(matchChats(chats, 'WEEKLY').map(chat => chat.id), [2]);
+ assert.deepEqual(matchChats(chats, 'nothing'), []);
+});
+
+test('"More sections" reaches every existing section the reference has no place for, each named in both languages', () => {
+ assert.deepEqual(moreSections.map(([path]) => path), ['home', 'projects', 'skills', 'approvals', 'usage', 'settings/members', 'settings/work', 'settings/agents', 'agents']);
+ for (const language of ['en', 'ar']) {
+  const catalogue = JSON.parse(readFileSync(new URL(`../lib/messages/${language}.json`, import.meta.url), 'utf8'));
+  for (const [path, key] of moreSections) assert.ok(catalogue[key], `${language}: ${path} has a name`);
+ }
 });

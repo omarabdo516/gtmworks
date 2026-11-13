@@ -1,0 +1,11 @@
+export type LogValue = { text: string } | { key: string };
+export type LogRow = { id: number, created_at: string, actor_kind: 'person' | 'agent' | 'system', actor_id: string | null, actor_name?: string | null, subject: 'card' | 'member' | 'agent', card_id?: number | null, person_id?: string | null, agent_id?: string | null, action: string, details?: Record<string, unknown> | null, body?: string | null };
+export type LogLine = { act: [string, ...LogValue[]], obj?: string, from?: LogValue, to?: LogValue, note?: string };
+export function describeEntry(row: Pick<LogRow, 'action' | 'subject' | 'details' | 'body' | 'person_id' | 'agent_id'>, names?: { name?: (id: string) => string | undefined, agentName?: (id: string) => string | undefined }): LogLine;
+export type Who = { kind: 'all' } | { kind: 'system' } | { kind: 'person' | 'agent', id: string };
+export function parseWho(value: unknown): Who;
+export function parseCard(value: unknown): number | null;
+export function matchesFilters(row: Pick<LogRow, 'actor_kind' | 'actor_id' | 'agent_id' | 'card_id'>, who: Who, card: number | null): boolean;
+export function dayOf(iso: string, timeZone?: string): string;
+export function daysBack(day: string, today: string): number;
+export function groupByDay<T extends { id: number, created_at: string }>(rows: T[], timeZone?: string): { day: string, items: T[] }[];

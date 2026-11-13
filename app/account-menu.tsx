@@ -5,7 +5,7 @@ import Link from '@/lib/link';
 import { ShellIcon } from '@/components/shell-icon';
 import { saveTheme } from './theme-actions';
 import { saveLanguage } from './language-actions';
-import { themeChoices } from '@/lib/sidebar.mjs';
+import { moreSections, themeChoices } from '@/lib/sidebar.mjs';
 
 const themeIcons={light:'sun',dark:'moon',device:'monitor'} as const;
 
@@ -14,8 +14,9 @@ const languages=[{key:'en',name:'languageNameEnglish',description:'languageEngli
 
 // The account row at the bottom of the sidebar (reference: #btn-me and its menu): who you are, Settings, the
 // interface language and the theme. Both are saved to the account, so every device opens in them. The theme group
-// keeps "Device" (follow the system), which the sun/moon button alone cannot choose.
-export default function AccountMenu({personName,role,theme,companyName,settingsHref}:{personName:string,role:string,theme:string,companyName?:string,settingsHref?:string}) {
+// keeps "Device" (follow the system), which the sun/moon button alone cannot choose. Connect apps is not built yet
+// (#30). "More sections" reaches the company's existing sections that the reference has no place for.
+export default function AccountMenu({slug,personName,role,theme,companyName,settingsHref}:{slug?:string,personName:string,role:string,theme:string,companyName?:string,settingsHref?:string}) {
  const {t,language}=useI18n();
  const [open,setOpen]=useState(false);
  const [error,setError]=useState('');
@@ -57,6 +58,12 @@ export default function AccountMenu({personName,role,theme,companyName,settingsH
    <div role="group" aria-labelledby="me-theme-lbl">{themeChoices.map(choice=><button key={choice} type="button" className="menu__item" role="menuitemradio" aria-checked={choice===theme} disabled={pending} onClick={()=>chooseTheme(choice)}>
     <ShellIcon name={themeIcons[choice]}/><span className="menu__t">{t(choice)}</span>{choice===theme&&<ShellIcon name="check" className="menu__check"/>}
    </button>)}</div>
+   {slug&&<><div className="menu__sep" role="separator"/>
+    <button type="button" className="menu__item" role="menuitem" aria-disabled="true" title={t('soon')}><ShellIcon name="plug"/><span className="menu__t">{t('shellConnectApps')}<span className="menu__d">{t('soon')}</span></span></button>
+    <div className="menu__sep" role="separator"/>
+    <div className="menu__label" id="me-more-lbl">{t('shellMoreSections')}</div>
+    <div role="group" aria-labelledby="me-more-lbl">{moreSections.map(([path,label,icon])=><Link key={path} className="menu__item" role="menuitem" href={`/c/${slug}/${path}`} onClick={()=>setOpen(false)}><ShellIcon name={icon}/><span className="menu__t">{t(label)}</span></Link>)}</div>
+   </>}
   </div>}
   <button ref={button} type="button" className="me" id="btn-me" aria-haspopup="menu" aria-expanded={open} aria-controls="me-menu" aria-label={t('accountMenu')} onClick={()=>setOpen(value=>!value)}>
    <span className="me__av" aria-hidden="true">{initial}</span>

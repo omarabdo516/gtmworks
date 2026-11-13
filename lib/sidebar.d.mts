@@ -5,3 +5,5 @@ export type CompanyAgent = { id: string, connection_id: string, name: string, sp
 export function companyAgents(db: any, company: string): Promise<CompanyAgent[]>;
 export function waitingLabel(count: number): ['nothingWaitingOnYou'] | ['thingsWaitingOnYou', number];
 export const themeChoices: readonly ['light', 'dark', 'device'];
+export function matchChats<T extends { title: string }>(chats: T[], query: string): T[];
+export const moreSections: readonly (readonly [string, string, 'home' | 'folder' | 'bulb' | 'review' | 'cpu' | 'team' | 'gear' | 'shield'])[];

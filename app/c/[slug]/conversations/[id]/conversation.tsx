@@ -1,7 +1,8 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useI18n } from '@/lib/i18n-client';
-import { AgentFace } from '@/components/agent-face';
+import { CompanyAgentFace } from '@/components/company-agent-face';
+import { AgentDetails, HeadPill, useDetailsPanel, type DetailsAgent } from '@/app/agent-details';
 import { ShellIcon } from '@/components/shell-icon';
 import { MessageBox, postMessage } from '@/app/conversation-composer';
 import { titleOf, type ConversationMessage as Message, type UsageTotal } from '@/lib/conversations';
@@ -11,9 +12,10 @@ type Conversation={id:string,agent_name:string,face:string};
 // The reply is collected by the server from Hermes; the page asks again until it is in the record. Each send restarts
 // the asking, so an answer about an earlier run cannot stop it before the new reply arrives.
 // Drawn as the reference's chat (design-reference: renderChat, msgHTML): a floating title pill, the Agent's turns on
-// the start side, the person's on the end side, and the composer below.
-export default function ConversationView({company,conversation,initial,usage:initialUsage,failed:initialFailed,pending:initialPending,writer}:{company:string,conversation:Conversation,initial:Message[],usage:UsageTotal,failed:boolean,pending:boolean,writer:boolean}) {
- const {t,language}=useI18n(); const [messages,setMessages]=useState(initial); const [usage,setUsage]=useState(initialUsage); const [pending,setPending]=useState(initialPending); const [sent,setSent]=useState(0); const [failed,setFailed]=useState(initialFailed);
+// the start side, the person's on the end side, the composer below, and the Agent's details beside it while the
+// Agent is still attached.
+export default function ConversationView({slug,agent,company,conversation,initial,usage:initialUsage,failed:initialFailed,pending:initialPending,writer}:{slug:string,agent:DetailsAgent|null,company:string,conversation:Conversation,initial:Message[],usage:UsageTotal,failed:boolean,pending:boolean,writer:boolean}) {
+ const {t,language}=useI18n(); const [messages,setMessages]=useState(initial); const [usage,setUsage]=useState(initialUsage); const [pending,setPending]=useState(initialPending); const [sent,setSent]=useState(0); const [failed,setFailed]=useState(initialFailed); const panel=useDetailsPanel();
  useEffect(()=>{
   if(!pending) return;
   let stopped=false;
@@ -29,9 +31,9 @@ export default function ConversationView({company,conversation,initial,usage:ini
  },[pending,sent,company,conversation.id]);
  const count=(value:number)=>new Intl.NumberFormat(localeFor(language)).format(value);
  const time=(value:string)=>new Date(value).toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit'});
- const face=(size:number)=><span aria-hidden="true"><AgentFace id={conversation.face} role="account_manager" name={conversation.agent_name} size={size}/></span>;
- return <div className="chat">
-  <div className="chat__top"><h1 className="head-pill">{face(24)}<span className="head-pill__title" dir="auto">{titleOf(messages,conversation.agent_name)}</span></h1></div>
+ const face=(size:number)=><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:conversation.face,name:conversation.agent_name}} size={size}/></span>;
+ return <div className="convo"><div className="chat">
+  <HeadPill panel={panel} agent={agent?.name} face={face(24)} title={titleOf(messages,conversation.agent_name)} titleDir="auto"/>
   <div className="transcript"><div className="transcript__col">
    <ol className="turns" aria-label={t('conversationMessages')}>{messages.map(message=>message.author==='person'?<li key={message.id} className="turn turn--user msg" data-author="person">
     <div className="bubble-row"><time className="bubble__time" dateTime={message.created_at}>{time(message.created_at)}</time><div className="bubble bubble--user" dir="auto">{message.body}</div></div>
@@ -51,5 +53,5 @@ export default function ConversationView({company,conversation,initial,usage:ini
    }}/>:<p className="ro-line" role="note"><ShellIcon name="eye"/><span>{t('viewOnly')}</span></p>}
    <p className="chat-usage" data-usage>{t('conversationUsage',count(usage.input+usage.output),count(usage.input),count(usage.output))}{usage.unknown>0&&<> · {t('usageUnknownRuns',count(usage.unknown))}</>}</p>
   </div>
- </div>;
+ </div>{agent&&<AgentDetails panel={panel} agent={agent} settingsHref={`/c/${slug}/agents`}/>}</div>;
 }
