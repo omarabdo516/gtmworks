@@ -4,7 +4,9 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { request } from 'node:http';
-import { parseArgs, screens, outputPaths, resolveStaticPath, startStaticServer, anonymousCaptureUrl } from '../scripts/design-compare-lib.mjs';
+import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { parseArgs, screens, outputPaths, resolveStaticPath, startStaticServer, anonymousCaptureUrl, fixture } from '../scripts/design-compare-lib.mjs';
 
 const valid = ['--screen', 'home', '--width', '1440', '--lang', 'ar', '--theme', 'dark'];
 
@@ -21,9 +23,63 @@ test('a full set of arguments gives the options with per-screen defaults', () =>
   assert.deepEqual([custom.builtPath, custom.builtUrl, custom.signIn, custom.out, custom.referenceOnly], ['/c/x/home', 'http://localhost:4000', 'a@b.c', 'x.png', true]);
 });
 
-test('the main screen of the reference is named home and maps to the built Home', () => {
-  assert.equal(screens.home.builtPath, '/c/rs-learning/home');
+test('the main screen of the reference is named home and maps to the built Conversation with the main Agent', () => {
+  assert.equal(screens.home.builtPath, '/c/rs-learning/chat');
   assert.deepEqual(screens.home.reference.steps, [], 'home is the state the prototype opens on');
+});
+
+test('the optional compare fixture holds the reference agent grid, Lead as the main Agent and a populated Conversation', () => {
+  const sql = readFileSync(fixture.file, 'utf8');
+  // It refuses any database but the seeded local one before it writes anything, and the tool never applies it.
+  const guard = sql.indexOf("raise exception 'design-compare fixture: only for the seeded local database");
+  assert.ok(guard > 0, 'the fixture has its guard');
+  assert.ok(guard < sql.indexOf('insert into'), 'the guard runs before the first insert');
+  assert.ok(sql.trimStart().startsWith('--') && sql.includes('begin;') && sql.trimEnd().endsWith('commit;'), 'one transaction');
+  assert.doesNotMatch(readFileSync('scripts/design-compare.mjs', 'utf8'), /design-compare-fixture|supabase|execFile/, 'the compare tool never writes to a database');
+  // Only an explicit manual run of the comparison workflow loads it, into that run's own fresh database.
+  const workflow = readFileSync('.github/workflows/design-compare.yml', 'utf8');
+  assert.match(workflow, /fixture:\n\s+description: [^\n]+\n\s+type: boolean\n\s+default: false/);
+  assert.match(workflow, /- run: bash scripts\/local-db\.sh\n(\s+#[^\n]*\n)?\s+- name: load the comparison fixture\n\s+if: \$\{\{ inputs\.fixture == true \}\}\n/);
+  assert.equal(workflow.match(/design-compare-fixture\.sql/g).length, 2, 'named once in the input, once in the guarded step');
+  assert.equal(fixture.file, 'scripts/design-compare-fixture.sql');
+  for (const name of ['Lead', 'Ads', 'SEO & Content', 'Analyst', 'Critic']) assert.ok(sql.includes(`'${name}'`), name);
+  assert.ok(sql.includes("x.n=1 and not exists(select 1 from public.hermes_agents where company_id='10000000-0000-0000-0000-000000000001' and is_default)"), 'Lead is the main Agent');
+  assert.equal(fixture.mainAgent, '61000000-0000-0000-0000-000000000001');
+  assert.equal(fixture.agent, '61000000-0000-0000-0000-000000000002');
+  assert.equal(fixture.conversation, '62000000-0000-0000-0000-000000000001');
+  assert.ok(sql.includes(`('${fixture.conversation}','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','${fixture.mainAgent}','Lead')`), 'Omar’s Conversation with Lead');
+  assert.ok(sql.includes("(1,'person',") && sql.includes("(2,'agent',"), 'a message and its reply');
+  assert.doesNotMatch(sql, /\b(delete|update|truncate|drop)\b/i, 'the fixture only adds');
+});
+
+// Runs the workflow's own fixture step under bash -e (as Actions does) with fake docker and npx on PATH.
+function runFixtureStep(dockerExit) {
+  const workflow = readFileSync('.github/workflows/design-compare.yml', 'utf8');
+  const step = workflow.match(/- name: load the comparison fixture\n\s+if: [^\n]+\n\s+run: ([^\n]+)\n/)[1];
+  const bin = mkdtempSync(join(tmpdir(), 'design-compare-step-'));
+  // The pinned CLI sends the whole file as one prepared statement, which Postgres refuses for several commands.
+  writeFileSync(join(bin, 'npx'), "#!/bin/sh\necho 'ERROR: cannot insert multiple commands into a prepared statement (SQLSTATE 42601)' >&2\nexit 1\n", { mode: 0o755 });
+  writeFileSync(join(bin, 'docker'), `#!/bin/sh\nprintf '%s\\n' "$@" > "${bin}/args"\ncat > "${bin}/stdin"\nexit ${dockerExit}\n`, { mode: 0o755 });
+  const result = spawnSync('bash', ['-e', '-c', step], { encoding: 'utf8', env: { ...process.env, PATH: `${bin}:${process.env.PATH}` } });
+  const read = name => { try { return readFileSync(join(bin, name), 'utf8'); } catch { return null; } };
+  const out = { status: result.status, stderr: result.stderr, args: read('args')?.trimEnd().split('\n'), stdin: read('stdin') };
+  rmSync(bin, { recursive: true, force: true });
+  return out;
+}
+
+test('the fixture step streams the file unchanged to psql in the local database container, which runs several commands', () => {
+  const { status, stderr, args, stdin } = runFixtureStep(0);
+  assert.equal(status, 0, stderr);
+  const project = readFileSync('supabase/config.toml', 'utf8').match(/^project_id = "(.*)"/m)[1];
+  assert.deepEqual(args, ['exec', '-i', `supabase_db_${project}`, 'psql', '-X', '-h', '/var/run/postgresql', '-U', 'postgres', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1']);
+  // The file's own begin/commit is the transaction, so psql gets no --single-transaction on top of it.
+  assert.equal(stdin, readFileSync(fixture.file, 'utf8'));
+});
+
+test('a refused or failed fixture fails the step, so no capture runs on a half-loaded database', () => {
+  const { status, stdin } = runFixtureStep(3);
+  assert.notEqual(status, 0);
+  assert.equal(stdin, readFileSync(fixture.file, 'utf8'));
 });
 
 test('every screen says how to reach it in the reference and which built page it matches', () => {

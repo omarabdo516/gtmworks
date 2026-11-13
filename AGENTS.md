@@ -1,6 +1,6 @@
 # gtmworks
 
-An open-source, self-hosted marketing operating system. Conversations run on an agent engine through one engine contract (ADR 0009): Hermes ships inside the install and is the engine (ADR 0010), and gtmworks writes no model loop itself. Hermes owns agents, their settings, skills, scheduled work and memory; gtmworks owns companies, members, marketing cards, versions, approvals and the record of each conversation as people saw it. People direct, approve and read results; agents never approve, publish or spend (ADR 0006, 0008). RS Learning is the first Company in Omar's installation; R&S Consultations, Aleem and others follow on the same structure. English-first UI, with a complete shipped Arabic translation (Modern Standard Arabic). Direction follows the chosen language; content keeps its own direction. Every new interface string belongs in both message catalogues.
+An open-source, self-hosted marketing operating system. Conversations run on an agent engine through one engine contract (ADR 0009): Hermes ships inside the install and is the engine (ADR 0010), and gtmworks writes no model loop itself. Hermes owns agents, their settings, skills, scheduled work and memory; gtmworks owns companies, members, marketing cards, versions, approvals and the record of each conversation as people saw it. People direct, approve and read results; agents never approve, publish or spend (ADR 0006, 0008). RS Learning is the first Company in Omar's installation; R&S Consultations, Aleem and others follow on the same structure. English-first UI, with a complete shipped Arabic translation in Egyptian Arabic, worded as in the approved reference (`design-reference/`). Direction follows the chosen language; content keeps its own direction. Every new interface string belongs in both message catalogues.
 
 ## How work arrives
 
@@ -36,9 +36,9 @@ CI deploys nothing. An install picks up a merge when its owner runs `sh scripts/
 
 ## Visual comparison
 
-`tests/visual.spec.ts` compares ten screens with approved images, each in Arabic
-and English at 390 and 1440 wide (40 images in `tests/visual.spec.ts-snapshots/`):
-sign-in, Home, the board, a card, the calendar, approvals, settings members, agents
+`tests/visual.spec.ts` compares eleven screens with approved images, each in Arabic
+and English at 390 and 1440 wide (44 images in `tests/visual.spec.ts-snapshots/`):
+sign-in, Home, the Conversation with the main Agent, the board, a card, the calendar, approvals, settings members, agents
 and work, and the agency list. The list lives in `tests/visual-screens.mjs`;
 `tests/visual-baselines.test.mjs` fails when a screen lacks an image or an image has
 no screen.

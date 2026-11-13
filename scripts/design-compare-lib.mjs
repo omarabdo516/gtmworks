@@ -11,9 +11,17 @@ import { extname, join, resolve, sep } from 'node:path';
 // Every screen starts from the prototype's default state: the "viewing as" switcher and its demo worlds are never touched.
 const settings = [{ click: '#btn-me' }, { click: '[data-action="sov-open"]' }, { waitFor: '#sov[open] #sov-nav-company' }];
 const settingsSection = section => [...settings, { click: `#sov-nav-${section}` }, { waitFor: `#sov-nav-${section}[aria-current]` }];
+// The ids of the optional comparison fixture (design/COMPARE.md, "Representative captures"). The tool never applies
+// it: a person loads it by hand into a throwaway local database, then passes these ids with --built-path.
+export const fixture = {
+  file: 'scripts/design-compare-fixture.sql',
+  mainAgent: '61000000-0000-0000-0000-000000000001',
+  agent: '61000000-0000-0000-0000-000000000002',
+  conversation: '62000000-0000-0000-0000-000000000001',
+};
 export const screens = {
   // The prototype's main screen: the Conversation with the main Agent, Lead, which it opens on.
-  home: { reference: { steps: [] }, builtPath: '/c/rs-learning/home' },
+  home: { reference: { steps: [] }, builtPath: '/c/rs-learning/chat' },
   board: { reference: { steps: [{ click: '#sb-nav [data-view="board"]' }, { waitFor: '#board-cols' }] }, builtPath: '/c/rs-learning/work/board' },
   // "Waiting on you" is the board's first column in the prototype; the product gathers it on Approvals.
   waiting: { reference: { steps: [{ click: '#sb-nav [data-view="board"]' }, { waitFor: '#board-cols' }, { scrollTo: '#col-waiting' }] }, builtPath: '/c/rs-learning/approvals' },

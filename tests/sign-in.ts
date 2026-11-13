@@ -16,10 +16,15 @@ export async function followSignInLink(page:Page,email:string) {
 }
 
 export async function openNavigation(page:Page) {
- if(await page.locator('.mobile-menu').isVisible()&&!await page.locator('[data-slot=sheet-content]').isVisible()) await page.locator('.mobile-menu').click();
+ // Below 768px the sidebar is a drawer behind the menu button; it is open while it carries is-open.
+ if(await page.locator('.mobile-menu').isVisible()&&!await page.locator('.sidebar.is-open').count()) {
+  await page.locator('.mobile-menu').click(); await expect(page.locator('.sidebar.is-open')).toBeVisible();
+  // It slides in (200ms): measure it only once the slide has ended.
+  await expect.poll(()=>page.locator('.sidebar').evaluate(node=>node.getAnimations().length)).toBe(0);
+ }
 }
 export async function closeNavigation(page:Page) {
- if(await page.locator('[data-slot=sheet-content]').isVisible()) await page.keyboard.press('Escape');
+ if(await page.locator('.sidebar.is-open').count()) { await page.keyboard.press('Escape'); await expect(page.locator('.sidebar.is-open')).toHaveCount(0); }
 }
 export async function chooseCompany(page:Page,slug:string) {
  await openNavigation(page);
