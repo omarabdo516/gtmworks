@@ -87,7 +87,8 @@ test('every screen says how to reach it in the reference and which built page it
   for (const [name, screen] of Object.entries(screens)) {
     assert.match(name, /^[a-z]+(-[a-z]+)*$/, name);
     assert.deepEqual(Object.keys(screen).sort(), ['builtPath', 'reference'], name);
-    assert.ok(screen.builtPath === null || /^\/c\/rs-learning\/[a-z/]+$/.test(screen.builtPath), `${name} built path`);
+    // A path, plus one query parameter for the route-backed settings overlay's states.
+    assert.ok(screen.builtPath === null || /^\/c\/rs-learning\/[a-z/]+(\?[a-z]+=[a-z0-9-]+)?$/.test(screen.builtPath), `${name} built path`);
     assert.ok(Array.isArray(screen.reference.steps), `${name} steps`);
     for (const step of screen.reference.steps) {
       assert.equal(Object.keys(step).length, 1, `${name}: one action per step`);
@@ -103,16 +104,19 @@ test('every screen says how to reach it in the reference and which built page it
   assert.equal(screens.board.builtPath, '/c/rs-learning/work/board');
   assert.equal(screens.waiting.builtPath, '/c/rs-learning/approvals');
   assert.equal(screens.settings.builtPath, '/c/rs-learning/settings');
-  assert.equal(screens.agents.builtPath, '/c/rs-learning/agents');
+  // The settings overlay is route-backed (#26): one address per state.
+  assert.equal(screens.agents.builtPath, '/c/rs-learning/settings?section=agents');
+  assert.equal(screens.agent.builtPath, `/c/rs-learning/settings?agent=${fixture.mainAgent}`);
+  assert.equal(screens.account.builtPath, '/c/rs-learning/settings?section=account');
   // Numbers and the Activity log are built pages (#35, #11).
   assert.equal(screens.numbers.builtPath, '/c/rs-learning/numbers');
   assert.equal(screens.log.builtPath, '/c/rs-learning/log');
-  for (const name of ['agent', 'agent-chat', 'account']) assert.equal(screens[name].builtPath, null, `${name} has no built equivalent yet`);
+  assert.equal(screens['agent-chat'].builtPath, null, 'agent-chat has no built equivalent yet');
 });
 
 test('a screen with no built equivalent needs --built-path or --reference-only', () => {
-  const log = ['--screen', 'account', '--width', '1440', '--lang', 'en', '--theme', 'light'];
-  assert.throws(() => parseArgs(log), error => error.exitCode === 2 && /Screen "account" has no built equivalent yet; pass --built-path PATH or --reference-only\./.test(error.message));
+  const log = ['--screen', 'agent-chat', '--width', '1440', '--lang', 'en', '--theme', 'light'];
+  assert.throws(() => parseArgs(log), error => error.exitCode === 2 && /Screen "agent-chat" has no built equivalent yet; pass --built-path PATH or --reference-only\./.test(error.message));
   assert.equal(parseArgs([...log, '--reference-only']).builtPath, null);
   assert.equal(parseArgs([...log, '--built-path', '/c/rs-learning/home']).builtPath, '/c/rs-learning/home');
 });

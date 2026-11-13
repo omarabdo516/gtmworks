@@ -56,6 +56,12 @@ for(const width of [1440,390]) test(`company frame order, placeholders, LTR and 
  const routes=Object.keys(sections).filter(path=>path!=='work/new');
  for(const path of routes) {
   await page.goto(`/c/rs-learning/${path}`);
+  // Settings is the full-window overlay (#26) over the company's frame: the frame is there, inert, behind it.
+  if(path==='settings') {
+   await expect(page.getByRole('dialog',{name:i18n().t('settings')})).toBeVisible();
+   await expect(page.locator('[inert] .sidebar .sb-nav .sb-item')).toHaveText(labels);
+   continue;
+  }
   expect(await navLabels(page),path).toEqual(labels);
   await closeNavigation(page);
   const leaf={'settings/members':'members','settings/work':'workSettings','settings/agents':'agents'}[path as string];
@@ -90,6 +96,9 @@ for(const width of [1440,390]) test(`company frame order, placeholders, LTR and 
  await page.getByRole('button',{name:"Account menu",exact:true}).click();
  await page.getByRole('menu').getByRole('menuitem',{name:/^Settings/}).click();
  await expect(page).toHaveURL(/\/settings$/);
+ // Settings is the full-window overlay (#26): closing it returns to the board, whose sidebar is used next.
+ await page.getByRole('dialog',{name:'Settings'}).getByRole('button',{name:'Close settings and go back'}).click();
+ await expect(page).toHaveURL(/\/work\/board$/);
  // New chat opens the main Agent's empty Conversation; with no agent attached (the seed), a company member is told
  // why they cannot chat yet (#190) and has no composer.
  await openNavigation(page);
@@ -106,8 +115,12 @@ test('Viewer has the same navigation, New chat included, without new card on eve
  await signIn(page,'viewer@example.com','/c/rs-learning/home');
  for(const path of Object.keys(sections)) {
   await page.goto(`/c/rs-learning/${path}`);
-  expect(await navLabels(page),path).toEqual(labels);
-  await expect(page.locator('.sidebar').getByRole('link',{name:"New chat",exact:true})).toBeVisible();
+  // Settings is the full-window overlay (#26) over the same frame, which stays behind it, inert.
+  if(path==='settings') await expect(page.locator('[inert] .sidebar .sb-nav .sb-item')).toHaveText(labels);
+  else {
+   expect(await navLabels(page),path).toEqual(labels);
+   await expect(page.locator('.sidebar').getByRole('link',{name:"New chat",exact:true})).toBeVisible();
+  }
   await expect(page.locator('.sidebar').getByText("New card",{exact:true})).toHaveCount(0);
   await expect(page.getByRole('button',{name:"+ New card",exact:true})).toHaveCount(0);
   await expect(page.getByLabel('Message',{exact:true})).toHaveCount(0);

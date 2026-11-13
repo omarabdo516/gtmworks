@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { chooseLanguageInSettings } from './choose-language';
 import { clickPath, idle, measureClick, median, type Timing } from './navigation-measure';
 import { signIn, openNavigation, closeNavigation, openMoreSection } from './sign-in';
 import { gzipSync } from 'node:zlib';
@@ -277,9 +278,7 @@ test('drawer targets are at least 44px and do not overlap', async ({ page }) => 
   await signIn(page, 'manager@example.com', '/c/rs-learning/home');
   try {
     for (const language of ['en', 'ar']) {
-      await page.goto('/c/rs-learning/settings');
-      await page.locator('select[name=language]').selectOption(language);
-      await page.locator('form').filter({ has: page.locator('select[name=language]') }).getByRole('button').click();
+      await chooseLanguageInSettings(page,language);
       await expect(page.locator('html')).toHaveAttribute('lang', language);
       await page.goto('/c/rs-learning/home');
       await openNavigation(page);
@@ -313,9 +312,7 @@ test('drawer targets are at least 44px and do not overlap', async ({ page }) => 
     }
   } finally {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto('/c/rs-learning/settings');
-  await page.locator('select[name=language]').selectOption('en');
-  await page.locator('form').filter({ has: page.locator('select[name=language]') }).getByRole('button').click();
+  await chooseLanguageInSettings(page,'en');
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   }
 });

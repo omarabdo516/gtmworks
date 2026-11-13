@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { chooseLanguageInSettings } from './choose-language';
 import { mkdir } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { signIn } from './sign-in';
@@ -11,9 +12,7 @@ const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','qu
 const api='/api/v1/companies/rs-learning';
 const written=`---\nname: weekly-recap\ndescription: Writes the Friday recap of what shipped.\npermissions: [cards.read]\n---\n\n1. List the cards that moved to done this week.\n2. Write three lines about them.\n`;
 async function chooseLanguage(page:Page,language:'en'|'ar') {
- await page.goto('/c/rs-learning/settings');
- await page.locator('select[name=language]').selectOption(language);
- await page.locator('form').filter({has:page.locator('select[name=language]')}).getByRole('button').click();
+ await chooseLanguageInSettings(page,language);
  await expect(page.locator('html')).toHaveAttribute('lang',language);
 }
 test('a team member installs and enables a skill for the Writer, a bad skill is refused, and the agent reads exactly its enabled skills', async ({page}) => {

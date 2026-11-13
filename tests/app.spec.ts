@@ -1,4 +1,5 @@
 import { test, expect, type Page, type TestInfo } from '@playwright/test';
+import { chooseLanguageInSettings } from './choose-language';
 import { mkdir, readdir, readFile } from 'node:fs/promises';
 import { createHmac } from 'node:crypto';
 import { signIn, chooseCompany, openNavigation } from './sign-in';
@@ -55,9 +56,7 @@ for(const width of [1440,390]) test(`Paperclip Inter and Arabic-only Vazirmatn l
  await page.setViewportSize({width,height:900});
  await signIn(page,'manager@example.com','/c/rs-learning/home');
  for(const language of ['en','ar']) {
-  await page.goto('/c/rs-learning/settings');
-  await page.locator('select[name=language]').selectOption(language);
-  await page.locator('form').filter({has:page.locator('select[name=language]')}).getByRole('button').click();
+  await chooseLanguageInSettings(page,language);
   await expect(page.locator('html')).toHaveAttribute('lang',language);
   for(const path of ['home','work/board','work/board/1','work/calendar','work/list','approvals','agents','settings']) {
    await page.goto(`/c/rs-learning/${path}`);
@@ -88,9 +87,7 @@ for(const width of [1440,390]) test(`Paperclip Inter and Arabic-only Vazirmatn l
    expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(width);
   }
  }
- await page.goto('/c/rs-learning/settings');
- await page.locator('select[name=language]').selectOption('en');
- await page.locator('form').filter({has:page.locator('select[name=language]')}).getByRole('button').click();
+ await chooseLanguageInSettings(page,'en');
  await expect(page.locator('html')).toHaveAttribute('lang','en');
  expect(fontRequests.length).toBeGreaterThan(0);
  for(const request of fontRequests) {
@@ -144,9 +141,7 @@ for(const width of [1440,390]) test(`card creation fits the viewport and detail 
  await page.setViewportSize({width,height:900});
  await signIn(page,'manager@example.com','/c/rs-learning/work/board/1');
  for(const language of ['en','ar']) {
-  await page.goto('/c/rs-learning/settings');
-  await page.locator('select[name=language]').selectOption(language);
-  await page.locator('form').filter({has:page.locator('select[name=language]')}).getByRole('button').click();
+  await chooseLanguageInSettings(page,language);
   await expect(page.locator('html')).toHaveAttribute('lang',language);
   await page.goto('/c/rs-learning/work/new');
   const dialog=page.getByRole('dialog');
@@ -187,9 +182,7 @@ for(const width of [1440,390]) test(`card creation fits the viewport and detail 
   await close.click();
   await expect(page).toHaveURL(/\/work\/board$/);
  }
- await page.goto('/c/rs-learning/settings');
- await page.locator('select[name=language]').selectOption('en');
- await page.locator('form').filter({has:page.locator('select[name=language]')}).getByRole('button').click();
+ await chooseLanguageInSettings(page,'en');
  await expect(page.locator('html')).toHaveAttribute('lang','en');
 });
 
@@ -421,9 +414,7 @@ test('card close control is in the title row with a 44px target',async({page})=>
  await signIn(page,'manager@example.com','/c/rs-learning/work/board/1');
  try {
   for(const language of ['en','ar']) {
-   await page.goto('/c/rs-learning/settings');
-   await page.locator('select[name=language]').selectOption(language);
-   await page.locator('form').filter({has:page.locator('select[name=language]')}).getByRole('button').click();
+   await chooseLanguageInSettings(page,language);
    await expect(page.locator('html')).toHaveAttribute('lang',language);
    for(const width of [390,1440]) {
     await page.setViewportSize({width,height:900});
@@ -444,9 +435,7 @@ test('card close control is in the title row with a 44px target',async({page})=>
   }
  } finally {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto('/c/rs-learning/settings');
-  await page.locator('select[name=language]').selectOption('en');
-  await page.locator('form').filter({ has: page.locator('select[name=language]') }).getByRole('button').click();
+  await chooseLanguageInSettings(page,'en');
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
  }
 });
@@ -550,9 +539,7 @@ test('mobile card shows workflow controls first', async ({ page }, info) => {
  try {
   for (const language of ['en', 'ar']) {
    await page.setViewportSize({ width: 1440, height: 900 });
-   await page.goto('/c/rs-learning/settings');
-   await page.locator('select[name=language]').selectOption(language);
-   await page.locator('form').filter({ has: page.locator('select[name=language]') }).getByRole('button').click();
+   await chooseLanguageInSettings(page,language);
    await expect(page.locator('html')).toHaveAttribute('lang', language);
    for (const width of [390, 1440]) {
     await page.setViewportSize({ width, height: 900 });
@@ -582,9 +569,7 @@ test('mobile card shows workflow controls first', async ({ page }, info) => {
   }
  } finally {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto('/c/rs-learning/settings');
-  await page.locator('select[name=language]').selectOption('en');
-  await page.locator('form').filter({ has: page.locator('select[name=language]') }).getByRole('button').click();
+  await chooseLanguageInSettings(page,'en');
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
  }
 });
@@ -749,9 +734,7 @@ test('secondary text meets 4.5 to 1 contrast', async ({ page }) => {
  await signIn(page, 'omar@example.com', '/c/rs-learning/home');
  const setLanguage = async (language: string) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto('/c/rs-learning/settings');
-  await page.locator('select[name=language]').selectOption(language);
-  await page.locator('form').filter({ has: page.locator('select[name=language]') }).getByRole('button').click();
+  await chooseLanguageInSettings(page,language);
   await expect(page.locator('html')).toHaveAttribute('lang', language);
  };
  const seen: string[] = [];

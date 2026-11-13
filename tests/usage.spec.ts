@@ -86,7 +86,8 @@ test('an Owner of several companies sees each one\'s tokens per day, and an Owne
  await ownerSignIn(page);
  await page.goto('/c/rs-learning/settings');
  await page.getByRole('link',{name:'Usage',exact:true}).click();
- await expect(page).toHaveURL(/\/c\/rs-learning\/usage$/);
+ // Usage is a section of the settings overlay (#26), with the same table.
+ await expect(page).toHaveURL(/\/c\/rs-learning\/settings\?section=usage$/);
  await expect(rowsOn(page)).toHaveCount(2);
  await expect(rowsOn(page).filter({hasText:'RS Learning'}).getByRole('cell')).toHaveText(['RS Learning',day,'1,200','34','2','1']);
  await expect(rowsOn(page).filter({hasText:'Aleem'}).getByRole('cell')).toHaveText(['Aleem',day,'5,000','60','1','0']);

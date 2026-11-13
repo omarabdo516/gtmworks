@@ -25,14 +25,16 @@ test('the Owner is warned while two companies share the bundled Engine profile, 
   query(`update public.people set language='en' where id='${omar}'`);
   removals.push(provideBundled('10000000-0000-0000-0000-000000000002'));
   await signIn(page,'omar@example.com','/c/rs-consultations/settings');
-  await expect(page.getByRole('heading',{name:'Company settings'})).toBeVisible();
+  // The settings overlay opens on its Company section (#26).
+  await expect(page.getByRole('heading',{name:'Company',exact:true})).toBeVisible();
   await expect(page.getByText(english)).toHaveCount(0);
 
   removals.push(provideBundled('10000000-0000-0000-0000-000000000003'));
   await page.reload();
   await expect(page.getByRole('note').filter({hasText:english})).toBeVisible();
   await page.goto('/c/rs-learning/settings');
-  await expect(page.getByRole('heading',{name:'Company settings'})).toBeVisible();
+  // The settings overlay opens on its Company section (#26).
+  await expect(page.getByRole('heading',{name:'Company',exact:true})).toBeVisible();
   await expect(page.getByText(english)).toHaveCount(0);
 
   query(`update public.people set language='ar' where id='${omar}'`);

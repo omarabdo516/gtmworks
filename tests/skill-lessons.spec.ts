@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { chooseLanguageInSettings } from './choose-language';
 import { mkdir } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { signIn } from './sign-in';
@@ -12,9 +13,7 @@ const api='/api/v1/companies/rs-learning';
 const company=`(select id from public.companies where slug='rs-learning')`;
 const cleanUp=()=>{ for(const table of ['skill_lessons','skill_loads','skill_enablements','skill_events','skill_versions','skills']) query(`delete from public.${table} where company_id=${company}`); };
 async function chooseLanguage(page:Page,language:'en'|'ar') {
- await page.goto('/c/rs-learning/settings');
- await page.locator('select[name=language]').selectOption(language);
- await page.locator('form').filter({has:page.locator('select[name=language]')}).getByRole('button').click();
+ await chooseLanguageInSettings(page,language);
  await expect(page.locator('html')).toHaveAttribute('lang',language);
 }
 test('an agent proposes a lesson from its run, the Inbox shows the change, the reason and the card, approving adds it to the skill and rejecting does not', async ({page,browser}) => {

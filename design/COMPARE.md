@@ -27,7 +27,7 @@ npm run design:compare -- --screen NAME --width PX --lang ar|en --theme light|da
 | --- | --- |
 | `--screen` | A reference screen name from the table in `scripts/design-compare-lib.mjs`. An unknown name prints the valid ones and exits 2. |
 | `--width` | Window width in pixels, used for both sides. |
-| `--lang` | `ar` or `en`. On the reference this is `?lang=`. On the built app it is the account's saved language, set through the settings form as `tests/visual.spec.ts` does. Without `--sign-in`, the sign-in page is opened with `?language=ar` for Arabic and without it for English. |
+| `--lang` | `ar` or `en`. On the reference this is `?lang=`. On the built app it is the account's saved language, chosen in the settings overlay's Your account as `tests/visual.spec.ts` does. Without `--sign-in`, the sign-in page is opened with `?language=ar` for Arabic and without it for English. |
 | `--theme` | `light` or `dark`. On the reference this is `gtm-theme-v2`. On the built app it is the browser colour scheme, which the product follows while the account's theme is `device` (the seeded default). If the account saved another theme, the tool warns. |
 | `--built-url` | Where the built app runs. Default `http://127.0.0.1:3000`. |
 | `--built-path` | The built page. Default: the screen's path from the table below. A screen with no built equivalent needs this flag or `--reference-only`. |
@@ -56,11 +56,11 @@ The prototype has no URL routes. Its sidebar switches between four views (`data-
 | `log` | Sidebar, Activity log | `/c/rs-learning/log` |
 | `agent-chat` | The Ads Agent's tile in the sidebar: a Conversation with an Agent other than Lead | none |
 | `settings` | Account menu, Settings: the overlay's Company section | `/c/rs-learning/settings` |
-| `agents` | Settings, Agents | `/c/rs-learning/agents` |
-| `agent` | Settings, Agents, Lead: one Agent's page | none |
-| `account` | Settings, Your account | none |
+| `agents` | Settings, Agents | `/c/rs-learning/settings?section=agents` |
+| `agent` | Settings, Agents, Lead: one Agent's page | `/c/rs-learning/settings?agent=61000000-0000-0000-0000-000000000001` (the fixture's Lead) |
+| `account` | Settings, Your account | `/c/rs-learning/settings?section=account` |
 
-"none" means the product has no equivalent page yet. Pass `--built-path` once a ticket builds one, and add it to the table in the same change.
+The built settings overlay is route-backed: `/c/<slug>/settings` opens it, `?section=<name>` opens a section and `?agent=<id>` one Agent's page, so each state has one address. The `agent` row needs the comparison fixture (below); on the seed alone it shows the Agents list. "none" means the product has no equivalent page yet. Pass `--built-path` once a ticket builds one, and add it to the table in the same change.
 
 Every screen starts from the prototype's default state. The "viewing as" switcher is never touched. To add a screen, add a row in `scripts/design-compare-lib.mjs` with its steps (`click`, `waitFor` or `scrollTo`, each with a CSS selector) and its built path.
 

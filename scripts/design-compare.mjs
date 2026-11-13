@@ -57,14 +57,13 @@ async function signIn(page, options) {
   await settle(page);
 }
 
-// Language is a saved account setting: the same form tests/visual.spec.ts uses.
+// Language is a saved account setting, chosen in the settings overlay's "Your account" as tests/visual.spec.ts does.
 async function chooseLanguage(page, options) {
   const company = options.builtPath.match(/^\/c\/[^/]+/)?.[0] ?? '/c/rs-learning';
-  await page.goto(`${options.builtUrl}${company}/settings`);
-  const select = page.locator('select[name=language]');
-  if (!await select.count()) return console.warn('Warning: no language setting was found; the built screen keeps its current language.');
-  await select.selectOption(options.lang);
-  await page.locator('form').filter({ has: select }).getByRole('button').click();
+  await page.goto(`${options.builtUrl}${company}/settings?section=account`);
+  const choice = page.locator(`#ac-lang-${options.lang}`);
+  if (!await choice.count()) return console.warn('Warning: no language setting was found; the built screen keeps its current language.');
+  if (await choice.getAttribute('aria-checked') !== 'true') await choice.click();
   await page.waitForFunction(lang => document.documentElement.lang === lang, options.lang);
 }
 
