@@ -119,6 +119,9 @@ alter policy hermes_read on public.hermes_connections using (public.is_company_o
 alter policy hermes_create on public.hermes_connections with check (public.is_company_owner(company_id) and owner_id=auth.uid());
 alter policy hermes_replace on public.hermes_connections using (public.is_company_owner(company_id)) with check (public.is_company_owner(company_id));
 alter policy hermes_remove on public.hermes_connections using (public.is_company_owner(company_id));
+-- The server reads a kept key by the Connection's id and the Company the Owner was authorized in (lib/connection-key.mjs);
+-- filtering on company_id needs the right to read it. The company id is not a secret.
+grant select(company_id) on public.hermes_connections to service_role;
 -- Any Owner may now write a Connection, so its kept key must only ever reach the address and profile it was entered
 -- for: those never change on a saved row, for every writer, attached or not. A new key (rotation) is still saved; another
 -- destination is a new Connection. Named to run after hermes_profile_in_use, whose message an attached row keeps.

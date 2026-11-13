@@ -15,6 +15,7 @@ select json_build_object(
  'no_agency_function_body',not exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosrc ~ '(agency_access|is_agency_owner|agency_owner)'),
  'connection_owner',exists(select 1 from information_schema.columns where table_schema='public' and table_name='hermes_connections' and column_name='owner_id')
   and not has_column_privilege('authenticated','public.hermes_connections','owner_id','update'),
+ 'connection_key_company_scope',has_column_privilege('service_role','public.hermes_connections','company_id','select'),
  'connection_destination_fixed',exists(select 1 from pg_trigger where tgrelid='public.hermes_connections'::regclass and tgname='hermes_retarget_refused' and tgenabled='O' and tgfoid=to_regprocedure('public.keep_hermes_destination()')),
  'owner_check',has_function_privilege('authenticated','public.is_company_owner(uuid)','execute') and not has_function_privilege('anon','public.is_company_owner(uuid)','execute'),
  'role_policies_restored',(select count(*) from pg_policies where schemaname='public' and policyname in ('agent_keys_owner_read','agent_keys_owner_create','agent_keys_owner_update','agent_refusals_owner_read','agent_webhooks_owner','webhook_deliveries_owner_read','invitation_insert','invitation_update'))=8

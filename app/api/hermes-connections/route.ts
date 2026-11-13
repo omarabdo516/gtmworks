@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { supabaseConfig } from '@/lib/supabase-config';
-import { encryptSecret, decryptSecret } from '@/lib/agent-crypto.mjs';
+import { encryptSecret } from '@/lib/agent-crypto.mjs';
+import { savedConnectionKey } from '@/lib/connection-key.mjs';
 import { isHermesAddressAllowed, testHermes } from '@/lib/hermes.mjs';
 import { logActionFailure } from '@/lib/diagnostics.mjs';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
@@ -46,11 +47,13 @@ async function connectionRequest(request:NextRequest) {
   // A saved Connection keeps its address and profile (the database refuses a change too); another one is a new Connection.
   if(connection&&(connection.address!==address||connection.profile!==profile)) return reply({error:'hermesDestinationFixed'},409);
  } else {
+  if(!connection) return failure(400);
   if(!isHermesAddressAllowed(address)) return reply({error:'hermesHttpsRequired'},400);
   const server=createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false}});
-  const {data:secret,error}=await server.from('hermes_connections').select('key_encrypted').eq('id',id).single();
-  if(error||!secret) return failure(500);
-  key=decryptSecret(secret.key_encrypted,process.env.WEBHOOK_ENCRYPTION_KEY);
+  // connection was read above under the Owner's own access and with this company, so its company is the authorized one.
+  const saved=await savedConnectionKey(server,{id:connection.id,company:connection.company_id},process.env.WEBHOOK_ENCRYPTION_KEY);
+  if(!saved) return failure(500);
+  key=saved;
  }
  const status=await testHermes({address,profile,key});
  const unreachableSince=connection&&connection.address===address&&connection.profile===profile?connection.unreachable_since:null;
