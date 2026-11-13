@@ -5,13 +5,17 @@ import Link from '@/lib/link';
 import { ShellIcon } from '@/components/shell-icon';
 import { saveTheme } from './theme-actions';
 import { saveLanguage } from './language-actions';
+import { themeChoices } from '@/lib/sidebar.mjs';
+
+const themeIcons={light:'sun',dark:'moon',device:'monitor'} as const;
 
 // Each language is named in itself, the same in both catalogues.
 const languages=[{key:'en',name:'languageNameEnglish',description:'languageEnglishDescription'},{key:'ar',name:'languageNameArabic',description:'languageArabicDescription'}] as const;
 
-// The account row at the bottom of the sidebar (reference: #btn-me and its menu): who you are, Settings, and the
-// interface language. The language is saved to the account, so every device opens in it.
-export default function AccountMenu({personName,role,companyName,settingsHref}:{personName:string,role:string,companyName?:string,settingsHref?:string}) {
+// The account row at the bottom of the sidebar (reference: #btn-me and its menu): who you are, Settings, the
+// interface language and the theme. Both are saved to the account, so every device opens in them. The theme group
+// keeps "Device" (follow the system), which the sun/moon button alone cannot choose.
+export default function AccountMenu({personName,role,theme,companyName,settingsHref}:{personName:string,role:string,theme:string,companyName?:string,settingsHref?:string}) {
  const {t,language}=useI18n();
  const [open,setOpen]=useState(false);
  const [error,setError]=useState('');
@@ -31,6 +35,12 @@ export default function AccountMenu({personName,role,companyName,settingsHref}:{
   const failure=await saveLanguage('',form);
   setError(failure); if(!failure) setOpen(false);
  });
+ const chooseTheme=(next:string)=>startTransition(async()=>{
+  if(next===theme) { setOpen(false); return; }
+  const form=new FormData(); form.set('theme',next);
+  const failure=await saveTheme('',form);
+  setError(failure); if(!failure) setOpen(false);
+ });
  const initial=personName.trim().slice(0,1).toUpperCase();
  return <div ref={box} className="contents">
   {open&&<div className="menu me-menu" id="me-menu" role="menu" aria-labelledby="btn-me">
@@ -41,6 +51,11 @@ export default function AccountMenu({personName,role,companyName,settingsHref}:{
    <div className="menu__label" id="me-lang-lbl">{t('interfaceLanguage')}</div>
    <div role="group" aria-labelledby="me-lang-lbl">{languages.map(item=><button key={item.key} type="button" className="menu__item" role="menuitemradio" aria-checked={item.key===language} disabled={pending} onClick={()=>choose(item.key)}>
     <span className="menu__t"><span className="lang-native" lang={item.key} dir={item.key==='ar'?'rtl':'ltr'}>{t(item.name)}</span><span className="menu__d">{t(item.description)}</span></span>{item.key===language&&<ShellIcon name="check" className="menu__check"/>}
+   </button>)}</div>
+   <div className="menu__sep" role="separator"/>
+   <div className="menu__label" id="me-theme-lbl">{t('theme')}</div>
+   <div role="group" aria-labelledby="me-theme-lbl">{themeChoices.map(choice=><button key={choice} type="button" className="menu__item" role="menuitemradio" aria-checked={choice===theme} disabled={pending} onClick={()=>chooseTheme(choice)}>
+    <ShellIcon name={themeIcons[choice]}/><span className="menu__t">{t(choice)}</span>{choice===theme&&<ShellIcon name="check" className="menu__check"/>}
    </button>)}</div>
   </div>}
   <button ref={button} type="button" className="me" id="btn-me" aria-haspopup="menu" aria-expanded={open} aria-controls="me-menu" aria-label={t('accountMenu')} onClick={()=>setOpen(value=>!value)}>

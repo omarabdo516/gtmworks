@@ -428,6 +428,7 @@
   "marketingBoard": "Marketing board",
   "numbers": "Numbers",
   "thingsWaitingOnYou": "{0} things waiting on you",
+  "nothingWaitingOnYou": "Nothing waiting on you",
   "mainAgent": "Main",
   "newAgent": "New agent",
   "recentChats": "Recent chats",

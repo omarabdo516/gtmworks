@@ -4,8 +4,8 @@ import { supabase } from '@/lib/supabase';
 import AccountMenu, { ThemeToggle } from './account-menu';
 import Link from '@/lib/link';
 import { shellNav } from '@/lib/navigation';
-import { orderAgents } from '@/lib/sidebar.mjs';
-import { AgentFace } from '@/components/agent-face';
+import { companyAgents, waitingLabel } from '@/lib/sidebar.mjs';
+import { CompanyAgentFace } from '@/components/company-agent-face';
 import { ShellIcon } from '@/components/shell-icon';
 import { agentIdentities } from '@/lib/agent-identities';
 import { AgentIdentitiesProvider } from '@/lib/agent-identities-client';
@@ -18,7 +18,6 @@ import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbPage, BreadcrumbS
 import { Fragment } from 'react';
 type Crumb={label:string,href?:string};
 type Company = {id:string,slug:string,name:string};
-type Agent={id:string,connection_id:string,name:string,speciality:string,is_default:boolean};
 
 // The frame every screen sits in (design-reference: #sidebar). From the top: the Company, search and a new chat with
 // Lead; the four entries; the Agents with Lead first; this person's recent chats and cards; the account and theme.
@@ -27,7 +26,8 @@ export default async function Shell({company,companies,section,title,crumbs,pers
  const slug=company?.slug;
  const chat=section==='chat'||section==='conversations';
  const db=await supabase();
- const agents=company?.id?orderAgents(((await db.from('hermes_agents').select('id,connection_id,name,speciality,is_default').eq('company_id',company.id).order('name')).data||[]) as Agent[]):[];
+ const agents=company?.id?await companyAgents(db,company.id):[];
+ const [waitingKey,...waitingValues]=waitingLabel(approvalCount); const waiting=t(waitingKey,...waitingValues);
  const conversations=company?.id?(await db.from('conversations').select('id,agent_name,created_at').eq('company_id',company.id).order('created_at',{ascending:false}).limit(20)).data||[]:[];
  // Each listed chat reads its own first message, so a long chat never crowds another out of the titles.
  const firsts=await Promise.all(conversations.map(async c=>(await db.from('conversation_messages').select('body').eq('conversation_id',c.id).eq('author','person').order('id').limit(1).maybeSingle()).data?.body as string|undefined));
@@ -48,13 +48,13 @@ export default async function Shell({company,companies,section,title,crumbs,pers
   <nav className="sb-scroll nav" aria-label={t('navigation')}>{slug&&<>
    <div className="sb-nav">{shellNav.map(([path,label,icon])=><div key={path} className="sb-row">
     <Link className="sb-item" href={`/c/${slug}/${path}`} aria-current={active(path)?'page':undefined}><ShellIcon name={icon}/><span className="od-fill">{t(label)}</span></Link>
-    {path==='work/board'&&approvalCount>0&&<Link className="sb-count badge" href={`/c/${slug}/approvals`} aria-label={t('thingsWaitingOnYou',approvalCount)}>{approvalCount}</Link>}
+    {path==='work/board'&&<Link className={`sb-count${approvalCount?'':' sb-count--none'}`} href={`/c/${slug}/approvals`} aria-current={section==='approvals'?'page':undefined} aria-label={waiting}><span className="sb-count__n">{approvalCount}</span></Link>}
    </div>)}</div>
    <section className="sb-sec" aria-labelledby="lbl-agents">
     <h2 className="sb-label" id="lbl-agents">{t('agents')}</h2>
     <ul className="agent-grid">{agents.map(agent=><li key={agent.id}>
      <Link className="agent-tile" href={`/c/${slug}/chat/${agent.id}`} aria-current={chat&&agentId===agent.id?'true':undefined} aria-label={agent.is_default?`${agent.name} · ${t('mainAgent')}`:agent.name} title={agent.name}>
-      <span aria-hidden="true"><AgentFace id={agent.connection_id} role="account_manager" name={agent.name} size={52}/></span><bdi className="agent-tile__name">{agent.name}</bdi>{agent.is_default&&<span className="agent-tile__main" aria-hidden="true">{t('mainAgent')}</span>}
+      <span aria-hidden="true"><CompanyAgentFace agent={agent} size={52}/></span><bdi className="agent-tile__name">{agent.name}</bdi>{agent.is_default&&<span className="agent-tile__main" aria-hidden="true">{t('mainAgent')}</span>}
      </Link>
     </li>)}
     {agency&&<li><Link className="agent-tile agent-tile--new" href={`/c/${slug}/agents`}><span className="agent-tile__plus"><ShellIcon name="plus"/></span><span className="agent-tile__name">{t('newAgent')}</span></Link></li>}</ul>
@@ -65,7 +65,7 @@ export default async function Shell({company,companies,section,title,crumbs,pers
    </section>
   </>}</nav>
   <div className="sb-foot sidebar-bottom">
-   <AccountMenu personName={personName} role={role} companyName={company?.name} settingsHref={slug?`/c/${slug}/settings`:undefined}/>
+   <AccountMenu personName={personName} role={role} theme={theme} companyName={company?.name} settingsHref={slug?`/c/${slug}/settings`:undefined}/>
    <ThemeToggle theme={theme}/>
   </div>
  </>;

@@ -1,11 +1,21 @@
 import { test, expect, type Page } from '@playwright/test';
 import { createServerClient } from '@supabase/ssr';
-import { execFileSync } from 'node:child_process';
 import { signIn, openNavigation, closeNavigation } from './sign-in';
 
-const query = (sql: string) => execFileSync('npx', ['--no-install', 'supabase', 'db', 'query', sql, '-o', 'json', '--agent', 'no'], { encoding: 'utf8' });
+// The account menu keeps the three theme choices, Device included, as named menu radio items.
+async function chooseTheme(page: Page, choice: string) {
+ await openNavigation(page);
+ await page.getByRole('button', { name: 'Account menu' }).click();
+ await page.getByRole('menuitemradio', { name: choice, exact: true }).click();
+ await expect(page.locator('html')).toHaveAttribute('data-theme', choice.toLowerCase());
+ await page.getByRole('button', { name: 'Account menu' }).click();
+ await expect(page.getByRole('menuitemradio', { name: choice, exact: true })).toHaveAttribute('aria-checked', 'true');
+ await page.keyboard.press('Escape');
+ await expect(page.getByRole('menu')).toHaveCount(0);
+ await closeNavigation(page);
+}
 // The reference's sun/moon button flips what is shown now and saves that choice to the account.
-async function chooseTheme(page: Page, choice: 'light' | 'dark') {
+async function flipTheme(page: Page, choice: 'light' | 'dark') {
  await openNavigation(page);
  const toggle = page.locator('#btn-theme');
  await expect(toggle).toHaveAccessibleName(choice === 'light' ? 'Light mode' : 'Dark mode');
@@ -14,12 +24,6 @@ async function chooseTheme(page: Page, choice: 'light' | 'dark') {
  await expect(page.locator('html')).toHaveAttribute('data-theme', choice);
  await expect(toggle).toHaveAttribute('aria-pressed', String(choice === 'dark'));
  await closeNavigation(page);
-}
-// The toggle has no way back to following the device; the account's saved choice is reset directly.
-async function followDevice(page: Page) {
- query(`update public.people set theme='device' where id=(select id from auth.users where email='viewer@example.com')`);
- await page.reload();
- await expect(page.locator('html')).toHaveAttribute('data-theme', 'device');
 }
 
 test('device default, server-rendered theme and saved choice across sessions and devices', async ({ page, browser }) => {
@@ -36,7 +40,7 @@ test('device default, server-rendered theme and saved choice across sessions and
  try {
   await serverTheme('/c/rs-learning/home', 'device');
   await expect(page.locator('.app-layout')).toHaveCSS('background-color', 'oklch(0.185 0 0)');
-  await chooseTheme(page, 'light');
+  await chooseTheme(page, 'Light');
   await serverTheme('/c/rs-learning/home', 'light');
   await expect(page.locator('.app-layout')).toHaveCSS('background-color', 'rgb(250, 250, 250)');
   const config = await (await page.request.get('/api/config')).json();
@@ -55,14 +59,31 @@ test('device default, server-rendered theme and saved choice across sessions and
    await expect(second.locator('html')).toHaveAttribute('data-theme', 'light');
    await expect(second.locator('.app-layout')).toHaveCSS('background-color', 'rgb(250, 250, 250)');
   } finally { await other.close(); }
+  await chooseTheme(page, 'Dark');
   await page.emulateMedia({ colorScheme: 'light' });
-  await chooseTheme(page, 'dark');
   await expect(page.locator('.app-layout')).toHaveCSS('background-color', 'oklch(0.185 0 0)');
   await serverTheme('/c/rs-learning/home', 'dark');
- } finally { await followDevice(page); }
+ } finally { await chooseTheme(page, 'Device'); }
  await page.emulateMedia({ colorScheme: 'dark' });
  await expect(page.locator('.app-layout')).toHaveCSS('background-color', 'oklch(0.185 0 0)');
  await serverTheme('/c/rs-learning/home', 'device');
  await page.emulateMedia({ colorScheme: 'light' });
  await expect(page.locator('.app-layout')).toHaveCSS('background-color', 'rgb(250, 250, 250)');
+});
+
+test('the sun/moon button flips the shown theme and saves it; Device follows the system again', async ({ page }) => {
+ await page.emulateMedia({ colorScheme: 'dark' });
+ await signIn(page, 'viewer@example.com', '/c/rs-learning/home');
+ try {
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'device');
+  await flipTheme(page, 'light');
+  await expect(page.locator('.app-layout')).toHaveCSS('background-color', 'rgb(250, 250, 250)');
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  await flipTheme(page, 'dark');
+  await expect(page.locator('.app-layout')).toHaveCSS('background-color', 'oklch(0.185 0 0)');
+ } finally { await chooseTheme(page, 'Device'); }
+ await page.emulateMedia({ colorScheme: 'light' });
+ await expect(page.locator('.app-layout')).toHaveCSS('background-color', 'rgb(250, 250, 250)');
+ await expect(page.locator('#btn-theme')).toHaveAttribute('aria-pressed', 'false');
 });

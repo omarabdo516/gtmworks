@@ -96,11 +96,18 @@
 /* A link that is opening its page answers at once (lib/link.tsx, app/globals.css a:has(.link-pending)), without a fade. */
 .gw a:has(.link-pending) { transition: none; }
 .gw .sb-item .od-fill { flex: 1 1 0; min-width: 0; }
+/* The approvals entry: its own link to the Inbox, drawn as the reference's count pill. It stays at zero, quieter,
+   so the Inbox is always reachable. */
 .gw .sb-count {
-  position: absolute; inset-inline-end: 12px; min-width: 20px; height: 20px; padding: 0 6px; border-radius: var(--gw-r-full);
-  background: var(--gw-wait-bg); color: var(--gw-wait-text); font-size: var(--gw-fs-xs); font-weight: 600;
-  display: inline-flex; align-items: center; justify-content: center; text-decoration: none;
+  position: absolute; inset-inline-end: 12px; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--gw-r-full); text-decoration: none;
 }
+.gw .sb-count__n {
+  min-width: 20px; height: 20px; padding: 0 6px; border-radius: var(--gw-r-full);
+  background: var(--gw-wait-bg); color: var(--gw-wait-text); font-size: var(--gw-fs-xs); font-weight: 600;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.gw .sb-count--none .sb-count__n { background: var(--gw-bg-tertiary); color: var(--gw-text-2); font-weight: 400; }
 .gw .sb-sec { margin-top: 24px; }
 .gw .sb-label { margin: 0; padding: 0 12px 8px; font-size: var(--gw-fs-sm); font-weight: 400; color: var(--gw-text-3); letter-spacing: normal; text-transform: none; font-family: var(--gw-font); }
 .gw .agent-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; margin: 0; padding: 0; list-style: none; }
@@ -249,6 +256,11 @@
   .gw .circle-btn { width: 44px; height: 44px; }
   .gw .sb-item { height: 44px; }
   .gw .menu__item { min-height: 44px; }
+  /* The approvals count gets its own 44px square beside Marketing board instead of sitting on top of it, and the
+     company picker is as tall as the rows below it. */
+  .gw .sb-row .sb-item { flex: 1 1 0; min-width: 0; }
+  .gw .sb-count { position: static; flex: none; width: 44px; height: 44px; }
+  .gw .ws .switch { height: 44px; }
   /* The send arrow keeps the reference's 28px circle; an invisible 8px ring around it makes the tap area 44px,
      inside the composer's own margin and gap so it covers no text. */
   .gw .composer__send { position: relative; }

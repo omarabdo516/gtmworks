@@ -1,4 +1,4 @@
-import { test, expect, type Page, type Request } from '@playwright/test';
+import { test, expect, type Page, type Request, type Locator } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { fakeHermes } from './fake-hermes.mjs';
 import { execFileSync } from 'node:child_process';
@@ -6,6 +6,7 @@ import { createHmac } from 'node:crypto';
 import { signIn, openNavigation, closeNavigation } from './sign-in';
 import { createClient } from '@supabase/supabase-js';
 import { closeOpenRuns } from '../lib/conversation-runs.mjs';
+import { agentFace } from '../lib/agent-face.mjs';
 
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 function totp(secret:string) {
@@ -433,4 +434,59 @@ test('the shell opens an Agent, sends a message, switches language and theme, an
   });
   expect(misses,'taps inside the 44px square that miss the send button').toEqual([]);
  } finally { omarSetting('theme','device'); omarSetting('language','en'); detach(agents); await fake.close(); }
+});
+
+// The Mona/Nour fixture (Mona the main Agent): each real Agent keeps one identity (name, face, colour) in the
+// sidebar's grid, on the Agents page, in its empty chat and in a Conversation with it, and the grid lists the main
+// Agent first, on a desktop and on a phone. Home's four role agents are another population (frame.spec.ts).
+for(const width of [1440,390]) test(`a real Agent keeps one identity across the sidebar, the Agents page and its Conversation at ${width}px`,async({page})=>{
+ test.setTimeout(180000);
+ const fake=await fakeHermes(); let agents={};
+ try {
+  await agencySignIn(page); agents=await attachAgents(page,fake);
+  const fixture=agents as Record<'Mona'|'Nour',{id:string,connection:string}>;
+  await page.setViewportSize({width,height:900});
+  const face=(svg:Locator)=>svg.evaluate(node=>({icon:node.innerHTML,color:node.querySelector(':scope > g')?.getAttribute('fill')}));
+  await page.goto('/c/rs-learning/home');
+  await openNavigation(page);
+  const tiles=page.locator('.sidebar .agent-tile:not(.agent-tile--new)');
+  // Main first: Mona leads the grid with its mark, whatever the name order.
+  await expect(tiles.locator('bdi')).toHaveText(['Mona','Nour']);
+  await expect(tiles.first()).toHaveAccessibleName('Mona · Main');
+  await expect(tiles.first().locator('.agent-tile__main')).toHaveText('Main');
+  await expect(tiles.nth(1)).toHaveAccessibleName('Nour');
+  await expect(tiles.nth(1).locator('.agent-tile__main')).toHaveCount(0);
+  expect(await tiles.evaluateAll(links=>links.map(link=>link.getAttribute('href')))).toEqual([`/c/rs-learning/chat/${fixture.Mona.id}`,`/c/rs-learning/chat/${fixture.Nour.id}`]);
+  const shown={Mona:await face(tiles.first().locator('.agent-face')),Nour:await face(tiles.nth(1).locator('.agent-face'))};
+  await closeNavigation(page);
+  for(const agent of Object.values(shown)) { expect(agent.icon).toBeTruthy(); expect(agent.color).toBeTruthy(); }
+  // Two Agents look different exactly when their connections draw different faces (a random pair can rarely match).
+  expect(shown.Mona.icon!==shown.Nour.icon).toBe(JSON.stringify(agentFace(fixture.Mona.connection))!==JSON.stringify(agentFace(fixture.Nour.connection)));
+  // The Agents page shows the same face and colour for each, and marks the same one as the default.
+  await page.goto('/c/rs-learning/agents');
+  for(const name of ['Mona','Nour'] as const) {
+   const row=page.locator('.company-hermes-agents .detail-row').filter({has:page.locator('strong').getByText(name,{exact:true})});
+   await expect(row).toHaveCount(1);
+   expect(await face(row.locator('.agent-face')),`${name}: Agents page`).toEqual(shown[name]);
+   await expect(row.getByText('Default agent',{exact:true})).toHaveCount(name==='Mona'?1:0);
+  }
+  // Each opens from the grid into its own empty chat and then a Conversation, wearing the same face throughout.
+  for(const name of ['Mona','Nour'] as const) {
+   await openNavigation(page);
+   await tiles.filter({hasText:name}).click();
+   await expect(page).toHaveURL(new RegExp(`/chat/${fixture[name].id}$`));
+   await expect(page.locator('.chat .empty-chat h2 bdi')).toHaveText(name);
+   expect(await face(page.locator('.chat .empty-chat__faces .agent-face')),`${name}: empty chat`).toEqual(shown[name]);
+   expect(await face(page.locator('.chat .head-pill .agent-face')),`${name}: empty chat title`).toEqual(shown[name]);
+   const text=`Identity check for ${name} ${Date.now()}`;
+   await page.getByLabel('Message',{exact:true}).fill(text);
+   await page.getByRole('button',{name:'Send',exact:true}).click();
+   await expect(page).toHaveURL(/\/conversations\/[0-9a-f-]{36}$/);
+   const reply=page.locator('.msg[data-author=agent]');
+   await expect(reply.locator('.bubble')).toContainText(`Reply to: ${text}`);
+   await expect(reply.locator('.sender bdi')).toHaveText(name);
+   expect(await face(page.locator('.chat .head-pill .agent-face')),`${name}: Conversation title`).toEqual(shown[name]);
+   expect(await face(reply.locator('.sender .agent-face')),`${name}: Conversation reply`).toEqual(shown[name]);
+  }
+ } finally { detach(agents); await fake.close(); }
 });

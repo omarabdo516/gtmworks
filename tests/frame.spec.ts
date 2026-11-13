@@ -5,6 +5,7 @@ import { signIn, openNavigation, closeNavigation, chooseCompany } from './sign-i
 import { idle } from './navigation-measure';
 import { i18n } from '../lib/i18n.mjs';
 import { sections } from '../lib/navigation';
+import { roleAgents } from '../lib/role-agents';
 
 const quote=(sql:string|number)=>`'${String(sql).replaceAll("'","''")}'`;
 
@@ -18,6 +19,19 @@ for(const width of [1440,390]) test(`company frame order, placeholders, LTR and 
  test.setTimeout(180000);
  await page.setViewportSize({width,height:900});
  await signIn(page,'manager@example.com','/c/rs-learning/home');
+ // Home keeps its four role agents (not the sidebar's real Agents): their names in order, four distinct faces in
+ // their own colours, and each says what it is working on (a card link) or that it is not working now.
+ const roles=page.locator('.home-agents article');
+ await expect(roles.locator('h2')).toHaveText(["Account manager","Writer","Designer","Critic"]);
+ const faces=await roles.evaluateAll(rows=>rows.map(row=>({icon:row.querySelector('h2 .agent-face')?.innerHTML,color:row.querySelector('h2 .agent-face > g')?.getAttribute('fill')})));
+ expect(new Set(faces.map(face=>face.icon)).size).toBe(4);
+ expect(faces.map(face=>face.color)).toEqual(roleAgents.map(role=>role.color));
+ for(const [index,status] of (await roles.evaluateAll(rows=>rows.map(row=>[...row.querySelectorAll(':scope > p, :scope > a')].map(node=>({tag:node.tagName,text:node.textContent?.trim(),href:node.getAttribute('href')}))))).entries()) {
+  expect(status,`role ${index}: one status`).toHaveLength(1);
+  if(status[0].tag==='A') { expect(status[0].href).toMatch(/^\/c\/rs-learning\/work\/board\/\d+$/); expect(status[0].text).toBeTruthy(); }
+  else expect(status[0].text).toBe("Not working now");
+ }
+ await expect(roles.filter({has:page.getByRole('heading',{name:"Writer",exact:true})}).getByRole('link')).toHaveAttribute('href',/\/work\/board\/\d+$/);
  await openNavigation(page);
  await expect(page.locator('.sidebar .switch')).toHaveCount(1);
  await expect(page.locator('.topbar')).toHaveText("Home");
@@ -27,9 +41,9 @@ for(const width of [1440,390]) test(`company frame order, placeholders, LTR and 
  await expect(page.locator('.sidebar .sb-nav a[aria-current=page]')).toHaveText("Numbers");
  const layout=await page.locator('.sidebar').evaluate(sidebar=>{
   const active=sidebar.querySelector('.sb-nav [aria-current=page]')!,icon=active.querySelector('svg')!,label=active.querySelector('.od-fill')!;
-  return {left:sidebar.getBoundingClientRect().left,dir:getComputedStyle(sidebar).direction,iconLeft:icon.getBoundingClientRect().right<=label.getBoundingClientRect().left};
+  return {left:sidebar.getBoundingClientRect().left,dir:getComputedStyle(sidebar).direction,marker:getComputedStyle(active).borderInlineStartWidth,iconLeft:icon.getBoundingClientRect().right<=label.getBoundingClientRect().left};
  });
- expect(layout).toMatchObject({left:0,dir:'ltr',iconLeft:true});
+ expect(layout).toMatchObject({left:0,dir:'ltr',marker:'0px',iconLeft:true});
  await closeNavigation(page);
  await page.screenshot({path:`test-results/screenshots/frame-home-${width}.png`,fullPage:true});
  const routes=Object.keys(sections).filter(path=>path!=='work/new');
@@ -64,11 +78,13 @@ for(const width of [1440,390]) test(`company frame order, placeholders, LTR and 
  await page.getByRole('button',{name:"Account menu",exact:true}).click();
  await page.getByRole('menu').getByRole('menuitem',{name:/^Settings/}).click();
  await expect(page).toHaveURL(/\/settings$/);
- // New chat opens the main Agent's empty Conversation (or says no agent is attached yet).
+ // New chat opens the main Agent's empty Conversation; with no agent attached (the seed), a company member is told
+ // why they cannot chat yet (#190) and has no composer.
  await openNavigation(page);
  await page.getByRole('link',{name:"New chat",exact:true}).click();
  await expect(page).toHaveURL(/\/c\/rs-learning\/chat$/);
- await expect(page.locator('.chat .empty-chat')).toBeVisible();
+ await expect(page.locator('.chat .empty-chat').getByRole('note')).toHaveText("No agent is attached to this company yet. An Agency person can attach one on the Agents page.");
+ await expect(page.getByLabel('Message',{exact:true})).toHaveCount(0);
  await expect(page.locator('.sidebar .sb-nav a[aria-current=page]')).toHaveText("Chats");
  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(width);
 });
@@ -112,15 +128,14 @@ test('Home has four parts in order and missing sources show unavailable, never z
  await page.goto('/c/rs-learning/approvals');
  await expect(page.locator('.approvals')).toBeVisible();
  const count=await page.locator('.approval-card').count();
+ // The entry stays at zero too, so the Inbox is always one click away.
  const badge=page.locator('.sidebar .sb-count[href$="/approvals"]');
- if(count) {
-  await expect(badge).toHaveText(String(count));
-  await expect(badge).toHaveAccessibleName(`${count} things waiting on you`);
-  await page.goto('/c/rs-learning/work/board');
-  await openNavigation(page);
-  await badge.click();
-  await expect(page).toHaveURL(/\/approvals$/);
- } else await expect(badge).toHaveCount(0);
+ await expect(badge).toHaveText(String(count));
+ await expect(badge).toHaveAccessibleName(count?`${count} things waiting on you`:'Nothing waiting on you');
+ await page.goto('/c/rs-learning/work/board');
+ await openNavigation(page);
+ await badge.click();
+ await expect(page).toHaveURL(/\/approvals$/);
  await openNavigation(page);
  await page.locator('.sidebar .sb-nav a[href$="/home"]').click();
  await expect(page.locator('.stats strong').first()).toHaveText(String(count));
@@ -239,7 +254,7 @@ test('agency list keeps the current company actions and inbox count in the sideb
  await expect(page).toHaveURL(/\/all-brands$/);
  await expect(page.locator('.sidebar').getByRole('link',{name:"New chat",exact:true})).toBeVisible();
  const badge=page.locator('.sidebar .sb-count[href$="/approvals"]');
- const count=await badge.count()?Number(await badge.textContent()):0;
+ const count=Number(await badge.textContent());
  await page.goto('/c/rs-learning/approvals');
  await expect(page.locator('.approvals')).toBeVisible();
  expect(await page.locator('.approval-card').count()).toBe(count);

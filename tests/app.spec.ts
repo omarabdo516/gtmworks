@@ -730,6 +730,8 @@ test('secondary text meets 4.5 to 1 contrast', async ({ page }) => {
     await check(`chart subtitle ${language} ${width}`, '.home-charts article h2 + span');
     await openNavigation(page);
     await check(`sidebar heading ${language} ${width}`, '.sidebar .sb-label');
+    // The removed phone bottom bar's quiet labels are replaced by the drawer's quiet account line, on every width.
+    await check(`account role ${language} ${width}`, '.sidebar .me__role');
     await page.goto('/c/rs-learning/work/board');
     await idle(page);
     await check(`toolbar label ${language} ${width}`, '.work-toolbar .tabs a:not(.active), .work-toolbar .tabs button:not(.active)');
@@ -738,7 +740,7 @@ test('secondary text meets 4.5 to 1 contrast', async ({ page }) => {
     await check(`comment placeholder ${language} ${width}`, '.modal textarea[name=body]', '::placeholder');
    }
   }
-  expect(seen.length).toBe(16);
+  expect(seen.length).toBe(20);
  } finally {
   await setLanguage('en');
  }

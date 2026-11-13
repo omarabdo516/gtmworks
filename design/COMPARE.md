@@ -73,6 +73,21 @@ gh workflow run design-compare.yml --ref <branch> -R omarabdo516/gtmworks
 gh run download <run-id> -n design-compare -R omarabdo516/gtmworks
 ```
 
+### Representative captures
+
+The seed has no real Agents and no Conversations, so the default captures show an empty agent grid and a chat with no Agent attached. For a capture with the reference's five Agents (Lead the main one), a real main Agent and a populated Conversation, run the workflow with `fixture` checked. That loads `scripts/design-compare-fixture.sql` into the run's own fresh database before the capture. The tool itself never writes to a database, and the fixture refuses any database without the seed's Omar and test-only agent key, so it cannot touch a real installation. Pull request runs never load it.
+
+```sh
+# Lead's populated Conversation against the reference's main screen
+gh workflow run design-compare.yml --ref <branch> -f screen=home -f fixture=true -f built_path=/c/rs-learning/conversations/62000000-0000-0000-0000-000000000001
+# The main Agent's empty chat, with the full agent grid in the sidebar
+gh workflow run design-compare.yml --ref <branch> -f screen=home -f fixture=true
+# Another Agent's empty chat (Ads)
+gh workflow run design-compare.yml --ref <branch> -f screen=agent-chat -f fixture=true -f built_path=/c/rs-learning/chat/61000000-0000-0000-0000-000000000002
+```
+
+Add `-f lang=en`, `-f theme=light` and `-f width=390` for the other variants; both sides always use the same width, language and theme.
+
 ## Demo-only parts of the reference (do not build)
 
 The prototype shows these so the screens look alive. They are not part of the product:

@@ -142,6 +142,11 @@ test('English default, account language across sessions/devices, automatic conte
     await expect(page.locator('html')).toHaveAttribute('lang',language);
     await expect(page.locator('.sidebar .sb-nav .sb-item').first()).toHaveText(t('chats'));
    }
+   // Settings moved from the sidebar's bottom row into the account menu; it is still in the chosen language.
+   await page.getByRole('button',{name:t('accountMenu'),exact:true}).click();
+   await expect(page.getByRole('menu').getByRole('menuitem').filter({hasText:t('settings')})).toHaveAttribute('href','/c/rs-learning/settings');
+   await page.keyboard.press('Escape');
+   await expect(page.getByRole('menu')).toHaveCount(0);
    await page.goto('/c/rs-learning/work/board');
    for(const [index,title] of titles.entries()) {
     const link=page.locator('.card').getByRole('link',{name:title,exact:true});

@@ -1,6 +1,29 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { orderAgents, groupRecents } from '../lib/sidebar.mjs';
+import { orderAgents, groupRecents, waitingLabel, themeChoices, companyAgents } from '../lib/sidebar.mjs';
+
+test('the Inbox entry is named at zero too, so it stays reachable when nothing waits', () => {
+ assert.deepEqual(waitingLabel(0), ['nothingWaitingOnYou']);
+ assert.deepEqual(waitingLabel(3), ['thingsWaitingOnYou', 3]);
+});
+
+test('the account menu offers Light, Dark and following the Device', () => {
+ assert.deepEqual(themeChoices, ['light', 'dark', 'device']);
+});
+
+test('the sidebar reads the company’s own real Agents, the main Agent first', async () => {
+ const calls = [];
+ const rows = [{ id: 'a', connection_id: 'ca', name: 'Ads', speciality: 'Ads', is_default: false }, { id: 'l', connection_id: 'cl', name: 'Lead', speciality: 'General', is_default: true }];
+ const db = { from: table => { calls.push(['from', table]); const chain = {
+  select: columns => { calls.push(['select', columns]); return chain; },
+  eq: (column, value) => { calls.push(['eq', column, value]); return chain; },
+  order: column => { calls.push(['order', column]); return Promise.resolve({ data: rows }); },
+ }; return chain; } };
+ assert.deepEqual((await companyAgents(db, 'company-1')).map(agent => agent.id), ['l', 'a']);
+ assert.deepEqual(calls, [['from', 'hermes_agents'], ['select', 'id,connection_id,name,speciality,is_default'], ['eq', 'company_id', 'company-1'], ['order', 'name']]);
+ const empty = { from: () => ({ select: () => ({ eq: () => ({ order: () => Promise.resolve({ data: null }) }) }) }) };
+ assert.deepEqual(await companyAgents(empty, 'company-1'), []);
+});
 
 test('the main Agent, Lead, comes first and the rest keep their name order', () => {
  const agents = [{ id: 'a', name: 'Ads', is_default: false }, { id: 'l', name: 'Lead', is_default: true }, { id: 'c', name: 'Critic', is_default: false }];

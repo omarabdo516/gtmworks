@@ -7,7 +7,8 @@ export const clickPath = [
   { name: 'close card', link: '.close-card', path: '/work/board', content: '.board' },
   { name: 'list', link: '.tabs a[href$="/work/list"]', path: '/work/list', content: '.table tbody tr' },
   { name: 'calendar', link: '.tabs a[href$="/work/calendar"]', path: '/work/calendar', content: '.calendar' },
-  // The sidebar has no Inbox entry since #284; its last entry, Activity log, is measured instead.
+  // The Inbox opens from the approvals entry beside Marketing board; Activity log is the sidebar's last entry.
+  { name: 'inbox', link: '.nav a[href$="/approvals"]', path: '/approvals', content: '.approvals' },
   { name: 'activity log', link: '.nav a[href$="/history"]', path: '/history', content: '.content .empty' },
 ];
 export type Timing = { shown: number; settled: number; progress: boolean; longest: number; all: string[] };

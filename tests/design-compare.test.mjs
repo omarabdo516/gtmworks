@@ -4,7 +4,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { request } from 'node:http';
-import { parseArgs, screens, outputPaths, resolveStaticPath, startStaticServer, anonymousCaptureUrl } from '../scripts/design-compare-lib.mjs';
+import { readFileSync } from 'node:fs';
+import { parseArgs, screens, outputPaths, resolveStaticPath, startStaticServer, anonymousCaptureUrl, fixture } from '../scripts/design-compare-lib.mjs';
 
 const valid = ['--screen', 'home', '--width', '1440', '--lang', 'ar', '--theme', 'dark'];
 
@@ -24,6 +25,30 @@ test('a full set of arguments gives the options with per-screen defaults', () =>
 test('the main screen of the reference is named home and maps to the built Conversation with the main Agent', () => {
   assert.equal(screens.home.builtPath, '/c/rs-learning/chat');
   assert.deepEqual(screens.home.reference.steps, [], 'home is the state the prototype opens on');
+});
+
+test('the optional compare fixture holds the reference agent grid, Lead as the main Agent and a populated Conversation', () => {
+  const sql = readFileSync(fixture.file, 'utf8');
+  // It refuses any database but the seeded local one before it writes anything, and the tool never applies it.
+  const guard = sql.indexOf("raise exception 'design-compare fixture: only for the seeded local database");
+  assert.ok(guard > 0, 'the fixture has its guard');
+  assert.ok(guard < sql.indexOf('insert into'), 'the guard runs before the first insert');
+  assert.ok(sql.trimStart().startsWith('--') && sql.includes('begin;') && sql.trimEnd().endsWith('commit;'), 'one transaction');
+  assert.doesNotMatch(readFileSync('scripts/design-compare.mjs', 'utf8'), /design-compare-fixture|supabase|execFile/, 'the compare tool never writes to a database');
+  // Only an explicit manual run of the comparison workflow loads it, into that run's own fresh database.
+  const workflow = readFileSync('.github/workflows/design-compare.yml', 'utf8');
+  assert.match(workflow, /fixture:\n\s+description: [^\n]+\n\s+type: boolean\n\s+default: false/);
+  assert.match(workflow, /- run: bash scripts\/local-db\.sh\n(\s+#[^\n]*\n)?\s+- name: load the comparison fixture\n\s+if: \$\{\{ inputs\.fixture == true \}\}\n/);
+  assert.equal(workflow.match(/design-compare-fixture\.sql/g).length, 2, 'named once in the input, once in the guarded step');
+  assert.equal(fixture.file, 'scripts/design-compare-fixture.sql');
+  for (const name of ['Lead', 'Ads', 'SEO & Content', 'Analyst', 'Critic']) assert.ok(sql.includes(`'${name}'`), name);
+  assert.ok(sql.includes("x.n=1 and not exists(select 1 from public.hermes_agents where company_id='10000000-0000-0000-0000-000000000001' and is_default)"), 'Lead is the main Agent');
+  assert.equal(fixture.mainAgent, '61000000-0000-0000-0000-000000000001');
+  assert.equal(fixture.agent, '61000000-0000-0000-0000-000000000002');
+  assert.equal(fixture.conversation, '62000000-0000-0000-0000-000000000001');
+  assert.ok(sql.includes(`('${fixture.conversation}','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','${fixture.mainAgent}','Lead')`), 'Omar’s Conversation with Lead');
+  assert.ok(sql.includes("(1,'person',") && sql.includes("(2,'agent',"), 'a message and its reply');
+  assert.doesNotMatch(sql, /\b(delete|update|truncate|drop)\b/i, 'the fixture only adds');
 });
 
 test('every screen says how to reach it in the reference and which built page it matches', () => {
