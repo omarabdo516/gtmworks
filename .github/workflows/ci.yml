@@ -71,7 +71,9 @@ jobs:
     needs: [changes]
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.docs_only != 'true') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # main's browser suite already took 24 of 25 minutes (run 43398274074); the board, settings, log and numbers specs
+    # add to it.
+    timeout-minutes: 40
     permissions:
       contents: read
     steps:
