@@ -6,8 +6,9 @@
 # provenance proves the exact commit: a tag must name a commit on main whose required CI check passed on a push to main;
 # main publishes only its current head, once that check passed.
 # A release builds linux/amd64 and linux/arm64 and pushes X.Y.Z, installs on a fresh runner from the two release files
-# alone, and only then publishes the GitHub Release with both files and moves stable and latest, one promotion at a
-# time, to the highest published release (so an older or hotfix tag finishing last never moves them back).
+# alone, and only then uploads both files to a draft GitHub Release, publishes it (published releases are immutable) and
+# moves stable and latest, one promotion at a time, to the highest published release (so an older or hotfix tag
+# finishing last never moves them back). A re-run of a published release builds and tags nothing; it only promotes.
 # Every action is pinned to the full commit its release tag named when reviewed (the tag follows as a comment): a moved
 # upstream tag must not run with packages or contents write. tests/release.test.mjs lists the reviewed commits.
 # The first push creates the package private. Its owner makes it public once (README, Releases); until then the install
@@ -96,6 +97,17 @@ jobs:
           done
           [[ -n "$proven" ]] || fail "no CI run in $GITHUB_REPOSITORY passed its required check for $HEAD_SHA on a push to main"
           echo "provenance: $HEAD_SHA passed the required check in CI run $proven on a push to main"
+          # A published release is immutable, and so is its version: a re-run builds and tags nothing (an empty tag), and
+          # only promotes. A draft is not published, so an interrupted release is built and tested again. Every page is
+          # read; a list that cannot be read stops here rather than reading as unpublished.
+          if [[ -n "$release" ]]; then
+            published=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+              | jq -rs --arg tag "$release" '[.[][] | select(.tag_name == $tag and .draft == false)] | length')
+            if [[ "$published" != 0 ]]; then
+              echo "::notice::$release is already published; its image $IMAGE:$tag is not rebuilt or tagged again, and only promotion runs."
+              tag=
+            fi
+          fi
           printf '%s\n' "sha=$HEAD_SHA" "tag=$tag" "release=$release" >> "$GITHUB_OUTPUT"
 
   image:
@@ -208,23 +220,54 @@ jobs:
         with:
           name: release-files
           path: release
-      - name: GitHub Release with the compose file and install script
+      # Published releases are immutable (repository setting): their files can never be replaced, so both files go to a
+      # draft first and the draft is published only once it holds them. A fix ships as a new release.
+      - name: draft GitHub Release with the compose file and install script
         env:
           GH_TOKEN: ${{ github.token }}
           TAG_NAME: ${{ needs.provenance.outputs.release }}
           APP_IMAGE: ${{ env.IMAGE }}:${{ needs.provenance.outputs.tag }}@${{ needs.image.outputs.digest }}
         run: |
-          # A re-run of a tag rebuilds and re-tests its image; its Release then carries the files of that tested image.
-          if gh release view "$TAG_NAME" -R "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
-            gh release upload "$TAG_NAME" release/docker-compose.install.yml release/install.sh -R "$GITHUB_REPOSITORY" --clobber
-          else
-            gh release create "$TAG_NAME" release/docker-compose.install.yml release/install.sh -R "$GITHUB_REPOSITORY" \
-              --verify-tag --title "$TAG_NAME" \
-              --notes "Image: $APP_IMAGE. Put both files in an empty directory and run: sh install.sh"
-          fi
+          # Every page, drafts included; a failed request stops here rather than reading as no release.
+          state=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            | jq -rs --arg tag "$TAG_NAME" '[.[][] | select(.tag_name == $tag)]
+                | if any(.[]; .draft | not) then "published" elif length == 1 then "draft" elif length == 0 then "none" else "drafts" end')
+          case "$state" in
+            published)
+              # Provenance builds nothing for a published release, so it was published while this run built: its files
+              # stay as they are, and this run's image is not that release's.
+              echo "::error::$TAG_NAME was published after this run started; its files stay as they are, and this run's $APP_IMAGE is not released (its version tag may now name it). A fix ships as a new release." >&2
+              exit 1;;
+            draft)
+              # A draft a failed run left: its files are replaced with the ones this run's install test passed on.
+              gh release upload "$TAG_NAME" release/docker-compose.install.yml release/install.sh -R "$GITHUB_REPOSITORY" --clobber;;
+            none)
+              gh release create "$TAG_NAME" release/docker-compose.install.yml release/install.sh -R "$GITHUB_REPOSITORY" \
+                --draft --verify-tag --title "$TAG_NAME" \
+                --notes "Image: $APP_IMAGE. Put both files in an empty directory and run: sh install.sh";;
+            *) echo "::error::$TAG_NAME has more than one draft release; delete the extra drafts, then re-run" >&2; exit 1;;
+          esac
+      - name: publish the draft once it holds the tested files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ needs.provenance.outputs.release }}
+        run: |
+          for file in docker-compose.install.yml install.sh; do
+            gh release download "$TAG_NAME" -R "$GITHUB_REPOSITORY" -p "$file" -O "$RUNNER_TEMP/$file"
+            cmp -s "$RUNNER_TEMP/$file" "release/$file" \
+              || { echo "::error::the draft $TAG_NAME does not hold the tested $file; it is not published" >&2; exit 1; }
+          done
+          gh release edit "$TAG_NAME" -R "$GITHUB_REPOSITORY" --draft=false
+          echo "published $TAG_NAME"
 
   promote:
     needs: [provenance, image, release]
+    # After this run published its release, or on a re-run of a published release, for which provenance named no image
+    # tag and so nothing was built, tested or released. Any failure or cancellation stops it.
+    if: >-
+      ${{ !cancelled() && needs.provenance.result == 'success' && needs.provenance.outputs.release != ''
+      && (needs.release.result == 'success'
+      || (needs.provenance.outputs.tag == '' && needs.image.result == 'skipped' && needs.release.result == 'skipped')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # One promotion at a time, across every tag, each to the highest published release: whichever runs last leaves stable
@@ -256,7 +299,7 @@ jobs:
             | grep -oE "image: $IMAGE:${highest#v}@sha256:[a-f0-9]{64}" | sort -u)
           [[ $(grep -c . <<< "$pinned") == 1 ]] || { echo "$highest names no single gtmworks image" >&2; exit 1; }
           target=${pinned##*@}
-          echo "this run: $TAG_NAME $IMAGE@$DIGEST; highest release: $highest $IMAGE@$target"
+          echo "this run: $TAG_NAME ${DIGEST:+$IMAGE@$DIGEST}${DIGEST:-already published, nothing built}; highest release: $highest $IMAGE@$target"
           # The read-back must name the target digest itself before stable and latest move.
           [[ $(digest "$IMAGE@$target") == "$target" ]] || { echo "the digest read-back does not name $target" >&2; exit 1; }
           docker buildx imagetools create -t "$IMAGE:stable" -t "$IMAGE:latest" "$IMAGE@$target"

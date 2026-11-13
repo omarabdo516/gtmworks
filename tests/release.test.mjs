@@ -494,6 +494,214 @@ test('stable and latest always end on the highest published release, whichever t
  assert.equal(none.stable,null);
 });
 
+// Runs the release job's steps in order with gh replaced by one GitHub Release of TAG_NAME that behaves like an
+// immutable one: a draft takes and replaces files, a published release refuses every change.
+function githubRelease(t,{state,assets={},corrupt=false,apiError=''}={}) {
+ const directory=mkdtempSync(join(tmpdir(),'gtmworks-github-release-'));
+ t.after(()=>rmSync(directory,{recursive:true,force:true}));
+ const stub=join(directory,'stub'),work=join(directory,'work'),temp=join(directory,'temp');
+ for(const path of [join(stub,'assets'),join(work,'release'),temp]) mkdirSync(path,{recursive:true});
+ const tested={'docker-compose.install.yml':`services:\n  web:\n    image: ${app}\n`,'install.sh':'#!/bin/sh\necho tested\n'};
+ for(const [name,content] of Object.entries(tested)) writeFileSync(join(work,'release',name),content);
+ if(state) writeFileSync(join(stub,'state'),state);
+ for(const [name,content] of Object.entries(assets)) writeFileSync(join(stub,'assets',name),content);
+ const shim=`gh() {
+ printf '%s\\n' "$*" >> "$STUB/log"
+ local verb=$2 state= files=() draft= clobber= pattern= out= file
+ [[ -f $STUB/state ]] && state=$(cat "$STUB/state")
+ if [[ "$*" == "api --paginate repos/$GITHUB_REPOSITORY/releases?per_page=100" ]]; then
+  [[ -z $API_ERROR ]] || { echo "gh: $API_ERROR" >&2; return 1; }
+  # Two pages, the release of TAG_NAME on the second behind another tag's.
+  echo '[{"tag_name":"v0.9.0","draft":false}]'
+  case $state in draft) printf '[{"tag_name":"%s","draft":true}]\\n' "$TAG_NAME";; published) printf '[{"tag_name":"%s","draft":false}]\\n' "$TAG_NAME";; *) echo '[]';; esac
+  return
+ fi
+ [[ $1 == release ]] || { echo "unexpected gh $*" >&2; return 1; }
+ shift 2
+ [[ $1 == "$TAG_NAME" ]] || { echo "unexpected release $1" >&2; return 1; }; shift
+ while (($#)); do
+  case $1 in
+   -R|--title|--notes) shift 2;;
+   -p) pattern=$2; shift 2;;
+   -O) out=$2; shift 2;;
+   --draft) draft=true; shift;;
+   --draft=false) draft=false; shift;;
+   --clobber) clobber=1; shift;;
+   --verify-tag) shift;;
+   -*) echo "unexpected flag $1" >&2; return 1;;
+   *) files+=("$1"); shift;;
+  esac
+ done
+ case $verb in
+  view) [[ -n $state ]] || { echo 'release not found' >&2; return 1; };;
+  create) [[ -z $state ]] || { echo 'HTTP 422: already_exists' >&2; return 1; }
+   [[ $draft == true ]] && echo draft > "$STUB/state" || echo published > "$STUB/state"
+   for file in "\${files[@]}"; do cp "$file" "$STUB/assets/"; done;;
+  upload) [[ $state == draft ]] || { echo 'HTTP 422: Cannot upload assets to an immutable release.' >&2; return 1; }
+   for file in "\${files[@]}"; do
+    [[ -n $clobber || ! -f $STUB/assets/\${file##*/} ]] || { echo "asset \${file##*/} already exists" >&2; return 1; }
+    cp "$file" "$STUB/assets/"
+    [[ -z $CORRUPT ]] || echo corrupted >> "$STUB/assets/\${file##*/}"
+   done;;
+  edit) [[ $state == draft && $draft == false ]] || { echo 'HTTP 422: Cannot modify an immutable release.' >&2; return 1; }
+   echo published > "$STUB/state";;
+  download) [[ -f $STUB/assets/$pattern ]] || { echo 'no assets match the file pattern' >&2; return 1; }
+   if [[ $out == - ]]; then cat "$STUB/assets/$pattern"; else cp "$STUB/assets/$pattern" "$out"; fi;;
+  *) return 1;;
+ esac
+}`;
+ const output=join(directory,'output');
+ writeFileSync(output,'');
+ const outputs=()=>Object.fromEntries(readFileSync(output,'utf8').split('\n').filter(Boolean).map(line=>line.split(/=(.*)/s).slice(0,2)));
+ const results=[];
+ for(const step of workflow.jobs.release.steps.filter(step=>step.run)) {
+  if(step.if) {
+   const [,id,name,value]=step.if.match(/^\$\{\{ steps\.([\w-]+)\.outputs\.(\w+) == '(\w+)' \}\}$/)||[];
+   assert.ok(id,`${step.name}: unexpected condition ${step.if}`);
+   assert.ok(workflow.jobs.release.steps.some(other=>other.id===id),`${step.name}: no step ${id}`);
+   if(outputs()[name]!==value) continue;
+  }
+  const result=spawnSync('bash',['-c',`set -eo pipefail\n${shim}\n${step.run}`],{cwd:work,encoding:'utf8',env:{...process.env,STUB:stub,
+   GITHUB_OUTPUT:output,GITHUB_REPOSITORY:repo,RUNNER_TEMP:temp,GH_TOKEN:'',TAG_NAME:'v1.2.3',APP_IMAGE:app,CORRUPT:corrupt?'1':'',API_ERROR:apiError}});
+  results.push({name:step.name,...result});
+  if(result.status!==0) break;
+ }
+ const read=name=>existsSync(join(stub,name))?readFileSync(join(stub,name),'utf8'):null;
+ const log=(read('log')||'').split('\n').filter(Boolean);
+ return {status:results.at(-1)?.status,stdout:results.map(result=>result.stdout).join(''),stderr:results.map(result=>result.stderr).join(''),
+  steps:results.map(result=>result.name),log,state:read('state')?.trim()??null,asset:name=>read(join('assets',name)),tested};
+}
+
+test('a new GitHub Release gets both files as a draft and is published only once the draft holds the tested files', t => {
+ // Published releases are immutable (Omar, 2026-11-13): every file is uploaded to a draft first, then it is published.
+ const run=githubRelease(t);
+ assert.equal(run.status,0,run.stderr);
+ assert.equal(run.state,'published');
+ for(const [name,content] of Object.entries(run.tested)) assert.equal(run.asset(name),content,name);
+ const at=pattern=>run.log.findIndex(line=>pattern.test(line));
+ const created=at(/^release create v1\.2\.3 release\/docker-compose\.install\.yml release\/install\.sh /);
+ const published=at(/^release edit v1\.2\.3 .*--draft=false/);
+ assert.ok(created>=0,run.log.join('\n'));
+ assert.match(run.log[created],/ --draft( |$)/);
+ assert.match(run.log[created],new RegExp(`-R ${repo}`));
+ assert.ok(published>created,run.log.join('\n'));
+ // The draft's files are read back before the publish, and the log names the upload and the publish as two steps.
+ for(const name of Object.keys(run.tested)) {
+  const read=at(new RegExp(`^release download v1\\.2\\.3 .*-p ${name.replace(/[.]/g,'\\.')}`));
+  assert.ok(read>created&&read<published,name);
+ }
+ assert.equal(run.steps.length,2);
+ assert.match(run.steps[0],/draft/i);
+ assert.match(run.steps[1],/publish/i);
+});
+
+test('a re-run finishes the draft a failed run left, replacing its files before publishing it', t => {
+ const run=githubRelease(t,{state:'draft',assets:{'install.sh':'#!/bin/sh\necho stale\n'}});
+ assert.equal(run.status,0,run.stderr);
+ assert.equal(run.state,'published');
+ for(const [name,content] of Object.entries(run.tested)) assert.equal(run.asset(name),content,name);
+ assert.equal(run.log.some(line=>/^release create /.test(line)),false);
+ assert.match(run.log.find(line=>/^release upload /.test(line)),/^release upload v1\.2\.3 release\/docker-compose\.install\.yml release\/install\.sh .*--clobber/);
+});
+
+test('a draft that does not hold the tested files is never published', t => {
+ const run=githubRelease(t,{corrupt:true,state:'draft'});
+ assert.notEqual(run.status,0);
+ assert.equal(run.state,'draft');
+ assert.match(run.stderr,/::error::/);
+ assert.equal(run.log.some(line=>/^release edit /.test(line)),false);
+});
+
+test('a release published after its run started, or a releases list that cannot be read, stops the run unchanged', t => {
+ // A re-run of a published release never reaches this job (provenance builds nothing for it). Reaching it published
+ // means it was published while this run built, so this run's image is not that release's: nothing is changed.
+ const assets={'docker-compose.install.yml':'services:\n  web:\n    image: published\n','install.sh':'#!/bin/sh\necho published\n'};
+ const published=githubRelease(t,{state:'published',assets});
+ const unreadable=githubRelease(t,{apiError:'HTTP 502: Bad Gateway'});
+ for(const [name,run] of Object.entries({published,unreadable})) {
+  assert.notEqual(run.status,0,name);
+  assert.match(run.stderr,/::error::|HTTP 502/,name);
+  assert.deepEqual(run.log.filter(line=>/^release (create|upload|edit|delete) /.test(line)),[],name);
+  assert.equal(run.steps.length,1,name);
+ }
+ assert.match(published.stderr,/::error::v1\.2\.3 was published after this run started/);
+ for(const [name,content] of Object.entries(assets)) assert.equal(published.asset(name),content,name);
+ assert.equal(unreadable.state,null);
+});
+
+// Decides which release jobs GitHub runs from provenance's outputs and the jobs that fail. A job whose condition has
+// no status function runs only when every job it needs succeeded, as on GitHub.
+const laterJobs=['image','install-test','release','promote'];
+function schedule({outputs,fail=[],cancelled=false}) {
+ const results={provenance:fail.includes('provenance')?'failure':'success'};
+ const jobOutputs={provenance:results.provenance==='success'?outputs:{}};
+ for(const name of laterJobs) {
+  const job=workflow.jobs[name],needs=[job.needs??[]].flat();
+  const condition=(job.if??'${{ success() }}').match(/^\$\{\{ (.*) \}\}$/s)?.[1];
+  assert.ok(condition,`${name}: ${job.if}`);
+  const succeeded=needs.every(need=>results[need]==='success');
+  const value=reference=>{
+   const [,need,field,output]=reference.match(/^needs\.([\w-]+)\.(result|outputs\.(\w+))$/);
+   assert.ok(needs.includes(need),`${name} reads ${need}, which it does not need`);
+   return JSON.stringify(field==='result'?results[need]:jobOutputs[need][output]??'');
+  };
+  const script=condition.replace(/needs\.[\w-]+\.(?:result|outputs\.\w+)/g,value)
+   .replace(/\b(always|cancelled|success|failure)\(\)/g,(_,fn)=>String({always:true,cancelled,success:succeeded,failure:needs.some(need=>results[need]==='failure')}[fn]))
+   .replace(/([!=])=/g,'$1==');
+  const runs=(/\b(always|cancelled|success|failure)\(\)/.test(condition)||succeeded)&&new Function(`return (${script});`)();
+  results[name]=runs?(fail.includes(name)?'failure':'success'):'skipped';
+  jobOutputs[name]={};
+ }
+ return Object.fromEntries(laterJobs.map(name=>[name,results[name]]));
+}
+
+test('a published release builds and tags nothing on a re-run, and still promotes', () => {
+ assert.deepEqual(Object.keys(workflow.jobs),['provenance',...laterJobs]);
+ const tag={sha,tag:'1.2.3',release:'v1.2.3'},published={sha,tag:'',release:'v1.2.3'},main={sha,tag:'main',release:''};
+ const all=(result,changes={})=>({...Object.fromEntries(laterJobs.map(name=>[name,result])),...changes});
+ assert.deepEqual(schedule({outputs:published}),all('skipped',{promote:'success'}));
+ // A new or interrupted (draft) release builds, tests, publishes and promotes; main only builds.
+ assert.deepEqual(schedule({outputs:tag}),all('success'));
+ assert.deepEqual(schedule({outputs:main}),all('skipped',{image:'success'}));
+ // Every failure, cancellation or empty answer stops promotion.
+ assert.deepEqual(schedule({outputs:tag,fail:['image']}),all('skipped',{image:'failure'}));
+ assert.deepEqual(schedule({outputs:tag,fail:['install-test']}),all('skipped',{image:'success','install-test':'failure'}));
+ assert.deepEqual(schedule({outputs:tag,fail:['release']}),all('success',{release:'failure',promote:'skipped'}));
+ for(const outputs of [published,tag,{}]) assert.deepEqual(schedule({outputs,fail:['provenance']}),all('skipped'));
+ assert.deepEqual(schedule({outputs:published,cancelled:true}),all('skipped'));
+ assert.deepEqual(schedule({outputs:{sha:'',tag:'',release:''}}),all('skipped'));
+});
+
+test('provenance names a published release with no image tag, only after proving it, and fails on an unreadable list', t => {
+ const published=pages([{tag_name:'v1.2.2',draft:false}],[{tag_name:'v1.2.3',draft:false}]);
+ const proven=provenance(t,{files:{...reviewedTag(),releases:published}});
+ assert.equal(proven.result.status,0,proven.result.stderr);
+ assert.deepEqual(proven.outputs,{sha,tag:'',release:'v1.2.3'});
+ assert.match(proven.result.stdout,/::notice::v1\.2\.3 is already published/);
+ assert.match(proven.calls,new RegExp(`--paginate repos/${repo}/releases\\?per_page=100`));
+ // A draft is not published: an interrupted release is built, tested and published again.
+ const draft=provenance(t,{files:{...reviewedTag(),releases:pages([{tag_name:'v1.2.3',draft:true}])}});
+ assert.deepEqual(draft.outputs,{sha,tag:'1.2.3',release:'v1.2.3'});
+ // A list that cannot be read, or a published release of an unproven commit, names nothing.
+ for(const files of [{...reviewedTag(),releases:undefined},{...reviewedTag(),releases:published,'jobs-7':pages({jobs:[{name:'check',conclusion:'failure'}]})}]) {
+  const refused=provenance(t,{files});
+  assert.notEqual(refused.result.status,0);
+  assert.deepEqual(refused.outputs,{});
+ }
+ // Main never reads the releases.
+ const main=provenance(t,{path:'.github/workflows/ci.yml',branch:'main',files:{...reviewedTag(),main:{sha},releases:published}});
+ assert.deepEqual(main.outputs,{sha,tag:'main',release:''});
+ assert.doesNotMatch(main.calls,/releases/);
+});
+
+test('the README says releases are uploaded as a draft, published once, and never replaced', () => {
+ const releases=readFileSync('README.md','utf8').split(/^## Releases$/m)[1]?.split(/^## /m)[0];
+ assert.match(releases,/immutable/);
+ assert.match(releases,/draft/);
+ assert.match(releases,/new\s+release/);
+ assert.match(releases,/neither\s+rebuilds\s+nor\s+re-tags/);
+});
+
 test('the release workflow takes nothing from the run that started it but the identifiers provenance checks', () => {
  // That run may be one an unreviewed commit wrote. Its fields reach a script only through the provenance step's env,
  // never inline in a script, and no artifact or output of that run is read.
@@ -526,6 +734,7 @@ const ghShim=`gh() {
   */git/ref/tags/*) file=ref;;
   */git/tags/*) file=annotated;;
   */compare/*) file=compare;;
+  */releases'?'*) file=releases;;
   */actions/workflows/ci.yml/runs'?'*) file=runs;;
   */actions/runs/*/jobs'?'*) file=\${url#*/actions/runs/}; file=jobs-\${file%%/*};;
   *) echo "unexpected gh api $url" >&2; return 1;;
@@ -546,6 +755,8 @@ function reviewedTag() {
   'jobs-6':{jobs:[{name:'check',conclusion:'success'}]},
   'jobs-8':{jobs:[{name:'check',conclusion:'success'}]},
   'jobs-7':pages({jobs:[{name:'static',conclusion:'success'}]},{jobs:[{name:'check',conclusion:'success'}]}),
+  // Not published yet: an older release, and this tag's draft.
+  releases:pages([{tag_name:'v1.2.2',draft:false}],[{tag_name:'v1.2.3',draft:true}]),
  };
 }
 function provenance(t,{path='.github/workflows/release-tag.yml',branch='v1.2.3',head=sha,files=reviewedTag()}={}) {

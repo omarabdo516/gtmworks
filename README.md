@@ -117,7 +117,13 @@ of its own. Each such tag
 publishes the image `ghcr.io/omarabdo516/gtmworks:X.Y.Z` for
 `linux/amd64` and `linux/arm64`, and a GitHub Release with two files:
 `docker-compose.install.yml`, which pins every image by digest, and `install.sh`.
-In a directory holding only those two files, `sh install.sh` pulls the image and
+Published releases are immutable (the repository's immutable releases setting):
+once a release is published its two files can never be replaced. So the workflow
+uploads both files to a draft release, checks the draft holds exactly the files
+the install test passed on, and only then publishes it. A re-run of a tag whose
+release is already published leaves that release as it is and neither rebuilds
+nor re-tags its image `X.Y.Z`; it only runs the promotion of `stable` and
+`latest`. A fix ships as a new release `vX.Y.Z`. In a directory holding only those two files, `sh install.sh` pulls the image and
 takes the migrations and install files from it; nothing is built on the server.
 `stable` and `latest` move only after a release's install passes on its exact image,
 and always to the highest published release, so an older or hotfix tag never moves
