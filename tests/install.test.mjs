@@ -110,8 +110,9 @@ if [ -n "\${UPDATE_SOURCE:-}" ]; then cp "$UPDATE_SOURCE" scripts/install.sh; fi
 
 // Compose does not recreate a container when only a file it mounts changed, so an updated gateway config (it writes
 // X-Real-IP, the auth rate limit's key, issue #41) would never load. The new config is checked before anything changes;
-// the gateway is recreated on it once the new app is healthy.
-test('update checks the new gateway config before migrating and recreates the gateway on it after the app', t => {
+// the gateway is recreated on it after migrations and before the app starts: the worker reaches the database through the
+// gateway, so no service restarts once the worker runs (tests/setup-code.test.mjs).
+test('update checks the new gateway config before migrating and recreates the gateway on it before the app', t => {
  const directory=mkdtempSync(join(tmpdir(),'gtmworks-update-gateway-'));
  t.after(()=>rmSync(directory,{recursive:true,force:true}));
  for(const folder of ['scripts','bin','supabase/migrations']) mkdirSync(join(directory,folder),{recursive:true});
@@ -136,9 +137,9 @@ esac
 
  const updated=run(['update','main']);
  assert.equal(updated.status,0,updated.stderr);
- const order=[check,migrate,app,gateway].map(pattern=>at(updated.lines,pattern));
+ const order=[check,migrate,gateway,app].map(pattern=>at(updated.lines,pattern));
  assert.ok(order.every(index=>index>=0),`every stage ran: ${updated.lines.join(' | ')}`);
- assert.deepEqual([...order].sort((a,b)=>a-b),order,`config check, migrations, app, then gateway: ${updated.lines.join(' | ')}`);
+ assert.deepEqual([...order].sort((a,b)=>a-b),order,`config check, migrations, gateway, then app: ${updated.lines.join(' | ')}`);
  // Only the gateway is recreated by force: the app containers are replaced only when their image or settings changed.
  assert.equal(updated.lines.filter(line=>/--force-recreate/.test(line)).length,1);
 
@@ -159,25 +160,18 @@ esac
  const repeated=run([]);
  assert.equal(repeated.status,0,repeated.stderr);
  assert.ok(at(repeated.lines,check)>=0 && at(repeated.lines,check)<at(repeated.lines,migrate));
- assert.ok(at(repeated.lines,/ up -d --wait --wait-timeout 300$/)<at(repeated.lines,gateway));
+ assert.ok(at(repeated.lines,gateway)>=0 && at(repeated.lines,gateway)<at(repeated.lines,/ up -d --wait --wait-timeout 300$/));
 });
 
-// On the real install: the gateway runs a config from before issue #41 (no X-Real-IP line), a successful update brings
-// the current one from the downloaded source, and the gateway must then be a new container serving it.
-test('the install job proves a successful update recreates the gateway on its new config', () => {
+// A successful update on the real install belongs to issue #52; the install job keeps only the failed-update check, and
+// that check still proves the rollback: the migration is named, the old web container serves, and nothing is applied.
+test('the install job leaves the successful update to issue 52 and keeps the failed-update rollback check', () => {
  const run=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install.steps.find(step=>step.env?.INSTALL_REF).run;
- const at=text=>{ const index=run.indexOf(text); assert.notEqual(index,-1,text); return index; };
- const stale=at("sed -i '/X-Real-IP/d' scripts/install-nginx.conf");
- const restart=at('compose up -d --no-deps --force-recreate gateway');
- const before=at("[[ $(compose exec -T gateway grep -c X-Real-IP /etc/nginx/conf.d/default.conf) == 0 ]]");
- const id=at('old_gateway=$(compose ps -q gateway)');
- const update=at('sh scripts/install.sh update "$INSTALL_REF" > update-gateway.log 2>&1');
- const replaced=at('[[ $(compose ps -q gateway) != "$old_gateway" ]]');
- const serving=at("compose exec -T gateway grep -Fq 'proxy_set_header X-Real-IP $remote_addr;' /etc/nginx/conf.d/default.conf");
- assert.deepEqual([stale,restart,before,id,update,replaced,serving],[stale,restart,before,id,update,replaced,serving].sort((a,b)=>a-b));
- // After the proxied install is checked and before the failed-update check, which the update-log test runs alone.
- assert.ok(at("sh scripts/install.sh || fail 'proxied install'") < stale && serving < at('old_web=$(compose ps -q web)'));
- assert.ok(!run.slice(stale,at('old_web=$(compose ps -q web)')).includes('fail_update()'));
+ assert.doesNotMatch(run,/update-gateway\.log|old_gateway|sed -i '\/X-Real-IP\/d'/);
+ assert.equal([...run.matchAll(/sh scripts\/install\.sh update /g)].length,1,'only the failed update runs');
+ for(const text of ["if sh scripts/install.sh update \"$INSTALL_REF\" > update.log 2>&1; then fail_update 'update must fail'; fi",
+  "grep -Fq 'Applying migration: 99999999999999_failure.sql' update.log","[[ $(compose ps -q web) == \"$old_web\" ]] || fail_update 'old web container still serving'",
+  "to_regclass('public.update_should_rollback') is null","fail_update 'old version healthy after failed update'"]) assert.ok(run.includes(text),text);
 });
 
 test('failed backup resumes the install and leaves no archive or secrets behind', t => {

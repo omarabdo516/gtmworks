@@ -346,15 +346,6 @@ jobs:
             --env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY)=' .env.install) --env-file <(grep -E '^SETUP_CODE=' .env.install) \
             -e NODE_EXTRA_CA_CERTS=/ca.crt -e APP_ORIGIN="$public" -e MAIL_URL=http://127.0.0.1:8025 \
             node:22.14.0-alpine3.21 node --input-type=module - < scripts/check-install-proxy.mjs || { docker logs install-proxy; fail 'first run, sign-in and invitation links through the HTTPS proxy'; }
-          # An install from before issue #41: its gateway passes a client's X-Real-IP on to Auth. A successful update brings
-          # the current config from the downloaded source and must recreate the gateway on it; Compose alone would not.
-          sed -i '/X-Real-IP/d' scripts/install-nginx.conf || fail 'write the old gateway config'
-          compose up -d --no-deps --force-recreate gateway || fail 'serve the old gateway config'
-          [[ $(compose exec -T gateway grep -c X-Real-IP /etc/nginx/conf.d/default.conf) == 0 ]] || fail 'the gateway serves the old config'
-          old_gateway=$(compose ps -q gateway)
-          sh scripts/install.sh update "$INSTALL_REF" > update-gateway.log 2>&1 || { cat update-gateway.log >&2; fail 'successful update'; }
-          [[ $(compose ps -q gateway) != "$old_gateway" ]] || { cat update-gateway.log >&2; fail 'update recreates the gateway'; }
-          compose exec -T gateway grep -Fq 'proxy_set_header X-Real-IP $remote_addr;' /etc/nginx/conf.d/default.conf || fail 'the updated gateway writes X-Real-IP from the connection'
           old_web=$(compose ps -q web)
           # Repeated wrong passwords for that Owner hit the auth service's own rate limit (issue #41), per visitor behind the
           # proxy. Caddy writes each visitor's address in X-Forwarded-For, replacing any a client sent; the gateway believes

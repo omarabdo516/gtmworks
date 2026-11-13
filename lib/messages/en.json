@@ -120,6 +120,7 @@
   "savePassword": "Save password",
   "passwordSaved": "Password saved.",
   "couldNotSavePassword": "Could not save the password. Try again.",
+  "passwordNeedsVerificationCode": "Your account uses two-step verification: enter the code from your authenticator app to change your password.",
   "changePassword": "Change password",
   "noCompanyYet": "No company yet",
   "youAreNotAMemberOfAnyCompany": "You are not a member of any company yet.",

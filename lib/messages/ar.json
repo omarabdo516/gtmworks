@@ -120,6 +120,7 @@
   "savePassword": "حفظ كلمة المرور",
   "passwordSaved": "تم حفظ كلمة المرور.",
   "couldNotSavePassword": "تعذّر حفظ كلمة المرور. حاول مرة أخرى.",
+  "passwordNeedsVerificationCode": "يستخدم حسابك التحقق بخطوتين: أدخل الرمز من تطبيق المصادقة لتغيير كلمة المرور.",
   "changePassword": "تغيير كلمة المرور",
   "noCompanyYet": "لا توجد شركة بعد",
   "youAreNotAMemberOfAnyCompany": "ليس لديك عضوية في أي شركة حتى الآن.",

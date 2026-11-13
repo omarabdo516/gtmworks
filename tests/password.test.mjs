@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { passwordProblem, PASSWORD_MIN_LENGTH } from '../lib/password.mjs';
+import { passwordProblem, passwordNeedsSecondStep, PASSWORD_MIN_LENGTH } from '../lib/password.mjs';
 import { firstRunInput } from '../lib/first-run-input.mjs';
 
 const en=JSON.parse(readFileSync('lib/messages/en.json','utf8'));
@@ -60,4 +60,27 @@ test('the README install section describes the password first run and what the l
  assert.ok(install.includes('On a fresh install, enter your name, email, a password of at least 10 characters (twice) and your first company name; you are signed in at once, with no email step.'));
  assert.ok(install.includes('The local inbox at http://localhost:8025 receives password reset links and invitations.'));
  assert.doesNotMatch(install,/follow the sign-in link/);
+});
+
+// A person with a verified authenticator signs in with a password at the first level (aal1); the auth service refuses
+// to change their password until this session has passed the second step too (aal2), and so does the form.
+test('a person with a verified second step passes it in this session before a password change', () => {
+ assert.equal(passwordNeedsSecondStep({currentLevel:'aal1',nextLevel:'aal2'}),true);
+ assert.equal(passwordNeedsSecondStep({currentLevel:'aal2',nextLevel:'aal2'}),false);
+ assert.equal(passwordNeedsSecondStep({currentLevel:'aal1',nextLevel:'aal1'}),false);
+ // Unknown levels leave the decision to the auth service, which refuses an aal1 password change on its own.
+ assert.equal(passwordNeedsSecondStep(null),false);
+});
+
+test('the set-password form verifies the code before it sends the password, and shows the auth service refusal', () => {
+ const form=readFileSync('app/set-password-form.tsx','utf8');
+ const at=text=>{ const index=form.indexOf(text); assert.notEqual(index,-1,text); return index; };
+ assert.ok(at('getAuthenticatorAssuranceLevel()')<at('mfa.challenge(')&&at('mfa.challenge(')<at('mfa.verify(')&&at('mfa.verify(')<at('updateUser('),'level, challenge, verify, then the password');
+ assert.match(form,/passwordNeedsSecondStep\(/);
+ assert.match(form,/'insufficient_aal'/);
+ assert.match(form,/t\('verificationCode'\)/);
+ for(const key of ['passwordNeedsVerificationCode','verificationCode','incorrectCodeTryAgain','couldNotStartVerification']) {
+  assert.ok(en[key]?.trim(),`en has ${key}`);
+  assert.ok(ar[key]?.trim(),`ar has ${key}`);
+ }
 });

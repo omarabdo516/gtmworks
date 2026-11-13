@@ -125,15 +125,16 @@ if [ "$operation" = install ]; then compose up -d --wait db auth rest storage ma
   printf "notify pgrst, 'reload schema';\n"
 } | compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 --single-transaction
 compose build web
+# Compose does not recreate a container when only a file it mounts changed: recreate the gateway so its new config (the
+# X-Real-IP the auth rate limit counts by, issue #41) is the one that serves. Before the app starts: the worker reaches
+# the database through the gateway, so nothing restarts once the worker runs.
+compose up -d --no-deps --force-recreate --wait --wait-timeout 300 gateway
 if [ "$operation" = update ]; then
   # auth is recreated when its settings changed (password rules, reset-link lifetime, session length) and must be healthy.
   compose up -d --no-deps --wait --wait-timeout 300 auth hermes web worker
 else
   compose up -d --wait --wait-timeout 300
 fi
-# Compose does not recreate a container when only a file it mounts changed: recreate the gateway so its new config (the
-# X-Real-IP the auth rate limit counts by, issue #41) is the one that serves.
-compose up -d --no-deps --force-recreate --wait --wait-timeout 300 gateway
 compose exec -T web node -e "for(const url of ['http://gateway:8080/api/health','http://gateway:8080/sign-in','http://hermes:8642/health']) { const response=await fetch(url); if(response.status!==200) throw new Error(url+' returned '+response.status); }" --input-type=module
 # Whether first run is still open, asked through the app's service role; it answers open or closed and nothing else.
 setup=$(compose exec -T web node -e "const key=process.env.SUPABASE_SERVICE_ROLE_KEY; const response=await fetch('http://gateway:8080/rest/v1/rpc/setup_is_open',{method:'POST',headers:{apikey:key,authorization:'Bearer '+key}}); if(!response.ok) throw new Error('setup_is_open returned '+response.status); console.log(await response.json()===true?'open':'closed');" --input-type=module)

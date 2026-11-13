@@ -151,7 +151,7 @@ test('install and update restart no service once the worker runs', t => {
   const result=install.run('open',...args);
   assert.equal(result.status,0,`${args.join(' ')||'install'}: ${result.stderr}`);
   const commands=install.commands();
-  const started=commands.findIndex(command=>/compose .* up -d (--no-deps )?--wait --wait-timeout 300( hermes web worker)?$/.test(command));
+  const started=commands.findIndex(command=>/compose .* up -d (--no-deps )?--wait --wait-timeout 300( (auth )?hermes web worker)?$/.test(command));
   assert.ok(started>=0,commands.join('\n'));
   assert.deepEqual(commands.slice(started+1).filter(command=>/ (up|restart|stop|down)\b|--force-recreate/.test(command)),[],`${args.join(' ')||'install'}:\n${commands.join('\n')}`);
  }
