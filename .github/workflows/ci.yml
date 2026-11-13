@@ -210,8 +210,9 @@ jobs:
     needs: [changes]
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.docs_only != 'true') }}
     runs-on: ubuntu-latest
-    # The release install and update below add a fresh stack and an update to the source install checks.
-    timeout-minutes: 40
+    # The release install and update below add a fresh stack and an update to the source install checks, and the one-line
+    # install adds another, an update, a failed update and a return to an older release from a backup.
+    timeout-minutes: 60
     permissions:
       contents: read
     steps:
@@ -421,6 +422,126 @@ jobs:
             status=$(docker run --rm --network host curlimages/curl:8.12.1 -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:3000$path") || fail "$path request"
             [[ $status == 200 ]] || fail "$path returned HTTP $status after the release update (expected 200)"
           done
+      # The one line (#51) and gtmworks update (#52) against test releases served the way GitHub Releases serves them:
+      # releases.json lists the tags and <tag>/ holds each release's two files. GTMWORKS_RELEASES and GTMWORKS_GET are
+      # read only by tests (scripts/get.sh). HOME is inside the checkout, the one folder the Docker machine mounts.
+      - name: one-line install, gtmworks status and gtmworks update between test releases
+        env:
+          DOCKER_HOST: tcp://127.0.0.1:2375
+        run: |
+          fail() { echo "one-line install check failed: $1" >&2; exit 1; }
+          set -o pipefail
+          compose() { docker compose --env-file .env.install -f docker-compose.install.yml "$@"; }
+          db() { compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 -At "$@"; }
+          migrations() { db -c 'select name from gtmworks_install.schema_migrations order by name'; }
+          web_image() { docker inspect -f '{{.Image}}' "$(compose ps -q web)"; }
+          probe() {
+            for path in /api/health /sign-in; do
+              status=$(docker run --rm --network host curlimages/curl:8.12.1 -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:3000$path") || fail "$path request ($1)"
+              echo "http://127.0.0.1:3000$path $status"
+              [[ $status == 200 ]] || fail "$path returned HTTP $status $1 (expected 200)"
+            done
+          }
+          publish() { docker push -q "localhost:5000/gtmworks:$1" > /dev/null && docker image inspect --format '{{index .RepoDigests 0}}' "localhost:5000/gtmworks:$1"; }
+          workspace=$PWD
+          (cd release-install && compose down -v) || fail 'remove the release install'
+          releases="$workspace/test-releases"
+          mkdir -p "$releases/v0.0.0" "$releases/v0.0.1" "$releases/v0.0.2"
+          cp release-first/docker-compose.install.yml release-first/install.sh "$releases/v0.0.0/" || fail 'test release v0.0.0'
+          echo '[{"tag_name":"v0.0.0"}]' > "$releases/releases.json"
+          export GTMWORKS_RELEASES="file://$releases" GTMWORKS_GET="file://$workspace/scripts/get.sh"
+          export HOME="$workspace/one-line-home"
+          mkdir "$HOME"
+          dir="$HOME/gtmworks"
+          first=$(sed -n 's/^release_image=//p' release-first/install.sh)
+          next=$(sed -n 's/^release_image=//p' release-next/install.sh)
+          line() { curl -fsSL "$GTMWORKS_GET" | sh -s -- "$@"; }
+          # The one line in an empty folder installs the latest release (v0.0.0 while it is the only one).
+          { line || fail 'the one line in an empty folder'; } 2>&1 | tee one-line.log
+          grep -Fx 'Installing gtmworks v0.0.0 into '"$dir"'.' one-line.log || fail 'the line installs the latest release'
+          grep -E 'Digest: sha256:[a-f0-9]{64}' one-line.log || fail 'the log shows the image pulled by digest'
+          if grep -Ei 'compose build|\[\+\] Building' one-line.log; then fail 'the one line builds nothing'; fi
+          grep -Fx 'http://gateway:8080/api/health 200' one-line.log || fail 'the install health probe returns 200'
+          cd "$dir"
+          probe 'after the one line'
+          checksum=$(sha256sum < .env.install)
+          echo ".env.install sha256 after the first run: $checksum"
+          db -c "insert into public.companies (id,slug,name) values ('00000000-0000-4000-8000-000000000238','one-line-probe','Kept by the line');" || fail 'insert the probe'
+          migrations > "$RUNNER_TEMP/one-line-migrations" || fail 'read the migrations'
+          # The line again, and once naming the version: each repairs and restarts the same release, keeping keys and data.
+          for run in again version; do
+            cd "$workspace"
+            if [[ $run == again ]]; then args=(); else args=(--version v0.0.0); fi
+            { line "${args[@]}" || fail "the one line ($run)"; } 2>&1 | tee "one-line-$run.log"
+            grep -Fx "Repairing gtmworks v0.0.0 in $dir; its keys and data are kept." "one-line-$run.log" || fail "the line repairs ($run)"
+            grep -Fx "gtmworks v0.0.0: $first" "one-line-$run.log" || fail "the log names the release ($run)"
+            cd "$dir"
+            echo ".env.install sha256 after the line ($run): $(sha256sum < .env.install)"
+            [[ $(sha256sum < .env.install) == "$checksum" ]] || fail ".env.install unchanged ($run)"
+            [[ $(db -c "select name from public.companies where slug='one-line-probe'") == 'Kept by the line' ]] || fail "test data kept ($run)"
+            migrations | diff -u "$RUNNER_TEMP/one-line-migrations" - || fail "migrations unchanged ($run)"
+          done
+          # gtmworks from a new login shell: the line put ~/.local/bin on the PATH through the shell profile.
+          grep -F 'export PATH="$HOME/.local/bin:$PATH"' "$HOME/.profile" || fail 'the profile puts ~/.local/bin on the PATH'
+          env -i HOME="$HOME" PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin DOCKER_HOST="$DOCKER_HOST" \
+            sh -lc 'command -v gtmworks && gtmworks status' 2>&1 | tee "$RUNNER_TEMP/status.log" || fail 'gtmworks status from a new shell'
+          for service in $(compose config --services); do
+            grep -E "^$service +healthy" "$RUNNER_TEMP/status.log" || fail "gtmworks status reports $service healthy"
+          done
+          grep -Ex 'All [0-9]+ services are healthy\.' "$RUNNER_TEMP/status.log" || fail 'gtmworks status reports every service healthy'
+          export PATH="$HOME/.local/bin:$PATH"
+          # v0.0.1 is published: gtmworks update moves to it, backing up first.
+          cp "$workspace/release-next/docker-compose.install.yml" "$workspace/release-next/install.sh" "$releases/v0.0.1/" || fail 'test release v0.0.1'
+          echo '[{"tag_name":"v0.0.0"},{"tag_name":"v0.0.1"}]' > "$releases/releases.json"
+          old_image=$(web_image)
+          { gtmworks update || fail 'gtmworks update'; } 2>&1 | tee "$RUNNER_TEMP/update.log"
+          archive=$(sed -n 's/^Backup: //p' "$RUNNER_TEMP/update.log" | tail -n 1)
+          [[ $archive == "$dir"/backups/*.tgz && -f $archive ]] || fail 'the update prints the backup archive path'
+          grep -E 'Digest: sha256:[a-f0-9]{64}' "$RUNNER_TEMP/update.log" || fail 'the update pulls the new image by digest'
+          grep -Fx "gtmworks v0.0.1 is running: $next" "$RUNNER_TEMP/update.log" || fail 'the update names the new image digest'
+          grep -Fx "To go back to v0.0.0: gtmworks restore '$archive' --version v0.0.0" "$RUNNER_TEMP/update.log" || fail 'the update prints the command to go back'
+          [[ $(cat .install-release) == "$next" && $(cat .gtmworks-version) == v0.0.1 && $(web_image) != "$old_image" ]] || fail 'the update runs v0.0.1'
+          [[ $(db -c "select to_regclass('gtmworks_install.release_update_probe') is not null") == t ]] || fail 'the v0.0.1 migration applied'
+          probe 'after gtmworks update'
+          echo "find $dir ! -user $(id -u):"
+          owners=$(find "$dir" ! -user "$(id -u)")
+          [[ -z $owners ]] || { echo "$owners"; fail 'every file in the install folder belongs to the user who ran the update'; }
+          # An older release than the data: refused, nothing changed.
+          migrations > "$RUNNER_TEMP/updated-migrations"
+          image=$(web_image)
+          if gtmworks update --version v0.0.0 > "$RUNNER_TEMP/refused.log" 2>&1; then cat "$RUNNER_TEMP/refused.log"; fail 'an update to an older release must be refused'; fi
+          cat "$RUNNER_TEMP/refused.log"
+          grep -F 'older than the data' "$RUNNER_TEMP/refused.log" && grep -F 'Nothing was changed.' "$RUNNER_TEMP/refused.log" || fail 'the refusal says why in plain words'
+          [[ $(web_image) == "$image" && $(cat .install-release) == "$next" && $(cat .gtmworks-version) == v0.0.1 ]] || fail 'the refused update left the running release'
+          migrations | diff -u "$RUNNER_TEMP/updated-migrations" - || fail 'the refused update left the migrations'
+          # A failing migration on the update path: rolled back, the previous release serves on its own files, non-zero exit.
+          docker build -q -t localhost:5000/gtmworks:0.0.2-ci - > /dev/null <<'DOCKERFILE' || fail 'build the failing release image'
+          FROM localhost:5000/gtmworks:0.0.1-ci
+          RUN printf '%s\n' 'create table public.update_should_rollback(value integer);' 'select 1 / 0;' > /app/install/supabase/migrations/99999999999999_failure.sql
+          DOCKERFILE
+          failing=$(publish 0.0.2-ci) || fail 'push the failing release image'
+          (cd "$workspace" && node scripts/release-assets.mjs "$failing" "$releases/v0.0.2") || fail 'failing release files'
+          old_web=$(compose ps -q web)
+          if gtmworks update --version v0.0.2 --no-backup > "$RUNNER_TEMP/failed-update.log" 2>&1; then cat "$RUNNER_TEMP/failed-update.log"; fail 'the failing update must exit non-zero'; fi
+          cat "$RUNNER_TEMP/failed-update.log"
+          grep -Fq 'Applying migration: 99999999999999_failure.sql' "$RUNNER_TEMP/failed-update.log" || fail 'the failed update names its migration'
+          [[ $(compose ps -q web) == "$old_web" ]] || fail 'the previous web container still serves'
+          [[ $(db -c "select to_regclass('public.update_should_rollback') is null") == t ]] || fail 'the failed migration rolled back'
+          [[ $(cat .install-release) == "$next" && $(cat .gtmworks-version) == v0.0.1 ]] || fail 'the previous release files are back'
+          probe 'after the failed update'
+          owners=$(find "$dir" ! -user "$(id -u)")
+          [[ -z $owners ]] || { echo "$owners"; fail 'every file still belongs to the user after the failed update'; }
+          # The printed command goes back to v0.0.0 with the data from before the update.
+          back=$(sed -n 's/^To go back to v0\.0\.0: //p' "$RUNNER_TEMP/update.log")
+          { eval "$back" || fail 'the printed command goes back'; } 2>&1 | tee "$RUNNER_TEMP/go-back.log"
+          [[ $(cat .install-release) == "$first" && $(cat .gtmworks-version) == v0.0.0 ]] || fail 'back on v0.0.0'
+          migrations | diff -u "$RUNNER_TEMP/one-line-migrations" - || fail 'the migrations of v0.0.0 again'
+          [[ $(db -c "select name from public.companies where slug='one-line-probe'") == 'Kept by the line' ]] || fail 'the data from before the update'
+          [[ $(sha256sum < .env.install) == "$checksum" ]] || fail 'the keys from before the update'
+          probe 'after going back'
+          gtmworks status || fail 'healthy after going back'
+          owners=$(find "$dir" ! -user "$(id -u)")
+          [[ -z $owners ]] || { echo "$owners"; fail 'every file belongs to the user after going back'; }
       - name: remove the isolated Docker machine
         if: ${{ always() }}
         run: docker rm -fv install-docker || true
