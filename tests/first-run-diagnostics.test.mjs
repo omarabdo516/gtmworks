@@ -22,7 +22,8 @@ function load(file,imports,globals={}) {
 test('first-run refusals log distinct causes and retain their responses and account cleanup',async t=>{
  const code=generateSetupCode();
  process.env.SETUP_CODE=code;
- const input={name:'Owner',email:'owner@example.test',company:'Company',language:'en',code};
+ const marker='marker-password-41';
+ const input={name:'Owner',email:'owner@example.test',company:'Company',language:'en',code,password:marker,confirm:marker};
  const authError={name:'AuthApiError',code:'email_exists',status:422,message:'User owner@example.test already exists',email:input.email};
  const sqlError={code:'23503',message:'Foreign key violation',details:input.email};
  for(const scenario of [
@@ -39,18 +40,23 @@ test('first-run refusals log distinct causes and retain their responses and acco
   {name:'RPC error',sqlError,actions:['complete_setup'],status:404,cleanup:1},
   {name:'empty slug',slug:'',actions:['first_run_empty_slug'],status:404,cleanup:1},
   {name:'cleanup error',sqlError,cleanupError:true,actions:['complete_setup','first_run_cleanup'],cleanup:1},
-  {name:'successful setup',actions:[],status:303},
+  {name:'short password',input:{...input,password:'short',confirm:'short'},actions:['first_run_invalid_input'],status:303,location:'/first-run?invalid=passwordTooShort&language=en'},
+  {name:'mismatched password',input:{...input,confirm:'something-else'},actions:['first_run_invalid_input'],status:303,location:'/first-run?invalid=passwordsDoNotMatch&language=en'},
+  {name:'sign-in after setup fails',signInError:{name:'AuthApiError',code:'unexpected_failure',status:500,message:'Database error'},actions:['first_run_signIn'],status:303,location:'/sign-in?next=%2Fc%2Fcompany-slug%2Fhome&language=en'},
+  {name:'successful setup',actions:[],status:303,location:'/c/company-slug/home'},
  ]) await t.test(scenario.name,async()=>{
   const lines=[],open=[...(scenario.open ?? [true])];
   let deleted=0,created=0,completed=0;
   const admin={auth:{admin:{
-   createUser:async()=>(created++,{data:{user:scenario.authError || scenario.noUser?null:{id:'person-id'}},error:scenario.authError}),
+   createUser:async params=>{created++; assert.equal(params.password,marker); return {data:{user:scenario.authError || scenario.noUser?null:{id:'person-id'}},error:scenario.authError};},
    deleteUser:async id=>{assert.equal(id,'person-id'); deleted++; return {error:scenario.cleanupError};},
   }},rpc:async()=>(completed++,{data:scenario.slug ?? 'company-slug',error:scenario.sqlError})};
   const {POST}=load('app/first-run/submit/route.ts',{
    '@/lib/first-run':{setupIsOpen:async()=>open.length>1?open.shift():open[0],setupAdmin:()=>admin},
    '@/lib/first-run-input.mjs':{firstRunInput},
-   '@/lib/supabase':{supabase:async()=>({auth:{signInWithOtp:async()=>({error:null})}})},
+   '@/lib/password.mjs':await import('../lib/password.mjs'),
+   // The Owner is signed in with the password just chosen: no email is sent.
+   '@/lib/supabase':{supabase:async()=>({auth:{signInWithPassword:async credentials=>{assert.deepEqual({...credentials},{email:input.email,password:marker}); return {error:scenario.signInError ?? null};},signInWithOtp:()=>assert.fail('no email step')}})},
    '@/lib/diagnostics.mjs':{logActionFailure:(action,error)=>logActionFailure(action,error,{write:line=>lines.push(line)})},
    '@/lib/app-origin.mjs':{appUrl},
    '@/lib/setup-code.mjs':{setupCodeMatches},
@@ -67,12 +73,17 @@ test('first-run refusals log distinct causes and retain their responses and acco
    assert.equal(await response.text(),i18n.i18n(body.language).t('setupNeedsLink'));
    assert.equal(created+completed,0,'nothing is created without the right code');
   }
-  else assert.equal((await POST(request)).status,scenario.status);
+  else {
+   const response=await POST(request);
+   assert.equal(response.status,scenario.status);
+   if(scenario.location) assert.equal(new URL(response.headers.get('location')).pathname+new URL(response.headers.get('location')).search,scenario.location);
+  }
   const entries=lines.map(line=>JSON.parse(line));
   assert.deepEqual(entries.map(entry=>entry.action),scenario.actions);
   assert.equal(deleted,scenario.cleanup ?? 0);
   assert.doesNotMatch(lines.join('\n'),/owner@example\.test/);
   assert.ok(!lines.join('\n').includes(code),'the setup code is never logged');
+  assert.doesNotMatch(lines.join('\n'),new RegExp(marker));
   if(scenario.authError) {
    assert.equal(entries[0].code,authError.code);
    assert.equal(entries[0].status,authError.status);

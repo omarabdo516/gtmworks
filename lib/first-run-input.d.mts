@@ -1,1 +1,1 @@
-export function firstRunInput(form:FormData):{name:string,email:string,company:string,language:'en'|'ar'}|null;
+export function firstRunInput(form:FormData):{name:string,email:string,company:string,language:'en'|'ar',password:string}|null;

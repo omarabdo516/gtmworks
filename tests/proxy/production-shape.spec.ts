@@ -51,6 +51,10 @@ test('Send invitation shows its confirmation, the address gets the link and the 
   expect(link).toBeTruthy();
   await context.clearCookies();
   await page.goto(link);
+  // A new Member chooses a password before the Company opens (#41).
+  await page.getByLabel('New password').fill('invited-password');
+  await page.getByLabel('Confirm password').fill('invited-password');
+  await page.getByRole('button', { name: 'Save password' }).click();
   await expect(page).toHaveURL(/\/c\/rs-learning\/settings\/members/);
   await expect(page.getByRole('heading', { name: 'Team members' })).toBeVisible();
 });

@@ -135,6 +135,9 @@ chmod 600 .env.install
 complete_env "$PWD/.env.install"
 echo 'Validating install configuration...'
 docker run --rm --env-file .env.install -v "$PWD/lib:/code:ro" "$node_image" node /code/install-env.mjs validate complete
+# A broken gateway config stops here, before migrations or any container changes, while the old version still serves.
+echo 'Checking gateway configuration...'
+compose run --rm --no-deps gateway nginx -t
 if [ "$operation" = install ]; then compose up -d --wait db auth rest storage mail; fi
 {
   printf '%s\n' 'select pg_advisory_xact_lock(237);' 'create schema if not exists gtmworks_install;' \
@@ -152,8 +155,13 @@ if [ "$operation" = install ]; then compose up -d --wait db auth rest storage ma
   printf "notify pgrst, 'reload schema';\n"
 } | compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 --single-transaction
 if [ -z "$release_image" ]; then compose build web; fi
+# Compose does not recreate a container when only a file it mounts changed: recreate the gateway so its new config (the
+# X-Real-IP the auth rate limit counts by, issue #41) is the one that serves. Before the app starts: the worker reaches
+# the database through the gateway, so nothing restarts once the worker runs.
+compose up -d --no-deps --force-recreate --wait --wait-timeout 300 gateway
 if [ "$operation" = update ] && [ -z "$release_image" ]; then
-  compose up -d --no-deps --wait --wait-timeout 300 hermes web worker
+  # auth is recreated when its settings changed (password rules, reset-link lifetime, session length) and must be healthy.
+  compose up -d --no-deps --wait --wait-timeout 300 auth hermes web worker
 else
   # A release pins every service by digest: compose recreates each one the release changed and leaves the rest running.
   compose up -d --wait --wait-timeout 300

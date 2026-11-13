@@ -6,7 +6,6 @@ import { chromium } from '@playwright/test';
 import { anonymousCaptureUrl, defaultSignIn, outputPaths, parseArgs, referenceRoot, screens, startStaticServer } from './design-compare-lib.mjs';
 
 const height = 900;
-const mailbox = 'http://127.0.0.1:54324/api/v1';
 
 async function settle(page) {
   await page.waitForLoadState('networkidle').catch(() => {});
@@ -47,23 +46,15 @@ async function captureReference(browser, options) {
   }
 }
 
-// The minimal local Supabase mailbox flow of tests/sign-in.ts.
+// The password sign-in of tests/sign-in.ts, with the local seed's password unless GTMWORKS_SIGN_IN_PASSWORD names another.
 async function signIn(page, options) {
-  await page.request.delete(`${mailbox}/messages`).catch(() => {});
   await page.goto(`${options.builtUrl}/sign-in`);
-  await page.getByLabel('Email').fill(options.signIn);
-  await page.getByRole('button', { name: 'Send sign-in link' }).click();
-  for (let i = 0; i < 30; i++) {
-    const list = await (await page.request.get(`${mailbox}/messages`)).json();
-    const summary = list.messages?.find(message => message.To.some(to => to.Address === options.signIn));
-    if (summary) {
-      const message = await (await page.request.get(`${mailbox}/message/${summary.ID}`)).json();
-      const link = (message.HTML || message.Text).match(/https?:\/\/[^"\s<>]+/g)?.find(url => url.includes('/verify'))?.replace(/&amp;/g, '&');
-      if (link) { await page.goto(link); await settle(page); return; }
-    }
-    await page.waitForTimeout(1000);
-  }
-  throw new Error(`No sign-in link arrived for ${options.signIn} in the local mailbox (${mailbox}).`);
+  await page.getByLabel('Email', { exact: true }).fill(options.signIn);
+  await page.getByLabel('Password', { exact: true }).fill(process.env.GTMWORKS_SIGN_IN_PASSWORD || 'local-seed-password');
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  try { await page.waitForURL(url => !url.pathname.startsWith('/sign-in'), { timeout: 30000 }); }
+  catch { throw new Error(`Could not sign in as ${options.signIn} with a password.`); }
+  await settle(page);
 }
 
 // Language is a saved account setting: the same form tests/visual.spec.ts uses.

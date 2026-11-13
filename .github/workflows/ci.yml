@@ -225,6 +225,14 @@ jobs:
             -v "$PWD:$PWD" docker:28.5.1-dind
           for attempt in $(seq 1 60); do docker --host tcp://127.0.0.1:2375 info >/dev/null 2>&1 && break; sleep 1; done
           docker --host tcp://127.0.0.1:2375 info >/dev/null || { echo 'install check failed: DinD readiness' >&2; exit 1; }
+      # Only the browser check of the sign-in rate limit uses these, inside the Playwright image; the install itself is
+      # Docker only. No install scripts: the image already has the browsers.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: test packages for the install browser check
+        run: npm ci --ignore-scripts
       - name: isolated Docker-only install, repeat and verify
         env:
           DOCKER_HOST: tcp://127.0.0.1:2375
@@ -343,6 +351,25 @@ jobs:
             -e NODE_EXTRA_CA_CERTS=/ca.crt -e APP_ORIGIN="$public" -e MAIL_URL=http://127.0.0.1:8025 \
             node:22.14.0-alpine3.21 node --input-type=module - < scripts/check-install-proxy.mjs || { docker logs install-proxy; fail 'first run, sign-in and invitation links through the HTTPS proxy'; }
           old_web=$(compose ps -q web)
+          # Repeated wrong passwords for that Owner hit the auth service's own rate limit (issue #41), per visitor behind the
+          # proxy. Caddy writes each visitor's address in X-Forwarded-For, replacing any a client sent; the gateway believes
+          # it only from the install network's bridge gateway, where every connection from this machine arrives from
+          # (scripts/install-gateway-real-ip.sh). A browser signs in on the real page through the proxy, goes past the limit
+          # with forged client addresses, and the page says to try again later. Another visitor, inside the install network,
+          # still has its own allowance and signs in; its own forged addresses buy nothing, so it is limited in turn; and the
+          # browser's address is still limited after that.
+          docker run --rm --network host --ipc=host --add-host app.gtmworks.test:127.0.0.1 -v "$PWD:$PWD" -w "$PWD" --env-file <(grep -E '^NEXT_PUBLIC_SUPABASE_ANON_KEY=' .env.install) \
+            -e APP_ORIGIN="$public" -e SIGN_IN_EMAIL=proxy-owner@example.com \
+            mcr.microsoft.com/playwright:v1.64.1-noble npx --no-install playwright test -c playwright.install.config.ts || { docker logs install-proxy; fail 'the sign-in page past the auth rate limit through the HTTPS proxy'; }
+          docker run --rm --network gtmworks-install_default -v "$PWD/scripts:/check/scripts:ro" --env-file <(grep -E '^NEXT_PUBLIC_SUPABASE_ANON_KEY=' .env.install) \
+            -e APP_ORIGIN=http://gateway:8080 -e SIGN_IN_EMAIL=proxy-owner@example.com -e SIGN_IN_PASSWORD=proxy-owner-password \
+            node:22.14.0-alpine3.21 node /check/scripts/check-install-rate-limit.mjs fresh || fail 'another visitor keeps its own sign-in allowance'
+          docker run --rm --network gtmworks-install_default -v "$PWD/scripts:/check/scripts:ro" --env-file <(grep -E '^NEXT_PUBLIC_SUPABASE_ANON_KEY=' .env.install) \
+            -e APP_ORIGIN=http://gateway:8080 -e SIGN_IN_EMAIL=proxy-owner@example.com \
+            node:22.14.0-alpine3.21 node /check/scripts/check-install-rate-limit.mjs untrusted || fail 'forged addresses from inside the install network are ignored'
+          docker run --rm --network host --add-host app.gtmworks.test:127.0.0.1 -v "$PWD/ca.crt:/ca.crt:ro" -v "$PWD/scripts:/check/scripts:ro" --env-file <(grep -E '^NEXT_PUBLIC_SUPABASE_ANON_KEY=' .env.install) \
+            -e NODE_EXTRA_CA_CERTS=/ca.crt -e APP_ORIGIN="$public" -e SIGN_IN_EMAIL=proxy-owner@example.com \
+            node:22.14.0-alpine3.21 node /check/scripts/check-install-rate-limit.mjs limited || { docker logs install-proxy; fail 'the limited visitor stays limited despite forged addresses'; }
           cp scripts/install-failing-migration.sql supabase/migrations/99999999999999_failure.sql
           fail_update() { cat update.log >&2; fail "$1"; }
           if sh scripts/install.sh update "$INSTALL_REF" > update.log 2>&1; then fail_update 'update must fail'; fi

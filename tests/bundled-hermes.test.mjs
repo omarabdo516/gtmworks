@@ -130,7 +130,7 @@ test('install and update add a missing Hermes key before validating, and update 
  assert.ok(!(update.stdout+update.stderr).includes(key));
  const run=install.commands();
  assert.ok(run.indexOf('install-env.mjs missing')<run.indexOf('install-env.mjs validate complete'));
- assert.match(run,/up -d --no-deps --wait --wait-timeout 300 hermes web worker/);
+ assert.match(run,/up -d --no-deps --wait --wait-timeout 300 auth hermes web worker/);
  // A complete install file is left byte for byte as it was.
  const repeat=install.run();
  assert.equal(repeat.status,0,repeat.stderr);
@@ -165,7 +165,17 @@ test('an install updated by the installer before ADR 0010 keeps running without 
  assert.match(install.file(),new RegExp(`\\nHERMES_API_KEY=${key}\\n$`));
  run=install.commands();
  assert.match(run,/install-env\.mjs validate complete\n/);
- assert.match(run,/up -d --no-deps --wait --wait-timeout 300 hermes web worker\n/);
+ assert.match(run,/up -d --no-deps --wait --wait-timeout 300 auth hermes web worker\n/);
+});
+
+test('update recreates the auth service with its password settings and waits until it is healthy (#41)', t => {
+ const install=installDirectory(t,'scripts/install.sh',olderEnv());
+ const update=install.run();
+ assert.equal(update.status,0,update.stderr);
+ // compose up recreates a service whose settings changed; --wait needs auth's healthcheck to pass before success.
+ assert.match(install.commands(),/up -d --no-deps --wait --wait-timeout 300 auth hermes web worker\n/);
+ assert.ok(compose.services.auth.healthcheck?.test,'auth has a healthcheck for --wait');
+ assert.deepEqual([compose.services.auth.environment.GOTRUE_PASSWORD_MIN_LENGTH,compose.services.auth.environment.GOTRUE_MAILER_OTP_EXP,compose.services.auth.environment.GOTRUE_SESSIONS_TIMEBOX],['10','86400','720h']);
 });
 
 // A service-role client stand-in: records the RPCs the worker calls and answers them.
