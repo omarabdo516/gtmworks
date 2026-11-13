@@ -52,6 +52,14 @@ services:
       GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: /auth/v1/verify
       GOTRUE_MFA_TOTP_ENROLL_ENABLED: "true"
       GOTRUE_MFA_TOTP_VERIFY_ENABLED: "true"
+      # Passwords: the rule gtmworks shows (lib/password.mjs), a reset link that works for 24 hours, and a sign-in that
+      # lasts 30 days. Repeated wrong passwords are limited by GoTrue's own sign-in rate limit.
+      GOTRUE_PASSWORD_MIN_LENGTH: "10"
+      GOTRUE_MAILER_OTP_EXP: "86400"
+      GOTRUE_SESSIONS_TIMEBOX: 720h
+      # GoTrue applies its rate limits only to requests carrying this header, one allowance per value. The gateway writes
+      # it from the visitor's address (scripts/install-nginx.conf); browsers sign in through the gateway.
+      GOTRUE_RATE_LIMIT_HEADER: X-Real-IP
     healthcheck:
       test: [CMD, wget, -q, --spider, http://127.0.0.1:9999/health]
       interval: 5s
@@ -102,8 +110,13 @@ services:
     image: nginx:1.28.0-alpine
     restart: unless-stopped
     ports: [127.0.0.1:3000:8080]
+    # Before nginx starts, write whom it believes when a request names its visitor: only the install network's bridge
+    # gateway, read from this container's routes each start, so it follows the network with no setting to keep.
+    entrypoint: [sh, -ec, 'sh /gtmworks/gateway-real-ip.sh /etc/nginx/gtmworks-real-ip.conf; exec /docker-entrypoint.sh "$$@"', gateway]
+    command: [nginx, -g, daemon off;]
     volumes:
       - ./scripts/install-nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./scripts/install-gateway-real-ip.sh:/gtmworks/gateway-real-ip.sh:ro
   hermes:
     # The agent engine ships inside the install (ADR 0010). Bump it here, by tag and digest, together with the version
     # the driver accepts (lib/hermes.mjs); tests/bundled-hermes.test.mjs and the install test check both.

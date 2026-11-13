@@ -31,11 +31,15 @@ Port **3000** (app and Supabase gateway)
 and **8025** (local email inbox) must be free; both bind **only to 127.0.0.1**.
 For a remote server, forward them over SSH (`ssh -L 3000:localhost:3000
 -L 8025:localhost:8025 your-server`) and open the setup link there. Do not expose the
-mailbox publicly. Open the setup link, enter your name, email and first company
-name, then follow the sign-in link in the local inbox at http://localhost:8025.
-You become the Agency owner and the first company's Owner. Setup then closes
-permanently and the setup link stops working; later visits use sign-in. Public sign-ups stay disabled. No demo
-people or companies are created, and no SMTP account is needed for the local inbox.
+mailbox publicly. On a fresh install, enter your name, email, a password of at
+least 10 characters (twice) and your first company name; you are signed in
+at once, with no email step. You become the Agency owner and the first company's
+Owner. Setup then closes permanently and the setup link stops working; later
+visits sign in with email and password, and a sign-in lasts 30 days on that
+browser unless you sign out. Public sign-ups stay disabled. No demo people or
+companies are created.
+The local inbox at http://localhost:8025 receives password reset links and invitations.
+No SMTP account is needed for it.
 
 The command builds the web image and starts the web app, worker, Postgres,
 GoTrue, PostgREST, file Storage, an Nginx gateway, the local mail inbox and the
@@ -52,6 +56,15 @@ delete or regenerate this file for an existing database. `.env.install.example`
 documents the keys but deliberately cannot start the app. Public HTTP is rejected;
 HTTP is allowed only for this install's loopback origin. For a public deployment,
 put HTTPS in front and set `APP_ORIGIN` and `SUPABASE_PUBLIC_URL` to that origin.
+Run that proxy on the install machine, pointed at `127.0.0.1:3000`, and have it put
+each visitor's address in `X-Forwarded-For` (Caddy's `reverse_proxy` does this by
+default; an Nginx `$proxy_add_x_forwarded_for` works too). The gateway reads the
+last address in that header, so repeated wrong passwords are limited per visitor
+rather than for everyone behind the proxy. It believes the header only from
+connections that come from the install machine itself; a container on the install
+network is never believed. Every process on the install machine is trusted to name
+a visitor this way, so do not run untrusted programs on it. With no such header,
+every visitor behind the proxy shares one sign-in allowance.
 
 Run the same command again to resume an interrupted install or start it again.
 It preserves secrets and data, and applies only unrecorded migrations, in filename

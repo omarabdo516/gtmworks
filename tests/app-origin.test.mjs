@@ -33,6 +33,8 @@ process.env.SETUP_CODE=code;
 const {NextRequest}=await import('next/server');
 const submit=(await import('../app/first-run/submit/route.ts')).POST;
 const callback=(await import('../app/auth/callback/route.ts')).GET;
+const {sendResetLink}=await import('../app/sign-in/actions.ts');
+const {supabase}=await import('../lib/supabase.ts');
 
 // The Auth and database server: answers what setup and sign-in ask and records every request.
 function server() {
@@ -45,7 +47,7 @@ function server() {
   if(url.pathname==='/rest/v1/rpc/setup_is_open') return reply(true);
   if(url.pathname==='/auth/v1/admin/users') return reply({id:'00000000-0000-4000-8000-000000000040',email:'owner@example.test'});
   if(url.pathname==='/rest/v1/rpc/complete_setup') return reply('first-company-0000abcd');
-  if(url.pathname==='/auth/v1/otp') return reply({});
+  if(url.pathname==='/auth/v1/otp' || url.pathname==='/auth/v1/recover') return reply({});
   if(url.pathname==='/auth/v1/token') return reply({access_token:'access',token_type:'bearer',expires_in:3600,expires_at:4102444800,refresh_token:'refresh',user:{id:'00000000-0000-4000-8000-000000000040',aud:'authenticated',email:'owner@example.test'}});
   if(url.pathname==='/rest/v1/rpc/claim_invitations') return reply(null);
   throw new Error(`unexpected request ${init.method||'GET'} ${url}`);
@@ -53,17 +55,16 @@ function server() {
  return requests;
 }
 const form=values=>{ const body=new FormData(); for(const [name,value] of Object.entries(values)) body.set(name,value); return body; };
-const owner={name:'Owner',email:'owner@example.test',company:'First Company',language:'en',code};
+const owner={name:'Owner',email:'owner@example.test',company:'First Company',language:'en',code,password:'owner-password-41',confirm:'owner-password-41'};
 
-test('first run redirects and emails links on APP_ORIGIN, not on the forwarded request', async () => {
+test('first run signs the Owner in and redirects on APP_ORIGIN, not on the forwarded request, with no email', async () => {
  process.env.APP_ORIGIN=origin;
  const requests=server();
  const response=await submit(new NextRequest('http://gateway:8080/first-run/submit',{method:'POST',headers:inside,body:form(owner)}));
  assert.equal(response.status,303);
- assert.ok(response.headers.get('location').startsWith(`${origin}/sign-in?next=%2Fc%2Ffirst-company-0000abcd%2Fhome&message=sent`),response.headers.get('location'));
- const otp=requests.find(url=>url.pathname==='/auth/v1/otp');
- assert.ok(otp,'the sign-in email was requested');
- assert.equal(otp.searchParams.get('redirect_to'),`${origin}/auth/callback?next=${encodeURIComponent('/c/first-company-0000abcd/home')}`);
+ assert.equal(response.headers.get('location'),`${origin}/c/first-company-0000abcd/home`);
+ assert.ok(requests.some(url=>url.pathname==='/auth/v1/token'&&url.searchParams.get('grant_type')==='password'),'the Owner signed in with the password');
+ assert.ok(!requests.some(url=>url.pathname==='/auth/v1/otp'),'no sign-in email was requested');
 });
 
 test('first run sends invalid input back to the form on APP_ORIGIN', async () => {
@@ -87,13 +88,22 @@ test('first run takes the setup code only from the submitted body, never from th
 test('the auth callback redirects on APP_ORIGIN after the code is exchanged and when it is not', async () => {
  process.env.APP_ORIGIN=origin;
  const requests=server();
- // Sign-in leaves its code verifier in the browser's cookies; the callback needs it to exchange the code.
- await submit(new NextRequest('http://gateway:8080/first-run/submit',{method:'POST',headers:inside,body:form(owner)}));
+ // An invitation email leaves its code verifier in the browser's cookies; the callback needs it to exchange the code.
+ await (await supabase()).auth.signInWithOtp({email:owner.email,options:{emailRedirectTo:`${origin}/auth/callback`}});
  const signedIn=await callback(new NextRequest(`http://gateway:8080/auth/callback?code=one-time&next=${encodeURIComponent('/c/first-company-0000abcd/home')}`,{headers:inside}));
  assert.ok(requests.some(url=>url.pathname==='/auth/v1/token'),'the code was exchanged');
  assert.equal(signedIn.headers.get('location'),`${origin}/c/first-company-0000abcd/home`);
  const noCode=await callback(new NextRequest('http://gateway:8080/auth/callback',{headers:inside}));
  assert.equal(noCode.headers.get('location'),`${origin}/sign-in`);
+});
+
+test('the reset link is built on APP_ORIGIN, not on the forwarded request', async () => {
+ process.env.APP_ORIGIN=origin;
+ const requests=server();
+ assert.equal(await sendResetLink('',form({email:'owner@example.test'})),'checkYourEmailForAResetLink');
+ const recover=requests.find(url=>url.pathname==='/auth/v1/recover');
+ assert.ok(recover,'the reset email was requested');
+ assert.equal(recover.searchParams.get('redirect_to'),`${origin}/auth/reset`);
 });
 
 test('the origin is read from APP_ORIGIN each time a link is built', async () => {

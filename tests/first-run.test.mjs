@@ -3,12 +3,12 @@ import assert from 'node:assert/strict';
 import { firstRunInput } from '../lib/first-run-input.mjs';
 
 test('first-run accepts authored names and the chosen language, ignoring extra fields', () => {
- assert.deepEqual(firstRunInput(new FormDataBuilder({name:' عمر ',email:' OWNER@example.com ',company:' الشركة الأولى ',language:'ar',agency_owner:'false'})),
-  {name:'عمر',email:'owner@example.com',company:'الشركة الأولى',language:'ar'});
+ assert.deepEqual(firstRunInput(new FormDataBuilder({name:' عمر ',email:' OWNER@example.com ',company:' الشركة الأولى ',language:'ar',password:'long-enough-1',confirm:'long-enough-1',agency_owner:'false'})),
+  {name:'عمر',email:'owner@example.com',company:'الشركة الأولى',language:'ar',password:'long-enough-1'});
 });
 test('first-run refuses invalid or unbounded input before provisioning', () => {
  for (const change of [{name:''},{company:' '},{email:'bad'},{email:'owner\u0000@example.test'},{language:'fr'},{name:'a'.repeat(121)},{company:'a'.repeat(121)},{email:`${'a'.repeat(250)}@a.test`}]) {
-  assert.equal(firstRunInput(new FormDataBuilder({name:'Owner',email:'owner@example.com',company:'Company',language:'en',...change})),null);
+  assert.equal(firstRunInput(new FormDataBuilder({name:'Owner',email:'owner@example.com',company:'Company',language:'en',password:'long-enough-1',confirm:'long-enough-1',...change})),null);
  }
 });
 function FormDataBuilder(values) {

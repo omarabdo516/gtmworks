@@ -15,7 +15,7 @@ export function catalogueProblems(en, ar) {
 }
 
 // Product wordmark and the design thumbnail glyph are the only text exceptions.
-const textAllowlist={'app/shell.tsx':['gtm','works'],'app/sign-in/page.tsx':['gtm','works'],'app/first-run/page.tsx':['gtm','works'],'app/no-company/page.tsx':['gtm','works'],'app/c/[slug]/[[...section]]/approvals.tsx':['Aa']};
+const textAllowlist={'app/shell.tsx':['gtm','works'],'app/sign-in/page.tsx':['gtm','works'],'app/first-run/page.tsx':['gtm','works'],'app/forgot-password/page.tsx':['gtm','works'],'app/reset-password/page.tsx':['gtm','works'],'app/no-company/page.tsx':['gtm','works'],'app/c/[slug]/[[...section]]/approvals.tsx':['Aa']};
 const visibleAttributes=new Set(['aria-label','aria-description','aria-valuetext','title','placeholder','alt']);
 export function literalProblems(file, source) {
  const tree=ts.createSourceFile(file,source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);

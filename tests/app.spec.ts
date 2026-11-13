@@ -36,7 +36,7 @@ test('sign-in artwork renders, animates and respects reduced motion in both lang
   await expect(artwork).toContainText('╭');
   await page.setViewportSize({width:390,height:900});
   await expect(artwork).toBeHidden();
-  await expect(page.getByRole('textbox')).toBeInViewport({ratio:1});
+  await expect(page.locator('input[name=email]')).toBeInViewport({ratio:1});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);
   await page.screenshot({path:`test-results/screenshots/sign-in-${language}-390.png`});
   await page.setViewportSize({width:1440,height:900});
@@ -235,7 +235,10 @@ test('invite link signs the new member into the company',async({page,context})=>
  await page.request.delete('http://127.0.0.1:54324/api/v1/messages');
  await page.getByLabel("Email").fill('invited@example.com'); await page.getByRole('button',{name:"Send invitation"}).click(); await expect(page.getByRole('status')).toContainText('An invitation link was sent');
  let link=''; for(let i=0;i<30&&!link;i++){const mailbox=await (await page.request.get('http://127.0.0.1:54324/api/v1/messages')).json(); const item=mailbox.messages?.find((m:{To:{Address:string}[]})=>m.To.some(t=>t.Address==='invited@example.com')); if(item){const message=await (await page.request.get(`http://127.0.0.1:54324/api/v1/message/${item.ID}`)).json(); link=(message.HTML||message.Text).match(/https?:\/\/[^"\s<>]+/g)?.find((url:string)=>url.includes('/verify'))?.replaceAll('&amp;','&')||'';} if(!link) await page.waitForTimeout(1000);}
- expect(link).toBeTruthy(); await context.clearCookies(); await page.goto(link); await expect(page).toHaveURL(/\/c\/rs-learning\/settings\/members/); await expect(page.getByRole('heading',{name:"Team members"})).toBeVisible();
+ expect(link).toBeTruthy(); await context.clearCookies(); await page.goto(link);
+ // A new Member chooses a password before the Company opens (#41).
+ await page.getByLabel('New password').fill('invited-password'); await page.getByLabel('Confirm password').fill('invited-password'); await page.getByRole('button',{name:'Save password'}).click();
+ await expect(page).toHaveURL(/\/c\/rs-learning\/settings\/members/); await expect(page.getByRole('heading',{name:"Team members"})).toBeVisible();
 });
 
 function totp(secret:string) {
