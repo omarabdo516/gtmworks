@@ -1,0 +1,23 @@
+# A tag vX.Y.Z only requests a release: this file publishes nothing and asks for no permission. It guards nothing either.
+# GitHub runs a tag push's workflows from the tagged commit, so an unreviewed commit runs whatever workflows it holds,
+# as any pushed commit can; only repository access and rules limit that (README, Releases). The guard is the Release
+# workflow (release.yml): its completion trigger runs main's reviewed copy, which takes only this run's identifiers and
+# proves the tagged commit itself before anything is published.
+name: Release tag
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+
+permissions: {}
+
+jobs:
+  request:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: release requested
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+          TAGGED: ${{ github.sha }}
+        run: echo "Release $TAG_NAME requested for $TAGGED; the Release workflow checks and publishes it."

@@ -1,7 +1,7 @@
 name: gtmworks-install
 services:
   db:
-    image: supabase/postgres:17.6.1.136
+    image: supabase/postgres:17.6.1.136@sha256:f371b5f3f2ac0a05703f33d6e6134515fb2498cab708fb948a0aeb7481467c00
     restart: unless-stopped
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run scripts/install.sh}
@@ -23,7 +23,7 @@ services:
       timeout: 5s
       retries: 60
   auth:
-    image: supabase/gotrue:v2.197.0
+    image: supabase/gotrue:v2.197.0@sha256:1736a63078f5922b198c4cbe50f80ab9a2d3b54fe8b7b6cfb2e9dc5dbbc12c6b
     restart: unless-stopped
     depends_on:
       db: {condition: service_healthy}
@@ -58,7 +58,7 @@ services:
       timeout: 5s
       retries: 60
   rest:
-    image: postgrest/postgrest:v14.18
+    image: postgrest/postgrest:v14.18@sha256:c7cd7e265a85b05248abf53f4473fcec7e327c282d0bd0cf60f1551996d09fcf
     restart: unless-stopped
     depends_on:
       db: {condition: service_healthy}
@@ -69,7 +69,7 @@ services:
       PGRST_DB_ANON_ROLE: anon
       PGRST_JWT_SECRET: ${SUPABASE_JWT_SECRET}
   storage:
-    image: supabase/storage-api:v1.89.12
+    image: supabase/storage-api:v1.89.12@sha256:8526956cb462e9f7d392e9848ec77133b2769982ed614e9753cc687e8e4339a6
     restart: unless-stopped
     depends_on:
       db: {condition: service_healthy}
@@ -95,11 +95,11 @@ services:
       timeout: 5s
       retries: 60
   mail:
-    image: axllent/mailpit:v1.27.10
+    image: axllent/mailpit:v1.27.10@sha256:b1f1be18af530d939a11ee8820b379e0c88eeec204d904bfad68862adced3a5a
     restart: unless-stopped
     ports: [127.0.0.1:8025:8025]
   gateway:
-    image: nginx:1.28.0-alpine
+    image: nginx:1.28.0-alpine@sha256:30f1c0d78e0ad60901648be663a710bdadf19e4c10ac6782c235200619158284
     restart: unless-stopped
     ports: [127.0.0.1:3000:8080]
     volumes:

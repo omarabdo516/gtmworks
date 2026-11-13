@@ -210,11 +210,21 @@ jobs:
     needs: [changes]
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.docs_only != 'true') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # The release install and update below add a fresh stack and an update to the source install checks.
+    timeout-minutes: 40
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      # One isolated Docker machine for both install steps below: the release step reuses the source install's image.
+      # The last step removes it, also after a failure.
+      - name: start the isolated Docker machine
+        run: |
+          docker run -d --privileged --name install-docker \
+            -e DOCKER_TLS_CERTDIR= -p 127.0.0.1:2375:2375 \
+            -v "$PWD:$PWD" docker:28.5.1-dind
+          for attempt in $(seq 1 60); do docker --host tcp://127.0.0.1:2375 info >/dev/null 2>&1 && break; sleep 1; done
+          docker --host tcp://127.0.0.1:2375 info >/dev/null || { echo 'install check failed: DinD readiness' >&2; exit 1; }
       - name: isolated Docker-only install, repeat and verify
         env:
           DOCKER_HOST: tcp://127.0.0.1:2375
@@ -224,12 +234,6 @@ jobs:
           fail() { echo "install check failed: $1" >&2; exit 1; }
           # An install piped into tee keeps its own exit status.
           set -o pipefail
-          docker --host unix:///var/run/docker.sock run -d --privileged --name install-docker \
-            -e DOCKER_TLS_CERTDIR= -p 127.0.0.1:2375:2375 \
-            -v "$PWD:$PWD" docker:28.5.1-dind
-          trap 'docker --host unix:///var/run/docker.sock rm -fv install-docker' EXIT
-          for attempt in $(seq 1 60); do docker info >/dev/null 2>&1 && break; sleep 1; done
-          docker info >/dev/null || fail 'DinD readiness'
           { sh scripts/install.sh || fail 'first install'; } 2>&1 | tee first-install.log
           compose() { docker compose --env-file .env.install -f docker-compose.install.yml "$@"; }
           db() { compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 -At "$@"; }
@@ -347,6 +351,49 @@ jobs:
           [[ $(db -c "select to_regclass('public.update_should_rollback') is null") == t ]] || fail_update 'migration transaction rolled back'
           status=$(docker run --rm --network host curlimages/curl:8.12.1 -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/api/health) || fail_update 'old version health request'
           [[ $status == 200 ]] || fail_update 'old version healthy after failed update'
+      # A release install from only its two files, then its update to the next release, on a real database (#49). The
+      # images come by digest from a local registry; the next release adds a migration, which psql must read through
+      # the running database's /migrations bind mount after the update replaced the install files in place.
+      - name: release install and update from the two release files
+        env:
+          DOCKER_HOST: tcp://127.0.0.1:2375
+        run: |
+          fail() { echo "release install check failed: $1" >&2; exit 1; }
+          compose() { docker compose --env-file .env.install -f docker-compose.install.yml "$@"; }
+          compose down -v || fail 'remove the source install'
+          docker run -d --name install-registry -p 127.0.0.1:5000:5000 registry:2.8.3 > /dev/null || fail 'local registry'
+          for attempt in $(seq 1 30); do docker run --rm --network host curlimages/curl:8.12.1 -sf http://127.0.0.1:5000/v2/ > /dev/null && break; sleep 1; done
+          publish() { docker push -q "localhost:5000/gtmworks:$1" > /dev/null && docker image inspect --format '{{index .RepoDigests 0}}' "localhost:5000/gtmworks:$1"; }
+          docker tag gtmworks-local:237 localhost:5000/gtmworks:0.0.0-ci || fail 'tag the built image'
+          first=$(publish 0.0.0-ci) || fail 'push the first release image'
+          docker build -q -t localhost:5000/gtmworks:0.0.1-ci - > /dev/null <<'DOCKERFILE' || fail 'build the next release image'
+          FROM gtmworks-local:237
+          RUN echo 'create table gtmworks_install.release_update_probe(id integer);' > /app/install/supabase/migrations/99999999999998_release_update_probe.sql
+          DOCKERFILE
+          next=$(publish 0.0.1-ci) || fail 'push the next release image'
+          echo "first release: $first; next release: $next"
+          node scripts/release-assets.mjs "$first" release-first || fail 'first release files'
+          node scripts/release-assets.mjs "$next" release-next || fail 'next release files'
+          dir="$PWD/release-install"
+          mkdir "$dir" && cp release-first/docker-compose.install.yml release-first/install.sh "$dir/" || fail 'release install directory'
+          [[ $(ls -A "$dir" | wc -l) == 2 ]] || fail 'the release install directory holds only the two release files'
+          sh "$dir/install.sh" || fail 'release install'
+          cp release-next/docker-compose.install.yml release-next/install.sh "$dir/" || fail 'next release files in place'
+          sh "$dir/install.sh" update || fail 'release update'
+          cd "$dir"
+          [[ $(compose exec -T db psql -X -U postgres -d postgres -At -c "select to_regclass('gtmworks_install.release_update_probe') is not null") == t ]] \
+            || fail 'the next release migration applied through the running bind mount'
+          compose exec -T db ls /migrations | sort > "$RUNNER_TEMP/seen" || fail 'list the migrations the database sees'
+          ls supabase/migrations | sort > "$RUNNER_TEMP/expected"
+          diff -u "$RUNNER_TEMP/expected" "$RUNNER_TEMP/seen" || fail 'the running database sees the next release migrations'
+          [[ $(cat .install-release) == "$next" ]] || fail 'the update records the release it runs'
+          for path in /api/health /sign-in; do
+            status=$(docker run --rm --network host curlimages/curl:8.12.1 -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:3000$path") || fail "$path request"
+            [[ $status == 200 ]] || fail "$path returned HTTP $status after the release update (expected 200)"
+          done
+      - name: remove the isolated Docker machine
+        if: ${{ always() }}
+        run: docker rm -fv install-docker || true
 
   check:
     needs: [changes, static, integration, install]
