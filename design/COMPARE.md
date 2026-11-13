@@ -52,8 +52,8 @@ The prototype has no URL routes. Its sidebar switches between four views (`data-
 | `home` | The screen the prototype opens on: the Conversation with the main Agent, Lead | `/c/rs-learning/chat` |
 | `board` | Sidebar, Marketing board | `/c/rs-learning/work/board` |
 | `waiting` | The board scrolled to its "Waiting on you" column | `/c/rs-learning/approvals` |
-| `numbers` | Sidebar, Numbers (the dashboard) | none |
-| `log` | Sidebar, Activity log | none |
+| `numbers` | Sidebar, Numbers (the dashboard) | `/c/rs-learning/numbers` |
+| `log` | Sidebar, Activity log | `/c/rs-learning/log` |
 | `agent-chat` | The Ads Agent's tile in the sidebar: a Conversation with an Agent other than Lead | none |
 | `settings` | Account menu, Settings: the overlay's Company section | `/c/rs-learning/settings` |
 | `agents` | Settings, Agents | `/c/rs-learning/agents` |

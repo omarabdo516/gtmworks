@@ -6,3 +6,4 @@ export type AppReading = { app: string, period: Period, spend?: number, leads?: 
 export type NumbersTile = { name: 'spend' | 'leads' | 'costPerLead' | 'revenue', label: string, value: number | null, sources: string[], period: Period, money: boolean, currency: string | null };
 export function numbersTiles(readings: AppReading[] | null | undefined, period: Period): { connected: boolean, tiles: NumbersTile[] };
 export function formatFigure(tile: NumbersTile, locale: string): string | null;
+export function feedSince(now?: number): string;

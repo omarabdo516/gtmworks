@@ -26,8 +26,8 @@ export const screens = {
   // "Waiting on you" is the board's first column in the prototype; the product gathers it on Approvals.
   waiting: { reference: { steps: [{ click: '#sb-nav [data-view="board"]' }, { waitFor: '#board-cols' }, { scrollTo: '#col-waiting' }] }, builtPath: '/c/rs-learning/approvals' },
   // The dashboard loads for 650 ms before its figures appear.
-  numbers: { reference: { steps: [{ click: '#sb-nav [data-view="dashboard"]' }, { waitFor: '#view-dashboard .kpis' }] }, builtPath: null },
-  log: { reference: { steps: [{ click: '#sb-nav [data-view="log"]' }, { waitFor: '#view-log:not([hidden])' }] }, builtPath: null },
+  numbers: { reference: { steps: [{ click: '#sb-nav [data-view="dashboard"]' }, { waitFor: '#view-dashboard .kpis' }] }, builtPath: '/c/rs-learning/numbers' },
+  log: { reference: { steps: [{ click: '#sb-nav [data-view="log"]' }, { waitFor: '#view-log:not([hidden])' }] }, builtPath: '/c/rs-learning/log' },
   // A Conversation with an Agent other than Lead, opened from its tile in the sidebar.
   'agent-chat': { reference: { steps: [{ click: '#sb-agents [data-action="open-agent"][data-agent="ads"]' }] }, builtPath: null },
   // The settings overlay opens on its Company section.

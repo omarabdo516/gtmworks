@@ -104,12 +104,15 @@ test('every screen says how to reach it in the reference and which built page it
   assert.equal(screens.waiting.builtPath, '/c/rs-learning/approvals');
   assert.equal(screens.settings.builtPath, '/c/rs-learning/settings');
   assert.equal(screens.agents.builtPath, '/c/rs-learning/agents');
-  for (const name of ['numbers', 'log', 'agent', 'agent-chat', 'account']) assert.equal(screens[name].builtPath, null, `${name} has no built equivalent yet`);
+  // Numbers and the Activity log are built pages (#35, #11).
+  assert.equal(screens.numbers.builtPath, '/c/rs-learning/numbers');
+  assert.equal(screens.log.builtPath, '/c/rs-learning/log');
+  for (const name of ['agent', 'agent-chat', 'account']) assert.equal(screens[name].builtPath, null, `${name} has no built equivalent yet`);
 });
 
 test('a screen with no built equivalent needs --built-path or --reference-only', () => {
-  const log = ['--screen', 'log', '--width', '1440', '--lang', 'en', '--theme', 'light'];
-  assert.throws(() => parseArgs(log), error => error.exitCode === 2 && /Screen "log" has no built equivalent yet; pass --built-path PATH or --reference-only\./.test(error.message));
+  const log = ['--screen', 'account', '--width', '1440', '--lang', 'en', '--theme', 'light'];
+  assert.throws(() => parseArgs(log), error => error.exitCode === 2 && /Screen "account" has no built equivalent yet; pass --built-path PATH or --reference-only\./.test(error.message));
   assert.equal(parseArgs([...log, '--reference-only']).builtPath, null);
   assert.equal(parseArgs([...log, '--built-path', '/c/rs-learning/home']).builtPath, '/c/rs-learning/home');
 });

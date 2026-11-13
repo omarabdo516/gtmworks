@@ -596,5 +596,6 @@
   "boardViews": "Board views",
   "waitingNeedsReply": "Needs your reply",
   "waitingQuestionFrom": "Question from {0}",
-  "waitingQuestion": "Question"
+  "waitingQuestion": "Question",
+  "logSystemName": "gtmworks"
 }

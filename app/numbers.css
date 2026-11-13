@@ -1,0 +1,73 @@
+/* The Numbers page (#35), ported from the approved reference (design-reference/index.html: dashboard, segmented,
+   panel-row, wait-empty). Page heads, buttons and the shared tokens come from app/log.css. */
+.gw .numbers-page .dash { position: relative; height: 100%; overflow-y: auto; }
+.gw .numbers-page .dash__inner { padding: 0 var(--s8) var(--s12); display: grid; gap: var(--s4); max-width: 1240px; }
+.gw .numbers-page .segmented { display: flex; justify-content: center; gap: 2px; margin-inline-start: auto; padding: 0; }
+.gw .numbers-page .segmented a {
+  padding: 4px 10px; border-radius: var(--gw-r-full); font-size: var(--gw-fs-sm); line-height: 18px; color: var(--gw-text-2); text-decoration: none;
+}
+@media (hover: hover) { .gw .numbers-page .segmented a:hover { color: var(--gw-text-1); } }
+.gw .numbers-page .segmented a[aria-current="true"] { background: var(--gw-bg-tertiary); color: var(--gw-text-1); }
+
+.gw .numbers-page .kpis { display: grid; gap: var(--s3); grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.gw .numbers-page .kpi { display: grid; gap: 6px; padding: var(--s5); border-radius: var(--gw-r-lg); background: var(--gw-bg-pane); border: 0.5px solid var(--gw-border-3); min-width: 0; }
+.gw .numbers-page .kpi > * { display: block; min-width: 0; }
+.gw .numbers-page .kpi__label { font-size: var(--gw-fs-sm); color: var(--gw-text-2); }
+.gw .numbers-page .kpi__val { font-size: clamp(24px, 2.1vw, var(--p-fs-2xl)); font-weight: 600; line-height: 1.25; white-space: nowrap; color: var(--gw-text-1); }
+.gw .numbers-page .kpi__val--none { color: var(--gw-text-3); }
+.gw .numbers-page .kpi__unit { font-size: var(--gw-fs-base); font-weight: 400; color: var(--gw-text-2); margin-inline-start: 4px; }
+.gw .numbers-page .kpi__unit--pre { margin-inline-start: 0; margin-inline-end: 4px; }
+.gw .numbers-page .kpi__delta { display: inline-flex; align-items: center; gap: 4px; font-size: var(--gw-fs-xs); color: var(--gw-text-3); }
+
+.gw .numbers-page .panel { padding: var(--s5); border-radius: var(--gw-r-lg); background: var(--gw-bg-pane); border: 0.5px solid var(--gw-border-3); min-width: 0; color: var(--gw-text-1); }
+.gw .numbers-page .panel__h { display: flex; align-items: center; gap: var(--s3); margin-bottom: var(--s4); }
+.gw .numbers-page .panel__h h2 { margin: 0; font-size: var(--gw-fs-msg); line-height: 1.6; font-weight: 600; }
+.gw .numbers-page .panel__h .muted { font-size: var(--gw-fs-sm); }
+.gw .numbers-page .dash-row { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: var(--s4); align-items: start; }
+
+/* The chart keeps the reference's 720 × 250 area while no app feeds it, so the page keeps its shape. */
+.gw .numbers-page .chart-empty { aspect-ratio: 720 / 250; display: grid; align-items: center; }
+.gw .numbers-page .dash-empty { justify-items: center; gap: 6px; }
+.gw .numbers-page .dash-empty .btn { margin-top: var(--s2); }
+
+.gw .numbers-page .table { width: 100%; border-collapse: collapse; font-size: var(--gw-fs-sm); }
+.gw .numbers-page .table th { text-align: start; font-weight: 400; color: var(--gw-text-3); padding: 0 var(--s2) var(--s2); border-bottom: 0.5px solid var(--gw-border-2); white-space: nowrap; }
+.gw .numbers-page .table td { padding: var(--s3) var(--s2); border-bottom: 0; }
+.gw .numbers-page .table-wrap { overflow-x: auto; }
+
+.gw .numbers-page .panel-row { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 6px 4px; margin-inline: -4px; width: calc(100% + 8px); border-radius: var(--gw-r-sm); text-align: start; position: relative; text-decoration: none; color: inherit; }
+.gw .numbers-page .panel-row + .panel-row::before { content: ""; position: absolute; top: 0; inset-inline: 4px; height: 0.5px; background: var(--gw-border-2); }
+@media (hover: hover) { .gw .numbers-page .panel-row:hover { background: var(--gw-bg-hover); } }
+.gw .numbers-page .panel--wait .panel-card { border: 0; padding: 0; background: transparent; }
+.gw .numbers-page .panel-row__text { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0; }
+.gw .numbers-page .panel-row__t { font-size: var(--gw-fs-sm); line-height: 1.5; color: var(--gw-text-1); overflow-wrap: anywhere; }
+.gw .numbers-page .panel-row__d { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); overflow-wrap: anywhere; }
+.gw .numbers-page .panel-row__meta { font-size: var(--gw-fs-xs); color: var(--gw-text-3); flex: none; display: inline-flex; align-items: center; gap: 4px; }
+.gw .numbers-page .panel-row__meta--wait { color: var(--gw-wait-text); }
+.gw .numbers-page .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; display: inline-block; }
+.gw .numbers-page .dot--waiting { background: var(--p-wait); }
+
+.gw .numbers-page .wait-empty { padding: var(--s5); border-radius: var(--gw-r-md); border: 1px dashed var(--gw-border-2); text-align: center; display: grid; gap: 2px; }
+.gw .numbers-page .wait-empty b { font-size: var(--gw-fs-msg); font-weight: 600; }
+.gw .numbers-page .wait-empty span { font-size: var(--gw-fs-sm); color: var(--gw-text-3); }
+[dir="ltr"] .gw .numbers-page :is(.wait-empty span, .panel-row__t, .panel-row__d, .feed__t) { unicode-bidi: plaintext; }
+
+.gw .numbers-page .feed { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s4); }
+.gw .numbers-page .feed li { display: flex; gap: var(--s3); align-items: flex-start; }
+.gw .numbers-page .feed__body { flex: 1 1 0; min-width: 0; display: grid; gap: 2px; }
+.gw .numbers-page .feed__t { font-size: var(--gw-fs-base); line-height: 1.7; }
+.gw .numbers-page .feed__m { font-size: var(--gw-fs-xs); color: var(--gw-text-3); }
+
+@media (max-width: 1279px) { .gw .numbers-page .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 1023px) {
+  .gw .numbers-page .dash-row { grid-template-columns: minmax(0, 1fr); }
+  .gw .numbers-page .dash__inner { padding-inline: var(--s5); }
+}
+@media (max-width: 767px) {
+  .gw .numbers-page .kpis { grid-template-columns: minmax(0, 1fr); }
+  .gw .numbers-page .dash__inner { padding: 0 var(--s4) var(--s8); }
+  /* 44px touch targets on a phone (PRODUCT.md), where the reference draws 26px period buttons. */
+  .gw .numbers-page .segmented { margin-inline-start: 0; }
+  .gw .numbers-page .segmented a { min-height: 44px; display: inline-flex; align-items: center; }
+  .gw .numbers-page .dash-empty .btn { min-height: 44px; }
+}

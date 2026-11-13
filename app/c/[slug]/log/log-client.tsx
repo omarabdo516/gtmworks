@@ -1,5 +1,5 @@
 'use client';
-import { useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
 import { dayOf, daysBack, groupByDay } from '@/lib/activity-log.mjs';
@@ -54,16 +54,23 @@ export function LogFilters({slug,who,card,people,agents,cards,count}:{slug:strin
   router.push(`/c/${slug}/log${query.size?`?${query}`:''}`);
  };
  const filtered=who!=='all'||card!=='all';
+ // A choice made before the page finished loading still applies once it has.
+ const whoField=useRef<HTMLSelectElement>(null), cardField=useRef<HTMLSelectElement>(null);
+ useEffect(()=>{
+  const [nextWho,nextCard]=[whoField.current?.value??who,cardField.current?.value??card];
+  if(nextWho!==who||nextCard!==card) go(nextWho,nextCard);
+ // eslint-disable-next-line react-hooks/exhaustive-deps
+ },[]);
  return <div className="lgp-tools" role="group" aria-label={t('logFilters')}>
   <div className="lgp-field"><label htmlFor="lg-who">{t('logWho')}</label>
-   <select className="set-input" id="lg-who" value={who} onChange={event=>go(event.target.value,card)}>
+   <select ref={whoField} key={who} className="set-input" id="lg-who" defaultValue={who} onChange={event=>go(event.target.value,card)}>
     <option value="all">{t('logEveryone')}</option>
     {people.length>0&&<optgroup label={t('logPeople')}>{people.map(person=><option key={person.value} value={person.value}>{person.label}</option>)}</optgroup>}
     {agents.length>0&&<optgroup label={t('logAgents')}>{agents.map(agent=><option key={agent.value} value={agent.value}>{agent.label}</option>)}</optgroup>}
     <option value="s">{t('logSystem')}</option>
    </select></div>
   <div className="lgp-field"><label htmlFor="lg-card">{t('logCard')}</label>
-   <select className="set-input" id="lg-card" value={card} onChange={event=>go(who,event.target.value)}>
+   <select ref={cardField} key={card} className="set-input" id="lg-card" defaultValue={card} onChange={event=>go(who,event.target.value)}>
     <option value="all">{t('logAllCards')}</option>
     {cards.map(option=><option key={option.value} value={option.value}>{option.label}</option>)}
    </select></div>
