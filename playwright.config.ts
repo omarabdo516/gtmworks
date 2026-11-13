@@ -13,7 +13,8 @@ export default defineConfig({
   use: { baseURL: 'http://127.0.0.1:3000' },
   webServer: { command: 'mkdir -p playwright-report && bash scripts/web.sh production > playwright-report/server.log 2>&1', url: 'http://127.0.0.1:3000/sign-in', reuseExistingServer: false, timeout: 240000 },
   // The JSON report is saved by every CI run so a PR's failures can be compared with main's (scripts/compare-failures.mjs).
-  reporter: [['list'], ['json', { outputFile: 'playwright-report/results.json' }]],
+  // The journal keeps what was selected and observed, test by test, when the run stops before that report is written.
+  reporter: [['list'], ['json', { outputFile: 'playwright-report/results.json' }], ['./scripts/playwright-journal-reporter.mjs', { invocation: 'main', outputFile: 'playwright-report/journal-main.jsonl' }]],
   // A picture must match its approved image exactly. Animations and the caret are stopped, and Playwright waits until
   // two captures in a row are identical before it compares.
   expect: { toHaveScreenshot: { animations: 'disabled', caret: 'hide', scale: 'css', maxDiffPixels: 0 } },
