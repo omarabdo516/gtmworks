@@ -8,6 +8,7 @@ export const widths = [1440, 390];
 const lightScreens = [
   { name: 'sign-in', path: '/sign-in', anonymous: true },
   { name: 'home', path: '/c/rs-learning/home' },
+  { name: 'chat', path: '/c/rs-learning/chat' },
   { name: 'board', path: '/c/rs-learning/work/board' },
   { name: 'card', path: '/c/rs-learning/work/board/1' },
   { name: 'calendar', path: '/c/rs-learning/work/calendar' },
@@ -20,7 +21,7 @@ const lightScreens = [
 export const screens = [
   { name: 'first-run', path: '/first-run', anonymous: true, dark: false },
   ...lightScreens.map(screen => ({ ...screen, dark: false })),
-  ...lightScreens.filter(screen => ['sign-in', 'home', 'board', 'card'].includes(screen.name))
+  ...lightScreens.filter(screen => ['sign-in', 'home', 'chat', 'board', 'card'].includes(screen.name))
     .map(screen => ({ ...screen, name: `${screen.name}-dark`, dark: true })),
 ];
 

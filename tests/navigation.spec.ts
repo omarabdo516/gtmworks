@@ -2,13 +2,61 @@ import { test, expect } from '@playwright/test';
 import { clickPath, idle, measureClick, median, type Timing } from './navigation-measure';
 import { signIn, openNavigation, closeNavigation } from './sign-in';
 import { gzipSync } from 'node:zlib';
+import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { sections } from '../lib/navigation';
+
+// The prepared-navigation test measures a non-empty Inbox: before this file's tests one new card is moved to review,
+// where it waits on Omar (the seed's approver). The setup runs in its own hooks, so the measured test keeps its own
+// deadline. Cleanup approves only that card, found by its own address and its run-unique title; each worker (a retry
+// starts a new one) cleans the card it created and nothing else.
+let inboxFixture: { title: string, path: string } | undefined;
+test.beforeAll(async ({ browser }) => {
+  const context = await browser.newContext({ baseURL: 'http://127.0.0.1:3000' });
+  try {
+    const page = await context.newPage();
+    await signIn(page, 'omar@example.com', '/c/rs-learning/work/board');
+    const title = `بطاقة قياس الوارد ${randomUUID()}`;
+    await page.getByRole('button', { name: "+ New card" }).click();
+    await page.getByLabel('Message', { exact: true }).fill(title);
+    await page.getByRole('button', { name: "Create card" }).click();
+    await expect(page.locator('.modal h2').first()).toHaveText(title);
+    const path = new URL(page.url()).pathname;
+    expect(path).toMatch(/^\/c\/rs-learning\/work\/board\/\d+$/);
+    inboxFixture = { title, path };
+    await page.getByLabel("Move to list", { exact: true }).selectOption({ label: 'مراجعة' });
+    await expect(page.locator('.card-stage-line')).toContainText('مراجعة');
+  } finally { await context.close(); }
+});
+test.afterAll(async ({ browser }) => {
+  const created = inboxFixture;
+  if (!created) return;
+  const context = await browser.newContext({ baseURL: 'http://127.0.0.1:3000' });
+  try {
+    const page = await context.newPage();
+    await signIn(page, 'omar@example.com', '/c/rs-learning/approvals');
+    await expect(page.locator('.approvals')).toBeVisible();
+    const card = page.locator('.approval-card')
+      .filter({ has: page.locator(`a[href="${created.path}"]`) })
+      .filter({ hasText: created.title });
+    // A setup that failed before the move left no approval to clean; otherwise exactly this card is approved, once,
+    // as the seed's single step needs (the same flow as "own comments, moves and approvals ...").
+    if (await card.count()) {
+      expect(await card.count(), 'only the card this run created').toBe(1);
+      await card.locator('.approval-expand > summary').click();
+      await card.getByRole('button', { name: "Approve", exact: true }).click();
+      await expect(card).toHaveCount(0);
+    }
+    inboxFixture = undefined;
+  } finally { await context.close(); }
+});
 
 test('prepared navigation and Paperclip motion inventory (production, warm-up + 3 runs)', async ({ page }, testInfo) => {
   test.setTimeout(120000);
   await page.setViewportSize({ width: 1440, height: 900 });
-  await signIn(page, 'manager@example.com', '/c/rs-learning/work/board');
+  await signIn(page, 'omar@example.com', '/c/rs-learning/work/board');
+  // The measured Inbox step opens a non-empty Inbox from the sidebar's approvals entry.
+  expect(Number(await page.locator('.sidebar .sb-count[href$="/approvals"]').textContent())).toBeGreaterThan(0);
   const runs: Record<string, Timing[]> = Object.fromEntries(clickPath.map(step => [step.name, []]));
   for (let run = 0; run < 4; run++) {
     await page.goto('/c/rs-learning/work/board');
@@ -35,10 +83,12 @@ test('prepared navigation and Paperclip motion inventory (production, warm-up + 
     expect(timing.all, `${name}: unlisted computed transition-property: all`).toEqual([]);
     expect(timing.progress, `${name}: prepared click must not flash progress`).toBe(false);
   }
+  expect(runs.inbox.length, 'the Inbox was measured on every counted run').toBe(3);
   await idle(page);
 });
 
-test('unprepared links answer within 50ms and clear feedback when content arrives', async ({ page }, testInfo) => {
+// Set aside so the new shell can match the approved design first; #55 restores it (Omar, 2026-11-12).
+test.fixme('unprepared links answer within 50ms and clear feedback when content arrives', async ({ page }, testInfo) => {
   await signIn(page, 'manager@example.com', '/c/rs-learning/work/board');
   const answers: number[] = [];
   for (let run = 0; run < 4; run++) {
@@ -175,7 +225,7 @@ test('own comments, moves and approvals invalidate prepared pages immediately', 
   await page.locator('.close-card').click();
   await expect(page.locator('.column[data-stage-name="مراجعة"] .card').filter({ hasText: title })).toBeVisible();
   await openNavigation(page);
-  await page.locator('.nav').getByRole('link', { name: /^Inbox/ }).click();
+  await page.locator('.sidebar .sb-count[href$="/approvals"]').click();
   const queued = page.locator('.approval-card').filter({ hasText: title });
   await expect(queued).toBeVisible();
   await queued.locator('.approval-expand > summary').click();
@@ -212,7 +262,7 @@ test('every company route loads at most 230 KiB gzip of JavaScript', async ({ pa
   await testInfo.attach('js-gzip.json', { body: JSON.stringify(sizes, null, 2), contentType: 'application/json' });
 });
 
-test('drawer group toggles have 44px targets', async ({ page }) => {
+test('drawer targets are at least 44px and do not overlap', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await signIn(page, 'manager@example.com', '/c/rs-learning/home');
   try {
@@ -224,32 +274,32 @@ test('drawer group toggles have 44px targets', async ({ page }) => {
       await page.goto('/c/rs-learning/home');
       await openNavigation(page);
       await expect(page.getByRole('dialog')).toBeVisible();
+      const drawer = page.getByRole('dialog', { name: language === 'ar' ? 'القايمة الرئيسية' : 'Main menu' });
+      await expect(drawer).toHaveAttribute('aria-modal', 'true');
       await mkdir('test-results/screenshots', { recursive: true });
       await page.screenshot({ path: `test-results/screenshots/drawer-${language}-390.png` });
-      const toggles = page.locator('[data-slot=sheet-content] .nav-group button[aria-expanded]');
-      const count = await toggles.count();
-      expect(count, `${language}: drawer has group toggles`).toBeGreaterThan(0);
+      // The approvals entry is there even when nothing waits (the manager has nothing to approve in the seed),
+      // and the company picker is a target like the rest.
+      await expect(drawer.locator('.sb-count[href$="/approvals"]')).toBeVisible();
+      await expect(drawer.locator('.sb-count[href$="/approvals"]')).toHaveAccessibleName(/./);
+      await expect(drawer.getByRole('button', { name: language === 'ar' ? 'اختيار الشركة' : 'Choose company', exact: true })).toBeVisible();
+      const targets = drawer.locator(':is(.sb-item, .sb-count, .switch, .circle-btn, .me, .agent-tile)');
+      const count = await targets.count();
+      expect(count, `${language}: drawer has targets`).toBeGreaterThan(0);
+      for (const kind of ['.sb-count', '.switch']) expect(await drawer.locator(kind).count(), `${language}: ${kind} is measured`).toBe(1);
       for (let index = 0; index < count; index++) {
-        const toggle = toggles.nth(index);
-        const box = (await toggle.boundingBox())!;
-        expect.soft(box.width, `${language} toggle ${index}: width`).toBeGreaterThanOrEqual(44);
-        expect.soft(box.height, `${language} toggle ${index}: height`).toBeGreaterThanOrEqual(44);
-        // The bigger tap area must not sit on top of a link.
-        const covered = await toggle.evaluate(node => {
-          const a = node.getBoundingClientRect();
-          return Array.from(node.closest('[data-slot=sheet-content]')!.querySelectorAll('.nav a')).filter(link => {
-            const b = link.getBoundingClientRect();
-            return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
-          }).map(link => link.textContent);
-        });
-        expect.soft(covered, `${language} toggle ${index}: links under the tap area`).toEqual([]);
-        await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-        await toggle.click();
-        await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-        await toggle.click();
-        await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        const box = (await targets.nth(index).boundingBox())!;
+        expect.soft(box.height, `${language} target ${index}: height`).toBeGreaterThanOrEqual(44);
+        expect.soft(box.width, `${language} target ${index}: width`).toBeGreaterThanOrEqual(44);
       }
+      // No tap area sits on top of another one.
+      const overlaps = await targets.evaluateAll(nodes => nodes.flatMap((node, index) => nodes.slice(index + 1).filter(other => {
+        const a = node.getBoundingClientRect(), b = other.getBoundingClientRect();
+        return !node.contains(other) && !other.contains(node) && a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+      }).map(other => `${node.textContent} / ${other.textContent}`)));
+      expect.soft(overlaps, `${language}: overlapping targets`).toEqual([]);
       await closeNavigation(page);
+      await expect(page.getByRole('dialog')).toHaveCount(0);
     }
   } finally {
   await page.setViewportSize({ width: 1440, height: 900 });

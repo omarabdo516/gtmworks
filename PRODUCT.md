@@ -52,7 +52,7 @@ Showing Hermes data in gtmworks does not make gtmworks a second owner. Agent wor
 
 - The look is Paperclip's, per `DESIGN.md`. Existing screens are refined inside that identity.
 - New screens that Paperclip does not have (conversation, agent face, agent page) have full design freedom within the same tokens.
-- English-first, with a complete shipped Arabic (Modern Standard Arabic) translation. Direction follows the language; authored content keeps its own direction.
+- English-first, with a complete shipped Arabic translation. The interface Arabic is Egyptian, worded as in the approved reference's Arabic version (`design-reference/`); this replaces the earlier Modern Standard Arabic rule. Direction follows the language; authored content keeps its own direction.
 - Every new interface string belongs in both message catalogues.
 
 ## Accessibility & Inclusion

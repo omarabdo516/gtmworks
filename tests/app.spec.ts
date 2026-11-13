@@ -66,7 +66,8 @@ for(const width of [1440,390]) test(`Paperclip Inter and Arabic-only Vazirmatn l
    expect(family).toMatch(language==='en'?/^InterVariable$/:/^(?:__)?Vazirmatn(?:_|$)/);
    expect(await page.evaluate(font=>Array.from(document.fonts).some(face=>face.family.replaceAll(/["']/g,'')===font&&face.status==='loaded'),family)).toBe(true);
    for(const el of await page.locator('.content h1,.content h2,.content h3,.modal h2').all()) expect(await el.evaluate(el=>getComputedStyle(el).fontFamily.split(',')[0].trim().replaceAll(/["']/g,''))).toBe(family);
-   if(width===1440&&language==='ar') for(const heading of await page.locator('.nav-group h2').all()) expect(await heading.evaluate(el=>getComputedStyle(el).fontFamily.split(',')[0].trim().replaceAll(/["']/g,''))).toBe(family);
+   // The shell takes the approved reference's face (IBM Plex Sans Arabic) in both languages.
+   if(width===1440) for(const heading of await page.locator('.sidebar .sb-label').all()) expect(await heading.evaluate(el=>getComputedStyle(el).fontFamily.split(',')[0].trim().replaceAll(/["']/g,''))).toMatch(/^(?:__)?IBM[_ ]Plex[_ ]Sans[_ ]Arabic(?:_|$)/);
    if(path==='home') for(const metric of await page.locator('.stats .stat').all()) {
     const geometry=await metric.evaluate(node=>{
      const value=node.querySelector('strong')!,icon=node.querySelector('svg')!;
@@ -585,7 +586,7 @@ test('approval queue, rejection and ordered steps',async({page})=>{
  const queued=page.locator('.approval-card').filter({hasText:title});
  await expect(queued).toBeVisible();
  const count=await page.locator('.approval-card').count();
- await expect(page.locator('.nav a[href$="/approvals"] .badge')).toHaveText(String(count));
+ await expect(page.locator('.sidebar .sb-count[href$="/approvals"]')).toHaveText(String(count));
  await expect(queued.getByRole('link',{name:/View card/})).toHaveAttribute('href',new URL(cardUrl).pathname);
  await queued.locator('.approval-expand > summary').click();
  await expect(queued).toContainText('نص مخصص للمراجعة');
@@ -734,9 +735,10 @@ test('secondary text meets 4.5 to 1 contrast', async ({ page }) => {
     await page.goto('/c/rs-learning/home');
     await idle(page);
     await check(`chart subtitle ${language} ${width}`, '.home-charts article h2 + span');
-    if (width === 390) await check(`bottom navigation ${language} ${width}`, '.mobile-bottom-nav a:not([aria-current=page])');
     await openNavigation(page);
-    await check(`sidebar heading ${language} ${width}`, '.sidebar .nav-group h2');
+    await check(`sidebar heading ${language} ${width}`, '.sidebar .sb-label');
+    // The removed phone bottom bar's quiet labels are replaced by the drawer's quiet account line, on every width.
+    await check(`account role ${language} ${width}`, '.sidebar .me__role');
     await page.goto('/c/rs-learning/work/board');
     await idle(page);
     await check(`toolbar label ${language} ${width}`, '.work-toolbar .tabs a:not(.active), .work-toolbar .tabs button:not(.active)');
@@ -745,7 +747,7 @@ test('secondary text meets 4.5 to 1 contrast', async ({ page }) => {
     await check(`comment placeholder ${language} ${width}`, '.modal textarea[name=body]', '::placeholder');
    }
   }
-  expect(seen.length).toBe(18);
+  expect(seen.length).toBe(20);
  } finally {
   await setLanguage('en');
  }

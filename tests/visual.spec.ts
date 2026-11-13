@@ -74,6 +74,7 @@ async function fixClockText(page: Page) {
 
 const readyBy: Record<string, string> = {
   home: '.home-dashboard',
+  chat: '.chat',
   board: '.board',
   card: '.modal',
   calendar: '.calendar',

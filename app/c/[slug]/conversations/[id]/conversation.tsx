@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useI18n } from '@/lib/i18n-client';
 import { AgentFace } from '@/components/agent-face';
+import { ShellIcon } from '@/components/shell-icon';
 import { MessageBox, postMessage } from '@/app/conversation-composer';
 import { titleOf, type ConversationMessage as Message, type UsageTotal } from '@/lib/conversations';
 import { localeFor } from '@/lib/i18n.mjs';
@@ -9,7 +10,9 @@ type Conversation={id:string,agent_name:string,face:string};
 
 // The reply is collected by the server from Hermes; the page asks again until it is in the record. Each send restarts
 // the asking, so an answer about an earlier run cannot stop it before the new reply arrives.
-export default function ConversationView({company,companyName,conversation,initial,usage:initialUsage,failed:initialFailed,pending:initialPending,writer}:{company:string,companyName:string,conversation:Conversation,initial:Message[],usage:UsageTotal,failed:boolean,pending:boolean,writer:boolean}) {
+// Drawn as the reference's chat (design-reference: renderChat, msgHTML): a floating title pill, the Agent's turns on
+// the start side, the person's on the end side, and the composer below.
+export default function ConversationView({company,conversation,initial,usage:initialUsage,failed:initialFailed,pending:initialPending,writer}:{company:string,conversation:Conversation,initial:Message[],usage:UsageTotal,failed:boolean,pending:boolean,writer:boolean}) {
  const {t,language}=useI18n(); const [messages,setMessages]=useState(initial); const [usage,setUsage]=useState(initialUsage); const [pending,setPending]=useState(initialPending); const [sent,setSent]=useState(0); const [failed,setFailed]=useState(initialFailed);
  useEffect(()=>{
   if(!pending) return;
@@ -26,21 +29,27 @@ export default function ConversationView({company,companyName,conversation,initi
  },[pending,sent,company,conversation.id]);
  const count=(value:number)=>new Intl.NumberFormat(localeFor(language)).format(value);
  const time=(value:string)=>new Date(value).toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit'});
- return <div className="convo-layout">
-  <div className="convo-scroll"><div className="convo">
-   <div className="convo-head"><AgentFace id={conversation.face} role="account_manager" name={conversation.agent_name} size={40}/><div className="grow"><h1 dir="auto">{titleOf(messages,conversation.agent_name)}</h1><p className="sub">{t('conversationWith',conversation.agent_name,companyName)}</p><p className="sub" data-usage>{t('conversationUsage',count(usage.input+usage.output),count(usage.input),count(usage.output))}{usage.unknown>0&&<> · {t('usageUnknownRuns',count(usage.unknown))}</>}</p></div></div>
-   <ol className="convo-messages" aria-label={t('conversationMessages')}>{messages.map(message=><li key={message.id} className={`msg ${message.author==='person'?'me':''}`} data-author={message.author}>
-    <div className="byline">{message.author==='agent'&&<AgentFace id={conversation.face} role="account_manager" name={message.author_name}/>}<bdi>{message.author_name}</bdi><time className="when" dateTime={message.created_at}>{time(message.created_at)}</time></div>
-    <div className={message.author==='person'?'bubble':'text'} dir="auto">{message.body}</div>
-    {message.lost&&<p className="convo-status" data-outcome="lost">{t('conversationRunLost')}</p>}
+ const face=(size:number)=><span aria-hidden="true"><AgentFace id={conversation.face} role="account_manager" name={conversation.agent_name} size={size}/></span>;
+ return <div className="chat">
+  <div className="chat__top"><h1 className="head-pill">{face(24)}<span className="head-pill__title" dir="auto">{titleOf(messages,conversation.agent_name)}</span></h1></div>
+  <div className="transcript"><div className="transcript__col">
+   <ol className="turns" aria-label={t('conversationMessages')}>{messages.map(message=>message.author==='person'?<li key={message.id} className="turn turn--user msg" data-author="person">
+    <div className="bubble-row"><time className="bubble__time" dateTime={message.created_at}>{time(message.created_at)}</time><div className="bubble bubble--user" dir="auto">{message.body}</div></div>
+    {message.lost&&<p className="note" data-outcome="lost">{t('conversationRunLost')}</p>}
+   </li>:<li key={message.id} className="turn turn--agent msg" data-author="agent">
+    <div className="sender">{face(20)}<bdi>{message.author_name}</bdi><time className="sender__time" dateTime={message.created_at}>{time(message.created_at)}</time></div>
+    <div className="bubble bubble--agent" dir="auto">{message.body}</div>
    </li>)}</ol>
-   {pending&&<p className="convo-status" role="status">{t('conversationWorking',conversation.agent_name)}</p>}
-   {failed&&<p className="convo-status" role="alert">{t('conversationReplyFailed')}</p>}
+   {pending&&<p className="thinking convo-status" role="status">{t('conversationWorking',conversation.agent_name)}</p>}
+   {failed&&<p className="note convo-status" role="alert">{t('conversationReplyFailed')}</p>}
   </div></div>
-  {writer&&<div className="dock"><MessageBox rows={2} placeholder={t('conversationReplyPlaceholder',conversation.agent_name)} send={async(message,sendKey)=>{
-   const failure=await postMessage({company,conversation:conversation.id,message,sendKey});
-   if(!failure) { setPending(true); setSent(count=>count+1); }
-   return failure;
-  }}/></div>}
+  <div className="composer-area">
+   {writer?<MessageBox placeholder={t('writeTo',conversation.agent_name)} send={async(message,sendKey)=>{
+    const failure=await postMessage({company,conversation:conversation.id,message,sendKey});
+    if(!failure) { setPending(true); setSent(count=>count+1); }
+    return failure;
+   }}/>:<p className="ro-line" role="note"><ShellIcon name="eye"/><span>{t('viewOnly')}</span></p>}
+   <p className="chat-usage" data-usage>{t('conversationUsage',count(usage.input+usage.output),count(usage.input),count(usage.output))}{usage.unknown>0&&<> · {t('usageUnknownRuns',count(usage.unknown))}</>}</p>
+  </div>
  </div>;
 }

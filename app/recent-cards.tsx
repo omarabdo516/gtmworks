@@ -29,5 +29,5 @@ export default function RecentCards({slug}:{slug:string}) {
  if(!result) return null;
  if(result.error) return <p className="recent-error" role="status">{t('couldNotLoadRecentCards')}</p>;
  if(!result.cards.length) return null;
- return <section className="nav-group recent-cards" aria-label={t('recent')}><h2>{t('recent')}</h2>{result.cards.map(card=><Link key={card.id} href={`/c/${slug}/work/board/${card.id}`} title={card.title}><span className="icon" aria-hidden="true">▤</span><AuthoredTitle as="span" className="recent-title">{card.title}</AuthoredTitle></Link>)}</section>;
+ return <section className="thread-group recent-cards" aria-labelledby="lbl-recent-cards"><h2 className="sb-label" id="lbl-recent-cards">{t('recent')}</h2>{result.cards.map(card=><Link key={card.id} className="sb-item thread-item" href={`/c/${slug}/work/board/${card.id}`} title={card.title}><AuthoredTitle as="span" className="recent-title od-truncate">{card.title}</AuthoredTitle></Link>)}</section>;
 }

@@ -25,7 +25,7 @@ export default async function ConversationPage({params}:{params:Promise<{slug:st
  const {cards}=await approvalQueue(db,company.id,user.id,membership?.role||'');
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  const messages=shown(rows||[],usage); const title=titleOf(messages,conversation.agent_name);
- return <Shell company={company} companies={companies||[]} section="conversations" title={title} crumbs={[{label:t('conversations')},{label:title}]} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} approvalCount={cards.length}>
-  <main className="content convo-page"><ConversationView company={company.id} companyName={company.name} conversation={{id,agent_name:conversation.agent_name,face:faceOf(conversation)}} initial={messages} usage={totalOf(usage)} failed={latestEnded(rows||[],usage)} pending={waiting(rows||[],usage).length>0} writer={!!writer}/></main>
+ return <Shell company={company} companies={companies||[]} section="conversations" title={title} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={cards.length} agentId={conversation.agent_id||undefined} conversationId={id}>
+  <main className="convo-page h-full"><ConversationView company={company.id} conversation={{id,agent_name:conversation.agent_name,face:faceOf(conversation)}} initial={messages} usage={totalOf(usage)} failed={latestEnded(rows||[],usage)} pending={waiting(rows||[],usage).length>0} writer={!!writer}/></main>
  </Shell>;
 }

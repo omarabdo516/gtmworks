@@ -1,40 +1,76 @@
+import './shell.css';
 import { getI18n } from '@/lib/i18n-server';
-import AccountMenu from './account-menu';
+import { supabase } from '@/lib/supabase';
+import AccountMenu, { ThemeToggle } from './account-menu';
 import Link from '@/lib/link';
-import { primaryNav, navGroups } from '@/lib/navigation';
-import { roleAgents } from '@/lib/role-agents';
-import { AgentRoleFace } from '@/components/agent-role-face';
+import { shellNav } from '@/lib/navigation';
+import { companyAgents, waitingLabel } from '@/lib/sidebar.mjs';
+import { CompanyAgentFace } from '@/components/company-agent-face';
+import { ShellIcon } from '@/components/shell-icon';
 import { agentIdentities } from '@/lib/agent-identities';
 import { AgentIdentitiesProvider } from '@/lib/agent-identities-client';
 import Switcher from '@/app/c/[slug]/[[...section]]/switcher';
 import RecentCards, { RecentCardsProvider } from './recent-cards';
-import { NewConversation } from './conversation-composer';
+import RecentChats from './recent-chats';
+import { Frame } from './frame';
 import type { ReactNode } from 'react';
-import { MobileBottomNav } from '@/components/paperclip/MobileBottomNav';
-import { Layout } from '@/components/paperclip/Layout';
 import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbPage, BreadcrumbSeparator } from '@/components/paperclip/ui/breadcrumb';
 import { Fragment } from 'react';
 type Crumb={label:string,href?:string};
-import { SidebarNavItem } from '@/components/paperclip/SidebarNavItem';
-import { SidebarSection } from '@/components/paperclip/SidebarSection';
-import { Search, House, Inbox, Columns3, Folder, Repeat, Target, Library, Send, Users, ChartColumn, Lightbulb, Bot, Sparkles, Unplug, History, Settings, MessagesSquare } from 'lucide-react';
 type Company = {id:string,slug:string,name:string};
-const icons={search:Search,home:House,approvals:Inbox,'work/board':Columns3,projects:Folder,recurring:Repeat,campaigns:Target,library:Library,publishing:Send,sales:Users,performance:ChartColumn,strategy:Lightbulb,agents:Bot,skills:Sparkles,connections:Unplug,history:History,settings:Settings};
-export default async function Shell({company,companies,section,title,crumbs,personName,role,children,approvalCount=0,cardId}:{company?:Company,companies:Company[],section:string,title:string,crumbs?:Crumb[],personName:string,role:string,children:ReactNode,approvalCount?:number,cardId?:number}) { const {t,theme}=await getI18n();
+
+// The frame every screen sits in (design-reference: #sidebar). From the top: the Company, search and a new chat with
+// Lead; the four entries; the Agents with Lead first; this person's recent chats and cards; the account and theme.
+// `agentId` and `conversationId` mark the open Conversation in the sidebar.
+export default async function Shell({company,companies,section,title,crumbs,personName,role,owner=false,children,approvalCount=0,cardId,agentId,conversationId}:{company?:Company,companies:Company[],section:string,title:string,crumbs?:Crumb[],personName:string,role:string,owner?:boolean,children:ReactNode,approvalCount?:number,cardId?:number,agentId?:string,conversationId?:string}) { const {t,theme}=await getI18n();
  const slug=company?.slug;
- function item([path,label]:readonly [string,string]) {
-  const active=path==='work/board'?section.startsWith('work/')&&section!=='work/new':path==='settings'?section.startsWith('settings'):section===path;
-  const Icon=icons[path as keyof typeof icons];
-  return <SidebarNavItem key={path} active={active} href={`/c/${slug}/${path}`} icon={<Icon className="icon h-4 w-4" aria-hidden="true"/>} badge={path==='approvals'?approvalCount:undefined}>{t(label)}</SidebarNavItem>;
- }
- const sidebar=<aside className="sidebar"><div className="brand">gtm<span>works</span></div>{company&&<div className="switch-wrap"><Switcher companies={companies} slug={company.slug} section={section}/></div>}<nav className="nav" aria-label={t('mainNavigation')}>{slug&&<>
-  <div className="nav-primary">{company?.id&&<NewConversation slug={slug} company={company.id}/>}{primaryNav.map(item)}</div>
-  {navGroups.map(group=><SidebarSection key={group.label} label={t(group.label)}>{group.items.map(item)}</SidebarSection>)}
-  <SidebarSection label={t('agents')}><Link href={`/c/${slug}/agents`}><MessagesSquare className="icon h-4 w-4" aria-hidden="true"/>{t('companyChat')}</Link>{roleAgents.map(agent=><Link key={agent.key} className="role-agent" aria-label={t(agent.name)} href={`/c/${slug}/agents`}><AgentRoleFace agent={agent}/>{t(agent.name)}</Link>)}</SidebarSection>
-  {company?.id&&<RecentCards key={company.id} slug={slug}/>}
- </>}</nav><div className="sidebar-bottom"><AccountMenu personName={personName} role={role} theme={theme}/>{slug&&item(['settings','settings'])}</div></aside>;
+ const chat=section==='chat'||section==='conversations';
+ const db=await supabase();
+ const agents=company?.id?await companyAgents(db,company.id):[];
+ const [waitingKey,...waitingValues]=waitingLabel(approvalCount); const waiting=t(waitingKey,...waitingValues);
+ const conversations=company?.id?(await db.from('conversations').select('id,agent_name,created_at').eq('company_id',company.id).order('created_at',{ascending:false}).limit(20)).data||[]:[];
+ // Each listed chat reads its own first message, so a long chat never crowds another out of the titles.
+ const firsts=await Promise.all(conversations.map(async c=>(await db.from('conversation_messages').select('body').eq('conversation_id',c.id).eq('author','person').order('id').limit(1).maybeSingle()).data?.body as string|undefined));
+ // A chat is named by the first line of its first message, as its own page names it (lib/conversations titleOf).
+ const chats=conversations.map((c,index)=>({id:c.id,created_at:c.created_at,title:firsts[index]?.split('\n')[0]||c.agent_name}));
+ const active=(path:string)=>path==='chat'?chat:path==='work/board'?section.startsWith('work/'):section===path;
+ const sidebar=<>
+  <div className="sb-top">
+   <div className="ws">
+    <svg className="ws__mark" viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect width="32" height="32" rx="9" fill="var(--gw-accent)"/><path d="M21.5 11.5a7 7 0 1 0 1 7.5h-6.5" fill="none" stroke="#FFFFFF" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+    {company?<Switcher companies={companies} slug={company.slug} section={chat?'home':section}/>:<bdi className="ws__name">gtm<span>works</span></bdi>}
+   </div>
+   {slug&&<div className="sb-icons">
+    <Link className="circle-btn" href={`/c/${slug}/search`} aria-label={t('searchChats')}><ShellIcon name="search"/></Link>
+    <Link className="circle-btn" href={`/c/${slug}/chat`} aria-label={t('newChat')} title={t('newChat')}><ShellIcon name="compose"/></Link>
+   </div>}
+  </div>
+  <nav className="sb-scroll nav" aria-label={t('navigation')}>{slug&&<>
+   <div className="sb-nav">{shellNav.map(([path,label,icon])=><div key={path} className="sb-row">
+    <Link className="sb-item" href={`/c/${slug}/${path}`} aria-current={active(path)?'page':undefined}><ShellIcon name={icon}/><span className="od-fill">{t(label)}</span></Link>
+    {path==='work/board'&&<Link className={`sb-count${approvalCount?'':' sb-count--none'}`} href={`/c/${slug}/approvals`} aria-current={section==='approvals'?'page':undefined} aria-label={waiting}><span className="sb-count__n">{approvalCount}</span></Link>}
+   </div>)}</div>
+   <section className="sb-sec" aria-labelledby="lbl-agents">
+    <h2 className="sb-label" id="lbl-agents">{t('agents')}</h2>
+    <ul className="agent-grid">{agents.map(agent=><li key={agent.id}>
+     <Link className="agent-tile" href={`/c/${slug}/chat/${agent.id}`} aria-current={chat&&agentId===agent.id?'true':undefined} aria-label={agent.is_default?`${agent.name} · ${t('mainAgent')}`:agent.name} title={agent.name}>
+      <span aria-hidden="true"><CompanyAgentFace agent={agent} size={52}/></span><bdi className="agent-tile__name">{agent.name}</bdi>{agent.is_default&&<span className="agent-tile__main" aria-hidden="true">{t('mainAgent')}</span>}
+     </Link>
+    </li>)}
+    {owner&&<li><Link className="agent-tile agent-tile--new" href={`/c/${slug}/agents`}><span className="agent-tile__plus"><ShellIcon name="plus"/></span><span className="agent-tile__name">{t('newAgent')}</span></Link></li>}</ul>
+   </section>
+   <section className="sb-sec" aria-label={t('recentChats')}>
+    <RecentChats slug={slug} chats={chats} current={conversationId} lead={agents[0]?.name||'Lead'}/>
+    {company?.id&&<RecentCards key={company.id} slug={slug}/>}
+   </section>
+  </>}</nav>
+  <div className="sb-foot sidebar-bottom">
+   <AccountMenu personName={personName} role={role} theme={theme} companyName={company?.name} settingsHref={slug?`/c/${slug}/settings`:undefined}/>
+   <ThemeToggle theme={theme}/>
+  </div>
+ </>;
  // Paperclip BreadcrumbBar: a trail of two or more crumbs replaces the single page title. Rendered on the server so it adds no route JavaScript.
  const breadcrumb=crumbs&&crumbs.length>1?<div className="heading m-0 min-w-0 flex-1 overflow-hidden"><Breadcrumb aria-label={t('breadcrumb')} className="min-w-0 overflow-hidden"><BreadcrumbList className="flex-nowrap">{crumbs.map((crumb,index)=>{const last=index===crumbs.length-1;return <Fragment key={index}>{index>0&&<BreadcrumbSeparator/>}<BreadcrumbItem className={last?'min-w-0':'shrink-0'}>{last||!crumb.href?<BreadcrumbPage className="truncate"><bdi>{crumb.label}</bdi></BreadcrumbPage>:<Link className="hover:text-foreground transition-colors" href={crumb.href}><bdi>{crumb.label}</bdi></Link>}</BreadcrumbItem></Fragment>;})}</BreadcrumbList></Breadcrumb></div>:undefined;
- const frame=<Layout sidebar={sidebar} title={title} breadcrumb={breadcrumb} mobileNav={slug?<MobileBottomNav slug={slug} section={section} newConversation={company?.id?<NewConversation slug={slug} company={company.id} mobile/>:null} count={approvalCount}/>:undefined}>{children}</Layout>;
+ const frame=<Frame sidebar={sidebar} title={chat?t('chats'):title} breadcrumb={chat?undefined:breadcrumb} chat={chat}>{children}</Frame>;
  return <AgentIdentitiesProvider agents={await agentIdentities()}>{company?.id?<RecentCardsProvider key={company.id} company={company.id} cardId={cardId}>{frame}</RecentCardsProvider>:frame}</AgentIdentitiesProvider>;
 }
