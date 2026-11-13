@@ -421,5 +421,16 @@ test('the shell opens an Agent, sends a message, switches language and theme, an
   await expect(page.locator('.sidebar')).toBeHidden();
   await expect(page.locator('.topbar')).toHaveText('Chats');
   await expect(page.getByLabel('Message',{exact:true})).toBeVisible();
+  // On a phone the send arrow keeps the reference's 28px circle, and a tap anywhere in the 44px square around it sends.
+  const send=page.locator('.composer__send');
+  const circle=(await send.boundingBox())!;
+  expect([circle.width,circle.height]).toEqual([28,28]);
+  const misses=await send.evaluate(node=>{
+   const box=node.getBoundingClientRect(),x=box.left+box.width/2,y=box.top+box.height/2;
+   return [[-21,-21],[0,-21],[21,-21],[-21,0],[21,0],[-21,21],[0,21],[21,21]]
+    .filter(([dx,dy])=>!document.elementFromPoint(x+dx,y+dy)?.closest('.composer__send'))
+    .map(point=>point.join(','));
+  });
+  expect(misses,'taps inside the 44px square that miss the send button').toEqual([]);
  } finally { omarSetting('theme','device'); omarSetting('language','en'); detach(agents); await fake.close(); }
 });
