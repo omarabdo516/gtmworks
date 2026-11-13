@@ -396,6 +396,122 @@ test('flaky reporting claims no green run for a run that stopped early', () => {
  assert.match(renderSummary(flaky, 'https://example.test/run/2'), /stays green/);
 });
 
+// ── Unknown outcomes in Playwright's own JSON report ──────────────────────────────────────────────────────────────────
+// Playwright's own report (lib/runner/index.js _serializeTestSpec/_serializeTest in 1.64.1) has one spec per test case,
+// so one per repetition, a file relative to the test root, describe titles as nested suites and no repeat index. After
+// a graceful stop it still calls a test whose first attempt failed and whose retry was interrupted "unexpected".
+
+const nativeAttempts = (...statuses) => statuses.map((status, retry) => ({ retry, status }));
+const nativeSpec = (title, status, results, { line = 3, project = 'functional' } = {}) => ({ title, line, tests: [{ projectName: project, status, results }] });
+// files: { 'a.spec.ts': { specs: [...], board: [...] } }: specs at the file's top level, other keys are describe blocks.
+const nativeReport = (files) => ({
+ suites: Object.entries(files).map(([file, { specs = [], ...describes }]) => ({
+  title: file, file, specs: specs.map(spec => ({ ...spec, file })),
+  suites: Object.entries(describes).map(([title, nested]) => ({ title, file, specs: nested.map(spec => ({ ...spec, file })) })),
+ })),
+});
+// Playwright's own report from an interrupted run, as finalize() leaves it: the journal's execution field attached.
+const withJournal = (report, summary) => ({ ...report, execution: adaptReport(summary).execution });
+
+// A graceful stop: `exhausted` failed both attempts, `retried` failed once and its retry was interrupted.
+const retriedJournal = summarizeJournal(journal(launch(), begin(2), selected('exhausted'), selected('retried'),
+ started('exhausted'), finished('exhausted', 'failed'), started('exhausted', 1), finished('exhausted', 'failed', 1),
+ started('retried'), finished('retried', 'failed'), started('retried', 1), finished('retried', 'interrupted', 1), { kind: 'end', status: 'interrupted' }));
+const retriedNative = () => withJournal(nativeReport({ 'a.spec.ts': { specs: [
+ nativeSpec('exhausted', 'unexpected', nativeAttempts('failed', 'failed')),
+ nativeSpec('retried', 'unexpected', nativeAttempts('failed', 'interrupted')),
+] } }), retriedJournal);
+const completePrFailing = (...titles) => nativeReport({ 'a.spec.ts': { specs: titles.map(title => nativeSpec(title, 'unexpected', nativeAttempts('failed', 'failed'))) } });
+
+test('an interrupted retry in Playwright\'s own report is not a final failure of the PR run, and the exhausted one still is', () => {
+ const pr = retriedNative();
+ assert.deepEqual(failedTests(pr), ['functional › a.spec.ts › exhausted']);
+ const result = compareFailures(pr, null);
+ assert.deepEqual(result.own, ['functional › a.spec.ts › exhausted']);
+ assert.deepEqual(result.inherited, []);
+ const text = renderMarkdown(result, '');
+ assert.match(text, /### This PR's own \(1\)\n\n- functional › a\.spec\.ts › exhausted\n/);
+ assert.doesNotMatch(text, /› retried/);
+});
+
+test('an interrupted retry on main is never inherited: a matching real failure is, an unmatched PR failure is unknown on main', () => {
+ const result = compareFailures(completePrFailing('exhausted', 'retried'), retriedNative());
+ assert.equal(result.mainIncomplete, true);
+ assert.deepEqual(result.inherited, ['functional › a.spec.ts › exhausted']);
+ assert.deepEqual(result.unknownOnMain, ['functional › a.spec.ts › retried']);
+ assert.deepEqual(result.own, []);
+ const text = renderMarkdown(result, 'https://example.test/run/5');
+ assert.match(text, /### Inherited from main \(1\)\n\n- functional › a\.spec\.ts › exhausted\n/);
+ assert.match(text, /### Unknown on main \(1\)\n\n[^\n]*\n\n- functional › a\.spec\.ts › retried\n/);
+ assert.match(text, /### This PR's own \(0\)\n\nNone\./);
+});
+
+test('a failure still awaiting its retry when the run stopped is unknown, matched by project, file, line and full title', () => {
+ // The journal names one retry-pending case: functional › tests/a.spec.ts:3 › board › drags (root "tests").
+ const pending = summarizeJournal(journal(launch(), begin(1), selected('board › drags'), started('board › drags'), finished('board › drags', 'failed'), { kind: 'end', status: 'interrupted' }));
+ assert.deepEqual(pending.unknownCases.map(c => [c.title, c.outcome]), [['board › drags', 'retry-pending']]);
+ const failedOnce = nativeAttempts('failed');
+ const base = {
+  'a.spec.ts': { specs: [nativeSpec('drags', 'unexpected', failedOnce)], board: [nativeSpec('drags', 'unexpected', failedOnce), nativeSpec('drags', 'unexpected', failedOnce, { project: 'visual' })] },
+  'b.spec.ts': { board: [nativeSpec('drags', 'unexpected', failedOnce)] },
+ };
+ // Only the exact case is reconciled; another project, file or title path keeps its failure.
+ assert.deepEqual(failedTests(withJournal(nativeReport(base), pending)), ['functional › a.spec.ts › drags', 'functional › b.spec.ts › board › drags', 'visual › a.spec.ts › board › drags']);
+ // Same display name, different source line: a different test, so its real failure keeps the name.
+ const otherLine = { ...base, 'a.spec.ts': { ...base['a.spec.ts'], board: [...base['a.spec.ts'].board, nativeSpec('drags', 'unexpected', failedOnce, { line: 9 })] } };
+ assert.ok(failedTests(withJournal(nativeReport(otherLine), pending)).includes('functional › a.spec.ts › board › drags'));
+ // A journal written before repeatEachIndex existed (null repetition) reconciles the same way, with nothing assumed.
+ const legacyPending = summarizeJournal(journal(launch(), begin(1), legacy(selected('board › drags')), legacy(started('board › drags')), legacy(finished('board › drags', 'failed')), { kind: 'end', status: 'interrupted' }));
+ assert.equal(legacyPending.unknownCases[0].repeatEachIndex, null);
+ assert.deepEqual(failedTests(withJournal(nativeReport(base), legacyPending)), ['functional › a.spec.ts › drags', 'functional › b.spec.ts › board › drags', 'visual › a.spec.ts › board › drags']);
+});
+
+test('repetitions share one native identity: an unknown repetition never erases another repetition\'s real failure', () => {
+ // Two repetitions of board › drags, both "unexpected" after one failed attempt; the journal says only repetition 1
+ // still awaits its retry, so repetition 0's failure is real and the name stays.
+ const oneOfTwo = summarizeJournal(journal(launch(), begin(2), rep(selected('board › drags', 0), 0), rep(selected('board › drags'), 1),
+  rep(started('board › drags'), 0), rep(finished('board › drags', 'failed'), 0), rep(started('board › drags'), 1), rep(finished('board › drags', 'failed'), 1), { kind: 'end', status: 'interrupted' }));
+ assert.deepEqual(oneOfTwo.cases.map(c => [c.repeatEachIndex, c.outcome]), [[0, 'unexpected'], [1, 'retry-pending']]);
+ const twoReps = nativeReport({ 'a.spec.ts': { board: [nativeSpec('drags', 'unexpected', nativeAttempts('failed')), nativeSpec('drags', 'unexpected', nativeAttempts('failed'))] } });
+ assert.deepEqual(failedTests(withJournal(twoReps, oneOfTwo)), ['functional › a.spec.ts › board › drags']);
+ // An interrupted repetition beside a genuinely exhausted one and a completed flake: the failure stays.
+ const mixed = nativeReport({ 'a.spec.ts': { board: [
+  nativeSpec('drags', 'unexpected', nativeAttempts('failed', 'failed')),
+  nativeSpec('drags', 'flaky', nativeAttempts('failed', 'passed')),
+  nativeSpec('drags', 'unexpected', nativeAttempts('failed', 'interrupted')),
+ ] } });
+ const mixedJournal = summarizeJournal(journal(launch(), begin(3), rep(selected('board › drags'), 0), rep(selected('board › drags'), 1), rep(selected('board › drags'), 2),
+  rep(started('board › drags'), 0), rep(finished('board › drags', 'failed'), 0), rep(started('board › drags', 1), 0), rep(finished('board › drags', 'failed', 1), 0),
+  rep(started('board › drags'), 1), rep(finished('board › drags', 'failed'), 1), rep(started('board › drags', 1), 1), rep(finished('board › drags', 'passed', 1), 1),
+  rep(started('board › drags'), 2), rep(finished('board › drags', 'failed'), 2), rep(started('board › drags', 1), 2), rep(finished('board › drags', 'interrupted', 1), 2), { kind: 'end', status: 'interrupted' }));
+ assert.deepEqual(failedTests(withJournal(mixed, mixedJournal)), ['functional › a.spec.ts › board › drags']);
+ assert.deepEqual(flakyTests(withJournal(mixed, mixedJournal)).map(f => [f.title, f.occurrences]), [['a.spec.ts › board › drags', 1]]);
+ // A repetition interrupted on its first attempt is "skipped" natively, not red: its unknown never uses up the
+ // exhausted repetition's real failure.
+ const firstAttemptCut = nativeReport({ 'a.spec.ts': { board: [nativeSpec('drags', 'unexpected', nativeAttempts('failed', 'failed')), nativeSpec('drags', 'skipped', nativeAttempts('interrupted'))] } });
+ const firstAttemptJournal = summarizeJournal(journal(launch(), begin(2), rep(selected('board › drags'), 0), rep(selected('board › drags'), 1),
+  rep(started('board › drags'), 0), rep(finished('board › drags', 'failed'), 0), rep(started('board › drags', 1), 0), rep(finished('board › drags', 'failed', 1), 0),
+  rep(started('board › drags'), 1), rep(finished('board › drags', 'interrupted'), 1), { kind: 'end', status: 'interrupted' }));
+ assert.deepEqual(firstAttemptJournal.unknownCases.map(c => [c.repeatEachIndex, c.outcome]), [[1, 'interrupted']]);
+ assert.deepEqual(failedTests(withJournal(firstAttemptCut, firstAttemptJournal)), ['functional › a.spec.ts › board › drags']);
+ // Only the interrupted repetition fails natively: no real failure is left under that name.
+ const unknownOnly = nativeReport({ 'a.spec.ts': { board: [nativeSpec('drags', 'expected', nativeAttempts('passed')), nativeSpec('drags', 'unexpected', nativeAttempts('failed', 'interrupted'))] } });
+ assert.deepEqual(failedTests(withJournal(unknownOnly, mixedJournal)), []);
+});
+
+test('complete, legacy and no-report comparisons keep their meaning; flaky reporting lists no interrupted retry', () => {
+ // A plain report with no journal execution field (older runs, local runs) is read exactly as before.
+ const plain = nativeReport({ 'a.spec.ts': { specs: [nativeSpec('retried', 'unexpected', nativeAttempts('failed', 'interrupted'))] } });
+ assert.deepEqual(failedTests(plain), ['functional › a.spec.ts › retried']);
+ assert.deepEqual(compareFailures(plain, null), { mainReport: false, inherited: [], own: ['functional › a.spec.ts › retried'] });
+ // A complete main still splits into inherited and own only.
+ assert.deepEqual(compareFailures(completePrFailing('exhausted', 'retried'), completePrFailing('exhausted')), { mainReport: true, inherited: ['functional › a.spec.ts › exhausted'], own: ['functional › a.spec.ts › retried'] });
+ // Flaky: an interrupted retry is not flaky; a completed failed-then-passed case is, with its first error line.
+ assert.deepEqual(flakyTests(retriedNative()), []);
+ const flake = nativeReport({ 'a.spec.ts': { specs: [{ ...nativeSpec('flakes', 'flaky', [{ retry: 0, status: 'failed', error: { message: 'first try\nat line 2' } }, { retry: 1, status: 'passed' }]) }] } });
+ assert.deepEqual(flakyTests(withJournal(flake, retriedJournal)).map(f => [f.title, f.error]), [['a.spec.ts › flakes', 'first try']]);
+});
+
 // ── The reporter in a process that is stopped before onEnd ────────────────────────────────────────────────────────────
 
 // A child drives the reporter's lifecycle by hand (no Playwright, no browser): one pass, one failure and its retry, then
@@ -609,3 +725,125 @@ test('a real Playwright run with repeat-each keeps every repetition apart', asyn
  const playwright = JSON.parse(readFileSync(join(run.dir, 'out/results.json'), 'utf8'));
  assert.deepEqual(playwright.suites[0].specs.flatMap(spec => spec.tests.map(t => t.status)).sort(), ['expected', 'unexpected']);
 });
+
+// ── A real retry interrupted after its first attempt failed ───────────────────────────────────────────────────────────
+// The first attempt fails, the retry's start is on disk, then the run is stopped (or reaches the fixture's own global
+// time limit). The real finalizer command runs on what the process left, and the consumers read its results.json.
+
+const retrySpec = `
+test('passes', () => {});
+test('exhausted', () => { throw new Error('red on every attempt'); });
+test('flakes', ({}, testInfo) => { if (testInfo.retry === 0) throw new Error('first try'); });
+test('retried', async ({}, testInfo) => { if (testInfo.retry === 0) throw new Error('first try'); await new Promise(() => {}); });
+test('never starts', () => {});
+`;
+const retryStarted = (title, repeatEachIndex = 0) => new RegExp(`"kind":"started"[^\\n]*"title":"${title}","repeatEachIndex":${repeatEachIndex},"retry":1}`);
+
+// Stops the run once `startedPattern` is in the journal (signal given) or lets it end by itself (signal null); then runs
+// `node scripts/playwright-journal.mjs <report dir>` exactly as CI does and returns everything read back from disk.
+async function stopAndFinalize(name, spec, { signal, startedPattern, config = '' }) {
+ const run = project(spec, { config });
+ if (signal) {
+  await waitFor(run.journalFile, startedPattern, run.child);
+  process.kill(-run.child.pid, signal);
+ }
+ const exit = await run.exited;
+ const out = join(run.dir, 'out');
+ const nativeWritten = existsSync(join(out, 'results.json'));
+ const native = nativeWritten ? JSON.parse(readFileSync(join(out, 'results.json'), 'utf8')) : null;
+ const reportDir = join(run.dir, 'playwright-report');
+ mkdirSync(reportDir);
+ cpSync(run.journalFile, join(reportDir, 'journal-main.jsonl'));
+ if (nativeWritten) cpSync(join(out, 'results.json'), join(reportDir, 'results.json'));
+ const finalizer = spawnSync(process.execPath, [resolve('scripts/playwright-journal.mjs'), reportDir], { encoding: 'utf8', env: { PATH: process.env.PATH } });
+ writeFileSync(join(out, 'process.json'), JSON.stringify({ signalSent: signal, exit, nativeWritten, finalizer: { status: finalizer.status, stdout: finalizer.stdout, stderr: finalizer.stderr } }, null, 2) + '\n');
+ keep(name, run.dir);
+ assert.equal(finalizer.status, 0, finalizer.stderr);
+ return { exit, native, summary: summarizeJournal(readFileSync(run.journalFile, 'utf8')), report: JSON.parse(readFileSync(join(reportDir, 'results.json'), 'utf8')), output: run.output() };
+}
+
+const consumerView = (report) => ({ failed: failedTests(report), flaky: flakyTests(report).map(f => [f.title, f.occurrences]), state: reportState(report) });
+const parity = {};
+
+for (const signal of ['SIGINT', 'SIGKILL']) {
+ test(`a real retry stopped by ${signal} after its first attempt failed is unknown; the exhausted failure and the flake stay`, async () => {
+  const { exit, native, summary, report } = await stopAndFinalize(`playwright-retry-${signal}`, retrySpec, { signal, startedPattern: retryStarted('retried') });
+  if (signal === 'SIGKILL') assert.deepEqual(exit, { code: null, signal: 'SIGKILL' });
+  // What the journal observed: 7 attempts started; the graceful stop also reports the interrupted retry as finished.
+  assert.deepEqual([summary.state, summary.selected, summary.unrecordedSelected], ['interrupted', 5, 0]);
+  assert.deepEqual(summary.outcomes, { expected: 1, unexpected: 1, flaky: 1, skipped: 0 });
+  assert.deepEqual(summary.unknownCases.map(c => [c.title, c.repeatEachIndex, c.outcome]), [['retried', 0, 'interrupted'], ['never starts', 0, 'not-started']]);
+  assert.deepEqual(summary.attempts, { started: 7, finished: signal === 'SIGINT' ? 7 : 6 });
+  if (signal === 'SIGINT') {
+   // Playwright's own report calls the interrupted retry "unexpected": the hazard this reconciles.
+   const retried = native.suites[0].specs.find(s => s.title === 'retried').tests[0];
+   assert.deepEqual([retried.status, retried.results.map(r => r.status)], ['unexpected', ['failed', 'interrupted']]);
+   assert.equal(report.source, undefined, 'the graceful report is Playwright\'s own, with the journal attached');
+  } else {
+   assert.equal(native, null, 'an abrupt stop leaves no Playwright report');
+   assert.equal(report.source, 'journal');
+  }
+  const view = consumerView(report);
+  assert.deepEqual(view, { failed: ['a.spec.mjs › exhausted'], flaky: [['a.spec.mjs › flakes', 1]], state: 'interrupted' });
+  parity[signal] = view;
+  // As the PR run: only the exhausted failure is the PR's own, and the stop is said.
+  const asPr = compareFailures(report, null);
+  assert.deepEqual([asPr.own, asPr.prIncomplete], [['a.spec.mjs › exhausted'], true]);
+  assert.doesNotMatch(renderMarkdown(asPr, ''), /› retried/);
+  // As main: a PR failing both gets exhausted inherited and retried unknown on main, never its own.
+  const pr = { suites: [{ title: 'a.spec.mjs', file: 'a.spec.mjs', specs: ['exhausted', 'retried'].map(title => ({ title, file: 'a.spec.mjs', line: 1, tests: [{ projectName: '', status: 'unexpected', results: nativeAttempts('failed', 'failed') }] })) }] };
+  const asMain = compareFailures(pr, report);
+  assert.deepEqual([asMain.inherited, asMain.unknownOnMain, asMain.own], [['a.spec.mjs › exhausted'], ['a.spec.mjs › retried'], []]);
+  const text = renderMarkdown(asMain, 'https://example.test/run/6');
+  assert.match(text, /### Inherited from main \(1\)\n\n- a\.spec\.mjs › exhausted\n/);
+  assert.match(text, /### Unknown on main \(1\)\n\n[^\n]*\n\n- a\.spec\.mjs › retried\n/);
+ });
+}
+
+test('the graceful report (Playwright\'s own) and the abrupt one (the journal\'s) give the consumers the same answer', () => {
+ assert.ok(parity.SIGINT && parity.SIGKILL, 'both stops ran');
+ assert.deepEqual(parity.SIGINT, parity.SIGKILL);
+});
+
+// This fixture's own global time limit, not any repository or CI limit.
+test('a real retry cut off by the run\'s global time limit is unknown; the exhausted failure and the flake stay', async () => {
+ const { native, summary, report } = await stopAndFinalize('playwright-retry-globalTimeout', retrySpec, { signal: null, config: 'globalTimeout: 15000,' });
+ assert.deepEqual([summary.state, summary.endStatus], ['interrupted', 'timedout']);
+ assert.deepEqual(summary.outcomes, { expected: 1, unexpected: 1, flaky: 1, skipped: 0 });
+ assert.deepEqual(summary.unknownCases.map(c => [c.title, c.outcome]), [['retried', 'interrupted'], ['never starts', 'not-started']]);
+ // Here Playwright's own report records the cut-off retry as "skipped" (and still calls the test "unexpected"), while
+ // the journal has its start and no end: only the journal shows it never finished.
+ const retried = native.suites[0].specs.find(s => s.title === 'retried').tests[0];
+ assert.deepEqual([retried.status, retried.results.map(r => r.status)], ['unexpected', ['failed', 'skipped']]);
+ assert.deepEqual(summary.attempts, { started: 7, finished: 6 });
+ assert.deepEqual(consumerView(report), { failed: ['a.spec.mjs › exhausted'], flaky: [['a.spec.mjs › flakes', 1]], state: 'interrupted' });
+ assert.deepEqual(compareFailures(report, null).own, ['a.spec.mjs › exhausted']);
+});
+
+// Three repetitions of one test (same file, title and line): repetition 0 fails every attempt, 1 fails then passes,
+// 2 fails and its retry is stopped. Playwright's own report has three same-title specs and no repeat index.
+const repeatSpec = `
+test('repeats', async ({}, testInfo) => {
+ if (testInfo.repeatEachIndex === 0) throw new Error('red on every attempt');
+ if (testInfo.retry === 0) throw new Error('first try');
+ if (testInfo.repeatEachIndex === 2) await new Promise(() => {});
+});
+`;
+
+for (const signal of ['SIGINT', 'SIGKILL']) {
+ test(`real repetitions stopped by ${signal}: the unknown repetition never erases another repetition's real failure`, async () => {
+  const { native, summary, report } = await stopAndFinalize(`playwright-repeat-retry-${signal}`, repeatSpec, { signal, startedPattern: retryStarted('repeats', 2), config: 'repeatEach: 3,' });
+  assert.deepEqual(summary.cases.map(c => [c.repeatEachIndex, c.outcome, c.attempts.map(a => a.status)]),
+   [[0, 'unexpected', ['failed', 'failed']], [1, 'flaky', ['failed', 'passed']], [2, 'interrupted', signal === 'SIGINT' ? ['failed', 'interrupted'] : ['failed']]]);
+  if (signal === 'SIGINT') {
+   const specs = native.suites[0].specs;
+   assert.deepEqual(specs.map(s => [s.title, s.line, s.tests[0].status]), [['repeats', 3, 'unexpected'], ['repeats', 3, 'flaky'], ['repeats', 3, 'unexpected']]);
+   // No field carries a repeat index (its error snippets quote the fixture's source, so look at field names only).
+   const fieldNames = (value) => (value && typeof value === 'object' ? Object.entries(value).flatMap(([key, child]) => [key, ...fieldNames(child)]) : []);
+   assert.equal(fieldNames(native).includes('repeatEachIndex'), false, 'Playwright\'s own report carries no repeat index');
+  }
+  assert.deepEqual(consumerView(report), { failed: ['a.spec.mjs › repeats'], flaky: [['a.spec.mjs › repeats', 1]], state: 'interrupted' });
+  const pr = { suites: [{ title: 'a.spec.mjs', file: 'a.spec.mjs', specs: [{ title: 'repeats', file: 'a.spec.mjs', line: 2, tests: [{ projectName: '', status: 'unexpected', results: nativeAttempts('failed', 'failed') }] }] }] };
+  assert.deepEqual(compareFailures(pr, report).inherited, ['a.spec.mjs › repeats']);
+ });
+}

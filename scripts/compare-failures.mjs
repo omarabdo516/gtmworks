@@ -6,15 +6,49 @@ import { otherInvocations, reportState, withoutFinalOutcome } from './playwright
 
 export const COMMENT_MARKER = '<!-- ci-main-failures -->';
 
+// The journal's unknown cases of an interrupted run, counted per identity (project, file relative to the test root, line,
+// full title), for Playwright's own report only: its JSON calls a test whose first attempt failed and whose retry never
+// finished "unexpected" (the cut-off retry shows as "interrupted" or "skipped"), and one still awaiting its retry too.
+// A report the journal built already says "unknown", and a report without the journal field (a complete run, an older
+// one) is read as before. Repetitions share one identity in Playwright's JSON, which has no repeat index, so they are
+// counted, never matched by index.
+const identityOf = (project, file, line, title) => JSON.stringify([project ?? '', file ?? '', line ?? null, title ?? '']);
+function journalUnknowns(report) {
+  const main = report?.execution?.invocations?.main;
+  if (report?.source === 'journal' || reportState(report) !== 'interrupted' || !Array.isArray(main?.unknownCases)) return null;
+  const prefix = main.root ? `${main.root}/` : '';
+  const unknowns = new Map();
+  for (const c of main.unknownCases) {
+    const kind = c.outcome === 'interrupted' ? 'cutOff' : c.outcome === 'retry-pending' ? 'pending' : null;
+    if (!kind) continue;
+    const key = identityOf(c.project, c.file?.startsWith(prefix) ? c.file.slice(prefix.length) : c.file, c.line, c.title);
+    if (!unknowns.has(key)) unknowns.set(key, { cutOff: 0, pending: 0 });
+    unknowns.get(key)[kind] += 1;
+  }
+  return unknowns;
+}
+
 // Every test of a Playwright JSON report that finished red, as a stable name: project, file and the full title path.
+// In Playwright's own report from an interrupted run, a red test the journal names as unknown is not a final failure:
+// - its last attempt was cut off ("interrupted" or "skipped" after a failure) and the journal has that identity as
+//   interrupted;
+// - or it failed with a retry left and the journal has that identity as awaiting its retry.
+// Each journal unknown accounts for at most one red test of its own kind, so a different repetition's real failure, or
+// a test that differs in project, file, line or title, keeps its name.
 export function failedTests(report) {
   const names = new Set();
+  const unknowns = journalUnknowns(report);
   const walk = (suite, titles) => {
     const path = suite.title && suite.title !== suite.file ? [...titles, suite.title] : titles;
     for (const spec of suite.specs ?? []) {
       for (const test of spec.tests ?? []) {
         const red = test.status === 'unexpected' || (!test.status && (test.results ?? []).some((r) => r.status === 'failed' || r.status === 'timedOut'));
-        if (red) names.add([test.projectName, spec.file ?? suite.file, ...path, spec.title].filter(Boolean).join(' › '));
+        if (!red) continue;
+        const left = unknowns?.get(identityOf(test.projectName, spec.file ?? suite.file, spec.line, [...path, spec.title].join(' › ')));
+        const cutOff = ['interrupted', 'skipped'].includes(test.results?.at(-1)?.status);
+        if (left && cutOff && left.cutOff > 0) { left.cutOff -= 1; continue; }
+        if (left && !cutOff && left.pending > 0) { left.pending -= 1; continue; }
+        names.add([test.projectName, spec.file ?? suite.file, ...path, spec.title].filter(Boolean).join(' › '));
       }
     }
     for (const child of suite.suites ?? []) walk(child, path);

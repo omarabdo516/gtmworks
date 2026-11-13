@@ -73,6 +73,27 @@ An unknown outcome is never counted as passed or failed.
 `unrecordedSelected`, `started`, `outcomes`, `unknown` counts, `attempts`, `malformed` and `unknownCases` (the identity
 and outcome of every recorded case without a final outcome).
 
+## Unknown outcomes in Playwright's own report
+
+After a graceful stop or a run that reached its global time limit, Playwright still writes its own `results.json`, and
+there a test whose first attempt failed and whose retry never finished is `unexpected`: Playwright 1.64.1 leaves the
+cut-off attempt out of the outcome. That attempt shows as `interrupted` after a graceful stop and as `skipped` after a
+global time limit (where the journal has its start and no end). A test that failed with a retry left, when the run
+stopped before the retry, is `unexpected` too.
+
+So before `compare-failures` collects the failures of a report with an interrupted `execution` field, it takes out
+the red tests the journal names as unknown, by project, file (the journal's repository-relative path without its test
+`root`), line and full title:
+
+- a red test whose last attempt was cut off (`interrupted` or `skipped`), against the journal's `interrupted` cases;
+- any other red test, against the journal's `retry-pending` cases.
+
+Playwright's JSON has one spec per repetition and no repeat index, so repetitions of one test share an identity there.
+Each journal unknown takes out at most one red test of its own kind: a repetition that failed every attempt keeps the
+name even when another repetition of it is unknown. A report the journal built already says `unknown`, and a report
+without an `execution` field (a complete run, an older one) is read as before. `flaky-tests` needs no such step: it
+lists only `flaky`, and an unfinished retry is never that.
+
 When the latest main run was interrupted, `compare-failures` names a PR failure that main also showed failing as
 inherited, and one main never showed as **unknown on main**, a separate list and section: main stopped before it had an
 outcome there, so it is not called this PR's own. Against a complete main run the two lists are as before.
