@@ -25,6 +25,8 @@ repository=omarabdo516/gtmworks
 image=ghcr.io/$repository
 marker='# gtmworks get.sh: the one-line installer, and the gtmworks command it leaves behind (#51, #52).'
 releases=${GTMWORKS_RELEASES:-}
+# The folder of the last install the line made on this machine, named when another folder finds its data.
+owner_record=${XDG_STATE_HOME:-${HOME:-/nonexistent}/.local/state}/gtmworks/install-dir
 get_url=${GTMWORKS_GET:-https://raw.githubusercontent.com/$repository/main/scripts/get.sh}
 line="curl -fsSL https://raw.githubusercontent.com/$repository/main/scripts/get.sh | sh"
 # This script's own file, when it runs from one (the gtmworks command, or sh get.sh); a pipe has none.
@@ -38,9 +40,9 @@ usage() {
 Usage:
   $line -s -- [--version vX.Y.Z | --channel main] [--dir <folder>]
   gtmworks status
-  gtmworks update [--version vX.Y.Z | --channel main] [--no-backup]
+  gtmworks update [--version vX.Y.Z | --version main@sha256:<digest> | --channel main] [--no-backup]
   gtmworks backup
-  gtmworks restore <archive> [--version vX.Y.Z [--yes]]
+  gtmworks restore <archive> [--version vX.Y.Z | --version main@sha256:<digest> [--yes]]
   gtmworks install          (repair: the same as running the line again)
 USAGE
   exit "${1:-2}"
@@ -69,9 +71,12 @@ done
 # The line installs; the gtmworks command does what it is told and nothing when told nothing.
 if [ -z "$operation" ]; then [ "$command_mode" = no ] || usage; operation=install; fi
 case "$operation" in install|update|backup|restore|status) ;; *) wrong "Unknown command: $operation";; esac
-if [ -n "$version" ] && ! printf '%s\n' "$version" | grep -Eqx 'v[0-9]+\.[0-9]+\.[0-9]+'; then
+if [ -n "$version" ] && ! printf '%s\n' "$version" | grep -Eqx 'v[0-9]+\.[0-9]+\.[0-9]+|main@sha256:[a-f0-9]{64}'; then
   wrong "--version takes a release version such as v1.2.3, not $version."
 fi
+# main@sha256:<digest> names a main build this install ran before, whose files it kept: the go-back of an update.
+case "$version" in main@*) [ "$operation" = update ] || [ "$operation" = restore ] \
+  || wrong "--version $version names a main build this install kept; it belongs to gtmworks update and gtmworks restore.";; esac
 case "$channel" in ''|stable|main) ;; *) wrong "--channel is stable or main, not $channel.";; esac
 [ -z "$version" ] || [ "$channel" != main ] || wrong '--version names a stable release; it cannot be combined with --channel main.'
 [ "$backup" = yes ] || [ "$operation" = update ] || wrong '--no-backup belongs to gtmworks update.'
@@ -108,6 +113,13 @@ compose() { docker compose --env-file .env.install -f docker-compose.install.yml
 # The install script is read from its own file, never from this script's pipe.
 run_installer() { sh ./install.sh "$@" < /dev/null; }
 recorded() { sed -n '1{/^v[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*$/p;/^main$/p;}' "$dir/.gtmworks-version" 2> /dev/null || true; }
+# The release an update is moving to, written before it changes the install's files and removed when it finishes or its
+# migrations are confirmed rolled back: an update the machine stopped in the middle of is finished by gtmworks install.
+pending() { sed -n '1{/^v[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*$/p;/^main$/p;/^main@sha256:[a-f0-9]\{64\}$/p;}' "$dir/.gtmworks-pending" 2> /dev/null || true; }
+record_target() {
+  case "$1" in main@*) echo main;; *) printf '%s\n' "$1";; esac > .gtmworks-version
+  rm -f .gtmworks-pending
+}
 # None when the database has no migration table yet: a first install that stopped before its first migration.
 database_migrations() {
   printf '%s\n' "select to_regclass('gtmworks_install.schema_migrations') is not null as present \\gset" '\if :present' \
@@ -148,6 +160,13 @@ check_project_owner() {
     [ -z "$owner" ] || [ "$owner" = "$here" ] || [ "$owner" = "$physical" ] || { printf '%s\n' "$owner"; break; }
   done)
   [ -z "$other" ] || fail "gtmworks already runs from $other on this machine, and one machine runs one gtmworks install (its containers and volumes are all named gtmworks-install). Use that install, or remove it there first. Nothing was changed."
+  # Stopped containers can be gone (compose down) while the data stays in its volumes, whose keys are in the
+  # .env.install of the folder that made them: a folder without one would start that data with new keys.
+  if [ ! -f "$dir/.env.install" ] && docker volume inspect gtmworks-install_database > /dev/null 2>&1; then
+    made_by=$(sed -n 1p "$owner_record" 2> /dev/null || true)
+    [ -z "$made_by" ] || [ "$made_by" != "$dir" ] || made_by=
+    fail "Docker on this machine already holds gtmworks data (the volume gtmworks-install_database)${made_by:+, made by the install in $made_by}, and its keys are in that install's .env.install, not in $dir. Use that install${made_by:+: run the line again with --dir $made_by}. To start over without that data, back it up and remove its volumes first. Nothing was changed."
+  fi
 }
 
 stage=
@@ -185,6 +204,15 @@ check_assets() {
     || fail "The downloaded docker-compose.install.yml is not from the release of $release_ref."
 }
 download_release() {
+  case "$1" in main@sha256:*)
+    kept=$dir/.gtmworks-main/${1#main@sha256:}
+    [ -f "$kept/install.sh" ] && [ -f "$kept/docker-compose.install.yml" ] \
+      || fail "The files of the main build ${1#main@} are not kept in $dir, so it cannot be named. Nothing was changed."
+    cp "$kept/install.sh" "$kept/docker-compose.install.yml" "$2/"
+    check_assets "$2"
+    [ "${release_ref##*@}" = "${1#main@}" ] || fail "The kept files in $kept are not those of ${1#main@}. Nothing was changed."
+    return;;
+  esac
   if [ "$1" = main ]; then
     say "Pulling the newest main build: $image:main"
     docker pull "$image:main"
@@ -232,8 +260,12 @@ install_command() {
   # A profile that already names ~/.local/bin (Ubuntu's ~/.profile does) is left as it is.
   path_line='export PATH="$HOME/.local/bin:$PATH"'
   added=
-  for profile in "$HOME/.profile" "$HOME/.bash_profile" "$HOME/.bashrc" "$HOME/.zshrc"; do
-    [ "$profile" = "$HOME/.profile" ] || [ -f "$profile" ] || continue
+  # zsh reads none of ~/.profile and the bash files: for a zsh user ~/.zshenv, read by every zsh, is made when missing.
+  own=$HOME/.profile
+  case "${SHELL:-}" in */zsh) own=${ZDOTDIR:-$HOME}/.zshenv;; esac
+  for profile in "$HOME/.profile" "$HOME/.bash_profile" "$HOME/.bashrc" "$HOME/.zshrc" "$own"; do
+    [ "$profile" = "$HOME/.profile" ] || [ "$profile" = "$own" ] || [ -f "$profile" ] || continue
+    case "$added " in *" $profile "*) continue;; esac
     if [ -f "$profile" ] && grep -q '\.local/bin' "$profile"; then continue; fi
     printf '\n%s\n%s\n' '# Added by the gtmworks installer: the gtmworks command lives in ~/.local/bin.' "$path_line" >> "$profile"
     added="$added $profile"
@@ -249,7 +281,8 @@ op_install() {
   check_prerequisites
   need_curl
   check_project_owner
-  current=$(recorded)
+  current=$(pending) interrupted=yes
+  [ -n "$current" ] || current=$(recorded) interrupted=no
   requested=$version
   [ "$channel" != main ] || requested=main
   [ "$channel" != stable ] || [ -n "$version" ] || requested=stable
@@ -267,7 +300,8 @@ op_install() {
         *) fail "$dir already runs gtmworks $current. To move it to $requested, run: $(update_command "$requested"). Nothing was changed.";;
       esac
       target=$current
-      say "Repairing gtmworks $target in $dir; its keys and data are kept."
+      if [ "$interrupted" = yes ]; then say "Finishing the update of $dir to gtmworks $target, which did not finish; its keys and data are kept."
+      else say "Repairing gtmworks $target in $dir; its keys and data are kept."; fi
     else
       # An install with data and no recorded release (a release installed by hand, or a first install that did not
       # finish): the release is chosen as for a new install, and checked against the data before anything changes.
@@ -307,7 +341,8 @@ op_install() {
   [ "$keep" = yes ] || place_release "$stage"
   install_command
   run_installer
-  printf '%s\n' "$target" > .gtmworks-version
+  record_target "$target"
+  mkdir -p "${owner_record%/*}" && printf '%s\n' "$dir" > "$owner_record" || true
 }
 
 op_update() {
@@ -325,7 +360,7 @@ op_update() {
   new_stage
   download_release "$target" "$stage"
   if [ "$release_ref" = "$running" ]; then
-    printf '%s\n' "$target" > .gtmworks-version
+    record_target "$target"
     say "gtmworks $target ($release_ref) already runs in $dir: nothing to update."
     return
   fi
@@ -347,6 +382,14 @@ update_to() {
   fi
   cp docker-compose.install.yml "$stage/previous-compose.yml"
   cp install.sh "$stage/previous-install.sh"
+  # A main build is named by its digest to go back to it, so its two files are kept: main moves on.
+  back=$previous
+  case "$running" in "$image:main@sha256:"*)
+    back=main@${running##*@}
+    mkdir -p ".gtmworks-main/${running##*@sha256:}"
+    cp install.sh docker-compose.install.yml ".gtmworks-main/${running##*@sha256:}/";;
+  esac
+  printf '%s\n' "$target" > .gtmworks-pending
   place_release "$stage"
   if run_installer update; then :; else
     status=$?
@@ -356,6 +399,7 @@ update_to() {
       # Its migrations rolled back, so the previous release's files go back with the schema it was serving on.
       cp "$stage/previous-compose.yml" docker-compose.install.yml
       cp "$stage/previous-install.sh" install.sh
+      rm -f .gtmworks-pending
       if run_installer update > "$stage/return.log" 2>&1; then
         say "gtmworks ${previous:-(the previous release)} keeps serving, on its own files again." >&2
       else
@@ -365,26 +409,24 @@ update_to() {
     else
       # Its migrations may have run, so the data may now be $target's: the install is recorded as $target, and a repair
       # (gtmworks install) finishes $target rather than putting back a release older than the data.
-      printf '%s\n' "$target" > .gtmworks-version
+      record_target "$target"
       say "Its migrations may have been applied before it failed, so this install stays on $target: run gtmworks install to finish it." >&2
     fi
     [ -z "$archive" ] || say "Backup: $archive" >&2
     exit "$status"
   fi
-  printf '%s\n' "$target" > .gtmworks-version
+  record_target "$target"
   now=$(database_migrations) || now=
   say "gtmworks $target is running: $release_ref"
   [ -z "$archive" ] || say "Backup: $archive"
   if [ -z "$previous" ]; then
     say "The release this install ran before is not recorded, so there is no command to go back to it."
   elif [ "$now" = "$applied" ]; then
-    say "To go back to $previous: $(update_command "$previous")"
+    say "To go back to $back: $(update_command "$back")"
   elif [ -z "$archive" ]; then
-    say "This update migrated the database and took no backup (--no-backup), so going back to $previous needs a backup made before it."
-  elif [ "$previous" = main ]; then
-    say "To go back: restore $archive with a release that carries its migrations: gtmworks restore $(quote "$archive") --version vX.Y.Z"
+    say "This update migrated the database and took no backup (--no-backup), so going back to $back needs a backup made before it."
   else
-    say "To go back to $previous: gtmworks restore $(quote "$archive") --version $previous"
+    say "To go back to $back: gtmworks restore $(quote "$archive") --version $back"
   fi
 }
 
@@ -400,6 +442,18 @@ check_archive() {
   for entry in var/lib/postgresql/data/ etc/postgresql-custom/ var/lib/storage/ .env.install; do
     printf '%s\n' "$entries" | grep -Fqx -- "$entry" || fail "$archive is not a complete gtmworks backup: it has no $entry. Nothing was changed."
   done
+}
+# The archive's settings, checked as install.sh restore checks them (completed, then validated) but with the tool of the
+# release that will run them, before anything stops: a restore that refused them later would leave an empty install.
+check_archive_settings() {
+  ( umask 077; docker run --rm -i alpine:3.21 tar -xzOf - .env.install < "$archive" > "$stage/archive.env" ) \
+    || fail "Could not read the settings (.env.install) in $archive. Nothing was changed."
+  ( umask 077; docker run --rm --env-file "$stage/archive.env" "$release_ref" node /app/install/lib/install-env.mjs missing > "$stage/archive.missing" ) \
+    || fail "Could not check the settings in $archive with gtmworks $version. Nothing was changed."
+  ( umask 077; { cat "$stage/archive.env"; if [ -n "$(tail -c 1 "$stage/archive.env")" ]; then echo; fi; cat "$stage/archive.missing"; } > "$stage/archive.complete" )
+  docker run --rm --env-file "$stage/archive.complete" "$release_ref" node /app/install/lib/install-env.mjs validate complete \
+    || fail "The settings in $archive (its .env.install) are not valid for gtmworks $version, for the reason above. Nothing was changed."
+  rm -f "$stage/archive.env" "$stage/archive.missing" "$stage/archive.complete"
 }
 # The migrations the archive's database applied: its data folder, unpacked in a throwaway container of the database
 # image the release runs, is read by Postgres in single-user mode (no server, no network, no settings of its own).
@@ -443,6 +497,7 @@ op_restore() {
   new_stage
   download_release "$version" "$stage"
   check_archive
+  check_archive_settings
   archived=$(archive_migrations)
   carried=$(carried_by "$release_ref") || fail "Could not read the migrations of $release_ref. Nothing was changed."
   missing=$(missing_from "$carried" "$archived" | tr '\n' ' ')
@@ -458,7 +513,7 @@ op_restore() {
   run_installer restore "$archive"
   # The archive may predate migrations $version carries: its update applies them, as an update to it would.
   run_installer update
-  printf '%s\n' "$version" > .gtmworks-version
+  record_target "$version"
   say "gtmworks $version is running with the data of $archive. The data from before is in $archive_made."
 }
 
@@ -468,6 +523,7 @@ op_status() {
   check_prerequisites
   in_install
   say "gtmworks $(recorded | grep . || echo '(unrecorded version)') in $dir: $(cat .install-release 2> /dev/null || echo 'no finished install')"
+  [ -z "$(pending)" ] || say "An update to gtmworks $(pending) did not finish: run gtmworks install to finish it."
   services=$(compose config --services) || fail 'Could not read the install compose file.'
   total=0 unhealthy=
   for service in $services; do

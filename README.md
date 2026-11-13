@@ -24,10 +24,13 @@ Nothing is built on the server and no source is downloaded. Options go after
 - `--dir <folder>` installs into another folder. One machine runs one install
   (its containers and volumes are all named `gtmworks-install`), so the line
   refuses a second folder while another one runs gtmworks, before changing anything.
+  It also refuses a folder without the keys of gtmworks data Docker still holds
+  (containers removed, volumes kept), and names the folder that made it.
 
 It also puts a `gtmworks` command in `~/.local/bin`, and adds that folder to the
-PATH in your shell profile only when no profile names it yet; open a new shell to
-use it. `gtmworks status` reports each service's health; `gtmworks backup`,
+PATH in your shell profile only when no profile names it yet (`~/.profile`, and
+`~/.zshenv` when your login shell is zsh, which reads no other); open a new shell
+to use it. `gtmworks status` reports each service's health; `gtmworks backup`,
 `gtmworks restore` and `gtmworks update` are described below.
 
 Before it changes anything, the line checks for Docker and Docker Compose v2.20+
@@ -136,7 +139,8 @@ exact command that goes back to the release you ran before:
 when it did, `gtmworks restore <archive> --version <previous>`. Before it changes
 anything, that command checks the archive as restore does (only a backup's own
 entries, each of them present) and refuses an archive whose database applied a
-migration `<previous>` does not carry; then it names what it replaces and asks you
+migration `<previous>` does not carry, or whose `.env.install` that release's own
+check refuses; then it names what it replaces and asks you
 to type `yes` (`--yes` answers for a script). It then backs up the current data,
 makes the install anew with that release, restores the archive and applies that
 release's migrations the archive predates (the agent engine's volume is kept).
@@ -148,8 +152,12 @@ a migration is a restore of a backup made before it. If a migration fails, the
 transaction is rolled back, the previous release's files are put back and it keeps
 serving, and the command exits non-zero naming the migration. If the update fails
 after its migrations ran (while starting the new containers, say), the install
-stays on the new release: `gtmworks install` finishes it. An install on the
-`main` channel updates to the newest main build. `gtmworks update` does not replace
+stays on the new release: `gtmworks install` finishes it. The same holds when the
+machine stops in the middle of an update: the release it was moving to is written
+first (`.gtmworks-pending`), and `gtmworks install` finishes that update. An install
+on the `main` channel updates to the newest main build; the update keeps the two
+files of the build it ran (`.gtmworks-main/`), so its go-back command names that
+exact build, `--version main@sha256:<digest>`. `gtmworks update` does not replace
 the `gtmworks` command itself; run the line again for a newer one.
 
 ## Backup

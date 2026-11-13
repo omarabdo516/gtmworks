@@ -44,6 +44,7 @@ case "$op" in
 esac
 [ -f .env.install ] || echo "SECRET=$$" > .env.install
 rm -f .install-release
+if [ "$release_image" = "\${DIE_REF:-}" ]; then cp "$FIXTURE/migrations/\${release_image##*:}" "$DB_FILE"; kill -9 "$PPID"; exit 9; fi
 if [ "$release_image" = "\${FAIL_REF:-}" ]; then
  [ -z "\${FAIL_AFTER_MIGRATE:-}" ] || cp "$FIXTURE/migrations/\${release_image##*:}" "$DB_FILE"
  echo 'Applying migration: 999_failure.sql'; exit 3
@@ -60,6 +61,11 @@ case "$*" in
  'compose version --short') [ -z "\${COMPOSE_MISSING:-}" ] || exit 1; echo "\${COMPOSE_VERSION:-2.29.1}"; exit 0;;
  info) exit "\${INFO_EXIT:-0}";;
  'ps -a --filter label=com.docker.compose.project=gtmworks-install '*) [ -z "\${PROJECT_DIRS:-}" ] || printf '%s\\n' "$PROJECT_DIRS"; exit 0;;
+ 'volume inspect gtmworks-install_database') [ -f "$DB_FILE" ]; exit $?;;
+ 'run --rm -i alpine:3.21 tar -xzOf - .env.install') cat > /dev/null; printf '%s\\n' "\${ARCHIVE_ENV:-SECRET=archived}"; exit 0;;
+ *'install-env.mjs missing') exit 0;;
+ *'install-env.mjs validate complete')
+  [ -z "\${ENV_INVALID:-}" ] || { echo 'SUPABASE_PUBLIC_URL must equal APP_ORIGIN' >&2; exit 1; }; exit 0;;
  'run --rm -i alpine:3.21 tar -tzf -')
   cat > /dev/null
   if [ -n "\${ARCHIVE_ENTRIES:-}" ]; then printf '%s\\n' "$ARCHIVE_ENTRIES"
@@ -141,7 +147,7 @@ const ok=(result,label='')=>assert.equal(result.status,0,`${label}\n${result.std
 test('options: each wrong one stops with usage before Docker, curl or any folder is touched', t => {
  const m=machine(t);
  for(const args of [['--version','1.2.3'],['--version','v1.2'],['--version=v1.2.3-rc1'],['--channel','beta'],['--version','v1.2.3','--channel','main'],
-  ['--no-backup'],['status','--version','v1.2.3'],['backup','--channel','main'],['restore'],['frobnicate'],['--dir'],['--bogus'],['update','extra'],['status','--no-backup'],['update','--yes']]) {
+  ['--no-backup'],['status','--version','v1.2.3'],['backup','--channel','main'],['restore'],['frobnicate'],['--dir'],['--bogus'],['update','extra'],['status','--no-backup'],['update','--yes'],['--version',`main@sha256:${mainHex}`],['backup','--version',`main@sha256:${mainHex}`],['update','--version','main@sha256:abc']]) {
   const result=m.line(args);
   assert.equal(result.status,2,`${args.join(' ')}: ${result.stderr}`);
   assert.match(result.stderr,/Usage:/,args.join(' '));
@@ -173,6 +179,8 @@ test('the line installs the highest published vX.Y.Z by default, --version that 
 
  for(const [args,folder] of [[['--version','v1.2.3','--dir','elsewhere'],join(m.work,'elsewhere')],[['--version=v1.3.0',`--dir=${join(m.root,'abs')}`],join(m.root,'abs')]]) {
   m.clear();
+  // The install before was removed with its data (compose down -v): one machine runs one install.
+  rmSync(m.env.DB_FILE,{force:true});
   ok(m.line(args),args.join(' '));
   const tag=args[0].includes('=')?args[0].split('=')[1]:args[1];
   assert.doesNotMatch(m.curl(),/api\.github\.com/,'a named version reads no list');
@@ -363,6 +371,7 @@ test('a failed update puts the previous release back when its migrations rolled 
  assert.equal(m.file('install.sh'),readFileSync(join(m.env.FIXTURE,'v1.2.3/install.sh'),'utf8'));
  assert.equal(m.file('.install-release'),`${ref('v1.2.3')}\n`);
  assert.equal(m.file('.gtmworks-version'),'v1.2.3\n');
+ assert.equal(existsSync(join(m.dir,'.gtmworks-pending')),false,'a confirmed rollback leaves no update to finish');
  // Migrations that were applied before the failure stay with the files they belong to.
  m.clear();
  const applied=m.gtmworks(['update','--version','v1.3.0','--no-backup'],{extra:{FAIL_REF:ref('v1.3.0'),FAIL_AFTER_MIGRATE:'1'}});
@@ -388,6 +397,103 @@ test('a failed update puts the previous release back when its migrations rolled 
  assert.equal(unfinished.status,1);
  assert.match(unfinished.stderr,/an install or update did not finish\. Repair it first with: gtmworks install/);
  assert.deepEqual(m.installer(),[]);
+});
+
+test('an update the machine stopped right after its migrations is finished by gtmworks install', t => {
+ const m=machine(t);
+ ok(m.line(['--version','v1.2.3']));
+ m.clear();
+ const stopped=m.gtmworks(['update'],{extra:{DIE_REF:ref('v1.10.0')}});
+ assert.equal(stopped.signal,'SIGKILL',stopped.stderr);
+ // The record still names v1.2.3; the data is v1.10.0's; .install-release is gone.
+ assert.equal(m.file('.gtmworks-version'),'v1.2.3\n');
+ assert.equal(m.file('.install-release'),'');
+ const update=m.gtmworks(['update']);
+ assert.equal(update.status,1);
+ assert.match(update.stderr,/Repair it first with: gtmworks install/);
+ const status=m.gtmworks(['status']);
+ assert.match(status.stdout,/An update to gtmworks v1\.10\.0 did not finish: run gtmworks install to finish it\./);
+ m.clear();
+ const finished=m.gtmworks(['install']);
+ ok(finished);
+ assert.match(finished.stdout,/^Finishing the update of .* to gtmworks v1\.10\.0, which did not finish; its keys and data are kept\.$/m);
+ assert.deepEqual(m.installer(),[`${hex('c')} `]);
+ assert.equal(m.file('.install-release'),`${ref('v1.10.0')}\n`);
+ assert.equal(m.file('.gtmworks-version'),'v1.10.0\n');
+ assert.equal(existsSync(join(m.dir,'.gtmworks-pending')),false);
+});
+
+test('a folder without the keys of the gtmworks data on this machine is refused, naming the folder that has them', t => {
+ const m=machine(t);
+ ok(m.line());
+ const other=join(m.root,'other');
+ m.clear();
+ // The first install's containers are gone (compose down), its data volume is not.
+ const refused=m.line(['--dir',other]);
+ assert.equal(refused.status,1);
+ assert.match(refused.stderr,new RegExp(`already holds gtmworks data \\(the volume gtmworks-install_database\\), made by the install in ${m.dir}, .*run the line again with --dir ${m.dir}\\..*Nothing was changed\\.`));
+ assert.equal(existsSync(other),false);
+ assert.equal(m.curl()+m.installer().join(''),'');
+ // Its own folder, keys gone, is refused too; once the data is removed, a new folder installs.
+ rmSync(join(m.dir,'.env.install'));
+ assert.match(m.line().stderr,/already holds gtmworks data .*not in /);
+ rmSync(m.env.DB_FILE);
+ ok(m.line(['--dir',other]));
+ assert.equal(readFileSync(join(m.home,'.local/state/gtmworks/install-dir'),'utf8'),`${other}\n`);
+});
+
+test('a main install goes back to the exact main build it ran, by its digest and its kept files', t => {
+ const m=machine(t);
+ ok(m.line(['--channel','main']));
+ const newer=hex('9'), migrating=hex('8');
+ writeFileSync(join(m.env.FIXTURE,'migrations',newer),'001.sql\n002.sql\n003.sql\n004.sql\n');
+ writeFileSync(join(m.env.FIXTURE,'migrations',migrating),'001.sql\n002.sql\n003.sql\n004.sql\n005.sql\n');
+ // A newer main build with no new migration: the go-back is an update to the build before, by digest.
+ m.clear();
+ const updated=m.gtmworks(['update'],{extra:{MAIN_HEX:newer}});
+ ok(updated);
+ assert.equal(updated.stdout.trim().split('\n').at(-1),`To go back to main@sha256:${mainHex}: gtmworks update --version main@sha256:${mainHex}`);
+ assert.equal(m.file(`.gtmworks-main/${mainHex}/install.sh`),readFileSync(join(m.env.FIXTURE,'template-install.sh'),'utf8').replaceAll('@REF@',mainRef));
+ m.clear();
+ // main has moved on (MAIN_HEX is still the newer build): the command goes back to the exact one before.
+ ok(m.gtmworks(updated.stdout.trim().split('\n').at(-1).split(': gtmworks ')[1].split(' '),{extra:{MAIN_HEX:newer}}));
+ assert.deepEqual(m.installer(),[`${newer} backup ${join(m.dir,'backups')}`,`${mainHex} update`]);
+ assert.equal(m.file('.install-release'),`${mainRef}\n`);
+ assert.equal(m.file('.gtmworks-version'),'main\n');
+ // A newer main build that migrates: the go-back restores the backup with the build before, named by digest.
+ m.clear();
+ const migrated=m.gtmworks(['update'],{extra:{MAIN_HEX:migrating}});
+ ok(migrated);
+ const archive=join(m.dir,'backups/gtmworks-test.tgz');
+ assert.equal(migrated.stdout.trim().split('\n').at(-1),`To go back to main@sha256:${mainHex}: gtmworks restore '${archive}' --version main@sha256:${mainHex}`);
+ assert.doesNotMatch(migrated.stdout,/vX\.Y\.Z/);
+ m.clear();
+ ok(m.gtmworks(['restore',archive,'--version',`main@sha256:${mainHex}`,'--yes'],{extra:{MAIN_HEX:migrating}}));
+ assert.deepEqual(m.installer().slice(1),[`${mainHex} `,`${mainHex} restore ${archive}`,`${mainHex} update`]);
+ assert.equal(m.file('.install-release'),`${mainRef}\n`);
+ // A build whose files were not kept cannot be named.
+ const unknown=m.gtmworks(['update','--version',`main@sha256:${hex('7')}`]);
+ assert.equal(unknown.status,1);
+ assert.match(unknown.stderr,/are not kept in .*Nothing was changed\./);
+});
+
+test('for a zsh user the PATH line goes in ~/.zshenv, made when missing, which every zsh reads', t => {
+ const m=machine(t);
+ ok(m.line([],{extra:{SHELL:'/usr/bin/zsh'}}));
+ const pathLine='export PATH="$HOME/.local/bin:$PATH"';
+ const count=name=>readFileSync(join(m.home,name),'utf8').split('\n').filter(line=>line===pathLine).length;
+ assert.equal(count('.zshenv'),1);
+ assert.equal(count('.profile'),1);
+ ok(m.line([],{extra:{SHELL:'/usr/bin/zsh'}}));
+ assert.equal(count('.zshenv'),1,'not added twice');
+ // ZDOTDIR moves zsh's files; a bash user gets no zsh file.
+ const dot=machine(t);
+ mkdirSync(join(dot.home,'zdot'));
+ ok(dot.line([],{extra:{SHELL:'/bin/zsh',ZDOTDIR:join(dot.home,'zdot')}}));
+ assert.equal(readFileSync(join(dot.home,'zdot/.zshenv'),'utf8').includes(pathLine),true);
+ const bash=machine(t);
+ ok(bash.line([],{extra:{SHELL:'/bin/bash'}}));
+ assert.equal(existsSync(join(bash.home,'.zshenv')),false);
 });
 
 test('a repair refuses a recorded release older than the data, and changes nothing', t => {
@@ -510,6 +616,9 @@ test('gtmworks restore --version goes back: backs up the current data, makes the
  const firstChange=docker.findIndex(line=>/ (down|stop)$/.test(line)||/^volume rm /.test(line));
  assert.ok(docker.indexOf('run --rm -i alpine:3.21 tar -tzf -')>=0&&docker.indexOf('run --rm -i alpine:3.21 tar -tzf -')<firstChange);
  assert.ok(docker.findIndex(line=>/postgres --single/.test(line))<firstChange);
+ // The archive's settings, completed and validated by v1.2.3's own tool, also before anything stops.
+ const validated=docker.findIndex(line=>new RegExp(`^run --rm --env-file ${m.dir}/\\.gtmworks-download\\.\\w+/archive\\.complete ${ref('v1.2.3').replace(/[.]/g,'\\.')} node /app/install/lib/install-env\\.mjs validate complete$`).test(line));
+ assert.ok(validated>=0&&validated<firstChange,'settings validated by the target release before anything stops');
  assert.ok(docker.some(line=>/ down$/.test(line)),'the stack goes down, its volumes kept by compose');
  assert.equal(docker.filter(line=>/ down /.test(line)||/-v$/.test(line)).length,0);
  assert.ok(docker.includes('volume rm gtmworks-install_database gtmworks-install_database-config gtmworks-install_files'),'the agent engine volume is kept');
@@ -533,6 +642,7 @@ test('gtmworks restore --version checks the archive and asks before it replaces 
   [{ARCHIVE_ENTRIES:'var/lib/postgresql/data/\n../etc/passwd'},['--yes'],/is not a gtmworks backup: it holds an unsafe path: \.\.\/etc\/passwd\./],
   [{ARCHIVE_ENTRIES:'var/lib/postgresql/data/\nhome/x'},['--yes'],/it holds an entry no backup holds: home\/x\./],
   [{ARCHIVE_ENTRIES:'var/lib/postgresql/data/\netc/postgresql-custom/\n.env.install'},['--yes'],/not a complete gtmworks backup: it has no var\/lib\/storage\/\./],
+  [{ENV_INVALID:'1'},['--yes'],/SUPABASE_PUBLIC_URL must equal APP_ORIGIN\n.*The settings in .*old\.tgz \(its \.env\.install\) are not valid for gtmworks v1\.2\.3, for the reason above\. Nothing was changed\./],
   [{ARCHIVE_MIGRATIONS:'001.sql 002.sql 003.sql'},['--yes'],/old\.tgz holds migrations that gtmworks v1\.2\.3 does not carry \(002\.sql 003\.sql\): a later release made it\./],
  ];
  for(const [extra,flags,message] of cases) {
