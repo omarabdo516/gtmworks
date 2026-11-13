@@ -485,7 +485,9 @@ jobs:
           grep -F 'export PATH="$HOME/.local/bin:$PATH"' "$HOME/.profile" || fail 'the profile puts ~/.local/bin on the PATH'
           env -i HOME="$HOME" PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin DOCKER_HOST="$DOCKER_HOST" \
             sh -lc 'command -v gtmworks && gtmworks status' 2>&1 | tee "$RUNNER_TEMP/status.log" || fail 'gtmworks status from a new shell'
-          for service in $(compose config --services); do
+          services=$(compose config --services) || fail 'read the install services'
+          [[ -n $services ]] || fail 'the install names its services'
+          for service in $services; do
             grep -E "^$service +healthy" "$RUNNER_TEMP/status.log" || fail "gtmworks status reports $service healthy"
           done
           grep -Ex 'All [0-9]+ services are healthy\.' "$RUNNER_TEMP/status.log" || fail 'gtmworks status reports every service healthy'
@@ -531,9 +533,14 @@ jobs:
           probe 'after the failed update'
           owners=$(find "$dir" ! -user "$(id -u)")
           [[ -z $owners ]] || { echo "$owners"; fail 'every file still belongs to the user after the failed update'; }
-          # The printed command goes back to v0.0.0 with the data from before the update.
+          # The printed command goes back to v0.0.0 with the data from before the update; with no terminal to ask on, it
+          # replaces the current data only with --yes.
           back=$(sed -n 's/^To go back to v0\.0\.0: //p' "$RUNNER_TEMP/update.log")
-          { eval "$back" || fail 'the printed command goes back'; } 2>&1 | tee "$RUNNER_TEMP/go-back.log"
+          [[ -n $back ]] || fail 'the update printed the command to go back'
+          if eval "$back" < /dev/null > "$RUNNER_TEMP/go-back-unasked.log" 2>&1; then cat "$RUNNER_TEMP/go-back-unasked.log"; fail 'going back without --yes must ask first'; fi
+          grep -F 'Run it again with --yes to go on. Nothing was changed.' "$RUNNER_TEMP/go-back-unasked.log" || fail 'going back without --yes says how to go on'
+          [[ $(cat .install-release) == "$next" ]] || fail 'going back without --yes changed nothing'
+          { eval "$back --yes" || fail 'the printed command goes back'; } 2>&1 | tee "$RUNNER_TEMP/go-back.log"
           [[ $(cat .install-release) == "$first" && $(cat .gtmworks-version) == v0.0.0 ]] || fail 'back on v0.0.0'
           migrations | diff -u "$RUNNER_TEMP/one-line-migrations" - || fail 'the migrations of v0.0.0 again'
           [[ $(db -c "select name from public.companies where slug='one-line-probe'") == 'Kept by the line' ]] || fail 'the data from before the update'
@@ -542,6 +549,24 @@ jobs:
           gtmworks status || fail 'healthy after going back'
           owners=$(find "$dir" ! -user "$(id -u)")
           [[ -z $owners ]] || { echo "$owners"; fail 'every file belongs to the user after going back'; }
+          # One machine runs one install: the line refuses a second folder while this one runs, before changing anything.
+          fresh="$workspace/one-line-fresh"
+          cd "$workspace"
+          if line --dir "$fresh" > "$RUNNER_TEMP/second-dir.log" 2>&1; then cat "$RUNNER_TEMP/second-dir.log"; fail 'a second install folder must be refused'; fi
+          cat "$RUNNER_TEMP/second-dir.log"
+          grep -F "gtmworks already runs from $dir on this machine" "$RUNNER_TEMP/second-dir.log" || fail 'the refusal names the folder that runs gtmworks'
+          [[ ! -e $fresh ]] || fail 'the refused second folder was not created'
+          (cd "$dir" && [[ $(cat .install-release) == "$first" ]] && compose ps --status running -q web | grep -q .) || fail 'the first install still runs after the refusal'
+          # --version installs that release and not the latest: v0.0.0 into a fresh folder while v0.0.1 is the latest.
+          (cd "$dir" && compose down -v) || fail 'remove the one-line install'
+          echo '[{"tag_name":"v0.0.0"},{"tag_name":"v0.0.1"}]' > "$releases/releases.json"
+          { line --version v0.0.0 --dir "$fresh" || fail 'the one line with --version'; } 2>&1 | tee "$RUNNER_TEMP/one-line-version.log"
+          grep -Fx "Installing gtmworks v0.0.0 into $fresh." "$RUNNER_TEMP/one-line-version.log" || fail 'the --version run names v0.0.0'
+          grep -Fx "gtmworks v0.0.0: $first" "$RUNNER_TEMP/one-line-version.log" || fail 'the --version run names the v0.0.0 image'
+          cd "$fresh"
+          [[ $(cat .install-release) == "$first" && $(cat .gtmworks-version) == v0.0.0 ]] || fail 'the --version run records v0.0.0'
+          [[ $(web_image) == $(docker image inspect -f '{{.Id}}' "$first") ]] || fail 'the running web container is the v0.0.0 image'
+          probe 'after the --version run'
       - name: remove the isolated Docker machine
         if: ${{ always() }}
         run: docker rm -fv install-docker || true

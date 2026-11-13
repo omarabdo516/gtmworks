@@ -52,13 +52,22 @@ cp "$FIXTURE/migrations/\${release_image##*:}" "$DB_FILE"
 printf '%s\\n' "$release_image" > .install-release
 echo 'gtmworks is ready: http://localhost:3000/sign-in'
 `;
-const composeTemplate='services:\n  web:\n    image: @REF@\n  worker:\n    image: @REF@\n';
+const composeTemplate=`services:\n  db:\n    image: supabase/postgres:17@sha256:${'f'.repeat(64)}\n  web:\n    image: @REF@\n  worker:\n    image: @REF@\n`;
 
 const fakeDocker=`#!/bin/sh
 printf '%s\\n' "$*" >> "$DOCKER_LOG"
 case "$*" in
  'compose version --short') [ -z "\${COMPOSE_MISSING:-}" ] || exit 1; echo "\${COMPOSE_VERSION:-2.29.1}"; exit 0;;
  info) exit "\${INFO_EXIT:-0}";;
+ 'ps -a --filter label=com.docker.compose.project=gtmworks-install '*) [ -z "\${PROJECT_DIRS:-}" ] || printf '%s\\n' "$PROJECT_DIRS"; exit 0;;
+ 'run --rm -i alpine:3.21 tar -tzf -')
+  cat > /dev/null
+  if [ -n "\${ARCHIVE_ENTRIES:-}" ]; then printf '%s\\n' "$ARCHIVE_ENTRIES"
+  else printf '%s\\n' var/lib/postgresql/data/ var/lib/postgresql/data/PG_VERSION etc/postgresql-custom/ var/lib/storage/ .env.install; fi; exit 0;;
+ *'postgres --single'*)
+  [ "$8" = supabase/postgres:17@sha256:${'f'.repeat(64)} ] || exit 8
+  cat > /dev/null; [ -z "\${ARCHIVE_UNREADABLE:-}" ] || { echo 'ERROR:  relation "gtmworks_install.schema_migrations" does not exist'; exit 0; }
+  printf '\\t 1: migrations = "%s"\\t(typeid = 25, len = -1, typmod = -1, byval = f)\\n' "\${ARCHIVE_MIGRATIONS-001.sql}"; exit 0;;
  pull\\ *) echo "Digest: \${2##*@}"; exit 0;;
  'image inspect'*) printf 'mirror.example/gtmworks@sha256:%s\\nghcr.io/${repo}@sha256:%s\\n' "$MAIN_HEX" "$MAIN_HEX"; exit 0;;
  *release-assets.mjs*)
@@ -84,7 +93,8 @@ out= url=
 while [ $# -gt 0 ]; do case "$1" in -o) out=$2; shift;; --retry) shift;; -*) ;; *) url=$1;; esac; shift; done
 printf '%s\\n' "$url" >> "$CURL_LOG"
 case "$url" in
- 'https://api.github.com/repos/${repo}/releases?per_page=100') src=$FIXTURE/releases.json;;
+ 'https://api.github.com/repos/${repo}/releases?per_page=100&page=1'|'https://api.github.com/repos/${repo}/releases?per_page=100') src=$FIXTURE/releases.json;;
+ 'https://api.github.com/repos/${repo}/releases?per_page=100&page='*) src=$FIXTURE/releases-\${url##*page=}.json; [ -f "$src" ] || { echo '[]'; exit 0; };;
  https://github.com/${repo}/releases/download/*) src=$FIXTURE/\${url#https://github.com/${repo}/releases/download/};;
  https://raw.githubusercontent.com/${repo}/main/scripts/get.sh) src=$GET_SOURCE;;
  file://*) src=\${url#file://};;
@@ -131,7 +141,7 @@ const ok=(result,label='')=>assert.equal(result.status,0,`${label}\n${result.std
 test('options: each wrong one stops with usage before Docker, curl or any folder is touched', t => {
  const m=machine(t);
  for(const args of [['--version','1.2.3'],['--version','v1.2'],['--version=v1.2.3-rc1'],['--channel','beta'],['--version','v1.2.3','--channel','main'],
-  ['--no-backup'],['status','--version','v1.2.3'],['backup','--channel','main'],['restore'],['frobnicate'],['--dir'],['--bogus'],['update','extra'],['status','--no-backup']]) {
+  ['--no-backup'],['status','--version','v1.2.3'],['backup','--channel','main'],['restore'],['frobnicate'],['--dir'],['--bogus'],['update','extra'],['status','--no-backup'],['update','--yes']]) {
   const result=m.line(args);
   assert.equal(result.status,2,`${args.join(' ')}: ${result.stderr}`);
   assert.match(result.stderr,/Usage:/,args.join(' '));
@@ -149,7 +159,7 @@ test('the line installs the highest published vX.Y.Z by default, --version that 
  const latest=m.line();
  ok(latest);
  const urls=m.curl().split('\n');
- assert.equal(urls[0],`https://api.github.com/repos/${repo}/releases?per_page=100`);
+ assert.equal(urls[0],`https://api.github.com/repos/${repo}/releases?per_page=100&page=1`);
  for(const file of ['docker-compose.install.yml','install.sh']) assert.ok(urls.includes(`https://github.com/${repo}/releases/download/v1.10.0/${file}`),file);
  assert.match(latest.stdout,new RegExp(`^Installing gtmworks v1\\.10\\.0 into ${m.dir}\\.$`,'m'));
  assert.match(latest.stdout,new RegExp(`^gtmworks v1\\.10\\.0: ${ref('v1.10.0').replace(/[.]/g,'\\.')}$`,'m'));
@@ -358,14 +368,128 @@ test('a failed update puts the previous release back when its migrations rolled 
  const applied=m.gtmworks(['update','--version','v1.3.0','--no-backup'],{extra:{FAIL_REF:ref('v1.3.0'),FAIL_AFTER_MIGRATE:'1'}});
  assert.equal(applied.status,3);
  assert.deepEqual(m.installer(),[`${hex('b')} update`]);
- assert.match(applied.stderr,/gtmworks update --version v1\.3\.0 --no-backup to finish it/);
  assert.equal(m.file('install.sh'),readFileSync(join(m.env.FIXTURE,'v1.3.0/install.sh'),'utf8'));
+ // The data may now be v1.3.0's: the install is recorded as v1.3.0, so the advised command finishes v1.3.0 and never
+ // puts v1.2.3 back on it.
+ assert.equal(m.file('.gtmworks-version'),'v1.3.0\n');
+ const advised=applied.stderr.match(/run (gtmworks [^\n]*?) to finish it\./);
+ assert.ok(advised,applied.stderr);
+ m.clear();
+ const finished=m.gtmworks(advised[1].split(' ').slice(1));
+ ok(finished,advised[1]);
+ assert.match(finished.stdout,/^Repairing gtmworks v1\.3\.0 in /m);
+ assert.deepEqual(m.installer(),[`${hex('b')} `]);
+ assert.equal(m.file('.install-release'),`${ref('v1.3.0')}\n`);
+ assert.equal(m.file('.gtmworks-version'),'v1.3.0\n');
  // Files that are not the running release's are repaired before any update.
  m.clear();
+ rmSync(join(m.dir,'.install-release'));
  const unfinished=m.gtmworks(['update']);
  assert.equal(unfinished.status,1);
  assert.match(unfinished.stderr,/an install or update did not finish\. Repair it first with: gtmworks install/);
  assert.deepEqual(m.installer(),[]);
+});
+
+test('a repair refuses a recorded release older than the data, and changes nothing', t => {
+ const m=machine(t);
+ ok(m.line());
+ // The state a failed update left before: the data is v1.10.0's, the record names v1.2.3.
+ writeFileSync(join(m.dir,'.gtmworks-version'),'v1.2.3\n');
+ const before=['install.sh','docker-compose.install.yml','.install-release','.env.install'].map(name=>m.file(name));
+ m.clear();
+ const refused=m.gtmworks(['install']);
+ assert.equal(refused.status,1);
+ assert.match(refused.stderr,/gtmworks v1\.2\.3 is older than the data in .*\(002\.sql 003\.sql\)\. Nothing was changed\./);
+ assert.deepEqual(m.installer(),[]);
+ assert.deepEqual(['install.sh','docker-compose.install.yml','.install-release','.env.install'].map(name=>m.file(name)),before);
+});
+
+test('an install with data and no recorded release: older is refused, another release is an update that backs up', t => {
+ const m=machine(t);
+ // A release installed by hand (#49): its files, its data, no .gtmworks-version.
+ ok(m.line());
+ rmSync(join(m.dir,'.gtmworks-version'));
+ const before=['install.sh','docker-compose.install.yml','.install-release','.env.install'].map(name=>m.file(name));
+ m.clear();
+ const older=m.line(['--version','v1.2.3']);
+ assert.equal(older.status,1);
+ assert.match(older.stderr,/gtmworks v1\.2\.3 is older than the data in .*\(002\.sql 003\.sql\)\. Nothing was changed\./);
+ assert.deepEqual(m.installer(),[]);
+ assert.deepEqual(['install.sh','docker-compose.install.yml','.install-release','.env.install'].map(name=>m.file(name)),before);
+ assert.equal(m.file('.gtmworks-version'),'');
+ // A first install that did not finish (no .install-release): older is refused there too.
+ rmSync(join(m.dir,'.install-release'));
+ const unfinished=m.line(['--version','v1.2.3']);
+ assert.equal(unfinished.status,1);
+ assert.match(unfinished.stderr,/is older than the data/);
+ assert.deepEqual(m.installer(),[]);
+
+ const old=machine(t);
+ ok(old.line(['--version','v1.2.3']));
+ rmSync(join(old.dir,'.gtmworks-version'));
+ old.clear();
+ // The latest release is an update: the running release's installer backs up, the new one updates.
+ const moved=old.line();
+ ok(moved);
+ assert.deepEqual(old.installer(),[`${hex('a')} backup ${join(old.dir,'backups')}`,`${hex('c')} update`]);
+ assert.match(moved.stdout,/^Backup: .*gtmworks-test\.tgz$/m);
+ assert.equal(old.file('.gtmworks-version'),'v1.10.0\n');
+ assert.equal(old.file('.install-release'),`${ref('v1.10.0')}\n`);
+ // The release it runs, named, is a repair that records it.
+ rmSync(join(old.dir,'.gtmworks-version'));
+ old.clear();
+ ok(old.line(['--version','v1.10.0']));
+ assert.deepEqual(old.installer(),[`${hex('c')} `]);
+ assert.equal(old.file('.gtmworks-version'),'v1.10.0\n');
+});
+
+test('a second install folder is refused while another folder runs gtmworks on this machine', t => {
+ const m=machine(t);
+ const other=join(m.root,'first-install');
+ const refused=m.line(['--dir',join(m.root,'second')],{extra:{PROJECT_DIRS:other}});
+ assert.equal(refused.status,1);
+ assert.match(refused.stderr,new RegExp(`gtmworks already runs from ${other} on this machine.*Nothing was changed\\.`));
+ assert.equal(existsSync(join(m.root,'second')),false);
+ assert.equal(m.curl(),'');
+ assert.deepEqual(readdirSync(m.home),[]);
+ // Its own folder, and no other: a repair goes on.
+ ok(m.line());
+ m.clear();
+ ok(m.line([],{extra:{PROJECT_DIRS:m.dir}}));
+ for(const args of [['update'],['backup'],['restore','x.tgz','--version','v1.2.3','--yes']]) {
+  writeFileSync(join(m.work,'x.tgz'),'archive');
+  m.clear();
+  const taken=m.gtmworks(args,{extra:{PROJECT_DIRS:`${m.dir}\n${other}`}});
+  assert.equal(taken.status,1,args.join(' '));
+  assert.match(taken.stderr,/already runs from/,args.join(' '));
+  assert.deepEqual(m.installer(),[],args.join(' '));
+ }
+});
+
+test('--channel stable on a main install is a request to move, refused with the update that does it', t => {
+ const m=machine(t);
+ ok(m.line(['--channel','main']));
+ m.clear();
+ const refused=m.line(['--channel','stable']);
+ assert.equal(refused.status,1);
+ assert.match(refused.stderr,/runs gtmworks main\. To move it to the latest stable release, run: gtmworks update --channel stable\. Nothing was changed\./);
+ assert.deepEqual(m.installer(),[]);
+ assert.equal(m.file('.gtmworks-version'),'main\n');
+ // On a stable install it names the channel it is on: a repair.
+ const stable=machine(t);
+ ok(stable.line(['--version','v1.3.0']));
+ stable.clear();
+ ok(stable.line(['--channel','stable']));
+ assert.deepEqual(stable.installer(),[`${hex('b')} `]);
+});
+
+test('the latest release is read from every page of GitHub Releases, not only the first 100', t => {
+ const m=machine(t,{list:Array.from({length:100},(_,index)=>`v0.0.${index}`)});
+ writeFileSync(join(m.env.FIXTURE,'releases-2.json'),JSON.stringify([{tag_name:'v1.10.0'},{tag_name:'v1.2.3'}]));
+ const latest=m.line();
+ ok(latest);
+ assert.match(latest.stdout,/^Installing gtmworks v1\.10\.0 into /m);
+ assert.deepEqual(m.curl().split('\n').filter(url=>/api\.github\.com/.test(url)),[1,2].map(page=>`https://api.github.com/repos/${repo}/releases?per_page=100&page=${page}`));
 });
 
 test('gtmworks restore --version goes back: backs up the current data, makes the install anew and restores the archive', t => {
@@ -377,15 +501,67 @@ test('gtmworks restore --version goes back: backs up the current data, makes the
  ok(m.gtmworks(['restore',archive]));
  assert.deepEqual(m.installer(),[`${hex('c')} restore ${archive}`]);
  m.clear();
- const back=m.gtmworks(['restore',archive,'--version','v1.2.3']);
+ const back=m.gtmworks(['restore',archive,'--version','v1.2.3','--yes']);
  ok(back);
- assert.deepEqual(m.installer(),[`${hex('c')} backup ${join(m.dir,'backups')}`,`${hex('a')} `,`${hex('a')} restore ${archive}`]);
+ // After the restore, v1.2.3's update applies its migrations the archive predates.
+ assert.deepEqual(m.installer(),[`${hex('c')} backup ${join(m.dir,'backups')}`,`${hex('a')} `,`${hex('a')} restore ${archive}`,`${hex('a')} update`]);
  const docker=m.docker().split('\n');
+ // The archive is read before anything stops: its entries, then the migrations its database applied.
+ const firstChange=docker.findIndex(line=>/ (down|stop)$/.test(line)||/^volume rm /.test(line));
+ assert.ok(docker.indexOf('run --rm -i alpine:3.21 tar -tzf -')>=0&&docker.indexOf('run --rm -i alpine:3.21 tar -tzf -')<firstChange);
+ assert.ok(docker.findIndex(line=>/postgres --single/.test(line))<firstChange);
  assert.ok(docker.some(line=>/ down$/.test(line)),'the stack goes down, its volumes kept by compose');
  assert.equal(docker.filter(line=>/ down /.test(line)||/-v$/.test(line)).length,0);
  assert.ok(docker.includes('volume rm gtmworks-install_database gtmworks-install_database-config gtmworks-install_files'),'the agent engine volume is kept');
  assert.equal(m.file('.gtmworks-version'),'v1.2.3\n');
  assert.match(back.stdout,/The data from before is in .*gtmworks-test\.tgz\./);
+});
+
+test('gtmworks restore --version checks the archive and asks before it replaces anything', t => {
+ const m=machine(t);
+ ok(m.line());
+ const archive=join(m.root,'old.tgz');
+ writeFileSync(archive,'archive');
+ const nothingChanged=(result,label)=>{
+  assert.equal(result.status,1,label);
+  assert.match(result.stderr,/Nothing was changed\./,label);
+  assert.deepEqual(m.installer(),[],label);
+  assert.doesNotMatch(m.docker(),/ down$|^volume rm |^compose .* stop/m,label);
+ };
+ const cases=[
+  [{},[],/This replaces the data of the gtmworks install in .* with the data in .*old\.tgz, and runs gtmworks v1\.2\.3 on it\..* Run it again with --yes to go on\./],
+  [{ARCHIVE_ENTRIES:'var/lib/postgresql/data/\n../etc/passwd'},['--yes'],/is not a gtmworks backup: it holds an unsafe path: \.\.\/etc\/passwd\./],
+  [{ARCHIVE_ENTRIES:'var/lib/postgresql/data/\nhome/x'},['--yes'],/it holds an entry no backup holds: home\/x\./],
+  [{ARCHIVE_ENTRIES:'var/lib/postgresql/data/\netc/postgresql-custom/\n.env.install'},['--yes'],/not a complete gtmworks backup: it has no var\/lib\/storage\/\./],
+  [{ARCHIVE_MIGRATIONS:'001.sql 002.sql 003.sql'},['--yes'],/old\.tgz holds migrations that gtmworks v1\.2\.3 does not carry \(002\.sql 003\.sql\): a later release made it\./],
+ ];
+ for(const [extra,flags,message] of cases) {
+  m.clear();
+  const refused=m.gtmworks(['restore',archive,'--version','v1.2.3',...flags],{extra});
+  assert.match(refused.stderr,message,JSON.stringify(extra));
+  nothingChanged(refused,JSON.stringify(extra));
+ }
+ // An archive whose migrations cannot be read is not taken for one with none.
+ m.clear();
+ const unread=m.gtmworks(['restore',archive,'--version','v1.2.3','--yes'],{extra:{ARCHIVE_UNREADABLE:'1'}});
+ assert.match(unread.stderr,/Could not read the migrations in .*old\.tgz\./);
+ nothingChanged(unread,'unreadable');
+});
+
+test('gtmworks restore finds backups/<name> in the install folder when the current folder has none', t => {
+ const m=machine(t);
+ ok(m.line());
+ mkdirSync(join(m.dir,'backups'));
+ writeFileSync(join(m.dir,'backups/gtmworks-1.tgz'),'archive');
+ m.clear();
+ ok(m.gtmworks(['restore','backups/gtmworks-1.tgz']));
+ assert.deepEqual(m.installer(),[`${hex('c')} restore ${join(m.dir,'backups/gtmworks-1.tgz')}`]);
+ // One in the current folder is the one meant.
+ mkdirSync(join(m.work,'backups'));
+ writeFileSync(join(m.work,'backups/gtmworks-1.tgz'),'mine');
+ m.clear();
+ ok(m.gtmworks(['restore','backups/gtmworks-1.tgz']));
+ assert.deepEqual(m.installer(),[`${hex('c')} restore ${join(m.work,'backups/gtmworks-1.tgz')}`]);
 });
 
 test('gtmworks status reports every service and fails when one is not healthy', t => {
@@ -435,7 +611,21 @@ test('CI runs the one line twice, gtmworks status from a new shell, an update, a
   /\[\[ \$\(compose ps -q web\) == "\$old_web" \]\]/,
   /to_regclass\('public\.update_should_rollback'\) is null/,
   /eval "\$back"/,
+  /services=\$\(compose config --services\) \|\| fail [^\n]*\n\s*\[\[ -n \$services \]\] \|\| fail [^\n]*\n\s*for service in \$services; do/,
+  /if eval "\$back" < \/dev\/null > [^\n]*; then [^\n]*fail 'going back without --yes must ask first'/,
+  /eval "\$back --yes" \|\| fail/,
+  /if line --dir "\$fresh" > [^\n]*; then [^\n]*fail 'a second install folder must be refused'/,
+  /\[\[ ! -e \$fresh \]\]/,
+  /line --version v0\.0\.0 --dir "\$fresh" \|\| fail/,
+  /grep -Fx "Installing gtmworks v0\.0\.0 into \$fresh\."/,
+  /\[\[ \$\(web_image\) == \$\(docker image inspect -f '\{\{\.Id\}\}' "\$first"\) \]\]/,
  ]) assert.match(run,pattern);
+ // The per-service loop reads a list it checked is not empty.
+ assert.doesNotMatch(run,/for service in \$\(compose config --services\)/);
+ // The --version run names a release that is not the latest, in a folder of its own, after the first install is gone.
+ const versionRun=run.indexOf('line --version v0.0.0 --dir "$fresh"');
+ assert.ok(versionRun>run.lastIndexOf('compose down -v'));
+ assert.ok(run.lastIndexOf(`'[{"tag_name":"v0.0.0"},{"tag_name":"v0.0.1"}]'`,versionRun)>run.indexOf('eval "$back --yes"'));
  // The failing update runs after the successful one, and the refusal reads back the running image and migrations.
  assert.ok(run.indexOf('--version v0.0.2')>run.indexOf("gtmworks update || fail"));
  assert.match(run,/\[\[ \$\(web_image\) == "\$image" && \$\(cat \.install-release\) == "\$next"/);
