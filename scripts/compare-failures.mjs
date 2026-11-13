@@ -2,18 +2,53 @@
 // Pure functions first (unit tests in tests/compare-failures.test.mjs); the command line at the bottom does the file work.
 import { existsSync, readFileSync, writeFileSync, appendFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
+import { otherInvocations, reportState, withoutFinalOutcome } from './playwright-journal.mjs';
 
 export const COMMENT_MARKER = '<!-- ci-main-failures -->';
 
+// The journal's unknown cases of an interrupted run, counted per identity (project, file relative to the test root, line,
+// full title), for Playwright's own report only: its JSON calls a test whose first attempt failed and whose retry never
+// finished "unexpected" (the cut-off retry shows as "interrupted" or "skipped"), and one still awaiting its retry too.
+// A report the journal built already says "unknown", and a report without the journal field (a complete run, an older
+// one) is read as before. Repetitions share one identity in Playwright's JSON, which has no repeat index, so they are
+// counted, never matched by index.
+const identityOf = (project, file, line, title) => JSON.stringify([project ?? '', file ?? '', line ?? null, title ?? '']);
+function journalUnknowns(report) {
+  const main = report?.execution?.invocations?.main;
+  if (report?.source === 'journal' || reportState(report) !== 'interrupted' || !Array.isArray(main?.unknownCases)) return null;
+  const prefix = main.root ? `${main.root}/` : '';
+  const unknowns = new Map();
+  for (const c of main.unknownCases) {
+    const kind = c.outcome === 'interrupted' ? 'cutOff' : c.outcome === 'retry-pending' ? 'pending' : null;
+    if (!kind) continue;
+    const key = identityOf(c.project, c.file?.startsWith(prefix) ? c.file.slice(prefix.length) : c.file, c.line, c.title);
+    if (!unknowns.has(key)) unknowns.set(key, { cutOff: 0, pending: 0 });
+    unknowns.get(key)[kind] += 1;
+  }
+  return unknowns;
+}
+
 // Every test of a Playwright JSON report that finished red, as a stable name: project, file and the full title path.
+// In Playwright's own report from an interrupted run, a red test the journal names as unknown is not a final failure:
+// - its last attempt was cut off ("interrupted" or "skipped" after a failure) and the journal has that identity as
+//   interrupted;
+// - or it failed with a retry left and the journal has that identity as awaiting its retry.
+// Each journal unknown accounts for at most one red test of its own kind, so a different repetition's real failure, or
+// a test that differs in project, file, line or title, keeps its name.
 export function failedTests(report) {
   const names = new Set();
+  const unknowns = journalUnknowns(report);
   const walk = (suite, titles) => {
     const path = suite.title && suite.title !== suite.file ? [...titles, suite.title] : titles;
     for (const spec of suite.specs ?? []) {
       for (const test of spec.tests ?? []) {
         const red = test.status === 'unexpected' || (!test.status && (test.results ?? []).some((r) => r.status === 'failed' || r.status === 'timedOut'));
-        if (red) names.add([test.projectName, spec.file ?? suite.file, ...path, spec.title].filter(Boolean).join(' › '));
+        if (!red) continue;
+        const left = unknowns?.get(identityOf(test.projectName, spec.file ?? suite.file, spec.line, [...path, spec.title].join(' › ')));
+        const cutOff = ['interrupted', 'skipped'].includes(test.results?.at(-1)?.status);
+        if (left && cutOff && left.cutOff > 0) { left.cutOff -= 1; continue; }
+        if (left && !cutOff && left.pending > 0) { left.pending -= 1; continue; }
+        names.add([test.projectName, spec.file ?? suite.file, ...path, spec.title].filter(Boolean).join(' › '));
       }
     }
     for (const child of suite.suites ?? []) walk(child, path);
@@ -23,30 +58,56 @@ export function failedTests(report) {
 }
 
 // pr, main: parsed reports; main is null when the main run saved no report. A renamed test has a new name, so it counts as the PR's own.
+// A report from a run that stopped early (scripts/playwright-journal.mjs) lists only the failures it observed: it is named
+// incomplete, and a test missing from it proves nothing. So against an incomplete main, a PR failure main never showed
+// is unknown on main, never the PR's own.
 export function compareFailures(pr, main) {
   const prFailures = failedTests(pr);
-  if (pr?.notRun) return { prNotRun: true, mainReport: false, inherited: [], own: [] };
-  if (!main || main.notRun) return { mainReport: false, inherited: [], own: prFailures };
+  if (reportState(pr) === 'not-started') {
+    const others = otherInvocations(pr);
+    return others.length ? { prMainNotStarted: true, prOtherInvocations: others, mainReport: false, inherited: [], own: [] } : { prNotRun: true, mainReport: false, inherited: [], own: [] };
+  }
+  const prMain = pr?.execution?.invocations?.main;
+  const prIncomplete = reportState(pr) === 'interrupted' ? { prIncomplete: true, prSelected: prMain.selected, prUnknown: prMain.unknown, prUnrecorded: prMain.unrecordedSelected ?? null } : {};
+  if (!main || reportState(main) === 'not-started') return { mainReport: false, inherited: [], own: prFailures, ...prIncomplete };
   const onMain = new Set(failedTests(main));
+  const unmatched = prFailures.filter((name) => !onMain.has(name));
+  const mainIncomplete = reportState(main) === 'interrupted';
   return {
     mainReport: true,
+    ...(mainIncomplete ? { mainIncomplete: true, unknownOnMain: unmatched } : {}),
     inherited: prFailures.filter((name) => onMain.has(name)),
-    own: prFailures.filter((name) => !onMain.has(name)),
+    own: mainIncomplete ? [] : unmatched,
+    ...prIncomplete,
   };
 }
 
 const list = (names) => names.map((name) => `- ${name}`).join('\n');
 
 export function renderMarkdown(result, mainRunUrl) {
-  const { inherited, own, mainReport, prNotRun } = result;
+  const { inherited, own, unknownOnMain, mainReport, mainIncomplete, prNotRun, prMainNotStarted, prOtherInvocations, prIncomplete, prSelected, prUnknown, prUnrecorded } = result;
   const lines = ['## Failing tests'];
   if (prNotRun) {
     lines.push('', 'Playwright did not run in this CI run: an earlier step failed. No test failed and none passed here; fix that step first.');
     return lines.join('\n') + '\n';
   }
+  if (prMainNotStarted) {
+    lines.push('', 'The main Playwright suite did not start in this CI run, so it has no outcome here. Another Playwright invocation did run first; execution.json in the playwright-report artifact holds its record:', '', list(prOtherInvocations));
+    return lines.join('\n') + '\n';
+  }
+  if (prIncomplete) {
+    // Known identities without an outcome (interrupted, awaiting a retry, never started) are kept apart from selected
+    // cases whose identity was never written; before selection the count itself is unknown.
+    const unknown = withoutFinalOutcome({ unknown: prUnknown, unrecordedSelected: prUnrecorded });
+    const of = prSelected === null ? 'The selected cases are unknown' : `${unknown} of ${prSelected} selected cases have no final outcome`;
+    const unrecorded = prUnrecorded === null ? '' : `, ${prUnrecorded} selected but never recorded by name`;
+    lines.push('', `Playwright stopped before it finished in this CI run. ${of} (${prUnknown.interrupted} interrupted, ${prUnknown.retryPending} awaiting a retry, ${prUnknown.notStarted} never started${unrecorded}; execution.json in the playwright-report artifact names the recorded ones). Only the failures it observed are listed; a test missing from them is not shown to pass.`);
+  }
   if (!mainReport) lines.push('', `The latest completed run on main saved no usable Playwright report${mainRunUrl ? ` (${mainRunUrl})` : ''}, so nothing can be named as inherited. All failures are listed as this PR\'s own.`);
+  else if (mainIncomplete) lines.push('', `The latest completed run on main stopped before Playwright finished (${mainRunUrl}): only the failures it observed can be named as inherited, and the rest are unknown on main.`);
   else lines.push('', `Compared with the latest completed run on main: ${mainRunUrl}`);
   lines.push('', `### Inherited from main (${inherited.length})`, '', inherited.length ? list(inherited) : 'None.');
+  if (mainIncomplete) lines.push('', `### Unknown on main (${unknownOnMain.length})`, '', 'The run on main stopped before these had an outcome there, so they are neither inherited nor shown to be this PR\'s own.', '', unknownOnMain.length ? list(unknownOnMain) : 'None.');
   lines.push('', `### This PR's own (${own.length})`, '', own.length ? list(own) : 'None.');
   return lines.join('\n') + '\n';
 }
@@ -63,7 +124,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const pr = readReport(prPath);
   if (!pr) { console.log('No Playwright report for this run; nothing to compare.'); process.exit(0); }
   const result = compareFailures(pr, readReport(mainPath));
-  if (!result.prNotRun && !result.inherited.length && !result.own.length) { console.log('No failing Playwright tests; nothing to post.'); process.exit(0); }
+  if (!result.prNotRun && !result.prMainNotStarted && !result.prIncomplete && !result.inherited.length && !result.own.length && !result.unknownOnMain?.length) { console.log('No failing Playwright tests; nothing to post.'); process.exit(0); }
   const body = renderMarkdown(result, mainRunUrl);
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, body);
   writeFileSync(commentPath, `${COMMENT_MARKER}\n${body}`);

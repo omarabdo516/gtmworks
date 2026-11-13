@@ -103,18 +103,21 @@ jobs:
           path: test-results/screenshots/
           if-no-files-found: ignore
           retention-days: 14
-      - name: mark Playwright as not run when no report exists
+      # Playwright writes results.json only when a suite finishes; each invocation also appends a journal line by line
+      # (docs/ci-test-journal.md). ci.sh can stop on an earlier step, or the job can be cancelled mid-suite: results.json
+      # then says notRun only when no suite started, and otherwise records the run as interrupted with its unknown cases.
+      - name: record what Playwright selected and observed
         if: always()
-        run: |
-          # ci.sh can stop on an earlier step; the artifact then says so instead of being missing.
-          mkdir -p playwright-report
-          [[ -f playwright-report/results.json ]] || echo '{"notRun":true,"suites":[]}' > playwright-report/results.json
+        run: node scripts/playwright-journal.mjs playwright-report
       - name: upload Playwright report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
-          path: playwright-report/results.json
+          path: |
+            playwright-report/results.json
+            playwright-report/execution.json
+            playwright-report/journal-*.jsonl
           if-no-files-found: error
           retention-days: 30
 

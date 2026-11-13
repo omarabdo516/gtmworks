@@ -7,7 +7,8 @@ export default defineConfig({
   testMatch: '*.spec.ts',
   timeout: 90000,
   workers: 1,
-  reporter: 'list',
+  // Its own journal (docs/ci-test-journal.md), kept apart from the main suite's.
+  reporter: [['list'], ['./scripts/playwright-journal-reporter.mjs', { invocation: 'proxy', outputFile: 'playwright-report/journal-proxy.jsonl' }]],
   use: { baseURL: `https://${host}`, ignoreHTTPSErrors: true, launchOptions: { args: [`--host-resolver-rules=MAP ${host} 127.0.0.1`] } },
   webServer: {
     command: 'bash scripts/proxy-stack.sh',
