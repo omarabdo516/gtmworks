@@ -129,14 +129,16 @@ test('Waiting on you lists an Agent question and an item of a new kind, each ope
  const stamp=Date.now(), conversation=`62000000-0000-4000-8000-${String(stamp).slice(-12).padStart(12,'0')}`;
  await signIn(page,'manager@example.com','/c/rs-learning/approvals');
  const deliveries=Number(rows(`select count(*)::int as n from public.webhook_deliveries`)[0].n);
+ // Mail sent by earlier tests (an invite) may already be in the local mailbox; only a change counts.
+ const mailCount=async()=>{const mail=await (await page.request.get('http://127.0.0.1:54324/api/v1/messages')).json(); return Number(mail.total ?? mail.messages?.length ?? 0);};
+ const mailBefore=await mailCount();
  query(`insert into public.conversations(id,company_id,person_id,agent_name) values ('${conversation}','${rs}','${manager}','Lead')`);
  query(`select public.add_waiting_item('${rs}','${manager}','question','Which offer goes first ${stamp}?','',null,'${conversation}','Lead')`);
  query(`select public.add_waiting_item('${rs}','${manager}','test_kind','A new kind ${stamp}','Seeded by the test',1)`);
  query(`select public.add_waiting_item('${rs}','${omar}','test_kind','For Omar only ${stamp}','',1)`);
  // Nothing leaves gtmworks: no webhook delivery and no mail.
  expect(Number(rows(`select count(*)::int as n from public.webhook_deliveries`)[0].n)).toBe(deliveries);
- const mail=await (await page.request.get('http://127.0.0.1:54324/api/v1/messages')).json();
- expect(mail.messages?.length ?? 0).toBe(0);
+ expect(await mailCount()).toBe(mailBefore);
  await page.goto('/c/rs-learning/approvals');
  const waiting=page.locator('.col[data-column="waiting"]');
  const question=waiting.locator('.mcard').filter({hasText:`Which offer goes first ${stamp}?`});

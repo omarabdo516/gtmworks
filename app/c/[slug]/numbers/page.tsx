@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase';
 import Shell from '@/app/shell';
 import { approvalQueue } from '@/lib/approval-queue';
 import { localeFor } from '@/lib/i18n.mjs';
-import { feedSince, formatFigure, numbersTiles, parsePeriod, type AppReading } from '@/lib/numbers.mjs';
+import { feedSince, formatFigure, parsePeriod, readNumbers } from '@/lib/numbers.mjs';
 import type { LogRow } from '@/lib/activity-log.mjs';
 import { FeedWhen } from '../log/log-client';
 import { WhoFace, entryLine, logColumns, logPeople, whoOf } from '../log/entries';
@@ -15,9 +15,8 @@ import { PageIcon, SystemMark } from '../log/icons';
 
 // The Numbers page (#35, design-reference: renderDashboard). The four figures, the leads chart and the channel table
 // are read only from the Company's connected apps; "Waiting for your approval" and "What the agents did this week" are
-// gtmworks's own records. Connecting apps arrives with Settings: apps (#30); until then no app is connected, so the
-// app figures show the empty state and no number.
-const connectedReadings:AppReading[]=[];
+// gtmworks's own records. The app figures are read through readNumbers (lib/numbers.mjs); connecting apps arrives with
+// Settings: apps (#30), and until then no app is connected, so they show the empty state and no number.
 
 export default async function NumbersPage({params,searchParams}:{params:Promise<{slug:string}>,searchParams:Promise<{period?:string}>}) {
  const {t,language}=await getI18n(); const {slug}=await params; const period=parsePeriod((await searchParams).period);
@@ -36,7 +35,7 @@ export default async function NumbersPage({params,searchParams}:{params:Promise<
  const people=await logPeople(db,company.id,[...feed.flatMap(row=>row.card_id!=null?[row.card_id]:[]),...items.flatMap(item=>item.card_id!=null?[item.card_id]:[])]);
  const {data:submitters}=cards.length?await db.from('work_cards').select('id,review_submitter').eq('company_id',company.id).in('id',cards.map(card=>card.id)):{data:[]};
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
- const {connected,tiles}=numbersTiles(connectedReadings,period);
+ const {connected,tiles}=await readNumbers({company:company.id,period});
  const periodLabel=t(period==='7'?'numbersLast7':'numbersLast30');
  const writer=membership?.role!=='viewer';
  const locale=localeFor(language);

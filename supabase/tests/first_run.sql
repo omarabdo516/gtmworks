@@ -21,7 +21,7 @@ select is((select count(*)::int from auth.users),1,'the existing Auth user is ke
 select ok((select language='ar' and name='First owner' from public.people where id='90000000-0000-0000-0000-000000000238'),'the Auth user becomes a person in the chosen language');
 select ok((select slug ~ '^first-company-[a-f0-9]{8}$' and name='First Company' from public.companies),'the first company has its Home slug');
 select ok((select role='owner' and grant_publishing and grant_money_figures and grant_customer_data and removed_at is null from public.members where person_id='90000000-0000-0000-0000-000000000238'),'the new owner has all company grants');
-select is((select count(*)::int from public.work_stages),9,'the company trigger creates the workflow');
+select is((select count(*)::int from public.work_stages),10,'the company trigger creates the workflow with Done (ADR 0013)');
 select is((select count(*)::int from public.approval_steps where role='owner'),1,'the company trigger creates the Owner approval step');
 select is((select count(*)::int from public.member_audit where person_id='90000000-0000-0000-0000-000000000238' and action='INSERT'),1,'the membership trigger records the first owner');
 select * from finish();

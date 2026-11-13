@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { feedSince, formatFigure, numbersTiles, parsePeriod } from '../lib/numbers.mjs';
+import { connectedApps, feedSince, formatFigure, numbersTiles, parsePeriod, readNumbers } from '../lib/numbers.mjs';
 import { i18n } from '../lib/i18n.mjs';
 
 // The Numbers page (#35): every figure comes from a connected app and names its source and period.
@@ -29,6 +29,21 @@ test('each figure is read from the fake app source, with its source and period',
  // The other period reads only its own readings.
  const month = Object.fromEntries(numbersTiles(fakeApps, '30').tiles.map(tile => [tile.name, tile]));
  assert.deepEqual([month.spend.value, month.costPerLead.value, month.revenue.value], [5000, 50, null]);
+});
+
+test('the page reads its figures through the app source, and only the asked period', async () => {
+ const asked = [];
+ const source = async request => { asked.push(request); return fakeApps; };
+ const { connected, tiles } = await readNumbers({ company: 'c1', period: '30', source });
+ assert.deepEqual(asked, [{ company: 'c1', period: '30' }]);
+ assert.equal(connected, true);
+ assert.deepEqual(tiles.map(tile => [tile.name, tile.value, tile.sources, tile.period]), [['spend', 5000, ['Fake Ads'], '30'], ['leads', 100, ['Fake Ads'], '30'], ['costPerLead', 50, ['Fake Ads'], '30'], ['revenue', null, [], '30']]);
+ // Until apps can be connected (#30) the real source has no readings, so the page has no numbers.
+ assert.deepEqual(await connectedApps({ company: 'c1', period: '7' }), []);
+ assert.equal((await readNumbers({ company: 'c1', period: '7' })).connected, false);
+ const page = readFileSync('app/c/[slug]/numbers/page.tsx', 'utf8');
+ assert.match(page, /await readNumbers\(\{company:company\.id,period\}\)/);
+ assert.doesNotMatch(page, /numbersTiles\(/);
 });
 
 test('with no app connected there are no numbers', () => {

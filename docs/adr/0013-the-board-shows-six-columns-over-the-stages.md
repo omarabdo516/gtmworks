@@ -34,10 +34,11 @@ The nine stages carry rules: an approval starts when a card enters the review st
 - Version approval stays a decision inside a Card. A card waiting for a decision shows in "Waiting on you"; it leaves the column by the decision, not by a drag, and the board does not drop a card into the column (a card is sent for approval from the Card).
 - "Waiting on you" is one list per person (`waiting_list(company)`), newest first: the approvals this person holds, then any item addressed to them in `waiting_items`, of any kind (the first kind is an Agent's question). An item leaves the list when its person replies in its Conversation or changes its Card. Later kinds are new rows of their own kind and need no change to the list or its screen. Items are added by the server only and never notify anyone outside gtmworks.
 
-Migrations: `supabase/migrations/20261206000000_board_columns.sql`, `supabase/migrations/20261206000001_waiting_list.sql`.
+Migrations: `supabase/migrations/20261206000000_board_columns.sql`, `supabase/migrations/20261206000001_waiting_list.sql`, `supabase/migrations/20261206000002_board_column_guard.sql` (a stage's column never changes once made, and no stage before review is made in Live or Done).
 
 ## Consequences
 
 - The stage list in Work settings and the "Move to list" control inside a Card still show the nine stages and Done; the board shows six columns.
 - The previous app version still runs against the database: it reads stages and cards as before and shows Done as a tenth list.
 - An Agent filter on the board filters by the Card's assigned Agent identity (ADR 0006).
+- Nothing in this change adds an Agent question. The engine contract (ADR 0009) reports a run as running, completed, failed, stopped or lost, with no state for "the Agent asks the person", and guessing a question from the reply text would invent one. Agent questions arrive with the work that gives an Agent a way to ask: an Agent request made in a Conversation (#17) and the Agent's own work and log (#20). That server code calls `public.add_waiting_item(company, person, 'question', title, body, card, conversation, asker)` as the service role, and the item appears in the list with no change to the list or its screen. Until then the list holds approvals and items a test adds through the same function.

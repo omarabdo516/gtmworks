@@ -84,6 +84,8 @@
 @media (hover: hover) { .gw .board-view .chip:hover:not([aria-pressed="true"]) { background: var(--gw-bg-elevated-hover); } }
 .gw .board-view .board-tools__summary { margin-inline-start: auto; display: inline-flex; align-items: center; gap: var(--s2); font-size: var(--gw-fs-sm); color: var(--gw-text-2); --b-icon: 16px; }
 .gw .board-view .work-filters { margin: 0; font-size: var(--gw-fs-sm); color: var(--gw-text-2); }
+.gw .board-view .board-tools .work-filters { gap: var(--s3); }
+.gw .board-view .board-tools .work-filters input[type="month"] { height: 34px; min-height: 0; width: auto; padding: 0 var(--s3); border-radius: var(--gw-r-full); border: 0; box-shadow: var(--gw-border-2) 0 0 0 0.5px inset; background: var(--gw-bg-pane); color: var(--gw-text-1); font: inherit; font-size: var(--gw-fs-sm); }
 .gw .board-view .work-filters select { height: 34px; min-height: 0; padding: 0 var(--s3); border-radius: var(--gw-r-full); border: 0; box-shadow: var(--gw-border-2) 0 0 0 0.5px inset; background: var(--gw-bg-pane); font-size: var(--gw-fs-sm); }
 .gw .board-view .board-nav { display: inline-flex; align-items: center; gap: var(--s2); }
 .gw .board-view .board-nav[hidden] { display: none; }

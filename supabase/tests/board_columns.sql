@@ -1,6 +1,23 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(14);
+select plan(21);
+-- An Owner or Manager signed in makes a stage that takes its column, and cannot show a stage before review as Live or
+-- Done, by changing its column or by making it there (the column is guarded like the stage's kind and key). First in
+-- the file: PL/pgSQL checks a function's grant once per transaction, so a signed-in insert after one made as the owner
+-- would not show a missing grant.
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+insert into public.work_stages(company_id,name,position,kind) values ('10000000-0000-0000-0000-000000000001','تخطيط المدير',0,'before_review');
+select is((select board_column from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' and name='تخطيط المدير'),'planned','a signed-in Manager makes a stage and it is placed');
+select throws_ok($$update public.work_stages set board_column='done' where company_id='10000000-0000-0000-0000-000000000001' and name='كتابة'$$,'P0001','stage identity cannot change','a Manager cannot move writing to Done');
+select throws_ok($$update public.work_stages set board_column='live' where company_id='10000000-0000-0000-0000-000000000001' and name='بريف جاهز'$$,'P0001','stage identity cannot change','a Manager cannot move the brief stage to Live');
+select throws_ok($$insert into public.work_stages(company_id,name,position,kind,board_column) values ('10000000-0000-0000-0000-000000000001','مباشر مبكر',2,'before_review','live')$$,'P0001','a stage before review cannot be live or done','a Manager cannot make a stage before review in Live');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select throws_ok($$insert into public.work_stages(company_id,name,position,kind,board_column) values ('10000000-0000-0000-0000-000000000001','خلص مبكر',2,'before_review','done')$$,'P0001','a stage before review cannot be live or done','an Owner cannot make a stage before review in Done');
+select is((select string_agg(name||'='||board_column,',' order by position) from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' and name in ('بريف جاهز','كتابة')),'بريف جاهز=planned,كتابة=progress','the stages keep their columns');
+reset role;
+delete from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' and name='تخطيط المدير';
+
 -- A card in each of the nine old stages lands in the column ADR 0013 records.
 select set_config('approval.internal','yes',true);
 insert into public.work_cards(company_id,stage_id,title) select company_id,id,'column test '||name from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' and name<>'خلص';
@@ -11,8 +28,11 @@ select is((select count(*)::int from public.work_stages where company_id='100000
 -- A stage added later is placed by what it is.
 insert into public.work_stages(company_id,name,position,kind) values ('10000000-0000-0000-0000-000000000001','تخطيط',0,'before_review'),('10000000-0000-0000-0000-000000000001','متابعة',50,'after_review');
 select is((select string_agg(board_column,',' order by position) from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' and name in ('تخطيط','متابعة')),'planned,live','a new stage takes a column');
-select throws_ok($$update public.work_stages set board_column='waiting' where company_id='10000000-0000-0000-0000-000000000001' and name='تخطيط'$$,'23514',null,'only review is waiting');
+-- Only review is waiting: a stage made in Waiting on you is refused by the constraint, and a stage's column never changes.
+select throws_ok($$insert into public.work_stages(company_id,name,position,kind,board_column) values ('10000000-0000-0000-0000-000000000001','انتظار',60,'before_review','waiting')$$,'23514',null,'only review is waiting');
+select throws_ok($$update public.work_stages set board_column='waiting' where company_id='10000000-0000-0000-0000-000000000001' and name='تخطيط'$$,'P0001','stage identity cannot change','a stage keeps its column');
 delete from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' and name in ('تخطيط','متابعة');
+
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);

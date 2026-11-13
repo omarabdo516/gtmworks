@@ -46,6 +46,46 @@ test('the Activity log filters by who and by Card, and opens a Card',async({page
  await expect(page).toHaveURL(new RegExp(`/c/rs-learning/work/board/${card}$`));
 });
 
+test('the Activity log filters by a person, and an opened Card shows only its own rows',async({page})=>{
+ // Two Cards of the seed, each given a comment of its own by the Manager, so each has rows no other Card has.
+ const manager='20000000-0000-0000-0000-000000000002';
+ const stamp=Date.now(), [own,other]=[2,3], mine=`Only on card ${own} ${stamp}`, theirs=`Only on card ${other} ${stamp}`;
+ await signIn(page,'manager@example.com',`/c/rs-learning/work/board/${own}`);
+ const tr=await t(page);
+ for(const [card,body] of [[own,mine],[other,theirs]] as const) {
+  await page.goto(`/c/rs-learning/work/board/${card}`);
+  await page.getByLabel(tr('comment'),{exact:true}).fill(body);
+  await page.getByRole('button',{name:tr('send'),exact:true}).click();
+  await expect(page.locator('.comment-body').filter({hasText:body})).toBeVisible();
+ }
+
+ // One person: only their rows remain, both comments among them, and the address carries the filter.
+ await page.goto('/c/rs-learning/log');
+ const rows=page.locator('.lgp-body .lg-row');
+ await expect(rows.first()).toBeVisible();
+ const everyone=await rows.count();
+ await page.locator('#lg-who').selectOption(`p:${manager}`);
+ await expect(page).toHaveURL(new RegExp(`/c/rs-learning/log\\?who=p%3A${manager}$`));
+ await expect(rows.filter({hasText:mine})).toHaveCount(1);
+ await expect(rows.filter({hasText:theirs})).toHaveCount(1);
+ const names=await page.locator('.lgp-body .lg-row .lg-name').allInnerTexts();
+ expect(names.length).toBeLessThan(everyone);
+ expect(new Set(names)).toEqual(new Set(['مدير']));
+ await expect(page.locator('.lgp-count')).toHaveText(tr(names.length===1?'logEntry':'logEntries',names.length));
+
+ // The person and one Card: only that Card's rows.
+ await page.locator('#lg-card').selectOption(String(own));
+ await expect(page).toHaveURL(new RegExp(`/c/rs-learning/log\\?who=p%3A${manager}&card=${own}$`));
+ await expect(rows.filter({hasText:mine})).toHaveCount(1);
+ await expect(rows.filter({hasText:theirs})).toHaveCount(0);
+
+ // The opened Card shows its own rows and none of the other Card's.
+ await rows.filter({hasText:mine}).locator('.lg-card').click();
+ await expect(page).toHaveURL(new RegExp(`/c/rs-learning/work/board/${own}$`));
+ await expect(page.locator('.modal .comment-body').filter({hasText:mine})).toBeVisible();
+ await expect(page.locator('.modal').getByText(theirs)).toHaveCount(0);
+});
+
 test('a filter that matches nothing says so and offers everything back',async({page})=>{
  await signIn(page,'manager@example.com','/c/rs-learning/log?who=a:ffffffff-ffff-ffff-ffff-ffffffffffff');
  const tr=await t(page);

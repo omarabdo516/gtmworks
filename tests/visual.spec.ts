@@ -81,6 +81,8 @@ const readyBy: Record<string, string> = {
   approvals: '.approvals',
   members: '.member-row',
   'work-settings': '.settings-row',
+  numbers: '.numbers-page',
+  log: '.log-page',
 };
 
 async function showScreen(page: Page, screen: (typeof screens)[number], width: number) {

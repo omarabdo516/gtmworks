@@ -293,7 +293,11 @@ test('board moves, date filtering, creative versions and shared card views',asyn
  await expect(page.locator('.card-stage-line')).toContainText('كتابة');
  await page.goto('/c/rs-learning/work/board');
  await expect(page.locator('.col[data-column="progress"] .column[data-stage-name="كتابة"] .kcard[data-card-id="1"]')).toBeVisible();
- // The month filter lives with the dated views (list and calendar).
+ await page.getByLabel("Month").fill('2000-01');
+ await expect(page.locator('.kcard[data-card-id="1"]')).toHaveCount(0);
+ await page.getByLabel("Month").fill('');
+ await expect(page.locator('.kcard[data-card-id="1"]')).toBeVisible();
+ // The list view filters by month too.
  await page.goto('/c/rs-learning/work/list');
  const listed=page.locator('.table tbody tr').filter({has:page.locator('a[href="/c/rs-learning/work/board/1"]')});
  await expect(listed).toHaveCount(1);
