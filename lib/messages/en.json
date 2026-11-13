@@ -597,5 +597,7 @@
   "waitingNeedsReply": "Needs your reply",
   "waitingQuestionFrom": "Question from {0}",
   "waitingQuestion": "Question",
-  "logSystemName": "gtmworks"
+  "logSystemName": "gtmworks",
+  "captionNeedsWork": "Caption needs work",
+  "designNeedsWork": "Design needs work"
 }

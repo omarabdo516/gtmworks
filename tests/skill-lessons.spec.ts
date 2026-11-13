@@ -67,7 +67,8 @@ test('an agent proposes a lesson from its run, the Inbox shows the change, the r
   // A member who does not manage the company (a Contributor) sees no lessons.
   const contributor=await outside.newPage();
   await signIn(contributor,'reviewer@example.com','/c/rs-learning/approvals');
-  await expect(contributor.getByRole('heading',{name:/Awaiting approval/})).toBeVisible();
+  // The Inbox opens the board on "Waiting on you" (#16, ADR 0013): its heading shows the page has loaded.
+  await expect(contributor.getByRole('heading',{level:2,name:'Waiting on you',exact:true})).toBeVisible();
   await expect(contributor.getByRole('group',{name:'Lesson for caption-hooks'})).toHaveCount(0);
   // The page in both languages, at phone and desktop width, with 44px buttons and no sideways scroll on a phone.
   for(const copy of [{language:'en' as const,heading:'Lessons awaiting approval'},{language:'ar' as const,heading:'دروس تنتظر الموافقة'}]) {

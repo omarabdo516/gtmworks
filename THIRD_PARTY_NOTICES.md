@@ -69,6 +69,13 @@ Adaptations bind gtmworks data, routing and both message catalogues, preserve au
 | `components/paperclip/useMobileNavVisibility.ts` | Copied and adapted | `src/hooks/useMobileNavVisibility.ts` |
 | `components/paperclip/utils.ts` | Copied and adapted | `src/lib/utils.ts` |
 
+## Fonts bundled at build time
+
+`app/layout.tsx` loads these faces through `next/font/google`: the build downloads them once and serves them from the app's own `/_next/static/media/`, so a running install never asks Google for a font. Both use the SIL Open Font License 1.1; its full text is in `components/paperclip/fonts/Inter-OFL.txt` and at https://openfontlicense.org.
+
+- IBM Plex Sans Arabic (the approved reference's face for the shell and the board): Copyright © 2017 IBM Corp. with Reserved Font Name "Plex". Source: https://github.com/IBM/plex
+- Vazirmatn (Arabic text elsewhere): Copyright 2015 The Vazirmatn Project Authors. Source: https://github.com/rastikerdar/vazirmatn
+
 ## Hermes Agent (hermes-agent)
 
 Source: https://hub.docker.com/r/nousresearch/hermes-agent (Nous Research's official release image)

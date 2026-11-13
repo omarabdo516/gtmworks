@@ -597,5 +597,7 @@
   "waitingNeedsReply": "محتاج ردك",
   "waitingQuestionFrom": "سؤال من {0}",
   "waitingQuestion": "سؤال",
-  "logSystemName": "gtmworks"
+  "logSystemName": "gtmworks",
+  "captionNeedsWork": "النص محتاج تعديل",
+  "designNeedsWork": "التصميم محتاج تعديل"
 }

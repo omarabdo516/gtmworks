@@ -1,7 +1,7 @@
 import { test, expect, type Page, type Locator } from '@playwright/test';
 import { createServerClient } from '@supabase/ssr';
 import { mkdir } from 'node:fs/promises';
-import { signIn, openNavigation, closeNavigation } from './sign-in';
+import { signIn, openNavigation, closeNavigation, openMoreSection } from './sign-in';
 import { idle } from './navigation-measure';
 import { sections } from '../lib/navigation';
 import { i18n, type Language } from '../lib/i18n.mjs';
@@ -132,8 +132,8 @@ test('English default, account language across sessions/devices, automatic conte
    await page.setViewportSize({width:1440,height:900});
    await chooseLanguage(page,language);
    const {t}=i18n(language);
-   await openNavigation(page);
-   await page.locator('.nav a[href$="/home"]').click();
+   // Home has no sidebar entry; it opens from the account menu's "More sections" (#8).
+   await openMoreSection(page,'home');
    await expect(page.locator('.topbar')).toHaveText(t('home'));
    for(const section of Object.keys(sections).filter(section=>section!=='work/new')) {
     await page.goto(`/c/rs-learning/${section}`);
@@ -144,7 +144,8 @@ test('English default, account language across sessions/devices, automatic conte
    }
    // Settings moved from the sidebar's bottom row into the account menu; it is still in the chosen language.
    await page.getByRole('button',{name:t('accountMenu'),exact:true}).click();
-   await expect(page.getByRole('menu').getByRole('menuitem').filter({hasText:t('settings')})).toHaveAttribute('href','/c/rs-learning/settings');
+   // Anchored at the start: "More sections" (#8) also lists Work settings, whose name contains the word.
+   await expect(page.getByRole('menu').getByRole('menuitem').filter({hasText:new RegExp(`^${t('settings')}`)})).toHaveAttribute('href','/c/rs-learning/settings');
    await page.keyboard.press('Escape');
    await expect(page.getByRole('menu')).toHaveCount(0);
    await page.goto('/c/rs-learning/work/board');

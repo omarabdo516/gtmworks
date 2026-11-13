@@ -15,7 +15,9 @@ async function newCard(page:Page,label:string) {
  await expect(page).toHaveURL(/\/work\/board\/\d+$/);
  return {title,path:new URL(page.url()).pathname,id:Number(new URL(page.url()).pathname.split('/').pop())};
 }
-const columnOf=(page:Page,id:number)=>page.locator(`.kcard[data-card-id="${id}"]`).evaluate(el=>el.closest('[data-column]')!.getAttribute('data-column'));
+// A card that is being drawn again after a move can be read between columns (null); the loop below waits for it to land.
+const columnOf=(page:Page,id:number)=>page.locator(`.kcard[data-card-id="${id}"]`).evaluate(el=>el.closest('[data-column]')?.getAttribute('data-column') ?? null);
+const landedColumn=async(page:Page,id:number)=>{ let column:string|null=null; await expect.poll(async()=>column=await columnOf(page,id)).not.toBeNull(); return column; };
 
 test('the board shows the six columns of the approved design, Waiting on you first',async({page})=>{
  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
@@ -57,7 +59,7 @@ test('a card moves by drag and by keyboard, and both moves are logged',async({pa
  // Waiting on you fills by itself: a drop there is refused on the board.
  await page.goto('/c/rs-learning/work/board');
  await page.locator(`.kcard[data-card-id="${card.id}"] a`).focus();
- for(let step=0;step<3;step++) { const before=await columnOf(page,card.id); if(before==='waiting'||before==='ideas') break; await page.keyboard.press('Shift+ArrowLeft'); await expect.poll(()=>columnOf(page,card.id)).not.toBe(before); await page.locator(`.kcard[data-card-id="${card.id}"] a`).focus(); }
+ for(let step=0;step<3;step++) { const before=await landedColumn(page,card.id); if(before==='waiting'||before==='ideas') break; await page.keyboard.press('Shift+ArrowLeft'); await expect.poll(async()=>{ const now=await columnOf(page,card.id); return now!==null&&now!==before; }).toBe(true); await page.locator(`.kcard[data-card-id="${card.id}"] a`).focus(); }
  expect(await columnOf(page,card.id)).toBe('ideas');
  await page.keyboard.press('Shift+ArrowLeft');
  await expect(page.locator('.board-status')).toContainText('“Waiting on you” fills up on its own');
