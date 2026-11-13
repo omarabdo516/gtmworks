@@ -285,6 +285,31 @@ test('on a narrow screen the sidebar collapses behind the menu button and slides
  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);
 });
 
+test('a drawer left open when the screen widens closes and stops holding the keyboard',async({page})=>{
+ await page.setViewportSize({width:390,height:900});
+ await signIn(page,'manager@example.com','/c/rs-learning/home');
+ await openNavigation(page);
+ await expect(page.getByRole('dialog')).toBeVisible();
+ await page.setViewportSize({width:1440,height:900});
+ // Beside the page the sidebar is no longer a drawer: nothing is open, covered or inert.
+ await expect(page.locator('.sidebar.is-open')).toHaveCount(0);
+ await expect(page.getByRole('dialog')).toHaveCount(0);
+ await expect(page.locator('.scrim')).toBeHidden();
+ await expect(page.locator('.app-content')).toHaveJSProperty('inert',false);
+ // Tab walks out of the sidebar into the page instead of wrapping inside it.
+ const sidebar=page.locator('.sidebar');
+ await sidebar.locator('a[href]').first().focus();
+ const count=await sidebar.locator('a[href],button:not([disabled])').count();
+ let left=false;
+ for(let step=0;step<count+2&&!left;step++) { await page.keyboard.press('Tab'); left=await page.evaluate(()=>!document.activeElement?.closest('.sidebar')); }
+ expect(left,'Tab leaves the sidebar').toBe(true);
+ // Narrowing again keeps it closed until the menu button opens it.
+ await page.setViewportSize({width:390,height:900});
+ await expect(sidebar).toBeHidden();
+ await page.locator('.mobile-menu').click();
+ await expect(page.getByRole('dialog')).toBeVisible();
+});
+
 test('mobile recent cards record opens while the drawer stays closed',async({page})=>{
  await page.setViewportSize({width:390,height:900});
  await signIn(page,'reviewer@example.com','/c/rs-learning/work/board');
