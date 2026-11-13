@@ -21,8 +21,6 @@ export function Frame({sidebar,title,breadcrumb,chat=false,children}:{sidebar:Re
  // On a narrow screen the open drawer covers the page: the page behind it (all but the menu button) is inert, so
  // neither the keyboard nor assistive technology reaches it.
  const narrow=useSyncExternalStore(subscribe,()=>window.matchMedia(narrowQuery).matches,()=>false);
- // Widening past the drawer layout closes it, so its keyboard handling never outlives the drawer.
- if(open&&!narrow) setOpen(false);
  const covered=open&&narrow;
  const wasOpen=useRef(false);
  // While the drawer covers the page it holds the keyboard: focus moves into it, Tab and Shift+Tab wrap inside it,
@@ -35,7 +33,8 @@ export function Frame({sidebar,title,breadcrumb,chat=false,children}:{sidebar:Re
   targets()[0]?.focus();
   const keys=(event:KeyboardEvent)=>{
    if(event.key==='Escape') { setOpen(false); return; }
-   if(event.key!=='Tab') return;
+   // Tab wraps only while the drawer covers the page; beside a wide page the sidebar lets the keyboard walk on.
+   if(event.key!=='Tab'||!window.matchMedia(narrowQuery).matches) return;
    const list=targets(); if(!list.length) return;
    const first=list[0],last=list[list.length-1],inside=drawer.current?.contains(document.activeElement);
    if(event.shiftKey&&(document.activeElement===first||!inside)) { event.preventDefault(); last.focus(); }

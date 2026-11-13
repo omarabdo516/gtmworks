@@ -285,29 +285,41 @@ test('on a narrow screen the sidebar collapses behind the menu button and slides
  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);
 });
 
-test('a drawer left open when the screen widens closes and stops holding the keyboard',async({page})=>{
+test('the sidebar holds the keyboard only while it covers the page',async({page})=>{
+ const sidebar=page.locator('.sidebar');
+ const inside=()=>page.evaluate(()=>!!document.activeElement?.closest('.sidebar'));
+ // Beside the page the sidebar never covers anything: Tab walks out of it into the page.
+ const tabLeaves=async(label:string)=>{
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.locator('.scrim')).toBeHidden();
+  await expect(page.locator('.app-content')).toHaveJSProperty('inert',false);
+  await sidebar.locator('a[href]').first().focus();
+  const count=await sidebar.locator('a[href],button:not([disabled])').count();
+  let left=false;
+  for(let step=0;step<count+2&&!left;step++) { await page.keyboard.press('Tab'); left=!await inside(); }
+  expect(left,`${label}: Tab leaves the sidebar`).toBe(true);
+ };
+ // A drawer left open on a narrow screen lets go of the keyboard once the screen widens.
  await page.setViewportSize({width:390,height:900});
  await signIn(page,'manager@example.com','/c/rs-learning/home');
  await openNavigation(page);
  await expect(page.getByRole('dialog')).toBeVisible();
  await page.setViewportSize({width:1440,height:900});
- // Beside the page the sidebar is no longer a drawer: nothing is open, covered or inert.
- await expect(page.locator('.sidebar.is-open')).toHaveCount(0);
- await expect(page.getByRole('dialog')).toHaveCount(0);
- await expect(page.locator('.scrim')).toBeHidden();
- await expect(page.locator('.app-content')).toHaveJSProperty('inert',false);
- // Tab walks out of the sidebar into the page instead of wrapping inside it.
- const sidebar=page.locator('.sidebar');
+ await tabLeaves('widened');
+ // Narrowing again covers the page with the still-open drawer, which holds the keyboard again until Escape.
+ await page.setViewportSize({width:390,height:900});
+ await expect(page.getByRole('dialog')).toBeVisible();
  await sidebar.locator('a[href]').first().focus();
  const count=await sidebar.locator('a[href],button:not([disabled])').count();
- let left=false;
- for(let step=0;step<count+2&&!left;step++) { await page.keyboard.press('Tab'); left=await page.evaluate(()=>!document.activeElement?.closest('.sidebar')); }
- expect(left,'Tab leaves the sidebar').toBe(true);
- // Narrowing again keeps it closed until the menu button opens it.
- await page.setViewportSize({width:390,height:900});
+ for(let step=0;step<count+2;step++) { await page.keyboard.press('Tab'); expect(await inside(),`narrowed Tab ${step}`).toBe(true); }
+ await page.keyboard.press('Escape');
  await expect(sidebar).toBeHidden();
- await page.locator('.mobile-menu').click();
- await expect(page.getByRole('dialog')).toBeVisible();
+ // On a wide screen the menu button still opens and Escape closes the sidebar, without trapping Tab.
+ await page.setViewportSize({width:1440,height:900});
+ await openNavigation(page);
+ await expect(page.locator('.mobile-menu')).toHaveAttribute('aria-expanded','true');
+ await tabLeaves('wide');
+ await closeNavigation(page);
 });
 
 test('mobile recent cards record opens while the drawer stays closed',async({page})=>{
