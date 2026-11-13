@@ -90,6 +90,8 @@
 .gw .log-page .lg-forever { margin: 0; display: flex; align-items: flex-start; gap: 6px; padding-inline: var(--s1); font-size: var(--gw-fs-xs); line-height: 1.6; color: var(--gw-text-3); --od-icon-size: 14px; }
 .gw .log-page .lg-forever .pg-icon { margin-top: 2px; }
 .gw .log-page .lg-more { margin: 0; padding-inline: var(--s1); font-size: var(--gw-fs-xs); color: var(--gw-text-3); }
+.gw .log-page .lg-pages { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); }
+.gw .log-page .lg-pages .lg-more { margin-inline-end: auto; }
 
 /* the Company page «سجل النشاط» */
 .gw .log-page .lgp { position: relative; height: 100%; overflow-y: auto; }
@@ -121,6 +123,9 @@
   /* A Card link keeps the reference's 24px line; an invisible ring makes its tap area 44px tall inside the row's padding. */
   .gw .log-page .lg-meta .link-btn { position: relative; }
   .gw .log-page .lg-meta .link-btn::before { content: ""; position: absolute; inset: -10px 0; }
+  /* The page buttons keep their 30px look; a ring makes each tap area 44px tall. */
+  .gw .log-page .lg-pages .btn { position: relative; }
+  .gw .log-page .lg-pages .btn::before { content: ""; position: absolute; inset: -7px 0; }
 }
 @media (max-width: 599px) {
   .gw .log-page .lgp-field { flex: 1 1 100%; }

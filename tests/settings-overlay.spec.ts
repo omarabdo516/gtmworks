@@ -71,6 +71,64 @@ test('the Owner sees the company’s real Agents, main first, and makes another 
  }
 });
 
+test('the Owner renames the Company from Settings; other Roles read the name and the server refuses them',async({page,browser})=>{
+ const name=()=>JSON.parse(query(`select name from public.companies where id='${company}'`))[0].name as string;
+ const original=name(), renamed=`Aleem Studio ${Date.now()}`;
+ try {
+  await signIn(page,'omar@example.com','/c/aleem/home');
+  await page.goto('/c/aleem/settings?section=company');
+  const overlay=page.getByRole('dialog',{name:'Settings'});
+  const field=overlay.locator('#co-name');
+  await expect(field).toHaveValue(original);
+  const save=overlay.getByRole('button',{name:'Save',exact:true});
+  await expect(save).toBeDisabled(); // nothing changed yet
+  await field.fill('   ');
+  await expect(save).toBeDisabled();
+  await field.fill(`  ${renamed}  `);
+  await save.click();
+  await expect(overlay.locator('#co-name-status')).toHaveText('Name saved.');
+  await expect.poll(name).toBe(renamed);
+  await expect(field).toHaveValue(renamed);
+  // The Company keeps its address.
+  await expect(page).toHaveURL(/\/c\/aleem\/settings\?section=company$/);
+
+  // A Contributor of the same Company sees the name as text, and the server refuses their rename.
+  const other=await browser.newContext(); const contributor=await other.newPage();
+  try {
+   await signIn(contributor,'multi@example.com','/c/aleem/home');
+   await contributor.goto('/c/aleem/settings?section=company');
+   const theirs=contributor.getByRole('dialog',{name:'Settings'});
+   await expect(theirs.locator('.ro-text')).toHaveText(renamed);
+   await expect(theirs.locator('#co-name')).toHaveCount(0);
+   const refused=await contributor.request.post('/api/company-name',{data:{company,name:'Taken over'}});
+   expect(refused.status()).toBe(403);
+   expect(await refused.json()).toEqual({error:'companyRenameNotAllowed'});
+  } finally { await other.close(); }
+  expect(name()).toBe(renamed);
+ } finally {
+  query(`update public.companies set name='${original.replaceAll("'","''")}' where id='${company}'`);
+ }
+});
+
+test('a Manager and a Viewer cannot rename their Company, on the page or on the server',async({page})=>{
+ const rs='10000000-0000-0000-0000-000000000001';
+ const name=()=>JSON.parse(query(`select name from public.companies where id='${rs}'`))[0].name as string;
+ const original=name();
+ for(const email of ['manager@example.com','viewer@example.com']) {
+  await page.context().clearCookies();
+  await signIn(page,email,'/c/rs-learning/home');
+  if(email==='manager@example.com') {
+   await page.goto('/c/rs-learning/settings?section=company');
+   const overlay=page.getByRole('dialog',{name:'Settings'});
+   await expect(overlay.locator('.ro-text').first()).toHaveText(original);
+   await expect(overlay.locator('#co-name')).toHaveCount(0);
+  }
+  const refused=await page.request.post('/api/company-name',{data:{company:rs,name:`Renamed by ${email}`}});
+  expect(refused.status()).toBe(403);
+ }
+ expect(name()).toBe(original);
+});
+
 test('a Viewer sees only the Agents and their account, read only, and no Owner controls',async({page})=>{
  await signIn(page,'viewer@example.com','/c/rs-learning/home');
  await page.goto('/c/rs-learning/settings?section=company');

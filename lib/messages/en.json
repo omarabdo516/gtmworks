@@ -703,5 +703,12 @@
   "settingsModelsEffort": "How much it thinks before replying (default)",
   "settingsModelsEach": "Each agent",
   "settingsBackupList": "Backups",
-  "settingsBackupHolds": "What a backup holds"
+  "settingsBackupHolds": "What a backup holds",
+  "logPages": "Log pages",
+  "logOlder": "Older entries",
+  "logNewest": "Back to the newest",
+  "logShowingOlder": "Showing {0} older entries",
+  "companyRenameNotAllowed": "Only the company’s Owner can rename it.",
+  "companyNameInvalid": "Write a name of 1 to 80 characters.",
+  "companyNameSaved": "Name saved."
 }

@@ -48,6 +48,12 @@ export default function Work(p:WorkProps) { const {t,locale,language}=useI18n();
  // The board keeps the month filter of the dated views: a card dated in another month is hidden, an undated one stays.
  const boardCards=visible.filter(c=>(agentFilter==='all'||agentOfCard(c)===agentFilter));
  const items=(p.waiting||[]).filter(item=>item.kind!=='approval');
+ // On "Waiting on you" (/approvals) the column is the reader's own list, exactly as waiting_list returns it (the same
+ // source as the count): their approvals and their items, newest first. A card in review that waits on someone else is
+ // not theirs, so it is not shown there; the board's own column still shows every card in review.
+ const ownList=p.focus==='waiting';
+ const ownEntries=(p.waiting||[]).flatMap((item):{item:WaitingItem,card?:Card}[]=>{ if(item.kind!=='approval') return [{item}]; const c=boardCards.find(x=>x.id===item.id); return c?[{item,card:c}]:[]; });
+ const drawnCards=ownList?boardCards.filter(c=>columnOfCard(c)!=='waiting'||ownEntries.some(entry=>entry.card?.id===c.id)):boardCards;
  const waitingCount=p.approvableIds.length+items.length;
  const stagesIn=(column:string)=>p.stages.filter(s=>(s.board_column||'ideas')===column);
  const stageName=(c:Card)=>p.stages.find(s=>s.id===c.stage_id)?.name||'';
@@ -109,8 +115,12 @@ export default function Work(p:WorkProps) { const {t,locale,language}=useI18n();
   </div>
   {(moving||notice)&&<p role="status" className="board-status">{moving?t('movingCard'):notice}</p>}
   {!p.cards.length&&!items.length&&<div className="board-bare" role="note"><p>{t('boardEmpty',identities.find(a=>a.role==='account_manager')?.name||'Lead')}</p>{p.canCreate&&<Link className="btn btn--secondary btn--sm" href={`/c/${p.slug}/chat`}><BoardIcon name="chat"/><span>{t('boardTalkTo',identities.find(a=>a.role==='account_manager')?.name||'Lead')}</span></Link>}</div>}
-  <KanbanBoard label={t('workBoard')} busy={moving} cards={boardCards.map(c=>({id:c.id,title:c.title,column:columnOfCard(c)}))} columnName={columnName} renderOverlay={id=>cardView(p.cards.find(card=>card.id===id)!,true)} onMove={move}>
-   {boardColumns.map(column=>{ const list=boardCards.filter(c=>columnOfCard(c)===column); const extra=column==='waiting'?items:[]; const stages=stagesIn(column);
+  <KanbanBoard label={t('workBoard')} busy={moving} cards={drawnCards.map(c=>({id:c.id,title:c.title,column:columnOfCard(c)}))} columnName={columnName} renderOverlay={id=>cardView(p.cards.find(card=>card.id===id)!,true)} onMove={move}>
+   {boardColumns.map(column=>{ const list=drawnCards.filter(c=>columnOfCard(c)===column); const extra=column==='waiting'&&!ownList?items:[]; const stages=stagesIn(column);
+    if(column==='waiting'&&ownList) return <KanbanColumn key={column} column={column} id={`col-${column}-section`} name={columnName(column)} count={ownEntries.length} waiting head={null}>
+     {ownEntries.map(entry=>entry.card?<div key={`approval:${entry.card.id}`} className="column" data-stage-id={entry.card.stage_id} data-stage-name={stageName(entry.card)}>{cardView(entry.card)}</div>:itemView(entry.item))}
+     {!ownEntries.length&&<div className="col-empty"><b>{t(emptyKey[column][0])}</b>{emptyKey[column][1]&&<span>{t(emptyKey[column][1])}</span>}</div>}
+    </KanbanColumn>;
     const add=column==='ideas'&&p.canCreate&&ideasStage?<button type="button" className="circle-btn add-btn add-card" aria-label={t('addCard')} title={t('boardAddIdea')} onClick={()=>openCreate(ideasStage)}><BoardIcon name="plus"/></button>:null;
     return <KanbanColumn key={column} column={column} id={`col-${column}-section`} name={columnName(column)} count={list.length+extra.length} waiting={column==='waiting'} head={add} data-stage-name={stages.length===1?stages[0].name:undefined}>
      {extra.length>0&&<div className="mn-group" role="group" aria-labelledby="mn-h"><h3 className="mn-h" id="mn-h"><BoardIcon name="at"/><span>{t('waitingNeedsReply')}</span> <span className="num">{extra.length}</span></h3>{extra.map(itemView)}{list.length>0&&<div className="mn-sep" role="separator"/>}</div>}

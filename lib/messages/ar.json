@@ -703,5 +703,12 @@
   "settingsModelsEffort": "قد إيه يفكر قبل ما يرد (الافتراضي)",
   "settingsModelsEach": "كل وكيل",
   "settingsBackupList": "النسخ",
-  "settingsBackupHolds": "النسخة فيها إيه"
+  "settingsBackupHolds": "النسخة فيها إيه",
+  "logPages": "صفحات السجل",
+  "logOlder": "الأقدم",
+  "logNewest": "ارجع للأحدث",
+  "logShowingOlder": "معروض {0} سطر أقدم",
+  "companyRenameNotAllowed": "صاحب الشركة بس اللي يقدر يغيّر اسمها.",
+  "companyNameInvalid": "اكتب اسم من حرف لـ 80 حرف.",
+  "companyNameSaved": "الاسم اتحفظ."
 }

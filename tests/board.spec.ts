@@ -1,6 +1,8 @@
 import { test, expect, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { signIn } from './sign-in';
+import { fakeHermes } from './fake-hermes.mjs';
 
 // The board's six columns and "Waiting on you" (#34, #16; ADR 0013). The seeded accounts read English.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
@@ -124,49 +126,123 @@ test('a card waiting for my approval is in Waiting on you and leaves it when I a
  await expect(waiting.locator('.col__count')).toHaveText(String(count-1));
 });
 
+test('Waiting on you shows exactly the reader\'s own list, approvals and items newest first, and nothing for someone else',async({page,browser})=>{
+ // Omar holds the review step: a card he must approve, one item from before it entered review and one from after, so
+ // approvals and items interleave by time. The Manager holds no approval, so a card in review is not theirs.
+ const omar='20000000-0000-0000-0000-000000000001', manager='20000000-0000-0000-0000-000000000002', stamp=Date.now();
+ await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ const card=await newCard(page,'Own list approval');
+ await page.getByLabel('New design file').setInputFiles({name:'design.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII=','base64')});
+ await page.getByRole('button',{name:'Add design'}).click();
+ await expect(page.getByText(/Version 1:/)).toBeVisible();
+ await page.getByLabel('Move to list',{exact:true}).selectOption({label:'مراجعة'});
+ await expect(page.locator('.card-stage-line')).toContainText('مراجعة');
+ query(`select public.add_waiting_item('${rs}','${omar}','test_kind','Older than the approval ${stamp}','',1)`);
+ query(`select public.add_waiting_item('${rs}','${omar}','test_kind','Newer than the approval ${stamp}','',1)`);
+ query(`select public.add_waiting_item('${rs}','${manager}','test_kind','For the Manager ${stamp}','',1)`);
+ query(`update public.waiting_items i set created_at=w.review_entered_at+case when i.title like 'Older%' then interval '-1 minute' else interval '1 minute' end
+  from public.work_cards w where w.id=${card.id} and i.title in ('Older than the approval ${stamp}','Newer than the approval ${stamp}')`);
+ try {
+  await page.goto('/c/rs-learning/approvals');
+  const waiting=page.locator('.col[data-column="waiting"]');
+  const entries=waiting.locator(':is(.kcard,.mcard)');
+  await expect(waiting.locator(`.kcard[data-card-id="${card.id}"]`)).toBeVisible();
+  const order=await entries.evaluateAll(list=>list.map(entry=>entry.getAttribute('data-card-id')?`card:${entry.getAttribute('data-card-id')}`:entry.textContent||''));
+  const at=(match:string)=>order.findIndex(entry=>entry.includes(match));
+  expect(at(`card:${card.id}`)).toBeGreaterThan(at(`Newer than the approval ${stamp}`));
+  expect(at(`Older than the approval ${stamp}`)).toBeGreaterThan(at(`card:${card.id}`));
+  expect(at(`Newer than the approval ${stamp}`)).toBeGreaterThanOrEqual(0);
+  expect(at(`For the Manager ${stamp}`)).toBe(-1);
+  // The column and the sidebar count the same list.
+  await expect(waiting.locator('.col__count')).toHaveText(String(order.length));
+  await expect(page.locator(`a[href="/c/rs-learning/approvals"]`).first()).toContainText(String(order.length));
+  // Home's "Awaiting your approval" counts approvals only; the items (two of them here) are not approvals.
+  const approvals=order.filter(entry=>entry.startsWith('card:')).length;
+  expect(approvals).toBeLessThan(order.length);
+  await page.goto('/c/rs-learning/home');
+  await expect(page.locator('.stats .stat').first().locator('strong')).toHaveText(String(approvals));
+
+  // The Manager sees their own item and not Omar's card in review, nor Omar's items.
+  const other=await browser.newContext(); const managerPage=await other.newPage();
+  try {
+   await signIn(managerPage,'manager@example.com','/c/rs-learning/approvals');
+   const theirs=managerPage.locator('.col[data-column="waiting"]');
+   await expect(theirs.locator('.mcard').filter({hasText:`For the Manager ${stamp}`})).toBeVisible();
+   await expect(theirs.locator(`.kcard[data-card-id="${card.id}"]`)).toHaveCount(0);
+   await expect(theirs.getByText(`than the approval ${stamp}`)).toHaveCount(0);
+   const count=await theirs.locator(':is(.kcard,.mcard)').count();
+   await expect(theirs.locator('.col__count')).toHaveText(String(count));
+   expect(Number(rows(`select count(*)::int as n from public.waiting_items where person_id='${manager}' and resolved_at is null`)[0].n)).toBe(count);
+  } finally { await other.close(); }
+ } finally {
+  query(`update public.waiting_items set resolved_at=now() where resolved_at is null and title like '%${stamp}'`);
+ }
+});
+
 test('Waiting on you lists an Agent question and an item of a new kind, each opens its place and leaves when acted on, and nothing is sent out',async({page})=>{
  // The Manager: their own Conversation, a question in it, an item of a kind the list has never seen on card 1, and a
  // question for someone else that the Manager never sees.
  const manager='20000000-0000-0000-0000-000000000002', omar='20000000-0000-0000-0000-000000000001';
  const stamp=Date.now(), conversation=`62000000-0000-4000-8000-${String(stamp).slice(-12).padStart(12,'0')}`;
- await signIn(page,'manager@example.com','/c/rs-learning/approvals');
- const deliveries=Number(rows(`select count(*)::int as n from public.webhook_deliveries`)[0].n);
- // Mail sent by earlier tests (an invite) may already be in the local mailbox; only a change counts.
- const mailCount=async()=>{const mail=await (await page.request.get('http://127.0.0.1:54324/api/v1/messages')).json(); return Number(mail.total ?? mail.messages?.length ?? 0);};
- const mailBefore=await mailCount();
- query(`insert into public.conversations(id,company_id,person_id,agent_name) values ('${conversation}','${rs}','${manager}','Lead')`);
- query(`select public.add_waiting_item('${rs}','${manager}','question','Which offer goes first ${stamp}?','',null,'${conversation}','Lead')`);
- query(`select public.add_waiting_item('${rs}','${manager}','test_kind','A new kind ${stamp}','Seeded by the test',1)`);
- query(`select public.add_waiting_item('${rs}','${omar}','test_kind','For Omar only ${stamp}','',1)`);
- // Nothing leaves gtmworks: no webhook delivery and no mail.
- expect(Number(rows(`select count(*)::int as n from public.webhook_deliveries`)[0].n)).toBe(deliveries);
- expect(await mailCount()).toBe(mailBefore);
- await page.goto('/c/rs-learning/approvals');
- const waiting=page.locator('.col[data-column="waiting"]');
- const question=waiting.locator('.mcard').filter({hasText:`Which offer goes first ${stamp}?`});
- const other=waiting.locator('.mcard').filter({hasText:`A new kind ${stamp}`});
- await expect(question).toBeVisible();
- await expect(question).toContainText('Question from Lead');
- await expect(other).toBeVisible();
- await expect(waiting.getByText(`For Omar only ${stamp}`)).toHaveCount(0);
- // Newest first: the item of the new kind came last, so it is listed first.
- expect(await waiting.locator('.mcard').evaluateAll(cards=>cards.map(card=>card.textContent))).toEqual([expect.stringContaining(`A new kind ${stamp}`),expect.stringContaining(`Which offer goes first ${stamp}?`)]);
- const count=Number(await waiting.locator('.col__count').textContent());
- // The item of the new kind opens its Card; a comment there acts on it.
- await other.click();
- await expect(page).toHaveURL(/\/work\/board\/1$/);
- await page.getByLabel('Comment',{exact:true}).fill(`Answered ${stamp}`);
- await page.getByRole('button',{name:'Send',exact:true}).click();
- await expect(page.locator('.comment-body').filter({hasText:`Answered ${stamp}`})).toBeVisible();
- await page.goto('/c/rs-learning/approvals');
- await expect(other).toHaveCount(0);
- await expect(waiting.locator('.col__count')).toHaveText(String(count-1));
- // The question opens its Conversation; a reply there (written as the engine-less reply is stored) clears it.
- await question.click();
- await expect(page).toHaveURL(new RegExp(`/conversations/${conversation}$`));
- query(`insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id) values ('${rs}','${conversation}','person','${manager}','مدير','The early price','${conversation.slice(0,-4)}aaaa','board-spec-${stamp}')`);
- await page.goto('/c/rs-learning/approvals');
- await expect(question).toHaveCount(0);
- await expect(waiting.locator('.col__count')).toHaveText(String(count-2));
- query(`update public.waiting_items set resolved_at=now() where person_id='${omar}' and title='For Omar only ${stamp}'`);
+ // The Conversation runs on an Agent the Owner attaches on a fake engine, so the reply is sent as a person sends it.
+ const fake=await fakeHermes(); fake.settings.key=`hermes-key-${randomUUID()}`;
+ const attachedAgent={id:'',connection:''};
+ try {
+  await signIn(page,'omar@example.com','/c/rs-learning/home');
+  const saved=await page.request.post('/api/hermes-connections',{data:{company:rs,intent:'save',address:fake.address,profile:`board-${stamp}`,key:fake.settings.key}});
+  expect(saved.status()).toBe(200); attachedAgent.connection=(await saved.json()).connection.id;
+  const attached=await page.request.post('/api/hermes-agents',{data:{company:rs,intent:'attach',connection:attachedAgent.connection,name:`Lead ${stamp}`,speciality:'Marketing',makeDefault:false}});
+  expect(attached.status()).toBe(200);
+  attachedAgent.id=(await attached.json()).agents.find((agent:{connection_id:string})=>agent.connection_id===attachedAgent.connection).id;
+  await page.context().clearCookies();
+  await signIn(page,'manager@example.com','/c/rs-learning/approvals');
+  const deliveries=Number(rows(`select count(*)::int as n from public.webhook_deliveries`)[0].n);
+  // Mail sent by earlier tests (an invite) may already be in the local mailbox; only a change counts.
+  const mailCount=async()=>{const mail=await (await page.request.get('http://127.0.0.1:54324/api/v1/messages')).json(); return Number(mail.total ?? mail.messages?.length ?? 0);};
+  const mailBefore=await mailCount();
+  query(`insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${conversation}','${rs}','${manager}','${attachedAgent.id}','Lead')`);
+  query(`select public.add_waiting_item('${rs}','${manager}','question','Which offer goes first ${stamp}?','',null,'${conversation}','Lead')`);
+  query(`select public.add_waiting_item('${rs}','${manager}','test_kind','A new kind ${stamp}','Seeded by the test',1)`);
+  query(`select public.add_waiting_item('${rs}','${omar}','test_kind','For Omar only ${stamp}','',1)`);
+  // Nothing leaves gtmworks: no webhook delivery and no mail.
+  expect(Number(rows(`select count(*)::int as n from public.webhook_deliveries`)[0].n)).toBe(deliveries);
+  expect(await mailCount()).toBe(mailBefore);
+  await page.goto('/c/rs-learning/approvals');
+  const waiting=page.locator('.col[data-column="waiting"]');
+  const question=waiting.locator('.mcard').filter({hasText:`Which offer goes first ${stamp}?`});
+  const other=waiting.locator('.mcard').filter({hasText:`A new kind ${stamp}`});
+  await expect(question).toBeVisible();
+  await expect(question).toContainText('Question from Lead');
+  await expect(other).toBeVisible();
+  await expect(waiting.getByText(`For Omar only ${stamp}`)).toHaveCount(0);
+  // Newest first: the item of the new kind came last, so it is listed first.
+  expect(await waiting.locator('.mcard').evaluateAll(cards=>cards.map(card=>card.textContent))).toEqual([expect.stringContaining(`A new kind ${stamp}`),expect.stringContaining(`Which offer goes first ${stamp}?`)]);
+  const count=Number(await waiting.locator('.col__count').textContent());
+  // The item of the new kind opens its Card; a comment there acts on it.
+  await other.click();
+  await expect(page).toHaveURL(/\/work\/board\/1$/);
+  await page.getByLabel('Comment',{exact:true}).fill(`Answered ${stamp}`);
+  await page.getByRole('button',{name:'Send',exact:true}).click();
+  await expect(page.locator('.comment-body').filter({hasText:`Answered ${stamp}`})).toBeVisible();
+  await page.goto('/c/rs-learning/approvals');
+  await expect(other).toHaveCount(0);
+  await expect(waiting.locator('.col__count')).toHaveText(String(count-1));
+  // The question opens its Conversation; the Manager's reply, sent from the composer, clears it.
+  await question.click();
+  await expect(page).toHaveURL(new RegExp(`/conversations/${conversation}$`));
+  await page.getByLabel('Message',{exact:true}).fill(`The early price ${stamp}`);
+  await page.getByRole('button',{name:'Send',exact:true}).click();
+  // Sending waits for the engine to accept the run, so it is given longer than a page change.
+  await expect(page.locator('.msg[data-author=person]').filter({hasText:`The early price ${stamp}`})).toBeVisible({timeout:30000});
+  // The reply reached the engine as a run of this Conversation.
+  await expect.poll(()=>fake.settings.runs.some(run=>run.input.includes(`The early price ${stamp}`))).toBe(true);
+  await page.goto('/c/rs-learning/approvals');
+  await expect(question).toHaveCount(0);
+  await expect(waiting.locator('.col__count')).toHaveText(String(count-2));
+ } finally {
+  query(`update public.waiting_items set resolved_at=now() where resolved_at is null and title like '%${stamp}%'`);
+  if(attachedAgent.id) query(`delete from public.hermes_agents where id='${attachedAgent.id}'`);
+  if(attachedAgent.connection) query(`delete from public.hermes_connections where id='${attachedAgent.connection}'`);
+  await fake.close();
+ }
 });

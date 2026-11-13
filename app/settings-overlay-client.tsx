@@ -108,3 +108,24 @@ export function DeleteAgent({company,slug,agent}:{company:string,slug:string,age
  </>;
 }
 
+
+// The company name (reference: settings Company, name field) for the Owner. The server checks the Owner again
+// (/api/company-name, rename_company), so the field is only a convenience.
+export function CompanyName({company,name}:{company:string,name:string}) {
+ const {t}=useI18n(); const router=useRouter();
+ const [value,setValue]=useState(name); const [pending,startTransition]=useTransition(); const [state,setState]=useState<{error?:string,saved?:boolean}>({});
+ const save=()=>startTransition(async()=>{
+  try {
+   const response=await fetch('/api/company-name',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company,name:value})});
+   const body=await response.json() as {name?:string,error?:string};
+   if(!response.ok) { setState({error:body.error||'companyNameInvalid'}); return; }
+   setValue(body.name||value); setState({saved:true}); router.refresh();
+  } catch { setState({error:'companyNameInvalid'}); }
+ });
+ const trimmed=value.trim();
+ return <form className="co-name-form" onSubmit={event=>{event.preventDefault(); save();}}>
+  <div className="co-name"><input className="set-input" id="co-name" name="name" type="text" dir="auto" maxLength={80} required autoComplete="organization" aria-describedby="co-name-status" value={value} onChange={event=>{setValue(event.target.value); setState({});}}/>
+   <button type="submit" className="btn btn--primary btn--sm" disabled={pending||!trimmed||trimmed===name.trim()}>{t('save')}</button></div>
+  <p id="co-name-status" className={state.error?'set-err':'set-hint'} role={state.error?'alert':'status'}>{state.error?t(state.error):state.saved?t('companyNameSaved'):null}</p>
+ </form>;
+}

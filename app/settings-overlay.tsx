@@ -6,7 +6,7 @@ import { getI18n } from '@/lib/i18n-server';
 import { supabase } from '@/lib/supabase';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { visibleSections, pickSection, overlayHref, agentsMainFirst, usageTotals, type OverlaySection } from '@/lib/settings-overlay.mjs';
-import { OverlayFrame, CloseButton, AccountChoices, MakeMain, DeleteAgent } from './settings-overlay-client';
+import { OverlayFrame, CloseButton, AccountChoices, MakeMain, DeleteAgent, CompanyName } from './settings-overlay-client';
 import { SettingsIcon } from './settings-icons';
 import PasswordSettings from './password-settings';
 import { UsageTable, type UsageDay } from './c/[slug]/[[...section]]/usage';
@@ -69,10 +69,9 @@ const initial=(name:string)=>name.trim().slice(0,1).toUpperCase()||'?';
 function CompanySection({t,company,members,agents,userId,slug,owner,canManage,sharedEngine,roleNames,ro}:{t:T,company:{id:string,name:string},members:Member[],agents:Agent[],userId:string,slug:string,owner:boolean,canManage:boolean,sharedEngine:boolean,roleNames:Record<string,string>,ro:ReactNode}) {
  const count=members.length; const solo=count<=1;
  const name=<section className="dp-sec" aria-labelledby="co-h-name"><Label id="co-h-name">{t('settingsCompanyName')}</Label>
-  <div className="panel-card set-card">{canManage?<div className="set-field"><label className="set-label" htmlFor="co-name">{t('settingsCompanyNameHint')}</label>
-   {/* Renaming a company is not built yet: the field shows the name and the Save button stays off. */}
-   <div className="co-name"><input className="set-input" id="co-name" type="text" dir="auto" readOnly aria-disabled="true" title={t('soon')} defaultValue={company.name}/>
-    <button type="button" className="btn btn--primary btn--sm" disabled title={t('soon')}>{t('save')}</button></div></div>
+  <div className="panel-card set-card">{owner?<div className="set-field"><label className="set-label" htmlFor="co-name">{t('settingsCompanyNameHint')}</label>
+   {/* Only the Owner renames the Company (#26); the server checks it again. Other Roles read the name. */}
+   <CompanyName key={company.name} company={company.id} name={company.name}/></div>
    :<p className="ro-text"><bdi>{company.name}</bdi></p>}</div></section>;
  const mode=<section className="dp-sec" aria-labelledby="co-h-mode"><Label id="co-h-mode">{t('settingsMode')}</Label>
   <div className="panel-card"><div className="panel-row"><span className="panel-row__icon"><SettingsIcon name={solo?'user':'team'}/></span><span className="panel-row__text">

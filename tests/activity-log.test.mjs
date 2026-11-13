@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { dayOf, daysBack, describeEntry, groupByDay, matchesFilters, parseCard, parseWho } from '../lib/activity-log.mjs';
+import { dayOf, daysBack, describeEntry, groupByDay, logCursor, matchesFilters, parseBefore, parseCard, parseWho } from '../lib/activity-log.mjs';
 import { i18n } from '../lib/i18n.mjs';
 
 // One log for the Company (#11): what each kind of row says, the page's filters and its days.
@@ -63,4 +63,14 @@ test('rows are grouped by the reader’s own day, newest first', () => {
  assert.equal(dayOf('2026-11-12T23:10:00Z', 'Africa/Cairo'), '2026-11-13');
  assert.equal(daysBack('2026-11-12', '2026-11-13'), 1);
  assert.equal(daysBack('2026-11-13', '2026-11-13'), 0);
+});
+
+test('an older page starts at a cursor of time and id, and anything else is the first page', () => {
+ const row = { created_at: '2026-01-01T00:00:00.123456+00:00', id: 302 };
+ assert.equal(logCursor(row), '2026-01-01T00:00:00.123456+00:00~302');
+ assert.deepEqual(parseBefore(logCursor(row)), { at: '2026-01-01T00:00:00.123456+00:00', id: '302' });
+ // A '+' read back from an address as a space is still the same cursor.
+ assert.deepEqual(parseBefore('2026-01-01T00:00:00Z~7'), { at: '2026-01-01T00:00:00Z', id: '7' });
+ assert.deepEqual(parseBefore('2026-01-01T00:00:00.5 00:00~7'), { at: '2026-01-01T00:00:00.5+00:00', id: '7' });
+ for (const bad of [undefined, '', '302', '2026-01-01~1', '2026-13-45T99:99:99Z~1', '2026-01-01T00:00:00Z~0', '2026-01-01T00:00:00Z~1,id.gt.0', '2026-01-01T00:00:00Z"~1']) assert.equal(parseBefore(bad), null, String(bad));
 });

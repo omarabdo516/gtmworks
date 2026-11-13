@@ -235,3 +235,5 @@
   .gw .sov .sov-password :is(input, button[type="submit"]) { height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) { .gw .sov { animation: none; } .gw .sov .switch::after { transition: none; } }
+.gw .sov .co-name-form { display: grid; gap: 6px; }
+.gw .sov .co-name-form p:empty { display: none; }

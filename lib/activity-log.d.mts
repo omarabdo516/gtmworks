@@ -5,6 +5,8 @@ export function describeEntry(row: Pick<LogRow, 'action' | 'subject' | 'details'
 export type Who = { kind: 'all' } | { kind: 'system' } | { kind: 'person' | 'agent', id: string };
 export function parseWho(value: unknown): Who;
 export function parseCard(value: unknown): number | null;
+export function logCursor(row: { created_at: string, id: number }): string;
+export function parseBefore(value: unknown): { at: string, id: string } | null;
 export function matchesFilters(row: Pick<LogRow, 'actor_kind' | 'actor_id' | 'agent_id' | 'card_id'>, who: Who, card: number | null): boolean;
 export function dayOf(iso: string, timeZone?: string): string;
 export function daysBack(day: string, today: string): number;
