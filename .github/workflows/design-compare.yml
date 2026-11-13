@@ -50,7 +50,9 @@ jobs:
       # Only when asked, and only into the database this run just created; the fixture also refuses any other.
       - name: load the comparison fixture
         if: ${{ inputs.fixture == true }}
-        run: npx --no-install supabase db query --file scripts/design-compare-fixture.sql -o json --agent no
+        run: docker exec -i "supabase_db_$(sed -n 's/^project_id = "\([A-Za-z0-9_-]*\)"$/\1/p' supabase/config.toml)" psql -X -h /var/run/postgresql -U postgres -d postgres -v ON_ERROR_STOP=1 < scripts/design-compare-fixture.sql
+        # psql runs the file's several commands (supabase db query sends one prepared statement and refuses them);
+        # the file's own begin/commit makes it one transaction and ON_ERROR_STOP fails the step on the guard.
       - name: start the production app
         run: |
           mkdir -p playwright-report
