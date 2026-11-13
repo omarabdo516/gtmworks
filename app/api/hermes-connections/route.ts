@@ -2,15 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { supabaseConfig } from '@/lib/supabase-config';
-import { encryptSecret, decryptSecret } from '@/lib/agent-crypto.mjs';
+import { encryptSecret } from '@/lib/agent-crypto.mjs';
+import { savedConnectionKey } from '@/lib/connection-key.mjs';
 import { isHermesAddressAllowed, testHermes } from '@/lib/hermes.mjs';
 import { logActionFailure } from '@/lib/diagnostics.mjs';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
 
-const columns='id,company_id,agency_owner_id,address,profile,state,version,features,unreachable_since';
+const columns='id,company_id,owner_id,address,profile,state,version,features,unreachable_since';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const reply=(body:object,status=200)=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store'}});
-const failure=(status:number)=>reply({error:status===404?'hermesNotFound':status===403?'hermesAgencyOnly':'hermesFailed'},status);
+const failure=(status:number)=>reply({error:status===404?'hermesNotFound':status===403?'hermesNotAllowed':'hermesFailed'},status);
 
 async function connectionRequest(request:NextRequest) {
  const database=await supabase(); const {data:{user}}=await database.auth.getUser();
@@ -28,8 +29,9 @@ async function connectionRequest(request:NextRequest) {
  const connection=connections?.find(connection=>connection.id===id);
  if(id&&!connection) return failure(404);
  if(!writing) return reply(id?{connection}:{connections});
- const {data:agency}=await database.rpc('agency_access');
- if(!agency||connection&&connection.agency_owner_id!==user.id) return failure(403);
+ // Connections are the Company's Owners' to manage (ADR 0012); RLS refuses anyone else as well.
+ const {data:membership}=await database.from('members').select('role').eq('company_id',company).eq('person_id',user.id).is('removed_at',null).maybeSingle();
+ if(membership?.role!=='owner') return failure(403);
  if(body.intent==='remove'&&connection) {
   const {data:removed,error}=await database.from('hermes_connections').delete().eq('id',id).select('id');
   if(error?.code==='23503') return reply({error:'hermesProfileInUse'},409);
@@ -42,18 +44,22 @@ async function connectionRequest(request:NextRequest) {
   if(!['http:','https:'].includes(url.protocol)||url.username||url.password||url.search||url.hash||typeof body.profile!=='string'||!/^[a-zA-Z0-9_-]{1,100}$/.test(body.profile)||typeof body.key!=='string'||!body.key.trim()||body.key.length>4096||/[\r\n]/.test(body.key)) return failure(400);
   if(!isHermesAddressAllowed(url.href)) return reply({error:'hermesHttpsRequired'},400);
   address=url.toString().replace(/\/$/,''); profile=body.profile; key=body.key;
+  // A saved Connection keeps its address and profile (the database refuses a change too); another one is a new Connection.
+  if(connection&&(connection.address!==address||connection.profile!==profile)) return reply({error:'hermesDestinationFixed'},409);
  } else {
+  if(!connection) return failure(400);
   if(!isHermesAddressAllowed(address)) return reply({error:'hermesHttpsRequired'},400);
   const server=createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false}});
-  const {data:secret,error}=await server.from('hermes_connections').select('key_encrypted').eq('id',id).eq('agency_owner_id',user.id).single();
-  if(error||!secret) return failure(500);
-  key=decryptSecret(secret.key_encrypted,process.env.WEBHOOK_ENCRYPTION_KEY);
+  // connection was read above under the Owner's own access and with this company, so its company is the authorized one.
+  const saved=await savedConnectionKey(server,{id:connection.id,company:connection.company_id},process.env.WEBHOOK_ENCRYPTION_KEY);
+  if(!saved) return failure(500);
+  key=saved;
  }
  const status=await testHermes({address,profile,key});
  const unreachableSince=connection&&connection.address===address&&connection.profile===profile?connection.unreachable_since:null;
  const fields={...status,unreachable_since:status.state==='unreachable'?(unreachableSince||new Date().toISOString()):null};
  const mutation=body.intent==='save'?{...fields,address,profile,key_encrypted:encryptSecret(key,process.env.WEBHOOK_ENCRYPTION_KEY)}:fields;
- const query=connection?database.from('hermes_connections').update(mutation).eq('id',id):database.from('hermes_connections').insert({...mutation,company_id:company,agency_owner_id:user.id});
+ const query=connection?database.from('hermes_connections').update(mutation).eq('id',id):database.from('hermes_connections').insert({...mutation,company_id:company,owner_id:user.id});
  const {data:saved,error}=await query.select(columns).single();
  if(error?.message==='hermesProfileInUse') return reply({error:'hermesProfileInUse'},409);
  return error?failure(500):reply({connection:saved});

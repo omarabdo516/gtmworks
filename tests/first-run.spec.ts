@@ -33,7 +33,7 @@ async function fillFirstRun(page:Page,values:typeof input) {
  await page.getByLabel(/^(First company name|اسم الشركة الأولى)$/).fill(values.company);
 }
 
-test('empty install creates its Agency owner and first company with a password and opens Home signed in, with no email',async({page,baseURL})=>{
+test('empty install creates its first person as the Owner of its first company with a password and opens Home signed in, with no email',async({page,baseURL})=>{
  await page.request.delete(inbox);
  await page.goto('/');
  await expect(page).toHaveURL('/first-run');
@@ -53,7 +53,7 @@ test('empty install creates its Agency owner and first company with a password a
  await expect(page.locator('.home-dashboard')).toBeVisible();
  await expect(page.getByLabel('اختيار الشركة')).toContainText(input.company);
  expect(counts(baseURL!)).toEqual({accounts:1,people:1,companies:1,owners:1});
- expect(localQuery('select agency_owner,language from public.people',baseURL)[0]).toEqual({agency_owner:true,language:'ar'});
+ expect(localQuery(`select p.language,m.role,m.grant_publishing,m.grant_money_figures,m.grant_customer_data,c.name company from public.people p join public.members m on m.person_id=p.id and m.removed_at is null join public.companies c on c.id=m.company_id`,baseURL)).toEqual([{language:'ar',role:'owner',grant_publishing:true,grant_money_figures:true,grant_customer_data:true,company:input.company}]);
  expect((await page.request.get('/first-run')).status()).toBe(404);
  // Two requests carry it, both in a submit body: the page's check that the code is right, then the submission.
  const carrying=requests.filter(request=>request.url.includes(code) || request.body?.includes(code));
@@ -159,7 +159,7 @@ test('concurrent submissions leave exactly one account, person, company and Owne
  const responses=await Promise.all([submit('race-one@example.test'),submit('race-two@example.test')]);
  expect(responses.map(response=>response.status()).sort()).toEqual([303,404]);
  expect(counts(baseURL!)).toEqual({accounts:1,people:1,companies:1,owners:1});
- expect(localQuery(`select count(*)::int winners from auth.users a join public.people p on p.id=a.id join public.members m on m.person_id=p.id join public.companies c on c.id=m.company_id where p.agency_owner and m.role='owner'`,baseURL)[0]).toEqual({winners:1});
+ expect(localQuery(`select count(*)::int winners from auth.users a join public.people p on p.id=a.id join public.members m on m.person_id=p.id join public.companies c on c.id=m.company_id where m.role='owner' and m.removed_at is null`,baseURL)[0]).toEqual({winners:1});
  expect((await request.get('/first-run')).status()).toBe(404);
  expect((await submit('late@example.test')).status()).toBe(404);
  expect(counts(baseURL!)).toEqual({accounts:1,people:1,companies:1,owners:1});

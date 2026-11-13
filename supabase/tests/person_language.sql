@@ -8,7 +8,7 @@ select lives_ok($$select public.set_language('ar')$$,'a Viewer can choose their 
 select is((select language from public.people where id=auth.uid()),'ar','language is stored on the person');
 select throws_ok($$select public.set_language('fr')$$,'23514',null,'unsupported language rejected');
 select throws_ok($$select public.set_language(null)$$,'23502',null,'null language rejected');
-with changed as (update public.people set agency_owner=true,name='Changed' where id=auth.uid() returning 1) select is((select count(*)::int from changed),0,'preference does not grant profile or owner updates');
+with changed as (update public.people set name='Changed' where id=auth.uid() returning 1) select is((select count(*)::int from changed),0,'preference does not grant profile updates');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000005',true);
 select is((select language from public.people where id=auth.uid()),'en','another person keeps their own choice');
 select lives_ok($$select public.set_language('en')$$,'another person can choose English');

@@ -171,7 +171,7 @@ test('owner assigns a new Contributor agent through settings, Home follows renam
   await expect(assigned.locator('td').last()).toHaveText(renamed);
   await page.goto('/c/rs-learning/settings/members');
   const renamedMember=page.locator('.member-row').filter({has:page.locator('strong',{hasText:new RegExp(`^${renamed}$`)})});
-  await renamedMember.getByRole('combobox',{name:"Role",exact:true}).selectOption('viewer');
+  await renamedMember.getByRole('combobox',{name:"Member role",exact:true}).selectOption('viewer');
   await renamedMember.getByRole('button',{name:"Save",exact:true}).click();
   await expect(page.getByRole('status')).toHaveText("Change saved.");
   await expect(renamedMember.getByRole('combobox',{name:"Agent role",exact:true})).toHaveCount(0);
@@ -228,20 +228,15 @@ test('recent cards record actual opens only, newest three per person and company
  expect(await hrefs()).toEqual([1,4,3].map(id=>`/c/rs-learning/work/board/${id}`));
 });
 
-test('agency list keeps the current company actions and inbox count in the sidebar',async({page})=>{
+test('the company switcher lists only the person\'s companies, and the old all-companies list is not found',async({page})=>{
+ // Omar is the Owner of all three seeded companies; there is no list of every company beyond them.
  await signIn(page,'omar@example.com','/c/rs-learning/home');
- await chooseCompany(page,'');
- await expect(page).toHaveURL(/\/all-brands$/);
- await expect(page.locator('.nav').getByRole('button',{name:"New",exact:true})).toBeVisible();
- const count=await page.locator('.nav a[href$="/approvals"] .badge').textContent();
  await openNavigation(page);
- await page.locator('.nav a[href$="/approvals"]').click();
- await expect(page.locator('.approvals')).toBeVisible();
- expect(await page.locator('.approval-card').count()).toBe(Number(count));
- await page.goto('/all-brands');
- await openNavigation(page);
- await page.locator('.nav').getByRole('button',{name:"New",exact:true}).click();
- await expect(page.getByRole('dialog',{name:"New conversation"})).toBeVisible();
+ await page.getByLabel(/Choose company|اختيار الشركة/).click();
+ await expect(page.locator('[data-company-slug]')).toHaveCount(3);
+ await expect(page.locator('[data-company-slug=""]')).toHaveCount(0);
+ await page.keyboard.press('Escape');
+ expect((await page.goto('/all-brands'))?.status()).toBe(404);
 });
 
 test('Paperclip mobile navigation hides on deliberate scrolling, returns on upward scrolling and opens the drawer once',async({page})=>{

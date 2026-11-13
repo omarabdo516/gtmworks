@@ -3,7 +3,8 @@
 export const languages = ['en', 'ar'];
 export const widths = [1440, 390];
 
-// `anonymous` screens are shown to a visitor who has not signed in; every other screen is the agency owner's view.
+// `anonymous` screens are shown to a visitor who has not signed in; every other screen is the view of the
+// seeded Owner of every company.
 const lightScreens = [
   { name: 'sign-in', path: '/sign-in', anonymous: true },
   { name: 'home', path: '/c/rs-learning/home' },
@@ -14,7 +15,6 @@ const lightScreens = [
   { name: 'members', path: '/c/rs-learning/settings/members' },
   { name: 'agents', path: '/c/rs-learning/settings/agents' },
   { name: 'work-settings', path: '/c/rs-learning/settings/work' },
-  { name: 'agencies', path: '/all-brands' },
 ];
 
 export const screens = [

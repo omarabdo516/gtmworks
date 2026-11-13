@@ -33,7 +33,7 @@ For a remote server, forward them over SSH (`ssh -L 3000:localhost:3000
 -L 8025:localhost:8025 your-server`) and open the setup link there. Do not expose the
 mailbox publicly. On a fresh install, enter your name, email, a password of at
 least 10 characters (twice) and your first company name; you are signed in
-at once, with no email step. You become the Agency owner and the first company's
+at once, with no email step. You become the first company's
 Owner. Setup then closes permanently and the setup link stops working; later
 visits sign in with email and password, and a sign-in lasts 30 days on that
 browser unless you sign out. Public sign-ups stay disabled. No demo people or

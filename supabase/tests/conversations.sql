@@ -1,16 +1,15 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 select plan(16);
--- A company Omar is not a member of: only Agency access, after two-step verification, lets him write there.
+-- A company Omar is not a member of: nothing lets him write there, even with two-step verification.
 insert into public.companies(id,slug,name) values ('10000000-0000-0000-0000-000000000099','conversation-outside','Test');
-insert into public.hermes_connections(id,company_id,agency_owner_id,address,profile,key_encrypted,state) values ('e0000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://localhost','writer','ciphertext','connected');
+insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('e0000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://localhost','writer','ciphertext','connected');
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('e1000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','e0000000-0000-0000-0000-000000000001','Mona','Writing',true);
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
-select set_config('request.jwt.claims','{"aal":"aal1"}',true);
-select throws_ok($$select public.send_conversation_message('e2000000-0000-0000-0000-000000000009','10000000-0000-0000-0000-000000000099','e1000000-0000-0000-0000-000000000001','Hello','e3000000-0000-0000-0000-000000000009','run_9')$$,'42501','conversationNotAllowed','two-step verification is required to write outside one''s own companies');
 select set_config('request.jwt.claims','{"aal":"aal2"}',true);
-select is(public.send_conversation_message('e2000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000001','Hello','e3000000-0000-0000-0000-000000000001','run_1'),true,'an Agency person starts a conversation');
+select throws_ok($$select public.send_conversation_message('e2000000-0000-0000-0000-000000000009','10000000-0000-0000-0000-000000000099','e1000000-0000-0000-0000-000000000001','Hello','e3000000-0000-0000-0000-000000000009','run_9')$$,'42501','conversationNotAllowed','nobody writes outside their own companies, even after two-step verification');
+select is(public.send_conversation_message('e2000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000001','Hello','e3000000-0000-0000-0000-000000000001','run_1'),true,'the Owner starts a conversation');
 select is(public.send_conversation_message('e2000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000001','Hello','e3000000-0000-0000-0000-000000000001','run_1'),false,'the same send stores nothing more');
 select is((select count(*)::int from public.conversation_messages where conversation_id='e2000000-0000-0000-0000-000000000001'),1,'one stored message');
 select is((select person_id::text||' '||author from public.conversation_messages),'20000000-0000-0000-0000-000000000001 person','the row names its author');
@@ -25,7 +24,6 @@ select throws_ok($$update public.conversation_messages set body='changed'$$,'425
 select throws_ok($$delete from public.conversation_messages$$,'42501','conversationAppendOnly','the database refuses a delete');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
-select set_config('request.jwt.claims','{"aal":"aal1"}',true);
 select is((select count(*)::int from public.conversations),0,'another member of the company sees no conversation');
 select is((select count(*)::int from public.conversation_messages),0,'and no message');
 select throws_ok($$select public.send_conversation_message('e2000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000001','Hi','e3000000-0000-0000-0000-000000000003','run_3')$$,'P0002','conversationNotFound','a company member cannot write in another person''s conversation');

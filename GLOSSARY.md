@@ -1,6 +1,6 @@
 # gtmworks
 
-A marketing operating system that Omar's agency runs for many client companies at once: monthly strategy, content calendar, captions, designs, publishing, metrics and comments, each company kept apart from the others.
+A self-hosted marketing operating system that the person who installs it runs for one or many companies: monthly strategy, content calendar, captions, designs, publishing, metrics and comments, each company kept apart from the others.
 
 ## Language
 
@@ -8,7 +8,7 @@ The UI defaults to English and ships a complete Modern Standard Arabic translati
 
 Sidebar labels: Search / بحث; Home / الرئيسية; Inbox / الوارد; Work / الشغل (Work / العمل, Projects / المشاريع, Routines / المهام المتكررة, Campaigns / الحملات, Library / المكتبة, Publishing / النشر); Results / النتائج; Team / الفريق (Agents / الوكلاء والأتمتة, Skills / المهارات, Connections / الربط, Activity log / السجل); Agents / الوكلاء (Company chat / محادثة الشركة, Account manager / مدير الحساب, Writer / الكاتب, Designer / المصمم, Critic / الناقد); Recent / آخر البطاقات.
 
-Permission roles: Owner / مالك; Manager / مدير; Contributor / مساهم; Reviewer / مراجع; Viewer / مشاهد.
+Permission roles: Owner / مالك; Manager / مدير; Contributor / مساهم; Viewer / مشاهد.
 
 ### Who
 
@@ -25,13 +25,17 @@ A person's place in one company, carrying the role they hold there. One person c
 _Avoid_: user, seat, staff
 
 **Agent / وكيل**:
-A named worker running in Hermes, attached to a Company with a free name and speciality. Each Company has one default Agent for new conversations. A Hermes profile normally serves one Company because its memory belongs to that profile; an Agency owner must explicitly confirm the memory-sharing warning before attaching it to another Company. Legacy role agents retain their company grants during the transition. An Agent never approves, rejects, publishes or spends at this stage.
+A named worker running in Hermes, attached to a Company with a free name and speciality. Each Company has one default Agent for new conversations, its main Agent. A Hermes profile normally serves one Company because its memory belongs to that profile; an Owner must explicitly confirm the memory-sharing warning before attaching it to another Company. Legacy role agents retain their company grants during the transition. An Agent never approves, rejects, publishes or spends at this stage.
+
+**Main Agent / الوكيل الرئيسي**:
+The Company's default Agent, the one people talk to first. The bundled Engine names it Lead; a Company has one at a time, and an Owner may make another of its Agents the main one.
+_Avoid_: default bot, assistant, orchestrator
 
 **Run / تشغيل**:
 One attempt by an agent to work on one card in one company, with a short-lived credential limited to that card and run. A retry keeps the same card; execution happens outside gtmworks.
 
 **Conversation / محادثة**:
-One person's exchange with one Agent, started from New. It stays with that Agent for its whole life and maps to one session in the Agent's Engine (a Hermes session today), where the Agent's working context lives. gtmworks keeps its own append-only record of it as people saw it: who wrote each message, the Agent's reply and the time; the copy flows one way, from Hermes to gtmworks. A conversation is private to the person who started it. For now only Agency people start or write in one.
+One person's exchange with one Agent, started from New. It stays with that Agent for its whole life and maps to one session in the Agent's Engine (a Hermes session today), where the Agent's working context lives. gtmworks keeps its own append-only record of it as people saw it: who wrote each message, the Agent's reply and the time; the copy flows one way, from Hermes to gtmworks. A conversation is private to the person who started it. Any Member except a Viewer may start or write in one.
 _Avoid_: chat, thread, session
 
 **Engine / المحرك**:
@@ -53,7 +57,7 @@ A stable designation identifying a company's account manager, writer, designer o
 _Avoid_: display name, person identity, permission role
 
 **Role / دور**:
-The named set of permissions a member holds in one company: Owner, Manager, Contributor, Reviewer, or Viewer. Each company may change what every role except Owner may do.
+The named set of permissions a member holds in one company: Owner, Manager, Contributor, or Viewer. Owners and Managers approve; Contributors and Viewers never do. Each company may change what every role except Owner may do.
 _Avoid_: group, user type, access level
 
 **Grant / صلاحية منفصلة**:
@@ -64,16 +68,12 @@ One thing a role allows in a company, such as approving a post, sending a commen
 _Avoid_: right, privilege, scope
 
 **Owner / مالك**:
-The role that can do everything in its company; only an Owner or Omar can make another member an Owner. A company always has at least one.
+The role that can do everything in its company; only an Owner can make another member an Owner. The first person through first-run is the first company's Owner. A company always has at least one.
 _Avoid_: admin, super admin
 
 **Connection / ربط**:
 A company's link to an outside account or tool, such as Facebook, Google Ads, Odoo or an MCP tool. It belongs to one company and is made by a member allowed to connect accounts. Keys are encrypted and never shown to agents; model credentials stay outside gtmworks.
 _Avoid_: integration, account, credential, token
-
-**Agency / وكالة**:
-Omar's team, which runs the product for every company. An agency person works in a company only as a member of it; Omar alone sees every company.
-_Avoid_: admin, operator, platform
 
 ### What a company sells, and to whom
 

@@ -6,6 +6,8 @@ status: accepted
 
 Omar's decision of 2026-11-11, ticket #282. This supersedes the Codex and Claude Code drivers planned in [ADR 0009](0009-conversations-run-on-engines-behind-one-engine-contract.md). The engine contract of ADR 0009 stays; Hermes is its driver.
 
+[ADR 0012](0012-no-agency-layer-the-company-owner-manages-the-company.md) (#7): every Agency owner below is now the Company's Owner.
+
 ## Context
 
 ADR 0008 had each person install gtmworks beside their own Hermes and paste its address, profile and key. ADR 0009 then planned Codex and Claude Code drivers so that Hermes would not be required. Hermes already provides memory, routines, several agents, skills, approvals and subscription sign-in. Rebuilding those around other engines would cost more than shipping Hermes, and a person who has never heard of Hermes should be able to install gtmworks alone.

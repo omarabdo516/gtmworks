@@ -242,6 +242,9 @@ jobs:
           fail() { echo "install check failed: $1" >&2; exit 1; }
           # An install piped into tee keeps its own exit status.
           set -o pipefail
+          # A failure prints a fixed-field summary of the web and gateway logs (never log text) while the install still
+          # exists; the status is kept. The last step removes the Docker machine.
+          trap 'status=$?; if [ "$status" -ne 0 ]; then bash scripts/install-diagnostics.sh || true; fi; exit "$status"' EXIT
           { sh scripts/install.sh || fail 'first install'; } 2>&1 | tee first-install.log
           compose() { docker compose --env-file .env.install -f docker-compose.install.yml "$@"; }
           db() { compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 -At "$@"; }

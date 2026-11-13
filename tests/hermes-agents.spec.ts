@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
-import { createHmac, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { fakeHermes } from './fake-hermes.mjs';
 import { signIn } from './sign-in';
 
@@ -9,37 +9,25 @@ const other='10000000-0000-0000-0000-000000000002';
 const owner='20000000-0000-0000-0000-000000000001';
 const endpoint='/api/hermes-agents';
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
-function totp(secret:string) {
- const bits=[...secret.toUpperCase()].map(character=>'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'.indexOf(character).toString(2).padStart(5,'0')).join('');
- const key=Buffer.from(bits.match(/.{8}/g)!.map(byte=>parseInt(byte,2)));
- const counter=Buffer.alloc(8); counter.writeBigUInt64BE(BigInt(Math.floor(Date.now()/30000)));
- const digest=createHmac('sha1',key).update(counter).digest();
- return String((digest.readUInt32BE(digest[19]&15)&0x7fffffff)%1000000).padStart(6,'0');
-}
-async function agencySignIn(page:Page) {
- query(`delete from auth.mfa_factors where user_id='${owner}'`);
+// Omar is the Owner of all three seeded companies, so he manages their agents with no extra step.
+async function ownerSignIn(page:Page) {
  query(`update public.people set language='en' where id='${owner}'`);
- await signIn(page,'omar@example.com','/all-brands');
- await page.getByRole('button',{name:'Set up authenticator'}).click();
- await page.getByLabel('Verification code').fill(totp((await page.locator('code').textContent())!));
- await page.getByRole('button',{name:'Verify',exact:true}).click();
- await expect(page.locator('.company-card')).toHaveCount(3);
+ await signIn(page,'omar@example.com','/c/rs-learning/agents');
 }
 function fixtureConnection(id:string,profile:string,state='connected') {
- query(`insert into public.hermes_connections(id,company_id,agency_owner_id,address,profile,key_encrypted,state) values ('${id}','${company}','${owner}','http://localhost','${profile}','ciphertext','${state}')`);
+ query(`insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('${id}','${company}','${owner}','http://localhost','${profile}','ciphertext','${state}')`);
 }
 function cleanup(ids:string[]) {
  const list=ids.map(id=>`'${id}'`).join(',');
  query(`delete from public.hermes_agents where connection_id in (${list})`);
  query(`delete from public.hermes_connections where id in (${list})`);
- query(`delete from auth.mfa_factors where user_id='${owner}'`);
 }
 
-test('Agency connects, names and attaches an agent, confirms profile sharing and chooses a successor on removal',async({page})=>{
+test('the Owner connects, names and attaches an agent, confirms profile sharing and chooses a successor on removal',async({page})=>{
  const fake=await fakeHermes(); const ids:string[]=[];
  const post=(body:object)=>page.request.post(endpoint,{data:{company,...body}});
  try {
-  await agencySignIn(page);
+  await ownerSignIn(page);
   const connected=await page.request.post('/api/hermes-connections',{data:{company,intent:'save',address:fake.address,profile:'writer',key:fake.settings.key}});
   expect(connected.status()).toBe(200); const connection=(await connected.json()).connection.id; ids.push(connection);
   await page.goto('/c/rs-learning/agents');
@@ -92,7 +80,7 @@ test('integration: concurrent default changes and first attachments serialize, a
  const ids=[randomUUID(),randomUUID(),randomUUID()]; ids.forEach((id,index)=>fixtureConnection(id,`profile-${index}-${id}`));
  const post=(body:object)=>page.request.post(endpoint,{data:{company,...body}});
  try {
-  await agencySignIn(page);
+  await ownerSignIn(page);
   const first=await Promise.all(ids.slice(0,2).map((connection,index)=>post({intent:'attach',connection,name:`Agent ${index}`,speciality:'Strategy'})));
   expect(first.map(response=>response.status())).toEqual([200,200]);
   let agents=(await (await page.request.get(`${endpoint}?company=${company}`)).json()).agents;
@@ -113,11 +101,12 @@ test('integration: concurrent default changes and first attachments serialize, a
  } finally { cleanup(ids); await fake.close(); }
 });
 
-test('isolation: every company role sees only its own agents and cannot mutate assignments or another company',async({browser})=>{
+test('isolation: every company role sees only its own agents; only an Owner changes assignments, and never another company\'s',async({browser})=>{
  test.setTimeout(120000);
  const ids=[randomUUID(),randomUUID()]; ids.forEach(id=>fixtureConnection(id,id));
  query(`insert into public.hermes_agents(company_id,connection_id,name,speciality,is_default) values ('${company}','${ids[0]}','RS agent','Writing',true),('${other}','${ids[1]}','Other company agent','Strategy',true)`);
- const roles=[['manager@example.com','20000000-0000-0000-0000-000000000002','owner'],['manager@example.com','20000000-0000-0000-0000-000000000002','manager'],['agent1@example.com','30000000-0000-0000-0000-000000000001','contributor'],['reviewer@example.com','20000000-0000-0000-0000-000000000003','reviewer'],['viewer@example.com','20000000-0000-0000-0000-000000000004','viewer']];
+ // The Owner comes last, so the roles before it see the seeded assignment unchanged.
+ const roles=[['manager@example.com','20000000-0000-0000-0000-000000000002','manager'],['agent1@example.com','30000000-0000-0000-0000-000000000001','contributor'],['reviewer@example.com','20000000-0000-0000-0000-000000000003','contributor'],['viewer@example.com','20000000-0000-0000-0000-000000000004','viewer'],['manager@example.com','20000000-0000-0000-0000-000000000002','owner']];
  try {
   for(const [email,person,role] of roles) {
    query(`update public.members set role='${role}' where company_id='${company}' and person_id='${person}'`);
@@ -126,14 +115,24 @@ test('isolation: every company role sees only its own agents and cannot mutate a
     await signIn(page,email,'/c/rs-learning/agents');
     const panel=page.getByRole('region',{name:'Connected agents'});
     await expect(panel.getByText('RS agent',{exact:true})).toBeVisible(); await expect(panel.getByText('Other company agent')).toHaveCount(0);
-    await expect(panel.getByRole('button',{name:'Attach agent',exact:true})).toHaveCount(0);
+    await expect(panel.getByRole('button',{name:'Attach agent',exact:true})).toHaveCount(role==='owner'?1:0);
     const own=await page.request.get(`${endpoint}?company=${company}`); expect(own.status()).toBe(200);
     const agent=(await own.json()).agents[0]; expect(agent.name).toBe('RS agent');
     expect((await page.request.get(`${endpoint}?company=${other}`)).status()).toBe(404);
     for(const intent of ['attach','default','remove']) {
-     expect((await page.request.post(endpoint,{data:{company,intent,agent:agent.id,connection:ids[0],name:'Forbidden',speciality:'Writing'}})).status()).toBe(403);
      expect((await page.request.post(endpoint,{data:{company:other,intent,agent:agent.id,connection:ids[0],name:'Forbidden',speciality:'Writing'}})).status()).toBe(404);
+     if(role==='owner') continue;
+     const refused=await page.request.post(endpoint,{data:{company,intent,agent:agent.id,connection:ids[0],name:'Forbidden',speciality:'Writing'}});
+     expect(refused.status()).toBe(403); expect((await refused.json()).error).toBe('hermesNotAllowed');
     }
+    if(role==='owner') {
+     // An Owner who did not make the Connection still manages the company's agents.
+     const kept=await page.request.post(endpoint,{data:{company,intent:'default',agent:agent.id}});
+     expect(kept.status()).toBe(200);
+     const audit=JSON.parse(query(`select actor_id from public.hermes_agent_audit where action='DEFAULT_HERMES_AGENT' and agent_id='${agent.id}'`));
+     expect(audit).toEqual([{actor_id:person}]);
+    }
+    expect(JSON.parse(query(`select name,is_default from public.hermes_agents where company_id='${company}' and connection_id in ('${ids[0]}','${ids[1]}')`))).toEqual([{name:'RS agent',is_default:true}]);
    } finally { await context.close(); }
   }
  } finally {

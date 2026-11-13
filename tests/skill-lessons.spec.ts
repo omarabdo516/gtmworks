@@ -64,11 +64,11 @@ test('an agent proposes a lesson from its run, the Inbox shows the change, the r
   await expect(one).toContainText('Hooks that opened with a number were saved more often.');
   await expect(one.getByRole('link')).toHaveText(card.title);
   await expect(one.getByRole('link')).toHaveAttribute('href',`/c/rs-learning/work/board/${card.id}`);
-  // A member who does not manage the company sees no lessons.
-  const reviewer=await outside.newPage();
-  await signIn(reviewer,'reviewer@example.com','/c/rs-learning/approvals');
-  await expect(reviewer.getByRole('heading',{name:/Awaiting approval/})).toBeVisible();
-  await expect(reviewer.getByRole('group',{name:'Lesson for caption-hooks'})).toHaveCount(0);
+  // A member who does not manage the company (a Contributor) sees no lessons.
+  const contributor=await outside.newPage();
+  await signIn(contributor,'reviewer@example.com','/c/rs-learning/approvals');
+  await expect(contributor.getByRole('heading',{name:/Awaiting approval/})).toBeVisible();
+  await expect(contributor.getByRole('group',{name:'Lesson for caption-hooks'})).toHaveCount(0);
   // The page in both languages, at phone and desktop width, with 44px buttons and no sideways scroll on a phone.
   for(const copy of [{language:'en' as const,heading:'Lessons awaiting approval'},{language:'ar' as const,heading:'دروس تنتظر الموافقة'}]) {
    await chooseLanguage(page,copy.language);
