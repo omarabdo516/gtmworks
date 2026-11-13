@@ -14,7 +14,7 @@ do $$ begin
  end if;
 end $$;
 
-insert into public.hermes_connections(id,company_id,agency_owner_id,address,profile,key_encrypted,state)
+insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state)
 select ('60000000-0000-0000-0000-00000000000'||n)::uuid,'10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001',
  'http://127.0.0.1:9/p/compare-'||n,'compare-'||n,'design-compare-fixture-no-key','unreachable'
 from generate_series(1,5) n

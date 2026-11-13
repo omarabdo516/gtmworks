@@ -1,6 +1,6 @@
 // The sidebar's four entries, as the approved reference lists them: Chats, Marketing board, Numbers, Activity log.
-// Numbers opens Home (the dashboard) and Activity log its existing page; the board entry's count opens the Inbox.
-export const shellNav = [['chat','chats','chat'], ['work/board','marketingBoard','board'], ['home','numbers','chart'], ['history','activityLog','history']] as const;
+// Numbers and Activity log open their own pages (#35, #11); the board entry's count opens the Inbox.
+export const shellNav = [['chat','chats','chat'], ['work/board','marketingBoard','board'], ['numbers','numbers','chart'], ['log','activityLog','history']] as const;
 // Every company section and its title. Sections without a sidebar entry still open inside the shell.
 export const primaryNav =[['search','search'], ['home','home'], ['approvals','inbox']] as const;
 export const navGroups = [
