@@ -9,16 +9,16 @@ insert into auth.users (instance_id,id,aud,role,email,email_confirmed_at,created
 ('00000000-0000-0000-0000-000000000000','20000000-0000-0000-0000-000000000004','authenticated','authenticated','viewer@example.com',now(),now(),now(),'{"provider":"email","providers":["email"]}','{}','','','',''),
 ('00000000-0000-0000-0000-000000000000','20000000-0000-0000-0000-000000000005','authenticated','authenticated','multi@example.com',now(),now(),now(),'{"provider":"email","providers":["email"]}','{}','','','','');
 insert into auth.identities (id,user_id,identity_data,provider,provider_id,last_sign_in_at,created_at,updated_at) select id,id,jsonb_build_object('sub',id::text,'email',email),'email',email,now(),now(),now() from auth.users where id::text like '20000000-%';
-insert into public.people (id,name,agency_owner) values ('20000000-0000-0000-0000-000000000001','عمر',true),('20000000-0000-0000-0000-000000000002','مدير',false),('20000000-0000-0000-0000-000000000003','مراجع',false),('20000000-0000-0000-0000-000000000004','مشاهد',false),('20000000-0000-0000-0000-000000000005','عضو',false);
+insert into public.people (id,name) values ('20000000-0000-0000-0000-000000000001','عمر'),('20000000-0000-0000-0000-000000000002','مدير'),('20000000-0000-0000-0000-000000000003','مراجع'),('20000000-0000-0000-0000-000000000004','مشاهد'),('20000000-0000-0000-0000-000000000005','عضو');
 insert into public.members (company_id,person_id,role,grant_publishing,grant_money_figures,grant_customer_data) select id,'20000000-0000-0000-0000-000000000001','owner',true,true,true from public.companies;
 update public.approval_steps set person_id='20000000-0000-0000-0000-000000000001',role=null where company_id='10000000-0000-0000-0000-000000000001';
 insert into public.members (company_id,person_id,role) values
 ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','manager'),
-('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','reviewer'),
+('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','contributor'),
 ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000004','viewer'),
-('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000005','reviewer'),
+('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000005','contributor'),
 ('10000000-0000-0000-0000-000000000003','20000000-0000-0000-0000-000000000005','contributor');
-insert into public.role_permissions (company_id,role,permission,allowed) select c.id,r.role,p.permission,case when p.permission in ('approve','reject') then r.role in ('owner','manager','reviewer') else r.role <> 'viewer' end from public.companies c cross join unnest(enum_range(null::public.member_role)) as r(role) cross join (values ('approve'),('reject'),('edit')) as p(permission);
+insert into public.role_permissions (company_id,role,permission,allowed) select c.id,r.role,p.permission,case when p.permission in ('approve','reject') then r.role in ('owner','manager') else r.role <> 'viewer' end from public.companies c cross join unnest(enum_range(null::public.member_role)) as r(role) cross join (values ('approve'),('reject'),('edit')) as p(permission);
 -- Record an example membership change through the same trigger used by the app.
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',false);
 update public.members set grant_publishing=true where company_id='10000000-0000-0000-0000-000000000001' and person_id='20000000-0000-0000-0000-000000000003';

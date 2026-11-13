@@ -33,7 +33,7 @@ export const screens = {
 export const languages = ['ar', 'en'];
 export const themes = ['light', 'dark'];
 export const defaultBuiltUrl = 'http://127.0.0.1:3000';
-// The agency owner the seeded database and tests/visual.spec.ts sign in with.
+// The seeded Owner of every company, the person tests/visual.spec.ts signs in as.
 export const defaultSignIn = 'omar@example.com';
 
 export class UsageError extends Error {

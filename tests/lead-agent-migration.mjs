@@ -9,6 +9,12 @@ const verify=readFileSync('supabase/migrations/20261201000000_lead_agent.verify.
 const sql=`begin;
 create extension if not exists pgtap with schema extensions;
 select plan(8);
+-- The migration was written for the Agency shape that 20261204000000_remove_agency removed: people.agency_owner and
+-- hermes_connections.agency_owner_id. This rolled-back replay puts that shape back, with Omar as the Agency owner, so the
+-- migration runs as written.
+alter table public.people add column agency_owner boolean not null default false;
+update public.people set agency_owner=true where id='20000000-0000-0000-0000-000000000001';
+alter table public.hermes_connections rename column owner_id to agency_owner_id;
 insert into public.hermes_connections(id,company_id,agency_owner_id,address,profile,key_encrypted,state) values
  ('f2860000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://localhost','lead','ciphertext','connected'),
  ('f2860000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://localhost','other','ciphertext','connected'),

@@ -1,9 +1,9 @@
 // CI runs this on stdin inside /app in the installed web container, after pointing the bundled Hermes at the fake model
 // provider this script serves on http://web:8080/v1 (no subscription). It proves the bundled Hermes (ADR 0010) answers
-// /health on the compose network, and that an Agency owner's Arabic message gets its reply with no manual connection
+// /health on the compose network, and that a company Owner's Arabic message gets its reply with no manual connection
 // step: the worker provides the company's Hermes by itself, and closes the run with the reply.
 import assert from 'node:assert/strict';
-import { createHmac, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { createClient } from '@supabase/supabase-js';
 const {sendMessage}=await import(`${process.cwd()}/lib/conversation-runs.mjs`);
@@ -38,16 +38,14 @@ try {
  const checked=async query=>{const {data,error}=await query; assert.equal(error,null,JSON.stringify(error)); return data;};
  const credentials={email:'bundled-hermes@example.com',password:`Bundled-${randomUUID()}`};
  const {user}=await checked(service.auth.admin.createUser({...credentials,email_confirm:true}));
- await checked(service.from('people').insert({id:user.id,name:'Bundled Hermes Check',agency_owner:true}));
+ await checked(service.from('people').insert({id:user.id,name:'Bundled Hermes Check'}));
  const company=randomUUID();
  await checked(service.from('companies').insert({id:company,slug:`bundled-${company.slice(0,8)}`,name:'Bundled Hermes'}));
  await checked(service.from('members').insert({company_id:company,person_id:user.id,role:'owner'}));
 
- // The person's own session, two-step verified (Agency access), as the conversation route receives it.
+ // The Owner's own session, as the conversation route receives it.
  const person=createClient(origin,process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,options);
  await checked(person.auth.signInWithPassword(credentials));
- const factor=await checked(person.auth.mfa.enroll({factorType:'totp',friendlyName:'bundled-hermes'}));
- await checked(person.auth.mfa.challengeAndVerify({factorId:factor.id,code:totp(factor.totp.secret)}));
 
  const until=async(what,read,seconds)=>{
   for(let left=seconds;left>0;left--) { const found=await read(); if(found) return found; await new Promise(resolve=>setTimeout(resolve,1000)); }
@@ -65,11 +63,3 @@ try {
  assert.ok(asked.some(body=>JSON.stringify(body.messages).includes('مرحباً')),'the Arabic message reached the model');
  console.log(JSON.stringify({company,agent:agent.id,conversation}));
 } finally { model.close(); model.closeAllConnections(); }
-
-function totp(secret) {
- const bits=[...secret.toUpperCase()].map(character=>'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'.indexOf(character).toString(2).padStart(5,'0')).join('');
- const key=Buffer.from(bits.match(/.{8}/g).map(byte=>parseInt(byte,2)));
- const counter=Buffer.alloc(8); counter.writeBigUInt64BE(BigInt(Math.floor(Date.now()/30000)));
- const digest=createHmac('sha1',key).update(counter).digest();
- return String((digest.readUInt32BE(digest[19]&15)&0x7fffffff)%1000000).padStart(6,'0');
-}

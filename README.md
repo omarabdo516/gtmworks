@@ -33,7 +33,7 @@ For a remote server, forward them over SSH (`ssh -L 3000:localhost:3000
 -L 8025:localhost:8025 your-server`) and open the setup link there. Do not expose the
 mailbox publicly. Open the setup link, enter your name, email and first company
 name, then follow the sign-in link in the local inbox at http://localhost:8025.
-You become the Agency owner and the first company's Owner. Setup then closes
+You become the first company's Owner. Setup then closes
 permanently and the setup link stops working; later visits use sign-in. Public sign-ups stay disabled. No demo
 people or companies are created, and no SMTP account is needed for the local inbox.
 

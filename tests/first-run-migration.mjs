@@ -9,6 +9,9 @@ create extension if not exists pgtap with schema extensions;
 select plan(10);
 drop function public.complete_setup(uuid,text,text,text), public.setup_is_open();
 drop table public.setup_claim;
+-- The migration was written when people had an Agency flag (removed by 20261204000000_remove_agency); the column is
+-- put back for this rolled-back replay only, so the migration runs as written.
+alter table public.people add column agency_owner boolean not null default false;
 ${migration}
 select ok((select closed from public.setup_claim),'migration closes setup on an existing install');
 select throws_ok($test$select public.complete_setup(gen_random_uuid(),'Owner','Company','en')$test$,'P0001','Setup closed','populated install refuses setup');
@@ -20,7 +23,7 @@ select throws_ok($test$select public.complete_setup('90000000-0000-0000-0000-000
 select is((select count(*)::int from public.people),0,'invalid setup creates no person');
 select ok(public.setup_is_open(),'invalid setup does not consume the claim');
 select ok(public.complete_setup('90000000-0000-0000-0000-000000000238','Owner','الشركة الأولى','ar') like 'company-%','Arabic company receives a safe Home slug');
-select ok(exists(select 1 from public.people p join public.members m on m.person_id=p.id join public.companies c on c.id=m.company_id where p.agency_owner and p.language='ar' and m.role='owner' and m.grant_publishing and m.grant_money_figures and m.grant_customer_data and c.name='الشركة الأولى'),'person, Agency ownership, company and full Owner membership created together');
+select ok(exists(select 1 from public.people p join public.members m on m.person_id=p.id join public.companies c on c.id=m.company_id where p.language='ar' and m.role='owner' and m.removed_at is null and m.grant_publishing and m.grant_money_figures and m.grant_customer_data and c.name='الشركة الأولى'),'person, company and full Owner membership created together');
 select ok(not public.setup_is_open(),'successful setup closes the claim');
 truncate public.people cascade;
 select ok(not public.setup_is_open(),'deleting the new owner never reopens setup');

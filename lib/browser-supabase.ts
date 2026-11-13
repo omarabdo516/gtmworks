@@ -1,4 +1,4 @@
-// Loaded when a page needs it (sign-in link, two-step sign-in), never with every company page.
+// Loaded when a page needs it (the sign-in link), never with every company page.
 export async function browserSupabase() {
   const { createBrowserClient } = await import('@supabase/ssr');
   const response = await fetch('/api/config', { cache: 'no-store' });

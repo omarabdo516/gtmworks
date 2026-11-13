@@ -47,10 +47,10 @@ test('seed restore appends the unmodified seed after resetting to post-migration
 });
 
 test('local SELECTs parse the CLI non-agent row array and retain native JSON types',t=>{
- let output='[{"accounts":1,"people":1,"agency_owner":true,"language":"ar"}]\n';
+ let output='[{"accounts":1,"people":1,"role":"owner","language":"ar"}]\n';
  const command=stubExecution(t,()=>output);
  const sql='select count(*)::int accounts from auth.users';
- assert.deepEqual(localQuery(sql,baseURL),[{accounts:1,people:1,agency_owner:true,language:'ar'}]);
+ assert.deepEqual(localQuery(sql,baseURL),[{accounts:1,people:1,role:'owner',language:'ar'}]);
  assert.deepEqual(command.mock.calls[0].arguments,['npx',['--no-install','supabase','db','query',sql,'--db-url','postgresql://postgres:postgres@127.0.0.1:54322/postgres','--yes','-o','json','--agent','no'],{cwd:process.cwd(),encoding:'utf8'}]);
  output='[]';
  assert.deepEqual(localQuery(sql,baseURL),[]);

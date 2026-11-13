@@ -227,7 +227,9 @@ jobs:
           docker --host unix:///var/run/docker.sock run -d --privileged --name install-docker \
             -e DOCKER_TLS_CERTDIR= -p 127.0.0.1:2375:2375 \
             -v "$PWD:$PWD" docker:28.5.1-dind
-          trap 'docker --host unix:///var/run/docker.sock rm -fv install-docker' EXIT
+          # A failure prints a fixed-field summary of the web and gateway logs (never log text) while the install still
+          # exists; the status is kept.
+          trap 'status=$?; if [ "$status" -ne 0 ]; then bash scripts/install-diagnostics.sh || true; fi; docker --host unix:///var/run/docker.sock rm -fv install-docker; exit "$status"' EXIT
           for attempt in $(seq 1 60); do docker info >/dev/null 2>&1 && break; sleep 1; done
           docker info >/dev/null || fail 'DinD readiness'
           { sh scripts/install.sh || fail 'first install'; } 2>&1 | tee first-install.log

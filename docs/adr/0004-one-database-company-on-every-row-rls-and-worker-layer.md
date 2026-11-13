@@ -1,8 +1,10 @@
 ---
-status: accepted
+status: accepted, partly superseded by ADR 0012
 ---
 
 # One database for every company, a company on every row, enforced by database policies and the worker's data layer
+
+Partly superseded by [ADR 0012](0012-no-agency-layer-the-company-owner-manages-the-company.md) (#7): the Agency layer (the Agency bypass and see-all, the Agency list and the reviewer Role) is removed. Nobody outside a Company's Members enters it. The rest below still holds.
 
 Update ([ADR 0006](0006-agent-identities-company-grants-and-card-scoped-runs.md)): shared agent identities belong in this database; planned company grants, run records and their audits will carry company_id. RLS and checked RPCs must enforce company and card/run authority when these ship. The API authentication module also holds the service key solely for key lookup and rate accounting; current card queries use member-scoped JWTs, never that key.
 
@@ -28,5 +30,5 @@ Omar chose this on 2026-10-05.
   - Storage paths start with the company id, and Storage policies check it.
   - Similarity search requires a company before it ranks anything.
 - **A CI test fails when a table lacks RLS or a company column,** outside a short allowlist of shared tables.
-- **Omar's see-all is a flag honoured only after app-based 2FA,** and his actions inside a company are logged under his name.
+- **Omar's see-all is a flag honoured only after app-based 2FA,** and his actions inside a company are logged under his name. Superseded by ADR 0012: there is no see-all.
 - **Leaving this model later means splitting one database into many,** which is why it is recorded here.
