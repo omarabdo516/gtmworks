@@ -14,7 +14,7 @@ import { UsageTable, type UsageDay } from './c/[slug]/[[...section]]/usage';
 import { createClient } from '@supabase/supabase-js';
 import { supabaseConfig } from '@/lib/supabase-config';
 import { readCompanySignIns } from '@/lib/company-sign-in.mjs';
-import { AgentLevel, CompanySubscriptions } from './company-engine-client';
+import { AgentLevel, CompanySubscriptions } from './company-engine-lazy';
 
 type Agent={id:string,connection_id:string,name:string,speciality:string,is_default:boolean};
 type Member={person_id:string,role:string,people:{name:string|null}|null};
