@@ -7,14 +7,13 @@ import { supabase } from '@/lib/supabase';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { visibleSections, pickSection, overlayHref, agentsMainFirst, usageTotals, type OverlaySection } from '@/lib/settings-overlay.mjs';
 import { OverlayFrame, CloseButton, AccountChoices, MakeMain, DeleteAgent, CompanyName } from './settings-overlay-client';
-import MemberNote from './member-note-lazy';
 import { SettingsIcon } from './settings-icons';
 import PasswordSettings from './password-settings';
 import { UsageTable, type UsageDay } from './c/[slug]/[[...section]]/usage';
 import { createClient } from '@supabase/supabase-js';
 import { supabaseConfig } from '@/lib/supabase-config';
 import { readCompanySignIns } from '@/lib/company-sign-in.mjs';
-import { AgentLevel, CompanySubscriptions } from './company-engine-lazy';
+import { AgentLevel, CompanySubscriptions, MemberNote } from './settings-lazy';
 
 type Agent={id:string,connection_id:string,name:string,speciality:string,is_default:boolean};
 type Member={person_id:string,role:string,people:{name:string|null}|null};
