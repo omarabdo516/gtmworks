@@ -51,6 +51,7 @@ esac
 [ -f .env.install ] || echo "SECRET=$$" > .env.install
 rm -f .install-release
 if [ "$release_image" = "\${DIE_REF:-}" ]; then cp "$FIXTURE/migrations/\${release_image##*:}" "$DB_FILE"; kill -9 "$PPID"; kill -9 $$; fi
+if [ "$op" = update ] && [ "$release_image" = "\${PUT_BACK_FAIL_REF:-}" ]; then echo 'Error: http://gateway:8080/api/health returned 503' >&2; exit 4; fi
 if [ "$release_image" = "\${FAIL_REF:-}" ]; then
  [ -z "\${FAIL_AFTER_MIGRATE:-}" ] || cp "$FIXTURE/migrations/\${release_image##*:}" "$DB_FILE"
  echo 'Applying migration: 999_failure.sql'; exit 3
@@ -416,6 +417,26 @@ test('a failed update puts the previous release back when its migrations rolled 
  assert.equal(unfinished.status,1);
  assert.match(unfinished.stderr,/an install or update did not finish\. Repair it first with: gtmworks install/);
  assert.deepEqual(m.installer(),[]);
+});
+
+test('when putting the previous release back does not finish, gtmworks install restores it on its own files', t => {
+ const m=machine(t);
+ ok(m.line(['--version','v1.2.3']));
+ m.clear();
+ const failed=m.gtmworks(['update','--version','v1.3.0'],{extra:{FAIL_REF:ref('v1.3.0'),PUT_BACK_FAIL_REF:ref('v1.2.3')}});
+ assert.equal(failed.status,3);
+ assert.match(failed.stderr,/api\/health returned 503\n[^]*Putting the previous release's files back did not finish: run gtmworks install\./);
+ // The record still names v1.2.3, no update is pending, and the files are v1.2.3's; only .install-release is gone.
+ assert.equal(m.file('.gtmworks-version'),'v1.2.3\n');
+ assert.equal(existsSync(join(m.dir,'.gtmworks-pending'))||existsSync(join(m.dir,'.gtmworks-pending.d')),false);
+ assert.equal(m.file('install.sh'),readFileSync(join(m.env.FIXTURE,'v1.2.3/install.sh'),'utf8'));
+ assert.equal(m.file('.install-release'),'');
+ m.clear();
+ const repaired=m.gtmworks(['install']);
+ ok(repaired);
+ assert.match(repaired.stdout,/^Repairing gtmworks v1\.2\.3 in /m);
+ assert.deepEqual(m.installer(),[`${hex('a')} `]);
+ assert.equal(m.file('.install-release'),`${ref('v1.2.3')}\n`);
 });
 
 test('an update the machine stopped right after its migrations is finished by gtmworks install', t => {
