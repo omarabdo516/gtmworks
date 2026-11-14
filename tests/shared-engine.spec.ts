@@ -7,7 +7,7 @@ import { signIn } from './sign-in';
 // warned on the Company settings page while another company shares that profile, and only then.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const omar='20000000-0000-0000-0000-000000000001';
-const english='One install serves one company until each company gets its own agent engine home: companies on the bundled agent engine share one agent memory, so an agent can repeat facts from one company to people in another.';
+const english='Each company gets its own agent engine profile, with its own memory and sign-in; a company still on the shared default profile from an earlier install shares that memory, so an agent can repeat facts from one company to people in another until it moves.';
 
 // What provide_bundled_hermes leaves behind: the bundled Connection, its main agent and the audit row that marks it.
 function provideBundled(company:string) {
@@ -40,7 +40,7 @@ test('the Owner is warned while two companies share the bundled Engine profile, 
   query(`update public.people set language='ar' where id='${omar}'`);
   await page.goto('/c/aleem/settings');
   await expect(page.locator('html')).toHaveAttribute('lang','ar');
-  await expect(page.getByRole('note').filter({hasText:'يخدم التثبيت الواحد شركة واحدة'})).toBeVisible();
+  await expect(page.getByRole('note').filter({hasText:'الشركة اللي لسه على البروفايل المشترك من تثبيت قديم بتشارك ذاكرته'})).toBeVisible();
  } finally {
   for(const remove of removals.reverse()) remove();
   query(`update public.people set language='${language.language}' where id='${omar}'`);

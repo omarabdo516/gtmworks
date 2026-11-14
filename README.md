@@ -77,9 +77,28 @@ No SMTP account is needed for it.
 The install starts the web app, worker, Postgres,
 GoTrue, PostgREST, file Storage, an Nginx gateway, the local mail inbox and the
 Hermes agent engine, which is reachable only inside the install.
-One install serves one company until each company gets its own agent engine home:
-companies on the bundled agent engine share one agent memory, so an agent can
-repeat facts from one company to people in another.
+Each company gets its own agent engine profile, with its own memory and sign-in; a company still on the shared default profile from an earlier install shares that memory, so an agent can repeat facts from one company to people in another until it moves.
+
+**Company isolation (ADR 0014).** Nothing needs setting up on a fresh server: the
+worker gives every company its own profile in the bundled Hermes
+(`co-<company id>`), with its own memory, skills, sessions and model sign-in, and
+attaches the company's agents to it. A company's agents get marketing tools only:
+terminal, file, code-execution, browser and desktop tools are turned off in that
+profile at every Agent level, so a member cannot ask an agent to read another
+company's files. The Owner chooses the Agent level in Settings, Company (read and
+draft, act on approval, or scheduled work); new companies start at read and draft.
+Each company connects its own subscription in Settings, Subscription and models:
+ChatGPT signs in from that page; Claude signs in only from the install's command
+line, with the command shown there, run from this folder:
+`docker compose --env-file .env.install -f docker-compose.install.yml exec -u hermes hermes hermes -p <profile> auth add anthropic --type oauth --no-browser`.
+Do not sign in to a subscription on Hermes's own `default` profile: Hermes lets
+every company profile without its own sign-in use that one. An install updated
+from before ADR 0014 keeps its companies running on the shared `default` profile
+until a company's own profile holds a sign-in; the worker then moves it there.
+Memory already written on `default` stays there and is not split between companies,
+and earlier conversations do not carry their Hermes context to the new profile.
+`install.sh backup` does not include Hermes's data yet: after a restore, the
+worker makes each company's profile again, empty, and the company signs in again.
 Realtime, Studio, analytics and edge functions are not installed. Service settings
 follow the [official Supabase self-hosted stack](https://github.com/supabase/supabase/blob/master/docker/docker-compose.yml).
 

@@ -1,12 +1,14 @@
-// CI runs this on stdin inside /app in the installed web container, after pointing the bundled Hermes at the fake model
-// provider this script serves on http://web:8080/v1 (no subscription). It proves the bundled Hermes (ADR 0010) answers
+// CI runs this on stdin inside /app in the installed web container. It proves the bundled Hermes (ADR 0010) answers
 // /health on the compose network, and that a company Owner's Arabic message gets its reply with no manual connection
-// step: the worker provides the company's Hermes by itself, and closes the run with the reply.
+// step: the worker gives the company its own Hermes profile (ADR 0014) by itself, and closes the run with the reply.
+// The company's profile is pointed at the fake model provider this script serves on http://web:8080/v1, standing in for
+// the company's own subscription sign-in (#3), so CI needs no subscription.
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { createClient } from '@supabase/supabase-js';
 const {sendMessage}=await import(`${process.cwd()}/lib/conversation-runs.mjs`);
+const {companyProfile}=await import(`${process.cwd()}/lib/agent-levels.mjs`);
 
 const health=await fetch('http://hermes:8642/health');
 assert.equal(health.status,200);
@@ -53,6 +55,12 @@ try {
  };
  // Nobody connects anything: the worker gives the new company its bundled Hermes agent.
  const agent=await until('bundled Hermes agent provided',async()=>(await checked(person.from('hermes_agents').select('id,is_default').eq('company_id',company))).find(found=>found.is_default),120);
+ // Its Connection names the company's own profile, never the shared `default` one.
+ const profile=companyProfile(company);
+ assert.deepEqual((await checked(person.from('hermes_connections').select('profile').eq('company_id',company))).map(found=>found.profile),[profile]);
+ const configured=await fetch(`http://hermes:9119/api/config?profile=${profile}`,{method:'PUT',headers:{Authorization:`Bearer ${process.env.HERMES_API_KEY}`,'Content-Type':'application/json'},
+  body:JSON.stringify({config:{model:{provider:'custom',default:'fake-model',base_url:'http://web:8080/v1',api_key:'fake-model-key',context_length:128000}}})});
+ assert.equal(configured.status,200,'the company profile points at the fake model');
  const conversation=randomUUID();
  const sent=await sendMessage(person,service,{person:user.id,company,conversation,sendKey:randomUUID(),message:'مرحباً، اكتب لي عنواناً لمنشور عن إطلاق الدورة.',encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY});
  assert.deepEqual(sent,{conversation});

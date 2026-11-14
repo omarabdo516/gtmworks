@@ -237,3 +237,12 @@
 @media (prefers-reduced-motion: reduce) { .gw .sov { animation: none; } .gw .sov .switch::after { transition: none; } }
 .gw .sov .co-name-form { display: grid; gap: 6px; }
 .gw .sov .co-name-form p:empty { display: none; }
+
+/* A company's model sign-in (#3): the code and link of a ChatGPT sign-in, and Claude's command-line step. */
+.gw .sov .sub-row + .sub-row { border-top: 0.5px solid var(--gw-border-2); }
+.gw .sov .sub-step { display: flex; flex-direction: column; gap: var(--s2); padding: var(--s2) var(--s3) var(--s3); font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-2); }
+.gw .sov .sub-step p { margin: 0; }
+.gw .sov .sub-code { align-self: flex-start; padding: var(--s1) var(--s3); border-radius: var(--gw-r-sm); background: var(--gw-bg-active); color: var(--gw-text-1);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: var(--gw-fs-md, 15px); letter-spacing: 0.08em; user-select: all; }
+.gw .sov .sub-code--cmd { align-self: stretch; font-size: var(--gw-fs-xs); letter-spacing: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.gw .sov .sub-row > .set-hint, .gw .sov .sub-row > .set-err { margin: 0; padding: 0 var(--s3) var(--s2); }

@@ -340,6 +340,17 @@ jobs:
           status=$(docker run --rm --network host curlimages/curl:8.12.1 -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/api/profiles) || fail 'management path status on install host port 3000'
           [[ $status == 404 && $body != *is_default* ]] || fail "public gateway must not reach the management listener (HTTP $status)"
           if docker run --rm --network host curlimages/curl:8.12.1 -sS -o /dev/null --max-time 5 http://127.0.0.1:9119/api/profiles; then fail 'management listener must not be published on the host'; fi
+          # One profile per company (ADR 0014): two new companies get two different profiles in the bundled Engine, each
+          # with terminal, files and code execution off in its config and absent from its Runs' toolsets. A run on each
+          # answers, and a memory written in the first company's profile reaches its run and never the second's.
+          first=$(compose exec -T web node --input-type=module - prepare < scripts/check-install-profiles.mjs | tail -n 1) || fail 'two companies get two profiles with terminal, file and code tools off'
+          [[ $first =~ ^co-[0-9a-f]{32}$ ]] || fail "the first company's profile name"
+          marker="memory-check-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+          compose exec -T hermes sh -ec 'mkdir -p "/opt/data/profiles/$1/memories"; printf "%s\n" "The company code word is $2." >> "/opt/data/profiles/$1/memories/MEMORY.md"; chown -R hermes:hermes "/opt/data/profiles/$1/memories"' sh "$first" "$marker" || fail "write a memory in the first company's profile"
+          compose exec -T web node --input-type=module - verify "$marker" < scripts/check-install-profiles.mjs || fail "runs on each company profile answer and a company's memory stays in its own runs"
+          # Hermes holds none of gtmworks's own keys and passwords (#2): its environment and every file its user can read
+          # are scanned for the real values in .env.install, passed on stdin; only names and paths are printed.
+          { grep -E '^(POSTGRES_PASSWORD|PGSODIUM_ROOT_KEY|SUPABASE_JWT_SECRET|SUPABASE_SERVICE_ROLE_KEY|WEBHOOK_ENCRYPTION_KEY|SETUP_CODE)=' .env.install | compose exec -T -u hermes hermes /opt/hermes/.venv/bin/python -c "$(cat scripts/check-hermes-keys.py)"; } || fail "the bundled Hermes holds none of gtmworks's keys and passwords"
           # A remote server (README): a fresh install whose APP_ORIGIN is the https origin of a proxy in front of the gateway.
           # First run and the emailed sign-in link must stay on that origin and reach the Company home, and so must the
           # invitation link and a sign-in link requested with a forged X-Forwarded-Host (issue #40).
