@@ -15,6 +15,8 @@
 -- worker in one update (abandon_conversation_reservations). The person already saw an error and can send again. An
 -- abandoned reservation is kept with its pinned Connection and profile for the record, and holds nothing: only an
 -- active one holds the move, and the Connection's removal (a trigger, since a kept row must not keep a Connection).
+-- A late record of a reservation that was abandoned, or whose Agent's Connection changed, is refused
+-- (conversationSendAgain): its run would be read on another profile.
 
 -- Quiet window. The previous app version starts a run before it records it and never reserves. A move therefore also
 -- waits until no message of the company's conversations on those Connections was written in the last five minutes.
@@ -116,6 +118,36 @@ begin
 end $$;
 revoke all on function public.reserve_conversation_run(uuid,uuid,uuid,uuid,text) from public,anon,service_role;
 grant execute on function public.reserve_conversation_run(uuid,uuid,uuid,uuid,text) to authenticated;
+
+-- Recording a reserved run checks its reservation is still active and still pins the Agent's Connection.
+create or replace function public.send_conversation_message(conversation uuid, c uuid, agent uuid, message text, message_key uuid, run text)
+returns boolean language plpgsql security definer set search_path='' as $$
+declare existing public.conversations; chosen public.hermes_agents; writer text; saved bigint;
+begin
+ if not public.conversation_can_write(c) then raise exception 'conversationNotAllowed' using errcode='42501'; end if;
+ select * into chosen from public.hermes_agents where id=agent and company_id=c;
+ if not found then raise exception 'conversationNotFound' using errcode='P0002'; end if;
+ insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values(conversation,c,auth.uid(),agent,chosen.name) on conflict (id) do nothing;
+ select * into existing from public.conversations where id=conversation;
+ if existing.person_id<>auth.uid() or existing.company_id<>c or existing.agent_id is distinct from agent then raise exception 'conversationNotFound' using errcode='P0002'; end if;
+ -- A Member cannot register a run that belongs to another conversation: each copy would be closed again and its
+ -- engine usage counted twice. The lock keeps two calls at once from both passing. A retry in the same conversation
+ -- stays idempotent.
+ -- A reserved run is recorded only while its reservation is active and pins the Agent's Connection of now: one the
+ -- worker abandoned, or whose Agent moved since, would be read on another profile and end lost. The person sends again.
+ -- A message with no reservation is the previous app version's and is recorded as before.
+ if exists(select 1 from public.conversation_run_reservations r where r.conversation_id=conversation and r.send_key=message_key
+   and (r.abandoned_at is not null or r.connection_id is distinct from chosen.connection_id)) then
+  raise exception 'conversationSendAgain' using errcode='55000'; end if;
+ perform pg_advisory_xact_lock(hashtextextended('conversation_run:'||coalesce(run,''),0));
+ if exists(select 1 from public.conversation_messages where author='person' and run_id=run and conversation_id<>conversation) then raise exception 'conversationNotFound' using errcode='P0002'; end if;
+ select name into writer from public.people where id=auth.uid();
+ insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id)
+  values(c,conversation,'person',auth.uid(),coalesce(writer,''),message,message_key,run) on conflict do nothing returning id into saved;
+ delete from public.conversation_run_reservations where conversation_id=conversation and send_key=message_key;
+ return saved is not null;
+end;
+$$;
 
 -- The worker's one update: reservations whose message was not recorded within ten minutes, or that can never be
 -- recorded (the Agent is gone, or the sender may no longer write in the company), are abandoned. Returns how many.

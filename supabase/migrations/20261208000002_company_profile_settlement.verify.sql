@@ -12,6 +12,7 @@ select json_build_object(
  'active_reservation_keeps_its_connection',not exists(select 1 from pg_constraint where conname='conversation_run_reservations_connection_id_fkey')
   and exists(select 1 from pg_trigger where tgrelid='public.hermes_connections'::regclass and tgname='reserved_connection_kept' and tgenabled='O'),
  'retry_checked',position('company_profile_ready' in pg_get_functiondef('public.reserve_conversation_run(uuid,uuid,uuid,uuid,text)'::regprocedure))>0,
+ 'late_record_refused',position('conversationSendAgain' in pg_get_functiondef('public.send_conversation_message(uuid,uuid,uuid,text,uuid,text)'::regprocedure))>0,
  'abandoned_hold_nothing',position('abandoned_at is null' in pg_get_functiondef('public.move_company_profile(uuid,text,text,text,text[])'::regprocedure))>0,
  'move_waits_quietly',position('interval ''5 minutes''' in pg_get_functiondef('public.move_company_profile(uuid,text,text,text,text[])'::regprocedure))>0
 );

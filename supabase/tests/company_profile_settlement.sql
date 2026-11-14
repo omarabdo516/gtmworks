@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(21);
+select plan(22);
 -- R&S Consultations (2) runs on its own profile; Aleem (3) is on the shared profile with a Contributor (5).
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 set local role service_role;
@@ -106,6 +106,14 @@ select is(public.move_company_profile('10000000-0000-0000-0000-000000000003','ht
 reset role;
 select ok(not exists(select 1 from public.hermes_connections where id=(select connection_id from aleem)),'and the shared Connection is removed');
 select ok(exists(select 1 from public.conversation_run_reservations where company_id='10000000-0000-0000-0000-000000000003' and abandoned_at is not null),'the abandoned reservation stays for the record');
+-- The race: the send that reserved on the shared Connection (section 4) records only now, after it was abandoned and
+-- the company moved. Its run would be read on the new profile and end lost, so the record is refused.
+set local role authenticated;
+select set_config('request.jwt.claims','{"role":"authenticated"}',true);
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000005',true);
+select throws_ok($$select public.send_conversation_message('c4000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000003',(select agent from aleem),'Hello','c5000000-0000-0000-0000-000000000003','run_late')$$,'55000','conversationSendAgain',
+ 'a late record of an abandoned reservation is refused after the move');
+reset role;
 
 -- 6. A reservation that can never be recorded (its Agent is gone) is abandoned at once, without Hermes.
 set local role authenticated;

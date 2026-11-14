@@ -315,12 +315,12 @@ test('the install job proves profiles per company on the pinned release, after t
 });
 
 // The person's session and the service role, as sendMessage sees them; every call is recorded in order.
-function conversationDatabases({profile,reserve=null}) {
+function conversationDatabases({profile,reserve=null,record=null}) {
  const order=[];
  const db={order,args:{},rpc:async(name,args)=>{ order.push(name); db.args[name]=args;
    if(name==='conversation_agent') return {data:null,error:null};
    if(name==='reserve_conversation_run') return reserve||{data:'f9000000-0000-0000-0000-000000000001',error:null};
-   if(name==='send_conversation_message') return {data:true,error:null};
+   if(name==='send_conversation_message') return record||{data:true,error:null};
    return {data:null,error:{message:'unexpected'}}; },
   from:()=>{ const chain={select:()=>chain,eq:()=>chain,maybeSingle:async()=>({data:{id:'a9000000-0000-0000-0000-000000000001'},error:null})}; return chain; }};
  const key=encryptSecret('test-only-key',encryptionKey);
@@ -400,4 +400,11 @@ test('the worker abandons unrecorded reservations in one database update and nev
  assert.deepEqual(calls,['abandon_conversation_reservations']);
  const source=readFileSync('lib/company-profiles.mjs','utf8');
  assert.doesNotMatch(source,/settle|engineFor|\.start\(/,'no replay path is left');
+});
+
+test('a late record of an abandoned reservation asks the person to send again', async () => {
+ const {sendMessage}=await import('../lib/conversation-runs.mjs');
+ const late=conversationDatabases({profile:companyProfile(two),record:{data:null,error:{code:'55000',message:'conversationSendAgain'}}});
+ assert.deepEqual(await sendMessage(late.db,late.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...engine(late.order)}),{error:'conversationSendAgain',status:409});
+ for(const language of ['en','ar']) assert.notEqual(i18n(language).t('conversationSendAgain'),'conversationSendAgain');
 });
