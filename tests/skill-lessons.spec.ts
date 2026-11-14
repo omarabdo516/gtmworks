@@ -1,9 +1,10 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './fresh-seed';
 import { chooseLanguageInSettings } from './choose-language';
 import { mkdir } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { signIn } from './sign-in';
 import { hashKey } from '../lib/agent-crypto.mjs';
+import { appOrigin } from './lane.mjs';
 // This spec makes its own Writer key and removes every skill it installed, because skills.spec starts from an empty Skills page.
 const writerKey='agt_lessons_spec_writer_key';
 const headers={Authorization:`Bearer ${writerKey}`};
@@ -23,7 +24,7 @@ test('an agent proposes a lesson from its run, the Inbox shows the change, the r
  cleanUp();
  query(`delete from public.agent_keys where key_hash='${hashKey(writerKey)}'`);
  query(`insert into public.agent_keys(company_id,person_id,key_hash) select m.company_id,m.person_id,'${hashKey(writerKey)}' from public.members m join public.companies c on c.id=m.company_id where c.slug='rs-learning' and m.agent_role='writer' and m.removed_at is null`);
- const outside=await browser.newContext({baseURL:'http://127.0.0.1:3000'});
+ const outside=await browser.newContext({baseURL:appOrigin});
  try {
   await chooseLanguage(page,'en');
   await page.goto('/c/rs-learning/skills');

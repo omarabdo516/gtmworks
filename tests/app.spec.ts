@@ -1,10 +1,11 @@
-import { test, expect, type Page, type TestInfo } from '@playwright/test';
+import { test, expect, type Page, type TestInfo } from './fresh-seed';
 import { chooseLanguageInSettings } from './choose-language';
 import { mkdir, readdir, readFile } from 'node:fs/promises';
 import { createHmac } from 'node:crypto';
 import { signIn, chooseCompany, openNavigation } from './sign-in';
 import { idle } from './navigation-measure';
 import { recordTouchDiagnostics, formatTouchDiagnostics, touchDiagnosticsKey, touchDiagnosticsLimit } from './touch-diagnostics.mjs';
+import { appOrigin, inbox, mail } from './lane.mjs';
 test('public contains no font files, including renamed font binaries',async()=>{
  const entries=await readdir('public',{recursive:true,withFileTypes:true}).catch(error=>{if(error.code==='ENOENT') return []; throw error;});
  for(const entry of entries.filter(entry=>entry.isFile())) {
@@ -92,7 +93,7 @@ for(const width of [1440,390]) test(`Paperclip Inter and Arabic-only Vazirmatn l
  expect(fontRequests.length).toBeGreaterThan(0);
  for(const request of fontRequests) {
   const url=new URL(request);
-  expect(url.origin).toBe('http://127.0.0.1:3000');
+  expect(url.origin).toBe(appOrigin);
   expect(url.pathname).toMatch(/^\/_next\/static\/media\/[^/]+$/);
  }
  expect(externalFonts).toEqual([]);
@@ -189,11 +190,6 @@ for(const width of [1440,390]) test(`card creation fits the viewport and detail 
 test('sign-in returns to requested page, company switch preserves section, and access is isolated',async({page})=>{
  await signIn(page,'multi@example.com','/c/rs-learning/approvals'); await expect(page).toHaveURL(/\/c\/rs-learning\/approvals/); await chooseCompany(page,'aleem'); await expect(page).toHaveURL(/\/c\/aleem\/approvals/); const response=await page.goto('/c/rs-consultations/home'); expect(response?.status()).toBe(404); const unknown=await page.goto('/c/unknown/home'); expect(unknown?.status()).toBe(404);
 });
-test('landing and screenshots of every charter route',async({page})=>{
- await signIn(page,'omar@example.com','/sign-in'); await expect(page).toHaveURL(/\/c\/[^/]+\/home/); await mkdir('test-results/screenshots',{recursive:true});
- for(const width of [1440,390]) { await page.setViewportSize({width,height:900}); for(const path of ['/sign-in','/c/rs-learning/home','/c/rs-learning/approvals','/c/rs-learning/settings']) { await page.goto(path); await page.screenshot({path:`test-results/screenshots/${path.slice(1).replaceAll('/','-')}-${width}.png`,fullPage:true}); } }
-});
-
 test('an expired session is refreshed and the rotated cookies survive another request', async ({ page, context }) => {
  await signIn(page, 'manager@example.com', '/c/rs-learning/home');
  await expect(page).toHaveURL(/\/c\/rs-learning\/home/);
@@ -209,7 +205,7 @@ test('an expired session is refreshed and the rotated cookies survive another re
  const baseName = cookies[0].name.replace(/\.\d+$/, '');
  for (const cookie of cookies) await context.clearCookies({name:cookie.name});
  const chunks = expired.match(/.{1,3000}/g) || [];
- await context.addCookies(chunks.map((value, index) => ({name: chunks.length === 1 ? baseName : `${baseName}.${index}`, value, url:'http://127.0.0.1:3000'})));
+ await context.addCookies(chunks.map((value, index) => ({name: chunks.length === 1 ? baseName : `${baseName}.${index}`, value, url:appOrigin})));
  await page.goto('/c/rs-learning/approvals');
  await expect(page).toHaveURL(/\/c\/rs-learning\/approvals/);
  const refreshed = (await readCookies()).map(cookie => cookie.value).join('');
@@ -228,24 +224,21 @@ test('members controls, the Role list, viewer access, and no all-companies list'
  await context.clearCookies(); await signIn(page,'viewer@example.com','/c/rs-learning/settings/members'); await expect(page.getByRole('heading',{name:"Team members"})).toBeVisible(); await expect(page.getByRole('button',{name:"Remove"})).toHaveCount(0); await expect(page.locator('.member-row').filter({has:page.locator('strong',{hasText:/^مشاهد$/})})).toContainText("Viewer"); const res=await page.goto('/all-brands'); expect(res?.status()).toBe(404);
 });
 
-test('screenshots for unit routes',async({page})=>{
- await signIn(page,'omar@example.com','/c/rs-learning/settings/members'); await mkdir('test-results/screenshots',{recursive:true});
- for(const width of [1440,390]) { await page.setViewportSize({width,height:900}); for(const path of ['/c/rs-learning/settings/members','/c/rs-learning/settings/agents']) { await page.goto(path); await page.screenshot({path:`test-results/screenshots/${path.slice(1).replaceAll('/','-')}-${width}.png`,fullPage:true}); } }
-});
-
 test('invite link signs the new member into the company',async({page,context})=>{
  await signIn(page,'manager@example.com','/c/rs-learning/settings/members');
- await page.request.delete('http://127.0.0.1:54324/api/v1/messages');
+ await page.request.delete(inbox);
  await page.getByLabel("Email").fill('invited@example.com'); await page.getByRole('button',{name:"Send invitation"}).click(); await expect(page.getByRole('status')).toContainText('An invitation link was sent');
- let link=''; for(let i=0;i<30&&!link;i++){const mailbox=await (await page.request.get('http://127.0.0.1:54324/api/v1/messages')).json(); const item=mailbox.messages?.find((m:{To:{Address:string}[]})=>m.To.some(t=>t.Address==='invited@example.com')); if(item){const message=await (await page.request.get(`http://127.0.0.1:54324/api/v1/message/${item.ID}`)).json(); link=(message.HTML||message.Text).match(/https?:\/\/[^"\s<>]+/g)?.find((url:string)=>url.includes('/verify'))?.replaceAll('&amp;','&')||'';} if(!link) await page.waitForTimeout(1000);}
+ let link=''; for(let i=0;i<30&&!link;i++){const mailbox=await (await page.request.get(inbox)).json(); const item=mailbox.messages?.find((m:{To:{Address:string}[]})=>m.To.some(t=>t.Address==='invited@example.com')); if(item){const message=await (await page.request.get(`${mail}/api/v1/message/${item.ID}`)).json(); link=(message.HTML||message.Text).match(/https?:\/\/[^"\s<>]+/g)?.find((url:string)=>url.includes('/verify'))?.replaceAll('&amp;','&')||'';} if(!link) await page.waitForTimeout(1000);}
  expect(link).toBeTruthy(); await context.clearCookies(); await page.goto(link);
  // A new Member chooses a password before the Company opens (#41).
  await page.getByLabel('New password').fill('invited-password'); await page.getByLabel('Confirm password').fill('invited-password'); await page.getByRole('button',{name:'Save password'}).click();
  await expect(page).toHaveURL(/\/c\/rs-learning\/settings\/members/); await expect(page.getByRole('heading',{name:"Team members"})).toBeVisible();
 });
 
-test('the Owner of every company opens each one with no extra verification step',async({page})=>{
- await signIn(page,'omar@example.com','/c/rs-learning/home'); await expect(page.locator('.home-dashboard')).toBeVisible();
+test('the Owner of every company lands on a Company home from the sign-in page and opens each one with no extra verification step',async({page})=>{
+ // Signing in from the sign-in page itself, with no page asked for, lands a person of several companies on a Company home.
+ await signIn(page,'omar@example.com','/sign-in'); await expect(page).toHaveURL(/\/c\/[^/]+\/home$/);
+ await page.goto('/c/rs-learning/home'); await expect(page.locator('.home-dashboard')).toBeVisible();
  for(const slug of ['rs-consultations','aleem']) { await chooseCompany(page,slug); await expect(page).toHaveURL(new RegExp(`/c/${slug}/home$`)); await expect(page.locator('.home-dashboard')).toBeVisible(); }
 });
 
@@ -801,7 +794,7 @@ for(const width of [390,1440]) test(`caption keeps several lines at ${width}px`,
 
 test('activity times hydrate without errors', async ({ browser }) => {
  // The server runs in UTC; the viewer is in Cairo (two hours ahead in November).
- const context = await browser.newContext({ baseURL: 'http://127.0.0.1:3000', timezoneId: 'Africa/Cairo', locale: 'en-US' });
+ const context = await browser.newContext({ baseURL: appOrigin, timezoneId: 'Africa/Cairo', locale: 'en-US' });
  const page = await context.newPage();
  const problems: string[] = [];
  page.on('pageerror', error => problems.push(`pageerror: ${error.message}`));

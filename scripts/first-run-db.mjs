@@ -2,10 +2,13 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 const root=process.cwd();
-const database='postgresql://postgres:postgres@127.0.0.1:54322/postgres';
+// A browser test worker runs on its own local stack (tests/lane.mjs, #69): lane n has the app on port 3000+n and every
+// Supabase port moved by 100*n. Outside a worker the lane is 0, the stack every other script uses.
+const lane=Number.parseInt(process.env.TEST_PARALLEL_INDEX||'0',10)||0;
+const database=`postgresql://postgres:postgres@127.0.0.1:${54322+100*lane}/postgres`;
 
-export function assertLocalTarget(baseURL, apiURL=process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321') {
- if(baseURL!=='http://127.0.0.1:3000' || apiURL!=='http://127.0.0.1:54321') throw new Error('First-run tests refuse non-local targets');
+export function assertLocalTarget(baseURL, apiURL=process.env.NEXT_PUBLIC_SUPABASE_URL || `http://127.0.0.1:${54321+100*lane}`) {
+ if(baseURL!==`http://127.0.0.1:${3000+lane}` || apiURL!==`http://127.0.0.1:${54321+100*lane}`) throw new Error('First-run tests refuse non-local targets');
 }
 export function localQuery(sql,baseURL) {
  assertLocalTarget(baseURL);
@@ -29,5 +32,5 @@ export function resetFirstRun(baseURL,seed=false) {
  ${seed?readFileSync(join(root,'supabase/seed.sql'),'utf8'):''}
  `;
  // Pin both connections to local sockets; --file=- makes psql wrap stdin in one transaction.
- execFileSync('docker',['--host','unix:///var/run/docker.sock','exec','-i',`supabase_db_${project}`,'psql','-X','-h','/var/run/postgresql','-U','postgres','-d','postgres','-v','ON_ERROR_STOP=1','--single-transaction','--file=-'],{cwd:root,encoding:'utf8',input:sql});
+ execFileSync('docker',['--host','unix:///var/run/docker.sock','exec','-i',`supabase_db_${project}${lane?`-lane-${lane}`:''}`,'psql','-X','-h','/var/run/postgresql','-U','postgres','-d','postgres','-v','ON_ERROR_STOP=1','--single-transaction','--file=-'],{cwd:root,encoding:'utf8',input:sql});
 }

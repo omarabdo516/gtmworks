@@ -1,6 +1,7 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './fresh-seed';
 import { createServerClient } from '@supabase/ssr';
 import { signIn, openNavigation, closeNavigation } from './sign-in';
+import { appOrigin } from './lane.mjs';
 
 // The account menu keeps the three theme choices, Device included, as named menu radio items.
 async function chooseTheme(page: Page, choice: string) {
@@ -52,7 +53,7 @@ test('device default, server-rendered theme and saved choice across sessions and
   await signIn(page, 'viewer@example.com', '/c/rs-learning/home');
   await expect(page.locator('.app-layout')).toHaveCSS('background-color', 'rgb(250, 250, 250)');
   await serverTheme('/c/rs-learning/home', 'light');
-  const other = await browser.newContext({ baseURL: 'http://127.0.0.1:3000', colorScheme: 'dark' });
+  const other = await browser.newContext({ baseURL: appOrigin, colorScheme: 'dark' });
   try {
    const second = await other.newPage();
    await signIn(second, 'viewer@example.com', '/c/rs-learning/home');

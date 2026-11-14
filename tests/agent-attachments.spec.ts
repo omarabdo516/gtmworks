@@ -1,7 +1,8 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './fresh-seed';
 import { chooseLanguageInSettings } from './choose-language';
 import { mkdir } from 'node:fs/promises';
 import { signIn } from './sign-in';
+import { appOrigin } from './lane.mjs';
 // This file sorts before app.spec.ts on purpose: that file revokes the public fixture key at its end.
 const agent={Authorization:'Bearer agt_local_fixture_for_tests_only'};
 const root='/api/v1/companies/rs-learning/cards';
@@ -108,7 +109,7 @@ test('a run key downloads the files of its own card and no other, and another co
  const aleemCard=Number(new URL(page.url()).pathname.split('/').pop());
  const aleemFile=await reply(page,`File in Aleem ${stamp}`);
  expect((await page.request.get(aleemFile)).status()).toBe(200);
- const outside=await browser.newContext({baseURL:'http://127.0.0.1:3000'});
+ const outside=await browser.newContext({baseURL:appOrigin});
  try {
   const outsider=await outside.newPage();
   await signIn(outsider,'reviewer@example.com','/c/rs-learning/home'); // A member of RS Learning only.

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fresh-seed';
 
 // The approved prototype lives in design-reference/ for builders only; the product never serves it (#285).
 test('the production build answers 404 for the design reference', async ({ request }) => {

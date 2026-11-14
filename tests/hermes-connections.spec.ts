@@ -1,10 +1,11 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fakeHermes } from './fake-hermes.mjs';
 import { signIn } from './sign-in';
 import { i18n } from '../lib/i18n.mjs';
+import { serverLogOf } from './lane.mjs';
 
 const company='10000000-0000-0000-0000-000000000001';
 const owner='20000000-0000-0000-0000-000000000001';
@@ -121,7 +122,7 @@ test('save, replace, retest and remove a write-only Hermes Connection; refuse wr
   const removed=await post({intent:'remove',id}); expect(removed.status()).toBe(200);
   const missing=await page.request.get(`${endpoint}?company=${company}&id=${id}`); captured.push(await missing.text()); expect(missing.status()).toBe(404);
   expect((await post({intent:'save',address:savedKey,profile:'writer',key:replacementKey})).status()).toBe(400);
-  captured.push(readFileSync('playwright-report/server.log','utf8'));
+  captured.push(readFileSync(serverLogOf(),'utf8'));
   expect(captured.some(text=>text.includes(savedKey)||text.includes(replacementKey))).toBe(false);
  } finally {
   if(id) query(`delete from public.hermes_connections where id='${id}'`);

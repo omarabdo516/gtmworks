@@ -45,7 +45,8 @@ no screen.
 
 - The `visual` project runs first in `npm run test:e2e`, on the database exactly as
   the seed builds it, then the `functional` project runs, also when a screen failed,
-  and the `first-run` project last (each is a Playwright teardown project, so it
+  then `measured` (the navigation time budgets, alone on the machine), and the
+  `first-run` project last (each is a Playwright teardown project, so it
   waits for the earlier ones without being skipped by their failures). One CI round
   reports every group and `check` is red when any fails. Run one file with
   `npx playwright test --project=functional tests/frame.spec.ts`; screens alone

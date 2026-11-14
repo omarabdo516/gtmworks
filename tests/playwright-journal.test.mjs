@@ -125,7 +125,10 @@ test('CI leaves a complete Playwright report byte for byte and uploads the journ
 });
 
 test('the journal is evidence only: required check still needs a successful integration job', () => {
- assert.ok(workflow.jobs.check.steps[0].run.includes('"$INTEGRATION_RESULT" == success'));
+ // The check's verdict (scripts/ci-verdict.mjs, proven case by case in ci-verdict.test.mjs) is red unless integration succeeded.
+ assert.equal(workflow.jobs.check.steps.at(-1).run, 'node scripts/ci-verdict.mjs');
+ const verdict = spawnSync(process.execPath, ['scripts/ci-verdict.mjs'], { env: { PATH: process.env.PATH, EVENT_NAME: 'push', CHANGES_RESULT: 'success', DOCS_ONLY: 'false', INSTALL_RELATED: 'true', STATIC_RESULT: 'success', INTEGRATION_RESULT: 'failure', INSTALL_RESULT: 'success' } });
+ assert.equal(verdict.status, 1);
  for (const step of reportSteps) assert.equal(step['continue-on-error'], undefined, step.name);
  assert.equal(workflow.jobs.integration['continue-on-error'], undefined);
 });

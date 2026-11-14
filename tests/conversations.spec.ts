@@ -1,4 +1,4 @@
-import { test, expect, type Page, type Request, type Locator } from '@playwright/test';
+import { test, expect, type Page, type Request, type Locator } from './fresh-seed';
 import { randomUUID } from 'node:crypto';
 import { fakeHermes } from './fake-hermes.mjs';
 import { execFileSync } from 'node:child_process';

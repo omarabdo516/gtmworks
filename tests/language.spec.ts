@@ -1,4 +1,4 @@
-import { test, expect, type Page, type Locator } from '@playwright/test';
+import { test, expect, type Page, type Locator } from './fresh-seed';
 import { chooseLanguageInSettings } from './choose-language';
 import { createServerClient } from '@supabase/ssr';
 import { mkdir } from 'node:fs/promises';
@@ -6,6 +6,7 @@ import { signIn, openNavigation, closeNavigation, openMoreSection } from './sign
 import { idle } from './navigation-measure';
 import { sections } from '../lib/navigation';
 import { i18n, type Language } from '../lib/i18n.mjs';
+import { appOrigin } from './lane.mjs';
 
 async function chooseLanguage(page:Page,language:Language) {
  await chooseLanguageInSettings(page,language);
@@ -220,7 +221,7 @@ test('English default, account language across sessions/devices, automatic conte
   await signIn(page,'manager@example.com','/c/rs-learning/home');
   await expect(page.locator('html')).toHaveAttribute('lang','ar');
   await expect(page.locator('.topbar')).toHaveText('الرئيسية');
-  const second=await browser.newContext({baseURL:'http://127.0.0.1:3000',viewport:{width:1440,height:900}});
+  const second=await browser.newContext({baseURL:appOrigin,viewport:{width:1440,height:900}});
   try {
    const other=await second.newPage();
    await signIn(other,'manager@example.com','/c/rs-learning/home');

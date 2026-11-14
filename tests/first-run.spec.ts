@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { localQuery, resetFirstRun } from '../scripts/first-run-db.mjs';
 import { signIn } from './sign-in';
+import { inbox, serverLogOf } from './lane.mjs';
 
 // The install's setup code (playwright.config.ts), as the installer's setup link carries it (issue #50).
 const code=process.env.SETUP_CODE!;
@@ -15,7 +16,7 @@ const counts=(baseURL:string)=>localQuery(`select
 test.beforeEach(({baseURL})=>resetFirstRun(baseURL));
 test.afterEach(async({},testInfo)=>{
  if(testInfo.status===testInfo.expectedStatus) return;
- const log=await readFile(join(process.cwd(),'playwright-report/server.log'),'utf8').catch(error=>{
+ const log=await readFile(join(process.cwd(),serverLogOf()),'utf8').catch(error=>{
   if(error.code==='ENOENT') return '';
   throw error;
  });
@@ -24,7 +25,6 @@ test.afterEach(async({},testInfo)=>{
 });
 test.afterAll(({baseURL})=>resetFirstRun(baseURL,true));
 
-const inbox='http://127.0.0.1:54324/api/v1/messages';
 async function fillFirstRun(page:Page,values:typeof input) {
  await page.getByLabel(/^(Your name|اسمك)$/).fill(values.name);
  await page.getByLabel(/^(Email|البريد الإلكتروني)$/).fill(values.email);
@@ -143,7 +143,7 @@ test('no password appears in the web or worker log or in any public table after 
  await page.getByRole('button',{name:'Sign in',exact:true}).click();
  await expect(page.getByRole('alert').filter({hasText:'Wrong email or password.'})).toBeVisible();
  // The web server and the worker both write to this log (playwright.config.ts, scripts/web.sh).
- const log=await readFile(join(process.cwd(),'playwright-report/server.log'),'utf8');
+ const log=await readFile(join(process.cwd(),serverLogOf()),'utf8');
  expect(log.length).toBeGreaterThan(0);
  expect(log.includes(marker)).toBe(false);
  // Every row of every public table, read as text; the check proves itself on a value that is there (the email).

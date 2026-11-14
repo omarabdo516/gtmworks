@@ -1,8 +1,9 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { signIn } from './sign-in';
 import { fakeHermes } from './fake-hermes.mjs';
+import { inbox } from './lane.mjs';
 
 // The board's six columns and "Waiting on you" (#34, #16; ADR 0013). The seeded accounts read English.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
@@ -198,7 +199,7 @@ test('Waiting on you lists an Agent question and an item of a new kind, each ope
   await signIn(page,'manager@example.com','/c/rs-learning/approvals');
   const deliveries=Number(rows(`select count(*)::int as n from public.webhook_deliveries`)[0].n);
   // Mail sent by earlier tests (an invite) may already be in the local mailbox; only a change counts.
-  const mailCount=async()=>{const mail=await (await page.request.get('http://127.0.0.1:54324/api/v1/messages')).json(); return Number(mail.total ?? mail.messages?.length ?? 0);};
+  const mailCount=async()=>{const mail=await (await page.request.get(inbox)).json(); return Number(mail.total ?? mail.messages?.length ?? 0);};
   const mailBefore=await mailCount();
   query(`insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${conversation}','${rs}','${manager}','${attachedAgent.id}','Lead')`);
   query(`select public.add_waiting_item('${rs}','${manager}','question','Which offer goes first ${stamp}?','',null,'${conversation}','Lead')`);

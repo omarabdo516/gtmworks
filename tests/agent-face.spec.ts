@@ -1,6 +1,7 @@
-import { test, expect, type Locator, type Page } from '@playwright/test';
+import { test, expect, type Locator, type Page } from './fresh-seed';
 import { chooseLanguageInSettings } from './choose-language';
 import { signIn } from './sign-in';
+import { appOrigin } from './lane.mjs';
 
 const names=['Lead','وكيل المحتوى','المصمم','الناقد'];
 async function faceMarkup(face:Locator,name:string) {
@@ -54,7 +55,7 @@ test('shared agents keep distinct, named, still faces across screens and compani
 
 test('revoking a grant keeps the agent face and name in a company-only member’s history',async({page,browser})=>{
  await signIn(page,'omar@example.com','/c/rs-learning/agents');
- const context=await browser.newContext({baseURL:'http://127.0.0.1:3000'});
+ const context=await browser.newContext({baseURL:appOrigin});
  const member=await context.newPage();
  const writer=page.getByRole('form',{name:'Writer',exact:true});
  try {

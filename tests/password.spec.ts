@@ -1,11 +1,11 @@
-import { test, expect, type Page, type BrowserContext } from '@playwright/test';
+import { test, expect, type Page, type BrowserContext } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { createHmac } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import { signIn, emailLink, seededPassword } from './sign-in';
+import { inbox } from './lane.mjs';
 
 // Signing in with an email and a password (#41). Passwords go only to the auth service (GoTrue).
-const inbox='http://127.0.0.1:54324/api/v1/messages';
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const status=()=>{ const env=execFileSync('npx',['--no-install','supabase','status','-o','env'],{encoding:'utf8'}); return (name:string)=>env.match(new RegExp(`^${name}="(.*)"$`,'m'))![1]; };
 const sessionCookies=async(context:BrowserContext)=>(await context.cookies()).filter(cookie=>/^sb-.*-auth-token/.test(cookie.name));
