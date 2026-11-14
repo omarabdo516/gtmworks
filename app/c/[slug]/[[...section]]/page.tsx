@@ -54,6 +54,9 @@ export default async function CompanyPage({params,searchParams}:{params:Promise<
  const {steps,cards:myCards,items:waitingItems,available:approvalsAvailable}=await approvalQueue(db,company.id,user.id,membership?.role || '');
  const isWork=section.startsWith('work/')||section==='settings/work';
  const workData=(isWork||section==='home'||section==='approvals')?await Promise.all(['work_stages','work_labels','work_cards','work_checklist','work_activity','work_creatives','work_versions','work_card_labels','work_assignees','work_attachments'].map(t=>db.from(t).select('*').eq('company_id',company.id))):[];
+ // The Card list is capped at the Data API's row limit; the reader's own pending approvals were read by id
+ // (approvalQueue, company-scoped), so one past the cap still reaches Waiting on you and its board column.
+ if(workData[2]?.data) { const known=new Set(workData[2].data.map((c:{id:number})=>c.id)); workData[2].data.push(...(myCards||[]).filter((c:{id:number})=>!known.has(c.id))); }
  const {data:workMembers}=(isWork||section==='home'||section==='approvals')?await db.from('members').select('person_id,role,agent_role,people(name)').is('removed_at',null).eq('company_id',company.id):{data:[]};
  const {data:workAgents}=isWork?await db.rpc('company_agents',{c:company.id}):{data:[]};
  const {data:projects}=(isWork||section==='projects')?await db.from('work_projects').select('id,name,goal,status').eq('company_id',company.id).order('id'):{data:[]};
