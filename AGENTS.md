@@ -29,8 +29,8 @@ Impeccable (the design skill) is this repo's design workflow, used in full: ever
 
 ## Checks
 
-`./ci.sh check` runs `./ci.sh static` then `./ci.sh integration`; CI also checks the Docker install.
-For PRs and pushes to `main`, CI always runs static and skips integration and install only when every changed file is under `design/`, under `docs/`, or ends in `.md`, except files under `public/` (read by a browser test); unknown or empty diffs run all stages. A push to `main` is judged against the last commit a successful main CI run tested.
+`./ci.sh check` runs `./ci.sh static`, `./ci.sh database` then `./ci.sh integration`; CI also checks the Docker install.
+In CI the first job decides what runs (`scripts/ci-areas.mjs`, as Hermes and T3 Code do, #76): static runs on every change; the database tests, the whole-app browser suite (`integration`) and the install run on a pull request only when their own files change (`docs/testing.md` lists them); a change to the CI definition or `package.json` runs all; unknown or empty diffs run all. A push to `main` runs every suite unless every changed file is under `design/`, under `docs/`, or ends in `.md` (files under `public/` excepted), judged against the last commit a successful main CI run tested. A manual run starts the browser suite and the install only with `-f e2e=true` / `-f install=true`, off by default. `check` passes a suite nobody asked for only when it was skipped.
 
 CI deploys nothing. An install picks up a merge when its owner runs `sh scripts/install.sh update` (README), which applies new migrations before the new app version starts; a failed migration rolls back and the previous app keeps serving. A later version does not undo an applied migration; recovery needs a new forward migration. A forward migration cannot bring back deleted data; restore it from a backup.
 
