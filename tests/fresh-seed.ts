@@ -9,7 +9,8 @@ export * from '@playwright/test';
 // Every functional spec file starts from the database exactly as the seed builds it (#69): before its first test, or in
 // its own beforeAll when it prepares data there, the lane's data is put back from the snapshot scripts/local-db.sh took.
 // A file then proves its promise on its own, whichever files ran before it in its lane. The tests inside one file still
-// share what they change, in order; a retry of a test in the same run keeps that file's data instead of starting over.
+// share what they change, in order. A retry on the lane that ran the file keeps that file's data; a retry that lands on
+// another lane starts that lane from the seed, as the file itself did.
 const snapshot = seedSnapshotOf();
 const marker = join(dirname(snapshot), 'seeded-for');
 export function freshSeed(file: string) {

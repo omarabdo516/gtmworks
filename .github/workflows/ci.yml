@@ -108,7 +108,7 @@ jobs:
         env:
           CI_IMAGE_PREBUILT: "true"
         run: ./ci.sh integration
-      # PR #32 (issue #27) writes every Route's screenshot at 1440 and 390 wide here; upload them so a review can see them.
+      # The screenshots tests write (failing screen comparisons, card and phone checks) are uploaded so a review can see them.
       - name: upload route screenshots
         if: always()
         uses: actions/upload-artifact@v4

@@ -24,7 +24,7 @@ English/Arabic direction checks are never removed.
 
 | Removed | Why | Still covered by |
 |---|---|---|
-| `app.spec.ts` "landing and screenshots of every charter route" | Its only check was landing on the Company home after signing in; the rest wrote unchecked screenshots. | Landing: `first-run.spec.ts` (signs in from `/sign-in` and lands on the Company home) and `password.spec.ts` (the right password reaches the Company home). Screens: `visual.spec.ts` compares sign-in, Home, approvals and settings members exactly. |
+| `app.spec.ts` "landing and screenshots of every charter route" | Its only check was where a person of several companies lands after signing in from the sign-in page; the rest wrote unchecked screenshots. | Landing: merged into `app.spec.ts` "the Owner of every company lands on a Company home from the sign-in page and opens each one with no extra verification step" (the same person, the same page, the same check). Screens: `visual.spec.ts` compares sign-in, Home, approvals and settings members exactly. |
 | `app.spec.ts` "screenshots for unit routes" | It checked nothing beyond signing in, which every test does; it wrote unchecked screenshots. | `visual.spec.ts` compares the members and agents settings screens exactly. |
 
 ## Every file

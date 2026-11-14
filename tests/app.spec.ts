@@ -235,8 +235,10 @@ test('invite link signs the new member into the company',async({page,context})=>
  await expect(page).toHaveURL(/\/c\/rs-learning\/settings\/members/); await expect(page.getByRole('heading',{name:"Team members"})).toBeVisible();
 });
 
-test('the Owner of every company opens each one with no extra verification step',async({page})=>{
- await signIn(page,'omar@example.com','/c/rs-learning/home'); await expect(page.locator('.home-dashboard')).toBeVisible();
+test('the Owner of every company lands on a Company home from the sign-in page and opens each one with no extra verification step',async({page})=>{
+ // Signing in from the sign-in page itself, with no page asked for, lands a person of several companies on a Company home.
+ await signIn(page,'omar@example.com','/sign-in'); await expect(page).toHaveURL(/\/c\/[^/]+\/home$/);
+ await page.goto('/c/rs-learning/home'); await expect(page.locator('.home-dashboard')).toBeVisible();
  for(const slug of ['rs-consultations','aleem']) { await chooseCompany(page,slug); await expect(page).toHaveURL(new RegExp(`/c/${slug}/home$`)); await expect(page.locator('.home-dashboard')).toBeVisible(); }
 });
 
