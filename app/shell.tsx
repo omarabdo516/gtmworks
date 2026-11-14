@@ -12,6 +12,7 @@ import { AgentIdentitiesProvider } from '@/lib/agent-identities-client';
 import Switcher from '@/app/c/[slug]/[[...section]]/switcher';
 import RecentCards, { RecentCardsProvider } from './recent-cards';
 import RecentChats from './recent-chats';
+import FirstRunChoice from './first-run-choice';
 import { SidebarSearchProvider, SearchToggle, SearchBox } from './sidebar-search';
 import { Frame } from './frame';
 import type { ReactNode } from 'react';
@@ -81,6 +82,13 @@ export default async function Shell({company,companies,section,title,crumbs,pers
  </SidebarSearchProvider>;
  // Paperclip BreadcrumbBar: a trail of two or more crumbs replaces the single page title. Rendered on the server so it adds no route JavaScript.
  const breadcrumb=crumbs&&crumbs.length>1?<div className="heading m-0 min-w-0 flex-1 overflow-hidden"><Breadcrumb aria-label={t('breadcrumb')} className="min-w-0 overflow-hidden"><BreadcrumbList className="flex-nowrap">{crumbs.map((crumb,index)=>{const last=index===crumbs.length-1;return <Fragment key={index}>{index>0&&<BreadcrumbSeparator/>}<BreadcrumbItem className={last?'min-w-0':'shrink-0'}>{last||!crumb.href?<BreadcrumbPage className="truncate"><bdi>{crumb.label}</bdi></BreadcrumbPage>:<Link className="hover:text-foreground transition-colors" href={crumb.href}><bdi>{crumb.label}</bdi></Link>}</BreadcrumbItem></Fragment>;})}</BreadcrumbList></Breadcrumb></div>:undefined;
+ // First run's one question (#9): while the Company has no answer, its Owner is asked before anything else, over an
+ // inert workspace.
+ const asking=!!company?.id&&owner&&(await db.from('companies').select('work_mode').eq('id',company.id).maybeSingle()).data?.work_mode===null;
+ const mark=<svg className="ws__mark" viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect width="32" height="32" rx="9" fill="var(--gw-accent)"/><path d="M21.5 11.5a7 7 0 1 0 1 7.5h-6.5" fill="none" stroke="#FFFFFF" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+ const main=agents.find(agent=>agent.is_default);
+ const question=asking&&company?<FirstRunChoice slug={company.slug} company={company.id} companyName={company.name} personName={personName} lead={main?{name:main.name,connection_id:main.connection_id}:null} mark={mark} brand={<>gtm<span>works</span></>}/>:null;
  const frame=<Frame sidebar={sidebar} title={chat?t('chats'):title} breadcrumb={chat?undefined:breadcrumb} chat={chat}>{children}</Frame>;
- return <AgentIdentitiesProvider agents={await agentIdentities()}>{company?.id?<RecentCardsProvider key={company.id} company={company.id} cardId={cardId}>{frame}</RecentCardsProvider>:frame}</AgentIdentitiesProvider>;
+ const shown=question?<><div style={{display:'contents'}} inert>{frame}</div>{question}</>:frame;
+ return <AgentIdentitiesProvider agents={await agentIdentities()}>{company?.id?<RecentCardsProvider key={company.id} company={company.id} cardId={cardId}>{shown}</RecentCardsProvider>:shown}</AgentIdentitiesProvider>;
 }

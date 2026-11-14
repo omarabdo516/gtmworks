@@ -9,6 +9,7 @@ import { CompanyAgentFace } from '@/components/company-agent-face';
 import { AgentDetails, HeadPill, useDetailsPanel, type DetailsAgent } from '@/app/agent-details';
 import { ShellIcon } from '@/components/shell-icon';
 import { MessageBox, postMessage } from '@/app/conversation-composer';
+import { LeadWelcome } from '@/app/lead-welcome';
 import { titleOf } from '@/lib/conversations';
 import type { ConversationRecord } from '@/lib/conversation-record';
 import { localeFor } from '@/lib/i18n.mjs';
@@ -42,10 +43,14 @@ export default function ConversationView({slug,agent,company,conversation,initia
  const count=(value:number)=>new Intl.NumberFormat(localeFor(language)).format(value);
  const time=(value:string)=>new Date(value).toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit'});
  const face=(size:number)=><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:conversation.face,name:conversation.agent_name}} size={size}/></span>;
+ // A new workspace opens on the Owner's Conversation with Lead before anything is said in it (#9): Lead's first words.
+ const [draft,setDraft]=useState<{text:string,n:number}|null>(null);
+ const welcome=!messages.length&&agent?.main;
  const asked=()=>{ setRecord(current=>({...current,pending:true})); setSent(value=>value+1); };
  return <div className="convo"><div className="chat">
   <HeadPill panel={panel} agent={agent?.name} face={face(24)} title={titleOf(messages,conversation.agent_name)} titleDir="auto"/>
   <div className="transcript"><div className="transcript__col">
+   {welcome&&agent&&<LeadWelcome agent={agent} suggest={writer?text=>setDraft(current=>({text,n:(current?.n||0)+1})):undefined}/>}
    <ol className="turns" aria-label={t('conversationMessages')}>{messages.map(message=>message.author==='person'?<li key={`${message.kind||'m'}${message.id}`} className={`turn turn--user msg${message.kind==='queued'&&!message.failed?' is-queued':''}`} data-author="person" data-kind={message.kind}>
     <div className="bubble-row"><time className="bubble__time" dateTime={message.created_at}>{time(message.created_at)}</time><div className="bubble bubble--user" dir="auto">{message.body}</div></div>
     {message.kind==='queued'&&!message.failed&&<span className="queued"><ShellIcon name="clock"/>{c('conversationQueued')}</span>}
@@ -60,7 +65,7 @@ export default function ConversationView({slug,agent,company,conversation,initia
    {failed&&<p className="note convo-status" role="alert">{t('conversationReplyFailed')}</p>}
   </div></div>
   <div className="composer-area">
-   {writer?<MessageBox placeholder={t('writeTo',conversation.agent_name)} stop={working&&canStop?{label:c('conversationStop',conversation.agent_name),run:async()=>{
+   {writer?<MessageBox key={draft?.n||0} draft={draft?.text} placeholder={t('writeTo',conversation.agent_name)} stop={working&&canStop?{label:c('conversationStop',conversation.agent_name),run:async()=>{
     const failure=await postMessage({company,conversation:conversation.id,intent:'stop'});
     if(!failure) asked();
     return failure;

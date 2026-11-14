@@ -179,3 +179,74 @@ test('invalid input creates nothing and a populated installation refuses setup',
  expect((await request.post('/first-run/submit',{form:input,maxRedirects:0})).status()).toBe(404);
  expect(counts(baseURL!)).toEqual(before);
 });
+
+// #9: after setup the new Owner is asked one question, alone or with a team, and lands in one Conversation with Lead.
+const question={en:'Will you work alone or with a team?',ar:'هتشتغل لوحدك ولا مع تيم؟'};
+const choiceNames={en:['Alone','With a team'],ar:['لوحدي','مع تيم']};
+const leadLine={en:'I’m Lead and I run your marketing work with you. Need an agent for any job? Tell me in your own words and I’ll make it.',ar:'أنا Lead، بمسك شغل التسويق معاك. محتاج وكيل لأي شغلانة؟ قولّي بكلامك وأنا أعمله.'};
+const workspace=(baseURL:string)=>localQuery(`select c.work_mode,
+ (select string_agg(a.name||':'||a.is_default,',') from public.hermes_agents a where a.company_id=c.id) agents,
+ (select count(*)::int from public.conversations v where v.company_id=c.id) conversations,
+ (select count(*)::int from public.work_cards w where w.company_id=c.id) cards
+ from public.companies c`,baseURL);
+// The worker gives a new Company its own profile and its main Agent, Lead (lib/company-profiles.mjs); the browser suite
+// runs without the bundled engine, so the test does that step through the same database function.
+const workerAddsLead=(baseURL:string)=>{
+ localQuery(`insert into public.company_profiles(company_id,profile,tools_level,tools_policy,tools_pending) select id,public.company_engine_profile(id),agent_level,public.engine_tool_policy(),false from public.companies returning company_id`,baseURL);
+ return localQuery(`select public.attach_company_profile(id,'http://hermes:8642','encrypted','0.23.0','{run_submission}') attached from public.companies`,baseURL);
+};
+
+for(const [mode,language] of [['alone','en'],['team','ar']] as const) test(`first run asks only alone or with a team; ${mode} is stored and opens one Conversation with Lead, in ${language} (#9)`,async({page,baseURL})=>{
+ await page.goto(`/first-run?language=${language}#code=${code}`);
+ await page.locator('select').selectOption(language);
+ await fillFirstRun(page,input);
+ await page.getByRole('button',{name:/^(Create and sign in|إنشاء وتسجيل الدخول)$/}).click();
+ await expect(page).toHaveURL(/\/c\/first-company-[a-f0-9]{8}\/home$/);
+ const slug=new URL(page.url()).pathname.split('/')[2];
+ const dialog=page.getByRole('dialog',{name:question[language]});
+ await expect(dialog).toBeVisible();
+ // Exactly two choices and no other question; nothing is stored until one is picked.
+ await expect(dialog.getByRole('radio')).toHaveCount(2);
+ for(const [index,name] of choiceNames[language].entries()) await expect(dialog.getByRole('radio').nth(index)).toHaveAccessibleName(name);
+ await expect(dialog.getByRole('textbox')).toHaveCount(0);
+ await expect(dialog.getByRole('combobox')).toHaveCount(0);
+ expect(workspace(baseURL!)).toEqual([{work_mode:null,agents:null,conversations:0,cards:0}]);
+ expect(workerAddsLead(baseURL!)).toEqual([{attached:true}]);
+ await page.reload();
+ const open=dialog.getByRole('button',{name:language==='ar'?'افتح المساحة':'Open the workspace'});
+ await expect(open).toBeDisabled();
+ await dialog.getByRole('radio',{name:choiceNames[language][mode==='alone'?0:1]}).check();
+ await open.click();
+ await expect(page).toHaveURL(new RegExp(`/c/${slug}/conversations/[0-9a-f-]{36}$`));
+ expect(workspace(baseURL!)).toEqual([{work_mode:mode,agents:'Lead:true',conversations:1,cards:0}]);
+ await expect(page.getByRole('dialog')).toHaveCount(0);
+ // One Agent in the list, one chat in the recents, and Lead's first line, which invites asking for an Agent.
+ await expect(page.locator('.agent-grid .agent-tile:not(.agent-tile--new)')).toHaveCount(1);
+ await expect(page.locator('.agent-grid .agent-tile:not(.agent-tile--new)')).toHaveAccessibleName(new RegExp('^Lead · '));
+ await expect(page.locator('#sb-recent .thread-item:not(.ch-item)')).toHaveCount(1);
+ await expect(page.locator('#sb-recent .thread-item:not(.ch-item)')).toHaveAttribute('aria-current','true');
+ await expect(page.locator('[data-lead-line]')).toHaveText(leadLine[language]);
+ // The sentence to try fills the composer, ready to send.
+ await page.getByRole('button',{name:language==='ar'?'عايز حد يمسك إعلانات Meta وGoogle':'I want someone to run our Meta and Google ads'}).click();
+ await expect(page.getByRole('textbox',{name:/^(Message|الرسالة)$/})).toHaveValue(language==='ar'?'عايز حد يمسك إعلانات Meta وGoogle':'I want someone to run our Meta and Google ads');
+ const conversation=page.url();
+ // The other language says the same line in its own words.
+ const other=language==='ar'?'en':'ar';
+ // As tests/choose-language.ts does: the account's language, chosen in the settings overlay, until the page follows it.
+ await page.goto(`/c/${slug}/settings?section=account`);
+ await expect(async()=>{
+  const choice=page.locator(`#ac-lang-${other}`);
+  if(await choice.getAttribute('aria-checked')!=='true') await choice.click();
+  await expect(page.locator('html')).toHaveAttribute('lang',other,{timeout:3000});
+ }).toPass({timeout:30000});
+ await page.goto(conversation);
+ await expect(page.locator('[data-lead-line]')).toHaveText(leadLine[other]);
+ // The board is empty, and the question is not asked again.
+ await page.goto(`/c/${slug}/work/board`);
+ await expect(page.locator('.board-bare')).toBeVisible();
+ await expect(page.locator('.kcard')).toHaveCount(0);
+ await page.goto(`/c/${slug}/home`);
+ await expect(page.locator('.home-dashboard')).toBeVisible();
+ await expect(page.getByRole('dialog')).toHaveCount(0);
+ expect(workspace(baseURL!)).toEqual([{work_mode:mode,agents:'Lead:true',conversations:1,cards:0}]);
+});
