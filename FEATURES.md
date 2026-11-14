@@ -30,21 +30,21 @@ saved in the session's shots folder outside the repository.
 
 ## Issues
 
-- #41 Sign in with email and password (merged branch) — passes: false
-- #8 The new shell: sidebar and Agent Conversation — passes: false
-- #7 Remove the Agency and the reviewer Role (merged branch) — passes: false
+- #41 Sign in with email and password (merged branch) — passes: true — proof: CI run 43568240329 on 71de149: static, integration (password, first-run, rate-limit specs) and install (proxy rate-limit check) all success
+- #8 The new shell: sidebar and Agent Conversation — passes: true — proof: CI run 43568240329 on 71de149 success (conversations.spec shell tests, frame.spec, visual baselines refreshed in bbe5b1d); shots home/agent-chat 1440+390
+- #7 Remove the Agency and the reviewer Role (merged branch) — passes: true — proof: CI run 43568240329 on 71de149 success (no_agency.sql, remove-agency migration test, no-agency-strings unit test)
 - #49 Every release publishes a ready, tested image (merged branch) — passes: false
-- #34 The board takes the six columns of the approved design — passes: false
-- #16 "Waiting on you" is one list — passes: false
+- #34 The board takes the six columns of the approved design — passes: true — proof: CI run 43568240329 on 71de149 success (board.spec, board_columns.sql, app.spec board tests); shots board 1440+390
+- #16 "Waiting on you" is one list — passes: true — proof: CI run 43568240329 on 71de149 success (waiting_list.sql, board.spec waiting tests incl. reply through the composer); shots waiting 1440+390
 - #35 The numbers page — passes: false
-- #11 One log for the Company, with an Activity log page — passes: false
-- #51 Install gtmworks with one line — passes: false
-- #52 `gtmworks update` moves from release to release — passes: false
-- #2 Each company gets its own Hermes profile — passes: false
-- #3 A company connects its own ChatGPT or Claude subscription — passes: false
+- #11 One log for the Company, with an Activity log page — passes: true — proof: CI run 43568240329 on 71de149 success (company_log.sql, company-log-migration, activity-log.spec incl. paging and unlisted filter); shots log 1440+390
+- #51 Install gtmworks with one line — passes: true — proof: CI run 43568251478 on 3e724b1, job install (success), step "one-line install, gtmworks status and gtmworks update between test releases": log `Installing gtmworks v0.0.0 into …/one-line-home/gtmworks.`, `http://gateway:8080/api/health 200`, `.env.install sha256` identical after the first run, the repeat and `--version` (43bc2776…), `All 9 services are healthy.` from `gtmworks status` in a new shell; every check there is a `fail` guard (no `compose build`, digest pull, second folder refused); option parsing and prerequisite checks in tests/get.test.mjs (npm test green in that run). The test releases are local folders (`GTMWORKS_RELEASES`), not a published release (#49).
+- #52 `gtmworks update` moves from release to release — passes: true — proof: CI run 43568251478 on 3e724b1, job install (success), same step: `gtmworks update` v0.0.0 → v0.0.1 guarded on the printed backup archive, `Digest: sha256:…`, `gtmworks v0.0.1 is running: <digest>` and `To go back to v0.0.0: gtmworks restore '<archive>' --version v0.0.0`; `--version v0.0.0` refused with `older than the data` and `Nothing was changed.` and the same digest and migrations read back; the failing v0.0.2 migration names `99999999999999_failure.sql`, rolls back and the previous web container keeps serving; `find <dir> ! -user $(id -u)` empty after update, failed update and go-back.
+- #2 Each company gets its own Hermes profile — passes: true — proof: CI run 43580707591 on 96ecb76, job install (success): `scripts/check-install-profiles.mjs` printed `{"profiles":["co-5d52d23a…","co-155779cb…"],"memory":[true,false]}` (two companies, two profiles; A's memory marker absent from B's run) and the Hermes secrets scan printed `checked 6 secret(s): none found`; unit `tests/company-profiles.test.mjs` (two profiles with terminal, files and code off before attach; read-back against the deny list) and pgTAP `company_profiles.sql` green in the same run (decision 2026-11-13: profile per company, not a user or container per company)
+- #3 A company connects its own ChatGPT or Claude subscription — passes: false — ChatGPT sign-in, Owner-only server checks and disconnect are built (company-sign-in.spec, company-profiles.test); Claude sign-in is refused by Hermes v0.23's dashboard API (`external CLI`), so the settings show the install-owner command instead and the acceptance item for Claude is not met (PR #63)
 - #47 Flaky: activity times hydrate without errors — passes: false
-- #48 Flaky: drawer targets are at least 44px and do not overlap — passes: false
-- #56 Flaky: prepared navigation and motion inventory — passes: false
+- #48 Flaky: drawer targets are at least 44px and do not overlap — passes: true — proof: navigation.spec drawer test plus the many-chats drawer test and tap-overlaps fixtures; CI run 43568240329 on 71de149 success (one green run does not prove a flaky test gone)
+- #56 Flaky: prepared navigation and motion inventory — passes: true — proof: current sidebar entry no longer fades and the log opens on 50 rows (63 ms vs 251 ms, CI=true local); CI run 43568240329 on 71de149 success (one green run does not prove a flaky test gone)
 
 ## Team-work rules (Omar, 2026-11-13)
 
@@ -52,6 +52,6 @@ saved in the session's shots folder outside the repository.
 - b. Every server route is in a route-to-permission table; role re-checked per request — passes: false
 - c. A busy Agent queues another member's message as their own next turn; stop limited — passes: false
 - d. A message addressed to a person does not wake the Agent — passes: false
-- e. Agent levels per company (read/draft, act on approval, scheduled), new companies at 1 — passes: false
-- f. Health check warns on terminal/code/file tools in a multi-member company — passes: false
+- e. Agent levels per company (read/draft, act on approval, scheduled), new companies at 1 — passes: true — proof: CI run 43580707591 on 96ecb76 success: pgTAP `company_profiles.sql` (a new company waits at level 1; only the Owner sets 1-3; the change is in the company log with both levels; the worker sees tools lag the level) and unit `the level table: three levels, each adding to the one below` (level 3 adds cronjob). Level 2 offers the same tools as level 1 until gtmworks has an approval-gated action path (decision recorded in PR #63; agents never act unapproved, ADR 0006)
+- f. Health check warns on terminal/code/file tools in a multi-member company — passes: true — proof: CI run 43580707591 on 96ecb76 success: unit `the tool health check records which Agents can reach a terminal, files or code` (a pasted profile with Hermes defaults records terminal, code_execution, file; the company profile none) and pgTAP `company_profiles.sql` (`the Owner of a company of two is warned`, `a company of one person is not`, `a Contributor is not warned`); shown in the settings Company section (`#co-tool-warning`, both catalogues)
 - g. A member's preference note (max 4,000 characters, no secrets) in their own Conversations — passes: false
