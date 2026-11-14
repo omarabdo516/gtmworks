@@ -1,6 +1,6 @@
 'use client';
 // The strings only this page shows live in conversation.en.json and conversation.ar.json, in this route's own chunk, not in
-// the catalogue every company route loads (the route size budget, tests/navigation.spec.ts).
+// the catalogue every company route loads (page weight, #55).
 import conversationEn from '@/lib/messages/conversation.en.json';
 import conversationAr from '@/lib/messages/conversation.ar.json';
 import { useEffect, useState } from 'react';

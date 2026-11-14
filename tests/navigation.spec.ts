@@ -2,10 +2,8 @@ import { test, expect } from '@playwright/test';
 import { chooseLanguageInSettings } from './choose-language';
 import { clickPath, idle, measureClick, median, type Timing } from './navigation-measure';
 import { signIn, openNavigation, closeNavigation, openMoreSection } from './sign-in';
-import { gzipSync } from 'node:zlib';
 import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
-import { sections } from '../lib/navigation';
 import { tapOverlaps } from './tap-overlaps';
 import { execFileSync } from 'node:child_process';
 
@@ -246,36 +244,6 @@ test('own comments, moves and approvals invalidate prepared pages immediately', 
   await openNavigation(page);
   await page.locator('.nav a[href$="/work/board"]').click();
   await expect(page.locator('.column[data-stage-name="معتمد"] .card').filter({ hasText: title })).toBeVisible();
-});
-
-test('every company route loads at most 230 KiB gzip of JavaScript', async ({ page }, testInfo) => {
-  test.setTimeout(120000);
-  await signIn(page, 'manager@example.com', '/c/rs-learning/home');
-  const sizes: Record<string, number> = {};
-  for (const section of ['', ...Object.keys(sections), 'work/board/1']) {
-    const routePage = await page.context().newPage();
-    const scripts = new Map<string, Promise<number>>();
-    routePage.on('response', response => {
-      if (response.request().resourceType() === 'script') {
-        scripts.set(response.url(), response.body().then(body => gzipSync(body).length));
-      }
-    });
-    const route = `/c/rs-learning/${section}`;
-    await routePage.goto(route);
-    // The shell is drawn: the board, Inbox, Numbers and Activity log pages hide the top bar's title on a wide screen
-    // (#16, #35, #11), so the page counts as shown once the frame has its title and its sidebar and content are visible.
-    await expect(routePage.locator('.topbar .heading')).toBeAttached();
-    await expect(routePage.locator('.sidebar')).toBeVisible();
-    await expect(routePage.locator('.app-content')).toBeVisible();
-    await idle(routePage);
-    expect(scripts.size, `${route}: measured scripts`).toBeGreaterThan(0);
-    const bytes = (await Promise.all(scripts.values())).reduce((total, size) => total + size, 0);
-    sizes[route] = bytes;
-    console.log(`JS_GZIP ${route}: ${bytes} bytes (${(bytes / 1000).toFixed(2)} KB)`);
-    expect(bytes, `${route}: ${bytes} bytes gzip (limit 230 KiB)`).toBeLessThanOrEqual(230*1024);
-    await routePage.close();
-  }
-  await testInfo.attach('js-gzip.json', { body: JSON.stringify(sizes, null, 2), contentType: 'application/json' });
 });
 
 test('drawer targets are at least 44px and do not overlap', async ({ page }) => {

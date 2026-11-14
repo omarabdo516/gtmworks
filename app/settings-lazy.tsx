@@ -3,7 +3,7 @@ import { lazy, Suspense, type ComponentProps } from 'react';
 import type { AgentLevel as Level, CompanySubscriptions as Subscriptions } from './company-engine-client';
 
 // Parts of the settings overlay that only one of its sections shows, loaded on demand so they stay out of the page chunk
-// every company route loads (the route size budget, tests/navigation.spec.ts): the Agent level and the company sign-in
+// every company route loads (page weight, #55): the Agent level and the company sign-in
 // (Company section) and the member's note (Your account). The server still draws them, and React replays a click made
 // before their code arrives; the note form stays read-only until it is hydrated (member-note.tsx).
 const LazyLevel=lazy(()=>import('./company-engine-client').then(module=>({default:module.AgentLevel})));
