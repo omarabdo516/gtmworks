@@ -34,9 +34,15 @@ for(const folder of ['/usr/local/bin','/usr/bin','/bin']) {
  }
 }
 
+// The stand-in takes install.sh's own lock, as install.sh does, so a run cut off leaves the lock a real one leaves.
+const installText=readFileSync('scripts/install.sh','utf8');
+const lockStart=installText.indexOf('lock_owner() {'), lockEnd='lock_owner "$$" > .install-lock/owner\n';
+assert.ok(lockStart>0&&installText.indexOf(lockEnd)>lockStart,'install.sh takes its lock with lock_owner');
+const lockBlock=installText.slice(lockStart,installText.indexOf(lockEnd)+lockEnd.length);
 const installerTemplate=`#!/bin/sh
 release_image=@REF@
 op=\${1:-install}
+${lockBlock}trap 'rm -rf .install-lock' EXIT
 printf '%s %s\\n' "\${release_image##*:}" "$*" >> "$INSTALLER_LOG"
 case "$op" in
  backup) mkdir -p "$2"; : > "$2/gtmworks-test.tgz"; echo 'Stopping...'; echo "Backup: $2/gtmworks-test.tgz"; exit 0;;
@@ -44,7 +50,7 @@ case "$op" in
 esac
 [ -f .env.install ] || echo "SECRET=$$" > .env.install
 rm -f .install-release
-if [ "$release_image" = "\${DIE_REF:-}" ]; then cp "$FIXTURE/migrations/\${release_image##*:}" "$DB_FILE"; kill -9 "$PPID"; exit 9; fi
+if [ "$release_image" = "\${DIE_REF:-}" ]; then cp "$FIXTURE/migrations/\${release_image##*:}" "$DB_FILE"; kill -9 "$PPID"; kill -9 $$; fi
 if [ "$release_image" = "\${FAIL_REF:-}" ]; then
  [ -z "\${FAIL_AFTER_MIGRATE:-}" ] || cp "$FIXTURE/migrations/\${release_image##*:}" "$DB_FILE"
  echo 'Applying migration: 999_failure.sql'; exit 3
@@ -62,6 +68,11 @@ case "$*" in
  info) exit "\${INFO_EXIT:-0}";;
  'ps -a --filter label=com.docker.compose.project=gtmworks-install '*) [ -z "\${PROJECT_DIRS:-}" ] || printf '%s\\n' "$PROJECT_DIRS"; exit 0;;
  'volume inspect gtmworks-install_database') [ -f "$DB_FILE" ]; exit $?;;
+ 'volume inspect -f {{.CreatedAt}} gtmworks-install_database')
+  # A volume made anew (its data removed, then made again) has a new creation time.
+  [ -f "$DB_FILE" ] || { rm -f "$DB_FILE.created"; exit 1; }
+  [ -f "$DB_FILE.created" ] || date +%s%N > "$DB_FILE.created"
+  cat "$DB_FILE.created"; exit 0;;
  'run --rm -i alpine:3.21 tar -xzOf - .env.install') cat > /dev/null; printf '%s\\n' "\${ARCHIVE_ENV:-SECRET=archived}"; exit 0;;
  *'install-env.mjs missing') exit 0;;
  *'install-env.mjs validate complete')
@@ -93,6 +104,12 @@ case "$*" in
  *'exec -T web node'*) echo 'http://gateway:8080/api/health 200';;
 esac
 exit 0
+`;
+const fakeMv=`#!/bin/sh
+case "$#:\${CUT_BEFORE:-}:$1" in
+ "2:$2:"*/.gtmworks-download.*/"$2") kill -9 "$PPID"; exit 9;;
+esac
+exec "$REAL_MV" "$@"
 `;
 const fakeCurl=`#!/bin/sh
 out= url=
@@ -129,8 +146,9 @@ function machine(t,{list=['v1.2.3','nightly','v1.10.0','v2.0.0-rc1','v1.3.0','v1
  writeFileSync(join(fixture,'migrations',mainHex),'001.sql\n002.sql\n003.sql\n004.sql\n');
  if(docker) writeFileSync(join(bin,'docker'),fakeDocker,{mode:0o755});
  writeFileSync(join(bin,'curl'),fakeCurl,{mode:0o755});
+ writeFileSync(join(bin,'mv'),fakeMv,{mode:0o755});
  const logs={DOCKER_LOG:join(root,'docker.log'),CURL_LOG:join(root,'curl.log'),INSTALLER_LOG:join(root,'installer.log'),DB_FILE:join(root,'database')};
- const env={HOME:home,PATH:`${bin}:${tools}`,FIXTURE:fixture,GET_SOURCE:getScript,MAIN_HEX:mainHex,...logs};
+ const env={HOME:home,PATH:`${bin}:${tools}`,REAL_MV:join(tools,'mv'),FIXTURE:fixture,GET_SOURCE:getScript,MAIN_HEX:mainHex,...logs};
  const spawn=(args,{extra={},input,cwd=work}={})=>spawnSync('/bin/sh',args,{cwd,env:{...env,...extra},encoding:'utf8',input});
  const read=path=>existsSync(path)?readFileSync(path,'utf8'):'';
  const dir=join(home,'gtmworks');
@@ -138,6 +156,7 @@ function machine(t,{list=['v1.2.3','nightly','v1.10.0','v2.0.0-rc1','v1.3.0','v1
   line:(args=[],options)=>spawn([getScript,...args],options),
   piped:(args=[],options)=>spawn(['-s','--',...args],{...options,input:getText}),
   gtmworks:(args=[],options)=>spawn([join(home,'.local/bin/gtmworks'),...args],options),
+  spawnIn:(args,options)=>spawn(args.slice(1),options),
   docker:()=>read(logs.DOCKER_LOG),curl:()=>read(logs.CURL_LOG),installer:()=>read(logs.INSTALLER_LOG).split('\n').filter(Boolean),
   file:name=>read(join(dir,name)),
   clear:()=>{ for(const path of [logs.DOCKER_LOG,logs.CURL_LOG,logs.INSTALLER_LOG]) rmSync(path,{force:true}); }};
@@ -408,6 +427,8 @@ test('an update the machine stopped right after its migrations is finished by gt
  // The record still names v1.2.3; the data is v1.10.0's; .install-release is gone.
  assert.equal(m.file('.gtmworks-version'),'v1.2.3\n');
  assert.equal(m.file('.install-release'),'');
+ // The installer was cut off too: its lock stays, naming a process that is gone.
+ assert.match(m.file('.install-lock/owner'),/^\S+ \d+ \d+\n$/);
  const update=m.gtmworks(['update']);
  assert.equal(update.status,1);
  assert.match(update.stderr,/Repair it first with: gtmworks install/);
@@ -417,10 +438,62 @@ test('an update the machine stopped right after its migrations is finished by gt
  const finished=m.gtmworks(['install']);
  ok(finished);
  assert.match(finished.stdout,/^Finishing the update of .* to gtmworks v1\.10\.0, which did not finish; its keys and data are kept\.$/m);
+ assert.match(finished.stderr,/Taking over \.install-lock from an install that stopped \(process \d+ is gone\)\./);
+ assert.equal(existsSync(join(m.dir,'.install-lock')),false);
  assert.deepEqual(m.installer(),[`${hex('c')} `]);
  assert.equal(m.file('.install-release'),`${ref('v1.10.0')}\n`);
  assert.equal(m.file('.gtmworks-version'),'v1.10.0\n');
  assert.equal(existsSync(join(m.dir,'.gtmworks-pending')),false);
+});
+
+test('an update to a main build cut off before or between the swap of its two files is finished with that build', t => {
+ for(const cut of ['docker-compose.install.yml','install.sh']) {
+  const m=machine(t);
+  ok(m.line(['--channel','main']));
+  const newer=hex('9'), newest=hex('6');
+  for(const build of [newer,newest]) writeFileSync(join(m.env.FIXTURE,'migrations',build),'001.sql\n002.sql\n003.sql\n004.sql\n');
+  const newerRef=`ghcr.io/${repo}:main@sha256:${newer}`;
+  m.clear();
+  const stopped=m.gtmworks(['update'],{extra:{MAIN_HEX:newer,CUT_BEFORE:cut}});
+  assert.equal(stopped.signal,'SIGKILL',`${cut}: ${stopped.stderr}`);
+  assert.equal(m.file('.gtmworks-pending'),`main@sha256:${newer}\n`,cut);
+  // Main has moved on again by the time the install is finished: it finishes the build the update was moving to.
+  m.clear();
+  const finished=m.gtmworks(['install'],{extra:{MAIN_HEX:newest}});
+  ok(finished,cut);
+  assert.deepEqual(m.installer(),[`${newer} `],cut);
+  assert.equal(m.file('.install-release'),`${newerRef}\n`,cut);
+  for(const file of ['install.sh','docker-compose.install.yml']) assert.match(m.file(file),new RegExp(newer),`${cut}: ${file}`);
+  assert.equal(m.file('.gtmworks-version'),'main\n',cut);
+  assert.equal(existsSync(join(m.dir,'.gtmworks-pending'))||existsSync(join(m.dir,'.gtmworks-pending.d')),false,cut);
+ }
+});
+
+test('an old folder whose data was removed is refused once another folder made the data anew, keys or not', t => {
+ const m=machine(t);
+ ok(m.line());
+ const other=join(m.root,'other');
+ // The first install removed with its data (down -v); another made in its own folder, then stopped with its data kept.
+ rmSync(m.env.DB_FILE);
+ ok(m.line(['--dir',other]));
+ const before=['.env.install','install.sh','.install-release','.gtmworks-version'].map(name=>m.file(name));
+ m.clear();
+ const back=m.line();
+ assert.equal(back.status,1);
+ assert.match(back.stderr,new RegExp(`already holds gtmworks data \\(the volume gtmworks-install_database\\), made by the install in ${other}, and its keys are in that install's \\.env\\.install, not in ${m.dir}\\. .*--dir ${other}\\..*Nothing was changed\\.`));
+ assert.equal(m.curl()+m.installer().join(''),'');
+ assert.deepEqual(['.env.install','install.sh','.install-release','.gtmworks-version'].map(name=>m.file(name)),before);
+ const update=m.spawnIn(['sh',join(m.dir,'gtmworks.sh'),'--command','--dir',m.dir,'update']);
+ assert.equal(update.status,1);
+ assert.match(update.stderr,/already holds gtmworks data/);
+ // With its mark gone too it is still not the recorded maker.
+ rmSync(join(m.dir,'.gtmworks-data'));
+ assert.match(m.line().stderr,/made by the install in /);
+ // The folder that made the data repairs, with its mark or, from before the mark, as the recorded maker.
+ ok(m.line(['--dir',other]));
+ rmSync(join(other,'.gtmworks-data'));
+ ok(m.line(['--dir',other]));
+ assert.ok(existsSync(join(other,'.gtmworks-data')),'a repair marks the data again');
 });
 
 test('a folder without the keys of the gtmworks data on this machine is refused, naming the folder that has them', t => {

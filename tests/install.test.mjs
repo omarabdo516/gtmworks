@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, copyFileSync, rmSync, statSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, spawn } from 'node:child_process';
 import { load } from 'js-yaml';
 import { generateInstallEnv, validateInstallEnv } from '../lib/install-env.mjs';
 import { checkSettings } from '../lib/settings.mjs';
@@ -370,4 +370,37 @@ test('generated installs start independently; tampered, missing and example secr
  assert.throws(()=>validateInstallEnv({...env,WEBHOOK_ENCRYPTION_KEY:'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='}),/WEBHOOK_ENCRYPTION_KEY/);
  assert.throws(()=>validateInstallEnv({...env,APP_ORIGIN:'http://example.com'}),/APP_ORIGIN/);
  assert.throws(()=>checkSettings({...env,NODE_ENV:'production'}),/APP_ORIGIN.*https/);
+});
+
+test('install.sh takes over a lock only when the install that left it is shown gone', async t => {
+ const directory=mkdtempSync(join(tmpdir(),'gtmworks-lock-'));
+ t.after(()=>rmSync(directory,{recursive:true,force:true}));
+ mkdirSync(join(directory,'scripts'));
+ copyFileSync('scripts/install.sh',join(directory,'scripts/install.sh'));
+ const boot=readFileSync('/proc/sys/kernel/random/boot_id','utf8').trim();
+ const started=pid=>readFileSync(`/proc/${pid}/stat`,'utf8').replace(/^.*\) /s,'').split(' ')[19];
+ const live=spawn('sleep',['60']);
+ t.after(()=>live.kill());
+ await new Promise(resolve=>live.once('spawn',resolve));
+ const gone=spawnSync('true').pid;
+ // An operation install.sh does not know: past the lock it stops with its usage, and its own lock is removed on exit.
+ const run=owner=>{
+  rmSync(join(directory,'.install-lock'),{recursive:true,force:true});
+  mkdirSync(join(directory,'.install-lock'));
+  if(owner!==undefined) writeFileSync(join(directory,'.install-lock/owner'),owner);
+  return spawnSync('sh',['scripts/install.sh','frobnicate'],{cwd:directory,encoding:'utf8'});
+ };
+ for(const [owner,label] of [[`${boot} ${live.pid} ${started(live.pid)}\n`,'a running owner'],[undefined,'no owner named'],[`${boot} ${gone}\n`,'an owner without its start time'],['garbage\n','an unreadable owner']]) {
+  const refused=run(owner);
+  assert.equal(refused.status,1,label);
+  assert.match(refused.stderr,/^Another install is running \(or remove stale \.install-lock\)\.$/m,label);
+  assert.doesNotMatch(refused.stderr,/Usage:/,label);
+  assert.equal(existsSync(join(directory,'.install-lock')),true,`${label}: the lock is left alone`);
+ }
+ for(const [owner,label] of [[`${boot} ${gone} 12345\n`,'a process that is gone'],[`${boot} ${live.pid} 1\n`,'its number reused by another process'],[`another-boot ${live.pid} ${started(live.pid)}\n`,'an owner from before a restart']]) {
+  const taken=run(owner);
+  assert.match(taken.stderr,/Taking over \.install-lock from an install that stopped/,label);
+  assert.match(taken.stderr,/Usage: sh scripts\/install\.sh/,label);
+  assert.equal(existsSync(join(directory,'.install-lock')),false,`${label}: the run that took it over removed it`);
+ }
 });

@@ -8,7 +8,26 @@ main() {
 release_image=
 if [ -n "$release_image" ]; then cd "$(dirname "$0")"; else cd "$(dirname "$0")/.."; fi
 umask 077
-mkdir .install-lock || { echo 'Another install is running (or remove stale .install-lock).' >&2; exit 1; }
+# One install at a time. The lock names its owner (this boot, the process and the process's start time), so a lock left
+# by an install that stopped (a power cut, a killed process) is taken over once its owner is shown gone; a lock whose
+# owner cannot be shown gone is left alone.
+lock_owner() {
+  printf '%s %s %s\n' "$(cat /proc/sys/kernel/random/boot_id 2> /dev/null)" "$1" \
+    "$(sed 's/^.*) //' "/proc/$1/stat" 2> /dev/null | cut -d' ' -f20)"
+}
+if ! mkdir .install-lock 2> /dev/null; then
+  boot= pid= start=
+  if [ -f .install-lock/owner ]; then read -r boot pid start < .install-lock/owner || true; fi
+  case "$pid" in ''|*[!0-9]*) pid=;; esac
+  if [ -n "$boot" ] && [ -n "$pid" ] && [ -n "$start" ] && [ "$(lock_owner "$pid")" != "$boot $pid $start" ]; then
+    echo "Taking over .install-lock from an install that stopped (process $pid is gone)." >&2
+    rm -rf .install-lock
+    mkdir .install-lock || { echo 'Another install is running (or remove stale .install-lock).' >&2; exit 1; }
+  else
+    echo 'Another install is running (or remove stale .install-lock).' >&2; exit 1
+  fi
+fi
+lock_owner "$$" > .install-lock/owner
 resume=no
 cleanup() {
   status=$?

@@ -25,7 +25,9 @@ Nothing is built on the server and no source is downloaded. Options go after
   (its containers and volumes are all named `gtmworks-install`), so the line
   refuses a second folder while another one runs gtmworks, before changing anything.
   It also refuses a folder without the keys of gtmworks data Docker still holds
-  (containers removed, volumes kept), and names the folder that made it.
+  (containers removed, volumes kept), and names the folder that made it: each
+  install keeps the creation time of its data volume (`.gtmworks-data`), so an old
+  folder whose data another install has since made anew is refused too.
 
 It also puts a `gtmworks` command in `~/.local/bin`, and adds that folder to the
 PATH in your shell profile only when no profile names it yet (`~/.profile`, and
@@ -153,8 +155,12 @@ transaction is rolled back, the previous release's files are put back and it kee
 serving, and the command exits non-zero naming the migration. If the update fails
 after its migrations ran (while starting the new containers, say), the install
 stays on the new release: `gtmworks install` finishes it. The same holds when the
-machine stops in the middle of an update: the release it was moving to is written
-first (`.gtmworks-pending`), and `gtmworks install` finishes that update. An install
+machine stops in the middle of an update: the two files of the release it was
+moving to are saved and that release recorded first (`.gtmworks-pending.d`,
+`.gtmworks-pending`; a main build by its digest), and `gtmworks install` finishes
+the update from them. An install that stopped leaves `.install-lock` behind, with
+the process that held it; the next run takes the lock over once that process is
+gone, and leaves a lock it cannot show abandoned. An install
 on the `main` channel updates to the newest main build; the update keeps the two
 files of the build it ran (`.gtmworks-main/`), so its go-back command names that
 exact build, `--version main@sha256:<digest>`. `gtmworks update` does not replace

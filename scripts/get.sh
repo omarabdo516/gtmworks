@@ -118,7 +118,31 @@ recorded() { sed -n '1{/^v[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*$/p;/^main$/p;}' 
 pending() { sed -n '1{/^v[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*$/p;/^main$/p;/^main@sha256:[a-f0-9]\{64\}$/p;}' "$dir/.gtmworks-pending" 2> /dev/null || true; }
 record_target() {
   case "$1" in main@*) echo main;; *) printf '%s\n' "$1";; esac > .gtmworks-version
-  rm -f .gtmworks-pending
+  drop_pending
+}
+drop_pending() { rm -f .gtmworks-pending; rm -rf .gtmworks-pending.d; }
+# The target's two files are saved before the update is recorded as pending, so an update the machine stopped in is
+# finished from them (a main build pinned by its digest), whichever of the install's own files were swapped already.
+save_pending() {
+  drop_pending
+  rm -rf .gtmworks-pending.tmp.d
+  mkdir .gtmworks-pending.tmp.d
+  cp "$stage/install.sh" "$stage/docker-compose.install.yml" .gtmworks-pending.tmp.d/
+  mv .gtmworks-pending.tmp.d .gtmworks-pending.d
+  printf '%s\n' "$1" > .gtmworks-pending.tmp
+  mv .gtmworks-pending.tmp .gtmworks-pending
+}
+# The data volume's creation time, kept in the folder whose .env.install holds the data's keys: Docker makes the volume
+# anew when another install starts over, so a folder whose mark differs holds keys for data that is gone.
+data_created() { docker volume inspect -f '{{.CreatedAt}}' gtmworks-install_database 2> /dev/null; }
+own_data() {
+  mkdir -p "${owner_record%/*}" && printf '%s\n' "$dir" > "$owner_record" || true
+  created=$(data_created) && printf '%s\n' "$created" > "$dir/.gtmworks-data" || rm -f "$dir/.gtmworks-data"
+}
+# This folder is about to make the data anew: it is recorded as the maker before the volumes exist.
+claim_data() {
+  rm -f "$dir/.gtmworks-data"
+  mkdir -p "${owner_record%/*}" && printf '%s\n' "$dir" > "$owner_record" || true
 }
 # None when the database has no migration table yet: a first install that stopped before its first migration.
 database_migrations() {
@@ -161,11 +185,16 @@ check_project_owner() {
   done)
   [ -z "$other" ] || fail "gtmworks already runs from $other on this machine, and one machine runs one gtmworks install (its containers and volumes are all named gtmworks-install). Use that install, or remove it there first. Nothing was changed."
   # Stopped containers can be gone (compose down) while the data stays in its volumes, whose keys are in the
-  # .env.install of the folder that made them: a folder without one would start that data with new keys.
-  if [ ! -f "$dir/.env.install" ] && docker volume inspect gtmworks-install_database > /dev/null 2>&1; then
+  # .env.install of the folder that made them. A folder with an .env.install is that one when its mark names the volume's
+  # creation time, or, with no mark (an install from before the mark), when no other folder is recorded as the maker.
+  if created=$(data_created); then
     made_by=$(sed -n 1p "$owner_record" 2> /dev/null || true)
-    [ -z "$made_by" ] || [ "$made_by" != "$dir" ] || made_by=
-    fail "Docker on this machine already holds gtmworks data (the volume gtmworks-install_database)${made_by:+, made by the install in $made_by}, and its keys are in that install's .env.install, not in $dir. Use that install${made_by:+: run the line again with --dir $made_by}. To start over without that data, back it up and remove its volumes first. Nothing was changed."
+    mine=no
+    if [ ! -f "$dir/.env.install" ]; then :
+    elif [ -f "$dir/.gtmworks-data" ]; then [ "$(sed -n 1p "$dir/.gtmworks-data")" != "$created" ] || mine=yes
+    elif [ -z "$made_by" ] || [ "$made_by" = "$dir" ]; then mine=yes; fi
+    [ "$made_by" != "$dir" ] || made_by=
+    [ "$mine" = yes ] || fail "Docker on this machine already holds gtmworks data (the volume gtmworks-install_database)${made_by:+, made by the install in $made_by}, and its keys are in that install's .env.install, not in $dir. Use that install${made_by:+: run the line again with --dir $made_by}. To start over without that data, back it up and remove its volumes first. Nothing was changed."
   fi
 }
 
@@ -319,7 +348,11 @@ op_install() {
   fi
   new_stage
   keep=no
-  if [ "$target" = main ] && [ "$current" = main ] && [ -f install.sh ] && [ -f docker-compose.install.yml ]; then
+  if [ "$interrupted" = yes ] && [ -f .gtmworks-pending.d/install.sh ] && [ -f .gtmworks-pending.d/docker-compose.install.yml ]; then
+    # The update the machine stopped in is finished with the files it saved, not with what the install now holds.
+    cp .gtmworks-pending.d/install.sh .gtmworks-pending.d/docker-compose.install.yml "$stage/"
+    check_assets "$stage"
+  elif [ "$target" = main ] && [ "$current" = main ] && [ -f install.sh ] && [ -f docker-compose.install.yml ]; then
     # A repair keeps the main build it runs; moving to a newer one is an update, which backs up first.
     keep=yes
     check_assets .
@@ -334,15 +367,17 @@ op_install() {
       previous=
       update_to
       install_command
+      own_data
       return
     fi
     refuse_older "$target" "$applied"
   fi
   [ "$keep" = yes ] || place_release "$stage"
   install_command
+  data_created > /dev/null || claim_data
   run_installer
   record_target "$target"
-  mkdir -p "${owner_record%/*}" && printf '%s\n' "$dir" > "$owner_record" || true
+  own_data
 }
 
 op_update() {
@@ -365,6 +400,7 @@ op_update() {
     return
   fi
   update_to
+  own_data
 }
 
 # From a finished install of $running ($previous, when recorded) to $target, whose files are in $stage.
@@ -389,7 +425,9 @@ update_to() {
     mkdir -p ".gtmworks-main/${running##*@sha256:}"
     cp install.sh docker-compose.install.yml ".gtmworks-main/${running##*@sha256:}/";;
   esac
-  printf '%s\n' "$target" > .gtmworks-pending
+  pin=$target
+  [ "$target" != main ] || pin=main@${release_ref##*@}
+  save_pending "$pin"
   place_release "$stage"
   if run_installer update; then :; else
     status=$?
@@ -399,7 +437,7 @@ update_to() {
       # Its migrations rolled back, so the previous release's files go back with the schema it was serving on.
       cp "$stage/previous-compose.yml" docker-compose.install.yml
       cp "$stage/previous-install.sh" install.sh
-      rm -f .gtmworks-pending
+      drop_pending
       if run_installer update > "$stage/return.log" 2>&1; then
         say "gtmworks ${previous:-(the previous release)} keeps serving, on its own files again." >&2
       else
@@ -506,6 +544,7 @@ op_restore() {
   say "Going back to gtmworks $version with the data of $archive. The current data is backed up first."
   take_backup || fail 'The backup of the current data failed, so nothing was changed.'
   say "Backup of the current data: $archive_made"
+  claim_data
   compose down
   docker volume rm gtmworks-install_database gtmworks-install_database-config gtmworks-install_files
   place_release "$stage"
@@ -514,6 +553,7 @@ op_restore() {
   # The archive may predate migrations $version carries: its update applies them, as an update to it would.
   run_installer update
   record_target "$version"
+  own_data
   say "gtmworks $version is running with the data of $archive. The data from before is in $archive_made."
 }
 
