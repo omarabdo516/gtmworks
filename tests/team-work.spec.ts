@@ -117,9 +117,10 @@ test('integration: a send whose answer was lost is kept as its sender\'s turn, a
   fake.settings.loseStarts=2;
   expect(await send()).toEqual({conversation,queued:true});
   expect(JSON.parse(query(`select abandoned_at, start_unknown_at is not null as marked from public.conversation_run_reservations where send_key='${sendKey}'`))).toEqual([{abandoned_at:null,marked:true}]);
-  // The person edits their note, and sends again: the message is already waiting, and nothing new is reserved.
+  // The person edits their note, and sends again: the message is still waiting, or the background worker already sent
+  // it; either way nothing new is reserved or started.
   expect((await person.rpc('save_member_note',{c:company,note:'Answer at length.'})).error).toBeNull();
-  expect(await send()).toEqual({conversation,queued:true});
+  expect([{conversation,queued:true},{conversation}]).toContainEqual(await send());
   // The worker asks again with the same key and the first request's body; Hermes names the run it started.
   // (The background worker may make the same attempt; either way it is one run.)
   await expect.poll(async()=>{ await startQueuedTurns(service,{encryptionKey,conversation}); return rows(conversation).filter((row:{author:string})=>row.author==='person').length; },{timeout:30000}).toBe(1);
