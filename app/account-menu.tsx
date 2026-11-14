@@ -18,38 +18,48 @@ const languages=[{key:'en',name:'languageNameEnglish',description:'languageEngli
 // keeps "Device" (follow the system), which the sun/moon button alone cannot choose. Connect apps is not built yet
 // (#30). "More sections" reaches the company's existing sections that the reference has no place for. Settings opens
 // the full-window settings overlay (app/settings-overlay.tsx), which closes back to the page it was opened from.
+// Every page draws its own shell, so moving to another page (closing a card, a refresh after a save) draws a new
+// account menu. Whether it is open is kept here, outside the shell, so a menu opened while the previous page was still
+// arriving stays open on the new one instead of closing under the pointer. It closes as before: by choosing an item,
+// Escape, a press outside it, or going back or forward in the browser.
+let menuOpen=false;
+const menuListeners=new Set<()=>void>();
+const setMenuOpen=(next:boolean|((value:boolean)=>boolean))=>{ const value=typeof next==='function'?next(menuOpen):next; if(value===menuOpen) return; menuOpen=value; menuListeners.forEach(listener=>listener()); };
+const subscribeMenu=(listener:()=>void)=>{ menuListeners.add(listener); return ()=>{ menuListeners.delete(listener); }; };
+
 export default function AccountMenu({slug,personName,role,theme,companyName,settingsHref}:{slug?:string,personName:string,role:string,theme:string,companyName?:string,settingsHref?:string}) {
  const {t,language}=useI18n();
- const [open,setOpen]=useState(false);
+ const open=useSyncExternalStore(subscribeMenu,()=>menuOpen,()=>false);
+ useEffect(()=>{ const back=()=>setMenuOpen(false); window.addEventListener('popstate',back); return ()=>window.removeEventListener('popstate',back); },[]);
  const [error,setError]=useState('');
  const [pending,startTransition]=useTransition();
  const box=useRef<HTMLDivElement>(null); const button=useRef<HTMLButtonElement>(null);
  useEffect(()=>{
   if(!open) return;
-  const outside=(event:PointerEvent)=>{if(!box.current?.contains(event.target as Node)) setOpen(false);};
-  const escape=(event:KeyboardEvent)=>{if(event.key==='Escape'){event.stopPropagation();setOpen(false);button.current?.focus();}};
+  const outside=(event:PointerEvent)=>{if(!box.current?.contains(event.target as Node)) setMenuOpen(false);};
+  const escape=(event:KeyboardEvent)=>{if(event.key==='Escape'){event.stopPropagation();setMenuOpen(false);button.current?.focus();}};
   document.addEventListener('pointerdown',outside); document.addEventListener('keydown',escape,true);
   box.current?.querySelector<HTMLElement>('[aria-checked="true"],[role^="menuitem"]')?.focus();
   return ()=>{document.removeEventListener('pointerdown',outside);document.removeEventListener('keydown',escape,true);};
  },[open]);
  const choose=(next:string)=>startTransition(async()=>{
-  if(next===language) { setOpen(false); return; }
+  if(next===language) { setMenuOpen(false); return; }
   const form=new FormData(); form.set('language',next);
   const failure=await saveLanguage('',form);
-  setError(failure); if(!failure) setOpen(false);
+  setError(failure); if(!failure) setMenuOpen(false);
  });
  const chooseTheme=(next:string)=>startTransition(async()=>{
-  if(next===theme) { setOpen(false); return; }
+  if(next===theme) { setMenuOpen(false); return; }
   const form=new FormData(); form.set('theme',next);
   const failure=await saveTheme('',form);
-  setError(failure); if(!failure) setOpen(false);
+  setError(failure); if(!failure) setMenuOpen(false);
  });
  const initial=personName.trim().slice(0,1).toUpperCase();
  return <div ref={box} className="contents">
   {open&&<div className="menu me-menu" id="me-menu" role="menu" aria-labelledby="btn-me">
    <div className="me-menu__head"><span className="me__av" aria-hidden="true">{initial}</span><span className="me__text"><span className="me__name"><bdi>{personName}</bdi></span><span className="me__role">{role}{companyName&&<> · <bdi>{companyName}</bdi></>}</span></span></div>
    {settingsHref&&<><div className="menu__sep" role="separator"/>
-    <Link className="menu__item" role="menuitem" href={settingsHref} onClick={()=>{rememberOpener();setOpen(false);}}><ShellIcon name="gear"/><span className="menu__t">{t('settings')}<span className="menu__d">{t('settingsMenuDescription')}</span></span></Link></>}
+    <Link className="menu__item" role="menuitem" href={settingsHref} onClick={()=>{rememberOpener();setMenuOpen(false);}}><ShellIcon name="gear"/><span className="menu__t">{t('settings')}<span className="menu__d">{t('settingsMenuDescription')}</span></span></Link></>}
    <div className="menu__sep" role="separator"/>
    <div className="menu__label" id="me-lang-lbl">{t('interfaceLanguage')}</div>
    <div role="group" aria-labelledby="me-lang-lbl">{languages.map(item=><button key={item.key} type="button" className="menu__item" role="menuitemradio" aria-checked={item.key===language} disabled={pending} onClick={()=>choose(item.key)}>
@@ -64,10 +74,10 @@ export default function AccountMenu({slug,personName,role,theme,companyName,sett
     <button type="button" className="menu__item" role="menuitem" aria-disabled="true" title={t('soon')}><ShellIcon name="plug"/><span className="menu__t">{t('shellConnectApps')}<span className="menu__d">{t('soon')}</span></span></button>
     <div className="menu__sep" role="separator"/>
     <div className="menu__label" id="me-more-lbl">{t('shellMoreSections')}</div>
-    <div role="group" aria-labelledby="me-more-lbl">{moreSections.map(([path,label,icon])=><Link key={path} className="menu__item" role="menuitem" href={`/c/${slug}/${path}`} onClick={()=>setOpen(false)}><ShellIcon name={icon}/><span className="menu__t">{t(label)}</span></Link>)}</div>
+    <div role="group" aria-labelledby="me-more-lbl">{moreSections.map(([path,label,icon])=><Link key={path} className="menu__item" role="menuitem" href={`/c/${slug}/${path}`} onClick={()=>setMenuOpen(false)}><ShellIcon name={icon}/><span className="menu__t">{t(label)}</span></Link>)}</div>
    </>}
   </div>}
-  <button ref={button} type="button" className="me" id="btn-me" aria-haspopup="menu" aria-expanded={open} aria-controls="me-menu" aria-label={t('accountMenu')} onClick={()=>setOpen(value=>!value)}>
+  <button ref={button} type="button" className="me" id="btn-me" aria-haspopup="menu" aria-expanded={open} aria-controls="me-menu" aria-label={t('accountMenu')} onClick={()=>setMenuOpen(value=>!value)}>
    <span className="me__av" aria-hidden="true">{initial}</span>
    <span className="me__text"><span className="me__name"><bdi>{personName}</bdi></span><span className="me__role">{role}</span></span>
    <span className="me__chev" aria-hidden="true"><ShellIcon name="up"/></span>

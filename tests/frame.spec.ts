@@ -390,3 +390,37 @@ test('the recent cards endpoint refuses what it cannot trust and never reads for
  expect((await request.post(url,{data:{company,cardId:-1}})).status()).toBe(400);
  expect((await request.post(url,{data:{company}})).status()).toBe(401);
 });
+
+test('an account menu opened while the next page is still arriving stays open when that page lands',async({page})=>{
+ // Every page draws its own shell, so closing a card draws a new one. After a comment (which makes the prepared board
+ // stale) the board's data is held back until the menu is open, so the new shell always lands under an open menu.
+ await page.setViewportSize({width:1440,height:900});
+ await signIn(page,'omar@example.com','/c/rs-learning/work/board/1');
+ await expect(page.locator('.modal')).toBeVisible();
+ let release!:()=>void; const held=new Promise<void>(resolve=>{release=resolve;});
+ let arrived!:()=>void; const asked=new Promise<void>(resolve=>{arrived=resolve;});
+ const board=(url:URL)=>url.pathname==='/c/rs-learning/work/board';
+ const hold=async(route:import('@playwright/test').Route)=>{ if(route.request().headers()['rsc']==='1') { arrived(); await held; } await route.continue(); };
+ await page.route(board,hold);
+ try {
+  const comment=`Menu stays ${Date.now()}`;
+  await page.getByLabel('Comment',{exact:true}).fill(comment);
+  await page.getByRole('button',{name:'Send',exact:true}).click();
+  await expect(page.locator('.comment-body').filter({hasText:comment})).toBeVisible();
+  const shell=await page.locator('.shell').elementHandle();
+  await page.locator('.close-card').click();
+  await asked;
+  await page.locator('.sidebar #btn-me').click();
+  const menu=page.getByRole('menu');
+  await expect(menu).toBeVisible();
+  release();
+  await expect(page).toHaveURL(/\/c\/rs-learning\/work\/board$/);
+  await expect(page.locator('.modal')).toHaveCount(0);
+  // The page landed with a new shell, and the menu is still open on it.
+  await expect.poll(()=>shell!.evaluate(node=>node.isConnected)).toBe(false);
+  await expect(menu).toBeVisible();
+  await menu.locator('[role=group] a[role=menuitem][href$="/home"]').click();
+  await expect(page).toHaveURL(/\/c\/rs-learning\/home$/);
+  await expect(menu).toHaveCount(0);
+ } finally { release(); await page.unroute(board,hold); }
+});
