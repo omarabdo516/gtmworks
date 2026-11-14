@@ -136,3 +136,15 @@ test('no file in app/ or lib/ but the one helper reads the host, origin or forwa
  assert.match(readFileSync(helper,'utf8'),forbidden,'the pattern finds the header names where they are read');
  assert.deepEqual(files.filter(path=>path!==helper&&forbidden.test(readFileSync(path,'utf8'))),[]);
 });
+
+// The auth service answers an address with no account as sent, but a second request for an existing account within its
+// cooldown is refused (429): that answer would tell whether the account exists, so the page says the same as for a
+// sent link. A failure that is the same for every address (the service is down) still says the link was not sent.
+test('a reset request refused for its cooldown answers like a sent link; a failed service says it was not sent', async () => {
+ process.env.APP_ORIGIN=origin;
+ const answering=status=>{ globalThis.fetch=async()=>new Response(JSON.stringify({code:status===429?'over_email_send_rate_limit':'unexpected_failure',msg:'refused'}),{status,headers:{'Content-Type':'application/json'}}); };
+ answering(429);
+ assert.equal(await sendResetLink('',form({email:'owner@example.test'})),'checkYourEmailForAResetLink');
+ answering(500);
+ assert.equal(await sendResetLink('',form({email:'owner@example.test'})),'couldNotSendTheLinkTryAgain');
+});

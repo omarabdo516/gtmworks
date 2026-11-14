@@ -14,5 +14,7 @@ export const sendResetLink=withActionLog('sendResetLink',async function sendRese
  const resetAuth=createClient(supabaseConfig.url,supabaseConfig.anonKey,{auth:{flowType:'implicit',persistSession:false,autoRefreshToken:false}});
  const {error}=await resetAuth.auth.resetPasswordForEmail(email,{redirectTo:appUrl('/auth/reset').href});
  if(error) logActionFailure('sendResetLink',{name:error.name,code:error.code,status:error.status,message:error.message.replace(/\S+@\S+/g,'[redacted]')});
- return error ? 'couldNotSendTheLinkTryAgain' : 'checkYourEmailForAResetLink';
+ // A refusal for the per-account cooldown (429) reaches only an address that has an account, so it is answered like a sent
+ // link; only a failure that is the same for every address says the link was not sent.
+ return error && error.status!==429 ? 'couldNotSendTheLinkTryAgain' : 'checkYourEmailForAResetLink';
 });
