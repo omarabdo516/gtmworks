@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, freshSeed } from './fresh-seed';
 import { chooseLanguageInSettings } from './choose-language';
 import { clickPath, idle, measureClick, median, type Timing } from './navigation-measure';
 import { signIn, openNavigation, closeNavigation, openMoreSection } from './sign-in';
@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { tapOverlaps } from './tap-overlaps';
 import { execFileSync } from 'node:child_process';
+import { appOrigin } from './lane.mjs';
 
 // Supabase CLI targets the local test database by default; never pass --remote.
 const query = (sql: string) => execFileSync('npx', ['--no-install', 'supabase', 'db', 'query', sql, '-o', 'json', '--agent', 'no'], { encoding: 'utf8' });
@@ -15,8 +16,9 @@ const query = (sql: string) => execFileSync('npx', ['--no-install', 'supabase', 
 // deadline. Cleanup approves only that card, found by its own address and its run-unique title; each worker (a retry
 // starts a new one) cleans the card it created and nothing else.
 let inboxFixture: { title: string, path: string } | undefined;
-test.beforeAll(async ({ browser }) => {
-  const context = await browser.newContext({ baseURL: 'http://127.0.0.1:3000' });
+test.beforeAll(async ({ browser }, testInfo) => {
+  freshSeed(testInfo.file);
+  const context = await browser.newContext({ baseURL: appOrigin });
   try {
     const page = await context.newPage();
     await signIn(page, 'omar@example.com', '/c/rs-learning/work/board');
@@ -35,7 +37,7 @@ test.beforeAll(async ({ browser }) => {
 test.afterAll(async ({ browser }) => {
   const created = inboxFixture;
   if (!created) return;
-  const context = await browser.newContext({ baseURL: 'http://127.0.0.1:3000' });
+  const context = await browser.newContext({ baseURL: appOrigin });
   try {
     const page = await context.newPage();
     await signIn(page, 'omar@example.com', '/c/rs-learning/approvals');

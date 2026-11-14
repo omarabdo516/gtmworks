@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fresh-seed';
 import { signIn } from './sign-in';
 // This file sorts before app.spec.ts on purpose: that file revokes the public fixture key at its end.
 const legacy={Authorization:'Bearer agt_local_fixture_for_tests_only'};

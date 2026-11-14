@@ -1,10 +1,11 @@
-import { test, expect, type Page, type TestInfo } from '@playwright/test';
+import { test, expect, type Page, type TestInfo } from './fresh-seed';
 import { chooseLanguageInSettings } from './choose-language';
 import { mkdir, readdir, readFile } from 'node:fs/promises';
 import { createHmac } from 'node:crypto';
 import { signIn, chooseCompany, openNavigation } from './sign-in';
 import { idle } from './navigation-measure';
 import { recordTouchDiagnostics, formatTouchDiagnostics, touchDiagnosticsKey, touchDiagnosticsLimit } from './touch-diagnostics.mjs';
+import { appOrigin, inbox, mail } from './lane.mjs';
 test('public contains no font files, including renamed font binaries',async()=>{
  const entries=await readdir('public',{recursive:true,withFileTypes:true}).catch(error=>{if(error.code==='ENOENT') return []; throw error;});
  for(const entry of entries.filter(entry=>entry.isFile())) {
@@ -92,7 +93,7 @@ for(const width of [1440,390]) test(`Paperclip Inter and Arabic-only Vazirmatn l
  expect(fontRequests.length).toBeGreaterThan(0);
  for(const request of fontRequests) {
   const url=new URL(request);
-  expect(url.origin).toBe('http://127.0.0.1:3000');
+  expect(url.origin).toBe(appOrigin);
   expect(url.pathname).toMatch(/^\/_next\/static\/media\/[^/]+$/);
  }
  expect(externalFonts).toEqual([]);
@@ -209,7 +210,7 @@ test('an expired session is refreshed and the rotated cookies survive another re
  const baseName = cookies[0].name.replace(/\.\d+$/, '');
  for (const cookie of cookies) await context.clearCookies({name:cookie.name});
  const chunks = expired.match(/.{1,3000}/g) || [];
- await context.addCookies(chunks.map((value, index) => ({name: chunks.length === 1 ? baseName : `${baseName}.${index}`, value, url:'http://127.0.0.1:3000'})));
+ await context.addCookies(chunks.map((value, index) => ({name: chunks.length === 1 ? baseName : `${baseName}.${index}`, value, url:appOrigin})));
  await page.goto('/c/rs-learning/approvals');
  await expect(page).toHaveURL(/\/c\/rs-learning\/approvals/);
  const refreshed = (await readCookies()).map(cookie => cookie.value).join('');
@@ -235,9 +236,9 @@ test('screenshots for unit routes',async({page})=>{
 
 test('invite link signs the new member into the company',async({page,context})=>{
  await signIn(page,'manager@example.com','/c/rs-learning/settings/members');
- await page.request.delete('http://127.0.0.1:54324/api/v1/messages');
+ await page.request.delete(inbox);
  await page.getByLabel("Email").fill('invited@example.com'); await page.getByRole('button',{name:"Send invitation"}).click(); await expect(page.getByRole('status')).toContainText('An invitation link was sent');
- let link=''; for(let i=0;i<30&&!link;i++){const mailbox=await (await page.request.get('http://127.0.0.1:54324/api/v1/messages')).json(); const item=mailbox.messages?.find((m:{To:{Address:string}[]})=>m.To.some(t=>t.Address==='invited@example.com')); if(item){const message=await (await page.request.get(`http://127.0.0.1:54324/api/v1/message/${item.ID}`)).json(); link=(message.HTML||message.Text).match(/https?:\/\/[^"\s<>]+/g)?.find((url:string)=>url.includes('/verify'))?.replaceAll('&amp;','&')||'';} if(!link) await page.waitForTimeout(1000);}
+ let link=''; for(let i=0;i<30&&!link;i++){const mailbox=await (await page.request.get(inbox)).json(); const item=mailbox.messages?.find((m:{To:{Address:string}[]})=>m.To.some(t=>t.Address==='invited@example.com')); if(item){const message=await (await page.request.get(`${mail}/api/v1/message/${item.ID}`)).json(); link=(message.HTML||message.Text).match(/https?:\/\/[^"\s<>]+/g)?.find((url:string)=>url.includes('/verify'))?.replaceAll('&amp;','&')||'';} if(!link) await page.waitForTimeout(1000);}
  expect(link).toBeTruthy(); await context.clearCookies(); await page.goto(link);
  // A new Member chooses a password before the Company opens (#41).
  await page.getByLabel('New password').fill('invited-password'); await page.getByLabel('Confirm password').fill('invited-password'); await page.getByRole('button',{name:'Save password'}).click();
@@ -801,7 +802,7 @@ for(const width of [390,1440]) test(`caption keeps several lines at ${width}px`,
 
 test('activity times hydrate without errors', async ({ browser }) => {
  // The server runs in UTC; the viewer is in Cairo (two hours ahead in November).
- const context = await browser.newContext({ baseURL: 'http://127.0.0.1:3000', timezoneId: 'Africa/Cairo', locale: 'en-US' });
+ const context = await browser.newContext({ baseURL: appOrigin, timezoneId: 'Africa/Cairo', locale: 'en-US' });
  const page = await context.newPage();
  const problems: string[] = [];
  page.on('pageerror', error => problems.push(`pageerror: ${error.message}`));

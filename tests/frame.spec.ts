@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { signIn, openNavigation, closeNavigation, chooseCompany, openMoreSection } from './sign-in';
@@ -6,6 +6,7 @@ import { idle } from './navigation-measure';
 import { i18n } from '../lib/i18n.mjs';
 import { sections } from '../lib/navigation';
 import { roleAgents } from '../lib/role-agents';
+import { appOrigin } from './lane.mjs';
 
 const quote=(sql:string|number)=>`'${String(sql).replaceAll("'","''")}'`;
 
@@ -259,7 +260,7 @@ test('recent cards record actual opens only, newest three per person and company
  await expect(page.locator('.recent-cards a')).toHaveCount(3);
  expect(await hrefs()).toEqual([1,4,3].map(id=>`/c/rs-learning/work/board/${id}`));
  await expect(page.locator('.recent-cards')).not.toContainText('بطاقة عليم');
- const another=await browser.newContext({baseURL:'http://127.0.0.1:3000'});
+ const another=await browser.newContext({baseURL:appOrigin});
  const otherPage=await another.newPage();
  await signIn(otherPage,'reviewer@example.com','/c/aleem/home'); // No access to Aleem.
  expect((await otherPage.goto('/c/aleem/home'))?.status()).toBe(404);

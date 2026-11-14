@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './fresh-seed';
 import { tapOverlaps } from './tap-overlaps';
 
 // The overlap check (tests/tap-overlaps.ts) clips a target only where the browser clips it (#48).

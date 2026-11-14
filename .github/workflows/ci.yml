@@ -101,6 +101,8 @@ jobs:
       - name: integration
         env:
           CI_IMAGE_PREBUILT: "true"
+          # One browser test lane per worker, each on a whole stack of its own (tests/lane.mjs, #69).
+          GTMWORKS_TEST_LANES: "4"
         run: ./ci.sh integration
       # PR #32 (issue #27) writes every Route's screenshot at 1440 and 390 wide here; upload them so a review can see them.
       - name: upload route screenshots

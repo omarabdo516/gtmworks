@@ -5,6 +5,7 @@ import { signIn } from './sign-in';
 import { resetFirstRun } from '../scripts/first-run-db.mjs';
 import { idle } from './navigation-measure';
 import { languages, widths, screens, snapshotName } from './visual-screens.mjs';
+import { appOrigin } from './lane.mjs';
 
 // Every listed screen is compared with its approved image (tests/visual.spec.ts-snapshots) in both languages at 1440 and 390.
 // This project runs first on the freshly seeded database (see playwright.config.ts). It leaves the data as the seed built it,
@@ -13,7 +14,7 @@ type Language = 'en' | 'ar';
 const rsLearning = '10000000-0000-0000-0000-000000000001';
 const seedAuthor = '30000000-0000-0000-0000-000000000001';
 const contextOptions = {
-  baseURL: 'http://127.0.0.1:3000',
+  baseURL: appOrigin,
   viewport: { width: 1440, height: 900 },
   locale: 'en-US',
   timezoneId: 'UTC',

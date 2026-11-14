@@ -1,17 +1,23 @@
 import { randomBytes } from 'node:crypto';
 import { defineConfig } from '@playwright/test';
+import { appOrigin, lanes, originOf, serverLogOf } from './tests/lane.mjs';
 // First run opens only with the install's setup code (issue #50). The web server and the test workers inherit this one.
 process.env.SETUP_CODE ||= randomBytes(32).toString('hex');
+// Each run's spec files restore the seed before they start (tests/fresh-seed.ts); the workers inherit this run's name.
+process.env.GTMWORKS_TEST_RUN ||= randomBytes(8).toString('hex');
 export default defineConfig({
   testDir: './tests',
   testMatch: '*.spec.ts',
   testIgnore: '**/proxy/**', // the production-shaped suite has its own config (playwright.proxy.config.ts)
   timeout: 60000,
-  workers: 1,
+  // One worker per lane, each on a whole stack of its own (tests/lane.mjs, #69): spec files run side by side and never
+  // share data; the tests inside one file still run in order. CI sets GTMWORKS_TEST_LANES; a local run has one lane.
+  workers: lanes,
   // CI retries a failed test once; one that then passes is reported as flaky (scripts/flaky-tests.mjs). Local runs never retry.
   retries: process.env.CI ? 1 : 0,
-  use: { baseURL: 'http://127.0.0.1:3000' },
-  webServer: { command: 'mkdir -p playwright-report && bash scripts/web.sh production > playwright-report/server.log 2>&1', url: 'http://127.0.0.1:3000/sign-in', reuseExistingServer: false, timeout: 240000 },
+  use: { baseURL: appOrigin },
+  // Lane 0 builds the app and serves it; every other lane serves that build on its own port (scripts/web.sh).
+  webServer: Array.from({ length: lanes }, (_, n) => ({ command: `mkdir -p playwright-report && LANE=${n} bash scripts/web.sh production > ${serverLogOf(n)} 2>&1`, url: `${originOf(n)}/sign-in`, reuseExistingServer: false, timeout: 240000 })),
   // The JSON report is saved by every CI run so a PR's failures can be compared with main's (scripts/compare-failures.mjs).
   // The journal keeps what was selected and observed, test by test, when the run stops before that report is written.
   reporter: [['list'], ['json', { outputFile: 'playwright-report/results.json' }], ['./scripts/playwright-journal-reporter.mjs', { invocation: 'main', outputFile: 'playwright-report/journal-main.jsonl' }]],

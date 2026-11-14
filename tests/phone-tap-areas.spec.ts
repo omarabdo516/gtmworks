@@ -1,4 +1,4 @@
-import { test, expect, type Locator } from '@playwright/test';
+import { test, expect, type Locator } from './fresh-seed';
 import { signIn } from './sign-in';
 
 // On a phone the Numbers period buttons and the Activity log filters keep the reference's size (26px pills, 34px

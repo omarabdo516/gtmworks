@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { signIn } from './sign-in';
 import { idle } from './navigation-measure';

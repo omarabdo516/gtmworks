@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fresh-seed';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { signIn } from './sign-in';

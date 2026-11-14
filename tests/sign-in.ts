@@ -1,8 +1,9 @@
 import { expect, type Page } from '@playwright/test';
+import { inbox, mail } from './lane.mjs';
 // The password every seeded person has on the local database (supabase/seed.sql).
 export const seededPassword='local-seed-password';
 export async function signIn(page:Page,email:string,path:string,password=seededPassword) {
- await page.request.delete('http://127.0.0.1:54324/api/v1/messages'); await page.goto(path); await expect(page).toHaveURL(/sign-in/);
+ await page.request.delete(inbox); await page.goto(path); await expect(page).toHaveURL(/sign-in/);
  // A wrong password fails at once. Only the auth service's rate limit is waited out: every test signs in from this one
  // address, and the allowance refills within seconds. The install job goes past the limit on purpose (issue #41).
  for(let attempt=1;;attempt++) {
@@ -25,7 +26,7 @@ export async function followSignInLink(page:Page,email:string) {
 // The first auth-service link (/verify) in the newest local-inbox message to this address.
 export async function emailLink(page:Page,email:string) {
  let link='';
- for(let i=0;i<30 && !link;i++) { const response=await page.request.get('http://127.0.0.1:54324/api/v1/messages'); const mailbox=await response.json(); const summary=mailbox.messages?.find((message:{To:{Address:string}[]})=>message.To.some(to=>to.Address===email)); if(summary) { const message=await (await page.request.get(`http://127.0.0.1:54324/api/v1/message/${summary.ID}`)).json(); const body=message.HTML || message.Text; link=body.match(/https?:\/\/[^"\s<>]+/g)?.find((url:string)=>url.includes('/verify'))?.replace(/&amp;/g,'&') || ''; } if(!link) await page.waitForTimeout(1000); }
+ for(let i=0;i<30 && !link;i++) { const response=await page.request.get(inbox); const mailbox=await response.json(); const summary=mailbox.messages?.find((message:{To:{Address:string}[]})=>message.To.some(to=>to.Address===email)); if(summary) { const message=await (await page.request.get(`${mail}/api/v1/message/${summary.ID}`)).json(); const body=message.HTML || message.Text; link=body.match(/https?:\/\/[^"\s<>]+/g)?.find((url:string)=>url.includes('/verify'))?.replace(/&amp;/g,'&') || ''; } if(!link) await page.waitForTimeout(1000); }
  expect(link).toBeTruthy(); return link;
 }
 
