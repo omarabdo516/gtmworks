@@ -1,26 +1,14 @@
 import { test, expect, type Page } from '@playwright/test';
-import { randomUUID, createHmac } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fakeHermes } from './fake-hermes.mjs';
 import { signIn } from './sign-in';
 
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
-function totp(secret:string) {
- const bits=[...secret.toUpperCase()].map(character=>'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'.indexOf(character).toString(2).padStart(5,'0')).join('');
- const key=Buffer.from(bits.match(/.{8}/g)!.map(byte=>parseInt(byte,2)));
- const counter=Buffer.alloc(8); counter.writeBigUInt64BE(BigInt(Math.floor(Date.now()/30000)));
- const digest=createHmac('sha1',key).update(counter).digest();
- return String((digest.readUInt32BE(digest[19]&15)&0x7fffffff)%1000000).padStart(6,'0');
-}
-// Omar signs in with a fresh authenticator, so the session has Agency access (two-step verified).
-async function agencySignIn(page:Page) {
- query(`delete from auth.mfa_factors where user_id='${omar}'`);
+// Omar signs in as the Owner of all three seeded companies.
+async function ownerSignIn(page:Page) {
  query(`update public.people set language='en' where id='${omar}'`);
- await signIn(page,'omar@example.com','/all-brands');
- await page.getByRole('button',{name:'Set up authenticator'}).click();
- await page.getByLabel('Verification code').fill(totp((await page.locator('code').textContent())!));
- await page.getByRole('button',{name:'Verify',exact:true}).click();
- await expect(page.locator('.company-card')).toHaveCount(3);
+ await signIn(page,'omar@example.com','/c/rs-learning/home');
 }
 const company='10000000-0000-0000-0000-000000000001';
 const aleem='10000000-0000-0000-0000-000000000003';
@@ -47,7 +35,7 @@ test('integration: two completed replies store their tokens and the conversation
  test.setTimeout(120000);
  const fake=await fakeHermes(); let agent;
  try {
-  await agencySignIn(page); agent=await attachAgent(page,fake);
+  await ownerSignIn(page); agent=await attachAgent(page,fake);
   const conversation=randomUUID();
   fake.settings.usage={input_tokens:14000,output_tokens:12};
   expect((await send(page,conversation,'Plan the launch week')).status()).toBe(200);
@@ -67,7 +55,7 @@ test('integration: a stopped run keeps what Hermes reported and a lost run recor
  test.setTimeout(120000);
  const fake=await fakeHermes(); let agent;
  try {
-  await agencySignIn(page); agent=await attachAgent(page,fake);
+  await ownerSignIn(page); agent=await attachAgent(page,fake);
   const conversation=randomUUID();
   fake.settings.ending='cancelled'; fake.settings.usage={input_tokens:900,output_tokens:7};
   expect((await send(page,conversation,'Stop after a while')).status()).toBe(200);
@@ -87,7 +75,7 @@ test('integration: a stopped run keeps what Hermes reported and a lost run recor
  } finally { detach(agent); await fake.close(); }
 });
 
-test('the Agency owner sees each company\'s tokens per day, and a company Owner only their own company',async({page,browser})=>{
+test('an Owner of several companies sees each one\'s tokens per day, and an Owner of one company only their own',async({page,browser})=>{
  test.setTimeout(120000);
  // A day no other test writes to, so the rows are this test's own.
  const day=new Date(Date.UTC(2001,0,1)+Math.floor(Math.random()*9000)*86400000).toISOString().slice(0,10);
@@ -95,10 +83,11 @@ test('the Agency owner sees each company\'s tokens per day, and a company Owner 
  query(`insert into public.conversations(id,company_id,person_id,agent_name) values ('${rs}','${company}','${omar}','Mona'),('${other}','${aleem}','${omar}','Sara')`);
  query(`insert into public.conversation_usage(company_id,conversation_id,run_id,outcome,input_tokens,output_tokens,recorded_at) values ('${company}','${rs}','run_a','completed',1200,34,'${day}T08:00Z'),('${company}','${rs}','run_b','lost',null,null,'${day}T09:00Z'),('${aleem}','${other}','run_c','completed',5000,60,'${day}T10:00Z')`);
  const rowsOn=(viewer:Page)=>viewer.getByRole('row').filter({hasText:day});
- await agencySignIn(page);
+ await ownerSignIn(page);
  await page.goto('/c/rs-learning/settings');
  await page.getByRole('link',{name:'Usage',exact:true}).click();
- await expect(page).toHaveURL(/\/c\/rs-learning\/usage$/);
+ // Usage is a section of the settings overlay (#26), with the same table.
+ await expect(page).toHaveURL(/\/c\/rs-learning\/settings\?section=usage$/);
  await expect(rowsOn(page)).toHaveCount(2);
  await expect(rowsOn(page).filter({hasText:'RS Learning'}).getByRole('cell')).toHaveText(['RS Learning',day,'1,200','34','2','1']);
  await expect(rowsOn(page).filter({hasText:'Aleem'}).getByRole('cell')).toHaveText(['Aleem',day,'5,000','60','1','0']);

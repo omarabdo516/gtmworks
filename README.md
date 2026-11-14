@@ -31,11 +31,15 @@ Port **3000** (app and Supabase gateway)
 and **8025** (local email inbox) must be free; both bind **only to 127.0.0.1**.
 For a remote server, forward them over SSH (`ssh -L 3000:localhost:3000
 -L 8025:localhost:8025 your-server`) and open the setup link there. Do not expose the
-mailbox publicly. Open the setup link, enter your name, email and first company
-name, then follow the sign-in link in the local inbox at http://localhost:8025.
-You become the Agency owner and the first company's Owner. Setup then closes
-permanently and the setup link stops working; later visits use sign-in. Public sign-ups stay disabled. No demo
-people or companies are created, and no SMTP account is needed for the local inbox.
+mailbox publicly. On a fresh install, enter your name, email, a password of at
+least 10 characters (twice) and your first company name; you are signed in
+at once, with no email step. You become the first company's
+Owner. Setup then closes permanently and the setup link stops working; later
+visits sign in with email and password, and a sign-in lasts 30 days on that
+browser unless you sign out. Public sign-ups stay disabled. No demo people or
+companies are created.
+The local inbox at http://localhost:8025 receives password reset links and invitations.
+No SMTP account is needed for it.
 
 The command builds the web image and starts the web app, worker, Postgres,
 GoTrue, PostgREST, file Storage, an Nginx gateway, the local mail inbox and the
@@ -52,6 +56,15 @@ delete or regenerate this file for an existing database. `.env.install.example`
 documents the keys but deliberately cannot start the app. Public HTTP is rejected;
 HTTP is allowed only for this install's loopback origin. For a public deployment,
 put HTTPS in front and set `APP_ORIGIN` and `SUPABASE_PUBLIC_URL` to that origin.
+Run that proxy on the install machine, pointed at `127.0.0.1:3000`, and have it put
+each visitor's address in `X-Forwarded-For` (Caddy's `reverse_proxy` does this by
+default; an Nginx `$proxy_add_x_forwarded_for` works too). The gateway reads the
+last address in that header, so repeated wrong passwords are limited per visitor
+rather than for everyone behind the proxy. It believes the header only from
+connections that come from the install machine itself; a container on the install
+network is never believed. Every process on the install machine is trusted to name
+a visitor this way, so do not run untrusted programs on it. With no such header,
+every visitor behind the proxy shares one sign-in allowance.
 
 Run the same command again to resume an interrupted install or start it again.
 It preserves secrets and data, and applies only unrecorded migrations, in filename
@@ -103,6 +116,45 @@ version as the backup first, then restore the trusted archive. It replaces that
 empty install's volumes and `.env.install`, including its keys and origin settings,
 and restarts the stack. This is a full-install backup, not a company export; it
 does not back up the agent engine's data volume. Do not use it to change the pinned Postgres version.
+
+## Releases
+
+A tag `vX.Y.Z` publishes only a commit that is on `main` and whose required CI
+check passed on its push to `main`; any other tag publishes nothing through this
+release workflow. A collaborator with write access can still run workflows of their
+own from any commit they push, and publish with them: only repository access and
+rules on tags and branches limit that, not a workflow file. The repository's active
+tag ruleset `release tags: admins only` lets only repository admins create, move or
+delete a `v*` tag; the release workflow relies on that rule and adds no credential
+of its own. Each such tag
+publishes the image `ghcr.io/omarabdo516/gtmworks:X.Y.Z` for
+`linux/amd64` and `linux/arm64`, and a GitHub Release with two files:
+`docker-compose.install.yml`, which pins every image by digest, and `install.sh`.
+Published releases are immutable (the repository's immutable releases setting):
+once a release is published its two files can never be replaced. So the workflow
+uploads both files to a draft release, checks the draft holds exactly the files
+the install test passed on, and only then publishes it. A re-run of a tag whose
+release is already published leaves that release as it is and neither rebuilds
+nor re-tags its image `X.Y.Z`; it only runs the promotion of `stable` and
+`latest`. A fix ships as a new release `vX.Y.Z`. In a directory holding only those two files, `sh install.sh` pulls the image and
+takes the migrations and install files from it; nothing is built on the server.
+`stable` and `latest` move only after a release's install passes on its exact image,
+and always to the highest published release, so an older or hotfix tag never moves
+them back; `main` follows the head of main once its CI passed. A release install
+updates when both files are replaced with the next release's and `sh install.sh
+update` runs; it applies the new migrations, then recreates every service whose
+image changed. Back up before replacing them: backup and restore refuse to run with
+the files of a release the install does not run yet, and after an update that did
+not finish. If an update fails, the previous app keeps serving; put the previous
+release's two files back and run `sh install.sh update` to return to it (migrations
+already applied stay, as they move only forward).
+
+The first push creates the package `ghcr.io/omarabdo516/gtmworks` **private**, and
+nothing in the workflow can change that. Its owner makes it public once: on GitHub,
+open the package's **Package settings**, choose **Change visibility** and set it to
+**Public**. Until then a release's install test stops on its anonymous read, and
+`stable`, `latest` and the GitHub Release are not published; afterwards, re-run that
+workflow run's failed jobs.
 
 ## Licence
 

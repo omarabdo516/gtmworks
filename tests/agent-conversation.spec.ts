@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { chooseLanguageInSettings } from './choose-language';
 import { mkdir } from 'node:fs/promises';
 import { signIn } from './sign-in';
 // This file sorts before app.spec.ts on purpose: that file revokes the public fixture key at its end.
@@ -7,9 +8,7 @@ const root='/api/v1/companies/rs-learning/cards';
 // The fixture key belongs to the Writer agent; its role colour is #b5d9cf.
 const writerName='وكيل المحتوى';
 async function chooseLanguage(page:Page,language:'en'|'ar') {
- await page.goto('/c/rs-learning/settings');
- await page.locator('select[name=language]').selectOption(language);
- await page.locator('form').filter({has:page.locator('select[name=language]')}).getByRole('button').click();
+ await chooseLanguageInSettings(page,language);
  await expect(page.locator('html')).toHaveAttribute('lang',language);
 }
 

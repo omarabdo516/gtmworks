@@ -1,29 +1,17 @@
-import { test, expect, type Page, type Request } from '@playwright/test';
+import { test, expect, type Page, type Request, type Locator } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { fakeHermes } from './fake-hermes.mjs';
 import { execFileSync } from 'node:child_process';
-import { createHmac } from 'node:crypto';
-import { signIn } from './sign-in';
+import { signIn, openNavigation, closeNavigation } from './sign-in';
 import { createClient } from '@supabase/supabase-js';
 import { closeOpenRuns } from '../lib/conversation-runs.mjs';
+import { agentFace } from '../lib/agent-face.mjs';
 
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
-function totp(secret:string) {
- const bits=[...secret.toUpperCase()].map(character=>'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'.indexOf(character).toString(2).padStart(5,'0')).join('');
- const key=Buffer.from(bits.match(/.{8}/g)!.map(byte=>parseInt(byte,2)));
- const counter=Buffer.alloc(8); counter.writeBigUInt64BE(BigInt(Math.floor(Date.now()/30000)));
- const digest=createHmac('sha1',key).update(counter).digest();
- return String((digest.readUInt32BE(digest[19]&15)&0x7fffffff)%1000000).padStart(6,'0');
-}
-// Omar signs in and enrols an authenticator, so the session has Agency access (two-step verified).
-async function agencySignIn(page:Page) {
- query(`delete from auth.mfa_factors where user_id='20000000-0000-0000-0000-000000000001'`);
+// Omar signs in as the Owner of RS Learning, who connects and attaches its agents.
+async function ownerSignIn(page:Page) {
  query(`update public.people set language='en' where id='20000000-0000-0000-0000-000000000001'`);
- await signIn(page,'omar@example.com','/all-brands');
- await page.getByRole('button',{name:'Set up authenticator'}).click();
- await page.getByLabel('Verification code').fill(totp((await page.locator('code').textContent())!));
- await page.getByRole('button',{name:'Verify',exact:true}).click();
- await expect(page.locator('.company-card')).toHaveCount(3);
+ await signIn(page,'omar@example.com','/c/rs-learning/home');
 }
 
 const company='10000000-0000-0000-0000-000000000001';
@@ -55,27 +43,26 @@ function detach(agents:Record<string,{id:string,connection:string}>) {
 test.use({actionTimeout:15000});
 const send=(page:Page,data:object)=>page.request.post('/api/conversations',{data:{company,...data}});
 
-test('An Agency person starts a private conversation from the board and from Home, and the reply arrives without a reload',async({page})=>{
+test('The Owner starts a private conversation from the board and from Home, and the reply arrives without a reload',async({page})=>{
  test.setTimeout(120000);
  const fake=await fakeHermes(); fake.settings.key=`hermes-key-${randomUUID()}`; fake.settings.pendingReads=2;
  let agents={};
  const responses:Promise<string>[]=[];
  try {
-  await agencySignIn(page); agents=await attachAgents(page,fake);
+  await ownerSignIn(page); agents=await attachAgents(page,fake);
   const {Nour,Mona}=agents as Record<string,{profile:string}>;
   // Only finished requests: a still-open stream (the dev server's or a prefetch) has no complete body to read.
   const record=(request:Request)=>{responses.push(request.response().then(response=>response?response.text():'').catch(()=>''));};
   page.on('requestfinished',record);
   await page.goto('/c/rs-learning/work/board');
-  await page.locator('.nav').getByRole('button',{name:'New',exact:true}).click();
-  const dialog=page.getByRole('dialog',{name:'New conversation'});
-  await expect(dialog.getByRole('button',{name:'Agent',exact:true})).toContainText('Mona');
-  await dialog.getByRole('button',{name:'Agent',exact:true}).click();
-  await page.getByRole('menuitemradio').filter({hasText:'Nour'}).click();
+  // Opening an Agent from the sidebar: its tile leads to its empty Conversation.
+  await page.locator('.sidebar .agent-tile').filter({hasText:'Nour'}).click();
+  await expect(page).toHaveURL(/\/c\/rs-learning\/chat\/[0-9a-f-]{36}$/);
+  await expect(page.locator('.chat .empty-chat h2')).toHaveText('Nour');
   const text=`Plan the launch week خطة الإطلاق ${Date.now()}`;
-  await dialog.getByLabel('Message',{exact:true}).fill(text);
+  await page.getByLabel('Message',{exact:true}).fill(text);
   await page.evaluate(()=>{(window as unknown as {stayed:boolean}).stayed=true;});
-  await dialog.getByRole('button',{name:'Send',exact:true}).click();
+  await page.getByRole('button',{name:'Send',exact:true}).click();
   await expect(page).toHaveURL(/\/c\/rs-learning\/conversations\/[0-9a-f-]{36}$/);
   const conversation=page.url().split('/').pop()!;
   await expect(page.locator('.msg[data-author=person]')).toHaveText(new RegExp(text));
@@ -85,10 +72,11 @@ test('An Agency person starts a private conversation from the board and from Hom
   expect(runs.map(request=>[request.path,request.session])).toEqual([[`/p/${Nour.profile}/v1/runs`,conversation]]);
 
   await page.goto('/c/rs-learning/home');
-  await page.locator('.nav').getByRole('button',{name:'New',exact:true}).click();
-  await expect(page.getByRole('dialog',{name:'New conversation'}).getByRole('button',{name:'Agent',exact:true})).toContainText('Mona');
-  await page.getByRole('dialog').getByLabel('Message',{exact:true}).fill('From Home');
-  await page.getByRole('dialog').getByLabel('Message',{exact:true}).press('Enter');
+  // New chat opens the main Agent (Mona is this company's default).
+  await page.locator('.sidebar').getByRole('link',{name:'New chat',exact:true}).click();
+  await expect(page.locator('.chat .empty-chat h2')).toContainText('Mona');
+  await page.getByLabel('Message',{exact:true}).fill('From Home');
+  await page.getByLabel('Message',{exact:true}).press('Enter');
   await expect(page).toHaveURL(/\/conversations\/[0-9a-f-]{36}$/);
   await expect(page.locator('.msg[data-author=person]')).toContainText('From Home');
   await expect(page.locator('.msg[data-author=agent]')).toContainText('Reply to: From Home');
@@ -105,7 +93,7 @@ test('An Agency person starts a private conversation from the board and from Hom
 test('integration: the same send runs once, and the record is append-only and names who wrote each message',async({page})=>{
  const fake=await fakeHermes(); let agents={};
  try {
-  await agencySignIn(page); agents=await attachAgents(page,fake);
+  await ownerSignIn(page); agents=await attachAgents(page,fake);
   const {Mona}=agents as Record<string,{id:string,profile:string}>;
   const conversation=randomUUID(); const message={conversation,agent:Mona.id,message:'Write the teaser',sendKey:randomUUID()};
   expect((await send(page,message)).status()).toBe(200);
@@ -132,7 +120,7 @@ test('isolation: another member and another company get not found, and a company
  test.setTimeout(120000);
  const fake=await fakeHermes(); let agents={};
  try {
-  await agencySignIn(page); agents=await attachAgents(page,fake);
+  await ownerSignIn(page); agents=await attachAgents(page,fake);
   const conversation=randomUUID();
   expect((await send(page,{conversation,message:'Private plan',sendKey:randomUUID()})).status()).toBe(200);
   expect((await page.request.get(`/api/conversations?company=${other}&conversation=${conversation}`)).status()).toBe(404);
@@ -151,24 +139,23 @@ test('isolation: another member and another company get not found, and a company
  } finally { detach(agents); await fake.close(); }
 });
 
-// #287: a Contributor (no Agency access) talks to the company's agent, whose Connection an Agency owner attached.
+// #287: a Contributor talks to the company's agent, whose Connection the company's Owner attached.
 test('A Contributor starts a conversation and gets the reply; nobody else reads it',async({page,browser})=>{
  test.setTimeout(120000);
  const fake=await fakeHermes(); fake.settings.key=`hermes-key-${randomUUID()}`; let agents={};
  const contributor='20000000-0000-0000-0000-000000000005';
  query(`update public.members set role='contributor' where company_id='${company}' and person_id='${contributor}'`);
  try {
-  await agencySignIn(page); agents=await attachAgents(page,fake);
+  await ownerSignIn(page); agents=await attachAgents(page,fake);
   const {Mona}=agents as Record<string,{profile:string}>;
   const context=await browser.newContext(); const member=await context.newPage();
   try {
    await signIn(member,'multi@example.com','/c/rs-learning/home');
-   await member.locator('.nav').getByRole('button',{name:'New',exact:true}).click();
-   const dialog=member.getByRole('dialog',{name:'New conversation'});
-   await expect(dialog.getByRole('button',{name:'Agent',exact:true})).toContainText('Mona');
+   await member.locator('.sidebar').getByRole('link',{name:'New chat',exact:true}).click();
+   await expect(member.locator('.chat .empty-chat h2')).toContainText('Mona');
    const text=`Draft the course teaser ${Date.now()}`;
-   await dialog.getByLabel('Message',{exact:true}).fill(text);
-   await dialog.getByRole('button',{name:'Send',exact:true}).click();
+   await member.getByLabel('Message',{exact:true}).fill(text);
+   await member.getByRole('button',{name:'Send',exact:true}).click();
    await expect(member).toHaveURL(/\/c\/rs-learning\/conversations\/[0-9a-f-]{36}$/);
    const conversation=member.url().split('/').pop()!;
    await expect(member.locator('.msg[data-author=person]')).toContainText(text);
@@ -176,26 +163,26 @@ test('A Contributor starts a conversation and gets the reply; nobody else reads 
    await expect(member.getByLabel('Message',{exact:true})).toBeVisible();
    expect(fake.settings.runs.map(run=>run.session)).toEqual([conversation]);
    expect(fake.settings.requests.filter(request=>request.method==='POST').at(-1)!.path).toBe(`/p/${Mona.profile}/v1/runs`);
-   // The company's Owner (Omar here, with Agency access too) cannot read it.
+   // The company's Owner (Omar here) cannot read it.
    expect((await page.request.get(`/api/conversations?company=${company}&conversation=${conversation}`)).status()).toBe(404);
    expect((await page.goto(`/c/rs-learning/conversations/${conversation}`))!.status()).toBe(404);
   } finally { await context.close(); }
- } finally { query(`update public.members set role='reviewer' where company_id='${company}' and person_id='${contributor}'`); detach(agents); await fake.close(); }
+ } finally { query(`update public.members set role='contributor' where company_id='${company}' and person_id='${contributor}'`); detach(agents); await fake.close(); }
 });
 
 test('A Viewer has no composer and the server refuses their message',async({page,browser})=>{
  test.setTimeout(120000);
  const fake=await fakeHermes(); let agents={};
  try {
-  await agencySignIn(page); agents=await attachAgents(page,fake);
+  await ownerSignIn(page); agents=await attachAgents(page,fake);
   const context=await browser.newContext(); const viewer=await context.newPage();
   try {
    await signIn(viewer,'viewer@example.com','/c/rs-learning/home');
-   await viewer.locator('.nav').getByRole('button',{name:'New',exact:true}).click();
-   const dialog=viewer.getByRole('dialog',{name:'New conversation'});
-   await expect(dialog.getByRole('note')).toContainText('Viewers can read but cannot chat with agents.');
-   await expect(dialog.getByLabel('Message',{exact:true})).toHaveCount(0);
-   await expect(dialog.getByRole('button',{name:'Send',exact:true})).toHaveCount(0);
+   await viewer.locator('.sidebar').getByRole('link',{name:'New chat',exact:true}).click();
+   const chat=viewer.locator('.chat');
+   await expect(chat.locator('.ro-line')).toHaveText('Your account is view-only: you read without writing or approving, and you can’t ask for a new agent.');
+   await expect(chat.getByLabel('Message',{exact:true})).toHaveCount(0);
+   await expect(chat.getByRole('button',{name:'Send',exact:true})).toHaveCount(0);
    const refused=await send(viewer,{conversation:randomUUID(),message:'Hello',sendKey:randomUUID()});
    expect(refused.status()).toBe(403); expect((await refused.json()).error).toBe('conversationNotAllowed');
   } finally { await context.close(); }
@@ -217,12 +204,11 @@ test('Closing the page mid-reply and reopening the conversation shows the comple
  test.setTimeout(120000);
  const fake=await fakeHermes(); fake.settings.key=`hermes-key-${randomUUID()}`; fake.settings.pendingReads=1e9; let agents={};
  try {
-  await agencySignIn(page); agents=await attachAgents(page,fake);
+  await ownerSignIn(page); agents=await attachAgents(page,fake);
   await page.goto('/c/rs-learning/home');
-  await page.locator('.nav').getByRole('button',{name:'New',exact:true}).click();
-  const dialog=page.getByRole('dialog',{name:'New conversation'});
-  await dialog.getByLabel('Message',{exact:true}).fill('Draft the long launch plan');
-  await dialog.getByRole('button',{name:'Send',exact:true}).click();
+  await page.locator('.sidebar').getByRole('link',{name:'New chat',exact:true}).click();
+  await page.getByLabel('Message',{exact:true}).fill('Draft the long launch plan');
+  await page.getByRole('button',{name:'Send',exact:true}).click();
   await expect(page).toHaveURL(/\/conversations\/[0-9a-f-]{36}$/);
   const address=page.url(); const conversation=address.split('/').pop()!;
   await expect(page.locator('.convo-status')).toContainText('Mona is working on a reply');
@@ -241,7 +227,7 @@ test('Closing the page mid-reply and reopening the conversation shows the comple
 test('integration: after gtmworks restarts during a run, the reconciler completes the record from Hermes once',async({page})=>{
  const fake=await fakeHermes(); fake.settings.pendingReads=1e9; let agents={};
  try {
-  await agencySignIn(page); agents=await attachAgents(page,fake);
+  await ownerSignIn(page); agents=await attachAgents(page,fake);
   const conversation=randomUUID(); const reconcile=reconciler();
   expect((await send(page,{conversation,message:'Write the long report',sendKey:randomUUID()})).status()).toBe(200);
   expect(await reconcile(conversation)).toBe(0);
@@ -260,7 +246,7 @@ test('integration: after gtmworks restarts during a run, the reconciler complete
 test('integration: a run unknown to Hermes is recorded as lost and the conversation accepts a new message',async({page})=>{
  const fake=await fakeHermes(); fake.settings.pendingReads=1e9; let agents={};
  try {
-  await agencySignIn(page); agents=await attachAgents(page,fake);
+  await ownerSignIn(page); agents=await attachAgents(page,fake);
   const conversation=randomUUID();
   expect((await send(page,{conversation,message:'First try',sendKey:randomUUID()})).status()).toBe(200);
   // Hermes forgets the run: it now answers not found for it.
@@ -285,7 +271,7 @@ test('With Hermes unreachable, sending keeps the text in the composer and says s
  test.setTimeout(120000);
  const fake=await fakeHermes(); let agents={};
  try {
-  await agencySignIn(page); agents=await attachAgents(page,fake);
+  await ownerSignIn(page); agents=await attachAgents(page,fake);
   const conversation=randomUUID();
   expect((await send(page,{conversation,message:'Before the outage',sendKey:randomUUID()})).status()).toBe(200);
   await expect.poll(()=>agentRows(conversation).length,{timeout:30000}).toBe(1);
@@ -305,5 +291,274 @@ test('With Hermes unreachable, sending keeps the text in the composer and says s
   await expect(page.locator('.approval-count')).toBeVisible();
   await page.goto('/c/rs-learning/work/calendar');
   await expect(page.locator('.calendar')).toBeVisible();
+ } finally { detach(agents); await fake.close(); }
+});
+
+// #8: the shell and the Agent Conversation as in the approved reference (design-reference/), in both languages.
+const omarSetting=(column:'theme'|'language',value:string)=>query(`update public.people set ${column}='${value}' where id='${omar}'`);
+async function noSideScroll(page:Page,where:string) {
+ const [scroll,inner]=await page.evaluate(()=>[document.documentElement.scrollWidth,window.innerWidth]);
+ expect(scroll,`${where}: page width`).toBe(inner);
+}
+
+test('the shell opens an Agent, sends a message, switches language and theme, and keeps direction and width',async({page})=>{
+ test.setTimeout(240000);
+ const fake=await fakeHermes(); let agents={};
+ try {
+  await ownerSignIn(page); agents=await attachAgents(page,fake);
+  omarSetting('theme','light');
+  await page.setViewportSize({width:1440,height:900});
+  await page.goto('/c/rs-learning/home');
+  // Lead, the main Agent (the company's default), comes first and carries its mark.
+  const tiles=page.locator('.sidebar .agent-tile:not(.agent-tile--new)');
+  await expect(tiles.first()).toContainText('Mona');
+  await expect(tiles.first().locator('.agent-tile__main')).toHaveText('Main');
+  await expect(tiles.filter({hasText:'Nour'}).locator('.agent-tile__main')).toHaveCount(0);
+  // Open an Agent: its tile is current and the screen is its empty Conversation.
+  await tiles.filter({hasText:'Nour'}).click();
+  await expect(page).toHaveURL(/\/chat\/[0-9a-f-]{36}$/);
+  await expect(tiles.filter({hasText:'Nour'})).toHaveAttribute('aria-current','true');
+  await expect(page.locator('.sidebar .sb-nav a[aria-current=page]')).toHaveText('Chats');
+  await expect(page.locator('.chat .head-pill')).toHaveText('New chat');
+  await expect(page.getByLabel('Message',{exact:true})).toHaveAttribute('placeholder','Write to Nour…');
+  // Send a message that mixes Arabic and English: it keeps its own direction inside the English shell.
+  const mixed=`خطة إطلاق الكورس for the Meta campaign ${Date.now()}`;
+  await page.getByLabel('Message',{exact:true}).fill(mixed);
+  await page.getByRole('button',{name:'Send',exact:true}).click();
+  await expect(page).toHaveURL(/\/conversations\/[0-9a-f-]{36}$/);
+  const conversation=page.url().split('/').pop()!;
+  const mine=page.locator('.msg[data-author=person] .bubble');
+  await expect(mine).toHaveText(mixed);
+  await expect(page.locator('.msg[data-author=agent] .bubble')).toContainText(`Reply to: ${mixed}`);
+  await expect(page.locator('html')).toHaveAttribute('dir','ltr');
+  await expect(page.locator('.sidebar')).toHaveCSS('direction','ltr');
+  await expect(mine).toHaveCSS('direction','rtl');
+  await expect(page.locator('.chat .head-pill__title')).toHaveCSS('direction','rtl');
+  // The person's turn sits on the end side of the column, the Agent's on the start side.
+  const sides=()=>page.evaluate(()=>{
+   const box=(selector:string)=>document.querySelector(selector)!.getBoundingClientRect();
+   const column=box('.transcript__col');
+   return {personRight:Math.round(box('.msg[data-author=person] .bubble').right),personLeft:Math.round(box('.msg[data-author=person] .bubble').left),agentLeft:Math.round(box('.msg[data-author=agent] .bubble').left),agentRight:Math.round(box('.msg[data-author=agent] .bubble').right),columnLeft:Math.round(column.left),columnRight:Math.round(column.right)};
+  });
+  let at=await sides();
+  expect([at.personRight,at.agentLeft]).toEqual([at.columnRight,at.columnLeft]);
+  // The new chat is the newest recent chat and is marked current.
+  const recent=page.locator(`.sidebar .thread-item[href$="/conversations/${conversation}"]`);
+  await expect(recent).toHaveAttribute('aria-current','true');
+  await expect(recent.locator('.od-truncate')).toHaveText(mixed);
+  await noSideScroll(page,'chat en 1440');
+  // Switch theme: the sun/moon button flips light and dark, and the account keeps the choice.
+  await expect(page.locator('.chat')).toHaveCSS('background-color','rgb(252, 252, 252)');
+  await expect(page.locator('#btn-theme')).toHaveAccessibleName('Dark mode');
+  await page.locator('#btn-theme').click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
+  await expect(page.locator('.chat')).toHaveCSS('background-color','rgb(18, 18, 18)');
+  await expect(page.locator('.sidebar')).toHaveCSS('background-color','rgb(14, 14, 14)');
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
+  await expect(page.locator('#btn-theme')).toHaveAccessibleName('Light mode');
+  await page.locator('#btn-theme').click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme','light');
+  // Switch language from the account menu: the shell turns right to left, the message keeps its own direction.
+  await page.getByRole('button',{name:'Account menu',exact:true}).click();
+  await expect(page.getByRole('menuitemradio').filter({hasText:'English'})).toHaveAttribute('aria-checked','true');
+  await page.getByRole('menuitemradio').filter({hasText:'العربية'}).click();
+  await expect(page.locator('html')).toHaveAttribute('lang','ar');
+  await expect(page.locator('html')).toHaveAttribute('dir','rtl');
+  await expect(page.locator('.sidebar')).toHaveCSS('direction','rtl');
+  await expect(page.locator('.sidebar .sb-nav .sb-item').first()).toHaveText('المحادثات');
+  await expect(page.getByLabel('الرسالة',{exact:true})).toHaveAttribute('placeholder','اكتب لـ Nour…');
+  await expect(mine).toHaveCSS('direction','rtl');
+  expect((await page.locator('.sidebar').boundingBox())!.x).toBe(1440-300);
+  at=await sides();
+  expect([at.personLeft,at.agentRight]).toEqual([at.columnLeft,at.columnRight]);
+  // An English message keeps left to right inside the Arabic shell.
+  const english=`Plan the launch week ${Date.now()}`;
+  await page.getByLabel('الرسالة',{exact:true}).fill(english);
+  await page.getByRole('button',{name:'ابعت',exact:true}).click();
+  await expect(page.locator('.msg[data-author=person] .bubble').last()).toHaveText(english);
+  await expect(page.locator('.msg[data-author=person] .bubble').last()).toHaveCSS('direction','ltr');
+  // No sideways scroll at 1440 and at a phone width, in both languages, with the drawer closed and open.
+  for(const language of ['ar','en'] as const) {
+   if(language==='en') {
+    await page.setViewportSize({width:1440,height:900});
+    // The page is still in Arabic here, so the account button carries its Arabic label.
+    await page.getByRole('button',{name:'قائمة الحساب',exact:true}).click();
+    await page.getByRole('menuitemradio').filter({hasText:'English'}).click();
+    await expect(page.locator('html')).toHaveAttribute('lang','en');
+   }
+   for(const width of [1440,390]) {
+    await page.setViewportSize({width,height:900});
+    for(const path of [`/c/rs-learning/conversations/${conversation}`,'/c/rs-learning/chat','/c/rs-learning/work/board']) {
+     await page.goto(path);
+     await expect(page.locator('html')).toHaveAttribute('lang',language);
+     await noSideScroll(page,`${path} ${language} ${width}`);
+     await openNavigation(page);
+     await noSideScroll(page,`${path} ${language} ${width} with the sidebar open`);
+     await closeNavigation(page);
+    }
+   }
+  }
+  // Collapse on a narrow screen: the sidebar hides behind the menu button, and an Agent opens from the drawer.
+  await page.setViewportSize({width:390,height:900});
+  await page.goto('/c/rs-learning/work/board');
+  await expect(page.locator('.sidebar')).toBeHidden();
+  await page.locator('.mobile-menu').click();
+  await page.locator('.sidebar .agent-tile').filter({hasText:'Mona'}).click();
+  await expect(page).toHaveURL(/\/chat\/[0-9a-f-]{36}$/);
+  await expect(page.locator('.sidebar')).toBeHidden();
+  await expect(page.locator('.topbar')).toHaveText('Chats');
+  await expect(page.getByLabel('Message',{exact:true})).toBeVisible();
+  // On a phone the send arrow keeps the reference's 28px circle, and a tap anywhere in the 44px square around it sends.
+  const send=page.locator('.composer__send');
+  const circle=(await send.boundingBox())!;
+  expect([circle.width,circle.height]).toEqual([28,28]);
+  const misses=await send.evaluate(node=>{
+   const box=node.getBoundingClientRect(),x=box.left+box.width/2,y=box.top+box.height/2;
+   return [[-21,-21],[0,-21],[21,-21],[-21,0],[21,0],[-21,21],[0,21],[21,21]]
+    .filter(([dx,dy])=>!document.elementFromPoint(x+dx,y+dy)?.closest('.composer__send'))
+    .map(point=>point.join(','));
+  });
+  expect(misses,'taps inside the 44px square that miss the send button').toEqual([]);
+ } finally { omarSetting('theme','device'); omarSetting('language','en'); detach(agents); await fake.close(); }
+});
+
+// The Mona/Nour fixture (Mona the main Agent): each real Agent keeps one identity (name, face, colour) in the
+// sidebar's grid, on the Agents page, in its empty chat and in a Conversation with it, and the grid lists the main
+// Agent first, on a desktop and on a phone. Home's four role agents are another population (frame.spec.ts).
+for(const width of [1440,390]) test(`a real Agent keeps one identity across the sidebar, the Agents page and its Conversation at ${width}px`,async({page})=>{
+ test.setTimeout(180000);
+ const fake=await fakeHermes(); let agents={};
+ try {
+  await ownerSignIn(page); agents=await attachAgents(page,fake);
+  const fixture=agents as Record<'Mona'|'Nour',{id:string,connection:string}>;
+  await page.setViewportSize({width,height:900});
+  const face=(svg:Locator)=>svg.evaluate(node=>({icon:node.innerHTML,color:node.querySelector(':scope > g')?.getAttribute('fill')}));
+  await page.goto('/c/rs-learning/home');
+  await openNavigation(page);
+  const tiles=page.locator('.sidebar .agent-tile:not(.agent-tile--new)');
+  // Main first: Mona leads the grid with its mark, whatever the name order.
+  await expect(tiles.locator('bdi')).toHaveText(['Mona','Nour']);
+  await expect(tiles.first()).toHaveAccessibleName('Mona · Main');
+  await expect(tiles.first().locator('.agent-tile__main')).toHaveText('Main');
+  await expect(tiles.nth(1)).toHaveAccessibleName('Nour');
+  await expect(tiles.nth(1).locator('.agent-tile__main')).toHaveCount(0);
+  expect(await tiles.evaluateAll(links=>links.map(link=>link.getAttribute('href')))).toEqual([`/c/rs-learning/chat/${fixture.Mona.id}`,`/c/rs-learning/chat/${fixture.Nour.id}`]);
+  const shown={Mona:await face(tiles.first().locator('.agent-face')),Nour:await face(tiles.nth(1).locator('.agent-face'))};
+  await closeNavigation(page);
+  for(const agent of Object.values(shown)) { expect(agent.icon).toBeTruthy(); expect(agent.color).toBeTruthy(); }
+  // Two Agents look different exactly when their connections draw different faces (a random pair can rarely match).
+  expect(shown.Mona.icon!==shown.Nour.icon).toBe(JSON.stringify(agentFace(fixture.Mona.connection))!==JSON.stringify(agentFace(fixture.Nour.connection)));
+  // The Agents page shows the same face and colour for each, and marks the same one as the default.
+  await page.goto('/c/rs-learning/agents');
+  for(const name of ['Mona','Nour'] as const) {
+   const row=page.locator('.company-hermes-agents .detail-row').filter({has:page.locator('strong').getByText(name,{exact:true})});
+   await expect(row).toHaveCount(1);
+   expect(await face(row.locator('.agent-face')),`${name}: Agents page`).toEqual(shown[name]);
+   await expect(row.getByText('Default agent',{exact:true})).toHaveCount(name==='Mona'?1:0);
+  }
+  // Each opens from the grid into its own empty chat and then a Conversation, wearing the same face throughout.
+  for(const name of ['Mona','Nour'] as const) {
+   await openNavigation(page);
+   await tiles.filter({hasText:name}).click();
+   await expect(page).toHaveURL(new RegExp(`/chat/${fixture[name].id}$`));
+   await expect(page.locator('.chat .empty-chat h2 bdi')).toHaveText(name);
+   expect(await face(page.locator('.chat .empty-chat__faces .agent-face')),`${name}: empty chat`).toEqual(shown[name]);
+   expect(await face(page.locator('.chat .head-pill .agent-face')),`${name}: empty chat title`).toEqual(shown[name]);
+   const text=`Identity check for ${name} ${Date.now()}`;
+   await page.getByLabel('Message',{exact:true}).fill(text);
+   await page.getByRole('button',{name:'Send',exact:true}).click();
+   await expect(page).toHaveURL(/\/conversations\/[0-9a-f-]{36}$/);
+   const reply=page.locator('.msg[data-author=agent]');
+   await expect(reply.locator('.bubble')).toContainText(`Reply to: ${text}`);
+   await expect(reply.locator('.sender bdi')).toHaveText(name);
+   expect(await face(page.locator('.chat .head-pill .agent-face')),`${name}: Conversation title`).toEqual(shown[name]);
+   expect(await face(reply.locator('.sender .agent-face')),`${name}: Conversation reply`).toEqual(shown[name]);
+  }
+ } finally { detach(agents); await fake.close(); }
+});
+
+// #8, the rest of the approved reference's shell and chat: the Agent's details beside the chat (over it below 1024px),
+// the chat search, and the parts not built yet (channels, Connect apps, the composer's extras and dictation, the
+// details tabs) drawn as the reference draws them but disabled with "Soon", with no invented counts.
+test('the Agent details panel, the chat search, the account menu sections and the not-built-yet parts follow the reference',async({page})=>{
+ test.setTimeout(180000);
+ const fake=await fakeHermes(); let agents={};
+ try {
+  await ownerSignIn(page); agents=await attachAgents(page,fake);
+  const fixture=agents as Record<'Mona'|'Nour',{id:string}>;
+  await page.setViewportSize({width:1440,height:900});
+  await page.goto(`/c/rs-learning/chat/${fixture.Mona.id}`);
+  // Beside the chat at 1440: the details are open, named for the Agent, with its main mark and speciality.
+  const pill=page.locator('.chat .head-pill');
+  const details=page.getByRole('complementary',{name:'Details: Mona',exact:true});
+  await expect(details).toBeVisible();
+  await expect(pill).toHaveAttribute('aria-expanded','true');
+  await expect(details.locator('.dp-id__name')).toHaveText('MonaMain');
+  await expect(details.locator('.dp-id__role')).toHaveText('Marketing');
+  await expect(details.getByRole('link',{name:'Settings for Mona',exact:true})).toHaveAttribute('href','/c/rs-learning/agents');
+  // The five tabs are drawn, each disabled and saying "Soon".
+  const tabs=details.locator('.dp-tabs button');
+  await expect(tabs).toHaveText(['Activity · Soon','Tasks · Soon','Files · Soon','Memory · Soon','Log · Soon']);
+  for(const tab of await tabs.all()) { await expect(tab).toHaveAttribute('aria-disabled','true'); await expect(tab).toHaveAttribute('title','Soon'); }
+  // The title pill hides and shows the details; the close button hides them and gives the focus back to the pill.
+  await pill.click(); await expect(details).toBeHidden(); await expect(pill).toHaveAttribute('aria-expanded','false');
+  await pill.click(); await expect(details).toBeVisible();
+  await details.getByRole('button',{name:'Close details',exact:true}).click();
+  await expect(details).toBeHidden(); await expect(pill).toBeFocused();
+  // Below 1024px the details start closed and slide over the chat; Escape closes them.
+  await page.setViewportSize({width:900,height:900});
+  await page.reload();
+  await expect(details).toBeHidden();
+  await pill.click();
+  await expect(page.locator('.details.is-open')).toBeVisible();
+  await expect(details.getByRole('button',{name:'Close details',exact:true})).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.details.is-open')).toHaveCount(0); await expect(details).toBeHidden(); await expect(pill).toBeFocused();
+  await page.setViewportSize({width:1440,height:900});
+  // The composer's extras and dictation are drawn but disabled; the text and send still work (tests above).
+  for(const name of ['More · Soon','Voice dictation · Soon']) {
+   const control=page.locator('.composer').getByRole('button',{name,exact:true});
+   await expect(control).toHaveAttribute('aria-disabled','true'); await expect(control).toHaveAttribute('title','Soon');
+  }
+  // Channels: the general channel and the Owner's new-channel button, disabled, with no unread number.
+  const sidebar=page.locator('.sidebar');
+  await expect(sidebar.locator('#lbl-ch')).toHaveText('Channels');
+  const general=sidebar.locator('.ch-item');
+  await expect(general).toHaveText('general · Soon'); await expect(general).toHaveAttribute('aria-disabled','true');
+  await expect(sidebar.getByRole('button',{name:'New channel · Soon',exact:true})).toHaveAttribute('aria-disabled','true');
+  await expect(sidebar.locator('.sb-unread')).toHaveCount(0);
+  // Connect apps: disabled, "Soon" where the reference counts connected apps.
+  const apps=sidebar.locator('#btn-apps');
+  await expect(apps).toHaveText('Connect appsSoon'); await expect(apps).toHaveAttribute('aria-disabled','true');
+  // Search: the magnifier opens a field that narrows the recent chats by title; Escape empties it, then closes it.
+  const text=`Search check ${Date.now()}`;
+  const started=await send(page,{conversation:randomUUID(),agent:fixture.Nour.id,message:text,sendKey:randomUUID()});
+  expect(started.status()).toBe(200);
+  await page.reload();
+  await sidebar.getByRole('button',{name:'Search chats',exact:true}).click();
+  const field=sidebar.getByRole('searchbox',{name:'Search chats'});
+  await expect(field).toBeFocused();
+  await field.fill('no chat is called this');
+  // The chat rows are the links to a Conversation: the channel row and the Recent cards rows (drawn as thread items
+  // since the board work) are not chats and are not searched.
+  const chatRows=sidebar.locator('.thread-item[href*="/conversations/"]');
+  await expect(chatRows).toHaveCount(0);
+  await expect(sidebar.locator('.sb-empty')).toHaveText('No chats match “no chat is called this”');
+  await field.fill(text.slice(0,12).toUpperCase());
+  await expect(chatRows.filter({hasText:text})).toHaveCount(1);
+  await field.press('Escape'); await expect(field).toHaveValue('');
+  await field.press('Escape'); await expect(field).toHaveCount(0);
+  await expect(sidebar.getByRole('button',{name:'Search chats',exact:true})).toHaveAttribute('aria-expanded','false');
+  // The account menu: Connect apps disabled, and "More sections" reaches the sections the reference has no place for.
+  await page.getByRole('button',{name:'Account menu',exact:true}).click();
+  const menu=page.getByRole('menu');
+  await expect(menu.getByRole('menuitem',{name:/^Connect apps/})).toHaveAttribute('aria-disabled','true');
+  const more=menu.getByRole('group',{name:'More sections',exact:true}).getByRole('menuitem');
+  await expect(more).toHaveText(['Home','Projects','Skills','Approvals','Usage','Members','Work settings','Agent keys','Agents']);
+  expect(await more.evaluateAll(links=>links.map(link=>link.getAttribute('href')))).toEqual(['home','projects','skills','approvals','usage','settings/members','settings/work','settings/agents','agents'].map(path=>`/c/rs-learning/${path}`));
+  await more.filter({hasText:'Members'}).click();
+  await expect(page).toHaveURL(/\/c\/rs-learning\/settings\/members$/);
+  await expect(page.getByRole('menu')).toHaveCount(0);
  } finally { detach(agents); await fake.close(); }
 });

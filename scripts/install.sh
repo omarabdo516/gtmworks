@@ -3,7 +3,10 @@ set +x
 set -eu
 # Read the function before an update replaces this script on disk.
 main() {
-cd "$(dirname "$0")/.."
+# A release's install script names its image by digest (scripts/release-assets.mjs) and sits beside its compose file;
+# in a source checkout this stays empty and the image is built from the checkout.
+release_image=
+if [ -n "$release_image" ]; then cd "$(dirname "$0")"; else cd "$(dirname "$0")/.."; fi
 umask 077
 mkdir .install-lock || { echo 'Another install is running (or remove stale .install-lock).' >&2; exit 1; }
 resume=no
@@ -31,6 +34,19 @@ volumes() {
   docker run --rm --volumes-from "$(compose ps -aq db)" --volumes-from "$(compose ps -aq storage)" "$@"
 }
 operation=${1:-install}
+if [ -n "$release_image" ]; then
+  # Release mode replaces the install files below; a checkout's own copies of them are source code.
+  test ! -e scripts/install.sh || {
+    echo 'A release install runs in its own directory, not in a source checkout: run sh scripts/install.sh here.' >&2; exit 1; }
+  # A compose file from another release would migrate one version and start another.
+  grep -qF "image: $release_image" docker-compose.install.yml || {
+    echo "docker-compose.install.yml is not from the release of $release_image: download both files of one release." >&2; exit 1; }
+  # Backup and restore restart the stack without migrating, so they run only with the files of the release it runs.
+  case "$operation" in backup|restore)
+    test "$(cat .install-release 2>/dev/null)" = "$release_image" || {
+      echo "This install does not run $release_image yet: run sh install.sh update first, or use the files of the release it runs." >&2; exit 1; };;
+  esac
+fi
 if [ "$operation" = backup ]; then
   test -f .env.install || { echo 'Install first.' >&2; exit 1; }
   destination=${2:-backups}
@@ -78,6 +94,9 @@ elif [ "$operation" = restore ]; then
   mv .env.install.tmp .env.install
   compose up -d --force-recreate --wait --wait-timeout 300
   return
+elif [ "$operation" = update ] && [ -n "$release_image" ]; then
+  test -f .env.install || { echo 'Install first.' >&2; exit 1; }
+  test -z "${2:-}" || { echo 'A release install updates to the next release: put its docker-compose.install.yml and install.sh here, then run sh install.sh update.' >&2; exit 1; }
 elif [ "$operation" = update ]; then
   test -f .env.install || { echo 'Install first.' >&2; exit 1; }
   ref=${2:-main}
@@ -96,6 +115,17 @@ elif [ "$operation" = update ]; then
 elif [ "$operation" != install ]; then
   echo 'Usage: sh scripts/install.sh [update [ref] | backup [directory] | restore <archive>]' >&2; exit 1
 fi
+if [ -n "$release_image" ]; then
+  docker pull "$release_image"
+  # From here the files on disk belong to this release until the run finishes, so backup and restore wait for that.
+  rm -f .install-release
+  # The image carries what a checkout holds for the install: migrations, database and gateway files, lib/install-env.mjs.
+  # The migrations are replaced, not merged, so a rolled-back release leaves none of its own to apply again. The folder is
+  # emptied, never removed, and files are overwritten in place: the running db and gateway bind-mount these by inode, so a
+  # folder made anew would leave psql reading the old, deleted one.
+  docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/install" "$release_image" \
+    sh -ec 'mkdir -p /install/supabase/migrations; find /install/supabase/migrations -mindepth 1 -delete; cp -R /app/install/. /install/'
+fi
 if [ ! -f .env.install ]; then
   docker run --rm -v "$PWD/lib:/code:ro" "$node_image" node /code/install-env.mjs generate > .env.install.tmp
   mv .env.install.tmp .env.install
@@ -105,6 +135,9 @@ chmod 600 .env.install
 complete_env "$PWD/.env.install"
 echo 'Validating install configuration...'
 docker run --rm --env-file .env.install -v "$PWD/lib:/code:ro" "$node_image" node /code/install-env.mjs validate complete
+# A broken gateway config stops here, before migrations or any container changes, while the old version still serves.
+echo 'Checking gateway configuration...'
+compose run --rm --no-deps gateway nginx -t
 if [ "$operation" = install ]; then compose up -d --wait db auth rest storage mail; fi
 {
   printf '%s\n' 'select pg_advisory_xact_lock(237);' 'create schema if not exists gtmworks_install;' \
@@ -121,13 +154,25 @@ if [ "$operation" = install ]; then compose up -d --wait db auth rest storage ma
   done
   printf "notify pgrst, 'reload schema';\n"
 } | compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 --single-transaction
-compose build web
-if [ "$operation" = update ]; then
-  compose up -d --no-deps --wait --wait-timeout 300 hermes web worker
+if [ -z "$release_image" ]; then
+  compose build web
+  # Compose does not recreate a container when only a file it mounts changed: recreate the gateway so its new config (the
+  # X-Real-IP the auth rate limit counts by, issue #41) is the one that serves. Before the app starts: the worker reaches
+  # the database through the gateway, so nothing restarts once the worker runs. A release install lets compose recreate
+  # what its pinned files changed and reloads the gateway below.
+  compose up -d --no-deps --force-recreate --wait --wait-timeout 300 gateway
+fi
+if [ "$operation" = update ] && [ -z "$release_image" ]; then
+  # auth is recreated when its settings changed (password rules, reset-link lifetime, session length) and must be healthy.
+  compose up -d --no-deps --wait --wait-timeout 300 auth hermes web worker
 else
+  # A release pins every service by digest: compose recreates each one the release changed and leaves the rest running.
   compose up -d --wait --wait-timeout 300
 fi
-compose exec -T web node -e "for(const url of ['http://gateway:8080/api/health','http://gateway:8080/sign-in','http://hermes:8642/health']) { const response=await fetch(url); if(response.status!==200) throw new Error(url+' returned '+response.status); }" --input-type=module
+# The extraction replaced the gateway configuration in place; Nginx reads it again without dropping connections.
+if [ "$operation" = update ] && [ -n "$release_image" ]; then compose exec -T gateway nginx -s reload; fi
+compose exec -T web node -e "for(const url of ['http://gateway:8080/api/health','http://gateway:8080/sign-in','http://hermes:8642/health']) { const response=await fetch(url); if(response.status!==200) throw new Error(url+' returned '+response.status); console.log(url+' '+response.status); }" --input-type=module
+if [ -n "$release_image" ]; then printf '%s\n' "$release_image" > .install-release; fi
 # Whether first run is still open, asked through the app's service role; it answers open or closed and nothing else.
 setup=$(compose exec -T web node -e "const key=process.env.SUPABASE_SERVICE_ROLE_KEY; const response=await fetch('http://gateway:8080/rest/v1/rpc/setup_is_open',{method:'POST',headers:{apikey:key,authorization:'Bearer '+key}}); if(!response.ok) throw new Error('setup_is_open returned '+response.status); console.log(await response.json()===true?'open':'closed');" --input-type=module)
 echo 'Mail: http://localhost:8025'

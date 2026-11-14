@@ -1,25 +1,50 @@
 import { expect, type Page } from '@playwright/test';
-export async function signIn(page:Page,email:string,path:string) {
- await page.request.delete('http://127.0.0.1:54324/api/v1/messages'); await page.goto(path); await expect(page).toHaveURL(/sign-in/); // The local Auth server throttles repeated email requests for the same person.
- await expect(async()=>{
-  await page.getByLabel('Email').fill(email);
-  await page.getByRole('button',{name:'Send sign-in link'}).click();
-  await expect(page.getByRole('status')).toHaveText('Check your email for a sign-in link.',{timeout:2000});
- }).toPass({intervals:[1100],timeout:10000});
- await followSignInLink(page,email);
+// The password every seeded person has on the local database (supabase/seed.sql).
+export const seededPassword='local-seed-password';
+export async function signIn(page:Page,email:string,path:string,password=seededPassword) {
+ await page.request.delete('http://127.0.0.1:54324/api/v1/messages'); await page.goto(path); await expect(page).toHaveURL(/sign-in/);
+ // A wrong password fails at once. Only the auth service's rate limit is waited out: every test signs in from this one
+ // address, and the allowance refills within seconds. The install job goes past the limit on purpose (issue #41).
+ for(let attempt=1;;attempt++) {
+  await page.getByLabel('Email',{exact:true}).fill(email);
+  await page.getByLabel('Password',{exact:true}).fill(password);
+  await page.getByRole('button',{name:'Sign in',exact:true}).click();
+  const outcome=async()=>!new URL(page.url()).pathname.startsWith('/sign-in')?'signed in':await page.getByText('Wrong email or password.').isVisible()?'wrong':await page.getByText('Too many sign-in attempts. Try again later.').isVisible()?'limited':'waiting';
+  await expect.poll(outcome,{timeout:15000}).not.toBe('waiting');
+  const result=await outcome();
+  if(result==='signed in') return;
+  if(result==='wrong') throw new Error(`Sign-in refused for ${email}: wrong email or password`);
+  if(attempt>=20) throw new Error(`Sign-in for ${email} still rate limited after ${attempt} attempts`);
+  await page.waitForTimeout(3000); await page.reload();
+ }
 }
 
 export async function followSignInLink(page:Page,email:string) {
+ await page.goto(await emailLink(page,email));
+}
+// The first auth-service link (/verify) in the newest local-inbox message to this address.
+export async function emailLink(page:Page,email:string) {
  let link='';
  for(let i=0;i<30 && !link;i++) { const response=await page.request.get('http://127.0.0.1:54324/api/v1/messages'); const mailbox=await response.json(); const summary=mailbox.messages?.find((message:{To:{Address:string}[]})=>message.To.some(to=>to.Address===email)); if(summary) { const message=await (await page.request.get(`http://127.0.0.1:54324/api/v1/message/${summary.ID}`)).json(); const body=message.HTML || message.Text; link=body.match(/https?:\/\/[^"\s<>]+/g)?.find((url:string)=>url.includes('/verify'))?.replace(/&amp;/g,'&') || ''; } if(!link) await page.waitForTimeout(1000); }
- expect(link).toBeTruthy(); await page.goto(link);
+ expect(link).toBeTruthy(); return link;
 }
 
 export async function openNavigation(page:Page) {
- if(await page.locator('.mobile-menu').isVisible()&&!await page.locator('[data-slot=sheet-content]').isVisible()) await page.locator('.mobile-menu').click();
+ // Below 768px the sidebar is a drawer behind the menu button; it is open while it carries is-open.
+ if(await page.locator('.mobile-menu').isVisible()&&!await page.locator('.sidebar.is-open').count()) {
+  await page.locator('.mobile-menu').click(); await expect(page.locator('.sidebar.is-open')).toBeVisible();
+  // It slides in (200ms): measure it only once the slide has ended.
+  await expect.poll(()=>page.locator('.sidebar').evaluate(node=>node.getAnimations().length)).toBe(0);
+ }
 }
 export async function closeNavigation(page:Page) {
- if(await page.locator('[data-slot=sheet-content]').isVisible()) await page.keyboard.press('Escape');
+ if(await page.locator('.sidebar.is-open').count()) { await page.keyboard.press('Escape'); await expect(page.locator('.sidebar.is-open')).toHaveCount(0); }
+}
+// Sections without a sidebar entry (Home among them) open from the account menu's "More sections" group (#8).
+export async function openMoreSection(page:Page,path:string) {
+ await openNavigation(page);
+ await page.locator('.sidebar #btn-me').click();
+ await page.getByRole('menu').locator(`[role=group] a[role=menuitem][href$="/${path}"]`).click();
 }
 export async function chooseCompany(page:Page,slug:string) {
  await openNavigation(page);

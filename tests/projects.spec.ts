@@ -1,6 +1,12 @@
 import { test, expect, type Page, type Locator } from '@playwright/test';
+import { chooseLanguageInSettings } from './choose-language';
 import { mkdir } from 'node:fs/promises';
 import { signIn } from './sign-in';
+import { execFileSync } from 'node:child_process';
+
+// Supabase CLI targets the local test database by default; never pass --remote.
+const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
+const rows=(sql:string)=>{ const out=JSON.parse(query(sql)); return (Array.isArray(out)?out:out.rows) as Record<string,unknown>[]; };
 
 // Clicks Save and waits until the server action has answered and the page has drawn its result. React resets an action form when the action ends, so typing before that would be wiped.
 async function save(page:Page,button:Locator) {
@@ -10,9 +16,7 @@ async function save(page:Page,button:Locator) {
 }
 
 async function chooseLanguage(page:Page,language:'en'|'ar') {
- await page.goto('/c/rs-learning/settings');
- await page.locator('select[name=language]').selectOption(language);
- await page.locator('form').filter({has:page.locator('select[name=language]')}).getByRole('button').click();
+ await chooseLanguageInSettings(page,language);
  await expect(page.locator('html')).toHaveAttribute('lang',language);
 }
 // The picture of the page as it is now, phone and desktop; the CI step keeps test-results/screenshots for the pull request.
@@ -110,4 +114,30 @@ test('a viewer sees projects but cannot change them',async({page})=>{
  await expect(page.locator('.content .settings-row').first()).toBeVisible();
  await expect(page.getByRole('form',{name:'New project',exact:true})).toHaveCount(0);
  await expect(page.getByRole('button',{name:'Create project'})).toHaveCount(0);
+});
+
+test('once the server has the saved status, a later change by someone else shows and is not overwritten',async({page})=>{
+ await signIn(page,'omar@example.com','/c/rs-learning/projects');
+ const name=`Shared plan ${Date.now()}`;
+ const form=page.getByRole('form',{name:'New project',exact:true});
+ await form.getByLabel('Project name').fill(name);
+ await form.getByLabel('Goal').fill('First goal');
+ await form.getByRole('button',{name:'Create project'}).click();
+ const row=page.getByRole('form',{name,exact:true});
+ await expect(row.getByLabel('Project status')).toHaveValue('active');
+ await row.getByLabel('Project status').selectOption('paused');
+ await save(page,row.getByRole('button',{name:'Save'}));
+ await expect(row.getByLabel('Project status')).toHaveValue('paused');
+ expect(rows(`select status from public.work_projects where name='${name}'`)[0].status).toBe('paused');
+ // Someone else sets it back to active; this page learns of it when it is drawn again after another save here.
+ query(`update public.work_projects set status='active' where name='${name}'`);
+ await form.getByLabel('Project name').fill(`${name} (other)`);
+ await save(page,form.getByRole('button',{name:'Create project'}));
+ await expect(page.getByRole('form',{name:`${name} (other)`,exact:true})).toBeVisible();
+ await expect(row.getByLabel('Project status')).toHaveValue('active');
+ // A later save of this row keeps their status.
+ await row.getByLabel('Goal').fill('Second goal');
+ await save(page,row.getByRole('button',{name:'Save'}));
+ await expect(row.getByLabel('Goal')).toHaveValue('Second goal');
+ expect(rows(`select status,goal from public.work_projects where name='${name}'`)[0]).toEqual({status:'active',goal:'Second goal'});
 });

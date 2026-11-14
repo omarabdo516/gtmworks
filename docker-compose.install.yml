@@ -1,7 +1,7 @@
 name: gtmworks-install
 services:
   db:
-    image: supabase/postgres:17.6.1.136
+    image: supabase/postgres:17.6.1.136@sha256:f371b5f3f2ac0a05703f33d6e6134515fb2498cab708fb948a0aeb7481467c00
     restart: unless-stopped
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run scripts/install.sh}
@@ -23,7 +23,7 @@ services:
       timeout: 5s
       retries: 60
   auth:
-    image: supabase/gotrue:v2.197.0
+    image: supabase/gotrue:v2.197.0@sha256:1736a63078f5922b198c4cbe50f80ab9a2d3b54fe8b7b6cfb2e9dc5dbbc12c6b
     restart: unless-stopped
     depends_on:
       db: {condition: service_healthy}
@@ -52,13 +52,21 @@ services:
       GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: /auth/v1/verify
       GOTRUE_MFA_TOTP_ENROLL_ENABLED: "true"
       GOTRUE_MFA_TOTP_VERIFY_ENABLED: "true"
+      # Passwords: the rule gtmworks shows (lib/password.mjs), a reset link that works for 24 hours, and a sign-in that
+      # lasts 30 days. Repeated wrong passwords are limited by GoTrue's own sign-in rate limit.
+      GOTRUE_PASSWORD_MIN_LENGTH: "10"
+      GOTRUE_MAILER_OTP_EXP: "86400"
+      GOTRUE_SESSIONS_TIMEBOX: 720h
+      # GoTrue applies its rate limits only to requests carrying this header, one allowance per value. The gateway writes
+      # it from the visitor's address (scripts/install-nginx.conf); browsers sign in through the gateway.
+      GOTRUE_RATE_LIMIT_HEADER: X-Real-IP
     healthcheck:
       test: [CMD, wget, -q, --spider, http://127.0.0.1:9999/health]
       interval: 5s
       timeout: 5s
       retries: 60
   rest:
-    image: postgrest/postgrest:v14.18
+    image: postgrest/postgrest:v14.18@sha256:c7cd7e265a85b05248abf53f4473fcec7e327c282d0bd0cf60f1551996d09fcf
     restart: unless-stopped
     depends_on:
       db: {condition: service_healthy}
@@ -69,7 +77,7 @@ services:
       PGRST_DB_ANON_ROLE: anon
       PGRST_JWT_SECRET: ${SUPABASE_JWT_SECRET}
   storage:
-    image: supabase/storage-api:v1.89.12
+    image: supabase/storage-api:v1.89.12@sha256:8526956cb462e9f7d392e9848ec77133b2769982ed614e9753cc687e8e4339a6
     restart: unless-stopped
     depends_on:
       db: {condition: service_healthy}
@@ -95,15 +103,20 @@ services:
       timeout: 5s
       retries: 60
   mail:
-    image: axllent/mailpit:v1.27.10
+    image: axllent/mailpit:v1.27.10@sha256:b1f1be18af530d939a11ee8820b379e0c88eeec204d904bfad68862adced3a5a
     restart: unless-stopped
     ports: [127.0.0.1:8025:8025]
   gateway:
-    image: nginx:1.28.0-alpine
+    image: nginx:1.28.0-alpine@sha256:30f1c0d78e0ad60901648be663a710bdadf19e4c10ac6782c235200619158284
     restart: unless-stopped
     ports: [127.0.0.1:3000:8080]
+    # Before nginx starts, write whom it believes when a request names its visitor: only the install network's bridge
+    # gateway, read from this container's routes each start, so it follows the network with no setting to keep.
+    entrypoint: [sh, -ec, 'sh /gtmworks/gateway-real-ip.sh /etc/nginx/gtmworks-real-ip.conf; exec /docker-entrypoint.sh "$$@"', gateway]
+    command: [nginx, -g, daemon off;]
     volumes:
       - ./scripts/install-nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./scripts/install-gateway-real-ip.sh:/gtmworks/gateway-real-ip.sh:ro
   hermes:
     # The agent engine ships inside the install (ADR 0010). Bump it here, by tag and digest, together with the version
     # the driver accepts (lib/hermes.mjs); tests/bundled-hermes.test.mjs and the install test check both.

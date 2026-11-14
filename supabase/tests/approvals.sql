@@ -1,20 +1,21 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(27);
+select plan(28);
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
-select lives_ok($$select public.save_approval_step('10000000-0000-0000-0000-000000000001',null,'مراجعة ثانية',2,'20000000-0000-0000-0000-000000000003',null)$$,'add second step');
+select throws_ok($$select public.save_approval_step('10000000-0000-0000-0000-000000000001',null,'مراجعة ثانية',2,'20000000-0000-0000-0000-000000000003',null)$$,'P0001','invalid approver','a Contributor cannot be named an approver');
+select lives_ok($$select public.save_approval_step('10000000-0000-0000-0000-000000000001',null,'مراجعة ثانية',2,'20000000-0000-0000-0000-000000000002',null)$$,'add second step');
 select lives_ok($$select public.move_work_card('10000000-0000-0000-0000-000000000001',1,(select id from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' and kind='review'))$$,'submit for review');
 select is((select next_actor from public.work_cards where id=1),'20000000-0000-0000-0000-000000000001'::uuid,'first step owns card');
 select throws_ok($$select public.decide_approval('10000000-0000-0000-0000-000000000001',1,'reject','  ',true,false)$$,'P0001','reason and marked part required','empty reason refused');
 select lives_ok($$select public.decide_approval('10000000-0000-0000-0000-000000000001',1,'approve')$$,'approve first step');
-select is((select next_actor from public.work_cards where id=1),'20000000-0000-0000-0000-000000000003'::uuid,'second step owns card');
+select is((select next_actor from public.work_cards where id=1),'20000000-0000-0000-0000-000000000002'::uuid,'second step owns card');
 select throws_ok($$select public.decide_approval('10000000-0000-0000-0000-000000000001',1,'approve')$$,'P0001','not current approver','other member refused');
 select set_config('request.jwt.claim.sub','30000000-0000-0000-0000-000000000001',true);
 select throws_ok($$select public.decide_approval('10000000-0000-0000-0000-000000000001',1,'approve')$$,'P0001','not current approver','contributor refused');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
 select throws_ok($$select public.decide_approval('10000000-0000-0000-0000-000000000001',1,'reject','سبب',true,false)$$,'P0001','not current approver','viewer refused');
-select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
 select lives_ok($$select public.decide_approval('10000000-0000-0000-0000-000000000001',1,'approve')$$,'approve final step');
 select is((select s.name from public.work_cards w join public.work_stages s on s.id=w.stage_id where w.id=1),'مجدول للنشر','dated card scheduled');
 select is((select count(*)::int from public.work_activity where card_id=1 and action='card_changed' and details->>'new_name'='معتمد'),1,'card passed through approved');
@@ -32,7 +33,7 @@ select public.decide_approval('10000000-0000-0000-0000-000000000001',2,'reject',
 select is((select s.name from public.work_cards w join public.work_stages s on s.id=w.stage_id where w.id=2),'كتابة','caption alone returns to writing');
 select public.move_work_card('10000000-0000-0000-0000-000000000001',2,(select id from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' and kind='review'));
 select public.remove_approval_step('10000000-0000-0000-0000-000000000001',(select id from public.approval_steps where company_id='10000000-0000-0000-0000-000000000001' and position=1));
-select is((select next_actor from public.work_cards where id=2),'20000000-0000-0000-0000-000000000003'::uuid,'removed step skipped');
+select is((select next_actor from public.work_cards where id=2),'20000000-0000-0000-0000-000000000002'::uuid,'removed step skipped');
 select is((select count(*)::int from public.work_activity where card_id=2 and action='approval_skipped'),1,'skip audited');
 
 select is((select count(*)::int from public.approval_steps where company_id='10000000-0000-0000-0000-000000000001' and position=1 and removed_at is not null),1,'removed step retained as history');
@@ -40,13 +41,13 @@ select throws_ok($$select public.save_approval_step('10000000-0000-0000-0000-000
 select throws_ok($$select public.remove_approval_step('10000000-0000-0000-0000-000000000001',(select id from public.approval_steps where company_id='10000000-0000-0000-0000-000000000001' and position=1))$$,'P0001','step not found','removed step cannot be removed twice');
 select throws_ok($$select public.remove_approval_step('10000000-0000-0000-0000-000000000001',(select id from public.approval_steps where company_id='10000000-0000-0000-0000-000000000001' and position=2))$$,'P0001','one step required','last active step cannot be removed');
 select public.move_work_card('10000000-0000-0000-0000-000000000001',3,(select id from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' and kind='review'));
-select is((select next_actor from public.work_cards where id=3),'20000000-0000-0000-0000-000000000003'::uuid,'new review skips removed step');
+select is((select next_actor from public.work_cards where id=3),'20000000-0000-0000-0000-000000000002'::uuid,'new review skips removed step');
 
 select public.save_approval_step('10000000-0000-0000-0000-000000000001',null,'خطوة محذوفة',3,null,'manager');
 select public.save_approval_step('10000000-0000-0000-0000-000000000001',null,'خطوة أخيرة',4,null,'owner');
 select public.remove_approval_step('10000000-0000-0000-0000-000000000001',(select id from public.approval_steps where company_id='10000000-0000-0000-0000-000000000001' and position=3));
-select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
-select lives_ok($$select public.decide_approval('10000000-0000-0000-0000-000000000001',3,'approve')$$,'current reviewer approves after a later step is removed');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select lives_ok($$select public.decide_approval('10000000-0000-0000-0000-000000000001',3,'approve')$$,'the current approver approves after a later step is removed');
 select is((select next_actor from public.work_cards where id=3),'20000000-0000-0000-0000-000000000001'::uuid,'approval advances past removed intermediate step');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 

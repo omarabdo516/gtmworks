@@ -1,6 +1,6 @@
 import { test, expect, type BrowserContext, type Page } from '@playwright/test';
+import { chooseLanguageInSettings } from './choose-language';
 import { execFileSync } from 'node:child_process';
-import { createHmac } from 'node:crypto';
 import { signIn } from './sign-in';
 import { resetFirstRun } from '../scripts/first-run-db.mjs';
 import { idle } from './navigation-measure';
@@ -8,9 +8,8 @@ import { languages, widths, screens, snapshotName } from './visual-screens.mjs';
 
 // Every listed screen is compared with its approved image (tests/visual.spec.ts-snapshots) in both languages at 1440 and 390.
 // This project runs first on the freshly seeded database (see playwright.config.ts). It leaves the data as the seed built it,
-// except the opened-card record that opening a card always makes, and it restores the owner's language and sign-in factor.
+// except the opened-card record that opening a card always makes, and it restores the owner's language.
 type Language = 'en' | 'ar';
-const owner = '20000000-0000-0000-0000-000000000001';
 const rsLearning = '10000000-0000-0000-0000-000000000001';
 const seedAuthor = '30000000-0000-0000-0000-000000000001';
 const contextOptions = {
@@ -36,22 +35,8 @@ function fixPublishingDates() {
   end $$;`);
 }
 
-function totp(secret: string) {
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-  let bits = '';
-  for (const c of secret.replace(/=+$/, '').toUpperCase()) bits += alphabet.indexOf(c).toString(2).padStart(5, '0');
-  const key = Buffer.from(bits.match(/.{8}/g)?.map(b => parseInt(b, 2)) || []);
-  const counter = Buffer.alloc(8);
-  counter.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30000)));
-  const hash = createHmac('sha1', key).update(counter).digest();
-  const offset = hash[19] & 15;
-  return String((hash.readUInt32BE(offset) & 0x7fffffff) % 1000000).padStart(6, '0');
-}
-
 async function chooseLanguage(page: Page, language: Language) {
-  await page.goto('/c/rs-learning/settings');
-  await page.locator('select[name=language]').selectOption(language);
-  await page.locator('form').filter({ has: page.locator('select[name=language]') }).getByRole('button').click();
+  await chooseLanguageInSettings(page,language);
   await expect(page.locator('html')).toHaveAttribute('lang', language);
   await expect(page.locator('html')).toHaveAttribute('dir', language === 'ar' ? 'rtl' : 'ltr');
 }
@@ -88,13 +73,15 @@ async function fixClockText(page: Page) {
 
 const readyBy: Record<string, string> = {
   home: '.home-dashboard',
+  chat: '.chat',
   board: '.board',
   card: '.modal',
   calendar: '.calendar',
   approvals: '.approvals',
   members: '.member-row',
   'work-settings': '.settings-row',
-  agencies: '.company-card',
+  numbers: '.numbers-page',
+  log: '.log-page',
 };
 
 async function showScreen(page: Page, screen: (typeof screens)[number], width: number) {
@@ -150,21 +137,12 @@ test.describe('signed-in screens', () => {
   let current: Language | null = null;
   test.beforeAll(async ({ browser }) => {
     test.setTimeout(240000);
-    // A clean slate if an earlier run stopped half way: no authenticator, the seeded dates, English.
-    query(`delete from auth.mfa_factors where user_id='${owner}'`);
+    // A clean slate if an earlier run stopped half way: the seeded dates, English.
     fixPublishingDates();
     context = await browser.newContext(contextOptions);
     page = await context.newPage();
+    // Omar is the Owner of every seeded company, so the screens show what an Owner sees.
     await signIn(page, 'omar@example.com', '/c/rs-learning/settings');
-    // The agency list shows companies only after two-step verification; the factor is removed again in afterAll.
-    await page.goto('/all-brands');
-    await expect(page.getByRole('heading', { name: 'Two-step verification' })).toBeVisible();
-    await page.getByRole('button', { name: 'Set up authenticator' }).click();
-    const secret = await page.locator('code').textContent();
-    expect(secret).toBeTruthy();
-    await page.getByLabel('Verification code').fill(totp(secret!));
-    await page.getByRole('button', { name: 'Verify', exact: true }).click();
-    await expect(page.locator('.company-card')).toHaveCount(3);
     await chooseLanguage(page, 'en');
     current = 'en';
     // The sidebar lists recently opened cards and opening one is recorded. Open card 1 now so that every screen,
@@ -179,7 +157,6 @@ test.describe('signed-in screens', () => {
     try {
       if (page && current !== 'en') await chooseLanguage(page, 'en');
     } finally {
-      query(`delete from auth.mfa_factors where user_id='${owner}'`);
       await context?.close();
     }
   });

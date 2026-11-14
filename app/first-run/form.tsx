@@ -5,7 +5,7 @@ import { setupCodeFromHash } from '@/lib/setup-link.mjs';
 import { Button } from '@/components/paperclip/ui/button';
 import { Input } from '@/components/paperclip/ui/input';
 const onHashChange=(changed:()=>void)=>{ window.addEventListener('hashchange',changed); return ()=>window.removeEventListener('hashchange',changed); };
-export default function FirstRunForm({invalid}:{invalid:boolean}) {
+export default function FirstRunForm({invalid}:{invalid?:'setupInvalid'|'passwordTooShort'|'passwordsDoNotMatch'}) {
  const {t,language}=useI18n();
  const [pending,setPending]=useState(false);
  // The setup link's code, from its fragment (issue #50); null on the server, which never sees the fragment.
@@ -31,8 +31,11 @@ export default function FirstRunForm({invalid}:{invalid:boolean}) {
   <input type="hidden" name="code" value={code}/>
   <label className="block text-xs text-muted-foreground">{t('yourName')}<Input className="field max-md:min-h-11" dir="auto" name="name" autoComplete="name" required maxLength={120}/></label>
   <label className="block text-xs text-muted-foreground">{t('email')}<Input className="field max-md:min-h-11" dir="ltr" name="email" type="email" autoComplete="email" required maxLength={254}/></label>
+  {/* The length rule is checked on the server, so its message is shown in the page's language rather than the browser's. */}
+  <label className="block text-xs text-muted-foreground">{t('password')}<Input className="field max-md:min-h-11" dir="ltr" name="password" type="password" autoComplete="new-password" required/></label>
+  <label className="block text-xs text-muted-foreground">{t('confirmPassword')}<Input className="field max-md:min-h-11" dir="ltr" name="confirm" type="password" autoComplete="new-password" required/></label>
   <label className="block text-xs text-muted-foreground">{t('firstCompanyName')}<Input className="field max-md:min-h-11" dir="auto" name="company" autoComplete="organization" required maxLength={120}/></label>
-  {invalid && <p role="alert">{t('setupInvalid')}</p>}
-  <Button className="w-full max-md:min-h-11" type="submit" disabled={pending}>{t('createAndSendLink')}</Button>
+  {invalid && <p role="alert">{t(invalid)}</p>}
+  <Button className="w-full max-md:min-h-11" type="submit" disabled={pending}>{t('createAndSignIn')}</Button>
  </form>;
 }

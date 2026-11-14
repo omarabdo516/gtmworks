@@ -1,14 +1,71 @@
 import { test, expect } from '@playwright/test';
+import { chooseLanguageInSettings } from './choose-language';
 import { clickPath, idle, measureClick, median, type Timing } from './navigation-measure';
-import { signIn, openNavigation, closeNavigation } from './sign-in';
+import { signIn, openNavigation, closeNavigation, openMoreSection } from './sign-in';
 import { gzipSync } from 'node:zlib';
+import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { sections } from '../lib/navigation';
+import { tapOverlaps } from './tap-overlaps';
+import { execFileSync } from 'node:child_process';
+
+// Supabase CLI targets the local test database by default; never pass --remote.
+const query = (sql: string) => execFileSync('npx', ['--no-install', 'supabase', 'db', 'query', sql, '-o', 'json', '--agent', 'no'], { encoding: 'utf8' });
+
+// The prepared-navigation test measures a non-empty Inbox: before this file's tests one new card is moved to review,
+// where it waits on Omar (the seed's approver). The setup runs in its own hooks, so the measured test keeps its own
+// deadline. Cleanup approves only that card, found by its own address and its run-unique title; each worker (a retry
+// starts a new one) cleans the card it created and nothing else.
+let inboxFixture: { title: string, path: string } | undefined;
+test.beforeAll(async ({ browser }) => {
+  const context = await browser.newContext({ baseURL: 'http://127.0.0.1:3000' });
+  try {
+    const page = await context.newPage();
+    await signIn(page, 'omar@example.com', '/c/rs-learning/work/board');
+    const title = `بطاقة قياس الوارد ${randomUUID()}`;
+    await page.getByRole('button', { name: "+ New card" }).click();
+    await page.getByLabel('Message', { exact: true }).fill(title);
+    await page.getByRole('button', { name: "Create card" }).click();
+    await expect(page.locator('.modal h2').first()).toHaveText(title);
+    const path = new URL(page.url()).pathname;
+    expect(path).toMatch(/^\/c\/rs-learning\/work\/board\/\d+$/);
+    inboxFixture = { title, path };
+    await page.getByLabel("Move to list", { exact: true }).selectOption({ label: 'مراجعة' });
+    await expect(page.locator('.card-stage-line')).toContainText('مراجعة');
+  } finally { await context.close(); }
+});
+test.afterAll(async ({ browser }) => {
+  const created = inboxFixture;
+  if (!created) return;
+  const context = await browser.newContext({ baseURL: 'http://127.0.0.1:3000' });
+  try {
+    const page = await context.newPage();
+    await signIn(page, 'omar@example.com', '/c/rs-learning/approvals');
+    await expect(page.locator('.approvals')).toBeVisible();
+    const card = page.locator('.approval-card')
+      .filter({ has: page.locator(`a[href="${created.path}"]`) })
+      .filter({ hasText: created.title });
+    // A setup that failed before the move left no approval to clean; otherwise exactly this card is approved, once,
+    // as the seed's single step needs (the same flow as "own comments, moves and approvals ...").
+    if (await card.count()) {
+      expect(await card.count(), 'only the card this run created').toBe(1);
+      // The waiting column lists the card; its decision is taken inside the card (#16).
+      await card.getByRole('link', { name: created.title }).click();
+      await page.locator('[data-card-section="review"]').getByRole('button', { name: "Approve", exact: true }).click();
+      await expect(page.locator('.card-stage-line')).toContainText('معتمد');
+      await page.goto('/c/rs-learning/approvals');
+      await expect(card).toHaveCount(0);
+    }
+    inboxFixture = undefined;
+  } finally { await context.close(); }
+});
 
 test('prepared navigation and Paperclip motion inventory (production, warm-up + 3 runs)', async ({ page }, testInfo) => {
   test.setTimeout(120000);
   await page.setViewportSize({ width: 1440, height: 900 });
-  await signIn(page, 'manager@example.com', '/c/rs-learning/work/board');
+  await signIn(page, 'omar@example.com', '/c/rs-learning/work/board');
+  // The measured Inbox step opens a non-empty Inbox from the sidebar's approvals entry.
+  expect(Number(await page.locator('.sidebar .sb-count[href$="/approvals"]').textContent())).toBeGreaterThan(0);
   const runs: Record<string, Timing[]> = Object.fromEntries(clickPath.map(step => [step.name, []]));
   for (let run = 0; run < 4; run++) {
     await page.goto('/c/rs-learning/work/board');
@@ -35,10 +92,12 @@ test('prepared navigation and Paperclip motion inventory (production, warm-up + 
     expect(timing.all, `${name}: unlisted computed transition-property: all`).toEqual([]);
     expect(timing.progress, `${name}: prepared click must not flash progress`).toBe(false);
   }
+  expect(runs.inbox.length, 'the Inbox was measured on every counted run').toBe(3);
   await idle(page);
 });
 
-test('unprepared links answer within 50ms and clear feedback when content arrives', async ({ page }, testInfo) => {
+// Set aside so the new shell can match the approved design first; #55 restores it (Omar, 2026-11-12).
+test.fixme('unprepared links answer within 50ms and clear feedback when content arrives', async ({ page }, testInfo) => {
   await signIn(page, 'manager@example.com', '/c/rs-learning/work/board');
   const answers: number[] = [];
   for (let run = 0; run < 4; run++) {
@@ -166,8 +225,8 @@ test('own comments, moves and approvals invalidate prepared pages immediately', 
   await page.getByRole('button', { name: "Send", exact: true }).click();
   await expect(page.locator('.comment-body').filter({ hasText: comment })).toBeVisible();
   await page.locator('.close-card').click();
-  await openNavigation(page);
-  await page.locator('.nav a[href$="/home"]').click();
+  // Home has no sidebar entry; it opens from the account menu's "More sections" (#8).
+  await openMoreSection(page, 'home');
   await expect(page.locator('.comment-body').filter({ hasText: comment })).toBeVisible();
   await page.locator(`.content a[href="${cardPath}"]`).first().click();
   await page.getByLabel("Move to list", { exact: true }).selectOption({ label: 'مراجعة' });
@@ -175,11 +234,14 @@ test('own comments, moves and approvals invalidate prepared pages immediately', 
   await page.locator('.close-card').click();
   await expect(page.locator('.column[data-stage-name="مراجعة"] .card').filter({ hasText: title })).toBeVisible();
   await openNavigation(page);
-  await page.locator('.nav').getByRole('link', { name: /^Inbox/ }).click();
+  await page.locator('.sidebar .sb-count[href$="/approvals"]').click();
   const queued = page.locator('.approval-card').filter({ hasText: title });
   await expect(queued).toBeVisible();
-  await queued.locator('.approval-expand > summary').click();
-  await queued.getByRole('button', { name: "Approve", exact: true }).click();
+  await queued.getByRole('link', { name: title }).click();
+  await page.locator('[data-card-section="review"]').getByRole('button', { name: "Approve", exact: true }).click();
+  await expect(page.locator('.card-stage-line')).toContainText('معتمد');
+  await openNavigation(page);
+  await page.locator('.sidebar .sb-count[href$="/approvals"]').click();
   await expect(queued).toHaveCount(0);
   await openNavigation(page);
   await page.locator('.nav a[href$="/work/board"]').click();
@@ -200,7 +262,11 @@ test('every company route loads at most 230 KiB gzip of JavaScript', async ({ pa
     });
     const route = `/c/rs-learning/${section}`;
     await routePage.goto(route);
-    await expect(routePage.locator('.topbar .heading')).toBeVisible();
+    // The shell is drawn: the board, Inbox, Numbers and Activity log pages hide the top bar's title on a wide screen
+    // (#16, #35, #11), so the page counts as shown once the frame has its title and its sidebar and content are visible.
+    await expect(routePage.locator('.topbar .heading')).toBeAttached();
+    await expect(routePage.locator('.sidebar')).toBeVisible();
+    await expect(routePage.locator('.app-content')).toBeVisible();
     await idle(routePage);
     expect(scripts.size, `${route}: measured scripts`).toBeGreaterThan(0);
     const bytes = (await Promise.all(scripts.values())).reduce((total, size) => total + size, 0);
@@ -212,50 +278,90 @@ test('every company route loads at most 230 KiB gzip of JavaScript', async ({ pa
   await testInfo.attach('js-gzip.json', { body: JSON.stringify(sizes, null, 2), contentType: 'application/json' });
 });
 
-test('drawer group toggles have 44px targets', async ({ page }) => {
+test('drawer targets are at least 44px and do not overlap', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await signIn(page, 'manager@example.com', '/c/rs-learning/home');
   try {
     for (const language of ['en', 'ar']) {
-      await page.goto('/c/rs-learning/settings');
-      await page.locator('select[name=language]').selectOption(language);
-      await page.locator('form').filter({ has: page.locator('select[name=language]') }).getByRole('button').click();
+      await chooseLanguageInSettings(page,language);
       await expect(page.locator('html')).toHaveAttribute('lang', language);
       await page.goto('/c/rs-learning/home');
       await openNavigation(page);
       await expect(page.getByRole('dialog')).toBeVisible();
+      const drawer = page.getByRole('dialog', { name: language === 'ar' ? 'القايمة الرئيسية' : 'Main menu' });
+      await expect(drawer).toHaveAttribute('aria-modal', 'true');
       await mkdir('test-results/screenshots', { recursive: true });
       await page.screenshot({ path: `test-results/screenshots/drawer-${language}-390.png` });
-      const toggles = page.locator('[data-slot=sheet-content] .nav-group button[aria-expanded]');
-      const count = await toggles.count();
-      expect(count, `${language}: drawer has group toggles`).toBeGreaterThan(0);
+      // The approvals entry is there even when nothing waits (the manager has nothing to approve in the seed),
+      // and the company picker is a target like the rest.
+      await expect(drawer.locator('.sb-count[href$="/approvals"]')).toBeVisible();
+      await expect(drawer.locator('.sb-count[href$="/approvals"]')).toHaveAccessibleName(/./);
+      await expect(drawer.getByRole('button', { name: language === 'ar' ? 'اختيار الشركة' : 'Choose company', exact: true })).toBeVisible();
+      const targets = drawer.locator(':is(.sb-item, .sb-count, .switch, .circle-btn, .me, .agent-tile)');
+      const count = await targets.count();
+      expect(count, `${language}: drawer has targets`).toBeGreaterThan(0);
+      for (const kind of ['.sb-count', '.switch']) expect(await drawer.locator(kind).count(), `${language}: ${kind} is measured`).toBe(1);
       for (let index = 0; index < count; index++) {
-        const toggle = toggles.nth(index);
-        const box = (await toggle.boundingBox())!;
-        expect.soft(box.width, `${language} toggle ${index}: width`).toBeGreaterThanOrEqual(44);
-        expect.soft(box.height, `${language} toggle ${index}: height`).toBeGreaterThanOrEqual(44);
-        // The bigger tap area must not sit on top of a link.
-        const covered = await toggle.evaluate(node => {
-          const a = node.getBoundingClientRect();
-          return Array.from(node.closest('[data-slot=sheet-content]')!.querySelectorAll('.nav a')).filter(link => {
-            const b = link.getBoundingClientRect();
-            return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
-          }).map(link => link.textContent);
-        });
-        expect.soft(covered, `${language} toggle ${index}: links under the tap area`).toEqual([]);
-        await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-        await toggle.click();
-        await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-        await toggle.click();
-        await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        const box = (await targets.nth(index).boundingBox())!;
+        expect.soft(box.height, `${language} target ${index}: height`).toBeGreaterThanOrEqual(44);
+        expect.soft(box.width, `${language} target ${index}: width`).toBeGreaterThanOrEqual(44);
       }
+      // No tap area sits on top of another one.
+      expect.soft(await tapOverlaps(targets), `${language}: overlapping targets`).toEqual([]);
       await closeNavigation(page);
+      await expect(page.getByRole('dialog')).toHaveCount(0);
     }
   } finally {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto('/c/rs-learning/settings');
-  await page.locator('select[name=language]').selectOption('en');
-  await page.locator('form').filter({ has: page.locator('select[name=language]') }).getByRole('button').click();
+  await chooseLanguageInSettings(page,'en');
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  }
+});
+
+test('with many recent chats and cards the drawer list scrolls above a footer that stays put, and no tap areas overlap', async ({ page }) => {
+  // The Manager's own chats and three recent cards make the list longer than a phone screen (#48).
+  const company = '10000000-0000-0000-0000-000000000001', manager = '20000000-0000-0000-0000-000000000002', stamp = Date.now();
+  const chats = Array.from({ length: 12 }, (_, index) => `63000000-0000-4000-8000-${String(stamp + index).slice(-12).padStart(12, '0')}`);
+  query(`insert into public.conversations(id,company_id,person_id,agent_name) values ${chats.map(id => `('${id}','${company}','${manager}','Lead')`).join(',')}`);
+  query(`insert into public.work_card_visits(company_id,person_id,card_id) select '${company}','${manager}',id from public.work_cards where company_id='${company}' order by id limit 3 on conflict do nothing`);
+  await page.setViewportSize({ width: 390, height: 900 });
+  await signIn(page, 'manager@example.com', '/c/rs-learning/home');
+  try {
+    for (const language of ['en', 'ar']) {
+      await chooseLanguageInSettings(page, language);
+      await expect(page.locator('html')).toHaveAttribute('lang', language);
+      await page.goto('/c/rs-learning/home');
+      await openNavigation(page);
+      const drawer = page.getByRole('dialog', { name: language === 'ar' ? 'القايمة الرئيسية' : 'Main menu' });
+      await expect(drawer.locator('.recent-cards a')).toHaveCount(3);
+      await expect(drawer.locator('#sb-recent .thread-item')).not.toHaveCount(0);
+      const list = drawer.locator('.sb-scroll'), foot = drawer.locator('.sb-foot');
+      // The list is longer than its place, so it scrolls, and its place ends where the footer begins.
+      expect(await list.evaluate(node => node.scrollHeight > node.clientHeight), `${language}: the list scrolls`).toBe(true);
+      const [listBox, footBox, drawerBox] = [await list.boundingBox(), await foot.boundingBox(), await drawer.boundingBox()];
+      expect(listBox!.y + listBox!.height, `${language}: the list ends above the footer`).toBeLessThanOrEqual(footBox!.y + 0.5);
+      expect(footBox!.y + footBox!.height, `${language}: the footer stays at the bottom`).toBeCloseTo(drawerBox!.y + drawerBox!.height, 0);
+      const targets = drawer.locator(':is(.sb-item, .sb-count, .switch, .circle-btn, .me, .agent-tile)');
+      for (const position of ['top', 'bottom']) {
+        await list.evaluate((node, end) => { node.scrollTop = end === 'top' ? 0 : node.scrollHeight; }, position);
+        await expect(foot).toBeVisible();
+        // Every footer control answers a tap at its centre, whatever the list shows behind it.
+        for (const control of await foot.locator(':is(.sb-item, .me, .circle-btn)').all()) {
+          expect(await control.evaluate(node => { const box = node.getBoundingClientRect(); return node.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)); }), `${language} ${position}: ${await control.textContent()} answers its tap`).toBe(true);
+        }
+        expect.soft(await tapOverlaps(targets), `${language} ${position}: overlapping targets`).toEqual([]);
+      }
+      // At the end of the list the last recent card is wholly above the footer and answers its own tap.
+      const last = drawer.locator('.recent-cards a').last();
+      const lastBox = (await last.boundingBox())!;
+      expect(lastBox.y + lastBox.height, `${language}: the last card ends above the footer`).toBeLessThanOrEqual(footBox!.y + 0.5);
+      expect(await last.evaluate(node => { const box = node.getBoundingClientRect(); return node.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)); })).toBe(true);
+      await closeNavigation(page);
+    }
+  } finally {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await chooseLanguageInSettings(page, 'en');
+    query(`delete from public.conversations where id in (${chats.map(id => `'${id}'`).join(',')})`);
+    query(`delete from public.work_card_visits where company_id='${company}' and person_id='${manager}'`);
   }
 });

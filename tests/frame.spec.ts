@@ -1,47 +1,69 @@
 import { test, expect } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { signIn, openNavigation, closeNavigation, chooseCompany } from './sign-in';
+import { signIn, openNavigation, closeNavigation, chooseCompany, openMoreSection } from './sign-in';
 import { idle } from './navigation-measure';
 import { i18n } from '../lib/i18n.mjs';
 import { sections } from '../lib/navigation';
+import { roleAgents } from '../lib/role-agents';
 
 const quote=(sql:string|number)=>`'${String(sql).replaceAll("'","''")}'`;
 
-const groups=["Work","Results","Team","Agents"];
-const labels=["Search","Home","Inbox","Work","Projects","Routines","Campaigns","Library","Publishing","Sales and customers","Performance","Strategy and learning","Agents","Skills","Connections","Activity log","Company chat","Account manager","Writer","Designer","Critic"];
+// The approved reference's sidebar (#284): four entries, then the Agents with Lead first, then recent chats.
+const labels=["Chats","Marketing board","Numbers","Activity log"];
 async function navLabels(page:import('@playwright/test').Page) {
  await openNavigation(page);
- return page.locator('.nav a').evaluateAll(links=>links.filter(link=>!link.closest('.recent-cards')).map(link=>Array.from(link.childNodes).filter(node=>node.nodeType===Node.TEXT_NODE).map(node=>node.textContent).join('').trim()));
+ return page.locator('.sidebar .sb-nav .sb-item').allInnerTexts();
 }
-for(const width of [1440,390]) test(`company frame order, placeholders, LTR and shared agent identity at ${width}px`,async({page})=>{
+for(const width of [1440,390]) test(`company frame order, placeholders, LTR and every section inside the new shell at ${width}px`,async({page})=>{
  test.setTimeout(180000);
  await page.setViewportSize({width,height:900});
  await signIn(page,'manager@example.com','/c/rs-learning/home');
+ // Home keeps its four role agents (not the sidebar's real Agents): their names in order, four distinct faces in
+ // their own colours, and each says what it is working on (a card link) or that it is not working now.
+ const roles=page.locator('.home-agents article');
+ await expect(roles.locator('h2')).toHaveText(["Account manager","Writer","Designer","Critic"]);
+ const faces=await roles.evaluateAll(rows=>rows.map(row=>({icon:row.querySelector('h2 .agent-face')?.innerHTML,color:row.querySelector('h2 .agent-face > g')?.getAttribute('fill')})));
+ expect(new Set(faces.map(face=>face.icon)).size).toBe(4);
+ expect(faces.map(face=>face.color)).toEqual(roleAgents.map(role=>role.color));
+ for(const [index,status] of (await roles.evaluateAll(rows=>rows.map(row=>[...row.querySelectorAll(':scope > p, :scope > a')].map(node=>({tag:node.tagName,text:node.textContent?.trim(),href:node.getAttribute('href')}))))).entries()) {
+  expect(status,`role ${index}: one status`).toHaveLength(1);
+  if(status[0].tag==='A') { expect(status[0].href).toMatch(/^\/c\/rs-learning\/work\/board\/\d+$/); expect(status[0].text).toBeTruthy(); }
+  else expect(status[0].text).toBe("Not working now");
+ }
+ await expect(roles.filter({has:page.getByRole('heading',{name:"Writer",exact:true})}).getByRole('link')).toHaveAttribute('href',/\/work\/board\/\d+$/);
  await openNavigation(page);
  await expect(page.locator('.sidebar .switch')).toHaveCount(1);
  await expect(page.locator('.topbar')).toHaveText("Home");
  await expect(page.locator('.topbar .mobile-menu')).toHaveCount(1);
  expect(await navLabels(page)).toEqual(labels);
- expect(await page.locator('.nav-group:not(.recent-cards) h2').allTextContents()).toEqual(groups);
- const agents=await page.locator('.nav .role-agent').evaluateAll(rows=>rows.map(row=>({name:row.textContent,icon:row.querySelector('.agent-face')?.innerHTML,color:row.querySelector('.agent-face > g')?.getAttribute('fill')})));
- const home=await page.locator('.home-agents .role-agent').evaluateAll(rows=>rows.map(row=>({name:row.querySelector('h2')?.textContent,icon:row.querySelector('.agent-face')?.innerHTML,color:row.querySelector('.agent-face > g')?.getAttribute('fill')})));
- expect(home).toEqual(agents);
- expect(new Set(agents.map(a=>a.icon)).size).toBe(4);
- expect(new Set(agents.map(a=>a.color)).size).toBe(4);
- const layout=await page.locator('.sidebar').evaluate(sidebar=>{
-  const nav=sidebar.querySelector('.nav')!,active=nav.querySelector('.active')!,icon=active.querySelector('.icon')!;
-  const title=Array.from(active.childNodes).find(node=>node.nodeType===Node.TEXT_NODE)!;
-  const range=document.createRange();range.selectNode(title);
-  return {left:sidebar.getBoundingClientRect().left,dir:getComputedStyle(nav).direction,flex:getComputedStyle(nav).flexDirection,marker:getComputedStyle(active).borderInlineStartWidth,iconLeft:icon.getBoundingClientRect().right<=range.getBoundingClientRect().left};
- });
- expect(layout).toMatchObject({left:0,dir:'ltr',flex:'column',marker:'0px',iconLeft:true});
+ await expect(page.locator('.sidebar .sb-label').first()).toHaveText("Agents");
+ // Home has no sidebar entry since Numbers opens its own page (#35): Home is reached from the account menu's More
+ // sections, so no entry is marked here.
+ await expect(page.locator('.sidebar .sb-nav a[aria-current=page]')).toHaveCount(0);
  await closeNavigation(page);
  await page.screenshot({path:`test-results/screenshots/frame-home-${width}.png`,fullPage:true});
+ // The visited section's entry is marked: Numbers on its own page.
+ await page.goto('/c/rs-learning/numbers');
+ await openNavigation(page);
+ await expect(page.locator('.sidebar .sb-nav a[aria-current=page]')).toHaveText("Numbers");
+ const layout=await page.locator('.sidebar').evaluate(sidebar=>{
+  const active=sidebar.querySelector('.sb-nav [aria-current=page]')!,icon=active.querySelector('svg')!,label=active.querySelector('.od-fill')!;
+  return {left:sidebar.getBoundingClientRect().left,dir:getComputedStyle(sidebar).direction,marker:getComputedStyle(active).borderInlineStartWidth,iconLeft:icon.getBoundingClientRect().right<=label.getBoundingClientRect().left};
+ });
+ expect(layout).toMatchObject({left:0,dir:'ltr',marker:'0px',iconLeft:true});
+ await closeNavigation(page);
  const routes=Object.keys(sections).filter(path=>path!=='work/new');
  for(const path of routes) {
   await page.goto(`/c/rs-learning/${path}`);
+  // Settings is the full-window overlay (#26) over the company's frame: the frame is there, inert, behind it.
+  if(path==='settings') {
+   await expect(page.getByRole('dialog',{name:i18n().t('settings')})).toBeVisible();
+   await expect(page.locator('[inert] .sidebar .sb-nav .sb-item')).toHaveText(labels);
+   continue;
+  }
   expect(await navLabels(page),path).toEqual(labels);
+  await closeNavigation(page);
   const leaf={'settings/members':'members','settings/work':'workSettings','settings/agents':'agents'}[path as string];
   if(leaf) {
    const crumbs=page.locator('.topbar [data-slot="breadcrumb"] li:not([role="presentation"])');
@@ -51,38 +73,55 @@ for(const width of [1440,390]) test(`company frame order, placeholders, LTR and 
    await expect(crumbs.nth(1).locator('a'),path).toHaveAttribute('href','/c/rs-learning/settings');
   } else await expect(page.locator('.topbar'),path).toHaveText(i18n().t(sections[path]));
  }
- const placeholders=[['recurring',"No routines yet"],['skills',"No skills yet"],['connections',"No connections yet"],['history',"No activity log yet"],['search',"Search is not available yet"]];
+ // Sections without a sidebar entry still open, by their address, inside the same shell.
+ const placeholders=[['recurring',"No routines yet"],['skills',"No skills yet"],['connections',"No connections yet"],['search',"Search is not available yet"],['history',"No activity log yet"]];
  for(const [path,text] of placeholders) {
-  await openNavigation(page);
-  await page.locator(`.nav a[href$="/${path}"]`).click();
+  await page.goto(`/c/rs-learning/${path}`);
   await expect(page.locator('.content .empty')).toHaveText(text);
- }
- for(const name of ["Company chat","Account manager","Writer","Designer","Critic"]) {
-  await openNavigation(page);
-  await page.locator('.nav').getByRole('link',{name,exact:true}).click();
-  await expect(page).toHaveURL(/\/agents$/);
+  expect(await navLabels(page),path).toEqual(labels);
+  await closeNavigation(page);
  }
  await openNavigation(page);
- await page.locator('.sidebar-bottom').getByRole('link',{name:"Settings",exact:true}).click();
- await expect(page).toHaveURL(/\/settings$/);
+ // Activity log opens the Company's log page (#11); the old placeholder address is checked with the others above.
+ await page.locator('.sidebar .sb-nav').getByRole('link',{name:"Activity log",exact:true}).click();
+ await expect(page).toHaveURL(/\/c\/rs-learning\/log$/);
+ await expect(page.getByRole('main').getByRole('heading',{level:1,name:"Activity log",exact:true})).toBeVisible();
  await openNavigation(page);
- // New opens the conversation composer over the page; a company member is told why they cannot chat yet (#190).
- await page.locator('.nav').getByRole('button',{name:"New",exact:true}).click();
- await expect(page.getByRole('dialog',{name:"New conversation"}).getByRole('note')).toBeVisible();
- await page.keyboard.press('Escape');
- await expect(page.getByRole('dialog',{name:"New conversation"})).toHaveCount(0);
+ await expect(page.locator('.sidebar .sb-nav a[aria-current=page]')).toHaveText("Activity log");
  await closeNavigation(page);
+ await openNavigation(page);
+ await page.locator('.sidebar .sb-nav').getByRole('link',{name:"Marketing board",exact:true}).click();
+ await expect(page).toHaveURL(/\/work\/board$/);
+ await openNavigation(page);
+ await page.getByRole('button',{name:"Account menu",exact:true}).click();
+ await page.getByRole('menu').getByRole('menuitem',{name:/^Settings/}).click();
+ await expect(page).toHaveURL(/\/settings$/);
+ // Settings is the full-window overlay (#26): closing it returns to the board, whose sidebar is used next.
+ await page.getByRole('dialog',{name:'Settings'}).getByRole('button',{name:'Close settings and go back'}).click();
+ await expect(page).toHaveURL(/\/work\/board$/);
+ // New chat opens the main Agent's empty Conversation; with no agent attached (the seed), a company member is told
+ // why they cannot chat yet (#190) and has no composer.
+ await openNavigation(page);
+ await page.getByRole('link',{name:"New chat",exact:true}).click();
+ await expect(page).toHaveURL(/\/c\/rs-learning\/chat$/);
+ await expect(page.locator('.chat .empty-chat').getByRole('note')).toHaveText("No agent is attached to this company yet. The company's Owner can attach one on the Agents page."); // Worded for the Owner since #7 removed the Agency (ADR 0012).
+ await expect(page.getByLabel('Message',{exact:true})).toHaveCount(0);
+ await expect(page.locator('.sidebar .sb-nav a[aria-current=page]')).toHaveText("Chats");
  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(width);
 });
 
-test('Viewer has the same navigation, New included, without new card on every company section',async({page})=>{
+test('Viewer has the same navigation, New chat included, without new card on every company section',async({page})=>{
  test.setTimeout(180000);
  await signIn(page,'viewer@example.com','/c/rs-learning/home');
  for(const path of Object.keys(sections)) {
   await page.goto(`/c/rs-learning/${path}`);
-  expect(await navLabels(page),path).toEqual(labels);
-  await expect(page.locator('.nav').getByRole('button',{name:"New",exact:true})).toBeVisible();
-  await expect(page.locator('.nav').getByText("New card",{exact:true})).toHaveCount(0);
+  // Settings is the full-window overlay (#26) over the same frame, which stays behind it, inert.
+  if(path==='settings') await expect(page.locator('[inert] .sidebar .sb-nav .sb-item')).toHaveText(labels);
+  else {
+   expect(await navLabels(page),path).toEqual(labels);
+   await expect(page.locator('.sidebar').getByRole('link',{name:"New chat",exact:true})).toBeVisible();
+  }
+  await expect(page.locator('.sidebar').getByText("New card",{exact:true})).toHaveCount(0);
   await expect(page.getByRole('button',{name:"+ New card",exact:true})).toHaveCount(0);
   await expect(page.getByLabel('Message',{exact:true})).toHaveCount(0);
  }
@@ -110,14 +149,20 @@ test('Home has four parts in order and missing sources show unavailable, never z
  await page.goto('/c/rs-learning/work/list');
  const assigned=page.locator('.table tbody tr').filter({has:page.locator(`a[href="${cardPath}"]`)});
  await expect(assigned.locator('td').last()).toHaveText('وكيل المحتوى');
- await openNavigation(page);
- await page.locator('.nav a[href$="/approvals"]').click();
- await expect(page.locator('.nav a[href$="/approvals"]')).toContainText("Inbox");
+ // The Inbox count sits on the Marketing board entry and opens the Inbox.
+ await page.goto('/c/rs-learning/approvals');
  await expect(page.locator('.approvals')).toBeVisible();
  const count=await page.locator('.approval-card').count();
- await expect(page.locator('.nav a[href$="/approvals"] .badge')).toHaveText(String(count));
+ // The entry stays at zero too, so the Inbox is always one click away.
+ const badge=page.locator('.sidebar .sb-count[href$="/approvals"]');
+ await expect(badge).toHaveText(String(count));
+ await expect(badge).toHaveAccessibleName(count?`${count} things waiting on you`:'Nothing waiting on you');
+ await page.goto('/c/rs-learning/work/board');
  await openNavigation(page);
- await page.locator('.nav a[href$="/home"]').click();
+ await badge.click();
+ await expect(page).toHaveURL(/\/approvals$/);
+ // Home has no sidebar entry; it opens from the account menu's "More sections" (#8).
+ await openMoreSection(page,'home');
  await expect(page.locator('.stats strong').first()).toHaveText(String(count));
 });
 
@@ -158,8 +203,7 @@ test('owner assigns a new Contributor agent through settings, Home follows renam
   await expect(page.locator('.detail-row').filter({hasText:initialName}).filter({hasText:'Agent role: No agent role to Writer'})).toHaveCount(1);
   const [audit]=JSON.parse(query(`select actor_id,after_data->>'agent_role' as agent_role from public.member_audit where company_id=${quote(writer.company_id)} and person_id=${quote(person)} and action='UPDATE' order by id desc limit 1`));
   expect(audit).toEqual({actor_id:'20000000-0000-0000-0000-000000000001',agent_role:'writer'});
-  await openNavigation(page);
-  await page.locator('.nav a[href$="/home"]').click();
+  await openMoreSection(page,'home');
   await expect(current).toHaveAttribute('href',cardPath!);
   await expect(current).toHaveText(title!);
   expect(query(`update public.people set name=${quote(renamed)} where id=${quote(person)} returning name;`)).toContain(renamed);
@@ -171,7 +215,7 @@ test('owner assigns a new Contributor agent through settings, Home follows renam
   await expect(assigned.locator('td').last()).toHaveText(renamed);
   await page.goto('/c/rs-learning/settings/members');
   const renamedMember=page.locator('.member-row').filter({has:page.locator('strong',{hasText:new RegExp(`^${renamed}$`)})});
-  await renamedMember.getByRole('combobox',{name:"Role",exact:true}).selectOption('viewer');
+  await renamedMember.getByRole('combobox',{name:"Member role",exact:true}).selectOption('viewer');
   await renamedMember.getByRole('button',{name:"Save",exact:true}).click();
   await expect(page.getByRole('status')).toHaveText("Change saved.");
   await expect(renamedMember.getByRole('combobox',{name:"Agent role",exact:true})).toHaveCount(0);
@@ -228,41 +272,98 @@ test('recent cards record actual opens only, newest three per person and company
  expect(await hrefs()).toEqual([1,4,3].map(id=>`/c/rs-learning/work/board/${id}`));
 });
 
-test('agency list keeps the current company actions and inbox count in the sidebar',async({page})=>{
+test('the company switcher lists only the person\'s companies, and the old all-companies list is not found',async({page})=>{
+ // Omar is the Owner of all three seeded companies; there is no list of every company beyond them.
  await signIn(page,'omar@example.com','/c/rs-learning/home');
- await chooseCompany(page,'');
- await expect(page).toHaveURL(/\/all-brands$/);
- await expect(page.locator('.nav').getByRole('button',{name:"New",exact:true})).toBeVisible();
- const count=await page.locator('.nav a[href$="/approvals"] .badge').textContent();
  await openNavigation(page);
- await page.locator('.nav a[href$="/approvals"]').click();
+ await page.getByLabel(/Choose company|اختيار الشركة/).click();
+ await expect(page.locator('[data-company-slug]')).toHaveCount(3);
+ await expect(page.locator('[data-company-slug=""]')).toHaveCount(0);
+ await page.keyboard.press('Escape');
+ await expect(page.locator('.sidebar').getByRole('link',{name:"New chat",exact:true})).toBeVisible();
+ const badge=page.locator('.sidebar .sb-count[href$="/approvals"]');
+ const count=Number(await badge.textContent());
+ await page.goto('/c/rs-learning/approvals');
  await expect(page.locator('.approvals')).toBeVisible();
- expect(await page.locator('.approval-card').count()).toBe(Number(count));
- await page.goto('/all-brands');
+ expect(await page.locator('.approval-card').count()).toBe(count);
+ await page.goto('/c/rs-learning/home');
  await openNavigation(page);
- await page.locator('.nav').getByRole('button',{name:"New",exact:true}).click();
- await expect(page.getByRole('dialog',{name:"New conversation"})).toBeVisible();
+ await page.locator('.sidebar').getByRole('link',{name:"New chat",exact:true}).click();
+ await expect(page).toHaveURL(/\/c\/rs-learning\/chat$/);
+ expect((await page.goto('/all-brands'))?.status()).toBe(404);
 });
 
-test('Paperclip mobile navigation hides on deliberate scrolling, returns on upward scrolling and opens the drawer once',async({page})=>{
+test('on a narrow screen the sidebar collapses behind the menu button and slides in over a scrim',async({page})=>{
  await page.setViewportSize({width:390,height:900});
  await signIn(page,'manager@example.com','/c/rs-learning/home');
- const nav=page.getByRole('navigation',{name:'Mobile navigation'});
- await expect(nav).toHaveAttribute('data-visible','true');
- await page.locator('.app-content').evaluate(node=>{node.scrollTop=150;});
- await expect(page.locator('.mobile-bottom-nav')).toHaveAttribute('data-visible','false');
- await page.locator('.app-content').evaluate(node=>{node.scrollTop=100;});
- await expect(nav).toHaveAttribute('data-visible','true');
- await openNavigation(page);
- await expect(page.locator('.sidebar')).toHaveCount(1);
- await expect(page.getByRole('dialog')).toBeVisible();
- await page.getByRole('button',{name:'Collapse Work',exact:true}).click();
- await expect(page.locator('.nav a[href$="/work/board"]')).toHaveCount(0);
- await page.getByRole('button',{name:'Expand Work',exact:true}).click();
- await expect(page.locator('.nav a[href$="/work/board"]')).toBeVisible();
- await closeNavigation(page);
- await expect(page.getByRole('dialog')).toHaveCount(0);
+ const sidebar=page.locator('.sidebar');
+ await expect(sidebar).toHaveCount(1);
+ await expect(sidebar).toBeHidden();
+ await expect(page.locator('.scrim')).toBeHidden();
+ await page.locator('.mobile-menu').click();
+ await expect(page.locator('.mobile-menu')).toHaveAttribute('aria-expanded','true');
+ await expect(sidebar).toBeVisible();
+ await expect(page.locator('.scrim')).toBeVisible();
+ // While open it holds the keyboard: focus starts inside it, and Tab and Shift+Tab wrap inside it.
+ const inside=()=>page.evaluate(()=>!!document.activeElement?.closest('.sidebar'));
+ expect(await inside()).toBe(true);
+ // The page behind the open drawer is inert, so assistive technology does not reach it either.
+ await expect(page.locator('.app-content')).toHaveJSProperty('inert',true);
+ const count=await sidebar.locator('a[href],button:not([disabled])').count();
+ for(let step=0;step<count+2;step++) { await page.keyboard.press('Tab'); expect(await inside(),`Tab ${step}`).toBe(true); }
+ for(let step=0;step<count+2;step++) { await page.keyboard.press('Shift+Tab'); expect(await inside(),`Shift+Tab ${step}`).toBe(true); }
+ // Escape closes it and gives focus back to the menu button.
+ await page.keyboard.press('Escape');
+ await expect(sidebar).toBeHidden();
  await expect(page.locator('.mobile-menu')).toBeFocused();
+ await expect(page.locator('.app-content')).toHaveJSProperty('inert',false);
+ // Tapping the scrim closes it and also gives focus back; following a link closes it on the new page.
+ await page.locator('.mobile-menu').click();
+ await page.locator('.scrim').click({position:{x:380,y:450}});
+ await expect(sidebar).toBeHidden();
+ await expect(page.locator('.mobile-menu')).toBeFocused();
+ await page.locator('.mobile-menu').click();
+ await sidebar.getByRole('link',{name:"Marketing board",exact:true}).click();
+ await expect(page).toHaveURL(/\/work\/board$/);
+ await expect(sidebar).toBeHidden();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);
+});
+
+test('the sidebar holds the keyboard only while it covers the page',async({page})=>{
+ const sidebar=page.locator('.sidebar');
+ const inside=()=>page.evaluate(()=>!!document.activeElement?.closest('.sidebar'));
+ // Beside the page the sidebar never covers anything: Tab walks out of it into the page.
+ const tabLeaves=async(label:string)=>{
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.locator('.scrim')).toBeHidden();
+  await expect(page.locator('.app-content')).toHaveJSProperty('inert',false);
+  await sidebar.locator('a[href]').first().focus();
+  const count=await sidebar.locator('a[href],button:not([disabled])').count();
+  let left=false;
+  for(let step=0;step<count+2&&!left;step++) { await page.keyboard.press('Tab'); left=!await inside(); }
+  expect(left,`${label}: Tab leaves the sidebar`).toBe(true);
+ };
+ // A drawer left open on a narrow screen lets go of the keyboard once the screen widens.
+ await page.setViewportSize({width:390,height:900});
+ await signIn(page,'manager@example.com','/c/rs-learning/home');
+ await openNavigation(page);
+ await expect(page.getByRole('dialog')).toBeVisible();
+ await page.setViewportSize({width:1440,height:900});
+ await tabLeaves('widened');
+ // Narrowing again covers the page with the still-open drawer, which holds the keyboard again until Escape.
+ await page.setViewportSize({width:390,height:900});
+ await expect(page.getByRole('dialog')).toBeVisible();
+ await sidebar.locator('a[href]').first().focus();
+ const count=await sidebar.locator('a[href],button:not([disabled])').count();
+ for(let step=0;step<count+2;step++) { await page.keyboard.press('Tab'); expect(await inside(),`narrowed Tab ${step}`).toBe(true); }
+ await page.keyboard.press('Escape');
+ await expect(sidebar).toBeHidden();
+ // On a wide screen the menu button still opens and Escape closes the sidebar, without trapping Tab.
+ await page.setViewportSize({width:1440,height:900});
+ await openNavigation(page);
+ await expect(page.locator('.mobile-menu')).toHaveAttribute('aria-expanded','true');
+ await tabLeaves('wide');
+ await closeNavigation(page);
 });
 
 test('mobile recent cards record opens while the drawer stays closed',async({page})=>{
@@ -276,7 +377,7 @@ test('mobile recent cards record opens while the drawer stays closed',async({pag
   await page.locator('.close-card').click();
   await expect(page.locator('.modal')).toHaveCount(0);
  }
- await page.getByRole('navigation',{name:'Mobile navigation'}).getByRole('link',{name:'Home',exact:true}).click();
+ await openMoreSection(page,'home');
  await openNavigation(page);
  await expect(page.locator('.recent-cards a').first()).toHaveAttribute('href','/c/rs-learning/work/board/4');
  expect(await page.locator('.recent-cards a').evaluateAll(links=>links.slice(0,2).map(link=>link.getAttribute('href')))).toEqual([4,3].map(id=>`/c/rs-learning/work/board/${id}`));
@@ -288,4 +389,108 @@ test('the recent cards endpoint refuses what it cannot trust and never reads for
  expect((await request.post(url,{data:{company:'not-a-company'}})).status()).toBe(400);
  expect((await request.post(url,{data:{company,cardId:-1}})).status()).toBe(400);
  expect((await request.post(url,{data:{company}})).status()).toBe(401);
+});
+
+test('an account menu opened while the next page is still arriving stays open when that page lands',async({page})=>{
+ // Every page draws its own shell, so closing a card draws a new one. After a comment (which makes the prepared board
+ // stale) the board's data is held back until the menu is open, so the new shell always lands under an open menu.
+ await page.setViewportSize({width:1440,height:900});
+ await signIn(page,'omar@example.com','/c/rs-learning/work/board/1');
+ await expect(page.locator('.modal')).toBeVisible();
+ let release!:()=>void; const held=new Promise<void>(resolve=>{release=resolve;});
+ let arrived!:()=>void; const asked=new Promise<void>(resolve=>{arrived=resolve;});
+ const board=(url:URL)=>url.pathname==='/c/rs-learning/work/board';
+ const hold=async(route:import('@playwright/test').Route)=>{ if(route.request().headers()['rsc']==='1') { arrived(); await held; } await route.continue(); };
+ await page.route(board,hold);
+ try {
+  const comment=`Menu stays ${Date.now()}`;
+  await page.getByLabel('Comment',{exact:true}).fill(comment);
+  await page.getByRole('button',{name:'Send',exact:true}).click();
+  await expect(page.locator('.comment-body').filter({hasText:comment})).toBeVisible();
+  const shell=await page.locator('.shell').elementHandle();
+  await page.locator('.close-card').click();
+  await asked;
+  await page.locator('.sidebar #btn-me').click();
+  const menu=page.getByRole('menu');
+  await expect(menu).toBeVisible();
+  release();
+  await expect(page).toHaveURL(/\/c\/rs-learning\/work\/board$/);
+  await expect(page.locator('.modal')).toHaveCount(0);
+  // The page landed with a new shell, and the menu is still open on it.
+  await expect.poll(()=>shell!.evaluate(node=>node.isConnected)).toBe(false);
+  await expect(menu).toBeVisible();
+  await menu.locator('[role=group] a[role=menuitem][href$="/home"]').click();
+  await expect(page).toHaveURL(/\/c\/rs-learning\/home$/);
+  await expect(menu).toHaveCount(0);
+ } finally { release(); await page.unroute(board,hold); }
+});
+
+test('an open account menu closes when the keyboard takes the person to another company',async({page})=>{
+ await page.setViewportSize({width:1440,height:900});
+ await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ await idle(page);
+ await page.locator('.sidebar #btn-me').click();
+ await expect(page.getByRole('menu')).toBeVisible();
+ // Only the keyboard: no press outside the menu and no Back.
+ await page.getByLabel('Choose company').press('Enter');
+ await page.locator('[data-company-slug="aleem"]').press('Enter');
+ await expect(page).toHaveURL(/\/c\/aleem\//);
+ await expect(page.locator('.ws').getByText('Aleem')).toBeVisible();
+ await expect(page.locator('#me-menu')).toHaveCount(0);
+ await expect(page.locator('.sidebar #btn-me')).toHaveAttribute('aria-expanded','false');
+});
+
+test('a menu open while its own page lands keeps the item that had focus',async({page})=>{
+ // As above: the board's data is held until the menu is open and focus is on one of its items.
+ await page.setViewportSize({width:1440,height:900});
+ await signIn(page,'omar@example.com','/c/rs-learning/work/board/1');
+ await expect(page.locator('.modal')).toBeVisible();
+ let release!:()=>void; const held=new Promise<void>(resolve=>{release=resolve;});
+ let arrived!:()=>void; const asked=new Promise<void>(resolve=>{arrived=resolve;});
+ const board=(url:URL)=>url.pathname==='/c/rs-learning/work/board';
+ const hold=async(route:import('@playwright/test').Route)=>{ if(route.request().headers()['rsc']==='1') { arrived(); await held; } await route.continue(); };
+ await page.route(board,hold);
+ try {
+  const comment=`Focus stays ${Date.now()}`;
+  await page.getByLabel('Comment',{exact:true}).fill(comment);
+  await page.getByRole('button',{name:'Send',exact:true}).click();
+  await expect(page.locator('.comment-body').filter({hasText:comment})).toBeVisible();
+  const shell=await page.locator('.shell').elementHandle();
+  await page.locator('.close-card').click();
+  await asked;
+  await page.locator('.sidebar #btn-me').click();
+  const menu=page.getByRole('menu');
+  await menu.getByRole('menuitemradio',{name:'Dark'}).focus();
+  await expect(menu.getByRole('menuitemradio',{name:'Dark'})).toBeFocused();
+  release();
+  await expect(page.locator('.modal')).toHaveCount(0);
+  await expect.poll(()=>shell!.evaluate(node=>node.isConnected)).toBe(false);
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('menuitemradio',{name:'Dark'})).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
+ } finally { release(); await page.unroute(board,hold); }
+});
+
+test('an open account menu closes when the keyboard opens another page of the same company, even one being prepared',async({page})=>{
+ // Numbers is still being prepared (its prefetch is held) when the menu opens; the person then opens it with the keyboard.
+ await page.setViewportSize({width:1440,height:900});
+ let release!:()=>void; const held=new Promise<void>(resolve=>{release=resolve;});
+ let arrived!:()=>void; const asked=new Promise<void>(resolve=>{arrived=resolve;});
+ const numbers=(url:URL)=>url.pathname==='/c/rs-learning/numbers';
+ const hold=async(route:import('@playwright/test').Route)=>{ if(route.request().headers()['rsc']==='1') { arrived(); await held; } await route.continue(); };
+ await page.route(numbers,hold);
+ try {
+  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+  await asked;
+  await page.locator('.sidebar #btn-me').click();
+  await expect(page.getByRole('menu')).toBeVisible();
+  // Only the keyboard: no press outside the menu and no Back.
+  await page.locator('.sidebar .nav a[href$="/numbers"]').press('Enter');
+  release();
+  await expect(page).toHaveURL(/\/c\/rs-learning\/numbers$/);
+  await expect(page.locator('.numbers-page')).toBeVisible();
+  await expect(page.locator('#me-menu')).toHaveCount(0);
+  await expect(page.locator('.sidebar #btn-me')).toHaveAttribute('aria-expanded','false');
+ } finally { release(); await page.unroute(numbers,hold); }
 });

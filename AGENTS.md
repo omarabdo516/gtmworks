@@ -1,6 +1,6 @@
 # gtmworks
 
-An open-source, self-hosted marketing operating system. Conversations run on an agent engine through one engine contract (ADR 0009): Hermes ships inside the install and is the engine (ADR 0010), and gtmworks writes no model loop itself. Hermes owns agents, their settings, skills, scheduled work and memory; gtmworks owns companies, members, marketing cards, versions, approvals and the record of each conversation as people saw it. People direct, approve and read results; agents never approve, publish or spend (ADR 0006, 0008). RS Learning is the first Company in Omar's installation; R&S Consultations, Aleem and others follow on the same structure. English-first UI, with a complete shipped Arabic translation (Modern Standard Arabic). Direction follows the chosen language; content keeps its own direction. Every new interface string belongs in both message catalogues.
+An open-source, self-hosted marketing operating system. Conversations run on an agent engine through one engine contract (ADR 0009): Hermes ships inside the install and is the engine (ADR 0010), and gtmworks writes no model loop itself. Hermes owns agents, their settings, skills, scheduled work and memory; gtmworks owns companies, members, marketing cards, versions, approvals and the record of each conversation as people saw it. People direct, approve and read results; agents never approve, publish or spend (ADR 0006, 0008). RS Learning is the first Company in Omar's installation; R&S Consultations, Aleem and others follow on the same structure. English-first UI, with a complete shipped Arabic translation in Egyptian Arabic, worded as in the approved reference (`design-reference/`). Direction follows the chosen language; content keeps its own direction. Every new interface string belongs in both message catalogues.
 
 ## How work arrives
 
@@ -36,10 +36,10 @@ CI deploys nothing. An install picks up a merge when its owner runs `sh scripts/
 
 ## Visual comparison
 
-`tests/visual.spec.ts` compares ten screens with approved images, each in Arabic
-and English at 390 and 1440 wide (40 images in `tests/visual.spec.ts-snapshots/`):
-sign-in, Home, the board, a card, the calendar, approvals, settings members, agents
-and work, and the agency list. The list lives in `tests/visual-screens.mjs`;
+`tests/visual.spec.ts` compares eighteen screens with approved images, each in Arabic
+and English at 390 and 1440 wide (72 images in `tests/visual.spec.ts-snapshots/`):
+sign-in, first run, Home, the Conversation with the main Agent, the board, a card, the calendar, approvals, settings
+members, agents and work, Numbers, the Activity log, and sign-in, Home, the Conversation, the board and a card in the dark theme. The list lives in `tests/visual-screens.mjs`;
 `tests/visual-baselines.test.mjs` fails when a screen lacks an image or an image has
 no screen.
 
@@ -84,7 +84,7 @@ no screen.
   Safe path: new tests, or a baseline refresh for screens the issue changes.
 
 ### Company isolation and roles
-- Company data is reached only through the caller's own company (ADR 0004), and Agency-only actions are checked on the server. Flag a `service_role` query with no owner or company filter, and a permission check that exists only in the browser.
+- Company data is reached only through the caller's own company (ADR 0004), and Owner-only actions are checked on the server. Flag a `service_role` query with no owner or company filter, and a permission check that exists only in the browser.
 
 ### Keys and secrets
 - Hermes keys and webhook secrets are stored encrypted, agent and run keys only as hashes; none is returned after saving or logged (ADR 0007, ADR 0008). Flag request bodies, headers or exception text written to logs on a route that receives a key.

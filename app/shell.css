@@ -1,0 +1,374 @@
+/* The shell (sidebar, frame) and the Agent Conversation screen, ported from the approved reference
+   (design-reference/index.html). Tokens carry a gw- prefix so they never collide with the Paperclip tokens
+   that the sections inside the shell still use. */
+.gw {
+  --gw-bg-chrome: #FCFCFC; --gw-bg-sidebar: #F5F5F5; --gw-bg-pane: #FFFFFF;
+  --gw-bg-hover: #1C1C1C0F; --gw-bg-active: #1C1C1C14; --gw-bg-tertiary: #1C1C1C0F; --gw-bg-secondary-hover: #1C1C1C1A;
+  --gw-bg-elevated-hover: #F1F1F1; --gw-bg-active-solid: #E9E9E9; --gw-bg-scrim: #00000066;
+  --gw-text-1: #1C1C1C; --gw-text-2: #1C1C1CB8; --gw-text-3: #1C1C1CA3; --gw-text-4: #1C1C1C80;
+  --gw-border-1: #1C1C1C3D; --gw-border-2: #1C1C1C1F; --gw-border-3: #1C1C1C14;
+  --gw-primary: #1C1C1C; --gw-primary-hover: #363636; --gw-on-primary: #FCFCFC; --gw-primary-disabled: #1C1C1C26;
+  --gw-bubble-agent: #1C1C1C0F; --gw-bubble-user: #1C1C1C; --gw-on-bubble-user: #FFFFFF;
+  --gw-accent: #0F766E; --gw-focus: #0F766E; --gw-wait-text: #985500; --gw-wait-bg: #F5931217; --gw-danger-text: #CD2834;
+  --gw-shadow-pill: #1C1C1C14 0 4px 12px -1px, #1C1C1C0A 0 1px 2px;
+  --gw-shadow-composer: #0000000D 0 2px 8px -1px, #00000008 0 1px 2px;
+  --gw-shadow-popover: #1C1C1C1A 0 10px 20px -3px, #1C1C1C14 0 4px 6px -4px;
+  --gw-shadow-modal: #1C1C1C1A 0 20px 32px -5px, #1C1C1C1A 0 8px 12px -6px;
+  --gw-bubble-ring: #1C1C1C0F 0 0 0 0.5px inset;
+  --gw-font: var(--font-plex-arabic), "IBM Plex Sans Arabic", "Noto Sans Arabic", Tahoma, system-ui, sans-serif;
+  --gw-fs-xs: 12px; --gw-fs-sm: 13px; --gw-fs-base: 14px; --gw-fs-msg: 15px; --gw-fs-lg: 17px; --gw-fs-xl: 22px;
+  --gw-r-xs: 6px; --gw-r-sm: 8px; --gw-r-md: 12px; --gw-r-lg: 16px; --gw-r-bubble: 18px; --gw-r-composer: 22px; --gw-r-full: 9999px;
+  --gw-dur-fast: 150ms; --gw-dur: 200ms; --gw-ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --gw-sidebar-w: 300px; --gw-details-w: 320px; --gw-chat-col: 620px; --gw-head-h: 64px; --gw-idle-dot: #B5B5B5;
+}
+:root[data-theme="dark"] .gw {
+  --gw-bg-chrome: #121212; --gw-bg-sidebar: #0E0E0E; --gw-bg-pane: #161616;
+  --gw-bg-hover: #F5F5F50F; --gw-bg-active: #F5F5F514; --gw-bg-tertiary: #F5F5F50F; --gw-bg-secondary-hover: #F5F5F51A;
+  --gw-bg-elevated-hover: #2C2C2C; --gw-bg-active-solid: #262626; --gw-bg-scrim: #000000B2;
+  --gw-text-1: #F5F5F5; --gw-text-2: #F5F5F5B8; --gw-text-3: #F5F5F599; --gw-text-4: #F5F5F58A;
+  --gw-border-1: #F5F5F538; --gw-border-2: #F5F5F51A; --gw-border-3: #F5F5F50F;
+  --gw-primary: #F5F5F5; --gw-primary-hover: #DBDBDB; --gw-on-primary: #121212; --gw-primary-disabled: #F5F5F521;
+  --gw-bubble-agent: #F5F5F50F; --gw-bubble-user: #F5F5F52E; --gw-on-bubble-user: #FFFFFF;
+  --gw-accent: #2CC3AE; --gw-focus: #5EE0CC; --gw-wait-text: #F0A443; --gw-wait-bg: #F694121F; --gw-danger-text: #FF6463;
+  --gw-shadow-pill: #F5F5F51A 0 0 0 0.5px; --gw-shadow-composer: #F5F5F51A 0 0 0 0.5px;
+  --gw-shadow-popover: #000000 0 10px 20px -3px, #F5F5F51A 0 0 0 0.5px; --gw-shadow-modal: #000000 0 20px 32px -5px, #F5F5F51A 0 0 0 0.5px;
+  --gw-bubble-ring: #F5F5F50F 0 0 0 0.5px inset;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="device"] .gw {
+    --gw-bg-chrome: #121212; --gw-bg-sidebar: #0E0E0E; --gw-bg-pane: #161616;
+    --gw-bg-hover: #F5F5F50F; --gw-bg-active: #F5F5F514; --gw-bg-tertiary: #F5F5F50F; --gw-bg-secondary-hover: #F5F5F51A;
+    --gw-bg-elevated-hover: #2C2C2C; --gw-bg-active-solid: #262626; --gw-bg-scrim: #000000B2;
+    --gw-text-1: #F5F5F5; --gw-text-2: #F5F5F5B8; --gw-text-3: #F5F5F599; --gw-text-4: #F5F5F58A;
+    --gw-border-1: #F5F5F538; --gw-border-2: #F5F5F51A; --gw-border-3: #F5F5F50F;
+    --gw-primary: #F5F5F5; --gw-primary-hover: #DBDBDB; --gw-on-primary: #121212; --gw-primary-disabled: #F5F5F521;
+    --gw-bubble-agent: #F5F5F50F; --gw-bubble-user: #F5F5F52E; --gw-on-bubble-user: #FFFFFF;
+    --gw-accent: #2CC3AE; --gw-focus: #5EE0CC; --gw-wait-text: #F0A443; --gw-wait-bg: #F694121F; --gw-danger-text: #FF6463;
+    --gw-shadow-pill: #F5F5F51A 0 0 0 0.5px; --gw-shadow-composer: #F5F5F51A 0 0 0 0.5px;
+    --gw-shadow-popover: #000000 0 10px 20px -3px, #F5F5F51A 0 0 0 0.5px; --gw-shadow-modal: #000000 0 20px 32px -5px, #F5F5F51A 0 0 0 0.5px;
+    --gw-bubble-ring: #F5F5F50F 0 0 0 0.5px inset;
+  }
+}
+
+/* The product's global button look (app/globals.css: border, padding, 36px floor, half opacity when disabled) is not
+   the reference's; the shell's buttons start bare, as the reference's do. The reset has no more weight than one class,
+   so every rule below still draws its own button; buttons from the shared component kit (data-slot) keep theirs. */
+.gw :where(.sidebar, .chat, .details) :where(button:not([data-slot])) {
+  border: 0; padding: 0; margin: 0; min-height: 0; background: none; font: inherit; color: inherit; text-align: inherit; border-radius: 0; gap: 0;
+}
+/* Drawn as the reference draws them, but not built yet: they show "Soon" and do nothing. */
+.gw [aria-disabled="true"] { cursor: default; }
+.gw :is(.circle-btn, .me, .menu__item, .composer__send) { border: 0; padding: 0; min-height: 0; font-size: inherit; font-weight: inherit; }
+.gw :is(.circle-btn, .me, .menu__item, .composer__send):disabled { opacity: 1; }
+.gw .me { padding: 4px; min-height: 44px; background: transparent; }
+.gw .menu__item { padding: 4px 10px; min-height: 32px; background: transparent; justify-content: flex-start; }
+
+/* The reference's thin scrollbars: no arrows, a 10px track, the thumb shows on hover (design-reference: base). */
+.gw ::-webkit-scrollbar { width: 10px; height: 10px; background: transparent; }
+.gw ::-webkit-scrollbar-track, .gw ::-webkit-scrollbar-corner { background: transparent; }
+.gw ::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+.gw ::-webkit-scrollbar-thumb { background: transparent; border-radius: var(--gw-r-full); border: 3px solid transparent; background-clip: padding-box; }
+.gw :hover::-webkit-scrollbar-thumb { background-color: #1C1C1C2E; }
+:root[data-theme="dark"] .gw :hover::-webkit-scrollbar-thumb { background-color: #F5F5F52E; }
+
+/* ---------- frame ---------- */
+.gw.app-layout { display: grid; grid-template-columns: var(--gw-sidebar-w) minmax(0, 1fr); height: 100vh; height: 100dvh; overflow: hidden; }
+.gw .shell { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.gw .gw-icon { width: 18px; height: 18px; flex: none; display: inline-block; }
+.gw :focus-visible { outline: 2px solid var(--gw-focus); outline-offset: 2px; }
+.gw .scrim { display: none; }
+.gw.is-chat .shell { background: var(--gw-bg-chrome); }
+.gw.is-chat .topbar { display: none; }
+
+/* ---------- sidebar ---------- */
+.gw .sidebar {
+  background: var(--gw-bg-sidebar); border-inline-end: 0.5px solid var(--gw-border-3); color: var(--gw-text-1); font-family: var(--gw-font);
+  display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; min-height: 0; position: relative; width: auto; height: auto; padding: 0;
+  font-size: var(--gw-fs-msg); line-height: 1.6;
+}
+/* The search row is usually hidden: each part keeps its own row so the list stays in the 1fr row and scrolls. */
+.gw .sidebar > .sb-top { grid-row: 1; }
+.gw .sidebar > .sb-search { grid-row: 2; }
+.gw .sidebar > .sb-scroll { grid-row: 3; }
+.gw .sidebar > .sb-foot { grid-row: 4; }
+.gw .sb-search { padding: 0 12px 8px; }
+.gw .sb-search[hidden] { display: none; }
+.gw .sb-search input {
+  width: 100%; height: 36px; min-height: 0; padding: 0 12px; border-radius: var(--gw-r-full); border: 0.5px solid var(--gw-border-2);
+  background: var(--gw-bg-pane); color: var(--gw-text-1); font-size: var(--gw-fs-base); outline: none;
+}
+.gw .sb-search input:focus { border-color: var(--gw-border-1); box-shadow: 0 0 0 3px var(--gw-bg-active); }
+.gw .sb-search input::placeholder { color: var(--gw-text-4); }
+.gw .sb-top { display: flex; align-items: center; gap: 12px; height: var(--gw-head-h); padding: 12px 16px; }
+.gw .ws { display: flex; align-items: center; gap: 8px; flex: 1 1 0; min-width: 0; }
+.gw .ws__mark { width: 28px; height: 28px; flex: none; }
+.gw .ws__name { font-weight: 600; font-size: var(--gw-fs-base); line-height: 1.3; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gw .ws .switch { height: 36px; min-width: 0; flex: 1 1 0; gap: 6px; font-weight: 600; font-size: var(--gw-fs-base); line-height: 1.3; padding-inline: 4px; color: var(--gw-text-1); font-family: var(--gw-font); }
+/* The reference names the workspace beside its mark; the picker keeps that look: no letter tile, a quiet chevron. */
+.gw .ws .switch > span:first-child { display: none; }
+.gw .ws .switch > svg { width: 14px; height: 14px; color: var(--gw-text-3); }
+.gw .sb-icons { display: flex; align-items: center; gap: 10px; }
+.gw .circle-btn {
+  display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; flex: none;
+  border-radius: var(--gw-r-full); background: var(--gw-bg-pane); box-shadow: var(--gw-border-3) 0 0 0 0.5px inset, var(--gw-border-3) 0 0 0 0.5px;
+  color: var(--gw-text-1); transition: background-color var(--gw-dur-fast) var(--gw-ease-out);
+}
+.gw .circle-btn[aria-pressed="true"], .gw .circle-btn[aria-expanded="true"] { background: var(--gw-bg-active-solid); }
+.gw .sb-scroll { overflow-y: auto; overflow-x: hidden; min-height: 0; padding: 4px 2px 40px 12px; padding-inline: 12px 2px; scrollbar-gutter: stable; }
+.gw .sb-nav { display: grid; gap: 2px; }
+.gw .sb-row { position: relative; display: flex; align-items: center; }
+.gw .sb-item {
+  display: flex; align-items: center; gap: 12px; width: 100%; height: 36px; padding: 0 12px;
+  border-radius: var(--gw-r-sm); color: var(--gw-text-1); font-size: var(--gw-fs-base); text-decoration: none;
+  transition: background-color var(--gw-dur-fast) var(--gw-ease-out);
+}
+.gw .sb-item .gw-icon { color: var(--gw-text-2); }
+.gw .sb-item[aria-current="page"], .gw .sb-item[aria-current="true"] { background: var(--gw-bg-active); }
+/* A link that is opening its page answers at once (lib/link.tsx, app/globals.css a:has(.link-pending)), without a fade.
+   The same goes for the entry that becomes current when its page arrives: the fade is for hover, and a 150ms fade
+   from the hover tint to the current tint would hold the opened page from settling (tests/navigation.spec.ts). */
+.gw a:has(.link-pending), .gw .sb-item[aria-current], .gw .agent-tile[aria-current] { transition: none; }
+.gw .sb-item .od-fill { flex: 1 1 0; min-width: 0; }
+/* The approvals entry: its own link to the Inbox, drawn as the reference's count pill. It stays at zero, quieter,
+   so the Inbox is always reachable. */
+.gw .sb-count {
+  position: absolute; inset-inline-end: 12px; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--gw-r-full); text-decoration: none;
+}
+.gw .sb-count__n {
+  min-width: 20px; height: 20px; padding: 0 6px; border-radius: var(--gw-r-full);
+  background: var(--gw-wait-bg); color: var(--gw-wait-text); font-size: var(--gw-fs-xs); font-weight: 600;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.gw .sb-count--none .sb-count__n { background: var(--gw-bg-tertiary); color: var(--gw-text-2); font-weight: 400; }
+.gw .sb-sec { margin-top: 24px; }
+.gw .sb-label { margin: 0; padding: 0 12px 8px; font-size: var(--gw-fs-sm); font-weight: 400; line-height: 1.6; color: var(--gw-text-3); letter-spacing: normal; text-transform: none; font-family: var(--gw-font); }
+.gw .agent-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; margin: 0; padding: 0; list-style: none; }
+.gw .agent-tile {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; color: var(--gw-text-1); text-decoration: none;
+  padding: 8px 4px 6px; border-radius: var(--gw-r-md); transition: background-color var(--gw-dur-fast) var(--gw-ease-out);
+}
+.gw .agent-tile[aria-current="true"] { background: var(--gw-bg-active); }
+.gw .agent-tile__name { display: block; max-width: 100%; font-size: var(--gw-fs-xs); line-height: 16px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gw .agent-tile__main { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; margin-top: -2px; border-radius: var(--gw-r-full); background: var(--gw-bg-tertiary); font-size: var(--gw-fs-xs); line-height: 1; color: var(--gw-text-2); white-space: nowrap; }
+.gw .agent-tile[aria-current="true"] .agent-tile__main { background: var(--gw-bg-pane); }
+.gw .agent-tile--new { border: 1px dashed var(--gw-border-1); padding-block: 7px 5px; }
+.gw .agent-tile--new .agent-tile__name { color: var(--gw-text-2); }
+.gw .agent-tile__plus {
+  width: 52px; height: 52px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--gw-bg-pane); box-shadow: var(--gw-border-3) 0 0 0 0.5px inset; color: var(--gw-text-2);
+}
+.gw .thread-group + .thread-group, .gw .thread-group + .sb-empty { margin-top: 16px; }
+.gw .thread-item { height: 36px; }
+.gw .sb-label-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.gw .sb-add {
+  display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; margin: -6px 0 2px; flex: none;
+  border-radius: var(--gw-r-full); color: var(--gw-text-2);
+}
+.gw .sb-add .gw-icon { width: 16px; height: 16px; }
+.gw .ch-item .gw-icon { width: 16px; height: 16px; color: var(--gw-text-3); }
+.gw .sb-item[aria-disabled="true"]:hover, .gw .sb-add[aria-disabled="true"]:hover { background: none; }
+.gw .thread-group ul { margin: 0; padding: 0; list-style: none; }
+.gw .thread-item .od-truncate { flex: 1 1 0; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.gw .thread-item__time { font-size: var(--gw-fs-xs); color: var(--gw-text-3); flex: none; }
+.gw .sb-empty { margin: 0; padding: 8px 12px; font-size: var(--gw-fs-sm); color: var(--gw-text-3); }
+.gw .sb-foot { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; row-gap: 4px; padding: 8px 16px 16px; }
+.gw .sb-apps { flex: 1 0 100%; }
+.gw .sb-apps__n { font-size: var(--gw-fs-xs); color: var(--gw-text-3); flex: none; }
+.gw .sb-foot::before { content: ""; position: absolute; inset-inline: 0; top: -40px; height: 40px; pointer-events: none; background: linear-gradient(180deg, transparent, var(--gw-bg-sidebar)); }
+.gw .me {
+  display: flex; align-items: center; gap: 8px; flex: 1 1 0; min-width: 0; min-height: 44px;
+  padding: 4px; margin-inline-start: -4px; border-radius: var(--gw-r-sm); color: var(--gw-text-1); text-align: start;
+}
+.gw .me[aria-expanded="true"] { background: var(--gw-bg-hover); }
+.gw .me__text { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0; text-align: start; }
+.gw .me__chev { flex: none; color: var(--gw-text-3); display: inline-flex; }
+.gw .me__av {
+  width: 36px; height: 36px; border-radius: 50%; flex: none; background: var(--gw-bg-active); box-shadow: var(--gw-border-3) 0 0 0 0.5px inset;
+  color: var(--gw-text-2); display: inline-flex; align-items: center; justify-content: center; font-size: var(--gw-fs-base); font-weight: 600;
+}
+.gw .me__name { text-align: start; font-size: var(--gw-fs-base); line-height: 1.35; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.gw .me__role { font-size: var(--gw-fs-xs); color: var(--gw-text-3); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.gw .menu {
+  position: absolute; z-index: 30; inset-inline: 12px; bottom: calc(100% - 4px); max-height: min(440px, 62vh); overflow-y: auto;
+  padding: 4px; border-radius: var(--gw-r-md); background: var(--gw-bg-pane); border: 0.5px solid var(--gw-border-2); box-shadow: var(--gw-shadow-popover);
+}
+.gw .me-menu__head { display: flex; align-items: center; gap: 8px; padding: 8px 10px; }
+.gw .me-menu__head .me__av { width: 32px; height: 32px; font-size: var(--gw-fs-sm); }
+.gw .me-menu__head .me__text { gap: 2px; }
+.gw .me-menu__hint { margin: 2px 10px 6px; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); }
+.gw .menu__label { padding: 6px 10px 4px; font-size: var(--gw-fs-xs); color: var(--gw-text-3); }
+.gw .menu__sep { height: 0.5px; margin: 4px 6px; background: var(--gw-border-2); }
+.gw .menu__item {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: 32px; padding: 4px 10px; border-radius: var(--gw-r-xs);
+  font-size: var(--gw-fs-sm); line-height: 1.4; text-align: start; color: var(--gw-text-1); text-decoration: none;
+}
+.gw .menu__item > .gw-icon { width: 16px; height: 16px; color: var(--gw-text-2); }
+.gw .menu__item:focus-visible { background: var(--gw-bg-hover); outline: none; }
+.gw .menu__t { flex: 1 1 0; min-width: 0; }
+.gw .menu__d { display: block; font-size: var(--gw-fs-xs); color: var(--gw-text-3); }
+.gw .lang-native { display: block; }
+.gw .menu__check { width: 16px; height: 16px; color: var(--gw-text-1); }
+.gw .menu__item[aria-disabled="true"]:hover { background: none; }
+
+@media (hover: hover) {
+  .gw .circle-btn:hover { background: var(--gw-bg-elevated-hover); }
+  .gw .sb-item:hover, .gw .agent-tile:hover, .gw .me:hover, .gw .menu__item:hover { background: var(--gw-bg-hover); }
+}
+
+/* ---------- the Agent Conversation ---------- */
+.gw .convo { display: grid; grid-template-columns: minmax(0, 1fr) auto; height: 100%; min-height: 0; }
+.gw .chat { position: relative; display: grid; grid-template-rows: minmax(0, 1fr) auto; height: 100%; background: var(--gw-bg-chrome); color: var(--gw-text-1); font-family: var(--gw-font); font-size: var(--gw-fs-msg); line-height: 1.6; }
+.gw .chat__top {
+  position: absolute; inset-inline: 0; top: 0; height: var(--gw-head-h); z-index: 5; display: flex; align-items: center; justify-content: center; padding: 0 12px;
+  background: linear-gradient(180deg, var(--gw-bg-chrome) 55%, transparent 100%); pointer-events: none;
+}
+.gw .chat__top > * { pointer-events: auto; }
+.gw .chat__h { display: contents; margin: 0; font: inherit; letter-spacing: normal; }
+.gw .head-pill {
+  display: inline-flex; align-items: center; gap: 8px; max-width: calc(100% - 400px); min-width: 0; margin: 0;
+  padding-block: 7px; padding-inline: 7px 14px; border-radius: var(--gw-r-full); font-size: var(--gw-fs-base); font-weight: 400; line-height: 1.5;
+  background: var(--gw-bg-pane); box-shadow: var(--gw-border-3) 0 0 0 0.5px inset, var(--gw-shadow-pill); color: var(--gw-text-1);
+  transition: background-color var(--gw-dur-fast) var(--gw-ease-out); pointer-events: auto;
+}
+.gw .head-pill > span[aria-hidden] { display: inline-flex; flex: none; }
+@media (hover: hover) { .gw button.head-pill:hover { background: var(--gw-bg-elevated-hover); } }
+.gw .head-pill__title { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.gw .transcript {
+  overflow-y: auto; overflow-x: hidden; min-height: 0; overscroll-behavior: contain; padding: calc(var(--gw-head-h) + 24px) 16px 24px;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 var(--gw-head-h)); mask-image: linear-gradient(180deg, transparent 0, #000 var(--gw-head-h));
+}
+.gw .transcript__col { max-width: var(--gw-chat-col); margin: 0 auto; display: flex; flex-direction: column; gap: 24px; min-height: 100%; justify-content: flex-end; }
+.gw .transcript__col > * { max-width: 100%; }
+.gw .turns { display: flex; flex-direction: column; gap: 24px; margin: 0; padding: 0; list-style: none; }
+.gw .turn { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; width: 100%; }
+.gw .turn--user { align-items: flex-end; }
+.gw .sender { display: flex; align-items: center; gap: 6px; padding-inline-start: 4px; font-size: var(--gw-fs-xs); line-height: 16px; color: var(--gw-text-2); }
+.gw .sender__time, .gw .bubble__time { color: var(--gw-text-3); opacity: 0; transition: opacity var(--gw-dur-fast) var(--gw-ease-out); }
+.gw .turn:hover :is(.sender__time, .bubble__time), .gw .turn:focus-within :is(.sender__time, .bubble__time) { opacity: 1; }
+.gw .bubble {
+  max-width: 560px; min-width: 0; padding: 8px 14px; border-radius: var(--gw-r-bubble); font-size: var(--gw-fs-msg); line-height: 1.7;
+  box-shadow: var(--gw-bubble-ring); white-space: pre-wrap; overflow-wrap: anywhere; text-wrap: pretty;
+}
+.gw .bubble--agent { background: var(--gw-bubble-agent); color: var(--gw-text-1); border-end-start-radius: 6px; }
+.gw .bubble--user { background: var(--gw-bubble-user); color: var(--gw-on-bubble-user); border-end-end-radius: 6px; box-shadow: none; }
+.gw .bubble-row { display: flex; align-items: flex-end; gap: 8px; max-width: 100%; }
+.gw .bubble__time { flex: none; padding-bottom: 9px; font-size: var(--gw-fs-xs); white-space: nowrap; }
+.gw .note { align-self: center; max-width: 560px; margin: 0; text-align: center; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-2); padding: 0 12px; }
+.gw .note[role="alert"], .gw .note[data-outcome="lost"] { color: var(--gw-danger-text); }
+.gw .thinking { padding: 2px 4px; font-size: var(--gw-fs-base); color: var(--gw-text-2); }
+.gw .empty-chat { margin: auto 0; display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; padding: 40px 0; }
+.gw .empty-chat__faces { display: flex; gap: 8px; margin-bottom: 8px; }
+.gw .empty-chat h2 { margin: 0; font-size: var(--gw-fs-xl); line-height: 1.4; font-weight: 600; letter-spacing: normal; }
+.gw .empty-chat p { margin: 0; color: var(--gw-text-2); font-size: var(--gw-fs-base); line-height: 1.7; max-width: 42ch; text-wrap: pretty; }
+.gw .empty-chat .empty-chat__role { font-size: var(--gw-fs-sm); color: var(--gw-text-3); margin-top: -4px; }
+.gw .main-h { display: inline-flex; align-items: center; gap: 8px; }
+.gw .badge { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: var(--gw-r-full); font-size: var(--gw-fs-xs); font-weight: 400; line-height: 1.5; background: var(--gw-bg-tertiary); color: var(--gw-text-1); }
+.gw .main-badge { align-self: center; }
+.gw .ro-line { display: flex; align-items: center; justify-content: center; gap: 6px; max-width: var(--gw-chat-col); margin: 0 auto; padding: 12px 16px; font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-3); text-align: center; }
+.gw .composer-area { padding: 0 16px 16px; background: var(--gw-bg-chrome); }
+.gw .composer {
+  position: relative; max-width: var(--gw-chat-col); margin: 0 auto; min-height: 44px; padding: 0;
+  background: var(--gw-bg-pane); border: 0.5px solid var(--gw-border-2); border-radius: var(--gw-r-composer); box-shadow: var(--gw-shadow-composer);
+}
+.gw .composer:focus-within { border-color: var(--gw-border-1); }
+.gw .composer__row { display: flex; align-items: flex-end; gap: 8px; padding: 0 8px; }
+.gw .composer__btn {
+  display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; margin: 8px 0; border-radius: 50%; flex: none;
+  background: var(--gw-bg-tertiary); box-shadow: var(--gw-border-3) 0 0 0 0.5px inset; color: var(--gw-text-1);
+}
+.gw .composer__btn .gw-icon { width: 16px; height: 16px; }
+.gw .composer__mic { background: transparent; box-shadow: none; color: var(--gw-text-2); }
+.gw .composer__input {
+  flex: 1 1 0; min-width: 0; display: block; max-height: 200px; resize: none; border: 0; outline: 0; background: transparent; box-shadow: none;
+  padding: 11px 0; margin: 0; font: inherit; field-sizing: content; min-height: 44px; font-size: var(--gw-fs-msg); line-height: 22px; color: var(--gw-text-1);
+}
+.gw .composer__input::placeholder { color: var(--gw-text-4); opacity: 1; }
+.gw .composer__send {
+  display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; margin: 8px 0; border-radius: 50%; flex: none;
+  background: var(--gw-primary); color: var(--gw-on-primary); transition: background-color var(--gw-dur-fast) var(--gw-ease-out);
+}
+.gw .composer__send .gw-icon { width: 16px; height: 16px; }
+.gw .composer__send:disabled { background: var(--gw-primary-disabled); color: var(--gw-text-4); }
+@media (hover: hover) { .gw .composer__send:hover:not(:disabled) { background: var(--gw-primary-hover); } }
+.gw .composer-error { margin: 0; padding: 0 16px 10px; font-size: var(--gw-fs-sm); color: var(--gw-danger-text); }
+.gw .chat-usage { max-width: var(--gw-chat-col); margin: 8px auto 0; text-align: center; font-size: var(--gw-fs-xs); color: var(--gw-text-3); }
+
+/* ---------- the Agent's details (design-reference: #details) ---------- */
+.gw .details {
+  width: var(--gw-details-w); min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr);
+  background: var(--gw-bg-chrome); border-inline-start: 0.5px solid var(--gw-border-3); color: var(--gw-text-1); font-family: var(--gw-font); font-size: var(--gw-fs-msg); line-height: 1.6;
+}
+.gw .details[hidden] { display: none; }
+.gw .dp-top { display: flex; align-items: center; justify-content: space-between; height: var(--gw-head-h); padding: 12px; }
+.gw .dp-scroll { overflow-y: auto; min-height: 0; padding-bottom: 32px; }
+.gw .dp-id { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 4px 16px 12px; text-align: center; }
+.gw .dp-id > div { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; max-width: 100%; }
+.gw .dp-id__name { display: inline-flex; align-items: center; gap: 8px; font-size: var(--gw-fs-lg); font-weight: 600; line-height: 1.4; }
+.gw .dp-id__role { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 0 4px; font-size: var(--gw-fs-sm); line-height: 1.5; color: var(--gw-text-2); }
+.gw .face-wrap { position: relative; display: inline-flex; flex: none; }
+.gw .segmented { display: flex; justify-content: center; gap: 2px; padding: 4px 16px 10px; }
+.gw .segmented button { padding: 4px 10px; border-radius: var(--gw-r-full); font-size: var(--gw-fs-sm); line-height: 18px; color: var(--gw-text-2); }
+/* The five tabs as one even track (design-reference: .dp-scroll > .segmented[role="tablist"]); the first is drawn as
+   the reference's chosen tab. */
+.gw .dp-tabs { justify-content: stretch; gap: 0; margin: 4px 16px 8px; padding: 2px; border-radius: var(--gw-r-full); box-shadow: var(--gw-border-2) 0 0 0 0.5px inset; }
+.gw .dp-tabs button { flex: 1 1 0; min-width: 0; padding: 5px 0; text-align: center; white-space: nowrap; }
+.gw .dp-tabs button[data-first] { background: var(--gw-bg-tertiary); color: var(--gw-text-1); }
+.gw .panel-empty { margin: 0; padding: 10px 8px; font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-3); text-wrap: pretty; }
+.gw .dp-soon { padding: 10px 24px; text-align: center; }
+.gw .dp-scrim { display: none; }
+
+/* Authored text inside the English interface takes its direction from its own words. */
+[dir="ltr"] .gw :is(.head-pill__title, .thread-item .od-truncate) { unicode-bidi: plaintext; text-align: left; }
+[dir="ltr"] .gw :is(.dp-id__name, .empty-chat h2) { unicode-bidi: plaintext; }
+
+/* ---------- the reference's widths: a narrower sidebar and details below 1280px, the details over the chat below 1024px ---------- */
+@media (max-width: 1279px) {
+  .gw { --gw-sidebar-w: 264px; --gw-details-w: 300px; }
+  .gw .head-pill { max-width: calc(100% - 320px); }
+}
+@media (max-width: 1023px) {
+  .gw { --gw-sidebar-w: 248px; }
+  .gw .convo { grid-template-columns: minmax(0, 1fr); }
+  .gw .details {
+    position: fixed; top: 0; bottom: 0; inset-inline-end: 0; z-index: 40; width: min(340px, 92vw);
+    box-shadow: var(--gw-shadow-modal); transform: translateX(-105%); transition: transform var(--gw-dur) var(--gw-ease-out); visibility: hidden;
+  }
+  [dir="ltr"] .gw .details { transform: translateX(105%); }
+  .gw .details.is-open, [dir="ltr"] .gw .details.is-open { transform: none; visibility: visible; }
+  .gw .dp-scrim { display: block; position: fixed; inset: 0; background: var(--gw-bg-scrim); z-index: 39; }
+}
+
+/* ---------- narrow screens: the sidebar slides in over the page ---------- */
+@media (max-width: 767px) {
+  .gw.app-layout { grid-template-columns: minmax(0, 1fr); }
+  .gw .sidebar {
+    position: fixed; top: 0; bottom: 0; inset-inline-start: 0; z-index: 50; width: min(300px, 86vw);
+    transform: translateX(105%); transition: transform var(--gw-dur) var(--gw-ease-out); visibility: hidden; box-shadow: var(--gw-shadow-modal);
+  }
+  [dir="ltr"] .gw .sidebar { transform: translateX(-105%); }
+  .gw .sidebar.is-open, [dir="ltr"] .gw .sidebar.is-open { transform: none; visibility: visible; }
+  .gw .scrim:not([hidden]) { display: block; position: fixed; inset: 0; background: var(--gw-bg-scrim); z-index: 45; }
+  .gw.is-chat .topbar { display: flex; min-height: 56px; height: auto; padding: 0 12px; background: var(--gw-bg-chrome); border: 0; font-family: var(--gw-font); }
+  .gw.is-chat .topbar h1 { font-weight: 600; font-size: var(--gw-fs-base); text-transform: none; letter-spacing: normal; color: var(--gw-text-1); }
+  /* 44px touch targets on a phone (PRODUCT.md), where the reference draws 36px rows and buttons. */
+  .gw .circle-btn { width: 44px; height: 44px; }
+  .gw .sb-item { height: 44px; }
+  .gw .menu__item { min-height: 44px; }
+  .gw .sb-add { width: 44px; height: 44px; margin: -14px 0 -6px; }
+  /* The approvals count gets its own 44px square beside Marketing board instead of sitting on top of it, and the
+     company picker is as tall as the rows below it. */
+  .gw .sb-row .sb-item { flex: 1 1 0; min-width: 0; }
+  .gw .sb-count { position: static; flex: none; width: 44px; height: 44px; }
+  .gw .ws .switch { height: 44px; }
+  /* The send arrow keeps the reference's 28px circle; an invisible 8px ring around it makes the tap area 44px,
+     inside the composer's own margin and gap so it covers no text. */
+  .gw .composer__send { position: relative; }
+  .gw .composer__send::before { content: ""; position: absolute; inset: -8px; }
+  .gw .transcript { padding: calc(var(--gw-head-h) + 16px) 12px 20px; }
+  .gw .composer-area { padding: 0 12px 12px; }
+  .gw .head-pill { max-width: calc(100% - 150px); }
+  .gw .empty-chat h2 { font-size: var(--gw-fs-lg); }
+  .gw .bubble { max-width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) { .gw .sidebar, .gw .details { transition: none; } }

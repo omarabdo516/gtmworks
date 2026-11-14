@@ -21,7 +21,7 @@ select throws_ok($$update public.members set agent_role='advertiser' where compa
 select throws_ok($$update public.members set agent_role='writer' where company_id=current_setting('test.agent_company')::uuid and person_id=current_setting('test.agent_two')::uuid$$,'23505',null,'active keys are unique within a company');
 select throws_ok($$update public.members set agent_role='designer' where company_id=current_setting('test.agent_company')::uuid and role='owner'$$,'23514',null,'owner cannot hold an agent key');
 select throws_ok($$update public.members set role='manager' where company_id=current_setting('test.agent_company')::uuid and agent_role='writer'$$,'23514',null,'manager cannot hold an agent key');
-select throws_ok($$update public.members set role='reviewer' where company_id=current_setting('test.agent_company')::uuid and agent_role='writer'$$,'23514',null,'reviewer cannot hold an agent key');
+select throws_ok($$update public.members set role='reviewer' where company_id=current_setting('test.agent_company')::uuid and agent_role='writer'$$,'22P02',null,'there is no reviewer Role to hold an agent key');
 select throws_ok($$update public.members set role='viewer' where company_id=current_setting('test.agent_company')::uuid and agent_role='writer'$$,'23514',null,'viewer cannot hold an agent key');
 select lives_ok($$insert into public.members(company_id,person_id,role,agent_role) values ('10000000-0000-0000-0000-000000000003',current_setting('test.agent_one')::uuid,'contributor','writer')$$,'the same key is allowed in another company');
 select lives_ok($$select public.remove_member(current_setting('test.agent_company')::uuid,current_setting('test.agent_one')::uuid)$$,'key holder can be removed');
@@ -46,7 +46,7 @@ select is((select count(*)::int from public.members where company_id=current_set
 with changed as (update public.members set agent_role=null where company_id='10000000-0000-0000-0000-000000000001' and agent_role is not null returning 1) select is((select count(*)::int from changed),0,'viewer cannot change keys');
 select throws_ok($$insert into public.members(company_id,person_id,role,agent_role) values ('10000000-0000-0000-0000-000000000001',current_setting('test.agent_two')::uuid,'contributor','writer')$$,'42501',null,'viewer gains no member insertion path');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
-with changed as (update public.members set agent_role=null where company_id='10000000-0000-0000-0000-000000000001' and agent_role is not null returning 1) select is((select count(*)::int from changed),0,'reviewer cannot change keys');
+with changed as (update public.members set agent_role=null where company_id='10000000-0000-0000-0000-000000000001' and agent_role is not null returning 1) select is((select count(*)::int from changed),0,'a Contributor cannot change keys');
 select set_config('request.jwt.claim.sub',current_setting('test.agent_two'),true);
 select is((select agent_role::text from public.members where company_id=current_setting('test.agent_company')::uuid and person_id=auth.uid()),'writer','contributor can read their key');
 with changed as (update public.members set agent_role='designer' where company_id=current_setting('test.agent_company')::uuid and person_id=auth.uid() returning 1) select is((select count(*)::int from changed),0,'agent cannot reassign its own key');

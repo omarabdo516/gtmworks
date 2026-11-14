@@ -1,1 +1,1 @@
-export function canCreateCard(access:{role?:string,agencyAccess:boolean}):boolean;
+export function canCreateCard(access:{role?:string}):boolean;

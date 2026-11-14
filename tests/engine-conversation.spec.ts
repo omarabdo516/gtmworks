@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { createHmac, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { createClient } from '@supabase/supabase-js';
 import { encryptSecret } from '../lib/agent-crypto.mjs';
@@ -10,41 +10,24 @@ import { fakeEngine } from './fake-engine.mjs';
 // through the same send and close code the conversation route and the worker run, on the local database.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const status=()=>{ const env=execFileSync('npx',['--no-install','supabase','status','-o','env'],{encoding:'utf8'}); return (name:string)=>env.match(new RegExp(`^${name}="(.*)"$`,'m'))![1]; };
-function totp(secret:string) {
- const bits=[...secret.toUpperCase()].map(character=>'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'.indexOf(character).toString(2).padStart(5,'0')).join('');
- const key=Buffer.from(bits.match(/.{8}/g)!.map(byte=>parseInt(byte,2)));
- const counter=Buffer.alloc(8); counter.writeBigUInt64BE(BigInt(Math.floor(Date.now()/30000)));
- const digest=createHmac('sha1',key).update(counter).digest();
- return String((digest.readUInt32BE(digest[19]&15)&0x7fffffff)%1000000).padStart(6,'0');
-}
 const company='10000000-0000-0000-0000-000000000001';
 const omar='20000000-0000-0000-0000-000000000001';
 const encryptionKey=process.env.WEBHOOK_ENCRYPTION_KEY||'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
 
-// Omar's own session, two-step verified (Agency access), as the conversation route receives it; and the service client
-// the route and the worker use.
-async function clients() {
- const value=status();
- const service=createClient(value('API_URL'),value('SERVICE_ROLE_KEY'),{auth:{persistSession:false,autoRefreshToken:false}});
- const person=createClient(value('API_URL'),value('ANON_KEY'),{auth:{persistSession:false,autoRefreshToken:false}});
- query(`delete from auth.mfa_factors where user_id='${omar}'`);
- const {data:link,error:linked}=await service.auth.admin.generateLink({type:'magiclink',email:'omar@example.com'});
- expect(linked).toBeNull();
- expect((await person.auth.verifyOtp({type:'email',token_hash:link.properties!.hashed_token})).error).toBeNull();
- const {data:factor,error:enrolled}=await person.auth.mfa.enroll({factorType:'totp',friendlyName:`fake-engine-${randomUUID().slice(0,8)}`});
- expect(enrolled).toBeNull();
- expect((await person.auth.mfa.challengeAndVerify({factorId:factor!.id,code:totp(factor!.totp.secret)})).error).toBeNull();
- return {service,person};
+// Omar's own session (the company's Owner), as the conversation route receives it; and the service client the route
+// and the worker use.
+function clients() {
+ return memberClient('omar@example.com');
 }
 // An agent whose Connection is never called: every run goes to the fake engine. Its address refuses connections, so
 // the background worker (which drives Hermes) leaves these runs open for the fake engine to close.
 function attachAgent() {
  const [connection,agent]=[randomUUID(),randomUUID()];
- query(`insert into public.hermes_connections(id,company_id,agency_owner_id,address,profile,key_encrypted,state,version,features) values ('${connection}','${company}','${omar}','http://127.0.0.1:9','fake-${connection.slice(0,8)}','${encryptSecret('fake-engine-key',encryptionKey)}','connected','0.23.0','{run_submission}')`);
+ query(`insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values ('${connection}','${company}','${omar}','http://127.0.0.1:9','fake-${connection.slice(0,8)}','${encryptSecret('fake-engine-key',encryptionKey)}','connected','0.23.0','{run_submission}')`);
  query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('${agent}','${company}','${connection}','Faye','Marketing')`);
  return {connection,agent,detach:()=>{ query(`delete from public.hermes_agents where id='${agent}'`); query(`delete from public.hermes_connections where id='${connection}'`); }};
 }
-// A Member's own session, signed in with no two-step verification (so no Agency access).
+// A Member's own session, signed in by email link.
 async function memberClient(email:string) {
  const value=status();
  const service=createClient(value('API_URL'),value('SERVICE_ROLE_KEY'),{auth:{persistSession:false,autoRefreshToken:false}});
@@ -106,8 +89,8 @@ test('integration: on the fake engine a failed run and a stopped run end with th
  } finally { detach(); }
 });
 
-// #287: a Contributor, with no Agency access, gets a reply on the fake engine through the company agent's Connection
-// (an Agency owner's), and a Viewer is refused by the database before the engine is called.
+// #287: a Contributor gets a reply on the fake engine through the company agent's Connection (the company Owner's), and
+// a Viewer is refused by the database before the engine is called.
 test('integration: a Contributor gets a reply on the fake engine and a Viewer is refused',async()=>{
  test.setTimeout(120000);
  const fake=fakeEngine(); const {agent,detach}=attachAgent();
@@ -125,5 +108,5 @@ test('integration: a Contributor gets a reply on the fake engine and a Viewer is
   const viewer=(await memberClient('viewer@example.com')).person;
   expect(await sendMessage(viewer,service,{person:'20000000-0000-0000-0000-000000000004',company,conversation:randomUUID(),sendKey:randomUUID(),agent,message:'Hello',encryptionKey,engineFor:fake.engineFor})).toEqual({code:'42501'});
   expect(fake.runs).toHaveLength(1);
- } finally { query(`update public.members set role='reviewer' where company_id='${company}' and person_id='${contributor}'`); detach(); }
+ } finally { query(`update public.members set role='contributor' where company_id='${company}' and person_id='${contributor}'`); detach(); }
 });

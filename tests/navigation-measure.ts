@@ -1,13 +1,17 @@
 import { expect, type Page } from '@playwright/test';
 
+// Each step leaves from a sidebar entry the shell has (#8): Numbers opens its own page (#35) where Home used to be the
+// first entry, and Activity log opens /log (#11).
 export const clickPath = [
-  { name: 'home', link: '.nav a[href$="/home"]', path: '/home', content: '.home-dashboard' },
+  { name: 'numbers', link: '.nav a[href$="/numbers"]', path: '/numbers', content: '.numbers-page' },
   { name: 'work', link: '.nav a[href$="/work/board"]', path: '/work/board', content: '.board' },
   { name: 'open card', link: '.board .card a[href$="/board/1"]', path: '/work/board/1', content: '.modal' },
   { name: 'close card', link: '.close-card', path: '/work/board', content: '.board' },
   { name: 'list', link: '.tabs a[href$="/work/list"]', path: '/work/list', content: '.table tbody tr' },
   { name: 'calendar', link: '.tabs a[href$="/work/calendar"]', path: '/work/calendar', content: '.calendar' },
+  // The Inbox opens from the approvals entry beside Marketing board; Activity log is the sidebar's last entry.
   { name: 'inbox', link: '.nav a[href$="/approvals"]', path: '/approvals', content: '.approvals' },
+  { name: 'activity log', link: '.nav a[href$="/log"]', path: '/log', content: '.log-page' },
 ];
 export type Timing = { shown: number; settled: number; progress: boolean; longest: number; all: string[] };
 export const median = (values: number[]) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)];
@@ -38,7 +42,9 @@ export async function measureClick(page: Page, step: typeof clickPath[number]): 
       const sample = () => {
         if (state.clickTiming) return;
         cancelAnimationFrame(frame);
-        progress ||= !!document.querySelector('[role="progressbar"]');
+        // The page-opening feedback (lib/link and the new-card fallback). The board's cards carry their own progress
+        // bars since #34, which are content, not navigation feedback.
+        progress ||= !!document.querySelector('.navigation-progress[role="progressbar"]');
         const animations = document.getAnimations().filter(a => a.playState === 'running' || a.pending);
         for (const animation of animations) {
           if (!seen.has(animation)) {

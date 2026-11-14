@@ -1,17 +1,16 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 select plan(27);
-insert into public.hermes_connections(id,company_id,agency_owner_id,address,profile,key_encrypted,state) values
+insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values
  ('d0000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://localhost','writer','ciphertext','connected'),
  ('d0000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://localhost','designer','ciphertext','connected'),
  ('d0000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000001','HTTP://LOCALHOST:80/x/%2e%2e/','writer','ciphertext','connected'),
  ('d0000000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000001','http://%6cocalhost','writer','ciphertext','connected');
 set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select throws_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','attach','d0000000-0000-0000-0000-000000000001',agent_name=>'Mona',speciality=>'Writing')$$,'42501','hermesNotAllowed','a Manager cannot attach an agent');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
-select set_config('request.jwt.claims','{"aal":"aal1"}',true);
-select throws_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','attach','d0000000-0000-0000-0000-000000000001',agent_name=>'Mona',speciality=>'Writing')$$,'42501',null,'two-step verification required');
-select set_config('request.jwt.claims','{"aal":"aal2"}',true);
-select lives_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','attach','d0000000-0000-0000-0000-000000000001',agent_name=>'Mona',speciality=>'Writing')$$,'Agency attaches a connected profile');
+select lives_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','attach','d0000000-0000-0000-0000-000000000001',agent_name=>'Mona',speciality=>'Writing')$$,'the Owner attaches a connected profile without two-step verification');
 select is((select name from public.hermes_agents where is_default),'Mona','first agent becomes the default');
 select throws_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000002','attach','d0000000-0000-0000-0000-000000000003',agent_name=>'Shared',speciality=>'Writing')$$,'P0001','hermesSharingWarning','a second Connection for the same profile cannot bypass confirmation');
 select throws_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000002','attach','d0000000-0000-0000-0000-000000000004',agent_name=>'Encoded host',speciality=>'Writing')$$,'P0001','hermesAgentFailed','raw encoded host spellings cannot bypass confirmation');

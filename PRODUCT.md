@@ -10,12 +10,9 @@ web
 
 ## Users
 
-Two audiences of equal importance:
+Company members (Owner, Manager, Contributor, Viewer) direct, approve and read the numbers for their own Company. One person may be a member of several companies and run the marketing of each. They talk to agents, starting with the Company's main Agent, follow the agents' work and approve it. They work mostly on desktop and on mobile for quick approvals.
 
-- **Agency people** run the marketing of several companies at once. They talk to agents, follow the agents' work and approve it as members of those companies. They work mostly on desktop and on mobile for quick approvals.
-- **Company members** (Owner, Manager, Contributor, Reviewer, Viewer) direct, approve and read the numbers for their own Company.
-
-Each person installs gtmworks, and Hermes comes inside it (ADR 0010). Members use that installation according to their role in each Company. Agency people work in a Company as members of it.
+Each person installs gtmworks, and Hermes comes inside it (ADR 0010). The first person to set it up is the Owner of its first Company. Members use that installation according to their role in each Company; nobody outside a Company's members enters it (ADR 0012).
 
 ## Product Purpose
 
@@ -25,7 +22,7 @@ A Company uses its Hermes agents for marketing, sales analysis and strategy. gtm
 
 gtmworks is open source and self-hosted. It is built on Hermes only and runs no model itself. Hermes, shipped inside the install, is the agent engine (ADR 0010); gtmworks supplies the Company's marketing workflow and the record people use to follow it.
 
-Agents take on ongoing work, keep working when a person steps away and bring back what needs attention. Each Company gets an agent on the bundled Hermes with no connection step; an Agency owner may connect another Hermes profile instead and choose which existing agents work in each Company. Agent settings, skills and memory stay in Hermes.
+Agents take on ongoing work, keep working when a person steps away and bring back what needs attention. Each Company gets its main Agent on the bundled Hermes with no connection step; the Company's Owner may connect another Hermes profile instead and choose which existing agents work in each Company. Agent settings, skills and memory stay in Hermes.
 
 ## Operating Context
 
@@ -40,7 +37,7 @@ There are two layers of work. The marketing board, stages, dates and named appro
 - The dashboard and its worker run no model and hold no model credentials. Hermes executes agent work; gtmworks starts Hermes runs and relays their events. The older agent API remains transitional (ADR 0006, 0007, 0008).
 - A Hermes profile key is a connection credential, not a model credential. gtmworks stores it encrypted and calls Hermes directly; the saved key is never shown again (ADR 0008).
 - Agents never approve, reject, publish or spend. Approval belongs to an authorized person and applies to one exact Version. A changed Version needs a new Approval. No answer is never yes.
-- Terms follow `GLOSSARY.md`: Company, Agency, Person, Member, Agent, Card, Version and Approval. The permission roles are Owner, Manager, Contributor, Reviewer and Viewer.
+- Terms follow `GLOSSARY.md`: Company, Person, Member, Agent, main Agent, Card, Version and Approval. The permission roles are Owner, Manager, Contributor and Viewer.
 
 ### One owner for each kind of data
 
@@ -55,7 +52,7 @@ Showing Hermes data in gtmworks does not make gtmworks a second owner. Agent wor
 
 - The look is Paperclip's, per `DESIGN.md`. Existing screens are refined inside that identity.
 - New screens that Paperclip does not have (conversation, agent face, agent page) have full design freedom within the same tokens.
-- English-first, with a complete shipped Arabic (Modern Standard Arabic) translation. Direction follows the language; authored content keeps its own direction.
+- English-first, with a complete shipped Arabic translation. The interface Arabic is Egyptian, worded as in the approved reference's Arabic version (`design-reference/`); this replaces the earlier Modern Standard Arabic rule. Direction follows the language; authored content keeps its own direction.
 - Every new interface string belongs in both message catalogues.
 
 ## Accessibility & Inclusion

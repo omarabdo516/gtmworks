@@ -39,6 +39,8 @@ export const workAction=withActionLog('workAction',async function workAction(for
  }
  else if(op==='project') ({error}=await db.rpc('edit_work_card',{c:company,card,fields:{project_id:String(form.get('project')||'')},evidence}));
  else if(op==='move') ({error}=await db.rpc('move_work_card',{c:company,card,stage:Number(form.get('stage')),evidence}));
+ // The board moves a card by column (ADR 0013); the database picks the column's stage and applies every stage rule.
+ else if(op==='move-column') ({error}=await db.rpc('move_work_card_to_column',{c:company,card,target:String(form.get('column')||''),evidence}));
  else if(op==='edit') { const fields=Object.fromEntries(['title','offering','segment','hook','channel','format','go_live','goal','caption'].map(k=>[k,String(form.get(k)||'')])); ({error}=await db.rpc('edit_work_card',{c:company,card,fields,evidence})); }
  else if(op==='comment') {
   const stored=await storeFiles(db,company,form,`${card}/${crypto.randomUUID()}`); error=stored.error;
@@ -65,6 +67,6 @@ export const workAction=withActionLog('workAction',async function workAction(for
  else if(op==='label-settings') { const result=await db.from('work_labels').update({name:String(form.get('name')),color:String(form.get('color'))}).eq('company_id',company).eq('id',Number(form.get('label'))).select('id'); error=result.error || (!result.data?.length?{message:'not permitted'}:null); }
  else error={message:'unknown operation'};
  revalidatePath(`/c/${slug}`,'layout');
- if(error) { logActionFailure(`workAction:${op}`,error,{form}); const path=op==='request'?`/c/${slug}/work/new`:(op.endsWith('settings')||op.endsWith('step'))?`/c/${slug}/settings/work`:card&&(op!=='move'||form.get('view')==='card')?`${base}/${card}`:base; redirect(`${path}?message=${encodeURIComponent(error.message.includes('contributors cannot move')?t('youCannotMoveTheCardToThisStage'):t('couldNotSaveTheChangeCheckPermissionsAnd'))}`); }
+ if(error) { logActionFailure(`workAction:${op}`,error,{form}); const path=op==='request'?`/c/${slug}/work/new`:(op.endsWith('settings')||op.endsWith('step'))?`/c/${slug}/settings/work`:card&&(!['move','move-column'].includes(op)||form.get('view')==='card')?`${base}/${card}`:base; redirect(`${path}?message=${encodeURIComponent(error.message.includes('contributors cannot move')?t('youCannotMoveTheCardToThisStage'):error.message.includes('approval required')?t('boardNeedsApproval'):error.message.includes('decision required')?t('boardDecideFirst'):t('couldNotSaveTheChangeCheckPermissionsAnd'))}`); }
  if(created) redirect(`${base}/${created}`);
 });

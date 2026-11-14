@@ -8,9 +8,9 @@ const reply=(body:object,status=200)=>NextResponse.json(body,{status,headers:{'C
 async function respond(request:NextRequest) {
  try {
   const db=await supabase(); const {data:{user}}=await db.auth.getUser();
-  if(!user) return reply({error:'hermesAgencyOnly'},401);
+  if(!user) return reply({error:'hermesNotAllowed'},401);
   const writing=request.method==='POST';
-  if(writing&&(!request.headers.get('content-type')?.startsWith('application/json')||crossSiteWrite(request.headers))) return reply({error:'hermesAgencyOnly'},403);
+  if(writing&&(!request.headers.get('content-type')?.startsWith('application/json')||crossSiteWrite(request.headers))) return reply({error:'hermesNotAllowed'},403);
   const raw=writing?await request.text():''; if(raw.length>4000) return reply({error:'hermesAgentFailed'},400);
   const body=writing?JSON.parse(raw):Object.fromEntries(request.nextUrl.searchParams);
   if(typeof body.company!=='string'||!uuid.test(body.company)) return reply({error:'hermesAgentFailed'},400);
@@ -21,7 +21,7 @@ async function respond(request:NextRequest) {
    if(body.intent==='attach'&&(!body.connection||typeof body.name!=='string'||!body.name.trim()||body.name.length>100||typeof body.speciality!=='string'||!body.speciality.trim()||body.speciality.length>200)||body.intent!=='attach'&&!body.agent) return reply({error:'hermesAgentFailed'},400);
    const {error}=await db.rpc('manage_hermes_agent',{c:body.company,intent:body.intent,connection:body.connection??null,a:body.agent??null,agent_name:body.name??null,speciality:body.speciality??null,make_default:body.makeDefault===true,confirm_sharing:body.confirmSharing===true,replacement:body.replacement??null});
    if(error) {
-    const key=['hermesSharingWarning','hermesNextDefault','hermesAgentNotFound','hermesAgencyOnly'].includes(error.message)?error.message:'hermesAgentFailed';
+    const key=['hermesSharingWarning','hermesNextDefault','hermesAgentNotFound','hermesNotAllowed'].includes(error.message)?error.message:'hermesAgentFailed';
     return reply({error:key},error.code==='42501'?403:error.code==='P0002'?404:key==='hermesSharingWarning'||key==='hermesNextDefault'?409:400);
    }
   }

@@ -2,6 +2,8 @@ begin;
 create extension if not exists pgtap with schema extensions;
 select plan(16);
 update public.role_permissions set allowed=false where company_id='10000000-0000-0000-0000-000000000003' and role='manager' and permission='edit';
+-- Person 5 is a Contributor in RS Learning; here they hold a different Role in Aleem.
+update public.members set role='viewer' where company_id='10000000-0000-0000-0000-000000000003' and person_id='20000000-0000-0000-0000-000000000005';
 select is((select count(*)::int from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind in ('r','p') and not c.relrowsecurity),0,'every public table has RLS');
 select is((select count(*)::int from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind in ('r','p') and c.relname not in ('agents','companies','people','setup_claim') and not exists (select 1 from pg_attribute a where a.attrelid=c.oid and a.attname='company_id' and not a.attisdropped)),0,'company-owned tables have company_id');
 set local role anon;

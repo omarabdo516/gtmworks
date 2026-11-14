@@ -1,0 +1,310 @@
+# One tested gtmworks image per release, pulled by installs instead of built on the server (#49).
+# It runs only on workflow_run, so GitHub always runs this reviewed copy from main: a tag push runs the workflow files of
+# the tagged commit, which may be unreviewed, so this workflow follows only release-tag.yml, and nothing from that run is
+# used here but its conclusion and event (job conditions), its identifiers in the concurrency group, and the identifiers
+# provenance checks (no inline expression in a script, no artifact). Before anything is published,
+# provenance proves the exact commit: a tag must name a commit on main whose required CI check passed on a push to main;
+# main publishes only its current head, once that check passed.
+# A release builds linux/amd64 and linux/arm64 and pushes X.Y.Z, installs on a fresh runner from the two release files
+# alone, and only then uploads both files to a draft GitHub Release, publishes it (published releases are immutable) and
+# moves stable and latest, one promotion at a time, to the highest published release (so an older or hotfix tag
+# finishing last never moves them back). A re-run of a published release builds and tags nothing; it only promotes.
+# Every action is pinned to the full commit its release tag named when reviewed (the tag follows as a comment): a moved
+# upstream tag must not run with packages or contents write. tests/release.test.mjs lists the reviewed commits.
+# The first push creates the package private. Its owner makes it public once (README, Releases); until then the install
+# test stops on the anonymous read below, and stable, latest and the GitHub Release are not published.
+name: Release
+
+on:
+  workflow_run:
+    workflows: [CI, Release tag]
+    types: [completed]
+
+# Main runs one at a time in CI's push order (a newer pending run replaces an older one); each tag runs on its own.
+concurrency:
+  group: release-${{ github.event.workflow_run.path == '.github/workflows/ci.yml' && 'main' || github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  provenance:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      sha: ${{ steps.provenance.outputs.sha }}
+      tag: ${{ steps.provenance.outputs.tag }}
+      release: ${{ steps.provenance.outputs.release }}
+    steps:
+      - name: the exact commit is reviewed and passed the required CI check
+        id: provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_PATH: ${{ github.event.workflow_run.path }}
+          EVENT: ${{ github.event.workflow_run.event }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          fail() { echo "::error::$1" >&2; exit 1; }
+          [[ "$EVENT" == push ]] || fail "only a push starts a release, not $EVENT"
+          [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "not a commit SHA: $HEAD_SHA"
+          case "$WORKFLOW_PATH" in
+            .github/workflows/ci.yml)
+              [[ "$HEAD_BRANCH" == main ]] || fail "CI ran for $HEAD_BRANCH, not main"
+              # A re-run of an old main run, or an older commit whose CI finished late, must not move main back.
+              # Main runs are serialised (concurrency above), so the head checked here is the newest a run can publish.
+              main=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+              if [[ "$main" != "$HEAD_SHA" ]]; then
+                echo "::notice::$HEAD_SHA is no longer the head of main ($main); main is not published from it."
+                printf '%s\n' sha= tag= release= >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+              tag=main release=
+              ;;
+            .github/workflows/release-tag.yml)
+              [[ "$HEAD_BRANCH" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "not a release tag: $HEAD_BRANCH"
+              # The tag must still name this exact commit: a moved tag, or a re-run after it moved, publishes nothing.
+              object=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$HEAD_BRANCH" --jq '.object.type + " " + .object.sha') \
+                || fail "tag $HEAD_BRANCH not found"
+              if [[ "$object" == "tag "* ]]; then
+                object=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/${object#tag }" --jq '.object.type + " " + .object.sha') \
+                  || fail "annotated tag $HEAD_BRANCH not found"
+              fi
+              [[ "$object" == "commit $HEAD_SHA" ]] || fail "$HEAD_BRANCH names $object, not commit $HEAD_SHA"
+              # Reviewed: the commit is on main, which is ahead of it or is it.
+              status=$(gh api "repos/$GITHUB_REPOSITORY/compare/$HEAD_SHA...main" --jq .status)
+              [[ "$status" == ahead || "$status" == identical ]] || fail "$HEAD_SHA is not on main (compare: $status)"
+              tag=${HEAD_BRANCH#v} release=$HEAD_BRANCH
+              ;;
+            *) fail "a release starts only from CI or Release tag, not $WORKFLOW_PATH";;
+          esac
+          # The required check passed for this exact commit on a push to main, in this repository, on the latest attempt
+          # of its CI run. Every page of runs and jobs is read.
+          runs=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?event=push&branch=main&head_sha=$HEAD_SHA&per_page=100" \
+            | jq -rs --arg sha "$HEAD_SHA" --arg repo "$GITHUB_REPOSITORY" '.[].workflow_runs[]
+                | select(.head_sha == $sha and .event == "push" and .head_branch == "main"
+                    and .head_repository.full_name == $repo and .conclusion == "success") | .id')
+          proven=
+          for run in $runs; do
+            check=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$run/jobs?filter=latest&per_page=100" \
+              | jq -rs '[.[].jobs[] | select(.name == "check")] | if length == 1 then .[0].conclusion else "missing" end')
+            if [[ "$check" == success ]]; then proven=$run; break; fi
+          done
+          [[ -n "$proven" ]] || fail "no CI run in $GITHUB_REPOSITORY passed its required check for $HEAD_SHA on a push to main"
+          echo "provenance: $HEAD_SHA passed the required check in CI run $proven on a push to main"
+          # A published release is immutable, and so is its version: a re-run builds and tags nothing (an empty tag), and
+          # only promotes. A draft is not published, so an interrupted release is built and tested again. Every page is
+          # read; a list that cannot be read stops here rather than reading as unpublished.
+          if [[ -n "$release" ]]; then
+            published=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+              | jq -rs --arg tag "$release" '[.[][] | select(.tag_name == $tag and .draft == false)] | length')
+            if [[ "$published" != 0 ]]; then
+              echo "::notice::$release is already published; its image $IMAGE:$tag is not rebuilt or tagged again, and only promotion runs."
+              tag=
+            fi
+          fi
+          printf '%s\n' "sha=$HEAD_SHA" "tag=$tag" "release=$release" >> "$GITHUB_OUTPUT"
+
+  image:
+    needs: provenance
+    if: ${{ needs.provenance.outputs.tag != '' }}
+    runs-on: ubuntu-latest
+    # arm64 is built under emulation on the standard runner.
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ needs.provenance.outputs.sha }}
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ github.token }}
+      - name: build and push linux/amd64 and linux/arm64
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.IMAGE }}:${{ needs.provenance.outputs.tag }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha,scope=release
+          cache-to: type=gha,mode=max,scope=release
+      - name: both platform digests pushed
+        env:
+          TAG: ${{ needs.provenance.outputs.tag }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          docker manifest inspect "$IMAGE:$TAG" | tee manifest.json
+          for arch in amd64 arm64; do
+            digest=$(jq -r --arg arch "$arch" '.manifests[] | select(.platform.os == "linux" and .platform.architecture == $arch) | .digest' manifest.json)
+            [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]] || { echo "no single linux/$arch image in $IMAGE:$TAG" >&2; exit 1; }
+            echo "linux/$arch: $IMAGE@$digest"
+          done
+          echo "index: $IMAGE:$TAG@$DIGEST"
+
+  install-test:
+    needs: [provenance, image]
+    if: ${{ needs.provenance.outputs.release != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # No packages permission and no login: the pull below is what an install with no account does.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ needs.provenance.outputs.sha }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - name: release files pinned by digest
+        env:
+          TAG: ${{ needs.provenance.outputs.tag }}
+          DIGEST: ${{ needs.image.outputs.digest }}
+        run: |
+          node scripts/release-assets.mjs "$IMAGE:$TAG@$DIGEST" release
+          grep -n 'image:' release/docker-compose.install.yml
+          if grep 'image:' release/docker-compose.install.yml | grep -v '@sha256:'; then echo 'an image is not pinned by digest' >&2; exit 1; fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-files
+          path: release/
+          if-no-files-found: error
+          retention-days: 30
+      - name: the image reads with no account
+        env:
+          DIGEST: ${{ needs.image.outputs.digest }}
+        run: |
+          if ! docker manifest inspect "$IMAGE@$DIGEST" > /dev/null; then
+            settings="https://github.com/users/$GITHUB_REPOSITORY_OWNER/packages/container/${GITHUB_REPOSITORY#*/}/settings"
+            echo "::error::$IMAGE cannot be read without an account. Its owner sets it to Public once ($settings, Change visibility), then re-runs this workflow's failed jobs."
+            exit 1
+          fi
+      - name: install from only the compose file and install script
+        run: |
+          dir="$RUNNER_TEMP/gtmworks"
+          mkdir "$dir"
+          cp release/docker-compose.install.yml release/install.sh "$dir/"
+          cd "$dir"
+          ls -A
+          [[ $(ls -A | wc -l) == 2 ]] || { echo 'the install directory must hold only the two release files' >&2; exit 1; }
+          sh install.sh
+          for path in /api/health /sign-in; do
+            status=$(curl -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:3000$path")
+            echo "http://127.0.0.1:3000$path $status"
+            [[ $status == 200 ]] || exit 1
+          done
+
+  release:
+    needs: [provenance, image, install-test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release-files
+          path: release
+      # Published releases are immutable (repository setting): their files can never be replaced, so both files go to a
+      # draft first and the draft is published only once it holds them. A fix ships as a new release.
+      - name: draft GitHub Release with the compose file and install script
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ needs.provenance.outputs.release }}
+          APP_IMAGE: ${{ env.IMAGE }}:${{ needs.provenance.outputs.tag }}@${{ needs.image.outputs.digest }}
+        run: |
+          # Every page, drafts included; a failed request stops here rather than reading as no release.
+          state=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            | jq -rs --arg tag "$TAG_NAME" '[.[][] | select(.tag_name == $tag)]
+                | if any(.[]; .draft | not) then "published" elif length == 1 then "draft" elif length == 0 then "none" else "drafts" end')
+          case "$state" in
+            published)
+              # Provenance builds nothing for a published release, so it was published while this run built: its files
+              # stay as they are, and this run's image is not that release's.
+              echo "::error::$TAG_NAME was published after this run started; its files stay as they are, and this run's $APP_IMAGE is not released (its version tag may now name it). A fix ships as a new release." >&2
+              exit 1;;
+            draft)
+              # A draft a failed run left: its files are replaced with the ones this run's install test passed on.
+              gh release upload "$TAG_NAME" release/docker-compose.install.yml release/install.sh -R "$GITHUB_REPOSITORY" --clobber;;
+            none)
+              gh release create "$TAG_NAME" release/docker-compose.install.yml release/install.sh -R "$GITHUB_REPOSITORY" \
+                --draft --verify-tag --title "$TAG_NAME" \
+                --notes "Image: $APP_IMAGE. Put both files in an empty directory and run: sh install.sh";;
+            *) echo "::error::$TAG_NAME has more than one draft release; delete the extra drafts, then re-run" >&2; exit 1;;
+          esac
+      - name: publish the draft once it holds the tested files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ needs.provenance.outputs.release }}
+        run: |
+          for file in docker-compose.install.yml install.sh; do
+            gh release download "$TAG_NAME" -R "$GITHUB_REPOSITORY" -p "$file" -O "$RUNNER_TEMP/$file"
+            cmp -s "$RUNNER_TEMP/$file" "release/$file" \
+              || { echo "::error::the draft $TAG_NAME does not hold the tested $file; it is not published" >&2; exit 1; }
+          done
+          gh release edit "$TAG_NAME" -R "$GITHUB_REPOSITORY" --draft=false
+          echo "published $TAG_NAME"
+
+  promote:
+    needs: [provenance, image, release]
+    # After this run published its release, or on a re-run of a published release, for which provenance named no image
+    # tag and so nothing was built, tested or released. Any failure or cancellation stops it.
+    if: >-
+      ${{ !cancelled() && needs.provenance.result == 'success' && needs.provenance.outputs.release != ''
+      && (needs.release.result == 'success'
+      || (needs.provenance.outputs.tag == '' && needs.image.result == 'skipped' && needs.release.result == 'skipped')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # One promotion at a time, across every tag, each to the highest published release: whichever runs last leaves stable
+    # and latest there. A promotion still waiting when a newer one queues is cancelled; the newer one covers it.
+    concurrency:
+      group: release-promote
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ github.token }}
+      - name: move stable and latest to the highest published release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ needs.provenance.outputs.release }}
+          DIGEST: ${{ needs.image.outputs.digest }}
+        run: |
+          digest() { docker buildx imagetools inspect "$1" --format '{{json .Manifest}}' | jq -r .digest; }
+          highest=$(gh release list -R "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases --limit 1000 --json tagName --jq '.[].tagName' \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1) || true
+          [[ -n "$highest" ]] || { echo 'no published vX.Y.Z release to promote' >&2; exit 1; }
+          # The digest that release's install test passed on, read from its own compose file.
+          pinned=$(gh release download "$highest" -R "$GITHUB_REPOSITORY" -p docker-compose.install.yml -O - \
+            | grep -oE "image: $IMAGE:${highest#v}@sha256:[a-f0-9]{64}" | sort -u)
+          [[ $(grep -c . <<< "$pinned") == 1 ]] || { echo "$highest names no single gtmworks image" >&2; exit 1; }
+          target=${pinned##*@}
+          echo "this run: $TAG_NAME ${DIGEST:+$IMAGE@$DIGEST}${DIGEST:-already published, nothing built}; highest release: $highest $IMAGE@$target"
+          # The read-back must name the target digest itself before stable and latest move.
+          [[ $(digest "$IMAGE@$target") == "$target" ]] || { echo "the digest read-back does not name $target" >&2; exit 1; }
+          docker buildx imagetools create -t "$IMAGE:stable" -t "$IMAGE:latest" "$IMAGE@$target"
+          for tag in stable latest; do
+            moved=$(digest "$IMAGE:$tag")
+            echo "$IMAGE:$tag -> $moved"
+            [[ "$moved" == "$target" ]] || { echo "$tag points at $moved, not $target" >&2; exit 1; }
+          done

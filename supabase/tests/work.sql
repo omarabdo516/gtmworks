@@ -5,7 +5,7 @@ insert into public.companies(id,slug,name) values ('10000000-0000-0000-0000-0000
 insert into public.work_cards(company_id,stage_id,title) select company_id,id,'Private' from public.work_stages where company_id='10000000-0000-0000-0000-000000000099' and position=1;
 insert into public.work_creatives(company_id,card_id,name) select company_id,id,'Private' from public.work_cards where company_id='10000000-0000-0000-0000-000000000099';
 insert into storage.objects(bucket_id,name) values ('creatives','10000000-0000-0000-0000-000000000099/private.png');
-select is((select count(*)::int from public.work_stages where company_id='10000000-0000-0000-0000-000000000099'),9,'new company receives nine stages');
+select is((select count(*)::int from public.work_stages where company_id='10000000-0000-0000-0000-000000000099'),10,'new company receives nine stages and Done (ADR 0013)');
 select is((select count(*)::int from public.work_labels where company_id='10000000-0000-0000-0000-000000000099'),8,'new company receives labels');
 update public.work_stages set position=1 where company_id='10000000-0000-0000-0000-000000000001' and kind='after_review';
 set local role authenticated;

@@ -18,14 +18,16 @@ export default async function ConversationPage({params}:{params:Promise<{slug:st
  // Usage first: a run the worker closes between the two reads then shows its reply too (one transaction writes both).
  const usage=((await db.from('conversation_usage').select(usageColumns).eq('conversation_id',id)).data||[]) as RunUsage[];
  const {data:rows}=await db.from('conversation_messages').select(messageColumns).eq('conversation_id',id).order('id');
- const {data:person}=await db.from('people').select('name,agency_owner').eq('id',user.id).single();
+ // The Agent's details beside the chat, while it is still attached to the company.
+ const {data:agent}=conversation.agent_id?await db.from('hermes_agents').select('id,connection_id,name,speciality,is_default').eq('id',conversation.agent_id).eq('company_id',company.id).maybeSingle():{data:null};
+ const {data:person}=await db.from('people').select('name').eq('id',user.id).single();
  const {data:membership}=await db.from('members').select('role').eq('company_id',company.id).eq('person_id',user.id).is('removed_at',null).maybeSingle();
  // Any Member but a Viewer may write (#287); the database decides, as it does for every send.
  const {data:writer}=await db.rpc('conversation_can_write',{c:company.id});
- const {cards}=await approvalQueue(db,company.id,user.id,membership?.role||'');
- const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),reviewer:t('reviewer'),viewer:t('viewer')};
+ const {items:waitingItems}=await approvalQueue(db,company.id,user.id,membership?.role||'');
+ const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  const messages=shown(rows||[],usage); const title=titleOf(messages,conversation.agent_name);
- return <Shell company={company} companies={companies||[]} section="conversations" title={title} crumbs={[{label:t('conversations')},{label:title}]} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||t('agencyOwner')} agency={!!person?.agency_owner} approvalCount={cards.length}>
-  <main className="content convo-page"><ConversationView company={company.id} companyName={company.name} conversation={{id,agent_name:conversation.agent_name,face:faceOf(conversation)}} initial={messages} usage={totalOf(usage)} failed={latestEnded(rows||[],usage)} pending={waiting(rows||[],usage).length>0} writer={!!writer}/></main>
+ return <Shell company={company} companies={companies||[]} section="conversations" title={title} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={waitingItems.length} agentId={conversation.agent_id||undefined} conversationId={id}>
+  <main className="convo-page h-full"><ConversationView slug={slug} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default}:null} company={company.id} conversation={{id,agent_name:conversation.agent_name,face:faceOf(conversation)}} initial={messages} usage={totalOf(usage)} failed={latestEnded(rows||[],usage)} pending={waiting(rows||[],usage).length>0} writer={!!writer}/></main>
  </Shell>;
 }

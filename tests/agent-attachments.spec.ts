@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { chooseLanguageInSettings } from './choose-language';
 import { mkdir } from 'node:fs/promises';
 import { signIn } from './sign-in';
 // This file sorts before app.spec.ts on purpose: that file revokes the public fixture key at its end.
@@ -10,9 +11,7 @@ const bytes=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
 const picture=(name:string)=>({name,mimeType:'image/png',buffer:bytes});
 const attach=(page:Page)=>page.locator('input[type=file][name=files]');
 async function chooseLanguage(page:Page,language:'en'|'ar') {
- await page.goto('/c/rs-learning/settings');
- await page.locator('select[name=language]').selectOption(language);
- await page.locator('form').filter({has:page.locator('select[name=language]')}).getByRole('button').click();
+ await chooseLanguageInSettings(page,language);
  await expect(page.locator('html')).toHaveAttribute('lang',language);
 }
 // The thumbnail of the message holding `text`: it must really load, and its address names the file by id, never by storage path.

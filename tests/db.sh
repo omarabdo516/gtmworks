@@ -16,3 +16,5 @@ node tests/agent-role-backfill.mjs
 node tests/bootstrap-db.mjs
 node tests/first-run-migration.mjs
 node tests/lead-agent-migration.mjs
+node tests/remove-agency-migration.mjs
+node tests/company-log-migration.mjs

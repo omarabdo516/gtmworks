@@ -46,7 +46,7 @@ select set_config('request.jwt.claims','',true);
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
 select throws_ok($$select public.decide_skill_lesson('10000000-0000-0000-0000-000000000001',(select id from public.skill_lessons where request_key='k1'),true)$$,'42501',null,'a viewer cannot approve a lesson');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
-select throws_ok($$select public.decide_skill_lesson('10000000-0000-0000-0000-000000000001',(select id from public.skill_lessons where request_key='k1'),false)$$,'42501',null,'a reviewer cannot reject a lesson');
+select throws_ok($$select public.decide_skill_lesson('10000000-0000-0000-0000-000000000001',(select id from public.skill_lessons where request_key='k1'),false)$$,'42501',null,'a Contributor cannot reject a lesson');
 select throws_ok($$insert into public.skill_lessons(company_id,skill_id,card_id,proposed_by,lesson,reason,base_version,request_key,fingerprint) select company_id,skill_id,card_id,proposed_by,'x','y',1,'direct','z' from public.skill_lessons limit 1$$,'42501',null,'clients cannot write lessons directly');
 select throws_ok($$update public.skill_lessons set status='approved'$$,'42501',null,'clients cannot decide a lesson by updating it');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
