@@ -16,8 +16,19 @@ const marker = join(dirname(snapshot), 'seeded-for');
 export function freshSeed(file: string) {
   const owner = `${process.env.GTMWORKS_TEST_RUN} ${file}`;
   try { if (readFileSync(marker, 'utf8') === owner) return; } catch { /* no file has used this lane yet */ }
-  execFileSync('docker', ['exec', '-i', dbContainerOf(), 'psql', '-U', 'supabase_admin', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-q'],
-    { input: readFileSync(snapshot), stdio: ['pipe', 'ignore', 'inherit'] });
+  // One transaction: the lane's app or worker may still be finishing a query of the previous file, and a restore that
+  // meets it in a deadlock is rolled back whole and tried again; any other error fails the test at once.
+  for (let attempt = 1; ; attempt++) {
+    try {
+      execFileSync('docker', ['exec', '-i', dbContainerOf(), 'psql', '-U', 'supabase_admin', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-q', '--single-transaction'],
+        { input: readFileSync(snapshot), stdio: ['pipe', 'ignore', 'pipe'], encoding: 'utf8' });
+      break;
+    } catch (error) {
+      const stderr = String((error as { stderr?: string }).stderr ?? '');
+      if (attempt >= 5 || !stderr.includes('deadlock detected')) throw new Error(`Restoring the seed failed: ${stderr}`);
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 200 * attempt);
+    }
+  }
   writeFileSync(marker, owner);
 }
 
