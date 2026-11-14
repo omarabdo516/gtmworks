@@ -424,3 +424,50 @@ test('an account menu opened while the next page is still arriving stays open wh
   await expect(menu).toHaveCount(0);
  } finally { release(); await page.unroute(board,hold); }
 });
+
+test('an open account menu closes when the keyboard takes the person to another company',async({page})=>{
+ await page.setViewportSize({width:1440,height:900});
+ await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ await idle(page);
+ await page.locator('.sidebar #btn-me').click();
+ await expect(page.getByRole('menu')).toBeVisible();
+ // Only the keyboard: no press outside the menu and no Back.
+ await page.getByLabel('Choose company').press('Enter');
+ await page.locator('[data-company-slug="aleem"]').press('Enter');
+ await expect(page).toHaveURL(/\/c\/aleem\//);
+ await expect(page.locator('.ws').getByText('Aleem')).toBeVisible();
+ await expect(page.locator('#me-menu')).toHaveCount(0);
+ await expect(page.locator('.sidebar #btn-me')).toHaveAttribute('aria-expanded','false');
+});
+
+test('a menu open while its own page lands keeps the item that had focus',async({page})=>{
+ // As above: the board's data is held until the menu is open and focus is on one of its items.
+ await page.setViewportSize({width:1440,height:900});
+ await signIn(page,'omar@example.com','/c/rs-learning/work/board/1');
+ await expect(page.locator('.modal')).toBeVisible();
+ let release!:()=>void; const held=new Promise<void>(resolve=>{release=resolve;});
+ let arrived!:()=>void; const asked=new Promise<void>(resolve=>{arrived=resolve;});
+ const board=(url:URL)=>url.pathname==='/c/rs-learning/work/board';
+ const hold=async(route:import('@playwright/test').Route)=>{ if(route.request().headers()['rsc']==='1') { arrived(); await held; } await route.continue(); };
+ await page.route(board,hold);
+ try {
+  const comment=`Focus stays ${Date.now()}`;
+  await page.getByLabel('Comment',{exact:true}).fill(comment);
+  await page.getByRole('button',{name:'Send',exact:true}).click();
+  await expect(page.locator('.comment-body').filter({hasText:comment})).toBeVisible();
+  const shell=await page.locator('.shell').elementHandle();
+  await page.locator('.close-card').click();
+  await asked;
+  await page.locator('.sidebar #btn-me').click();
+  const menu=page.getByRole('menu');
+  await menu.getByRole('menuitemradio',{name:'Dark'}).focus();
+  await expect(menu.getByRole('menuitemradio',{name:'Dark'})).toBeFocused();
+  release();
+  await expect(page.locator('.modal')).toHaveCount(0);
+  await expect.poll(()=>shell!.evaluate(node=>node.isConnected)).toBe(false);
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('menuitemradio',{name:'Dark'})).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
+ } finally { release(); await page.unroute(board,hold); }
+});

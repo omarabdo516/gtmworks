@@ -20,11 +20,15 @@ export default function Projects({slug,company,projects,counts,canEdit,message}:
 // One project's form. React resets an action's form when the action ends, and each control then shows its default
 // value. The page drawn again after the save normally brings the saved values, but it may land after the reset, or be
 // replaced by an older copy of the page that was being prepared at the same moment; the controls then fell back to
-// the values from before the save. So the row keeps what it saved and shows it until the page brings newer values
-// than the ones it had when the save began. Each control is keyed on the value it shows, so it is drawn again with it.
+// the values from before the save. So the row keeps what it saved only until the page brings anything other than
+// the values it had when the save began: the saved values (the server has them) or someone else's newer change. From
+// then on the server's values are shown again, so a later save never writes over another person's change. Each
+// control is keyed on the value it shows, so it is drawn again with it.
 function ProjectRow({project,cards,hidden,status}:{project:Project,cards:number,hidden:React.ReactNode,status:(s:string)=>string}) { const {t}=useI18n();
  const [saved,setSaved]=useState<{from:Project,values:Project}|null>(null);
  const same=(a:Project,b:Project)=>a.name===b.name&&a.goal===b.goal&&a.status===b.status;
+ // The server has answered: forget the kept values (React's pattern for state that follows a prop).
+ if(saved&&!same(saved.from,project)) setSaved(null);
  const shown=saved&&same(saved.from,project)?saved.values:project;
  const save=async(form:FormData)=>{
   const from=project;

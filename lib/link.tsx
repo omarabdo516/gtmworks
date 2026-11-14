@@ -27,6 +27,9 @@ function trackPageRequests() {
   return () => { window.fetch = fetch; requests.clear(); };
 }
 
+/** The pages whose data the browser is fetching right now (a navigation or a refresh on its way). */
+export const pendingPagePaths = () => [...requests].map(request => request.path);
+
 export function NavigationFeedback() {
   useLayoutEffect(trackPageRequests, []);
   return null;
