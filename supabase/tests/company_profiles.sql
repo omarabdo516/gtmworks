@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(36);
+select plan(37);
 -- Omar owns every company. R&S Consultations (2) has no Hermes; Aleem (3) is on the shared bundled `default` profile, as
 -- the previous worker left it, and has a Contributor (5); a new company (99) has no Hermes either.
 insert into public.companies(id,slug,name) values ('10000000-0000-0000-0000-000000000099','profiles-new','Profiles new');
@@ -18,6 +18,18 @@ select is(public.attach_company_profile('10000000-0000-0000-0000-000000000002','
 -- Aleem and the new company get the shared profile from the previous worker's function.
 select cmp_ok(public.provide_bundled_hermes('http://hermes:8642','default','encrypted','0.23.0','{run_submission}'),'>=',2,'the previous worker still provides the shared profile');
 select ok((select move and not attach from public.company_profile_work() where company_id='10000000-0000-0000-0000-000000000003'),'a company on the shared profile waits to move');
+-- Companies that only wait to move (a move waits for the company's own sign-in, maybe for long) never hold back one to
+-- provision: a company with no Hermes, whatever its id, comes before them.
+reset role;
+insert into public.companies(id,slug,name) values ('1fffffff-0000-0000-0000-000000000098','profiles-late','Profiles late');
+insert into public.members(company_id,person_id,role) values ('1fffffff-0000-0000-0000-000000000098','20000000-0000-0000-0000-000000000001','owner');
+set local role service_role;
+select is((select array_agg(w.company_id::text order by w.n) from public.company_profile_work() with ordinality w(company_id,profile,agent_level,tools_level,tools_policy,tools_pending,attach,move,n) where w.company_id in ('10000000-0000-0000-0000-000000000003','1fffffff-0000-0000-0000-000000000098')),
+ array['1fffffff-0000-0000-0000-000000000098','10000000-0000-0000-0000-000000000003'],'a company to provision comes before one that only waits to move');
+reset role;
+-- Without an active Owner it leaves the worker's list.
+update public.members set removed_at=now() where company_id='1fffffff-0000-0000-0000-000000000098';
+set local role service_role;
 select is(public.move_company_profile('10000000-0000-0000-0000-000000000003','http://hermes:8642','encrypted','0.23.0','{run_submission}'),0,'nothing moves before its own profile is made');
 select lives_ok($$select public.record_company_profile('10000000-0000-0000-0000-000000000003','co-10000000000000000000000000000003',1,public.engine_tool_policy())$$,'Aleem''s profile is recorded');
 reset role;

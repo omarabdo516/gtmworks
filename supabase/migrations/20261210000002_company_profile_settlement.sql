@@ -50,7 +50,11 @@ language sql stable security definer set search_path='' as $$
   where exists(select 1 from public.members m where m.company_id=c.id and m.role='owner' and m.removed_at is null)) w
  where w.attach or w.move or w.lost
   or (w.recorded and (w.tools_level<>w.agent_level or w.tools_policy is distinct from public.engine_tool_policy() or w.tools_pending))
- order by w.id limit 100;
+ -- A company that only waits to move may wait long (for its own sign-in): those come after every company with other work,
+ -- in an order that turns every minute, so a hundred of them never hold back a company to provision, nor each other.
+ order by (w.move and not w.attach and not w.lost and not (w.recorded and (w.tools_level<>w.agent_level or w.tools_policy is distinct from public.engine_tool_policy() or w.tools_pending))),
+  case when w.move and not w.attach and not w.lost then md5(w.id::text||date_trunc('minute',now())::text) end,w.id
+ limit 100;
 $$;
 revoke all on function public.company_profile_work() from public,anon,authenticated;
 grant execute on function public.company_profile_work() to service_role;
