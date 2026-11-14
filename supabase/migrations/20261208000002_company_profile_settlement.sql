@@ -8,12 +8,14 @@
 -- the recorded read-back (record_company_profile, current policy only) clears the mark. A change Hermes applied but the
 -- worker could not record therefore never looks applied: no run starts until the read-back matches again.
 --
--- Settled reservations. A reservation no longer expires and its Connection cannot be deleted under it (no cascade; the
--- move removes an old Connection only when nothing pins it). It holds the person's message, so the worker settles one
--- whose message was never recorded: it asks Hermes on the pinned Connection with the same idempotency key, which replays
--- the run Hermes started or starts it, and records it (settle_conversation_run). A retry by the person reserves the same
--- Connection. The move waits for every reservation of its Connections, whatever its age.
---
+-- Reservations. A run is reserved before Hermes is called and recording its message ends the reservation. A retry
+-- that finds its reservation passes the same checks as a new one (the profile is the company's, its tools are applied
+-- and not pending) before it may start. gtmworks never calls Hermes to finish a reservation: one whose message was not
+-- recorded within ten minutes, or whose Agent or sender's place in the company is gone, is marked abandoned by the
+-- worker in one update (abandon_conversation_reservations). The person already saw an error and can send again. An
+-- abandoned reservation is kept with its pinned Connection and profile for the record, and holds nothing: only an
+-- active one holds the move, and the Connection's removal (a trigger, since a kept row must not keep a Connection).
+
 -- Quiet window. The previous app version starts a run before it records it and never reserves. A move therefore also
 -- waits until no message of the company's conversations on those Connections was written in the last five minutes.
 -- What remains: a message the previous version sends after five quiet minutes, in the instant between its Hermes call
@@ -69,78 +71,68 @@ $$;
 revoke all on function public.begin_company_tools(uuid) from public,anon,authenticated;
 grant execute on function public.begin_company_tools(uuid) to service_role;
 
--- Reservations keep their Connection, Agent and message until they are settled.
+-- Reservations keep their Agent, message and pinned profile, and say when they were abandoned. They point at their
+-- Connection by id without a foreign key, so an abandoned one never keeps a Connection; an active one does (trigger).
 alter table public.conversation_run_reservations drop constraint conversation_run_reservations_connection_id_fkey;
-alter table public.conversation_run_reservations add constraint conversation_run_reservations_connection_id_fkey foreign key (connection_id) references public.hermes_connections(id);
-alter table public.conversation_run_reservations add column agent_id uuid, add column message text;
+alter table public.conversation_run_reservations add column agent_id uuid, add column message text, add column profile text, add column abandoned_at timestamptz;
+
+create function public.keep_reserved_connection() returns trigger language plpgsql security definer set search_path='' as $$
+begin
+ if exists(select 1 from public.conversation_run_reservations r where r.connection_id=old.id and r.abandoned_at is null) then
+  raise exception 'hermesProfileInUse' using errcode='23503'; end if;
+ return old;
+end $$;
+revoke all on function public.keep_reserved_connection() from public,anon,authenticated,service_role;
+create trigger reserved_connection_kept before delete on public.hermes_connections for each row execute function public.keep_reserved_connection();
 
 drop function public.reserve_conversation_run(uuid,uuid,uuid,uuid);
 create function public.reserve_conversation_run(conversation uuid, c uuid, agent uuid, message_key uuid, message text) returns uuid
 language plpgsql security definer set search_path='' as $$
-declare existing public.conversations; linked public.hermes_connections; pinned uuid;
+declare existing public.conversations; held public.conversation_run_reservations; linked public.hermes_connections;
 begin
  if not public.conversation_can_write(c) then raise exception 'conversationNotAllowed' using errcode='42501'; end if;
  if message is null or length(message) not between 1 and 200000 then raise exception 'conversationNotFound' using errcode='22023'; end if;
  select * into existing from public.conversations where id=conversation;
  if found and (existing.person_id<>auth.uid() or existing.company_id<>c or existing.agent_id is distinct from agent) then raise exception 'conversationNotFound' using errcode='P0002'; end if;
  perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
- -- A retry keeps the Connection it first reserved, so it never starts a run on another profile.
- select r.connection_id into pinned from public.conversation_run_reservations r where r.conversation_id=conversation and r.send_key=message_key and r.person_id=auth.uid();
- if pinned is not null then return pinned; end if;
- select h.* into linked from public.hermes_agents a join public.hermes_connections h on h.id=a.connection_id where a.id=agent and a.company_id=c;
- if not found then raise exception 'conversationNotFound' using errcode='P0002'; end if;
+ if not exists(select 1 from public.hermes_agents a where a.id=agent and a.company_id=c) then raise exception 'conversationNotFound' using errcode='P0002'; end if;
+ select * into held from public.conversation_run_reservations r where r.conversation_id=conversation and r.send_key=message_key;
+ if found and (held.person_id<>auth.uid() or held.company_id<>c or held.agent_id is distinct from agent) then raise exception 'conversationNotFound' using errcode='P0002'; end if;
+ -- A retry keeps the Connection it first reserved, so it never starts a run on another profile; an abandoned one is
+ -- reserved again on the Agent's Connection of now. Either way the checks below run before it is returned.
+ if found and held.abandoned_at is null then select * into linked from public.hermes_connections where id=held.connection_id;
+ else select h.* into linked from public.hermes_agents a join public.hermes_connections h on h.id=a.connection_id where a.id=agent and a.company_id=c;
+ end if;
+ if linked.id is null then raise exception 'conversationNotFound' using errcode='P0002'; end if;
  if linked.profile ~ '^co-[0-9a-f]{32}$' then
   if linked.profile<>public.company_engine_profile(c) then raise exception 'hermesProfileNotShared' using errcode='42501'; end if;
   if not public.company_profile_ready(c) then raise exception 'agentLevelPending' using errcode='55000'; end if;
  end if;
- insert into public.conversation_run_reservations(conversation_id,send_key,company_id,connection_id,person_id,agent_id,message)
-  values(conversation,message_key,c,linked.id,auth.uid(),agent,message) on conflict (conversation_id,send_key) do nothing;
- select r.connection_id into pinned from public.conversation_run_reservations r where r.conversation_id=conversation and r.send_key=message_key and r.person_id=auth.uid();
- if pinned is null then raise exception 'conversationNotFound' using errcode='P0002'; end if;
- return pinned;
+ insert into public.conversation_run_reservations(conversation_id,send_key,company_id,connection_id,person_id,agent_id,message,profile)
+  values(conversation,message_key,c,linked.id,auth.uid(),agent,message,linked.profile)
+  on conflict (conversation_id,send_key) do update set connection_id=excluded.connection_id,profile=excluded.profile,message=excluded.message,created_at=now(),abandoned_at=null
+   where public.conversation_run_reservations.abandoned_at is not null;
+ return linked.id;
 end $$;
 revoke all on function public.reserve_conversation_run(uuid,uuid,uuid,uuid,text) from public,anon,service_role;
 grant execute on function public.reserve_conversation_run(uuid,uuid,uuid,uuid,text) to authenticated;
 
--- The reservations older than two minutes whose message was never recorded, with the pinned Connection the worker
--- asks Hermes on (its key stays encrypted until the worker decrypts it to call the driver).
-create function public.unsettled_conversation_runs() returns table(conversation uuid, send_key uuid, message text, connection uuid, address text, profile text, state text, features text[], key_encrypted text)
-language sql stable security definer set search_path='' as $$
- select r.conversation_id,r.send_key,r.message,h.id,h.address,h.profile,h.state,h.features,h.key_encrypted
- from public.conversation_run_reservations r join public.hermes_connections h on h.id=r.connection_id
- where r.created_at<now()-interval '2 minutes' and r.message is not null order by r.created_at limit 100;
+-- The worker's one update: reservations whose message was not recorded within ten minutes, or that can never be
+-- recorded (the Agent is gone, or the sender may no longer write in the company), are abandoned. Returns how many.
+create function public.abandon_conversation_reservations() returns integer language sql security definer set search_path='' as $$
+ with abandoned as (
+  update public.conversation_run_reservations r set abandoned_at=now()
+  where r.abandoned_at is null and (r.created_at<now()-interval '10 minutes'
+   or not exists(select 1 from public.hermes_agents a where a.id=r.agent_id and a.company_id=r.company_id)
+   or not exists(select 1 from public.members m where m.company_id=r.company_id and m.person_id=r.person_id and m.removed_at is null and m.role<>'viewer'))
+  returning 1)
+ select count(*)::integer from abandoned;
 $$;
-revoke all on function public.unsettled_conversation_runs() from public,anon,authenticated;
-grant execute on function public.unsettled_conversation_runs() to service_role;
+revoke all on function public.abandon_conversation_reservations() from public,anon,authenticated;
+grant execute on function public.abandon_conversation_reservations() to service_role;
 
--- Records the run Hermes replayed or started for a reservation, as the person's own message, and ends the reservation.
--- A reservation whose Agent or Company place is gone can never be recorded and is dropped.
-create function public.settle_conversation_run(conversation uuid, message_key uuid, run text) returns boolean
-language plpgsql security definer set search_path='' as $$
-declare held public.conversation_run_reservations; chosen public.hermes_agents; existing public.conversations; saved bigint;
-begin
- if run is null or run !~ '^[\w.:-]{1,200}$' then raise exception 'conversationNotFound' using errcode='22023'; end if;
- select * into held from public.conversation_run_reservations r where r.conversation_id=conversation and r.send_key=message_key for update;
- if not found then return false; end if;
- select * into chosen from public.hermes_agents where id=held.agent_id and company_id=held.company_id;
- if not found or not exists(select 1 from public.members where company_id=held.company_id and person_id=held.person_id and removed_at is null and role<>'viewer') then
-  delete from public.conversation_run_reservations r where r.conversation_id=conversation and r.send_key=message_key; return false;
- end if;
- insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values(conversation,held.company_id,held.person_id,chosen.id,chosen.name) on conflict (id) do nothing;
- select * into existing from public.conversations where id=conversation;
- if existing.person_id<>held.person_id or existing.company_id<>held.company_id or existing.agent_id is distinct from chosen.id then raise exception 'conversationNotFound' using errcode='P0002'; end if;
- perform pg_advisory_xact_lock(hashtextextended('conversation_run:'||run,0));
- if exists(select 1 from public.conversation_messages where author='person' and run_id=run and conversation_id<>conversation) then raise exception 'conversationNotFound' using errcode='P0002'; end if;
- insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id)
-  values(held.company_id,conversation,'person',held.person_id,coalesce((select name from public.people where id=held.person_id),''),held.message,message_key,run) on conflict do nothing returning id into saved;
- delete from public.conversation_run_reservations r where r.conversation_id=conversation and r.send_key=message_key;
- return true;
-end $$;
-revoke all on function public.settle_conversation_run(uuid,uuid,text) from public,anon,authenticated;
-grant execute on function public.settle_conversation_run(uuid,uuid,text) to service_role;
-
--- The move waits for every reservation of its Connections, and for five quiet minutes; it removes an old Connection
--- only when no Agent and no reservation uses it.
+-- The move waits for every active reservation of its Connections, and for five quiet minutes; it removes an old
+-- Connection only when no Agent and no active reservation uses it.
 create or replace function public.move_company_profile(c uuid, bundled_address text, bundled_key text, bundled_version text, bundled_features text[]) returns integer
 language plpgsql security definer set search_path='' as $$
 declare first_owner uuid; olds uuid[]; old uuid; linked uuid; agent uuid; moved integer:=0;
@@ -152,7 +144,7 @@ begin
  if first_owner is null then return 0; end if;
  olds:=array(select distinct a.connection_id from public.hermes_agents a join public.hermes_connections h on h.id=a.connection_id
   where a.company_id=c and h.profile<>public.company_engine_profile(c) and public.is_bundled_connection(h.id));
- if exists(select 1 from public.conversation_run_reservations r where r.connection_id=any(olds))
+ if exists(select 1 from public.conversation_run_reservations r where r.connection_id=any(olds) and r.abandoned_at is null)
   or exists(select 1 from public.conversation_messages m join public.conversations cv on cv.id=m.conversation_id
    join public.hermes_agents a on a.id=cv.agent_id and a.company_id=cv.company_id
    where a.company_id=c and a.connection_id=any(olds) and m.created_at>now()-interval '5 minutes')
@@ -172,7 +164,7 @@ begin
    moved:=moved+1;
   end loop;
   delete from public.hermes_connections h where h.id=old and not exists(select 1 from public.hermes_agents a where a.connection_id=old)
-   and not exists(select 1 from public.conversation_run_reservations r where r.connection_id=old);
+   and not exists(select 1 from public.conversation_run_reservations r where r.connection_id=old and r.abandoned_at is null);
  end loop;
  return moved;
 end $$;

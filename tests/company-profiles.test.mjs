@@ -335,7 +335,7 @@ test('a run is reserved on its pinned Connection before Hermes is called, and re
  const {db,service,order}=conversationDatabases({profile:companyProfile(two)});
  const sent=await sendMessage(db,service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...engine(order)});
  assert.deepEqual(sent,{conversation:'c'});
- // The reservation carries the message, so the worker can settle it with Hermes if the record never happens.
+ // The reservation keeps the message for the record.
  assert.equal(db.args.reserve_conversation_run.message,'Hi');
  assert.deepEqual(order,['conversation_agent','reserve_conversation_run','read hermes_connections f9000000-0000-0000-0000-000000000001',`start ${companyProfile(two)}`,'send_conversation_message']);
 });
@@ -392,13 +392,12 @@ test('raised, written, not recorded, then lowered: the profile stays pending unt
  } finally { await fake.close(); }
 });
 
-test('an unsettled reservation is settled on its pinned Connection with the same idempotency key', async () => {
- const {settleConversationRuns}=await import('../lib/company-profiles.mjs');
- const key=encryptSecret('test-only-key',encryptionKey); const calls=[]; const starts=[];
- const pinned={conversation:'c1',send_key:'k1',message:'Hello',connection:'f1',address:'http://hermes:8642',profile:'default',state:'connected',features:['run_submission'],key_encrypted:key};
- const db={rpc:async(name,args)=>{ calls.push({name,args}); return name==='unsettled_conversation_runs'?{data:[pinned,{...pinned,conversation:'c2',send_key:'k2'}],error:null}:{data:true,error:null}; }};
- const engineFor=connection=>({start:async run=>{ starts.push({connection,run}); return run.conversation==='c2'?null:'run_replayed'; }});
- assert.equal(await settleConversationRuns(db,{encryptionKey,engineFor}),1);
- assert.deepEqual(starts.map(start=>[start.connection.profile,start.connection.key,start.run.idempotencyKey,start.run.input]),[['default','test-only-key','c1:k1','Hello'],['default','test-only-key','c2:k2','Hello']]);
- assert.deepEqual(calls.filter(call=>call.name==='settle_conversation_run').map(call=>call.args),[{conversation:'c1',message_key:'k1',run:'run_replayed'}],'an unreachable Hermes leaves the reservation held');
+test('the worker abandons unrecorded reservations in one database update and never calls the engine', async () => {
+ const {abandonConversationReservations}=await import('../lib/company-profiles.mjs');
+ const calls=[];
+ const db={rpc:async name=>{ calls.push(name); return {data:3,error:null}; }};
+ assert.equal(await abandonConversationReservations(db),3);
+ assert.deepEqual(calls,['abandon_conversation_reservations']);
+ const source=readFileSync('lib/company-profiles.mjs','utf8');
+ assert.doesNotMatch(source,/settle|engineFor|\.start\(/,'no replay path is left');
 });

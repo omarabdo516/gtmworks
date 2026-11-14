@@ -2,7 +2,7 @@ import { checkSettings } from '../lib/settings.mjs';
 import { createWorkerClient, deliverBatch } from './webhooks.mjs';
 import { closeOpenRuns } from '../lib/conversation-runs.mjs';
 import { bundledHermes } from '../lib/bundled-hermes.mjs';
-import { keepCompanyProfiles, checkAgentTools, settleConversationRuns } from '../lib/company-profiles.mjs';
+import { keepCompanyProfiles, checkAgentTools, abandonConversationReservations } from '../lib/company-profiles.mjs';
 import { appOrigin } from '../lib/app-origin.mjs';
 checkSettings();
 const db=createWorkerClient(process.env.NEXT_PUBLIC_SUPABASE_URL,process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -20,4 +20,4 @@ const waiting=new Map();
 await Promise.all([loop('Webhook',()=>deliverBatch(db,options)),loop('Conversation',()=>closeOpenRuns(db,options)),
  hermes&&loop('Hermes',()=>keepCompanyProfiles(db,{hermes,encryptionKey:options.encryptionKey,waiting}),2000),
  loop('Agent tools',()=>checkAgentTools(db,{encryptionKey:options.encryptionKey}),300000),
- loop('Reserved runs',()=>settleConversationRuns(db,{encryptionKey:options.encryptionKey}),60000)]);
+ loop('Reserved runs',()=>abandonConversationReservations(db),60000)]);
