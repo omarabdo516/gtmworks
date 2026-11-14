@@ -106,7 +106,7 @@ test('integration: a queued turn whose start answer was lost is asked again, not
  } finally { detach(); await fake.close(); }
 });
 
-test('integration: a send whose answer was lost keeps its reservation, and its retry sends the note it was first reserved with',async()=>{
+test('integration: a send whose answer was lost is kept as its sender\'s turn, and the worker\'s retry sends the note it was first reserved with',async()=>{
  test.setTimeout(120000);
  const fake=await fakeHermes();
  const {service,person}=await memberClient('omar@example.com'); const {agent,detach}=await attachFakeHermes(fake);
@@ -115,11 +115,14 @@ test('integration: a send whose answer was lost keeps its reservation, and its r
   const conversation=randomUUID(); const sendKey=randomUUID();
   const send=()=>sendMessage(person,service,{company,conversation,sendKey,agent,message:'Plan the week',encryptionKey});
   fake.settings.loseStarts=2;
-  expect(await send()).toEqual({error:'conversationSendAgain',status:409});
-  expect(JSON.parse(query(`select abandoned_at from public.conversation_run_reservations where send_key='${sendKey}'`))).toEqual([{abandoned_at:null}]);
-  // The person edits their note before trying again: the retry is still the first request.
+  expect(await send()).toEqual({conversation,queued:true});
+  expect(JSON.parse(query(`select abandoned_at, start_unknown_at is not null as marked from public.conversation_run_reservations where send_key='${sendKey}'`))).toEqual([{abandoned_at:null,marked:true}]);
+  // The person edits their note, and sends again: the message is already waiting, and nothing new is reserved.
   expect((await person.rpc('save_member_note',{c:company,note:'Answer at length.'})).error).toBeNull();
-  expect(await send()).toEqual({conversation});
+  expect(await send()).toEqual({conversation,queued:true});
+  // The worker asks again with the same key and the first request's body; Hermes names the run it started.
+  // (The background worker may make the same attempt; either way it is one run.)
+  await expect.poll(async()=>{ await startQueuedTurns(service,{encryptionKey,conversation}); return rows(conversation).filter((row:{author:string})=>row.author==='person').length; },{timeout:30000}).toBe(1);
   expect(fake.settings.runs).toHaveLength(1);
   expect(fake.settings.runs[0].instructions).toContain('Answer in short points.');
   expect(rows(conversation).filter((row:{author:string})=>row.author==='person')).toHaveLength(1);

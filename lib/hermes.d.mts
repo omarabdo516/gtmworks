@@ -4,7 +4,7 @@ export function isHermesAddressAllowed(address:string):boolean;
 export function testHermes(connection:{address:string,profile:string,key:string}):Promise<HermesState>;
 export type HermesConnection={address:string,profile:string,key:string};
 export const startUnknown:{readonly state:'unknown'};
-export function startRun(message:HermesConnection&{input:string,instructions?:string,sessionKey:string,idempotencyKey:string}):Promise<string|null|{readonly state:'unknown'}>;
+export function startRun(message:HermesConnection&{input:string,instructions?:string,sessionKey:string,idempotencyKey:string,retry?:boolean}):Promise<string|null|{readonly state:'unknown'}>;
 export type RunUsage={input:number,output:number};
 export function readRun(run:HermesConnection&{run:string}):Promise<{status:'running'|'completed'|'failed'|'cancelled'|'interrupted'|'lost'|'unreachable',output:string|null,session:string|null,usage:RunUsage|null}>;
 export function stopRun(run:HermesConnection&{run:string}):Promise<boolean>;

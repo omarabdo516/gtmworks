@@ -8,7 +8,7 @@ export type FoundAgent={state:'found',agent:Agent}|{state:'missing'|'refused'|'u
 export type StartUnknown={readonly state:'unknown'};
 export function startOutcomeUnknown(result:unknown):result is StartUnknown;
 export type Engine={
- start(run:{conversation:string,input:string,idempotencyKey:string,instructions?:string}):Promise<string|null|StartUnknown>,
+ start(run:{conversation:string,input:string,idempotencyKey:string,instructions?:string,retry?:boolean}):Promise<string|null|StartUnknown>,
  read(run:string):Promise<RunState>,
  stop(run:string):Promise<boolean>,
  createAgent(agent:AgentRequest):Promise<CreatedAgent>,

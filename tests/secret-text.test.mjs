@@ -21,7 +21,9 @@ test('keys, tokens and passwords look like secrets; ordinary preferences do not'
    // Quoted names (JSON, YAML, .env) and credentials inside an address.
    '{"password":"hunter22"}', "{'api_key': 'abcd1234'}", 'password: "hunter22"', 'DB_PASSWORD=hunter22', 'client_secret = "s3cr3t-value"', 'postgresql://alice:hunter22@localhost/db', 'https://bob:pa55word@example.com/path',
    // Quoted values with spaces, and every form the first detector refused.
-   'password: "abc def 123"', "token = 'a b c d'", 'password: "abc"', 'secret=abcd', 'pwd: x"yz'])
+   'password: "abc def 123"', "token = 'a b c d'", 'password: "abc"', 'secret=abcd', 'pwd: x"yz',
+   // Egyptian spellings of the Arabic words.
+   'كلمه السر: abcd1234', 'الباسوورد: abcd1234', 'باسوورد = hunter22'])
     assert.equal(secretLike(secret), true, secret);
   for (const note of ['Answer in short points, in Egyptian Arabic.', 'رد في نقط قصيرة، واقترح اختيارين قبل ما تكتب.', 'I never share my password with agents.', 'Use the brand token colours.'])
     assert.equal(secretLike(note), false, note);
