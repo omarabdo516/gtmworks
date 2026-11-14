@@ -711,5 +711,6 @@
   "companyRenameNotAllowed": "صاحب الشركة بس اللي يقدر يغيّر اسمها.",
   "companyNameInvalid": "اكتب اسم من حرف لـ 80 حرف.",
   "companyNameSaved": "الاسم اتحفظ.",
-  "logActCompanyRenamed": "غيّر اسم الشركة"
+  "logActCompanyRenamed": "غيّر اسم الشركة",
+  "logNotListed": "مش موجود في القايمة دلوقتي"
 }

@@ -149,6 +149,18 @@ test('a filter that matches nothing says so and offers everything back',async({p
  await expect(page.locator('.lgp-empty')).toHaveCount(0);
 });
 
+test('a filter whose person or Agent is no longer listed shows as such, and Everyone clears only it',async({page})=>{
+ await signIn(page,'manager@example.com','/c/rs-learning/log?who=a:ffffffff-ffff-ffff-ffff-ffffffffffff&card=1');
+ const tr=await t(page);
+ await idle(page);
+ const who=page.locator('#lg-who');
+ await expect(who).toHaveValue('a:ffffffff-ffff-ffff-ffff-ffffffffffff');
+ await expect(who.locator('option:checked')).toHaveText(tr('logNotListed'));
+ await who.selectOption('all');
+ await expect(page).toHaveURL(/\/c\/rs-learning\/log\?card=1$/);
+ await expect(page.locator('#lg-who')).toHaveValue('all');
+});
+
 test('a Member reads only the log of their own Company',async({page})=>{
  await signIn(page,'viewer@example.com','/c/rs-learning/log');
  await expect(page.locator('.lgp-body .lg-row').first()).toBeVisible();
