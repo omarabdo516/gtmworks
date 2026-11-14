@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(37);
+select plan(39);
 -- RS Learning: Omar (1) is Owner. A start whose answer was lost is kept as Omar's own waiting turn on its own
 -- reservation, asked again by the worker as a retry, and never abandoned to another Connection.
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('e0000000-0000-0000-0000-000000000411','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://localhost','unknown-starts','ciphertext','connected');
@@ -96,7 +96,10 @@ select is(public.reserve_conversation_turn('e2000000-0000-0000-0000-000000000405
 select is(public.send_conversation_message('e2000000-0000-0000-0000-000000000405','10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000411','Fifth','e3000000-0000-0000-0000-000000000405','unknown_run_5','e0000000-0000-0000-0000-000000000411'),true,'the first run is recorded');
 reset role;
 set local role service_role;
+-- Only conversations whose turn could start now are listed, so a page of busy ones never hides a ready one.
+select ok(not exists(select 1 from public.queued_conversations(null) q where q.conversation='e2000000-0000-0000-0000-000000000405'),'a conversation whose run is still open is not listed');
 select public.close_conversation_run('e2000000-0000-0000-0000-000000000405','unknown_run_5','completed','Done','session_5',1,1);
+select ok(exists(select 1 from public.queued_conversations(null) q where q.conversation='e2000000-0000-0000-0000-000000000405'),'once its run ended it is listed');
 select is((select retry from public.claim_conversation_turn('e2000000-0000-0000-0000-000000000405')),false,'the waiting turn is claimed as a first start');
 select is(public.begin_start('e2000000-0000-0000-0000-000000000405','e3000000-0000-0000-0000-000000000406'),1,'and attempted');
 select is((select retry from public.claim_conversation_turn('e2000000-0000-0000-0000-000000000405')),true,'claimed again before any answer, it is a retry');

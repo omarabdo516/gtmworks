@@ -255,3 +255,16 @@ begin
 end $$;
 revoke all on function public.reserve_conversation_run(uuid,uuid,uuid,uuid,text) from public,anon,service_role;
 grant execute on function public.reserve_conversation_run(uuid,uuid,uuid,uuid,text) to authenticated;
+
+-- The worker's and a reader's list of Conversations with turns waiting: only those whose turn could start now (no open
+-- run, and no other key's active reservation), so a page of busy conversations never hides a ready one.
+create or replace function public.queued_conversations(just uuid default null) returns table(conversation uuid) language sql stable security definer set search_path='' as $$
+ select distinct q.conversation_id from public.conversation_queued_turns q
+ where q.started_at is null and q.failed_at is null and (just is null or q.conversation_id=just)
+  and not exists(select 1 from public.conversation_open_run(q.conversation_id))
+  and not exists(select 1 from public.conversation_run_reservations r where r.conversation_id=q.conversation_id and r.abandoned_at is null
+   and not exists(select 1 from public.conversation_queued_turns o where o.conversation_id=r.conversation_id and o.send_key=r.send_key and o.started_at is null and o.failed_at is null))
+ limit 500;
+$$;
+revoke all on function public.queued_conversations(uuid) from public,anon,authenticated;
+grant execute on function public.queued_conversations(uuid) to service_role;

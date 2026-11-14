@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { startRun, startUnknown } from '../lib/hermes.mjs';
 import { encryptSecret } from '../lib/agent-crypto.mjs';
 import { sendMessage, startQueuedTurns } from '../lib/conversation-runs.mjs';
+import { readFileSync } from 'node:fs';
 
 // A start whose outcome was once unknown stays unknown until Hermes names the run (ADR 0015): no later answer can prove
 // it never started, so its reservation is never released or failed, and the worker asks again until Hermes says which.
@@ -111,4 +112,14 @@ test('a lost start whose reservation is gone answers by what was stored, never a
  // Nothing stored and nothing kept: the person is asked to send again.
  const lost=databases({kept:false});
  assert.deepEqual(await sendMessage(lost.db,lost.service,{company:'co',conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...engine(lost.order,startUnknown)}),{error:'conversationSendAgain',status:409});
+});
+
+// A start may wait twenty seconds on an engine that does not answer: queued starts run in their own worker loop, so they
+// never hold back closing the runs of other conversations.
+test('the worker closes runs and starts queued turns in separate loops', () => {
+ const worker=readFileSync('worker/index.mjs','utf8');
+ const loops=[...worker.matchAll(/loop\('([^']+)',([^]*?)\)(?=,\s*(?:\n\s*)?(?:hermes&&)?loop\(|\]\))/g)].map(match=>[match[1],match[2]]);
+ const closing=loops.filter(([,body])=>body.includes('closeOpenRuns')), starting=loops.filter(([,body])=>body.includes('startQueuedTurns'));
+ assert.equal(closing.length,1); assert.equal(starting.length,1);
+ assert.notEqual(closing[0][0],starting[0][0]);
 });
