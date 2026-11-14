@@ -750,5 +750,6 @@
   "signInOwnSpace": "Each company signs in on its own: the sign-in, memory and skills stay with this company only.",
   "signInShared": "Not connected (shared sign-in on the agent engine’s default space)",
   "signInSharedWarning": "A subscription is signed in on the agent engine’s shared default space. Every company without its own sign-in would run on it, so it never counts as this company’s. Ask whoever installed gtmworks to sign it out there.",
-  "conversationAgentLevelPending": "The agents’ tools are being updated to the level the Owner chose. Try again in a moment."
+  "conversationAgentLevelPending": "The agents’ tools are being updated to the level the Owner chose. Try again in a moment.",
+  "logNotListed": "No longer listed"
 }

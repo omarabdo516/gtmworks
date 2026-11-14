@@ -404,3 +404,65 @@ test('install.sh takes over a lock only when the install that left it is shown g
   assert.equal(existsSync(join(directory,'.install-lock')),false,`${label}: the run that took it over removed it`);
  }
 });
+
+// The installer's last probes, run for real: the docker stand-in runs the script install.sh hands to the web container
+// under node, with fetch answering from PROBE_PLAN (the health address's answers in turn, the last one repeated; every
+// other address 200) and the one-second pause recorded instead of waited for.
+const probeStub=`
+import { appendFileSync } from 'node:fs';
+const plan=process.env.PROBE_PLAN.split(',');
+let asked=0;
+globalThis.fetch=async url=>{
+ appendFileSync(process.env.PROBE_LOG,url+'\\n');
+ if(url!=='http://gateway:8080/api/health') return {status:200};
+ const answer=plan[Math.min(asked++,plan.length-1)];
+ if(answer==='refused') throw new Error('fetch failed');
+ return {status:Number(answer)};
+};
+globalThis.setTimeout=(resolve,delay)=>{ appendFileSync(process.env.PROBE_LOG,'pause '+delay+'\\n'); setImmediate(resolve); };
+`;
+const probeShim=`#!/bin/sh
+printf '%s\\n' "$*" >> "$COMMANDS"
+case "$*" in
+ *install-env.mjs*)
+  file=; previous=; all="$*"
+  for argument do [ "$previous" = --env-file ] && file=$argument; previous=$argument; done
+  if [ -z "$file" ]; then exec node "$INSTALL_ENV" \${all##*install-env.mjs }; fi
+  exec env -i PATH="$PATH" sh -c 'set -a; case "$1" in /*) . "$1";; *) . "./$1";; esac; set +a; shift; exec node "$@"' sh "$file" "$INSTALL_ENV" \${all##*install-env.mjs };;
+ *'exec -T db psql'*) cat > /dev/null;;
+ *'exec -T web node'*setup_is_open*) echo closed;;
+ *'exec -T web node -e '*api/health*)
+  script=; previous=
+  for argument do [ "$previous" = -e ] && script=$argument; previous=$argument; done
+  exec node --import "$PROBE_STUB" --input-type=module -e "$script";;
+esac
+`;
+test('the installer waits for every address to answer 200, and fails naming the one that never does', t => {
+ const directory=mkdtempSync(join(tmpdir(),'gtmworks-probe-'));
+ t.after(()=>rmSync(directory,{recursive:true,force:true}));
+ for(const folder of ['scripts','bin','lib','supabase/migrations']) mkdirSync(join(directory,folder),{recursive:true});
+ copyFileSync('scripts/install.sh',join(directory,'scripts/install.sh'));
+ writeFileSync(join(directory,'bin/docker'),probeShim,{mode:0o755});
+ writeFileSync(join(directory,'probe-stub.mjs'),probeStub);
+ const log=join(directory,'probe.log');
+ const env={...process.env,PATH:`${directory}/bin:${process.env.PATH}`,INSTALL_ENV:join(process.cwd(),'lib/install-env.mjs'),
+  COMMANDS:join(directory,'commands'),PROBE_STUB:join(directory,'probe-stub.mjs'),PROBE_LOG:log,GH_TOKEN:''};
+ const run=plan=>{ rmSync(log,{force:true}); return spawnSync('sh',['scripts/install.sh'],{cwd:directory,env:{...env,PROBE_PLAN:plan},encoding:'utf8'}); };
+ const health='http://gateway:8080/api/health';
+ // 503 while PostgREST reloads its schema, then 200: the install goes on, a second between tries.
+ const waited=run('503,refused,503,200');
+ assert.equal(waited.status,0,waited.stderr);
+ assert.deepEqual(readFileSync(log,'utf8').trimEnd().split('\n'),
+  [health,'pause 1000',health,'pause 1000',health,'pause 1000',health,'http://gateway:8080/sign-in','http://hermes:8642/health']);
+ assert.match(waited.stdout,/^http:\/\/gateway:8080\/api\/health 200$/m);
+ assert.equal(waited.stdout.trimEnd().split('\n').at(-1),'gtmworks is ready: http://localhost:3000/sign-in');
+ // Never 200: 60 tries, then the install fails naming the address and its last answer, and prints no ready line.
+ const failed=run('503');
+ assert.notEqual(failed.status,0);
+ assert.match(failed.stderr,/http:\/\/gateway:8080\/api\/health returned 503/);
+ const asked=readFileSync(log,'utf8').trimEnd().split('\n');
+ assert.equal(asked.filter(line=>line===health).length,60);
+ assert.equal(asked.filter(line=>line==='pause 1000').length,59);
+ assert.doesNotMatch(failed.stdout,/gtmworks is ready/);
+ assert.equal(existsSync(join(directory,'.install-lock')),false);
+});
