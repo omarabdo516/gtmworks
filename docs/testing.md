@@ -34,7 +34,7 @@ the whole-app browser and install suites run only when their own area changed, o
   it was skipped; one it asked for must succeed; a failed or cancelled stage is red (`scripts/ci-verdict.mjs`).
 
 App screens, components, `lib/` and `worker/` changes run static on the pull request; their browser and install proof
-runs on `main` after the merge. Screens move to component tests in a headless browser in a later pull request under #76.
+runs on `main` after the merge. Screens move to component tests in a headless browser in a later pull request (#81).
 
 ## Every suite, before and after (#76)
 
@@ -48,10 +48,10 @@ the parts are timed from run 43642299138.
 | static: lint, types, catalogues, OpenAPI, node --test (about 540 tests) | fast, unit | rules in `lib/`, routes and permissions tables, wording, workflow and release files | 1.6 min, every run | 1.6 min, every run | keep |
 | database: *.verify.sql, check-rls.sql, tests/db.sh (pgTAP, migration replays) | database | row-level security, grants, company isolation, migrations on legacy data | 1.5 min inside `integration` (plus the stack start), every non-document PR | own `database` job, when `supabase/` or a database test changes; every `main` push | moved to its own job; never removed (isolation and permissions) |
 | proxy suite (tests/proxy/, 7 tests) | whole-app browser | sign-in, settings and invitations behind an https proxy | 0.7 min inside `integration`, every non-document PR | inside `integration`: its area, `main`, or `e2e` input | gated |
-| browser suite (playwright test, 225 tests on 4 lanes: screens, functional, measured, first run) | whole-app browser | journeys, the 72 approved screens, navigation budgets, first run | 13.3 min of `integration`'s 22.2 min (stack start 4 min, image 2.7 min), every non-document PR | inside `integration`: its area, `main`, or `e2e` input | gated; screens to become component tests (later PR under #76) |
+| browser suite (playwright test, 225 tests on 4 lanes: screens, functional, measured, first run) | whole-app browser | journeys, the 72 approved screens, navigation budgets, first run | 13.3 min of `integration`'s 22.2 min (stack start 4 min, image 2.7 min), every non-document PR | inside `integration`: its area, `main`, or `e2e` input | gated; screens to become component tests (#81) |
 | image health (scripts/ci-image.sh) | whole-app | the built image serves health and runs its worker | inside `integration` | inside `integration` | gated with it |
 | install | install end-to-end | install, repeat, backup, restore, release update, one-line install, rollback | 15.2 min, PRs touching install files, `lib/`, `worker/` or the app build, every `main` push | its own files, every `main` push, or `install` input | gated tighter: `lib/`, `worker/`, `next.config.mjs` and `server.js` no longer start it on a PR |
-| compare-failures, flaky-tests | our own CI tooling | names failures inherited from main; files an issue per flaky test | 0.1 to 0.2 min after `integration` | unchanged here | to be replaced by Playwright's own report (later PR under #76) |
+| compare-failures, flaky-tests | our own CI tooling | names failures inherited from main; files an issue per flaky test | 0.1 to 0.2 min after `integration` | unchanged here | to be replaced by Playwright's own report (#81) |
 | check | summary | the one required check | 0.1 min | 0.1 min | keep; judges five stages |
 | design-compare.yml | design tool | a screen against the design reference | its own paths, or by hand | unchanged | keep |
 | visual-baselines.yml | tool | refreshes approved images | by hand | unchanged | keep |
