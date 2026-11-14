@@ -9,7 +9,7 @@ const everything = [/^\.github\/workflows\/ci\.yml$/, /^ci\.sh$/, /^scripts\/ci-
 const suites = {
   // The database tests: migrations replayed and verified, RLS and grants (tests/db.sh, *.verify.sql, check-rls.sql).
   database: [
-    /^supabase\//, /^scripts\/(check-rls\.sql|verify-db\.mjs|local-db\.sh|local-default-privileges\.sql)$/,
+    /^supabase\//, /^scripts\/(check-rls\.sql|verify-db\.mjs|local-db\.sh|local-default-privileges\.sql|bootstrap-owner\.mjs)$/,
     /^tests\/(db\.sh|[^/]*-migration\.mjs|bootstrap-db\.mjs|hosted-default-privileges\.mjs|agent-role-backfill\.mjs|sql-statements\.mjs)$/,
   ],
   // The whole-app browser suite and its screens: the specs, their helpers and approved images, the stacks they run on,
