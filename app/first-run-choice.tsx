@@ -17,8 +17,9 @@ export default function FirstRunChoice({slug,company,companyName,personName,lead
  const [error,action,pending]=useActionState(chooseWorkMode,'');
  const box=useRef<HTMLDivElement>(null);
  const name=lead?.name||'Lead';
- // The question takes the keyboard's first stop, on the first choice, as the reference's dialog does.
- useEffect(()=>{ box.current?.querySelector<HTMLInputElement>('input[name=mode]')?.focus({preventScroll:true}); },[]);
+ // Opening moves focus into the question (the dialog itself, as the settings overlay does), so Tab starts at the
+ // choices without either one looking picked before the Owner picks it.
+ useEffect(()=>{ box.current?.focus({preventScroll:true}); },[]);
  const initial=(personName.trim()[0]||'·').toUpperCase();
  const art=(choice:Mode)=><span className="fr-art" aria-hidden="true">
   <span className="fr-ppl"><span className="me__av">{initial}</span>{choice==='team'&&<><span className="me__av fr-ppl__more"/><span className="me__av fr-ppl__more"/></>}</span>
@@ -26,7 +27,7 @@ export default function FirstRunChoice({slug,company,companyName,personName,lead
   {lead?<CompanyAgentFace agent={lead} size={32}/>:<span className="me__av"/>}
  </span>;
  const choices:[Mode,string,string][]=[['alone',t('firstRunAlone'),t('firstRunAloneHint',name)],['team',t('firstRunTeam'),t('firstRunTeamHint',name)]];
- return <div className="gw fr-root"><div ref={box} className="fr" role="dialog" aria-modal="true" aria-labelledby="fr-title">
+ return <div className="gw fr-root"><div ref={box} className="fr" role="dialog" aria-modal="true" aria-labelledby="fr-title" tabIndex={-1}>
   <header className="fr__bar"><span className="ws">{mark}<bdi className="ws__name">{brand}</bdi></span></header>
   <div className="fr__body"><form className="fr__col" action={action}>
    <input type="hidden" name="company" value={company}/><input type="hidden" name="slug" value={slug}/>
