@@ -1,4 +1,4 @@
--- Guards on the Company profiles of ADR 0014 (review of 20261208000000).
+-- Guards on the Company profiles of ADR 0014 (review of 20261210000000).
 --
 -- A Company's own profile serves that Company only. An Owner of two Companies could attach one Company's Connection to
 -- the other's Agent after the sharing warning (manage_hermes_agent), so the other Company's members would run on its

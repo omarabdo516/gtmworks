@@ -55,7 +55,7 @@ test('a company profile is named from the company id, in Hermes profile name for
  assert.notEqual(companyProfile(two),companyProfile(three));
  for(const bad of ['default','',null,'10000000-0000-0000-0000-00000000000']) assert.throws(()=>companyProfile(bad),/companyInvalid/);
  // The database derives the same name and refuses any other (company_engine_profile, record_company_profile).
- assert.match(readFileSync('supabase/migrations/20261208000000_company_profiles.sql','utf8'),/'co-'\|\|replace\(c::text,'-',''\)/);
+ assert.match(readFileSync('supabase/migrations/20261210000000_company_profiles.sql','utf8'),/'co-'\|\|replace\(c::text,'-',''\)/);
 });
 
 test('the driver makes a company profile with its key and level-1 tools, and reads back what a Run may use', async () => {
