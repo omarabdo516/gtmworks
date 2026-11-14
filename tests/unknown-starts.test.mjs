@@ -31,7 +31,7 @@ function databases({reserve={state:'reserved',connection,note:null},claim=[],usa
   if(name==='reserve_conversation_turn') return {data:reserve,error:null};
   if(name==='queued_conversations') return {data:[{conversation:'c'}],error:null};
   if(name==='claim_conversation_turn') return {data:claim,error:null};
-  if(['keep_unknown_start','fail_conversation_turn','release_conversation_run','record_conversation_turn','send_conversation_message'].includes(name)) return {data:true,error:null};
+  if(['begin_start','keep_unknown_start','fail_conversation_turn','release_conversation_run','record_conversation_turn','send_conversation_message'].includes(name)) return {data:true,error:null};
   return {data:null,error:{message:'unexpected'}}; };
  const chain=data=>{ const c={select:()=>c,eq:()=>c,maybeSingle:async()=>({data,error:null})}; return c; };
  const key=encryptSecret('test-only-key',encryptionKey);
@@ -47,6 +47,9 @@ test('a direct send whose start is unknown is kept as its sender\'s turn for the
  assert.deepEqual(sent,{conversation:'c',queued:true});
  assert.deepEqual(args.keep_unknown_start,{conversation:'c',message_key:'k'});
  assert.ok(order.includes('start retry=false'));
+ // The attempt is recorded before Hermes is called, so a crash between the two never loses the run.
+ assert.ok(order.indexOf('service begin_start')>=0&&order.indexOf('service begin_start')<order.indexOf('start retry=false'));
+ assert.deepEqual(args.begin_start,{conversation:'c',message_key:'k'});
  assert.ok(!order.some(step=>step.endsWith('release_conversation_run')),'the reservation is never released');
 });
 
@@ -56,6 +59,7 @@ test('the worker asks again on a turn whose start was unknown, and never fails i
  const first=databases({claim:[{...turn,retry:false}]});
  await startQueuedTurns(first.service,{encryptionKey,...engine(first.order,startUnknown)});
  assert.deepEqual(first.args.keep_unknown_start,{conversation:'c',message_key:'k'});
+ assert.ok(first.order.indexOf('service begin_start')>=0&&first.order.indexOf('service begin_start')<first.order.indexOf('start retry=false'),'the attempt is recorded first');
  assert.ok(!first.order.includes('service fail_conversation_turn'));
  // Its retry is sent as a retry; a refusal then is not a proof, so the turn stays.
  const again=databases({claim:[{...turn,retry:true}]});

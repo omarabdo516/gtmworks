@@ -23,7 +23,9 @@ test('keys, tokens and passwords look like secrets; ordinary preferences do not'
    // Quoted values with spaces, and every form the first detector refused.
    'password: "abc def 123"', "token = 'a b c d'", 'password: "abc"', 'secret=abcd', 'pwd: x"yz',
    // Egyptian spellings of the Arabic words.
-   'كلمه السر: abcd1234', 'الباسوورد: abcd1234', 'باسوورد = hunter22'])
+   'كلمه السر: abcd1234', 'الباسوورد: abcd1234', 'باسوورد = hunter22',
+   // Quoted Arabic names, as in JSON, and quoted values.
+   '{"كلمة السر":"hunter22"}', 'كلمة المرور: "abc def"'])
     assert.equal(secretLike(secret), true, secret);
   for (const note of ['Answer in short points, in Egyptian Arabic.', 'رد في نقط قصيرة، واقترح اختيارين قبل ما تكتب.', 'I never share my password with agents.', 'Use the brand token colours.'])
     assert.equal(secretLike(note), false, note);

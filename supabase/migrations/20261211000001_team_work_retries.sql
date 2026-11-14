@@ -30,7 +30,7 @@ create or replace function public.secret_like(t text) returns boolean language s
    '(password|passwd|pwd|passphrase|secret|api[ _-]?key|access[ _-]?key|access[ _-]?token|auth[ _-]?token|refresh[ _-]?token|client[ _-]?secret|private[ _-]?key|token)["'']?\s*[:=]\s*("[^"]+"|''[^'']+''|["'']?[^\s"''][^\s]{3,})',
    '[a-z][a-z0-9+.-]*://[^\s/:@]+:[^\s/@]+@',
    'bearer\s+[A-Za-z0-9._~+/-]{20,}',
-   '(\u0643\u0644\u0645[\u0629\u0647] (\u0627\u0644\u0633\u0631|\u0627\u0644\u0645\u0631\u0648\u0631)|\u0628\u0627\u0633\u0648+\u0631\u062f)\s*[:=]\s*\S{4,}'
+   '(\u0643\u0644\u0645[\u0629\u0647] (\u0627\u0644\u0633\u0631|\u0627\u0644\u0645\u0631\u0648\u0631)|\u0628\u0627\u0633\u0648+\u0631\u062f)["'']?\s*[:=]\s*("[^"]+"|''[^'']+''|["'']?[^\s"''][^\s]{3,})'
   ]),false);
 $$;
 

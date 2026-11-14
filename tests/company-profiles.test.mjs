@@ -326,7 +326,7 @@ function conversationDatabases({profile,reserve=null,record=null}) {
    return {data:null,error:{message:'unexpected'}}; },
   from:()=>{ const chain={select:()=>chain,eq:()=>chain,maybeSingle:async()=>({data:{id:'a9000000-0000-0000-0000-000000000001'},error:null})}; return chain; }};
  const key=encryptSecret('test-only-key',encryptionKey);
- const service={from:table=>{ const filters={}; const chain={select:()=>chain,eq:(column,value)=>{filters[column]=value;return chain;},maybeSingle:async()=>{ order.push(`read ${table} ${filters.id||''}`);
+ const service={rpc:async(name)=>{ order.push(`service ${name}`); return name==='begin_start'?{data:true,error:null}:{data:null,error:{message:'unexpected'}}; },from:table=>{ const filters={}; const chain={select:()=>chain,eq:(column,value)=>{filters[column]=value;return chain;},maybeSingle:async()=>{ order.push(`read ${table} ${filters.id||''}`);
    return table==='hermes_connections'?{data:{address:'http://hermes:8642',profile,state:'connected',features:['run_submission'],key_encrypted:key},error:null}:{data:{connection_id:'f9000000-0000-0000-0000-000000000099'},error:null}; }}; return chain; }};
  return {db,service,order};
 }
@@ -341,7 +341,7 @@ test('a run is reserved on its pinned Connection before Hermes is called, and re
  assert.equal(db.args.reserve_conversation_turn.message,'Hi');
  // The record names the Connection the run started on, the one the reservation pinned.
  assert.equal(db.args.send_conversation_message.started_on,'f9000000-0000-0000-0000-000000000001');
- assert.deepEqual(order,['conversation_agent','reserve_conversation_turn','read hermes_connections f9000000-0000-0000-0000-000000000001',`start ${companyProfile(two)}`,'send_conversation_message']);
+ assert.deepEqual(order,['conversation_agent','reserve_conversation_turn','read hermes_connections f9000000-0000-0000-0000-000000000001','service begin_start',`start ${companyProfile(two)}`,'send_conversation_message']);
 });
 
 test('a run never starts on another company\'s profile, nor while the profile\'s tools lag behind the level', async () => {

@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(14);
+select plan(22);
 -- RS Learning: Omar (1) is Owner. A start whose answer was lost is kept as Omar's own waiting turn on its own
 -- reservation, asked again by the worker as a retry, and never abandoned to another Connection.
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('e0000000-0000-0000-0000-000000000411','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://localhost','unknown-starts','ciphertext','connected');
@@ -52,6 +52,40 @@ set local role service_role;
 select public.abandon_conversation_reservations();
 reset role;
 select ok((select abandoned_at is not null from public.conversation_run_reservations where send_key='e3000000-0000-0000-0000-000000000402'),'an unmarked reservation is abandoned after ten minutes as before');
+
+-- An attempt recorded before Hermes is called outlives a crash: after ten minutes unrecorded it becomes a marked turn,
+-- asked again on its own Connection, instead of being abandoned.
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select is(public.reserve_conversation_turn('e2000000-0000-0000-0000-000000000403','10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000411','e3000000-0000-0000-0000-000000000403','Third')->>'state','reserved','a message in another conversation reserves its run');
+reset role;
+set local role service_role;
+select is(public.begin_start('e2000000-0000-0000-0000-000000000403','e3000000-0000-0000-0000-000000000403'),true,'its attempt is recorded before Hermes is called');
+reset role;
+update public.conversation_run_reservations set created_at=now()-interval '11 minutes' where send_key='e3000000-0000-0000-0000-000000000403';
+set local role service_role;
+select public.abandon_conversation_reservations();
+reset role;
+select ok((select abandoned_at is null and start_unknown_at is not null from public.conversation_run_reservations where send_key='e3000000-0000-0000-0000-000000000403'),'an attempted start left unrecorded is kept and marked, not abandoned');
+select ok(exists(select 1 from public.conversation_queued_turns where send_key='e3000000-0000-0000-0000-000000000403' and failed_at is null and started_at is null),'and becomes its sender''s turn');
+
+-- Neither a refusal from a second claimer nor the sender's release drops a marked start.
+set local role service_role;
+select public.fail_conversation_turn('e2000000-0000-0000-0000-000000000403','e3000000-0000-0000-0000-000000000403');
+reset role;
+select ok((select abandoned_at is null from public.conversation_run_reservations where send_key='e3000000-0000-0000-0000-000000000403')
+ and exists(select 1 from public.conversation_queued_turns where send_key='e3000000-0000-0000-0000-000000000403' and failed_at is null),'a marked turn is not failed');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select is(public.release_conversation_run('e2000000-0000-0000-0000-000000000403','10000000-0000-0000-0000-000000000001','e3000000-0000-0000-0000-000000000403'),false,'nor released');
+
+-- A turn whose message was recorded meanwhile (the direct send's late record) is not started a second time.
+select is(public.send_conversation_message('e2000000-0000-0000-0000-000000000403','10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000411','Third','e3000000-0000-0000-0000-000000000403','unknown_run_3','e0000000-0000-0000-0000-000000000411'),true,'the late record of the direct send lands');
+reset role;
+set local role service_role;
+select public.close_conversation_run('e2000000-0000-0000-0000-000000000403','unknown_run_3','completed','Done','session_3',1,1);
+select is((select count(*)::int from public.claim_conversation_turn('e2000000-0000-0000-0000-000000000403')),0,'its waiting turn is not claimed again');
+reset role;
 
 select * from finish();
 rollback;
