@@ -8,6 +8,8 @@ import { routeAllowed } from '../lib/route-permissions.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 import { signIn } from './sign-in';
+import noteEn from '../lib/messages/member-note.en.json' with { type: 'json' };
+import noteAr from '../lib/messages/member-note.ar.json' with { type: 'json' };
 
 // Team-work rules of 2026-11-13 (a, b, c, d, g) on the local database, through the same run layer the conversation
 // route and the worker use, with the fake engine (tests/fake-engine.mjs) in place of Hermes. A Conversation stays
@@ -225,4 +227,24 @@ test('integration: a role lowered between two requests refuses the second one',a
   expect(second.status()).toBe(403);
   expect(await second.json()).toEqual({error:'conversationNotAllowed'});
  } finally { query(`update public.members set role='contributor' where company_id='${company}' and person_id='${contributor}'`); }
+});
+
+test('integration: the note form refuses a secret before sending it, and saves a note in the person\'s language',async({page})=>{
+ test.setTimeout(120000);
+ try {
+  await signIn(page,'omar@example.com','/c/rs-learning/home');
+  await page.goto('/c/rs-learning/settings?section=account');
+  const text=(await page.locator('html').getAttribute('lang'))==='ar'?noteAr:noteEn;
+  const note=page.getByRole('textbox',{name:text.memberNote});
+  const save=page.getByRole('button',{name:text.memberNoteSave});
+  await note.fill('my api key: sk-abcdefghijklmnopqrstuvwx');
+  await expect(page.locator('#ac-note-status[role=alert]')).toHaveText(text.memberNoteSecret);
+  await expect(save).toBeDisabled();
+  expect(JSON.parse(query(`select count(*)::int as n from public.member_notes where company_id='${company}' and person_id='${omar}'`))).toEqual([{n:0}]);
+  await note.fill('Answer in short points.');
+  await expect(save).toBeEnabled();
+  await save.click();
+  await expect(page.locator('#ac-note-status')).toHaveText(text.memberNoteSaved);
+  expect(JSON.parse(query(`select note from public.member_notes where company_id='${company}' and person_id='${omar}'`))).toEqual([{note:'Answer in short points.'}]);
+ } finally { query(`delete from public.member_notes where company_id='${company}'`); }
 });

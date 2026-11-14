@@ -138,7 +138,6 @@ grant execute on function public.abandon_conversation_reservations() to service_
 -- A refusal fails or releases only the attempt it answers, and only while no later attempt was made and the start was
 -- not marked unknown: a second claimer's or a resend's attempt may hold a run, and a refusal proves nothing about it.
 -- `attempt` 0 is a failure before any attempt (no usable Connection). Otherwise as before.
-drop function public.fail_conversation_turn(uuid,uuid);
 create function public.fail_conversation_turn(conversation uuid, message_key uuid, attempt integer) returns void language plpgsql security definer set search_path='' as $$
 begin
  perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
@@ -149,6 +148,14 @@ begin
 end $$;
 revoke all on function public.fail_conversation_turn(uuid,uuid,integer) from public,anon,authenticated;
 grant execute on function public.fail_conversation_turn(uuid,uuid,integer) to service_role;
+
+-- The two-argument form is the failure before any attempt (no usable Connection): it fails only a turn nobody attempted.
+create or replace function public.fail_conversation_turn(conversation uuid, message_key uuid) returns void language plpgsql security definer set search_path='' as $$
+begin
+ perform public.fail_conversation_turn(conversation,message_key,0);
+end $$;
+revoke all on function public.fail_conversation_turn(uuid,uuid) from public,anon,authenticated;
+grant execute on function public.fail_conversation_turn(uuid,uuid) to service_role;
 
 create function public.release_conversation_run(conversation uuid, c uuid, message_key uuid, attempt integer) returns boolean
 language plpgsql security definer set search_path='' as $$
@@ -166,9 +173,16 @@ grant execute on function public.release_conversation_run(uuid,uuid,uuid,integer
 
 -- The previous app version's form: it never counts an attempt, so it releases only a reservation nobody attempted.
 create or replace function public.release_conversation_run(conversation uuid, c uuid, message_key uuid) returns boolean
-language sql security definer set search_path='' as $$
- select public.release_conversation_run(conversation,c,message_key,0);
-$$;
+language plpgsql security definer set search_path='' as $$
+declare released integer;
+begin
+ perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
+ update public.conversation_run_reservations r set abandoned_at=now()
+  where r.conversation_id=conversation and r.send_key=message_key and r.company_id=c and r.person_id=auth.uid() and r.abandoned_at is null
+   and r.start_unknown_at is null and r.start_attempts=0;
+ get diagnostics released=row_count;
+ return released>0;
+end $$;
 revoke all on function public.release_conversation_run(uuid,uuid,uuid) from public,anon,service_role;
 grant execute on function public.release_conversation_run(uuid,uuid,uuid) to authenticated;
 

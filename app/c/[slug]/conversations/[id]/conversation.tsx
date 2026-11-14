@@ -1,4 +1,8 @@
 'use client';
+// The strings only this page shows live in conversation.en.json and conversation.ar.json, in this route's own chunk, not in
+// the catalogue every company route loads (the route size budget, tests/navigation.spec.ts).
+import conversationEn from '@/lib/messages/conversation.en.json';
+import conversationAr from '@/lib/messages/conversation.ar.json';
 import { useEffect, useState } from 'react';
 import { useI18n } from '@/lib/i18n-client';
 import { CompanyAgentFace } from '@/components/company-agent-face';
@@ -18,7 +22,9 @@ type Conversation={id:string,agent_name:string,face:string};
 // meanwhile waits as its sender's next turn (marked as the reference marks a queued message), and the person who
 // started the run, or a Manager or Owner, may stop it from the composer's stop square.
 export default function ConversationView({slug,agent,company,conversation,initial,writer}:{slug:string,agent:DetailsAgent|null,company:string,conversation:Conversation,initial:ConversationRecord,writer:boolean}) {
- const {t,language}=useI18n(); const [record,setRecord]=useState(initial); const [sent,setSent]=useState(0); const panel=useDetailsPanel();
+ const {t,language}=useI18n(); const own:Record<string,string>=language==='ar'?conversationAr:conversationEn;
+ const c=(key:string,...values:unknown[])=>own[key].replace(/\{(\d+)\}/g,(_,index)=>String(values[Number(index)] ?? ''));
+ const [record,setRecord]=useState(initial); const [sent,setSent]=useState(0); const panel=useDetailsPanel();
  const {messages,usage,pending,failed,working,canStop}=record;
  useEffect(()=>{
   if(!pending) return;
@@ -42,19 +48,19 @@ export default function ConversationView({slug,agent,company,conversation,initia
   <div className="transcript"><div className="transcript__col">
    <ol className="turns" aria-label={t('conversationMessages')}>{messages.map(message=>message.author==='person'?<li key={`${message.kind||'m'}${message.id}`} className={`turn turn--user msg${message.kind==='queued'&&!message.failed?' is-queued':''}`} data-author="person" data-kind={message.kind}>
     <div className="bubble-row"><time className="bubble__time" dateTime={message.created_at}>{time(message.created_at)}</time><div className="bubble bubble--user" dir="auto">{message.body}</div></div>
-    {message.kind==='queued'&&!message.failed&&<span className="queued"><ShellIcon name="clock"/>{t('conversationQueued')}</span>}
-    {message.kind==='queued'&&message.failed&&<p className="note" role="alert">{t('conversationQueuedFailed')}</p>}
-    {message.kind==='note'&&<span className="queued" data-addressed>{t('conversationAddressed',message.to||'')}</span>}
+    {message.kind==='queued'&&!message.failed&&<span className="queued"><ShellIcon name="clock"/>{c('conversationQueued')}</span>}
+    {message.kind==='queued'&&message.failed&&<p className="note" role="alert">{c('conversationQueuedFailed')}</p>}
+    {message.kind==='note'&&<span className="queued" data-addressed>{c('conversationAddressed',message.to||'')}</span>}
     {message.lost&&<p className="note" data-outcome="lost">{t('conversationRunLost')}</p>}
    </li>:<li key={`m${message.id}`} className="turn turn--agent msg" data-author="agent">
     <div className="sender">{face(20)}<bdi>{message.author_name}</bdi><time className="sender__time" dateTime={message.created_at}>{time(message.created_at)}</time></div>
     <div className="bubble bubble--agent" dir="auto">{message.body}</div>
    </li>)}</ol>
-   {pending&&<p className="thinking convo-status" role="status">{working?t('conversationWorkingFor',conversation.agent_name,working):t('conversationWorking',conversation.agent_name)}</p>}
+   {pending&&<p className="thinking convo-status" role="status">{working?c('conversationWorkingFor',conversation.agent_name,working):t('conversationWorking',conversation.agent_name)}</p>}
    {failed&&<p className="note convo-status" role="alert">{t('conversationReplyFailed')}</p>}
   </div></div>
   <div className="composer-area">
-   {writer?<MessageBox placeholder={t('writeTo',conversation.agent_name)} stop={working&&canStop?{label:t('conversationStop',conversation.agent_name),run:async()=>{
+   {writer?<MessageBox placeholder={t('writeTo',conversation.agent_name)} stop={working&&canStop?{label:c('conversationStop',conversation.agent_name),run:async()=>{
     const failure=await postMessage({company,conversation:conversation.id,intent:'stop'});
     if(!failure) asked();
     return failure;

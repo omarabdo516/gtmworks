@@ -3,13 +3,18 @@ import { useActionState, useState } from 'react';
 import { useI18n } from '@/lib/i18n-client';
 import { saveMemberNote } from './member-note-actions';
 import { noteLimit, secretLike } from '@/lib/secret-text.mjs';
+import en from '@/lib/messages/member-note.en.json';
+import ar from '@/lib/messages/member-note.ar.json';
 
 // A Member's own note for the Agents in this Company, laid out as the reference lays out standing instructions (a quiet
 // label over a card holding the text, a hint with the count, and Save). It is checked here for length and anything
 // that looks like a secret before it is sent; the server action and the database check both again. It loads only when
-// the account section is open (settings-overlay.tsx), so no other page carries it.
+// the account section is open (settings-overlay.tsx), so no other page carries it, nor its strings: they live in
+// member-note.en.json and member-note.ar.json, in this component's own chunk, not in the catalogue every route loads.
 export default function MemberNote({company,note}:{company:string,note:string}) {
- const {t,locale}=useI18n(); const [value,setValue]=useState(note); const [message,save,pending]=useActionState(saveMemberNote,'');
+ const {language,locale}=useI18n(); const text:Record<string,string>=language==='ar'?ar:en;
+ const t=(key:string,...values:unknown[])=>text[key].replace(/\{(\d+)\}/g,(_,index)=>String(values[Number(index)] ?? ''));
+ const [value,setValue]=useState(note); const [message,save,pending]=useActionState(saveMemberNote,'');
  const [edited,setEdited]=useState(false);
  const local=value.trim().length>noteLimit?'memberNoteTooLong':secretLike(value)?'memberNoteSecret':'';
  const shown=edited?local:local||message;
