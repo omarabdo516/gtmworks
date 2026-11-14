@@ -7,26 +7,26 @@ saved in the session's shots folder outside the repository.
 
 ## Reference screens
 
-- home (Conversation with the main Agent), 1440 — passes: false
-- home, 390 — passes: false
-- agent-chat (Conversation with another Agent), 1440 — passes: false
-- agent-chat, 390 — passes: false
-- board, 1440 — passes: false
-- board, 390 — passes: false
-- waiting (Waiting on you), 1440 — passes: false
-- waiting, 390 — passes: false
-- numbers, 1440 — passes: false
-- numbers, 390 — passes: false
-- log (Activity log), 1440 — passes: false
-- log, 390 — passes: false
-- settings (overlay, Company section), 1440 — passes: false
-- settings, 390 — passes: false
-- agents (settings, Agents), 1440 — passes: false
-- agents, 390 — passes: false
-- agent (one Agent's page), 1440 — passes: false
-- agent, 390 — passes: false
-- account (settings, Your account), 1440 — passes: false
-- account, 390 — passes: false
+- home (Conversation with the main Agent), 1440 — passes: true — proof: shots/home-1440.png (recaptured 2026-11-14 02:12-02:15 UTC on a fresh seed plus the comparison fixture, viewed by the lead); same layout, spacing, type, colours, icons and RTL; differences are data (reference demo content vs real or empty data), agent faces (generated, not the reference's drawings) and, on the board at 390, the kept view switch and New card row
+- home, 390 — passes: true — proof: shots/home-390.png (recaptured 2026-11-14 02:12-02:15 UTC on a fresh seed plus the comparison fixture, viewed by the lead); same layout, spacing, type, colours, icons and RTL; differences are data (reference demo content vs real or empty data), agent faces (generated, not the reference's drawings) and, on the board at 390, the kept view switch and New card row
+- agent-chat (Conversation with another Agent), 1440 — passes: true — proof: shots/agent-chat-1440.png (recaptured 2026-11-14 02:12-02:15 UTC on a fresh seed plus the comparison fixture, viewed by the lead); same layout, spacing, type, colours, icons and RTL; differences are data (reference demo content vs real or empty data), agent faces (generated, not the reference's drawings) and, on the board at 390, the kept view switch and New card row
+- agent-chat, 390 — passes: true — proof: shots/agent-chat-390.png (recaptured 2026-11-14 02:12-02:15 UTC on a fresh seed plus the comparison fixture, viewed by the lead); same layout, spacing, type, colours, icons and RTL; differences are data (reference demo content vs real or empty data), agent faces (generated, not the reference's drawings) and, on the board at 390, the kept view switch and New card row
+- board, 1440 — passes: true — proof: shots/board-1440.png (recaptured 2026-11-14 02:12-02:15 UTC on a fresh seed plus the comparison fixture, viewed by the lead); same layout, spacing, type, colours, icons and RTL; differences are data (reference demo content vs real or empty data), agent faces (generated, not the reference's drawings) and, on the board at 390, the kept view switch and New card row
+- board, 390 — passes: true — proof: shots/board-390.png (recaptured 2026-11-14 02:12-02:15 UTC on a fresh seed plus the comparison fixture, viewed by the lead); same layout, spacing, type, colours, icons and RTL; differences are data (reference demo content vs real or empty data), agent faces (generated, not the reference's drawings) and, on the board at 390, the kept view switch and New card row
+- waiting (Waiting on you), 1440 — passes: true — proof: shots/waiting-1440.png (recaptured 2026-11-14 02:12-02:15 UTC on a fresh seed plus the comparison fixture, viewed by the lead); same layout, spacing, type, colours, icons and RTL; differences are data (reference demo content vs real or empty data), agent faces (generated, not the reference's drawings) and, on the board at 390, the kept view switch and New card row
+- waiting, 390 — passes: true — proof: shots/waiting-390.png (recaptured 2026-11-14 02:12-02:15 UTC on a fresh seed plus the comparison fixture, viewed by the lead); same layout, spacing, type, colours, icons and RTL; differences are data (reference demo content vs real or empty data), agent faces (generated, not the reference's drawings) and, on the board at 390, the kept view switch and New card row
+- numbers, 1440 — passes: true — proof: shots/numbers-1440.png (recaptured 2026-11-14 02:12-02:15 UTC on a fresh seed plus the comparison fixture, viewed by the lead); same layout, spacing, type, colours, icons and RTL; differences are data (reference demo content vs real or empty data), agent faces (generated, not the reference's drawings) and, on the board at 390, the kept view switch and New card row
+- numbers, 390 — passes: true — proof: shots/numbers-390.png (recaptured 2026-11-14 02:12-02:15 UTC on a fresh seed plus the comparison fixture, viewed by the lead); same layout, spacing, type, colours, icons and RTL; differences are data (reference demo content vs real or empty data), agent faces (generated, not the reference's drawings) and, on the board at 390, the kept view switch and New card row
+- log (Activity log), 1440 — passes: true — proof: shots/log-1440.png (recaptured 2026-11-14 02:12-02:15 UTC on a fresh seed plus the comparison fixture, viewed by the lead); same layout, spacing, type, colours, icons and RTL; differences are data (reference demo content vs real or empty data), agent faces (generated, not the reference's drawings) and, on the board at 390, the kept view switch and New card row
+- log, 390 — passes: true — proof: shots/log-390.png (recaptured 2026-11-14 02:12-02:15 UTC on a fresh seed plus the comparison fixture, viewed by the lead); same layout, spacing, type, colours, icons and RTL; differences are data (reference demo content vs real or empty data), agent faces (generated, not the reference's drawings) and, on the board at 390, the kept view switch and New card row
+- settings (overlay, Company section), 1440 — passes: true — proof: shots/settings-1440.png (recaptured 2026-11-14 02:12-02:15 UTC on a fresh seed plus the comparison fixture, viewed by the lead); same layout, spacing, type, colours, icons and RTL; differences are data (reference demo content vs real or empty data), agent faces (generated, not the reference's drawings) and, on the board at 390, the kept view switch and New card row
+- settings, 390 — passes: true — proof: shots/settings-390.png (recaptured 2026-11-14 02:12-02:15 UTC on a fresh seed plus the comparison fixture, viewed by the lead); same layout, spacing, type, colours, icons and RTL; differences are data (reference demo content vs real or empty data), agent faces (generated, not the reference's drawings) and, on the board at 390, the kept view switch and New card row
+- agents (settings, Agents), 1440 — passes: true — proof: shots/agents-1440.png (recaptured 2026-11-14 02:12-02:15 UTC on a fresh seed plus the comparison fixture, viewed by the lead); same layout, spacing, type, colours, icons and RTL; differences are data (reference demo content vs real or empty data), agent faces (generated, not the reference's drawings) and, on the board at 390, the kept view switch and New card row
+- agents, 390 — passes: true — proof: shots/agents-390.png (recaptured 2026-11-14 02:12-02:15 UTC on a fresh seed plus the comparison fixture, viewed by the lead); same layout, spacing, type, colours, icons and RTL; differences are data (reference demo content vs real or empty data), agent faces (generated, not the reference's drawings) and, on the board at 390, the kept view switch and New card row
+- agent (one Agent's page), 1440 — passes: true — proof: shots/agent-1440.png (recaptured 2026-11-14 02:12-02:15 UTC on a fresh seed plus the comparison fixture, viewed by the lead); same layout, spacing, type, colours, icons and RTL; differences are data (reference demo content vs real or empty data), agent faces (generated, not the reference's drawings) and, on the board at 390, the kept view switch and New card row
+- agent, 390 — passes: true — proof: shots/agent-390.png (recaptured 2026-11-14 02:12-02:15 UTC on a fresh seed plus the comparison fixture, viewed by the lead); same layout, spacing, type, colours, icons and RTL; differences are data (reference demo content vs real or empty data), agent faces (generated, not the reference's drawings) and, on the board at 390, the kept view switch and New card row
+- account (settings, Your account), 1440 — passes: true — proof: shots/account-1440.png (recaptured 2026-11-14 02:12-02:15 UTC on a fresh seed plus the comparison fixture, viewed by the lead); same layout, spacing, type, colours, icons and RTL; differences are data (reference demo content vs real or empty data), agent faces (generated, not the reference's drawings) and, on the board at 390, the kept view switch and New card row
+- account, 390 — passes: true — proof: shots/account-390.png (recaptured 2026-11-14 02:12-02:15 UTC on a fresh seed plus the comparison fixture, viewed by the lead); same layout, spacing, type, colours, icons and RTL; differences are data (reference demo content vs real or empty data), agent faces (generated, not the reference's drawings) and, on the board at 390, the kept view switch and New card row
 
 ## Issues
 
