@@ -6,6 +6,7 @@ import { gzipSync } from 'node:zlib';
 import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { sections } from '../lib/navigation';
+import { tapOverlaps } from './tap-overlaps';
 import { execFileSync } from 'node:child_process';
 
 // Supabase CLI targets the local test database by default; never pass --remote.
@@ -276,29 +277,6 @@ test('every company route loads at most 230 KiB gzip of JavaScript', async ({ pa
   }
   await testInfo.attach('js-gzip.json', { body: JSON.stringify(sizes, null, 2), contentType: 'application/json' });
 });
-
-// Tap areas that sit on top of each other. A target is measured by the part a person can reach: a row scrolled out
-// of the drawer's list is cut off by the list, so its hidden part is under the footer only on paper (#48).
-async function tapOverlaps(targets: import('@playwright/test').Locator) {
-  return targets.evaluateAll(nodes => {
-    const reach = (node: Element) => {
-      const own = node.getBoundingClientRect();
-      let box = { left: own.left, top: own.top, right: own.right, bottom: own.bottom };
-      for (let parent = node.parentElement; parent; parent = parent.parentElement) {
-        const style = getComputedStyle(parent);
-        if (!/auto|scroll|hidden|clip/.test(`${style.overflowX} ${style.overflowY}`)) continue;
-        const clip = parent.getBoundingClientRect();
-        box = { left: Math.max(box.left, clip.left), top: Math.max(box.top, clip.top), right: Math.min(box.right, clip.right), bottom: Math.min(box.bottom, clip.bottom) };
-      }
-      return box;
-    };
-    return nodes.flatMap((node, index) => nodes.slice(index + 1).filter(other => {
-      const a = reach(node), b = reach(other);
-      const shown = a.right > a.left && a.bottom > a.top && b.right > b.left && b.bottom > b.top;
-      return shown && !node.contains(other) && !other.contains(node) && a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
-    }).map(other => `${node.textContent} / ${other.textContent}`));
-  });
-}
 
 test('drawer targets are at least 44px and do not overlap', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
