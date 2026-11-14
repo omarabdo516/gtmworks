@@ -24,7 +24,7 @@ test('a retry of an unknown start is never read as not started', async () => {
 });
 
 const connection='f9000000-0000-0000-0000-000000000001';
-function databases({reserve={state:'reserved',connection,note:null},claim=[],usable=true,attempt=1}={}) {
+function databases({reserve={state:'reserved',connection,note:null},claim=[],usable=true,attempt=1,kept=true,stored=false}={}) {
  const order=[]; const args={};
  const rpc=who=>async(name,given)=>{ order.push(`${who} ${name}`); args[name]=given;
   if(name==='conversation_agent') return {data:null,error:null};
@@ -33,11 +33,13 @@ function databases({reserve={state:'reserved',connection,note:null},claim=[],usa
   if(name==='claim_conversation_turn') return {data:claim,error:null};
   // begin_start answers which attempt of the key this is (0: the reservation is no longer active).
   if(name==='begin_start') return {data:attempt,error:null};
+  if(name==='keep_unknown_start') return {data:kept,error:null};
   if(['keep_unknown_start','fail_conversation_turn','release_conversation_run','record_conversation_turn','send_conversation_message'].includes(name)) return {data:true,error:null};
   return {data:null,error:{message:'unexpected'}}; };
  const chain=data=>{ const c={select:()=>c,eq:()=>c,maybeSingle:async()=>({data,error:null})}; return c; };
  const key=encryptSecret('test-only-key',encryptionKey);
- const db={rpc:rpc('person'),from:()=>chain({id:'a9000000-0000-0000-0000-000000000001'})};
+ // The person's reads: the Agent, and (after a lost start) whether the message was stored meanwhile.
+ const db={rpc:rpc('person'),from:table=>chain(table==='conversation_messages'?(stored?{id:7}:null):{id:'a9000000-0000-0000-0000-000000000001'})};
  const service={rpc:rpc('service'),from:()=>chain({address:'http://hermes:8642',profile:'writer',state:usable?'connected':'unreachable',features:['run_submission'],key_encrypted:key})};
  return {db,service,order,args};
 }
@@ -100,4 +102,13 @@ test('a second attempt of the same key is a retry, and is never released or fail
  const failed=databases({claim:[turn]});
  await startQueuedTurns(failed.service,{encryptionKey,...engine(failed.order,null)});
  assert.deepEqual(failed.args.fail_conversation_turn,{conversation:'c',message_key:'k',attempt:1});
+});
+
+test('a lost start whose reservation is gone answers by what was stored, never as waiting', async () => {
+ // Another attempt's record landed meanwhile: the message was sent.
+ const sent=databases({kept:false,stored:true});
+ assert.deepEqual(await sendMessage(sent.db,sent.service,{company:'co',conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...engine(sent.order,startUnknown)}),{conversation:'c'});
+ // Nothing stored and nothing kept: the person is asked to send again.
+ const lost=databases({kept:false});
+ assert.deepEqual(await sendMessage(lost.db,lost.service,{company:'co',conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...engine(lost.order,startUnknown)}),{error:'conversationSendAgain',status:409});
 });

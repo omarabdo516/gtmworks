@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(33);
+select plan(37);
 -- RS Learning: Omar (1) is Owner. A start whose answer was lost is kept as Omar's own waiting turn on its own
 -- reservation, asked again by the worker as a retry, and never abandoned to another Connection.
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('e0000000-0000-0000-0000-000000000411','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://localhost','unknown-starts','ciphertext','connected');
@@ -123,6 +123,23 @@ set local role service_role;
 select is(public.record_conversation_turn('e2000000-0000-0000-0000-000000000407','e3000000-0000-0000-0000-000000000407','unknown_run_7','e0000000-0000-0000-0000-000000000411'),false,'the worker''s record stores nothing twice');
 reset role;
 select ok((select started_at is not null and failed_at is null from public.conversation_queued_turns where send_key='e3000000-0000-0000-0000-000000000407'),'and its turn reads as started, not failed');
+
+-- A start refused at its first attempt is released; sending the same key again is a first attempt anew.
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select is(public.reserve_conversation_turn('e2000000-0000-0000-0000-000000000408','10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000411','e3000000-0000-0000-0000-000000000408','Eighth')->>'state','reserved','a send reserves its run');
+reset role;
+set local role service_role;
+select public.begin_start('e2000000-0000-0000-0000-000000000408','e3000000-0000-0000-0000-000000000408');
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select is(public.release_conversation_run('e2000000-0000-0000-0000-000000000408','10000000-0000-0000-0000-000000000001','e3000000-0000-0000-0000-000000000408',1),true,'its refused first attempt is released');
+select is(public.reserve_conversation_turn('e2000000-0000-0000-0000-000000000408','10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000411','e3000000-0000-0000-0000-000000000408','Eighth')->>'state','reserved','the person sends it again');
+reset role;
+set local role service_role;
+select is(public.begin_start('e2000000-0000-0000-0000-000000000408','e3000000-0000-0000-0000-000000000408'),1,'and it is a first attempt again, which the engine may refuse');
+reset role;
 
 select * from finish();
 rollback;

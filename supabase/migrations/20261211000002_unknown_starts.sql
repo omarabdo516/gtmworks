@@ -96,7 +96,8 @@ begin
  if held.conversation_id is null then
   insert into public.conversation_run_reservations(conversation_id,send_key,company_id,connection_id,person_id,agent_id,message,profile)
    values(conversation,turn.send_key,turn.company_id,linked.id,turn.person_id,turn.agent_id,turn.message,linked.profile)
-   on conflict on constraint conversation_run_reservations_pkey do update set connection_id=excluded.connection_id,profile=excluded.profile,message=excluded.message,created_at=now(),abandoned_at=null
+   on conflict on constraint conversation_run_reservations_pkey do update set connection_id=excluded.connection_id,profile=excluded.profile,message=excluded.message,created_at=now(),abandoned_at=null,
+    start_attempts=0,start_unknown_at=null
     where public.conversation_run_reservations.abandoned_at is not null;
  end if;
  return query select turn.company_id,turn.agent_id,turn.person_id,turn.send_key,turn.message,linked.id,
@@ -219,3 +220,38 @@ begin
 end $$;
 revoke all on function public.record_conversation_turn(uuid,uuid,text,uuid) from public,anon,authenticated;
 grant execute on function public.record_conversation_turn(uuid,uuid,text,uuid) to service_role;
+
+-- As before, and: a reservation reserved again after it was abandoned (a refused first attempt released, an unattempted
+-- one after ten minutes, a marked one given up after a day) starts its attempts anew, so its next start is a first
+-- start the engine may refuse.
+create or replace function public.reserve_conversation_run(conversation uuid, c uuid, agent uuid, message_key uuid, message text) returns uuid
+language plpgsql security definer set search_path='' as $$
+declare existing public.conversations; held public.conversation_run_reservations; linked public.hermes_connections;
+begin
+ if not public.conversation_can_write(c) then raise exception 'conversationNotAllowed' using errcode='42501'; end if;
+ if message is null or length(message) not between 1 and 200000 then raise exception 'conversationNotFound' using errcode='22023'; end if;
+ select * into existing from public.conversations where id=conversation;
+ if found and (existing.person_id<>auth.uid() or existing.company_id<>c or existing.agent_id is distinct from agent) then raise exception 'conversationNotFound' using errcode='P0002'; end if;
+ perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
+ if not exists(select 1 from public.hermes_agents a where a.id=agent and a.company_id=c) then raise exception 'conversationNotFound' using errcode='P0002'; end if;
+ select * into held from public.conversation_run_reservations r where r.conversation_id=conversation and r.send_key=message_key;
+ if found and (held.person_id<>auth.uid() or held.company_id<>c or held.agent_id is distinct from agent) then raise exception 'conversationNotFound' using errcode='P0002'; end if;
+ -- A retry keeps the Connection it first reserved, so it never starts a run on another profile; an abandoned one is
+ -- reserved again on the Agent's Connection of now. Either way the checks below run before it is returned.
+ if found and held.abandoned_at is null then select * into linked from public.hermes_connections where id=held.connection_id;
+ else select h.* into linked from public.hermes_agents a join public.hermes_connections h on h.id=a.connection_id where a.id=agent and a.company_id=c;
+ end if;
+ if linked.id is null then raise exception 'conversationNotFound' using errcode='P0002'; end if;
+ if linked.profile ~ '^co-[0-9a-f]{32}$' then
+  if linked.profile<>public.company_engine_profile(c) then raise exception 'hermesProfileNotShared' using errcode='42501'; end if;
+  if not public.company_profile_ready(c) then raise exception 'agentLevelPending' using errcode='55000'; end if;
+ end if;
+ insert into public.conversation_run_reservations(conversation_id,send_key,company_id,connection_id,person_id,agent_id,message,profile)
+  values(conversation,message_key,c,linked.id,auth.uid(),agent,message,linked.profile)
+  on conflict (conversation_id,send_key) do update set connection_id=excluded.connection_id,profile=excluded.profile,message=excluded.message,created_at=now(),abandoned_at=null,
+   start_attempts=0,start_unknown_at=null
+   where public.conversation_run_reservations.abandoned_at is not null;
+ return linked.id;
+end $$;
+revoke all on function public.reserve_conversation_run(uuid,uuid,uuid,uuid,text) from public,anon,service_role;
+grant execute on function public.reserve_conversation_run(uuid,uuid,uuid,uuid,text) to authenticated;
