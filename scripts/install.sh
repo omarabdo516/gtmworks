@@ -8,7 +8,26 @@ main() {
 release_image=
 if [ -n "$release_image" ]; then cd "$(dirname "$0")"; else cd "$(dirname "$0")/.."; fi
 umask 077
-mkdir .install-lock || { echo 'Another install is running (or remove stale .install-lock).' >&2; exit 1; }
+# One install at a time. The lock names its owner (this boot, the process and the process's start time), so a lock left
+# by an install that stopped (a power cut, a killed process) is taken over once its owner is shown gone; a lock whose
+# owner cannot be shown gone is left alone.
+lock_owner() {
+  printf '%s %s %s\n' "$(cat /proc/sys/kernel/random/boot_id 2> /dev/null)" "$1" \
+    "$(sed 's/^.*) //' "/proc/$1/stat" 2> /dev/null | cut -d' ' -f20)"
+}
+if ! mkdir .install-lock 2> /dev/null; then
+  boot= pid= start=
+  if [ -f .install-lock/owner ]; then read -r boot pid start < .install-lock/owner || true; fi
+  case "$pid" in ''|*[!0-9]*) pid=;; esac
+  if [ -n "$boot" ] && [ -n "$pid" ] && [ -n "$start" ] && [ "$(lock_owner "$pid")" != "$boot $pid $start" ]; then
+    echo "Taking over .install-lock from an install that stopped (process $pid is gone)." >&2
+    rm -rf .install-lock
+    mkdir .install-lock || { echo 'Another install is running (or remove stale .install-lock).' >&2; exit 1; }
+  else
+    echo 'Another install is running (or remove stale .install-lock).' >&2; exit 1
+  fi
+fi
+lock_owner "$$" > .install-lock/owner
 resume=no
 cleanup() {
   status=$?
@@ -171,7 +190,10 @@ else
 fi
 # The extraction replaced the gateway configuration in place; Nginx reads it again without dropping connections.
 if [ "$operation" = update ] && [ -n "$release_image" ]; then compose exec -T gateway nginx -s reload; fi
-compose exec -T web node -e "for(const url of ['http://gateway:8080/api/health','http://gateway:8080/sign-in','http://hermes:8642/health']) { const response=await fetch(url); if(response.status!==200) throw new Error(url+' returned '+response.status); console.log(url+' '+response.status); }" --input-type=module
+# Each address must answer 200. Right after the migrations PostgREST reloads its schema cache (and the gateway its
+# configuration), and the app's health answers 503 meanwhile: the probes try again once a second, 60 tries in all, and
+# fail naming the address and its last answer when 200 never comes.
+compose exec -T web node -e "let tries=60; for(const url of ['http://gateway:8080/api/health','http://gateway:8080/sign-in','http://hermes:8642/health']) { for(;;) { let answer; try { answer=(await fetch(url)).status; } catch(error) { answer=error.message; } if(answer===200) { console.log(url+' 200'); break; } if(--tries<=0) throw new Error(url+' returned '+answer); await new Promise(resolve=>setTimeout(resolve,1000)); } }" --input-type=module
 if [ -n "$release_image" ]; then printf '%s\n' "$release_image" > .install-release; fi
 # Whether first run is still open, asked through the app's service role; it answers open or closed and nothing else.
 setup=$(compose exec -T web node -e "const key=process.env.SUPABASE_SERVICE_ROLE_KEY; const response=await fetch('http://gateway:8080/rest/v1/rpc/setup_is_open',{method:'POST',headers:{apikey:key,authorization:'Bearer '+key}}); if(!response.ok) throw new Error('setup_is_open returned '+response.status); console.log(await response.json()===true?'open':'closed');" --input-type=module)

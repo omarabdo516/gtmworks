@@ -28,6 +28,10 @@ COPY --from=build --chown=node:node /app/components/paperclip/fonts/*.txt /app/c
 COPY --from=build --chown=node:node /app/lib ./install/lib
 COPY --from=build --chown=node:node /app/scripts/install-db.sql /app/scripts/local-default-privileges.sql /app/scripts/install-key.sh /app/scripts/install-nginx.conf /app/scripts/install-gateway-real-ip.sh ./install/scripts/
 COPY --from=build --chown=node:node /app/supabase/migrations ./install/supabase/migrations
+# The main channel (scripts/get.sh --channel main) has no GitHub Release: its compose file and install script are written
+# from these source files by release-assets.mjs, run inside the main image for the digest the install just pulled.
+COPY --from=build --chown=node:node /app/docker-compose.install.yml ./release-source/
+COPY --from=build --chown=node:node /app/scripts/install.sh /app/scripts/release-assets.mjs ./release-source/scripts/
 USER node
 EXPOSE 3000
 CMD ["node", "server.js"]
