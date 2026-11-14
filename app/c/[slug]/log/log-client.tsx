@@ -57,10 +57,17 @@ export function LogFilters({slug,who,card,people,agents,cards,count}:{slug:strin
   router.push(`/c/${slug}/log${query.size?`?${query}`:''}`);
  };
  const filtered=who!=='all'||card!=='all';
- // A choice made before the page finished loading still applies once it has.
+ // A choice made before the page finished loading still applies once it has. Only a field the reader changed counts:
+ // one whose value differs from what the page was drawn with. A filter with no option of its own (an Agent or Card
+ // no longer listed) draws the field on its first option, and that is not a choice, so the address keeps the filter.
  const whoField=useRef<HTMLSelectElement>(null), cardField=useRef<HTMLSelectElement>(null);
  useEffect(()=>{
-  const [nextWho,nextCard]=[whoField.current?.value??who,cardField.current?.value??card];
+  const chosen=(field:HTMLSelectElement|null,current:string)=>{
+   if(!field) return current;
+   const drawn=[...field.options].find(option=>option.defaultSelected)??field.options[0];
+   return field.value!==drawn?.value?field.value:current;
+  };
+  const [nextWho,nextCard]=[chosen(whoField.current,who),chosen(cardField.current,card)];
   if(nextWho!==who||nextCard!==card) go(nextWho,nextCard);
  // eslint-disable-next-line react-hooks/exhaustive-deps
  },[]);

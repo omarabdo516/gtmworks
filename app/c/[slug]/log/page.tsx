@@ -5,13 +5,13 @@ import { getI18n } from '@/lib/i18n-server';
 import { supabase } from '@/lib/supabase';
 import Shell from '@/app/shell';
 import { approvalQueue } from '@/lib/approval-queue';
-import { logCursor, parseBefore, parseCard, parseWho, type LogRow } from '@/lib/activity-log.mjs';
+import { logCursor, logPageSize, parseBefore, parseCard, parseWho, type LogRow } from '@/lib/activity-log.mjs';
 import { LogDays, LogFilters } from './log-client';
 import { LogEntry, logColumns, logPeople } from './entries';
 import { PageIcon } from './icons';
 
-// A page shows this many rows, newest first; "Older entries" opens the next page. The count names every row that matches.
-const shown=300;
+// A page shows logPageSize rows, newest first; "Older entries" opens the next page. The count names every row that matches.
+const shown=logPageSize;
 
 // The Company's Activity log (#11, design-reference: renderLogPage): every change, newest first, filtered by who did
 // it and by Card. Read with the signed-in person's session, so the database shows only their own Company's rows.

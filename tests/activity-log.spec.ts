@@ -1,7 +1,9 @@
 import { test, expect, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { signIn } from './sign-in';
+import { idle } from './navigation-measure';
 import { i18n } from '../lib/i18n.mjs';
+import { logPageSize } from '../lib/activity-log.mjs';
 
 // One log for the Company (#11): the Activity log page filters by person or Agent and by Card, a Card opens from its
 // rows, and a Member reads only their own Company's log. The seed's Card activity is made by its role Agents.
@@ -91,36 +93,40 @@ test('the Activity log filters by a person, and an opened Card shows only its ow
 });
 
 test('older rows are reached page by page in a stable order, each row once',async({page})=>{
- // A Company of its own, so its 302 rows weigh on no other test: one Card with 302 comments at four moments, so the
- // first page (300 rows) ends inside a run of rows with the same time and the next page has to split them by id.
+ // A Company of its own, so its rows weigh on no other test: one Card with a page and two more of comments at a few
+ // moments, so the first page ends inside a run of rows with the same time and the next page has to split them by id.
  // The Viewer reads it and is removed again at the end, which hides the Company from everyone.
  const stamp=Date.now(), slug=`paged-${stamp}`, title=`Paged log ${stamp}`, viewer='20000000-0000-0000-0000-000000000004';
+ const comments=logPageSize+2, total=comments+1, moment=Math.floor(logPageSize*0.4); // the card's creation and its comments
  const company=rows(`insert into public.companies(id,slug,name) values (gen_random_uuid(),'${slug}','Paged ${stamp}') returning id`)[0].id as string;
  query(`insert into public.members(company_id,person_id,role) values ('${company}','${viewer}','viewer')`);
  try {
   query(`with card as (insert into public.work_cards(company_id,stage_id,title) select '${company}',id,'${title}' from public.work_stages where company_id='${company}' and kind='ideas' order by position limit 1 returning id)
-   insert into public.work_comments(company_id,card_id,body,author_id,created_at) select '${company}',card.id,'Paged row '||g,'${viewer}',timestamptz '2026-01-01T00:00:00Z'+(g/100)*interval '1 minute' from card,generate_series(1,302) g`);
+   insert into public.work_comments(company_id,card_id,body,author_id,created_at) select '${company}',card.id,'Paged row '||g,'${viewer}',timestamptz '2026-01-01T00:00:00Z'+(g/${moment})*interval '1 minute' from card,generate_series(1,${comments}) g`);
   const card=Number(rows(`select id from public.work_cards where title='${title}'`)[0].id);
+  const expected=rows(`select id,created_at from public.company_log where card_id=${card} order by created_at desc,id desc`);
+  expect(expected).toHaveLength(total);
+  // The page boundary falls between two rows of the same moment.
+  expect(expected[logPageSize-1].created_at).toBe(expected[logPageSize].created_at);
   await signIn(page,'viewer@example.com',`/c/${slug}/log?card=${card}`);
   const tr=await t(page);
   const entries=page.locator('.lgp-body .lg-row');
-  await expect(page.locator('.lgp-count')).toHaveText(tr('logEntries',303)); // the card's creation and its 302 comments
-  await expect(entries).toHaveCount(300);
-  await expect(page.locator('.lg-pages .lg-more')).toHaveText(tr('logShowing',300));
+  await expect(page.locator('.lgp-count')).toHaveText(tr('logEntries',total));
+  await expect(entries).toHaveCount(logPageSize);
+  await expect(page.locator('.lg-pages .lg-more')).toHaveText(tr('logShowing',logPageSize));
   const first=await entries.evaluateAll(list=>list.map(row=>row.getAttribute('data-entry')));
   await page.getByRole('link',{name:tr('logOlder')}).click();
   await expect(page).toHaveURL(new RegExp(`/c/${slug}/log\\?card=${card}&before=`));
-  await expect(entries).toHaveCount(3);
-  await expect(page.locator('.lgp-count')).toHaveText(tr('logEntries',303));
-  await expect(page.locator('.lg-pages .lg-more')).toHaveText(tr('logShowingOlder',3));
+  await expect(entries).toHaveCount(total-logPageSize);
+  await expect(page.locator('.lgp-count')).toHaveText(tr('logEntries',total));
+  await expect(page.locator('.lg-pages .lg-more')).toHaveText(tr('logShowingOlder',total-logPageSize));
   await expect(page.getByRole('link',{name:tr('logOlder')})).toHaveCount(0);
   const second=await entries.evaluateAll(list=>list.map(row=>row.getAttribute('data-entry')));
   // Both pages together are the card's log in its order (time, then id, newest first), each row once.
-  const expected=rows(`select id from public.company_log where card_id=${card} order by created_at desc,id desc`).map(row=>String(row.id));
-  expect([...first,...second]).toEqual(expected);
+  expect([...first,...second]).toEqual(expected.map(row=>String(row.id)));
   await page.getByRole('link',{name:tr('logNewest')}).click();
   await expect(page).toHaveURL(new RegExp(`/c/${slug}/log\\?card=${card}$`));
-  await expect(entries).toHaveCount(300);
+  await expect(entries).toHaveCount(logPageSize);
  } finally {
   query(`update public.members set removed_at=now() where company_id='${company}' and person_id='${viewer}'`);
  }
@@ -131,6 +137,16 @@ test('a filter that matches nothing says so and offers everything back',async({p
  const tr=await t(page);
  await expect(page.locator('.lgp-empty')).toContainText(tr('logNoMatch'));
  await expect(page.locator('.lgp-body .lg-row')).toHaveCount(0);
+ // Once the page has finished loading the filter still holds: a filter with no option of its own is not undone.
+ await idle(page);
+ await expect(page).toHaveURL(/\/c\/rs-learning\/log\?who=a(?::|%3A)ffffffff-ffff-ffff-ffff-ffffffffffff$/);
+ await expect(page.locator('.lgp-empty')).toContainText(tr('logNoMatch'));
+ await expect(page.locator('.lgp-body .lg-row')).toHaveCount(0);
+ // Everything comes back from the note.
+ await page.locator('.lgp-empty').getByRole('link',{name:tr('logShowAll')}).click();
+ await expect(page).toHaveURL(/\/c\/rs-learning\/log$/);
+ await expect(page.locator('.lgp-body .lg-row').first()).toBeVisible();
+ await expect(page.locator('.lgp-empty')).toHaveCount(0);
 });
 
 test('a Member reads only the log of their own Company',async({page})=>{
