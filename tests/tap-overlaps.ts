@@ -4,6 +4,9 @@ import type { Locator } from '@playwright/test';
 // ancestors do not clip, as the browser clips it (#48). An ancestor clips an axis only when its overflow on that axis
 // is not `visible`, and only if it clips this element at all: nothing above a fixed element clips it, and an absolute
 // element is clipped only by its containing block and what lies above that, not by the boxes in between.
+// Not modelled (none occurs in the shell's drawer, checked 2026-11-14): a fixed element inside a transformed ancestor,
+// clipping at the padding edge instead of the border edge, overflow-clip-margin, and inline boxes, which overflow does
+// not clip. A page that starts using one of these needs this helper extended first.
 export async function tapOverlaps(targets: Locator) {
   return targets.evaluateAll(nodes => {
     // Whether a box is the containing block of an absolute descendant.
