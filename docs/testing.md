@@ -14,7 +14,9 @@ English/Arabic direction checks are never removed.
   app server of its own (`tests/lane.mjs`, `scripts/local-db.sh`, `scripts/web.sh`), so spec files run side by side
   and never share data. Each functional spec file starts from the seed: before its first test the lane's data is put
   back from a snapshot taken right after seeding (`tests/fresh-seed.ts`). Tests inside one file still run in order.
-  The screens still run first, on the seed as built, and first run last.
+  The screens still run first, on the seed as built. The navigation time budgets (`navigation.spec.ts`, project
+  `measured`) run after every functional test with the machine to themselves, as they did when the suite was serial,
+  and first run last.
 - `install` runs on every push to `main`, and on a pull request only when it changes a file the install exercises
   (`scripts/install-related.mjs`): the image and its build inputs, install and release files, the database, `lib/`,
   `worker/` and the workflows. `check` allows a skipped install only then, and is red on any failed or cancelled stage
@@ -106,7 +108,7 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `migration-statements.test.mjs` | Both migration runners split statements alike and no migration controls its own transaction. | 0.4 s | — | keep |
 | `navigation-measure.ts` | browser helper: navigation timing | — | — | helper, kept |
 | `navigation-path.test.mjs` | The measured navigation path keeps the Inbox and the Activity log. | 1.4 s | navigation.spec.ts | keep |
-| `navigation.spec.ts` | Prepared navigation stays within its time budgets, prefetches, honours reduced motion, invalidates on own changes; drawer tap areas. | 56.9 s | navigation-path.test.mjs (the measured path only) | keep |
+| `navigation.spec.ts` | Prepared navigation stays within its time budgets, prefetches, honours reduced motion, invalidates on own changes; drawer tap areas. (measured project, alone) | 56.9 s | navigation-path.test.mjs (the measured path only) | keep |
 | `no-agency-strings.test.mjs` | No interface string mentions an Agency or a reviewer. | 0.6 s | — | keep |
 | `numbers.spec.ts` | The Numbers page shows its empty state with no app and lists what waits on its reader. | 1.8 s | numbers.test.mjs (figures and sources) | keep |
 | `numbers.test.mjs` | Every Numbers figure comes from a connected app with its source and period. | 0.8 s | numbers.spec.ts | keep |

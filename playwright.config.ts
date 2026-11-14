@@ -33,8 +33,12 @@ export default defineConfig({
     // order is visual, functional, first-run, and a failed screen no longer hides the functional failures (#257).
     // The screen-only scripts pass --no-deps so they do not pull the later projects in.
     { name: 'seeded', testMatch: /^$/, teardown: 'first-run' },
-    { name: 'visual', testMatch: 'visual.spec.ts', outputDir: 'test-results/screenshots/visual', dependencies: ['seeded'], teardown: 'functional' },
-    { name: 'functional', testIgnore: ['visual.spec.ts', 'first-run.spec.ts', '**/proxy/**'] },
+    // The navigation time budgets are measured with the machine to themselves (#69): `measured` is the teardown of an
+    // empty anchor that `visual` depends on, so it runs alone after every functional test, and before first run.
+    { name: 'measured-anchor', testMatch: /^$/, dependencies: ['seeded'], teardown: 'measured' },
+    { name: 'visual', testMatch: 'visual.spec.ts', outputDir: 'test-results/screenshots/visual', dependencies: ['measured-anchor'], teardown: 'functional' },
+    { name: 'functional', testIgnore: ['visual.spec.ts', 'first-run.spec.ts', 'navigation.spec.ts', '**/proxy/**'] },
+    { name: 'measured', testMatch: 'navigation.spec.ts', workers: 1 },
     // Empty-install scenarios mutate the whole local database and run only after seeded functional tests finish.
     { name: 'first-run', testMatch: 'first-run.spec.ts' },
   ],

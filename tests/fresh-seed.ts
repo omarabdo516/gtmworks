@@ -23,7 +23,7 @@ export function freshSeed(file: string) {
 
 export const test = base.extend<{ seededFile: void }>({
   seededFile: [async ({}, use, testInfo) => {
-    if (testInfo.project.name === 'functional') freshSeed(testInfo.file);
+    if (['functional', 'measured'].includes(testInfo.project.name)) freshSeed(testInfo.file);
     await use();
   }, { auto: true }],
 });

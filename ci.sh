@@ -65,26 +65,12 @@ PY
   npm run typecheck
   npm test
   ;;
- stacks)
-  # Starts the stack of every browser test lane in the background and returns (CI runs it before the image build so both
-  # happen at once); `integration` then waits for them.
+ integration)
   if [[ "${CI:-}" == "true" ]]; then
     npm ci
     npx playwright install --with-deps chromium
   fi
   start_lanes
-  touch playwright-report/lanes-started
-  ;;
- integration)
-  if [[ -f playwright-report/lanes-started ]]; then
-    rm playwright-report/lanes-started
-  else
-    if [[ "${CI:-}" == "true" ]]; then
-      npm ci
-      npx playwright install --with-deps chromium
-    fi
-    start_lanes
-  fi
   wait_lanes
   if [[ "${CI:-}" == "true" ]]; then
     bash scripts/ci-image.sh
@@ -112,5 +98,5 @@ PY
   bash scripts/local-db.sh
   npm run test:visual:update
   ;;
- *) echo 'usage: ./ci.sh check | static | stacks | integration | visual-update' >&2; exit 2;;
+ *) echo 'usage: ./ci.sh check | static | integration | visual-update' >&2; exit 2;;
 esac

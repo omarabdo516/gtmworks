@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 
 // The real playwright.config.ts runs in a sandbox with stand-in specs and no web server, so the order and the
 // skip rules of its two projects are observed through Playwright itself, as CI runs them (CI=true: one retry).
-function sandbox(t, { visual, functional, firstRun = true }) {
+function sandbox(t, { visual, functional, firstRun = true, measured }) {
  const output = resolve('test-results');
  mkdirSync(output, { recursive: true });
  const dir = mkdtempSync(join(output, 'projects-'));
@@ -24,6 +24,7 @@ test('${name} second', async () => { await new Promise(r => setTimeout(r, 30)); 
  writeFileSync(join(dir, 'tests/visual.spec.ts'), spec('screen', visual));
  writeFileSync(join(dir, 'tests/board.spec.ts'), spec('board', functional));
  writeFileSync(join(dir, 'tests/first-run.spec.ts'), spec('empty install', firstRun));
+ if (measured !== undefined) writeFileSync(join(dir, 'tests/navigation.spec.ts'), spec('navigation budget', measured));
  return dir;
 }
 
@@ -100,5 +101,16 @@ test('the screen-only commands run only screens, and one project alone runs only
  for (const project of ['functional', 'first-run']) {
   const { results, output } = run(dir, ['playwright', 'test', `--project=${project}`]);
   assert.deepEqual([...new Set(results.map(r => r.project))], [project], output);
+ }
+});
+
+test('the navigation time budgets run alone after every functional test and before first run, and hide no failure', t => {
+ for (const [functional, measured] of [[true, true], [false, true], [true, false]]) {
+  const { status, results, output } = run(sandbox(t, { visual: true, functional, measured }), ['playwright', 'test']);
+  assert.equal(status === 0, functional && measured, output);
+  assert.equal(count(results, 'measured'), measured ? 2 : 3, output); // a failing budget ran twice: CI retries once
+  assert.equal(count(results, 'first-run'), 2, output);
+  assert.ok(ends(results, 'functional') <= starts(results, 'measured'), output);
+  assert.ok(ends(results, 'measured') <= starts(results, 'first-run'), output);
  }
 });
