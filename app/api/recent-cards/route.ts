@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { routeAllowed } from '@/lib/route-permissions.mjs';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,6 +19,7 @@ export async function POST(request: NextRequest) {
   const db = await supabase();
   const { data: { user }, error: authError } = await db.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Session unavailable' }, { status: 401, headers });
+  if (!await routeAllowed(db, 'app/api/recent-cards/route.ts', 'POST', company, user.id)) return NextResponse.json({ error: 'Not allowed' }, { status: 403, headers });
   if (cardId !== undefined) {
     const { error } = await db.from('work_card_visits').upsert({ company_id: company, person_id: user.id, card_id: cardId as number }, { onConflict: 'company_id,person_id,card_id' });
     if (error) return NextResponse.json({ error: 'Could not record the visit' }, { status: 500, headers });

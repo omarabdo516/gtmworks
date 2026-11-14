@@ -319,13 +319,14 @@ function conversationDatabases({profile,reserve=null,record=null}) {
  const order=[];
  const db={order,args:{},rpc:async(name,args)=>{ order.push(name); db.args[name]=args;
    if(name==='conversation_agent') return {data:null,error:null};
-   if(name==='reserve_conversation_run') return reserve||{data:'f9000000-0000-0000-0000-000000000001',error:null};
+   // The sender's one entry point reserves the run when the Agent is free (reserve_conversation_turn, #team-work).
+   if(name==='reserve_conversation_turn') return reserve||{data:{state:'reserved',connection:'f9000000-0000-0000-0000-000000000001',note:null},error:null};
    if(name==='send_conversation_message') return record||{data:true,error:null};
    if(name==='release_conversation_run') return {data:true,error:null};
    return {data:null,error:{message:'unexpected'}}; },
   from:()=>{ const chain={select:()=>chain,eq:()=>chain,maybeSingle:async()=>({data:{id:'a9000000-0000-0000-0000-000000000001'},error:null})}; return chain; }};
  const key=encryptSecret('test-only-key',encryptionKey);
- const service={from:table=>{ const filters={}; const chain={select:()=>chain,eq:(column,value)=>{filters[column]=value;return chain;},maybeSingle:async()=>{ order.push(`read ${table} ${filters.id||''}`);
+ const service={rpc:async(name)=>{ order.push(`service ${name}`); return name==='begin_start'?{data:1,error:null}:{data:null,error:{message:'unexpected'}}; },from:table=>{ const filters={}; const chain={select:()=>chain,eq:(column,value)=>{filters[column]=value;return chain;},maybeSingle:async()=>{ order.push(`read ${table} ${filters.id||''}`);
    return table==='hermes_connections'?{data:{address:'http://hermes:8642',profile,state:'connected',features:['run_submission'],key_encrypted:key},error:null}:{data:{connection_id:'f9000000-0000-0000-0000-000000000099'},error:null}; }}; return chain; }};
  return {db,service,order};
 }
@@ -337,10 +338,10 @@ test('a run is reserved on its pinned Connection before Hermes is called, and re
  const sent=await sendMessage(db,service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...engine(order)});
  assert.deepEqual(sent,{conversation:'c'});
  // The reservation keeps the message for the record.
- assert.equal(db.args.reserve_conversation_run.message,'Hi');
+ assert.equal(db.args.reserve_conversation_turn.message,'Hi');
  // The record names the Connection the run started on, the one the reservation pinned.
  assert.equal(db.args.send_conversation_message.started_on,'f9000000-0000-0000-0000-000000000001');
- assert.deepEqual(order,['conversation_agent','reserve_conversation_run','read hermes_connections f9000000-0000-0000-0000-000000000001',`start ${companyProfile(two)}`,'send_conversation_message']);
+ assert.deepEqual(order,['conversation_agent','reserve_conversation_turn','read hermes_connections f9000000-0000-0000-0000-000000000001','service begin_start',`start ${companyProfile(two)}`,'send_conversation_message']);
 });
 
 test('a run never starts on another company\'s profile, nor while the profile\'s tools lag behind the level', async () => {
@@ -418,7 +419,7 @@ test('a run that never started releases its reservation at once; a started one l
  const refusing={engineFor:connection=>({start:async()=>{ refused.order.push(`start ${connection.profile}`); return null; }})};
  assert.deepEqual(await sendMessage(refused.db,refused.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...refusing}),{error:'conversationHermesFailed',status:502});
  assert.deepEqual(refused.order.slice(-2),[`start ${companyProfile(two)}`,'release_conversation_run']);
- assert.deepEqual(refused.db.args.release_conversation_run,{conversation:'c',c:two,message_key:'k'});
+ assert.deepEqual(refused.db.args.release_conversation_run,{conversation:'c',c:two,message_key:'k',attempt:1});
  // A Connection that cannot be used never reaches the engine, and its reservation is released too.
  const borrowed=conversationDatabases({profile:companyProfile(three)});
  assert.deepEqual(await sendMessage(borrowed.db,borrowed.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...engine(borrowed.order)}),{error:'conversationNotFound',status:404});

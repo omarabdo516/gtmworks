@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fakeHermes } from './fake-hermes.mjs';
-import { startRun, readRun } from '../lib/hermes.mjs';
+import { startRun, readRun, startUnknown } from '../lib/hermes.mjs';
 
 const connection=fake=>({address:fake.address,profile:'writer',key:'test-only-key'});
 
@@ -20,6 +20,17 @@ test('a message starts one run in the conversation session of the chosen profile
  } finally { await fake.close(); }
 });
 
+// A Member's note travels as the run's own instructions (Hermes v0.23.0 /v1/runs `instructions`, an ephemeral prompt),
+// never inside the message; a run without a note sends no instructions at all.
+test('a run carries the sender\'s instructions only when it has them',async()=>{
+ const fake=await fakeHermes();
+ try {
+  await startRun({...connection(fake),input:'Plan the week',instructions:'Answer in short points.',sessionKey:'s',idempotencyKey:'k1'});
+  await startRun({...connection(fake),input:'And the next',sessionKey:'s',idempotencyKey:'k2'});
+  assert.deepEqual(fake.settings.runs.map(run=>[run.input,run.instructions]),[['Plan the week','Answer in short points.'],['And the next',undefined]]);
+ } finally { await fake.close(); }
+});
+
 test('a run is read as pending until Hermes reports its terminal status, output and session',async()=>{
  const fake=await fakeHermes(); fake.settings.pendingReads=1;
  try {
@@ -31,14 +42,49 @@ test('a run is read as pending until Hermes reports its terminal status, output 
  } finally { await fake.close(); }
 });
 
+// A start whose answers are lost (the driver asks twice) may have started the run: it is unknown, never "not started",
+// and asking again with the same key and body replays that run. The same key with another body is refused, as the pinned release refuses it.
+test('a lost start answer is unknown, and the same key with another body is refused',async()=>{
+ const fake=await fakeHermes(); fake.settings.loseStarts=2;
+ try {
+  const start={...connection(fake),input:'Plan the week',instructions:'Answer in short points.',sessionKey:'s',idempotencyKey:'k'};
+  assert.equal(await startRun(start),startUnknown);
+  assert.equal(fake.settings.runs.length,1);
+  const run=await startRun(start);
+  assert.equal(run,fake.settings.runs[0].id);
+  assert.equal(await startRun({...start,instructions:'Changed note.'}),null);
+  assert.equal(fake.settings.runs.length,1);
+ } finally { await fake.close(); }
+});
+
+// Only the first attempt can prove a run did not start. Once an answer was lost, a later refusal or a closed
+// connection proves nothing about the run the first attempt may have started; a gateway's 502, 503 or 504 never does.
+test('after a lost answer every failure is unknown, and a gateway error is never a refusal',async()=>{
+ const real=globalThis.fetch;
+ const failing=code=>Object.assign(new TypeError('fetch failed'),{cause:{code}});
+ const start={address:'http://127.0.0.1:8642',profile:'writer',key:'test-only-key',input:'Hello',sessionKey:'s',idempotencyKey:'k'};
+ const answers=list=>{ const queue=[...list]; globalThis.fetch=async()=>{ const next=queue.shift(); if(next instanceof Error) throw next; return new Response(JSON.stringify({error:{message:'x'}}),{status:next}); }; };
+ try {
+  answers([failing('UND_ERR_SOCKET'),failing('ECONNREFUSED')]); assert.equal(await startRun(start),startUnknown);
+  answers([failing('UND_ERR_SOCKET'),400]); assert.equal(await startRun(start),startUnknown);
+  for(const status of [502,503,504]) { answers([status,status]); assert.equal(await startRun(start),startUnknown,String(status)); }
+  answers([failing('ECONNREFUSED')]); assert.equal(await startRun(start),null);
+  answers([409]); assert.equal(await startRun(start),null);
+ } finally { globalThis.fetch=real; }
+});
+
 test('a refused or unreachable Hermes starts no run',async()=>{
  const fake=await fakeHermes(); const input={...connection(fake),input:'Hello',sessionKey:'s',idempotencyKey:'k'};
  try {
   assert.equal(await startRun({...input,key:'wrong'}),null);
-  fake.settings.status=503;
+  // Hermes's own error answer is a refusal; a gateway's 502, 503 or 504 is not (next test).
+  fake.settings.status=500;
   assert.equal(await startRun(input),null);
  } finally { await fake.close(); }
- assert.equal(await startRun(input),null);
+ // A Hermes nothing can connect to starts no run. (A request on a socket the closed fake dropped after an earlier answer
+ // is unknown instead: whether it reached Hermes cannot be told.)
+ const gone=await fakeHermes(); const address=gone.address; await gone.close();
+ assert.equal(await startRun({...input,address}),null);
 });
 
 test('a key is never sent to Hermes over plain HTTP on a public address',async()=>{

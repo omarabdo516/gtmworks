@@ -4,6 +4,7 @@ import { getI18n } from '@/lib/i18n-server';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { actionAllowed } from '@/lib/route-permissions.mjs';
 import { fingerprint } from '@/lib/agent-crypto.mjs';
 import { filesProblem } from '@/lib/attachments.mjs';
 // Files chosen in a form are stored in the company's folder first; the database then records them against a message.
@@ -23,7 +24,10 @@ async function storeFiles(db: Awaited<ReturnType<typeof supabase>>, company: str
 export const workAction=withActionLog('workAction',async function workAction(form: FormData) { const {t}=await getI18n();
  const db=await supabase(); const company=String(form.get('company')); const slug=String(form.get('slug')); const op=String(form.get('op')); const card=Number(form.get('card')); const base=`/c/${slug}/work/board`; const evidence=String(form.get('evidence')||'').trim() || null;
  let error: {message:string}|null=null; let created: number|undefined;
- if(op==='approve'||op==='reject') ({error}=await db.rpc('decide_approval',{c:company,card,decision:op==='approve'?'approve':'reject',reason:String(form.get('reason')||''),caption_marked:form.has('caption_marked'),design_marked:form.has('design_marked')}));
+ // The action's permission (lib/route-permissions.mjs) for this operation, with the role read now; the database checks
+ // the finer rules (the current approver, the stage rules) again.
+ if(!await actionAllowed(db,'workAction',company,op)) error={message:'not permitted'};
+ else if(op==='approve'||op==='reject') ({error}=await db.rpc('decide_approval',{c:company,card,decision:op==='approve'?'approve':'reject',reason:String(form.get('reason')||''),caption_marked:form.has('caption_marked'),design_marked:form.has('design_marked')}));
  else if(op==='save-step') { const [kind,value]=String(form.get('approver')).split(':'); ({error}=await db.rpc('save_approval_step',{c:company,step:Number(form.get('step'))||null,step_name:String(form.get('name')),step_position:Number(form.get('position')),member:kind==='person'?value:null,member_role:kind==='role'?value:null})); }
  else if(op==='remove-step') ({error}=await db.rpc('remove_approval_step',{c:company,step:Number(form.get('step'))}));
  else if(op==='create') { const result=await db.rpc('create_work_card',{c:company,s:Number(form.get('stage')),card_title:String(form.get('title')),template:String(form.get('template')||''),evidence}); error=result.error; created=result.data; }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
+import { routeAllowed } from '@/lib/route-permissions.mjs';
 
 const columns='id,company_id,connection_id,name,speciality,is_default';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -16,6 +17,7 @@ async function respond(request:NextRequest) {
   if(typeof body.company!=='string'||!uuid.test(body.company)) return reply({error:'hermesAgentFailed'},400);
   const {data:company}=await db.from('companies').select('id').eq('id',body.company).maybeSingle();
   if(!company) return reply({error:'hermesAgentNotFound'},404);
+  if(!await routeAllowed(db,'app/api/hermes-agents/route.ts',request.method,body.company,user.id)) return reply({error:'hermesNotAllowed'},403);
   if(writing) {
    if(!['attach','default','remove'].includes(body.intent)||['connection','agent','replacement'].some(key=>body[key]!==undefined&&(typeof body[key]!=='string'||!uuid.test(body[key])))) return reply({error:'hermesAgentFailed'},400);
    if(body.intent==='attach'&&(!body.connection||typeof body.name!=='string'||!body.name.trim()||body.name.length>100||typeof body.speciality!=='string'||!body.speciality.trim()||body.speciality.length>200)||body.intent!=='attach'&&!body.agent) return reply({error:'hermesAgentFailed'},400);

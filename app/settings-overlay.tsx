@@ -7,13 +7,14 @@ import { supabase } from '@/lib/supabase';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { visibleSections, pickSection, overlayHref, agentsMainFirst, usageTotals, type OverlaySection } from '@/lib/settings-overlay.mjs';
 import { OverlayFrame, CloseButton, AccountChoices, MakeMain, DeleteAgent, CompanyName } from './settings-overlay-client';
+import MemberNote from './member-note-lazy';
 import { SettingsIcon } from './settings-icons';
 import PasswordSettings from './password-settings';
 import { UsageTable, type UsageDay } from './c/[slug]/[[...section]]/usage';
 import { createClient } from '@supabase/supabase-js';
 import { supabaseConfig } from '@/lib/supabase-config';
 import { readCompanySignIns } from '@/lib/company-sign-in.mjs';
-import { AgentLevel, CompanySubscriptions } from './company-engine-client';
+import { AgentLevel, CompanySubscriptions } from './company-engine-lazy';
 
 type Agent={id:string,connection_id:string,name:string,speciality:string,is_default:boolean};
 type Member={person_id:string,role:string,people:{name:string|null}|null};
@@ -43,13 +44,15 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  // key of that Company's bundled Connection, after the database said the person is a member (company_engine_target).
  const subscriptions=section==='models'?await (async()=>{ try { return await readCompanySignIns(db,createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false}}),{company:company.id,encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY}); } catch { return {profile:null,signIns:null}; } })():null;
  const usageRows:UsageDay[]=section==='usage'?((await db.rpc('usage_by_day')).data||[]) as UsageDay[]:[];
+ // The person's own note for the Agents in this Company (RLS: nobody else reads it).
+ const memberNote=section==='account'?(await db.from('member_notes').select('note').eq('company_id',company.id).eq('person_id',userId).maybeSingle()).data?.note||'':'';
  const agent=section==='agents'&&query.agent?agents.find(item=>item.id===query.agent):undefined;
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  const ro=!canManage&&<p className="ro-note"><SettingsIcon name="shield"/><span>{t('settingsRO')}</span></p>;
  const page=section==='company'?<CompanySection t={t} company={company} members={members} agents={agents} userId={userId} slug={slug} owner={owner} canManage={canManage} sharedEngine={sharedEngine} agentLevel={agentLevel} toolWarning={toolWarning.map(row=>row.agent_name)} roleNames={roleNames} ro={ro}/>
   :section==='agents'?(agent?<AgentPage t={t} rtl={rtl} slug={slug} company={company.id} agent={agent} main={agents[0]} owner={owner} canManage={canManage} canWrite={canWrite}/>:<AgentsSection t={t} rtl={rtl} slug={slug} agents={agents} canManage={canManage} canWrite={canWrite} owner={owner}/>)
   :section==='usage'?<UsageSection t={t} locale={locale} slug={slug} company={company.id} rows={usageRows} period={query.period==='30'?30:7}/>
-  :section==='account'?<AccountSection t={t} theme={theme} personName={personName} role={role} roleName={roleNames[role]||''} companyName={company.name}/>
+  :section==='account'?<AccountSection t={t} theme={theme} personName={personName} role={role} roleName={roleNames[role]||''} companyName={company.name} company={company.id} memberNote={memberNote}/>
   :<SoonSection t={t} section={section} ro={ro} models={<ModelsSubscriptions company={company.id} owner={owner} subscriptions={subscriptions}/>}/>;
  const item=([key,label,icon]:readonly [OverlaySection,string,Parameters<typeof SettingsIcon>[0]['name'],boolean,boolean])=><Link key={key} replace className="sb-item sov-nav__i" id={`sov-nav-${key}`} href={overlayHref(slug,key)} aria-current={key===section?'page':undefined}><SettingsIcon name={icon}/><span className="od-fill">{t(label)}</span></Link>;
  const list=visibleSections(role);
@@ -183,7 +186,7 @@ function UsageSection({t,locale,slug,company,rows,period}:{t:T,locale:string,slu
    {rows.length?<div className="sov-ta"><UsageTable rows={rows}/></div>:<div className="panel-card"><p className="panel-empty">{t('usageNone')}</p></div>}</section></>;
 }
 
-function AccountSection({t,theme,personName,role,roleName,companyName}:{t:T,theme:string,personName:string,role:string,roleName:string,companyName:string}) {
+function AccountSection({t,theme,personName,role,roleName,companyName,company,memberNote}:{t:T,theme:string,personName:string,role:string,roleName:string,companyName:string,company:string,memberNote:string}) {
  const roleD:Record<string,string>={owner:'settingsRoleOwnerD',manager:'settingsRoleManagerD',contributor:'settingsRoleContributorD',viewer:'settingsRoleViewerD'};
  return <><Head title={t('settingsAccount')} sub={t('settingsAccountSub')}/>
   <div className="panel-card">
@@ -191,6 +194,7 @@ function AccountSection({t,theme,personName,role,roleName,companyName}:{t:T,them
    <div className="panel-row"><span className="panel-row__icon"><SettingsIcon name="shield"/></span><span className="panel-row__text"><span className="panel-row__t">{t('settingsYourRole',roleName)}</span>{roleD[role]&&<span className="panel-row__d">{t(roleD[role])}</span>}</span></div>
   </div>
   <AccountChoices theme={theme}/>
+  <MemberNote company={company} note={memberNote}/>
   <PasswordSettings variant="overlay"/></>;
 }
 
