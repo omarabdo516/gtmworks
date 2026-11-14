@@ -4,7 +4,7 @@ select plan(16);
 -- Omar owns R&S Consultations (2) and Aleem (3); 5 is a Contributor of Aleem. R&S runs on its own profile.
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 set local role service_role;
-select public.record_company_profile('10000000-0000-0000-0000-000000000002','co-10000000000000000000000000000002',1);
+select public.record_company_profile('10000000-0000-0000-0000-000000000002','co-10000000000000000000000000000002',1,public.engine_tool_policy());
 select public.attach_company_profile('10000000-0000-0000-0000-000000000002','http://hermes:8642','encrypted','0.23.0','{run_submission}');
 reset role;
 create temporary table ids as select (select connection_id from public.hermes_agents where company_id='10000000-0000-0000-0000-000000000002') as rs;
@@ -26,7 +26,7 @@ select lives_ok($$insert into public.hermes_connections(company_id,owner_id,addr
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 set local role service_role;
 select cmp_ok(public.provide_bundled_hermes('http://hermes:8642','default','encrypted','0.23.0','{run_submission}'),'>=',1,'Aleem is on the shared profile');
-select public.record_company_profile('10000000-0000-0000-0000-000000000003','co-10000000000000000000000000000003',1);
+select public.record_company_profile('10000000-0000-0000-0000-000000000003','co-10000000000000000000000000000003',1,public.engine_tool_policy());
 reset role;
 insert into ids select connection_id from public.hermes_agents where company_id='10000000-0000-0000-0000-000000000003';
 create temporary table aleem as select a.id as agent,a.connection_id from public.hermes_agents a where a.company_id='10000000-0000-0000-0000-000000000003';
@@ -34,7 +34,7 @@ grant select on aleem to authenticated;
 set local role authenticated;
 select set_config('request.jwt.claims','{"role":"authenticated"}',true);
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000005',true);
-select is(public.reserve_conversation_run('c2000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000003',(select agent from aleem),'c3000000-0000-0000-0000-000000000003'),(select connection_id from aleem),
+select is(public.reserve_conversation_run('c2000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000003',(select agent from aleem),'c3000000-0000-0000-0000-000000000003','Hello'),(select connection_id from aleem),
  'a member reserves the run on the agent''s current Connection');
 reset role;
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
@@ -44,7 +44,7 @@ reset role;
 set local role authenticated;
 select set_config('request.jwt.claims','{"role":"authenticated"}',true);
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000005',true);
-select is(public.reserve_conversation_run('c2000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000003',(select agent from aleem),'c3000000-0000-0000-0000-000000000003'),(select connection_id from aleem),'a retry keeps the same Connection');
+select is(public.reserve_conversation_run('c2000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000003',(select agent from aleem),'c3000000-0000-0000-0000-000000000003','Hello'),(select connection_id from aleem),'a retry keeps the same Connection');
 select ok(public.send_conversation_message('c2000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000003',(select agent from aleem),'Hello','c3000000-0000-0000-0000-000000000003','run_reserved'),'the started run is recorded');
 reset role;
 select is((select count(*)::int from public.conversation_run_reservations),0,'recording ends the reservation');
@@ -54,6 +54,10 @@ select is(public.move_company_profile('10000000-0000-0000-0000-000000000003','ht
 reset role;
 insert into public.conversation_messages(company_id,conversation_id,author,agent_id,author_name,body,run_id)
  values ('10000000-0000-0000-0000-000000000003','c2000000-0000-0000-0000-000000000003','agent',(select agent from aleem),'Lead','Hi','run_reserved');
+-- Five quiet minutes pass (messages are append-only, so their time is moved back with the triggers off).
+set local session_replication_role=replica;
+update public.conversation_messages set created_at=now()-interval '6 minutes' where company_id='10000000-0000-0000-0000-000000000003';
+set local session_replication_role=origin;
 set local role service_role;
 select is(public.move_company_profile('10000000-0000-0000-0000-000000000003','http://hermes:8642','encrypted','0.23.0','{run_submission}'),1,'once it ended, the company moves');
 reset role;
@@ -63,18 +67,18 @@ set local role authenticated;
 select set_config('request.jwt.claims','{"role":"authenticated"}',true);
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select is(public.set_agent_level('10000000-0000-0000-0000-000000000003',3),3,'the Owner raises the level');
-select throws_ok($$select public.reserve_conversation_run('c2000000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000003',(select agent from aleem),'c3000000-0000-0000-0000-000000000004')$$,'55000','agentLevelPending',
+select throws_ok($$select public.reserve_conversation_run('c2000000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000003',(select agent from aleem),'c3000000-0000-0000-0000-000000000004','Hello')$$,'55000','agentLevelPending',
  'no run starts until the worker applied the new tools');
 reset role;
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 set local role service_role;
-select public.record_company_profile('10000000-0000-0000-0000-000000000003','co-10000000000000000000000000000003',3);
+select public.record_company_profile('10000000-0000-0000-0000-000000000003','co-10000000000000000000000000000003',3,public.engine_tool_policy());
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claims','{"role":"authenticated"}',true);
-select ok(public.reserve_conversation_run('c2000000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000003',(select agent from aleem),'c3000000-0000-0000-0000-000000000004') is not null,'once applied, runs start again');
+select ok(public.reserve_conversation_run('c2000000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000003',(select agent from aleem),'c3000000-0000-0000-0000-000000000004','Hello') is not null,'once applied, runs start again');
 reset role;
 set local role anon;
-select throws_ok($$select public.reserve_conversation_run('c2000000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000003',null,'c3000000-0000-0000-0000-000000000004')$$,'42501',null,'a visitor reserves nothing');
+select throws_ok($$select public.reserve_conversation_run('c2000000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000003',null,'c3000000-0000-0000-0000-000000000004','Hello')$$,'42501',null,'a visitor reserves nothing');
 select * from finish();
 rollback;

@@ -23,21 +23,33 @@ for name, value in secrets.items():
         found.append(f'the environment holds the value of {name}')
 
 skip = {'/proc', '/sys', '/dev'}
-largest = 64 * 1024 * 1024
+# Files are read in chunks of any size; each chunk keeps the end of the one before (one byte less than the longest
+# value), so a value split across two chunks is still found. HERMES_KEYS_CHUNK sets the chunk size for the unit test.
+chunk = max(int(os.environ.get('HERMES_KEYS_CHUNK', 8 * 1024 * 1024)), 1)
+overlap = max(len(value) for value in secrets.values()) - 1
 for directory, folders, files in os.walk(root, followlinks=False):
     folders[:] = [folder for folder in folders if os.path.join(directory, folder) not in skip]
     for file in files:
         path = os.path.join(directory, file)
+        held = set()
         try:
-            if not os.path.isfile(path) or os.path.islink(path) or os.path.getsize(path) > largest:
+            if not os.path.isfile(path) or os.path.islink(path):
                 continue
             with open(path, 'rb') as handle:
-                content = handle.read()
+                tail = b''
+                while len(held) < len(secrets):
+                    block = handle.read(chunk)
+                    if not block:
+                        break
+                    window = tail + block
+                    for name, value in secrets.items():
+                        if name not in held and value in window:
+                            held.add(name)
+                    tail = window[-overlap:] if overlap else b''
         except OSError:
             continue
-        for name, value in secrets.items():
-            if value in content:
-                found.append(f'{path} holds the value of {name}')
+        for name in sorted(held):
+            found.append(f'{path} holds the value of {name}')
 
 for line in found:
     print(line)

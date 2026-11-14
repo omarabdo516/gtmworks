@@ -61,3 +61,21 @@ test('the install job runs the scan inside the bundled Hermes with the real secr
  for(const name of ['POSTGRES_PASSWORD','PGSODIUM_ROOT_KEY','SUPABASE_JWT_SECRET','SUPABASE_SERVICE_ROLE_KEY','WEBHOOK_ENCRYPTION_KEY','SETUP_CODE']) assert.ok(line.includes(name),name);
  assert.match(line,/\.env\.install \| compose exec -T -u hermes hermes/);
 });
+
+test('the runtime scan reads large files in chunks, also finding a value split across two chunks', t => {
+ const root=mkdtempSync(join(tmpdir(),'hermes-large-')); t.after(()=>rmSync(root,{recursive:true,force:true}));
+ const secrets='SUPABASE_JWT_SECRET=jwt-secret-value-0123456789\n';
+ const scan=env=>spawnSync('python3',['scripts/check-hermes-keys.py',root],{input:secrets,encoding:'utf8',env:{PATH:process.env.PATH,...env}});
+ // A file larger than the 64 MiB the first version skipped, with the value at its very end.
+ const large=Buffer.alloc(65*1024*1024,0x61); Buffer.from('jwt-secret-value-0123456789').copy(large,large.length-27);
+ writeFileSync(join(root,'large.bin'),large);
+ const found=scan({});
+ assert.equal(found.status,1,found.stdout); assert.match(found.stdout,/large\.bin holds the value of SUPABASE_JWT_SECRET/);
+ rmSync(join(root,'large.bin'));
+ // With 16-byte chunks the value straddles a boundary.
+ writeFileSync(join(root,'split.txt'),`${'x'.repeat(10)}jwt-secret-value-0123456789${'y'.repeat(10)}`);
+ const split=scan({HERMES_KEYS_CHUNK:'16'});
+ assert.equal(split.status,1,split.stdout); assert.match(split.stdout,/split\.txt holds the value of SUPABASE_JWT_SECRET/);
+ rmSync(join(root,'split.txt'));
+ assert.equal(scan({HERMES_KEYS_CHUNK:'16'}).status,0);
+});

@@ -1,7 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { agentLevels, levelToolsets, alwaysOff, riskyToolsets, levelConfig, forbiddenOf, riskyOf, companyProfile } from '../lib/agent-levels.mjs';
+import { agentLevels, levelToolsets, alwaysOff, riskyToolsets, levelConfig, forbiddenOf, riskyOf, companyProfile, toolPolicy } from '../lib/agent-levels.mjs';
+import { createHash } from 'node:crypto';
+import { readdirSync } from 'node:fs';
 import { provideProfile, configureProfile, readToolsets, readSignIns, startSignIn, pollSignIn, cancelSignIn, disconnectSignIn } from '../lib/hermes.mjs';
 import { keepCompanyProfiles, checkAgentTools } from '../lib/company-profiles.mjs';
 import { changeCompanySignIn, readCompanySignIns } from '../lib/company-sign-in.mjs';
@@ -100,18 +102,22 @@ test('the driver makes a company profile with its key and level-1 tools, and rea
 });
 
 // A service-role client stand-in for the worker: the work the database lists, and the calls the worker makes.
-function workerDatabase(rows) {
+function workerDatabase(rows,{failRecord=false}={}) {
  const calls=[];
  return {calls,rows,rpc:async(name,args)=>{
   calls.push({name,args});
-  if(name==='company_profile_work') return {data:rows.filter(row=>row.attach||row.move||row.tools_level!==row.agent_level).map(row=>({...row})),error:null};
-  if(name==='record_company_profile') { const row=rows.find(found=>found.company_id===args.c); row.tools_level=args.level; return {data:null,error:null}; }
+  if(name==='company_profile_work') return {data:rows.filter(row=>row.attach||row.move||row.tools_level!=null&&(row.tools_level!==row.agent_level||row.tools_policy!==toolPolicy||row.tools_pending)).map(row=>({...row})),error:null};
+  if(name==='begin_company_tools') { const row=rows.find(found=>found.company_id===args.c); row.tools_pending=true; return {data:null,error:null}; }
+  if(name==='record_company_profile') {
+   if(failRecord||args.policy!==toolPolicy) return {data:null,error:{message:'record failed'}};
+   const row=rows.find(found=>found.company_id===args.c); Object.assign(row,{tools_level:args.level,tools_policy:args.policy,tools_pending:false}); return {data:null,error:null};
+  }
   if(name==='attach_company_profile') { const row=rows.find(found=>found.company_id===args.c); row.attach=false; return {data:true,error:null}; }
   if(name==='move_company_profile') { const row=rows.find(found=>found.company_id===args.c); row.move=false; return {data:1,error:null}; }
   return {data:null,error:{message:`unexpected ${name}`}};
  }};
 }
-const row=(company,extra={})=>({company_id:company,profile:companyProfile(company),agent_level:1,tools_level:null,attach:true,move:false,...extra});
+const row=(company,extra={})=>({company_id:company,profile:companyProfile(company),agent_level:1,tools_level:null,tools_policy:null,tools_pending:false,attach:true,move:false,...extra});
 
 test('two companies get two different profiles, each with terminal, files and code turned off, before either is attached', async () => {
  const fake=await fakeHermes();
@@ -311,7 +317,7 @@ test('the install job proves profiles per company on the pinned release, after t
 // The person's session and the service role, as sendMessage sees them; every call is recorded in order.
 function conversationDatabases({profile,reserve=null}) {
  const order=[];
- const db={order,rpc:async name=>{ order.push(name);
+ const db={order,args:{},rpc:async(name,args)=>{ order.push(name); db.args[name]=args;
    if(name==='conversation_agent') return {data:null,error:null};
    if(name==='reserve_conversation_run') return reserve||{data:'f9000000-0000-0000-0000-000000000001',error:null};
    if(name==='send_conversation_message') return {data:true,error:null};
@@ -329,6 +335,8 @@ test('a run is reserved on its pinned Connection before Hermes is called, and re
  const {db,service,order}=conversationDatabases({profile:companyProfile(two)});
  const sent=await sendMessage(db,service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...engine(order)});
  assert.deepEqual(sent,{conversation:'c'});
+ // The reservation carries the message, so the worker can settle it with Hermes if the record never happens.
+ assert.equal(db.args.reserve_conversation_run.message,'Hi');
  assert.deepEqual(order,['conversation_agent','reserve_conversation_run','read hermes_connections f9000000-0000-0000-0000-000000000001',`start ${companyProfile(two)}`,'send_conversation_message']);
 });
 
@@ -340,4 +348,57 @@ test('a run never starts on another company\'s profile, nor while the profile\'s
  const pending=conversationDatabases({profile:companyProfile(two),reserve:{data:null,error:{code:'55000',message:'agentLevelPending'}}});
  assert.deepEqual(await sendMessage(pending.db,pending.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...engine(pending.order)}),{error:'conversationAgentLevelPending',status:409});
  assert.ok(!pending.order.some(step=>step.startsWith('start')));
+});
+
+test('the level table is versioned: any change to it needs a new policy, in the code and in the database', () => {
+ // The fingerprint of each policy's table. Changing the table without a new toolPolicy (and its migration) fails here.
+ const fingerprints={2:'863aa8ac90a8fce674cf7880e0e63444c107d9051d7b95f9e861a58ac437da4d'};
+ const table=JSON.stringify(agentLevels.map(level=>levelConfig(level)));
+ assert.equal(createHash('sha256').update(table).digest('hex'),fingerprints[toolPolicy]);
+ const latest=readdirSync('supabase/migrations').filter(file=>file.endsWith('.sql')&&!file.endsWith('.verify.sql')).sort()
+  .map(file=>readFileSync(`supabase/migrations/${file}`,'utf8')).filter(sql=>/function public\.engine_tool_policy\(\)/.test(sql)).at(-1);
+ assert.equal(Number(/engine_tool_policy\(\)[^$]*\$\$ select (\d+) \$\$/.exec(latest)?.[1]),toolPolicy);
+});
+
+test('a profile applied under an older policy is applied again at the same level, and a change is marked before it is written', async () => {
+ const fake=await fakeHermes();
+ try {
+  const name=companyProfile(two);
+  await provideProfile(install(fake),{name,soul:'',config:{platform_toolsets:{api_server:['web','connections']},agent:{disabled_toolsets:[]}},forbidden:[]});
+  const db=workerDatabase([row(two,{attach:false,agent_level:2,tools_level:2,tools_policy:1})]);
+  assert.deepEqual(await keepCompanyProfiles(db,{hermes:install(fake),encryptionKey}),{provided:0,configured:1,attached:0,moved:0});
+  assert.deepEqual(db.calls.map(call=>call.name),['company_profile_work','begin_company_tools','record_company_profile']);
+  assert.equal(db.calls[2].args.policy,toolPolicy);
+  assert.ok(!(await readToolsets({address:fake.address,profile:name,key:'test-only-key'})).toolsets.includes('connections'),'the old policy\'s connectors are gone');
+ } finally { await fake.close(); }
+});
+
+test('raised, written, not recorded, then lowered: the profile stays pending until the read-back of the lower level is recorded', async () => {
+ const fake=await fakeHermes();
+ try {
+  const name=companyProfile(two);
+  await provideProfile(install(fake),{name,soul:'',config:levelConfig(1),forbidden:alwaysOff});
+  const failing=workerDatabase([row(two,{attach:false,agent_level:3,tools_level:1,tools_policy:toolPolicy})],{failRecord:true});
+  await keepCompanyProfiles(failing,{hermes:install(fake),encryptionKey});
+  assert.ok(fake.settings.profiles.get(name).config.platform_toolsets.api_server.includes('cronjob'),'Hermes has level 3');
+  assert.equal(failing.rows[0].tools_pending,true,'marked before writing, never cleared');
+  // The Owner lowers to 1: the levels agree, but the pending mark keeps it work and runs refused until the read-back.
+  failing.rows[0].agent_level=1;
+  const db=workerDatabase(failing.rows);
+  assert.equal((await keepCompanyProfiles(db,{hermes:install(fake),encryptionKey})).configured,1);
+  assert.deepEqual(db.calls.map(call=>call.name),['company_profile_work','begin_company_tools','record_company_profile']);
+  assert.equal(db.rows[0].tools_pending,false);
+  assert.ok(!(await readToolsets({address:fake.address,profile:name,key:'test-only-key'})).toolsets.includes('cronjob'));
+ } finally { await fake.close(); }
+});
+
+test('an unsettled reservation is settled on its pinned Connection with the same idempotency key', async () => {
+ const {settleConversationRuns}=await import('../lib/company-profiles.mjs');
+ const key=encryptSecret('test-only-key',encryptionKey); const calls=[]; const starts=[];
+ const pinned={conversation:'c1',send_key:'k1',message:'Hello',connection:'f1',address:'http://hermes:8642',profile:'default',state:'connected',features:['run_submission'],key_encrypted:key};
+ const db={rpc:async(name,args)=>{ calls.push({name,args}); return name==='unsettled_conversation_runs'?{data:[pinned,{...pinned,conversation:'c2',send_key:'k2'}],error:null}:{data:true,error:null}; }};
+ const engineFor=connection=>({start:async run=>{ starts.push({connection,run}); return run.conversation==='c2'?null:'run_replayed'; }});
+ assert.equal(await settleConversationRuns(db,{encryptionKey,engineFor}),1);
+ assert.deepEqual(starts.map(start=>[start.connection.profile,start.connection.key,start.run.idempotencyKey,start.run.input]),[['default','test-only-key','c1:k1','Hello'],['default','test-only-key','c2:k2','Hello']]);
+ assert.deepEqual(calls.filter(call=>call.name==='settle_conversation_run').map(call=>call.args),[{conversation:'c1',message_key:'k1',run:'run_replayed'}],'an unreachable Hermes leaves the reservation held');
 });

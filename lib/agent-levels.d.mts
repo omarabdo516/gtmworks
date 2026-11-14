@@ -7,3 +7,4 @@ export function levelConfig(level:number):{platform_toolsets:{api_server:string[
 export function forbiddenOf(enabled:string[]):string[];
 export function riskyOf(enabled:string[]):string[];
 export function companyProfile(company:string):string;
+export const toolPolicy:number;

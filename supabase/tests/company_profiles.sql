@@ -10,8 +10,8 @@ set local role service_role;
 select ok((select attach and not move and profile='co-10000000000000000000000000000002' and agent_level=1 and tools_level is null from public.company_profile_work() where company_id='10000000-0000-0000-0000-000000000002'),
  'a company with no Hermes waits for its own profile, named from its id, at level 1');
 select is(public.attach_company_profile('10000000-0000-0000-0000-000000000002','http://hermes:8642','encrypted','0.23.0','{run_submission}'),false,'nothing is attached before Hermes made the profile');
-select throws_ok($$select public.record_company_profile('10000000-0000-0000-0000-000000000002','co-10000000000000000000000000000003',1)$$,'22023','companyProfileInvalid','a company is recorded only on its own profile');
-select lives_ok($$select public.record_company_profile('10000000-0000-0000-0000-000000000002','co-10000000000000000000000000000002',1)$$,'the worker records the profile Hermes made');
+select throws_ok($$select public.record_company_profile('10000000-0000-0000-0000-000000000002','co-10000000000000000000000000000003',1,public.engine_tool_policy())$$,'22023','companyProfileInvalid','a company is recorded only on its own profile');
+select lives_ok($$select public.record_company_profile('10000000-0000-0000-0000-000000000002','co-10000000000000000000000000000002',1,public.engine_tool_policy())$$,'the worker records the profile Hermes made');
 select throws_ok($$select public.attach_company_profile('10000000-0000-0000-0000-000000000002','http://hermes:8642','encrypted','0.23.0','{}')$$,'22023','hermesAgentFailed','a profile that takes no runs is not attached');
 select is(public.attach_company_profile('10000000-0000-0000-0000-000000000002','http://hermes:8642','encrypted','0.23.0','{run_submission}'),true,'the company is attached to its own profile');
 select is(public.attach_company_profile('10000000-0000-0000-0000-000000000002','http://hermes:8642','encrypted','0.23.0','{run_submission}'),false,'attaching again adds nothing');
@@ -19,7 +19,7 @@ select is(public.attach_company_profile('10000000-0000-0000-0000-000000000002','
 select cmp_ok(public.provide_bundled_hermes('http://hermes:8642','default','encrypted','0.23.0','{run_submission}'),'>=',2,'the previous worker still provides the shared profile');
 select ok((select move and not attach from public.company_profile_work() where company_id='10000000-0000-0000-0000-000000000003'),'a company on the shared profile waits to move');
 select is(public.move_company_profile('10000000-0000-0000-0000-000000000003','http://hermes:8642','encrypted','0.23.0','{run_submission}'),0,'nothing moves before its own profile is made');
-select lives_ok($$select public.record_company_profile('10000000-0000-0000-0000-000000000003','co-10000000000000000000000000000003',1)$$,'Aleem''s profile is recorded');
+select lives_ok($$select public.record_company_profile('10000000-0000-0000-0000-000000000003','co-10000000000000000000000000000003',1,public.engine_tool_policy())$$,'Aleem''s profile is recorded');
 reset role;
 -- An open Run of Aleem's Lead holds the move.
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name) select 'c0000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000003','20000000-0000-0000-0000-000000000001',id,name
@@ -31,6 +31,10 @@ select is(public.move_company_profile('10000000-0000-0000-0000-000000000003','ht
 reset role;
 insert into public.conversation_messages(company_id,conversation_id,author,agent_id,author_name,body,run_id)
  select '10000000-0000-0000-0000-000000000003','c0000000-0000-0000-0000-000000000003','agent',id,name,'Hi','run_open' from public.hermes_agents where company_id='10000000-0000-0000-0000-000000000003';
+-- Five quiet minutes pass (messages are append-only, so their time is moved back with the triggers off).
+set local session_replication_role=replica;
+update public.conversation_messages set created_at=now()-interval '6 minutes' where company_id='10000000-0000-0000-0000-000000000003';
+set local session_replication_role=origin;
 set local role service_role;
 select is(public.move_company_profile('10000000-0000-0000-0000-000000000003','http://hermes:8642','encrypted','0.23.0','{run_submission}'),1,'once the run ended, Aleem''s Lead moves');
 reset role;
@@ -43,7 +47,7 @@ select ok(exists(select 1 from public.company_log where company_id='10000000-000
 select ok(not exists(select 1 from public.company_profile_work() where company_id in ('10000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000003')),'nothing is left to do for either');
 select is(public.forget_company_profile((select connection_id from public.hermes_agents where company_id='10000000-0000-0000-0000-000000000002')),true,'a profile the Engine lost is forgotten');
 select ok((select tools_level is null and not attach and not move from public.company_profile_work() where company_id='10000000-0000-0000-0000-000000000002'),'and the worker makes it again');
-select lives_ok($$select public.record_company_profile('10000000-0000-0000-0000-000000000002','co-10000000000000000000000000000002',1)$$,'once made again it is recorded');
+select lives_ok($$select public.record_company_profile('10000000-0000-0000-0000-000000000002','co-10000000000000000000000000000002',1,public.engine_tool_policy())$$,'once made again it is recorded');
 -- Levels: only an Owner, 1 to 3, logged; the worker then rewrites the profile's tools, and no company moves meanwhile.
 set local role authenticated;
 select set_config('request.jwt.claims','{"role":"authenticated"}',true);
