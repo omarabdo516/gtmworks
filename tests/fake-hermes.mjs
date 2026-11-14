@@ -16,7 +16,7 @@ export async function fakeHermes({managementPort=0}={}) {
   defaultConfig:/** @type {any} */({}),defaultCredentials:/** @type {Record<string,string>} */({}),
   signInSessions:/** @type {Map<string,{provider:string,profile:string,status:string}>} */(new Map()),
   // Ignore the disabled list when reporting toolsets, as a Hermes that did not apply it would.
-  ignoreDisabled:false,
+  ignoreDisabled:false,staleConfig:false,
   // Profiles the Run API answers 404 for, as Hermes does for one it does not serve.
   unknownProfiles:/** @type {string[]} */([]),
   approve(session) { const found=settings.signInSessions.get(session); if(!found) return; found.status='approved'; credentialsOf(found.profile)[found.provider]=`codex-token-${randomUUID()}`; }};
@@ -94,7 +94,8 @@ export async function fakeHermes({managementPort=0}={}) {
     if(!home) return send(response,404,{detail:`Profile '${scoped}' does not exist.`});
     if(request.method==='GET') return send(response,200,home.config);
     if(settings.failStep==='config'||!body?.config||typeof body.config!=='object') return send(response,500,{detail:'Internal server error'});
-    home.config=merge(home.config,body.config);
+    // A stale Hermes answers the write and keeps the old config.
+    if(!settings.staleConfig) home.config=merge(home.config,body.config);
     if(scoped==='default') settings.defaultConfig=home.config;
     return send(response,200,{ok:true});
    }
@@ -111,9 +112,12 @@ export async function fakeHermes({managementPort=0}={}) {
    if(oauth) {
     if(!home) return send(response,404,{detail:`Profile '${scoped}' does not exist.`});
     const [,provider,step,session]=oauth;
+    // As in the pinned release (hermes_cli/auth.py read_credential_pool, _load_provider_state), a profile with no
+    // credential of its own for a provider reads the default (root) profile's, and its status says logged in.
+    const credentialFor=id=>home.credentials[id]||(scoped!=='default'?settings.defaultCredentials[id]:undefined);
     if(!provider&&request.method==='GET') return send(response,200,{providers:[
-     {id:'openai-codex',name:'ChatGPT or Codex Subscription',flow:'device_code',status:{logged_in:Boolean(home.credentials['openai-codex']),token_preview:home.credentials['openai-codex']?.slice(-6)||null}},
-     {id:'anthropic',name:'Anthropic Account',flow:'external',cli_command:'hermes auth add anthropic',status:{logged_in:Boolean(home.credentials.anthropic),token_preview:home.credentials.anthropic?.slice(-6)||null}}]});
+     {id:'openai-codex',name:'ChatGPT or Codex Subscription',flow:'device_code',status:{logged_in:Boolean(credentialFor('openai-codex')),token_preview:credentialFor('openai-codex')?.slice(-6)||null}},
+     {id:'anthropic',name:'Anthropic Account',flow:'external',cli_command:'hermes auth add anthropic',status:{logged_in:Boolean(credentialFor('anthropic')),token_preview:credentialFor('anthropic')?.slice(-6)||null}}]});
     if(!['openai-codex','anthropic'].includes(provider)) return send(response,400,{detail:`Unknown provider ${provider}`});
     if(step==='start'&&request.method==='POST') {
      if(provider==='anthropic') return send(response,400,{detail:'anthropic uses an external CLI; run `hermes auth add anthropic` manually'});

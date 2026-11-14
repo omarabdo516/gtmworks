@@ -16,7 +16,7 @@ export function configureProfile(connection:import('./engine.mjs').EngineConnect
 export function readToolsets(connection:HermesConnection):Promise<{state:'found'|'missing'|'refused'|'unreachable'|'failed',toolsets:string[]|null}>;
 export type SignInProvider='openai-codex'|'anthropic';
 export const signInProviders:SignInProvider[];
-export type SignIns=Record<SignInProvider,{connected:boolean,flow:'device_code'|'external'}>;
+export type SignIns=Record<SignInProvider,{connected:boolean,shared:boolean,flow:'device_code'|'external'}>;
 export function readSignIns(connection:import('./engine.mjs').EngineConnection):Promise<{state:'found'|'refused'|'unreachable'|'failed',signIns:SignIns|null}>;
 export function startSignIn(connection:import('./engine.mjs').EngineConnection,provider:string):Promise<{state:'started'|'terminal_only'|'refused'|'unreachable'|'failed',session:string|null,code:string|null,link:string|null,expiresIn:number|null,interval:number|null}>;
 export function pollSignIn(connection:import('./engine.mjs').EngineConnection,provider:string,session:string):Promise<{state:'pending'|'approved'|'denied'|'expired'|'error'|'cancelled'|'refused'|'unreachable'|'failed'}>;

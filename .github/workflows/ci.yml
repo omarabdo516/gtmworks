@@ -348,6 +348,9 @@ jobs:
           marker="memory-check-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
           compose exec -T hermes sh -ec 'mkdir -p "/opt/data/profiles/$1/memories"; printf "%s\n" "The company code word is $2." >> "/opt/data/profiles/$1/memories/MEMORY.md"; chown -R hermes:hermes "/opt/data/profiles/$1/memories"' sh "$first" "$marker" || fail "write a memory in the first company's profile"
           compose exec -T web node --input-type=module - verify "$marker" < scripts/check-install-profiles.mjs || fail "runs on each company profile answer and a company's memory stays in its own runs"
+          # Hermes holds none of gtmworks's own keys and passwords (#2): its environment and every file its user can read
+          # are scanned for the real values in .env.install, passed on stdin; only names and paths are printed.
+          { grep -E '^(POSTGRES_PASSWORD|PGSODIUM_ROOT_KEY|SUPABASE_JWT_SECRET|SUPABASE_SERVICE_ROLE_KEY|WEBHOOK_ENCRYPTION_KEY|SETUP_CODE)=' .env.install | compose exec -T -u hermes hermes /opt/hermes/.venv/bin/python -c "$(cat scripts/check-hermes-keys.py)"; } || fail "the bundled Hermes holds none of gtmworks's keys and passwords"
           # A remote server (README): a fresh install whose APP_ORIGIN is the https origin of a proxy in front of the gateway.
           # First run and the emailed sign-in link must stay on that origin and reach the Company home, and so must the
           # invitation link and a sign-in link requested with a forged X-Forwarded-Host (issue #40).

@@ -717,7 +717,7 @@
   "agentLevel1": "Read and draft",
   "agentLevel1D": "Researches, reads and writes drafts. Nothing leaves gtmworks.",
   "agentLevel2": "Act on approval",
-  "agentLevel2D": "Can also act in connected accounts; what it delivers waits for approval.",
+  "agentLevel2D": "Acts on approval. No action tools yet: until gtmworks can hold each action for approval, it works like Read and draft.",
   "agentLevel3": "Scheduled work",
   "agentLevel3D": "Can also schedule its own recurring work within what was approved.",
   "agentLevelOwnerOnly": "Only the Owner changes this.",
@@ -747,5 +747,8 @@
   "signInTerminalOnly": "Claude signs in from the install’s command line only. On the server, in the gtmworks folder, run:",
   "signInTerminalWho": "If you didn’t install gtmworks, send this command to whoever did.",
   "signInHint": "The agents run on these company subscriptions. You connect a subscription once by signing in; there are no keys or files to set up yourself.",
-  "signInOwnSpace": "Each company signs in on its own: the sign-in, memory and skills stay with this company only."
+  "signInOwnSpace": "Each company signs in on its own: the sign-in, memory and skills stay with this company only.",
+  "signInShared": "Not connected (shared sign-in on the agent engine’s default space)",
+  "signInSharedWarning": "A subscription is signed in on the agent engine’s shared default space. Every company without its own sign-in would run on it, so it never counts as this company’s. Ask whoever installed gtmworks to sign it out there.",
+  "conversationAgentLevelPending": "The agents’ tools are being updated to the level the Owner chose. Try again in a moment."
 }

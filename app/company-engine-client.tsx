@@ -38,7 +38,7 @@ export function AgentLevel({company,level,owner}:{company:string,level:number,ow
 }
 
 type Provider='openai-codex'|'anthropic';
-type SignIns=Record<Provider,{connected:boolean,flow:string}>;
+type SignIns=Record<Provider,{connected:boolean,shared?:boolean,flow:string}>;
 type Started={provider:Provider,session:string,code:string,link:string,interval:number};
 async function ask(body:object):Promise<{ok:boolean,body:Record<string,unknown>}> {
  try {
@@ -88,13 +88,13 @@ export function CompanySubscriptions({company,owner,profile,signIns}:{company:st
  });
  const command=profile?`docker compose --env-file .env.install -f docker-compose.install.yml exec -u hermes hermes hermes -p ${profile} auth add anthropic --type oauth --no-browser`:'';
  const row=(provider:Provider,name:string)=>{
-  const state=signIns?.[provider]; const connected=state?.connected===true; const waiting=started?.provider===provider;
+  const state=signIns?.[provider]; const connected=state?.connected===true; const shared=state?.shared===true; const waiting=started?.provider===provider;
   const label=name;
   return <div className="sub-row" key={provider} id={`sub-${provider}`}>
    <div className="panel-row"><span className="panel-row__icon"><SettingsIcon name="cpu"/></span>
     <span className="panel-row__text"><span className="panel-row__t"><bdi>{name}</bdi></span>
-     <span className="panel-row__d" id={`sub-${provider}-state`}>{!signIns?t('signInUnknown'):connected?t('signInConnected'):t('signInNotConnected')}</span></span>
-    {owner&&signIns&&(connected?<button type="button" className="btn btn--secondary btn--sm" disabled={pending} aria-label={t('signInDisconnectLabel',label)} onClick={()=>act(provider,'disconnect')}>{t('signInDisconnect')}</button>
+     <span className="panel-row__d" id={`sub-${provider}-state`}>{!signIns?t('signInUnknown'):connected?t('signInConnected'):shared?t('signInShared'):t('signInNotConnected')}</span></span>
+    {owner&&signIns&&!shared&&(connected?<button type="button" className="btn btn--secondary btn--sm" disabled={pending} aria-label={t('signInDisconnectLabel',label)} onClick={()=>act(provider,'disconnect')}>{t('signInDisconnect')}</button>
      :provider==='openai-codex'&&!waiting&&<button type="button" className="btn btn--primary btn--sm" disabled={pending||!!started} aria-label={t('signInConnectLabel',label)} onClick={()=>act(provider,'start')}>{t('signInConnect')}</button>)}
    </div>
    {owner&&waiting&&started&&<div className="sub-step" role="group" aria-label={t('signInConnectLabel',label)}>
@@ -103,12 +103,13 @@ export function CompanySubscriptions({company,owner,profile,signIns}:{company:st
     <p className="set-hint" role="status">{t('signInWaiting')}</p>
     <div className="panel-form__row panel-form__row--end"><button type="button" className="btn btn--secondary btn--sm" disabled={pending} onClick={()=>act(provider,'cancel')}>{t('cancel')}</button></div>
    </div>}
-   {owner&&signIns&&provider==='anthropic'&&!connected&&<div className="sub-step">
+   {owner&&signIns&&provider==='anthropic'&&!connected&&!shared&&<div className="sub-step">
     <p>{t('signInTerminalOnly')}</p><code className="sub-code sub-code--cmd" dir="ltr" translate="no">{command}</code><p className="set-hint">{t('signInTerminalWho')}</p></div>}
    {note?.provider===provider&&<p className={note.alert?'set-err':'set-hint'} role={note.alert?'alert':'status'}>{t(note.key)}</p>}
   </div>;
  };
  return <section className="dp-sec" aria-labelledby="md-h-sub" id="md-subscriptions"><h4 className="dp-label" id="md-h-sub"><span>{t('settingsModelsSubs')}</span></h4>
+  {signIns&&Object.values(signIns).some(state=>state.shared)&&<p className="ro-note sov-warn" role="note" id="sub-shared"><SettingsIcon name="shield"/><span>{t('signInSharedWarning')}</span></p>}
   {profile?<div className="panel-card">{row('openai-codex',t('signInChatGPT'))}{row('anthropic',t('signInClaude'))}</div>
    :<div className="panel-card"><p className="panel-empty">{t('signInNoProfile')}</p></div>}
   <p className="set-hint">{t('signInHint')} {t('signInOwnSpace')}</p>

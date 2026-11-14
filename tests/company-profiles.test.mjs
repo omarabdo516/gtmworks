@@ -34,7 +34,11 @@ test('the level table: three levels, each adding to the one below, none ever off
  assert.ok(levelToolsets[1].includes('web')&&levelToolsets[1].includes('memory'));
  assert.ok(!levelToolsets[1].includes('connections')&&!levelToolsets[1].includes('cronjob'));
  assert.ok(levelConfig(1).agent.disabled_toolsets.includes('connections')&&levelConfig(1).agent.disabled_toolsets.includes('cronjob'));
- assert.ok(levelToolsets[2].includes('connections')&&!levelToolsets[2].includes('cronjob')&&levelConfig(2).agent.disabled_toolsets.includes('cronjob'));
+ // Until gtmworks has an approval-gated action path, level 2 offers nothing beyond level 1 (lead's decision, ADR 0014),
+ // and Hermes's connectors (actions in connected accounts) stay off at every level.
+ assert.deepEqual(levelToolsets[2],levelToolsets[1]);
+ assert.deepEqual(levelConfig(2),levelConfig(1));
+ for(const level of agentLevels) assert.ok(!levelToolsets[level].includes('connections')&&levelConfig(level).agent.disabled_toolsets.includes('connections'));
  assert.ok(levelToolsets[3].includes('cronjob'));
  for(const level of agentLevels.slice(1)) assert.ok(levelToolsets[level-1].every(name=>levelToolsets[level].includes(name)));
  // Disabling these composites would strip web search too (Hermes removes every tool of a disabled composite).
@@ -73,7 +77,13 @@ test('the driver makes a company profile with its key and level-1 tools, and rea
   // Level 3 adds scheduled work; terminal, files and code stay off.
   const three=await configureProfile(install(fake),{name,config:levelConfig(3),forbidden:alwaysOff});
   assert.equal(three.state,'configured');
-  assert.ok(three.toolsets.includes('cronjob')&&three.toolsets.includes('connections'));
+  assert.ok(three.toolsets.includes('cronjob')&&!three.toolsets.includes('connections'));
+  // A downgrade whose write Hermes answers but does not apply reads back stale: level 1 is refused while cron jobs stay on.
+  fake.settings.staleConfig=true;
+  const stale=await configureProfile(install(fake),{name,config:levelConfig(1),forbidden:levelConfig(1).agent.disabled_toolsets});
+  assert.equal(stale.state,'failed');
+  assert.ok(stale.toolsets.includes('cronjob'));
+  fake.settings.staleConfig=false;
   assert.deepEqual(riskyOf(three.toolsets),[]);
   // A profile that still offers a forbidden toolset (a Hermes that ignored the list) fails closed.
   fake.settings.ignoreDisabled=true;
@@ -141,6 +151,11 @@ test('a company on the shared profile moves only once its own profile holds a si
   const options={hermes:install(fake),encryptionKey,waiting,now:()=>clock};
   assert.deepEqual(await keepCompanyProfiles(db,options),{provided:1,configured:0,attached:0,moved:0});
   assert.ok(!db.calls.some(call=>call.name==='move_company_profile'),'no model sign-in yet: the company keeps running where it was');
+  // A sign-in on the default profile, which Hermes would lend to the company profile, does not count as the company's.
+  fake.settings.defaultCredentials['openai-codex']='root-codex-token';
+  clock+=60000;
+  assert.equal((await keepCompanyProfiles(db,options)).moved,0,'an inherited sign-in never moves a company');
+  delete fake.settings.defaultCredentials['openai-codex'];
   // The Owner signs in for the company; the next look (a minute later) moves it.
   const name=companyProfile(three);
   const started=await startSignIn({...install(fake),profile:name},'openai-codex');
@@ -154,6 +169,12 @@ test('a company on the shared profile moves only once its own profile holds a si
   assert.deepEqual(await keepCompanyProfiles(db,options),{provided:0,configured:1,attached:0,moved:0});
   assert.ok(fake.settings.profiles.get(name).config.platform_toolsets.api_server.includes('cronjob'));
   assert.equal(db.rows[0].tools_level,3);
+  // Back to level 1 with a stale read-back: the worker records nothing, so no new run starts (reserve_conversation_run).
+  db.rows[0].agent_level=1;
+  fake.settings.staleConfig=true;
+  assert.deepEqual(await keepCompanyProfiles(db,options),{provided:0,configured:0,attached:0,moved:0});
+  assert.equal(db.rows[0].tools_level,3);
+  fake.settings.staleConfig=false;
   // A Hermes that refuses keeps the level waiting, recorded nowhere.
   db.rows[0].agent_level=2;
   fake.settings.managementStatus=503;
@@ -189,7 +210,11 @@ test('the sign-in driver passes on states, a code and an https link, never a cre
   const name=companyProfile(two);
   await provideProfile(install(fake),{name,soul:'',config:levelConfig(1),forbidden:alwaysOff});
   const target={...install(fake),profile:name};
-  assert.deepEqual(await readSignIns(target),{state:'found',signIns:{'openai-codex':{connected:false,flow:'device_code'},anthropic:{connected:false,flow:'external'}}});
+  // Hermes lets a profile with no credential of its own use the default profile's: that is never the company's own.
+  fake.settings.defaultCredentials['openai-codex']='root-codex-token';
+  assert.deepEqual((await readSignIns(target)).signIns['openai-codex'],{connected:false,shared:true,flow:'device_code'});
+  delete fake.settings.defaultCredentials['openai-codex'];
+  assert.deepEqual(await readSignIns(target),{state:'found',signIns:{'openai-codex':{connected:false,shared:false,flow:'device_code'},anthropic:{connected:false,shared:false,flow:'external'}}});
   const started=await startSignIn(target,'openai-codex');
   assert.equal(started.state,'started');
   assert.equal(started.code,'ABCD-1234');
@@ -247,7 +272,7 @@ test('only an Owner starts, follows or removes a company sign-in, checked on the
   }
   assert.equal(fake.settings.signInSessions.size,0,'a member never reaches Hermes');
   // A member still reads whether the company is connected.
-  assert.deepEqual(await readCompanySignIns(member.db,member.service,{company:two,encryptionKey,driver}),{profile:companyProfile(two),signIns:{'openai-codex':{connected:false,flow:'device_code'},anthropic:{connected:false,flow:'external'}}});
+  assert.deepEqual(await readCompanySignIns(member.db,member.service,{company:two,encryptionKey,driver}),{profile:companyProfile(two),signIns:{'openai-codex':{connected:false,shared:false,flow:'device_code'},anthropic:{connected:false,shared:false,flow:'external'}}});
   const owner=sessions(fake,{owner:true});
   const started=await changeCompanySignIn(owner.db,owner.service,{company:two,provider:'openai-codex',intent:'start',encryptionKey,driver});
   assert.equal(started.status,200);
@@ -281,4 +306,38 @@ test('the install job proves profiles per company on the pinned release, after t
  const script=readFileSync('scripts/check-install-profiles.mjs','utf8');
  for(const off of ['terminal','file','code_execution']) assert.ok(script.includes(`'${off}'`),off);
  assert.match(script,/assert\.deepEqual\(seen,\[true,false\]\)/);
+});
+
+// The person's session and the service role, as sendMessage sees them; every call is recorded in order.
+function conversationDatabases({profile,reserve=null}) {
+ const order=[];
+ const db={order,rpc:async name=>{ order.push(name);
+   if(name==='conversation_agent') return {data:null,error:null};
+   if(name==='reserve_conversation_run') return reserve||{data:'f9000000-0000-0000-0000-000000000001',error:null};
+   if(name==='send_conversation_message') return {data:true,error:null};
+   return {data:null,error:{message:'unexpected'}}; },
+  from:()=>{ const chain={select:()=>chain,eq:()=>chain,maybeSingle:async()=>({data:{id:'a9000000-0000-0000-0000-000000000001'},error:null})}; return chain; }};
+ const key=encryptSecret('test-only-key',encryptionKey);
+ const service={from:table=>{ const filters={}; const chain={select:()=>chain,eq:(column,value)=>{filters[column]=value;return chain;},maybeSingle:async()=>{ order.push(`read ${table} ${filters.id||''}`);
+   return table==='hermes_connections'?{data:{address:'http://hermes:8642',profile,state:'connected',features:['run_submission'],key_encrypted:key},error:null}:{data:{connection_id:'f9000000-0000-0000-0000-000000000099'},error:null}; }}; return chain; }};
+ return {db,service,order};
+}
+const engine=order=>({engineFor:connection=>({start:async()=>{ order.push(`start ${connection.profile}`); return 'run_1'; }})});
+
+test('a run is reserved on its pinned Connection before Hermes is called, and recorded after', async () => {
+ const {sendMessage}=await import('../lib/conversation-runs.mjs');
+ const {db,service,order}=conversationDatabases({profile:companyProfile(two)});
+ const sent=await sendMessage(db,service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...engine(order)});
+ assert.deepEqual(sent,{conversation:'c'});
+ assert.deepEqual(order,['conversation_agent','reserve_conversation_run','read hermes_connections f9000000-0000-0000-0000-000000000001',`start ${companyProfile(two)}`,'send_conversation_message']);
+});
+
+test('a run never starts on another company\'s profile, nor while the profile\'s tools lag behind the level', async () => {
+ const {sendMessage}=await import('../lib/conversation-runs.mjs');
+ const borrowed=conversationDatabases({profile:companyProfile(three)});
+ assert.deepEqual(await sendMessage(borrowed.db,borrowed.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...engine(borrowed.order)}),{error:'conversationNotFound',status:404});
+ assert.ok(!borrowed.order.some(step=>step.startsWith('start')));
+ const pending=conversationDatabases({profile:companyProfile(two),reserve:{data:null,error:{code:'55000',message:'agentLevelPending'}}});
+ assert.deepEqual(await sendMessage(pending.db,pending.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...engine(pending.order)}),{error:'conversationAgentLevelPending',status:409});
+ assert.ok(!pending.order.some(step=>step.startsWith('start')));
 });
