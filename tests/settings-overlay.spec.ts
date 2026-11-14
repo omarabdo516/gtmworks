@@ -86,11 +86,19 @@ test('the Owner renames the Company from Settings; other Roles read the name and
   await expect(save).toBeDisabled();
   await field.fill(`  ${renamed}  `);
   await save.click();
+  // The settings header shows the new name once the page has been read again, and the confirmation is still there.
+  await expect(overlay.locator('.sov__co')).toHaveText(renamed);
   await expect(overlay.locator('#co-name-status')).toHaveText('Name saved.');
-  await expect.poll(name).toBe(renamed);
+  expect(name()).toBe(renamed);
   await expect(field).toHaveValue(renamed);
   // The Company keeps its address.
   await expect(page).toHaveURL(/\/c\/aleem\/settings\?section=company$/);
+  // The Activity log shows who renamed it, the old name and the new one.
+  await page.goto('/c/aleem/log');
+  const row=page.locator('.lgp-body .lg-row').filter({hasText:'renamed the company'}).filter({hasText:renamed}).first();
+  await expect(row.locator('.lg-name')).toHaveText('عمر');
+  await expect(row.locator('.lg-val--old')).toHaveText(original);
+  await expect(row.locator('.lg-change .lg-val').last()).toHaveText(renamed);
 
   // A Contributor of the same Company sees the name as text, and the server refuses their rename.
   const other=await browser.newContext(); const contributor=await other.newPage();

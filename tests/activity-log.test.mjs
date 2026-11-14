@@ -74,3 +74,11 @@ test('an older page starts at a cursor of time and id, and anything else is the 
  assert.deepEqual(parseBefore('2026-01-01T00:00:00.5 00:00~7'), { at: '2026-01-01T00:00:00.5+00:00', id: '7' });
  for (const bad of [undefined, '', '302', '2026-01-01~1', '2026-13-45T99:99:99Z~1', '2026-01-01T00:00:00Z~0', '2026-01-01T00:00:00Z~1,id.gt.0', '2026-01-01T00:00:00Z"~1']) assert.equal(parseBefore(bad), null, String(bad));
 });
+
+test('a Company rename names the old name and the new one, in both languages', () => {
+ const renamed = describeEntry({ subject: 'company', action: 'company_renamed', details: { old_name: 'RS Learning', new_name: 'RS Learning Academy' } });
+ assert.deepEqual(renamed.act, ['logActCompanyRenamed']);
+ assert.deepEqual([renamed.from, renamed.to], [{ text: 'RS Learning' }, { text: 'RS Learning Academy' }]);
+ assert.equal(i18n('en').t('logActCompanyRenamed'), 'renamed the company');
+ assert.equal(i18n('ar').t('logActCompanyRenamed'), 'غيّر اسم الشركة');
+});

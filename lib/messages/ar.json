@@ -710,5 +710,6 @@
   "logShowingOlder": "معروض {0} سطر أقدم",
   "companyRenameNotAllowed": "صاحب الشركة بس اللي يقدر يغيّر اسمها.",
   "companyNameInvalid": "اكتب اسم من حرف لـ 80 حرف.",
-  "companyNameSaved": "الاسم اتحفظ."
+  "companyNameSaved": "الاسم اتحفظ.",
+  "logActCompanyRenamed": "غيّر اسم الشركة"
 }

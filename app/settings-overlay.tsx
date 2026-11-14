@@ -71,7 +71,7 @@ function CompanySection({t,company,members,agents,userId,slug,owner,canManage,sh
  const name=<section className="dp-sec" aria-labelledby="co-h-name"><Label id="co-h-name">{t('settingsCompanyName')}</Label>
   <div className="panel-card set-card">{owner?<div className="set-field"><label className="set-label" htmlFor="co-name">{t('settingsCompanyNameHint')}</label>
    {/* Only the Owner renames the Company (#26); the server checks it again. Other Roles read the name. */}
-   <CompanyName key={company.name} company={company.id} name={company.name}/></div>
+   <CompanyName key={company.id} company={company.id} name={company.name}/></div>
    :<p className="ro-text"><bdi>{company.name}</bdi></p>}</div></section>;
  const mode=<section className="dp-sec" aria-labelledby="co-h-mode"><Label id="co-h-mode">{t('settingsMode')}</Label>
   <div className="panel-card"><div className="panel-row"><span className="panel-row__icon"><SettingsIcon name={solo?'user':'team'}/></span><span className="panel-row__text">

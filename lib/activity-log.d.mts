@@ -1,5 +1,5 @@
 export type LogValue = { text: string } | { key: string };
-export type LogRow = { id: number, created_at: string, actor_kind: 'person' | 'agent' | 'system', actor_id: string | null, actor_name?: string | null, subject: 'card' | 'member' | 'agent', card_id?: number | null, person_id?: string | null, agent_id?: string | null, action: string, details?: Record<string, unknown> | null, body?: string | null };
+export type LogRow = { id: number, created_at: string, actor_kind: 'person' | 'agent' | 'system', actor_id: string | null, actor_name?: string | null, subject: 'card' | 'member' | 'agent' | 'company', card_id?: number | null, person_id?: string | null, agent_id?: string | null, action: string, details?: Record<string, unknown> | null, body?: string | null };
 export type LogLine = { act: [string, ...LogValue[]], obj?: string, from?: LogValue, to?: LogValue, note?: string };
 export function describeEntry(row: Pick<LogRow, 'action' | 'subject' | 'details' | 'body' | 'person_id' | 'agent_id'>, names?: { name?: (id: string) => string | undefined, agentName?: (id: string) => string | undefined }): LogLine;
 export type Who = { kind: 'all' } | { kind: 'system' } | { kind: 'person' | 'agent', id: string };
