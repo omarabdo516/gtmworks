@@ -326,7 +326,7 @@ function conversationDatabases({profile,reserve=null,record=null}) {
    return {data:null,error:{message:'unexpected'}}; },
   from:()=>{ const chain={select:()=>chain,eq:()=>chain,maybeSingle:async()=>({data:{id:'a9000000-0000-0000-0000-000000000001'},error:null})}; return chain; }};
  const key=encryptSecret('test-only-key',encryptionKey);
- const service={rpc:async(name)=>{ order.push(`service ${name}`); return name==='begin_start'?{data:true,error:null}:{data:null,error:{message:'unexpected'}}; },from:table=>{ const filters={}; const chain={select:()=>chain,eq:(column,value)=>{filters[column]=value;return chain;},maybeSingle:async()=>{ order.push(`read ${table} ${filters.id||''}`);
+ const service={rpc:async(name)=>{ order.push(`service ${name}`); return name==='begin_start'?{data:1,error:null}:{data:null,error:{message:'unexpected'}}; },from:table=>{ const filters={}; const chain={select:()=>chain,eq:(column,value)=>{filters[column]=value;return chain;},maybeSingle:async()=>{ order.push(`read ${table} ${filters.id||''}`);
    return table==='hermes_connections'?{data:{address:'http://hermes:8642',profile,state:'connected',features:['run_submission'],key_encrypted:key},error:null}:{data:{connection_id:'f9000000-0000-0000-0000-000000000099'},error:null}; }}; return chain; }};
  return {db,service,order};
 }
@@ -419,7 +419,7 @@ test('a run that never started releases its reservation at once; a started one l
  const refusing={engineFor:connection=>({start:async()=>{ refused.order.push(`start ${connection.profile}`); return null; }})};
  assert.deepEqual(await sendMessage(refused.db,refused.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...refusing}),{error:'conversationHermesFailed',status:502});
  assert.deepEqual(refused.order.slice(-2),[`start ${companyProfile(two)}`,'release_conversation_run']);
- assert.deepEqual(refused.db.args.release_conversation_run,{conversation:'c',c:two,message_key:'k'});
+ assert.deepEqual(refused.db.args.release_conversation_run,{conversation:'c',c:two,message_key:'k',attempt:1});
  // A Connection that cannot be used never reaches the engine, and its reservation is released too.
  const borrowed=conversationDatabases({profile:companyProfile(three)});
  assert.deepEqual(await sendMessage(borrowed.db,borrowed.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...engine(borrowed.order)}),{error:'conversationNotFound',status:404});

@@ -24,14 +24,16 @@ test('a retry of an unknown start is never read as not started', async () => {
 });
 
 const connection='f9000000-0000-0000-0000-000000000001';
-function databases({reserve={state:'reserved',connection,note:null},claim=[],usable=true}={}) {
+function databases({reserve={state:'reserved',connection,note:null},claim=[],usable=true,attempt=1}={}) {
  const order=[]; const args={};
  const rpc=who=>async(name,given)=>{ order.push(`${who} ${name}`); args[name]=given;
   if(name==='conversation_agent') return {data:null,error:null};
   if(name==='reserve_conversation_turn') return {data:reserve,error:null};
   if(name==='queued_conversations') return {data:[{conversation:'c'}],error:null};
   if(name==='claim_conversation_turn') return {data:claim,error:null};
-  if(['begin_start','keep_unknown_start','fail_conversation_turn','release_conversation_run','record_conversation_turn','send_conversation_message'].includes(name)) return {data:true,error:null};
+  // begin_start answers which attempt of the key this is (0: the reservation is no longer active).
+  if(name==='begin_start') return {data:attempt,error:null};
+  if(['keep_unknown_start','fail_conversation_turn','release_conversation_run','record_conversation_turn','send_conversation_message'].includes(name)) return {data:true,error:null};
   return {data:null,error:{message:'unexpected'}}; };
  const chain=data=>{ const c={select:()=>c,eq:()=>c,maybeSingle:async()=>({data,error:null})}; return c; };
  const key=encryptSecret('test-only-key',encryptionKey);
@@ -75,4 +77,27 @@ test('the worker asks again on a turn whose start was unknown, and never fails i
  const refused=databases({claim:[{...turn,retry:false}]});
  await startQueuedTurns(refused.service,{encryptionKey,...engine(refused.order,null)});
  assert.ok(refused.order.includes('service fail_conversation_turn'));
+});
+
+test('a second attempt of the same key is a retry, and is never released or failed', async () => {
+ // The server stopped after the first attempt reached Hermes; the person sends again with the same key.
+ const resend=databases({attempt:2});
+ const sent=await sendMessage(resend.db,resend.service,{company:'co',conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...engine(resend.order,null)});
+ assert.ok(resend.order.includes('start retry=true'));
+ assert.ok(!resend.order.some(step=>step.endsWith('release_conversation_run')));
+ assert.deepEqual(sent,{conversation:'c',queued:true});
+ // A worker claims a turn another claimer (or a stopped worker) already attempted: its refusal fails nothing.
+ const turn={company:'co',agent:'a',person:'p',send_key:'k',message:'Hi',connection,note:null,retry:false};
+ const second=databases({claim:[turn],attempt:2});
+ await startQueuedTurns(second.service,{encryptionKey,...engine(second.order,null)});
+ assert.ok(second.order.includes('start retry=true'));
+ assert.ok(!second.order.includes('service fail_conversation_turn'));
+ // Only the first attempt's refusal releases or fails, and it names that attempt, so the database keeps a start
+ // another attempt made meanwhile.
+ const first=databases();
+ assert.deepEqual(await sendMessage(first.db,first.service,{company:'co',conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...engine(first.order,null)}),{error:'conversationHermesFailed',status:502});
+ assert.deepEqual(first.args.release_conversation_run,{conversation:'c',c:'co',message_key:'k',attempt:1});
+ const failed=databases({claim:[turn]});
+ await startQueuedTurns(failed.service,{encryptionKey,...engine(failed.order,null)});
+ assert.deepEqual(failed.args.fail_conversation_turn,{conversation:'c',message_key:'k',attempt:1});
 });

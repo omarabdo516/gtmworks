@@ -4,21 +4,23 @@
 -- and the same Connection whether or not the person ever sends again. A marked reservation outlives the ten minutes an
 -- unrecorded one gets; after a day it is given up and its turn failed, never reserved again on another Connection.
 --
--- Additive only: two nullable columns; the previous app version never records an attempt or marks a start, so its
+-- Additive only: two new columns; the previous app version never records an attempt or marks a start, so its
 -- reservations behave as before, and it does not call claim_conversation_turn (whose result gains `retry`).
 
-alter table public.conversation_run_reservations add column start_unknown_at timestamptz, add column start_attempted_at timestamptz;
+alter table public.conversation_run_reservations add column start_unknown_at timestamptz, add column start_attempts integer not null default 0;
 
--- Recorded right before the engine is called, so a crash between the call and its answer never loses the run: an
+-- Counted right before the engine is called, so a crash between the call and its answer never loses the run: an
 -- attempted start left unrecorded after ten minutes is marked unknown by the worker (abandon_conversation_reservations)
--- instead of abandoned. Returns false when the reservation is no longer active (then nothing is started).
-create function public.begin_start(conversation uuid, message_key uuid) returns boolean
+-- instead of abandoned. Returns the attempt's number; only attempt 1 can be refused by the engine, every later one (after
+-- a stop, a second claimer or the person's resend) is a retry. 0: the reservation is no longer active (nothing starts).
+create function public.begin_start(conversation uuid, message_key uuid) returns integer
 language plpgsql security definer set search_path='' as $$
+declare attempt integer;
 begin
  perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
- update public.conversation_run_reservations r set start_attempted_at=coalesce(r.start_attempted_at,now())
-  where r.conversation_id=conversation and r.send_key=message_key and r.abandoned_at is null;
- return found;
+ update public.conversation_run_reservations r set start_attempts=r.start_attempts+1
+  where r.conversation_id=conversation and r.send_key=message_key and r.abandoned_at is null returning r.start_attempts into attempt;
+ return coalesce(attempt,0);
 end $$;
 revoke all on function public.begin_start(uuid,uuid) from public,anon,authenticated;
 grant execute on function public.begin_start(uuid,uuid) to service_role;
@@ -54,13 +56,13 @@ revoke all on function public.keep_unknown_start(uuid,uuid) from public,anon,aut
 grant execute on function public.keep_unknown_start(uuid,uuid) to service_role;
 
 -- As before, and: the turn that holds its own active reservation goes first (it may already be running), and the
--- result says whether its start was once unknown, so the driver asks again as a retry that no answer but a run id
--- settles.
+-- result says whether its start was already attempted or marked unknown, so the driver asks again as a retry that no
+-- answer but a run id settles.
 drop function public.claim_conversation_turn(uuid);
 create function public.claim_conversation_turn(conversation uuid)
 returns table(company uuid, agent uuid, person uuid, send_key uuid, message text, connection uuid, note text, retry boolean)
 language plpgsql security definer set search_path='' as $$
-declare turn public.conversation_queued_turns; linked public.hermes_connections; held public.conversation_run_reservations;
+declare turn public.conversation_queued_turns; linked public.hermes_connections; held public.conversation_run_reservations; uncertain boolean;
 begin
  perform pg_advisory_xact_lock(hashtextextended('conversation_turn:'||conversation::text,0));
  if exists(select 1 from public.conversation_open_run(conversation)) then return; end if;
@@ -81,15 +83,16 @@ begin
  end if;
  perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
  select * into held from public.conversation_run_reservations r where r.conversation_id=conversation and r.send_key=turn.send_key and r.abandoned_at is null;
+ uncertain:=held.conversation_id is not null and (held.start_unknown_at is not null or held.start_attempts>0);
  if held.conversation_id is not null then select * into linked from public.hermes_connections h where h.id=held.connection_id;
  else select h.* into linked from public.hermes_agents a join public.hermes_connections h on h.id=a.connection_id where a.id=turn.agent_id and a.company_id=turn.company_id;
  end if;
  -- A start that may have happened is never failed here: it waits for its own Connection to be usable again.
- if (linked.id is null or (linked.profile ~ '^co-[0-9a-f]{32}$' and linked.profile<>public.company_engine_profile(turn.company_id))) and held.start_unknown_at is null then
+ if (linked.id is null or (linked.profile ~ '^co-[0-9a-f]{32}$' and linked.profile<>public.company_engine_profile(turn.company_id))) and not uncertain then
   update public.conversation_queued_turns q set failed_at=now() where q.conversation_id=conversation and q.send_key=turn.send_key; return;
  end if;
  if linked.id is null then return; end if;
- if linked.profile ~ '^co-[0-9a-f]{32}$' and not public.company_profile_ready(turn.company_id) and held.start_unknown_at is null then return; end if;
+ if linked.profile ~ '^co-[0-9a-f]{32}$' and not public.company_profile_ready(turn.company_id) and not uncertain then return; end if;
  if held.conversation_id is null then
   insert into public.conversation_run_reservations(conversation_id,send_key,company_id,connection_id,person_id,agent_id,message,profile)
    values(conversation,turn.send_key,turn.company_id,linked.id,turn.person_id,turn.agent_id,turn.message,linked.profile)
@@ -97,7 +100,7 @@ begin
     where public.conversation_run_reservations.abandoned_at is not null;
  end if;
  return query select turn.company_id,turn.agent_id,turn.person_id,turn.send_key,turn.message,linked.id,
-  public.pinned_run_note(conversation,turn.send_key,turn.company_id,turn.person_id),held.start_unknown_at is not null;
+  public.pinned_run_note(conversation,turn.send_key,turn.company_id,turn.person_id),uncertain;
 end $$;
 revoke all on function public.claim_conversation_turn(uuid) from public,anon,authenticated;
 grant execute on function public.claim_conversation_turn(uuid) to service_role;
@@ -111,13 +114,13 @@ declare abandoned integer; stale public.conversation_run_reservations;
 begin
  perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
  for stale in select r.* from public.conversation_run_reservations r
-  where r.abandoned_at is null and r.start_unknown_at is null and r.start_attempted_at is not null and r.created_at<now()-interval '10 minutes'
+  where r.abandoned_at is null and r.start_unknown_at is null and r.start_attempts>0 and r.created_at<now()-interval '10 minutes'
    and exists(select 1 from public.hermes_agents a where a.id=r.agent_id and a.company_id=r.company_id)
    and exists(select 1 from public.members m where m.company_id=r.company_id and m.person_id=r.person_id and m.removed_at is null and m.role<>'viewer')
  loop perform public.queue_unknown_start(stale); end loop;
  with given_up as (
   update public.conversation_run_reservations r set abandoned_at=now()
-  where r.abandoned_at is null and ((r.start_unknown_at is null and r.start_attempted_at is null and r.created_at<now()-interval '10 minutes')
+  where r.abandoned_at is null and ((r.start_unknown_at is null and r.start_attempts=0 and r.created_at<now()-interval '10 minutes')
    or r.start_unknown_at<now()-interval '1 day'
    or not exists(select 1 from public.hermes_agents a where a.id=r.agent_id and a.company_id=r.company_id)
    or not exists(select 1 from public.members m where m.company_id=r.company_id and m.person_id=r.person_id and m.removed_at is null and m.role<>'viewer'))
@@ -132,27 +135,73 @@ end $$;
 revoke all on function public.abandon_conversation_reservations() from public,anon,authenticated;
 grant execute on function public.abandon_conversation_reservations() to service_role;
 
--- A refusal never drops a start once marked unknown: a second claimer of the same turn (worker and reader at once) may
--- see a refusal after the first one's answer was lost, and that proves nothing about the run. Otherwise as before.
-create or replace function public.fail_conversation_turn(conversation uuid, message_key uuid) returns void language plpgsql security definer set search_path='' as $$
+-- A refusal fails or releases only the attempt it answers, and only while no later attempt was made and the start was
+-- not marked unknown: a second claimer's or a resend's attempt may hold a run, and a refusal proves nothing about it.
+-- `attempt` 0 is a failure before any attempt (no usable Connection). Otherwise as before.
+drop function public.fail_conversation_turn(uuid,uuid);
+create function public.fail_conversation_turn(conversation uuid, message_key uuid, attempt integer) returns void language plpgsql security definer set search_path='' as $$
 begin
  perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
- if exists(select 1 from public.conversation_run_reservations r where r.conversation_id=conversation and r.send_key=message_key and r.abandoned_at is null and r.start_unknown_at is not null) then return; end if;
+ if exists(select 1 from public.conversation_run_reservations r where r.conversation_id=conversation and r.send_key=message_key and r.abandoned_at is null
+  and (r.start_unknown_at is not null or r.start_attempts<>attempt)) then return; end if;
  update public.conversation_queued_turns q set failed_at=now() where q.conversation_id=conversation and q.send_key=message_key and q.started_at is null;
  delete from public.conversation_run_reservations r where r.conversation_id=conversation and r.send_key=message_key and r.abandoned_at is null;
 end $$;
-revoke all on function public.fail_conversation_turn(uuid,uuid) from public,anon,authenticated;
-grant execute on function public.fail_conversation_turn(uuid,uuid) to service_role;
+revoke all on function public.fail_conversation_turn(uuid,uuid,integer) from public,anon,authenticated;
+grant execute on function public.fail_conversation_turn(uuid,uuid,integer) to service_role;
 
-create or replace function public.release_conversation_run(conversation uuid, c uuid, message_key uuid) returns boolean
+create function public.release_conversation_run(conversation uuid, c uuid, message_key uuid, attempt integer) returns boolean
 language plpgsql security definer set search_path='' as $$
 declare released integer;
 begin
  perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
  update public.conversation_run_reservations r set abandoned_at=now()
-  where r.conversation_id=conversation and r.send_key=message_key and r.company_id=c and r.person_id=auth.uid() and r.abandoned_at is null and r.start_unknown_at is null;
+  where r.conversation_id=conversation and r.send_key=message_key and r.company_id=c and r.person_id=auth.uid() and r.abandoned_at is null
+   and r.start_unknown_at is null and r.start_attempts=attempt;
  get diagnostics released=row_count;
  return released>0;
 end $$;
+revoke all on function public.release_conversation_run(uuid,uuid,uuid,integer) from public,anon,service_role;
+grant execute on function public.release_conversation_run(uuid,uuid,uuid,integer) to authenticated;
+
+-- The previous app version's form: it never counts an attempt, so it releases only a reservation nobody attempted.
+create or replace function public.release_conversation_run(conversation uuid, c uuid, message_key uuid) returns boolean
+language sql security definer set search_path='' as $$
+ select public.release_conversation_run(conversation,c,message_key,0);
+$$;
 revoke all on function public.release_conversation_run(uuid,uuid,uuid) from public,anon,service_role;
 grant execute on function public.release_conversation_run(uuid,uuid,uuid) to authenticated;
+
+-- As before, and: a turn whose message the direct send already stored is started, not failed.
+create or replace function public.record_conversation_turn(conversation uuid, message_key uuid, run text, started_on uuid) returns boolean
+language plpgsql security definer set search_path='' as $$
+declare turn public.conversation_queued_turns; held public.conversation_run_reservations; chosen public.hermes_agents; writer text; saved bigint;
+begin
+ perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
+ select * into turn from public.conversation_queued_turns q where q.conversation_id=conversation and q.send_key=message_key;
+ if not found or run is null then raise exception 'conversationNotFound' using errcode='P0002'; end if;
+ if turn.started_at is not null then return false; end if;
+ -- Its message was already stored by the direct send's late record: the turn ran; it is started, never failed.
+ if exists(select 1 from public.conversation_messages m where m.conversation_id=conversation and m.send_key=message_key and m.author='person') then
+  update public.conversation_queued_turns q set started_at=now() where q.conversation_id=conversation and q.send_key=message_key;
+  delete from public.conversation_run_reservations r where r.conversation_id=conversation and r.send_key=message_key and r.abandoned_at is null;
+  return false;
+ end if;
+ select * into chosen from public.hermes_agents a where a.id=turn.agent_id and a.company_id=turn.company_id;
+ select * into held from public.conversation_run_reservations r where r.conversation_id=conversation and r.send_key=message_key;
+ if chosen.id is null or held.conversation_id is null or held.abandoned_at is not null or started_on is null or held.connection_id<>started_on or held.connection_id is distinct from chosen.connection_id then
+  update public.conversation_queued_turns q set failed_at=now() where q.conversation_id=conversation and q.send_key=message_key;
+  delete from public.conversation_run_reservations r where r.conversation_id=conversation and r.send_key=message_key and r.abandoned_at is null;
+  return false;
+ end if;
+ perform pg_advisory_xact_lock(hashtextextended('conversation_run:'||run,0));
+ if exists(select 1 from public.conversation_messages m where m.author='person' and m.run_id=run and m.conversation_id<>conversation) then raise exception 'conversationNotFound' using errcode='P0002'; end if;
+ select name into writer from public.people where id=turn.person_id;
+ insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id)
+  values(turn.company_id,conversation,'person',turn.person_id,coalesce(writer,''),turn.message,message_key,run) on conflict do nothing returning id into saved;
+ delete from public.conversation_run_reservations r where r.conversation_id=conversation and r.send_key=message_key;
+ update public.conversation_queued_turns q set started_at=now() where q.conversation_id=conversation and q.send_key=message_key;
+ return saved is not null;
+end $$;
+revoke all on function public.record_conversation_turn(uuid,uuid,text,uuid) from public,anon,authenticated;
+grant execute on function public.record_conversation_turn(uuid,uuid,text,uuid) to service_role;
