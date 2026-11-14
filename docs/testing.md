@@ -17,6 +17,11 @@ English/Arabic direction checks are never removed.
   The screens still run first, on the seed as built. The navigation time budgets (`navigation.spec.ts`, project
   `measured`) run after every functional test with the machine to themselves, as they did when the suite was serial,
   and first run last.
+- `integration-2` (#74) runs at the same time on a second standard runner, with four lanes of its own: only the
+  functional files `tests/browser-jobs.mjs` lists, which `integration` then leaves out (`GTMWORKS_BROWSER_JOB`). They
+  are the long files, chosen so both jobs end at about the same time; a new spec file runs in `integration` until it
+  is listed. A local `./ci.sh check` sets no job and runs the whole suite in one run. `check` needs both jobs, and
+  `flaky-tests` and `compare-failures` read both jobs' reports (`playwright-report`, `playwright-report-2`).
 - `install` runs on every push to `main`, and on a pull request only when it changes a file the install exercises
   (`scripts/install-related.mjs`): the image and its build inputs, install and release files, the database, `lib/`,
   `worker/` and the workflows. `check` allows a skipped install only then, and is red on any failed or cancelled stage
@@ -49,6 +54,8 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `app-origin.test.mjs` | Behind an HTTPS proxy, first run and sign-in links stay on APP_ORIGIN (#40). | 1.1 s | production-shape.spec.ts | keep |
 | `app.spec.ts` | Sign-in, fonts, the card dialog and detail, members and invitations, board moves, approvals, webhooks, contrast and client error reports. | 142.1 s | See the two removed tests below; the rest prove promises no other file does. | keep; 2 tests removed (below) |
 | `attachments.test.mjs` | Only raster images show in place; every download is sandboxed and never sniffed. | 0.4 s | — | keep |
+| `browser-jobs.mjs` | browser helper: which functional files CI's second integration job runs (new, #74) | — | — | helper, kept |
+| `browser-jobs.test.mjs` | The two integration jobs run every functional file exactly once, and the first keeps screens, budgets and first run. (new, #74) | 7 s | — | new |
 | `board-columns.test.mjs` | The six columns keep the approved order, Waiting on you first. | 0.3 s | board.spec.ts | keep |
 | `board.spec.ts` | The board's six columns, drag and keyboard moves (logged), the Agent filter, Viewer limits and Waiting on you. | 48.5 s | board-columns.test.mjs (column order only) | keep |
 | `bootstrap-db.mjs` | runs production SQL with real triggers (tests/db.sh) | — | — | helper, kept |
@@ -56,7 +63,7 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `card-request.spec.ts` | A message to an agent makes one card in Ideas with its message, assignment and mode; the composer loads on open. | 8.6 s | — | keep |
 | `choose-language.ts` | browser helper: choose the language in Settings | — | — | helper, kept |
 | `ci-runners.test.mjs` | Every workflow runs on free GitHub-hosted runners and a PR reads no secret. | 0.5 s | — | keep |
-| `ci-verdict.test.mjs` | `check` allows a skipped install only on a PR with no install file, and is red on any failed or cancelled stage. (new, #69) | 3 s | — | new |
+| `ci-verdict.test.mjs` | `check` allows a skipped install only on a PR with no install file, needs both integration jobs (#74), and is red on any failed or cancelled stage. (new, #69) | 3 s | — | new |
 | `company-log-migration.mjs` | replays the company-log migration (tests/db.sh) | — | — | helper, kept |
 | `company-profiles.test.mjs` | Each company has its own Engine profile with its level's toolsets and never a risky one. | 1.1 s | — | keep |
 | `company-sign-in.spec.ts` | The Owner signs the company in to ChatGPT and out; a member only sees whether it is connected. | 20.5 s | settings-overlay.test.mjs (the Models slot) | keep |

@@ -85,6 +85,8 @@ jobs:
     env:
       # One browser test lane per worker, each on a whole stack of its own (tests/lane.mjs, #69).
       GTMWORKS_TEST_LANES: "4"
+      # The screens, the functional files integration-2 does not run, the navigation budgets and first run (#74).
+      GTMWORKS_BROWSER_JOB: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -132,11 +134,56 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  # The second integration job (#74): the long functional browser files tests/browser-jobs.mjs lists, on four lanes of
+  # its own on another standard runner (free while the repository is public), at the same time as the first job.
+  integration-2:
+    needs: [changes]
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.docs_only != 'true') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      GTMWORKS_TEST_LANES: "4"
+      GTMWORKS_BROWSER_JOB: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: integration-2
+        run: ./ci.sh integration-2
+      - name: upload route screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: route-screenshots-2
+          path: test-results/screenshots/
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: record what Playwright selected and observed
+        if: always()
+        run: node scripts/playwright-journal.mjs playwright-report
+      - name: upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-2
+          path: |
+            playwright-report/results.json
+            playwright-report/execution.json
+            playwright-report/journal-*.jsonl
+          if-no-files-found: error
+          retention-days: 30
+
   # Failing PR tests that are also red on the latest completed main run are named "inherited from main" (#157).
   # Posts nothing when no Playwright test failed.
+  # Each integration job's report is compared with the same job's report on main; a main run from before the split (#74)
+  # has one report with every test, which then stands for both.
   compare-failures:
-    needs: [integration]
-    if: ${{ always() && github.event_name == 'pull_request' && needs.integration.result == 'failure' }}
+    needs: [integration, integration-2]
+    if: ${{ always() && github.event_name == 'pull_request' && (needs.integration.result == 'failure' || needs.integration-2.result == 'failure') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -156,7 +203,13 @@ jobs:
         with:
           name: playwright-report
           path: pr-report
-      - name: latest completed main run's report
+      - name: this run's second report
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: playwright-report-2
+          path: pr-report-2
+      - name: latest completed main run's reports
         id: main
         continue-on-error: true
         run: |
@@ -164,8 +217,19 @@ jobs:
             --jq '.[0] | "\(.databaseId) \(.url)"')
           echo "url=${run#* }" >> "$GITHUB_OUTPUT"
           gh run download "${run%% *}" -R "$GITHUB_REPOSITORY" -n playwright-report -D main-report || true
+          gh run download "${run%% *}" -R "$GITHUB_REPOSITORY" -n playwright-report-2 -D main-report-2 || true
       - name: compare
-        run: node scripts/compare-failures.mjs pr-report/results.json main-report/results.json "${{ steps.main.outputs.url }}" comment.md
+        run: |
+          main2=main-report-2/results.json
+          [[ -f "$main2" ]] || main2=main-report/results.json
+          node scripts/compare-failures.mjs pr-report/results.json main-report/results.json "${{ steps.main.outputs.url }}" comment-1.md
+          node scripts/compare-failures.mjs pr-report-2/results.json "$main2" "${{ steps.main.outputs.url }}" comment-2.md
+          # One comment: the marker line once, then each failing job's part under its job's name.
+          for n in 1 2; do
+            [[ -f "comment-$n.md" ]] || continue
+            [[ -f comment.md ]] || head -n 1 "comment-$n.md" > comment.md
+            { echo; echo "**integration$([[ $n == 2 ]] && echo -2)**"; echo; tail -n +2 "comment-$n.md"; } >> comment.md
+          done
       - name: one PR comment, updated in place
         run: |
           [[ -f comment.md ]] || exit 0
@@ -179,8 +243,8 @@ jobs:
 
   # A test that failed and then passed on its CI retry: listed in the run summary, one `flaky` issue per test title (#158).
   flaky-tests:
-    needs: [integration]
-    if: ${{ always() && needs.integration.result != 'skipped' }}
+    needs: [integration, integration-2]
+    if: ${{ always() && (needs.integration.result != 'skipped' || needs.integration-2.result != 'skipped') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -200,8 +264,18 @@ jobs:
         with:
           name: playwright-report
           path: report
-      - name: list flaky tests
-        run: node scripts/flaky-tests.mjs report/results.json "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" flaky.json
+      - name: this run's second report
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: playwright-report-2
+          path: report-2
+      - name: list flaky tests of both integration jobs
+        run: |
+          url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          node scripts/flaky-tests.mjs report/results.json "$url" flaky-1.json
+          node scripts/flaky-tests.mjs report-2/results.json "$url" flaky-2.json
+          jq -s 'add' flaky-1.json flaky-2.json > flaky.json
       - name: one issue per flaky test, updated when it flakes again
         if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
         run: |
@@ -594,7 +668,7 @@ jobs:
         run: docker rm -fv install-docker || true
 
   check:
-    needs: [changes, static, integration, install]
+    needs: [changes, static, integration, integration-2, install]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     permissions:
@@ -609,5 +683,6 @@ jobs:
           INSTALL_RELATED: ${{ needs.changes.outputs.install_related }}
           STATIC_RESULT: ${{ needs.static.result }}
           INTEGRATION_RESULT: ${{ needs.integration.result }}
+          INTEGRATION_2_RESULT: ${{ needs.integration-2.result }}
           INSTALL_RESULT: ${{ needs.install.result }}
         run: node scripts/ci-verdict.mjs

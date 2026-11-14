@@ -29,7 +29,7 @@ Impeccable (the design skill) is this repo's design workflow, used in full: ever
 
 ## Checks
 
-`./ci.sh check` runs `./ci.sh static` then `./ci.sh integration`; CI also checks the Docker install.
+`./ci.sh check` runs `./ci.sh static` then `./ci.sh integration`; CI also checks the Docker install, and splits the browser suite across two integration jobs (`integration`, `integration-2`; `docs/testing.md`).
 For PRs and pushes to `main`, CI always runs static and skips integration and install only when every changed file is under `design/`, under `docs/`, or ends in `.md`, except files under `public/` (read by a browser test); unknown or empty diffs run all stages. A push to `main` is judged against the last commit a successful main CI run tested.
 
 CI deploys nothing. An install picks up a merge when its owner runs `sh scripts/install.sh update` (README), which applies new migrations before the new app version starts; a failed migration rolls back and the previous app keeps serving. A later version does not undo an applied migration; recovery needs a new forward migration. A forward migration cannot bring back deleted data; restore it from a backup.

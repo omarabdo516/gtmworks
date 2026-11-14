@@ -13,7 +13,7 @@ start_lanes() {
   done
 }
 wait_lanes() {
-  for ((n = 0; n < lanes; n++)); do
+  for ((n = ${1:-0}; n < ${2:-lanes}; n++)); do
     second=0
     while [[ ! -s "playwright-report/lane-$n.status" ]] && ((second++ < 900)); do sleep 1; done
     if [[ $(cat "playwright-report/lane-$n.status" 2> /dev/null) != 0 ]]; then
@@ -89,6 +89,22 @@ PY
   wait "$build_pid" || { cat playwright-report/build.log >&2; echo 'the browser suite build failed' >&2; exit 1; }
   GTMWORKS_WEB_PREBUILT=true GTMWORKS_TEST_LANES=$lanes npm run test:e2e
   ;;
+ integration-2)
+  # CI's second integration job (#74): only the functional browser files tests/browser-jobs.mjs lists, on lanes of its
+  # own. The database checks, the proxy suite, the screens, the navigation budgets and first run stay in `integration`.
+  if [[ "${CI:-}" == "true" ]]; then
+    npm ci
+    npx playwright install --with-deps chromium
+  fi
+  start_lanes
+  # The build needs lane 0's stack only; it runs while the other lanes are still starting.
+  wait_lanes 0 1
+  (LANE=0 bash scripts/web.sh build > playwright-report/build.log 2>&1) &
+  build_pid=$!
+  wait_lanes 1
+  wait "$build_pid" || { cat playwright-report/build.log >&2; echo 'the browser suite build failed' >&2; exit 1; }
+  GTMWORKS_BROWSER_JOB=2 GTMWORKS_WEB_PREBUILT=true GTMWORKS_TEST_LANES=$lanes npm run test:e2e
+  ;;
  visual-update)
   # Rewrites only the approved screen images that changed. Run it where CI runs: the images are made for that system.
   if [[ "${CI:-}" == "true" ]]; then
@@ -98,5 +114,5 @@ PY
   bash scripts/local-db.sh
   npm run test:visual:update
   ;;
- *) echo 'usage: ./ci.sh check | static | integration | visual-update' >&2; exit 2;;
+ *) echo 'usage: ./ci.sh check | static | integration | integration-2 | visual-update' >&2; exit 2;;
 esac

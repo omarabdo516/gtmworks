@@ -1,11 +1,18 @@
 import { randomBytes } from 'node:crypto';
 import { defineConfig } from '@playwright/test';
 import { appOrigin, lanes, originOf, serverLogOf } from './tests/lane.mjs';
+import { browserJob, secondJobFiles } from './tests/browser-jobs.mjs';
 // First run opens only with the install's setup code (issue #50). The web server and the test workers inherit this one.
 process.env.SETUP_CODE ||= randomBytes(32).toString('hex');
 // Each run's spec files restore the seed before they start (tests/fresh-seed.ts); the workers inherit this run's name.
 process.env.GTMWORKS_TEST_RUN ||= randomBytes(8).toString('hex');
-export default defineConfig({
+// CI's second integration job runs only the functional files tests/browser-jobs.mjs lists, and the first job the rest (#74).
+const functional = {
+  name: 'functional',
+  testIgnore: ['visual.spec.ts', 'first-run.spec.ts', 'navigation.spec.ts', '**/proxy/**', ...(browserJob === '1' ? secondJobFiles : [])],
+  ...(browserJob === '2' ? { testMatch: secondJobFiles } : {}),
+};
+const config = defineConfig({
   testDir: './tests',
   testMatch: '*.spec.ts',
   testIgnore: '**/proxy/**', // the production-shaped suite has its own config (playwright.proxy.config.ts)
@@ -37,9 +44,11 @@ export default defineConfig({
     // empty anchor that `visual` depends on, so it runs alone after every functional test, and before first run.
     { name: 'measured-anchor', testMatch: /^$/, dependencies: ['seeded'], teardown: 'measured' },
     { name: 'visual', testMatch: 'visual.spec.ts', outputDir: 'test-results/screenshots/visual', dependencies: ['measured-anchor'], teardown: 'functional' },
-    { name: 'functional', testIgnore: ['visual.spec.ts', 'first-run.spec.ts', 'navigation.spec.ts', '**/proxy/**'] },
+    functional,
     { name: 'measured', testMatch: 'navigation.spec.ts', workers: 1 },
     // Empty-install scenarios mutate the whole local database and run only after seeded functional tests finish.
     { name: 'first-run', testMatch: 'first-run.spec.ts' },
   ],
 });
+// The second job has its functional files only: no screens, navigation budgets or first run, whatever it is asked for.
+export default browserJob === '2' ? { ...config, projects: [functional] } : config;

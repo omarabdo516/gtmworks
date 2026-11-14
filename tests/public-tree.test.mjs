@@ -60,9 +60,9 @@ test('the public tree deploys nothing of ours', () => {
  assert.deepEqual(offenders(new RegExp(piece('\\benvironment', ':')), inWorkflows), [], 'deployment environment');
  assert.deepEqual(offenders(new RegExp(piece('\\bsecrets', '\\.(?!GITHUB_TOKEN\\b)')), inWorkflows), [], 'secret other than GITHUB_TOKEN');
  const ci = load(texts.get('.github/workflows/ci.yml'));
- for (const job of ['changes', 'static', 'integration', 'install', 'flaky-tests', 'check']) assert.ok(ci.jobs[job], job);
+ for (const job of ['changes', 'static', 'integration', 'integration-2', 'install', 'flaky-tests', 'check']) assert.ok(ci.jobs[job], job);
  for (const job of ['deploy', 'deploy-db']) assert.equal(ci.jobs[job], undefined, job);
- assert.deepEqual(ci.jobs.check.needs, ['changes', 'static', 'integration', 'install']);
+ assert.deepEqual(ci.jobs.check.needs, ['changes', 'static', 'integration', 'integration-2', 'install']);
 });
 
 test('no identifier of our own hosted instance', () => {
