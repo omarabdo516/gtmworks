@@ -23,14 +23,16 @@ if [[ -z "${SETUP_CODE:-}" ]]; then
 fi
 # Production e2e uses the local stack while retaining the production settings guard. Links are built on APP_ORIGIN, so it
 # is the address the browser uses; the guard accepts a plain-http loopback origin only in the local install's shape.
-if [[ "${1:-dev}" == "production" ]]; then
+if [[ "${1:-dev}" == "production" || "${1:-dev}" == "build" ]]; then
  export APP_ORIGIN=http://127.0.0.1:$port GTMWORKS_SELF_HOSTED=true SUPABASE_PUBLIC_URL="$NEXT_PUBLIC_SUPABASE_URL"
 fi
+# `web.sh build` only builds, with the same settings, so CI can build while other checks run (ci.sh integration).
+if [[ "${1:-dev}" == "build" ]]; then exec npm run build; fi
 node worker/index.mjs &
 worker_pid=$!
 trap 'kill "$worker_pid" 2>/dev/null || true' EXIT INT TERM
 if [[ "${1:-dev}" == "production" ]]; then
- if [[ $lane == 0 ]]; then npm run build; fi
+ if [[ $lane == 0 && "${GTMWORKS_WEB_PREBUILT:-}" != true ]]; then npm run build; fi
  npx next start -p "$port"
 else
  npx next dev -p "$port"

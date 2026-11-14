@@ -25,11 +25,14 @@ if [[ $lane != 0 ]]; then
     -e '/^\[\(studio\|analytics\|edge_runtime\)\]$/,/^enabled = / s/^enabled = true$/enabled = false/' \
     "$tmp_dir/supabase/config.toml"
 fi
+# A first start applies the migrations and the seed itself; a stack whose database already exists is rebuilt.
+project=$(sed -n 's/^project_id = "\(.*\)"$/\1/p' "$tmp_dir/supabase/config.toml")
+existing=false
+if docker volume inspect "supabase_db_$project" > /dev/null 2>&1; then existing=true; fi
 npx --no-install supabase start --workdir "$tmp_dir"
-npx --no-install supabase db reset --workdir "$tmp_dir"
+if [[ $existing == true ]]; then npx --no-install supabase db reset --workdir "$tmp_dir"; fi
 # The seeded data as one script that puts it back: browser spec files start from it (tests/fresh-seed.ts, #69), so no
 # file sees what an earlier one left. Migration records and the realtime service's own tables are not data and stay.
-project=$(sed -n 's/^project_id = "\(.*\)"$/\1/p' "$tmp_dir/supabase/config.toml")
 snapshot="$PWD/supabase/.temp/lanes/$lane/seed-data.sql"
 mkdir -p "$(dirname "$snapshot")"
 {
