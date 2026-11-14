@@ -6,6 +6,8 @@ status: accepted
 
 Ticket #293 (parent spec #284). This extends the engine contract of [ADR 0009](0009-conversations-run-on-engines-behind-one-engine-contract.md) and the bundled install of [ADR 0010](0010-hermes-ships-inside-the-gtmworks-install-and-is-the-engine.md).
 
+[ADR 0014](0014-one-hermes-profile-per-company.md) (#2): in the bundled Hermes, a Company's Agents share the Company's one profile instead of one profile each.
+
 ## Context
 
 The engine contract started, read and stopped a Run. gtmworks now needs to create and read an Agent (name, instructions, model). The pinned release (Hermes v0.23.0) does not serve profiles on its Run API (port 8642). It serves them on its dashboard, a FastAPI server on port 9119. The dashboard is off unless `HERMES_DASHBOARD=1` is set, and it then starts beside `hermes gateway run` in the same container and data volume. On a non-loopback bind it requires a secret, which `HERMES_DASHBOARD_SESSION_TOKEN` provides and which REST callers send as `Authorization: Bearer`. These facts were observed on the pinned image, on a scratch network, from a second container.

@@ -10,6 +10,10 @@ import { OverlayFrame, CloseButton, AccountChoices, MakeMain, DeleteAgent, Compa
 import { SettingsIcon } from './settings-icons';
 import PasswordSettings from './password-settings';
 import { UsageTable, type UsageDay } from './c/[slug]/[[...section]]/usage';
+import { createClient } from '@supabase/supabase-js';
+import { supabaseConfig } from '@/lib/supabase-config';
+import { readCompanySignIns } from '@/lib/company-sign-in.mjs';
+import { AgentLevel, CompanySubscriptions } from './company-engine-client';
 
 type Agent={id:string,connection_id:string,name:string,speciality:string,is_default:boolean};
 type Member={person_id:string,role:string,people:{name:string|null}|null};
@@ -31,15 +35,22 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  const agents:Agent[]=needAgents?agentsMainFirst((await db.from('hermes_agents').select('id,connection_id,name,speciality,is_default').eq('company_id',company.id).order('name')).data||[]):[];
  const members:Member[]=section==='company'?(((await db.from('members').select('person_id,role,people(name)').eq('company_id',company.id).is('removed_at',null)).data||[]) as unknown as Member[]).sort((a,b)=>(roleRank[a.role]??9)-(roleRank[b.role]??9)||(a.people?.name||'').localeCompare(b.people?.name||'')):[];
  const sharedEngine=section==='company'&&owner?(await db.rpc('bundled_engine_shared',{c:company.id})).data===true:false;
+ // The Company's Agent level, and for its Owner the Agents whose engine offers terminal, code or file tools while the
+ // Company has more than one member (agent_tool_warning returns nothing to anyone else).
+ const agentLevel=section==='company'?Number((await db.from('companies').select('agent_level').eq('id',company.id).maybeSingle()).data?.agent_level)||1:1;
+ const toolWarning=section==='company'&&owner?((await db.rpc('agent_tool_warning',{c:company.id})).data||[]) as {agent_name:string}[]:[];
+ // The Company's model sign-in, read from its own profile in the agent engine (#3). The service role reads only the
+ // key of that Company's bundled Connection, after the database said the person is a member (company_engine_target).
+ const subscriptions=section==='models'?await (async()=>{ try { return await readCompanySignIns(db,createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false}}),{company:company.id,encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY}); } catch { return {profile:null,signIns:null}; } })():null;
  const usageRows:UsageDay[]=section==='usage'?((await db.rpc('usage_by_day')).data||[]) as UsageDay[]:[];
  const agent=section==='agents'&&query.agent?agents.find(item=>item.id===query.agent):undefined;
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  const ro=!canManage&&<p className="ro-note"><SettingsIcon name="shield"/><span>{t('settingsRO')}</span></p>;
- const page=section==='company'?<CompanySection t={t} company={company} members={members} agents={agents} userId={userId} slug={slug} owner={owner} canManage={canManage} sharedEngine={sharedEngine} roleNames={roleNames} ro={ro}/>
+ const page=section==='company'?<CompanySection t={t} company={company} members={members} agents={agents} userId={userId} slug={slug} owner={owner} canManage={canManage} sharedEngine={sharedEngine} agentLevel={agentLevel} toolWarning={toolWarning.map(row=>row.agent_name)} roleNames={roleNames} ro={ro}/>
   :section==='agents'?(agent?<AgentPage t={t} rtl={rtl} slug={slug} company={company.id} agent={agent} main={agents[0]} owner={owner} canManage={canManage} canWrite={canWrite}/>:<AgentsSection t={t} rtl={rtl} slug={slug} agents={agents} canManage={canManage} canWrite={canWrite} owner={owner}/>)
   :section==='usage'?<UsageSection t={t} locale={locale} slug={slug} company={company.id} rows={usageRows} period={query.period==='30'?30:7}/>
   :section==='account'?<AccountSection t={t} theme={theme} personName={personName} role={role} roleName={roleNames[role]||''} companyName={company.name}/>
-  :<SoonSection t={t} section={section} ro={ro}/>;
+  :<SoonSection t={t} section={section} ro={ro} models={<ModelsSubscriptions company={company.id} owner={owner} subscriptions={subscriptions}/>}/>;
  const item=([key,label,icon]:readonly [OverlaySection,string,Parameters<typeof SettingsIcon>[0]['name'],boolean,boolean])=><Link key={key} replace className="sb-item sov-nav__i" id={`sov-nav-${key}`} href={overlayHref(slug,key)} aria-current={key===section?'page':undefined}><SettingsIcon name={icon}/><span className="od-fill">{t(label)}</span></Link>;
  const list=visibleSections(role);
  return <OverlayFrame slug={slug}>
@@ -66,7 +77,7 @@ const Soon=({t}:{t:T})=><div className="panel-card sov-soon" aria-disabled="true
 const SoonSec=({t,id,label}:{t:T,id:string,label:string})=><section className="dp-sec" aria-labelledby={id}><Label id={id}>{label}</Label><Soon t={t}/></section>;
 const initial=(name:string)=>name.trim().slice(0,1).toUpperCase()||'?';
 
-function CompanySection({t,company,members,agents,userId,slug,owner,canManage,sharedEngine,roleNames,ro}:{t:T,company:{id:string,name:string},members:Member[],agents:Agent[],userId:string,slug:string,owner:boolean,canManage:boolean,sharedEngine:boolean,roleNames:Record<string,string>,ro:ReactNode}) {
+function CompanySection({t,company,members,agents,userId,slug,owner,canManage,sharedEngine,agentLevel,toolWarning,roleNames,ro}:{t:T,company:{id:string,name:string},members:Member[],agents:Agent[],userId:string,slug:string,owner:boolean,canManage:boolean,sharedEngine:boolean,agentLevel:number,toolWarning:string[],roleNames:Record<string,string>,ro:ReactNode}) {
  const count=members.length; const solo=count<=1;
  const name=<section className="dp-sec" aria-labelledby="co-h-name"><Label id="co-h-name">{t('settingsCompanyName')}</Label>
   <div className="panel-card set-card">{owner?<div className="set-field"><label className="set-label" htmlFor="co-name">{t('settingsCompanyNameHint')}</label>
@@ -94,7 +105,8 @@ function CompanySection({t,company,members,agents,userId,slug,owner,canManage,sh
   <div className="panel-card">{members.map(member=><div className="panel-row" key={member.person_id}><span className="me__av pp-av" aria-hidden="true">{initial(member.people?.name||t('member'))}</span><span className="panel-row__text"><span className="panel-row__t"><bdi>{member.people?.name||t('member')}</bdi>{member.person_id===userId&&<> <span className="ch-you">{t('settingsYouMark')}</span></>}</span><span className="panel-row__d">{roleNames[member.role]||''}</span></span></div>)}</div></section>;
  return <><Head title={t('settingsCompany')} sub={t('settingsCompanySub')}/>{ro}
   {sharedEngine&&<p className="ro-note sov-warn" role="note"><SettingsIcon name="shield"/><span>{t('sharedEngineWarning')}</span></p>}
-  {name}{mode}{canManage?table:list}</>;
+  {toolWarning.length>0&&<p className="ro-note sov-warn" role="note" id="co-tool-warning"><SettingsIcon name="shield"/><span>{t('agentToolWarning',toolWarning.join(', '))}</span></p>}
+  {name}{mode}<AgentLevel company={company.id} level={agentLevel} owner={owner}/>{canManage?table:list}</>;
 }
 
 function TalkTip({t,text,talk}:{t:T,text:string,talk?:{href:string,name:string}}) {
@@ -184,7 +196,7 @@ function AccountSection({t,theme,personName,role,roleName,companyName}:{t:T,them
 
 // The company's sections whose features come later (#27–#33): each keeps the reference's heading, its explanation and
 // its parts in place, empty and marked "Soon", with no sample figures.
-function SoonSection({t,section,ro}:{t:T,section:OverlaySection,ro:ReactNode}) {
+function SoonSection({t,section,ro,models}:{t:T,section:OverlaySection,ro:ReactNode,models:ReactNode}) {
  if(section==='knowledge') return <><Head title={t('settingsKnowledge')} sub={t('settingsKnowledgeSub')}/>{ro}
   <div className="know-vs"><div className="know-vs__c"><b><SettingsIcon name="book"/>{t('settingsKnowledge')}</b><p>{t('settingsKnowCompanyD')}</p></div>
    <div className="know-vs__c"><b><SettingsIcon name="bulb"/>{t('settingsKnowMemory')}</b><p>{t('settingsKnowMemoryD')}</p></div></div>
@@ -192,7 +204,7 @@ function SoonSection({t,section,ro}:{t:T,section:OverlaySection,ro:ReactNode}) {
  if(section==='learning') return <><Head title={t('settingsLearning')} sub={t('settingsLearningSub')}/>{ro}
   {(['settingsLearnSuggestions','settingsLearnCompany','settingsLearnPerAgent','settingsLearnRecent','settingsLearnRules'] as const).map(key=><SoonSec key={key} t={t} id={`ln-h-${key}`} label={t(key)}/>)}</>;
  if(section==='models') return <><Head title={t('settingsModels')} sub={t('settingsModelsSub')}/>{ro}
-  <ModelsSubscriptions t={t}/>
+  {models}
   {(['settingsModelsDefault','settingsModelsEffort','settingsModelsEach'] as const).map(key=><SoonSec key={key} t={t} id={`md-h-${key}`} label={t(key)}/>)}</>;
  if(section==='apps') return <><Head title={t('settingsApps')}/><Soon t={t}/></>;
  if(section==='routines') return <><Head title={t('settingsRoutines')} sub={t('settingsRoutinesSub')}/><Soon t={t}/></>;
@@ -201,7 +213,8 @@ function SoonSection({t,section,ro}:{t:T,section:OverlaySection,ro:ReactNode}) {
 }
 
 // The company's connected AI subscriptions. A company signs in to its own subscription through the Hermes inside
-// gtmworks (#3); that sign-in replaces the "Soon" panel inside this one section.
-function ModelsSubscriptions({t}:{t:T}) {
- return <section className="dp-sec" aria-labelledby="md-h-sub" id="md-subscriptions"><Label id="md-h-sub">{t('settingsModelsSubs')}</Label><Soon t={t}/></section>;
+// gtmworks (#3, ADR 0014): the state is read on the server from the company's own profile, and the Owner's buttons
+// call /api/company-sign-in, which checks the Owner again.
+function ModelsSubscriptions({company,owner,subscriptions}:{company:string,owner:boolean,subscriptions:Awaited<ReturnType<typeof readCompanySignIns>>|null}) {
+ return <CompanySubscriptions company={company} owner={owner} profile={subscriptions?.profile??null} signIns={subscriptions?.signIns??null}/>;
 }

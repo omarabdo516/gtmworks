@@ -195,7 +195,7 @@ if [ -n "$release_image" ]; then printf '%s\n' "$release_image" > .install-relea
 # Whether first run is still open, asked through the app's service role; it answers open or closed and nothing else.
 setup=$(compose exec -T web node -e "const key=process.env.SUPABASE_SERVICE_ROLE_KEY; const response=await fetch('http://gateway:8080/rest/v1/rpc/setup_is_open',{method:'POST',headers:{apikey:key,authorization:'Bearer '+key}}); if(!response.ok) throw new Error('setup_is_open returned '+response.status); console.log(await response.json()===true?'open':'closed');" --input-type=module)
 echo 'Mail: http://localhost:8025'
-echo 'One install serves one company until each company gets its own agent engine home: companies on the bundled agent engine share one agent memory, so an agent can repeat facts from one company to people in another.'
+echo 'Each company gets its own agent engine profile, with its own memory and sign-in; a company still on the shared default profile from an earlier install shares that memory, so an agent can repeat facts from one company to people in another until it moves.'
 # The last line: the one-time setup link while first run is open (issue #50), the sign-in address after.
 docker run --rm --env-file .env.install -v "$PWD/lib:/code:ro" "$node_image" node /code/install-env.mjs ready "$setup"
 exit 0
