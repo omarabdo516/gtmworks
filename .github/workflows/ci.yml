@@ -270,7 +270,9 @@ jobs:
           [[ $(tail -n 1 first-install.log) == "$link" ]] || fail 'the first install ends with the setup link'
           [[ $(grep -cF "$code" first-install.log) == 1 ]] || fail 'the setup code appears only in the setup link'
           if grep -qF '?code=' first-install.log; then fail 'no link carries the setup code in its query string'; fi
+          gateway_id=$(compose ps -q gateway) && [[ -n $gateway_id ]] || fail 'the first install runs the gateway'
           { sh scripts/install.sh || fail 'repeat install before setup'; } 2>&1 | tee repeat-before-setup.log
+          [[ $(compose ps -q gateway) == "$gateway_id" ]] || fail 'a repeat install before setup keeps the unchanged gateway container'
           [[ $(tail -n 1 repeat-before-setup.log) == "$link" ]] || fail 'a repeat install before setup prints the same setup link'
           # The local install on http://localhost:3000, straight to the gateway, while first run is still open: the emailed
           # sign-in link reaches the Company home, an invitation link returns to the app, and a sign-in request with a forged
@@ -293,6 +295,8 @@ jobs:
           { sh scripts/install.sh || fail 'repeat install'; } 2>&1 | tee repeat-after-setup.log
           [[ $(tail -n 1 repeat-after-setup.log) == 'gtmworks is ready: http://localhost:3000/sign-in' ]] || fail 'a repeat install after setup prints the sign-in address'
           if grep -qF "$code" repeat-after-setup.log; then fail 'a repeat install after setup prints no setup code'; fi
+          [[ $(compose ps -q gateway) == "$gateway_id" ]] || fail 'a repeat install after setup keeps the unchanged gateway container'
+          if grep -qF 'gateway-1 Recreate' repeat-before-setup.log repeat-after-setup.log; then fail 'a repeat install leaves the unchanged gateway running under the worker'; fi
           cmp .env.install.before .env.install || fail '.env.install unchanged after repeat install'
           db -c 'select name from gtmworks_install.schema_migrations order by name' > after || fail 'read migrations after repeat install'
           diff -u before after || fail 'migrations unchanged after repeat install'

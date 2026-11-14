@@ -108,6 +108,7 @@ function installDirectory(t,installer,env) {
  t.after(()=>rmSync(directory,{recursive:true,force:true}));
  for(const folder of ['scripts','bin','supabase/migrations']) mkdirSync(join(directory,folder),{recursive:true});
  copyFileSync(installer,join(directory,'scripts/install.sh'));
+ for(const file of ['install-nginx.conf','install-gateway-real-ip.sh']) copyFileSync(join('scripts',file),join(directory,'scripts',file));
  // Written without a final newline: an added line must still start a line of its own.
  writeFileSync(join(directory,'.env.install'),envText(env));
  writeFileSync(join(directory,'bin/docker'),dockerShim,{mode:0o755});

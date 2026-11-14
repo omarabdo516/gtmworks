@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, copyFileSync, rmSync } from 'node:fs';
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, copyFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -99,25 +99,37 @@ test('the first-run form shows only after the server confirms the code, asked in
 // question to the app with SETUP_STATE. Every command is recorded in COMMANDS.
 const dockerShim=`#!/bin/sh
 printf '%s\\n' "$*" >> "$COMMANDS"
+all="$*"
 case "$*" in
  *install-env.mjs*)
-  file=; previous=; all="$*"
+  file=; previous=
   for argument do [ "$previous" = --env-file ] && file=$argument; previous=$argument; done
   if [ -z "$file" ]; then exec node "$INSTALL_ENV" \${all##*install-env.mjs }; fi
   exec env -i PATH="$PATH" sh -c 'set -a; case "$1" in /*) . "$1";; *) . "./$1";; esac; set +a; shift; exec node "$@"' sh "$file" "$INSTALL_ENV" \${all##*install-env.mjs };;
  *'exec -T db psql'*) cat > /dev/null;;
  *'exec -T web node'*) echo "$SETUP_STATE";;
+ *' config --hash gateway') echo "gateway $(cat "$STATE/compose-hash" 2> /dev/null || echo one)";;
+ *'inspect -f'*'config-hash'*) cat "$STATE/gateway-label";;
+ *' start worker') touch "$STATE/worker";;
+ *' ps -q --status running '*) service=\${all##* }; if [ -f "$STATE/$service" ]; then echo "$service-1"; fi;;
+ *' stop '*) for argument in \${all##* stop }; do rm -f "$STATE/$argument"; done;;
+ *' up -d '*)
+  services=; previous=
+  for argument in \${all##* up -d }; do case "$previous,$argument" in --wait-timeout,*|*,-*) ;; *) services="$services $argument";; esac; previous=$argument; done
+  case " $services " in *' gateway '*) if [ -f "$STATE/fail-gateway" ]; then exit 1; fi;; esac
+  for service in \${services:-gateway web worker}; do touch "$STATE/$service"; done
+  case " \${services:-gateway} " in *' gateway '*) cat "$STATE/compose-hash" 2> /dev/null > "$STATE/gateway-label" || echo one > "$STATE/gateway-label";; esac;;
 esac
 `;
 function installDirectory(t) {
  const directory=mkdtempSync(join(tmpdir(),'gtmworks-setup-'));
  t.after(()=>rmSync(directory,{recursive:true,force:true}));
- for(const folder of ['scripts','bin','lib','supabase/migrations']) mkdirSync(join(directory,folder),{recursive:true});
- copyFileSync('scripts/install.sh',join(directory,'scripts/install.sh'));
+ for(const folder of ['scripts','bin','lib','supabase/migrations','state']) mkdirSync(join(directory,folder),{recursive:true});
+ for(const file of ['install.sh','install-nginx.conf','install-gateway-real-ip.sh']) copyFileSync(join('scripts',file),join(directory,'scripts',file));
  writeFileSync(join(directory,'bin/docker'),dockerShim,{mode:0o755});
  const commands=join(directory,'commands');
- const env={...process.env,PATH:`${directory}/bin:${process.env.PATH}`,INSTALL_ENV:join(process.cwd(),'lib/install-env.mjs'),COMMANDS:commands,GH_TOKEN:''};
- return {run:(state,...args)=>{ writeFileSync(commands,''); return spawnSync('sh',['scripts/install.sh',...args],{cwd:directory,env:{...env,SETUP_STATE:state},encoding:'utf8'}); },
+ const env={...process.env,PATH:`${directory}/bin:${process.env.PATH}`,INSTALL_ENV:join(process.cwd(),'lib/install-env.mjs'),COMMANDS:commands,GH_TOKEN:'',STATE:join(directory,'state')};
+ return {directory,run:(state,...args)=>{ writeFileSync(commands,''); return spawnSync('sh',['scripts/install.sh',...args],{cwd:directory,env:{...env,SETUP_STATE:state},encoding:'utf8'}); },
   commands:()=>readFileSync(commands,'utf8').trimEnd().split('\n'),
   code:()=>/^SETUP_CODE=([a-f0-9]{64})$/m.exec(readFileSync(join(directory,'.env.install'),'utf8'))?.[1]};
 }
@@ -155,6 +167,56 @@ test('install and update restart no service once the worker runs', t => {
   assert.ok(started>=0,commands.join('\n'));
   assert.deepEqual(commands.slice(started+1).filter(command=>/ (up|restart|stop|down)\b|--force-recreate/.test(command)),[],`${args.join(' ')||'install'}:\n${commands.join('\n')}`);
  }
+});
+
+// Issue #78: a repeat install or update leaves an unchanged gateway running (the worker reaches the database through
+// it); when its files or its compose definition changed, the worker is stopped before the gateway is recreated, and
+// the app start brings it back, so the worker never meets a gateway that went away under it.
+test('a repeat install or update recreates the gateway only when its inputs changed, never under a running worker', t => {
+ const install=installDirectory(t);
+ const gatewayChange=command=>/ up -d [^\n]* gateway$/.test(command);
+ const first=install.run('open');
+ assert.equal(first.status,0,first.stderr);
+ assert.equal(install.commands().filter(gatewayChange).length,1,'a first install starts the gateway');
+ for(const args of [[],['update','main']]) {
+  const result=install.run('closed',...args);
+  assert.equal(result.status,0,`${args.join(' ')||'install'}: ${result.stderr}`);
+  const commands=install.commands();
+  assert.deepEqual(commands.filter(command=>gatewayChange(command)||/ stop /.test(command)),[],`${args.join(' ')||'install'} with nothing changed:\n${commands.join('\n')}`);
+ }
+ const changes=[
+  ['the gateway config','scripts/install-nginx.conf'],
+  ['the real-ip script','scripts/install-gateway-real-ip.sh'],
+  ['the compose definition','state/compose-hash'],
+ ];
+ for(const [what,file] of changes) {
+  writeFileSync(join(install.directory,file),'changed\n',{flag:'a'});
+  const result=install.run('closed','update','main');
+  assert.equal(result.status,0,`${what}: ${result.stderr}`);
+  const commands=install.commands();
+  const stop=commands.findIndex(command=>/ stop worker$/.test(command)), recreate=commands.findIndex(gatewayChange);
+  assert.ok(recreate>=0,`${what} changed recreates the gateway:\n${commands.join('\n')}`);
+  assert.match(commands[recreate],/--force-recreate/,what);
+  assert.ok(stop>=0 && stop<recreate,`${what}: the running worker stops before the gateway is recreated:\n${commands.join('\n')}`);
+  assert.ok(commands.slice(recreate).some(command=>/ up -d [^\n]*worker$/.test(command)),`${what}: the worker starts again`);
+ }
+ // A gateway that is not running is started, and an unchanged one stays put after that.
+ rmSync(join(install.directory,'state/gateway'));
+ assert.equal(install.run('closed').status,0);
+ assert.equal(install.commands().filter(gatewayChange).length,1,'a stopped gateway is started');
+ // A gateway compose created from another definition (by hand, or by another installer) is recreated, not left for
+ // the app start to recreate under the running worker.
+ writeFileSync(join(install.directory,'state/gateway-label'),'other\n');
+ assert.equal(install.run('closed').status,0);
+ assert.ok(install.commands().some(gatewayChange),'a gateway running another definition is recreated');
+ // A run that stopped the worker and then failed starts the worker again before it exits non-zero.
+ writeFileSync(join(install.directory,'scripts/install-nginx.conf'),'changed again\n',{flag:'a'});
+ writeFileSync(join(install.directory,'state/fail-gateway'),'');
+ const failed=install.run('closed','update','main');
+ assert.notEqual(failed.status,0,'a failed gateway start fails the run');
+ const commands=install.commands();
+ assert.ok(commands.findIndex(command=>/ stop worker$/.test(command))<commands.findIndex(command=>/ start worker$/.test(command)),commands.join('\n'));
+ assert.ok(existsSync(join(install.directory,'state/worker')),'the worker runs again');
 });
 
 test('the installer asks the app whether setup is open, through the service role, before it prints the last line', () => {
