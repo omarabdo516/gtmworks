@@ -82,3 +82,13 @@ test('a Company rename names the old name and the new one, in both languages', (
  assert.equal(i18n('en').t('logActCompanyRenamed'), 'renamed the company');
  assert.equal(i18n('ar').t('logActCompanyRenamed'), 'غيّر اسم الشركة');
 });
+
+test('a day with no zone given follows the runtime zone, also after it changes', () => {
+ const before = process.env.TZ;
+ try {
+  process.env.TZ = 'UTC';
+  assert.equal(dayOf('2026-11-12T23:30:00Z'), '2026-11-12');
+  process.env.TZ = 'Africa/Cairo';
+  assert.equal(dayOf('2026-11-12T23:30:00Z'), '2026-11-13');
+ } finally { if (before === undefined) delete process.env.TZ; else process.env.TZ = before; }
+});
