@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(22);
+select plan(27);
 -- R&S Consultations (2) runs on its own profile; Aleem (3) is on the shared profile with a Contributor (5).
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 set local role service_role;
@@ -90,7 +90,7 @@ set local role authenticated;
 select set_config('request.jwt.claims','{"role":"authenticated"}',true);
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000005',true);
 select public.reserve_conversation_run('c4000000-0000-0000-0000-000000000005','10000000-0000-0000-0000-000000000003',(select agent from aleem),'c5000000-0000-0000-0000-000000000005','Hi again');
-select ok(public.send_conversation_message('c4000000-0000-0000-0000-000000000005','10000000-0000-0000-0000-000000000003',(select agent from aleem),'Hi again','c5000000-0000-0000-0000-000000000005','run_quiet'),'a run is recorded');
+select ok(public.send_conversation_message('c4000000-0000-0000-0000-000000000005','10000000-0000-0000-0000-000000000003',(select agent from aleem),'Hi again','c5000000-0000-0000-0000-000000000005','run_quiet',(select connection_id from aleem)),'a run is recorded');
 reset role;
 insert into public.conversation_messages(company_id,conversation_id,author,agent_id,author_name,body,run_id)
  values ('10000000-0000-0000-0000-000000000003','c4000000-0000-0000-0000-000000000005','agent',(select agent from aleem),'Lead','Hi','run_quiet');
@@ -111,8 +111,25 @@ select ok(exists(select 1 from public.conversation_run_reservations where compan
 set local role authenticated;
 select set_config('request.jwt.claims','{"role":"authenticated"}',true);
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000005',true);
-select throws_ok($$select public.send_conversation_message('c4000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000003',(select agent from aleem),'Hello','c5000000-0000-0000-0000-000000000003','run_late')$$,'55000','conversationSendAgain',
+select throws_ok($$select public.send_conversation_message('c4000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000003',(select agent from aleem),'Hello','c5000000-0000-0000-0000-000000000003','run_late',(select connection_id from aleem))$$,'55000','conversationSendAgain',
  'a late record of an abandoned reservation is refused after the move');
+reset role;
+-- The person sends again with the same send key: the abandoned reservation is replaced on Aleem's own Connection. The old
+-- request, whose run started on the shared Connection, still arrives late: it is refused; the new one is recorded.
+create temporary table moved as select connection_id from public.hermes_agents where id=(select agent from aleem);
+grant select on moved to authenticated;
+set local role authenticated;
+select set_config('request.jwt.claims','{"role":"authenticated"}',true);
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000005',true);
+select is(public.reserve_conversation_run('c4000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000003',(select agent from aleem),'c5000000-0000-0000-0000-000000000003','Hello'),(select connection_id from moved),
+ 'sending again reserves on the company''s own Connection');
+select throws_ok($$select public.send_conversation_message('c4000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000003',(select agent from aleem),'Hello','c5000000-0000-0000-0000-000000000003','run_old',(select connection_id from aleem))$$,'55000','conversationSendAgain',
+ 'the old request, started on the shared Connection, is refused after the re-reservation');
+select ok(public.send_conversation_message('c4000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000003',(select agent from aleem),'Hello','c5000000-0000-0000-0000-000000000003','run_new',(select connection_id from moved)),
+ 'the new request, started on the pinned Connection, is recorded');
+select ok(public.reserve_conversation_run('c4000000-0000-0000-0000-000000000008','10000000-0000-0000-0000-000000000003',(select agent from aleem),'c5000000-0000-0000-0000-000000000008','Hi') is not null,'another run is reserved');
+select throws_ok($$select public.send_conversation_message('c4000000-0000-0000-0000-000000000008','10000000-0000-0000-0000-000000000003',(select agent from aleem),'Hi','c5000000-0000-0000-0000-000000000008','run_unpinned')$$,'55000','conversationSendAgain',
+ 'a reserved run recorded without the Connection it started on is refused');
 reset role;
 
 -- 6. A reservation that can never be recorded (its Agent is gone) is abandoned at once, without Hermes.

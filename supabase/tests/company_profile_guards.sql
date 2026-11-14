@@ -45,7 +45,7 @@ set local role authenticated;
 select set_config('request.jwt.claims','{"role":"authenticated"}',true);
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000005',true);
 select is(public.reserve_conversation_run('c2000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000003',(select agent from aleem),'c3000000-0000-0000-0000-000000000003','Hello'),(select connection_id from aleem),'a retry keeps the same Connection');
-select ok(public.send_conversation_message('c2000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000003',(select agent from aleem),'Hello','c3000000-0000-0000-0000-000000000003','run_reserved'),'the started run is recorded');
+select ok(public.send_conversation_message('c2000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000003',(select agent from aleem),'Hello','c3000000-0000-0000-0000-000000000003','run_reserved',(select connection_id from aleem)),'the started run is recorded');
 reset role;
 select is((select count(*)::int from public.conversation_run_reservations),0,'recording ends the reservation');
 select set_config('request.jwt.claims','{"role":"service_role"}',true);

@@ -119,26 +119,28 @@ end $$;
 revoke all on function public.reserve_conversation_run(uuid,uuid,uuid,uuid,text) from public,anon,service_role;
 grant execute on function public.reserve_conversation_run(uuid,uuid,uuid,uuid,text) to authenticated;
 
--- Recording a reserved run checks its reservation is still active and still pins the Agent's Connection.
-create or replace function public.send_conversation_message(conversation uuid, c uuid, agent uuid, message text, message_key uuid, run text)
+-- Recording a run. The app passes the Connection it called Hermes on (the one its reservation pinned). Under the lock
+-- the move and the worker's abandon take, a reserved run is recorded only while its reservation is active and the
+-- reservation's Connection, the one the run started on and the Agent's Connection of now are the same; otherwise the
+-- run would be read on another profile, so the person sends again. A message with no reservation is the previous app
+-- version's (it calls the six-argument form below) and is recorded as before.
+create function public.send_conversation_message(conversation uuid, c uuid, agent uuid, message text, message_key uuid, run text, started_on uuid)
 returns boolean language plpgsql security definer set search_path='' as $$
-declare existing public.conversations; chosen public.hermes_agents; writer text; saved bigint;
+declare existing public.conversations; chosen public.hermes_agents; held public.conversation_run_reservations; writer text; saved bigint;
 begin
  if not public.conversation_can_write(c) then raise exception 'conversationNotAllowed' using errcode='42501'; end if;
+ perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
  select * into chosen from public.hermes_agents where id=agent and company_id=c;
  if not found then raise exception 'conversationNotFound' using errcode='P0002'; end if;
+ select * into held from public.conversation_run_reservations r where r.conversation_id=conversation and r.send_key=message_key;
+ if found and (held.abandoned_at is not null or started_on is null or held.connection_id<>started_on or held.connection_id<>chosen.connection_id) then
+  raise exception 'conversationSendAgain' using errcode='55000'; end if;
  insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values(conversation,c,auth.uid(),agent,chosen.name) on conflict (id) do nothing;
  select * into existing from public.conversations where id=conversation;
  if existing.person_id<>auth.uid() or existing.company_id<>c or existing.agent_id is distinct from agent then raise exception 'conversationNotFound' using errcode='P0002'; end if;
  -- A Member cannot register a run that belongs to another conversation: each copy would be closed again and its
  -- engine usage counted twice. The lock keeps two calls at once from both passing. A retry in the same conversation
  -- stays idempotent.
- -- A reserved run is recorded only while its reservation is active and pins the Agent's Connection of now: one the
- -- worker abandoned, or whose Agent moved since, would be read on another profile and end lost. The person sends again.
- -- A message with no reservation is the previous app version's and is recorded as before.
- if exists(select 1 from public.conversation_run_reservations r where r.conversation_id=conversation and r.send_key=message_key
-   and (r.abandoned_at is not null or r.connection_id is distinct from chosen.connection_id)) then
-  raise exception 'conversationSendAgain' using errcode='55000'; end if;
  perform pg_advisory_xact_lock(hashtextextended('conversation_run:'||coalesce(run,''),0));
  if exists(select 1 from public.conversation_messages where author='person' and run_id=run and conversation_id<>conversation) then raise exception 'conversationNotFound' using errcode='P0002'; end if;
  select name into writer from public.people where id=auth.uid();
@@ -148,18 +150,30 @@ begin
  return saved is not null;
 end;
 $$;
+revoke all on function public.send_conversation_message(uuid,uuid,uuid,text,uuid,text,uuid) from public,anon,service_role;
+grant execute on function public.send_conversation_message(uuid,uuid,uuid,text,uuid,text,uuid) to authenticated;
+
+-- The previous app version's form: no reservation, so no Connection to compare; a reserved run recorded through it is
+-- refused like any other whose Connection is not known.
+create or replace function public.send_conversation_message(conversation uuid, c uuid, agent uuid, message text, message_key uuid, run text)
+returns boolean language sql security definer set search_path='' as $$
+ select public.send_conversation_message(conversation,c,agent,message,message_key,run,null::uuid);
+$$;
 
 -- The worker's one update: reservations whose message was not recorded within ten minutes, or that can never be
 -- recorded (the Agent is gone, or the sender may no longer write in the company), are abandoned. Returns how many.
-create function public.abandon_conversation_reservations() returns integer language sql security definer set search_path='' as $$
- with abandoned as (
-  update public.conversation_run_reservations r set abandoned_at=now()
-  where r.abandoned_at is null and (r.created_at<now()-interval '10 minutes'
-   or not exists(select 1 from public.hermes_agents a where a.id=r.agent_id and a.company_id=r.company_id)
-   or not exists(select 1 from public.members m where m.company_id=r.company_id and m.person_id=r.person_id and m.removed_at is null and m.role<>'viewer'))
-  returning 1)
- select count(*)::integer from abandoned;
-$$;
+create function public.abandon_conversation_reservations() returns integer language plpgsql security definer set search_path='' as $$
+declare abandoned integer;
+begin
+ -- The lock of the move and of recording a run: a record never passes between its check and its insert.
+ perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
+ update public.conversation_run_reservations r set abandoned_at=now()
+ where r.abandoned_at is null and (r.created_at<now()-interval '10 minutes'
+  or not exists(select 1 from public.hermes_agents a where a.id=r.agent_id and a.company_id=r.company_id)
+  or not exists(select 1 from public.members m where m.company_id=r.company_id and m.person_id=r.person_id and m.removed_at is null and m.role<>'viewer'));
+ get diagnostics abandoned=row_count;
+ return abandoned;
+end $$;
 revoke all on function public.abandon_conversation_reservations() from public,anon,authenticated;
 grant execute on function public.abandon_conversation_reservations() to service_role;
 

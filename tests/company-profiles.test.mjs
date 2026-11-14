@@ -337,6 +337,8 @@ test('a run is reserved on its pinned Connection before Hermes is called, and re
  assert.deepEqual(sent,{conversation:'c'});
  // The reservation keeps the message for the record.
  assert.equal(db.args.reserve_conversation_run.message,'Hi');
+ // The record names the Connection the run started on, the one the reservation pinned.
+ assert.equal(db.args.send_conversation_message.started_on,'f9000000-0000-0000-0000-000000000001');
  assert.deepEqual(order,['conversation_agent','reserve_conversation_run','read hermes_connections f9000000-0000-0000-0000-000000000001',`start ${companyProfile(two)}`,'send_conversation_message']);
 });
 

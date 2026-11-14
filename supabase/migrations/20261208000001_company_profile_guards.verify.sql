@@ -8,7 +8,7 @@ select json_build_object(
   and not has_function_privilege('service_role','public.reserve_conversation_run(uuid,uuid,uuid,uuid,text)','execute'),
  'reserve_checks_level',position('company_profile_ready' in pg_get_functiondef('public.reserve_conversation_run(uuid,uuid,uuid,uuid,text)'::regprocedure))>0,
  'move_waits',position('conversation_run_reservations' in pg_get_functiondef('public.move_company_profile(uuid,text,text,text,text[])'::regprocedure))>0,
- 'record_ends_reservation',position('conversation_run_reservations' in pg_get_functiondef('public.send_conversation_message(uuid,uuid,uuid,text,uuid,text)'::regprocedure))>0,
+ 'record_ends_reservation',position('conversation_run_reservations' in pg_get_functiondef('public.send_conversation_message(uuid,uuid,uuid,text,uuid,text,uuid)'::regprocedure))>0,
  'reservations_closed',(select relrowsecurity from pg_class where oid='public.conversation_run_reservations'::regclass)
   and not has_table_privilege('authenticated','public.conversation_run_reservations','select') and not has_table_privilege('service_role','public.conversation_run_reservations','insert')
 );
