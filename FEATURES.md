@@ -30,21 +30,21 @@ saved in the session's shots folder outside the repository.
 
 ## Issues
 
-- #41 Sign in with email and password (merged branch) — passes: false
-- #8 The new shell: sidebar and Agent Conversation — passes: false
-- #7 Remove the Agency and the reviewer Role (merged branch) — passes: false
+- #41 Sign in with email and password (merged branch) — passes: true — proof: CI run 43568240329 on 71de149: static, integration (password, first-run, rate-limit specs) and install (proxy rate-limit check) all success
+- #8 The new shell: sidebar and Agent Conversation — passes: true — proof: CI run 43568240329 on 71de149 success (conversations.spec shell tests, frame.spec, visual baselines refreshed in bbe5b1d); shots home/agent-chat 1440+390
+- #7 Remove the Agency and the reviewer Role (merged branch) — passes: true — proof: CI run 43568240329 on 71de149 success (no_agency.sql, remove-agency migration test, no-agency-strings unit test)
 - #49 Every release publishes a ready, tested image (merged branch) — passes: false
-- #34 The board takes the six columns of the approved design — passes: false
-- #16 "Waiting on you" is one list — passes: false
+- #34 The board takes the six columns of the approved design — passes: true — proof: CI run 43568240329 on 71de149 success (board.spec, board_columns.sql, app.spec board tests); shots board 1440+390
+- #16 "Waiting on you" is one list — passes: true — proof: CI run 43568240329 on 71de149 success (waiting_list.sql, board.spec waiting tests incl. reply through the composer); shots waiting 1440+390
 - #35 The numbers page — passes: false
-- #11 One log for the Company, with an Activity log page — passes: false
+- #11 One log for the Company, with an Activity log page — passes: true — proof: CI run 43568240329 on 71de149 success (company_log.sql, company-log-migration, activity-log.spec incl. paging and unlisted filter); shots log 1440+390
 - #51 Install gtmworks with one line — passes: false
 - #52 `gtmworks update` moves from release to release — passes: false
 - #2 Each company gets its own Hermes profile — passes: false
 - #3 A company connects its own ChatGPT or Claude subscription — passes: false
 - #47 Flaky: activity times hydrate without errors — passes: false
-- #48 Flaky: drawer targets are at least 44px and do not overlap — passes: false
-- #56 Flaky: prepared navigation and motion inventory — passes: false
+- #48 Flaky: drawer targets are at least 44px and do not overlap — passes: true — proof: navigation.spec drawer test plus the many-chats drawer test and tap-overlaps fixtures; CI run 43568240329 on 71de149 success (one green run does not prove a flaky test gone)
+- #56 Flaky: prepared navigation and motion inventory — passes: true — proof: current sidebar entry no longer fades and the log opens on 50 rows (63 ms vs 251 ms, CI=true local); CI run 43568240329 on 71de149 success (one green run does not prove a flaky test gone)
 
 ## Team-work rules (Omar, 2026-11-13)
 
