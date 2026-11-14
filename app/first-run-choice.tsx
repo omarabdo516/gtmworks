@@ -37,8 +37,8 @@ export default function FirstRunChoice({slug,company,companyName,personName,lead
     <p className="fr__sub">{t('firstRunQuestionSub',name)}</p>
    </div>
    <div className="fr__choices" role="radiogroup" aria-labelledby="fr-title">{choices.map(([value,title,hint])=><label key={value} className="cr-kind fr-choice">
-    <input className="fr-choice__input" type="radio" name="mode" value={value} checked={mode===value} onChange={()=>setMode(value)} aria-describedby={`fr-mode-${value}-d`}/>
-    {art(value)}<span className="cr-kind__t">{title}</span><span className="cr-kind__d" id={`fr-mode-${value}-d`}>{hint}</span>
+    <input className="fr-choice__input" type="radio" name="mode" value={value} checked={mode===value} onChange={()=>setMode(value)} aria-labelledby={`fr-mode-${value}-t`} aria-describedby={`fr-mode-${value}-d`}/>
+    {art(value)}<span className="cr-kind__t" id={`fr-mode-${value}-t`}>{title}</span><span className="cr-kind__d" id={`fr-mode-${value}-d`}>{hint}</span>
     {mode===value&&<span className="cr-kind__check" aria-hidden="true"><ShellIcon name="check"/></span>}
    </label>)}</div>
    {error&&<p className="fr__error" role="alert">{error}</p>}
