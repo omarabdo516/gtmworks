@@ -19,7 +19,9 @@ test('the form and the database use the same secret patterns', () => {
 test('keys, tokens and passwords look like secrets; ordinary preferences do not', () => {
   for (const secret of ['sk-ant-api03-abcdefghijklmnopqrstuvwxyz', 'gtmw_run_abcdefghijklmnop1234', 'ghp_abcdefghijklmnopqrstuvwxyz0123456789', 'AKIAABCDEFGHIJKLMNOP', 'Password = hunter22', 'my api key: 12345678', 'Bearer abcdefghijklmnopqrstuvwxyz.123', 'الباسورد: 12345678', '-----BEGIN RSA PRIVATE KEY-----',
    // Quoted names (JSON, YAML, .env) and credentials inside an address.
-   '{"password":"hunter22"}', "{'api_key': 'abcd1234'}", 'password: "hunter22"', 'DB_PASSWORD=hunter22', 'client_secret = "s3cr3t-value"', 'postgresql://alice:hunter22@localhost/db', 'https://bob:pa55word@example.com/path'])
+   '{"password":"hunter22"}', "{'api_key': 'abcd1234'}", 'password: "hunter22"', 'DB_PASSWORD=hunter22', 'client_secret = "s3cr3t-value"', 'postgresql://alice:hunter22@localhost/db', 'https://bob:pa55word@example.com/path',
+   // Quoted values with spaces, and every form the first detector refused.
+   'password: "abc def 123"', "token = 'a b c d'", 'password: "abc"', 'secret=abcd', 'pwd: x"yz'])
     assert.equal(secretLike(secret), true, secret);
   for (const note of ['Answer in short points, in Egyptian Arabic.', 'رد في نقط قصيرة، واقترح اختيارين قبل ما تكتب.', 'I never share my password with agents.', 'Use the brand token colours.'])
     assert.equal(secretLike(note), false, note);
