@@ -247,3 +247,6 @@ test('Waiting on you lists an Agent question and an item of a new kind, each ope
   await fake.close();
  }
 });
+
+// Deliberate failure for #74's acceptance: check must turn red when the second integration job fails. Reverted next.
+test('deliberate failure in the second integration job (#74)', () => { expect(1).toBe(2); });
