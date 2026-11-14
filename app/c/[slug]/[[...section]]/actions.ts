@@ -7,11 +7,14 @@ import { supabase } from '@/lib/supabase';
 import { createClient } from '@supabase/supabase-js';
 import { supabaseConfig } from '@/lib/supabase-config';
 import { appUrl } from '@/lib/app-origin.mjs';
+import { actionAllowed } from '@/lib/route-permissions.mjs';
 export const changeMember=withActionLog('changeMember',async function changeMember(form: FormData) { const {t}=await getI18n();
  const db=await supabase(); const slug=String(form.get('slug')); const company=String(form.get('company')); const person=String(form.get('person')); const op=String(form.get('op'));
  const values={role:String(form.get('role')),grant_publishing:form.has('publishing'),grant_money_figures:form.has('money'),grant_customer_data:form.has('customer')};
  let error;
- if(op==='invite') {
+ // The action's permission (lib/route-permissions.mjs), with the role read now; the database checks each change again.
+ if(!await actionAllowed(db,'changeMember',company,op)) error={code:'42501',message:'not permitted'};
+ else if(op==='invite') {
   const email=String(form.get('email')).trim().toLowerCase();
   ({error}=await db.from('member_invitations').upsert({company_id:company,email,claimed_at:null,...values},{onConflict:'company_id,email'}));
   if(!error) {

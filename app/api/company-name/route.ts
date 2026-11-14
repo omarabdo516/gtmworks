@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
+import { routeAllowed } from '@/lib/route-permissions.mjs';
 
 // The Owner renames the Company from Settings (#26). The request runs as the signed-in person, and the database
 // function checks that they are an active Owner of that Company (rename_company), so another Role is refused here
@@ -15,6 +16,7 @@ export async function POST(request:NextRequest) {
   const raw=await request.text(); if(raw.length>1000) return reply({error:'companyNameInvalid'},400);
   const body=JSON.parse(raw);
   if(typeof body.company!=='string'||!uuid.test(body.company)||typeof body.name!=='string') return reply({error:'companyNameInvalid'},400);
+  if(!await routeAllowed(db,'app/api/company-name/route.ts','POST',body.company,user.id)) return reply({error:'companyRenameNotAllowed'},403);
   const {data:name,error}=await db.rpc('rename_company',{c:body.company,company_name:body.name});
   if(error) return error.code==='42501'?reply({error:'companyRenameNotAllowed'},403):reply({error:'companyNameInvalid'},400);
   return reply({name});

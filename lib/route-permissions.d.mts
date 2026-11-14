@@ -1,0 +1,12 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
+export type Access = 'viewer' | 'contributor' | 'manager' | 'owner' | 'public' | 'signedIn' | 'setupCode' | 'agentKey';
+type Entry = Access | Record<string, Access>;
+export const roleOrder: string[];
+export const outsideCompany: string[];
+export const routePermissions: Record<string, Record<string, Access>>;
+export const actionPermissions: Record<string, Entry>;
+export function requiredFor(table: Record<string, Entry>, key: string, part?: string): Access;
+type Db = SupabaseClient;
+export function permitted(db: Db, required: Access, company?: unknown, person?: string): Promise<boolean>;
+export function routeAllowed(db: Db, file: string, method: string, company?: unknown, person?: string): Promise<boolean>;
+export function actionAllowed(db: Db, name: string, company?: unknown, operation?: string, person?: string): Promise<boolean>;

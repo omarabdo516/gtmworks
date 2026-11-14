@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { supabaseConfig } from '@/lib/supabase-config';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
+import { routeAllowed } from '@/lib/route-permissions.mjs';
 import { changeCompanySignIn } from '@/lib/company-sign-in.mjs';
 
 // The Company's model sign-in (#3): an Owner starts a ChatGPT sign-in in the Company's own Hermes profile, follows it,
@@ -18,6 +19,7 @@ export async function POST(request:NextRequest) {
   const raw=await request.text(); if(raw.length>1000) return reply({error:'signInInvalid'},400);
   const body=JSON.parse(raw);
   if(typeof body?.company!=='string'||!uuid.test(body.company)) return reply({error:'signInInvalid'},400);
+  if(!await routeAllowed(db,'app/api/company-sign-in/route.ts','POST',body.company,user.id)) return reply({error:'signInNotAllowed'},403);
   const service=createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false}});
   const result=await changeCompanySignIn(db,service,{company:body.company,provider:body.provider,intent:body.intent,session:body.session,encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY});
   return reply(result.body,result.status);

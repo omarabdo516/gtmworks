@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
+import { routeAllowed } from '@/lib/route-permissions.mjs';
 
 // The Owner sets the Company's Agent level (1 read and draft, 2 act on approval, 3 scheduled work). The request runs
 // as the signed-in person and the database function checks that they are an active Owner of that Company
@@ -16,6 +17,7 @@ export async function POST(request:NextRequest) {
   const raw=await request.text(); if(raw.length>1000) return reply({error:'agentLevelInvalid'},400);
   const body=JSON.parse(raw);
   if(typeof body?.company!=='string'||!uuid.test(body.company)||!Number.isInteger(body.level)) return reply({error:'agentLevelInvalid'},400);
+  if(!await routeAllowed(db,'app/api/agent-level/route.ts','POST',body.company,user.id)) return reply({error:'agentLevelNotAllowed'},403);
   const {data:level,error}=await db.rpc('set_agent_level',{c:body.company,level:body.level});
   if(error) return error.code==='42501'?reply({error:'agentLevelNotAllowed'},403):reply({error:'agentLevelInvalid'},400);
   return reply({level});

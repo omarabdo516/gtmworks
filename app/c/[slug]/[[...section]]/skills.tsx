@@ -10,7 +10,7 @@ type Skill={id:string,slug:string,source:string,skill_versions:Version[]};
 type Agent={agent_id:string,role:string};
 const problems:Record<string,string>={install_script:'skillProblemInstallScript',too_large:'skillProblemTooLarge',no_frontmatter:'skillProblemNoFrontmatter',bad_name:'skillProblemBadName',no_description:'skillProblemNoDescription',no_permissions:'skillProblemNoPermissions',unknown_permission:'skillProblemUnknownPermission'};
 const sources:Record<string,string>={library:'skillSourceLibrary',upload:'skillSourceUpload',team:'skillSourceTeam'};
-// A server component: it ships no client JavaScript, which the route size budget counts. Its own strings live in skills.en.json and
+// A server component: it ships no client JavaScript, which keeps page weight down (#55). Its own strings live in skills.en.json and
 // skills.ar.json (checked like the main catalogues) because the main ones are bundled for the browser and main has no budget left.
 export default async function Skills({company,slug,skills,enabled,agents,refused,failed}:{company:string,slug:string,skills:Skill[],enabled:{skill_id:string,agent_id:string}[],agents:Agent[],refused?:string,failed?:boolean}) { const {t,language}=await getI18n(); const text:Record<string,string>=language==='ar'?ar:en; const s=(key:string,...values:unknown[])=>text[key].replace(/\{(\d+)\}/g,(_,index)=>String(values[Number(index)] ?? ''));
  const hidden=<><input type="hidden" name="company" value={company}/><input type="hidden" name="slug" value={slug}/></>;

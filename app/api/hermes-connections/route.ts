@@ -7,6 +7,7 @@ import { savedConnectionKey } from '@/lib/connection-key.mjs';
 import { isHermesAddressAllowed, testHermes } from '@/lib/hermes.mjs';
 import { logActionFailure } from '@/lib/diagnostics.mjs';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
+import { routeAllowed } from '@/lib/route-permissions.mjs';
 
 const columns='id,company_id,owner_id,address,profile,state,version,features,unreachable_since';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -28,6 +29,8 @@ async function connectionRequest(request:NextRequest) {
  if(readError) return failure(500);
  const connection=connections?.find(connection=>connection.id===id);
  if(id&&!connection) return failure(404);
+ // The route's permission (lib/route-permissions.mjs), read now; a Connection the person cannot see stays not found.
+ if(!await routeAllowed(database,'app/api/hermes-connections/route.ts',request.method,company,user.id)) return failure(403);
  if(!writing) return reply(id?{connection}:{connections});
  // Connections are the Company's Owners' to manage (ADR 0012); RLS refuses anyone else as well.
  const {data:membership}=await database.from('members').select('role').eq('company_id',company).eq('person_id',user.id).is('removed_at',null).maybeSingle();

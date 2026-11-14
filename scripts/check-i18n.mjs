@@ -53,7 +53,7 @@ export function checkI18n() {
  const en=JSON.parse(readFileSync('lib/messages/en.json','utf8')),ar=JSON.parse(readFileSync('lib/messages/ar.json','utf8'));
  const problems=catalogueProblems(en,ar);
  // Strings used only by server components live in their own pair so the browser bundle does not carry them.
- for(const name of ['skills','lessons']) problems.push(...catalogueProblems(JSON.parse(readFileSync(`lib/messages/${name}.en.json`,'utf8')),JSON.parse(readFileSync(`lib/messages/${name}.ar.json`,'utf8'))).map(problem=>`${name}: ${problem}`));
+ for(const name of ['skills','lessons','member-note','conversation']) problems.push(...catalogueProblems(JSON.parse(readFileSync(`lib/messages/${name}.en.json`,'utf8')),JSON.parse(readFileSync(`lib/messages/${name}.ar.json`,'utf8'))).map(problem=>`${name}: ${problem}`));
  for(const file of [...files('app'),...files('lib'),...files('components')].filter(file=>/\.(tsx?|mjs)$/.test(file)&&!file.endsWith('.d.mts'))) problems.push(...literalProblems(file,readFileSync(file,'utf8')));
  return problems;
 }

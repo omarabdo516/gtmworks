@@ -1,0 +1,11 @@
+{
+  "memberNote": "Your note for the agents",
+  "memberNoteD": "How you like to work, in your own words. Only you can see it here, and it goes only with your own chats. The agent may still remember a preference for the whole team, so keep anything private out of it.",
+  "memberNotePlaceholder": "For example: answer in short points, and suggest two options before you write.",
+  "memberNoteHint": "Up to {0} characters. No passwords, keys or tokens.",
+  "memberNoteSave": "Save note",
+  "memberNoteSaved": "Note saved.",
+  "memberNoteTooLong": "The note is longer than {0} characters.",
+  "memberNoteSecret": "This looks like a password, key or token. Keep secrets out of the note.",
+  "memberNoteFailed": "Couldn’t save the note. Try again."
+}

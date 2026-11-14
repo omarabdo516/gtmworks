@@ -257,6 +257,12 @@
 .gw .note { align-self: center; max-width: 560px; margin: 0; text-align: center; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-2); padding: 0 12px; }
 .gw .note[role="alert"], .gw .note[data-outcome="lost"] { color: var(--gw-danger-text); }
 .gw .thinking { padding: 2px 4px; font-size: var(--gw-fs-base); color: var(--gw-text-2); }
+/* A turn waiting for the current reply (also the line under a message to a person), and the stop square
+   (design-reference: .queued, .is-queued, .is-stop) */
+.gw .queued { display: inline-flex; align-items: center; gap: 4px; padding-inline-end: 4px; font-size: var(--gw-fs-xs); color: var(--gw-text-3); }
+.gw .queued .gw-icon { width: 13px; height: 13px; }
+.gw .turn--user.is-queued .bubble--user { opacity: .72; }
+.gw .composer__send.is-stop .gw-icon { width: 16px; height: 16px; }
 .gw .empty-chat { margin: auto 0; display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; padding: 40px 0; }
 .gw .empty-chat__faces { display: flex; gap: 8px; margin-bottom: 8px; }
 .gw .empty-chat h2 { margin: 0; font-size: var(--gw-fs-xl); line-height: 1.4; font-weight: 600; letter-spacing: normal; }

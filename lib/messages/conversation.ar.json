@@ -1,0 +1,7 @@
+{
+  "conversationWorkingFor": "{0} يكتب الرد لـ {1}…",
+  "conversationQueued": "هيقراها بعد الرد اللي شغال عليه",
+  "conversationQueuedFailed": "متبعتتش: محرك الوكلاء مرضيش يبدأها. ابعتها تاني.",
+  "conversationAddressed": "لـ {0} · الوكيل متسألش",
+  "conversationStop": "وقّف {0}"
+}

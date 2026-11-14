@@ -105,6 +105,10 @@
 .gw .sov .set-input[readonly] { cursor: default; }
 .gw .sov .set-hint { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); }
 .gw .sov .set-err { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-danger-text); }
+.gw .sov .set-textarea { height: auto; min-height: 136px; padding: var(--s2) 10px; line-height: 1.7; resize: vertical; }
+.gw .sov .set-hint-row { display: flex; align-items: flex-start; gap: var(--s2); }
+.gw .sov .set-count { flex: none; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); white-space: nowrap; }
+.gw .sov .set-actions { display: flex; justify-content: flex-end; }
 .gw .sov .segmented { display: flex; justify-content: center; gap: 2px; padding: 0; }
 .gw .sov .segmented :is(button, a) { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 4px 10px; border-radius: var(--gw-r-full); font-size: var(--gw-fs-sm); line-height: 18px; color: var(--gw-text-2); --od-icon-size: 16px; }
 .gw .sov .segmented :is([aria-selected="true"], [aria-pressed="true"]) { background: var(--gw-bg-tertiary); color: var(--gw-text-1); }

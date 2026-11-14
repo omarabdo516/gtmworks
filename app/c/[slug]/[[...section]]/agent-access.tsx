@@ -4,7 +4,7 @@ import { AgentRoleFace } from '@/components/agent-role-face';
 import { changeAgentAccess } from './agent-actions';
 type Agent={id:string,role:string};
 type Grant={agent_id:string,revoked_at:string|null};
-// A server component: it ships no client JavaScript, which the route size budget counts.
+// A server component: it ships no client JavaScript, which keeps page weight down (#55).
 export default async function AgentAccess({company,slug,agents,grants,message}:{company:string,slug:string,agents:Agent[],grants:Grant[],message?:string}) { const {t}=await getI18n();
  const order=(agent:Agent)=>roleAgents.findIndex(item=>item.key===agent.role);
  return <section className="panel agents-panel">
