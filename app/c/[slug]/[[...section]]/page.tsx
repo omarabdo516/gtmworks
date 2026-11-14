@@ -23,7 +23,11 @@ import { Approvals, ApprovalSettings } from './approvals';
 import { type WorkActivity, type WorkMember } from '@/lib/work-activity';
 
 export default async function CompanyPage({params,searchParams}:{params:Promise<{slug:string,section?:string[]}>,searchParams:Promise<{message?:string,refused?:string,failed?:string,section?:string,agent?:string,period?:string}>}) { const {t}=await getI18n();
- const {slug,section:parts}=await params; const cardId=parts?.[0]==='work' && parts?.[1]==='board' && parts?.[2] ? Number(parts[2]) : undefined; const section=cardId?'work/board':parts?.join('/') || 'home'; const db=await supabase(); const {data:{user}}=await db.auth.getUser(); if(!user) redirect(`/sign-in?next=${encodeURIComponent(`/c/${slug}/${parts?.join('/') || 'home'}`)}`);
+ const {slug,section:parts}=await params; const cardId=parts?.[0]==='work' && parts?.[1]==='board' && parts?.[2] ? Number(parts[2]) : undefined; const section=cardId?'work/board':parts?.join('/') || 'home'; const db=await supabase(); const {data:{user}}=await db.auth.getUser();
+ // Signing in returns to the page asked for, with the settings overlay's own state (section, agent, period) kept, so a
+ // link to Settings, Subscription and models opens there; other query values (one-time notices) are not carried.
+ if(!user) { const asked=await searchParams; const kept=new URLSearchParams(Object.entries({section:asked.section,agent:asked.agent,period:asked.period}).filter((entry):entry is [string,string]=>typeof entry[1]==='string')).toString();
+  redirect(`/sign-in?next=${encodeURIComponent(`/c/${slug}/${parts?.join('/') || 'home'}${kept?`?${kept}`:''}`)}`); }
  const {data:companies}=await db.from('companies').select('id,slug,name').order('name'); const company=companies?.find(c=>c.slug===slug); if(!company || !sections[section]) notFound(); const title=t(sections[section]);
  const {data:person}=await db.from('people').select('name').eq('id',user.id).single();
  const {data:membership}=await db.from('members').select('role').eq('company_id',company.id).eq('person_id',user.id).is('removed_at',null).maybeSingle();
