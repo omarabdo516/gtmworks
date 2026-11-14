@@ -1,4 +1,5 @@
 import { test, expect, type Page, type TestInfo } from '@playwright/test';
+import { chooseLanguageInSettings } from './choose-language';
 import { mkdir, readdir, readFile } from 'node:fs/promises';
 import { createHmac } from 'node:crypto';
 import { signIn, chooseCompany, openNavigation } from './sign-in';
@@ -55,16 +56,22 @@ for(const width of [1440,390]) test(`Paperclip Inter and Arabic-only Vazirmatn l
  await page.setViewportSize({width,height:900});
  await signIn(page,'manager@example.com','/c/rs-learning/home');
  for(const language of ['en','ar']) {
-  await page.goto('/c/rs-learning/settings');
-  await page.locator('select[name=language]').selectOption(language);
-  await page.locator('form').filter({has:page.locator('select[name=language]')}).getByRole('button').click();
+  await chooseLanguageInSettings(page,language);
   await expect(page.locator('html')).toHaveAttribute('lang',language);
   for(const path of ['home','work/board','work/board/1','work/calendar','work/list','approvals','agents','settings']) {
    await page.goto(`/c/rs-learning/${path}`);
    await page.evaluate(()=>document.fonts.ready);
    const family=await page.locator('body').evaluate(el=>getComputedStyle(el).fontFamily.split(',')[0].trim().replaceAll(/["']/g,''));
    expect(family).toMatch(language==='en'?/^InterVariable$/:/^(?:__)?Vazirmatn(?:_|$)/);
-   expect(await page.evaluate(font=>Array.from(document.fonts).some(face=>face.family.replaceAll(/["']/g,'')===font&&face.status==='loaded'),family)).toBe(true);
+   // Every face that draws text on the page has loaded. The board views (ADR 0013) draw every word in the approved
+   // reference's IBM Plex Sans Arabic, so the body face draws nothing there and is rightly never fetched; every other page
+   // draws its own text in the body face.
+   const drawn=await page.evaluate(()=>[...new Set([...document.querySelectorAll('body *')].filter(el=>el.getClientRects().length&&[...el.childNodes].some(node=>node.nodeType===Node.TEXT_NODE&&node.textContent!.trim())).map(el=>getComputedStyle(el).fontFamily.split(',')[0].trim().replaceAll(/["']/g,'')))]);
+   const plex=drawn.find(font=>/^(?:__)?IBM[_ ]Plex[_ ]Sans[_ ]Arabic(?:_|$)/.test(font));
+   expect(plex,'the shell draws in IBM Plex Sans Arabic').toBeTruthy();
+   expect(drawn.filter(font=>font!==family&&font!==plex),'no other face draws text').toEqual([]);
+   if(!['work/board','work/calendar','work/list','approvals'].includes(path)) expect(drawn).toContain(family);
+   for(const font of drawn) expect(await page.evaluate(font=>Array.from(document.fonts).some(face=>face.family.replaceAll(/["']/g,'')===font&&face.status==='loaded'),font),`${font} loaded`).toBe(true);
    for(const el of await page.locator(':is(.content h1,.content h2,.content h3,.modal h2):not(.board-view *)').all()) expect(await el.evaluate(el=>getComputedStyle(el).fontFamily.split(',')[0].trim().replaceAll(/["']/g,''))).toBe(family);
    // The shell and the board (ADR 0013) take the approved reference's face (IBM Plex Sans Arabic) in both languages.
    if(width===1440) for(const heading of await page.locator('.sidebar .sb-label, .board-view h1, .board-view h2').all()) expect(await heading.evaluate(el=>getComputedStyle(el).fontFamily.split(',')[0].trim().replaceAll(/["']/g,''))).toMatch(/^(?:__)?IBM[_ ]Plex[_ ]Sans[_ ]Arabic(?:_|$)/);
@@ -80,9 +87,7 @@ for(const width of [1440,390]) test(`Paperclip Inter and Arabic-only Vazirmatn l
    expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(width);
   }
  }
- await page.goto('/c/rs-learning/settings');
- await page.locator('select[name=language]').selectOption('en');
- await page.locator('form').filter({has:page.locator('select[name=language]')}).getByRole('button').click();
+ await chooseLanguageInSettings(page,'en');
  await expect(page.locator('html')).toHaveAttribute('lang','en');
  expect(fontRequests.length).toBeGreaterThan(0);
  for(const request of fontRequests) {
@@ -136,9 +141,7 @@ for(const width of [1440,390]) test(`card creation fits the viewport and detail 
  await page.setViewportSize({width,height:900});
  await signIn(page,'manager@example.com','/c/rs-learning/work/board/1');
  for(const language of ['en','ar']) {
-  await page.goto('/c/rs-learning/settings');
-  await page.locator('select[name=language]').selectOption(language);
-  await page.locator('form').filter({has:page.locator('select[name=language]')}).getByRole('button').click();
+  await chooseLanguageInSettings(page,language);
   await expect(page.locator('html')).toHaveAttribute('lang',language);
   await page.goto('/c/rs-learning/work/new');
   const dialog=page.getByRole('dialog');
@@ -179,9 +182,7 @@ for(const width of [1440,390]) test(`card creation fits the viewport and detail 
   await close.click();
   await expect(page).toHaveURL(/\/work\/board$/);
  }
- await page.goto('/c/rs-learning/settings');
- await page.locator('select[name=language]').selectOption('en');
- await page.locator('form').filter({has:page.locator('select[name=language]')}).getByRole('button').click();
+ await chooseLanguageInSettings(page,'en');
  await expect(page.locator('html')).toHaveAttribute('lang','en');
 });
 
@@ -293,7 +294,11 @@ test('board moves, date filtering, creative versions and shared card views',asyn
  await expect(page.locator('.card-stage-line')).toContainText('كتابة');
  await page.goto('/c/rs-learning/work/board');
  await expect(page.locator('.col[data-column="progress"] .column[data-stage-name="كتابة"] .kcard[data-card-id="1"]')).toBeVisible();
- // The month filter lives with the dated views (list and calendar).
+ await page.getByLabel("Month").fill('2000-01');
+ await expect(page.locator('.kcard[data-card-id="1"]')).toHaveCount(0);
+ await page.getByLabel("Month").fill('');
+ await expect(page.locator('.kcard[data-card-id="1"]')).toBeVisible();
+ // The list view filters by month too.
  await page.goto('/c/rs-learning/work/list');
  const listed=page.locator('.table tbody tr').filter({has:page.locator('a[href="/c/rs-learning/work/board/1"]')});
  await expect(listed).toHaveCount(1);
@@ -364,13 +369,21 @@ test.describe('touch board',()=>{
    const before=await cardStages();
    // A plain swipe starting on a card scrolls the board and moves no card.
    const scrolled=await scrollLeft();
-   const swipeBox=(await card.boundingBox())!,swipeX=swipeBox.x+swipeBox.width/2,swipeY=swipeBox.y+12;
+   // Ideas now follows "Waiting on you" (ADR 0013), so on a phone the card starts partly off screen: the finger lands on
+   // the middle of the part in view.
+   const swipeBox=(await card.boundingBox())!,screenWidth=page.viewportSize()!.width;
+   const swipeStart=Math.max(swipeBox.x,0),swipeEnd=Math.min(swipeBox.x+swipeBox.width,screenWidth);
+   expect(swipeEnd-swipeStart,'part of the card is in view to swipe on').toBeGreaterThanOrEqual(44);
+   const swipeX=(swipeStart+swipeEnd)/2,swipeY=swipeBox.y+12;
    await touch('touchStart',swipeX,swipeY);
    for(let step=1;step<=12;step++) { await touch('touchMove',swipeX-dir*step*14,swipeY); await page.waitForTimeout(16); }
    await touch('touchEnd');
    await expect.poll(scrollLeft,{message:'the board scrolled under the swipe'}).toBeGreaterThan(scrolled);
    await expect(page.getByText('Moving card…')).toHaveCount(0);
    expect(await cardStages()).toEqual(before);
+   // A person presses the next card once the board has stopped gliding from the swipe: Chrome makes a touch that lands
+   // during the glide uncancelable, so that press only stops the board and can pick nothing up.
+   await expect.poll(async()=>{const start=await scrollLeft(); await page.waitForTimeout(200); return start===await scrollLeft();},{message:'the board stops gliding'}).toBe(true);
    // Scroll the board so most of the card's list is off screen at its start side and the next list is beside it, then hold the card and carry it across.
    await page.evaluate(([direction,stage])=>{document.querySelector('.card[data-card-id="1"]')!.scrollIntoView({block:'center'});const board=document.querySelector('.board')!,box=board.querySelector(`.col[data-column="${stage}"]`)!.getBoundingClientRect(),area=board.getBoundingClientRect();board.scrollLeft+=direction>0?box.left-area.left+box.width*0.6:-(area.right-box.right+box.width*0.6);},[dir,startColumn] as [number,string]);
    await page.evaluate(()=>{const w=window as unknown as {pointerCancels:number};w.pointerCancels=0;window.addEventListener('pointercancel',()=>{w.pointerCancels++;},true);});
@@ -401,9 +414,7 @@ test('card close control is in the title row with a 44px target',async({page})=>
  await signIn(page,'manager@example.com','/c/rs-learning/work/board/1');
  try {
   for(const language of ['en','ar']) {
-   await page.goto('/c/rs-learning/settings');
-   await page.locator('select[name=language]').selectOption(language);
-   await page.locator('form').filter({has:page.locator('select[name=language]')}).getByRole('button').click();
+   await chooseLanguageInSettings(page,language);
    await expect(page.locator('html')).toHaveAttribute('lang',language);
    for(const width of [390,1440]) {
     await page.setViewportSize({width,height:900});
@@ -424,9 +435,7 @@ test('card close control is in the title row with a 44px target',async({page})=>
   }
  } finally {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto('/c/rs-learning/settings');
-  await page.locator('select[name=language]').selectOption('en');
-  await page.locator('form').filter({ has: page.locator('select[name=language]') }).getByRole('button').click();
+  await chooseLanguageInSettings(page,'en');
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
  }
 });
@@ -530,9 +539,7 @@ test('mobile card shows workflow controls first', async ({ page }, info) => {
  try {
   for (const language of ['en', 'ar']) {
    await page.setViewportSize({ width: 1440, height: 900 });
-   await page.goto('/c/rs-learning/settings');
-   await page.locator('select[name=language]').selectOption(language);
-   await page.locator('form').filter({ has: page.locator('select[name=language]') }).getByRole('button').click();
+   await chooseLanguageInSettings(page,language);
    await expect(page.locator('html')).toHaveAttribute('lang', language);
    for (const width of [390, 1440]) {
     await page.setViewportSize({ width, height: 900 });
@@ -562,9 +569,7 @@ test('mobile card shows workflow controls first', async ({ page }, info) => {
   }
  } finally {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto('/c/rs-learning/settings');
-  await page.locator('select[name=language]').selectOption('en');
-  await page.locator('form').filter({ has: page.locator('select[name=language]') }).getByRole('button').click();
+  await chooseLanguageInSettings(page,'en');
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
  }
 });
@@ -598,7 +603,8 @@ test('approval queue, rejection and ordered steps',async({page})=>{
  await expect(queued.getByRole('link',{name:title})).toHaveAttribute('href',new URL(cardUrl).pathname);
  // The decision is made inside the card, beside the caption and the brief it is about.
  await queued.getByRole('link',{name:title}).click();
- await expect(page.getByLabel("Caption",{exact:true})).toHaveValue('نص مخصص للمراجعة');
+ // By role: a filled textarea's text is part of its wrapping label's text, so getByLabel stops matching it once it has a caption.
+ await expect(page.getByRole('textbox',{name:"Caption",exact:true})).toHaveValue('نص مخصص للمراجعة');
  await expect(page.getByLabel("Offering",{exact:true})).toHaveValue('عرض مخصص للمراجعة');
  const review=page.locator('[data-card-section="review"]');
  await Promise.all([page.waitForResponse(response=>response.request().method()==='POST' && response.url().includes('/work/board/')), review.getByRole('button',{name:"Approve"}).click()]);
@@ -627,7 +633,7 @@ test('approval queue, rejection and ordered steps',async({page})=>{
  const decision=page.locator('[data-card-section="review"]');
  await decision.getByText("Reject with a reason").click();
  await decision.getByLabel("Rejection reason").fill('يرجى تعديل التصميم');
- await decision.getByLabel("Design",{exact:true}).check();
+ await decision.getByLabel("Design needs work",{exact:true}).check();
  await decision.getByRole('button',{name:"Confirm rejection"}).click();
  await expect(page.locator('.rejection-notice')).toContainText('يرجى تعديل التصميم');
  await page.goto('/c/rs-learning/approvals');
@@ -686,7 +692,7 @@ test('agent creates and submits a card; rejection produces a signed webhook', as
   await page.goto(`/c/rs-learning/work/board/${id}`); await expect(page.getByLabel('وكيل المحتوى').first()).toBeVisible(); await expect(page.getByText("Created the card")).toBeVisible(); await expect(page.getByRole('link',{name:"View evidence file"})).toBeVisible();
   await page.goto('/c/rs-learning/approvals'); const row=page.locator('.approval-card').filter({hasText:title}); await expect(row).toBeVisible(); await expect(row.getByLabel('وكيل المحتوى')).toBeVisible();
   // The decision is made inside the card (ADR 0013).
-  await row.getByRole('link',{name:title}).click(); const decision=page.locator('[data-card-section="review"]'); await decision.getByText("Reject with a reason").click(); await decision.getByLabel("Rejection reason").fill('يرجى تعديل التصميم'); await decision.getByLabel("Design",{exact:true}).check();
+  await row.getByRole('link',{name:title}).click(); const decision=page.locator('[data-card-section="review"]'); await decision.getByText("Reject with a reason").click(); await decision.getByLabel("Rejection reason").fill('يرجى تعديل التصميم'); await decision.getByLabel("Design needs work",{exact:true}).check();
   const start=Date.now(); await decision.getByRole('button',{name:"Confirm rejection"}).click();
   await expect.poll(()=>received.length,{timeout:10000}).toBeGreaterThan(0); expect(Date.now()-start).toBeLessThan(10000);
   const message=received.find(x=>JSON.parse(x.body).event_type==='rejected'); expect(message).toBeTruthy();
@@ -728,9 +734,7 @@ test('secondary text meets 4.5 to 1 contrast', async ({ page }) => {
  await signIn(page, 'omar@example.com', '/c/rs-learning/home');
  const setLanguage = async (language: string) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto('/c/rs-learning/settings');
-  await page.locator('select[name=language]').selectOption(language);
-  await page.locator('form').filter({ has: page.locator('select[name=language]') }).getByRole('button').click();
+  await chooseLanguageInSettings(page,language);
   await expect(page.locator('html')).toHaveAttribute('lang', language);
  };
  const seen: string[] = [];

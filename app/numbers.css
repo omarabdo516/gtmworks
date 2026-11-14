@@ -66,8 +66,10 @@
 @media (max-width: 767px) {
   .gw .numbers-page .kpis { grid-template-columns: minmax(0, 1fr); }
   .gw .numbers-page .dash__inner { padding: 0 var(--s4) var(--s8); }
-  /* 44px touch targets on a phone (PRODUCT.md), where the reference draws 26px period buttons. */
-  .gw .numbers-page .segmented { margin-inline-start: 0; }
-  .gw .numbers-page .segmented a { min-height: 44px; display: inline-flex; align-items: center; }
-  .gw .numbers-page .dash-empty .btn { min-height: 44px; }
+  /* 44px touch targets on a phone (PRODUCT.md): the period buttons keep the reference's 26px pill at the head's end,
+     and an invisible ring around each makes its tap area 44px without moving the cards below. */
+  .gw .numbers-page .segmented a { position: relative; }
+  .gw .numbers-page .segmented a::before { content: ""; position: absolute; inset: -9px 0; }
+  .gw .numbers-page .dash-empty .btn { position: relative; }
+  .gw .numbers-page .dash-empty .btn::before { content: ""; position: absolute; inset: -7px 0; }
 }

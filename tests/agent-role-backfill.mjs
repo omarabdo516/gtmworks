@@ -9,6 +9,8 @@ const sql=`begin;
 create extension if not exists pgtap with schema extensions;
 select plan(5);
 drop trigger member_agent_role_guard on public.members;
+-- The company log (20261207000000) reads members.agent_role, which this replay removes first; it is not under test here.
+alter table public.member_audit disable trigger member_audit_company_log;
 alter table public.members drop column agent_role;
 drop type public.member_agent_role;
 create temporary table legacy_agents as

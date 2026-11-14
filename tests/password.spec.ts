@@ -162,7 +162,9 @@ test('an invited Member sets a password from the invitation and signs in with it
 
 test('a signed-in person changes their own password in settings and signs in with the new one',async({page,context})=>{
  try {
-  await signIn(page,'viewer@example.com','/c/rs-learning/settings');
+  // The password is changed in the settings overlay's Your account (#26).
+  await signIn(page,'viewer@example.com','/c/rs-learning/home');
+  await page.goto('/c/rs-learning/settings?section=account');
   const panel=page.locator('section').filter({has:page.getByRole('heading',{name:'Change password'})});
   await panel.getByLabel('New password').fill('viewer-new-password');
   await panel.getByLabel('Confirm password').fill('viewer-other-password');

@@ -540,10 +540,13 @@ test('the Agent details panel, the chat search, the account menu sections and th
   const field=sidebar.getByRole('searchbox',{name:'Search chats'});
   await expect(field).toBeFocused();
   await field.fill('no chat is called this');
-  await expect(sidebar.locator('.thread-item:not(.ch-item)')).toHaveCount(0);
+  // The chat rows are the links to a Conversation: the channel row and the Recent cards rows (drawn as thread items
+  // since the board work) are not chats and are not searched.
+  const chatRows=sidebar.locator('.thread-item[href*="/conversations/"]');
+  await expect(chatRows).toHaveCount(0);
   await expect(sidebar.locator('.sb-empty')).toHaveText('No chats match “no chat is called this”');
   await field.fill(text.slice(0,12).toUpperCase());
-  await expect(sidebar.locator('.thread-item:not(.ch-item)').filter({hasText:text})).toHaveCount(1);
+  await expect(chatRows.filter({hasText:text})).toHaveCount(1);
   await field.press('Escape'); await expect(field).toHaveValue('');
   await field.press('Escape'); await expect(field).toHaveCount(0);
   await expect(sidebar.getByRole('button',{name:'Search chats',exact:true})).toHaveAttribute('aria-expanded','false');

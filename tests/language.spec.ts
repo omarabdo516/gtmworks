@@ -1,51 +1,51 @@
 import { test, expect, type Page, type Locator } from '@playwright/test';
+import { chooseLanguageInSettings } from './choose-language';
 import { createServerClient } from '@supabase/ssr';
 import { mkdir } from 'node:fs/promises';
-import { signIn, openNavigation, closeNavigation } from './sign-in';
+import { signIn, openNavigation, closeNavigation, openMoreSection } from './sign-in';
 import { idle } from './navigation-measure';
 import { sections } from '../lib/navigation';
 import { i18n, type Language } from '../lib/i18n.mjs';
 
 async function chooseLanguage(page:Page,language:Language) {
- await page.goto('/c/rs-learning/settings');
- await page.locator('select[name=language]').selectOption(language);
- await page.locator('form').filter({has:page.locator('select[name=language]')}).getByRole('button').click();
+ await chooseLanguageInSettings(page,language);
  await expect(page.locator('html')).toHaveAttribute('lang',language);
  await expect(page.locator('html')).toHaveAttribute('dir',language==='ar'?'rtl':'ltr');
 }
 
+// The language is chosen in the settings overlay's Your account (#26): each choice saves at once. While one save is
+// on its way the other choice waits, so two saves never race, and the last choice is the one that stays.
 test('390px language choice survives the previous save finishing',async({page})=>{
  await page.setViewportSize({width:390,height:900});
- await signIn(page,'manager@example.com','/c/rs-learning/settings');
+ await signIn(page,'manager@example.com','/c/rs-learning/home');
  await chooseLanguage(page,'ar');
- const select=page.locator('select[name=language]');
- const save=page.locator('form').filter({has:select}).getByRole('button');
- await expect(save).toBeEnabled();
+ const english=page.locator('#ac-lang-en'),arabic=page.locator('#ac-lang-ar');
+ await expect(arabic).toHaveAttribute('aria-checked','true');
  let release!:()=>void;
  const held=new Promise<void>(resolve=>{release=resolve;});
  let arrived!:()=>void;
  const responseReady=new Promise<void>(resolve=>{arrived=resolve;});
- await page.route('**/c/rs-learning/settings',async route=>{
+ let holding=true;
+ await page.route(url=>url.pathname==='/c/rs-learning/settings',async route=>{
+  if(!holding||route.request().method()!=='POST') return route.fallback();
+  holding=false;
   const response=await route.fetch();
   arrived();
   await held;
   await route.fulfill({response});
- },{times:1});
- await save.click();
+ });
+ await english.click();
  await responseReady;
- const selection=select.selectOption('en');
  try {
-  // Either keep the new choice or defer editing until the pending save completes.
-  await expect.poll(async()=>await select.isDisabled()||await select.inputValue()==='en').toBe(true);
+  // The other choice cannot start a second save while the first is pending.
+  await expect(arabic).toBeDisabled();
  } finally {release();}
- await selection;
- await expect(save).toBeEnabled();
- await save.click();
  await expect(page.locator('html')).toHaveAttribute('lang','en');
  await expect(page.locator('html')).toHaveAttribute('dir','ltr');
+ await expect(english).toBeEnabled();
  await page.reload();
  await expect(page.locator('html')).toHaveAttribute('lang','en');
- await expect(select).toHaveValue('en');
+ await expect(english).toHaveAttribute('aria-checked','true');
 });
 async function expectTitleAligned(title:Locator,container:Locator,edge:'left'|'right') {
  await expect(title).toBeVisible();
@@ -132,8 +132,12 @@ test('English default, account language across sessions/devices, automatic conte
    await page.setViewportSize({width:1440,height:900});
    await chooseLanguage(page,language);
    const {t}=i18n(language);
-   await openNavigation(page);
-   await page.locator('.nav a[href$="/home"]').click();
+   // The language is chosen in the full-window settings overlay (#26), which covers the shell: close it as a person
+   // would before using the account menu.
+   await page.keyboard.press('Escape');
+   await expect(page.locator('.sov-root')).toHaveCount(0);
+   // Home has no sidebar entry; it opens from the account menu's "More sections" (#8).
+   await openMoreSection(page,'home');
    await expect(page.locator('.topbar')).toHaveText(t('home'));
    for(const section of Object.keys(sections).filter(section=>section!=='work/new')) {
     await page.goto(`/c/rs-learning/${section}`);
@@ -144,7 +148,8 @@ test('English default, account language across sessions/devices, automatic conte
    }
    // Settings moved from the sidebar's bottom row into the account menu; it is still in the chosen language.
    await page.getByRole('button',{name:t('accountMenu'),exact:true}).click();
-   await expect(page.getByRole('menu').getByRole('menuitem').filter({hasText:t('settings')})).toHaveAttribute('href','/c/rs-learning/settings');
+   // Anchored at the start: "More sections" (#8) also lists Work settings, whose name contains the word.
+   await expect(page.getByRole('menu').getByRole('menuitem').filter({hasText:new RegExp(`^${t('settings')}`)})).toHaveAttribute('href','/c/rs-learning/settings');
    await page.keyboard.press('Escape');
    await expect(page.getByRole('menu')).toHaveCount(0);
    await page.goto('/c/rs-learning/work/board');

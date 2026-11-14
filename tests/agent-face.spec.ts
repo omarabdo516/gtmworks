@@ -1,4 +1,5 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
+import { chooseLanguageInSettings } from './choose-language';
 import { signIn } from './sign-in';
 
 const names=['Lead','وكيل المحتوى','المصمم','الناقد'];
@@ -9,9 +10,7 @@ async function faceMarkup(face:Locator,name:string) {
  return face.innerHTML();
 }
 async function chooseLanguage(page:Page,language:'en'|'ar') {
- await page.goto('/c/rs-learning/settings');
- await page.locator('select[name=language]').selectOption(language);
- await page.locator('form').filter({has:page.locator('select[name=language]')}).getByRole('button').click();
+ await chooseLanguageInSettings(page,language);
  await expect(page.locator('html')).toHaveAttribute('lang',language);
 }
 

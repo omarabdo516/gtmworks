@@ -30,12 +30,14 @@ export const screens = {
   log: { reference: { steps: [{ click: '#sb-nav [data-view="log"]' }, { waitFor: '#view-log:not([hidden])' }] }, builtPath: '/c/rs-learning/log' },
   // A Conversation with an Agent other than Lead, opened from its tile in the sidebar.
   'agent-chat': { reference: { steps: [{ click: '#sb-agents [data-action="open-agent"][data-agent="ads"]' }] }, builtPath: null },
-  // The settings overlay opens on its Company section.
+  // The settings overlay opens on its Company section. The built overlay is route-backed (app/settings-overlay.tsx):
+  // ?section= opens a section and ?agent=<id> one Agent's page.
   settings: { reference: { steps: settings }, builtPath: '/c/rs-learning/settings' },
-  agents: { reference: { steps: settingsSection('agents') }, builtPath: '/c/rs-learning/agents' },
-  // One Agent's page: Lead's settings inside the overlay.
-  agent: { reference: { steps: [...settingsSection('agents'), { click: '#sov-ag-lead' }, { waitFor: '#sov-tab-settings' }] }, builtPath: null },
-  account: { reference: { steps: settingsSection('account') }, builtPath: null },
+  agents: { reference: { steps: settingsSection('agents') }, builtPath: '/c/rs-learning/settings?section=agents' },
+  // One Agent's page: Lead's settings inside the overlay. Built: the comparison fixture's main Agent, Lead (the seed
+  // alone has no Agent with that id, so without the fixture the overlay shows the Agents list).
+  agent: { reference: { steps: [...settingsSection('agents'), { click: '#sov-ag-lead' }, { waitFor: '#sov-tab-settings' }] }, builtPath: `/c/rs-learning/settings?agent=${fixture.mainAgent}` },
+  account: { reference: { steps: settingsSection('account') }, builtPath: '/c/rs-learning/settings?section=account' },
 };
 
 export const languages = ['ar', 'en'];

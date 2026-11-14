@@ -40,6 +40,12 @@ export async function openNavigation(page:Page) {
 export async function closeNavigation(page:Page) {
  if(await page.locator('.sidebar.is-open').count()) { await page.keyboard.press('Escape'); await expect(page.locator('.sidebar.is-open')).toHaveCount(0); }
 }
+// Sections without a sidebar entry (Home among them) open from the account menu's "More sections" group (#8).
+export async function openMoreSection(page:Page,path:string) {
+ await openNavigation(page);
+ await page.locator('.sidebar #btn-me').click();
+ await page.getByRole('menu').locator(`[role=group] a[role=menuitem][href$="/${path}"]`).click();
+}
 export async function chooseCompany(page:Page,slug:string) {
  await openNavigation(page);
  await page.getByLabel(/Choose company|اختيار الشركة/).click();

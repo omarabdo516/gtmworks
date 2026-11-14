@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { chooseLanguageInSettings } from './choose-language';
 import { mkdir } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { signIn } from './sign-in';
@@ -12,9 +13,7 @@ const api='/api/v1/companies/rs-learning';
 const company=`(select id from public.companies where slug='rs-learning')`;
 const cleanUp=()=>{ for(const table of ['skill_lessons','skill_loads','skill_enablements','skill_events','skill_versions','skills']) query(`delete from public.${table} where company_id=${company}`); };
 async function chooseLanguage(page:Page,language:'en'|'ar') {
- await page.goto('/c/rs-learning/settings');
- await page.locator('select[name=language]').selectOption(language);
- await page.locator('form').filter({has:page.locator('select[name=language]')}).getByRole('button').click();
+ await chooseLanguageInSettings(page,language);
  await expect(page.locator('html')).toHaveAttribute('lang',language);
 }
 test('an agent proposes a lesson from its run, the Inbox shows the change, the reason and the card, approving adds it to the skill and rejecting does not', async ({page,browser}) => {
@@ -67,7 +66,8 @@ test('an agent proposes a lesson from its run, the Inbox shows the change, the r
   // A member who does not manage the company (a Contributor) sees no lessons.
   const contributor=await outside.newPage();
   await signIn(contributor,'reviewer@example.com','/c/rs-learning/approvals');
-  await expect(contributor.getByRole('heading',{name:/Awaiting approval/})).toBeVisible();
+  // The Inbox opens the board on "Waiting on you" (#16, ADR 0013): its heading shows the page has loaded.
+  await expect(contributor.getByRole('heading',{level:2,name:'Waiting on you',exact:true})).toBeVisible();
   await expect(contributor.getByRole('group',{name:'Lesson for caption-hooks'})).toHaveCount(0);
   // The page in both languages, at phone and desktop width, with 44px buttons and no sideways scroll on a phone.
   for(const copy of [{language:'en' as const,heading:'Lessons awaiting approval'},{language:'ar' as const,heading:'دروس تنتظر الموافقة'}]) {

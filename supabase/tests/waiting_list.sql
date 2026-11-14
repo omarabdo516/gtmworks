@@ -2,6 +2,10 @@ begin;
 create extension if not exists pgtap with schema extensions;
 select plan(15);
 -- Two Members of RS Learning: Omar (Owner, holds the approval step) and the Manager, each with a Conversation.
+-- The test brings its own Agent (a Connection that is never called) and both Conversations, so it needs no fixture.
+insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('60000000-0000-0000-0000-0000000000f1','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9/p/waiting','waiting','not-a-key','unreachable') on conflict do nothing;
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('61000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','60000000-0000-0000-0000-0000000000f1','Lead','Marketing lead',false) on conflict do nothing;
+insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('62000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','61000000-0000-0000-0000-000000000001','Lead') on conflict do nothing;
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('62000000-0000-0000-0000-0000000000f2','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','61000000-0000-0000-0000-000000000001','Lead') on conflict do nothing;
 -- A webhook is configured, so anything that did notify the outside would leave a delivery behind.
 insert into public.agent_webhooks(company_id,url,secret_encrypted) values ('10000000-0000-0000-0000-000000000001','https://example.test/hook','x') on conflict do nothing;

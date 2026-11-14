@@ -1,4 +1,5 @@
 import { test, expect, type BrowserContext, type Page } from '@playwright/test';
+import { chooseLanguageInSettings } from './choose-language';
 import { execFileSync } from 'node:child_process';
 import { signIn } from './sign-in';
 import { resetFirstRun } from '../scripts/first-run-db.mjs';
@@ -35,9 +36,7 @@ function fixPublishingDates() {
 }
 
 async function chooseLanguage(page: Page, language: Language) {
-  await page.goto('/c/rs-learning/settings');
-  await page.locator('select[name=language]').selectOption(language);
-  await page.locator('form').filter({ has: page.locator('select[name=language]') }).getByRole('button').click();
+  await chooseLanguageInSettings(page,language);
   await expect(page.locator('html')).toHaveAttribute('lang', language);
   await expect(page.locator('html')).toHaveAttribute('dir', language === 'ar' ? 'rtl' : 'ltr');
 }
@@ -81,6 +80,8 @@ const readyBy: Record<string, string> = {
   approvals: '.approvals',
   members: '.member-row',
   'work-settings': '.settings-row',
+  numbers: '.numbers-page',
+  log: '.log-page',
 };
 
 async function showScreen(page: Page, screen: (typeof screens)[number], width: number) {

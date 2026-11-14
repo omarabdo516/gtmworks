@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { signIn, openNavigation, closeNavigation, chooseCompany } from './sign-in';
+import { signIn, openNavigation, closeNavigation, chooseCompany, openMoreSection } from './sign-in';
 import { idle } from './navigation-measure';
 import { i18n } from '../lib/i18n.mjs';
 import { sections } from '../lib/navigation';
@@ -38,6 +38,14 @@ for(const width of [1440,390]) test(`company frame order, placeholders, LTR and 
  await expect(page.locator('.topbar .mobile-menu')).toHaveCount(1);
  expect(await navLabels(page)).toEqual(labels);
  await expect(page.locator('.sidebar .sb-label').first()).toHaveText("Agents");
+ // Home has no sidebar entry since Numbers opens its own page (#35): Home is reached from the account menu's More
+ // sections, so no entry is marked here.
+ await expect(page.locator('.sidebar .sb-nav a[aria-current=page]')).toHaveCount(0);
+ await closeNavigation(page);
+ await page.screenshot({path:`test-results/screenshots/frame-home-${width}.png`,fullPage:true});
+ // The visited section's entry is marked: Numbers on its own page.
+ await page.goto('/c/rs-learning/numbers');
+ await openNavigation(page);
  await expect(page.locator('.sidebar .sb-nav a[aria-current=page]')).toHaveText("Numbers");
  const layout=await page.locator('.sidebar').evaluate(sidebar=>{
   const active=sidebar.querySelector('.sb-nav [aria-current=page]')!,icon=active.querySelector('svg')!,label=active.querySelector('.od-fill')!;
@@ -45,10 +53,15 @@ for(const width of [1440,390]) test(`company frame order, placeholders, LTR and 
  });
  expect(layout).toMatchObject({left:0,dir:'ltr',marker:'0px',iconLeft:true});
  await closeNavigation(page);
- await page.screenshot({path:`test-results/screenshots/frame-home-${width}.png`,fullPage:true});
  const routes=Object.keys(sections).filter(path=>path!=='work/new');
  for(const path of routes) {
   await page.goto(`/c/rs-learning/${path}`);
+  // Settings is the full-window overlay (#26) over the company's frame: the frame is there, inert, behind it.
+  if(path==='settings') {
+   await expect(page.getByRole('dialog',{name:i18n().t('settings')})).toBeVisible();
+   await expect(page.locator('[inert] .sidebar .sb-nav .sb-item')).toHaveText(labels);
+   continue;
+  }
   expect(await navLabels(page),path).toEqual(labels);
   await closeNavigation(page);
   const leaf={'settings/members':'members','settings/work':'workSettings','settings/agents':'agents'}[path as string];
@@ -61,7 +74,7 @@ for(const width of [1440,390]) test(`company frame order, placeholders, LTR and 
   } else await expect(page.locator('.topbar'),path).toHaveText(i18n().t(sections[path]));
  }
  // Sections without a sidebar entry still open, by their address, inside the same shell.
- const placeholders=[['recurring',"No routines yet"],['skills',"No skills yet"],['connections',"No connections yet"],['search',"Search is not available yet"]];
+ const placeholders=[['recurring',"No routines yet"],['skills',"No skills yet"],['connections',"No connections yet"],['search',"Search is not available yet"],['history',"No activity log yet"]];
  for(const [path,text] of placeholders) {
   await page.goto(`/c/rs-learning/${path}`);
   await expect(page.locator('.content .empty')).toHaveText(text);
@@ -69,8 +82,13 @@ for(const width of [1440,390]) test(`company frame order, placeholders, LTR and 
   await closeNavigation(page);
  }
  await openNavigation(page);
+ // Activity log opens the Company's log page (#11); the old placeholder address is checked with the others above.
  await page.locator('.sidebar .sb-nav').getByRole('link',{name:"Activity log",exact:true}).click();
- await expect(page.locator('.content .empty')).toHaveText("No activity log yet");
+ await expect(page).toHaveURL(/\/c\/rs-learning\/log$/);
+ await expect(page.getByRole('main').getByRole('heading',{level:1,name:"Activity log",exact:true})).toBeVisible();
+ await openNavigation(page);
+ await expect(page.locator('.sidebar .sb-nav a[aria-current=page]')).toHaveText("Activity log");
+ await closeNavigation(page);
  await openNavigation(page);
  await page.locator('.sidebar .sb-nav').getByRole('link',{name:"Marketing board",exact:true}).click();
  await expect(page).toHaveURL(/\/work\/board$/);
@@ -78,12 +96,15 @@ for(const width of [1440,390]) test(`company frame order, placeholders, LTR and 
  await page.getByRole('button',{name:"Account menu",exact:true}).click();
  await page.getByRole('menu').getByRole('menuitem',{name:/^Settings/}).click();
  await expect(page).toHaveURL(/\/settings$/);
+ // Settings is the full-window overlay (#26): closing it returns to the board, whose sidebar is used next.
+ await page.getByRole('dialog',{name:'Settings'}).getByRole('button',{name:'Close settings and go back'}).click();
+ await expect(page).toHaveURL(/\/work\/board$/);
  // New chat opens the main Agent's empty Conversation; with no agent attached (the seed), a company member is told
  // why they cannot chat yet (#190) and has no composer.
  await openNavigation(page);
  await page.getByRole('link',{name:"New chat",exact:true}).click();
  await expect(page).toHaveURL(/\/c\/rs-learning\/chat$/);
- await expect(page.locator('.chat .empty-chat').getByRole('note')).toHaveText("No agent is attached to this company yet. An Agency person can attach one on the Agents page.");
+ await expect(page.locator('.chat .empty-chat').getByRole('note')).toHaveText("No agent is attached to this company yet. The company's Owner can attach one on the Agents page."); // Worded for the Owner since #7 removed the Agency (ADR 0012).
  await expect(page.getByLabel('Message',{exact:true})).toHaveCount(0);
  await expect(page.locator('.sidebar .sb-nav a[aria-current=page]')).toHaveText("Chats");
  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(width);
@@ -94,8 +115,12 @@ test('Viewer has the same navigation, New chat included, without new card on eve
  await signIn(page,'viewer@example.com','/c/rs-learning/home');
  for(const path of Object.keys(sections)) {
   await page.goto(`/c/rs-learning/${path}`);
-  expect(await navLabels(page),path).toEqual(labels);
-  await expect(page.locator('.sidebar').getByRole('link',{name:"New chat",exact:true})).toBeVisible();
+  // Settings is the full-window overlay (#26) over the same frame, which stays behind it, inert.
+  if(path==='settings') await expect(page.locator('[inert] .sidebar .sb-nav .sb-item')).toHaveText(labels);
+  else {
+   expect(await navLabels(page),path).toEqual(labels);
+   await expect(page.locator('.sidebar').getByRole('link',{name:"New chat",exact:true})).toBeVisible();
+  }
   await expect(page.locator('.sidebar').getByText("New card",{exact:true})).toHaveCount(0);
   await expect(page.getByRole('button',{name:"+ New card",exact:true})).toHaveCount(0);
   await expect(page.getByLabel('Message',{exact:true})).toHaveCount(0);
@@ -136,8 +161,8 @@ test('Home has four parts in order and missing sources show unavailable, never z
  await openNavigation(page);
  await badge.click();
  await expect(page).toHaveURL(/\/approvals$/);
- await openNavigation(page);
- await page.locator('.sidebar .sb-nav a[href$="/home"]').click();
+ // Home has no sidebar entry; it opens from the account menu's "More sections" (#8).
+ await openMoreSection(page,'home');
  await expect(page.locator('.stats strong').first()).toHaveText(String(count));
 });
 
@@ -178,8 +203,7 @@ test('owner assigns a new Contributor agent through settings, Home follows renam
   await expect(page.locator('.detail-row').filter({hasText:initialName}).filter({hasText:'Agent role: No agent role to Writer'})).toHaveCount(1);
   const [audit]=JSON.parse(query(`select actor_id,after_data->>'agent_role' as agent_role from public.member_audit where company_id=${quote(writer.company_id)} and person_id=${quote(person)} and action='UPDATE' order by id desc limit 1`));
   expect(audit).toEqual({actor_id:'20000000-0000-0000-0000-000000000001',agent_role:'writer'});
-  await openNavigation(page);
-  await page.locator('.nav a[href$="/home"]').click();
+  await openMoreSection(page,'home');
   await expect(current).toHaveAttribute('href',cardPath!);
   await expect(current).toHaveText(title!);
   expect(query(`update public.people set name=${quote(renamed)} where id=${quote(person)} returning name;`)).toContain(renamed);
@@ -353,8 +377,7 @@ test('mobile recent cards record opens while the drawer stays closed',async({pag
   await page.locator('.close-card').click();
   await expect(page.locator('.modal')).toHaveCount(0);
  }
- await openNavigation(page);
- await page.locator('.sidebar .sb-nav a[href$="/home"]').click();
+ await openMoreSection(page,'home');
  await openNavigation(page);
  await expect(page.locator('.recent-cards a').first()).toHaveAttribute('href','/c/rs-learning/work/board/4');
  expect(await page.locator('.recent-cards a').evaluateAll(links=>links.slice(0,2).map(link=>link.getAttribute('href')))).toEqual([4,3].map(id=>`/c/rs-learning/work/board/${id}`));

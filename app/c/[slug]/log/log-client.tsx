@@ -2,7 +2,7 @@
 import { useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
-import { dayOf, daysBack, groupByDay } from '@/lib/activity-log.mjs';
+import { dateFormatter, dayOf, daysBack, groupByDay } from '@/lib/activity-log.mjs';
 import { workDate } from '@/lib/work-date.mjs';
 import Link from '@/lib/link';
 
@@ -11,9 +11,12 @@ import Link from '@/lib/link';
 const never=()=>()=>{};
 const useZone=()=>useSyncExternalStore(never,()=>undefined,()=>'UTC' as string|undefined);
 
+// The time of day in the reader's language and zone, from a formatter built once (lib/activity-log dateFormatter).
+const timeOf=(value:string,language:string,zone:string|undefined)=>dateFormatter(language==='ar'?'ar-EG-u-nu-latn':'en-US-u-nu-latn',{hour:'numeric',minute:'2-digit',timeZone:zone}).format(new Date(value));
+
 export function LogTime({value}:{value:string}) {
  const {language}=useI18n(); const zone=useZone();
- return <time className="lg-time num" dateTime={value} data-utc={zone}>{new Date(value).toLocaleTimeString(language==='ar'?'ar-EG-u-nu-latn':'en-US-u-nu-latn',{hour:'numeric',minute:'2-digit',timeZone:zone})}</time>;
+ return <time className="lg-time num" dateTime={value} data-utc={zone}>{timeOf(value,language,zone)}</time>;
 }
 
 // Today, Yesterday, then the weekday and date (design-reference: dayName).
@@ -40,7 +43,7 @@ export function LogDays({items}:{items:{id:number,at:string,node:ReactNode}[]}) 
 // A short "when" for the Numbers page's agent feed: Today · 8:40 PM.
 export function FeedWhen({value}:{value:string}) {
  const {zone,name}=useDayName(); const {language}=useI18n();
- const time=new Date(value).toLocaleTimeString(language==='ar'?'ar-EG-u-nu-latn':'en-US-u-nu-latn',{hour:'numeric',minute:'2-digit',timeZone:zone});
+ const time=timeOf(value,language,zone);
  return <time className="feed__m" dateTime={value} data-utc={zone}>{name(dayOf(value,zone))} · {time}</time>;
 }
 

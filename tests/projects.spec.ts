@@ -1,4 +1,5 @@
 import { test, expect, type Page, type Locator } from '@playwright/test';
+import { chooseLanguageInSettings } from './choose-language';
 import { mkdir } from 'node:fs/promises';
 import { signIn } from './sign-in';
 
@@ -10,9 +11,7 @@ async function save(page:Page,button:Locator) {
 }
 
 async function chooseLanguage(page:Page,language:'en'|'ar') {
- await page.goto('/c/rs-learning/settings');
- await page.locator('select[name=language]').selectOption(language);
- await page.locator('form').filter({has:page.locator('select[name=language]')}).getByRole('button').click();
+ await chooseLanguageInSettings(page,language);
  await expect(page.locator('html')).toHaveAttribute('lang',language);
 }
 // The picture of the page as it is now, phone and desktop; the CI step keeps test-results/screenshots for the pull request.

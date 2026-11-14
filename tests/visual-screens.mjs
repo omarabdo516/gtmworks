@@ -16,6 +16,8 @@ const lightScreens = [
   { name: 'members', path: '/c/rs-learning/settings/members' },
   { name: 'agents', path: '/c/rs-learning/settings/agents' },
   { name: 'work-settings', path: '/c/rs-learning/settings/work' },
+  { name: 'numbers', path: '/c/rs-learning/numbers' },
+  { name: 'log', path: '/c/rs-learning/log' },
 ];
 
 export const screens = [
