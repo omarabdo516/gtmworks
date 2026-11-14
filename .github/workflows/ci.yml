@@ -1,6 +1,8 @@
 # Static always runs; document-only PRs and main pushes skip integration and install.
 # Only design/, docs/ and Markdown qualify (except public/ files read by a browser test).
-# Required `check` fails on classification/static errors and requires both long stages otherwise.
+# A pull request that changes no file the install exercises (scripts/install-related.mjs) also skips install (#69);
+# main always runs it. Required `check` fails on classification/static errors and on any failed or cancelled stage
+# (scripts/ci-verdict.mjs).
 name: CI
 
 on:
@@ -21,6 +23,7 @@ jobs:
       actions: read
     outputs:
       docs_only: ${{ steps.classify.outputs.docs_only }}
+      install_related: ${{ steps.classify.outputs.install_related }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -37,6 +40,7 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           docs_only=false
+          install_related=true
           if [[ "$EVENT_NAME" == push ]]; then
             BASE_SHA=$(gh run list -R "$GITHUB_REPOSITORY" -w CI -b main -e push -s success -L 1 --json headSha -q '.[0].headSha') || BASE_SHA=
           fi
@@ -49,9 +53,11 @@ jobs:
             # No rename detection: a move must check both its old and new paths.
             if git diff --no-ext-diff --no-renames --name-only -z "$range" -- > "$RUNNER_TEMP/changed-files"; then
               docs_only=$(node scripts/docs-only.mjs < "$RUNNER_TEMP/changed-files")
+              install_related=$(node scripts/install-related.mjs < "$RUNNER_TEMP/changed-files")
             fi
           fi
           echo "docs_only=$docs_only" >> "$GITHUB_OUTPUT"
+          echo "install_related=$install_related" >> "$GITHUB_OUTPUT"
 
   static:
     runs-on: ubuntu-latest
@@ -210,7 +216,7 @@ jobs:
 
   install:
     needs: [changes]
-    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.docs_only != 'true') }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || (needs.changes.outputs.docs_only != 'true' && (github.event_name != 'pull_request' || needs.changes.outputs.install_related != 'false'))) }}
     runs-on: ubuntu-latest
     # The release install and update below add a fresh stack and an update to the source install checks, and the one-line
     # install adds another, an update, a failed update and a return to an older release from a backup.
@@ -588,19 +594,17 @@ jobs:
     needs: [changes, static, integration, install]
     if: ${{ always() }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
+      - uses: actions/checkout@v4
       - name: all required stages green
         env:
+          EVENT_NAME: ${{ github.event_name }}
           CHANGES_RESULT: ${{ needs.changes.result }}
           DOCS_ONLY: ${{ needs.changes.outputs.docs_only }}
+          INSTALL_RELATED: ${{ needs.changes.outputs.install_related }}
           STATIC_RESULT: ${{ needs.static.result }}
           INTEGRATION_RESULT: ${{ needs.integration.result }}
           INSTALL_RESULT: ${{ needs.install.result }}
-        run: |
-          echo "changes=$CHANGES_RESULT docs_only=$DOCS_ONLY static=$STATIC_RESULT integration=$INTEGRATION_RESULT install=$INSTALL_RESULT"
-          [[ "$CHANGES_RESULT" == success && "$STATIC_RESULT" == success ]] || exit 1
-          if [[ "$DOCS_ONLY" == true ]]; then
-            [[ "$INTEGRATION_RESULT" == skipped && "$INSTALL_RESULT" == skipped ]]
-          else
-            [[ "$DOCS_ONLY" == false && "$INTEGRATION_RESULT" == success && "$INSTALL_RESULT" == success ]]
-          fi
+        run: node scripts/ci-verdict.mjs

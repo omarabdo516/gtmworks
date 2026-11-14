@@ -10,3 +10,19 @@ test-results
 playwright-report
 supabase/.temp
 *.tsbuildinfo
+# What the CI install check (.github/workflows/ci.yml) writes in the checkout between its installs: none of it belongs in
+# the image, and leaving it out lets a repeat install reuse the cached app build instead of rebuilding it (#69).
+/*.log
+/before
+/after
+/expected
+/restored
+/data.before
+/data.after
+/Caddyfile
+/ca.crt
+/release-first
+/release-next
+/release-install
+/test-releases
+/one-line-home
