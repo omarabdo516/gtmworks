@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# Probe for #76: a change to the database tests alone runs only the database suite.
 # The allowlist is the single source of truth for shared tables.
 python3 - <<'PY'
 from pathlib import Path
