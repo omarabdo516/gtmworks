@@ -132,6 +132,10 @@ test('English default, account language across sessions/devices, automatic conte
    await page.setViewportSize({width:1440,height:900});
    await chooseLanguage(page,language);
    const {t}=i18n(language);
+   // The language is chosen in the full-window settings overlay (#26), which covers the shell: close it as a person
+   // would before using the account menu.
+   await page.keyboard.press('Escape');
+   await expect(page.locator('.sov-root')).toHaveCount(0);
    // Home has no sidebar entry; it opens from the account menu's "More sections" (#8).
    await openMoreSection(page,'home');
    await expect(page.locator('.topbar')).toHaveText(t('home'));

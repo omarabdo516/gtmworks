@@ -8,6 +8,7 @@ export function parseCard(value: unknown): number | null;
 export function logCursor(row: { created_at: string, id: number }): string;
 export function parseBefore(value: unknown): { at: string, id: string } | null;
 export function matchesFilters(row: Pick<LogRow, 'actor_kind' | 'actor_id' | 'agent_id' | 'card_id'>, who: Who, card: number | null): boolean;
+export function dateFormatter(locale: string, options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat;
 export function dayOf(iso: string, timeZone?: string): string;
 export function daysBack(day: string, today: string): number;
 export function groupByDay<T extends { id: number, created_at: string }>(rows: T[], timeZone?: string): { day: string, items: T[] }[];
