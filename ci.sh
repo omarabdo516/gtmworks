@@ -14,7 +14,8 @@ start_lanes() {
 }
 wait_lanes() {
   for ((n = 0; n < lanes; n++)); do
-    for ((second = 0; second < 900 && ! -s "playwright-report/lane-$n.status"; second++)); do sleep 1; done
+    second=0
+    while [[ ! -s "playwright-report/lane-$n.status" ]] && ((second++ < 900)); do sleep 1; done
     if [[ $(cat "playwright-report/lane-$n.status" 2> /dev/null) != 0 ]]; then
       cat "playwright-report/lane-$n-db.log" >&2; echo "browser test lane $n did not start" >&2; exit 1
     fi

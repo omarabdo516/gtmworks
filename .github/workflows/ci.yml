@@ -240,6 +240,11 @@ jobs:
             -v "$PWD:$PWD" docker:28.5.1-dind
           for attempt in $(seq 1 60); do docker --host tcp://127.0.0.1:2375 info >/dev/null 2>&1 && break; sleep 1; done
           docker --host tcp://127.0.0.1:2375 info >/dev/null || { echo 'install check failed: DinD readiness' >&2; exit 1; }
+          # The images the steps below pull download in the background now, in the order they are needed, while the
+          # install builds and starts (#69). A step that needs one first waits for the same download; nothing else is pulled.
+          images=(node:22.14.0-alpine3.21 $(sed -n 's/^ *image: *\([^ ]*@sha256:[0-9a-f]*\)$/\1/p' docker-compose.install.yml)
+            curlimages/curl:8.12.1 alpine:3.21 caddy:2 mcr.microsoft.com/playwright:v1.64.1-noble registry:2.8.3)
+          nohup sh -c 'for image do docker --host tcp://127.0.0.1:2375 pull -q "$image"; done' sh "${images[@]}" > "$RUNNER_TEMP/pull-ahead.log" 2>&1 &
       # Only the browser check of the sign-in rate limit uses these, inside the Playwright image; the install itself is
       # Docker only. No install scripts: the image already has the browsers.
       - uses: actions/setup-node@v4
