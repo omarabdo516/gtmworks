@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore, useTransition } from 'react';
 import { usePathname } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
-import Link, { pendingPagePaths } from '@/lib/link';
+import Link, { pageBeingOpened } from '@/lib/link';
 import { ShellIcon } from '@/components/shell-icon';
 import { saveTheme } from './theme-actions';
 import { saveLanguage } from './language-actions';
@@ -20,10 +20,11 @@ const languages=[{key:'en',name:'languageNameEnglish',description:'languageEngli
 // (#30). "More sections" reaches the company's existing sections that the reference has no place for. Settings opens
 // the full-window settings overlay (app/settings-overlay.tsx), which closes back to the page it was opened from.
 // Every page draws its own shell, so a page landing (closing a card, a refresh after a save) draws a new account
-// menu. Whether it is open is kept here, outside the shell, for the page it was opened on: that page, or one whose
-// data was already on its way when it was opened, so a menu opened while that page was still arriving stays open when
-// it lands instead of closing under the pointer, with focus on the item that had it. Any other page, another company
-// or Back and Forward close it, as do choosing an item, Escape and a press outside it.
+// menu. Whether it is open is kept here, outside the shell, for the page it was opened on: that page, or the page the
+// person had already set out to open through a link (lib/link pageBeingOpened; never a prefetch). A menu opened while
+// that page was still arriving stays open when it lands instead of closing under the pointer, with focus on the item
+// that had it. Any other page, another company or Back and Forward close it, as do choosing an item, Escape and a
+// press outside it.
 type MenuState={open:boolean,company?:string,paths:string[],focus:number|null,fresh:boolean};
 const closedMenu:MenuState={open:false,paths:[],focus:null,fresh:false};
 let menuState=closedMenu;
@@ -37,9 +38,10 @@ export default function AccountMenu({slug,personName,role,theme,companyName,sett
  const pathname=usePathname();
  const state=useSyncExternalStore(subscribeMenu,()=>menuState,()=>closedMenu);
  const open=state.open&&state.company===slug&&state.paths.includes(pathname);
- const toggle=()=>open?closeMenu():setMenuState({open:true,company:slug,paths:[pathname,...pendingPagePaths()],focus:null,fresh:true});
- // Kept open for another page or company: it is closed there.
- useEffect(()=>{ if(state.open&&!open) closeMenu(); },[state.open,open]);
+ const toggle=()=>open?closeMenu():setMenuState({open:true,company:slug,paths:[pathname,...(pageBeingOpened()?[pageBeingOpened()!]:[])],focus:null,fresh:true});
+ // Kept open for another page or company: it is closed there. Once the page being opened has landed, the menu belongs
+ // to that page alone.
+ useEffect(()=>{ if(state.open&&!open) closeMenu(); else if(open&&menuState.paths.length>1&&pathname!==menuState.paths[0]) menuState.paths=[pathname]; },[state,open,pathname]);
  useEffect(()=>{ window.addEventListener('popstate',closeMenu); return ()=>window.removeEventListener('popstate',closeMenu); },[]);
  const [error,setError]=useState('');
  const [pending,startTransition]=useTransition();

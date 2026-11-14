@@ -471,3 +471,26 @@ test('a menu open while its own page lands keeps the item that had focus',async(
   await expect(menu).toHaveCount(0);
  } finally { release(); await page.unroute(board,hold); }
 });
+
+test('an open account menu closes when the keyboard opens another page of the same company, even one being prepared',async({page})=>{
+ // Numbers is still being prepared (its prefetch is held) when the menu opens; the person then opens it with the keyboard.
+ await page.setViewportSize({width:1440,height:900});
+ let release!:()=>void; const held=new Promise<void>(resolve=>{release=resolve;});
+ let arrived!:()=>void; const asked=new Promise<void>(resolve=>{arrived=resolve;});
+ const numbers=(url:URL)=>url.pathname==='/c/rs-learning/numbers';
+ const hold=async(route:import('@playwright/test').Route)=>{ if(route.request().headers()['rsc']==='1') { arrived(); await held; } await route.continue(); };
+ await page.route(numbers,hold);
+ try {
+  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+  await asked;
+  await page.locator('.sidebar #btn-me').click();
+  await expect(page.getByRole('menu')).toBeVisible();
+  // Only the keyboard: no press outside the menu and no Back.
+  await page.locator('.sidebar .nav a[href$="/numbers"]').press('Enter');
+  release();
+  await expect(page).toHaveURL(/\/c\/rs-learning\/numbers$/);
+  await expect(page.locator('.numbers-page')).toBeVisible();
+  await expect(page.locator('#me-menu')).toHaveCount(0);
+  await expect(page.locator('.sidebar #btn-me')).toHaveAttribute('aria-expanded','false');
+ } finally { release(); await page.unroute(numbers,hold); }
+});

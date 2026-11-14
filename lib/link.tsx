@@ -2,6 +2,7 @@
 import { useI18n } from '@/lib/i18n-client';
 
 import NextLink, { useLinkStatus } from 'next/link';
+import { usePathname } from 'next/navigation';
 import { createPortal } from 'react-dom';
 import { useEffect, useLayoutEffect, useState, type ComponentProps } from 'react';
 
@@ -27,11 +28,17 @@ function trackPageRequests() {
   return () => { window.fetch = fetch; requests.clear(); };
 }
 
-/** The pages whose data the browser is fetching right now (a navigation or a refresh on its way). */
-export const pendingPagePaths = () => [...requests].map(request => request.path);
+// The page a person is opening right now through one of these links (a click or Enter), until it has landed or the
+// link stops waiting for it. Prefetches never count: only a link the person activated.
+let opening: string | null = null;
+/** The page whose navigation the person started and that has not landed yet, if any. */
+export const pageBeingOpened = () => opening;
 
 export function NavigationFeedback() {
   useLayoutEffect(trackPageRequests, []);
+  // A page that landed is no longer being opened.
+  const pathname = usePathname();
+  useEffect(() => { opening = null; }, [pathname]);
   return null;
 }
 
@@ -52,11 +59,23 @@ function Feedback({ href }: { href: string }) { const {t}=useI18n();
 
 function Pending({ href }: { href: string }) {
   const { pending } = useLinkStatus();
+  // The navigation this link started has settled (landed, or given up) once it stops waiting.
+  useEffect(() => {
+    if (!pending) return;
+    const path = new URL(href, location.href).pathname;
+    return () => { if (opening === path) opening = null; };
+  }, [pending, href]);
   return pending ? <Feedback href={href} /> : null;
 }
 
 export default function Link({ children, ...props }: ComponentProps<typeof NextLink>) {
   const target = props.as || props.href;
   const href = typeof target === 'string' ? target : target.pathname || '';
-  return <NextLink {...props} prefetch>{children}<Pending href={href} /></NextLink>;
+  // A plain click or Enter (which the browser turns into a click) opens the page here; a modified click opens it
+  // elsewhere and is not this page being opened.
+  const onClick: ComponentProps<typeof NextLink>['onClick'] = event => {
+    props.onClick?.(event);
+    if (!event.defaultPrevented && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && (!props.target || props.target === '_self')) opening = new URL(href, location.href).pathname;
+  };
+  return <NextLink {...props} onClick={onClick} prefetch>{children}<Pending href={href} /></NextLink>;
 }
