@@ -6,6 +6,10 @@ import { gzipSync } from 'node:zlib';
 import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { sections } from '../lib/navigation';
+import { execFileSync } from 'node:child_process';
+
+// Supabase CLI targets the local test database by default; never pass --remote.
+const query = (sql: string) => execFileSync('npx', ['--no-install', 'supabase', 'db', 'query', sql, '-o', 'json', '--agent', 'no'], { encoding: 'utf8' });
 
 // The prepared-navigation test measures a non-empty Inbox: before this file's tests one new card is moved to review,
 // where it waits on Omar (the seed's approver). The setup runs in its own hooks, so the measured test keeps its own
@@ -273,6 +277,29 @@ test('every company route loads at most 230 KiB gzip of JavaScript', async ({ pa
   await testInfo.attach('js-gzip.json', { body: JSON.stringify(sizes, null, 2), contentType: 'application/json' });
 });
 
+// Tap areas that sit on top of each other. A target is measured by the part a person can reach: a row scrolled out
+// of the drawer's list is cut off by the list, so its hidden part is under the footer only on paper (#48).
+async function tapOverlaps(targets: import('@playwright/test').Locator) {
+  return targets.evaluateAll(nodes => {
+    const reach = (node: Element) => {
+      const own = node.getBoundingClientRect();
+      let box = { left: own.left, top: own.top, right: own.right, bottom: own.bottom };
+      for (let parent = node.parentElement; parent; parent = parent.parentElement) {
+        const style = getComputedStyle(parent);
+        if (!/auto|scroll|hidden|clip/.test(`${style.overflowX} ${style.overflowY}`)) continue;
+        const clip = parent.getBoundingClientRect();
+        box = { left: Math.max(box.left, clip.left), top: Math.max(box.top, clip.top), right: Math.min(box.right, clip.right), bottom: Math.min(box.bottom, clip.bottom) };
+      }
+      return box;
+    };
+    return nodes.flatMap((node, index) => nodes.slice(index + 1).filter(other => {
+      const a = reach(node), b = reach(other);
+      const shown = a.right > a.left && a.bottom > a.top && b.right > b.left && b.bottom > b.top;
+      return shown && !node.contains(other) && !other.contains(node) && a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+    }).map(other => `${node.textContent} / ${other.textContent}`));
+  });
+}
+
 test('drawer targets are at least 44px and do not overlap', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await signIn(page, 'manager@example.com', '/c/rs-learning/home');
@@ -302,11 +329,7 @@ test('drawer targets are at least 44px and do not overlap', async ({ page }) => 
         expect.soft(box.width, `${language} target ${index}: width`).toBeGreaterThanOrEqual(44);
       }
       // No tap area sits on top of another one.
-      const overlaps = await targets.evaluateAll(nodes => nodes.flatMap((node, index) => nodes.slice(index + 1).filter(other => {
-        const a = node.getBoundingClientRect(), b = other.getBoundingClientRect();
-        return !node.contains(other) && !other.contains(node) && a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
-      }).map(other => `${node.textContent} / ${other.textContent}`)));
-      expect.soft(overlaps, `${language}: overlapping targets`).toEqual([]);
+      expect.soft(await tapOverlaps(targets), `${language}: overlapping targets`).toEqual([]);
       await closeNavigation(page);
       await expect(page.getByRole('dialog')).toHaveCount(0);
     }
@@ -314,5 +337,53 @@ test('drawer targets are at least 44px and do not overlap', async ({ page }) => 
   await page.setViewportSize({ width: 1440, height: 900 });
   await chooseLanguageInSettings(page,'en');
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  }
+});
+
+test('with many recent chats and cards the drawer list scrolls above a footer that stays put, and no tap areas overlap', async ({ page }) => {
+  // The Manager's own chats and three recent cards make the list longer than a phone screen (#48).
+  const company = '10000000-0000-0000-0000-000000000001', manager = '20000000-0000-0000-0000-000000000002', stamp = Date.now();
+  const chats = Array.from({ length: 12 }, (_, index) => `63000000-0000-4000-8000-${String(stamp + index).slice(-12).padStart(12, '0')}`);
+  query(`insert into public.conversations(id,company_id,person_id,agent_name) values ${chats.map(id => `('${id}','${company}','${manager}','Lead')`).join(',')}`);
+  query(`insert into public.work_card_visits(company_id,person_id,card_id) select '${company}','${manager}',id from public.work_cards where company_id='${company}' order by id limit 3 on conflict do nothing`);
+  await page.setViewportSize({ width: 390, height: 900 });
+  await signIn(page, 'manager@example.com', '/c/rs-learning/home');
+  try {
+    for (const language of ['en', 'ar']) {
+      await chooseLanguageInSettings(page, language);
+      await expect(page.locator('html')).toHaveAttribute('lang', language);
+      await page.goto('/c/rs-learning/home');
+      await openNavigation(page);
+      const drawer = page.getByRole('dialog', { name: language === 'ar' ? 'القايمة الرئيسية' : 'Main menu' });
+      await expect(drawer.locator('.recent-cards a')).toHaveCount(3);
+      await expect(drawer.locator('#sb-recent .thread-item')).not.toHaveCount(0);
+      const list = drawer.locator('.sb-scroll'), foot = drawer.locator('.sb-foot');
+      // The list is longer than its place, so it scrolls, and its place ends where the footer begins.
+      expect(await list.evaluate(node => node.scrollHeight > node.clientHeight), `${language}: the list scrolls`).toBe(true);
+      const [listBox, footBox, drawerBox] = [await list.boundingBox(), await foot.boundingBox(), await drawer.boundingBox()];
+      expect(listBox!.y + listBox!.height, `${language}: the list ends above the footer`).toBeLessThanOrEqual(footBox!.y + 0.5);
+      expect(footBox!.y + footBox!.height, `${language}: the footer stays at the bottom`).toBeCloseTo(drawerBox!.y + drawerBox!.height, 0);
+      const targets = drawer.locator(':is(.sb-item, .sb-count, .switch, .circle-btn, .me, .agent-tile)');
+      for (const position of ['top', 'bottom']) {
+        await list.evaluate((node, end) => { node.scrollTop = end === 'top' ? 0 : node.scrollHeight; }, position);
+        await expect(foot).toBeVisible();
+        // Every footer control answers a tap at its centre, whatever the list shows behind it.
+        for (const control of await foot.locator(':is(.sb-item, .me, .circle-btn)').all()) {
+          expect(await control.evaluate(node => { const box = node.getBoundingClientRect(); return node.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)); }), `${language} ${position}: ${await control.textContent()} answers its tap`).toBe(true);
+        }
+        expect.soft(await tapOverlaps(targets), `${language} ${position}: overlapping targets`).toEqual([]);
+      }
+      // At the end of the list the last recent card is wholly above the footer and answers its own tap.
+      const last = drawer.locator('.recent-cards a').last();
+      const lastBox = (await last.boundingBox())!;
+      expect(lastBox.y + lastBox.height, `${language}: the last card ends above the footer`).toBeLessThanOrEqual(footBox!.y + 0.5);
+      expect(await last.evaluate(node => { const box = node.getBoundingClientRect(); return node.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)); })).toBe(true);
+      await closeNavigation(page);
+    }
+  } finally {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await chooseLanguageInSettings(page, 'en');
+    query(`delete from public.conversations where id in (${chats.map(id => `'${id}'`).join(',')})`);
+    query(`delete from public.work_card_visits where company_id='${company}' and person_id='${manager}'`);
   }
 });
