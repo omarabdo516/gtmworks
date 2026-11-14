@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 
 // These are imported browser helpers, not standalone tests.
-const helpers = new Set(['tests/sign-in.ts', 'tests/navigation-measure.ts', 'tests/visual-screens.mjs', 'tests/fake-hermes.mjs', 'tests/fake-engine.mjs', 'tests/touch-diagnostics.mjs', 'tests/sql-statements.mjs']);
+const helpers = new Set(['tests/sign-in.ts', 'tests/navigation-measure.ts', 'tests/visual-screens.mjs', 'tests/fake-hermes.mjs', 'tests/fake-engine.mjs', 'tests/touch-diagnostics.mjs', 'tests/sql-statements.mjs', 'tests/choose-language.ts']);
 const generated = new Set(['.git', 'node_modules', '.next', 'test-results', 'playwright-report', '.temp']);
 function files(directory = '.') {
  return readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
