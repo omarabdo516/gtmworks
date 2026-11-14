@@ -84,6 +84,48 @@ test('integration: two sends while the Agent is busy run as two turns in order, 
  } finally { query(`delete from public.member_notes where company_id='${company}'`); detach(); await fake.close(); }
 });
 
+// Review of 2026-11-14: a start whose answer is lost may have started the run. A queued turn is then asked again with
+// the same key, never failed; a direct send keeps its reservation, and its retry sends exactly the first request, the
+// note it was first reserved with included (the fake Hermes, like the pinned release, refuses another body for a key).
+test('integration: a queued turn whose start answer was lost is asked again, not failed, and runs once',async()=>{
+ test.setTimeout(120000);
+ const fake=await fakeHermes(); fake.settings.pendingReads=1e9;
+ const {service,person}=await memberClient('omar@example.com'); const {agent,detach}=await attachFakeHermes(fake);
+ try {
+  const conversation=randomUUID(); const second=randomUUID();
+  expect(await sendMessage(person,service,{company,conversation,sendKey:randomUUID(),agent,message:'Plan the launch week',encryptionKey})).toEqual({conversation});
+  expect(await sendMessage(person,service,{company,conversation,sendKey:second,agent,message:'Add a teaser post',encryptionKey})).toEqual({conversation,queued:true});
+  fake.settings.loseStarts=2; fake.settings.pendingReads=0;
+  await closeOpenRuns(service,{encryptionKey,conversation});
+  // (The background worker may make the same attempt; either way the turn is not failed.)
+  await startQueuedTurns(service,{encryptionKey,conversation});
+  expect(JSON.parse(query(`select failed_at from public.conversation_queued_turns where send_key='${second}'`))).toEqual([{failed_at:null}]);
+  await expect.poll(async()=>{ await closeOpenRuns(service,{encryptionKey,conversation}); await startQueuedTurns(service,{encryptionKey,conversation}); return rows(conversation).length; },{timeout:30000}).toBe(4);
+  expect(rows(conversation).map((row:{body:string})=>row.body)).toEqual(['Plan the launch week','Reply to: Plan the launch week','Add a teaser post','Reply to: Add a teaser post']);
+  expect(fake.settings.runs.map(run=>run.input)).toEqual(['Plan the launch week','Add a teaser post']);
+ } finally { detach(); await fake.close(); }
+});
+
+test('integration: a send whose answer was lost keeps its reservation, and its retry sends the note it was first reserved with',async()=>{
+ test.setTimeout(120000);
+ const fake=await fakeHermes();
+ const {service,person}=await memberClient('omar@example.com'); const {agent,detach}=await attachFakeHermes(fake);
+ try {
+  expect((await person.rpc('save_member_note',{c:company,note:'Answer in short points.'})).error).toBeNull();
+  const conversation=randomUUID(); const sendKey=randomUUID();
+  const send=()=>sendMessage(person,service,{company,conversation,sendKey,agent,message:'Plan the week',encryptionKey});
+  fake.settings.loseStarts=2;
+  expect(await send()).toEqual({error:'conversationSendAgain',status:409});
+  expect(JSON.parse(query(`select abandoned_at from public.conversation_run_reservations where send_key='${sendKey}'`))).toEqual([{abandoned_at:null}]);
+  // The person edits their note before trying again: the retry is still the first request.
+  expect((await person.rpc('save_member_note',{c:company,note:'Answer at length.'})).error).toBeNull();
+  expect(await send()).toEqual({conversation});
+  expect(fake.settings.runs).toHaveLength(1);
+  expect(fake.settings.runs[0].instructions).toContain('Answer in short points.');
+  expect(rows(conversation).filter((row:{author:string})=>row.author==='person')).toHaveLength(1);
+ } finally { query(`delete from public.member_notes where company_id='${company}'`); detach(); await fake.close(); }
+});
+
 test('integration: stop is refused to another Contributor and works for a Manager',async()=>{
  test.setTimeout(120000);
  const fake=fakeEngine(); fake.settings.pendingReads=1e9;

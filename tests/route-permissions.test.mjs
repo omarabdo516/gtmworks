@@ -1,27 +1,61 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { globSync, readFileSync } from 'node:fs';
+import ts from 'typescript';
 import { actionPermissions, outsideCompany, permitted, requiredFor, roleOrder, routePermissions } from '../lib/route-permissions.mjs';
 
 // Rule b of 2026-11-13: every server route and server action is in one table (lib/route-permissions.mjs), anything
 // missing needs Owner, and the role is read from the database on every request.
 const methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
-const routeFiles = () => globSync('app/**/route.ts').map(path => path.replaceAll('\\', '/')).sort();
-const actionFiles = () => globSync('app/**/{actions,*-actions}.ts').map(path => path.replaceAll('\\', '/')).sort();
-const exportedMethods = source => methods.filter(method => new RegExp(`export\\s+(const\\s+${method}\\b|(async\\s+)?function\\s+${method}\\b)`).test(source));
-const exportedActions = source => [...source.matchAll(/export\s+const\s+(\w+)\s*=\s*withActionLog\(/g)].map(match => match[1]);
+const sourceFiles = directory => globSync(`${directory}/**/*.{ts,tsx,mjs}`).map(path => path.replaceAll('\\', '/')).filter(path => !path.endsWith('.d.mts')).sort();
+const routeFiles = () => globSync('app/**/route.{ts,tsx,js,mjs}').map(path => path.replaceAll('\\', '/')).sort();
+// Every file that defines server actions: its first statement is the 'use server' directive (anywhere in the code, not
+// only files named *actions.ts).
+const isServerFile = source => { const first = ts.createSourceFile('f.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX).statements[0]; return !!first && ts.isExpressionStatement(first) && ts.isStringLiteral(first.expression) && first.expression.text === 'use server'; };
+const actionFiles = () => ['app', 'lib', 'components'].flatMap(sourceFiles).filter(file => isServerFile(read(file)));
+// Every name a module exports, however it is written: export function, export async function, export const/let,
+// export { handler as DELETE }, and export default.
+export function exportedNames(source) {
+  const names = [];
+  const exported = node => ts.canHaveModifiers(node) && (ts.getModifiers(node) || []).some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword);
+  const isDefault = node => (ts.getModifiers(node) || []).some(modifier => modifier.kind === ts.SyntaxKind.DefaultKeyword);
+  for (const statement of ts.createSourceFile('f.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX).statements) {
+    if ((ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) && exported(statement)) names.push(isDefault(statement) ? 'default' : statement.name?.text || 'default');
+    else if (ts.isVariableStatement(statement) && exported(statement)) for (const declaration of statement.declarationList.declarations) names.push(declaration.name.getText());
+    else if (ts.isExportDeclaration(statement) && statement.exportClause && ts.isNamedExports(statement.exportClause)) for (const element of statement.exportClause.elements) names.push(element.name.text);
+    else if (ts.isExportAssignment(statement)) names.push('default');
+  }
+  return names;
+}
+const exportedMethods = source => exportedNames(source).filter(name => methods.includes(name));
+// In a 'use server' file every export is an action.
+const exportedActions = source => isServerFile(source) ? exportedNames(source) : [];
 
 // What the tree has that the table lacks: route files, methods of a listed file, and actions.
 export function uncovered(files, read, table = routePermissions, actions = actionPermissions) {
   const missing = [];
   for (const file of files) {
     const source = read(file);
-    if (file.endsWith('/route.ts')) {
+    if (/\/route\.(ts|tsx|js|mjs)$/.test(file)) {
       if (!Object.hasOwn(table, file)) { missing.push(file); continue; }
       for (const method of exportedMethods(source)) if (!Object.hasOwn(table[file], method)) missing.push(`${file} ${method}`);
     } else for (const action of exportedActions(source)) if (!Object.hasOwn(actions, action)) missing.push(`${file} ${action}`);
   }
   return missing;
+}
+// Routes and actions that do not check their own entry where they run.
+export function unguarded(files, read) {
+  const problems = [];
+  for (const file of files) {
+    const source = read(file);
+    if (/\/route\.(ts|tsx|js|mjs)$/.test(file)) {
+      const levels = new Set(Object.values(routePermissions[file] || { any: 'owner' }));
+      if (levels.has('agentKey')) { if (!/authenticateAgent\(/.test(source)) problems.push(file); }
+      else if (levels.has('setupCode')) { if (!/setupCodeMatches\(/.test(source)) problems.push(file); }
+      else if (![...levels].every(level => level === 'public') && !(source.includes('routeAllowed(') && source.includes(`'${file}'`))) problems.push(file);
+    } else for (const action of exportedActions(source)) if (requiredFor(actionPermissions, action) !== 'public' && !source.includes(`actionAllowed(db,'${action}'`)) problems.push(`${file} ${action}`);
+  }
+  return problems;
 }
 const read = file => readFileSync(file, 'utf8');
 
@@ -32,8 +66,15 @@ test('every route file, method and server action is in the permission table', ()
 });
 
 test('a route or action added without a table entry is reported, and needs Owner', () => {
-  const sources = { 'app/api/new-thing/route.ts': 'export async function POST() {}', 'app/c/[slug]/new-actions.ts': "export const doNewThing=withActionLog('doNewThing',async()=>{});", 'app/api/config/route.ts': 'export function GET() {}\nexport function DELETE() {}' };
-  assert.deepEqual(uncovered(Object.keys(sources), file => sources[file]), ['app/api/new-thing/route.ts', 'app/c/[slug]/new-actions.ts doNewThing', 'app/api/config/route.ts DELETE']);
+  const sources = {
+    'app/api/new-thing/route.ts': 'export async function POST() {}',
+    'app/c/[slug]/new-actions.ts': "'use server';\nexport const doNewThing=withActionLog('doNewThing',async()=>{});",
+    'app/api/config/route.ts': 'export function GET() {}\nconst handler=async()=>{};\nexport { handler as DELETE };',
+    'lib/sneaky.ts': "'use server';\nexport async function sneaky(form) {}\nconst other=async()=>{};\nexport { other as renamedAction };",
+    'lib/not-server.ts': 'export async function helper() {}',
+  };
+  assert.deepEqual(uncovered(Object.keys(sources), file => sources[file]), ['app/api/new-thing/route.ts', 'app/c/[slug]/new-actions.ts doNewThing', 'app/api/config/route.ts DELETE', 'lib/sneaky.ts sneaky', 'lib/sneaky.ts renamedAction']);
+  assert.deepEqual(unguarded(['app/c/[slug]/new-actions.ts', 'lib/sneaky.ts', 'app/api/new-thing/route.ts'], file => sources[file]), ['app/c/[slug]/new-actions.ts doNewThing', 'lib/sneaky.ts sneaky', 'lib/sneaky.ts renamedAction', 'app/api/new-thing/route.ts']);
   assert.equal(requiredFor(routePermissions, 'app/api/new-thing/route.ts', 'POST'), 'owner');
   assert.equal(requiredFor(routePermissions, 'app/api/config/route.ts', 'DELETE'), 'owner');
   assert.equal(requiredFor(actionPermissions, 'doNewThing'), 'owner');
@@ -52,16 +93,7 @@ test('every table entry names a known level, and no route or action in it is gon
 });
 
 test('each route and action checks its own entry where it runs', () => {
-  for (const file of routeFiles()) {
-    const source = read(file); const levels = new Set(Object.values(routePermissions[file]));
-    if (levels.has('agentKey')) assert.match(source, /authenticateAgent\(/, file);
-    else if (levels.has('setupCode')) assert.match(source, /setupCodeMatches\(/, file);
-    else if (![...levels].every(level => level === 'public')) assert.ok(source.includes(`routeAllowed(`) && source.includes(`'${file}'`), `${file} calls routeAllowed with its own path`);
-  }
-  for (const file of actionFiles()) {
-    const source = read(file);
-    for (const action of exportedActions(source)) if (requiredFor(actionPermissions, action) !== 'public') assert.ok(source.includes(`actionAllowed(db,'${action}'`), `${file} ${action} calls actionAllowed with its own name`);
-  }
+  assert.deepEqual(unguarded([...routeFiles(), ...actionFiles()], read), []);
 });
 
 // A database stand-in that answers the members query with whatever role the member holds at that moment.

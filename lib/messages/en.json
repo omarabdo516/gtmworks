@@ -759,7 +759,7 @@
   "conversationAddressed": "To {0} · the agent wasn’t asked",
   "conversationStop": "Stop {0}",
   "memberNote": "Your note for the agents",
-  "memberNoteD": "How you like to work, in your own words. Only you see it, and it goes only with your own chats; the company’s memory stays shared.",
+  "memberNoteD": "How you like to work, in your own words. Only you can see it here, and it goes only with your own chats. The agent may still remember a preference for the whole team, so keep anything private out of it.",
   "memberNotePlaceholder": "For example: answer in short points, and suggest two options before you write.",
   "memberNoteHint": "Up to {0} characters. No passwords, keys or tokens.",
   "memberNoteSave": "Save note",

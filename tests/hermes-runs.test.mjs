@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fakeHermes } from './fake-hermes.mjs';
-import { startRun, readRun } from '../lib/hermes.mjs';
+import { startRun, readRun, startUnknown } from '../lib/hermes.mjs';
 
 const connection=fake=>({address:fake.address,profile:'writer',key:'test-only-key'});
 
@@ -39,6 +39,21 @@ test('a run is read as pending until Hermes reports its terminal status, output 
   assert.deepEqual(await readRun({...connection(fake),run}),{status:'completed',output:'Reply to: Hello',session:'s',usage:{input:14000,output:12}});
   fake.settings.status=500;
   assert.deepEqual(await readRun({...connection(fake),run}),{status:'unreachable',output:null,session:null,usage:null});
+ } finally { await fake.close(); }
+});
+
+// A start whose answers are lost (the driver asks twice) may have started the run: it is unknown, never "not started",
+// and asking again with the same key and body replays that run. The same key with another body is refused, as the pinned release refuses it.
+test('a lost start answer is unknown, and the same key with another body is refused',async()=>{
+ const fake=await fakeHermes(); fake.settings.loseStarts=2;
+ try {
+  const start={...connection(fake),input:'Plan the week',instructions:'Answer in short points.',sessionKey:'s',idempotencyKey:'k'};
+  assert.equal(await startRun(start),startUnknown);
+  assert.equal(fake.settings.runs.length,1);
+  const run=await startRun(start);
+  assert.equal(run,fake.settings.runs[0].id);
+  assert.equal(await startRun({...start,instructions:'Changed note.'}),null);
+  assert.equal(fake.settings.runs.length,1);
  } finally { await fake.close(); }
 });
 
