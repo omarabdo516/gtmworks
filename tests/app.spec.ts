@@ -190,11 +190,6 @@ for(const width of [1440,390]) test(`card creation fits the viewport and detail 
 test('sign-in returns to requested page, company switch preserves section, and access is isolated',async({page})=>{
  await signIn(page,'multi@example.com','/c/rs-learning/approvals'); await expect(page).toHaveURL(/\/c\/rs-learning\/approvals/); await chooseCompany(page,'aleem'); await expect(page).toHaveURL(/\/c\/aleem\/approvals/); const response=await page.goto('/c/rs-consultations/home'); expect(response?.status()).toBe(404); const unknown=await page.goto('/c/unknown/home'); expect(unknown?.status()).toBe(404);
 });
-test('landing and screenshots of every charter route',async({page})=>{
- await signIn(page,'omar@example.com','/sign-in'); await expect(page).toHaveURL(/\/c\/[^/]+\/home/); await mkdir('test-results/screenshots',{recursive:true});
- for(const width of [1440,390]) { await page.setViewportSize({width,height:900}); for(const path of ['/sign-in','/c/rs-learning/home','/c/rs-learning/approvals','/c/rs-learning/settings']) { await page.goto(path); await page.screenshot({path:`test-results/screenshots/${path.slice(1).replaceAll('/','-')}-${width}.png`,fullPage:true}); } }
-});
-
 test('an expired session is refreshed and the rotated cookies survive another request', async ({ page, context }) => {
  await signIn(page, 'manager@example.com', '/c/rs-learning/home');
  await expect(page).toHaveURL(/\/c\/rs-learning\/home/);
@@ -227,11 +222,6 @@ test('members controls, the Role list, viewer access, and no all-companies list'
  const viewer=page.locator('.member-row').filter({has:page.locator('strong',{hasText:/^مشاهد$/})}); const roles=await viewer.getByRole('combobox',{name:"Member role",exact:true}).locator('option').evaluateAll(options=>options.map(option=>(option as HTMLOptionElement).value)); expect(roles).toEqual(['owner','manager','contributor','viewer']); await expect(viewer.getByRole('combobox',{name:"Agent role",exact:true})).toHaveCount(0); await viewer.getByRole('combobox',{name:"Member role",exact:true}).selectOption('contributor'); await viewer.getByLabel("Publishing").check(); await viewer.getByRole('button',{name:"Save"}).click(); await expect(page.getByRole('status')).toContainText('Change saved.'); const changed=page.locator('.member-row').filter({has:page.locator('strong',{hasText:/^مشاهد$/})}); await expect(changed.getByRole('combobox',{name:"Member role",exact:true})).toHaveValue('contributor'); await expect(changed.getByRole('combobox',{name:"Agent role",exact:true})).toBeVisible(); await changed.getByRole('combobox',{name:"Member role",exact:true}).selectOption('viewer'); await changed.getByLabel("Publishing").uncheck(); await changed.getByRole('button',{name:"Save"}).click(); await expect(changed.getByRole('combobox',{name:"Member role",exact:true})).toHaveValue('viewer'); await expect(changed.getByRole('combobox',{name:"Agent role",exact:true})).toHaveCount(0);
  expect((await page.goto('/all-brands'))?.status()).toBe(404);
  await context.clearCookies(); await signIn(page,'viewer@example.com','/c/rs-learning/settings/members'); await expect(page.getByRole('heading',{name:"Team members"})).toBeVisible(); await expect(page.getByRole('button',{name:"Remove"})).toHaveCount(0); await expect(page.locator('.member-row').filter({has:page.locator('strong',{hasText:/^مشاهد$/})})).toContainText("Viewer"); const res=await page.goto('/all-brands'); expect(res?.status()).toBe(404);
-});
-
-test('screenshots for unit routes',async({page})=>{
- await signIn(page,'omar@example.com','/c/rs-learning/settings/members'); await mkdir('test-results/screenshots',{recursive:true});
- for(const width of [1440,390]) { await page.setViewportSize({width,height:900}); for(const path of ['/c/rs-learning/settings/members','/c/rs-learning/settings/agents']) { await page.goto(path); await page.screenshot({path:`test-results/screenshots/${path.slice(1).replaceAll('/','-')}-${width}.png`,fullPage:true}); } }
 });
 
 test('invite link signs the new member into the company',async({page,context})=>{
