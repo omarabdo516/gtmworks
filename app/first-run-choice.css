@@ -1,0 +1,58 @@
+/* First run's one question (#9), ported from the approved reference (design-reference/index.html: .fr, .fr__*, .fr-*,
+   .cr-kind). Colours come from the shell's gw tokens (app/shell.css), so it follows the theme. */
+.gw.fr-root {
+  position: fixed; inset: 0; z-index: 70; background: var(--gw-bg-chrome); color: var(--gw-text-1);
+  font-family: var(--gw-font); font-size: var(--gw-fs-msg); line-height: 1.6; -webkit-font-smoothing: antialiased;
+}
+.gw .fr:focus { outline: none; }
+.gw .fr { width: 100%; height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); animation: fr-in var(--gw-dur) var(--gw-ease-out); }
+@keyframes fr-in { from { opacity: 0; } }
+@keyframes fr-rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.gw .fr :where(h1, p) { margin: 0; letter-spacing: normal; text-transform: none; }
+.gw .fr__bar { display: flex; align-items: center; gap: 12px; padding: 16px 24px; border-bottom: 0.5px solid var(--gw-border-3); }
+.gw .fr__body { display: flex; flex-direction: column; align-items: center; overflow-y: auto; min-height: 0; overscroll-behavior: contain; padding: 48px 24px 64px; }
+.gw .fr__col { width: min(640px, 100%); margin-block: auto; display: grid; gap: 24px; }
+.gw .fr__col > * { animation: fr-rise 280ms var(--gw-ease-out) both; }
+.gw .fr__col > :nth-child(3) { animation-delay: 40ms; }
+.gw .fr__col > :nth-child(4) { animation-delay: 80ms; }
+.gw .fr__head { display: grid; gap: 8px; }
+.gw .fr__eyebrow { font-size: var(--gw-fs-sm); line-height: 1.5; color: var(--gw-text-3); }
+.gw .fr__title { font-size: var(--gw-fs-xl); line-height: 1.4; font-weight: 600; }
+.gw .fr__sub { font-size: var(--gw-fs-base); line-height: 1.7; color: var(--gw-text-2); max-width: 60ch; text-wrap: pretty; }
+.gw .fr__choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.gw .cr-kind {
+  position: relative; display: grid; gap: 4px; padding: 20px; padding-inline-end: 44px; align-content: start; border-radius: var(--gw-r-md); text-align: start; cursor: pointer;
+  background: var(--gw-bg-pane); box-shadow: var(--gw-border-2) 0 0 0 1px inset; transition: background-color var(--gw-dur-fast) var(--gw-ease-out);
+}
+@media (hover: hover) { .gw .cr-kind:hover:not(:has(input:checked)) { background: var(--gw-bg-elevated-hover); } }
+.gw .cr-kind:has(input:checked) { box-shadow: var(--gw-text-1) 0 0 0 1px inset; }
+.gw .cr-kind:has(input:focus-visible) { outline: 2px solid var(--gw-focus); outline-offset: 2px; }
+.gw .fr-choice__input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.gw .cr-kind__t { font-size: var(--gw-fs-msg); font-weight: 600; line-height: 1.5; }
+.gw .cr-kind__d { font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-2); }
+.gw .cr-kind__check { position: absolute; top: 20px; inset-inline-end: 16px; display: inline-flex; color: var(--gw-text-1); }
+.gw .cr-kind__check .gw-icon { width: 16px; height: 16px; }
+.gw .fr-art { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; color: var(--gw-text-3); }
+.gw .fr-art .me__av { width: 32px; height: 32px; font-size: var(--gw-fs-sm); }
+.gw .fr-ppl { display: inline-flex; flex: none; }
+.gw .fr-ppl > .me__av { box-shadow: 0 0 0 2px var(--gw-bg-pane); }
+.gw .fr-ppl > * + * { margin-inline-start: -8px; }
+.gw .fr-art__plus { display: inline-flex; flex: none; }
+.gw .fr-art__plus .gw-icon { width: 14px; height: 14px; }
+.gw .fr__error { font-size: var(--gw-fs-sm); color: var(--gw-danger-text); }
+.gw .fr__actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding-top: 8px; }
+.gw .fr__hint { flex: 1 1 0; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); }
+.gw .fr .btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; min-width: 120px; padding: 0 16px; border: 0; border-radius: var(--gw-r-full);
+  font: inherit; font-size: var(--gw-fs-base); font-weight: 600; white-space: nowrap; transition: background-color var(--gw-dur-fast) var(--gw-ease-out);
+}
+.gw .fr .btn--primary { background: var(--gw-primary); color: var(--gw-on-primary); cursor: pointer; }
+.gw .fr .btn--primary:disabled { background: var(--gw-primary-disabled); color: var(--gw-text-4); cursor: default; }
+@media (hover: hover) { .gw .fr .btn--primary:hover:not(:disabled) { background: var(--gw-primary-hover); } }
+@media (max-width: 639px) {
+  .gw .fr__bar { padding-inline: 16px; }
+  .gw .fr__body { padding: 32px 16px 48px; }
+  .gw .fr__choices { grid-template-columns: minmax(0, 1fr); }
+  .gw .fr__actions .btn { flex: 1 1 0; min-width: 0; min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) { .gw .fr, .gw .fr__col > * { animation: none; } }

@@ -18,6 +18,10 @@ const lightScreens = [
   { name: 'work-settings', path: '/c/rs-learning/settings/work' },
   { name: 'numbers', path: '/c/rs-learning/numbers' },
   { name: 'log', path: '/c/rs-learning/log' },
+  // First run's one question (#9), over RS Learning made unanswered for the picture, and Lead's first words in the
+  // Owner's new, empty Conversation with Lead (tests/visual.spec.ts sets both states up and puts the seed back).
+  { name: 'first-run-question', path: '/c/rs-learning/home', state: 'unanswered' },
+  { name: 'lead-welcome', path: '/c/rs-learning/conversations/64000000-0000-0000-0000-000000000009', state: 'lead-welcome' },
 ];
 
 export const screens = [

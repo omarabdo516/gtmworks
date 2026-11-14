@@ -752,5 +752,18 @@
   "signInSharedWarning": "A subscription is signed in on the agent engine’s shared default space. Every company without its own sign-in would run on it, so it never counts as this company’s. Ask whoever installed gtmworks to sign it out there.",
   "conversationAgentLevelPending": "The agents’ tools are being updated to the level the Owner chose. Try again in a moment.",
   "logNotListed": "No longer listed",
-  "conversationSendAgain": "That message didn’t reach the agent in time. Please send it again."
+  "conversationSendAgain": "That message didn’t reach the agent in time. Please send it again.",
+  "firstRunWelcome": "Welcome to",
+  "firstRunQuestion": "Will you work alone or with a team?",
+  "firstRunQuestionSub": "Either way you start with {0} alone, and ask it for any agent in your own words. If you start alone, you can invite someone whenever you like.",
+  "firstRunAlone": "Alone",
+  "firstRunAloneHint": "Just you and {0}, and you ask it for any agent you need. You can invite someone later, any time.",
+  "firstRunTeam": "With a team",
+  "firstRunTeamHint": "You start with {0}, and everyone on the team asks it for the agent they need. Shared work lives in channels.",
+  "firstRunPick": "Pick one to continue",
+  "firstRunOpen": "Open the workspace",
+  "firstRunFailed": "Your answer wasn’t saved. Try again.",
+  "leadFreshLine": "I’m {0} and I run your marketing work with you. Need an agent for any job? Tell me in your own words and I’ll make it.",
+  "leadTrySaying": "Try saying",
+  "leadTryExample": "I want someone to run our Meta and Google ads"
 }

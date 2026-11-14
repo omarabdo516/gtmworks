@@ -83,6 +83,26 @@ const readyBy: Record<string, string> = {
   'work-settings': '.settings-row',
   numbers: '.numbers-page',
   log: '.log-page',
+  'first-run-question': '.fr',
+  'lead-welcome': '[data-lead-line]',
+};
+
+// The two first-run states (#9) the seed does not hold: RS Learning with no answer yet, and a new workspace's Lead with
+// the Owner's empty Conversation. Each is set up for its own picture and taken away after it, so the seed stays as built.
+const leadWelcome = { connection: '64000000-0000-0000-0000-000000000007', agent: '64000000-0000-0000-0000-000000000008', conversation: '64000000-0000-0000-0000-000000000009' };
+const screenStates: Record<string, { set: string, unset: string }> = {
+  unanswered: {
+    set: `update public.companies set work_mode=null where id='${rsLearning}'`,
+    unset: `update public.companies set work_mode='team' where id='${rsLearning}'`,
+  },
+  'lead-welcome': {
+    set: `do $$ begin insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('${leadWelcome.connection}','${rsLearning}','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9/p/visual','visual-lead','visual-no-key','unreachable');
+      insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('${leadWelcome.agent}','${rsLearning}','${leadWelcome.connection}','Lead','General',true);
+      insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${leadWelcome.conversation}','${rsLearning}','20000000-0000-0000-0000-000000000001','${leadWelcome.agent}','Lead'); end $$;`,
+    unset: `do $$ begin delete from public.conversations where id='${leadWelcome.conversation}';
+      delete from public.hermes_agents where id='${leadWelcome.agent}';
+      delete from public.hermes_connections where id='${leadWelcome.connection}'; end $$;`,
+  },
 };
 
 async function showScreen(page: Page, screen: (typeof screens)[number], width: number) {
@@ -103,7 +123,8 @@ async function showScreen(page: Page, screen: (typeof screens)[number], width: n
   // The fixed text is shorter than a real date, so it changes how rows wrap and how tall the page is. It goes in before the
   // window is sized, otherwise the window is sized for the real date and the picture keeps blank space that depends on the day.
   await fixClockText(page);
-  await showWholePage(page, width);
+  // The question covers the whole window over an inert workspace: the window keeps its size, as a person sees it.
+  if (screen.name !== 'first-run-question') await showWholePage(page, width);
 }
 
 test.describe('anonymous screens', () => {
@@ -168,9 +189,15 @@ test.describe('signed-in screens', () => {
         await chooseLanguage(page, language);
         current = language;
       }
-      await showScreen(page, screen, width);
-      if (screen.dark) await expectDarkContrast(page);
-      await expect(page).toHaveScreenshot(`${snapshotName(screen, language, width)}.png`, { fullPage: true });
+      const state = 'state' in screen && typeof screen.state === 'string' ? screenStates[screen.state] : undefined;
+      if (state) { query(state.unset); query(state.set); }
+      try {
+        await showScreen(page, screen, width);
+        if (screen.dark) await expectDarkContrast(page);
+        await expect(page).toHaveScreenshot(`${snapshotName(screen, language, width)}.png`, { fullPage: true });
+      } finally {
+        if (state) query(state.unset);
+      }
     });
   }
 });
