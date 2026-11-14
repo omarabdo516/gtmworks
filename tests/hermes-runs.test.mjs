@@ -20,6 +20,17 @@ test('a message starts one run in the conversation session of the chosen profile
  } finally { await fake.close(); }
 });
 
+// A Member's note travels as the run's own instructions (Hermes v0.23.0 /v1/runs `instructions`, an ephemeral prompt),
+// never inside the message; a run without a note sends no instructions at all.
+test('a run carries the sender\'s instructions only when it has them',async()=>{
+ const fake=await fakeHermes();
+ try {
+  await startRun({...connection(fake),input:'Plan the week',instructions:'Answer in short points.',sessionKey:'s',idempotencyKey:'k1'});
+  await startRun({...connection(fake),input:'And the next',sessionKey:'s',idempotencyKey:'k2'});
+  assert.deepEqual(fake.settings.runs.map(run=>[run.input,run.instructions]),[['Plan the week','Answer in short points.'],['And the next',undefined]]);
+ } finally { await fake.close(); }
+});
+
 test('a run is read as pending until Hermes reports its terminal status, output and session',async()=>{
  const fake=await fakeHermes(); fake.settings.pendingReads=1;
  try {

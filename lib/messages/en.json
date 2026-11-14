@@ -752,5 +752,19 @@
   "signInSharedWarning": "A subscription is signed in on the agent engine’s shared default space. Every company without its own sign-in would run on it, so it never counts as this company’s. Ask whoever installed gtmworks to sign it out there.",
   "conversationAgentLevelPending": "The agents’ tools are being updated to the level the Owner chose. Try again in a moment.",
   "logNotListed": "No longer listed",
-  "conversationSendAgain": "That message didn’t reach the agent in time. Please send it again."
+  "conversationSendAgain": "That message didn’t reach the agent in time. Please send it again.",
+  "conversationWorkingFor": "{0} is working on a reply for {1}…",
+  "conversationQueued": "It’ll read this after the current reply",
+  "conversationQueuedFailed": "Not sent: the agent engine wouldn’t start it. Send it again.",
+  "conversationAddressed": "To {0} · the agent wasn’t asked",
+  "conversationStop": "Stop {0}",
+  "memberNote": "Your note for the agents",
+  "memberNoteD": "How you like to work, in your own words. Only you see it, and it goes only with your own chats; the company’s memory stays shared.",
+  "memberNotePlaceholder": "For example: answer in short points, and suggest two options before you write.",
+  "memberNoteHint": "Up to {0} characters. No passwords, keys or tokens.",
+  "memberNoteSave": "Save note",
+  "memberNoteSaved": "Note saved.",
+  "memberNoteTooLong": "The note is longer than {0} characters.",
+  "memberNoteSecret": "This looks like a password, key or token. Keep secrets out of the note.",
+  "memberNoteFailed": "Couldn’t save the note. Try again."
 }

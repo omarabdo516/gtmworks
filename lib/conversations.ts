@@ -1,5 +1,7 @@
-// The conversation record as the page shows it: run ids stay on the server.
-export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string};
+// The conversation record as the page shows it: run ids stay on the server. A note is a person's message addressed to
+// another Member (`to`, no run); a queued message waits for the Agent to finish the current reply (`queued`), or was
+// not sent because the engine would not start it (`failed`).
+export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued',to?:string,failed?:boolean};
 type StoredMessage=ConversationMessage&{run_id:string};
 export const messageColumns='id,author,author_name,body,run_id,created_at';
 export const conversationColumns='id,agent_id,agent_name,hermes_agents(connection_id)';
@@ -18,3 +20,20 @@ export const titleOf=(messages:ConversationMessage[],agentName:string)=>messages
 // The agent's face is drawn from its Connection, as on the Agents page; a detached agent keeps a stable face from the conversation.
 export const faceOf=(conversation:{id:string,hermes_agents:unknown})=>(conversation.hermes_agents as {connection_id:string}|null)?.connection_id||conversation.id;
 export const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Notes to a person and turns still waiting join the record: notes in the order they were written, waiting turns after
+// everything already sent (they start in that order). A started turn is an ordinary message and is not repeated.
+export type StoredNote={id:number,author_name:string,addressed_name:string,body:string,created_at:string};
+export type QueuedTurn={send_key:string,message:string,queued_at:string,started_at:string|null,failed_at:string|null};
+export const noteColumns='id,author_name,addressed_name,body,created_at';
+export const queuedColumns='send_key,message,queued_at,started_at,failed_at';
+export const withTeamWork=(record:ConversationMessage[],notes:StoredNote[]=[],queued:QueuedTurn[]=[],sender=''):ConversationMessage[]=>{
+ // The record keeps its own order (by id); each note goes before the first message written after it.
+ const merged:ConversationMessage[]=[]; const left=[...notes].sort((a,b)=>a.id-b.id);
+ for(const message of record) { while(left.length&&left[0].created_at<=message.created_at) merged.push(noteOf(left.shift()!)); merged.push(message); }
+ return [...merged,...left.map(noteOf),
+  ...queued.filter(turn=>!turn.started_at).map((turn,index)=>({id:index,author:'person' as const,author_name:sender,body:turn.message,created_at:turn.queued_at,kind:'queued' as const,...(turn.failed_at?{failed:true}:{})}))];
+};
+const noteOf=(note:StoredNote):ConversationMessage=>({id:note.id,author:'person',author_name:note.author_name,body:note.body,created_at:note.created_at,kind:'note',to:note.addressed_name});
+// Waiting turns keep the page asking until they have started and been answered.
+export const queuedWaiting=(queued:QueuedTurn[])=>queued.some(turn=>!turn.started_at&&!turn.failed_at);

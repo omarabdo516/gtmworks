@@ -3,7 +3,7 @@ export type HermesState={state:'connected'|'refused'|'unreachable'|'untested_ver
 export function isHermesAddressAllowed(address:string):boolean;
 export function testHermes(connection:{address:string,profile:string,key:string}):Promise<HermesState>;
 export type HermesConnection={address:string,profile:string,key:string};
-export function startRun(message:HermesConnection&{input:string,sessionKey:string,idempotencyKey:string}):Promise<string|null>;
+export function startRun(message:HermesConnection&{input:string,instructions?:string,sessionKey:string,idempotencyKey:string}):Promise<string|null>;
 export type RunUsage={input:number,output:number};
 export function readRun(run:HermesConnection&{run:string}):Promise<{status:'running'|'completed'|'failed'|'cancelled'|'interrupted'|'lost'|'unreachable',output:string|null,session:string|null,usage:RunUsage|null}>;
 export function stopRun(run:HermesConnection&{run:string}):Promise<boolean>;

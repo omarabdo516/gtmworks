@@ -5,8 +5,10 @@ import { newKey, encryptSecret } from '@/lib/agent-crypto.mjs';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { actionAllowed } from '@/lib/route-permissions.mjs';
 export const createAgentKey=withActionLog('createAgentKey',async function createAgentKey(_state:{key?:string,error?:string}, form:FormData):Promise<{key?:string,error?:string}> { const {t}=await getI18n();
  const db=await supabase();
+ if(!await actionAllowed(db,'createAgentKey',String(form.get('company')))) return {error:t('couldNotCreateTheKeyCheckTheMembers')};
  const {key,hash}=newKey('agent');
  const {error}=await db.from('agent_keys').insert({company_id:String(form.get('company')),person_id:String(form.get('person')),key_hash:hash});
  if(error) { logActionFailure('createAgentKey',error,{form}); return {error:t('couldNotCreateTheKeyCheckTheMembers')}; }
@@ -15,6 +17,7 @@ export const createAgentKey=withActionLog('createAgentKey',async function create
 });
 export const revokeAgentKey=withActionLog('revokeAgentKey',async function revokeAgentKey(form:FormData) {
  const {t}=await getI18n(); const db=await supabase(); const path=`/c/${String(form.get('slug'))}/settings/agents`;
+ if(!await actionAllowed(db,'revokeAgentKey',String(form.get('company')))) redirect(`${path}?message=${encodeURIComponent(t('couldNotSaveTheChangeCheckPermissionsAnd'))}`);
  // A key that was not revoked must say so: an update that fails, or matches nothing (not permitted), is shown as a message.
  const {data,error}=await db.from('agent_keys').update({revoked_at:new Date().toISOString()}).eq('id',String(form.get('id'))).eq('company_id',String(form.get('company'))).select('id');
  revalidatePath(path);
@@ -24,7 +27,8 @@ export const revokeAgentKey=withActionLog('revokeAgentKey',async function revoke
 
 export const saveWebhook=withActionLog('saveWebhook',async function saveWebhook(_state:{message?:string},form:FormData):Promise<{message?:string}> { const {t}=await getI18n();
  const db=await supabase(); const company=String(form.get('company')); const slug=String(form.get('slug'));
- try { const url=new URL(String(form.get('url'))); if (!['https:','http:'].includes(url.protocol) || url.username || url.password) throw new Error('url');
+ try { if(!await actionAllowed(db,'saveWebhook',company)) throw new Error('not permitted');
+ const url=new URL(String(form.get('url'))); if (!['https:','http:'].includes(url.protocol) || url.username || url.password) throw new Error('url');
  const secret=String(form.get('secret')); if (!secret) throw new Error('secret');
  const {error}=await db.from('agent_webhooks').upsert({company_id:company,url:url.toString(),secret_encrypted:encryptSecret(secret,process.env.WEBHOOK_ENCRYPTION_KEY),updated_at:new Date().toISOString()});
  if(error) throw error; revalidatePath(`/c/${slug}/settings/agents`); return {message:t('notificationSettingsSaved')};
@@ -33,7 +37,7 @@ export const saveWebhook=withActionLog('saveWebhook',async function saveWebhook(
 
 export const changeAgentAccess=withActionLog('changeAgentAccess',async function changeAgentAccess(form:FormData) { const {t}=await getI18n();
  const db=await supabase(); const path=`/c/${String(form.get('slug'))}/agents`;
- const {error}=await db.rpc(form.get('intent')==='grant'?'grant_agent_access':'revoke_agent_access',{c:String(form.get('company')),a:String(form.get('agent'))});
+ const {error}=await actionAllowed(db,'changeAgentAccess',String(form.get('company')))?await db.rpc(form.get('intent')==='grant'?'grant_agent_access':'revoke_agent_access',{c:String(form.get('company')),a:String(form.get('agent'))}):{error:{message:'not permitted'}};
  revalidatePath(path);
  if(error) logActionFailure('changeAgentAccess',error,{form});
  redirect(error?`${path}?message=${encodeURIComponent(t('couldNotChangeThisAgentsAccess'))}`:path);
