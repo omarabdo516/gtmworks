@@ -57,10 +57,18 @@ export function LogFilters({slug,who,card,people,agents,cards,count}:{slug:strin
   router.push(`/c/${slug}/log${query.size?`?${query}`:''}`);
  };
  const filtered=who!=='all'||card!=='all';
- // A choice made before the page finished loading still applies once it has.
+ // A choice made before the page finished loading still applies once it has. Only a field the reader changed counts:
+ // one whose value differs from what the page was drawn with. A filter with no option of its own (an Agent or Card
+ // no longer listed) is drawn on a 'No longer listed' option of its own, so the field shows the filter in force and
+ // choosing Everyone or All cards clears just that filter.
  const whoField=useRef<HTMLSelectElement>(null), cardField=useRef<HTMLSelectElement>(null);
  useEffect(()=>{
-  const [nextWho,nextCard]=[whoField.current?.value??who,cardField.current?.value??card];
+  const chosen=(field:HTMLSelectElement|null,current:string)=>{
+   if(!field) return current;
+   const drawn=[...field.options].find(option=>option.defaultSelected)??field.options[0];
+   return field.value!==drawn?.value?field.value:current;
+  };
+  const [nextWho,nextCard]=[chosen(whoField.current,who),chosen(cardField.current,card)];
   if(nextWho!==who||nextCard!==card) go(nextWho,nextCard);
  // eslint-disable-next-line react-hooks/exhaustive-deps
  },[]);
@@ -71,11 +79,13 @@ export function LogFilters({slug,who,card,people,agents,cards,count}:{slug:strin
     {people.length>0&&<optgroup label={t('logPeople')}>{people.map(person=><option key={person.value} value={person.value}>{person.label}</option>)}</optgroup>}
     {agents.length>0&&<optgroup label={t('logAgents')}>{agents.map(agent=><option key={agent.value} value={agent.value}>{agent.label}</option>)}</optgroup>}
     <option value="s">{t('logSystem')}</option>
+    {who!=='all'&&who!=='s'&&![...people,...agents].some(option=>option.value===who)&&<option value={who}>{t('logNotListed')}</option>}
    </select></div>
   <div className="lgp-field"><label htmlFor="lg-card">{t('logCard')}</label>
    <select ref={cardField} key={card} className="set-input" id="lg-card" defaultValue={card} onChange={event=>go(who,event.target.value)}>
     <option value="all">{t('logAllCards')}</option>
     {cards.map(option=><option key={option.value} value={option.value}>{option.label}</option>)}
+    {card!=='all'&&!cards.some(option=>option.value===card)&&<option value={card}>{t('logNotListed')}</option>}
    </select></div>
   {filtered&&<Link className="link-btn lgp-clear" href={`/c/${slug}/log`}>{t('logShowAll')}</Link>}
   <span className="lgp-count num" aria-live="polite">{t(count===1?'logEntry':'logEntries',count)}</span>

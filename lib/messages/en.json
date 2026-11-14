@@ -711,5 +711,6 @@
   "companyRenameNotAllowed": "Only the company’s Owner can rename it.",
   "companyNameInvalid": "Write a name of 1 to 80 characters.",
   "companyNameSaved": "Name saved.",
-  "logActCompanyRenamed": "renamed the company"
+  "logActCompanyRenamed": "renamed the company",
+  "logNotListed": "No longer listed"
 }
