@@ -321,6 +321,7 @@ function conversationDatabases({profile,reserve=null,record=null}) {
    if(name==='conversation_agent') return {data:null,error:null};
    if(name==='reserve_conversation_run') return reserve||{data:'f9000000-0000-0000-0000-000000000001',error:null};
    if(name==='send_conversation_message') return record||{data:true,error:null};
+   if(name==='release_conversation_run') return {data:true,error:null};
    return {data:null,error:{message:'unexpected'}}; },
   from:()=>{ const chain={select:()=>chain,eq:()=>chain,maybeSingle:async()=>({data:{id:'a9000000-0000-0000-0000-000000000001'},error:null})}; return chain; }};
  const key=encryptSecret('test-only-key',encryptionKey);
@@ -409,4 +410,21 @@ test('a late record of an abandoned reservation asks the person to send again', 
  const late=conversationDatabases({profile:companyProfile(two),record:{data:null,error:{code:'55000',message:'conversationSendAgain'}}});
  assert.deepEqual(await sendMessage(late.db,late.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...engine(late.order)}),{error:'conversationSendAgain',status:409});
  for(const language of ['en','ar']) assert.notEqual(i18n(language).t('conversationSendAgain'),'conversationSendAgain');
+});
+
+test('a run that never started releases its reservation at once; a started one leaves it to the record', async () => {
+ const {sendMessage}=await import('../lib/conversation-runs.mjs');
+ const refused=conversationDatabases({profile:companyProfile(two)});
+ const refusing={engineFor:connection=>({start:async()=>{ refused.order.push(`start ${connection.profile}`); return null; }})};
+ assert.deepEqual(await sendMessage(refused.db,refused.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...refusing}),{error:'conversationHermesFailed',status:502});
+ assert.deepEqual(refused.order.slice(-2),[`start ${companyProfile(two)}`,'release_conversation_run']);
+ assert.deepEqual(refused.db.args.release_conversation_run,{conversation:'c',c:two,message_key:'k'});
+ // A Connection that cannot be used never reaches the engine, and its reservation is released too.
+ const borrowed=conversationDatabases({profile:companyProfile(three)});
+ assert.deepEqual(await sendMessage(borrowed.db,borrowed.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...engine(borrowed.order)}),{error:'conversationNotFound',status:404});
+ assert.equal(borrowed.order.at(-1),'release_conversation_run');
+ // A run that started is recorded, never released: the record ends its reservation.
+ const started=conversationDatabases({profile:companyProfile(two)});
+ assert.deepEqual(await sendMessage(started.db,started.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...engine(started.order)}),{conversation:'c'});
+ assert.ok(!started.order.includes('release_conversation_run'));
 });

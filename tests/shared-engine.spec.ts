@@ -40,7 +40,7 @@ test('the Owner is warned while two companies share the bundled Engine profile, 
   query(`update public.people set language='ar' where id='${omar}'`);
   await page.goto('/c/aleem/settings');
   await expect(page.locator('html')).toHaveAttribute('lang','ar');
-  await expect(page.getByRole('note').filter({hasText:'يخدم التثبيت الواحد شركة واحدة'})).toBeVisible();
+  await expect(page.getByRole('note').filter({hasText:'الشركة اللي لسه على البروفايل المشترك من تثبيت قديم بتشارك ذاكرته'})).toBeVisible();
  } finally {
   for(const remove of removals.reverse()) remove();
   query(`update public.people set language='${language.language}' where id='${omar}'`);
