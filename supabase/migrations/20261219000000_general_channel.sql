@@ -319,3 +319,19 @@ begin
 end $$;
 revoke all on function public.move_company_profile(uuid,text,text,text,text[]) from public,anon,authenticated;
 grant execute on function public.move_company_profile(uuid,text,text,text,text[]) to service_role;
+
+-- An Owner's usage per day also counts the channel Runs that ran: a started Run once it ended, its tokens, and its
+-- usage unknown when the engine reported none. A Run that never started used nothing. The rest is
+-- 20261204000000_remove_agency's usage_by_day unchanged.
+create or replace function public.usage_by_day() returns table(company_id uuid, company_name text, day date, input_tokens bigint, output_tokens bigint, runs bigint, unknown_runs bigint)
+language sql stable security definer set search_path='' as $$
+ select u.company_id, co.name, (u.at at time zone 'UTC')::date, coalesce(sum(u.input_tokens),0)::bigint, coalesce(sum(u.output_tokens),0)::bigint, count(*), count(*) filter (where u.input_tokens is null)
+ from (
+  select company_id, recorded_at at, input_tokens, output_tokens from public.conversation_usage
+  union all
+  select company_id, closed_at, input_tokens, output_tokens from public.channel_runs where outcome is not null and run_id is not null
+ ) u join public.companies co on co.id=u.company_id
+ where auth.uid() is not null and public.is_company_owner(u.company_id)
+ group by u.company_id, co.name, (u.at at time zone 'UTC')::date
+ order by 3 desc, 2;
+$$;

@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(84);
+select plan(86);
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state)
  select ('f2300000-0000-0000-0000-00000000000'||n)::uuid,'10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://localhost','channels-'||n,'ciphertext','connected' from generate_series(1,4) n;
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,instructions) values
@@ -193,5 +193,15 @@ set local role service_role;
 select ok(public.close_channel_run((select id from sent where label='first'),'run-first','completed',repeat('x',200005),null,null),'an over-long reply still ends its Run');
 reset role;
 select is((select length(body) from public.channel_messages where reply_to=(select id from sent where label='first')),200000,'kept to its first 200,000 characters');
+reset role;
+create temp table used_want as select coalesce(sum(input_tokens),0)::bigint input_tokens, count(*)::bigint runs, count(*) filter (where input_tokens is null)::bigint unknown_runs from (
+ select input_tokens from public.conversation_usage where company_id='10000000-0000-0000-0000-000000000001'
+ union all select input_tokens from public.channel_runs where company_id='10000000-0000-0000-0000-000000000001' and outcome is not null and run_id is not null) u;
+grant select on used_want to authenticated;
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select is((select array[sum(input_tokens),sum(runs),sum(unknown_runs)]::bigint[] from public.usage_by_day() where company_id='10000000-0000-0000-0000-000000000001'),
+ (select array[input_tokens,runs,unknown_runs] from used_want),'the Owner''s usage counts the channel Runs that ran, their tokens and the ones of unknown usage');
+select ok((select input_tokens from used_want)>=120 and (select unknown_runs from used_want)>=1,'which here holds Faye''s 120 tokens and a Run of unknown usage');
 select * from finish();
 rollback;
