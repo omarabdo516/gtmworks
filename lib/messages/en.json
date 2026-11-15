@@ -778,5 +778,6 @@
   "agentMadeOnMine": "Made on {0} at your request",
   "agentMadeToday": "Made today at {0} at the request of {1}",
   "agentMadeTodayMine": "Made today at {0} at your request",
-  "agentMadeSeeAsk": "See the ask"
+  "agentMadeSeeAsk": "See the ask",
+  "newAgentReadyMade": "or pick a ready-made one"
 }
