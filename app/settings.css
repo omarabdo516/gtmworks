@@ -240,6 +240,8 @@
   .gw .sov .circle-btn::before { content: ""; position: absolute; inset: -4px; }
   .gw .sov :is(.btn--sm, .link-btn, .segmented :is(button, a), .switch) { position: relative; }
   .gw .sov .btn--sm::before { content: ""; position: absolute; inset: -7px 0; }
+  .gw .sov .inv-go { position: relative; }
+  .gw .sov .inv-go::before { content: ""; position: absolute; inset: -4px 0; }
   .gw .sov .segmented :is(button, a)::before { content: ""; position: absolute; inset: -8px 0; }
   .gw .sov .link-btn::before { content: ""; position: absolute; inset: -11px 0; }
   .gw .sov .switch::before { content: ""; position: absolute; inset: -12px -6px; }
