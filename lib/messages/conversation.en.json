@@ -15,5 +15,8 @@
   "madeAgentSpend": "Spend money",
   "madeAgentMessage": "Message a customer",
   "madeAgentOpen": "Open {0}",
-  "madeAgentTip": "Want to change something? Tell it in its chat."
+  "madeAgentTip": "Want to change something? Tell it in its chat.",
+  "ruleSaved": "Saved",
+  "ruleSavedFor": "A rule for {0} · written in the log",
+  "ruleSeeIt": "See it"
 }

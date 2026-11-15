@@ -83,7 +83,7 @@ test('a refused or failed fixture fails the step, so no capture runs on a half-l
 });
 
 test('every screen says how to reach it in the reference and which built page it matches', () => {
-  assert.deepEqual(Object.keys(screens).sort(), ['account', 'agent', 'agent-chat', 'agents', 'board', 'home', 'home-alone', 'log', 'made-agent', 'made-card', 'new-agent', 'numbers', 'ready-roles', 'settings', 'settings-alone', 'waiting']);
+  assert.deepEqual(Object.keys(screens).sort(), ['account', 'agent', 'agent-chat', 'agents', 'board', 'home', 'home-alone', 'log', 'made-agent', 'made-card', 'new-agent', 'numbers', 'ready-roles', 'rule-saved', 'settings', 'settings-alone', 'waiting']);
   for (const [name, screen] of Object.entries(screens)) {
     assert.match(name, /^[a-z]+(-[a-z]+)*$/, name);
     assert.deepEqual(Object.keys(screen).sort(), ['builtPath', 'reference'], name);
@@ -124,6 +124,8 @@ test('every screen says how to reach it in the reference and which built page it
   assert.equal(screens['new-agent'].builtPath, '/c/rs-learning/chat?new=agent');
   assert.equal(screens['made-card'].builtPath, null, 'the Conversation has a uuid path: pass the fixture\'s madeConversation');
   assert.equal(screens['made-agent'].builtPath, `/c/rs-learning/settings?agent=${fixture.agent}`);
+  // A lasting rule told to Ads (#18): the saved line in the Conversation; Ads's page above lists the rule.
+  assert.equal(screens['rule-saved'].builtPath, null, 'the Conversation has a uuid path: pass the fixture\'s ruleConversation');
 });
 
 test('a screen with no built equivalent needs --built-path or --reference-only', () => {

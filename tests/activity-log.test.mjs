@@ -21,13 +21,18 @@ test('Card, Member and Agent rows say who changed what', () => {
  assert.deepEqual([added.act, added.obj], [['logActAgentAdded'], 'Lead']);
  const requested = describeEntry({ subject: 'agent', action: 'agent_requested', details: { agent_name: 'Meta Ads', job: 'Runs the Meta ads.' } });
  assert.deepEqual([requested.act, requested.obj, requested.to], [['logActAgentRequested'], 'Meta Ads', { text: 'Runs the Meta ads.' }]);
+ const rule = 'من دلوقتي ما تبعتش حاجة للعميل من غير ما أشوفها';
+ const saved = describeEntry({ subject: 'agent', action: 'agent_rule_saved', agent_id: lead, details: { agent_name: 'Ads', rule } });
+ assert.deepEqual([saved.act, saved.obj, saved.to], [['logActRuleSaved', { text: 'Ads' }], rule, { key: 'logRuleInEffect' }], 'the rule is the object, said in the chat and in effect now');
+ const removed = describeEntry({ subject: 'agent', action: 'agent_rule_removed', agent_id: lead, details: { rule: 'x'.repeat(200) } }, { agentName: id => id === lead ? 'Ads' : undefined });
+ assert.deepEqual([removed.act, removed.obj.length, removed.to], [['logActRuleRemoved', { text: 'Ads' }], 80, undefined]);
  const long = describeEntry({ subject: 'card', action: 'card_changed', details: { field: 'title', old: 'x'.repeat(200), new: 'y' } });
  assert.equal(long.from.text.length, 80);
  // Every act and value key is in both catalogues.
- const rows = [moved, note, handed, caption, role, added, requested, describeEntry({ subject: 'card', action: 'unknown' }), describeEntry({ subject: 'member', action: 'agent_granted', details: {} })];
+ const rows = [moved, note, handed, caption, role, added, requested, saved, removed, describeEntry({ subject: 'card', action: 'unknown' }), describeEntry({ subject: 'member', action: 'agent_granted', details: {} })];
  for (const language of ['en', 'ar']) for (const line of rows) {
   const { t } = i18n(language);
-  t(line.act[0], ...line.act.slice(1).map(value => t(value.key)));
+  t(line.act[0], ...line.act.slice(1).map(value => 'key' in value ? t(value.key) : value.text));
   for (const value of [line.from, line.to]) if (value && 'key' in value) t(value.key);
  }
 });

@@ -3,18 +3,25 @@
 // not sent because the engine would not start it (`failed`).
 // An Agent Lead made in a run (#13) shows as a card in Lead's turn of that run (`made`); when Lead wrote nothing but the
 // call, the card is Lead's whole turn (`kind` made) after the message that asked.
+// A lasting rule the Agent saved in a run (#18) shows as a saved line (`kind` saved) after the Agent's reply of that run,
+// or after the message that told it when the reply was nothing but the call. A rule since removed keeps its line, since
+// the Conversation is the record as people saw it; only its way to the Agent's page goes, with the Agent's.
 export type MadeAgent={id:string,connection_id:string,name:string,job:string,apps:string[],fresh:boolean,created_at:string};
-export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made',to?:string,failed?:boolean,made?:MadeAgent[]};
+export type SavedRule={id:string,agent:string|null,removed:boolean,said_at:string};
+export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved',to?:string,failed?:boolean,made?:MadeAgent[],saved?:SavedRule[]};
 type StoredMessage=ConversationMessage&{run_id:string};
 export const messageColumns='id,author,author_name,body,run_id,created_at';
 export const conversationColumns='id,agent_id,agent_name,hermes_agents(connection_id)';
 // A person's message whose run Hermes no longer knew is marked lost (#243), from the run's usage record.
-export const shown=(messages:StoredMessage[],usage:{run_id:string,outcome:string}[]=[],made:{run_id:string,agent:MadeAgent}[]=[],agentName=''):ConversationMessage[]=>messages.flatMap(message=>{
+export const shown=(messages:StoredMessage[],usage:{run_id:string,outcome:string}[]=[],made:{run_id:string,agent:MadeAgent}[]=[],agentName='',saved:{run_id:string,rule:SavedRule}[]=[]):ConversationMessage[]=>messages.flatMap(message=>{
  const plain={id:message.id,author:message.author,author_name:message.author_name,body:message.body,lost:message.author==='person'&&usage.some(run=>run.run_id===message.run_id&&run.outcome==='lost'),created_at:message.created_at};
+ const replied=message.author==='agent'||messages.some(other=>other.author==='agent'&&other.run_id===message.run_id);
  const cards=made.filter(row=>row.run_id===message.run_id).map(row=>row.agent);
- if(!cards.length) return [plain];
- if(message.author==='agent') return [{...plain,made:cards}];
- return messages.some(other=>other.author==='agent'&&other.run_id===message.run_id)?[plain]:[plain,{id:message.id,author:'agent' as const,author_name:agentName,body:'',created_at:cards[0].created_at,kind:'made' as const,made:cards}];
+ const rules=saved.filter(row=>row.run_id===message.run_id).map(row=>row.rule);
+ const turn:ConversationMessage[]=message.author==='agent'?[cards.length?{...plain,made:cards}:plain]
+  :replied||!cards.length?[plain]:[plain,{id:message.id,author:'agent',author_name:agentName,body:'',created_at:cards[0].created_at,kind:'made',made:cards}];
+ const last=message.author==='agent'||!replied;
+ return last&&rules.length?[...turn,{id:message.id,author:'agent',author_name:agentName,body:'',created_at:rules[0].said_at,kind:'saved',saved:rules}]:turn;
 });
 // What each ended run used, as Hermes reported it; null tokens are unknown, never zero.
 export type RunUsage={run_id:string,outcome:'completed'|'stopped'|'lost'|'failed',input_tokens:number|null,output_tokens:number|null};

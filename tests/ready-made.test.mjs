@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { roleTemplates } from '../lib/role-templates.mjs';
-import { leadToolSpecs } from '../lib/lead-tools.mjs';
+import { agentToolSpecs } from '../lib/agent-tools.mjs';
 
 // The gallery (lib/ready-roles.ts) names each ready-made role from its own catalogue, keyed by the role's id. Every role
 // needs its words in both languages, its English line is the job the Agent is then given (so the card promises what
@@ -23,7 +23,7 @@ test('every ready-made role has its name, line and category in both languages, a
 });
 
 test('the message a pick sends names the role as create_agent describes its template, so Lead can tell which one', () => {
- const described = /** @type {any} */(leadToolSpecs.find(tool => tool.name === 'create_agent')).parameters.properties.template.description.toLowerCase();
+ const described = /** @type {any} */(agentToolSpecs.find(tool => tool.name === 'create_agent')).parameters.properties.template.description.toLowerCase();
  const en = catalogue('en');
  for (const id of Object.keys(roleTemplates)) assert.ok(described.includes(`${id} (${en[`role.${id}`].toLowerCase()})`), `${id}: ${en[`role.${id}`]}`);
 });
