@@ -16,6 +16,9 @@ the whole-app browser and install suites run only when their own area changed, o
   lock runs every suite; an empty, malformed or unreadable change list runs every suite; a push to `main` runs every
   suite unless every changed file is a document.
 - `static` runs on every change: the `node --test` files, lint, types, the catalogue and OpenAPI checks.
+- `components` tests screens as components in headless Chromium (Vitest browser mode, `vitest.config.mts`,
+  `tests/components/`), in two shards, as T3 Code does (#81). It runs when `app/`, `components/`, `lib/` or the
+  component tests change.
 - `database` runs the migration verifications, `check-rls.sql` and `tests/db.sh` (RLS, grants, migrations replayed on
   legacy data) on one local stack, when `supabase/` or a database test file changes.
 - `integration` is the whole-app browser suite: the production-shaped proxy suite, then the screens, the functional
@@ -49,6 +52,7 @@ the parts are timed from run 43642299138.
 | Suite | Layer | What it guards | Before | After | Decision |
 |---|---|---|---|---|---|
 | changes | classification | which suites a change needs | 0.1 min, every run (decided only docs-only and install) | 0.1 min, every run; decides database, browser and install | keep; one area script replaces `docs-only.mjs` and `install-related.mjs` |
+| components: Vitest in headless Chromium, two shards (tests/components/, 10 tests) | screen components | the composer's sending, retry and stop rules in both languages; an Agent's face | none | `app/`, `components/`, `lib/` or its tests; every `main` push | new (#81); the whole-app browser suite still runs on app changes until component tests cover the screens it proves |
 | static: lint, types, catalogues, OpenAPI, node --test (about 540 tests) | fast, unit | rules in `lib/`, routes and permissions tables, wording, workflow and release files | 1.6 min, every run | 1.6 min, every run | keep |
 | database: *.verify.sql, check-rls.sql, tests/db.sh (pgTAP, migration replays) | database | row-level security, grants, company isolation, migrations on legacy data | 1.5 min inside `integration` (plus the stack start), every non-document PR | own `database` job, when `supabase/` or a database test changes; every `main` push | moved to its own job; never removed (isolation and permissions) |
 | proxy suite (tests/proxy/, 7 tests) | whole-app browser | sign-in, settings and invitations behind an https proxy | 0.7 min inside `integration`, every non-document PR | inside `integration`: its area or app code, `main`, or `e2e` input | gated |
@@ -119,6 +123,8 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `ci-areas.test.mjs` | Each suite runs only when its own files change; main runs all unless the change is documents only; an unknown list runs all. (new, #76; replaces docs-only and install-related) | 3.1 s | — | new |
 | `ci-verdict.test.mjs` | `check` counts a suite as passed only when it was skipped because nobody asked for it, is red on any failed or cancelled stage, and the browser and install inputs default to off. (#69, #76) | 3 s | — | keep, extended |
 | `company-log-migration.mjs` | replays the company-log migration (tests/db.sh) | — | — | helper, kept |
+| `components/company-agent-face.test.tsx` | An Agent's face is a picture named for it at the asked size; one Agent always wears the same face; Agents whose connections draw different faces look different. (#81) | 0.2 s | agent-face.test.mjs (the face generator only), agent-face.spec.ts (faces across screens) | new |
+| `components/message-box.test.tsx` | The composer sends once on Enter (Shift+Enter adds a line), keeps text and shows why on a failed send, retries with the same send key and gives a new text a new key, offers stop on an empty box while the Agent works, starts with a focused draft, and speaks Arabic with the text keeping its own direction. (#81) | 1.6 s | conversations.spec.ts, lead-creates-agent.spec.ts (the composer inside whole journeys) | new |
 | `company-profiles.test.mjs` | Each company has its own Engine profile with its level's toolsets and never a risky one. | 1.1 s | — | keep |
 | `company-sign-in.spec.ts` | The Owner signs the company in to ChatGPT and out; a member only sees whether it is connected. | 20.5 s | settings-overlay.test.mjs (the Models slot) | keep |
 | `connection-key.test.mjs` | A kept Connection key is read only within its own Company. | 0.3 s | hermes-connections.spec.ts | keep |

@@ -2,7 +2,7 @@
 // and static must succeed. Each long suite the first job did not ask for (scripts/ci-areas.mjs) passes only when it was
 // skipped; one it asked for, or whose need is unknown, must succeed. A failed or cancelled stage is always red.
 const env = process.env;
-const stages = ['DATABASE', 'INTEGRATION', 'INSTALL'];
+const stages = ['COMPONENTS', 'DATABASE', 'INTEGRATION', 'INSTALL'];
 const keys = ['CHANGES_RESULT', 'STATIC_RESULT', ...stages.flatMap(stage => [`${stage}_RUN`, `${stage}_RESULT`])];
 console.log(keys.map(key => `${key}=${env[key] ?? ''}`).join(' '));
 const passes = env.CHANGES_RESULT === 'success' && env.STATIC_RESULT === 'success'

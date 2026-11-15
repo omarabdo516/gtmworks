@@ -7,7 +7,7 @@ import { resolve } from 'node:path';
 // when it was skipped; a suite it asked for, or one whose need is unknown, must succeed; a failed or cancelled stage is
 // always red.
 const script = resolve('scripts/ci-verdict.mjs');
-const stages = ['DATABASE', 'INTEGRATION', 'INSTALL'];
+const stages = ['COMPONENTS', 'DATABASE', 'INTEGRATION', 'INSTALL'];
 const green = { CHANGES_RESULT: 'success', STATIC_RESULT: 'success', ...Object.fromEntries(stages.flatMap(stage => [[`${stage}_RUN`, 'true'], [`${stage}_RESULT`, 'success']])) };
 const verdict = overrides => {
   const env = { PATH: process.env.PATH, ...green, ...overrides };
@@ -52,7 +52,7 @@ test('ci.yml decides the suites in its first job, gates each suite on it, and ju
   const { jobs } = workflow;
   const classify = jobs.changes.steps.find(step => step.id === 'classify');
   assert.match(classify.run, /node scripts\/ci-areas\.mjs \$main < "\$RUNNER_TEMP\/changed-files"/);
-  for (const [job, output] of [['database', 'database'], ['integration', 'integration'], ['install', 'install']]) {
+  for (const [job, output] of [['components', 'components'], ['database', 'database'], ['integration', 'integration'], ['install', 'install']]) {
     assert.equal(jobs.changes.outputs[output], `\${{ steps.classify.outputs.${output} }}`, output);
     assert.deepEqual(jobs[job].needs, ['changes'], job);
     assert.equal(jobs[job].if, `\${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.${output} != 'false') }}`, job);
@@ -60,7 +60,7 @@ test('ci.yml decides the suites in its first job, gates each suite on it, and ju
   const step = jobs.check.steps.at(-1);
   assert.equal(step.run, 'node scripts/ci-verdict.mjs');
   assert.equal(jobs.check.if, '${{ always() }}');
-  assert.deepEqual(jobs.check.needs, ['changes', 'static', 'database', 'integration', 'install']);
+  assert.deepEqual(jobs.check.needs, ['changes', 'static', 'components', 'database', 'integration', 'install']);
   for (const key of Object.keys(green)) assert.ok(step.env[key], key);
 });
 

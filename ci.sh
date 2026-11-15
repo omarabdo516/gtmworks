@@ -26,6 +26,7 @@ case "${1:-check}" in
   # Every stage in order, for local use. CI runs them as parallel jobs, each only when its files change
   # (.github/workflows/ci.yml, scripts/ci-areas.mjs).
   bash ci.sh static
+  bash ci.sh components
   bash ci.sh database
   bash ci.sh integration
   ;;
@@ -67,6 +68,14 @@ PY
   npm run typecheck
   npm test
   ;;
+ components)
+  # Screens as components in headless Chromium (#81); SHARD (for example 1/2) runs one slice.
+  if [[ "${CI:-}" == "true" ]]; then
+    npm ci
+  fi
+  npx playwright install --with-deps chromium
+  npm run test:components -- ${SHARD:+--shard="$SHARD"}
+  ;;
  database)
   # Migrations replayed and verified, row-level security and grants, on lane 0's stack.
   if [[ "${CI:-}" == "true" ]]; then
@@ -107,5 +116,5 @@ PY
   bash scripts/local-db.sh
   npm run test:visual:update
   ;;
- *) echo 'usage: ./ci.sh check | static | database | integration | visual-update' >&2; exit 2;;
+ *) echo 'usage: ./ci.sh check | static | components | database | integration | visual-update' >&2; exit 2;;
 esac
