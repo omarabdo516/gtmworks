@@ -7,9 +7,9 @@ select json_build_object(
   and has_table_privilege('authenticated','public.lead_made_agents','select')
   and not has_table_privilege('authenticated','public.lead_made_agents','insert,update,delete')
   and not has_table_privilege('service_role','public.lead_made_agents','select,insert,update,delete'),
- 'worker_calls_only',has_function_privilege('service_role','public.lead_create_agent(uuid,text,text,text,text,text[])','execute')
-  and not has_function_privilege('authenticated','public.lead_create_agent(uuid,text,text,text,text,text[])','execute')
-  and not has_function_privilege('anon','public.lead_create_agent(uuid,text,text,text,text,text[])','execute')
+ 'worker_calls_only',has_function_privilege('service_role','public.lead_create_agent'::regproc,'execute')
+  and not has_function_privilege('authenticated','public.lead_create_agent'::regproc,'execute')
+  and not has_function_privilege('anon','public.lead_create_agent'::regproc,'execute')
   and has_function_privilege('service_role','public.run_offers_tools(uuid,uuid)','execute')
   and not has_function_privilege('authenticated','public.run_offers_tools(uuid,uuid)','execute'),
  'rules_private',(select bool_and(not has_function_privilege(r,'public.may_use_lead_tools(uuid,uuid,uuid)','execute') and not has_function_privilege(r,'public.pinned_run_note(uuid,uuid,uuid,uuid)','execute'))

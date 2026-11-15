@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { runToolCall } from '../lib/lead-tools.mjs';
 import { fakeEngine } from './fake-engine.mjs';
+import { instructionsOf, roleTemplates } from '../lib/role-templates.mjs';
 
 const profile='co-10000000000000000000000000000001';
 function harness(/** @type {object} */ engineOverride={}) {
@@ -15,7 +16,8 @@ const asked={name:' Meta Ads ',job:'Runs the Meta ads. ',apps:['Meta Ads Manager
 test('an unknown tool or arguments that do not read are ignored, and nothing is asked of the Engine or the database',async()=>{
  const {fake,rpcs,call}=harness();
  for(const [name,args] of /** @type {[string,unknown][]} */([['delete_company',asked],['create_agent',null],['create_agent',{...asked,name:'x'.repeat(101)}],['create_agent',{...asked,job:' '}],
-  ['create_agent',{...asked,apps:Array(9).fill('Canva')}],['create_agent',{...asked,apps:['x'.repeat(41)]}],['create_agent',{...asked,apps:[7]}],['create_agent',{...asked,name:'Meta\u0000Ads'}],['create_agent',{...asked,apps:['Can\u0000va']}],['create_agent',{name:'Meta Ads',job:'Runs ads.'}]]))
+  ['create_agent',{...asked,apps:Array(9).fill('Canva')}],['create_agent',{...asked,apps:['x'.repeat(41)]}],['create_agent',{...asked,apps:[7]}],['create_agent',{...asked,name:'Meta\u0000Ads'}],['create_agent',{...asked,apps:['Can\u0000va']}],['create_agent',{name:'Meta Ads',job:'Runs ads.'}],
+  ['create_agent',{template:'astrologer'}],['create_agent',{...asked,template:'toString'}],['create_agent',{template:7}],['create_agent',{template:'writer',name:'x'.repeat(101)}],['create_agent',{template:'writer',apps:['x'.repeat(41)]}]]))
   assert.deepEqual(await call(name,args),{state:'ignored'},`${name} ${JSON.stringify(args)?.slice(0,60)}`);
  assert.deepEqual([fake.agentReads,rpcs],[[],[]]);
 });
@@ -35,4 +37,17 @@ test('create_agent asks nothing of the database while the Engine does not answer
  const {rpcs,call}=harness({readAgent:async()=>({state:'unreachable',agent:null})});
  assert.deepEqual(await call('create_agent',asked),{state:'engineUnreachable'});
  assert.deepEqual(rpcs,[]);
+});
+
+test('create_agent starts from a ready-made role: its name, job and apps unless others are given, and its instructions and limits for the database to fit',async()=>{
+ const {engine,rpcs,call}=harness();
+ await engine.createAgent({name:profile,instructions:''});
+ for(const [id,role] of Object.entries(roleTemplates)) {
+  assert.deepEqual(await call('create_agent',{template:id}),{state:'created',agent:'agent-1'},id);
+  assert.deepEqual(rpcs.at(-1),['lead_create_agent',{conversation:'conversation-1',run:'run-1',call:'call-0',agent_name:role.name,job:role.job,apps:role.apps,template:id,instructions:instructionsOf(/** @type {keyof typeof roleTemplates} */(id))}],id);
+  const {instructions}=/** @type {{instructions:string}} */(rpcs.at(-1)?.[1]);
+  assert.ok(instructions.startsWith(role.instructions)&&instructions.includes('{company}')&&role.limits.every(limit=>instructions.includes(limit)),id);
+ }
+ assert.deepEqual(await call('create_agent',{template:'writer',name:' Penny ',apps:['WordPress'],job:null}),{state:'created',agent:'agent-1'});
+ assert.deepEqual(rpcs.at(-1)?.[1],{conversation:'conversation-1',run:'run-1',call:'call-0',agent_name:'Penny',job:roleTemplates.writer.job,apps:['WordPress'],template:'writer',instructions:instructionsOf('writer')});
 });

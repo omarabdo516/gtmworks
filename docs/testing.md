@@ -140,7 +140,7 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `design-reference.spec.ts` | The production build answers 404 for the design reference. | 0 s | design-reference.test.mjs (the files, not the route) | keep |
 | `design-reference.test.mjs` | The design reference matches its approved checksums, file for file. | 0.3 s | design-reference.spec.ts | keep |
 | `engine-agents.test.mjs` | An Agent is one Engine profile made through the management listener with the install key. | 0.7 s | hermes-agents.spec.ts | keep |
-| `engine-conversation.spec.ts` | On the fake engine a reply is stored once with usage; failed and stopped runs end with usage; a Viewer is refused; Lead's create_agent call makes the Owner's Agent once, with its log row, and nothing for a Manager. | 28.1 s | conversations.spec.ts (the same flow on fake Hermes) | keep |
+| `engine-conversation.spec.ts` | On the fake engine a reply is stored once with usage; failed and stopped runs end with usage; a Viewer is refused; Lead's create_agent call makes the Owner's Agent once, with its log row, and nothing for a Manager; from each ready-made role it makes an Agent whose stored instructions are the role's, limits included, fitted with the Company's name, and a run to that Agent carries them. | 28.1 s | conversations.spec.ts (the same flow on fake Hermes) | keep |
 | `engine-name.spec.ts` | No page names the Engine, in English or Arabic. | 16 s | engine-name.test.mjs (catalogues only, not rendered pages) | keep |
 | `engine-name.test.mjs` | No message value names the Engine, in any language. | 0.3 s | engine-name.spec.ts | keep |
 | `engine.test.mjs` | The engine driver runs once per idempotency key, offers tools in a run's instructions and reads at most four calls back from the reply, and never sends a key over plain HTTP to a public address. | 0.6 s | — | keep |
@@ -171,7 +171,7 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `language.spec.ts` | English by default, the account language across sessions and devices, automatic content direction, and Arabic sign-in. | 62.6 s | — | keep (direction checks) |
 | `lead-agent-migration.mjs` | replays the lead-agent migration (tests/db.sh) | — | — | helper, kept |
 | `lead-creates-agent.spec.ts` | The Conversation shows the card for each Agent Lead made (under Lead's reply, or alone when the reply was only the call); the list marks it new for its requester only, until they open it; its page and details say when and at whose request; "New agent" and Settings open Lead's chat focused with a hint line, no form. (#13) | 30.7 s | engine-conversation.spec.ts (the tool call that makes the rows), sidebar.test.mjs (who sees the mark) | new |
-| `lead-tools.test.mjs` | Lead's create_agent call is ignored when its tool or arguments do not read, makes nothing until the Engine has the Company's profile ready, then asks the database with the trimmed arguments. | 0.1 s | engine-conversation.spec.ts (the same call on the database) | keep |
+| `lead-tools.test.mjs` | Lead's create_agent call is ignored when its tool or arguments (an unknown ready-made role included) do not read, makes nothing until the Engine has the Company's profile ready, then asks the database with the trimmed arguments; from a ready-made role it takes the role's name, job and apps unless given others, and passes the role's instructions and limits. | 0.1 s | engine-conversation.spec.ts (the same call on the database) | keep |
 | `lessons.test.mjs` | A lesson is proposed only from a run; deciding is a person's action. | 0.3 s | skill-lessons.spec.ts | keep |
 | `license.test.mjs` | LICENSE is MIT with the owner's copyright and the package stays private. | 0.6 s | — | keep |
 | `member-agent-visibility-migration.mjs` | replays the member-agent-visibility migration: every Member keeps the Agents they saw before the update (tests/db.sh) | — | — | helper, new |
@@ -220,7 +220,7 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `touch-diagnostics.mjs` | browser helper: touch recorder | — | — | helper, kept |
 | `touch-diagnostics.test.mjs` | Touch diagnostics print only bounded numbers and known words. | 0.2 s | — | keep |
 | `unit.test.mjs` | Glossary terms, Role-only access and other small rules across lib/. | 2 s | — | keep |
-| `unknown-starts.test.mjs` | A start whose outcome was unknown stays unknown until Hermes names the run. | 0.3 s | team-work.spec.ts | keep |
+| `unknown-starts.test.mjs` | A start whose outcome was unknown stays unknown until Hermes names the run; a run to an Agent with its own instructions carries them before its sender's note, sent now or queued; a retry of a Lead start sends its first attempt's tools, though the tools offered changed since, also when the previous app version made that attempt during an update. | 0.3 s | team-work.spec.ts | keep |
 | `usage.spec.ts` | Replies store their tokens and show a running total; stopped and lost runs keep what was reported; an Owner sees each company's tokens. | 23.8 s | hermes-usage.test.mjs (the parsing) | keep |
 | `visual-baselines.test.mjs` | Every listed screen has its approved images and no image lacks a screen. | 0.4 s | visual.spec.ts | keep |
 | `visual-screens.mjs` | helper: the compared screens | — | — | helper, kept |
