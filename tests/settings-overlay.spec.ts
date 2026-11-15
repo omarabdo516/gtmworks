@@ -197,6 +197,8 @@ for(const view of roleViews) test(`${view.role}: Settings shows only what the Ro
  const [first,second,lead,ads]=[randomUUID(),randomUUID(),randomUUID(),randomUUID()];
  for(const connection of [first,second]) query(`insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('${connection}','${rsLearning}','${owner}','http://localhost','roles-${connection.slice(0,8)}','ciphertext','connected')`);
  query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('${lead}','${rsLearning}','${first}','Lead','Marketing lead',true),('${ads}','${rsLearning}','${second}','Ads','Ads agent',false)`);
+ // Ads is shown to every Member (#15), so each Role reads both Agents and the difference is only what it may do.
+ query(`insert into public.member_agent_access(company_id,person_id,agent_id) select company_id,person_id,'${ads}' from public.members where company_id='${rsLearning}' and removed_at is null and role<>'owner'`);
  const main=()=>JSON.parse(query(`select id from public.hermes_agents where company_id='${rsLearning}' and is_default`)).map((row:{id:string})=>row.id);
  try {
   await signIn(page,view.email,'/c/rs-learning/home');
