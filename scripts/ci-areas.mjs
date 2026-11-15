@@ -14,15 +14,15 @@ const suites = {
   ],
   // The whole-app browser suite and its screens: the specs, their helpers and approved images, the stacks they run on
   // (every lane is built from the migrations, the stack configuration and the local default privileges), the first-run
-  // reset helpers the specs import, the seed the screens are compared on, and public/ (a browser test reads every file
-  // there). Until screens have
+  // reset helpers the specs import, the image the job builds and the proxy suite runs in, the seed the screens are
+  // compared on, and public/ (a browser test reads every file there). Until screens have
   // component tests (#81), it is also what proves app code before merge, so the app, its library, the worker and the
   // root files the build and server read run it too (review run on #79).
   integration: [
     /^(app|components|lib|worker)\//, /^(middleware|instrumentation)\.ts$/, /^(next|postcss)\.config\.mjs$/, /^server\.js$/,
     /^tests\/(.+\/)?[^/]+\.spec\.ts$/, /^tests\/[^/]+\.ts$/, /^tests\/visual\.spec\.ts-snapshots\//,
     /^tests\/(visual-screens|lane|fake-hermes|fake-engine|touch-diagnostics)\.mjs$/,
-    /^playwright(\.proxy)?\.config\.ts$/,
+    /^playwright(\.proxy)?\.config\.ts$/, /^Dockerfile$/, /^\.dockerignore$/,
     /^scripts\/(web\.sh|local-db\.sh|proxy-stack\.sh|ci-image\.sh|playwright-journal-reporter\.mjs|first-run-db\.mjs|local-default-privileges\.sql)$/,
     /^supabase\/(migrations\/|config\.toml$|seed\.sql$)/, /^public\//,
   ],

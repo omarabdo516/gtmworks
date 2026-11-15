@@ -56,6 +56,8 @@ for (const path of [
   // The first-run and screen specs import its reset helpers; every browser lane is built from the migrations, the
   // stack configuration and the local default privileges (scripts/local-db.sh).
   'scripts/first-run-db.mjs', 'scripts/local-default-privileges.sql', 'supabase/migrations/20260101000000_x.sql', 'supabase/config.toml',
+  // The integration job builds the image and the proxy suite runs inside it (scripts/proxy-stack.sh).
+  'Dockerfile', '.dockerignore',
   // The public-assets browser test reads every file under public/, Markdown included.
   'public/nested/README.md',
 ]) {
@@ -90,7 +92,7 @@ test('on main every suite runs unless every file is a document', () => {
 
 test('stdin accepts NUL-separated git paths without splitting spaces or newlines', () => {
   assert.equal(run([], 'docs/a page.md\0docs/a\npage.md\0'), 'database=false\nintegration=false\ninstall=false\n');
-  assert.equal(run([], 'docs/a page.md\0Dockerfile\0'), 'database=false\nintegration=false\ninstall=true\n');
+  assert.equal(run([], 'docs/a page.md\0docker-compose.install.yml\0'), 'database=false\nintegration=false\ninstall=true\n');
   assert.equal(run(['--main'], 'app/a page.tsx\0'), 'database=true\nintegration=true\ninstall=true\n');
 });
 

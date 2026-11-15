@@ -21,7 +21,7 @@ the whole-app browser and install suites run only when their own area changed, o
 - `integration` is the whole-app browser suite: the production-shaped proxy suite, then the screens, the functional
   journeys, the measured navigation and first run. It runs when a browser spec, its helpers, its approved images, the
   Playwright configs, the stacks it runs on (migrations, stack configuration, local default privileges, the first-run
-  reset helpers), the seed or `public/` change, and, until screens have component tests, when the app itself changes
+  reset helpers, the image the proxy suite runs in), the seed or `public/` change, and, until screens have component tests, when the app itself changes
   (`app/`, `components/`, `lib/`, `worker/` and the root files the build and server read). Its suite runs on `GTMWORKS_TEST_LANES`
   lanes (four in CI), one per Playwright worker: each lane is a whole local Supabase stack and an app server of its own
   (`tests/lane.mjs`, `scripts/local-db.sh`, `scripts/web.sh`), so spec files run side by side and never share data.
