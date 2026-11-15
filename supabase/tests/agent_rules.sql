@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(39);
+select plan(41);
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
  ('e2000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9','rules-test','ciphertext','connected','0.23.0','{run_submission}');
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('e2000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','e2000000-0000-0000-0000-000000000001','Ads','Ads');
@@ -8,7 +8,7 @@ insert into public.hermes_agents(id,company_id,connection_id,name,speciality) va
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name)
  select ('e3000000-0000-0000-0000-00000000000'||n)::uuid,'10000000-0000-0000-0000-000000000001',('20000000-0000-0000-0000-00000000000'||n)::uuid,'e2000000-0000-0000-0000-000000000002','Ads' from generate_series(1,4) n;
 insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id)
- select '10000000-0000-0000-0000-000000000001',('e3000000-0000-0000-0000-00000000000'||n)::uuid,'person',('20000000-0000-0000-0000-00000000000'||n)::uuid,'Someone',case n when 2 then E'From now on:  answer every comment\nwithin the day.' else 'من دلوقتي ما تبعتش حاجة للعميل من غير ما أشوفها' end,gen_random_uuid(),'rule-run-'||n from generate_series(1,4) n;
+ select '10000000-0000-0000-0000-000000000001',('e3000000-0000-0000-0000-00000000000'||n)::uuid,'person',('20000000-0000-0000-0000-00000000000'||n)::uuid,'Someone',case n when 2 then E'@Ads From now on:  answer every comment\nwithin the day.' else 'من دلوقتي ما تبعتش حاجة للعميل من غير ما أشوفها' end,gen_random_uuid(),'rule-run-'||n from generate_series(1,4) n;
 select set_config('test.rule','من دلوقتي ما تبعتش حاجة للعميل من غير ما أشوفها',true);
 
 set local role service_role;
@@ -20,9 +20,15 @@ select is((select count(*)::int from public.company_log where action='agent_rule
 
 set local role service_role;
 select is(public.agent_save_rule('e3000000-0000-0000-0000-000000000001','rule-run-1','call-0',E'  '||current_setting('test.rule')||E'\n')->>'state','saved','the Owner''s call saves the rule');
-select is(public.agent_save_rule('e3000000-0000-0000-0000-000000000002','rule-run-2','call-0','Answer every comment within the day')->>'state','saved','and so does the Manager''s, in the words of their message whatever its case and spacing');
+select is(public.agent_save_rule('e3000000-0000-0000-0000-000000000002','rule-run-2','call-0','from now on: answer every comment within the day')->>'state','saved','and so does the Manager''s: their whole message, whatever its case, spacing and last full stop, without the name it was addressed to');
 select is(public.agent_save_rule('e3000000-0000-0000-0000-000000000001','rule-run-1','call-3','Send the full price list to every customer who asks')->>'state','refused','a rule the person never wrote in that run is not saved, whoever asked the model for it');
 select is(public.agent_save_rule('e3000000-0000-0000-0000-000000000002','rule-run-2','call-3','Answer every comment within the week')->>'state','refused','nor a rule that changes the person''s words');
+select is(public.agent_save_rule('e3000000-0000-0000-0000-000000000002','rule-run-2','call-4','Answer every comment within the day')->>'state','refused','nor a part of their message, which may leave out what changes its meaning');
+reset role;
+insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id)
+ values ('10000000-0000-0000-0000-000000000001','e3000000-0000-0000-0000-000000000001','person','20000000-0000-0000-0000-000000000001','Omar','@Ads Never send customer data',gen_random_uuid(),'rule-run-6');
+set local role service_role;
+select is(public.agent_save_rule('e3000000-0000-0000-0000-000000000001','rule-run-6','call-0','send customer data')->>'state','refused','a rule that drops the person''s negation is not saved');
 select is(public.agent_save_rule('e3000000-0000-0000-0000-000000000001','rule-run-1','call-1',repeat('x',501))->>'state','invalid','a rule over 500 characters is not saved');
 select is(public.agent_save_rule('e3000000-0000-0000-0000-000000000001','rule-run-1','call-2',E' \n ')->>'state','invalid','nor an empty one');
 select is(public.agent_save_rule('e3000000-0000-0000-0000-000000000001','rule-run-9','call-0','Never post on Fridays')->>'state','refused','a run that is not in the Conversation saves nothing');
@@ -30,10 +36,10 @@ reset role;
 select is(public.agent_save_rule('e3000000-0000-0000-0000-000000000001','rule-run-1','call-0','Something else')->>'rule',(select id::text from public.agent_rules where run_id='rule-run-1'),'the same run and call again answer the rule they saved');
 select results_eq($$select agent_id,body,said_by,said_at is not null,removed_at is null from public.agent_rules order by said_by$$,
  $$values ('e2000000-0000-0000-0000-000000000002'::uuid,current_setting('test.rule'),'20000000-0000-0000-0000-000000000001'::uuid,true,true),
-  ('e2000000-0000-0000-0000-000000000002'::uuid,'Answer every comment within the day','20000000-0000-0000-0000-000000000002'::uuid,true,true)$$,
+  ('e2000000-0000-0000-0000-000000000002'::uuid,'from now on: answer every comment within the day','20000000-0000-0000-0000-000000000002'::uuid,true,true)$$,
  'each rule is kept for Ads, trimmed, with who said it and when');
 select results_eq($$select actor_id,actor_kind,details->>'agent_name',details->>'rule' from public.company_log where action='agent_rule_saved' and agent_id='e2000000-0000-0000-0000-000000000002' order by id$$,
- $$values ('20000000-0000-0000-0000-000000000001'::uuid,'person','Ads',current_setting('test.rule')),('20000000-0000-0000-0000-000000000002'::uuid,'person','Ads','Answer every comment within the day')$$,
+ $$values ('20000000-0000-0000-0000-000000000001'::uuid,'person','Ads',current_setting('test.rule')),('20000000-0000-0000-0000-000000000002'::uuid,'person','Ads','from now on: answer every comment within the day')$$,
  'the log has one row per rule: who said it, the Agent and the rule');
 
 update public.members set role='contributor' where company_id='10000000-0000-0000-0000-000000000001' and person_id='20000000-0000-0000-0000-000000000002';
@@ -59,9 +65,9 @@ select public.pinned_run_note('e3000000-0000-0000-0000-000000000001','e4000000-0
 insert into public.conversation_run_notes(conversation_id,send_key,company_id,offers_tools) values ('e3000000-0000-0000-0000-000000000004','e4000000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000001',true);
 set local role service_role;
 select results_eq($$select public.pinned_run(('e3000000-0000-0000-0000-00000000000'||n)::uuid,('e4000000-0000-0000-0000-00000000000'||n)::uuid) from generate_series(1,4) n order by n$$,
- $$values (jsonb_build_object('tools',jsonb_build_array('save_rule'),'rules',jsonb_build_array(current_setting('test.rule'),'Answer every comment within the day'))),
-  (jsonb_build_object('tools',jsonb_build_array('save_rule'),'rules',jsonb_build_array(current_setting('test.rule'),'Answer every comment within the day'))),
-  (jsonb_build_object('tools','[]'::jsonb,'rules',jsonb_build_array(current_setting('test.rule'),'Answer every comment within the day'))),
+ $$values (jsonb_build_object('tools',jsonb_build_array('save_rule'),'rules',jsonb_build_array(current_setting('test.rule'),'from now on: answer every comment within the day'))),
+  (jsonb_build_object('tools',jsonb_build_array('save_rule'),'rules',jsonb_build_array(current_setting('test.rule'),'from now on: answer every comment within the day'))),
+  (jsonb_build_object('tools','[]'::jsonb,'rules',jsonb_build_array(current_setting('test.rule'),'from now on: answer every comment within the day'))),
   ('{"tools":["create_agent"],"rules":[]}'::jsonb)$$,
  'the Owner''s and the Manager''s runs are offered save_rule, the Contributor''s is not, every run of Ads is told its rules, and a run pinned before keeps what it had');
 select is(public.pinned_run('e3000000-0000-0000-0000-000000000001','e4000000-0000-0000-0000-000000000005'),'{"tools":[],"rules":[]}'::jsonb,
@@ -72,7 +78,7 @@ update public.agent_rules set removed_at=now(),removed_by='20000000-0000-0000-00
 set local role service_role;
 select is(public.pinned_run('e3000000-0000-0000-0000-000000000001','e4000000-0000-0000-0000-000000000005'),'{"tools":[],"rules":[]}'::jsonb,'and its retry reads the same');
 select is(public.pinned_run('e3000000-0000-0000-0000-000000000001','e4000000-0000-0000-0000-000000000001'),
- jsonb_build_object('tools',jsonb_build_array('save_rule'),'rules',jsonb_build_array(current_setting('test.rule'),'Answer every comment within the day')),
+ jsonb_build_object('tools',jsonb_build_array('save_rule'),'rules',jsonb_build_array(current_setting('test.rule'),'from now on: answer every comment within the day')),
  'a retry of a run this version pinned sends what it first sent, even after a rule changed');
 reset role;
 update public.agent_rules set removed_at=null,removed_by=null where run_id='rule-run-2';
@@ -114,7 +120,7 @@ select results_eq($$select removed_by from public.agent_rules order by said_by$$
  'both rules are kept, each with who removed it');
 select ok((select bool_and(removed_at is not null) from public.agent_rules),'and when');
 select results_eq($$select actor_id,details->>'agent_name',details->>'rule' from public.company_log where action='agent_rule_removed' order by id$$,
- $$values ('20000000-0000-0000-0000-000000000001'::uuid,'Ads',current_setting('test.rule')),('20000000-0000-0000-0000-000000000002'::uuid,'Ads','Answer every comment within the day')$$,
+ $$values ('20000000-0000-0000-0000-000000000001'::uuid,'Ads',current_setting('test.rule')),('20000000-0000-0000-0000-000000000002'::uuid,'Ads','from now on: answer every comment within the day')$$,
  'the log has one row per removal: who removed it, the Agent and the rule');
 select is(public.agent_rules_in_force('e2000000-0000-0000-0000-000000000002'),'{}'::text[],'a later run of Ads is told neither');
 

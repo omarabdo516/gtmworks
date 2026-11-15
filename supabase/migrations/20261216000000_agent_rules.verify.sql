@@ -19,7 +19,8 @@ select json_build_object(
  'offer_and_rules_pinned',position('run_tools' in pg_get_functiondef('public.pinned_run(uuid,uuid)'::regprocedure))>0
   and position('agent_rules_in_force' in pg_get_functiondef('public.pinned_run(uuid,uuid)'::regprocedure))>0
   and position('run_tools' in pg_get_functiondef('public.pinned_run_note(uuid,uuid,uuid,uuid)'::regprocedure))=0,
- 'rule_from_person',position('m.body' in pg_get_functiondef('public.agent_save_rule(uuid,text,text,text)'::regprocedure))>0,
+ 'rule_from_person',position('rule_words(m.body)=public.rule_words(said)' in pg_get_functiondef('public.agent_save_rule(uuid,text,text,text)'::regprocedure))>0
+  and public.rule_words(E' @Ads From now on:  no emojis!\n')=public.rule_words('from now on: no emojis') and public.rule_words('Never send customer data')<>public.rule_words('send customer data'),
  'previous_app_reads_offer',has_function_privilege('service_role','public.run_offers_tools(uuid,uuid)','execute'),
  'logged_with_rule',public.log_agent_action('AGENT_RULE_SAVED')='agent_rule_saved' and public.log_agent_action('AGENT_RULE_REMOVED')='agent_rule_removed'
   and position('''rule''' in pg_get_functiondef('public.log_agent_change()'::regprocedure))>0

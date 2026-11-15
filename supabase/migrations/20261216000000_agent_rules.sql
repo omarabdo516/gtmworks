@@ -75,6 +75,13 @@ end $$;
 revoke all on function public.pinned_run(uuid,uuid) from public,anon,authenticated;
 grant execute on function public.pinned_run(uuid,uuid) to service_role;
 
+-- A message's words as a rule is compared: without the name it was addressed to (@Ads), its case, its spacing and its
+-- closing punctuation.
+create function public.rule_words(said text) returns text language sql immutable set search_path='' as $$
+ select regexp_replace(regexp_replace(lower(regexp_replace(btrim(said),'^@\S+\s+','')),'\s+',' ','g'),'[\s.!?؟]+$','');
+$$;
+revoke all on function public.rule_words(text) from public,anon,authenticated,service_role;
+
 -- A save_rule call of a completed run, carried out by whoever closes the run (the worker, or a reader). It is checked
 -- now, not when the message was sent: the Conversation's person must still be an active Owner or Manager of its Company
 -- and its Agent still there. The answer is a value, never an error, so a refused call cannot keep its run open. The
@@ -89,10 +96,11 @@ begin
  if not found or not exists(select 1 from public.conversation_messages m where m.conversation_id=conversation and m.author='person' and m.run_id=run)
   or not public.may_tell_agent_rules(talk.company_id,talk.agent_id,talk.person_id) then return jsonb_build_object('state','refused'); end if;
  if coalesce(length(said) between 1 and 500,false) is not true then return jsonb_build_object('state','invalid'); end if;
- -- A lasting rule is what the person said, never text the model read elsewhere: it is saved only when it is in the
- -- person's own message of that run, whatever its case and spacing.
+ -- A lasting rule is what the person said, never text the model read elsewhere or a part of their words, which may
+ -- leave out what changes its meaning ("Never send customer data"): it is saved only when it is the person's whole
+ -- message of that run, as the reference keeps it (ruleTurn).
  if not exists(select 1 from public.conversation_messages m where m.conversation_id=conversation and m.author='person' and m.run_id=run
-  and position(lower(regexp_replace(said,'\s+',' ','g')) in lower(regexp_replace(m.body,'\s+',' ','g')))>0) then
+  and public.rule_words(m.body)=public.rule_words(said)) then
   return jsonb_build_object('state','refused');
  end if;
  insert into public.agent_rules(company_id,agent_id,body,said_by,conversation_id,run_id,call_id)
