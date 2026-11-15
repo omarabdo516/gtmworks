@@ -131,6 +131,9 @@ test('integration: Lead makes the Agent the Owner asks for, and nothing for a Ma
  expect(made()).toEqual([]);
  await fake.engineFor({}).createAgent({name:profile,instructions:''});
  expect(await ask()).toEqual({conversation});
+ const down=(connection:object)=>({...fake.engineFor(connection),readAgent:async()=>({state:'unreachable' as const,agent:null})});
+ expect(await closeOpenRuns(service,{encryptionKey,conversation,engineFor:down})).toBe(0);
+ expect(made()).toEqual([]);
  const closed=await Promise.all([close(),close()]);
  expect(closed[0]+closed[1]).toBe(1);
  expect(fake.runs.map(run=>run.tools.map(tool=>tool.name))).toEqual([['create_agent'],['create_agent']]);
