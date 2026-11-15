@@ -1,5 +1,5 @@
 'use client';
-import { Fragment, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/paperclip/ui/dialog';
@@ -27,12 +27,16 @@ export default function ReadyMade({slug,company,agent,companyName,alone,lead,rol
  const [sending,setSending]=useState(false); const [failure,setFailure]=useState('');
  // One Conversation and send key per role picked, kept for a retry or a second click, so it is asked once.
  const picks=useRef<Partial<Record<string,{conversation:string,sendKey:string}>>>({});
- const leave=()=>{ setOpen(false); router.replace(`/c/${slug}/chat?new=agent`); };
+ // A send still on its way when the gallery closes must not move the page that took its place.
+ const active=useRef(true);
+ useEffect(()=>{ active.current=true; return ()=>{ active.current=false; }; },[]);
+ const leave=()=>{ active.current=false; setOpen(false); router.replace(`/c/${slug}/chat?new=agent`); };
  async function add(role:ReadyRole) {
   if(sending) return;
   setSending(true); setFailure('');
   const pick=picks.current[role.id]??={conversation:newId(),sendKey:newId()};
   const failed=await postMessage({company,conversation:pick.conversation,agent,message:role.ask,sendKey:pick.sendKey});
+  if(!active.current) return;
   if(!failed) return router.replace(`/c/${slug}/conversations/${pick.conversation}`);
   setFailure(failed); setSending(false);
  }
