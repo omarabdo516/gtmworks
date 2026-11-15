@@ -110,7 +110,7 @@ alter table public.waiting_items add column note_id bigint,
  add foreign key (company_id, card_id, note_id) references public.work_comments(company_id, card_id, id);
 create unique index waiting_items_one_per_note on public.waiting_items(note_id, person_id) where note_id is not null;
 
--- 20261206000001's list, with the note a mention opens.
+-- 20261206000001's list, with the note a mention opens and that note's current text.
 drop function public.waiting_list(uuid);
 create function public.waiting_list(c uuid)
 returns table(kind text, id bigint, title text, body text, asked_by text, card_id bigint, conversation_id uuid, created_at timestamptz, note_id bigint)
@@ -122,8 +122,8 @@ language sql stable set search_path='' as $$
    left join public.approval_steps a on a.company_id=w.company_id and a.id=w.approval_step_id
    where w.company_id=c and w.approval_step_id is not null and public.approval_holds(c,w.approval_step_id)
   union all
-  select i.kind, i.id, i.title, i.body, i.asked_by, i.card_id, i.conversation_id, i.created_at, i.note_id
-   from public.waiting_items i where i.company_id=c and i.person_id=auth.uid() and i.resolved_at is null
+  select i.kind, i.id, i.title, coalesce(left(w.body,4000), i.body), i.asked_by, i.card_id, i.conversation_id, i.created_at, i.note_id
+   from public.waiting_items i left join public.work_comments w on w.id=i.note_id where i.company_id=c and i.person_id=auth.uid() and i.resolved_at is null
  ) x(kind,id,title,body,asked_by,card_id,conversation_id,created_at,note_id)
  order by created_at desc, id desc;
 $$;

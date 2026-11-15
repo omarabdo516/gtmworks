@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(56);
+select plan(58);
 -- Notes and mentions in the log (#22). Seed people of RS Learning: Omar 0001 owns it, 0002 مدير is a Manager, 0003 مراجع
 -- and 0005 عضو are Contributors, 0004 مشاهد is a Viewer, 30000000-…-0001 is a role Agent. Faye is shown to the Manager;
 -- Secret to nobody but the Owner. 0005 is also a Contributor of Aleem.
@@ -78,10 +78,13 @@ select is((select count(*)::int from public.waiting_items where note_id in (sele
 select is((select count(*)::int from public.waiting_items where note_id=(select id from notes where label='twice')),1,'a Member named twice in one note gets one item');
 select is((select count(*)::int from public.waiting_items where note_id in (select id from notes) and person_id='20000000-0000-0000-0000-000000000002'),0,'the writer gets none');
 set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select ok(public.edit_card_note('10000000-0000-0000-0000-000000000001',(select id from notes where label='call'),'شوف ده تاني يا @مراجع، و @عضو و @مشاهد'),'the writer edits a note that named Members');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
-select is((select array_agg(note_id order by note_id) from public.waiting_list('10000000-0000-0000-0000-000000000001') where kind='mention'),array[(select id from notes where label='call')],'the Viewer reads the mention in Waiting on you, with the note it opens');
+select is((select array_agg(note_id order by note_id) from public.waiting_list('10000000-0000-0000-0000-000000000001') where kind='mention' and note_id in (select id from notes)),array[(select id from notes where label='call')],'the Viewer reads the mention in Waiting on you, with the note it opens');
+select is((select body from public.waiting_list('10000000-0000-0000-0000-000000000001') where kind='mention' and note_id in (select id from notes)),'شوف ده تاني يا @مراجع، و @عضو و @مشاهد','and reads the note as it now stands');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
-select is((select array_agg(note_id order by note_id) from public.waiting_list('10000000-0000-0000-0000-000000000001') where kind='mention'),(select array_agg(id order by id) from notes where label in ('call','twice')),'and each Member reads only their own');
+select is((select array_agg(note_id order by note_id) from public.waiting_list('10000000-0000-0000-0000-000000000001') where kind='mention' and note_id in (select id from notes)),(select array_agg(id order by id) from notes where label in ('call','twice')),'and each Member reads only their own');
 
 -- An Agent called in a note: one Run, only for an Agent the writer sees.
 reset role;
@@ -102,15 +105,15 @@ select is((select count(*)::int from public.note_runs where note_id=(select id f
  'a note an Agent writes through the API calls no one');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
-select is((select array_agg(agent_name order by note_id) from public.note_runs),array['Faye'],'the Manager reads the Run of the Agent they see');
+select is((select array_agg(agent_name order by note_id) from public.note_runs where note_id in (select id from notes)),array['Faye'],'the Manager reads the Run of the Agent they see');
 select throws_ok($$select input from public.note_runs$$,'42501',null,'but not what it sent');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
-select is((select count(*)::int from public.note_runs),0,'a Member who does not see the Agent reads none of its Runs');
+select is((select count(*)::int from public.note_runs where note_id in (select id from notes)),0,'a Member who does not see the Agent reads none of its Runs');
 
 -- The Run's lifecycle, and its reply in the log under the note.
 reset role;
 set local role service_role;
-select is((select array_agg(message) from public.note_runs_due(null,0)),null::bigint[],'a fresh Run belongs to its writer''s request for its first minute');
+select is((select array_agg(message) from public.note_runs_due(null,0) where message in (select id from notes)),null::bigint[],'a fresh Run belongs to its writer''s request for its first minute');
 select is((select array_agg(message) from public.note_runs_due((select id from notes where label='faye'),0)),array[(select id from notes where label='faye')],'which drives it at once');
 select is((select attempt from public.begin_note_start((select id from notes where label='faye'))),1,'the first attempt');
 select ok(public.answer_note_start((select id from notes where label='faye'),1,'run-note-faye'),'the run id is recorded');
@@ -119,14 +122,14 @@ select ok(not public.close_note_run((select id from notes where label='faye'),'r
 select is((select attempt from public.begin_note_start((select id from notes where label='owner secret'))),1,'another Run is asked');
 select ok(public.answer_note_start((select id from notes where label='owner secret'),1,null),'refused, it ends');
 reset role;
-select is((select array_agg(concat_ws('|',actor_kind,actor_id::text,actor_name,agent_id::text,subject,card_id::text,action,body,details->>'reply_to')) from public.company_log where source='note_runs'),
+select is((select array_agg(concat_ws('|',actor_kind,actor_id::text,actor_name,agent_id::text,subject,card_id::text,action,body,details->>'reply_to')) from public.company_log where source='note_runs' and source_id in (select id from notes)),
  array[concat_ws('|','agent','a2200000-0000-0000-0000-000000000001','Faye','a2200000-0000-0000-0000-000000000001','card',(select id from card)::text,'note_reply','Here is the draft.',(select id from notes where label='faye')::text)],
  'the reply is one log row under its note, written by the Agent; a Run that failed writes none');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
-select is((select count(*)::int from public.company_log where action='note_reply'),1,'the writer reads the reply');
+select is((select count(*)::int from public.company_log where action='note_reply' and source_id in (select id from notes)),1,'the writer reads the reply');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
-select is((select count(*)::int from public.company_log where action='note_reply'),0,'a Member who does not see the Agent does not');
+select is((select count(*)::int from public.company_log where action='note_reply' and source_id in (select id from notes)),0,'a Member who does not see the Agent does not');
 
 -- A profile move waits for a note's open Run, as for a channel's.
 reset role;
