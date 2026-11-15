@@ -29,10 +29,13 @@ if ! mkdir .install-lock 2> /dev/null; then
 fi
 lock_owner "$$" > .install-lock/owner
 resume=no
+worker_stopped=no
 cleanup() {
   status=$?
   trap - EXIT
   if [ "$resume" = yes ]; then compose up -d --wait --wait-timeout 300 || status=1; fi
+  # A run that stopped the worker for a gateway change and failed before the app started leaves it running again.
+  if [ "$worker_stopped" = yes ]; then compose start worker || status=1; fi
   rm -f .env.install.tmp
   rm -rf .install-lock
   exit "$status"
@@ -175,11 +178,25 @@ if [ "$operation" = install ]; then compose up -d --wait db auth rest storage ma
 } | compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 --single-transaction
 if [ -z "$release_image" ]; then
   compose build web
-  # Compose does not recreate a container when only a file it mounts changed: recreate the gateway so its new config (the
-  # X-Real-IP the auth rate limit counts by, issue #41) is the one that serves. Before the app starts: the worker reaches
-  # the database through the gateway, so nothing restarts once the worker runs. A release install lets compose recreate
-  # what its pinned files changed and reloads the gateway below.
-  compose up -d --no-deps --force-recreate --wait --wait-timeout 300 gateway
+  # Compose does not recreate a container when only a file it mounts changed. The gateway is recreated when it is not
+  # running, when its compose definition differs from the one it runs (its config-hash label), or when its mounted files
+  # differ from those it last started with (.install-gateway): a new config (the X-Real-IP the auth rate limit counts by,
+  # issue #41) is the one that serves, and an unchanged gateway keeps running (issue #78). The worker reaches the
+  # database through the gateway, so a running worker stops first and the app start below brings it back (or, should the
+  # run fail before then, the exit does): it never meets a gateway that went away under it. A release install lets
+  # compose recreate what its pinned files changed and reloads the gateway below.
+  gateway_hash=$(compose config --hash gateway)
+  gateway_hash=${gateway_hash##* }
+  cksum scripts/install-nginx.conf scripts/install-gateway-real-ip.sh > .install-lock/gateway
+  gateway=$(compose ps -q --status running gateway)
+  worker=$(compose ps -q --status running worker)
+  serving=
+  if [ -n "$gateway" ]; then serving=$(docker inspect -f '{{index .Config.Labels "com.docker.compose.config-hash"}}' "$gateway"); fi
+  if [ -z "$serving" ] || [ "$serving" != "$gateway_hash" ] || ! cmp -s .install-lock/gateway .install-gateway; then
+    if [ -n "$worker" ]; then worker_stopped=yes; compose stop worker; fi
+    compose up -d --no-deps --force-recreate --wait --wait-timeout 300 gateway
+    mv .install-lock/gateway .install-gateway
+  fi
 fi
 if [ "$operation" = update ] && [ -z "$release_image" ]; then
   # auth is recreated when its settings changed (password rules, reset-link lifetime, session length) and must be healthy.
@@ -188,6 +205,7 @@ else
   # A release pins every service by digest: compose recreates each one the release changed and leaves the rest running.
   compose up -d --wait --wait-timeout 300
 fi
+worker_stopped=no
 # The extraction replaced the gateway configuration in place; Nginx reads it again without dropping connections.
 if [ "$operation" = update ] && [ -n "$release_image" ]; then compose exec -T gateway nginx -s reload; fi
 # Each address must answer 200. Right after the migrations PostgREST reloads its schema cache (and the gateway its

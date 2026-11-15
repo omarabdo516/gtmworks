@@ -4,6 +4,7 @@ node_modules
 .next
 .env*
 .install-lock
+.install-gateway
 backups
 prod.env
 test-results

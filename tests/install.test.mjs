@@ -51,6 +51,7 @@ test('update preserves the serving containers on migration failure and safely re
  t.after(()=>rmSync(directory,{recursive:true,force:true}));
  for(const folder of ['scripts','bin','supabase/migrations']) mkdirSync(join(directory,folder),{recursive:true});
  copyFileSync('scripts/install.sh',join(directory,'scripts/install.sh'));
+ for(const file of ['install-nginx.conf','install-gateway-real-ip.sh']) copyFileSync(join('scripts',file),join(directory,'scripts',file));
  writeFileSync(join(directory,'.env.install'),'existing secrets');
  writeFileSync(join(directory,'supabase/migrations/999_failure.sql'),"select 1/0;");
  writeFileSync(join(directory,'bin/docker'),`#!/bin/sh
@@ -117,6 +118,7 @@ test('update checks the new gateway config before migrating and recreates the ga
  t.after(()=>rmSync(directory,{recursive:true,force:true}));
  for(const folder of ['scripts','bin','supabase/migrations']) mkdirSync(join(directory,folder),{recursive:true});
  copyFileSync('scripts/install.sh',join(directory,'scripts/install.sh'));
+ for(const file of ['install-nginx.conf','install-gateway-real-ip.sh']) copyFileSync(join('scripts',file),join(directory,'scripts',file));
  writeFileSync(join(directory,'.env.install'),'existing secrets');
  writeFileSync(join(directory,'supabase/migrations/001_first.sql'),'select 1;');
  writeFileSync(join(directory,'bin/docker'),`#!/bin/sh
@@ -156,7 +158,8 @@ esac
  assert.equal(failed.status,3,failed.stderr);
  assert.equal(at(failed.lines,gateway),-1);
 
- // A repeat install on a running stack also loads a changed gateway config.
+ // A repeat install whose gateway is not serving (this fake docker reports no running container) starts it again after
+ // the config check and before the app; tests/setup-code.test.mjs covers an unchanged or changed running gateway.
  const repeated=run([]);
  assert.equal(repeated.status,0,repeated.stderr);
  assert.ok(at(repeated.lines,check)>=0 && at(repeated.lines,check)<at(repeated.lines,migrate));
@@ -307,6 +310,7 @@ test('installer preserves secrets, tightens permissions and streams ordered tran
  t.after(()=>rmSync(directory,{recursive:true,force:true}));
  for(const folder of ['scripts','bin','supabase/migrations']) mkdirSync(join(directory,folder),{recursive:true});
  copyFileSync('scripts/install.sh',join(directory,'scripts/install.sh'));
+ for(const file of ['install-nginx.conf','install-gateway-real-ip.sh']) copyFileSync(join('scripts',file),join(directory,'scripts',file));
  for(const name of ['002_second.sql','001_first.sql','001_first.verify.sql']) writeFileSync(join(directory,'supabase/migrations',name),'select 1;');
  const secrets=Object.entries(generateInstallEnv()).map(([name,value])=>`${name}=${value}`).join('\n');
  writeFileSync(join(directory,'.env.install'),secrets,{mode:0o644});
@@ -442,6 +446,7 @@ test('the installer waits for every address to answer 200, and fails naming the 
  t.after(()=>rmSync(directory,{recursive:true,force:true}));
  for(const folder of ['scripts','bin','lib','supabase/migrations']) mkdirSync(join(directory,folder),{recursive:true});
  copyFileSync('scripts/install.sh',join(directory,'scripts/install.sh'));
+ for(const file of ['install-nginx.conf','install-gateway-real-ip.sh']) copyFileSync(join('scripts',file),join(directory,'scripts',file));
  writeFileSync(join(directory,'bin/docker'),probeShim,{mode:0o755});
  writeFileSync(join(directory,'probe-stub.mjs'),probeStub);
  const log=join(directory,'probe.log');
