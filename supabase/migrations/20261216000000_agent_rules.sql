@@ -25,7 +25,7 @@ create table public.agent_rules (
  foreign key (conversation_id,company_id) references public.conversations(id,company_id),
  check ((removed_at is null)=(removed_by is null))
 );
-create index agent_rules_in_force on public.agent_rules(agent_id,said_at) where removed_at is null;
+create index agent_rules_by_agent on public.agent_rules(agent_id,said_at) where removed_at is null;
 alter table public.agent_rules enable row level security;
 -- Every Member reads the rules of their own Company's Agents (its page, and the saved line in the Conversation that told
 -- one); only the functions below write them.
