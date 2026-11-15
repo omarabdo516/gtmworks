@@ -14,7 +14,7 @@
   --gw-shadow-composer: #0000000D 0 2px 8px -1px, #00000008 0 1px 2px;
   --gw-shadow-popover: #1C1C1C1A 0 10px 20px -3px, #1C1C1C14 0 4px 6px -4px;
   --gw-shadow-modal: #1C1C1C1A 0 20px 32px -5px, #1C1C1C1A 0 8px 12px -6px;
-  --gw-bubble-ring: #1C1C1C0F 0 0 0 0.5px inset;
+  --gw-bubble-ring: #1C1C1C0F 0 0 0 0.5px inset; --gw-shadow-card: #1C1C1C1F 0 0 0 0.5px, #1C1C1C09 0 2px 8px;
   --gw-font: var(--font-plex-arabic), "IBM Plex Sans Arabic", "Noto Sans Arabic", Tahoma, system-ui, sans-serif;
   --gw-fs-xs: 12px; --gw-fs-sm: 13px; --gw-fs-base: 14px; --gw-fs-msg: 15px; --gw-fs-lg: 17px; --gw-fs-xl: 22px;
   --gw-r-xs: 6px; --gw-r-sm: 8px; --gw-r-md: 12px; --gw-r-lg: 16px; --gw-r-bubble: 18px; --gw-r-composer: 22px; --gw-r-full: 9999px;
@@ -32,7 +32,7 @@
   --gw-accent: #2CC3AE; --gw-focus: #5EE0CC; --gw-wait-text: #F0A443; --gw-wait-bg: #F694121F; --gw-danger-text: #FF6463;
   --gw-shadow-pill: #F5F5F51A 0 0 0 0.5px; --gw-shadow-composer: #F5F5F51A 0 0 0 0.5px;
   --gw-shadow-popover: #000000 0 10px 20px -3px, #F5F5F51A 0 0 0 0.5px; --gw-shadow-modal: #000000 0 20px 32px -5px, #F5F5F51A 0 0 0 0.5px;
-  --gw-bubble-ring: #F5F5F50F 0 0 0 0.5px inset;
+  --gw-bubble-ring: #F5F5F50F 0 0 0 0.5px inset; --gw-shadow-card: #F5F5F51A 0 0 0 0.5px;
 }
 @media (prefers-color-scheme: dark) {
   :root[data-theme="device"] .gw {
@@ -46,7 +46,7 @@
     --gw-accent: #2CC3AE; --gw-focus: #5EE0CC; --gw-wait-text: #F0A443; --gw-wait-bg: #F694121F; --gw-danger-text: #FF6463;
     --gw-shadow-pill: #F5F5F51A 0 0 0 0.5px; --gw-shadow-composer: #F5F5F51A 0 0 0 0.5px;
     --gw-shadow-popover: #000000 0 10px 20px -3px, #F5F5F51A 0 0 0 0.5px; --gw-shadow-modal: #000000 0 20px 32px -5px, #F5F5F51A 0 0 0 0.5px;
-    --gw-bubble-ring: #F5F5F50F 0 0 0 0.5px inset;
+    --gw-bubble-ring: #F5F5F50F 0 0 0 0.5px inset; --gw-shadow-card: #F5F5F51A 0 0 0 0.5px;
   }
 }
 
@@ -340,6 +340,32 @@
 .gw .new-hint .gw-icon { width: 16px; height: 16px; color: var(--gw-text-2); }
 .gw .new-hint__t { margin: 0; flex: 1 1 260px; }
 
+/* The card for an Agent Lead made, in Lead's turn (design-reference: agentCardHTML; .card, .kv, .ac-*, .badge--made) */
+.gw .ac-card { display: flex; flex-direction: column; width: 100%; overflow: clip; background: var(--gw-bg-pane); border-radius: 24px; box-shadow: var(--gw-shadow-card); }
+.gw .hcard__top { padding: 16px 16px 0; }
+.gw .badge--made { background: var(--gw-primary); color: var(--gw-on-primary); font-weight: 600; }
+.gw .badge--made .gw-icon { width: 13px; height: 13px; }
+.gw .badge[data-utc] { visibility: hidden; }
+.gw .ac-card .card__head { display: flex; align-items: center; gap: 10px; padding: 8px 16px 4px; }
+.gw .card__titles { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0; padding: 2px 0; }
+.gw .card__title { font-size: var(--gw-fs-base); font-weight: 600; line-height: 1.5; }
+.gw .ac-card .kv { margin: 12px 16px 0; padding: 2px 0; border-top: 1px solid var(--gw-border-3); border-bottom: 1px solid var(--gw-border-3); }
+.gw .ac-card .kv__row { display: grid; grid-template-columns: 116px minmax(0, 1fr); gap: 12px; padding: 8px 0; font-size: var(--gw-fs-sm); line-height: 1.6; }
+.gw .ac-card .kv__row + .kv__row { border-top: 1px solid var(--gw-border-3); }
+.gw .ac-card dt { color: var(--gw-text-2); }
+.gw .ac-card dd { margin: 0; color: var(--gw-text-1); line-height: 1.7; overflow-wrap: anywhere; }
+.gw .ac-never { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.gw .ac-never li { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border-radius: var(--gw-r-full); background: var(--gw-bg-tertiary); font-size: var(--gw-fs-xs); color: var(--gw-text-1); }
+.gw .ac-never .gw-icon { width: 13px; height: 13px; color: var(--gw-text-2); }
+.gw .ac-actions { display: flex; gap: 8px; padding: 14px 16px 16px; }
+.gw .ac-actions .btn {
+  display: inline-flex; align-items: center; justify-content: center; height: 36px; padding: 0 20px; border-radius: var(--gw-r-full); font-size: var(--gw-fs-base); font-weight: 600;
+  white-space: nowrap; background: var(--gw-primary); color: var(--gw-on-primary); transition: background-color var(--gw-dur-fast) var(--gw-ease-out);
+}
+@media (hover: hover) { .gw .ac-actions .btn:hover { background: var(--gw-primary-hover); } }
+.gw .ac-tip { display: flex; align-items: center; gap: 6px; margin: -6px 0 0; padding: 0 16px 16px; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); }
+.gw .ac-tip .gw-icon { width: 13px; height: 13px; flex: none; color: var(--gw-text-3); }
+
 /* When an Agent Lead made was made and at whose request, on its details and its Settings page (design-reference: .born) */
 .gw .born { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; margin: 0; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); }
 .gw .born .gw-icon { width: 13px; height: 13px; color: var(--gw-text-3); }
@@ -348,7 +374,7 @@
 
 /* Authored text inside the English interface takes its direction from its own words. */
 [dir="ltr"] .gw :is(.head-pill__title, .thread-item .od-truncate) { unicode-bidi: plaintext; text-align: left; }
-[dir="ltr"] .gw :is(.dp-id__name, .empty-chat h2, .new-hint__t, .born span) { unicode-bidi: plaintext; }
+[dir="ltr"] .gw :is(.dp-id__name, .empty-chat h2, .new-hint__t, .born span, .ac-never span) { unicode-bidi: plaintext; }
 
 /* ---------- the reference's widths: a narrower sidebar and details below 1280px, the details over the chat below 1024px ---------- */
 @media (max-width: 1279px) {
@@ -393,6 +419,9 @@
      inside the composer's own margin and gap so it covers no text. */
   .gw .composer__send { position: relative; }
   .gw .composer__send::before { content: ""; position: absolute; inset: -8px; }
+  /* The made card's Open button keeps the reference's 36px; an invisible band above and below makes it 44px. */
+  .gw .ac-actions .btn { position: relative; }
+  .gw .ac-actions .btn::before { content: ""; position: absolute; inset: -4px 0; }
   .gw .transcript { padding: calc(var(--gw-head-h) + 16px) 12px 20px; }
   .gw .composer-area { padding: 0 12px 12px; }
   .gw .head-pill { max-width: calc(100% - 150px); }

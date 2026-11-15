@@ -3,14 +3,16 @@
 // the catalogue every company route loads (page weight, #55).
 import conversationEn from '@/lib/messages/conversation.en.json';
 import conversationAr from '@/lib/messages/conversation.ar.json';
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
+import Link from '@/lib/link';
 import { useI18n } from '@/lib/i18n-client';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { AgentDetails, HeadPill, useDetailsPanel, type DetailsAgent } from '@/app/agent-details';
 import { ShellIcon } from '@/components/shell-icon';
 import { MessageBox, postMessage } from '@/app/conversation-composer';
 import { LeadWelcome } from '@/app/lead-welcome';
-import { titleOf } from '@/lib/conversations';
+import { titleOf, type MadeAgent } from '@/lib/conversations';
+import { madeDay, useZone } from '@/app/agent-made';
 import type { ConversationRecord } from '@/lib/conversation-record';
 import { localeFor } from '@/lib/i18n.mjs';
 type Conversation={id:string,agent_name:string,face:string};
@@ -57,9 +59,10 @@ export default function ConversationView({slug,agent,company,conversation,initia
     {message.kind==='queued'&&message.failed&&<p className="note" role="alert">{c('conversationQueuedFailed')}</p>}
     {message.kind==='note'&&<span className="queued" data-addressed>{c('conversationAddressed',message.to||'')}</span>}
     {message.lost&&<p className="note" data-outcome="lost">{t('conversationRunLost')}</p>}
-   </li>:<li key={`m${message.id}`} className="turn turn--agent msg" data-author="agent">
+   </li>:<li key={`${message.kind||'m'}${message.id}`} className="turn turn--agent msg" data-author="agent" data-kind={message.kind}>
     <div className="sender">{face(20)}<bdi>{message.author_name}</bdi><time className="sender__time" dateTime={message.created_at}>{time(message.created_at)}</time></div>
-    <div className="bubble bubble--agent" dir="auto">{message.body}</div>
+    {message.body&&<div className="bubble bubble--agent" dir="auto">{message.body}</div>}
+    {message.made?.map(made=><MadeCard key={made.id} slug={slug} agent={made} c={c}/>)}
    </li>)}</ol>
    {pending&&<p className="thinking convo-status" role="status">{working?c('conversationWorkingFor',conversation.agent_name,working):t('conversationWorking',conversation.agent_name)}</p>}
    {failed&&<p className="note convo-status" role="alert">{t('conversationReplyFailed')}</p>}
@@ -77,4 +80,23 @@ export default function ConversationView({slug,agent,company,conversation,initia
    <p className="chat-usage" data-usage>{t('conversationUsage',count(usage.input+usage.output),count(usage.input),count(usage.output))}{usage.unknown>0&&<> · {t('usageUnknownRuns',count(usage.unknown))}</>}</p>
   </div>
  </div>{agent&&<AgentDetails panel={panel} agent={agent} settingsHref={`/c/${slug}/agents`}/>}</div>;
+}
+
+// The card for an Agent Lead made (design-reference: agentCardHTML): "Made", with "New" until the person who asked opens
+// it and its day after that; its name, job and apps; the three things no Agent does without a person (ADR 0006, 0008);
+// and the way into its own chat.
+const never=['madeAgentPublish','madeAgentSpend','madeAgentMessage'];
+function MadeCard({slug,agent,c}:{slug:string,agent:MadeAgent,c:(key:string,...values:unknown[])=>string}) {
+ const {t,language}=useI18n(); const zone=useZone();
+ return <div className="ac-card" role="group" aria-label={c('madeAgentLabel',agent.name)}>
+  <div className="hcard__top"><span className="badge badge--made" data-utc={agent.fresh?undefined:zone}><ShellIcon name="check"/>{c('madeAgentMade')} · {agent.fresh?t('agentNew'):madeDay(agent.created_at,language,zone)}</span></div>
+  <div className="card__head"><span aria-hidden="true"><CompanyAgentFace agent={agent} size={44}/></span><div className="card__titles"><span className="card__title"><bdi>{agent.name}</bdi></span></div></div>
+  <dl className="kv ac-kv">
+   <div className="kv__row"><dt>{c('madeAgentJob')}</dt><dd dir="auto">{agent.job}</dd></div>
+   <div className="kv__row"><dt>{c('madeAgentApps')}</dt><dd>{agent.apps.length?agent.apps.map((app,index)=><Fragment key={index}>{index>0&&c('madeAgentAppsJoin')}<bdi>{app}</bdi></Fragment>):c('madeAgentNoApps')}</dd></div>
+   <div className="kv__row"><dt>{c('madeAgentNever')}</dt><dd><ul className="ac-never">{never.map(key=><li key={key}><ShellIcon name="hand"/><span>{c(key)}</span></li>)}</ul></dd></div>
+  </dl>
+  <div className="ac-actions"><Link className="btn btn--primary" href={`/c/${slug}/chat/${agent.id}`}>{c('madeAgentOpen',agent.name)}</Link></div>
+  <p className="ac-tip"><ShellIcon name="chat"/><span>{c('madeAgentTip')}</span></p>
+ </div>;
 }
