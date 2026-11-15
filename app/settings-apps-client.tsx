@@ -45,7 +45,7 @@ export function AppsList({slug,owner,items,text}:{slug:string,owner:boolean,item
  return <>
   <header className="apps-head">
    <div className="sheet__top"><h3 className="sheet__title sov-h" id="sov-h" tabIndex={-1}>{say('title')}</h3>
-    <span className="badge apps-count"><SettingsIcon name="check"/><span className="num">{items.filter(item=>item.state==='connected').length}</span> {say('connected')}</span></div>
+    <span className="badge apps-count"><SettingsIcon name="check"/><span className="num">{items.filter(item=>item.state!=='off').length}</span> {say('connected')}</span></div>
    <p className="apps-sub">{say(owner?'subOwner':'subOther')}</p>
    <label className="tpl-search"><ShellIcon name="search"/><span className="sr-only">{say('search')}</span><input ref={search} id="apps-q" type="search" autoComplete="off" placeholder={say('searchHint')} value={query} onChange={event=>setQuery(event.target.value)}/></label>
    <div className="tpl-cats" role="group" aria-label={say('categories')}>{(['all',...order.filter(kind=>items.some(item=>item.category===kind))] as const).map(kind=>

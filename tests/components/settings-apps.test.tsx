@@ -25,7 +25,7 @@ function answers(...bodies: [number, object][]) {
 
 test('the list groups connected and attention apps apart from the rest, and searches in either language', async () => {
   const screen = await render(<AppsList slug="rs-learning" owner items={items} text={text}/>);
-  await expect.element(screen.getByText('1 connected')).toBeVisible();
+  await expect.element(screen.getByText('2 connected')).toBeVisible();
   const on = screen.getByRole('region', { name: /^Connected/ });
   expect(on.getByRole('heading', { level: 5 }).elements().map(element => element.textContent)).toEqual(['Klaviyo', 'Notion']);
   await expect.element(screen.getByRole('link', { name: 'Manage Klaviyo' })).toHaveAttribute('href', '/c/rs-learning/settings?section=apps&app=klaviyo');

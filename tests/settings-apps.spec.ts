@@ -59,7 +59,7 @@ test('the apps and their states are the Engine\'s: connected, needing attention 
  await signIn(page,'omar@example.com','/c/rs-learning/home');
  await page.goto('/c/rs-learning/settings?section=apps');
  await expect(page.locator('#sov-h')).toHaveText('Connect apps');
- await expect(page.locator('.apps-count')).toHaveText('1 connected');
+ await expect(page.locator('.apps-count'),'the chip counts every app in the Connected group, as the reference does').toHaveText('2 connected');
  const on=page.locator('.apps-sec').filter({has:page.getByRole('heading',{name:/^Connected/})});
  await expect(on.locator('.app__name')).toHaveText(['Klaviyo','Notion']);
  await expect(card(page,'Klaviyo').locator('.app__state')).toHaveText('Connected');
