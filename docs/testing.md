@@ -226,5 +226,5 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `usage.spec.ts` | Replies store their tokens and show a running total; stopped and lost runs keep what was reported; an Owner sees each company's tokens. | 23.8 s | hermes-usage.test.mjs (the parsing) | keep |
 | `visual-baselines.test.mjs` | Every listed screen has its approved images and no image lacks a screen. | 0.4 s | visual.spec.ts | keep |
 | `visual-screens.mjs` | helper: the compared screens | — | — | helper, kept |
-| `visual.spec.ts` | Thirty screens match their approved images in English and Arabic at 390 and 1440, light and dark, on the seed as built. (visual project, first) | 83.6 s | visual-baselines.test.mjs (every screen has its images) | keep |
+| `visual.spec.ts` | Thirty-two screens match their approved images in English and Arabic at 390 and 1440, light and dark, on the seed as built. (visual project, first) | 83.6 s | visual-baselines.test.mjs (every screen has its images) | keep |
 | `visual.spec.ts-snapshots/` | The 96 approved screen images `visual.spec.ts` compares with. | — | — | data, kept |
