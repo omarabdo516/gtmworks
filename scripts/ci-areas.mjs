@@ -12,21 +12,25 @@ const suites = {
     /^supabase\//, /^scripts\/(check-rls\.sql|verify-db\.mjs|local-db\.sh|local-default-privileges\.sql|bootstrap-owner\.mjs)$/,
     /^tests\/(db\.sh|[^/]*-migration\.mjs|bootstrap-db\.mjs|hosted-default-privileges\.mjs|agent-role-backfill\.mjs|sql-statements\.mjs)$/,
   ],
-  // The whole-app browser suite and its screens: the specs, their helpers and approved images, the stacks they run on,
-  // the seed the screens are compared on, and public/ (a browser test reads every file there). Until screens have
+  // The whole-app browser suite and its screens: the specs, their helpers and approved images, the stacks they run on
+  // (every lane is built from the migrations, the stack configuration and the local default privileges), the first-run
+  // reset helpers the specs import, the seed the screens are compared on, and public/ (a browser test reads every file
+  // there). Until screens have
   // component tests (#81), it is also what proves app code before merge, so the app, its library, the worker and the
   // root files the build and server read run it too (review run on #79).
   integration: [
     /^(app|components|lib|worker)\//, /^(middleware|instrumentation)\.ts$/, /^(next|postcss)\.config\.mjs$/, /^server\.js$/,
     /^tests\/(.+\/)?[^/]+\.spec\.ts$/, /^tests\/[^/]+\.ts$/, /^tests\/visual\.spec\.ts-snapshots\//,
     /^tests\/(visual-screens|lane|fake-hermes|fake-engine|touch-diagnostics)\.mjs$/,
-    /^playwright(\.proxy)?\.config\.ts$/, /^scripts\/(web\.sh|local-db\.sh|proxy-stack\.sh|ci-image\.sh|playwright-journal-reporter\.mjs)$/,
-    /^supabase\/seed\.sql$/, /^public\//,
+    /^playwright(\.proxy)?\.config\.ts$/,
+    /^scripts\/(web\.sh|local-db\.sh|proxy-stack\.sh|ci-image\.sh|playwright-journal-reporter\.mjs|first-run-db\.mjs|local-default-privileges\.sql)$/,
+    /^supabase\/(migrations\/|config\.toml$|seed\.sql$)/, /^public\//,
   ],
   // The Docker install, update, backup and release: the image and its build inputs, the install and release files, the
-  // migrations it applies and the checks it runs. App code is proven before merge by the browser suite and, on main, by
-  // this job too.
+  // migrations it applies and the checks it runs, and the code those checks drive against the real bundled Hermes (lib/,
+  // worker/, the server the image runs; the browser suite only has fake engines). Screens alone run it on main.
   install: [
+    /^(lib|worker)\//, /^next\.config\.mjs$/, /^server\.js$/,
     /^Dockerfile$/, /^\.dockerignore$/, /^docker-compose[^/]*\.ya?ml$/, /^\.env[^/]*\.example$/,
     /^scripts\/(install|check-install|get\.sh$|release-assets\.mjs$|check-hermes-keys\.py$|check-rls\.sql$|verify-db\.mjs$|forged-identity\.mjs$|local-default-privileges\.sql$)/,
     /^supabase\//, /^playwright\.install\.config\.ts$/, /^tests\/install\//, /^\.github\/workflows\/release[^/]*\.ya?ml$/,

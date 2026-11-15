@@ -22,13 +22,18 @@ test('unit test and brand file changes run no long suite: static covers them on 
 });
 
 // Until screens have component tests (a later PR under #76, #81), the whole-app browser suite is what proves app code
-// before merge, so a change to it runs that suite (review run on #79). It needs neither the database nor the install.
-for (const path of [
-  'app/page.tsx', 'app/globals.css', 'components/shell/sidebar.tsx', 'lib/engine.mjs', 'lib/i18n/messages.en.json', 'worker/index.mjs',
-  'middleware.ts', 'instrumentation.ts', 'next.config.mjs', 'postcss.config.mjs', 'server.js',
-]) {
+// before merge, so a change to it runs that suite (review run on #79). Screens and the request layer need no install.
+for (const path of ['app/page.tsx', 'app/globals.css', 'components/shell/sidebar.tsx', 'middleware.ts', 'instrumentation.ts', 'postcss.config.mjs']) {
   test(`${path} runs the browser suite and neither the database nor the install`, () => {
     assert.deepEqual(areas(path), { database: 'false', integration: 'true', install: 'false' });
+  });
+}
+
+// The library, the worker and the server the image runs keep their install trigger (#69): only the install drives them
+// against the real bundled Hermes (conversation, Agent, company profiles); the browser suite uses fake engines.
+for (const path of ['lib/engine.mjs', 'lib/i18n/messages.en.json', 'worker/index.mjs', 'next.config.mjs', 'server.js']) {
+  test(`${path} runs the browser suite and the install`, () => {
+    assert.deepEqual(areas(path), { database: 'false', integration: 'true', install: 'true' });
   });
 }
 
@@ -48,6 +53,9 @@ for (const path of [
   'tests/visual.spec.ts-snapshots/home-en-1440-linux.png', 'tests/lane.mjs', 'tests/fake-hermes.mjs', 'tests/fake-engine.mjs',
   'tests/touch-diagnostics.mjs', 'playwright.config.ts', 'playwright.proxy.config.ts', 'scripts/web.sh', 'scripts/local-db.sh',
   'scripts/proxy-stack.sh', 'scripts/ci-image.sh', 'scripts/playwright-journal-reporter.mjs', 'supabase/seed.sql',
+  // The first-run and screen specs import its reset helpers; every browser lane is built from the migrations, the
+  // stack configuration and the local default privileges (scripts/local-db.sh).
+  'scripts/first-run-db.mjs', 'scripts/local-default-privileges.sql', 'supabase/migrations/20260101000000_x.sql', 'supabase/config.toml',
   // The public-assets browser test reads every file under public/, Markdown included.
   'public/nested/README.md',
 ]) {

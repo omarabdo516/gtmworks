@@ -20,22 +20,24 @@ the whole-app browser and install suites run only when their own area changed, o
   legacy data) on one local stack, when `supabase/` or a database test file changes.
 - `integration` is the whole-app browser suite: the production-shaped proxy suite, then the screens, the functional
   journeys, the measured navigation and first run. It runs when a browser spec, its helpers, its approved images, the
-  Playwright configs, the stacks it runs on, the seed or `public/` change, and, until screens have component tests,
-  when the app itself changes (`app/`, `components/`, `lib/`, `worker/` and the root files the build and server read). Its suite runs on `GTMWORKS_TEST_LANES`
+  Playwright configs, the stacks it runs on (migrations, stack configuration, local default privileges, the first-run
+  reset helpers), the seed or `public/` change, and, until screens have component tests, when the app itself changes
+  (`app/`, `components/`, `lib/`, `worker/` and the root files the build and server read). Its suite runs on `GTMWORKS_TEST_LANES`
   lanes (four in CI), one per Playwright worker: each lane is a whole local Supabase stack and an app server of its own
   (`tests/lane.mjs`, `scripts/local-db.sh`, `scripts/web.sh`), so spec files run side by side and never share data.
   Each functional spec file starts from the seed (`tests/fresh-seed.ts`); tests inside one file still run in order.
   The screens run first, on the seed as built; the navigation time budgets (project `measured`) run after every
   functional test with the machine to themselves, and first run last.
 - `install` is the Docker install, update, backup, restore, release and one-line install. It runs when the image, its
-  build inputs, the install and release files, the migrations it applies or its own checks change.
+  build inputs, the install and release files, the migrations it applies or its own checks change, and when `lib/`,
+  `worker/`, `next.config.mjs` or `server.js` change: only the install drives that code against the real bundled Hermes.
 - A manual run (`gh workflow run ci.yml --ref <branch>`) runs static and the database; the browser suite and the install
   run only with `-f e2e=true` and `-f install=true`, both off by default (like Hermes `e2e` and `e2e_upgrade`).
 - `check` is the one required check (like Hermes `all-checks-pass`): a suite `changes` did not ask for passes only when
   it was skipped; one it asked for must succeed; a failed or cancelled stage is red (`scripts/ci-verdict.mjs`).
 
 App screens, components, `lib/` and `worker/` changes run static and the whole-app browser suite on the pull request
-(review run on #79); their install proof runs on `main` after the merge. When screens move to component tests in a
+(review run on #79); `lib/` and `worker/` also run the install, and screens alone get their install proof on `main`. When screens move to component tests in a
 headless browser (#81), app changes run those instead and the browser suite goes back to its own area.
 
 ## Every suite, before and after (#76)
@@ -52,7 +54,7 @@ the parts are timed from run 43642299138.
 | proxy suite (tests/proxy/, 7 tests) | whole-app browser | sign-in, settings and invitations behind an https proxy | 0.7 min inside `integration`, every non-document PR | inside `integration`: its area or app code, `main`, or `e2e` input | gated |
 | browser suite (playwright test, 225 tests on 4 lanes: screens, functional, measured, first run) | whole-app browser | journeys, the 72 approved screens, navigation budgets, first run | 13.3 min of `integration`'s 22.2 min (stack start 4 min, image 2.7 min), every non-document PR | inside `integration`: its area or app code (until #81), `main`, or `e2e` input | gated; screens to become component tests (#81) |
 | image health (scripts/ci-image.sh) | whole-app | the built image serves health and runs its worker | inside `integration` | inside `integration` | gated with it |
-| install | install end-to-end | install, repeat, backup, restore, release update, one-line install, rollback | 15.2 min, PRs touching install files, `lib/`, `worker/` or the app build, every `main` push | its own files, every `main` push, or `install` input | gated tighter: `lib/`, `worker/`, `next.config.mjs` and `server.js` no longer start it on a PR |
+| install | install end-to-end | install, repeat, backup, restore, release update, one-line install, rollback | 15.2 min, PRs touching install files, `lib/`, `worker/` or the app build, every `main` push | its own files and `lib/`, `worker/`, `next.config.mjs`, `server.js` (the code it drives against the real Hermes); every `main` push; or `install` input | gated as before on a PR; `app/` and `components/` alone still skip it |
 | compare-failures, flaky-tests | our own CI tooling | names failures inherited from main; files an issue per flaky test | 0.1 to 0.2 min after `integration` | unchanged here | to be replaced by Playwright's own report (#81) |
 | check | summary | the one required check | 0.1 min | 0.1 min | keep; judges five stages |
 | design-compare.yml | design tool | a screen against the design reference | its own paths, or by hand | unchanged | keep |
