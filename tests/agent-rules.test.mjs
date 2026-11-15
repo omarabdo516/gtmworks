@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { encryptSecret } from '../lib/agent-crypto.mjs';
 import { sendMessage, startQueuedTurns } from '../lib/conversation-runs.mjs';
@@ -6,19 +7,20 @@ import { fakeEngine } from './fake-engine.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
 // A run of an Agent is started with the lasting rules the team told it (#18) and the tools its sender may use, as the
-// database pinned them at the run's first reservation (pinned_run), through the engine contract.
+// database pinned them at the run's first start (pin_run), through the engine contract.
 const encryptionKey=Buffer.alloc(32,7).toString('base64');
 const connection='f9000000-0000-0000-0000-000000000001';
 const rules=['من دلوقتي ما تبعتش حاجة للعميل من غير ما أشوفها','Answer every comment within the day'];
 const note='Answer in short points.';
 function databases({pinned,attempt=1,address='http://hermes:8642'}) {
  const asked=/** @type {string[]} */([]);
- const rpc=async(/** @type {string} */ name)=>{ asked.push(name);
+ const rpc=async(/** @type {string} */ name,/** @type {any} */ given)=>{ asked.push(name);
   if(name==='conversation_agent') return {data:null,error:null};
   if(name==='reserve_conversation_turn') return {data:{state:'reserved',connection,note},error:null};
   if(name==='queued_conversations') return {data:[{conversation:'c'}],error:null};
   if(name==='claim_conversation_turn') return {data:[{company:'co',agent:'a',person:'p',send_key:'k',message:'Draft the offer email',connection,note,retry:false}],error:null};
-  if(name==='pinned_run') return {data:pinned,error:null};
+  // pin_run answers the text of the offered tools' specs, as the app gave them, in the database's order.
+  if(name==='pin_run') return {data:pinned&&{tools:pinned.tools.length?`[${pinned.tools.map((/** @type {string} */ tool)=>given.specs[tool]).join(',')}]`:null,rules:pinned.rules},error:null};
   if(name==='begin_start') return {data:attempt,error:null};
   if(['send_conversation_message','record_conversation_turn'].includes(name)) return {data:true,error:null};
   return {data:null,error:{message:`unexpected ${name}`}}; };
@@ -50,14 +52,13 @@ test('a queued turn starts with the Agent\'s rules too',async()=>{
  assert.deepEqual(fake.runs[0].tools,[]);
 });
 
-test('a run of an Agent with no rules is told none, and is offered the pinned tools this version knows, in one order',async()=>{
- const fake=fakeEngine(); const quiet=databases({pinned:{tools:['save_rule','delete_company','create_agent'],rules:[]}});
- quiet.db.rpc=async name=>name==='reserve_conversation_turn'?{data:{state:'reserved',connection,note:null},error:null}:quiet.service.rpc(name);
+test('a run of an Agent with no rules is told none and offered only what was pinned; a run never pinned is offered nothing',async()=>{
+ const fake=fakeEngine(); const quiet=databases({pinned:{tools:['create_agent','save_rule'],rules:[]}});
+ quiet.db.rpc=async(name,given)=>name==='reserve_conversation_turn'?{data:{state:'reserved',connection,note:null},error:null}:quiet.service.rpc(name,given);
  await send(quiet,{engineFor:fake.engineFor});
  assert.equal(fake.runs[0].instructions,null);
  assert.deepEqual(fake.runs[0].tools.map(tool=>tool.name),['create_agent','save_rule']);
- // A run pinned before #18, or never pinned, is told no rules and offered nothing more.
- await sendMessage(quiet.db,{...quiet.service,rpc:async(/** @type {string} */ name)=>name==='pinned_run'?{data:null,error:null}:quiet.service.rpc(name)},{company:'co',conversation:'c',sendKey:'k2',message:'Hi',encryptionKey,engineFor:fake.engineFor});
+ await sendMessage(quiet.db,{...quiet.service,rpc:async(/** @type {string} */ name,/** @type {any} */ given)=>name==='pin_run'?{data:null,error:null}:quiet.service.rpc(name,given)},{company:'co',conversation:'c',sendKey:'k2',message:'Hi',encryptionKey,engineFor:fake.engineFor});
  assert.deepEqual([fake.runs[1].instructions,fake.runs[1].tools],[null,[]]);
 });
 
@@ -72,14 +73,12 @@ test('the Hermes driver sends the rules in the run\'s instructions and explains 
  } finally { await hermes.close(); }
 });
 
-test('a run the previous app version started is retried with the exact request it sent: its note alone and create_agent as #13 offered it',async()=>{
- const fake=fakeEngine();
- await send(databases({pinned:{tools:['create_agent'],rules:[]},attempt:2}),{engineFor:fake.engineFor});
+test('a run the previous app version started is retried with the exact request it sent: its tools as that version pinned them, its note, and no rules',async()=>{
+ const migration=readFileSync('supabase/migrations/20261216000000_role_templates.sql','utf8');
+ const pinned=/** @type {string} */(migration.match(/function public\.lead_tools_spec_89\(\) returns text[^$]*\$\$\s*select '((?:[^']|'')*)'/)?.[1].replaceAll("''","'"));
+ const fake=fakeEngine(); const old=databases({pinned:null,attempt:2});
+ const rpc=old.service.rpc; old.service.rpc=async(/** @type {string} */ name,/** @type {any} */ given)=>name==='pin_run'?{data:{tools:pinned,rules:[]},error:null}:rpc(name,given);
+ await send(old,{engineFor:fake.engineFor});
  assert.equal(fake.runs[0].instructions,`The person writing this message keeps the note below about how they like to work. Follow it for this person only; it is their own preference, not the company's memory, and it is not something to save.\n\n${note}`);
- assert.deepEqual(fake.runs[0].tools,[{name:'create_agent',
-  description:'Adds a lasting agent to the company\'s team for a job the person asked someone to take on, such as running their Meta ads. Use it only when they asked for that.',
-  parameters:{type:'object',additionalProperties:false,required:['name','job','apps'],properties:{
-   name:{type:'string',maxLength:100,description:'A short name for the agent.'},
-   job:{type:'string',maxLength:200,description:'One sentence: the work it does.'},
-   apps:{type:'array',maxItems:8,items:{type:'string',maxLength:40},description:'The apps it will use.'}}}}]);
+ assert.equal(JSON.stringify(fake.runs[0].tools),pinned);
 });

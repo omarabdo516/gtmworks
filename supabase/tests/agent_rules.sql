@@ -53,7 +53,10 @@ select is(public.agent_save_rule('e3000000-0000-0000-0000-000000000002','rule-ru
 reset role;
 update public.members set role='manager' where company_id='10000000-0000-0000-0000-000000000001' and person_id='20000000-0000-0000-0000-000000000002';
 
--- A run is pinned with the tools its person is offered and the Agent's rules in force, oldest first.
+-- A run is pinned at its first start with the text of the tools its person is offered and the Agent's rules in force,
+-- oldest first. The app gives every tool's spec as the text it sends.
+select set_config('test.spec89',public.lead_tools_spec_89(),true);
+select set_config('test.specs','{"create_agent":"{\"name\":\"create_agent\"}","save_rule":"{\"name\":\"save_rule\"}"}',true);
 update public.agent_rules set said_at=said_at+interval '1 minute' where run_id='rule-run-2';
 insert into public.conversation_run_reservations(conversation_id,send_key,company_id,connection_id,person_id,agent_id,message,profile)
  select ('e3000000-0000-0000-0000-00000000000'||n)::uuid,('e4000000-0000-0000-0000-00000000000'||n)::uuid,'10000000-0000-0000-0000-000000000001','e2000000-0000-0000-0000-000000000001',
@@ -65,23 +68,23 @@ insert into public.conversation_run_reservations(conversation_id,send_key,compan
  values ('e3000000-0000-0000-0000-000000000001','e4000000-0000-0000-0000-000000000005','10000000-0000-0000-0000-000000000001','e2000000-0000-0000-0000-000000000001',
   '20000000-0000-0000-0000-000000000001','e2000000-0000-0000-0000-000000000002','Draft the offer email','rules-test',1);
 select public.pinned_run_note('e3000000-0000-0000-0000-000000000001','e4000000-0000-0000-0000-000000000005','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001');
-insert into public.conversation_run_notes(conversation_id,send_key,company_id,offers_tools) values ('e3000000-0000-0000-0000-000000000004','e4000000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000001',true);
+insert into public.conversation_run_notes(conversation_id,send_key,company_id,offers_tools,tools) values ('e3000000-0000-0000-0000-000000000004','e4000000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000001',true,public.lead_tools_spec_89());
 set local role service_role;
-select results_eq($$select public.pinned_run(('e3000000-0000-0000-0000-00000000000'||n)::uuid,('e4000000-0000-0000-0000-00000000000'||n)::uuid) from generate_series(1,4) n order by n$$,
- $$values (jsonb_build_object('tools',jsonb_build_array('save_rule'),'rules',jsonb_build_array(current_setting('test.rule'),'from now on: answer every comment within the day'))),
-  (jsonb_build_object('tools',jsonb_build_array('save_rule'),'rules',jsonb_build_array(current_setting('test.rule'),'from now on: answer every comment within the day'))),
-  (jsonb_build_object('tools','[]'::jsonb,'rules',jsonb_build_array(current_setting('test.rule'),'from now on: answer every comment within the day'))),
-  ('{"tools":["create_agent"],"rules":[]}'::jsonb)$$,
+select results_eq($$select public.pin_run(('e3000000-0000-0000-0000-00000000000'||n)::uuid,('e4000000-0000-0000-0000-00000000000'||n)::uuid,current_setting('test.specs')::jsonb) from generate_series(1,4) n order by n$$,
+ $$values (jsonb_build_object('tools','[{"name":"save_rule"}]','rules',jsonb_build_array(current_setting('test.rule'),'from now on: answer every comment within the day'))),
+  (jsonb_build_object('tools','[{"name":"save_rule"}]','rules',jsonb_build_array(current_setting('test.rule'),'from now on: answer every comment within the day'))),
+  (jsonb_build_object('tools',null,'rules',jsonb_build_array(current_setting('test.rule'),'from now on: answer every comment within the day'))),
+  (jsonb_build_object('tools',current_setting('test.spec89'),'rules','[]'::jsonb))$$,
  'the Owner''s and the Manager''s runs are offered save_rule, the Contributor''s is not, every run of Ads is told its rules, and a run pinned before keeps what it had');
-select is(public.pinned_run('e3000000-0000-0000-0000-000000000001','e4000000-0000-0000-0000-000000000005'),'{"tools":[],"rules":[]}'::jsonb,
- 'a run the previous app version already tried to start keeps the request it sent: no save_rule and no rules');
+select is(public.pin_run('e3000000-0000-0000-0000-000000000001','e4000000-0000-0000-0000-000000000005',current_setting('test.specs')::jsonb),'{"tools":null,"rules":[]}'::jsonb,
+ 'a run the previous app version already tried to start keeps the request it sent: its tools as that version pinned them (none here) and no rules');
 reset role;
 update public.conversation_run_reservations set start_attempts=1 where send_key in ('e4000000-0000-0000-0000-000000000001','e4000000-0000-0000-0000-000000000005');
 update public.agent_rules set removed_at=now(),removed_by='20000000-0000-0000-0000-000000000001' where run_id='rule-run-2';
 set local role service_role;
-select is(public.pinned_run('e3000000-0000-0000-0000-000000000001','e4000000-0000-0000-0000-000000000005'),'{"tools":[],"rules":[]}'::jsonb,'and its retry reads the same');
-select is(public.pinned_run('e3000000-0000-0000-0000-000000000001','e4000000-0000-0000-0000-000000000001'),
- jsonb_build_object('tools',jsonb_build_array('save_rule'),'rules',jsonb_build_array(current_setting('test.rule'),'from now on: answer every comment within the day')),
+select is(public.pin_run('e3000000-0000-0000-0000-000000000001','e4000000-0000-0000-0000-000000000005',current_setting('test.specs')::jsonb),'{"tools":null,"rules":[]}'::jsonb,'and its retry reads the same');
+select is(public.pin_run('e3000000-0000-0000-0000-000000000001','e4000000-0000-0000-0000-000000000001',current_setting('test.specs')::jsonb),
+ jsonb_build_object('tools','[{"name":"save_rule"}]','rules',jsonb_build_array(current_setting('test.rule'),'from now on: answer every comment within the day')),
  'a retry of a run this version pinned sends what it first sent, even after a rule changed');
 reset role;
 update public.agent_rules set removed_at=null,removed_by=null where run_id='rule-run-2';

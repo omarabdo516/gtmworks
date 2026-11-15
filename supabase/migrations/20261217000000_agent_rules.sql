@@ -6,8 +6,8 @@
 -- run's instructions, pinned at the run's first reservation with its note. An Owner or a Manager removes a rule: it is
 -- kept, marked removed, and the removal is logged too.
 --
--- Nothing existing is rewritten. A run pinned before keeps what it was offered (offers_tools) and is told no rules, so
--- its retries send the request it first sent; the previous app version still reads offers_tools.
+-- Nothing existing is rewritten. A run pinned before keeps what it was offered and is told no rules, so its retries send
+-- the request it first sent; the previous app version's pinning stays as it is.
 
 create table public.agent_rules (
  id uuid primary key default gen_random_uuid(),
@@ -54,27 +54,30 @@ create function public.agent_rules_in_force(agent uuid) returns text[] language 
 $$;
 revoke all on function public.agent_rules_in_force(uuid) from public,anon,authenticated,service_role;
 
--- What a run is offered and told is pinned once, before its first start, so every retry sends the same request.
--- pinned_run_note keeps #13's body: the previous app version reserves through it and starts with offers_tools and the
--- note alone during an update. This version pins the rest itself, through pinned_run, only while no start was made: a
--- run the previous version already tried to start keeps what it sent, create_agent when offers_tools says so and no
--- rules. The reservation row is locked, as begin_start counts an attempt on it.
-alter table public.conversation_run_notes add column tools text[], add column rules text[];
-create function public.pinned_run(conversation uuid, message_key uuid) returns jsonb language plpgsql security definer set search_path='' as $$
-declare held public.conversation_run_reservations; kept public.conversation_run_notes;
+-- A run's tools and rules are pinned at its first start (pin_run), beside its note, so every retry sends the same
+-- request: the text of the tools its person may then use with the Agent (#14 pins tools as the exact text sent), in the
+-- app's order, create_agent then save_rule, and the Agent's rules in force. The previous app version reserves and
+-- starts through pinned_run_note, pin_run_tools and run_offers_tools, unchanged, and sends no rules: a run it already
+-- tried to start (an attempt or an unknown start on its reservation, whose row is locked as begin_start counts one)
+-- keeps its tools as that version pinned them and is told no rules. rules stays null until this version pins a run.
+alter table public.conversation_run_notes add column rules text[];
+create function public.pin_run(conversation uuid, message_key uuid, specs jsonb) returns jsonb language plpgsql security definer set search_path='' as $$
+declare held public.conversation_run_reservations; kept public.conversation_run_notes; offered text[];
 begin
  select * into held from public.conversation_run_reservations r where r.conversation_id=conversation and r.send_key=message_key for update;
- if found and held.start_attempts=0 and held.start_unknown_at is null then
-  update public.conversation_run_notes n set tools=public.run_tools(held.company_id,held.agent_id,held.person_id),rules=public.agent_rules_in_force(held.agent_id)
-   where n.conversation_id=conversation and n.send_key=message_key and n.tools is null;
+ select * into kept from public.conversation_run_notes n where n.conversation_id=conversation and n.send_key=message_key for update;
+ if kept.conversation_id is null then return null; end if;
+ if kept.rules is null and held.conversation_id is not null and held.start_attempts=0 and held.start_unknown_at is null then
+  offered:=array(select t from unnest(public.run_tools(held.company_id,held.agent_id,held.person_id)) t where jsonb_typeof(specs->t)='string');
+  update public.conversation_run_notes n set
+   tools=case when cardinality(offered)>0 then '['||(select string_agg(specs->>t,',' order by o) from unnest(offered) with ordinality u(t,o))||']' end,
+   rules=public.agent_rules_in_force(held.agent_id)
+   where n.conversation_id=conversation and n.send_key=message_key returning * into kept;
  end if;
- select * into kept from public.conversation_run_notes n where n.conversation_id=conversation and n.send_key=message_key;
- if not found then return null; end if;
- return jsonb_build_object('tools',to_jsonb(coalesce(kept.tools,case when kept.offers_tools then array['create_agent'] else '{}'::text[] end)),
-  'rules',to_jsonb(coalesce(kept.rules,'{}'::text[])));
+ return jsonb_build_object('tools',kept.tools,'rules',to_jsonb(coalesce(kept.rules,'{}'::text[])));
 end $$;
-revoke all on function public.pinned_run(uuid,uuid) from public,anon,authenticated;
-grant execute on function public.pinned_run(uuid,uuid) to service_role;
+revoke all on function public.pin_run(uuid,uuid,jsonb) from public,anon,authenticated;
+grant execute on function public.pin_run(uuid,uuid,jsonb) to service_role;
 
 -- A message's words as a rule is compared: without the name it was addressed to (@Ads), its case, its spacing and its
 -- closing punctuation.
