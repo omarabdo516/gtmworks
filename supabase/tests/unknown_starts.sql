@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(45);
+select plan(56);
 -- RS Learning: Omar (1) is Owner. A start whose answer was lost is kept as Omar's own waiting turn on its own
 -- reservation, asked again by the worker as a retry, and never abandoned to another Connection.
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('e0000000-0000-0000-0000-000000000411','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://localhost','unknown-starts','ciphertext','connected');
@@ -160,6 +160,32 @@ select is(public.pin_run_tools('e2000000-0000-0000-0000-000000000409','e3000000-
 select is(public.pin_run_tools('e2000000-0000-0000-0000-000000000409','e3000000-0000-0000-0000-000000000499','[{"name":"create_agent","parameters":{"type":"object","additionalProperties":false}}]'),null,'nor does a run with no note');
 reset role;
 select is((select string_agg(coalesce(tools,'none'),' ' order by send_key) from public.conversation_run_notes where conversation_id='e2000000-0000-0000-0000-000000000409'),'[{"name":"create_agent","parameters":{"type":"object","additionalProperties":false}}] none','only the first pin is kept');
+
+-- During an update the previous app version serves on after the migrations (scripts/install.sh) and starts Lead's runs
+-- with #89's spec, asking run_offers_tools before each start. That pins #89's spec, so the new version's retry of a
+-- start whose answer was lost sends the body Hermes already has. A run the new version pinned keeps its own spec.
+insert into public.conversation_run_notes(conversation_id,send_key,company_id,offers_tools) values
+ ('e2000000-0000-0000-0000-000000000411','e3000000-0000-0000-0000-000000000411','10000000-0000-0000-0000-000000000001',true),
+ ('e2000000-0000-0000-0000-000000000411','e3000000-0000-0000-0000-000000000412','10000000-0000-0000-0000-000000000001',true),
+ ('e2000000-0000-0000-0000-000000000411','e3000000-0000-0000-0000-000000000413','10000000-0000-0000-0000-000000000001',false);
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select throws_ok($$select public.run_offers_tools('e2000000-0000-0000-0000-000000000411','e3000000-0000-0000-0000-000000000411')$$,'42501',null,'a Member still cannot ask whether a run offers tools');
+reset role;
+select ok(has_function_privilege('service_role','public.run_offers_tools(uuid,uuid)','execute') and not has_function_privilege('anon','public.run_offers_tools(uuid,uuid)','execute'),'the service role still may');
+set local role service_role;
+select is(public.run_offers_tools('e2000000-0000-0000-0000-000000000411','e3000000-0000-0000-0000-000000000411'),true,'the previous version reads that its run offers tools');
+reset role;
+select is((select tools from public.conversation_run_notes where send_key='e3000000-0000-0000-0000-000000000411'),'[{"name":"create_agent","description":"Adds a lasting agent to the company''s team for a job the person asked someone to take on, such as running their Meta ads. Use it only when they asked for that.","parameters":{"type":"object","additionalProperties":false,"required":["name","job","apps"],"properties":{"name":{"type":"string","maxLength":100,"description":"A short name for the agent."},"job":{"type":"string","maxLength":200,"description":"One sentence: the work it does."},"apps":{"type":"array","maxItems":8,"items":{"type":"string","maxLength":40},"description":"The apps it will use."}}}}]','and the run keeps #89''s spec, as that version sends it');
+set local role service_role;
+select is(public.run_offers_tools('e2000000-0000-0000-0000-000000000411','e3000000-0000-0000-0000-000000000411'),true,'its own retry reads the same');
+select is(public.pin_run_tools('e2000000-0000-0000-0000-000000000411','e3000000-0000-0000-0000-000000000411','[{"name":"create_agent","description":"Later."}]'),'[{"name":"create_agent","description":"Adds a lasting agent to the company''s team for a job the person asked someone to take on, such as running their Meta ads. Use it only when they asked for that.","parameters":{"type":"object","additionalProperties":false,"required":["name","job","apps"],"properties":{"name":{"type":"string","maxLength":100,"description":"A short name for the agent."},"job":{"type":"string","maxLength":200,"description":"One sentence: the work it does."},"apps":{"type":"array","maxItems":8,"items":{"type":"string","maxLength":40},"description":"The apps it will use."}}}}]','the new version''s retry gets #89''s spec, not its own');
+select is(public.pin_run_tools('e2000000-0000-0000-0000-000000000411','e3000000-0000-0000-0000-000000000412','[{"name":"create_agent","description":"Later."}]'),'[{"name":"create_agent","description":"Later."}]','a run the new version starts first pins its own spec');
+select is(public.run_offers_tools('e2000000-0000-0000-0000-000000000411','e3000000-0000-0000-0000-000000000412'),true,'which still reads as offering tools');
+select is(public.run_offers_tools('e2000000-0000-0000-0000-000000000411','e3000000-0000-0000-0000-000000000413'),false,'a run that offers no tools reads so');
+select is(public.run_offers_tools('e2000000-0000-0000-0000-000000000411','e3000000-0000-0000-0000-000000000499'),false,'as does a run with no note');
+reset role;
+select is((select string_agg(coalesce(tools,'none'),' ' order by send_key) from public.conversation_run_notes where send_key in ('e3000000-0000-0000-0000-000000000412','e3000000-0000-0000-0000-000000000413')),'[{"name":"create_agent","description":"Later."}] none','and neither gains #89''s spec');
 
 select * from finish();
 rollback;

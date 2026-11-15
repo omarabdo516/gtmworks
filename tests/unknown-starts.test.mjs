@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { startRun, startUnknown } from '../lib/hermes.mjs';
+import { engineFor } from '../lib/engine.mjs';
 import { encryptSecret } from '../lib/agent-crypto.mjs';
 import { noteInstructions, sendMessage, startQueuedTurns } from '../lib/conversation-runs.mjs';
 import { leadTools } from '../lib/lead-tools.mjs';
@@ -130,14 +131,18 @@ test('a run to an Agent with its own instructions carries them, then its sender\
  assert.ok(queued.reads.some(read=>read.table==='hermes_agents'&&read.id==='a7'&&read.company_id==='co'),'the claimed turn\'s Agent, in its Company');
 });
 
-test('a retry of a Lead start sends the tools of its first attempt, though the tools offered changed since', async () => {
- const real=globalThis.fetch; const spec=leadTools.create_agent.spec; const offered=spec.description;
- // Hermes keeps each key's first body and refuses the key with any other (409); the answers to the first start are lost.
- const bodies=[]; const runs=new Map(); let lost=2;
+// Hermes keeps each key's first body and refuses the key with any other (409); the answers to the first start are lost.
+function hermesKeepingFirstBodies() {
+ const real=globalThis.fetch; const bodies=[]; const runs=new Map(); let lost=2;
  globalThis.fetch=async(_,{headers,body})=>{ bodies.push(body); const key=headers['Idempotency-Key'];
   if(runs.has(key)&&runs.get(key)!==body) return new Response('{}',{status:409});
   runs.set(key,body); if(lost-->0) throw failing('ECONNRESET');
   return new Response(JSON.stringify({run_id:`run_${runs.size}`}),{status:202}); };
+ return {bodies,restore:()=>{ globalThis.fetch=real; }};
+}
+
+test('a retry of a Lead start sends the tools of its first attempt, though the tools offered changed since', async () => {
+ const spec=leadTools.create_agent.spec; const offered=spec.description; const {bodies,restore}=hermesKeepingFirstBodies();
  const runNote={offersTools:true}; const message='Find me someone to run our Meta ads';
  try {
   const first=databases({runNote});
@@ -151,7 +156,32 @@ test('a retry of a Lead start sends the tools of its first attempt, though the t
   const fresh=databases({runNote:{offersTools:true}});
   assert.deepEqual(await sendMessage(fresh.db,fresh.service,{company:'co',conversation:'c',sendKey:'k2',message,encryptionKey}),{conversation:'c'});
   assert.ok(bodies.at(-1).includes(`- create_agent: ${spec.description}`),'a new run offers the tools as they are now');
- } finally { globalThis.fetch=real; spec.description=offered; }
+ } finally { restore(); spec.description=offered; }
+});
+
+// During an update the previous app version serves on after the migrations (scripts/install.sh). It starts a Lead run
+// with #89's spec, as it held it (lib/lead-tools.mjs before #14), and the database pins that spec for the run when that
+// version asks whether the run offers tools (run_offers_tools, lead_tools_spec_89).
+test('a Lead start the previous app version began is asked again with the body it sent', async () => {
+ const previousSpecs=[{name:'create_agent',
+  description:'Adds a lasting agent to the company\'s team for a job the person asked someone to take on, such as running their Meta ads. Use it only when they asked for that.',
+  parameters:{type:'object',additionalProperties:false,required:['name','job','apps'],properties:{
+   name:{type:'string',maxLength:100,description:'A short name for the agent.'},
+   job:{type:'string',maxLength:200,description:'One sentence: the work it does.'},
+   apps:{type:'array',maxItems:8,items:{type:'string',maxLength:40},description:'The apps it will use.'}}}}];
+ const migration=readFileSync('supabase/migrations/20261216000000_role_templates.sql','utf8');
+ const pinned=migration.match(/function public\.lead_tools_spec_89\(\) returns text[^$]*\$\$\s*select '((?:[^']|'')*)'/)?.[1].replaceAll("''","'");
+ assert.ok(pinned,'the migration holds #89\'s spec');
+ const {bodies,restore}=hermesKeepingFirstBodies(); const message='Find me someone to run our Meta ads';
+ try {
+  const previous=engineFor({address:'http://hermes:8642',profile:'writer',key:'test-only-key'});
+  assert.equal(await previous.start({conversation:'c',input:message,idempotencyKey:'c:k',tools:previousSpecs,retry:false}),startUnknown,'its answer is lost');
+  const again=databases({runNote:{offersTools:true,tools:pinned},attempt:2,claim:[{company:'co',agent:'a',person:'p',send_key:'k',message,connection,note:null,retry:true}]});
+  assert.equal(await startQueuedTurns(again.service,{encryptionKey}),1);
+  assert.equal(bodies.length,3);
+  assert.equal(new Set(bodies).size,1,'the new worker\'s retry sent the previous version\'s body, byte for byte');
+  assert.equal(again.args.record_conversation_turn.run,'run_1','and its turn is recorded with the run Hermes named');
+ } finally { restore(); }
 });
 
 // A start may wait twenty seconds on an engine that does not answer: queued starts run in their own worker loop, so they
