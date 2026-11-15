@@ -46,12 +46,15 @@ const lightScreens = [
   { name: 'settings-agents', path: '/c/rs-learning/settings?section=agents', state: 'lead-made' },
   { name: 'settings-main-agent', path: '/c/rs-learning/settings?agent=65000000-0000-0000-0000-000000000003', state: 'lead-made' },
   { name: 'agent-details', path: '/c/rs-learning/chat/69100000-0000-0000-0000-000000000005', state: 'agent-details' },
+  // Settings, Apps (#30), over RS Learning's own profile in a fake Engine (tests/visual.spec.ts): Klaviyo connected,
+  // Notion needing attention and every other app not connected.
+  { name: 'settings-apps', path: '/c/rs-learning/settings?section=apps', state: 'apps' },
 ];
 
 export const screens = [
   { name: 'first-run', path: '/first-run', anonymous: true, dark: false },
   ...lightScreens.map(screen => ({ ...screen, dark: false })),
-  ...lightScreens.filter(screen => ['sign-in', 'home', 'chat', 'board', 'card', 'alone-chat', 'alone-settings', 'made-card', 'new-agent', 'made-agent', 'agent-visibility', 'ready-roles', 'rule-saved', 'agent-rules', 'settings-agents', 'settings-main-agent', 'agent-details'].includes(screen.name))
+  ...lightScreens.filter(screen => ['sign-in', 'home', 'chat', 'board', 'card', 'alone-chat', 'alone-settings', 'made-card', 'new-agent', 'made-agent', 'agent-visibility', 'ready-roles', 'rule-saved', 'agent-rules', 'settings-agents', 'settings-main-agent', 'agent-details', 'settings-apps'].includes(screen.name))
     .map(screen => ({ ...screen, name: `${screen.name}-dark`, dark: true })),
 ];
 
