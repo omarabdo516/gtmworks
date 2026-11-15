@@ -214,6 +214,7 @@ const screenStates: Record<string, { set: string, unset: string, admin?: true }>
       delete from public.member_agent_access where agent_id='${suggested(2)}';
       delete from public.hermes_agents where id='${suggested(2)}';
       delete from public.hermes_connections where id='${suggested(1)}';`,
+  },
   'agent-details': {
     admin: true,
     set: `insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values
