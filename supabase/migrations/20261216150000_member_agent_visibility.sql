@@ -24,13 +24,19 @@ create or replace function public.agent_visible_to(c uuid, person uuid, agent uu
   or exists(select 1 from public.members m where m.company_id=c and m.person_id=person and m.removed_at is null and m.role='owner')
   or exists(select 1 from public.member_agent_access a where a.company_id=c and a.person_id=person and a.agent_id=agent);
 $$;
-revoke all on function public.agent_visible_to(uuid,uuid,uuid) from public,anon,service_role;
-grant execute on function public.agent_visible_to(uuid,uuid,uuid) to authenticated;
+revoke all on function public.agent_visible_to(uuid,uuid,uuid) from public,anon,authenticated,service_role;
+-- What the read policies ask: whether the caller sees one Agent of a Company they belong to. It answers nothing about
+-- another person or another Company.
+create or replace function public.can_see_agent(c uuid, agent uuid) returns boolean language sql stable security definer set search_path='' as $$
+ select public.is_member(c) and public.agent_visible_to(c,auth.uid(),agent);
+$$;
+revoke all on function public.can_see_agent(uuid,uuid) from public,anon,service_role;
+grant execute on function public.can_see_agent(uuid,uuid) to authenticated;
 
-alter policy hermes_agents_read on public.hermes_agents using (public.is_member(company_id) and public.agent_visible_to(company_id,auth.uid(),id));
-alter policy hermes_agent_audit_read on public.hermes_agent_audit using (public.is_member(company_id) and public.agent_visible_to(company_id,auth.uid(),agent_id));
-alter policy conversations_read on public.conversations using (person_id=auth.uid() and public.is_member(company_id) and public.agent_visible_to(company_id,auth.uid(),agent_id));
-alter policy company_log_read on public.company_log using (public.is_member(company_id) and public.agent_visible_to(company_id,auth.uid(),agent_id) and public.agent_visible_to(company_id,auth.uid(),actor_id));
+alter policy hermes_agents_read on public.hermes_agents using (public.can_see_agent(company_id,id));
+alter policy hermes_agent_audit_read on public.hermes_agent_audit using (public.can_see_agent(company_id,agent_id));
+alter policy conversations_read on public.conversations using (person_id=auth.uid() and public.can_see_agent(company_id,agent_id));
+alter policy company_log_read on public.company_log using (public.can_see_agent(company_id,agent_id) and public.can_see_agent(company_id,actor_id));
 
 -- Every way a person reaches an Agent writes one of these rows first (a new Conversation, a reserved run, a queued
 -- turn): an Agent hidden from that person is not found, as if its address did not exist. The worker (service_role) only
