@@ -39,6 +39,8 @@ export const screens = {
   // The dashboard loads for 650 ms before its figures appear.
   numbers: { reference: { steps: [{ click: '#sb-nav [data-view="dashboard"]' }, { waitFor: '#view-dashboard .kpis' }] }, builtPath: '/c/rs-learning/numbers' },
   log: { reference: { steps: [{ click: '#sb-nav [data-view="log"]' }, { waitFor: '#view-log:not([hidden])' }] }, builtPath: '/c/rs-learning/log' },
+  // A Card's log with its note field (#22): the reference's card sheet on its Log tab, beside the built Card.
+  'card-log': { reference: { steps: [{ click: '#sb-nav [data-view="board"]' }, { waitFor: '#board-cols' }, { click: '.kcard[data-action="open-card"]' }, { click: '#sh-tab-log' }, { waitFor: '#ta-note' }] }, builtPath: '/c/rs-learning/work/board/1' },
   // A Conversation with an Agent other than Lead, opened from its tile in the sidebar. In a team it starts with the
   // private line (#25).
   'agent-chat': { reference: { steps: [{ click: '#sb-agents [data-action="open-agent"][data-agent="ads"]' }] }, builtPath: null },
