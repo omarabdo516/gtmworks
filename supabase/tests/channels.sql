@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(79);
+select plan(84);
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state)
  select ('f2300000-0000-0000-0000-00000000000'||n)::uuid,'10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://localhost','channels-'||n,'ciphertext','connected' from generate_series(1,4) n;
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,instructions) values
@@ -131,11 +131,14 @@ reset role;
 select is((select agent_name from public.channel_runs r join sent s on s.id=r.message_id where s.label='owner hidden'),'Secret','the Owner, who sees every Agent, can call it');
 
 set local role service_role;
-select is((select array_agg(message order by message) from public.channel_runs_due(null,null)),null::bigint[],'a fresh Run belongs to its sender''s request for its first minute');
-select is((select array_agg(message) from public.channel_runs_due(null,(select id from sent where label='faye'))),array[(select id from sent where label='faye')],'which drives it at once');
+select is((select array_agg(message order by message) from public.channel_runs_due(null,null,0)),null::bigint[],'a fresh Run belongs to its sender''s request for its first minute');
+select is((select array_agg(message) from public.channel_runs_due(null,(select id from sent where label='faye'),0)),array[(select id from sent where label='faye')],'which drives it at once');
 select is((select attempt from public.begin_channel_start((select id from sent where label='faye'))),1,'the first attempt');
-select is((select connection::text from public.channel_runs_due(null,(select id from sent where label='faye'))),'f2300000-0000-0000-0000-000000000002','pins the Agent''s Connection');
+select is((select connection::text from public.channel_runs_due(null,(select id from sent where label='faye'),0)),'f2300000-0000-0000-0000-000000000002','pins the Agent''s Connection');
+select is((select key_encrypted from public.channel_runs_due(null,(select id from sent where label='faye'),0)),null,'and comes with no key before it started');
 select ok(public.answer_channel_start((select id from sent where label='faye'),1,'run-faye'),'the run id is recorded');
+select ok((select key_encrypted from public.channel_runs_due(null,(select id from sent where label='faye'),0)) is not null,'a started Run comes with its pinned Connection''s key');
+select is((select count(*)::int from public.channel_runs_due(null,null,(select id from sent where label='faye')) where message=(select id from sent where label='faye')),0,'a page starts after the message it is given');
 select ok(public.answer_channel_start((select id from sent where label='faye'),2,'run-faye'),'the same run named again by another attempt is the same');
 select is((select count(*)::int from public.begin_channel_start((select id from sent where label='faye'))),0,'a started Run is not started again');
 select ok(public.close_channel_run((select id from sent where label='faye'),'run-faye','completed','Here is the week.',120,30),'the Run ends with its reply');
@@ -155,17 +158,17 @@ select is((select outcome from public.channel_runs where message_id=(select id f
 select is((select count(*)::int from public.channel_messages where reply_to=(select id from sent where label='longest')),0,'with no reply');
 update public.channel_runs set created_at=now()-interval '11 minutes' where message_id=(select id from sent where label='arabic');
 set local role service_role;
-select is((select array_agg(message) from public.channel_runs_due(null,null) where message=(select id from sent where label='arabic')),array[(select id from sent where label='arabic')],'after its first minute any driver takes a Run');
+select is((select array_agg(message) from public.channel_runs_due(null,null,0) where message=(select id from sent where label='arabic')),array[(select id from sent where label='arabic')],'after its first minute any driver takes a Run');
 select is((select count(*)::int from public.begin_channel_start((select id from sent where label='arabic'))),0,'after ten minutes it is not started');
 reset role;
 select is((select outcome from public.channel_runs where message_id=(select id from sent where label='arabic')),'failed','it failed');
 set local role service_role;
 select is((select attempt from public.begin_channel_start((select id from sent where label='owner hidden'))),1,'a start is sent');
-select is((select count(*)::int from public.channel_runs_due(null,null) where message=(select id from sent where label='owner hidden')),0,'while its answer may still come, no other driver sends it again');
+select is((select count(*)::int from public.channel_runs_due(null,null,0) where message=(select id from sent where label='owner hidden')),0,'while its answer may still come, no other driver sends it again');
 reset role;
 update public.channel_runs set attempted_at=now()-interval '31 seconds' where message_id=(select id from sent where label='owner hidden');
 set local role service_role;
-select is((select count(*)::int from public.channel_runs_due(null,null) where message=(select id from sent where label='owner hidden')),1,'after thirty seconds any driver asks again');
+select is((select count(*)::int from public.channel_runs_due(null,null,0) where message=(select id from sent where label='owner hidden')),1,'after thirty seconds any driver asks again');
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
@@ -185,5 +188,10 @@ select is((select attempt from public.begin_channel_start((select id from sent w
 select is(public.move_company_profile('10000000-0000-0000-0000-000000000003','http://hermes:8642','encrypted','0.23.0','{run_submission}'),0,'its open channel Run holds the move');
 select ok(public.close_channel_run((select id from sent where label='aleem'),null,'lost',null,null,null),'once it ended');
 select is(public.move_company_profile('10000000-0000-0000-0000-000000000003','http://hermes:8642','encrypted','0.23.0','{run_submission}'),1,'the Company moves');
+reset role;
+set local role service_role;
+select ok(public.close_channel_run((select id from sent where label='first'),'run-first','completed',repeat('x',200005),null,null),'an over-long reply still ends its Run');
+reset role;
+select is((select length(body) from public.channel_messages where reply_to=(select id from sent where label='first')),200000,'kept to its first 200,000 characters');
 select * from finish();
 rollback;

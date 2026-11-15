@@ -172,13 +172,15 @@ grant execute on function public.post_channel_message(uuid,uuid,text) to authent
 -- row under its lock, so a retry, a second worker or a reader at the same moment changes nothing twice. A fresh Run
 -- belongs to its sender's request for one minute, and a start whose answer is not in yet to that attempt for thirty
 -- seconds (an engine answers a start within twenty): the sender's own request (just_message, also a resend of the same
--- message) may drive it at once; after that anyone does. So a start in flight is not sent again every second.
-create function public.channel_runs_due(just_channel uuid default null, just_message bigint default null)
-returns table(message bigint, run text, connection uuid, address text, profile text, state text)
+-- message) may drive it at once; after that anyone does. So a start in flight is not sent again every second. Pages
+-- of 500 after the message `after`, so Runs held on an unreachable engine never starve later ones. A started Run comes
+-- with the key of the Connection pinned from its own Company's Agent, the only key a driver reads to close it.
+create function public.channel_runs_due(just_channel uuid default null, just_message bigint default null, after bigint default 0)
+returns table(message bigint, run text, connection uuid, address text, profile text, state text, key_encrypted text)
 language sql stable security definer set search_path='' as $$
- select r.message_id, r.run_id, r.connection_id, h.address, h.profile, h.state
+ select r.message_id, r.run_id, r.connection_id, h.address, h.profile, h.state, case when r.run_id is not null then h.key_encrypted end
  from public.channel_runs r left join public.hermes_connections h on h.id=r.connection_id
- where r.outcome is null
+ where r.outcome is null and r.message_id > coalesce(after, 0)
   and (just_channel is null or r.channel_id=just_channel) and (just_message is null or r.message_id=just_message)
   and (r.run_id is not null or r.message_id=just_message
    or (r.attempts = 0 and r.created_at < now()-interval '1 minute') or (r.attempts > 0 and r.attempted_at < now()-interval '30 seconds'))
@@ -246,16 +248,16 @@ begin
  if r.message_id is null then return false; end if;
  if run_outcome='completed' then
   insert into public.channel_messages(company_id, channel_id, author, agent_id, author_name, body, reply_to)
-   values (r.company_id, r.channel_id, 'agent', r.agent_id, r.agent_name, reply, message) on conflict (reply_to) do nothing;
+   values (r.company_id, r.channel_id, 'agent', r.agent_id, r.agent_name, left(reply, 200000), message) on conflict (reply_to) do nothing;
  end if;
  return true;
 end $$;
 
-revoke all on function public.channel_runs_due(uuid,bigint) from public,anon,authenticated;
+revoke all on function public.channel_runs_due(uuid,bigint,bigint) from public,anon,authenticated;
 revoke all on function public.begin_channel_start(bigint) from public,anon,authenticated;
 revoke all on function public.answer_channel_start(bigint,integer,text) from public,anon,authenticated;
 revoke all on function public.close_channel_run(bigint,text,text,text,bigint,bigint) from public,anon,authenticated;
-grant execute on function public.channel_runs_due(uuid,bigint), public.begin_channel_start(bigint),
+grant execute on function public.channel_runs_due(uuid,bigint,bigint), public.begin_channel_start(bigint),
  public.answer_channel_start(bigint,integer,text), public.close_channel_run(bigint,text,text,text,bigint,bigint) to service_role;
 
 alter table public.channels enable row level security;

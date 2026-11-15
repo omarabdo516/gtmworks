@@ -24,8 +24,10 @@ const stateOf=(outcome:string|null):MentionState=>outcome===null?'open':outcome=
 export async function channelRecord(db:Database,person:string,company:string,channel:string):Promise<ChannelRecord|null> {
  const {data:found}=await db.from('channels').select('id,company_id').eq('id',channel).eq('company_id',company).maybeSingle();
  if(!found) return null;
- // Runs first: a Run closed between the two reads then shows its reply too (both are written in one transaction).
- const runs=((await db.from('channel_runs').select('message_id,agent_name,outcome').eq('channel_id',channel)).data||[]) as StoredRun[];
+ // Runs first: a Run closed between the two reads then shows its reply too (both are written in one transaction). Each
+ // Run has its own message, so the latest Runs by message cover every Run of the messages shown.
+ const runs=((await db.from('channel_runs').select('message_id,agent_name,outcome').eq('channel_id',channel).order('message_id',{ascending:false}).limit(shownMessages)).data||[]) as StoredRun[];
+ const {count:waiting}=await db.from('channel_runs').select('message_id',{count:'exact',head:true}).eq('channel_id',channel).is('outcome',null);
  const latest=((await db.from('channel_messages').select('id,author,person_id,agent_id,author_name,body,created_at').eq('channel_id',channel).order('id',{ascending:false}).limit(shownMessages)).data||[]) as StoredMessage[];
  const {data:members}=await db.rpc('channel_members',{ch:channel});
  const {data:agents}=await db.from('hermes_agents').select('id,connection_id,name,speciality,is_default').eq('company_id',company).order('is_default',{ascending:false}).order('name');
@@ -44,7 +46,7 @@ export async function channelRecord(db:Database,person:string,company:string,cha
   agents:seen.map(agent=>({id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default})),
   writer:!!writer,
   messages,
-  open:runs.some(run=>run.outcome===null),
+  open:(waiting??0)>0,
  };
 }
 
