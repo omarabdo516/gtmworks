@@ -85,6 +85,7 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `agent-projects.spec.ts` | An agent files its card into a project with a run key, never into another company. | 2.1 s | — | keep |
 | `agent-role-backfill.mjs` | replays the agent-role migration on legacy members (tests/db.sh) | — | — | helper, kept |
 | `agent-run-keys.spec.ts` | A run key reaches one card, expires, follows the grant and never takes its identity from the request. | 7.5 s | — | keep |
+| `alone-team.spec.ts` | A Company worked alone shows no channels, Member permissions or per-member agents and keeps the Activity log; the first invited Member's acceptance makes it a team with every earlier Conversation, Card and log row unchanged. (#10) | — | supabase/tests/alone_team.sql (the switch and its refusal in the database) | new |
 | `app-origin.test.mjs` | Behind an HTTPS proxy, first run and sign-in links stay on APP_ORIGIN (#40). | 1.1 s | production-shape.spec.ts | keep |
 | `app.spec.ts` | Sign-in, fonts, the card dialog and detail, members and invitations, board moves, approvals, webhooks, contrast and client error reports. | 142.1 s | See the two removed tests below; the rest prove promises no other file does. | keep; 2 tests removed (below) |
 | `attachments.test.mjs` | Only raster images show in place; every download is sandboxed and never sniffed. | 0.4 s | — | keep |
@@ -192,5 +193,5 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `usage.spec.ts` | Replies store their tokens and show a running total; stopped and lost runs keep what was reported; an Owner sees each company's tokens. | 23.8 s | hermes-usage.test.mjs (the parsing) | keep |
 | `visual-baselines.test.mjs` | Every listed screen has its approved images and no image lacks a screen. | 0.4 s | visual.spec.ts | keep |
 | `visual-screens.mjs` | helper: the compared screens | — | — | helper, kept |
-| `visual.spec.ts` | Eighteen screens match their approved images in English and Arabic at 390 and 1440, light and dark, on the seed as built. (visual project, first) | 83.6 s | visual-baselines.test.mjs (every screen has its images) | keep |
-| `visual.spec.ts-snapshots/` | The 72 approved screen images `visual.spec.ts` compares with. | — | — | data, kept |
+| `visual.spec.ts` | Twenty-four screens match their approved images in English and Arabic at 390 and 1440, light and dark, on the seed as built. (visual project, first) | 83.6 s | visual-baselines.test.mjs (every screen has its images) | keep |
+| `visual.spec.ts-snapshots/` | The 96 approved screen images `visual.spec.ts` compares with. | — | — | data, kept |
