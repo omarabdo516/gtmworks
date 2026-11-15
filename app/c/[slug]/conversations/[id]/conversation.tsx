@@ -36,8 +36,9 @@ export default function ConversationView({slug,agent,details,company,conversatio
  // page once the server parts are drawn again, so its tile and its "new" mark show without a reload.
  const router=useRouter(); const madeCount=(rows:ConversationRecord['messages'])=>rows.reduce((sum,message)=>sum+(message.made?.length||0),0);
  const made=useRef(madeCount(initial.messages));
- const drawnPending=useRef(initial.pending);
- useEffect(()=>{ if(drawnPending.current===pending) return; drawnPending.current=pending; router.refresh(); },[pending,router]);
+ // A queued turn keeps `pending` true from one run to the next; each run's start and reply add a message.
+ const runKey=`${pending}:${messages.length}`; const drawnRun=useRef(runKey);
+ useEffect(()=>{ if(drawnRun.current===runKey) return; drawnRun.current=runKey; router.refresh(); },[runKey,router]);
  useEffect(()=>{
   if(!pending) return;
   let stopped=false;
