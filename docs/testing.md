@@ -145,7 +145,7 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `design-reference.test.mjs` | The design reference matches its approved checksums, file for file. | 0.3 s | design-reference.spec.ts | keep |
 | `engine-agents.test.mjs` | An Agent is one Engine profile made through the management listener with the install key. | 0.7 s | hermes-agents.spec.ts | keep |
 | `engine-conversation.spec.ts` | On the fake engine a reply is stored once with usage; failed and stopped runs end with usage; a Viewer is refused; Lead's create_agent call makes the Owner's Agent once, with its log row, and nothing for a Manager; from each ready-made role it makes an Agent whose stored instructions are the role's, limits included, fitted with the Company's name, and a run to that Agent carries them; an Agent's save_rule call saves the Owner's rule once, with its log row, every later run carries it, and a Contributor's saves nothing. | 28.1 s | conversations.spec.ts (the same flow on fake Hermes) | keep |
-| `engine-name.spec.ts` | No page names the Engine, in English or Arabic. | 16 s | engine-name.test.mjs (catalogues only, not rendered pages) | keep |
+| `engine-name.spec.ts` | No page names the Engine, in English or Arabic, and the settings overlay shows no file path. | 16 s | engine-name.test.mjs (catalogues only, not rendered pages) | keep |
 | `engine-name.test.mjs` | No message value names the Engine, in any language. | 0.3 s | engine-name.spec.ts | keep |
 | `engine.test.mjs` | The engine driver runs once per idempotency key, offers tools in a run's instructions and reads at most four calls back from the reply, and never sends a key over plain HTTP to a public address. | 0.6 s | — | keep |
 | `fake-engine.mjs` | browser helper: an in-memory engine | — | — | helper, kept |
@@ -203,7 +203,7 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `role-labels.test.mjs` | A member row shows the Role and, for an Owner, a Contributor's Agent role. | 0.3 s | — | keep |
 | `route-permissions.test.mjs` | Every server route and action is in the permission table; a missing one needs Owner. | 3.2 s | — | keep |
 | `secret-text.test.mjs` | The note form and the database refuse the same secrets. | 0.2 s | team-work.spec.ts | keep |
-| `settings-overlay.spec.ts` | The Settings overlay opens over the page, lists the real Agents, lets only the Owner rename, and fits a phone. | 28.5 s | settings-overlay.test.mjs (sections per role) | keep |
+| `settings-overlay.spec.ts` | The Settings overlay opens over the page by pointer and by keyboard, lists the real Agents, shows each Role only what it allows, lets only the Owner rename and move the main mark, and fits a phone. | 28.5 s | settings-overlay.test.mjs (sections per role) | keep |
 | `settings-overlay.test.mjs` | The overlay lists the reference's sections, and a Viewer sees only theirs. | 0.3 s | settings-overlay.spec.ts | keep |
 | `setup-code.test.mjs` | The setup code has 256 bits, is compared exactly and travels only after `#`. (#50) | 1.9 s | first-run.spec.ts, install job | keep (decision #50) |
 | `shared-engine.spec.ts` | The Owner is warned, in English and Arabic, while two companies share the bundled Engine profile. | 21.1 s | one-company-install.test.mjs (docs and logic) | keep |
@@ -229,5 +229,5 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `usage.spec.ts` | Replies store their tokens and show a running total; stopped and lost runs keep what was reported; an Owner sees each company's tokens. | 23.8 s | hermes-usage.test.mjs (the parsing) | keep |
 | `visual-baselines.test.mjs` | Every listed screen has its approved images and no image lacks a screen. | 0.4 s | visual.spec.ts | keep |
 | `visual-screens.mjs` | helper: the compared screens | — | — | helper, kept |
-| `visual.spec.ts` | Thirty-eight screens match their approved images in English and Arabic at 390 and 1440, light and dark, on the seed as built. (visual project, first) | 83.6 s | visual-baselines.test.mjs (every screen has its images) | keep |
-| `visual.spec.ts-snapshots/` | The 152 approved screen images `visual.spec.ts` compares with. | — | — | data, kept |
+| `visual.spec.ts` | Forty-two screens match their approved images in English and Arabic at 390 and 1440, light and dark, on the seed as built. (visual project, first) | 83.6 s | visual-baselines.test.mjs (every screen has its images) | keep |
+| `visual.spec.ts-snapshots/` | The 168 approved screen images `visual.spec.ts` compares with. | — | — | data, kept |

@@ -95,6 +95,8 @@ const readyBy: Record<string, string> = {
   'made-agent': '.born--sov',
   'rule-saved': '.note--saved',
   'agent-rules': '.rl-said:not([data-utc])',
+  'settings-agents': '.sov-ag',
+  'settings-main-agent': '#set-h-main',
 };
 
 // The states the seed does not hold: first run's two (#9), RS Learning with no answer yet and a new workspace's Lead with
