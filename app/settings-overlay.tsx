@@ -14,10 +14,11 @@ import { createClient } from '@supabase/supabase-js';
 import { supabaseConfig } from '@/lib/supabase-config';
 import { readCompanySignIns } from '@/lib/company-sign-in.mjs';
 import { AgentLevel, CompanySubscriptions, MemberNote } from './settings-lazy';
-import { OpenedMark } from './agent-made';
+import { MadeLine, OpenedMark } from './agent-made';
+import { madeColumns, madeOf } from '@/lib/agent-made';
 import { isNewFor } from '@/lib/sidebar.mjs';
 
-type Agent={id:string,connection_id:string,name:string,speciality:string,is_default:boolean,requested_by:string|null,requester_opened_at:string|null};
+type Agent={id:string,connection_id:string,name:string,speciality:string,is_default:boolean,created_at:string|null,requested_by:string|null,requester_opened_at:string|null,requester:unknown};
 type Member={person_id:string,role:string,people:{name:string|null}|null};
 type T=Awaited<ReturnType<typeof getI18n>>['t'];
 const roleRank:Record<string,number>={owner:0,manager:1,contributor:2,viewer:3};
@@ -35,7 +36,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  const section=pickSection(query.section??(query.agent?'agents':undefined),role);
  const owner=role==='owner', canManage=owner||role==='manager', canWrite=role!=='viewer';
  const needAgents=['company','agents'].includes(section);
- const agents:Agent[]=needAgents?agentsMainFirst((await db.from('hermes_agents').select('id,connection_id,name,speciality,is_default,requested_by,requester_opened_at').eq('company_id',company.id).order('name')).data||[]):[];
+ const agents:Agent[]=needAgents?agentsMainFirst((await db.from('hermes_agents').select(`id,connection_id,name,speciality,is_default,${madeColumns}`).eq('company_id',company.id).order('name')).data||[]):[];
  const members:Member[]=section==='company'?(((await db.from('members').select('person_id,role,people(name)').eq('company_id',company.id).is('removed_at',null)).data||[]) as unknown as Member[]).sort((a,b)=>(roleRank[a.role]??9)-(roleRank[b.role]??9)||(a.people?.name||'').localeCompare(b.people?.name||'')):[];
  const sharedEngine=section==='company'&&owner?(await db.rpc('bundled_engine_shared',{c:company.id})).data===true:false;
  // The Company's Agent level, and for its Owner the Agents whose engine offers terminal, code or file tools while the
@@ -140,7 +141,7 @@ function AgentsSection({t,rtl,slug,agents,canManage,canWrite,owner}:{t:T,rtl:boo
 }
 
 function AgentPage({t,rtl,slug,company,userId,agent,main,owner,canManage,canWrite}:{t:T,rtl:boolean,slug:string,company:string,userId:string,agent:Agent,main?:Agent,owner:boolean,canManage:boolean,canWrite:boolean}) {
- const isMain=agent.is_default;
+ const isMain=agent.is_default; const made=madeOf(agent,userId);
  const mainSec=owner?<section className="dp-sec" id="set-main" aria-labelledby="set-h-main"><Label id="set-h-main">{t('settingsMainAgent')}</Label><ul className="panel-card">
    {isMain?<li className="panel-row"><span className="panel-row__icon"><SettingsIcon name="check"/></span><span className="panel-row__text"><span className="panel-row__t">{t('settingsIsMain',agent.name)}</span><span className="panel-row__d">{t('settingsIsMainD')}</span></span></li>
     :<MakeMain company={company} agent={agent} current={main?.name||''}/>}</ul></section>
@@ -150,7 +151,7 @@ function AgentPage({t,rtl,slug,company,userId,agent,main,owner,canManage,canWrit
   <Link className="link-btn sov-back" id="sov-back" href={overlayHref(slug,'agents')} replace><SettingsIcon name="back" rtl={rtl}/><span>{t('settingsAllAgents')}</span></Link>
   <div className="sov-agent-id"><span className="face-wrap face-wrap--lg" aria-hidden="true"><CompanyAgentFace agent={agent} size={48}/></span><div className="od-fill">
    <div className="dp-id__name"><bdi>{agent.name}</bdi>{isMain&&<span className="badge dp-id__badge">{t('mainAgent')}</span>}</div>
-   {agent.speciality&&<div className="dp-id__role"><bdi>{agent.speciality}</bdi></div>}</div></div>
+   {agent.speciality&&<div className="dp-id__role"><bdi>{agent.speciality}</bdi></div>}{made&&<MadeLine made={made} where="sov"/>}</div></div>
   {/* The Memory tab (#21) is not built yet. */}
   <div className="segmented sov-tabs" role="tablist" aria-label={agent.name}>
    <button type="button" role="tab" id="sov-tab-settings" aria-selected="true" aria-controls="sov-agent-panel" tabIndex={0}>{t('settings')}</button>

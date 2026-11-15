@@ -340,9 +340,15 @@
 .gw .new-hint .gw-icon { width: 16px; height: 16px; color: var(--gw-text-2); }
 .gw .new-hint__t { margin: 0; flex: 1 1 260px; }
 
+/* When an Agent Lead made was made and at whose request, on its details and its Settings page (design-reference: .born) */
+.gw .born { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; margin: 0; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); }
+.gw .born .gw-icon { width: 13px; height: 13px; color: var(--gw-text-3); }
+.gw .born[data-utc] { visibility: hidden; }
+.gw .born--sov { margin-top: 2px; }
+
 /* Authored text inside the English interface takes its direction from its own words. */
 [dir="ltr"] .gw :is(.head-pill__title, .thread-item .od-truncate) { unicode-bidi: plaintext; text-align: left; }
-[dir="ltr"] .gw :is(.dp-id__name, .empty-chat h2, .new-hint__t) { unicode-bidi: plaintext; }
+[dir="ltr"] .gw :is(.dp-id__name, .empty-chat h2, .new-hint__t, .born span) { unicode-bidi: plaintext; }
 
 /* ---------- the reference's widths: a narrower sidebar and details below 1280px, the details over the chat below 1024px ---------- */
 @media (max-width: 1279px) {
