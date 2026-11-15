@@ -12,7 +12,7 @@ const accessories = [
 ];
 const mouths = ['M11.5 20c2.5 2.6 6.5 2.6 9 0', 'M13 22h6', 'M12 21.2c1.8 1 6.2 1 8 0', 'M12.6 21.4c1.9 1.4 4.6 1.4 6.4 0'];
 
-// A company's real Agent wears the reference's face (a pastel circle with ink features) in the sidebar's grid, its
+// A company's real Agent wears the reference's face (a pastel circle with ink marks) in the sidebar's grid, its
 // chat and its details. Every feature comes from lib/agent-face.mjs keyed by the Hermes connection, so one Agent never
 // looks like two, and two Agents look different exactly when their connections draw different faces.
 export function CompanyAgentFace({agent,size}:{agent:Pick<CompanyAgent,'connection_id'|'name'>,size:number}) {
