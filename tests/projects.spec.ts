@@ -8,10 +8,11 @@ import { execFileSync } from 'node:child_process';
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const rows=(sql:string)=>{ const out=JSON.parse(query(sql)); return (Array.isArray(out)?out:out.rows) as Record<string,unknown>[]; };
 
-// Clicks Save and waits until the server action has answered and the page has drawn its result. React resets an action form when the action ends, so typing before that would be wiped.
+// Clicks Save and waits until the server action has answered and the page has drawn its result. React resets an action
+// form when the action ends, so typing before that would be wiped: a project row's Save stays busy until then (#62).
 async function save(page:Page,button:Locator) {
- await Promise.all([page.waitForResponse(response=>response.request().method()==='POST'),button.click()]);
- await page.waitForLoadState('networkidle');
+ await Promise.all([page.waitForResponse(response=>!!response.request().headers()['next-action']),button.click()]);
+ await expect(button).toBeEnabled();
  await page.evaluate(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));
 }
 

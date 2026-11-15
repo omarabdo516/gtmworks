@@ -68,6 +68,23 @@ the parts are timed from run 43642299138.
 | `app.spec.ts` "landing and screenshots of every charter route" | Its only check was where a person of several companies lands after signing in from the sign-in page; the rest wrote unchecked screenshots. | Landing: merged into `app.spec.ts` "the Owner of every company lands on a Company home from the sign-in page and opens each one with no extra verification step" (the same person, the same page, the same check). Screens: `visual.spec.ts` compares sign-in, Home, approvals and settings members exactly. |
 | `app.spec.ts` "screenshots for unit routes" | It checked nothing beyond signing in, which every test does; it wrote unchecked screenshots. | `visual.spec.ts` compares the members and agents settings screens exactly. |
 
+## Flaky tests (#83)
+
+Each open flaky-test issue was repeated with Playwright's own `--repeat-each=20` on `main` after #79, then fixed at its
+cause or closed with the repeat that did not reproduce it. No test was moved, removed or loosened, and no retry was added.
+
+| Issue | Test | Root cause | Outcome |
+|---|---|---|---|
+| #47 | `app.spec.ts` activity times hydrate without errors | Its one failure (React #418, a hydration mismatch) was on a pull request branch before #59 whose other screens also failed; the element that mismatched was not found. | Not reproducible: 20 passed on `main`. |
+| #48 | `navigation.spec.ts` drawer targets are at least 44px | The drawer was measured while it slid in (43.99998px wide under the transform). #59 made `openNavigation` wait for the slide to end. | Fixed by #59: 20 passed on `main`. |
+| #56 | `navigation.spec.ts` prepared navigation budgets | Measured while functional tests loaded the same runner (211.6ms against 200ms). #69 runs the `measured` project alone after every functional test. | Fixed by #69: see the PR for the 20 runs. |
+| #61 | `activity-log.spec.ts` a filter that matches nothing | The who-filter had no option for an unknown value, so after hydration it fell back to everyone and drew all rows. #59 added the "not listed" option. | Fixed by #59: 20 passed on `main`. |
+| #62 | `projects.spec.ts` a project is created, a card is filed into it | The test's `save` ended on any POST's first bytes, so the next save overlapped it and the first save's form reset put back the old goal; a person could do the same with two quick saves. Separately, the board and list project filters took a choice before hydration and dropped it. | Fixed: a project row's Save is busy until its save ends, and `save` waits for it and for the action's own answer; both project filters are disabled until hydrated, as the month filter already was. |
+| #64 | `app.spec.ts` touch drag moves a card on a phone | A swipe is a press unless it moves within 250ms; right after the board loaded, the page's own work delayed the first move up to 250ms on a cold runner. The drop was aimed before the drag, and on CI the board moved 218px under the held card. | Fixed: the swipe waits for the board to finish loading; the drag aims at the next list where it is at each step. |
+| #70, #86 | `team-work.spec.ts` queued turns | A claim read the next turn before taking the lock a start is recorded under, so meeting a record half done it reserved the started turn again; nothing cleared that reservation, later turns waited forever and the Connection could not be removed. | Fixed in the database: `claim_conversation_turn` takes that lock before it reads (migration `20261215000000`). |
+| #73 | `password.spec.ts` sign-in answers wrong and unknown alike | The seed restore met the lane's worker in a deadlock on the #69 branch before it merged; `main` restores in one transaction and repeats it after a deadlock. | Fixed by #69: 20 passed on `main`. |
+| #84 | `agent-attachments.spec.ts` a run key downloads the files of its own card | CI twice reset the request client's connection (ECONNRESET). An idle client between 4.9s and 5.1s, around the server's 5s keep-alive, was answered every time, so that was not it. | Left open: no repeat reset a connection; on a host at load above 30, some repeats waited past 5s for the reply's thumbnail. |
+
 ## Every file
 
 Browser runtimes are from main's last full CI run before this change (run 43623167814, one worker); `node --test` runtimes
@@ -87,7 +104,7 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `agent-run-keys.spec.ts` | A run key reaches one card, expires, follows the grant and never takes its identity from the request. | 7.5 s | — | keep |
 | `alone-team.spec.ts` | A Company worked alone shows no channels, Member permissions or per-member agents and keeps the Activity log; the first invited Member's acceptance makes it a team with every earlier Conversation, Card and log row unchanged. (#10) | — | supabase/tests/alone_team.sql (the switch and its refusal in the database) | new |
 | `app-origin.test.mjs` | Behind an HTTPS proxy, first run and sign-in links stay on APP_ORIGIN (#40). | 1.1 s | production-shape.spec.ts | keep |
-| `app.spec.ts` | Sign-in, fonts, the card dialog and detail, members and invitations, board moves, approvals, webhooks, contrast and client error reports. | 142.1 s | See the two removed tests below; the rest prove promises no other file does. | keep; 2 tests removed (below) |
+| `app.spec.ts` | Sign-in, fonts, the card dialog and detail, members and invitations, board moves, approvals, webhooks, contrast and client error reports. | 142.1 s | See the two removed tests below; the rest prove promises no other file does. | keep; 2 tests removed (below); touch drag flake fixed (#83) |
 | `attachments.test.mjs` | Only raster images show in place; every download is sandboxed and never sniffed. | 0.4 s | — | keep |
 | `board-columns.test.mjs` | The six columns keep the approved order, Waiting on you first. | 0.3 s | board.spec.ts | keep |
 | `board.spec.ts` | The board's six columns, drag and keyboard moves (logged), the Agent filter, Viewer limits and Waiting on you. | 48.5 s | board-columns.test.mjs (column order only) | keep |
@@ -158,7 +175,7 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `phone-tap-areas.spec.ts` | At 390px the Numbers and Activity log controls keep 44px tap areas. | 1.4 s | — | keep |
 | `playwright-journal.test.mjs` | A killed Playwright run still leaves a truthful record; `check` still needs a green integration job. | 107.1 s | — | keep |
 | `playwright-projects.test.mjs` | Screens run first on the seed, functional next, first run last, and a failure in one group hides none of the others. | 77.8 s | — | keep |
-| `projects.spec.ts` | Projects are created, cards filed into them, Viewers read only, and a later change by someone else is not overwritten. | 23.3 s | — | keep |
+| `projects.spec.ts` | Projects are created, cards filed into them, Viewers read only, and a later change by someone else is not overwritten. | 23.3 s | — | keep; flaky cause fixed (#83) |
 | `proxy/production-shape.spec.ts` | Behind a proxy on https and a public-looking host, sign-in, settings and invitations work. (own config) | 14 s | install job (the same through a real install) | keep |
 | `public-tree.test.mjs` | The public tree carries no superseded decision or private wording. | 0.7 s | — | keep |
 | `release.test.mjs` | Releases pin every image, publish one tested image and are proven before publishing. (decision 0015) | 4.8 s | install job | keep (decision 0015) |
@@ -183,7 +200,7 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `sql-statements.mjs` | helper: split SQL into statements | — | — | helper, kept |
 | `tap-overlaps.spec.ts` | The tap-overlap measure used by the phone checks counts what really overlaps. | 0.3 s | — | keep |
 | `tap-overlaps.ts` | browser helper: tap-area overlap measure | — | — | helper, kept |
-| `team-work.spec.ts` | Queued turns run in order, lost answers are retried once, stop and roles are enforced, authors come from the session, notes stay private. | 85.6 s | unknown-starts.test.mjs, hermes-runs.test.mjs (driver logic) | keep |
+| `team-work.spec.ts` | Queued turns run in order, lost answers are retried once, stop and roles are enforced, authors come from the session, notes stay private. | 85.6 s | unknown-starts.test.mjs, hermes-runs.test.mjs (driver logic) | keep; flaky cause fixed (#83) |
 | `test-discovery.test.mjs` | npm test discovers a new nested test file and its failure. | 4.3 s | — | keep |
 | `testing-doc.test.mjs` | docs/testing.md keeps one row per file under tests/. (new, #69) | — | — | new |
 | `theme.spec.ts` | The device theme by default, the saved choice across sessions and devices, and the sun/moon toggle. | 6.9 s | sidebar.test.mjs (the menu entries) | keep |
