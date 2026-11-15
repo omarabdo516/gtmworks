@@ -37,7 +37,7 @@ test('alone: the sidebar has no channels and keeps the log; settings has no memb
  await expect(page.locator('.home-dashboard')).toBeVisible();
  await expect(page.getByRole('link',{name:'Activity log'}).first()).toBeVisible();
  await expect(channels(page)).toHaveCount(0);
- await expect(page.locator('.thread-group')).toHaveCount(0);
+ await expect(page.locator('#lbl-ch')).toHaveCount(0);
 
  await page.goto('/c/rs-consultations/settings');
  await expect(page.getByText('Alone · just you and the agents')).toBeVisible();
