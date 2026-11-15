@@ -636,6 +636,7 @@
   "settingsYouMark": "(you)",
   "settingsShownToAll": "Shown to all",
   "settingsOwnerSeesAll": "The Owner sees every agent",
+  "agentVisibilityFailed": "Couldn’t change who sees this agent. Try again.",
   "settingsTeamHint": "Changes apply to the member right away. A contributor writes with the agents they’re allowed; a viewer only reads.",
   "settingsInvite": "Invite a member",
   "settingsAskLead": "Ask {0} for an agent",

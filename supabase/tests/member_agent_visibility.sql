@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(29);
+select plan(31);
 -- RS Learning with four Agents: Lead (main), Ads, SEO and Coder; Aleem's Lead is another Company's. The Contributor
 -- (…03) has a Conversation with each, a message in two, and every Agent has a row in the log.
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state)
@@ -26,6 +26,7 @@ select set_config('request.jwt.claims','{"aal":"aal1"}',true);
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select lives_ok($$select public.set_agent_visible('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','a1500000-0000-0000-0000-000000000002',true)$$,'the Owner shows Ads to the Contributor');
 select lives_ok($$select public.set_agent_visible('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','a1500000-0000-0000-0000-000000000003',true)$$,'and SEO');
+select lives_ok($$select public.set_agent_visible('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','a1500000-0000-0000-0000-000000000002',true)$$,'and Ads to the Manager');
 select is((select string_agg(name,',' order by name) from public.hermes_agents where company_id='10000000-0000-0000-0000-000000000001'),'Ads,Coder,Lead,SEO','the Owner sees every Agent without being allowed any');
 select throws_ok($$select public.set_agent_visible('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','a1500000-0000-0000-0000-000000000001',false)$$,'42501','mainAgentShownToAll','the main Agent cannot be hidden');
 select throws_ok($$select public.set_agent_visible('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000004','a1500000-0000-0000-0000-000000000001',true)$$,'42501','mainAgentShownToAll','nor given a row of its own');
@@ -33,11 +34,12 @@ select throws_ok($$select public.set_agent_visible('10000000-0000-0000-0000-0000
 select throws_ok($$select public.set_agent_visible('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','a1500000-0000-0000-0000-000000000005',true)$$,'P0002','agentNotFound','another Company''s Agent is not found');
 select throws_ok($$delete from public.member_agent_access$$,'42501',null,'nobody changes the rows except through set_agent_visible');
 
--- A Manager changes it too; with no row of their own, a Manager sees Lead alone.
+-- A Manager changes it too, for the Agents the Manager sees.
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
 select lives_ok($$select public.set_agent_visible('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000005','a1500000-0000-0000-0000-000000000002',true)$$,'a Manager shows Ads to another Member');
-select is((select count(*)::int from public.member_agent_access where company_id='10000000-0000-0000-0000-000000000001'),3,'a Manager reads every Member''s switches');
-select is((select string_agg(name,',' order by name) from public.hermes_agents),'Lead','a Manager with no Agent allowed sees the main Agent only');
+select is((select count(*)::int from public.member_agent_access where company_id='10000000-0000-0000-0000-000000000001'),4,'a Manager reads every Member''s switches');
+select is((select string_agg(name,',' order by name) from public.hermes_agents),'Ads,Lead','a Manager sees the main Agent and the Agents allowed to them');
+select throws_ok($$select public.set_agent_visible('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000005','a1500000-0000-0000-0000-000000000004',true)$$,'P0002','agentNotFound','an Agent hidden from the Manager is not found for them to show');
 
 -- The Contributor: two of four Agents allowed, and Lead.
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);

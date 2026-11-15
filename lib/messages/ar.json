@@ -636,6 +636,7 @@
   "settingsYouMark": "(انت)",
   "settingsShownToAll": "ظاهر للكل",
   "settingsOwnerSeesAll": "المالك بيشوف كل الوكلاء",
+  "agentVisibilityFailed": "معرفناش نغيّر مين يشوف الوكيل ده. جرّب تاني.",
   "settingsTeamHint": "التغيير بيبان عند العضو على طول. المساهم بيكتب في الوكلاء المسموحله بيهم، والمشاهد بيقرا بس.",
   "settingsInvite": "اعزم عضو",
   "settingsAskLead": "اطلب من {0} وكيل",

@@ -53,7 +53,8 @@ create or replace function public.set_agent_visible(c uuid, person uuid, agent u
 declare chosen public.hermes_agents; target public.members;
 begin
  if visible is null or not public.can_manage_company(c) then raise exception 'agentVisibilityNotAllowed' using errcode='42501'; end if;
- select * into chosen from public.hermes_agents where id=agent and company_id=c;
+ -- A Manager changes only the Agents they see themselves; one hidden from them is not found here either.
+ select * into chosen from public.hermes_agents where id=agent and company_id=c and public.agent_visible_to(c,auth.uid(),agent);
  if not found then raise exception 'agentNotFound' using errcode='P0002'; end if;
  if chosen.is_default then raise exception 'mainAgentShownToAll' using errcode='42501'; end if;
  select * into target from public.members where company_id=c and person_id=person and removed_at is null;

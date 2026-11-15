@@ -8,6 +8,7 @@ import { saveLanguage } from './language-actions';
 import { SettingsIcon } from './settings-icons';
 import { openedFrom as storedFrom } from './settings-opener';
 import { changeMember } from './c/[slug]/[[...section]]/actions';
+import { setAgentVisible } from './agent-visibility-actions';
 
 
 // The full-window overlay (reference: dialog#sov): it holds the keyboard's first stop and closes on Escape.
@@ -147,4 +148,16 @@ export function InviteForm({slug,company,roles}:{slug:string,company:string,role
   </div>
   <p className="set-hint" id="inv-role-d">{chosen.name}: {chosen.description}</p>
  </form>;
+}
+
+// One Member × Agent switch (#15; reference: ta-toggle). It turns at once and goes back, with the reason, when the
+// database refuses.
+export function AgentSwitch({company,person,agent,on,label}:{company:string,person:string,agent:string,on:boolean,label:string}) {
+ const {t}=useI18n(); const router=useRouter();
+ const [checked,setChecked]=useState(on); const [pending,startTransition]=useTransition(); const [error,setError]=useState('');
+ return <><button type="button" className="switch" role="switch" aria-checked={checked} aria-label={label} disabled={pending} onClick={()=>startTransition(async()=>{
+  const next=!checked; setChecked(next); setError('');
+  const failure=await setAgentVisible(company,person,agent,next);
+  if(failure) { setChecked(!next); setError(failure); } else router.refresh();
+ })}/>{error&&<span className="set-err" role="alert">{t(error)}</span>}</>;
 }
