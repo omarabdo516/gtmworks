@@ -66,6 +66,8 @@ PY
   npx --yes @redocly/cli@2.76.0 lint docs/api/openapi.yaml --extends=spec
   npm run lint
   npm run typecheck
+  # Unused files, exports and dependencies (knip.json), as T3 Code checks them (#81).
+  npx --no-install knip --no-progress
   npm test
   ;;
  components)

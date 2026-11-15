@@ -2,7 +2,6 @@
 import { useI18n } from '@/lib/i18n-client';
 import { workAction } from './work-actions';
 import Work, { type WorkProps } from './work';
-export { Decision } from './decision';
 export type Step={id:number,name:string,position:number,person_id:string|null,role:string|null};
 export type ApprovalCard={id:number,title:string,caption:string,offering:string,segment:string,hook:string,goal:string,go_live:string|null,approval_step_id:number|null,review_entered_at:string|null,rejection_reason:string|null};
 type Member={person_id:string,role:string,people:{name:string}|null};
