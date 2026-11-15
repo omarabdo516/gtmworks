@@ -6,7 +6,7 @@ An open-source, self-hosted marketing operating system. Conversations run on an 
 
 Work arrives as a GitHub issue in this repo with an acceptance list. A UI change with no approved look names its approved prototype in the issue. The pull request body starts with `Closes #<n>`, the required check is `check`, and the pull request is reviewed on GitHub before it merges. CodeRabbit and Codex comments on GitHub are advisory.
 
-Every build runs in `/pstack:poteto-mode` and follows its playbooks. No other workflow skill is used in this repo. Impeccable stays the design tool for screens (Design workflow below).
+Every build runs in `/pstack:poteto-mode` and follows its playbooks. No other workflow skill is used in this repo. Money, secrets, deletion, release tags and repo settings stay with Omar, so in this repo they join the playbooks' always-pause list. Impeccable stays the design tool for screens (Design workflow below).
 
 ## Before exploring, read these
 
