@@ -1,0 +1,17 @@
+{
+  "channelPlaceholder": "اكتب في #{0}… والوكيل بيرد بس لو ناديته باسمه",
+  "channelMessageLabel": "اكتب رسالتك في القناة",
+  "channelMembers": "{0} أعضاء",
+  "channelAgents": "{0} وكلاء",
+  "channelNoAgents": "مفيش وكلاء",
+  "channelRouteTip": "الوكلاء مش بيقروا ولا بيردّوا غير لما حد يناديهم باسمهم، زي @{0}. الكلام العادي بين الأعضاء مش بيروح لأي وكيل.",
+  "channelRouteTipPlain": "الوكلاء مش بيقروا ولا بيردّوا غير لما حد يناديهم باسمهم. الكلام العادي بين الأعضاء مش بيروح لأي وكيل.",
+  "channelCouldNotReply": "{0} مقدرش يرد على الرسالة دي.",
+  "channelDetails": "تفاصيل القناة",
+  "channelKind": "قناة",
+  "channelEveryone": "«{0}» فيها كل أعضاء الشركة دايماً.",
+  "channelYou": "(انت)",
+  "channelReadsOnly": "بتقرا بس",
+  "channelMessages": "الرسايل في #{0}",
+  "channelNamesJoin": "، "
+}

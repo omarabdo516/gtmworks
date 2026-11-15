@@ -521,11 +521,11 @@ test('the Agent details panel, the chat search, the account menu sections and th
    const control=page.locator('.composer').getByRole('button',{name,exact:true});
    await expect(control).toHaveAttribute('aria-disabled','true'); await expect(control).toHaveAttribute('title','Soon');
   }
-  // Channels: the general channel and the Owner's new-channel button, disabled, with no unread number.
+  // Channels: the general channel opens (#23); the Owner's new-channel button is still disabled (#24); no unread number.
   const sidebar=page.locator('.sidebar');
   await expect(sidebar.locator('#lbl-ch')).toHaveText('Channels');
   const general=sidebar.locator('.ch-item');
-  await expect(general).toHaveText('general · Soon'); await expect(general).toHaveAttribute('aria-disabled','true');
+  await expect(general).toHaveText('general'); await expect(general).toHaveAttribute('href','/c/rs-learning/channels/69000000-0000-0000-0000-000000000001');
   await expect(sidebar.getByRole('button',{name:'New channel · Soon',exact:true})).toHaveAttribute('aria-disabled','true');
   await expect(sidebar.locator('.sb-unread')).toHaveCount(0);
   // Connect apps: disabled, "Soon" where the reference counts connected apps.

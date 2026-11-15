@@ -23,24 +23,24 @@ export function useDetailsPanel():DetailsPanel {
  return {overlay,expanded:overlay?over:beside,toggle:()=>(overlay?setOver:setBeside)(value=>!value),close};
 }
 
-// The chat's floating title (design-reference: .head-pill). With an Agent it is the button that shows its details.
-export function HeadPill({panel,agent,face,title,titleDir}:{panel?:DetailsPanel,agent?:string,face:ReactNode,title:string,titleDir?:'auto'}) {
+// The chat's floating title (design-reference: .head-pill). With an Agent, or a channel's `details` label, it is the
+// button that shows the details.
+export function HeadPill({panel,agent,details,face,title,titleDir}:{panel?:DetailsPanel,agent?:string,details?:string,face:ReactNode,title:string,titleDir?:'auto'}) {
  const {t}=useI18n();
  const inside=<>{face}<span className="head-pill__title" dir={titleDir}>{title}</span></>;
- return <div className="chat__top"><h1 className="chat__h">{panel&&agent?<button type="button" className="head-pill" id="btn-details" aria-controls="details" aria-expanded={panel.expanded} aria-label={`${title} · ${t('chatDetailsOf',agent)}`} onClick={panel.toggle}>{inside}</button>:<span className="head-pill">{inside}</span>}</h1></div>;
+ const label=details??(agent?t('chatDetailsOf',agent):undefined);
+ return <div className="chat__top"><h1 className="chat__h">{panel&&label?<button type="button" className="head-pill" id="btn-details" aria-controls="details" aria-expanded={panel.expanded} aria-label={`${title} · ${label}`} onClick={panel.toggle}>{inside}</button>:<span className="head-pill">{inside}</span>}</h1></div>;
 }
 
 const tabs=['chatTabActivity','chatTabTasks','chatTabFiles','chatTabMemory','chatTabLog'];
 
-// The Agent's details (design-reference: #details, renderDetailsPanel): its settings and close buttons, its face,
-// name, main mark, speciality and, for an Agent Lead made, when and at whose request (#13), then the five tabs. Activity, tasks, files, memory and log are not built yet (#20,
-// #21), so the tabs are drawn but say "Soon".
-export function AgentDetails({panel,agent,settingsHref}:{panel:DetailsPanel,agent:DetailsAgent,settingsHref:string}) {
+// The panel beside the chat, or over it below 1024px (design-reference: #details): `start` on the top bar, a close
+// button, and the content. Over the chat it takes the focus, and Escape gives it back to the title pill.
+export function DetailsShell({panel,label,start,children}:{panel:DetailsPanel,label:string,start:ReactNode,children:ReactNode}) {
  const {t}=useI18n(); const close=useRef<HTMLButtonElement>(null);
  const covering=panel.overlay&&panel.expanded;
  const {close:hide}=panel;
  const done=useCallback(()=>{hide();document.getElementById('btn-details')?.focus();},[hide]);
- // Over the chat the panel takes the focus, and Escape gives it back to the title pill.
  useEffect(()=>{
   if(!covering) return;
   close.current?.focus();
@@ -50,23 +50,31 @@ export function AgentDetails({panel,agent,settingsHref}:{panel:DetailsPanel,agen
  },[covering,done]);
  return <>
   {covering&&<div className="dp-scrim" onClick={done}/>}
-  <aside id="details" className={`details${covering?' is-open':''}`} aria-label={t('chatDetailsOf',agent.name)} hidden={!panel.overlay&&!panel.expanded}>
+  <aside id="details" className={`details${covering?' is-open':''}`} aria-label={label} hidden={!panel.overlay&&!panel.expanded}>
    <div className="dp-top">
-    <Link className="circle-btn" href={settingsHref} aria-label={t('chatAgentSettings',agent.name)} title={t('settings')}><ShellIcon name="gear"/></Link>
+    {start}
     <button ref={close} type="button" className="circle-btn" aria-label={t('chatCloseDetails')} onClick={done}><ShellIcon name="x"/></button>
    </div>
-   <div className="dp-scroll">
-    <div className="dp-id">
-     <span className="face-wrap face-wrap--lg" aria-hidden="true"><CompanyAgentFace agent={agent} size={64}/></span>
-     <div>
-      <div className="dp-id__name"><bdi>{agent.name}</bdi>{agent.main&&<span className="badge dp-id__badge">{t('mainAgent')}</span>}</div>
-      {agent.speciality&&<div className="dp-id__role"><bdi>{agent.speciality}</bdi></div>}
-      {agent.made&&<MadeLine made={agent.made} where="panel"/>}
-     </div>
-    </div>
-    <div className="segmented dp-tabs" role="group" aria-label={t('chatDetailsOf',agent.name)}>{tabs.map((key,index)=><button key={key} type="button" aria-disabled="true" title={t('soon')} data-first={index===0||undefined}>{t(key)}<span className="sr-only"> · {t('soon')}</span></button>)}</div>
-    <p className="panel-empty dp-soon">{t('chatDetailsSoon')}</p>
-   </div>
+   <div className="dp-scroll">{children}</div>
   </aside>
  </>;
+}
+
+// The Agent's details (design-reference: #details, renderDetailsPanel): its settings and close buttons, its face,
+// name, main mark, speciality and, for an Agent Lead made, when and at whose request (#13), then the five tabs. Activity, tasks, files, memory and log are not built yet (#20,
+// #21), so the tabs are drawn but say "Soon".
+export function AgentDetails({panel,agent,settingsHref}:{panel:DetailsPanel,agent:DetailsAgent,settingsHref:string}) {
+ const {t}=useI18n();
+ return <DetailsShell panel={panel} label={t('chatDetailsOf',agent.name)} start={<Link className="circle-btn" href={settingsHref} aria-label={t('chatAgentSettings',agent.name)} title={t('settings')}><ShellIcon name="gear"/></Link>}>
+  <div className="dp-id">
+   <span className="face-wrap face-wrap--lg" aria-hidden="true"><CompanyAgentFace agent={agent} size={64}/></span>
+   <div>
+    <div className="dp-id__name"><bdi>{agent.name}</bdi>{agent.main&&<span className="badge dp-id__badge">{t('mainAgent')}</span>}</div>
+    {agent.speciality&&<div className="dp-id__role"><bdi>{agent.speciality}</bdi></div>}
+    {agent.made&&<MadeLine made={agent.made} where="panel"/>}
+   </div>
+  </div>
+  <div className="segmented dp-tabs" role="group" aria-label={t('chatDetailsOf',agent.name)}>{tabs.map((key,index)=><button key={key} type="button" aria-disabled="true" title={t('soon')} data-first={index===0||undefined}>{t(key)}<span className="sr-only"> · {t('soon')}</span></button>)}</div>
+  <p className="panel-empty dp-soon">{t('chatDetailsSoon')}</p>
+ </DetailsShell>;
 }

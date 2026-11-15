@@ -13,8 +13,9 @@ export const newId=()=>{const b=crypto.getRandomValues(new Uint8Array(16));b[6]=
 // While the Agent works (design-reference: syncComposer), an empty box turns the send arrow into a stop square for a
 // person allowed to stop the run (`stop`); typed text is still sent, and waits for the current reply.
 // `draft` starts the box with a sentence to try (remount with a new key to put another one in); it is focused for editing,
-// as it is with `focus` ("New agent" opens Lead's chat ready to type, #13).
-export function MessageBox({placeholder,send,stop,draft,focus=false}:{placeholder:string,send:(text:string,sendKey:string)=>Promise<string|null>,stop?:{label:string,run:()=>Promise<string|null>},draft?:string,focus?:boolean}) {
+// as it is with `focus` ("New agent" opens Lead's chat ready to type, #13). `label` names the box for a reader (a
+// channel's says where the message goes).
+export function MessageBox({placeholder,label,send,stop,draft,focus=false}:{placeholder:string,label?:string,send:(text:string,sendKey:string)=>Promise<string|null>,stop?:{label:string,run:()=>Promise<string|null>},draft?:string,focus?:boolean}) {
  const {t}=useI18n(); const [text,setText]=useState(draft??''); const [key,setKey]=useState(newId); const [busy,setBusy]=useState(false); const [error,setError]=useState('');
  async function submit() {
   if(!text.trim()||busy) return;
@@ -32,7 +33,7 @@ export function MessageBox({placeholder,send,stop,draft,focus=false}:{placeholde
  return <div className="composer">
   <div className="composer__row">
    <button type="button" className="composer__btn" aria-disabled="true" aria-label={`${t('chatMore')} · ${t('soon')}`} title={t('soon')}><ShellIcon name="plus"/></button>
-   <textarea className="composer__input" dir="auto" rows={1} autoFocus={!!draft||focus} readOnly={busy} aria-busy={busy} aria-label={t('conversationMessage')} placeholder={placeholder} value={text} onChange={event=>{setText(event.target.value);setKey(newId());}} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing){event.preventDefault();void submit();}}}/>
+   <textarea className="composer__input" dir="auto" rows={1} autoFocus={!!draft||focus} readOnly={busy} aria-busy={busy} aria-label={label??t('conversationMessage')} placeholder={placeholder} value={text} onChange={event=>{setText(event.target.value);setKey(newId());}} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing){event.preventDefault();void submit();}}}/>
    <button type="button" className="composer__btn composer__mic" aria-disabled="true" aria-label={`${t('chatDictation')} · ${t('soon')}`} title={t('soon')}><ShellIcon name="mic"/></button>
    {stop&&!text.trim()?<button type="button" className="composer__send is-stop" aria-label={stop.label} title={stop.label} disabled={busy} onClick={()=>void halt(stop)}><svg className="gw-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/></svg></button>
    :<button type="button" className="composer__send" aria-label={t('conversationSend')} disabled={!text.trim()||busy} onClick={()=>void submit()}><ShellIcon name="send"/></button>}
@@ -41,9 +42,9 @@ export function MessageBox({placeholder,send,stop,draft,focus=false}:{placeholde
  </div>;
 }
 
-export async function postMessage(body:object) {
+export async function postMessage(body:object,path='/api/conversations') {
  try {
-  const response=await fetch('/api/conversations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const response=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   return response.ok?null:((await response.json()).error as string)||'conversationFailed';
  } catch { return 'conversationFailed'; }
 }

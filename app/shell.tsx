@@ -22,13 +22,13 @@ type Crumb={label:string,href?:string};
 type Company = {id:string,slug:string,name:string};
 
 // The frame every screen sits in (design-reference: #sidebar). From the top: the Company, search and a new chat with
-// Lead; the four entries; the Agents with Lead first; the channels (not built yet, and absent for a Company worked
-// alone), this person's recent chats and cards; Connect apps (not built yet), the account and theme.
-// `agentId` and `conversationId` mark the open Conversation in the sidebar; `personId` is the signed-in person, for
-// whom an Agent Lead made at their request is marked new until they open it (#13).
-export default async function Shell({company,companies,section,title,crumbs,personId,personName,role,owner=false,children,approvalCount=0,cardId,agentId,conversationId}:{company?:Company,companies:Company[],section:string,title:string,crumbs?:Crumb[],personId:string,personName:string,role:string,owner?:boolean,children:ReactNode,approvalCount?:number,cardId?:number,agentId?:string,conversationId?:string}) { const {t,theme}=await getI18n();
+// Lead; the four entries; the Agents with Lead first; the channels this person is in (#23: the general channel; none
+// in a Company worked alone), this person's recent chats and cards; Connect apps (not built yet), the account and theme.
+// `agentId` and `conversationId` mark the open Conversation in the sidebar, `channelId` the open channel; `personId` is
+// the signed-in person, for whom an Agent Lead made at their request is marked new until they open it (#13).
+export default async function Shell({company,companies,section,title,crumbs,personId,personName,role,owner=false,children,approvalCount=0,cardId,agentId,conversationId,channelId}:{company?:Company,companies:Company[],section:string,title:string,crumbs?:Crumb[],personId:string,personName:string,role:string,owner?:boolean,children:ReactNode,approvalCount?:number,cardId?:number,agentId?:string,conversationId?:string,channelId?:string}) { const {t,theme}=await getI18n();
  const slug=company?.slug;
- const chat=section==='chat'||section==='conversations';
+ const chat=section==='chat'||section==='conversations'||section==='channels';
  const db=await supabase();
  const agents=company?.id?await companyAgents(db,company.id):[];
  const [waitingKey,...waitingValues]=waitingLabel(approvalCount); const waiting=t(waitingKey,...waitingValues);
@@ -38,6 +38,8 @@ export default async function Shell({company,companies,section,title,crumbs,pers
  // A chat is named by the first line of its first message, as its own page names it (lib/conversations titleOf).
  const chats=conversations.map((c,index)=>({id:c.id,created_at:c.created_at,title:firsts[index]?.split('\n')[0]||c.agent_name}));
  const workMode=company?.id?(await db.from('companies').select('work_mode').eq('id',company.id).maybeSingle()).data?.work_mode as string|null|undefined:undefined;
+ // The channels this person is in: the database answers (in_channel), so a Company worked alone lists none.
+ const channels=company?.id?((await db.from('channels').select('id,kind').eq('company_id',company.id).order('created_at')).data||[]) as {id:string,kind:'general'}[]:[];
  const active=(path:string)=>path==='chat'?chat:path==='work/board'?section.startsWith('work/'):section===path;
  const sidebar=<SidebarSearchProvider>
   <div className="sb-top">
@@ -67,10 +69,10 @@ export default async function Shell({company,companies,section,title,crumbs,pers
     {owner&&<li><Link className="agent-tile agent-tile--new" href={`/c/${slug}/chat?new=agent`}><span className="agent-tile__plus"><ShellIcon name="plus"/></span><span className="agent-tile__name">{t('newAgent')}</span></Link></li>}</ul>
    </section>
    <section className="sb-sec" id="sb-recent" aria-label={t('recentChats')}>
-    {/* Channels (#23, #24) are drawn as the reference draws them, without invented unread counts, and open nothing yet. */}
-    {workMode!=='alone'&&<div className="thread-group">
+    {/* Channels (#23) as the reference draws them, without invented unread counts; a new channel is #24. */}
+    {channels.length>0&&<div className="thread-group">
      <div className="sb-label-row"><h2 className="sb-label" id="lbl-ch">{t('shellChannels')}</h2>{owner&&<button type="button" className="sb-add" aria-disabled="true" aria-label={`${t('shellNewChannel')} · ${t('soon')}`} title={t('soon')}><ShellIcon name="plus"/></button>}</div>
-     <ul aria-labelledby="lbl-ch"><li><button type="button" className="sb-item thread-item ch-item" aria-disabled="true" title={t('soon')}><ShellIcon name="hash"/><span className="od-truncate">{t('shellGeneralChannel')}</span><span className="sr-only"> · {t('soon')}</span></button></li></ul>
+     <ul aria-labelledby="lbl-ch">{channels.map(channel=><li key={channel.id}><Link className="sb-item thread-item ch-item" href={`/c/${slug}/channels/${channel.id}`} aria-current={channel.id===channelId?'true':undefined}><ShellIcon name="hash"/><span className="od-truncate">{t('shellGeneralChannel')}</span></Link></li>)}</ul>
     </div>}
     <RecentChats slug={slug} chats={chats} current={conversationId} lead={agents[0]?.name||'Lead'}/>
     {company?.id&&<RecentCards key={company.id} slug={slug}/>}

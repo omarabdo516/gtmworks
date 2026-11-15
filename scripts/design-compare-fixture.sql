@@ -1,7 +1,7 @@
 -- Optional data for representative design comparisons (design/COMPARE.md, "Representative captures"): the
 -- reference's five Agents in RS Learning, Lead the main one, one Conversation of Omar's with Lead holding a message and
 -- a reply, and the Conversation in which Lead made Ads at Omar's request on October 10 (#13; the reference's
--- th-made-ads), Ads already opened as in the reference. Nothing applies it automatically; load it by hand into a throwaway local database only.
+-- th-made-ads), Ads already opened as in the reference, and talk in the general channel (#23). Nothing applies it automatically; load it by hand into a throwaway local database only.
 -- Fixed ids (scripts/design-compare-lib.mjs, fixture); running it again adds nothing. The connections point nowhere
 -- and hold no key: they are never called.
 begin;
@@ -69,6 +69,30 @@ on conflict do nothing;
 insert into public.member_agent_access(company_id,person_id,agent_id)
 select '10000000-0000-0000-0000-000000000001',('20000000-0000-0000-0000-00000000000'||x.person)::uuid,('61000000-0000-0000-0000-00000000000'||x.n)::uuid
 from (values (2,2),(2,3),(2,4),(2,5),(3,2),(3,4),(4,3),(4,4),(4,5)) x(person,n)
+on conflict do nothing;
+
+-- RS Learning's general channel (#23), as the reference's ch-general: Omar and the Manager write, the Contributor
+-- calls Lead, and Lead replies. Added only to an empty channel.
+insert into public.channel_messages(company_id,channel_id,author,person_id,author_name,body,send_key)
+select '10000000-0000-0000-0000-000000000001','69000000-0000-0000-0000-000000000001','person',x.person_id,x.author_name,x.body,x.send_key
+from (values
+ (1,'20000000-0000-0000-0000-000000000001'::uuid,'عمر','صباح الخير يا جماعة. الدفعة الجديدة من «المحاسب الشامل» بتبدأ 1 ديسمبر، فكل حملات التسجيل لازم تبقى جاهزة قبل 20 نوفمبر.','63000000-0000-0000-0000-000000000011'::uuid),
+ (2,'20000000-0000-0000-0000-000000000002','مدير','تمام. حملة Meta هتبقى جاهزة الأسبوع ده، وGoogle Search بعدها بيومين.','63000000-0000-0000-0000-000000000012'),
+ (3,'20000000-0000-0000-0000-000000000003','مراجع','@Lead لخّصلنا مين مستني إيه النهارده.','63000000-0000-0000-0000-000000000013')
+) x(n,person_id,author_name,body,send_key)
+where not exists(select 1 from public.channel_messages where channel_id='69000000-0000-0000-0000-000000000001')
+order by x.n;
+insert into public.channel_runs(message_id,company_id,channel_id,agent_id,agent_name,session,input,attempts,attempted_at,run_id,outcome,closed_at)
+select id,company_id,channel_id,'61000000-0000-0000-0000-000000000001','Lead','63000000-0000-0000-0000-000000000014','مراجع: '||body,1,now(),'design-compare-fixture-channel','completed',now()
+from public.channel_messages where send_key='63000000-0000-0000-0000-000000000013'
+on conflict do nothing;
+insert into public.channel_messages(company_id,channel_id,author,agent_id,author_name,body,reply_to)
+select company_id,channel_id,'agent','61000000-0000-0000-0000-000000000001','Lead','ده اللي واقف النهارده:
+• حملة Meta للمحاسب الشامل: مستنية عمر يختار زاوية الإعلان
+• مقال «كورس محاسبة اونلاين»: مستني موافقة النشر
+
+الباقي ماشي لوحده، وهقولكم هنا لو حاجة وقفت.',id
+from public.channel_messages where send_key='63000000-0000-0000-0000-000000000013'
 on conflict do nothing;
 
 commit;

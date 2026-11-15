@@ -23,6 +23,8 @@ export const fixture = {
   conversation: '62000000-0000-0000-0000-000000000001',
   // Omar's Conversation in which Lead made Ads (#13), as the reference's thread th-made-ads.
   madeConversation: '62000000-0000-0000-0000-000000000002',
+  // RS Learning's general channel (#23), as the reference's ch-general.
+  channel: '69000000-0000-0000-0000-000000000001',
 };
 export const screens = {
   // The prototype's main screen: the Conversation with the main Agent, Lead, which it opens on.
@@ -54,6 +56,8 @@ export const screens = {
   'made-card': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-made-ads"]' }, { waitFor: '.ac-card' }] }, builtPath: null },
   // Ads's page in Settings, saying when it was made and at whose request. Built: the fixture's Ads, which Lead made.
   'made-agent': { reference: { steps: [...settingsSection('agents'), { click: '#sov-ag-ads' }, { waitFor: '#sov-tab-settings' }] }, builtPath: `/c/rs-learning/settings?agent=${fixture.agent}` },
+  // #23. RS Learning's general channel (its fixed id in supabase/seed.sql), with the fixture's talk in it.
+  channel: { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="ch-general"]' }, { waitFor: '.ch-intro' }] }, builtPath: `/c/rs-learning/channels/${fixture.channel}` },
 };
 
 export const languages = ['ar', 'en'];

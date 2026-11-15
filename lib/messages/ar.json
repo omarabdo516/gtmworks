@@ -779,5 +779,8 @@
   "agentMadeToday": "اتعمل النهارده {0} بطلب من {1}",
   "agentMadeTodayMine": "اتعمل النهارده {0} بطلب منك",
   "agentMadeSeeAsk": "شوف الطلب",
-  "newAgentReadyMade": "أو اختار من الجاهزين"
+  "newAgentReadyMade": "أو اختار من الجاهزين",
+  "channelNotFound": "القناة دي مش مفتوحة لك.",
+  "channelNotAllowed": "دورك بيقرا القناة دي بس، ومينفعش يكتب فيها.",
+  "channelFailed": "الرسالة متبعتتش. جرّب تاني."
 }
