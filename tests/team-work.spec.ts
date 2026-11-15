@@ -38,6 +38,8 @@ function attachAgent() {
  const [connection,agent]=[randomUUID(),randomUUID()];
  query(`insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values ('${connection}','${company}','${omar}','http://127.0.0.1:9','fake-${connection.slice(0,8)}','${encryptSecret('fake-engine-key',encryptionKey)}','connected','0.23.0','{run_submission}')`);
  query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('${agent}','${company}','${connection}','Faye','Marketing')`);
+ // Shown to every Member, as the #15 update shows every Agent that existed before it.
+ query(`insert into public.member_agent_access(company_id,person_id,agent_id) select company_id,person_id,'${agent}' from public.members where company_id='${company}' and removed_at is null and role<>'owner'`);
  return {agent,detach:()=>{
   query(`delete from public.hermes_agents where id='${agent}'`); query(`delete from public.hermes_connections where id='${connection}'`);
  }};
@@ -52,6 +54,8 @@ async function attachFakeHermes(fake:Awaited<ReturnType<typeof fakeHermes>>) {
  const [connection,agent]=[randomUUID(),randomUUID()];
  query(`insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values ('${connection}','${company}','${omar}','${fake.address}','queue-${connection.slice(0,8)}','${encryptSecret(fake.settings.key,encryptionKey)}','connected','0.23.0','{run_submission}')`);
  query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('${agent}','${company}','${connection}','Faye','Marketing')`);
+ // Shown to every Member, as the #15 update shows every Agent that existed before it.
+ query(`insert into public.member_agent_access(company_id,person_id,agent_id) select company_id,person_id,'${agent}' from public.members where company_id='${company}' and removed_at is null and role<>'owner'`);
  return {agent,detach:()=>{ query(`delete from public.hermes_agents where id='${agent}'`); query(`delete from public.hermes_connections where id='${connection}'`); }};
 }
 

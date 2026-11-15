@@ -90,6 +90,7 @@ const readyBy: Record<string, string> = {
   'alone-settings': '#inv-email',
   'made-card': '.ac-card',
   'new-agent': '.new-hint',
+  'agent-visibility': '.ta-table .switch',
   'made-agent': '.born--sov',
 };
 
@@ -103,6 +104,8 @@ const made = (n: number) => `65000000-0000-0000-0000-00000000000${n}`;
 // administrator with triggers off, the way tests/fresh-seed.ts puts the seed back, so nothing of it stays behind.
 const asAdmin = (sql: string) => execFileSync('docker', ['exec', '-i', dbContainerOf(), 'psql', '-U', 'supabase_admin', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-q', '--single-transaction'],
   { input: `set session_replication_role = replica;\n${sql}`, stdio: ['pipe', 'ignore', 'pipe'], encoding: 'utf8' });
+// Lead, Meta Ads and SEO in RS Learning, with the switches the screen shows on (#15).
+const seen = (n: number) => `68000000-0000-0000-0000-00000000000${n}`;
 const screenStates: Record<string, { set: string, unset: string, admin?: true }> = {
   unanswered: {
     set: `update public.companies set work_mode=null where id='${rsLearning}'`,
@@ -119,6 +122,21 @@ const screenStates: Record<string, { set: string, unset: string, admin?: true }>
     unset: `do $$ begin delete from public.conversations where id='${leadWelcome.conversation}';
       delete from public.hermes_agents where id='${leadWelcome.agent}';
       delete from public.hermes_connections where id='${leadWelcome.connection}'; end $$;`,
+  },
+  visibility: {
+    set: `do $$ begin insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values
+       ('${seen(1)}','${rsLearning}','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9/p/visual-seen-lead','visual-seen-lead','visual-no-key','unreachable'),
+       ('${seen(2)}','${rsLearning}','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9/p/visual-seen-ads','visual-seen-ads','visual-no-key','unreachable'),
+       ('${seen(3)}','${rsLearning}','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9/p/visual-seen-seo','visual-seen-seo','visual-no-key','unreachable');
+      insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values
+       ('${seen(4)}','${rsLearning}','${seen(1)}','Lead','General',true),
+       ('${seen(5)}','${rsLearning}','${seen(2)}','Meta Ads','Runs the Meta ads.',false),
+       ('${seen(6)}','${rsLearning}','${seen(3)}','SEO','Writes the blog.',false);
+      insert into public.member_agent_access(company_id,person_id,agent_id) values
+       ('${rsLearning}','20000000-0000-0000-0000-000000000002','${seen(5)}'),('${rsLearning}','20000000-0000-0000-0000-000000000002','${seen(6)}'),
+       ('${rsLearning}','20000000-0000-0000-0000-000000000003','${seen(5)}'); end $$;`,
+    unset: `do $$ begin delete from public.hermes_agents where id in ('${seen(4)}','${seen(5)}','${seen(6)}');
+      delete from public.hermes_connections where id in ('${seen(1)}','${seen(2)}','${seen(3)}'); end $$;`,
   },
   'lead-made': {
     admin: true,

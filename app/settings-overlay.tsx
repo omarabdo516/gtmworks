@@ -6,7 +6,7 @@ import { getI18n } from '@/lib/i18n-server';
 import { supabase } from '@/lib/supabase';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { visibleSections, pickSection, overlayHref, agentsMainFirst, usageTotals, type OverlaySection } from '@/lib/settings-overlay.mjs';
-import { OverlayFrame, CloseButton, AccountChoices, MakeMain, DeleteAgent, CompanyName, InviteForm } from './settings-overlay-client';
+import { OverlayFrame, CloseButton, AccountChoices, MakeMain, DeleteAgent, CompanyName, InviteForm, AgentSwitch } from './settings-overlay-client';
 import { SettingsIcon } from './settings-icons';
 import PasswordSettings from './password-settings';
 import { UsageTable, type UsageDay } from './c/[slug]/[[...section]]/usage';
@@ -38,6 +38,8 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  const needAgents=['company','agents'].includes(section);
  const agents:Agent[]=needAgents?agentsMainFirst((await db.from('hermes_agents').select(`id,connection_id,name,speciality,is_default,${madeColumns}`).eq('company_id',company.id).order('name')).data||[]):[];
  const members:Member[]=section==='company'?(((await db.from('members').select('person_id,role,people(name)').eq('company_id',company.id).is('removed_at',null)).data||[]) as unknown as Member[]).sort((a,b)=>(roleRank[a.role]??9)-(roleRank[b.role]??9)||(a.people?.name||'').localeCompare(b.people?.name||'')):[];
+ // Which Agents each Member sees (#15): every Member's switches, read by an Owner or a Manager.
+ const allowed=new Set(section==='company'&&canManage?((await db.from('member_agent_access').select('person_id,agent_id').eq('company_id',company.id)).data||[]).map(row=>`${row.person_id}:${row.agent_id}`):[]);
  const sharedEngine=section==='company'&&owner?(await db.rpc('bundled_engine_shared',{c:company.id})).data===true:false;
  // The Company's Agent level, and for its Owner the Agents whose engine offers terminal, code or file tools while the
  // Company has more than one member (agent_tool_warning returns nothing to anyone else).
@@ -52,7 +54,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  const agent=section==='agents'&&query.agent?agents.find(item=>item.id===query.agent):undefined;
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  const ro=!canManage&&<p className="ro-note"><SettingsIcon name="shield"/><span>{t('settingsRO')}</span></p>;
- const page=section==='company'?<CompanySection t={t} company={company} solo={workMode==='alone'} message={query.message} members={members} agents={agents} userId={userId} slug={slug} owner={owner} canManage={canManage} sharedEngine={sharedEngine} agentLevel={agentLevel} toolWarning={toolWarning.map(row=>row.agent_name)} roleNames={roleNames} ro={ro}/>
+ const page=section==='company'?<CompanySection t={t} company={company} solo={workMode==='alone'} message={query.message} members={members} agents={agents} allowed={allowed} userId={userId} slug={slug} owner={owner} canManage={canManage} sharedEngine={sharedEngine} agentLevel={agentLevel} toolWarning={toolWarning.map(row=>row.agent_name)} roleNames={roleNames} ro={ro}/>
   :section==='agents'?(agent?<AgentPage t={t} rtl={rtl} slug={slug} company={company.id} userId={userId} agent={agent} main={agents[0]} owner={owner} canManage={canManage} canWrite={canWrite}/>:<AgentsSection t={t} rtl={rtl} slug={slug} agents={agents} canManage={canManage} canWrite={canWrite} owner={owner}/>)
   :section==='usage'?<UsageSection t={t} locale={locale} slug={slug} company={company.id} rows={usageRows} period={query.period==='30'?30:7}/>
   :section==='account'?<AccountSection t={t} theme={theme} personName={personName} role={role} roleName={roleNames[role]||''} companyName={company.name} company={company.id} memberNote={memberNote}/>
@@ -83,7 +85,7 @@ const Soon=({t}:{t:T})=><div className="panel-card sov-soon" aria-disabled="true
 const SoonSec=({t,id,label}:{t:T,id:string,label:string})=><section className="dp-sec" aria-labelledby={id}><Label id={id}>{label}</Label><Soon t={t}/></section>;
 const initial=(name:string)=>name.trim().slice(0,1).toUpperCase()||'?';
 
-function CompanySection({t,company,solo,message,members,agents,userId,slug,owner,canManage,sharedEngine,agentLevel,toolWarning,roleNames,ro}:{t:T,company:{id:string,name:string},solo:boolean,message?:string,members:Member[],agents:Agent[],userId:string,slug:string,owner:boolean,canManage:boolean,sharedEngine:boolean,agentLevel:number,toolWarning:string[],roleNames:Record<string,string>,ro:ReactNode}) {
+function CompanySection({t,company,solo,message,members,agents,allowed,userId,slug,owner,canManage,sharedEngine,agentLevel,toolWarning,roleNames,ro}:{t:T,company:{id:string,name:string},solo:boolean,message?:string,members:Member[],agents:Agent[],allowed:Set<string>,userId:string,slug:string,owner:boolean,canManage:boolean,sharedEngine:boolean,agentLevel:number,toolWarning:string[],roleNames:Record<string,string>,ro:ReactNode}) {
  const count=members.length;
  const name=<section className="dp-sec" aria-labelledby="co-h-name"><Label id="co-h-name">{t('settingsCompanyName')}</Label>
   <div className="panel-card set-card">{owner?<div className="set-field"><label className="set-label" htmlFor="co-name">{t('settingsCompanyNameHint')}</label>
@@ -101,8 +103,7 @@ function CompanySection({t,company,solo,message,members,agents,userId,slug,owner
    <tbody>{members.map(member=><tr key={member.person_id}><th scope="row">{who(member)}</th>
     {agents.length>0&&<td><span className="ta-all">{t('settingsShownToAll')}</span></td>}
     {member.role==='owner'?(others.length>0&&<td colSpan={others.length}><span className="ta-all">{t('settingsOwnerSeesAll')}</span></td>)
-     /* Choosing which Agents each member works with (#15) is not built: today every member works with every Agent. */
-     :others.map(agent=><td key={agent.id}><button type="button" className="switch" role="switch" aria-checked="true" aria-disabled="true" title={t('soon')} aria-label={`${member.people?.name||t('member')} · ${agent.name} · ${t('soon')}`}/></td>)}
+     :others.map(agent=><td key={agent.id}><AgentSwitch company={company.id} person={member.person_id} agent={agent.id} on={allowed.has(`${member.person_id}:${agent.id}`)} label={`${member.people?.name||t('member')} · ${agent.name}`}/></td>)}
    </tr>)}</tbody></table></div>
   <p className="set-hint ta-hint">{t('settingsTeamHint')}</p>
   {owner&&<section className="inv-sec" aria-labelledby="inv-h"><h4 className="sr-only" id="inv-h">{t('settingsInvite')}</h4><Link className="btn btn--secondary inv-open" href={`/c/${slug}/settings/members`}><SettingsIcon name="plus"/><span>{t('settingsInvite')}</span></Link></section>}

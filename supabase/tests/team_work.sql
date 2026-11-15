@@ -4,6 +4,8 @@ select plan(33);
 -- RS Learning: Omar (1) is Owner, 2 Manager (مدير), 3 and 5 Contributors, 4 Viewer.
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('e0000000-0000-0000-0000-000000000211','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://localhost','team','ciphertext','connected');
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('e1000000-0000-0000-0000-000000000211','10000000-0000-0000-0000-000000000001','e0000000-0000-0000-0000-000000000211','Mona','Writing',false);
+-- Mona is shown to every Member (#15), as the update shows each Agent that existed before it.
+insert into public.member_agent_access(company_id,person_id,agent_id) select company_id,person_id,'e1000000-0000-0000-0000-000000000211' from public.members where company_id='10000000-0000-0000-0000-000000000001' and removed_at is null and role<>'owner';
 set local role authenticated;
 
 -- (g) A Member's note: saved as themselves, read by nobody else, refused when too long or secret-looking.

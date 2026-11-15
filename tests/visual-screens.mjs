@@ -32,12 +32,15 @@ const lightScreens = [
   { name: 'made-card', path: '/c/rs-learning/conversations/65000000-0000-0000-0000-000000000005', state: 'lead-made' },
   { name: 'new-agent', path: '/c/rs-learning/chat?new=agent', state: 'lead-made' },
   { name: 'made-agent', path: '/c/rs-learning/settings?agent=65000000-0000-0000-0000-000000000004', state: 'lead-made' },
+  // Which Agents each Member sees (#15): Company settings over Lead, Meta Ads and SEO, with Meta Ads shown to the Manager
+  // and to the first Contributor, and SEO to the Manager.
+  { name: 'agent-visibility', path: '/c/rs-learning/settings', state: 'visibility' },
 ];
 
 export const screens = [
   { name: 'first-run', path: '/first-run', anonymous: true, dark: false },
   ...lightScreens.map(screen => ({ ...screen, dark: false })),
-  ...lightScreens.filter(screen => ['sign-in', 'home', 'chat', 'board', 'card', 'alone-chat', 'alone-settings', 'made-card', 'new-agent', 'made-agent'].includes(screen.name))
+  ...lightScreens.filter(screen => ['sign-in', 'home', 'chat', 'board', 'card', 'alone-chat', 'alone-settings', 'made-card', 'new-agent', 'made-agent', 'agent-visibility'].includes(screen.name))
     .map(screen => ({ ...screen, name: `${screen.name}-dark`, dark: true })),
 ];
 

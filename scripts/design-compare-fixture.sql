@@ -64,4 +64,11 @@ insert into public.lead_made_agents(conversation_id,run_id,call_id,company_id,ag
 values ('62000000-0000-0000-0000-000000000002','design-compare-fixture-made-1','call-0','10000000-0000-0000-0000-000000000001','61000000-0000-0000-0000-000000000002','2026-10-10T11:03:00Z')
 on conflict do nothing;
 
+-- Which Agents each Member sees (#15), as in the reference's ACCESS: the Manager every Agent, the first Contributor Ads
+-- and Analyst, the Viewer SEO & Content, Analyst and Critic.
+insert into public.member_agent_access(company_id,person_id,agent_id)
+select '10000000-0000-0000-0000-000000000001',('20000000-0000-0000-0000-00000000000'||x.person)::uuid,('61000000-0000-0000-0000-00000000000'||x.n)::uuid
+from (values (2,2),(2,3),(2,4),(2,5),(3,2),(3,4),(4,3),(4,4),(4,5)) x(person,n)
+on conflict do nothing;
+
 commit;
