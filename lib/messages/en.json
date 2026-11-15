@@ -771,10 +771,11 @@
   "settingsInviteGo": "Invite",
   "settingsInviteEmailExample": "name@example.com",
   "newAgentHint": "Tell {0} what you need an agent for, in your own words, and it makes it right away.",
-  "newAgentExample": "e.g. I want someone to follow up on WhatsApp leads and reply to them",
+  "newAgentExample": "e.g. I want someone to follow up on WhatsApp leads",
   "agentNew": "New",
   "agentMadeOn": "Made on {0} at the request of {1}",
   "agentMadeOnMine": "Made on {0} at your request",
   "agentMadeToday": "Made today at {0} at the request of {1}",
-  "agentMadeTodayMine": "Made today at {0} at your request"
+  "agentMadeTodayMine": "Made today at {0} at your request",
+  "agentMadeSeeAsk": "See the ask"
 }
