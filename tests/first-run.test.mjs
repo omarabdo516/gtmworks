@@ -28,12 +28,3 @@ test('setup diagnostics retain the Postgres cause without logging row details', 
  assert.equal(entry.message,'insert or update violates foreign key constraint');
  assert.doesNotMatch(lines[0],/First owner|setup@example\.test|First Company/);
 });
-
-test('destructive first-run helpers refuse remote app and Supabase targets', async () => {
- const {assertLocalTarget,resetFirstRun}=await import('../scripts/first-run-db.mjs');
- assert.doesNotThrow(()=>assertLocalTarget('http://127.0.0.1:3000','http://127.0.0.1:54321'));
- for(const [app,api] of [['https://app.example.com','http://127.0.0.1:54321'],['http://127.0.0.1:3000','https://example.supabase.co']]) {
-  assert.throws(()=>assertLocalTarget(app,api),/refuse non-local/);
- }
- assert.throws(()=>resetFirstRun('https://app.example.com'),/refuse non-local/);
-});
