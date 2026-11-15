@@ -141,6 +141,7 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `lane.mjs` | browser helper: one whole stack per worker (new, #69) | — | — | helper, kept |
 | `language.spec.ts` | English by default, the account language across sessions and devices, automatic content direction, and Arabic sign-in. | 62.6 s | — | keep (direction checks) |
 | `lead-agent-migration.mjs` | replays the lead-agent migration (tests/db.sh) | — | — | helper, kept |
+| `lead-tools.test.mjs` | Lead's create_agent call is ignored when its tool or arguments do not read, makes nothing until the Engine has the Company's profile ready, then asks the database with the trimmed arguments. | 0.1 s | engine-conversation.spec.ts (the same call on the database) | keep |
 | `lessons.test.mjs` | A lesson is proposed only from a run; deciding is a person's action. | 0.3 s | skill-lessons.spec.ts | keep |
 | `license.test.mjs` | LICENSE is MIT with the owner's copyright and the package stays private. | 0.6 s | — | keep |
 | `member-picker.spec.ts` | Saving a card unchanged clears a next actor who left the company. | 11.2 s | — | keep |
