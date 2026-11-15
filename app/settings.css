@@ -102,6 +102,7 @@
   transition: border-color var(--gw-dur-fast) var(--gw-ease-out), box-shadow var(--gw-dur-fast) var(--gw-ease-out);
 }
 .gw .sov .set-input:focus { border-color: var(--gw-border-1); box-shadow: 0 0 0 3px var(--gw-bg-active); }
+.gw .sov .set-input::placeholder { color: var(--gw-text-4); opacity: 1; }
 .gw .sov .set-input[readonly] { cursor: default; }
 .gw .sov .set-hint { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); }
 .gw .sov .set-err { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-danger-text); }
@@ -154,8 +155,14 @@
 .gw .sov .me__av.sov-av { width: 40px; height: 40px; font-size: var(--gw-fs-base); }
 .gw .sov .sov-ta .table-wrap, .gw .sov .sov-ta > .panel { padding: var(--s1) var(--s3) var(--s2); border-radius: var(--gw-r-md); background: var(--gw-bg-pane); border: 0.5px solid var(--gw-border-3); margin: 0; }
 .gw .sov .sov-ta .ta-hint { margin: var(--s2) 2px 0; }
-.gw .sov .inv-sec { margin-top: var(--s5); }
-.gw .sov .inv-open { --od-icon-size: 16px; }
+.gw .sov .inv-sec { display: grid; gap: var(--s2); }
+.gw .sov .ta .inv-sec { margin-top: var(--s5); }
+.gw .sov .inv-open { justify-self: start; --od-icon-size: 16px; }
+/* The invitation form of a Company worked alone: the button lines up with the fields under their labels. */
+.gw .sov .inv { display: grid; gap: var(--s2); }
+.gw .sov .inv-row { display: grid; grid-template-columns: minmax(0, 1fr) 148px auto; gap: var(--s2); align-items: start; }
+.gw .sov .inv-go { margin-top: calc(var(--gw-fs-xs) * 1.5 + 6px); min-width: 88px; }
+@media (max-width: 639px) { .gw .sov .inv-row { grid-template-columns: minmax(0, 1fr); } .gw .sov .inv-go { margin-top: 0; justify-self: start; } }
 .gw .sov .sov-warn { padding: var(--s3) var(--s4); border-radius: var(--gw-r-md); background: var(--gw-wait-bg); color: var(--gw-wait-text); }
 .gw .sov .sov-warn .sov-icon { color: inherit; }
 

@@ -28,7 +28,9 @@ export default async function CompanyPage({params,searchParams}:{params:Promise<
  // link to Settings, Subscription and models opens there; other query values (one-time notices) are not carried.
  if(!user) { const asked=await searchParams; const kept=new URLSearchParams(Object.entries({section:asked.section,agent:asked.agent,period:asked.period}).filter((entry):entry is [string,string]=>typeof entry[1]==='string')).toString();
   redirect(`/sign-in?next=${encodeURIComponent(`/c/${slug}/${parts?.join('/') || 'home'}${kept?`?${kept}`:''}`)}`); }
- const {data:companies}=await db.from('companies').select('id,slug,name').order('name'); const company=companies?.find(c=>c.slug===slug); if(!company || !sections[section]) notFound(); const title=t(sections[section]);
+ const {data:companies}=await db.from('companies').select('id,slug,name,work_mode').order('name'); const company=companies?.find(c=>c.slug===slug); if(!company || !sections[section]) notFound(); const title=t(sections[section]);
+ // A Company worked alone has no Member permissions to set (#10); its invitation form is in the settings overlay.
+ if(section==='settings/members'&&company.work_mode==='alone') redirect(`/c/${slug}/settings`);
  const {data:person}=await db.from('people').select('name').eq('id',user.id).single();
  const {data:membership}=await db.from('members').select('role').eq('company_id',company.id).eq('person_id',user.id).is('removed_at',null).maybeSingle();
  const canCreate=canCreateCard({role:membership?.role});
@@ -36,7 +38,7 @@ export default async function CompanyPage({params,searchParams}:{params:Promise<
  // inert, as the reference's dialog covers the workspace.
  if(section==='settings') { const roleName=(({owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')}) as Record<string,string>)[String(membership?.role || '')]||'';
   return <><div className="contents" inert><Shell company={company} companies={companies || []} section={section} title={title} personName={person?.name || user.email || ''} role={roleName} owner={membership?.role==='owner'}><main className="content"/></Shell></div>
-   <SettingsOverlay slug={slug} company={company} userId={user.id} role={membership?.role || ''} personName={person?.name || user.email || ''} query={await searchParams}/></>; }
+   <SettingsOverlay slug={slug} company={company} userId={user.id} role={membership?.role || ''} personName={person?.name || user.email || ''} workMode={company.work_mode} query={await searchParams}/></>; }
  const {data:hermesConnections}=section==='settings/agents'?await db.from('hermes_connections').select('id,address,profile,state,version,features,unreachable_since').eq('company_id',company.id):{data:[]};
  const manage=['owner','manager'].includes(membership?.role || ''); const canOwner=membership?.role==='owner';
  const {data:members}=section==='settings/members'?await db.from('members').select('person_id,role,agent_role,grant_publishing,grant_money_figures,grant_customer_data,people(name)').eq('company_id',company.id).order('role'): {data:[]};
