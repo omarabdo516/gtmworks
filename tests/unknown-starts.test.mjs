@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { startRun, startUnknown } from '../lib/hermes.mjs';
 import { encryptSecret } from '../lib/agent-crypto.mjs';
-import { sendMessage, startQueuedTurns } from '../lib/conversation-runs.mjs';
+import { noteInstructions, sendMessage, startQueuedTurns } from '../lib/conversation-runs.mjs';
 import { readFileSync } from 'node:fs';
 
 // A start whose outcome was once unknown stays unknown until Hermes names the run (ADR 0015): no later answer can prove
@@ -25,8 +25,8 @@ test('a retry of an unknown start is never read as not started', async () => {
 });
 
 const connection='f9000000-0000-0000-0000-000000000001';
-function databases({reserve={state:'reserved',connection,note:null},claim=[],usable=true,attempt=1,kept=true,stored=false}={}) {
- const order=[]; const args={};
+function databases({reserve={state:'reserved',connection,note:null},claim=[],usable=true,attempt=1,kept=true,stored=false,instructions=null}={}) {
+ const order=[]; const args={}; const reads=[];
  const rpc=who=>async(name,given)=>{ order.push(`${who} ${name}`); args[name]=given;
   if(name==='conversation_agent') return {data:null,error:null};
   if(name==='reserve_conversation_turn') return {data:reserve,error:null};
@@ -38,12 +38,12 @@ function databases({reserve={state:'reserved',connection,note:null},claim=[],usa
   if(name==='keep_unknown_start') return {data:kept,error:null};
   if(['keep_unknown_start','fail_conversation_turn','release_conversation_run','record_conversation_turn','send_conversation_message'].includes(name)) return {data:true,error:null};
   return {data:null,error:{message:'unexpected'}}; };
- const chain=data=>{ const c={select:()=>c,eq:()=>c,maybeSingle:async()=>({data,error:null})}; return c; };
+ const chain=(table,data)=>{ const read={table}; reads.push(read); const c={select:()=>c,eq:(column,value)=>{ read[column]=value; return c; },maybeSingle:async()=>({data,error:null})}; return c; };
  const key=encryptSecret('test-only-key',encryptionKey);
  // The person's reads: the Agent, and (after a lost start) whether the message was stored meanwhile.
- const db={rpc:rpc('person'),from:table=>chain(table==='conversation_messages'?(stored?{id:7}:null):{id:'a9000000-0000-0000-0000-000000000001'})};
- const service={rpc:rpc('service'),from:()=>chain({address:'http://hermes:8642',profile:'writer',state:usable?'connected':'unreachable',features:['run_submission'],key_encrypted:key})};
- return {db,service,order,args};
+ const db={rpc:rpc('person'),from:table=>chain(table,table==='conversation_messages'?(stored?{id:7}:null):{id:'a9000000-0000-0000-0000-000000000001',instructions})};
+ const service={rpc:rpc('service'),from:table=>chain(table,table==='hermes_agents'?{instructions}:{address:'http://hermes:8642',profile:'writer',state:usable?'connected':'unreachable',features:['run_submission'],key_encrypted:key})};
+ return {db,service,order,args,reads};
 }
 const engine=(order,outcome)=>({engineFor:()=>({start:async run=>{ order.push(`start retry=${run.retry===true}`); return outcome; }})});
 
@@ -113,6 +113,19 @@ test('a lost start whose reservation is gone answers by what was stored, never a
  // Nothing stored and nothing kept: the person is asked to send again.
  const lost=databases({kept:false});
  assert.deepEqual(await sendMessage(lost.db,lost.service,{company:'co',conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...engine(lost.order,startUnknown)}),{error:'conversationSendAgain',status:409});
+});
+
+test('a run to an Agent with its own instructions carries them, then its sender\'s note, sent now or queued', async () => {
+ const instructions='You are the ad critic on RS Learning\'s marketing team.';
+ const sent=[]; const engine={engineFor:()=>({start:async run=>{ sent.push(run.instructions); return 'run_1'; }})};
+ const now=databases({instructions,reserve:{state:'reserved',connection,note:'Answer in short points.'}});
+ assert.deepEqual(await sendMessage(now.db,now.service,{company:'co',conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...engine}),{conversation:'c'});
+ const queued=databases({instructions,claim:[{company:'co',agent:'a7',person:'p',send_key:'k',message:'Hi',connection,note:null,retry:false}]});
+ await startQueuedTurns(queued.service,{encryptionKey,...engine});
+ const plain=databases({claim:[{company:'co',agent:'a8',person:'p',send_key:'k',message:'Hi',connection,note:null,retry:false}]});
+ await startQueuedTurns(plain.service,{encryptionKey,...engine});
+ assert.deepEqual(sent,[`${instructions}\n\n${noteInstructions('Answer in short points.')}`,instructions,undefined]);
+ assert.ok(queued.reads.some(read=>read.table==='hermes_agents'&&read.id==='a7'&&read.company_id==='co'),'the claimed turn\'s Agent, in its Company');
 });
 
 // A start may wait twenty seconds on an engine that does not answer: queued starts run in their own worker loop, so they

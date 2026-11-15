@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { createClient } from '@supabase/supabase-js';
 import { encryptSecret } from '../lib/agent-crypto.mjs';
-import { closeOpenRuns, sendMessage } from '../lib/conversation-runs.mjs';
+import { closeOpenRuns, noteInstructions, sendMessage } from '../lib/conversation-runs.mjs';
+import { instructionsOf, roleTemplates } from '../lib/role-templates.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 
 // A conversation on the fake engine (tests/fake-engine.mjs): the engine contract with no subscription and no network,
@@ -111,14 +112,22 @@ test('integration: a Contributor gets a reply on the fake engine and a Viewer is
  } finally { query(`update public.members set role='contributor' where company_id='${company}' and person_id='${contributor}'`); detach(); }
 });
 
-test('integration: Lead makes the Agent the Owner asks for, and nothing for a Manager',async()=>{
- test.setTimeout(120000);
+// Lead, the main Agent, on the Company's own profile in the bundled Engine (ADR 0014); the tests below share it.
+function bundledLead() {
  const profile=`co-${company.replaceAll('-','')}`;
+ const [made]=JSON.parse(query(`select id from public.hermes_agents where company_id='${company}' and is_default`));
+ if(made) return {profile,lead:made.id as string};
  const [connection,lead]=[randomUUID(),randomUUID()];
  query(`insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values ('${connection}','${company}','${omar}','http://127.0.0.1:9','${profile}','${encryptSecret('fake-engine-key',encryptionKey)}','connected','0.23.0','{run_submission}')`);
  query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('${lead}','${company}','${connection}','Lead','General',true)`);
  query(`insert into public.hermes_agent_audit(company_id,actor_id,agent_id,action,details) values ('${company}','${omar}','${lead}','PROVIDE_BUNDLED_HERMES_AGENT',jsonb_build_object('connection_id','${connection}'))`);
  query(`insert into public.company_profiles(company_id,profile,tools_level,tools_policy) select id,'${profile}',agent_level,public.engine_tool_policy() from public.companies where id='${company}' on conflict (company_id) do update set tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false`);
+ return {profile,lead};
+}
+
+test('integration: Lead makes the Agent the Owner asks for, and nothing for a Manager',async()=>{
+ test.setTimeout(120000);
+ const {profile,lead}=bundledLead();
  const fake=fakeEngine();
  fake.settings.toolCalls=()=>[{id:'call-0',name:'create_agent',arguments:{name:'Meta Ads',job:'Runs the Meta ads.',apps:['Meta Ads Manager','Canva']}}];
  const made=()=>JSON.parse(query(`select a.id,a.name,a.speciality,array_to_string(a.apps,'|') as apps,a.requested_by,a.created_at is not null as dated,a.is_default,h.profile from public.hermes_agents a join public.hermes_connections h on h.id=a.connection_id where a.company_id='${company}' and a.id<>'${lead}'`));
@@ -158,4 +167,34 @@ test('integration: Lead makes the Agent the Owner asks for, and nothing for a Ma
  expect(fake.runs[3].tools).toEqual([]);
  expect(await closeOpenRuns(service,{encryptionKey,conversation:theirs,engineFor:fake.engineFor})).toBe(1);
  expect(made()).toHaveLength(2);
+});
+
+test('integration: Lead makes an Agent from each ready-made role, fitted with the Company\'s name, and runs to it carry the role',async()=>{
+ test.setTimeout(120000);
+ const {profile,lead}=bundledLead();
+ const fake=fakeEngine();
+ await fake.engineFor({}).createAgent({name:profile,instructions:''});
+ const {service,person}=await clients();
+ const conversation=randomUUID();
+ for(const template of Object.keys(roleTemplates)) {
+  fake.settings.toolCalls=()=>[{id:'call-0',name:'create_agent',arguments:{template}}];
+  expect(await sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent:lead,message:`I want the ready-made ${template}`,encryptionKey,engineFor:fake.engineFor})).toEqual({conversation});
+  expect(await closeOpenRuns(service,{encryptionKey,conversation,engineFor:fake.engineFor})).toBe(1);
+ }
+ const made=JSON.parse(query(`select a.id,a.template,a.name,a.speciality,array_to_string(a.apps,'|') as apps,a.instructions from public.lead_made_agents l join public.hermes_agents a on a.id=l.agent_id where l.conversation_id='${conversation}' order by l.created_at`));
+ expect(made.map((agent:{template:string})=>agent.template)).toEqual(Object.keys(roleTemplates));
+ for(const agent of made) {
+  const role=roleTemplates[agent.template as keyof typeof roleTemplates];
+  expect(agent).toMatchObject({name:role.name,speciality:role.job,apps:role.apps.join('|'),instructions:instructionsOf(agent.template).replaceAll('{company}','RS Learning')});
+  for(const limit of role.limits) expect(agent.instructions).toContain(limit);
+  expect(agent.instructions).not.toContain('{company}');
+ }
+
+ const writer=made.find((agent:{template:string})=>agent.template==='writer');
+ try {
+  expect((await person.rpc('save_member_note',{c:company,note:'Answer in short points.'})).error).toBeNull();
+  const theirs=randomUUID();
+  expect(await sendMessage(person,service,{person:omar,company,conversation:theirs,sendKey:randomUUID(),agent:writer.id,message:'Write about the tax diploma',encryptionKey,engineFor:fake.engineFor})).toEqual({conversation:theirs});
+  expect(fake.runs.at(-1)).toMatchObject({conversation:theirs,instructions:`${writer.instructions}\n\n${noteInstructions('Answer in short points.')}`});
+ } finally { query(`delete from public.member_notes where company_id='${company}'`); }
 });
