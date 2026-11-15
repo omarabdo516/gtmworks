@@ -40,7 +40,11 @@ const repliesTo=(message:number)=>JSON.parse(query(`select author,author_name,bo
 test('integration: ordinary talk starts no Run; a mention starts exactly one, and its reply is posted in the channel once',async()=>{
  test.setTimeout(120000);
  const fake=fakeEngine(); fake.settings.pendingReads=2; fake.settings.usage={input:2100,output:35};
- const {service,person}=await memberClient('omar@example.com'); const {detach}=attachAgent();
+ const {service,person}=await memberClient('omar@example.com'); const {agent,detach}=attachAgent();
+ // A lasting rule Omar told Faye in a Conversation (#18): a channel Run gets it too.
+ const told=randomUUID();
+ query(`insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${told}','${company}','${omar}','${agent}','Faye')`);
+ query(`insert into public.agent_rules(company_id,agent_id,body,said_by,conversation_id,run_id,call_id) values ('${company}','${agent}','Answer in English','${omar}','${told}','channel-rule','call-0')`);
  try {
   const drive=()=>driveChannelRuns(service,{encryptionKey,channel,engineFor:fake.engineFor});
   const plain=await postChannelMessage(person,service,{channel,sendKey:randomUUID(),message:'Morning, team',encryptionKey,engineFor:fake.engineFor});
@@ -53,6 +57,7 @@ test('integration: ordinary talk starts no Run; a mention starts exactly one, an
   const sent=await postChannelMessage(person,service,mention) as {message:number};
   expect(fake.runs.map(run=>({key:run.key,input:run.input}))).toEqual([{key:`channel:${sent.message}`,input:'عمر: @Faye plan the launch week'}]);
   expect(fake.connections[0]).toMatchObject({address:'http://127.0.0.1:9',key:'fake-engine-key'});
+  expect(fake.runs[0].instructions).toContain('- Answer in English');
   // The reply is slow: the first pass finds the Run still running.
   expect(await drive()).toEqual({started:0,closed:0});
   // A repeated send (double click, a lost answer) is the same message and the same Run, still running.

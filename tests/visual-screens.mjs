@@ -39,12 +39,20 @@ const lightScreens = [
   { name: 'agent-visibility', path: '/c/rs-learning/settings', state: 'visibility' },
   // The general channel (#23), RS Learning's, over a Manager's message, Omar's call to Lead and Lead's reply on June 10.
   { name: 'channel', path: '/c/rs-learning/channels/69000000-0000-0000-0000-000000000001', state: 'channel' },
+  // A lasting rule told to an Agent (#18), over Ads and the rule Omar told it on June 10: the Conversation with Ads's
+  // reply and the saved line, and Ads's page in Settings listing the rule, who said it and when, with the Owner's Remove.
+  { name: 'rule-saved', path: '/c/rs-learning/conversations/68000000-0000-0000-0000-000000000003', state: 'rule-told' },
+  { name: 'agent-rules', path: '/c/rs-learning/settings?agent=68000000-0000-0000-0000-000000000002', state: 'rule-told' },
+  // The settings overlay (#26), over Lead and Meta Ads as in made-agent: the Agents section and the main Agent's page.
+  // Its Company section of a team is agent-visibility above.
+  { name: 'settings-agents', path: '/c/rs-learning/settings?section=agents', state: 'lead-made' },
+  { name: 'settings-main-agent', path: '/c/rs-learning/settings?agent=65000000-0000-0000-0000-000000000003', state: 'lead-made' },
 ];
 
 export const screens = [
   { name: 'first-run', path: '/first-run', anonymous: true, dark: false },
   ...lightScreens.map(screen => ({ ...screen, dark: false })),
-  ...lightScreens.filter(screen => ['sign-in', 'home', 'chat', 'board', 'card', 'alone-chat', 'alone-settings', 'made-card', 'new-agent', 'made-agent', 'agent-visibility', 'ready-roles', 'channel'].includes(screen.name))
+  ...lightScreens.filter(screen => ['sign-in', 'home', 'chat', 'board', 'card', 'alone-chat', 'alone-settings', 'made-card', 'new-agent', 'made-agent', 'agent-visibility', 'ready-roles', 'rule-saved', 'agent-rules', 'settings-agents', 'settings-main-agent', 'channel'].includes(screen.name))
     .map(screen => ({ ...screen, name: `${screen.name}-dark`, dark: true })),
 ];
 

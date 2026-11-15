@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(27);
+select plan(31);
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values
  ('d0000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://localhost','writer','ciphertext','connected'),
  ('d0000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://localhost','designer','ciphertext','connected'),
@@ -23,6 +23,12 @@ select lives_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000
 select lives_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','default',connection=>'d0000000-0000-0000-0000-000000000002',a=>(select id from public.hermes_agents where name='Mona'))$$,'changing default resolves the affected assignment');
 select is((select details->>'connection_id' from public.hermes_agent_audit where action='DEFAULT_HERMES_AGENT'),'d0000000-0000-0000-0000-000000000001','audit uses actual Connection regardless of unrelated caller input');
 select lives_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','attach','d0000000-0000-0000-0000-000000000002',agent_name=>'Nour',speciality=>'Design')$$,'reattach a non-default agent');
+select lives_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','default',a=>(select id from public.hermes_agents where name='Nour'))$$,'the Owner moves the main mark to another agent');
+select is((select array_agg(name) from public.hermes_agents where company_id='10000000-0000-0000-0000-000000000001' and is_default),array['Nour'],'exactly one agent is main after the move, the one just made main');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select throws_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','default',a=>(select id from public.hermes_agents where name='Mona'))$$,'42501','hermesNotAllowed','a Manager cannot move the main mark');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select lives_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','default',a=>(select id from public.hermes_agents where name='Mona'))$$,'the Owner moves the main mark back');
 select lives_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','remove',a=>(select id from public.hermes_agents where name='Nour'),replacement=>'ffffffff-ffff-ffff-ffff-ffffffffffff')$$,'removing a non-default agent ignores a bogus replacement');
 select is((select details->'replacement_id' from public.hermes_agent_audit where company_id='10000000-0000-0000-0000-000000000001' and action='REMOVE_HERMES_AGENT' order by id desc limit 1),'null'::jsonb,'audit records no replacement when no successor was applied');
 select throws_ok($$update public.hermes_connections set profile='changed' where id='d0000000-0000-0000-0000-000000000001'$$,'P0001','hermesProfileInUse','an attached Connection cannot be retargeted around the sharing check');

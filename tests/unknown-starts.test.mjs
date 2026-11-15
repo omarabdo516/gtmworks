@@ -4,7 +4,7 @@ import { startRun, startUnknown } from '../lib/hermes.mjs';
 import { engineFor } from '../lib/engine.mjs';
 import { encryptSecret } from '../lib/agent-crypto.mjs';
 import { noteInstructions, sendMessage, startQueuedTurns } from '../lib/conversation-runs.mjs';
-import { leadToolSpecs } from '../lib/lead-tools.mjs';
+import { agentToolSpecs } from '../lib/agent-tools.mjs';
 import { readFileSync } from 'node:fs';
 
 // A start whose outcome was once unknown stays unknown until Hermes names the run (ADR 0015): no later answer can prove
@@ -36,8 +36,12 @@ function databases({reserve={state:'reserved',connection,note:null},claim=[],usa
   if(name==='claim_conversation_turn') return {data:claim,error:null};
   // begin_start answers which attempt of the key this is (0: the reservation is no longer active).
   if(name==='begin_start') return {data:attempt,error:null};
-  // The run's note: a run that offers tools keeps the first ones pinned for it (pin_run_tools).
-  if(name==='pin_run_tools') return {data:runNote.offersTools?(runNote.tools??=given.tools):null,error:null};
+  // The run's note: its first start pins the tools offered then, as the text sent, and its rules; every later start
+  // reads them (pin_run). A run the previous app version already started keeps its tools and is told no rules.
+  if(name==='pin_run') {
+   if(runNote.rules===undefined&&!runNote.started) { runNote.tools=runNote.offersTools?`[${given.specs.create_agent}]`:null; runNote.rules=[]; }
+   return {data:{tools:runNote.tools??null,rules:runNote.rules??[]},error:null};
+  }
   if(name==='keep_unknown_start') return {data:kept,error:null};
   if(['keep_unknown_start','fail_conversation_turn','release_conversation_run','record_conversation_turn','send_conversation_message'].includes(name)) return {data:true,error:null};
   return {data:null,error:{message:'unexpected'}}; };
@@ -142,7 +146,7 @@ function hermesKeepingFirstBodies() {
 }
 
 test('a retry of a Lead start sends the tools of its first attempt, though the tools offered changed since', async () => {
- const spec=/** @type {import('../lib/engine.mjs').ToolSpec} */(leadToolSpecs.find(tool=>tool.name==='create_agent')); const offered=spec.description; const {bodies,restore}=hermesKeepingFirstBodies();
+ const spec=/** @type {import('../lib/engine.mjs').ToolSpec} */(agentToolSpecs.find(tool=>tool.name==='create_agent')); const offered=spec.description; const {bodies,restore}=hermesKeepingFirstBodies();
  const runNote={offersTools:true}; const message='Find me someone to run our Meta ads';
  try {
   const first=databases({runNote});
@@ -176,7 +180,7 @@ test('a Lead start the previous app version began is asked again with the body i
  try {
   const previous=engineFor({address:'http://hermes:8642',profile:'writer',key:'test-only-key'});
   assert.equal(await previous.start({conversation:'c',input:message,idempotencyKey:'c:k',tools:previousSpecs,retry:false}),startUnknown,'its answer is lost');
-  const again=databases({runNote:{offersTools:true,tools:pinned},attempt:2,claim:[{company:'co',agent:'a',person:'p',send_key:'k',message,connection,note:null,retry:true}]});
+  const again=databases({runNote:{offersTools:true,tools:pinned,started:true},attempt:2,claim:[{company:'co',agent:'a',person:'p',send_key:'k',message,connection,note:null,retry:true}]});
   assert.equal(await startQueuedTurns(again.service,{encryptionKey}),1);
   assert.equal(bodies.length,3);
   assert.equal(new Set(bodies).size,1,'the new worker\'s retry sent the previous version\'s body, byte for byte');

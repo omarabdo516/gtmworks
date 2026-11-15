@@ -39,7 +39,8 @@ create table public.channel_messages (
 create index channel_messages_order on public.channel_messages(channel_id, id);
 
 -- The one Run of a message that calls an Agent, keyed by that message. Everything a start sends is pinned before the
--- first attempt (the session, the input, the Agent's instructions; the Connection at the first attempt), so every
+-- first attempt (the session, the input, the Agent's instructions and its lasting rules in force (#18); the Connection
+-- at the first attempt), so every
 -- attempt by anyone is the same engine request under the same idempotency key ('channel:' || message_id, derived in
 -- lib/channel-runs.mjs, never stored), which the engine contract makes one Run.
 create table public.channel_runs (
@@ -51,6 +52,7 @@ create table public.channel_runs (
  session uuid not null,
  input text not null,
  instructions text,
+ rules text[] not null default '{}',
  connection_id uuid references public.hermes_connections(id) on delete set null,
  attempts integer not null default 0 check (attempts >= 0),
  attempted_at timestamptz,
@@ -162,9 +164,9 @@ begin
  end if;
  select * into chosen from public.hermes_agents where id=public.channel_mention(k.company_id, auth.uid(), message);
  if chosen.id is not null then
-  insert into public.channel_runs(message_id, company_id, channel_id, agent_id, agent_name, session, input, instructions)
+  insert into public.channel_runs(message_id, company_id, channel_id, agent_id, agent_name, session, input, instructions, rules)
    values (saved, k.company_id, ch, chosen.id, chosen.name, md5(ch::text||':'||chosen.id::text)::uuid,
-           split_part(coalesce(writer,''),' ',1)||': '||message, nullif(btrim(chosen.instructions),''));
+           split_part(coalesce(writer,''),' ',1)||': '||message, nullif(btrim(chosen.instructions),''), public.agent_rules_in_force(chosen.id));
  end if;
  return saved;
 end $$;
@@ -192,7 +194,7 @@ $$;
 -- first (the order move_company_profile takes them in), so no move passes between pinning a Connection and the move's
 -- check for open Runs on it.
 create function public.begin_channel_start(message bigint)
-returns table(attempt integer, company uuid, connection uuid, session uuid, input text, instructions text)
+returns table(attempt integer, company uuid, connection uuid, session uuid, input text, instructions text, rules text[])
 language plpgsql security definer set search_path='' as $$
 declare r public.channel_runs; linked public.hermes_connections;
 begin
@@ -215,7 +217,7 @@ begin
  if linked.profile ~ '^co-[0-9a-f]{32}$' and (linked.profile <> public.company_engine_profile(r.company_id) or not public.company_profile_ready(r.company_id)) then return; end if;
  update public.channel_runs set attempts=attempts+1, attempted_at=now(), connection_id=r.connection_id
   where message_id=message returning attempts into r.attempts;
- return query select r.attempts, r.company_id, r.connection_id, r.session, r.input, r.instructions;
+ return query select r.attempts, r.company_id, r.connection_id, r.session, r.input, r.instructions, r.rules;
 end $$;
 
 -- The engine's answer to attempt `attempt`: a run id is recorded once; null (refused) ends the Run as failed only for

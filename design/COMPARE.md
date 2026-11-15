@@ -62,9 +62,10 @@ The prototype has no URL routes. Its sidebar switches between four views (`data-
 | `new-agent` | Sidebar, New agent: Lead's chat with the hint line (#13) | `/c/rs-learning/chat?new=agent` |
 | `ready-roles` | New agent, then the hint line's "or pick a ready-made one": the ready-made gallery (#14) | `/c/rs-learning/chat?new=ready` (needs the fixture's Lead) |
 | `made-card` | Sidebar, the chat in which Lead made Ads (`th-made-ads`), with the new Agent's card | none (a uuid path; with the fixture pass `--built-path /c/rs-learning/conversations/62000000-0000-0000-0000-000000000002`) |
-| `made-agent` | Settings, Agents, Ads: the page of an Agent Lead made, with when and at whose request | `/c/rs-learning/settings?agent=61000000-0000-0000-0000-000000000002` (the fixture's Ads) |
+| `made-agent` | Settings, Agents, Ads: the page of an Agent Lead made, with when and at whose request, and the rules it was told (#18) | `/c/rs-learning/settings?agent=61000000-0000-0000-0000-000000000002` (the fixture's Ads) |
+| `rule-saved` | Sidebar, the chat in which Omar told Ads a lasting rule (`th-rule-ads`), with the saved line under Ads's reply (#18) | none (a uuid path; with the fixture pass `--built-path /c/rs-learning/conversations/62000000-0000-0000-0000-000000000003`) |
 
-The built settings overlay is route-backed: `/c/<slug>/settings` opens it, `?section=<name>` opens a section and `?agent=<id>` one Agent's page, so each state has one address. The `agent`, `made-card`, `made-agent` and `ready-roles` rows need the comparison fixture (below); on the seed alone the overlay shows the Agents list. "none" means the product has no equivalent page yet. Pass `--built-path` once a ticket builds one, and add it to the table in the same change.
+The built settings overlay is route-backed: `/c/<slug>/settings` opens it, `?section=<name>` opens a section and `?agent=<id>` one Agent's page, so each state has one address. The `agent`, `made-card`, `made-agent`, `ready-roles` and `rule-saved` rows need the comparison fixture (below); on the seed alone the overlay shows the Agents list. "none" means the product has no equivalent page yet. Pass `--built-path` once a ticket builds one, and add it to the table in the same change.
 
 Every screen starts from the prototype's default state. The "viewing as" switcher is never touched. To add a screen, add a row in `scripts/design-compare-lib.mjs` with its steps (`click`, `waitFor` or `scrollTo`, each with a CSS selector) and its built path.
 
@@ -92,6 +93,8 @@ gh workflow run design-compare.yml --ref <branch> -f screen=agent-chat -f fixtur
 gh workflow run design-compare.yml --ref <branch> -f screen=made-card -f fixture=true -f built_path=/c/rs-learning/conversations/62000000-0000-0000-0000-000000000002
 # The ready-made gallery over Lead's New agent chat (#14)
 gh workflow run design-compare.yml --ref <branch> -f screen=ready-roles -f fixture=true
+# The chat in which Omar told Ads a lasting rule, with the saved line (#18)
+gh workflow run design-compare.yml --ref <branch> -f screen=rule-saved -f fixture=true -f built_path=/c/rs-learning/conversations/62000000-0000-0000-0000-000000000003
 ```
 
 Add `-f lang=en`, `-f theme=light` and `-f width=390` for the other variants; both sides always use the same width, language and theme.

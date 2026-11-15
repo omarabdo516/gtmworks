@@ -1,13 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { runToolCall } from '../lib/lead-tools.mjs';
+import { runToolCall } from '../lib/agent-tools.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 import { instructionsOf, roleTemplates } from '../lib/role-templates.mjs';
 
 const profile='co-10000000000000000000000000000001';
-function harness(/** @type {object} */ engineOverride={}) {
+function harness(/** @type {object} */ engineOverride={},/** @type {object} */ answer={state:'created',agent:'agent-1'}) {
  const fake=fakeEngine(); const engine={...fake.engineFor({}),...engineOverride}; const rpcs=/** @type {[string,object][]} */([]);
- const db={rpc:async(/** @type {string} */ name,/** @type {object} */ args)=>{ rpcs.push([name,args]); return {data:{state:'created',agent:'agent-1'},error:null}; }};
+ const db={rpc:async(/** @type {string} */ name,/** @type {object} */ args)=>{ rpcs.push([name,args]); return {data:answer,error:null}; }};
  const call=(/** @type {string} */ name,/** @type {unknown} */ args)=>runToolCall({db,engine,profile,conversation:'conversation-1',run:'run-1'},{id:'call-0',name,arguments:args});
  return {fake,engine,rpcs,call};
 }
@@ -50,4 +50,20 @@ test('create_agent starts from a ready-made role: its name, job and apps unless 
  }
  assert.deepEqual(await call('create_agent',{template:'writer',name:' Penny ',apps:['WordPress'],job:null}),{state:'created',agent:'agent-1'});
  assert.deepEqual(rpcs.at(-1)?.[1],{conversation:'conversation-1',run:'run-1',call:'call-0',agent_name:'Penny',job:roleTemplates.writer.job,apps:['WordPress'],template:'writer',instructions:instructionsOf('writer')});
+});
+
+test('a save_rule call whose rule does not read is ignored, and nothing is asked of the database',async()=>{
+ const {fake,rpcs,call}=harness();
+ for(const args of /** @type {unknown[]} */([null,{},{rule:'  '},{rule:7},{rule:'x'.repeat(501)},{rule:'من دلوقتي\u0000'}]))
+  assert.deepEqual(await call('save_rule',args),{state:'ignored'},JSON.stringify(args)?.slice(0,60));
+ assert.deepEqual([fake.agentReads,rpcs],[[],[]]);
+});
+
+test('save_rule asks the database with the trimmed rule, whatever the Engine\'s profile, and answers what it saved',async()=>{
+ const {fake,rpcs,call}=harness({},{state:'saved',rule:'rule-1'});
+ assert.deepEqual(await call('save_rule',{rule:' من دلوقتي ما تبعتش حاجة للعميل من غير ما أشوفها\n'}),{state:'saved',rule:'rule-1'});
+ assert.deepEqual(rpcs,[['agent_save_rule',{conversation:'conversation-1',run:'run-1',call:'call-0',rule:'من دلوقتي ما تبعتش حاجة للعميل من غير ما أشوفها'}]]);
+ assert.deepEqual(fake.agentReads,[]);
+ await call('save_rule',{rule:'y'.repeat(500)});
+ assert.equal(rpcs.length,2);
 });
