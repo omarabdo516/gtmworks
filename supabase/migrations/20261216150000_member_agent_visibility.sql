@@ -33,10 +33,10 @@ $$;
 revoke all on function public.can_see_agent(uuid,uuid) from public,anon,service_role;
 grant execute on function public.can_see_agent(uuid,uuid) to authenticated;
 
-alter policy hermes_agents_read on public.hermes_agents using (public.can_see_agent(company_id,id));
-alter policy hermes_agent_audit_read on public.hermes_agent_audit using (public.can_see_agent(company_id,agent_id));
-alter policy conversations_read on public.conversations using (person_id=auth.uid() and public.can_see_agent(company_id,agent_id));
-alter policy company_log_read on public.company_log using (public.can_see_agent(company_id,agent_id) and public.can_see_agent(company_id,actor_id));
+alter policy hermes_agents_read on public.hermes_agents using (public.is_member(company_id) and public.can_see_agent(company_id,id));
+alter policy hermes_agent_audit_read on public.hermes_agent_audit using (public.is_member(company_id) and public.can_see_agent(company_id,agent_id));
+alter policy conversations_read on public.conversations using (person_id=auth.uid() and public.is_member(company_id) and public.can_see_agent(company_id,agent_id));
+alter policy company_log_read on public.company_log using (public.is_member(company_id) and public.can_see_agent(company_id,agent_id) and public.can_see_agent(company_id,actor_id));
 
 -- Every way a person reaches an Agent writes one of these rows first (a new Conversation, a reserved run, a queued
 -- turn): an Agent hidden from that person is not found, as if its address did not exist. The worker (service_role) only
