@@ -4,7 +4,7 @@ import type { Step, ApprovalCard } from '@/app/c/[slug]/[[...section]]/approvals
 // One item of "Waiting on you" (ADR 0013): an approval this person holds, or anything else addressed to them by kind.
 // A learning suggestion (#25, kind rule_suggestion: title the rule, body the Agent's name, asked_by who told it) also
 // carries the whole rule and the Agent's face.
-export type RuleSuggestion={rule:string,agent:{connection_id:string,name:string}|null};
+type RuleSuggestion={rule:string,agent:{connection_id:string,name:string}|null};
 export type WaitingItem={kind:string,id:number,title:string,body:string,asked_by:string,card_id:number|null,conversation_id:string|null,created_at:string,suggestion?:RuleSuggestion};
 // "Waiting on you" is one list (#16), read once per request from waiting_list(company) as the signed-in person: the
 // approvals they hold (`cards`, for the card's decision and the counts) and every item, newest first (`items`).
