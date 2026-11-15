@@ -70,7 +70,7 @@ export function AgentDetails({panel,agent,details,settingsHref}:{panel:DetailsPa
      <span className="face-wrap face-wrap--lg" aria-hidden="true"><CompanyAgentFace agent={agent} size={64}/><span className={`dot dot--${details.status}`}/></span>
      <div>
       <div className="dp-id__name"><bdi>{agent.name}</bdi>{agent.main&&<span className="badge dp-id__badge">{t('mainAgent')}</span>}</div>
-      <div className="dp-id__role">{agent.speciality&&<span><bdi>{agent.speciality}</bdi> · </span>}{t(statusKeys[details.status])}</div>
+      <div className="dp-id__role">{agent.speciality&&<><bdi>{agent.speciality}</bdi>{'\u00a0'}</>}<span className="dp-id__state">{agent.speciality&&'·\u00a0'}{t(statusKeys[details.status])}</span></div>
       {agent.made&&<MadeLine made={agent.made} where="panel"/>}
      </div>
     </div>

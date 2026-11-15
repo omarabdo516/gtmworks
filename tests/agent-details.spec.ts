@@ -23,6 +23,11 @@ test.beforeAll(({},testInfo)=>{
    ('${lead}','${company}','${leadConnection}','Lead','General',true,null,null),
    ('${ads}','${company}','${adsConnection}','Meta Ads','Runs the Meta ads.',false,'2026-06-10T09:01:00Z','${omar}'),
    ('${seo}','${company}','${seoConnection}','SEO','Writes the blog.',false,null,null);
+  insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${id(9)}','${company}','${omar}','${lead}','Lead');
+  insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at) values
+   ('${company}','${id(9)}','person','${omar}',null,'Omar','I want someone to handle our Meta ads','${id(10)}','details-made','2026-06-10T09:00:00Z'),
+   ('${company}','${id(9)}','agent',null,'${lead}','Lead','Done.',null,'details-made','2026-06-10T09:01:00Z');
+  insert into public.lead_made_agents(conversation_id,run_id,call_id,company_id,agent_id,created_at) values ('${id(9)}','details-made','call-0','${company}','${ads}','2026-06-10T09:01:00Z');
   insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','${viewer}','${ads}');
   insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${conversation}','${company}','${omar}','${ads}','Meta Ads');
   insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id,created_at) values
@@ -51,6 +56,7 @@ test('the Owner reads the Agent\'s state, what it is doing for them, its Cards a
  await expect(details.locator('.dp-id__role')).toHaveText('Runs the Meta ads. · Working');
  await expect(details.locator('.face-wrap .dot')).toHaveClass(/\bdot--working\b/);
  await expect(details.locator('.born')).toContainText('Made on Jun 10 at your request');
+ await expect(details.locator('.born').getByRole('link',{name:'See the ask',exact:true})).toHaveAttribute('href',`/c/rs-learning/conversations/${id(9)}`);
  await expect(details.getByRole('link',{name:'Settings for Meta Ads',exact:true})).toBeVisible();
  await expect(details.getByRole('tab')).toHaveText(['Activity','Tasks','Files · Soon','Memory · Soon','Log']);
  const panel=details.getByRole('tabpanel');
