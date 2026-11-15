@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { startRun, startUnknown } from '../lib/hermes.mjs';
 import { encryptSecret } from '../lib/agent-crypto.mjs';
 import { noteInstructions, sendMessage, startQueuedTurns } from '../lib/conversation-runs.mjs';
+import { leadTools } from '../lib/lead-tools.mjs';
 import { readFileSync } from 'node:fs';
 
 // A start whose outcome was once unknown stays unknown until Hermes names the run (ADR 0015): no later answer can prove
@@ -25,7 +26,7 @@ test('a retry of an unknown start is never read as not started', async () => {
 });
 
 const connection='f9000000-0000-0000-0000-000000000001';
-function databases({reserve={state:'reserved',connection,note:null},claim=[],usable=true,attempt=1,kept=true,stored=false,instructions=null}={}) {
+function databases({reserve={state:'reserved',connection,note:null},claim=[],usable=true,attempt=1,kept=true,stored=false,instructions=null,runNote={offersTools:false}}={}) {
  const order=[]; const args={}; const reads=[];
  const rpc=who=>async(name,given)=>{ order.push(`${who} ${name}`); args[name]=given;
   if(name==='conversation_agent') return {data:null,error:null};
@@ -34,7 +35,8 @@ function databases({reserve={state:'reserved',connection,note:null},claim=[],usa
   if(name==='claim_conversation_turn') return {data:claim,error:null};
   // begin_start answers which attempt of the key this is (0: the reservation is no longer active).
   if(name==='begin_start') return {data:attempt,error:null};
-  if(name==='run_offers_tools') return {data:false,error:null};
+  // The run's note: a run that offers tools keeps the first ones pinned for it (pin_run_tools).
+  if(name==='pin_run_tools') return {data:runNote.offersTools?(runNote.tools??=given.tools):null,error:null};
   if(name==='keep_unknown_start') return {data:kept,error:null};
   if(['keep_unknown_start','fail_conversation_turn','release_conversation_run','record_conversation_turn','send_conversation_message'].includes(name)) return {data:true,error:null};
   return {data:null,error:{message:'unexpected'}}; };
@@ -126,6 +128,30 @@ test('a run to an Agent with its own instructions carries them, then its sender\
  await startQueuedTurns(plain.service,{encryptionKey,...engine});
  assert.deepEqual(sent,[`${instructions}\n\n${noteInstructions('Answer in short points.')}`,instructions,undefined]);
  assert.ok(queued.reads.some(read=>read.table==='hermes_agents'&&read.id==='a7'&&read.company_id==='co'),'the claimed turn\'s Agent, in its Company');
+});
+
+test('a retry of a Lead start sends the tools of its first attempt, though the tools offered changed since', async () => {
+ const real=globalThis.fetch; const spec=leadTools.create_agent.spec; const offered=spec.description;
+ // Hermes keeps each key's first body and refuses the key with any other (409); the answers to the first start are lost.
+ const bodies=[]; const runs=new Map(); let lost=2;
+ globalThis.fetch=async(_,{headers,body})=>{ bodies.push(body); const key=headers['Idempotency-Key'];
+  if(runs.has(key)&&runs.get(key)!==body) return new Response('{}',{status:409});
+  runs.set(key,body); if(lost-->0) throw failing('ECONNRESET');
+  return new Response(JSON.stringify({run_id:`run_${runs.size}`}),{status:202}); };
+ const runNote={offersTools:true}; const message='Find me someone to run our Meta ads';
+ try {
+  const first=databases({runNote});
+  assert.deepEqual(await sendMessage(first.db,first.service,{company:'co',conversation:'c',sendKey:'k',message,encryptionKey}),{conversation:'c',queued:true});
+  assert.ok(bodies[0].includes(`- create_agent: ${offered}`),'the first start offers create_agent');
+  spec.description='Adds an agent, as a later version words it.';
+  const again=databases({runNote,attempt:2,claim:[{company:'co',agent:'a',person:'p',send_key:'k',message,connection,note:null,retry:true}]});
+  assert.equal(await startQueuedTurns(again.service,{encryptionKey}),1);
+  assert.equal(again.args.record_conversation_turn.run,'run_1','the worker\'s retry finds the run');
+  assert.equal(new Set(bodies).size,1,'every attempt sent the first body');
+  const fresh=databases({runNote:{offersTools:true}});
+  assert.deepEqual(await sendMessage(fresh.db,fresh.service,{company:'co',conversation:'c',sendKey:'k2',message,encryptionKey}),{conversation:'c'});
+  assert.ok(bodies.at(-1).includes(`- create_agent: ${spec.description}`),'a new run offers the tools as they are now');
+ } finally { globalThis.fetch=real; spec.description=offered; }
 });
 
 // A start may wait twenty seconds on an engine that does not answer: queued starts run in their own worker loop, so they

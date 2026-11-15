@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(39);
+select plan(45);
 -- RS Learning: Omar (1) is Owner. A start whose answer was lost is kept as Omar's own waiting turn on its own
 -- reservation, asked again by the worker as a retry, and never abandoned to another Connection.
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('e0000000-0000-0000-0000-000000000411','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://localhost','unknown-starts','ciphertext','connected');
@@ -143,6 +143,23 @@ reset role;
 set local role service_role;
 select is(public.begin_start('e2000000-0000-0000-0000-000000000408','e3000000-0000-0000-0000-000000000408'),1,'and it is a first attempt again, which the engine may refuse');
 reset role;
+
+-- A run's tools are pinned at its first start as the exact text sent, so a retry offers the same ones, byte for byte,
+-- whatever the app offers by then; a run that offers none gets none.
+insert into public.conversation_run_notes(conversation_id,send_key,company_id,offers_tools) values
+ ('e2000000-0000-0000-0000-000000000409','e3000000-0000-0000-0000-000000000409','10000000-0000-0000-0000-000000000001',true),
+ ('e2000000-0000-0000-0000-000000000409','e3000000-0000-0000-0000-000000000410','10000000-0000-0000-0000-000000000001',false);
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select throws_ok($$select public.pin_run_tools('e2000000-0000-0000-0000-000000000409','e3000000-0000-0000-0000-000000000409','[]')$$,'42501',null,'a Member cannot pin a run''s tools');
+reset role;
+set local role service_role;
+select is(public.pin_run_tools('e2000000-0000-0000-0000-000000000409','e3000000-0000-0000-0000-000000000409','[{"name":"create_agent","parameters":{"type":"object","additionalProperties":false}}]'),'[{"name":"create_agent","parameters":{"type":"object","additionalProperties":false}}]','the first start pins the tools it offers, as sent');
+select is(public.pin_run_tools('e2000000-0000-0000-0000-000000000409','e3000000-0000-0000-0000-000000000409','[{"name":"create_agent","description":"Later."}]'),'[{"name":"create_agent","parameters":{"type":"object","additionalProperties":false}}]','a retry gets the first ones');
+select is(public.pin_run_tools('e2000000-0000-0000-0000-000000000409','e3000000-0000-0000-0000-000000000410','[{"name":"create_agent","parameters":{"type":"object","additionalProperties":false}}]'),null,'a run that offers no tools gets none');
+select is(public.pin_run_tools('e2000000-0000-0000-0000-000000000409','e3000000-0000-0000-0000-000000000499','[{"name":"create_agent","parameters":{"type":"object","additionalProperties":false}}]'),null,'nor does a run with no note');
+reset role;
+select is((select string_agg(coalesce(tools,'none'),' ' order by send_key) from public.conversation_run_notes where conversation_id='e2000000-0000-0000-0000-000000000409'),'[{"name":"create_agent","parameters":{"type":"object","additionalProperties":false}}] none','only the first pin is kept');
 
 select * from finish();
 rollback;

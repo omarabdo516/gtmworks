@@ -6,6 +6,20 @@ alter table public.hermes_agents add column template text, add column instructio
 -- The worker reads them for a queued turn, by the claimed turn's Agent and Company.
 grant select(instructions) on public.hermes_agents to service_role;
 
+-- create_agent's spec changes here, and a start whose answer was lost is asked again with the same body until Hermes
+-- names the run: another body under the same key is refused (409), so that turn would hold its Conversation's queue for
+-- a day and then fail, its run never read. A run's tools are therefore pinned with its note before its first start
+-- (pin_run_tools), as the exact text sent: jsonb would reorder their keys. A run pinned before offered #89's spec, which
+-- it keeps. run_offers_tools stays for the previous app version.
+alter table public.conversation_run_notes add column tools text;
+update public.conversation_run_notes set tools='[{"name":"create_agent","description":"Adds a lasting agent to the company''s team for a job the person asked someone to take on, such as running their Meta ads. Use it only when they asked for that.","parameters":{"type":"object","additionalProperties":false,"required":["name","job","apps"],"properties":{"name":{"type":"string","maxLength":100,"description":"A short name for the agent."},"job":{"type":"string","maxLength":200,"description":"One sentence: the work it does."},"apps":{"type":"array","maxItems":8,"items":{"type":"string","maxLength":40},"description":"The apps it will use."}}}}]' where offers_tools and tools is null;
+create function public.pin_run_tools(conversation uuid, message_key uuid, tools text) returns text language sql security definer set search_path='' as $$
+ update public.conversation_run_notes r set tools=coalesce(r.tools,pin_run_tools.tools)
+  where r.conversation_id=conversation and r.send_key=message_key and r.offers_tools returning r.tools;
+$$;
+revoke all on function public.pin_run_tools(uuid,uuid,text) from public,anon,authenticated;
+grant execute on function public.pin_run_tools(uuid,uuid,text) to service_role;
+
 -- Replaced, not overloaded: the previous app version's call names the first six arguments only, and the new ones default.
 drop function public.lead_create_agent(uuid,text,text,text,text,text[]);
 create function public.lead_create_agent(conversation uuid, run text, call text, agent_name text, job text, apps text[], template text default null, instructions text default null) returns jsonb
