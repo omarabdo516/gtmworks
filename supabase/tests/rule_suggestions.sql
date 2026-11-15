@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(53);
+select plan(56);
 -- #25. Ads in RS Learning, shown to the Manager (2), the Contributors (3, 5) and the Viewer (4); the Owner (1) sees every
 -- Agent. One Conversation with Ads each, and in it the whole message of each run that tells a rule.
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
@@ -138,9 +138,10 @@ select is((select count(*)::int from public.waiting_list('10000000-0000-0000-000
 select throws_ok($$select public.decide_agent_rule('10000000-0000-0000-0000-000000000001',current_setting('test.b1')::bigint,true)$$,'22023',null,'and the Owner can no longer approve it');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000005',true);
 select is((select count(*)::int from public.agent_rules where run_id='sg-b'),0,'another Member does not read it');
-select results_eq($$select actor_id,details->>'rule',details->>'taught_by' from public.company_log where action='agent_rule_rejected'$$,
- $$values ('20000000-0000-0000-0000-000000000002'::uuid,'From now on, no emojis','مراجع')$$,'but reads its refusal in the log, once');
+select is((select count(*)::int from public.company_log where action='agent_rule_rejected'),0,'nor its refusal in the log, which would show its words');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+select results_eq($$select actor_id,details->>'rule',details->>'taught_by' from public.company_log where action='agent_rule_rejected'$$,
+ $$values ('20000000-0000-0000-0000-000000000002'::uuid,'From now on, no emojis','مراجع')$$,'its teller reads its refusal in the log, once');
 select results_eq($$select suggestion,(select name from public.people where id=decided_by) from public.agent_rules where run_id='sg-b'$$,$$values ('rejected','مدير')$$,'its teller reads who refused it');
 reset role;
 select is(public.agent_rules_in_force('e5000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000003'),
@@ -176,6 +177,12 @@ select is((select count(*)::int from public.waiting_list('10000000-0000-0000-000
 select throws_ok($$select public.decide_agent_rule('10000000-0000-0000-0000-000000000001',current_setting('test.d1')::bigint,true)$$,'P0002',null,'and cannot be decided');
 reset role;
 select is((select count(*)::int from public.waiting_items where agent_rule_id=current_setting('test.d')::uuid and resolved_at is null),0,'no item for it is left open');
+select set_config('test.dbody',(select body from public.agent_rules where id=current_setting('test.d')::uuid),true);
+select is((select count(*)::int from public.company_log where action='agent_rule_removed' and details->>'rule'=current_setting('test.dbody')),1,'its removal is logged once');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000005',true);
+select is((select count(*)::int from public.company_log where action='agent_rule_removed' and details->>'rule'=current_setting('test.dbody')),0,'another Member does not read its removal in the log');
+reset role;
 
 -- What the Owner or a Manager tells is the team's at once: no suggestion, nothing waiting.
 set local role service_role;

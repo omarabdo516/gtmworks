@@ -111,7 +111,7 @@ begin
    insert into public.hermes_agent_audit(company_id,actor_id,actor_name,agent_id,action,details)
     values(talk.company_id,talk.person_id,(select name from public.people where id=talk.person_id),talk.agent_id,
      case when asked is null then 'AGENT_RULE_SAVED' else 'AGENT_RULE_SUGGESTED' end,
-     jsonb_build_object('rule',said,'rule_id',kept.id,'conversation_id',conversation));
+     jsonb_build_object('rule',said,'rule_id',kept.id,'conversation_id',conversation)||case when asked is null then '{}'::jsonb else jsonb_build_object('private',true,'teller',talk.person_id) end);
   end if;
  end if;
  return jsonb_build_object('state',case when kept.suggestion is null then 'saved' else 'suggested' end,'rule',kept.id);
@@ -134,7 +134,8 @@ begin
  update public.waiting_items set resolved_at=now() where agent_rule_id=kept.id and resolved_at is null;
  insert into public.hermes_agent_audit(company_id,actor_id,actor_name,agent_id,action,details)
   values(c,auth.uid(),(select name from public.people where id=auth.uid()),kept.agent_id,case when approve then 'AGENT_RULE_APPROVED' else 'AGENT_RULE_REJECTED' end,
-   jsonb_build_object('rule',kept.body,'rule_id',kept.id,'taught_by',(select name from public.people where id=kept.said_by)));
+   jsonb_build_object('rule',kept.body,'rule_id',kept.id,'taught_by',(select name from public.people where id=kept.said_by))
+    ||case when approve then '{}'::jsonb else jsonb_build_object('private',true,'teller',kept.said_by) end);
  return wanted;
 end $$;
 revoke all on function public.decide_agent_rule(uuid,bigint,boolean) from public,anon,service_role;
@@ -151,7 +152,8 @@ begin
  update public.agent_rules set removed_at=now(),removed_by=auth.uid() where id=rule;
  update public.waiting_items set resolved_at=now() where agent_rule_id=rule and resolved_at is null;
  insert into public.hermes_agent_audit(company_id,actor_id,actor_name,agent_id,action,details)
-  values(c,auth.uid(),(select name from public.people where id=auth.uid()),kept.agent_id,'AGENT_RULE_REMOVED',jsonb_build_object('rule',kept.body,'rule_id',rule));
+  values(c,auth.uid(),(select name from public.people where id=auth.uid()),kept.agent_id,'AGENT_RULE_REMOVED',jsonb_build_object('rule',kept.body,'rule_id',rule)
+   ||case when kept.suggestion in ('pending','rejected') then jsonb_build_object('private',true,'teller',kept.said_by) else '{}'::jsonb end);
  return true;
 end $$;
 
@@ -168,19 +170,21 @@ $$;
 revoke all on function public.rule_suggestions_sent_to(uuid) from public,anon,service_role;
 grant execute on function public.rule_suggestions_sent_to(uuid) to authenticated;
 
--- A suggestion is in the log for its teller and the Company's Owners and Managers only; its decision for everyone who
--- sees the Agent, naming who taught it (log_agent_action reads AGENT_RULE_SUGGESTED, AGENT_RULE_APPROVED and
--- AGENT_RULE_REJECTED as agent_rule_suggested, agent_rule_approved and agent_rule_rejected).
+-- A rule that is not the team's stays with its teller and the Company's Owners and Managers in the log too: its
+-- suggestion, its refusal, and its removal while waiting or refused carry `private` and their teller. Its approval, and
+-- every event of a team rule, is for everyone who sees the Agent, naming who taught it (log_agent_action reads
+-- AGENT_RULE_SUGGESTED, AGENT_RULE_APPROVED and AGENT_RULE_REJECTED as agent_rule_suggested, agent_rule_approved and
+-- agent_rule_rejected).
 alter policy hermes_agent_audit_read on public.hermes_agent_audit using (public.is_member(company_id) and public.can_see_agent(company_id,agent_id)
- and (action<>'AGENT_RULE_SUGGESTED' or actor_id=auth.uid() or public.can_manage_company(company_id)));
+ and (details->>'private' is null or actor_id=auth.uid() or details->>'teller'=auth.uid()::text or public.can_manage_company(company_id)));
 alter policy company_log_read on public.company_log using (public.is_member(company_id) and public.can_see_agent(company_id,agent_id) and public.can_see_agent(company_id,actor_id)
- and (action<>'agent_rule_suggested' or actor_id=auth.uid() or public.can_manage_company(company_id)));
+ and (details->>'private' is null or actor_id=auth.uid() or details->>'teller'=auth.uid()::text or public.can_manage_company(company_id)));
 create or replace function public.log_agent_change() returns trigger language plpgsql security definer set search_path='' as $$
 begin
  insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,agent_id,action,details,source,source_id,created_at)
   values(new.company_id,new.actor_id,public.log_actor_kind(new.company_id,new.actor_id),coalesce(new.actor_name,(select name from public.people where id=new.actor_id)),
    'agent',new.agent_id,public.log_agent_action(new.action),
-   jsonb_strip_nulls(jsonb_build_object('agent_name',(select name from public.hermes_agents where id=new.agent_id),'replacement_id',new.details->'replacement_id','job',new.details->'job','rule',new.details->'rule','taught_by',new.details->'taught_by')),
+   jsonb_strip_nulls(jsonb_build_object('agent_name',(select name from public.hermes_agents where id=new.agent_id),'replacement_id',new.details->'replacement_id','job',new.details->'job','rule',new.details->'rule','taught_by',new.details->'taught_by','private',new.details->'private','teller',new.details->'teller')),
    'hermes_agent_audit',new.id,new.created_at)
   on conflict (source,source_id) do nothing;
  return null;
