@@ -124,8 +124,12 @@ function CompanySection({t,company,solo,message,members,agents,allowed,userId,sl
   {name}{mode}<AgentLevel company={company.id} level={agentLevel} owner={owner}/>{solo?invite:canManage?table:list}</>;
 }
 
-function TalkTip({t,text,talk}:{t:T,text:string,talk?:{href:string,name:string}}) {
- return <p className="talk-tip"><SettingsIcon name="chat"/><span>{text}</span>{talk&&<Link className="link-btn" href={talk.href}>{t('settingsTalkTo',talk.name)}</Link>}</p>;
+// A line keeps the interface's direction and isolates the runs of the other script it quotes (design-reference: bx,
+// bxLtr): the Arabic example in English, an Agent's Latin name in Arabic.
+const isolate=(text:string,rtl:boolean)=>text.split(rtl?/([A-Za-z](?:[A-Za-z0-9 &.-]*[A-Za-z0-9])?)/:/([\u0600-\u06FF](?:[^A-Za-z“”"]*[\u0600-\u06FF])?)/)
+ .map((part,index)=>index%2?<bdi key={index} dir={rtl?'ltr':'rtl'}>{part}</bdi>:part);
+function TalkTip({t,rtl,text,talk}:{t:T,rtl:boolean,text:string,talk?:{href:string,name:string}}) {
+ return <p className="talk-tip"><SettingsIcon name="chat"/><span>{isolate(text,rtl)}</span>{talk&&<Link className="link-btn" href={talk.href}>{t('settingsTalkTo',talk.name)}</Link>}</p>;
 }
 
 function AgentsSection({t,rtl,slug,agents,canManage,canWrite,owner}:{t:T,rtl:boolean,slug:string,agents:Agent[],canManage:boolean,canWrite:boolean,owner:boolean}) {
@@ -135,7 +139,7 @@ function AgentsSection({t,rtl,slug,agents,canManage,canWrite,owner}:{t:T,rtl:boo
   :canWrite&&<button type="button" className="btn btn--secondary btn--sm" aria-disabled="true" title={t('soon')}><SettingsIcon name="chat"/><span>{t('settingsAskAgent')}</span></button>;
  return <><Head title={t('agents')} sub={t('settingsAgentsSub')} extra={add}/>
   {!canManage&&<p className="ro-note"><SettingsIcon name="shield"/><span>{t('settingsAgentsRO')}</span></p>}
-  <TalkTip t={t} text={t('settingsTalkTip')} talk={canWrite&&other?{href:`/c/${slug}/chat/${other.id}`,name:other.name}:undefined}/>
+  <TalkTip t={t} rtl={rtl} text={t('settingsTalkTip')} talk={canWrite&&other?{href:`/c/${slug}/chat/${other.id}`,name:other.name}:undefined}/>
   <div className="panel-card sov-ags">{agents.length?agents.map(agent=><Link key={agent.id} className="panel-row sov-ag" id={`sov-ag-${agent.id}`} href={overlayHref(slug,'agents',{agent:agent.id})}>
    <span className="face-wrap" aria-hidden="true"><CompanyAgentFace agent={agent} size={36}/></span>
    <span className="panel-row__text"><span className="panel-row__t"><bdi>{agent.name}</bdi>{agent.is_default&&<> <span className="badge sov-badge">{t('mainAgent')}</span></>}</span>
@@ -162,7 +166,7 @@ function AgentPage({t,rtl,slug,company,userId,agent,main,rules,owner,canManage,c
    <button type="button" role="tab" id="sov-tab-memory" aria-selected="false" aria-disabled="true" tabIndex={-1} title={t('soon')}>{t('settingsTabMemory')}</button>
   </div>
   <div id="sov-agent-panel" role="tabpanel" aria-labelledby="sov-tab-settings">
-   <TalkTip t={t} text={t('settingsTalkTipAgent',agent.name)} talk={canWrite&&!isMain?{href:`/c/${slug}/chat/${agent.id}`,name:agent.name}:undefined}/>
+   <TalkTip t={t} rtl={rtl} text={t('settingsTalkTipAgent',agent.name)} talk={canWrite&&!isMain?{href:`/c/${slug}/chat/${agent.id}`,name:agent.name}:undefined}/>
    <div className="dp-sections sov-rules"><AgentRules t={t} company={company} userId={userId} rules={rules} canManage={canManage}/></div>
    <div className="dp-sections">
     {!canManage&&<p className="ro-note"><SettingsIcon name="shield"/><span>{t('settingsAgentsRO')}</span></p>}
