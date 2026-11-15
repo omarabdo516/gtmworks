@@ -113,7 +113,7 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `engine-conversation.spec.ts` | On the fake engine a reply is stored once with usage; failed and stopped runs end with usage; a Viewer is refused. | 28.1 s | conversations.spec.ts (the same flow on fake Hermes) | keep |
 | `engine-name.spec.ts` | No page names the Engine, in English or Arabic. | 16 s | engine-name.test.mjs (catalogues only, not rendered pages) | keep |
 | `engine-name.test.mjs` | No message value names the Engine, in any language. | 0.3 s | engine-name.spec.ts | keep |
-| `engine.test.mjs` | The engine driver runs once per idempotency key and never sends a key over plain HTTP to a public address. | 0.6 s | — | keep |
+| `engine.test.mjs` | The engine driver runs once per idempotency key, offers tools in a run's instructions and reads at most four calls back from the reply, and never sends a key over plain HTTP to a public address. | 0.6 s | — | keep |
 | `fake-engine.mjs` | browser helper: an in-memory engine | — | — | helper, kept |
 | `fake-hermes.mjs` | browser helper: a fake Hermes server | — | — | helper, kept |
 | `first-run-db.test.mjs` | The first-run reset and seed restore run in fail-fast transactions. | 0.3 s | — | keep |
