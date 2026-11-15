@@ -14,9 +14,9 @@ import { ShellIcon } from '@/components/shell-icon';
 import { MessageBox, postMessage } from '@/app/conversation-composer';
 import { LeadWelcome } from '@/app/lead-welcome';
 import { PrivateLine } from '@/app/private-line';
-import { titleOf, type MadeAgent, type RuleDecision, type SavedRule } from '@/lib/conversations';
+import { titleOf, type Decision, type SavedRule } from '@/lib/conversations';
+import { MadeCard, RequestCard } from '@/app/agent-card';
 import { overlayHref } from '@/lib/settings-overlay.mjs';
-import { madeDay, useZone } from '@/app/agent-made';
 import type { ConversationRecord } from '@/lib/conversation-record';
 import { localeFor } from '@/lib/i18n.mjs';
 type Conversation={id:string,agent_name:string,face:string};
@@ -38,7 +38,7 @@ export default function ConversationView({slug,agent,details,company,conversatio
  const {messages,usage,pending,failed,working,canStop}=record;
  // The sidebar's Agents come from the server render: an Agent Lead makes while this page asks again is only on the
  // page once the server parts are drawn again, so its tile and its "new" mark show without a reload.
- const router=useRouter(); const madeCount=(rows:ConversationRecord['messages'])=>rows.reduce((sum,message)=>sum+(message.made?.length||0),0);
+ const router=useRouter(); const madeCount=(rows:ConversationRecord['messages'])=>rows.reduce((sum,message)=>sum+(message.cards?.filter(card=>card.kind==='made').length||0),0);
  const made=useRef(madeCount(initial.messages));
  // A queued turn keeps `pending` true from one run to the next; each run's start and reply add a message.
  const runKey=`${pending}:${messages.length}`; const drawnRun=useRef(runKey);
@@ -82,7 +82,7 @@ export default function ConversationView({slug,agent,details,company,conversatio
    </li>:<li key={`${message.kind||'m'}${message.id}`} className="turn turn--agent msg" data-author="agent" data-kind={message.kind}>
     <div className="sender">{face(20)}<bdi>{message.author_name}</bdi><time className="sender__time" dateTime={message.created_at}>{time(message.created_at)}</time></div>
     {message.body&&<div className="bubble bubble--agent" dir="auto">{message.body}</div>}
-    {message.made?.map(made=><MadeCard key={made.id} slug={slug} agent={made} c={c}/>)}
+    {message.cards?.map(card=>card.kind==='made'?<MadeCard key={card.agent.id} slug={slug} agent={card.agent}/>:<RequestCard key={`request${card.request.id}`} slug={slug} request={card.request}/>)}
    </li>)}</ol>
    {pending&&<p className="thinking convo-status" role="status">{working?c('conversationWorkingFor',conversation.agent_name,working):t('conversationWorking',conversation.agent_name)}</p>}
    {failed&&<p className="note convo-status" role="alert">{t('conversationReplyFailed')}</p>}
@@ -119,28 +119,13 @@ function SuggestedLine({to,cb}:{to:string[],cb:(key:string,...values:ReactNode[]
 }
 
 // An Owner's or a Manager's decision on it, where it happened among the messages (design-reference: lnApprove's notes):
-// approved, it is saved for the whole team; refused, it stays in this person's own work.
-function DecidedLine({decided,c,cb}:{decided:RuleDecision,c:(key:string,...values:unknown[])=>string,cb:(key:string,...values:ReactNode[])=>ReactNode[]}) {
+// approved, it is saved for the whole team; refused, it stays in this person's own work. An Owner's answer to this
+// person's request for an Agent (#17; design-reference: approveRequest and refuseRequest's messages) shows the same way.
+function DecidedLine({decided,c,cb}:{decided:Decision,c:(key:string,...values:unknown[])=>string,cb:(key:string,...values:ReactNode[])=>ReactNode[]}) {
+ if(decided.kind==='request') return decided.made
+  ?<li className="note note--icon" data-kind="decided" data-decision="made"><ShellIcon name="check" className="note__icon"/><span>{cb('requestAnsweredMade',decided.by,decided.name)}</span></li>
+  :<li className="note note--icon" data-kind="decided" data-decision="declined"><ShellIcon name="x" className="note__icon"/><span>{cb('requestAnsweredDeclined',decided.by,decided.name,decided.reason)}</span></li>;
  return decided.approved
   ?<li className="note note--saved" data-kind="decided" data-decision="approved"><ShellIcon name="check" className="note__icon"/><b className="note__saved">{c('ruleSaved')}</b><span>{cb('ruleApproved',decided.by,decided.rule)}</span></li>
   :<li className="note note--icon" data-kind="decided" data-decision="declined"><ShellIcon name="x" className="note__icon"/><span>{cb('ruleDeclined',decided.by)}</span></li>;
-}
-
-// The card for an Agent Lead made (design-reference: agentCardHTML): "Made", with "New" until the person who asked opens
-// it and its day after that; its name, job and apps; the three things no Agent does without a person (ADR 0006, 0008);
-// and the way into its own chat.
-const never=['madeAgentPublish','madeAgentSpend','madeAgentMessage'];
-function MadeCard({slug,agent,c}:{slug:string,agent:MadeAgent,c:(key:string,...values:unknown[])=>string}) {
- const {t,language}=useI18n(); const zone=useZone();
- return <div className="ac-card" role="group" aria-label={c('madeAgentLabel',agent.name)}>
-  <div className="hcard__top"><span className="badge badge--made" data-utc={agent.fresh?undefined:zone}><ShellIcon name="check"/>{c('madeAgentMade')} · {agent.fresh?t('agentNew'):madeDay(agent.created_at,language,zone)}</span></div>
-  <div className="card__head"><span aria-hidden="true"><CompanyAgentFace agent={agent} size={44}/></span><div className="card__titles"><span className="card__title"><bdi>{agent.name}</bdi></span></div></div>
-  <dl className="kv ac-kv">
-   <div className="kv__row"><dt>{c('madeAgentJob')}</dt><dd dir="auto">{agent.job}</dd></div>
-   <div className="kv__row"><dt>{c('madeAgentApps')}</dt><dd>{agent.apps.length?agent.apps.map((app,index)=><Fragment key={index}>{index>0&&c('madeAgentAppsJoin')}<bdi>{app}</bdi></Fragment>):c('madeAgentNoApps')}</dd></div>
-   <div className="kv__row"><dt>{c('madeAgentNever')}</dt><dd><ul className="ac-never">{never.map(key=><li key={key}><ShellIcon name="hand"/><span>{c(key)}</span></li>)}</ul></dd></div>
-  </dl>
-  <div className="ac-actions"><Link className="btn btn--primary" href={`/c/${slug}/chat/${agent.id}`}>{c('madeAgentOpen',agent.name)}</Link></div>
-  <p className="ac-tip"><ShellIcon name="chat"/><span>{c('madeAgentTip')}</span></p>
- </div>;
 }

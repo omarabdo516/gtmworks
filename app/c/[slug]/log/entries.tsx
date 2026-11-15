@@ -51,7 +51,7 @@ function entryLine(row:LogRow,people:LogPeople,t:I18n['t'],language:Language) {
  const nameOf=(id:string)=>people.identities.find(agent=>agent.id===id)?.name||people.members.find(member=>member.person_id===id)?.people?.name;
  const agentName=(id:string)=>people.agents.find(agent=>agent.id===id)?.name;
  const line=describeEntry(row,{name:nameOf,agentName});
- const value=(v:LogValue)=>'text' in v?v.text:t(v.key);
+ const value=(v:LogValue)=>'text' in v?v.text:t(v.key,...(v.values||[]));
  const [key,...args]=line.act;
  const act=t(key,...args.map(arg=>{const text=value(arg); return language==='en'&&'key' in arg?text.toLowerCase():text;}));
  return {...line,act,from:line.from&&value(line.from),to:line.to&&value(line.to)};

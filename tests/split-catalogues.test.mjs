@@ -10,6 +10,8 @@ const owners = [
  ['app/c/[slug]/conversations/[id]/conversation.tsx', 'conversation', /\bcb?\('([A-Za-z]+)'/g],
  ['app/ready-made.tsx', 'ready-made', /\bt\('([A-Za-z]+)'/g],
  ['app/c/[slug]/channels/[id]/channel.tsx', 'channel', /\bc\('([A-Za-z]+)'/g],
+ ['app/agent-card.tsx', 'agent-card', /\bcb?\('([A-Za-z]+)'/g],
+ ['app/c/[slug]/[[...section]]/agent-request-card.tsx', 'agent-card', /\bcb?\('([A-Za-z]+)'/g],
 ];
 test('every key a split catalogue owner asks for is in its catalogue in both languages', () => {
  for (const [file, name, pattern] of owners) {

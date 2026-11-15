@@ -1,33 +1,41 @@
 // The conversation record as the page shows it: run ids stay on the server. A note is a person's message addressed to
 // another Member (`to`, no run); a queued message waits for the Agent to finish the current reply (`queued`), or was
 // not sent because the engine would not start it (`failed`).
-// An Agent Lead made in a run (#13) shows as a card in Lead's turn of that run (`made`); when Lead wrote nothing but the
-// call, the card is Lead's whole turn (`kind` made) after the message that asked.
+// What Lead's turn of a run holds besides its words is a card: an Agent Lead made in it (#13), or a Member's request for
+// an Agent kept in it (#17), which shows the Owner's answer once there is one. The card is in Lead's reply of that run;
+// when Lead wrote nothing but the call, it is Lead's whole turn (`kind` made) after the message that asked.
 // A lasting rule the Agent saved in a run (#18) shows as a saved line (`kind` saved) after the Agent's reply of that run,
 // or after the message that told it when the reply was nothing but the call. A rule since removed keeps its line, since
 // the Conversation is the record as people saw it; only its way to the Agent's page goes, with the Agent's.
 // A Contributor's rule is a suggestion (#25): its line names who it was sent to (`sentTo`), and the Owner's or a
-// Manager's decision shows as its own line (`kind` decided) at the time it was made.
+// Manager's decision shows as its own line (`kind` decided) at the time it was made, as an Owner's answer to a request
+// does.
 export type MadeAgent={id:string,connection_id:string,name:string,job:string,apps:string[],fresh:boolean,created_at:string};
+// A request waits for an Owner (named for "When Omar says yes"), or carries who answered, when, and what: the Agent made
+// (null once it is removed) or the reason for no.
+type RequestBase={id:number,name:string,job:string,apps:string[],askedBy:string,askedWith:string};
+export type AgentRequestView=RequestBase&({state:'waiting',owners:string[]}|{state:'made',by:string,at:string,agent:Pick<MadeAgent,'id'|'connection_id'|'name'>|null}|{state:'declined',by:string,at:string,reason:string});
+export type LeadCard={kind:'made',agent:MadeAgent}|{kind:'request',request:AgentRequestView};
 export type SavedRule={id:string,agent:string|null,removed:boolean,said_at:string,sentTo?:string[]};
-export type RuleDecision={approved:boolean,by:string,rule:string,at:string};
-export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided',to?:string,failed?:boolean,made?:MadeAgent[],saved?:SavedRule[],decided?:RuleDecision};
+type RuleDecision={approved:boolean,by:string,rule:string,at:string};
+export type Decision=({kind:'rule'}&RuleDecision)|({kind:'request',by:string,name:string,at:string}&({made:true}|{made:false,reason:string}));
+export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided',to?:string,failed?:boolean,cards?:LeadCard[],saved?:SavedRule[],decided?:Decision};
 type StoredMessage=ConversationMessage&{run_id:string};
 export const messageColumns='id,author,author_name,body,run_id,created_at';
 export const conversationColumns='id,agent_id,agent_name,hermes_agents(connection_id)';
 // A person's message whose run Hermes no longer knew is marked lost (#243), from the run's usage record.
-export const shown=(messages:StoredMessage[],usage:{run_id:string,outcome:string}[]=[],made:{run_id:string,agent:MadeAgent}[]=[],agentName='',saved:{run_id:string,rule:SavedRule}[]=[]):ConversationMessage[]=>messages.flatMap(message=>{
+export const shown=(messages:StoredMessage[],usage:{run_id:string,outcome:string}[]=[],leadCards:{run_id:string,card:LeadCard,at:string}[]=[],agentName='',saved:{run_id:string,rule:SavedRule}[]=[]):ConversationMessage[]=>messages.flatMap(message=>{
  const plain={id:message.id,author:message.author,author_name:message.author_name,body:message.body,lost:message.author==='person'&&usage.some(run=>run.run_id===message.run_id&&run.outcome==='lost'),created_at:message.created_at};
  const replied=message.author==='agent'||messages.some(other=>other.author==='agent'&&other.run_id===message.run_id);
- const cards=made.filter(row=>row.run_id===message.run_id).map(row=>row.agent);
+ const ofRun=leadCards.filter(row=>row.run_id===message.run_id); const cards=ofRun.map(row=>row.card);
  const rules=saved.filter(row=>row.run_id===message.run_id).map(row=>row.rule);
- const turn:ConversationMessage[]=message.author==='agent'?[cards.length?{...plain,made:cards}:plain]
-  :replied||!cards.length?[plain]:[plain,{id:message.id,author:'agent',author_name:agentName,body:'',created_at:cards[0].created_at,kind:'made',made:cards}];
+ const turn:ConversationMessage[]=message.author==='agent'?[cards.length?{...plain,cards}:plain]
+  :replied||!cards.length?[plain]:[plain,{id:message.id,author:'agent',author_name:agentName,body:'',created_at:ofRun[0].at,kind:'made',cards}];
  const last=message.author==='agent'||!replied;
  return last&&rules.length?[...turn,{id:message.id,author:'agent',author_name:agentName,body:'',created_at:rules[0].said_at,kind:'saved',saved:rules}]:turn;
 });
 // Each decision goes before the first item shown after it.
-export const withDecisions=(record:ConversationMessage[],decisions:RuleDecision[],agentName=''):ConversationMessage[]=>{
+export const withDecisions=(record:ConversationMessage[],decisions:Decision[],agentName=''):ConversationMessage[]=>{
  const left=[...decisions].sort((a,b)=>a.at.localeCompare(b.at)).map((decided,index):ConversationMessage=>({id:index,author:'agent',author_name:agentName,body:'',created_at:decided.at,kind:'decided',decided}));
  const merged:ConversationMessage[]=[];
  for(const message of record) { while(left.length&&left[0].created_at<=message.created_at) merged.push(left.shift()!); merged.push(message); }

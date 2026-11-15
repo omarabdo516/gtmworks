@@ -33,3 +33,27 @@ test('a decision shows at its time among the messages and notes, and one after t
  const withNote=withTeamWork(later,[{id:9,author_name:'Youssef',addressed_name:'Omar',body:'See this',created_at:at(4)}]);
  assert.deepEqual(order(withNote),[1,2,'note','decided',3,4,'decided']);
 });
+
+// A Member's request for an Agent (#17): its card is in Lead's reply of the run that asked, or Lead's whole turn when Lead
+// wrote nothing but the call; the Owner's answer shows where it happened among the messages.
+const asking=[
+ {id:1,author:/** @type {const} */('person'),author_name:'Youssef',body:'I want someone to follow up our WhatsApp leads',run_id:'r1',created_at:at(1)},
+ {id:2,author:/** @type {const} */('agent'),author_name:'Lead',body:'I prepared your request and sent it to Omar.',run_id:'r1',created_at:at(2)},
+ {id:3,author:/** @type {const} */('person'),author_name:'Youssef',body:'And one for the blog',run_id:'r2',created_at:at(10)},
+];
+const request=(/** @type {number} */ id)=>({id,name:'WhatsApp Leads',job:'Follows up the WhatsApp leads.',apps:[],askedBy:'Youssef',askedWith:'I want someone to follow up our WhatsApp leads',state:/** @type {const} */('waiting'),owners:['Omar']});
+
+test('a request\'s card is in Lead\'s reply of its run, or is Lead\'s whole turn when Lead wrote nothing',()=>{
+ const cards=[{run_id:'r1',at:at(2),card:{kind:/** @type {const} */('request'),request:request(7)}},{run_id:'r2',at:at(11),card:{kind:/** @type {const} */('request'),request:request(8)}}];
+ const record=shown(asking,[],cards,'Lead');
+ assert.deepEqual(order(record),[1,2,3,'made']);
+ assert.deepEqual(record[1].cards,[cards[0].card]);
+ assert.deepEqual(record[3],{id:3,author:'agent',author_name:'Lead',body:'',created_at:at(11),kind:'made',cards:[cards[1].card]});
+});
+
+test('an Owner\'s answer to a request shows at its time',()=>{
+ const made={kind:/** @type {const} */('request'),made:true,by:'Omar',name:'WhatsApp Leads',at:at(5)};
+ const record=withDecisions(shown(asking,[],[{run_id:'r1',at:at(2),card:{kind:/** @type {const} */('request'),request:request(7)}}],'Lead'),[made],'Lead');
+ assert.deepEqual(order(record),[1,2,'decided',3]);
+ assert.equal(record[2].decided,made);
+});

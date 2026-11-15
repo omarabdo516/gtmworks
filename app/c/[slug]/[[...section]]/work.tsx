@@ -3,7 +3,7 @@ import { messages } from '@/lib/i18n.mjs';
 import { useI18n } from '@/lib/i18n-client';
 import Link from '@/lib/link';
 import { AuthoredTitle } from '@/lib/authored-title';
-import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { BoardPager, KanbanBoard, KanbanCard, KanbanColumn } from '@/components/paperclip/KanbanBoard';
 import { TaskList, TaskListRow } from '@/components/paperclip/TaskList';
@@ -16,6 +16,7 @@ import { useAgentIdentities } from '@/lib/agent-identities-client';
 const NewCard=lazy(()=>import('./new-card'));
 import { workAction } from './work-actions';
 import { decideAgentRule } from './skill-actions';
+import { OwnerRequestCard } from './agent-request-card';
 import { Decision } from './decision';
 import { ActivityRow, Avatar, isMessage, MessageRow, type WorkActivity, type WorkAttachment, type WorkMember, MemberPicker } from '@/lib/work-activity';
 import { workDate as date } from '@/lib/work-date.mjs';
@@ -100,7 +101,15 @@ export default function Work(p:WorkProps) { const {t,locale,language}=useI18n();
    <button className="btn btn--secondary btn--sm" name="intent" value="reject">{t('waitingRuleDecline')}</button>
    <button className="btn btn--primary btn--sm" name="intent" value="approve">{t('waitingRuleApprove')}</button></form>
  </div>;
- const itemView=(item:WaitingItem)=>item.kind==='rule_suggestion'?ruleView(item):<Link key={`${item.kind}:${item.id}`} className="mcard" data-kind={item.kind} href={item.conversation_id?`/c/${p.slug}/conversations/${item.conversation_id}`:`${base}/board/${item.card_id}`}>
+ const lead=identities.find(a=>a.role==='account_manager')?.name||'Lead';
+ // What is answered where it waits rather than where it came from, by kind: a learning suggestion, and a Member's request
+ // for an Agent (#17). On the board both stand apart from the items that need a reply.
+ const decidedHere:Record<string,(item:WaitingItem)=>ReactNode>={
+  rule_suggestion:ruleView,
+  agent_request:item=><OwnerRequestCard key={`${item.kind}:${item.id}`} slug={p.slug} company={p.company} lead={lead} item={item}/>,
+ };
+ const answeredHere=(item:WaitingItem)=>Object.hasOwn(decidedHere,item.kind);
+ const itemView=(item:WaitingItem)=>answeredHere(item)?decidedHere[item.kind](item):<Link key={`${item.kind}:${item.id}`} className="mcard" data-kind={item.kind} href={item.conversation_id?`/c/${p.slug}/conversations/${item.conversation_id}`:`${base}/board/${item.card_id}`}>
   <span className="mcard__top"><span className="od-fill mcard__who">{item.kind==='question'?<b>{item.asked_by?t('waitingQuestionFrom',item.asked_by):t('waitingQuestion')}</b>:<b dir="auto">{item.asked_by}</b>}</span><span className="mcard__time num">{date(item.created_at,language,{month:'short'})}</span></span>
   <span className="mcard__q od-clamp-3" dir="auto">{item.title}{item.body&&<> {item.body}</>}</span>
  </Link>;
@@ -127,14 +136,14 @@ export default function Work(p:WorkProps) { const {t,locale,language}=useI18n();
   {(moving||notice)&&<p role="status" className="board-status">{moving?t('movingCard'):notice}</p>}
   {!p.cards.length&&!items.length&&<div className="board-bare" role="note"><p>{t('boardEmpty',identities.find(a=>a.role==='account_manager')?.name||'Lead')}</p>{p.canCreate&&<Link className="btn btn--secondary btn--sm" href={`/c/${p.slug}/chat`}><BoardIcon name="chat"/><span>{t('boardTalkTo',identities.find(a=>a.role==='account_manager')?.name||'Lead')}</span></Link>}</div>}
   <KanbanBoard label={t('workBoard')} busy={moving} cards={drawnCards.map(c=>({id:c.id,title:c.title,column:columnOfCard(c)}))} columnName={columnName} renderOverlay={id=>cardView(p.cards.find(card=>card.id===id)!,true)} onMove={move}>
-   {boardColumns.map(column=>{ const list=drawnCards.filter(c=>columnOfCard(c)===column); const extra=column==='waiting'&&!ownList?items:[]; const replies=extra.filter(item=>item.kind!=='rule_suggestion'); const stages=stagesIn(column);
+   {boardColumns.map(column=>{ const list=drawnCards.filter(c=>columnOfCard(c)===column); const extra=column==='waiting'&&!ownList?items:[]; const replies=extra.filter(item=>!answeredHere(item)); const stages=stagesIn(column);
     if(column==='waiting'&&ownList) return <KanbanColumn key={column} column={column} id={`col-${column}-section`} name={columnName(column)} count={ownEntries.length} waiting head={null}>
      {ownEntries.map(entry=>entry.card?<div key={`approval:${entry.card.id}`} className="column" data-stage-id={entry.card.stage_id} data-stage-name={stageName(entry.card)}>{cardView(entry.card)}</div>:itemView(entry.item))}
      {!ownEntries.length&&<div className="col-empty"><b>{t(emptyKey[column][0])}</b>{emptyKey[column][1]&&<span>{t(emptyKey[column][1])}</span>}</div>}
     </KanbanColumn>;
     const add=column==='ideas'&&p.canCreate&&ideasStage?<button type="button" className="circle-btn add-btn add-card" aria-label={t('addCard')} title={t('boardAddIdea')} onClick={()=>openCreate(ideasStage)}><BoardIcon name="plus"/></button>:null;
     return <KanbanColumn key={column} column={column} id={`col-${column}-section`} name={columnName(column)} count={list.length+extra.length} waiting={column==='waiting'} head={add} data-stage-name={stages.length===1?stages[0].name:undefined}>
-     {extra.filter(item=>item.kind==='rule_suggestion').map(ruleView)}
+     {extra.filter(answeredHere).map(itemView)}
      {replies.length>0&&<div className="mn-group" role="group" aria-labelledby="mn-h"><h3 className="mn-h" id="mn-h"><BoardIcon name="at"/><span>{t('waitingNeedsReply')}</span> <span className="num">{replies.length}</span></h3>{replies.map(itemView)}{list.length>0&&<div className="mn-sep" role="separator"/>}</div>}
      {stages.map(stage=>{ const here=list.filter(c=>c.stage_id===stage.id); return here.length?<div key={stage.id} className="column" data-stage-id={stage.id} data-stage-name={stage.name}>{here.map(c=>cardView(c))}</div>:null; })}
      {!list.length&&!extra.length&&<div className="col-empty"><b>{t(emptyKey[column][0])}</b>{emptyKey[column][1]&&<span>{t(emptyKey[column][1])}</span>}</div>}
