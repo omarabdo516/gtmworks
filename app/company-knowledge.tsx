@@ -17,9 +17,11 @@ export async function CompanyKnowledge({slug,company,canManage,part:requested}:{
  const {t}=await getI18n(); const db=await supabase();
  const part=pickPart(requested);
  const title=t(knowledgeParts.find(([key])=>key===part)![1]);
- const [{data},{data:agentRows}]=await Promise.all([
+ const [{data,error},{data:agentRows}]=await Promise.all([
   db.from('company_knowledge').select('body,edited_at,editor:people!edited_by(name)').eq('company_id',company).eq('part',part).maybeSingle(),
   db.from('hermes_agents').select('id,connection_id,name,is_default').eq('company_id',company).order('name')]);
+ // An unread part is never shown as empty: saving over it would replace text the editor never saw.
+ if(error) throw new Error('Could not load the Company knowledge');
  const stored=data as unknown as Stored|null; const body=stored?.body||'';
  // The Agents this reader sees (RLS): a Member is not told of an Agent hidden from them.
  const agents=agentsMainFirst(agentRows||[]);

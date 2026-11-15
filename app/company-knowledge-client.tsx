@@ -24,7 +24,7 @@ export default function KnowledgeEditor({company,part,title,body,children}:{comp
  const open=()=>{ moved.current=true; setStatus(''); setError(''); setDraft(body); };
  const close=()=>{ moved.current=true; setError(''); setDraft(null); };
  const save=()=>{ if(draft===null||pending) return; startTransition(async()=>{
-  const outcome=await saveCompanyKnowledge(company,part,draft);
+  const outcome=await saveCompanyKnowledge(company,part,draft).catch(():KnowledgeOutcome=>'companyKnowledgeFailed');
   if(!saved.includes(outcome)) { setError(outcome); field.current?.focus(); return; }
   // The page leaves edit mode together with the text read again, so the old text is never shown in between.
   startTransition(()=>{ setStatus(outcome); close(); router.refresh(); });
