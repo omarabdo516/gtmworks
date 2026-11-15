@@ -83,7 +83,7 @@ test('a refused or failed fixture fails the step, so no capture runs on a half-l
 });
 
 test('every screen says how to reach it in the reference and which built page it matches', () => {
-  assert.deepEqual(Object.keys(screens).sort(), ['account', 'agent', 'agent-chat', 'agents', 'board', 'home', 'home-alone', 'log', 'numbers', 'settings', 'settings-alone', 'waiting']);
+  assert.deepEqual(Object.keys(screens).sort(), ['account', 'agent', 'agent-chat', 'agents', 'board', 'home', 'home-alone', 'log', 'made-agent', 'made-card', 'new-agent', 'numbers', 'settings', 'settings-alone', 'waiting']);
   for (const [name, screen] of Object.entries(screens)) {
     assert.match(name, /^[a-z]+(-[a-z]+)*$/, name);
     assert.deepEqual(Object.keys(screen).sort(), ['builtPath', 'reference'], name);
@@ -120,6 +120,10 @@ test('every screen says how to reach it in the reference and which built page it
   assert.deepEqual(screens['settings-alone'].reference.steps, [...alone, ...screens.settings.reference.steps]);
   assert.equal(screens['home-alone'].builtPath, '/c/rs-consultations/chat');
   assert.equal(screens['settings-alone'].builtPath, '/c/rs-consultations/settings');
+  // Lead makes an Agent (#13): the hint, the card in the Conversation and the Agent's page, beside the reference's Ads.
+  assert.equal(screens['new-agent'].builtPath, '/c/rs-learning/chat?new=agent');
+  assert.equal(screens['made-card'].builtPath, null, 'the Conversation has a uuid path: pass the fixture\'s madeConversation');
+  assert.equal(screens['made-agent'].builtPath, `/c/rs-learning/settings?agent=${fixture.agent}`);
 });
 
 test('a screen with no built equivalent needs --built-path or --reference-only', () => {
