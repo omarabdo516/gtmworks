@@ -39,8 +39,8 @@ const open=tabs.filter((tab):tab is Extract<(typeof tabs)[number],{key:Tab}>=>!(
 const statusKeys={working:'agentStatusWorking',waiting:'agentStatusWaiting',idle:'agentStatusIdle'};
 
 // The Agent's details (design-reference: #details, renderDetailsPanel): its settings and close buttons, its face with
-// its state, name, main mark, speciality and state, and, for an Agent Lead made, when and at whose request (#13), then
-// the tabs, read on the server (app/agent-details-server.tsx). A Viewer gets no settings button.
+// a dot for its state, name, main mark, speciality and state, and, for an Agent Lead made, when and at whose request
+// (#13), then the tabs, read on the server (app/agent-details-server.tsx). A Viewer gets no settings button.
 export function AgentDetails({panel,agent,details,settingsHref}:{panel:DetailsPanel,agent:DetailsAgent,details:AgentDetailsView,settingsHref:string}) {
  const {t,language}=useI18n(); const close=useRef<HTMLButtonElement>(null);
  const [tab,setTab]=useState<Tab>('activity');
