@@ -89,8 +89,6 @@ values ('64000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-00000000
  '20000000-0000-0000-0000-000000000001','2026-11-14T16:40:00Z','62000000-0000-0000-0000-000000000003','design-compare-fixture-rule','call-0')
 on conflict do nothing;
 
--- RS Learning's general channel (#23), as the reference's ch-general: Omar and the Manager write, the Contributor
--- calls Lead, and Lead replies. Added only to an empty channel.
 insert into public.channel_messages(company_id,channel_id,author,person_id,author_name,body,send_key)
 select '10000000-0000-0000-0000-000000000001','69000000-0000-0000-0000-000000000001','person',x.person_id,x.author_name,x.body,x.send_key
 from (values

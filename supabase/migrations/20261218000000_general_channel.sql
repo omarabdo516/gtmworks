@@ -3,9 +3,6 @@
 -- that message gets exactly one Run (one row of channel_runs) and at most one reply. A Viewer reads and cannot write.
 -- Additive: three new tables, one trigger on companies, and move_company_profile also waits for a channel's open Runs.
 -- The previous app version runs against it unchanged (a Company it inserts just gains its general channel row).
---
--- Not the Conversation machinery (lib/conversation-runs.mjs): no queued turns, notes, tools or stop. A channel Run is
--- one row per mentioning message, driven by lib/channel-runs.mjs through the four service-only steps below.
 
 create table public.channels (
  id uuid primary key default gen_random_uuid(),
@@ -16,8 +13,7 @@ create table public.channels (
 );
 create unique index channels_one_general on public.channels(company_id) where kind='general';
 
--- A Member's message, or an Agent's reply to the message that called it (reply_to: unique, so a mention gets at most
--- one reply). Append-only, as people saw it. agent_id has no foreign key: an Agent removed later leaves its replies.
+-- agent_id has no foreign key: an Agent removed later leaves its replies.
 create table public.channel_messages (
  id bigint generated always as identity primary key,
  company_id uuid not null,
@@ -92,7 +88,6 @@ $$;
 revoke all on function public.in_channel(uuid) from public,anon,service_role;
 grant execute on function public.in_channel(uuid) to authenticated;
 
--- Who is in the channel now, for a caller who is in it: Owners first, then Managers, Contributors and Viewers.
 create function public.channel_members(ch uuid) returns table(person uuid, name text, role public.member_role)
 language sql stable security definer set search_path='' as $$
  select m.person_id, p.name, m.role from public.channels k
@@ -239,8 +234,6 @@ begin
  return false;
 end $$;
 
--- Ends a Run once: its outcome and usage and, when it completed, the reply posted in the channel in the same
--- transaction. A second closer finds it ended and changes nothing.
 create function public.close_channel_run(message bigint, run text, run_outcome text, reply text, used_input bigint, used_output bigint)
 returns boolean language plpgsql security definer set search_path='' as $$
 declare r public.channel_runs;
@@ -265,7 +258,6 @@ revoke all on function public.close_channel_run(bigint,text,text,text,bigint,big
 grant execute on function public.channel_runs_due(uuid,bigint), public.begin_channel_start(bigint),
  public.answer_channel_start(bigint,integer,text), public.close_channel_run(bigint,text,text,text,bigint,bigint) to service_role;
 
--- Reads: channel members only (a Viewer reads; writing is post_channel_message's question). No client writes a table.
 alter table public.channels enable row level security;
 alter table public.channel_messages enable row level security;
 alter table public.channel_runs enable row level security;

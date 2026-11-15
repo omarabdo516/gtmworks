@@ -13,8 +13,7 @@ export const newId=()=>{const b=crypto.getRandomValues(new Uint8Array(16));b[6]=
 // While the Agent works (design-reference: syncComposer), an empty box turns the send arrow into a stop square for a
 // person allowed to stop the run (`stop`); typed text is still sent, and waits for the current reply.
 // `draft` starts the box with a sentence to try (remount with a new key to put another one in); it is focused for editing,
-// as it is with `focus` ("New agent" opens Lead's chat ready to type, #13). `label` names the box for a reader (a
-// channel's says where the message goes).
+// as it is with `focus` ("New agent" opens Lead's chat ready to type, #13).
 export function MessageBox({placeholder,label,send,stop,draft,focus=false}:{placeholder:string,label?:string,send:(text:string,sendKey:string)=>Promise<string|null>,stop?:{label:string,run:()=>Promise<string|null>},draft?:string,focus?:boolean}) {
  const {t}=useI18n(); const [text,setText]=useState(draft??''); const [key,setKey]=useState(newId); const [busy,setBusy]=useState(false); const [error,setError]=useState('');
  async function submit() {

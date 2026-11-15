@@ -8,8 +8,6 @@ import { uuid } from '@/lib/conversations';
 import { channelRecord } from '@/lib/channels';
 import ChannelView from './channel';
 
-// A channel (#23). Only its members read it (RLS): anyone else, in this Company or another, and everyone in a Company
-// worked alone, gets not found.
 export default async function ChannelPage({params}:{params:Promise<{slug:string,id:string}>}) {
  const {t}=await getI18n(); const {slug,id}=await params;
  const db=await supabase(); const {data:{user}}=await db.auth.getUser();

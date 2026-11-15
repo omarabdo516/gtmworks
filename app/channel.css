@@ -1,6 +1,3 @@
-/* A channel (#23; design-reference/index.html: "a channel: members talk to each other; agents answer only when
-   called", the transcript's .divider and .mention, and the team details' panel rows and hints). The chat, its turns,
-   bubbles, composer and details panel come from app/shell.css; colours are the shell's tokens, so both themes follow. */
 .gw .hp-hash { width: 24px; height: 24px; flex: none; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--gw-bg-tertiary); color: var(--gw-text-2); }
 .gw .hp-hash .gw-icon { width: 14px; height: 14px; }
 .gw .hp-hash--xl { width: 64px; height: 64px; color: var(--gw-text-1); }

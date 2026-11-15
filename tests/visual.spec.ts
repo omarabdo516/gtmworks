@@ -115,7 +115,6 @@ const asAdmin = (sql: string) => execFileSync('docker', ['exec', '-i', dbContain
   { input: `set session_replication_role = replica;\n${sql}`, stdio: ['pipe', 'ignore', 'pipe'], encoding: 'utf8' });
 // Lead, Meta Ads and SEO in RS Learning, with the switches the screen shows on (#15).
 const seen = (n: number) => `68000000-0000-0000-0000-00000000000${n}`;
-// RS Learning's general channel (#23, supabase/seed.sql), Lead, and the three messages its screen shows.
 const general = '69000000-0000-0000-0000-000000000001';
 const talk = (n: number) => `69000000-0000-0000-0000-0000000000${n}`;
 const screenStates: Record<string, { set: string, unset: string, admin?: true }> = {

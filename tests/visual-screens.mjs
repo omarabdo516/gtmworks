@@ -37,7 +37,6 @@ const lightScreens = [
   // Which Agents each Member sees (#15): Company settings over Lead, Meta Ads and SEO, with Meta Ads shown to the Manager
   // and to the first Contributor, and SEO to the Manager.
   { name: 'agent-visibility', path: '/c/rs-learning/settings', state: 'visibility' },
-  // The general channel (#23), RS Learning's, over a Manager's message, Omar's call to Lead and Lead's reply on June 10.
   { name: 'channel', path: '/c/rs-learning/channels/69000000-0000-0000-0000-000000000001', state: 'channel' },
   // A lasting rule told to an Agent (#18), over Ads and the rule Omar told it on June 10: the Conversation with Ads's
   // reply and the saved line, and Ads's page in Settings listing the rule, who said it and when, with the Owner's Remove.

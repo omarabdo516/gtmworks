@@ -1,5 +1,4 @@
 'use client';
-// The strings only this page shows live in channel.en.json and channel.ar.json, in this route's own chunk.
 import channelEn from '@/lib/messages/channel.en.json';
 import channelAr from '@/lib/messages/channel.ar.json';
 import { Fragment, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
@@ -16,13 +15,6 @@ import { firstName, withMention, type ChannelMessage, type ChannelRecord } from 
 type Say=(key:string,...values:unknown[])=>string;
 const roleKeys={owner:'owner',manager:'manager',contributor:'contributor',viewer:'viewer'} as const;
 
-// A channel (#23), drawn as the reference draws its general channel (design-reference: renderChat, chIntroHTML,
-// msgHTML): the title pill with its hash, the intro with who is in it and how Agents are called, the day, then the
-// talk: another member's messages on the start side with their initial, name and role, the reader's own on the end
-// side, an Agent's reply with its face. The Agent a message called is marked in it, and the message says while it
-// replies or when it could not. The composer says that only an Agent called by name replies; a Viewer reads only. The
-// page asks for the channel again every 1.5 s while a reply is coming, otherwise every 6 s while it is shown, and
-// soon after a send.
 export default function ChannelView({person,initial}:{person:string,initial:ChannelRecord}) {
  const {t,language}=useI18n(); const own:Record<string,string>=language==='ar'?channelAr:channelEn;
  const c:Say=(key,...values)=>own[key].replace(/\{(\d+)\}/g,(_,index)=>String(values[Number(index)] ?? ''));
@@ -35,14 +27,13 @@ export default function ChannelView({person,initial}:{person:string,initial:Chan
     try {
      const response=await fetch(`/api/channels?company=${channel.company}&channel=${channel.id}`,{cache:'no-store'});
      if(response.ok&&!stopped) setRecord(await response.json() as ChannelRecord);
-    } catch { /* The network is down: ask again. */ }
+    } catch {}
    }
    if(!stopped) timer=setTimeout(poll,open?1500:6000);
   };
   timer=setTimeout(poll,sent?300:open?1500:6000);
   return ()=>{stopped=true;clearTimeout(timer);};
  },[open,sent,channel.company,channel.id]);
- // Opened, and after each new message, the channel shows its latest talk, as the reference does.
  const transcript=useRef<HTMLDivElement>(null); const last=messages.at(-1)?.id;
  useEffect(()=>{ const box=transcript.current; if(box) box.scrollTop=box.scrollHeight; },[last]);
  const name=t('shellGeneralChannel');
@@ -50,7 +41,6 @@ export default function ChannelView({person,initial}:{person:string,initial:Chan
  const time=(value:string)=>new Date(value).toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit'});
  const now=new Date(); const today=dayOf(now.toISOString(),zone); const yesterday=dayOf(new Date(now.getTime()-864e5).toISOString(),zone);
  const dayLabel=(at:string)=>{ const day=dayOf(at,zone); return day===today?t('today'):day===yesterday?t('yesterday'):madeDay(at,language,zone); };
- // The route tip names the main Agent as the example, marked as the reference marks a mention.
  const [before,after]=own.channelRouteTip.split('@{0}');
  const tip=agents[0]?<>{before}<bdi className="mention">@{agents[0].name}</bdi>{after}</>:c('channelRouteTipPlain');
  const waiting=messages.find((message):message is Extract<ChannelMessage,{author:'person'}>=>message.author==='person'&&message.mention?.state==='open');
@@ -97,11 +87,8 @@ function Turn({message,time,c}:{message:ChannelMessage,time:(value:string)=>stri
  </li>;
 }
 
-// A member's initial in a round mark (design-reference: personAv).
 const Initial=({name,size}:{name:string,size:number})=><span className="me__av lg-av" style={{'--av':`${size}px`} as CSSProperties} aria-hidden="true">{Array.from(name.trim())[0]||'?'}</span>;
 
-// The channel's details (design-reference: renderTeamDetails), read-only: who is in it with their roles, that the
-// general channel always has everyone, the Agents the reader can call here, and how to call one.
 function ChannelDetails({panel,name,person,record,tip,c}:{panel:DetailsPanel,name:string,person:string,record:ChannelRecord,tip:ReactNode,c:Say}) {
  const {t,language}=useI18n();
  const count=(value:number)=>new Intl.NumberFormat(localeFor(language)).format(value);

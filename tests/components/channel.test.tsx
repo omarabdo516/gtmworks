@@ -7,7 +7,6 @@ import { LanguageProvider } from '@/lib/i18n-client';
 import type { ChannelMessage, ChannelRecord } from '@/lib/channels';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }) }));
-// Next's link reads the server's environment; the channel page draws no link of its own.
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 afterEach(() => { vi.unstubAllGlobals(); });
 

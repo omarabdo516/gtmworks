@@ -2,7 +2,6 @@ import type { supabase } from './supabase';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
 type MemberRole='owner'|'manager'|'contributor'|'viewer';
-// What a message that called an Agent shows under it: the Agent is replying, answered, or could not reply.
 type MentionState='open'|'answered'|'unanswered';
 export type ChannelMessage=
  | {id:number,author:'person',mine:boolean,name:string,role:MemberRole|null,body:string,at:string,mention:{agent:string,state:MentionState}|null}
@@ -11,11 +10,9 @@ type ChannelAgent={id:string,connection_id:string,name:string,speciality:string,
 export type ChannelRecord={
  channel:{id:string,company:string},
  members:{person:string,name:string,role:MemberRole}[],
- // The Agents the reader sees, the main one first: the ones they can call here.
  agents:ChannelAgent[],
  writer:boolean,
  messages:ChannelMessage[],
- // A mention still waits for its reply: the page asks again soon.
  open:boolean,
 };
 type StoredMessage={id:number,author:'person'|'agent',person_id:string|null,agent_id:string|null,author_name:string,body:string,created_at:string};
@@ -24,10 +21,6 @@ const shownMessages=200;
 
 const stateOf=(outcome:string|null):MentionState=>outcome===null?'open':outcome==='completed'?'answered':'unanswered';
 
-// The channel as the reader may see it (RLS: only a member of it reads anything), or null when they are not in it. The
-// page and its poll draw from this one record. Which Agent a message called is the database's own reading of it (its
-// Run row); the page only marks that name. A reply by an Agent the reader does not see is still shown, as every member
-// sees the channel; its face is then drawn from the Agent's id.
 export async function channelRecord(db:Database,person:string,company:string,channel:string):Promise<ChannelRecord|null> {
  const {data:found}=await db.from('channels').select('id,company_id').eq('id',channel).eq('company_id',company).maybeSingle();
  if(!found) return null;
@@ -55,10 +48,8 @@ export async function channelRecord(db:Database,person:string,company:string,cha
  };
 }
 
-// The writer's first name, as the channel names a member beside their message.
 export const firstName=(name:string)=>name.trim().split(/\s+/)[0]||name;
 
-// The message split around the Agent it called, so the page marks that name: the first "@<name>", in any case.
 export function withMention(body:string,agent:string|null|undefined):{text:string,mention:boolean}[] {
  if(!agent) return [{text:body,mention:false}];
  const at=body.toLowerCase().indexOf(`@${agent.toLowerCase()}`);

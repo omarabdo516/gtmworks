@@ -2,8 +2,6 @@ insert into public.companies (id,slug,name) values
 ('10000000-0000-0000-0000-000000000001','rs-learning','RS Learning'),
 ('10000000-0000-0000-0000-000000000002','rs-consultations','R&S Consultations'),
 ('10000000-0000-0000-0000-000000000003','aleem','Aleem');
--- Each Company gets its general channel when it is made (#23); RS Learning's has a fixed id, so the screens and the tests
--- that open it have one address.
 update public.channels set id='69000000-0000-0000-0000-000000000001' where company_id='10000000-0000-0000-0000-000000000001' and kind='general';
 insert into auth.users (instance_id,id,aud,role,email,email_confirmed_at,created_at,updated_at,raw_app_meta_data,raw_user_meta_data,confirmation_token,email_change,email_change_token_new,recovery_token) values
 ('00000000-0000-0000-0000-000000000000','20000000-0000-0000-0000-000000000001','authenticated','authenticated','omar@example.com',now(),now(),now(),'{"provider":"email","providers":["email"]}','{}','','','',''),

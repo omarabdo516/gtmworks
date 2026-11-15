@@ -14,10 +14,6 @@ const refuse=(error:string,status:number)=>reply({error},status);
 const service=()=>createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}});
 const encryptionKey=()=>process.env.WEBHOOK_ENCRYPTION_KEY;
 
-// A channel (#23): reading it, and a Member's message in it. The database decides who reads (a member of the channel),
-// who writes (any Member but a Viewer), who wrote it (the signed-in person: no field names an author) and whether the
-// message calls an Agent (lib/channel-runs.mjs); this route only checks the request's shape. Reading also moves the
-// channel's Runs on, so the page shows a reply without waiting for the worker.
 async function respond(request:NextRequest) {
  try {
   const db=await supabase(); const {data:{user}}=await db.auth.getUser();

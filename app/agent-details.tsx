@@ -34,8 +34,6 @@ export function HeadPill({panel,agent,details,face,title,titleDir}:{panel?:Detai
 
 const tabs=['chatTabActivity','chatTabTasks','chatTabFiles','chatTabMemory','chatTabLog'];
 
-// The panel beside the chat, or over it below 1024px (design-reference: #details): `start` on the top bar, a close
-// button, and the content. Over the chat it takes the focus, and Escape gives it back to the title pill.
 export function DetailsShell({panel,label,start,children}:{panel:DetailsPanel,label:string,start:ReactNode,children:ReactNode}) {
  const {t}=useI18n(); const close=useRef<HTMLButtonElement>(null);
  const covering=panel.overlay&&panel.expanded;

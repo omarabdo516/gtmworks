@@ -2,10 +2,6 @@ import { test, expect, freshSeed } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { signIn } from './sign-in';
 
-// #23, RS Learning's general channel: a Contributor (مراجع) opens it from the sidebar, reads that only an Agent called
-// by name replies, and writes; the message stays and starts no Run. The Viewer (مشاهد) reads it and has no composer.
-// The database side (every Role, a later Member, alone Companies, mentions and Runs) is supabase/tests/channels.sql;
-// Runs on the fake engine are tests/channel-runs.spec.ts.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const rows=(sql:string)=>{ const out=JSON.parse(query(sql)); return (Array.isArray(out)?out:out.rows) as Record<string,unknown>[]; };
 const general='/c/rs-learning/channels/69000000-0000-0000-0000-000000000001';

@@ -521,7 +521,6 @@ test('the Agent details panel, the chat search, the account menu sections and th
    const control=page.locator('.composer').getByRole('button',{name,exact:true});
    await expect(control).toHaveAttribute('aria-disabled','true'); await expect(control).toHaveAttribute('title','Soon');
   }
-  // Channels: the general channel opens (#23); the Owner's new-channel button is still disabled (#24); no unread number.
   const sidebar=page.locator('.sidebar');
   await expect(sidebar.locator('#lbl-ch')).toHaveText('Channels');
   const general=sidebar.locator('.ch-item');
