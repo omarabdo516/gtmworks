@@ -8,6 +8,8 @@ import { signIn, openNavigation } from './sign-in';
 const company='10000000-0000-0000-0000-000000000003';
 const owner='20000000-0000-0000-0000-000000000001';
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
+// The reference's ten sections, the company's nine first and Your account under "You".
+const sections=['Company','Agents','Company knowledge','Learning','Subscription and models','Apps','Recurring tasks','Usage','Backups','Your account'];
 
 test('the account menu opens Settings over the page, Escape and the close button return to it',async({page})=>{
  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
@@ -21,8 +23,7 @@ test('the account menu opens Settings over the page, Escape and the close button
   await expect(overlay).toBeVisible();
   await expect(page).toHaveURL(/\/c\/rs-learning\/settings$/);
   await expect(overlay.getByRole('heading',{name:'Company',exact:true})).toBeVisible();
-  // The reference's ten sections, the company's first and Your account under "You".
-  await expect(overlay.locator('.sov-nav .sb-item')).toHaveText(['Company','Agents','Company knowledge','Learning','Subscription and models','Apps','Recurring tasks','Usage','Backups','Your account']);
+  await expect(overlay.locator('.sov-nav .sb-item')).toHaveText(sections);
   await expect(overlay.locator('#sov-nav-company')).toHaveAttribute('aria-current','page');
   await overlay.locator('#sov-nav-account').click();
   await expect(page).toHaveURL(/\?section=account$/);
@@ -35,6 +36,31 @@ test('the account menu opens Settings over the page, Escape and the close button
   await expect(page).toHaveURL(/\/c\/rs-learning\/work\/board$/);
   await expect(overlay).toHaveCount(0);
  }
+});
+
+test('the keyboard alone opens Settings from the account menu, moves between sections and closes it with Escape',async({page})=>{
+ await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ await openNavigation(page);
+ const settings=page.getByRole('menu').getByRole('menuitem').filter({hasText:/^Settings/});
+ // Opening the menu puts focus on its first item, Settings. A key press that lands while the page is still being
+ // swapped in is repeated until the menu opens.
+ await expect(async()=>{ if(!await settings.isVisible()) await page.locator('.sidebar #btn-me').press('Enter'); await expect(settings).toBeFocused({timeout:2000}); }).toPass({timeout:30000});
+ await page.keyboard.press('Enter');
+ const overlay=page.getByRole('dialog',{name:'Settings'});
+ await expect(overlay).toBeVisible();
+ await expect(page).toHaveURL(/\/c\/rs-learning\/settings$/);
+ await expect(overlay.locator('.sov-nav .sb-item')).toHaveText(sections);
+ // Focus moves into the overlay, so Tab walks the overlay's own controls and reaches the sections.
+ await expect.poll(()=>overlay.evaluate(node=>node.contains(document.activeElement))).toBe(true);
+ const agents=overlay.locator('#sov-nav-agents');
+ for(let presses=0;presses<5&&!await agents.evaluate(node=>node===document.activeElement);presses++) await page.keyboard.press('Tab');
+ await expect(agents).toBeFocused();
+ await page.keyboard.press('Enter');
+ await expect(page).toHaveURL(/\/c\/rs-learning\/settings\?section=agents$/);
+ await expect(overlay.getByRole('heading',{name:'Agents',exact:true})).toBeVisible();
+ await page.keyboard.press('Escape');
+ await expect(page).toHaveURL(/\/c\/rs-learning\/work\/board$/);
+ await expect(overlay).toHaveCount(0);
 });
 
 test('the Owner sees the company’s real Agents, main first, and makes another one main from its page',async({page})=>{
@@ -149,6 +175,57 @@ test('a Viewer sees only the Agents and their account, read only, and no Owner c
  for(const section of ['usage','backup','models']) {
   await page.goto(`/c/rs-learning/settings?section=${section}`);
   await expect(overlay.getByRole('heading',{name:'Agents',exact:true})).toBeVisible();
+ }
+});
+
+// What each Role is shown in Settings (#26), over a main Agent and one other in RS Learning. Every selector of a surface
+// is checked for every Role: on screen when the Role's row names it, absent otherwise. A Viewer has no Company section.
+const rsLearning='10000000-0000-0000-0000-000000000001';
+const surfaces={
+ company:['#co-name','.ro-text','.ro-note:not(.sov-warn)','.sov-ta table','.inv-sec a.inv-open','[aria-labelledby=co-h-mem] .panel-row'],
+ agents:['a[href$="/chat?new=agent"]','.ro-note','.talk-tip a'],
+ agent:['#set-make-main','#danger-delete','.ro-note','.talk-tip a'],
+};
+const roleViews=[
+ {role:'Owner',email:'omar@example.com',sections,readOnly:false,movesMain:true,company:['#co-name','.sov-ta table','.inv-sec a.inv-open'],agents:['a[href$="/chat?new=agent"]','.talk-tip a'],agent:['#set-make-main','#danger-delete','.talk-tip a']},
+ {role:'Manager',email:'manager@example.com',sections,readOnly:false,movesMain:false,company:['.ro-text','.sov-ta table'],agents:['.talk-tip a'],agent:['.talk-tip a']},
+ {role:'Contributor',email:'reviewer@example.com',sections,readOnly:true,movesMain:false,company:['.ro-text','.ro-note:not(.sov-warn)','[aria-labelledby=co-h-mem] .panel-row'],agents:['.ro-note','.talk-tip a'],agent:['.ro-note','.talk-tip a']},
+ {role:'Viewer',email:'viewer@example.com',sections:['Agents','Your account'],readOnly:true,movesMain:false,company:null,agents:['.ro-note'],agent:['.ro-note']},
+];
+
+for(const view of roleViews) test(`${view.role}: Settings shows only what the Role allows, and only the Owner's request moves the main mark`,async({page})=>{
+ const [first,second,lead,ads]=[randomUUID(),randomUUID(),randomUUID(),randomUUID()];
+ for(const connection of [first,second]) query(`insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('${connection}','${rsLearning}','${owner}','http://localhost','roles-${connection.slice(0,8)}','ciphertext','connected')`);
+ query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('${lead}','${rsLearning}','${first}','Lead','Marketing lead',true),('${ads}','${rsLearning}','${second}','Ads','Ads agent',false)`);
+ const main=()=>JSON.parse(query(`select id from public.hermes_agents where company_id='${rsLearning}' and is_default`)).map((row:{id:string})=>row.id);
+ try {
+  await signIn(page,view.email,'/c/rs-learning/home');
+  const overlay=page.getByRole('dialog',{name:'Settings'});
+  // Called once the surface is drawn, so an absent selector is read from the finished page.
+  const shows=async(surface:keyof typeof surfaces,named:string[])=>{
+   for(const selector of surfaces[surface]) {
+    const found=overlay.locator(selector), why=`${view.role} ${surface}: ${selector}`;
+    if(named.includes(selector)) await expect(found.first(),why).toBeVisible(); else await expect(found,why).toHaveCount(0);
+   }
+  };
+  await page.goto('/c/rs-learning/settings?section=company');
+  await expect(overlay.locator('.sov-nav .sb-item')).toHaveText(view.sections);
+  await expect(overlay.getByRole('heading',{name:view.company?'Company':'Agents',exact:true})).toBeVisible();
+  await expect(overlay.locator('.sov-ro').filter({hasText:'Read only'})).toHaveCount(view.readOnly?1:0);
+  if(view.company) await shows('company',view.company);
+  await page.goto('/c/rs-learning/settings?section=agents');
+  await expect(overlay.locator('.sov-ag')).toHaveCount(2);
+  await shows('agents',view.agents);
+  await page.goto(`/c/rs-learning/settings?agent=${ads}`);
+  await expect(overlay.locator('#set-name')).toHaveValue('Ads');
+  await shows('agent',view.agent);
+  // The same request from every Role: the server checks the Role again, whatever the page offered.
+  const answer=await page.request.post('/api/hermes-agents',{data:{company:rsLearning,intent:'default',agent:ads}});
+  expect(answer.status()).toBe(view.movesMain?200:403);
+  expect(main()).toEqual([view.movesMain?ads:lead]);
+ } finally {
+  query(`delete from public.hermes_agents where id in ('${lead}','${ads}')`);
+  query(`delete from public.hermes_connections where id in ('${first}','${second}')`);
  }
 });
 
