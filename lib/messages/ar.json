@@ -776,5 +776,6 @@
   "agentMadeOn": "اتعمل يوم {0} بطلب من {1}",
   "agentMadeOnMine": "اتعمل يوم {0} بطلب منك",
   "agentMadeToday": "اتعمل النهارده {0} بطلب من {1}",
-  "agentMadeTodayMine": "اتعمل النهارده {0} بطلب منك"
+  "agentMadeTodayMine": "اتعمل النهارده {0} بطلب منك",
+  "agentMadeSeeAsk": "شوف الطلب"
 }

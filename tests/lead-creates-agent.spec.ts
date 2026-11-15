@@ -74,13 +74,16 @@ test('the Conversation shows the new Agent\'s card, the list marks it new, and o
 
 test('the Agent\'s page and its details say when it was made and at whose request; only the requester sees it new',async({page,browser})=>{
  await signIn(page,'omar@example.com',`/c/rs-learning/settings?agent=${seo}`);
- await expect(page.getByRole('dialog',{name:'Settings'}).locator('.born--sov')).toHaveText('Made on Jun 11 at your request');
+ const made=page.getByRole('dialog',{name:'Settings'}).locator('.born--sov');
+ await expect(made).toHaveText('Made on Jun 11 at your requestSee the ask');
+ await expect(made.getByRole('link',{name:'See the ask'})).toHaveAttribute('href',`/c/rs-learning/conversations/${conversation}`);
  await page.goto(`/c/rs-learning/chat/${seo}`);
- await expect(page.locator('#details .born--panel')).toHaveText('Made on Jun 11 at your request');
+ await expect(page.locator('#details .born--panel')).toHaveText('Made on Jun 11 at your requestSee the ask');
 
  const context=await browser.newContext({timezoneId:'UTC'}); const other=await context.newPage();
  try {
   await signIn(other,'manager@example.com',`/c/rs-learning/settings?agent=${ads}`);
+  // Only the person who asked reads the Conversation it was asked in.
   await expect(other.getByRole('dialog',{name:'Settings'}).locator('.born--sov')).toHaveText('Made on Jun 10 at the request of عمر');
   await other.goto(`/c/rs-learning/chat/${ads}`);
   await expect(other.locator('#details .born--panel')).toHaveText('Made on Jun 10 at the request of عمر');
@@ -102,7 +105,7 @@ test('"New agent" opens Lead\'s chat with the composer focused and a hint line, 
  await expect(page.locator('.new-hint[role="note"]')).toHaveText('Tell Lead what you need an agent for, in your own words, and it makes it right away.');
  const box=page.getByRole('textbox',{name:'Message'});
  await expect(box).toBeFocused();
- await expect(box).toHaveAttribute('placeholder','e.g. I want someone to follow up on WhatsApp leads and reply to them');
+ await expect(box).toHaveAttribute('placeholder','e.g. I want someone to follow up on WhatsApp leads');
  await expect(page.getByRole('dialog')).toHaveCount(0);
  await expect(page.locator('main form')).toHaveCount(0);
  // The Owner's "Ask Lead for an agent" in Settings opens the same place.

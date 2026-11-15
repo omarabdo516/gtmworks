@@ -5,6 +5,7 @@ import { useI18n } from '@/lib/i18n-client';
 import { localeFor, type Language } from '@/lib/i18n.mjs';
 import { dateFormatter, dayOf } from '@/lib/activity-log.mjs';
 import { ShellIcon } from '@/components/shell-icon';
+import Link from '@/lib/link';
 import type { Made } from '@/lib/agent-made';
 
 // Opening an Agent Lead made at your request takes its "new" mark away (#13). It is asked once the page has mounted,
@@ -27,11 +28,12 @@ export function madeDay(at:string,language:Language,zone:string|undefined) {
  return dateFormatter(localeFor(language),{day:'numeric',month:language==='ar'?'long':'short',...(thisYear?{}:{year:'numeric'}),timeZone:zone}).format(new Date(at));
 }
 
-// "Made on Jun 10 at the request of Omar", or today with the time (design-reference: bornText, bornHTML).
+// "Made on Jun 10 at the request of Omar", or today with the time, and "See the ask" for the person who asked
+// (design-reference: bornText, bornHTML).
 export function MadeLine({made,where}:{made:Made,where:'panel'|'sov'}) {
  const {t,language}=useI18n(); const zone=useZone();
  const today=dayOf(new Date().toISOString(),zone)===dayOf(made.at,zone);
  const when=today?dateFormatter(localeFor(language),{hour:'numeric',minute:'2-digit',timeZone:zone}).format(new Date(made.at)):madeDay(made.at,language,zone);
  const text=made.mine?t(today?'agentMadeTodayMine':'agentMadeOnMine',when):t(today?'agentMadeToday':'agentMadeOn',when,made.by||t('member'));
- return <p className={`born born--${where}`} data-utc={zone}><ShellIcon name="spark"/><span>{text}</span></p>;
+ return <p className={`born born--${where}`} data-utc={zone}><ShellIcon name="spark"/><span>{text}</span>{made.ask&&<Link className="link-btn born__link" href={made.ask}>{t('agentMadeSeeAsk')}</Link>}</p>;
 }

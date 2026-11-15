@@ -371,6 +371,8 @@
 .gw .born .gw-icon { width: 13px; height: 13px; color: var(--gw-text-3); }
 .gw .born[data-utc] { visibility: hidden; }
 .gw .born--sov { margin-top: 2px; }
+.gw .born__link { display: inline-flex; align-items: center; padding: 2px 6px; margin-inline-start: -6px; border-radius: var(--gw-r-xs); font-size: var(--gw-fs-xs); font-weight: 600; color: var(--gw-text-1); }
+@media (hover: hover) { .gw .born__link:hover { background: var(--gw-bg-hover); } }
 
 /* Authored text inside the English interface takes its direction from its own words. */
 [dir="ltr"] .gw :is(.head-pill__title, .thread-item .od-truncate) { unicode-bidi: plaintext; text-align: left; }
@@ -422,6 +424,8 @@
   /* The made card's Open button keeps the reference's 36px; an invisible band above and below makes it 44px. */
   .gw .ac-actions .btn { position: relative; }
   .gw .ac-actions .btn::before { content: ""; position: absolute; inset: -4px 0; }
+  .gw .born__link { position: relative; }
+  .gw .born__link::before { content: ""; position: absolute; inset: -11px 0; }
   .gw .transcript { padding: calc(var(--gw-head-h) + 16px) 12px 20px; }
   .gw .composer-area { padding: 0 12px 12px; }
   .gw .head-pill { max-width: calc(100% - 150px); }
