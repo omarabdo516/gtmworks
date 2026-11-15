@@ -59,6 +59,7 @@ The prototype has no URL routes. Its sidebar switches between four views (`data-
 | `agents` | Settings, Agents | `/c/rs-learning/settings?section=agents` |
 | `agent` | Settings, Agents, Lead: one Agent's page | `/c/rs-learning/settings?agent=61000000-0000-0000-0000-000000000001` (the fixture's Lead) |
 | `account` | Settings, Your account | `/c/rs-learning/settings?section=account` |
+| `knowledge` | Settings, Company knowledge, on its first part, Brand voice (#27) | `/c/rs-learning/settings?section=knowledge` |
 | `new-agent` | Sidebar, New agent: Lead's chat with the hint line (#13) | `/c/rs-learning/chat?new=agent` |
 | `ready-roles` | New agent, then the hint line's "or pick a ready-made one": the ready-made gallery (#14) | `/c/rs-learning/chat?new=ready` (needs the fixture's Lead) |
 | `made-card` | Sidebar, the chat in which Lead made Ads (`th-made-ads`), with the new Agent's card | none (a uuid path; with the fixture pass `--built-path /c/rs-learning/conversations/62000000-0000-0000-0000-000000000002`) |

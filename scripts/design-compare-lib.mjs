@@ -45,6 +45,7 @@ export const screens = {
   // alone has no Agent with that id, so without the fixture the overlay shows the Agents list).
   agent: { reference: { steps: [...settingsSection('agents'), { click: '#sov-ag-lead' }, { waitFor: '#sov-tab-settings' }] }, builtPath: `/c/rs-learning/settings?agent=${fixture.mainAgent}` },
   account: { reference: { steps: settingsSection('account') }, builtPath: '/c/rs-learning/settings?section=account' },
+  knowledge: { reference: { steps: settingsSection('knowledge') }, builtPath: '/c/rs-learning/settings?section=knowledge' },
   'home-alone': { reference: { steps: alone }, builtPath: '/c/rs-consultations/chat' },
   'settings-alone': { reference: { steps: [...alone, ...settings] }, builtPath: '/c/rs-consultations/settings' },
   // #13. "New agent" opens Lead's chat ready to type, with one hint line.
