@@ -2,7 +2,7 @@
 // The strings only this page shows live in channel.en.json and channel.ar.json, in this route's own chunk.
 import channelEn from '@/lib/messages/channel.en.json';
 import channelAr from '@/lib/messages/channel.ar.json';
-import { Fragment, useEffect, useState, type CSSProperties, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useI18n } from '@/lib/i18n-client';
 import { localeFor } from '@/lib/i18n.mjs';
 import { dayOf } from '@/lib/activity-log.mjs';
@@ -42,6 +42,9 @@ export default function ChannelView({person,initial}:{person:string,initial:Chan
   timer=setTimeout(poll,sent?300:open?1500:6000);
   return ()=>{stopped=true;clearTimeout(timer);};
  },[open,sent,channel.company,channel.id]);
+ // Opened, and after each new message, the channel shows its latest talk, as the reference does.
+ const transcript=useRef<HTMLDivElement>(null); const last=messages.at(-1)?.id;
+ useEffect(()=>{ const box=transcript.current; if(box) box.scrollTop=box.scrollHeight; },[last]);
  const name=t('shellGeneralChannel');
  const count=(value:number)=>new Intl.NumberFormat(localeFor(language)).format(value);
  const time=(value:string)=>new Date(value).toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit'});
@@ -53,7 +56,7 @@ export default function ChannelView({person,initial}:{person:string,initial:Chan
  const waiting=messages.find((message):message is Extract<ChannelMessage,{author:'person'}>=>message.author==='person'&&message.mention?.state==='open');
  return <div className="convo"><div className="chat">
   <HeadPill panel={panel} details={c('channelDetails')} face={<span className="hp-hash" aria-hidden="true"><ShellIcon name="hash"/></span>} title={name}/>
-  <div className="transcript"><div className="transcript__col">
+  <div className="transcript" ref={transcript}><div className="transcript__col">
    <div className="ch-intro">
     <span className="ch-intro__h">#{name}</span>
     <span>{c('channelMembers',count(members.length))} · {agents.length?agents.map((agent,index)=><Fragment key={agent.id}>{index>0&&c('channelNamesJoin')}<bdi>{agent.name}</bdi></Fragment>):c('channelNoAgents')}</span>
