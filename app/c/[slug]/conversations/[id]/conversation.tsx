@@ -9,6 +9,7 @@ import Link from '@/lib/link';
 import { useI18n } from '@/lib/i18n-client';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { AgentDetails, HeadPill, useDetailsPanel, type DetailsAgent } from '@/app/agent-details';
+import type { AgentDetailsView } from '@/app/agent-details-server';
 import { ShellIcon } from '@/components/shell-icon';
 import { MessageBox, postMessage } from '@/app/conversation-composer';
 import { LeadWelcome } from '@/app/lead-welcome';
@@ -26,7 +27,7 @@ type Conversation={id:string,agent_name:string,face:string};
 // Agent is still attached. While the Agent works, everyone reading sees who it is working for; a message sent
 // meanwhile waits as its sender's next turn (marked as the reference marks a queued message), and the person who
 // started the run, or a Manager or Owner, may stop it from the composer's stop square.
-export default function ConversationView({slug,agent,company,conversation,initial,writer}:{slug:string,agent:DetailsAgent|null,company:string,conversation:Conversation,initial:ConversationRecord,writer:boolean}) {
+export default function ConversationView({slug,agent,details,company,conversation,initial,writer}:{slug:string,agent:DetailsAgent|null,details:AgentDetailsView|null,company:string,conversation:Conversation,initial:ConversationRecord,writer:boolean}) {
  const {t,language}=useI18n(); const own:Record<string,string>=language==='ar'?conversationAr:conversationEn;
  const c=(key:string,...values:unknown[])=>own[key].replace(/\{(\d+)\}/g,(_,index)=>String(values[Number(index)] ?? ''));
  const [record,setRecord]=useState(initial); const [sent,setSent]=useState(0); const panel=useDetailsPanel();
@@ -89,7 +90,7 @@ export default function ConversationView({slug,agent,company,conversation,initia
    }}/>:<p className="ro-line" role="note"><ShellIcon name="eye"/><span>{t('viewOnly')}</span></p>}
    <p className="chat-usage" data-usage>{t('conversationUsage',count(usage.input+usage.output),count(usage.input),count(usage.output))}{usage.unknown>0&&<> · {t('usageUnknownRuns',count(usage.unknown))}</>}</p>
   </div>
- </div>{agent&&<AgentDetails panel={panel} agent={agent} settingsHref={`/c/${slug}/agents`}/>}</div>;
+ </div>{agent&&details&&<AgentDetails panel={panel} agent={agent} details={details} settingsHref={`/c/${slug}/agents`}/>}</div>;
 }
 
 // The line under the Agent's reply when it saved a lasting rule it was told (#18; design-reference: ruleTurn, the

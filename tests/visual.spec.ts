@@ -97,6 +97,7 @@ const readyBy: Record<string, string> = {
   'agent-rules': '.rl-said:not([data-utc])',
   'settings-agents': '.sov-ag',
   'settings-main-agent': '#set-h-main',
+  'agent-details': '.chat',
 };
 
 // The states the seed does not hold: first run's two (#9), RS Learning with no answer yet and a new workspace's Lead with
@@ -114,6 +115,8 @@ const asAdmin = (sql: string) => execFileSync('docker', ['exec', '-i', dbContain
   { input: `set session_replication_role = replica;\n${sql}`, stdio: ['pipe', 'ignore', 'pipe'], encoding: 'utf8' });
 // Lead, Meta Ads and SEO in RS Learning, with the switches the screen shows on (#15).
 const seen = (n: number) => `68000000-0000-0000-0000-00000000000${n}`;
+// Lead and Meta Ads, Meta Ads working on Omar's ask with two lines of its log this week (#20).
+const busy = (n: number) => `69100000-0000-0000-0000-00000000000${n}`;
 const screenStates: Record<string, { set: string, unset: string, admin?: true }> = {
   unanswered: {
     set: `update public.companies set work_mode=null where id='${rsLearning}'`,
@@ -182,6 +185,28 @@ const screenStates: Record<string, { set: string, unset: string, admin?: true }>
       delete from public.conversations where id='${told(3)}';
       delete from public.hermes_agents where id='${told(2)}';
       delete from public.hermes_connections where id='${told(1)}';`,
+  },
+  // The log copies an Agent change from its trigger, which the administrator's replica role turns off: its lines are
+  // written as the trigger would write them.
+  'agent-details': {
+    admin: true,
+    set: `insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values
+       ('${busy(1)}','${rsLearning}','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9/p/visual-busy-lead','visual-busy-lead','visual-no-key','unreachable'),
+       ('${busy(2)}','${rsLearning}','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9/p/visual-busy-ads','visual-busy-ads','visual-no-key','unreachable');
+      insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values
+       ('${busy(4)}','${rsLearning}','${busy(1)}','Lead','General',true),
+       ('${busy(5)}','${rsLearning}','${busy(2)}','Meta Ads','Runs the Meta ads and asks before it publishes or spends.',false);
+      insert into public.conversations(id,company_id,person_id,agent_id,agent_name,created_at) values ('${busy(6)}','${rsLearning}','20000000-0000-0000-0000-000000000001','${busy(5)}','Meta Ads','2026-06-12T09:00:00Z');
+      insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id,created_at) values
+       ('${rsLearning}','${busy(6)}','person','20000000-0000-0000-0000-000000000001','Omar','Plan the June campaign for the new course','${busy(7)}','visual-busy',now()-interval '5 minutes');
+      insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,agent_id,action,details,source,source_id,created_at) values
+       ('${rsLearning}','20000000-0000-0000-0000-000000000001','person','عمر','agent','${busy(5)}','agent_added','{"agent_name":"Meta Ads"}','hermes_agent_audit',691001,now()-interval '1 hour'),
+       ('${rsLearning}','20000000-0000-0000-0000-000000000001','person','عمر','agent','${busy(5)}','agent_changed','{"agent_name":"Meta Ads"}','hermes_agent_audit',691002,now()-interval '2 hours');`,
+    unset: `delete from public.company_log where agent_id='${busy(5)}';
+      delete from public.conversation_messages where conversation_id='${busy(6)}';
+      delete from public.conversations where id='${busy(6)}';
+      delete from public.hermes_agents where id in ('${busy(4)}','${busy(5)}');
+      delete from public.hermes_connections where id in ('${busy(1)}','${busy(2)}');`,
   },
 };
 

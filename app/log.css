@@ -1,7 +1,7 @@
 /* The Activity log page (#11) and the parts the Numbers page (#35) shares with it, ported from the approved reference
    (design-reference/index.html: page heads, panel-card, link-btn, btn, set-input and "the log, channels and mentions
    round"). Colours come from the shell's gw tokens (app/shell.css); the few it does not carry are set here for both
-   themes. Everything is scoped to the two pages. */
+   themes. Everything is scoped to the two pages; the log lines are also an Agent's Log tab (app/agent-details.tsx). */
 .gw :is(.log-page, .numbers-page) {
   --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 24px; --s8: 32px; --s12: 48px;
   --p-wait: #DA830E; --p-btn-secondary-bg: #1C1C1C0F; --p-btn-secondary-ring: transparent; --p-fs-2xl: 28px;
@@ -28,8 +28,8 @@
 .gw :is(.log-page, .numbers-page) .muted { color: var(--gw-text-3); }
 .gw :is(.log-page, .numbers-page) .od-field { display: grid; gap: 2px; min-width: 0; }
 .gw :is(.log-page, .numbers-page) .od-field > * { display: block; min-width: 0; }
-.gw :is(.log-page, .numbers-page) .od-truncate { display: block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.gw :is(.log-page, .numbers-page) .pg-icon { width: var(--od-icon-size, 18px); height: var(--od-icon-size, 18px); flex: none; display: inline-block; }
+.gw :is(.log-page, .numbers-page, .details) .od-truncate { display: block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.gw :is(.log-page, .numbers-page, .details) .pg-icon { width: var(--od-icon-size, 18px); height: var(--od-icon-size, 18px); flex: none; display: inline-block; }
 .gw :is(.log-page, .numbers-page) .page-head { display: flex; align-items: flex-end; gap: var(--s4); padding: var(--s8) var(--s8) var(--s4); flex-wrap: wrap; }
 .gw :is(.log-page, .numbers-page) .page-title { margin: 0; font-size: var(--gw-fs-xl); line-height: 1.4; font-weight: 600; }
 .gw :is(.log-page, .numbers-page) .page-sub { margin: 0; font-size: var(--gw-fs-base); color: var(--gw-text-2); text-wrap: pretty; }
@@ -59,39 +59,46 @@
 .gw :is(.log-page, .numbers-page) .set-input:focus { border-color: var(--gw-border-1); box-shadow: 0 0 0 3px var(--gw-bg-active); }
 
 /* who did it: a person's initial, an Agent's face, or the gtmworks mark for automatic lines */
-.gw .log-page .lg-av, .gw .numbers-page .lg-av {
+.gw :is(.log-page, .numbers-page, .details) .lg-av {
   width: var(--av, 28px); height: var(--av, 28px); border-radius: 50%; flex: none; background: var(--gw-bg-active); box-shadow: var(--gw-border-3) 0 0 0 0.5px inset;
   color: var(--gw-text-2); display: inline-flex; align-items: center; justify-content: center; font-size: var(--gw-fs-xs); font-weight: 600; line-height: 1;
 }
-.gw :is(.log-page, .numbers-page) .lg-face { display: inline-flex; flex: none; }
-.gw :is(.log-page, .numbers-page) .lg-sys { display: block; flex: none; }
+.gw :is(.log-page, .numbers-page, .details) .lg-face { display: inline-flex; flex: none; }
+.gw :is(.log-page, .numbers-page, .details) .lg-sys { display: block; flex: none; }
 
-/* one log line: who · what (old → new) · when, with notes as a quiet block */
-.gw .log-page .lg-day { display: grid; gap: var(--s2); }
-.gw .log-page .lg-day__h { margin: 0; padding-inline: var(--s1); font-size: var(--gw-fs-xs); font-weight: 400; line-height: 1.5; color: var(--gw-text-3); }
-.gw .log-page .lg-day__h[data-utc], .gw :is(.log-page, .numbers-page) time[data-utc] { visibility: hidden; }
-.gw .log-page .lg-list { list-style: none; margin: 0; padding: 2px var(--s4); border-radius: var(--gw-r-md); background: var(--gw-bg-pane); border: 0.5px solid var(--gw-border-3); }
-.gw .log-page .lg-row { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: var(--s3); align-items: start; padding: var(--s3) 0; }
-.gw .log-page .lg-row + .lg-row { border-top: 0.5px solid var(--gw-border-2); }
-.gw .log-page .lg-row > :first-child { margin-top: 1px; }
-.gw .log-page .lg-body { display: grid; gap: 6px; min-width: 0; }
-.gw .log-page .lg-line { margin: 0; font-size: var(--gw-fs-base); line-height: 1.6; color: var(--gw-text-1); overflow-wrap: anywhere; }
-.gw .log-page .lg-name { font-weight: 600; }
-.gw .log-page :is(.lg-you, .lg-act) { color: var(--gw-text-2); }
-.gw .log-page .lg-change { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; color: var(--gw-text-3); --od-icon-size: 14px; }
-.gw .log-page .lg-val { display: inline-block; max-width: 100%; padding: 1px var(--s2); border-radius: var(--gw-r-xs); background: var(--gw-bg-tertiary); font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-1); overflow-wrap: anywhere; }
-.gw .log-page .lg-val--old { background: transparent; box-shadow: var(--gw-border-2) 0 0 0 0.5px inset; color: var(--gw-text-2); }
-[dir="ltr"] .gw .log-page .lg-arrow { transform: scaleX(-1); }
-.gw .log-page .lg-note { margin: 0; padding: var(--s2) var(--s3); border-radius: var(--gw-r-md); background: var(--gw-bubble-agent); box-shadow: var(--gw-bubble-ring); font-size: var(--gw-fs-base); line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
-.gw .log-page .lg-meta { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; font-size: var(--gw-fs-xs); line-height: 1.6; color: var(--gw-text-3); --od-icon-size: 13px; }
-.gw .log-page .lg-meta .link-btn { font-size: var(--gw-fs-xs); padding: 0 4px; margin-inline: -4px; min-height: 24px; color: var(--gw-text-2); }
-.gw .log-page .lg-card { min-width: 0; max-width: 100%; }
-.gw .log-page .lg-card .od-truncate { max-width: 260px; }
-.gw .log-page .lg-forever { margin: 0; display: flex; align-items: flex-start; gap: 6px; padding-inline: var(--s1); font-size: var(--gw-fs-xs); line-height: 1.6; color: var(--gw-text-3); --od-icon-size: 14px; }
-.gw .log-page .lg-forever .pg-icon { margin-top: 2px; }
+/* one log line: who · what (old → new) · when, with notes as a quiet block; the same lines fill an Agent's Log tab */
+.gw :is(.log-page, .details) .lg-day { display: grid; gap: var(--s2); }
+.gw :is(.log-page, .details) .lg-day__h { margin: 0; padding-inline: var(--s1); font-size: var(--gw-fs-xs); font-weight: 400; line-height: 1.5; color: var(--gw-text-3); }
+.gw :is(.log-page, .details) .lg-day__h[data-utc], .gw :is(.log-page, .numbers-page, .details) time[data-utc] { visibility: hidden; }
+.gw :is(.log-page, .details) .lg-list { list-style: none; margin: 0; padding: 2px var(--s4); border-radius: var(--gw-r-md); background: var(--gw-bg-pane); border: 0.5px solid var(--gw-border-3); }
+.gw :is(.log-page, .details) .lg-row { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: var(--s3); align-items: start; padding: var(--s3) 0; }
+.gw :is(.log-page, .details) .lg-row + .lg-row { border-top: 0.5px solid var(--gw-border-2); }
+.gw :is(.log-page, .details) .lg-row > :first-child { margin-top: 1px; }
+.gw :is(.log-page, .details) .lg-body { display: grid; gap: 6px; min-width: 0; }
+.gw :is(.log-page, .details) .lg-line { margin: 0; font-size: var(--gw-fs-base); line-height: 1.6; color: var(--gw-text-1); overflow-wrap: anywhere; }
+.gw :is(.log-page, .details) .lg-name { font-weight: 600; }
+.gw :is(.log-page, .details) :is(.lg-you, .lg-act) { color: var(--gw-text-2); }
+.gw :is(.log-page, .details) .lg-change { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; color: var(--gw-text-3); --od-icon-size: 14px; }
+.gw :is(.log-page, .details) .lg-val { display: inline-block; max-width: 100%; padding: 1px var(--s2); border-radius: var(--gw-r-xs); background: var(--gw-bg-tertiary); font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-1); overflow-wrap: anywhere; }
+.gw :is(.log-page, .details) .lg-val--old { background: transparent; box-shadow: var(--gw-border-2) 0 0 0 0.5px inset; color: var(--gw-text-2); }
+[dir="ltr"] .gw :is(.log-page, .details) .lg-arrow { transform: scaleX(-1); }
+.gw :is(.log-page, .details) .lg-note { margin: 0; padding: var(--s2) var(--s3); border-radius: var(--gw-r-md); background: var(--gw-bubble-agent); box-shadow: var(--gw-bubble-ring); font-size: var(--gw-fs-base); line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+.gw :is(.log-page, .details) .lg-meta { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; font-size: var(--gw-fs-xs); line-height: 1.6; color: var(--gw-text-3); --od-icon-size: 13px; }
+.gw :is(.log-page, .details) .lg-meta .link-btn { font-size: var(--gw-fs-xs); padding: 0 4px; margin-inline: -4px; min-height: 24px; color: var(--gw-text-2); }
+.gw :is(.log-page, .details) .lg-card { min-width: 0; max-width: 100%; }
+.gw :is(.log-page, .details) .lg-card .od-truncate { max-width: 260px; }
+.gw :is(.log-page, .details) .lg-forever { margin: 0; display: flex; align-items: flex-start; gap: 6px; padding-inline: var(--s1); font-size: var(--gw-fs-xs); line-height: 1.6; color: var(--gw-text-3); --od-icon-size: 14px; }
+.gw :is(.log-page, .details) .lg-forever .pg-icon { margin-top: 2px; }
 .gw .log-page .lg-more { margin: 0; padding-inline: var(--s1); font-size: var(--gw-fs-xs); color: var(--gw-text-3); }
 .gw .log-page .lg-pages { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); }
 .gw .log-page .lg-pages .lg-more { margin-inline-end: auto; }
+
+/* the Log tab of an Agent's details (design-reference: .lg-wrap and its panel variant) */
+.gw .details .lg-wrap { display: grid; gap: var(--s4); }
+.gw .details .lg-wrap .lg-list { padding-inline: var(--s3); }
+.gw .details .lg-wrap .lg-row { grid-template-columns: 24px minmax(0, 1fr); gap: 10px; }
+.gw .details .lg-wrap :is(.lg-line, .lg-note) { font-size: var(--gw-fs-sm); }
+.gw .details .lg-wrap .lg-card .od-truncate { max-width: 170px; }
 
 /* the Company page «سجل النشاط» */
 .gw .log-page .lgp { position: relative; height: 100%; overflow-y: auto; }
