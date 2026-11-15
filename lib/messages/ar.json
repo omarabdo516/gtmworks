@@ -726,6 +726,7 @@
   "agentToolWarning": "{0} يقدر يستخدم أدوات التيرمنال أو الكود أو الملفات، والشركة فيها أكتر من عضو، يعني أي عضو ممكن يوصل من خلاله لحاجات برا الشركة. اقفل الأدوات دي عنده من محرك الوكلاء.",
   "logActAgentLevel": "غيّر الوكلاء يقدروا يعملوا إيه",
   "logActAgentOwnProfile": "اتنقل لمساحة الشركة الخاصة في محرك الوكلاء",
+  "logActAgentRequested": "طلب من الوكيل الرئيسي وكيل جديد",
   "signInChatGPT": "ChatGPT",
   "signInClaude": "Claude",
   "signInConnected": "متوصل",

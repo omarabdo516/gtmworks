@@ -34,6 +34,7 @@ function databases({reserve={state:'reserved',connection,note:null},claim=[],usa
   if(name==='claim_conversation_turn') return {data:claim,error:null};
   // begin_start answers which attempt of the key this is (0: the reservation is no longer active).
   if(name==='begin_start') return {data:attempt,error:null};
+  if(name==='run_offers_tools') return {data:false,error:null};
   if(name==='keep_unknown_start') return {data:kept,error:null};
   if(['keep_unknown_start','fail_conversation_turn','release_conversation_run','record_conversation_turn','send_conversation_message'].includes(name)) return {data:true,error:null};
   return {data:null,error:{message:'unexpected'}}; };

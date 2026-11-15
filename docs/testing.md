@@ -110,10 +110,10 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `design-reference.spec.ts` | The production build answers 404 for the design reference. | 0 s | design-reference.test.mjs (the files, not the route) | keep |
 | `design-reference.test.mjs` | The design reference matches its approved checksums, file for file. | 0.3 s | design-reference.spec.ts | keep |
 | `engine-agents.test.mjs` | An Agent is one Engine profile made through the management listener with the install key. | 0.7 s | hermes-agents.spec.ts | keep |
-| `engine-conversation.spec.ts` | On the fake engine a reply is stored once with usage; failed and stopped runs end with usage; a Viewer is refused. | 28.1 s | conversations.spec.ts (the same flow on fake Hermes) | keep |
+| `engine-conversation.spec.ts` | On the fake engine a reply is stored once with usage; failed and stopped runs end with usage; a Viewer is refused; Lead's create_agent call makes the Owner's Agent once, with its log row, and nothing for a Manager. | 28.1 s | conversations.spec.ts (the same flow on fake Hermes) | keep |
 | `engine-name.spec.ts` | No page names the Engine, in English or Arabic. | 16 s | engine-name.test.mjs (catalogues only, not rendered pages) | keep |
 | `engine-name.test.mjs` | No message value names the Engine, in any language. | 0.3 s | engine-name.spec.ts | keep |
-| `engine.test.mjs` | The engine driver runs once per idempotency key and never sends a key over plain HTTP to a public address. | 0.6 s | — | keep |
+| `engine.test.mjs` | The engine driver runs once per idempotency key, offers tools in a run's instructions and reads at most four calls back from the reply, and never sends a key over plain HTTP to a public address. | 0.6 s | — | keep |
 | `fake-engine.mjs` | browser helper: an in-memory engine | — | — | helper, kept |
 | `fake-hermes.mjs` | browser helper: a fake Hermes server | — | — | helper, kept |
 | `first-run-db.test.mjs` | The first-run reset and seed restore run in fail-fast transactions. | 0.3 s | — | keep |
@@ -141,6 +141,7 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `lane.mjs` | browser helper: one whole stack per worker (new, #69) | — | — | helper, kept |
 | `language.spec.ts` | English by default, the account language across sessions and devices, automatic content direction, and Arabic sign-in. | 62.6 s | — | keep (direction checks) |
 | `lead-agent-migration.mjs` | replays the lead-agent migration (tests/db.sh) | — | — | helper, kept |
+| `lead-tools.test.mjs` | Lead's create_agent call is ignored when its tool or arguments do not read, makes nothing until the Engine has the Company's profile ready, then asks the database with the trimmed arguments. | 0.1 s | engine-conversation.spec.ts (the same call on the database) | keep |
 | `lessons.test.mjs` | A lesson is proposed only from a run; deciding is a person's action. | 0.3 s | skill-lessons.spec.ts | keep |
 | `license.test.mjs` | LICENSE is MIT with the owner's copyright and the package stays private. | 0.6 s | — | keep |
 | `member-picker.spec.ts` | Saving a card unchanged clears a next actor who left the company. | 11.2 s | — | keep |

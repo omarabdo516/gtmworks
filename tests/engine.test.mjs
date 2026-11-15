@@ -21,8 +21,8 @@ test('the Hermes driver reads a slow run as running, then completed with the rep
  const fake=await fakeHermes(); fake.settings.pendingReads=1;
  try {
   const engine=engineFor(connection(fake)); const run=await engine.start(message);
-  assert.deepEqual(await engine.read(run),{state:'running',reply:null,session:'conversation-1',usage:null});
-  assert.deepEqual(await engine.read(run),{state:'completed',reply:'Reply to: Plan the launch post',session:'conversation-1',usage:{input:14000,output:12}});
+  assert.deepEqual(await engine.read(run),{state:'running',reply:null,session:'conversation-1',usage:null,toolCalls:[]});
+  assert.deepEqual(await engine.read(run),{state:'completed',reply:'Reply to: Plan the launch post',session:'conversation-1',usage:{input:14000,output:12},toolCalls:[]});
  } finally { await fake.close(); }
 });
 
@@ -31,7 +31,7 @@ test('the Hermes driver reads a cancelled or interrupted run as stopped, and kee
   const fake=await fakeHermes(); fake.settings.ending=ending; fake.settings.usage={input_tokens:900,output_tokens:7};
   try {
    const engine=engineFor(connection(fake));
-   assert.deepEqual(await engine.read(await engine.start(message)),{state:'stopped',reply:null,session:'conversation-1',usage:{input:900,output:7}});
+   assert.deepEqual(await engine.read(await engine.start(message)),{state:'stopped',reply:null,session:'conversation-1',usage:{input:900,output:7},toolCalls:[]});
   } finally { await fake.close(); }
  }
 });
@@ -40,11 +40,44 @@ test('the Hermes driver reads failed, lost and unreachable runs in the contract 
  const fake=await fakeHermes(); fake.settings.ending='failed'; fake.settings.usage=undefined;
  try {
   const engine=engineFor(connection(fake)); const run=await engine.start(message);
-  assert.deepEqual(await engine.read(run),{state:'failed',reply:null,session:'conversation-1',usage:null});
-  assert.deepEqual(await engine.read('run_unknown'),{state:'lost',reply:null,session:null,usage:null});
+  assert.deepEqual(await engine.read(run),{state:'failed',reply:null,session:'conversation-1',usage:null,toolCalls:[]});
+  assert.deepEqual(await engine.read('run_unknown'),{state:'lost',reply:null,session:null,usage:null,toolCalls:[]});
   fake.settings.status=500;
-  assert.deepEqual(await engine.read(run),{state:'unreachable',reply:null,session:null,usage:null});
+  assert.deepEqual(await engine.read(run),{state:'unreachable',reply:null,session:null,usage:null,toolCalls:[]});
   assert.equal(await engine.start({...message,idempotencyKey:'other'}),null);
+ } finally { await fake.close(); }
+});
+
+const createAgent={name:'create_agent',description:'Add an Agent to the team.',parameters:{type:/** @type {const} */('object'),properties:{name:{type:'string'}},required:['name']}};
+const block=body=>`\`\`\`gtmworks-tool\n${body}\n\`\`\``;
+test('the Hermes driver offers tools in the run\'s instructions and reads the calls out of the reply',async()=>{
+ const fake=await fakeHermes();
+ fake.settings.reply=()=>`Meta Ads is on the team now.\n\n${block('{"name":"create_agent","arguments":{"name":"Meta Ads"}}')}\n${block('not a call')}\n`;
+ try {
+  const engine=engineFor(connection(fake));
+  const offered={...message,instructions:'Answer in short points.',tools:[createAgent]};
+  const run=await engine.start(offered);
+  const sent=fake.settings.runs[0].instructions;
+  assert.ok(sent.startsWith('Answer in short points.\n\n'));
+  assert.ok(sent.includes('```gtmworks-tool\n{"name":"<tool name>"'));
+  assert.ok(sent.includes(`- create_agent: Add an Agent to the team. Its arguments, as JSON Schema: ${JSON.stringify(createAgent.parameters)}`));
+  assert.equal(await engine.start({...offered,retry:true}),run);
+  assert.deepEqual(await engine.read(run),{state:'completed',reply:'Meta Ads is on the team now.',session:'conversation-1',usage:{input:14000,output:12},
+   toolCalls:[{id:'call-0',name:'create_agent',arguments:{name:'Meta Ads'}}]});
+  await engine.start({...message,idempotencyKey:'no-tools'});
+  assert.equal(fake.settings.runs[1].instructions,undefined);
+ } finally { await fake.close(); }
+});
+
+test('the Hermes driver reads at most four calls, each a small JSON object',async()=>{
+ const fake=await fakeHermes();
+ const call=n=>block(JSON.stringify({name:'create_agent',arguments:{name:`Agent ${n}`}}));
+ fake.settings.reply=()=>[block(JSON.stringify({name:'create_agent',arguments:{name:'x'.repeat(4000)}})),...[1,2,3,4,5].map(call),'Done.'].join('\n');
+ try {
+  const engine=engineFor(connection(fake));
+  const {reply,toolCalls}=await engine.read(/** @type {string} */(await engine.start(message)));
+  assert.equal(reply,'Done.');
+  assert.deepEqual(toolCalls.map(({id,arguments:args})=>[id,/** @type {any} */(args).name]),[['call-0','Agent 1'],['call-1','Agent 2'],['call-2','Agent 3'],['call-3','Agent 4']]);
  } finally { await fake.close(); }
 });
 

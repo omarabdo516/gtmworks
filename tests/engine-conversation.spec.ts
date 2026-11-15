@@ -110,3 +110,52 @@ test('integration: a Contributor gets a reply on the fake engine and a Viewer is
   expect(fake.runs).toHaveLength(1);
  } finally { query(`update public.members set role='contributor' where company_id='${company}' and person_id='${contributor}'`); detach(); }
 });
+
+test('integration: Lead makes the Agent the Owner asks for, and nothing for a Manager',async()=>{
+ test.setTimeout(120000);
+ const profile=`co-${company.replaceAll('-','')}`;
+ const [connection,lead]=[randomUUID(),randomUUID()];
+ query(`insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values ('${connection}','${company}','${omar}','http://127.0.0.1:9','${profile}','${encryptSecret('fake-engine-key',encryptionKey)}','connected','0.23.0','{run_submission}')`);
+ query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('${lead}','${company}','${connection}','Lead','General',true)`);
+ query(`insert into public.hermes_agent_audit(company_id,actor_id,agent_id,action,details) values ('${company}','${omar}','${lead}','PROVIDE_BUNDLED_HERMES_AGENT',jsonb_build_object('connection_id','${connection}'))`);
+ query(`insert into public.company_profiles(company_id,profile,tools_level,tools_policy) select id,'${profile}',agent_level,public.engine_tool_policy() from public.companies where id='${company}' on conflict (company_id) do update set tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false`);
+ const fake=fakeEngine();
+ fake.settings.toolCalls=()=>[{id:'call-0',name:'create_agent',arguments:{name:'Meta Ads',job:'Runs the Meta ads.',apps:['Meta Ads Manager','Canva']}}];
+ const made=()=>JSON.parse(query(`select a.id,a.name,a.speciality,array_to_string(a.apps,'|') as apps,a.requested_by,a.created_at is not null as dated,a.is_default,h.profile from public.hermes_agents a join public.hermes_connections h on h.id=a.connection_id where a.company_id='${company}' and a.id<>'${lead}'`));
+ const {service,person}=await clients();
+ const conversation=randomUUID();
+ const ask=()=>sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent:lead,message:'I want someone to handle Meta ads',encryptionKey,engineFor:fake.engineFor});
+ const close=()=>closeOpenRuns(service,{encryptionKey,conversation,engineFor:fake.engineFor});
+ expect(await ask()).toEqual({conversation});
+ expect(await close()).toBe(1);
+ expect(made()).toEqual([]);
+ await fake.engineFor({}).createAgent({name:profile,instructions:''});
+ expect(await ask()).toEqual({conversation});
+ const down=(connection:object)=>({...fake.engineFor(connection),readAgent:async()=>({state:'unreachable' as const,agent:null})});
+ expect(await closeOpenRuns(service,{encryptionKey,conversation,engineFor:down})).toBe(0);
+ expect(made()).toEqual([]);
+ const closed=await Promise.all([close(),close()]);
+ expect(closed[0]+closed[1]).toBe(1);
+ expect(fake.runs.map(run=>run.tools.map(tool=>tool.name))).toEqual([['create_agent'],['create_agent']]);
+ expect(fake.agentReads).toContain(profile);
+ const [agent]=made();
+ expect(made()).toEqual([{id:agent.id,name:'Meta Ads',speciality:'Runs the Meta ads.',apps:'Meta Ads Manager|Canva',requested_by:omar,dated:true,is_default:false,profile}]);
+ expect(JSON.parse(query(`select actor_id,action,details->>'agent_name' as name,details->>'job' as job from public.company_log where company_id='${company}' and agent_id='${agent.id}'`)))
+  .toEqual([{actor_id:omar,action:'agent_requested',name:'Meta Ads',job:'Runs the Meta ads.'}]);
+ expect((await person.from('lead_made_agents').select('conversation_id,run_id,agent_id')).data).toEqual([{conversation_id:conversation,run_id:fake.runs[1].id,agent_id:agent.id}]);
+
+ const answer=fake.settings.reply;
+ fake.settings.reply=()=>'';
+ fake.settings.toolCalls=()=>[{id:'call-0',name:'create_agent',arguments:{name:'SEO',job:'Writes the blog.',apps:[]}}];
+ expect(await ask()).toEqual({conversation});
+ expect(await close()).toBe(1);
+ expect(made().map((row:{name:string})=>row.name).sort()).toEqual(['Meta Ads','SEO']);
+ fake.settings.reply=answer;
+
+ const manager=(await memberClient('manager@example.com')).person;
+ const theirs=randomUUID();
+ expect(await sendMessage(manager,service,{person:'20000000-0000-0000-0000-000000000002',company,conversation:theirs,sendKey:randomUUID(),agent:lead,message:'I want someone to handle Meta ads',encryptionKey,engineFor:fake.engineFor})).toEqual({conversation:theirs});
+ expect(fake.runs[3].tools).toEqual([]);
+ expect(await closeOpenRuns(service,{encryptionKey,conversation:theirs,engineFor:fake.engineFor})).toBe(1);
+ expect(made()).toHaveLength(2);
+});

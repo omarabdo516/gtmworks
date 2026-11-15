@@ -19,10 +19,12 @@ test('Card, Member and Agent rows say who changed what', () => {
  assert.deepEqual([role.act, role.obj, role.from, role.to], [['logActMemberRole'], 'سارة', { key: 'viewer' }, { key: 'manager' }]);
  const added = describeEntry({ subject: 'agent', action: 'agent_added', agent_id: lead, details: {} }, { agentName: id => id === lead ? 'Lead' : undefined });
  assert.deepEqual([added.act, added.obj], [['logActAgentAdded'], 'Lead']);
+ const requested = describeEntry({ subject: 'agent', action: 'agent_requested', details: { agent_name: 'Meta Ads', job: 'Runs the Meta ads.' } });
+ assert.deepEqual([requested.act, requested.obj, requested.to], [['logActAgentRequested'], 'Meta Ads', { text: 'Runs the Meta ads.' }]);
  const long = describeEntry({ subject: 'card', action: 'card_changed', details: { field: 'title', old: 'x'.repeat(200), new: 'y' } });
  assert.equal(long.from.text.length, 80);
  // Every act and value key is in both catalogues.
- const rows = [moved, note, handed, caption, role, added, describeEntry({ subject: 'card', action: 'unknown' }), describeEntry({ subject: 'member', action: 'agent_granted', details: {} })];
+ const rows = [moved, note, handed, caption, role, added, requested, describeEntry({ subject: 'card', action: 'unknown' }), describeEntry({ subject: 'member', action: 'agent_granted', details: {} })];
  for (const language of ['en', 'ar']) for (const line of rows) {
   const { t } = i18n(language);
   t(line.act[0], ...line.act.slice(1).map(value => t(value.key)));

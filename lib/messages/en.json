@@ -726,6 +726,7 @@
   "agentToolWarning": "{0} can use terminal, code or file tools while this company has more than one member, so a member could reach things outside the company through it. Turn those tools off for it in the agent engine.",
   "logActAgentLevel": "changed what the agents may do",
   "logActAgentOwnProfile": "moved to the company’s own space in the agent engine",
+  "logActAgentRequested": "asked the main agent for a new agent",
   "signInChatGPT": "ChatGPT",
   "signInClaude": "Claude",
   "signInConnected": "Connected",
