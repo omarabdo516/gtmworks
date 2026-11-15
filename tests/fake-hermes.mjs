@@ -21,6 +21,12 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
   ignoreDisabled:false,staleConfig:false,
   // Profiles the Run API answers 404 for, as Hermes does for one it does not serve.
   unknownProfiles:/** @type {string[]} */([]),
+  // The MCP catalogue the pinned release ships (optional-mcps/), the tools each app's server offers, the apps whose
+  // server does not answer, and the OAuth sign-ins of apps (hermes_cli/web_routers/mcp.py): a sign-in's token stays on
+  // disk when its server is removed, as in the pinned release. approveApps:false keeps a delivered sign-in waiting.
+  catalog:['klaviyo','canva','notion','airtable','webflow','wordpress-com','amplitude','mixpanel','attio','close','calendly','figma','gamma','intercom'],
+  appTools:/** @type {Record<string,string[]>} */({}),appsUnreachable:/** @type {Set<string>} */(new Set()),appTokens:/** @type {Set<string>} */(new Set()),approveApps:true,
+  appFlows:/** @type {Map<string,{server:string,profile:string,status:string,state:string,redirect:string}>} */(new Map()),appCallbacks:/** @type {string[]} */([]),
   approve(session) { const found=settings.signInSessions.get(session); if(!found) return; found.status='approved'; credentialsOf(found.profile)[found.provider]=`codex-token-${randomUUID()}`; }};
  const profileOf=name=>name==='default'?{config:settings.defaultConfig,credentials:settings.defaultCredentials}:settings.profiles.get(name);
  const credentialsOf=name=>profileOf(name)?.credentials||{};
@@ -70,9 +76,21 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
   let raw=''; request.on('data',chunk=>{raw+=chunk;}); request.on('end',()=>{
    let body=null; try { body=raw?JSON.parse(raw):null; } catch { body=null; }
    settings.managementRequests.push({method:request.method,path:request.url,authorization:request.headers.authorization,body});
+   const url=new URL(request.url,'http://management');
+   // The vendor's redirect reaches Hermes's OAuth callback with no session token; it answers with its own page.
+   const callback=url.pathname.match(/^\/api\/mcp\/oauth\/callback\/([^/]+)$/);
+   if(callback&&request.method==='GET') {
+    settings.appCallbacks.push(url.search);
+    const page=(code,html)=>{response.writeHead(code,{'Content-Type':'text/html'});response.end(html);};
+    const flow=[...settings.appFlows.values()].find(found=>found.server===decodeURIComponent(callback[1])&&found.status==='authorization_required'&&found.state===url.searchParams.get('state'));
+    if(!flow) return page(404,'<h1>OAuth flow expired</h1><p>Return to Hermes and try again.</p>');
+    if(url.searchParams.get('error')) { flow.status='error'; return page(400,'<h1>Authorization failed</h1><p>Return to Hermes for details.</p>'); }
+    if(settings.approveApps) { flow.status='approved'; settings.appTokens.add(`${flow.profile}:${flow.server}`); }
+    else flow.status='callback_received';
+    return page(200,'<h1>Authorization received</h1><p>You can close this tab and return to Hermes.</p>');
+   }
    if(request.headers.authorization!==`Bearer ${settings.key}`) return send(response,401,{error:'session_expired',message:request.headers.authorization});
    if(settings.managementStatus!==200) return send(response,settings.managementStatus,{detail:request.headers.authorization});
-   const url=new URL(request.url,'http://management');
    if(url.pathname==='/api/profiles'&&request.method==='GET') return send(response,200,{profiles:[{name:'default',path:'/opt/data',is_default:true,model:'default-model',provider:'auto'},...[...settings.profiles].map(([name,profile])=>({name,path:`/opt/data/profiles/${name}`,is_default:false,model:profile.model,provider:profile.provider}))]});
    if(url.pathname==='/api/profiles'&&request.method==='POST') {
     if(body?.name==='default'||settings.profiles.has(body?.name)) return send(response,400,{detail:`A profile named '${body.name}' already exists. Choose another name.`});
@@ -104,6 +122,46 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
     if(!settings.staleConfig) home.config=merge(home.config,body.config);
     if(scoped==='default') settings.defaultConfig=home.config;
     return send(response,200,{ok:true});
+   }
+   // Apps (hermes_cli/web_routers/mcp.py): the catalogue with what this profile installed, an install, a probe with the
+   // stored sign-in, an OAuth sign-in through a flow, and removal. A flow is not tied to a profile in its own routes.
+   const flowPath=url.pathname.match(/^\/api\/mcp\/oauth\/flows\/([^/]+)$/);
+   if(flowPath) {
+    const flow=settings.appFlows.get(decodeURIComponent(flowPath[1]));
+    if(request.method==='DELETE') { if(!flow) return send(response,200,{ok:true,status:'expired'}); if(flow.status!=='approved') flow.status='error'; return send(response,200,{ok:true,status:flow.status}); }
+    if(!flow) return send(response,404,{detail:'OAuth flow not found or expired'});
+    return send(response,200,{flow_id:flowPath[1],server_name:flow.server,status:flow.status==='callback_received'?'authorization_required':flow.status,authorization_url:null,error:flow.status==='error'?'Secret detail from /opt/data':null,tools:[]});
+   }
+   const servers=home?.config?.mcp_servers||{};
+   const keepServers=next=>{ home.config={...home.config,mcp_servers:next}; if(scoped==='default') settings.defaultConfig=home.config; };
+   if(url.pathname==='/api/mcp/catalog'&&request.method==='GET') {
+    if(!home) return send(response,404,{detail:`Profile '${scoped}' does not exist.`});
+    return send(response,200,{entries:settings.catalog.map(name=>({name,description:'',transport:'http',auth_type:'oauth',url:`https://mcp.${name}.example/mcp`,default_enabled:null,installed:Boolean(servers[name]),enabled:Boolean(servers[name])&&servers[name].enabled!==false})),diagnostics:[]});
+   }
+   if(url.pathname==='/api/mcp/catalog/install'&&request.method==='POST') {
+    if(!home) return send(response,404,{detail:`Profile '${scoped}' does not exist.`});
+    if(!settings.catalog.includes(body?.name)) return send(response,404,{detail:`No catalog entry '${body?.name}'`});
+    // As Hermes leaves an OAuth entry it cannot probe yet: no tool filter, every tool on once signed in.
+    keepServers({...servers,[body.name]:{url:`https://mcp.${body.name}.example/mcp`,auth:'oauth',enabled:body.enable!==false}});
+    return send(response,200,{ok:true,name:body.name,background:false});
+   }
+   const server=url.pathname.match(/^\/api\/mcp\/servers\/([^/]+)(?:\/(test|auth))?$/);
+   if(server) {
+    const name=decodeURIComponent(server[1]);
+    if(!home||!servers[name]) return send(response,404,{detail:`Server '${name}' not found`});
+    if(!server[2]&&request.method==='DELETE') { const {[name]:_,...rest}=servers; keepServers(rest); return send(response,200,{ok:true}); }
+    if(server[2]==='test'&&request.method==='POST') {
+     if(settings.appsUnreachable.has(name)) return send(response,200,{ok:false,error:'Connection failed: /opt/data/mcp-tokens secret detail',tools:[]});
+     if(!settings.appTokens.has(`${scoped}:${name}`)) return send(response,200,{ok:false,error:'OAuth authentication required — no token found.',tools:[]});
+     return send(response,200,{ok:true,tools:(settings.appTools[name]||[`get_${name}`,`delete_${name}`]).map(tool=>({name:tool,description:''})),prompts:0,resources:0});
+    }
+    if(server[2]==='auth'&&request.method==='POST') {
+     if([...settings.appFlows.values()].some(flow=>flow.server===name&&flow.profile===scoped&&['authorization_required','callback_received'].includes(flow.status))) return send(response,409,{detail:`MCP OAuth for '${name}' is already in progress`});
+     const id=randomUUID().replaceAll('-',''); const state=randomUUID();
+     const redirect=servers[name].oauth?.redirect_uri||`http://${request.headers.host}/api/mcp/oauth/callback/${name}`;
+     settings.appFlows.set(id,{server:name,profile:scoped,status:'authorization_required',state,redirect});
+     return send(response,200,{flow_id:id,server_name:name,status:'authorization_required',authorization_url:`https://auth.${name}.example/authorize?state=${state}&redirect_uri=${encodeURIComponent(redirect)}`,error:null});
+    }
    }
    // Model sign-in (hermes_cli/web_routers/oauth.py): ChatGPT through a device code, Claude from the command line only.
    const cancel=url.pathname.match(/^\/api\/providers\/oauth\/sessions\/([^/]+)$/);
