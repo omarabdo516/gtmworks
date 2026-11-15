@@ -174,6 +174,13 @@
 .gw .board-view .mcard__who b { color: var(--gw-text-1); font-weight: 600; }
 .gw .board-view .mcard__time { flex: none; color: var(--gw-text-3); }
 .gw .board-view .mcard__q { font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-1); }
+/* A learning suggestion, decided where it waits (#25; design-reference: .ln-row, .ln-meta, .ln-acts) */
+.gw .board-view .mcard--rule .mcard__q { overflow-wrap: anywhere; }
+.gw .board-view .ln-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: var(--gw-fs-xs); line-height: 1.6; color: var(--gw-text-3); }
+.gw .board-view .ln-meta .badge { height: 20px; }
+.gw .board-view .ln-meta .badge--wait { background: var(--gw-wait-bg); color: var(--gw-wait-text); font-weight: 600; }
+.gw .board-view .ln-who { display: inline-flex; align-items: center; gap: 4px; color: var(--gw-text-2); }
+.gw .board-view .ln-acts { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); margin-top: 4px; }
 
 /* ---------- list and calendar share the head ---------- */
 .gw .board-view--page .board-body { padding: 0 var(--s8) var(--s8); font-size: var(--gw-fs-base); }
