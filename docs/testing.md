@@ -104,7 +104,7 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | File | Promise | Runtime | Also guarded by | Decision |
 |---|---|---|---|---|
 | `activity-log.spec.ts` | The Activity log filters by person, Agent and Card, pages in a stable order, and shows a Member only their own Company. | 16.2 s | activity-log.test.mjs (wording and filters, no browser) | keep |
-| `activity-log.test.mjs` | Each kind of log row says who changed what, a rule told to an Agent and its removal included; the log's filters and days. | 1.6 s | activity-log.spec.ts | keep |
+| `activity-log.test.mjs` | Each kind of log row says who changed what, a rule told to an Agent and its removal included, and a Contributor's rule suggested, approved or refused with who taught it (#25); the log's filters and days. | 1.6 s | activity-log.spec.ts | keep |
 | `agent-attachments.spec.ts` | Files attached in the composer and replies show as thumbnails in both languages; a run key downloads only its own card's files. | 12 s | attachments.test.mjs (how a file is served) | keep |
 | `agent-conversation.spec.ts` | People and agents reply inside one card, in order, labelled, each in its own direction. | 3.9 s | — | keep |
 | `agent-face.spec.ts` | Shared agents keep distinct, named faces across screens and companies, also after a grant is revoked. | 17.1 s | agent-face.test.mjs (the face generator only) | keep |
