@@ -31,6 +31,8 @@ const lightScreens = [
   // in Settings saying when and at whose request.
   { name: 'made-card', path: '/c/rs-learning/conversations/65000000-0000-0000-0000-000000000005', state: 'lead-made' },
   { name: 'new-agent', path: '/c/rs-learning/chat?new=agent', state: 'lead-made' },
+  // The ready-made gallery (#14) over that chat, where the link in its hint line leads.
+  { name: 'ready-roles', path: '/c/rs-learning/chat?new=ready', state: 'lead-made' },
   { name: 'made-agent', path: '/c/rs-learning/settings?agent=65000000-0000-0000-0000-000000000004', state: 'lead-made' },
   // Which Agents each Member sees (#15): Company settings over Lead, Meta Ads and SEO, with Meta Ads shown to the Manager
   // and to the first Contributor, and SEO to the Manager.
@@ -44,7 +46,7 @@ const lightScreens = [
 export const screens = [
   { name: 'first-run', path: '/first-run', anonymous: true, dark: false },
   ...lightScreens.map(screen => ({ ...screen, dark: false })),
-  ...lightScreens.filter(screen => ['sign-in', 'home', 'chat', 'board', 'card', 'alone-chat', 'alone-settings', 'made-card', 'new-agent', 'made-agent', 'agent-visibility', 'rule-saved', 'agent-rules'].includes(screen.name))
+  ...lightScreens.filter(screen => ['sign-in', 'home', 'chat', 'board', 'card', 'alone-chat', 'alone-settings', 'made-card', 'new-agent', 'made-agent', 'agent-visibility', 'ready-roles', 'rule-saved', 'agent-rules'].includes(screen.name))
     .map(screen => ({ ...screen, name: `${screen.name}-dark`, dark: true })),
 ];
 

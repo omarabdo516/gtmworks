@@ -49,6 +49,9 @@ export const screens = {
   'settings-alone': { reference: { steps: [...alone, ...settings] }, builtPath: '/c/rs-consultations/settings' },
   // #13. "New agent" opens Lead's chat ready to type, with one hint line.
   'new-agent': { reference: { steps: [{ click: '#sb-agents [data-action="new-agent"]' }, { waitFor: '.new-hint' }] }, builtPath: '/c/rs-learning/chat?new=agent' },
+  // #14. The ready-made gallery, opened from that hint line's link. Built, it has its own address and needs a main
+  // Agent: the comparison fixture's Lead (the seed alone has none, so it shows the plain chat).
+  'ready-roles': { reference: { steps: [{ click: '#sb-agents [data-action="new-agent"]' }, { waitFor: '.new-hint' }, { click: '[data-action="open-gallery-alt"]' }, { waitFor: '#modal[open] .tpl' }] }, builtPath: '/c/rs-learning/chat?new=ready' },
   // The Conversation in which Lead made Ads, with its card. Built: the fixture's madeConversation (pass --built-path).
   'made-card': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-made-ads"]' }, { waitFor: '.ac-card' }] }, builtPath: null },
   // #18. The Conversation in which Omar told Ads a lasting rule, with the saved line under Ads's reply. Built: the

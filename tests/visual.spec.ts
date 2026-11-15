@@ -91,6 +91,7 @@ const readyBy: Record<string, string> = {
   'made-card': '.ac-card',
   'new-agent': '.new-hint',
   'agent-visibility': '.ta-table .switch',
+  'ready-roles': '.modal .tpl',
   'made-agent': '.born--sov',
   'rule-saved': '.note--saved',
   'agent-rules': '.rl-said:not([data-utc])',
@@ -200,8 +201,8 @@ async function showScreen(page: Page, screen: (typeof screens)[number], width: n
   // The fixed text is shorter than a real date, so it changes how rows wrap and how tall the page is. It goes in before the
   // window is sized, otherwise the window is sized for the real date and the picture keeps blank space that depends on the day.
   await fixClockText(page);
-  // The question covers the whole window over an inert workspace: the window keeps its size, as a person sees it.
-  if (screen.name !== 'first-run-question') await showWholePage(page, width);
+  // The question and the gallery cover the window over an inert page: the window keeps its size, as a person sees it.
+  if (!['first-run-question', 'ready-roles'].includes(screen.name.replace('-dark', ''))) await showWholePage(page, width);
 }
 
 test.describe('anonymous screens', () => {
