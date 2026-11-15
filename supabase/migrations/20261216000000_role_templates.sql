@@ -10,15 +10,25 @@ grant select(instructions) on public.hermes_agents to service_role;
 -- names the run: another body under the same key is refused (409), so that turn would hold its Conversation's queue for
 -- a day and then fail, its run never read. A run's tools are therefore pinned with its note before its first start
 -- (pin_run_tools), as the exact text sent: jsonb would reorder their keys. A run pinned before offered #89's spec, which
--- it keeps. run_offers_tools stays for the previous app version.
+-- it keeps. The previous app version serves on after these migrations until scripts/install.sh starts the new one, and
+-- starts Lead's runs with #89's spec too: run_offers_tools, which it asks before every start, pins that spec for the run.
 alter table public.conversation_run_notes add column tools text;
-update public.conversation_run_notes set tools='[{"name":"create_agent","description":"Adds a lasting agent to the company''s team for a job the person asked someone to take on, such as running their Meta ads. Use it only when they asked for that.","parameters":{"type":"object","additionalProperties":false,"required":["name","job","apps"],"properties":{"name":{"type":"string","maxLength":100,"description":"A short name for the agent."},"job":{"type":"string","maxLength":200,"description":"One sentence: the work it does."},"apps":{"type":"array","maxItems":8,"items":{"type":"string","maxLength":40},"description":"The apps it will use."}}}}]' where offers_tools and tools is null;
+create function public.lead_tools_spec_89() returns text language sql immutable set search_path='' as $$
+ select '[{"name":"create_agent","description":"Adds a lasting agent to the company''s team for a job the person asked someone to take on, such as running their Meta ads. Use it only when they asked for that.","parameters":{"type":"object","additionalProperties":false,"required":["name","job","apps"],"properties":{"name":{"type":"string","maxLength":100,"description":"A short name for the agent."},"job":{"type":"string","maxLength":200,"description":"One sentence: the work it does."},"apps":{"type":"array","maxItems":8,"items":{"type":"string","maxLength":40},"description":"The apps it will use."}}}}]'::text;
+$$;
+revoke all on function public.lead_tools_spec_89() from public,anon,authenticated,service_role;
+update public.conversation_run_notes set tools=public.lead_tools_spec_89() where offers_tools and tools is null;
 create function public.pin_run_tools(conversation uuid, message_key uuid, tools text) returns text language sql security definer set search_path='' as $$
  update public.conversation_run_notes r set tools=coalesce(r.tools,pin_run_tools.tools)
   where r.conversation_id=conversation and r.send_key=message_key and r.offers_tools returning r.tools;
 $$;
 revoke all on function public.pin_run_tools(uuid,uuid,text) from public,anon,authenticated;
 grant execute on function public.pin_run_tools(uuid,uuid,text) to service_role;
+create or replace function public.run_offers_tools(conversation uuid, message_key uuid) returns boolean language sql security definer set search_path='' as $$
+ with pinned as (update public.conversation_run_notes r set tools=coalesce(r.tools,public.lead_tools_spec_89())
+  where r.conversation_id=conversation and r.send_key=message_key and r.offers_tools returning 1)
+ select exists(select 1 from pinned);
+$$;
 
 -- Replaced, not overloaded: the previous app version's call names the first six arguments only, and the new ones default.
 drop function public.lead_create_agent(uuid,text,text,text,text,text[]);

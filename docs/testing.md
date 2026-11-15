@@ -218,7 +218,7 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `touch-diagnostics.mjs` | browser helper: touch recorder | — | — | helper, kept |
 | `touch-diagnostics.test.mjs` | Touch diagnostics print only bounded numbers and known words. | 0.2 s | — | keep |
 | `unit.test.mjs` | Glossary terms, Role-only access and other small rules across lib/. | 2 s | — | keep |
-| `unknown-starts.test.mjs` | A start whose outcome was unknown stays unknown until Hermes names the run; a run to an Agent with its own instructions carries them before its sender's note, sent now or queued; a retry of a Lead start sends its first attempt's tools, though the tools offered changed since. | 0.3 s | team-work.spec.ts | keep |
+| `unknown-starts.test.mjs` | A start whose outcome was unknown stays unknown until Hermes names the run; a run to an Agent with its own instructions carries them before its sender's note, sent now or queued; a retry of a Lead start sends its first attempt's tools, though the tools offered changed since, also when the previous app version made that attempt during an update. | 0.3 s | team-work.spec.ts | keep |
 | `usage.spec.ts` | Replies store their tokens and show a running total; stopped and lost runs keep what was reported; an Owner sees each company's tokens. | 23.8 s | hermes-usage.test.mjs (the parsing) | keep |
 | `visual-baselines.test.mjs` | Every listed screen has its approved images and no image lacks a screen. | 0.4 s | visual.spec.ts | keep |
 | `visual-screens.mjs` | helper: the compared screens | — | — | helper, kept |
