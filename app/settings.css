@@ -189,6 +189,9 @@
 .gw .sov .rl-list { padding-block: var(--s1); }
 .gw .sov .rl-row { align-items: flex-start; }
 .gw .sov .rl-row .panel-row__icon { margin-top: 2px; }
+/* A rule keeps its own direction and lines up with the page, as the reference's rule rows do */
+[dir="ltr"] .gw .sov .rl-row .panel-row__t { text-align: left; }
+[dir="rtl"] .gw .sov .rl-row .panel-row__t { text-align: right; }
 .gw .sov .rl-said[data-utc] { visibility: hidden; }
 .gw .sov .rl-act { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex: none; }
 

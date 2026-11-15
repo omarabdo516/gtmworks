@@ -52,7 +52,7 @@ test('the Conversation shows the saved line under the reply, and alone after a r
  await expect(page.locator('#rl-h')).toHaveText('Rules it was told 2');
  await expect(rows(page).locator('.panel-row__t')).toHaveText([later,rule]);
  await expect(rows(page).last().locator('.panel-row__t')).toHaveAttribute('dir','auto');
- await expect(rows(page).first().locator('.rl-said')).toHaveText(/^Said by عمر · Today · \d{1,2}:\d{2}/);
+ await expect(rows(page).first().locator('.rl-said')).toHaveText(/^Said by you · Today · \d{1,2}:\d{2}/);
  await expect(page.locator('.talk-tip')).toContainText('It’s saved here and written in the log.');
 });
 
@@ -67,6 +67,7 @@ test('a Contributor and a Viewer read the rules with no Remove',async({page})=>{
  for(const email of ['reviewer@example.com','viewer@example.com']) {
   await signIn(page,email,agentPage);
   await expect(rows(page)).toHaveCount(2);
+  await expect(rows(page).first().locator('.rl-said')).toHaveText(/^Said by عمر · /);
   await expect(page.getByRole('button',{name:/^Remove the rule/})).toHaveCount(0);
   await page.context().clearCookies();
  }

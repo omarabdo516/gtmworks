@@ -649,6 +649,7 @@
   "settingsRules": "Rules it was told",
   "settingsRulesEmpty": "Nobody has told it a rule yet. Write “من دلوقتي…” in its chat and it’s saved here.",
   "settingsRuleSaidBy": "Said by {0} · {1}",
+  "settingsRuleYou": "you",
   "settingsRuleRemove": "Remove",
   "settingsRuleRemoveLabel": "Remove the rule: {0}",
   "settingsRuleRemoveFailed": "Couldn’t remove it. Try again.",

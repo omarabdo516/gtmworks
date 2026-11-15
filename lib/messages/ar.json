@@ -649,6 +649,7 @@
   "settingsRules": "قواعد اتقالتله",
   "settingsRulesEmpty": "لسه محدش قاله قاعدة. اكتبله في المحادثة «من دلوقتي…» وهتتحفظ هنا.",
   "settingsRuleSaidBy": "قالها {0} · {1}",
+  "settingsRuleYou": "انت",
   "settingsRuleRemove": "شيلها",
   "settingsRuleRemoveLabel": "شيل القاعدة: {0}",
   "settingsRuleRemoveFailed": "مقدرناش نشيلها. جرّب تاني.",
