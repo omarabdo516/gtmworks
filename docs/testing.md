@@ -123,6 +123,7 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `bootstrap-db.mjs` | runs production SQL with real triggers (tests/db.sh) | — | — | helper, kept |
 | `bundled-hermes.test.mjs` | The bundled Hermes is one pinned release with no host port and none of gtmworks's secrets. | 3.1 s | install job | keep |
 | `card-request.spec.ts` | A message to an agent makes one card in Ideas with its message, assignment and mode; the composer loads on open. | 8.6 s | — | keep |
+| `channel-runs.spec.ts` | On the fake engine, ordinary talk in the general channel starts no Run; a message that calls an Agent starts exactly one, under the key `channel:<message>`, reading the writer's first name and the message, and its slow reply is posted in the channel once, also with two drivers at once; after a lost answer only the sender's resend asks again, with the same key; a refused first start ends failed with no reply; a Viewer is refused and calling a Member starts nothing. (#23) | — | supabase/tests/channels.sql (mentions, the Run's steps, every Role) | new |
 | `choose-language.ts` | browser helper: choose the language in Settings | — | — | helper, kept |
 | `ci-runners.test.mjs` | Every workflow runs on free GitHub-hosted runners and a PR reads no secret. | 0.5 s | — | keep |
 | `ci-areas.test.mjs` | Each suite runs only when its own files change; main runs all unless the change is documents only; an unknown list runs all. (new, #76; replaces docs-only and install-related) | 3.1 s | — | new |
