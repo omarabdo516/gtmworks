@@ -15,5 +15,8 @@
   "madeAgentSpend": "يصرف فلوس",
   "madeAgentMessage": "يبعت لعميل",
   "madeAgentOpen": "افتح {0}",
-  "madeAgentTip": "عايز تغيّر حاجة فيه؟ قولّه في المحادثة بتاعته."
+  "madeAgentTip": "عايز تغيّر حاجة فيه؟ قولّه في المحادثة بتاعته.",
+  "ruleSaved": "اتحفظت",
+  "ruleSavedFor": "قاعدة عند {0} · اتكتبت في السجل",
+  "ruleSeeIt": "شوفها"
 }

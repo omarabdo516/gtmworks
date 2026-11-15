@@ -12,7 +12,8 @@ import { AgentDetails, HeadPill, useDetailsPanel, type DetailsAgent } from '@/ap
 import { ShellIcon } from '@/components/shell-icon';
 import { MessageBox, postMessage } from '@/app/conversation-composer';
 import { LeadWelcome } from '@/app/lead-welcome';
-import { titleOf, type MadeAgent } from '@/lib/conversations';
+import { titleOf, type MadeAgent, type SavedRule } from '@/lib/conversations';
+import { overlayHref } from '@/lib/settings-overlay.mjs';
 import { madeDay, useZone } from '@/app/agent-made';
 import type { ConversationRecord } from '@/lib/conversation-record';
 import { localeFor } from '@/lib/i18n.mjs';
@@ -62,7 +63,7 @@ export default function ConversationView({slug,agent,company,conversation,initia
   <HeadPill panel={panel} agent={agent?.name} face={face(24)} title={titleOf(messages,conversation.agent_name)} titleDir="auto"/>
   <div className="transcript"><div className="transcript__col">
    {welcome&&agent&&<LeadWelcome agent={agent} suggest={writer?text=>setDraft(current=>({text,n:(current?.n||0)+1})):undefined}/>}
-   <ol className="turns" aria-label={t('conversationMessages')}>{messages.map(message=>message.author==='person'?<li key={`${message.kind||'m'}${message.id}`} className={`turn turn--user msg${message.kind==='queued'&&!message.failed?' is-queued':''}`} data-author="person" data-kind={message.kind}>
+   <ol className="turns" aria-label={t('conversationMessages')}>{messages.map(message=>message.kind==='saved'?<Fragment key={`saved${message.id}`}>{message.saved?.map(rule=><SavedLine key={rule.id} slug={slug} agent={conversation.agent_name} rule={rule} c={c}/>)}</Fragment>:message.author==='person'?<li key={`${message.kind||'m'}${message.id}`} className={`turn turn--user msg${message.kind==='queued'&&!message.failed?' is-queued':''}`} data-author="person" data-kind={message.kind}>
     <div className="bubble-row"><time className="bubble__time" dateTime={message.created_at}>{time(message.created_at)}</time><div className="bubble bubble--user" dir="auto">{message.body}</div></div>
     {message.kind==='queued'&&!message.failed&&<span className="queued"><ShellIcon name="clock"/>{c('conversationQueued')}</span>}
     {message.kind==='queued'&&message.failed&&<p className="note" role="alert">{c('conversationQueuedFailed')}</p>}
@@ -89,6 +90,14 @@ export default function ConversationView({slug,agent,company,conversation,initia
    <p className="chat-usage" data-usage>{t('conversationUsage',count(usage.input+usage.output),count(usage.input),count(usage.output))}{usage.unknown>0&&<> · {t('usageUnknownRuns',count(usage.unknown))}</>}</p>
   </div>
  </div>{agent&&<AgentDetails panel={panel} agent={agent} settingsHref={`/c/${slug}/agents`}/>}</div>;
+}
+
+// The line under the Agent's reply when it saved a lasting rule it was told (#18; design-reference: ruleTurn, the
+// note--saved message): "Saved", whose rule it is, that it is in the log, and the way to the Agent's page while the rule
+// is still there.
+function SavedLine({slug,agent,rule,c}:{slug:string,agent:string,rule:SavedRule,c:(key:string,...values:unknown[])=>string}) {
+ return <li className="note note--saved" data-kind="saved"><ShellIcon name="check" className="note__icon"/><b className="note__saved">{c('ruleSaved')}</b><span>{c('ruleSavedFor',agent)}</span>
+  {rule.agent&&!rule.removed&&<Link className="note__link" href={overlayHref(slug,'agents',{agent:rule.agent})}>{c('ruleSeeIt')}</Link>}</li>;
 }
 
 // The card for an Agent Lead made (design-reference: agentCardHTML): "Made", with "New" until the person who asked opens

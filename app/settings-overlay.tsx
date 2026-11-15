@@ -6,7 +6,7 @@ import { getI18n } from '@/lib/i18n-server';
 import { supabase } from '@/lib/supabase';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { visibleSections, pickSection, overlayHref, agentsMainFirst, usageTotals, type OverlaySection } from '@/lib/settings-overlay.mjs';
-import { OverlayFrame, CloseButton, AccountChoices, MakeMain, DeleteAgent, CompanyName, InviteForm, AgentSwitch } from './settings-overlay-client';
+import { OverlayFrame, CloseButton, AccountChoices, MakeMain, DeleteAgent, CompanyName, InviteForm, AgentSwitch, RuleSaid, RemoveRule } from './settings-overlay-client';
 import { SettingsIcon } from './settings-icons';
 import PasswordSettings from './password-settings';
 import { UsageTable, type UsageDay } from './c/[slug]/[[...section]]/usage';
@@ -20,6 +20,7 @@ import { isNewFor } from '@/lib/sidebar.mjs';
 
 type Agent={id:string,connection_id:string,name:string,speciality:string,is_default:boolean,created_at:string|null,requested_by:string|null,requester_opened_at:string|null,requester:unknown,lead_made_agents:unknown};
 type Member={person_id:string,role:string,people:{name:string|null}|null};
+type Rule={id:string,body:string,said_at:string,teller:{name:string|null}|null};
 type T=Awaited<ReturnType<typeof getI18n>>['t'];
 const roleRank:Record<string,number>={owner:0,manager:1,contributor:2,viewer:3};
 const roleDescription:Record<string,string>={owner:'settingsRoleOwnerD',manager:'settingsRoleManagerD',contributor:'settingsRoleContributorD',viewer:'settingsRoleViewerD'};
@@ -52,10 +53,12 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  // The person's own note for the Agents in this Company (RLS: nobody else reads it).
  const memberNote=section==='account'?(await db.from('member_notes').select('note').eq('company_id',company.id).eq('person_id',userId).maybeSingle()).data?.note||'':'';
  const agent=section==='agents'&&query.agent?agents.find(item=>item.id===query.agent):undefined;
+ // The rules the Agent was told and keeps (#18), newest first, as the reference lists them.
+ const rules:Rule[]=agent?(((await db.from('agent_rules').select('id,body,said_at,teller:people!said_by(name)').eq('agent_id',agent.id).is('removed_at',null).order('said_at',{ascending:false})).data||[]) as unknown as Rule[]):[];
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  const ro=!canManage&&<p className="ro-note"><SettingsIcon name="shield"/><span>{t('settingsRO')}</span></p>;
  const page=section==='company'?<CompanySection t={t} company={company} solo={workMode==='alone'} message={query.message} members={members} agents={agents} allowed={allowed} userId={userId} slug={slug} owner={owner} canManage={canManage} sharedEngine={sharedEngine} agentLevel={agentLevel} toolWarning={toolWarning.map(row=>row.agent_name)} roleNames={roleNames} ro={ro}/>
-  :section==='agents'?(agent?<AgentPage t={t} rtl={rtl} slug={slug} company={company.id} userId={userId} agent={agent} main={agents[0]} owner={owner} canManage={canManage} canWrite={canWrite}/>:<AgentsSection t={t} rtl={rtl} slug={slug} agents={agents} canManage={canManage} canWrite={canWrite} owner={owner}/>)
+  :section==='agents'?(agent?<AgentPage t={t} rtl={rtl} slug={slug} company={company.id} userId={userId} agent={agent} main={agents[0]} rules={rules} owner={owner} canManage={canManage} canWrite={canWrite}/>:<AgentsSection t={t} rtl={rtl} slug={slug} agents={agents} canManage={canManage} canWrite={canWrite} owner={owner}/>)
   :section==='usage'?<UsageSection t={t} locale={locale} slug={slug} company={company.id} rows={usageRows} period={query.period==='30'?30:7}/>
   :section==='account'?<AccountSection t={t} theme={theme} personName={personName} role={role} roleName={roleNames[role]||''} companyName={company.name} company={company.id} memberNote={memberNote}/>
   :<SoonSection t={t} section={section} ro={ro} models={<ModelsSubscriptions company={company.id} owner={owner} subscriptions={subscriptions}/>}/>;
@@ -141,7 +144,7 @@ function AgentsSection({t,rtl,slug,agents,canManage,canWrite,owner}:{t:T,rtl:boo
    :<p className="panel-empty">{t('noAgentsYet')}</p>}</div></>;
 }
 
-function AgentPage({t,rtl,slug,company,userId,agent,main,owner,canManage,canWrite}:{t:T,rtl:boolean,slug:string,company:string,userId:string,agent:Agent,main?:Agent,owner:boolean,canManage:boolean,canWrite:boolean}) {
+function AgentPage({t,rtl,slug,company,userId,agent,main,rules,owner,canManage,canWrite}:{t:T,rtl:boolean,slug:string,company:string,userId:string,agent:Agent,main?:Agent,rules:Rule[],owner:boolean,canManage:boolean,canWrite:boolean}) {
  const isMain=agent.is_default; const made=madeOf(agent,userId,slug);
  const mainSec=owner?<section className="dp-sec" id="set-main" aria-labelledby="set-h-main"><Label id="set-h-main">{t('settingsMainAgent')}</Label><ul className="panel-card">
    {isMain?<li className="panel-row"><span className="panel-row__icon"><SettingsIcon name="check"/></span><span className="panel-row__text"><span className="panel-row__t">{t('settingsIsMain',agent.name)}</span><span className="panel-row__d">{t('settingsIsMainD')}</span></span></li>
@@ -160,7 +163,7 @@ function AgentPage({t,rtl,slug,company,userId,agent,main,owner,canManage,canWrit
   </div>
   <div id="sov-agent-panel" role="tabpanel" aria-labelledby="sov-tab-settings">
    <TalkTip t={t} text={t('settingsTalkTipAgent',agent.name)} talk={canWrite&&!isMain?{href:`/c/${slug}/chat/${agent.id}`,name:agent.name}:undefined}/>
-   <div className="dp-sections sov-rules"><SoonSec t={t} id="rl-h" label={t('settingsRules')}/></div>
+   <div className="dp-sections sov-rules"><AgentRules t={t} company={company} rules={rules} canManage={canManage}/></div>
    <div className="dp-sections">
     {!canManage&&<p className="ro-note"><SettingsIcon name="shield"/><span>{t('settingsAgentsRO')}</span></p>}
     <section className="dp-sec" aria-labelledby="set-h-job"><Label id="set-h-job">{t('settingsJob')}</Label>
@@ -185,6 +188,16 @@ function AgentPage({t,rtl,slug,company,userId,agent,main,owner,canManage,canWrit
    </div>
   </div>
  </>;
+}
+
+// The rules the Agent was told in its chat and keeps (#18; design-reference: rulesHTML): each in its own direction, who
+// said it and when. An Owner or a Manager may remove one; the server checks that again (remove_agent_rule).
+function AgentRules({t,company,rules,canManage}:{t:T,company:string,rules:Rule[],canManage:boolean}) {
+ return <section className="dp-sec" aria-labelledby="rl-h"><h4 className="dp-label" id="rl-h" tabIndex={-1}><span>{t('settingsRules')} <span className="muted num">{rules.length}</span></span></h4>
+  {rules.length?<ul className="panel-card rl-list">{rules.map(rule=><li key={rule.id} className="panel-row rl-row"><span className="panel-row__icon"><SettingsIcon name="check"/></span>
+   <span className="panel-row__text"><span className="panel-row__t" dir="auto">{rule.body}</span><RuleSaid by={rule.teller?.name||t('member')} at={rule.said_at}/></span>
+   {canManage&&<RemoveRule company={company} rule={rule.id} body={rule.body}/>}</li>)}</ul>
+  :<div className="panel-card"><p className="panel-empty">{t('settingsRulesEmpty')}</p></div>}</section>;
 }
 
 function UsageSection({t,locale,slug,company,rows,period}:{t:T,locale:string,slug:string,company:string,rows:UsageDay[],period:7|30}) {

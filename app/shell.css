@@ -258,6 +258,13 @@
 .gw .bubble__time { flex: none; padding-bottom: 9px; font-size: var(--gw-fs-xs); white-space: nowrap; }
 .gw .note { align-self: center; max-width: 560px; margin: 0; text-align: center; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-2); padding: 0 12px; }
 .gw .note[role="alert"], .gw .note[data-outcome="lost"] { color: var(--gw-danger-text); }
+/* «اتحفظت»: the line after an Agent's reply when it saved a lasting rule (#18; design-reference: .note--saved) */
+.gw .note--saved { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 2px 8px; }
+.gw .note__icon { width: 14px; height: 14px; color: var(--gw-text-2); }
+.gw .note__saved { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: var(--gw-r-full); background: var(--gw-primary); color: var(--gw-on-primary); font-size: var(--gw-fs-xs); font-weight: 600; line-height: 1; }
+.gw .note__link { display: inline-flex; align-items: center; padding: 1px 6px; border-radius: var(--gw-r-xs); font-size: var(--gw-fs-xs); font-weight: 600; color: var(--gw-text-1); }
+@media (hover: hover) { .gw .note__link:hover { background: var(--gw-bg-hover); } }
+[dir="ltr"] .gw .note--saved > span { unicode-bidi: plaintext; }
 .gw .thinking { padding: 2px 4px; font-size: var(--gw-fs-base); color: var(--gw-text-2); }
 /* A turn waiting for the current reply (also the line under a message to a person), and the stop square
    (design-reference: .queued, .is-queued, .is-stop) */
@@ -426,6 +433,8 @@
   .gw .ac-actions .btn::before { content: ""; position: absolute; inset: -4px 0; }
   .gw .born__link { position: relative; }
   .gw .born__link::before { content: ""; position: absolute; inset: -11px 0; }
+  .gw .note__link { position: relative; }
+  .gw .note__link::before { content: ""; position: absolute; inset: -11px 0; }
   .gw .transcript { padding: calc(var(--gw-head-h) + 16px) 12px 20px; }
   .gw .composer-area { padding: 0 12px 12px; }
   .gw .head-pill { max-width: calc(100% - 150px); }

@@ -9,6 +9,9 @@ import { SettingsIcon } from './settings-icons';
 import { openedFrom as storedFrom } from './settings-opener';
 import { changeMember } from './c/[slug]/[[...section]]/actions';
 import { setAgentVisible } from './agent-visibility-actions';
+import { madeDay, useZone } from './agent-made';
+import { dateFormatter, dayOf } from '@/lib/activity-log.mjs';
+import { localeFor } from '@/lib/i18n.mjs';
 
 
 // The full-window overlay (reference: dialog#sov): it holds the keyboard's first stop and closes on Escape.
@@ -160,4 +163,33 @@ export function AgentSwitch({company,person,agent,on,label}:{company:string,pers
   const failure=await setAgentVisible(company,person,agent,next);
   if(failure) { setChecked(!next); setError(failure); } else router.refresh();
  })}/>{error&&<span className="set-err" role="alert">{t(error)}</span>}</>;
+}
+
+// Who told the Agent a rule and when (#18; design-reference: rulesHTML, "Said by Omar · Yesterday · 6:40 PM"), in the
+// reader's own time zone once the page has hydrated, as the made line is.
+export function RuleSaid({by,at}:{by:string,at:string}) {
+ const {t,language}=useI18n(); const zone=useZone();
+ const day=dayOf(at,zone); const today=dayOf(new Date().toISOString(),zone);
+ const yesterday=new Date(new Date(`${today}T00:00:00Z`).getTime()-86400000).toISOString().slice(0,10);
+ const time=dateFormatter(localeFor(language),{hour:'numeric',minute:'2-digit',timeZone:zone}).format(new Date(at));
+ const when=day===today?`${t('logToday')} · ${time}`:day===yesterday?`${t('logYesterday')} · ${time}`:madeDay(at,language,zone);
+ return <span className="panel-row__d rl-said" data-utc={zone}>{t('settingsRuleSaidBy',by,when)}</span>;
+}
+
+// An Owner's or a Manager's quiet "Remove" on one rule (#18), drawn like the reference's "Forget this" on a memory note.
+// The server checks the role again (remove_agent_rule). Focus moves to the next rule's Remove, or to the list's heading
+// when none is left, before the row goes.
+export function RemoveRule({company,rule,body}:{company:string,rule:string,body:string}) {
+ const {t}=useI18n(); const router=useRouter();
+ const [pending,startTransition]=useTransition(); const [failed,setFailed]=useState(false);
+ const remove=(button:HTMLButtonElement)=>startTransition(async()=>{
+  setFailed(false);
+  const removed=await fetch('/api/agent-rules',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company,rule})}).then(response=>response.ok,()=>false);
+  if(!removed) { setFailed(true); return; }
+  const buttons=[...document.querySelectorAll<HTMLButtonElement>('.rl-remove')]; const at=buttons.indexOf(button);
+  (buttons[at+1]||buttons[at-1]||document.getElementById('rl-h'))?.focus();
+  router.refresh();
+ });
+ return <span className="rl-act">{failed&&<span className="set-err" role="alert">{t('settingsRuleRemoveFailed')}</span>}
+  <button type="button" className="link-btn rl-remove" disabled={pending} aria-label={t('settingsRuleRemoveLabel',body.length>40?`${body.slice(0,40)}…`:body)} onClick={event=>remove(event.currentTarget)}>{t('settingsRuleRemove')}</button></span>;
 }
