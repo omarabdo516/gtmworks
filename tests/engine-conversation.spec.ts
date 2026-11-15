@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { createClient } from '@supabase/supabase-js';
 import { encryptSecret } from '../lib/agent-crypto.mjs';
 import { closeOpenRuns, noteInstructions, sendMessage } from '../lib/conversation-runs.mjs';
-import { instructionsOf, roleTemplates } from '../lib/role-templates.mjs';
+import { instructionsOf, roleAppNames, roleTemplates } from '../lib/role-templates.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 
 // A conversation on the fake engine (tests/fake-engine.mjs): the engine contract with no subscription and no network,
@@ -226,7 +226,7 @@ test('integration: Lead makes an Agent from each ready-made role, fitted with th
  expect(made.map((agent:{template:string})=>agent.template)).toEqual(Object.keys(roleTemplates));
  for(const agent of made) {
   const role=roleTemplates[agent.template as keyof typeof roleTemplates];
-  expect(agent).toMatchObject({name:role.name,speciality:role.job,apps:role.apps.join('|'),instructions:instructionsOf(agent.template).replaceAll('{company}','RS Learning')});
+  expect(agent).toMatchObject({name:role.name,speciality:role.job,apps:roleAppNames(agent.template).join('|'),instructions:instructionsOf(agent.template).replaceAll('{company}','RS Learning')});
   for(const limit of role.limits) expect(agent.instructions).toContain(limit);
   expect(agent.instructions).not.toContain('{company}');
  }

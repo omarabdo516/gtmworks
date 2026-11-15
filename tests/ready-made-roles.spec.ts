@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { fakeHermes } from './fake-hermes.mjs';
 import { signIn } from './sign-in';
 import { lane } from './lane.mjs';
-import { instructionsOf, roleTemplates } from '../lib/role-templates.mjs';
+import { instructionsOf, roleAppNames, roleTemplates } from '../lib/role-templates.mjs';
 
 // #14, the ready-made gallery. Lead is RS Learning's main Agent on the Company's own profile in a fake Hermes, which
 // answers a message naming a ready-made role with create_agent for that role, as the model would. The Owner opens the
@@ -107,7 +107,7 @@ test('the Owner finds a ready-made role, adds it, and Lead makes the same Agent 
  await expect(page.getByRole('group',{name:'Agent made: Writer'})).toBeVisible({timeout:30000});
  expect(fake.settings.runs.filter(run=>run.session===picked).map(run=>run.input)).toEqual([asked]);
  const writer=roleTemplates.writer;
- expect(madeIn(picked)).toEqual([{template:'writer',name:writer.name,speciality:writer.job,apps:writer.apps.join('|'),instructions:instructionsOf('writer').replaceAll('{company}','RS Learning'),
+ expect(madeIn(picked)).toEqual([{template:'writer',name:writer.name,speciality:writer.job,apps:roleAppNames('writer').join('|'),instructions:instructionsOf('writer').replaceAll('{company}','RS Learning'),
   requested_by:omar,is_default:false,actor_id:omar,action:'agent_requested',logged_name:writer.name,logged_job:writer.job}]);
 
  // Asking Lead in words, from the same chat, makes the same Agent and the same log row.

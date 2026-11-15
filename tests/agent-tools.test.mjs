@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { runToolCall } from '../lib/agent-tools.mjs';
 import { fakeEngine } from './fake-engine.mjs';
-import { instructionsOf, roleTemplates } from '../lib/role-templates.mjs';
+import { instructionsOf, roleAppNames, roleTemplates } from '../lib/role-templates.mjs';
 
 const profile='co-10000000000000000000000000000001';
 function harness(/** @type {object} */ engineOverride={},/** @type {object} */ answer={state:'created',agent:'agent-1'}) {
@@ -44,7 +44,7 @@ test('create_agent starts from a ready-made role: its name, job and apps unless 
  await engine.createAgent({name:profile,instructions:''});
  for(const [id,role] of Object.entries(roleTemplates)) {
   assert.deepEqual(await call('create_agent',{template:id}),{state:'created',agent:'agent-1'},id);
-  assert.deepEqual(rpcs.at(-1),['lead_create_agent',{conversation:'conversation-1',run:'run-1',call:'call-0',agent_name:role.name,job:role.job,apps:role.apps,template:id,instructions:instructionsOf(/** @type {keyof typeof roleTemplates} */(id))}],id);
+  assert.deepEqual(rpcs.at(-1),['lead_create_agent',{conversation:'conversation-1',run:'run-1',call:'call-0',agent_name:role.name,job:role.job,apps:roleAppNames(/** @type {keyof typeof roleTemplates} */(id)),template:id,instructions:instructionsOf(/** @type {keyof typeof roleTemplates} */(id))}],id);
   const {instructions}=/** @type {{instructions:string}} */(rpcs.at(-1)?.[1]);
   assert.ok(instructions.startsWith(role.instructions)&&instructions.includes('{company}')&&role.limits.every(limit=>instructions.includes(limit)),id);
  }
