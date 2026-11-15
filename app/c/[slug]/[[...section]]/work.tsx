@@ -18,12 +18,11 @@ import { Decision } from './decision';
 import { ActivityRow, Avatar, isMessage, MessageRow, type WorkActivity, type WorkAttachment, type WorkMember, MemberPicker } from '@/lib/work-activity';
 import { workDate as date } from '@/lib/work-date.mjs';
 import { sortWorkCards } from '@/lib/work-sort.mjs';
-import { boardColumns, blockReason, cardAgent, columnOf, keyboardTarget } from '@/lib/board-columns.mjs';
+import { boardColumns, blockReason, cardAgent, columnLabel, columnOf, keyboardTarget, progressOf } from '@/lib/board-columns.mjs';
 import type { WaitingItem } from '@/lib/approval-queue';
 import '@/app/board.css';
 type Stage={id:number,name:string,position:number,board_column?:string|null}; type Label={id:number,name:string,color:string}; type Card={id:number,title:string,stage_id:number,channel:string,format:string,go_live:string|null,offering:string,segment:string,hook:string,goal:string,caption:string,next_actor:string|null,mode:string|null,approval_step_id:number|null,rejection_reason:string|null,project_id:number|null}; type Project={id:number,name:string}; type Item={id:number,card_id:number,title:string,done:boolean}; type Person=WorkMember & {agent_role?:string|null}; type Activity=WorkActivity; type Creative={id:number,card_id:number,name:string}; type Version={id:number,creative_id:number,path:string,url:string|null}; type CL={card_id:number,label_id:number};
 export type WorkProps={slug:string,company:string,section:string,cardId?:number,stages:Stage[],labels:Label[],cards:Card[],items:Item[],members:Person[],activity:Activity[],creatives:Creative[],versions:Version[],cardLabels:CL[],projects:Project[],assignees:{card_id:number,person_id:string}[],message?:string,approvableIds:number[],agents:{person_id:string,role:string,granted:boolean}[],canCreate:boolean,initialCreating:boolean,attachments:WorkAttachment[],waiting?:WaitingItem[],focus?:'waiting'};
-const columnKey:Record<string,string>={waiting:'boardColWaiting',ideas:'boardColIdeas',planned:'boardColPlanned',progress:'boardColProgress',live:'boardColLive',done:'boardColDone'};
 const emptyKey:Record<string,[string,string]>={waiting:['boardEmptyWaiting','boardEmptyWaitingHint'],ideas:['boardEmptyIdeas','boardEmptyIdeasHint'],planned:['boardEmptyPlanned','boardEmptyPlannedHint'],progress:['boardEmptyProgress','boardEmptyProgressHint'],live:['boardEmptyLive','boardEmptyLiveHint'],done:['boardEmptyDone','']};
 export default function Work(p:WorkProps) { const {t,locale,language}=useI18n(); const router=useRouter(); const identities=useAgentIdentities();
  // A change-only form cannot submit before React attaches its handler.
@@ -37,7 +36,7 @@ export default function Work(p:WorkProps) { const {t,locale,language}=useI18n();
  const openCreate=(id:number)=>{setTarget(id);setCreating(true)};
  // ---- the board (ADR 0013): six columns over the stages, "Waiting on you" first ----
  const rtl=language==='ar';
- const columnName=(column:string)=>column==='waiting'&&!p.canCreate?t('boardColWaitingTeam'):t(columnKey[column]||'boardColIdeas');
+ const columnName=(column:string)=>t(columnLabel(column,p.canCreate));
  const agentIds=new Set([...p.agents.map(a=>a.person_id),...identities.map(a=>a.id)]);
  const agentName=(id:string)=>identities.find(a=>a.id===id)?.name||p.members.find(m=>m.person_id===id)?.people?.name||'';
  const agentRole=(id:string)=>identities.find(a=>a.id===id)?.role||p.agents.find(a=>a.person_id===id)?.role||p.members.find(m=>m.person_id===id)?.agent_role||'account_manager';
@@ -73,8 +72,7 @@ export default function Work(p:WorkProps) { const {t,locale,language}=useI18n();
  };
  const keys=(c:Card)=>(event:KeyboardEvent)=>{ if(!event.shiftKey||!p.canCreate) return; const to=keyboardTarget(columnOfCard(c),event.key,rtl); if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight') return; event.preventDefault(); if(to) move(c.id,to); };
  const due=(c:Card)=>c.go_live?date(c.go_live,language,{month:'short'}):'';
- const progressOf=(c:Card)=>{ const list=p.items.filter(i=>i.card_id===c.id); return list.length?{pct:Math.round(100*list.filter(i=>i.done).length/list.length),next:list.find(i=>!i.done)?.title}:null; };
- const cardView=(c:Card,isOverlay=false)=>{ const column=columnOfCard(c); const agent=agentOfCard(c); const person=agent||p.assignees.find(a=>a.card_id===c.id)?.person_id||c.next_actor; const mine=p.approvableIds.includes(c.id); const step=(p.waiting||[]).find(item=>item.kind==='approval'&&item.id===c.id)?.body; const progress=column==='progress'?progressOf(c):null;
+ const cardView=(c:Card,isOverlay=false)=>{ const column=columnOfCard(c); const agent=agentOfCard(c); const person=agent||p.assignees.find(a=>a.card_id===c.id)?.person_id||c.next_actor; const mine=p.approvableIds.includes(c.id); const step=(p.waiting||[]).find(item=>item.kind==='approval'&&item.id===c.id)?.body; const progress=column==='progress'?progressOf(c,p.items):null;
   const owner=c.next_actor?p.members.find(m=>m.person_id===c.next_actor)?.people?.name?.split(' ')[0]:undefined;
   const brief=stagesIn(column).length>1?stageName(c):[c.hook,c.offering,c.goal].find(Boolean)||'';
   return <KanbanCard id={c.id} column={column} isOverlay={isOverlay} key={c.id} disabled={!p.canCreate} className={mine?'approval-card':''} data-mine={mine||undefined} data-stage-id={c.stage_id} data-stage-name={stageName(c)}>

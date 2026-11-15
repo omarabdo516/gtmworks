@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import Shell from '@/app/shell';
 import { approvalQueue } from '@/lib/approval-queue';
 import { logCursor, logPageSize, parseBefore, parseCard, parseWho, type LogRow } from '@/lib/activity-log.mjs';
+import { agentLogFilter } from '@/lib/agent-details.mjs';
 import { LogDays, LogFilters } from './log-client';
 import { LogEntry, logColumns, logPeople } from './entries';
 import { PageIcon } from './icons';
@@ -28,7 +29,7 @@ export default async function ActivityLogPage({params,searchParams}:{params:Prom
   let rows=db.from('company_log').select(logColumns,{count:'exact',head}).eq('company_id',company.id);
   if(who.kind==='system') rows=rows.eq('actor_kind','system');
   if(who.kind==='person') rows=rows.eq('actor_kind','person').eq('actor_id',who.id);
-  if(who.kind==='agent') rows=rows.or(`and(actor_kind.eq.agent,actor_id.eq.${who.id}),agent_id.eq.${who.id}`);
+  if(who.kind==='agent') rows=rows.or(agentLogFilter(who.id));
   if(card!=null) rows=rows.eq('card_id',card);
   return rows;
  };

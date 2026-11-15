@@ -10,6 +10,7 @@ import { AgentDetails, HeadPill, useDetailsPanel, type DetailsAgent } from '@/ap
 import { OpenedMark } from '@/app/agent-made';
 import Link from '@/lib/link';
 import type { ReadyRole } from '@/lib/ready-roles';
+import type { AgentDetailsView } from '@/app/agent-details-server';
 
 const ReadyMade=lazy(()=>import('@/app/ready-made'));
 
@@ -21,7 +22,7 @@ const ReadyMade=lazy(()=>import('@/app/ready-made'));
 // hint line above it says Lead makes the Agent right away. `isNew`: an Agent Lead made at this person's request, opened
 // by them for the first time (#13). The hint line also links to the ready-made gallery (#14), which `gallery` opens over
 // the chat (?new=ready); leaving it gives the focus back to the composer.
-export default function AgentChat({slug,company,agent,writer,fresh=false,newAgent=false,isNew=false,gallery=null}:{slug:string,company:string,agent:DetailsAgent|null,writer:boolean,fresh?:boolean,newAgent?:boolean,isNew?:boolean,gallery?:{company:string,alone:boolean,roles:ReadyRole[]}|null}) {
+export default function AgentChat({slug,company,agent,details,writer,fresh=false,newAgent=false,isNew=false,gallery=null}:{slug:string,company:string,agent:DetailsAgent|null,details:AgentDetailsView|null,writer:boolean,fresh?:boolean,newAgent?:boolean,isNew?:boolean,gallery?:{company:string,alone:boolean,roles:ReadyRole[]}|null}) {
  const {t}=useI18n(); const router=useRouter(); const [conversation]=useState(newId); const panel=useDetailsPanel();
  const [draft,setDraft]=useState<{text:string,n:number}|null>(null);
  const composer=useRef<HTMLDivElement>(null); const picking=!!gallery; const wasPicking=useRef(picking);
@@ -46,7 +47,7 @@ export default function AgentChat({slug,company,agent,writer,fresh=false,newAgen
     return failure;
    }}/>:<p className="ro-line" role="note"><ShellIcon name="eye"/><span>{agent.main?t('viewOnlyLead'):t('viewOnly')}</span></p>)}</div>
   </div>
-  {agent&&<AgentDetails panel={panel} agent={agent} settingsHref={`/c/${slug}/agents`}/>}
+  {agent&&details&&<AgentDetails panel={panel} agent={agent} details={details} settingsHref={`/c/${slug}/agents`}/>}
   {agent&&isNew&&<OpenedMark company={company} agent={agent.id}/>}
  </div>;
 }
