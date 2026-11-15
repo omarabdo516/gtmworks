@@ -38,5 +38,6 @@ export const changeMember=withActionLog('changeMember',async function changeMemb
  revalidatePath(`/c/${slug}/settings/members`);
  revalidatePath(`/c/${slug}/home`);
  const message=error ? (error.code==='23505' && error.message.includes('members_active_agent_role')?t('thisAgentRoleIsAssignedToAnotherActive'):error.message.includes('last owner')?t('theLastOwnerCannotBeRemovedOrHave'):t('couldNotSaveTheChangeCheckPermissionsAnd')) : (op==='invite'?t('anInvitationLinkWasSentByEmail'):t('changeSaved'));
- redirect(`/c/${slug}/settings/members?message=${encodeURIComponent(message)}`);
+ // The invitation form in the settings overlay (a Company worked alone) returns to the overlay.
+ redirect(`/c/${slug}/${form.get('back')==='settings'?'settings':'settings/members'}?message=${encodeURIComponent(message)}`);
 });

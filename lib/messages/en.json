@@ -629,7 +629,7 @@
   "settingsMode": "Alone or with a team",
   "settingsModeAlone": "Alone · just you and the agents",
   "settingsModeTeam": "With a team · {0} members",
-  "settingsModeAloneD": "As soon as you invite someone, channels and per-member agents turn on by themselves, and “عام” opens.",
+  "settingsModeAloneD": "As soon as someone you invite joins, channels and per-member agents turn on by themselves.",
   "settingsModeTeamD": "Channels and per-member agents are on. There’s no going back to “alone” while other members exist.",
   "settingsMembersAgents": "Members and the agents they work with",
   "settingsMember": "Member",
@@ -765,5 +765,8 @@
   "firstRunFailed": "Your answer wasn’t saved. Try again.",
   "leadFreshLine": "I’m {0} and I run your marketing work with you. Need an agent for any job? Tell me in your own words and I’ll make it.",
   "leadTrySaying": "Try saying",
-  "leadTryExample": "I want someone to run our Meta and Google ads"
+  "leadTryExample": "I want someone to run our Meta and Google ads",
+  "settingsInviteEmail": "Member’s email",
+  "settingsInviteGo": "Invite",
+  "settingsInviteEmailExample": "name@example.com"
 }

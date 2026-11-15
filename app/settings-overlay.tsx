@@ -6,7 +6,7 @@ import { getI18n } from '@/lib/i18n-server';
 import { supabase } from '@/lib/supabase';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { visibleSections, pickSection, overlayHref, agentsMainFirst, usageTotals, type OverlaySection } from '@/lib/settings-overlay.mjs';
-import { OverlayFrame, CloseButton, AccountChoices, MakeMain, DeleteAgent, CompanyName } from './settings-overlay-client';
+import { OverlayFrame, CloseButton, AccountChoices, MakeMain, DeleteAgent, CompanyName, InviteForm } from './settings-overlay-client';
 import { SettingsIcon } from './settings-icons';
 import PasswordSettings from './password-settings';
 import { UsageTable, type UsageDay } from './c/[slug]/[[...section]]/usage';
@@ -19,13 +19,14 @@ type Agent={id:string,connection_id:string,name:string,speciality:string,is_defa
 type Member={person_id:string,role:string,people:{name:string|null}|null};
 type T=Awaited<ReturnType<typeof getI18n>>['t'];
 const roleRank:Record<string,number>={owner:0,manager:1,contributor:2,viewer:3};
+const roleDescription:Record<string,string>={owner:'settingsRoleOwnerD',manager:'settingsRoleManagerD',contributor:'settingsRoleContributorD',viewer:'settingsRoleViewerD'};
 
 // The settings overlay (#26; reference: dialog#sov in design-reference/app.js, renderSov). It is route-backed:
 // /c/<slug>/settings opens it on the person's first section and ?section=…&agent=… opens any other state, so the
 // account menu, links and tests all reach the same screen. It covers the whole window like the reference's dialog,
 // so no page is drawn behind it; closing returns to the page it was opened from. Data is read with the signed-in
 // person's session (RLS); every change goes through an existing server action or route that checks the role again.
-export default async function SettingsOverlay({slug,company,userId,role,personName,query}:{slug:string,company:{id:string,name:string},userId:string,role:string,personName:string,query:{section?:string,agent?:string,period?:string}}) {
+export default async function SettingsOverlay({slug,company,userId,role,personName,workMode,query}:{slug:string,company:{id:string,name:string},userId:string,role:string,personName:string,workMode?:string|null,query:{section?:string,agent?:string,period?:string,message?:string}}) {
  const {t,language,locale,theme}=await getI18n(); const rtl=language==='ar';
  const db=await supabase();
  // ?agent=<id> alone opens that Agent's page.
@@ -48,7 +49,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  const agent=section==='agents'&&query.agent?agents.find(item=>item.id===query.agent):undefined;
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  const ro=!canManage&&<p className="ro-note"><SettingsIcon name="shield"/><span>{t('settingsRO')}</span></p>;
- const page=section==='company'?<CompanySection t={t} company={company} members={members} agents={agents} userId={userId} slug={slug} owner={owner} canManage={canManage} sharedEngine={sharedEngine} agentLevel={agentLevel} toolWarning={toolWarning.map(row=>row.agent_name)} roleNames={roleNames} ro={ro}/>
+ const page=section==='company'?<CompanySection t={t} company={company} solo={workMode==='alone'} message={query.message} members={members} agents={agents} userId={userId} slug={slug} owner={owner} canManage={canManage} sharedEngine={sharedEngine} agentLevel={agentLevel} toolWarning={toolWarning.map(row=>row.agent_name)} roleNames={roleNames} ro={ro}/>
   :section==='agents'?(agent?<AgentPage t={t} rtl={rtl} slug={slug} company={company.id} agent={agent} main={agents[0]} owner={owner} canManage={canManage} canWrite={canWrite}/>:<AgentsSection t={t} rtl={rtl} slug={slug} agents={agents} canManage={canManage} canWrite={canWrite} owner={owner}/>)
   :section==='usage'?<UsageSection t={t} locale={locale} slug={slug} company={company.id} rows={usageRows} period={query.period==='30'?30:7}/>
   :section==='account'?<AccountSection t={t} theme={theme} personName={personName} role={role} roleName={roleNames[role]||''} companyName={company.name} company={company.id} memberNote={memberNote}/>
@@ -79,8 +80,8 @@ const Soon=({t}:{t:T})=><div className="panel-card sov-soon" aria-disabled="true
 const SoonSec=({t,id,label}:{t:T,id:string,label:string})=><section className="dp-sec" aria-labelledby={id}><Label id={id}>{label}</Label><Soon t={t}/></section>;
 const initial=(name:string)=>name.trim().slice(0,1).toUpperCase()||'?';
 
-function CompanySection({t,company,members,agents,userId,slug,owner,canManage,sharedEngine,agentLevel,toolWarning,roleNames,ro}:{t:T,company:{id:string,name:string},members:Member[],agents:Agent[],userId:string,slug:string,owner:boolean,canManage:boolean,sharedEngine:boolean,agentLevel:number,toolWarning:string[],roleNames:Record<string,string>,ro:ReactNode}) {
- const count=members.length; const solo=count<=1;
+function CompanySection({t,company,solo,message,members,agents,userId,slug,owner,canManage,sharedEngine,agentLevel,toolWarning,roleNames,ro}:{t:T,company:{id:string,name:string},solo:boolean,message?:string,members:Member[],agents:Agent[],userId:string,slug:string,owner:boolean,canManage:boolean,sharedEngine:boolean,agentLevel:number,toolWarning:string[],roleNames:Record<string,string>,ro:ReactNode}) {
+ const count=members.length;
  const name=<section className="dp-sec" aria-labelledby="co-h-name"><Label id="co-h-name">{t('settingsCompanyName')}</Label>
   <div className="panel-card set-card">{owner?<div className="set-field"><label className="set-label" htmlFor="co-name">{t('settingsCompanyNameHint')}</label>
    {/* Only the Owner renames the Company (#26); the server checks it again. Other Roles read the name. */}
@@ -103,12 +104,17 @@ function CompanySection({t,company,members,agents,userId,slug,owner,canManage,sh
   <p className="set-hint ta-hint">{t('settingsTeamHint')}</p>
   {owner&&<section className="inv-sec" aria-labelledby="inv-h"><h4 className="sr-only" id="inv-h">{t('settingsInvite')}</h4><Link className="btn btn--secondary inv-open" href={`/c/${slug}/settings/members`}><SettingsIcon name="plus"/><span>{t('settingsInvite')}</span></Link></section>}
  </div></section>;
+ // Alone (#10): no members, no per-member Agents; the Owner invites the first Member here, and the Company becomes a
+ // team when that Member accepts.
+ const invite=owner&&<section className="inv-sec" aria-labelledby="inv-h"><Label id="inv-h">{t('settingsInvite')}</Label>
+  <InviteForm slug={slug} company={company.id} roles={(['manager','contributor','viewer'] as const).map(key=>({key,name:roleNames[key],description:t(roleDescription[key])}))}/>
+  {message&&<p className="set-hint" role="status">{message}</p>}</section>;
  const list=<section className="dp-sec" aria-labelledby="co-h-mem"><Label id="co-h-mem">{t('members')} <span className="muted num">{count}</span></Label>
   <div className="panel-card">{members.map(member=><div className="panel-row" key={member.person_id}><span className="me__av pp-av" aria-hidden="true">{initial(member.people?.name||t('member'))}</span><span className="panel-row__text"><span className="panel-row__t"><bdi>{member.people?.name||t('member')}</bdi>{member.person_id===userId&&<> <span className="ch-you">{t('settingsYouMark')}</span></>}</span><span className="panel-row__d">{roleNames[member.role]||''}</span></span></div>)}</div></section>;
  return <><Head title={t('settingsCompany')} sub={t('settingsCompanySub')}/>{ro}
   {sharedEngine&&<p className="ro-note sov-warn" role="note"><SettingsIcon name="shield"/><span>{t('sharedEngineWarning')}</span></p>}
   {toolWarning.length>0&&<p className="ro-note sov-warn" role="note" id="co-tool-warning"><SettingsIcon name="shield"/><span>{t('agentToolWarning',toolWarning.join(', '))}</span></p>}
-  {name}{mode}<AgentLevel company={company.id} level={agentLevel} owner={owner}/>{canManage?table:list}</>;
+  {name}{mode}<AgentLevel company={company.id} level={agentLevel} owner={owner}/>{solo?invite:canManage?table:list}</>;
 }
 
 function TalkTip({t,text,talk}:{t:T,text:string,talk?:{href:string,name:string}}) {
@@ -186,11 +192,10 @@ function UsageSection({t,locale,slug,company,rows,period}:{t:T,locale:string,slu
 }
 
 function AccountSection({t,theme,personName,role,roleName,companyName,company,memberNote}:{t:T,theme:string,personName:string,role:string,roleName:string,companyName:string,company:string,memberNote:string}) {
- const roleD:Record<string,string>={owner:'settingsRoleOwnerD',manager:'settingsRoleManagerD',contributor:'settingsRoleContributorD',viewer:'settingsRoleViewerD'};
  return <><Head title={t('settingsAccount')} sub={t('settingsAccountSub')}/>
   <div className="panel-card">
    <div className="panel-row"><span className="me__av sov-av" aria-hidden="true">{initial(personName)}</span><span className="panel-row__text"><span className="panel-row__t"><bdi>{personName}</bdi></span><span className="panel-row__d">{roleName} · <bdi>{companyName}</bdi></span></span></div>
-   <div className="panel-row"><span className="panel-row__icon"><SettingsIcon name="shield"/></span><span className="panel-row__text"><span className="panel-row__t">{t('settingsYourRole',roleName)}</span>{roleD[role]&&<span className="panel-row__d">{t(roleD[role])}</span>}</span></div>
+   <div className="panel-row"><span className="panel-row__icon"><SettingsIcon name="shield"/></span><span className="panel-row__text"><span className="panel-row__t">{t('settingsYourRole',roleName)}</span>{roleDescription[role]&&<span className="panel-row__d">{t(roleDescription[role])}</span>}</span></div>
   </div>
   <AccountChoices theme={theme}/>
   <MemberNote company={company} note={memberNote}/>

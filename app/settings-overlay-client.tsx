@@ -7,6 +7,7 @@ import { saveTheme } from './theme-actions';
 import { saveLanguage } from './language-actions';
 import { SettingsIcon } from './settings-icons';
 import { openedFrom as storedFrom } from './settings-opener';
+import { changeMember } from './c/[slug]/[[...section]]/actions';
 
 
 // The full-window overlay (reference: dialog#sov): it holds the keyboard's first stop and closes on Escape.
@@ -127,5 +128,23 @@ export function CompanyName({company,name}:{company:string,name:string}) {
   <div className="co-name"><input className="set-input" id="co-name" name="name" type="text" dir="auto" maxLength={80} required autoComplete="organization" aria-describedby="co-name-status" value={value} onChange={event=>{setValue(event.target.value); setState({});}}/>
    <button type="submit" className="btn btn--primary btn--sm" disabled={pending||!trimmed||trimmed===name.trim()}>{t('save')}</button></div>
   <p id="co-name-status" className={state.error?'set-err':'set-hint'} role={state.error?'alert':'status'}>{state.error?t(state.error):state.saved?t('companyNameSaved'):null}</p>
+ </form>;
+}
+
+// The invitation form of a Company worked alone (reference: inviteFormHTML): the chosen Role's description follows the
+// select. It posts to the members action, which checks the Owner again and returns to the overlay.
+export function InviteForm({slug,company,roles}:{slug:string,company:string,roles:{key:string,name:string,description:string}[]}) {
+ const {t}=useI18n();
+ const [role,setRole]=useState('contributor'); const chosen=roles.find(item=>item.key===role)||roles[0];
+ return <form className="inv" action={changeMember}>
+  <input type="hidden" name="op" value="invite"/><input type="hidden" name="slug" value={slug}/><input type="hidden" name="company" value={company}/><input type="hidden" name="back" value="settings"/>
+  <div className="inv-row">
+   <div className="set-field"><label className="set-label" htmlFor="inv-email">{t('settingsInviteEmail')} <span aria-hidden="true">*</span></label>
+    <input className="set-input" id="inv-email" name="email" type="email" dir="ltr" autoComplete="off" spellCheck={false} placeholder={t('settingsInviteEmailExample')} required/></div>
+   <div className="set-field"><label className="set-label" htmlFor="inv-role">{t('settingsRole')}</label>
+    <select className="set-input" id="inv-role" name="role" aria-describedby="inv-role-d" value={role} onChange={event=>setRole(event.target.value)}>{roles.map(item=><option key={item.key} value={item.key}>{item.name}</option>)}</select></div>
+   <button type="submit" className="btn btn--primary inv-go">{t('settingsInviteGo')}</button>
+  </div>
+  <p className="set-hint" id="inv-role-d">{chosen.name}: {chosen.description}</p>
  </form>;
 }
