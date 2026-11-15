@@ -152,108 +152,15 @@ jobs:
           path: test-results/screenshots/
           if-no-files-found: ignore
           retention-days: 14
-      # Playwright writes results.json only when a suite finishes; each invocation also appends a journal line by line
-      # (docs/ci-test-journal.md). ci.sh can stop on an earlier step, or the job can be cancelled mid-suite: results.json
-      # then says notRun only when no suite started, and otherwise records the run as interrupted with its unknown cases.
-      - name: record what Playwright selected and observed
-        if: always()
-        run: node scripts/playwright-journal.mjs playwright-report
+      # Playwright's own HTML report: every failure, and each test that passed only on its retry marked flaky.
       - name: upload Playwright report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
-          path: |
-            playwright-report/results.json
-            playwright-report/execution.json
-            playwright-report/journal-*.jsonl
-          if-no-files-found: error
+          path: playwright-report/html/
+          if-no-files-found: ignore
           retention-days: 30
-
-  # Failing PR tests that are also red on the latest completed main run are named "inherited from main" (#157).
-  # Posts nothing when no Playwright test failed.
-  compare-failures:
-    needs: [integration]
-    if: ${{ always() && github.event_name == 'pull_request' && needs.integration.result == 'failure' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      actions: read
-      pull-requests: write
-    env:
-      GH_TOKEN: ${{ github.token }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: this run's report
-        continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          name: playwright-report
-          path: pr-report
-      - name: latest completed main run's report
-        id: main
-        continue-on-error: true
-        run: |
-          run=$(gh run list -R "$GITHUB_REPOSITORY" --workflow ci.yml --branch main --status completed --limit 1 --json databaseId,url \
-            --jq '.[0] | "\(.databaseId) \(.url)"')
-          echo "url=${run#* }" >> "$GITHUB_OUTPUT"
-          gh run download "${run%% *}" -R "$GITHUB_REPOSITORY" -n playwright-report -D main-report || true
-      - name: compare
-        run: node scripts/compare-failures.mjs pr-report/results.json main-report/results.json "${{ steps.main.outputs.url }}" comment.md
-      - name: one PR comment, updated in place
-        run: |
-          [[ -f comment.md ]] || exit 0
-          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/${{ github.event.pull_request.number }}/comments" --paginate \
-            --jq '.[] | select(.body | startswith("<!-- ci-main-failures -->")) | .id' | sed -n 1p)
-          if [[ -n "$id" ]]; then
-            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@comment.md
-          else
-            gh api "repos/$GITHUB_REPOSITORY/issues/${{ github.event.pull_request.number }}/comments" -F body=@comment.md
-          fi
-
-  # A test that failed and then passed on its CI retry: listed in the run summary, one `flaky` issue per test title (#158).
-  flaky-tests:
-    needs: [integration]
-    if: ${{ always() && needs.integration.result != 'skipped' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      actions: read
-      issues: write
-    env:
-      GH_TOKEN: ${{ github.token }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: this run's report
-        continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          name: playwright-report
-          path: report
-      - name: list flaky tests
-        run: node scripts/flaky-tests.mjs report/results.json "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" flaky.json
-      - name: one issue per flaky test, updated when it flakes again
-        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
-        run: |
-          [[ "$(jq length flaky.json)" -gt 0 ]] || exit 0
-          gh label create flaky --description "A test that passed only on its CI retry" --color FBCA04 2>/dev/null || true
-          jq -c '.[]' flaky.json | while read -r item; do
-            title=$(jq -r .issueTitle <<<"$item"); body=$(jq -r .issueBody <<<"$item")
-            number=$(gh issue list --label flaky --state open --limit 200 --json number,title | jq -r --arg t "$title" '.[] | select(.title == $t) | .number' | sed -n 1p)
-            if [[ -n "$number" ]]; then
-              gh issue comment "$number" --body "$body"
-            else
-              gh issue create --label flaky --title "$title" --body "$body"
-            fi
-          done
 
   install:
     needs: [changes]

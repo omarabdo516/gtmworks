@@ -52,7 +52,7 @@ for (const path of [
   'tests/frame.spec.ts', 'tests/proxy/production-shape.spec.ts', 'tests/sign-in.ts', 'tests/visual-screens.mjs',
   'tests/visual.spec.ts-snapshots/home-en-1440-linux.png', 'tests/lane.mjs', 'tests/fake-hermes.mjs', 'tests/fake-engine.mjs',
   'tests/touch-diagnostics.mjs', 'playwright.config.ts', 'playwright.proxy.config.ts', 'scripts/web.sh', 'scripts/local-db.sh',
-  'scripts/proxy-stack.sh', 'scripts/ci-image.sh', 'scripts/playwright-journal-reporter.mjs', 'supabase/seed.sql',
+  'scripts/proxy-stack.sh', 'scripts/ci-image.sh', 'supabase/seed.sql',
   // The first-run and screen specs import its reset helpers; every browser lane is built from the migrations, the
   // stack configuration and the local default privileges (scripts/local-db.sh).
   'scripts/first-run-db.mjs', 'scripts/local-default-privileges.sql', 'supabase/migrations/20260101000000_x.sql', 'supabase/config.toml',

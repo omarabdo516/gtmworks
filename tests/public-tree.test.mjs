@@ -60,9 +60,19 @@ test('the public tree deploys nothing of ours', () => {
  assert.deepEqual(offenders(new RegExp(piece('\\benvironment', ':')), inWorkflows), [], 'deployment environment');
  assert.deepEqual(offenders(new RegExp(piece('\\bsecrets', '\\.(?!GITHUB_TOKEN\\b)')), inWorkflows), [], 'secret other than GITHUB_TOKEN');
  const ci = load(texts.get('.github/workflows/ci.yml'));
- for (const job of ['changes', 'static', 'database', 'integration', 'install', 'flaky-tests', 'check']) assert.ok(ci.jobs[job], job);
+ for (const job of ['changes', 'static', 'database', 'integration', 'install', 'check']) assert.ok(ci.jobs[job], job);
  for (const job of ['deploy', 'deploy-db']) assert.equal(ci.jobs[job], undefined, job);
  assert.deepEqual(ci.jobs.check.needs, ['changes', 'static', 'database', 'integration', 'install']);
+});
+
+// Playwright's own reporters and retries replace our CI tooling around it (#81).
+test('CI keeps no tooling of its own around Playwright', () => {
+ const ci = load(texts.get('.github/workflows/ci.yml'));
+ for (const job of ['compare-failures', 'flaky-tests']) assert.equal(ci.jobs[job], undefined, job);
+ for (const path of ['scripts/compare-failures.mjs', 'scripts/flaky-tests.mjs', 'scripts/playwright-journal.mjs',
+  'scripts/playwright-journal-reporter.mjs', 'docs/ci-test-journal.md']) assert.equal(existsSync(path), false, path);
+ const upload = ci.jobs.integration.steps.find(step => step.name === 'upload Playwright report');
+ assert.equal(upload.with.path, 'playwright-report/html/');
 });
 
 test('no identifier of our own hosted instance', () => {

@@ -13,14 +13,14 @@ export default defineConfig({
   // One worker per lane, each on a whole stack of its own (tests/lane.mjs, #69): spec files run side by side and never
   // share data; the tests inside one file still run in order. CI sets GTMWORKS_TEST_LANES; a local run has one lane.
   workers: lanes,
-  // CI retries a failed test once; one that then passes is reported as flaky (scripts/flaky-tests.mjs). Local runs never retry.
+  // CI retries a failed test once; Playwright reports one that then passes as flaky. Local runs never retry.
   retries: process.env.CI ? 1 : 0,
   use: { baseURL: appOrigin },
   // Lane 0 builds the app and serves it; every other lane serves that build on its own port (scripts/web.sh).
   webServer: Array.from({ length: lanes }, (_, n) => ({ command: `mkdir -p playwright-report && LANE=${n} bash scripts/web.sh production > ${serverLogOf(n)} 2>&1`, url: `${originOf(n)}/sign-in`, reuseExistingServer: false, timeout: 240000 })),
-  // The JSON report is saved by every CI run so a PR's failures can be compared with main's (scripts/compare-failures.mjs).
-  // The journal keeps what was selected and observed, test by test, when the run stops before that report is written.
-  reporter: [['list'], ['json', { outputFile: 'playwright-report/results.json' }], ['./scripts/playwright-journal-reporter.mjs', { invocation: 'main', outputFile: 'playwright-report/journal-main.jsonl' }]],
+  // Playwright's own reporters only: CI uploads the HTML report, and the GitHub reporter marks failures and flaky tests
+  // on the run. The report keeps a folder of its own, since the servers write their logs to playwright-report/.
+  reporter: [['list'], ['html', { outputFolder: 'playwright-report/html', open: 'never' }], ...(process.env.CI ? [['github'] as const] : [])],
   // A picture must match its approved image exactly. Animations and the caret are stopped, and Playwright waits until
   // two captures in a row are identical before it compares.
   expect: { toHaveScreenshot: { animations: 'disabled', caret: 'hide', scale: 'css', maxDiffPixels: 0 } },
