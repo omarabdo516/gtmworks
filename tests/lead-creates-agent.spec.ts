@@ -115,3 +115,20 @@ test('"New agent" opens Lead\'s chat with the composer focused and a hint line, 
  await expect(page.getByRole('textbox',{name:'Message'})).toBeFocused();
  await expect(page.locator('.new-hint[role="note"]')).toBeVisible();
 });
+
+test('an Agent Lead makes while the Conversation is open shows in the sidebar, marked new, without a reload',async({page})=>{
+ const [analystConnection,analyst]=[10,11].map(id);
+ query(`insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id) values ('${company}','${conversation}','person','${omar}','Omar','And someone for the numbers','${id(12)}','made-run-3')`);
+ await signIn(page,'omar@example.com',`/c/rs-learning/conversations/${conversation}`);
+ await openNavigation(page);
+ const tile=page.locator('.sidebar .agent-tile').filter({hasText:'Analyst'});
+ await expect(tile).toHaveCount(0);
+ // Lead's Connection never answers here, so the page keeps asking for the open run while Lead's call lands.
+ query(`do $$ begin
+  insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('${analystConnection}','${company}','${omar}','http://127.0.0.1:9/p/analyst','made-analyst','no-key','unreachable');
+  insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,created_at,requested_by,apps) values ('${analyst}','${company}','${analystConnection}','Analyst','Reads the numbers.',false,now(),'${omar}','{}');
+  insert into public.lead_made_agents(conversation_id,run_id,call_id,company_id,agent_id) values ('${conversation}','made-run-3','call-0','${company}','${analyst}');
+ end $$;`);
+ await expect(page.getByRole('group',{name:'Agent made: Analyst'})).toBeVisible();
+ await expect(tile.locator('.agent-tile__new')).toHaveText('New');
+});

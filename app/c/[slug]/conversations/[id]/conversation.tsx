@@ -3,7 +3,8 @@
 // the catalogue every company route loads (page weight, #55).
 import conversationEn from '@/lib/messages/conversation.en.json';
 import conversationAr from '@/lib/messages/conversation.ar.json';
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from '@/lib/link';
 import { useI18n } from '@/lib/i18n-client';
 import { CompanyAgentFace } from '@/components/company-agent-face';
@@ -29,19 +30,27 @@ export default function ConversationView({slug,agent,company,conversation,initia
  const c=(key:string,...values:unknown[])=>own[key].replace(/\{(\d+)\}/g,(_,index)=>String(values[Number(index)] ?? ''));
  const [record,setRecord]=useState(initial); const [sent,setSent]=useState(0); const panel=useDetailsPanel();
  const {messages,usage,pending,failed,working,canStop}=record;
+ // The sidebar's Agents come from the server render: an Agent Lead makes while this page asks again is only on the
+ // page once the server parts are drawn again, so its tile and its "new" mark show without a reload.
+ const router=useRouter(); const madeCount=(rows:ConversationRecord['messages'])=>rows.reduce((sum,message)=>sum+(message.made?.length||0),0);
+ const made=useRef(madeCount(initial.messages));
  useEffect(()=>{
   if(!pending) return;
   let stopped=false;
   const poll=async()=>{
    try {
     const response=await fetch(`/api/conversations?company=${company}&conversation=${conversation.id}`,{cache:'no-store'});
-    if(response.ok&&!stopped) { const result=await response.json() as ConversationRecord; setRecord(result); if(!result.pending) return; }
+    if(response.ok&&!stopped) {
+     const result=await response.json() as ConversationRecord; setRecord(result);
+     const now=madeCount(result.messages); if(now>made.current) router.refresh(); made.current=now;
+     if(!result.pending) return;
+    }
    } catch { /* Hermes or the network is down: ask again. */ }
    if(!stopped) timer=setTimeout(poll,1500);
   };
   let timer=setTimeout(poll,500);
   return ()=>{stopped=true;clearTimeout(timer);};
- },[pending,sent,company,conversation.id]);
+ },[pending,sent,company,conversation.id,router]);
  const count=(value:number)=>new Intl.NumberFormat(localeFor(language)).format(value);
  const time=(value:string)=>new Date(value).toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit'});
  const face=(size:number)=><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:conversation.face,name:conversation.agent_name}} size={size}/></span>;
