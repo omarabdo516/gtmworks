@@ -42,6 +42,8 @@ test('connecting writes only the read tools and the way back before the sign-in,
   assert.equal(new URL(started.url).searchParams.get('redirect_uri'),back('klaviyo'));
   const steps=fake.settings.managementRequests.map(request=>`${request.method} ${request.path?.split('?')[0]}`);
   assert.deepEqual(steps,['GET /api/mcp/catalog','POST /api/mcp/catalog/install','PUT /api/config','POST /api/mcp/servers/klaviyo/auth']);
+  assert.equal(fake.settings.managementRequests[1].body.enable,false,'installed off, and turned on only with its list');
+  assert.equal(servers().klaviyo.enabled,true);
   assert.deepEqual(servers().klaviyo.tools,{include:[...appByKey('klaviyo').readTools],prompts:false,resources:false});
   assert.equal(servers().klaviyo.oauth.redirect_uri,back('klaviyo'));
   assert.equal((await states(target)).klaviyo,'attention','on, but not signed in yet');
