@@ -25,6 +25,8 @@ test.beforeAll(({},testInfo)=>{
    ('${lead}','${company}','${leadConnection}','Lead','General',true,null,null,null),
    ('${ads}','${company}','${adsConnection}','Meta Ads','Runs the Meta ads.',false,'2026-06-10T09:01:00Z','${omar}',array['Meta Ads Manager','Canva']),
    ('${seo}','${company}','${seoConnection}','SEO','Writes the blog.',false,'2026-06-11T09:01:00Z','${omar}','{}');
+  -- The Manager is shown both (#15), so the made line is checked from someone who did not ask.
+  insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','20000000-0000-0000-0000-000000000002','${ads}'),('${company}','20000000-0000-0000-0000-000000000002','${seo}');
   insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${conversation}','${company}','${omar}','${lead}','Lead');
   insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id) values
    ('${company}','${conversation}','person','${omar}',null,'Omar','I want someone to handle Meta ads','${id(8)}','made-run-1'),
