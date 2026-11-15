@@ -93,6 +93,7 @@ const readyBy: Record<string, string> = {
   'agent-visibility': '.ta-table .switch',
   'ready-roles': '.modal .tpl',
   'made-agent': '.born--sov',
+  channel: '.ch-intro',
   'rule-saved': '.note--saved',
   'agent-rules': '.rl-said:not([data-utc])',
   'settings-agents': '.sov-ag',
@@ -122,6 +123,8 @@ const asAdmin = (sql: string) => execFileSync('docker', ['exec', '-i', dbContain
   { input: `set session_replication_role = replica;\n${sql}`, stdio: ['pipe', 'ignore', 'pipe'], encoding: 'utf8' });
 // Lead, Meta Ads and SEO in RS Learning, with the switches the screen shows on (#15).
 const seen = (n: number) => `68000000-0000-0000-0000-00000000000${n}`;
+const general = '69000000-0000-0000-0000-000000000001';
+const talk = (n: number) => `69000000-0000-0000-0000-0000000000${n}`;
 const busy = (n: number) => `69100000-0000-0000-0000-00000000000${n}`;
 const screenStates: Record<string, { set: string, unset: string, admin?: true }> = {
   unanswered: {
@@ -154,6 +157,27 @@ const screenStates: Record<string, { set: string, unset: string, admin?: true }>
        ('${rsLearning}','20000000-0000-0000-0000-000000000003','${seen(5)}'); end $$;`,
     unset: `do $$ begin delete from public.hermes_agents where id in ('${seen(4)}','${seen(5)}','${seen(6)}');
       delete from public.hermes_connections where id in ('${seen(1)}','${seen(2)}','${seen(3)}'); end $$;`,
+  },
+  channel: {
+    admin: true,
+    set: `insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values
+       ('${talk(10)}','${rsLearning}','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9/p/visual-channel','visual-channel-lead','visual-no-key','unreachable');
+      insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('${talk(11)}','${rsLearning}','${talk(10)}','Lead','General',true);
+      insert into public.channel_messages(company_id,channel_id,author,person_id,author_name,body,send_key,created_at) values
+       ('${rsLearning}','${general}','person','20000000-0000-0000-0000-000000000002','مدير','صباح الخير يا جماعة. الدفعة الجديدة من «المحاسب الشامل» بتبدأ 1 ديسمبر، فكل حملات التسجيل لازم تبقى جاهزة قبل 20 نوفمبر.','${talk(12)}','2026-06-10T09:05:00Z'),
+       ('${rsLearning}','${general}','person','20000000-0000-0000-0000-000000000001','عمر','@Lead لخّصلنا مين مستني إيه النهارده.','${talk(13)}','2026-06-10T09:15:00Z');
+      insert into public.channel_runs(message_id,company_id,channel_id,agent_id,agent_name,session,input,attempts,attempted_at,run_id,outcome,created_at,closed_at)
+       select id,company_id,channel_id,'${talk(11)}','Lead','${talk(14)}','عمر: '||body,1,'2026-06-10T09:15:00Z','visual-channel','completed','2026-06-10T09:15:00Z','2026-06-10T09:15:40Z' from public.channel_messages where send_key='${talk(13)}';
+      insert into public.channel_messages(company_id,channel_id,author,agent_id,author_name,body,reply_to,created_at)
+       select company_id,channel_id,'agent','${talk(11)}','Lead','ده اللي واقف النهارده:
+• حملة Meta للمحاسب الشامل: مستنية عمر يختار زاوية الإعلان
+• مقال «كورس محاسبة اونلاين»: مستني موافقة النشر
+
+الباقي ماشي لوحده، وهقولكم هنا لو حاجة وقفت.',id,'2026-06-10T09:15:40Z' from public.channel_messages where send_key='${talk(13)}';`,
+    unset: `delete from public.channel_runs where channel_id='${general}';
+      delete from public.channel_messages where channel_id='${general}';
+      delete from public.hermes_agents where id='${talk(11)}';
+      delete from public.hermes_connections where id='${talk(10)}';`,
   },
   'lead-made': {
     admin: true,
