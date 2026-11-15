@@ -123,8 +123,9 @@ function TalkTip({t,text,talk}:{t:T,text:string,talk?:{href:string,name:string}}
 
 function AgentsSection({t,rtl,slug,agents,canManage,canWrite,owner}:{t:T,rtl:boolean,slug:string,agents:Agent[],canManage:boolean,canWrite:boolean,owner:boolean}) {
  const main=agents.find(agent=>agent.is_default); const other=agents.find(agent=>!agent.is_default);
- // Asking the main Agent for a new Agent (#13, #17) is not built yet.
- const add=canWrite&&<button type="button" className="btn btn--secondary btn--sm" aria-disabled="true" title={t('soon')}><SettingsIcon name="chat"/><span>{owner&&main?t('settingsAskLead',main.name):t('settingsAskAgent')}</span></button>;
+ // The Owner asks Lead for an Agent in Lead's chat, as "New agent" does (#13); a Member's request (#17) is not built yet.
+ const add=owner&&main?<Link className="btn btn--secondary btn--sm" href={`/c/${slug}/chat?new=agent`}><SettingsIcon name="chat"/><span>{t('settingsAskLead',main.name)}</span></Link>
+  :canWrite&&<button type="button" className="btn btn--secondary btn--sm" aria-disabled="true" title={t('soon')}><SettingsIcon name="chat"/><span>{t('settingsAskAgent')}</span></button>;
  return <><Head title={t('agents')} sub={t('settingsAgentsSub')} extra={add}/>
   {!canManage&&<p className="ro-note"><SettingsIcon name="shield"/><span>{t('settingsAgentsRO')}</span></p>}
   <TalkTip t={t} text={t('settingsTalkTip')} talk={canWrite&&other?{href:`/c/${slug}/chat/${other.id}`,name:other.name}:undefined}/>

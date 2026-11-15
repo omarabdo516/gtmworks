@@ -333,9 +333,14 @@
 .gw .dp-soon { padding: 10px 24px; text-align: center; }
 .gw .dp-scrim { display: none; }
 
+/* "New agent": one hint line above Lead's composer (design-reference: .new-hint) */
+.gw .new-hint { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; max-width: var(--gw-chat-col); margin: 0 auto 8px; padding: 0 8px; font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-2); }
+.gw .new-hint .gw-icon { width: 16px; height: 16px; color: var(--gw-text-2); }
+.gw .new-hint__t { margin: 0; flex: 1 1 260px; }
+
 /* Authored text inside the English interface takes its direction from its own words. */
 [dir="ltr"] .gw :is(.head-pill__title, .thread-item .od-truncate) { unicode-bidi: plaintext; text-align: left; }
-[dir="ltr"] .gw :is(.dp-id__name, .empty-chat h2) { unicode-bidi: plaintext; }
+[dir="ltr"] .gw :is(.dp-id__name, .empty-chat h2, .new-hint__t) { unicode-bidi: plaintext; }
 
 /* ---------- the reference's widths: a narrower sidebar and details below 1280px, the details over the chat below 1024px ---------- */
 @media (max-width: 1279px) {

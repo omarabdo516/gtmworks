@@ -7,9 +7,10 @@ import { uuid } from '@/lib/conversations';
 import AgentChat from './agent-chat';
 
 // Opening an Agent: its empty Conversation (design-reference: emptyChatHTML). Without an id it is the main Agent, Lead.
-// The first message starts the Conversation and the page moves to it.
-export default async function AgentChatPage({params}:{params:Promise<{slug:string,agent?:string[]}>}) {
- const {t}=await getI18n(); const {slug,agent:parts}=await params;
+// The first message starts the Conversation and the page moves to it. "New agent" opens it as ?new=agent (#13): for
+// the Owner, Lead's chat ready to type, with a hint line; no form.
+export default async function AgentChatPage({params,searchParams}:{params:Promise<{slug:string,agent?:string[]}>,searchParams:Promise<{new?:string}>}) {
+ const {t}=await getI18n(); const {slug,agent:parts}=await params; const asked=(await searchParams).new==='agent';
  const db=await supabase(); const {data:{user}}=await db.auth.getUser();
  if(!user) redirect(`/sign-in?next=${encodeURIComponent(`/c/${slug}/chat${parts?.length?`/${parts.join('/')}`:''}`)}`);
  const {data:companies}=await db.from('companies').select('id,slug,name').order('name'); const company=companies?.find(c=>c.slug===slug);
@@ -24,6 +25,6 @@ export default async function AgentChatPage({params}:{params:Promise<{slug:strin
  const {items:waitingItems}=await approvalQueue(db,company.id,user.id,membership?.role||'');
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  return <Shell company={company} companies={companies||[]} section="chat" title={t('chats')} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={waitingItems.length} agentId={agent?.id}>
-  <main className="convo-page h-full"><AgentChat slug={slug} company={company.id} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default}:null} writer={!!writer} fresh={agents?.length===1}/></main>
+  <main className="convo-page h-full"><AgentChat slug={slug} company={company.id} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default}:null} writer={!!writer} fresh={agents?.length===1} newAgent={asked&&membership?.role==='owner'&&!!agent?.is_default}/></main>
  </Shell>;
 }

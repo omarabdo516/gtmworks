@@ -12,7 +12,9 @@ import { AgentDetails, HeadPill, useDetailsPanel, type DetailsAgent } from '@/ap
 // carries "Main"), what it is for, and the composer, with the Agent's details beside it. A Viewer reads one quiet line
 // where the composer would be.
 // In a new workspace that holds only the main Agent (`fresh`), it greets with Lead's first words instead (#9).
-export default function AgentChat({slug,company,agent,writer,fresh=false}:{slug:string,company:string,agent:DetailsAgent|null,writer:boolean,fresh?:boolean}) {
+// `newAgent` (design-reference: openLeadForAgent): the composer is focused, its example is an Agent to ask for, and one
+// hint line above it says Lead makes the Agent right away.
+export default function AgentChat({slug,company,agent,writer,fresh=false,newAgent=false}:{slug:string,company:string,agent:DetailsAgent|null,writer:boolean,fresh?:boolean,newAgent?:boolean}) {
  const {t}=useI18n(); const router=useRouter(); const [conversation]=useState(newId); const panel=useDetailsPanel();
  const [draft,setDraft]=useState<{text:string,n:number}|null>(null);
  return <div className="convo">
@@ -26,7 +28,8 @@ export default function AgentChat({slug,company,agent,writer,fresh=false}:{slug:
      <p>{t('agentEmptyChat')}</p>
     </div>:<div className="empty-chat"><p role="note">{t('conversationNoAgent')}</p></div>}
    </div></div>
-   <div className="composer-area">{agent&&(writer?<MessageBox key={draft?.n||0} draft={draft?.text} placeholder={t('writeTo',agent.name)} send={async(message,sendKey)=>{
+   <div className="composer-area">{agent&&writer&&newAgent&&<div className="new-hint" role="note"><ShellIcon name="userPlus" className="new-hint__ic"/><p className="new-hint__t">{t('newAgentHint',agent.name)}</p></div>}
+    {agent&&(writer?<MessageBox key={`${newAgent}${draft?.n||0}`} draft={draft?.text} focus={newAgent} placeholder={newAgent?t('newAgentExample'):t('writeTo',agent.name)} send={async(message,sendKey)=>{
     const failure=await postMessage({company,conversation,agent:agent.id,message,sendKey});
     if(!failure) router.push(`/c/${slug}/conversations/${conversation}`);
     return failure;

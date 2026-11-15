@@ -62,7 +62,7 @@ export default async function Shell({company,companies,section,title,crumbs,pers
       <span aria-hidden="true"><CompanyAgentFace agent={agent} size={52}/></span><bdi className="agent-tile__name">{agent.name}</bdi>{agent.is_default&&<span className="agent-tile__main" aria-hidden="true">{t('mainAgent')}</span>}
      </Link>
     </li>)}
-    {owner&&<li><Link className="agent-tile agent-tile--new" href={`/c/${slug}/agents`}><span className="agent-tile__plus"><ShellIcon name="plus"/></span><span className="agent-tile__name">{t('newAgent')}</span></Link></li>}</ul>
+    {owner&&<li><Link className="agent-tile agent-tile--new" href={`/c/${slug}/chat?new=agent`}><span className="agent-tile__plus"><ShellIcon name="plus"/></span><span className="agent-tile__name">{t('newAgent')}</span></Link></li>}</ul>
    </section>
    <section className="sb-sec" id="sb-recent" aria-label={t('recentChats')}>
     {/* Channels (#23, #24) are drawn as the reference draws them, without invented unread counts, and open nothing yet. */}
