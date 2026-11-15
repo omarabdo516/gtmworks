@@ -47,7 +47,7 @@ export function WhoFace({who,size=28}:{who:Who,size?:number}) {
 
 // One line of the log (design-reference: entryHTML): who · what «object», the change from → to, a note, and when,
 // with a link to its Card.
-export function entryLine(row:LogRow,people:LogPeople,t:I18n['t'],language:Language) {
+function entryLine(row:LogRow,people:LogPeople,t:I18n['t'],language:Language) {
  const nameOf=(id:string)=>people.identities.find(agent=>agent.id===id)?.name||people.members.find(member=>member.person_id===id)?.people?.name;
  const agentName=(id:string)=>people.agents.find(agent=>agent.id===id)?.name;
  const line=describeEntry(row,{name:nameOf,agentName});
@@ -57,13 +57,21 @@ export function entryLine(row:LogRow,people:LogPeople,t:I18n['t'],language:Langu
  return {...line,act,from:line.from&&value(line.from),to:line.to&&value(line.to)};
 }
 
-export function LogEntry({row,people,me,slug,t,language,cardLink=true}:{row:LogRow,people:LogPeople,me:string,slug:string,t:I18n['t'],language:Language,cardLink?:boolean}) {
+const quoteIn=(language:Language)=>(text:string)=>language==='ar'?`«${text}»`:`“${text}”`;
+
+export function FeedText({row,people,t,language}:{row:LogRow,people:LogPeople,t:I18n['t'],language:Language}) {
+ const who=whoOf(row,people,t); const line=entryLine(row,people,t,language);
+ const object=line.obj||(row.card_id!=null?people.cards.get(row.card_id):undefined);
+ return <><b><bdi>{who.name}</bdi></b> {line.act}{object&&<> <bdi>{quoteIn(language)(object)}</bdi></>}{line.to&&<>: <bdi>{line.to}</bdi></>}</>;
+}
+
+export function LogEntry({row,people,me,slug,t,language,cardLink=true,faceSize}:{row:LogRow,people:LogPeople,me:string,slug:string,t:I18n['t'],language:Language,cardLink?:boolean,faceSize?:number}) {
  const who=whoOf(row,people,t);
  const line=entryLine(row,people,t,language);
- const quote=(text:string)=>language==='ar'?`«${text}»`:`“${text}”`;
+ const quote=quoteIn(language);
  const cardTitle=row.card_id!=null?people.cards.get(row.card_id):undefined;
  return <>
-  <WhoFace who={who}/>
+  <WhoFace who={who} size={faceSize}/>
   <div className="lg-body">
    <p className="lg-line"><b className="lg-name"><bdi>{who.name}</bdi></b>{who.id===me&&<> <span className="lg-you">{t('logYou')}</span></>} <span className="lg-act">{line.act}</span>{line.obj&&<> <span className="lg-obj"><bdi>{quote(line.obj)}</bdi></span></>}</p>
    {line.to!=null&&<p className="lg-change">{line.from!=null&&<><span className="sr-only">{t('logFrom')}</span><span className="lg-val lg-val--old" dir="auto">{line.from}</span><PageIcon name="arrow" className="lg-arrow"/><span className="sr-only">{t('logTo')}</span></>}<span className="lg-val" dir="auto">{line.to}</span></p>}

@@ -10,7 +10,7 @@ import { localeFor } from '@/lib/i18n.mjs';
 import { feedSince, formatFigure, parsePeriod, readNumbers } from '@/lib/numbers.mjs';
 import type { LogRow } from '@/lib/activity-log.mjs';
 import { FeedWhen } from '../log/log-client';
-import { WhoFace, entryLine, logColumns, logPeople, whoOf } from '../log/entries';
+import { FeedText, WhoFace, logColumns, logPeople, whoOf } from '../log/entries';
 import { PageIcon, SystemMark } from '../log/icons';
 
 // The Numbers page (#35, design-reference: renderDashboard). The four figures, the leads chart and the channel table
@@ -78,9 +78,7 @@ export default async function NumbersPage({params,searchParams}:{params:Promise<
        <div className="table-wrap"><table className="table"><thead><tr>{['numbersChannel','numbersSpend','numbersLeads','numbersCostPerLead','numbersSales','numbersRevenue','numbersRoas'].map(key=><th key={key} scope="col">{t(key)}</th>)}</tr></thead>
         <tbody><tr><td colSpan={7} className="table-empty">{noApp}</td></tr></tbody></table></div></section>
       <section className="panel" aria-labelledby="h-feed"><div className="panel__h"><h2 id="h-feed">{t('numbersAgentsDid')}</h2></div>
-       {feed.length?<ul className="feed">{feed.map(row=>{const who=whoOf(row,people,t); const line=entryLine(row,people,t,language); const card=row.card_id!=null?people.cards.get(row.card_id):undefined; const object=line.obj||card;
-        return <li key={row.id}><WhoFace who={who}/><div className="feed__body"><span className="feed__t"><b><bdi>{who.name}</bdi></b> {line.act}{object&&<> <bdi>{language==='ar'?`«${object}»`:`“${object}”`}</bdi></>}{line.to&&<>: <bdi>{line.to}</bdi></>}</span><FeedWhen value={row.created_at}/></div></li>;
-       })}</ul>:<div className="wait-empty"><span>{t('numbersAgentsNone')}</span></div>}
+       {feed.length?<ul className="feed">{feed.map(row=><li key={row.id}><WhoFace who={whoOf(row,people,t)}/><div className="feed__body"><span className="feed__t"><FeedText row={row} people={people} t={t} language={language}/></span><FeedWhen value={row.created_at}/></div></li>)}</ul>:<div className="wait-empty"><span>{t('numbersAgentsNone')}</span></div>}
       </section>
      </div>
     </div>

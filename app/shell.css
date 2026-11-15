@@ -20,7 +20,7 @@
   --gw-fs-xs: 12px; --gw-fs-sm: 13px; --gw-fs-base: 14px; --gw-fs-msg: 15px; --gw-fs-lg: 17px; --gw-fs-xl: 22px;
   --gw-r-xs: 6px; --gw-r-sm: 8px; --gw-r-md: 12px; --gw-r-lg: 16px; --gw-r-bubble: 18px; --gw-r-composer: 22px; --gw-r-card: 24px; --gw-r-full: 9999px;
   --gw-dur-fast: 150ms; --gw-dur: 200ms; --gw-ease-out: cubic-bezier(0.2, 0, 0, 1);
-  --gw-sidebar-w: 300px; --gw-details-w: 320px; --gw-chat-col: 620px; --gw-head-h: 64px; --gw-idle-dot: #B5B5B5;
+  --gw-sidebar-w: 300px; --gw-details-w: 320px; --gw-chat-col: 620px; --gw-head-h: 64px; --gw-idle-dot: #B5B5B5; --gw-wait: #DA830E;
 }
 :root[data-theme="dark"] .gw {
   --gw-bg-chrome: #121212; --gw-bg-sidebar: #0E0E0E; --gw-bg-pane: #161616;
@@ -31,7 +31,7 @@
   --gw-primary: #F5F5F5; --gw-primary-hover: #DBDBDB; --gw-on-primary: #121212; --gw-primary-disabled: #F5F5F521;
   --gw-btn2-bg: #F5F5F524; --gw-btn2-ring: #F5F5F55C; --gw-btn2-hover: #F5F5F533;
   --gw-bubble-agent: #F5F5F50F; --gw-bubble-user: #F5F5F52E; --gw-on-bubble-user: #FFFFFF;
-  --gw-accent: #2CC3AE; --gw-focus: #5EE0CC; --gw-wait-text: #F0A443; --gw-wait-bg: #F694121F; --gw-danger-text: #FF6463;
+  --gw-accent: #2CC3AE; --gw-focus: #5EE0CC; --gw-wait-text: #F0A443; --gw-wait-bg: #F694121F; --gw-danger-text: #FF6463; --gw-wait: #E8962A; --gw-idle-dot: #5C5C5C;
   --gw-shadow-pill: #F5F5F51A 0 0 0 0.5px; --gw-shadow-composer: #F5F5F51A 0 0 0 0.5px;
   --gw-shadow-popover: #000000 0 10px 20px -3px, #F5F5F51A 0 0 0 0.5px; --gw-shadow-modal: #000000 0 20px 32px -5px, #F5F5F51A 0 0 0 0.5px;
   --gw-bubble-ring: #F5F5F50F 0 0 0 0.5px inset; --gw-shadow-card: #F5F5F51A 0 0 0 0.5px;
@@ -46,7 +46,7 @@
     --gw-primary: #F5F5F5; --gw-primary-hover: #DBDBDB; --gw-on-primary: #121212; --gw-primary-disabled: #F5F5F521;
     --gw-btn2-bg: #F5F5F524; --gw-btn2-ring: #F5F5F55C; --gw-btn2-hover: #F5F5F533;
     --gw-bubble-agent: #F5F5F50F; --gw-bubble-user: #F5F5F52E; --gw-on-bubble-user: #FFFFFF;
-    --gw-accent: #2CC3AE; --gw-focus: #5EE0CC; --gw-wait-text: #F0A443; --gw-wait-bg: #F694121F; --gw-danger-text: #FF6463;
+    --gw-accent: #2CC3AE; --gw-focus: #5EE0CC; --gw-wait-text: #F0A443; --gw-wait-bg: #F694121F; --gw-danger-text: #FF6463; --gw-wait: #E8962A; --gw-idle-dot: #5C5C5C;
     --gw-shadow-pill: #F5F5F51A 0 0 0 0.5px; --gw-shadow-composer: #F5F5F51A 0 0 0 0.5px;
     --gw-shadow-popover: #000000 0 10px 20px -3px, #F5F5F51A 0 0 0 0.5px; --gw-shadow-modal: #000000 0 20px 32px -5px, #F5F5F51A 0 0 0 0.5px;
     --gw-bubble-ring: #F5F5F50F 0 0 0 0.5px inset; --gw-shadow-card: #F5F5F51A 0 0 0 0.5px;
@@ -330,26 +330,52 @@
 
 /* ---------- the Agent's details (design-reference: #details) ---------- */
 .gw .details {
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 24px;
   width: var(--gw-details-w); min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr);
   background: var(--gw-bg-chrome); border-inline-start: 0.5px solid var(--gw-border-3); color: var(--gw-text-1); font-family: var(--gw-font); font-size: var(--gw-fs-msg); line-height: 1.6;
 }
 .gw .details[hidden] { display: none; }
 .gw .dp-top { display: flex; align-items: center; justify-content: space-between; height: var(--gw-head-h); padding: 12px; }
+.gw .dp-top .circle-btn:last-child { margin-inline-start: auto; }
 .gw .dp-scroll { overflow-y: auto; min-height: 0; padding-bottom: 32px; }
 .gw .dp-id { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 4px 16px 12px; text-align: center; }
 .gw .dp-id > div { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; max-width: 100%; }
 .gw .dp-id__name { display: inline-flex; align-items: center; gap: 8px; font-size: var(--gw-fs-lg); font-weight: 600; line-height: 1.4; }
 .gw .dp-id__role { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 0 4px; font-size: var(--gw-fs-sm); line-height: 1.5; color: var(--gw-text-2); }
+.gw .details .dp-id__role { display: block; text-align: center; }
+.gw .dp-id__state { white-space: nowrap; }
 .gw .face-wrap { position: relative; display: inline-flex; flex: none; }
 .gw .segmented { display: flex; justify-content: center; gap: 2px; padding: 4px 16px 10px; }
 .gw .segmented button { padding: 4px 10px; border-radius: var(--gw-r-full); font-size: var(--gw-fs-sm); line-height: 18px; color: var(--gw-text-2); }
-/* The five tabs as one even track (design-reference: .dp-scroll > .segmented[role="tablist"]); the first is drawn as
-   the reference's chosen tab. */
 .gw .dp-tabs { justify-content: stretch; gap: 0; margin: 4px 16px 8px; padding: 2px; border-radius: var(--gw-r-full); box-shadow: var(--gw-border-2) 0 0 0 0.5px inset; }
 .gw .dp-tabs button { flex: 1 1 0; min-width: 0; padding: 5px 0; text-align: center; white-space: nowrap; }
-.gw .dp-tabs button[data-first] { background: var(--gw-bg-tertiary); color: var(--gw-text-1); }
+.gw .dp-tabs button[aria-selected="true"] { background: var(--gw-bg-tertiary); color: var(--gw-text-1); }
+@media (hover: hover) { .gw .dp-tabs button:not([aria-disabled="true"]):hover { color: var(--gw-text-1); } }
 .gw .panel-empty { margin: 0; padding: 10px 8px; font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-3); text-wrap: pretty; }
-.gw .dp-soon { padding: 10px 24px; text-align: center; }
+
+.gw .details .dp-sections { display: flex; flex-direction: column; gap: 22px; padding: 10px var(--s4) var(--s4); }
+.gw .details .dp-sec { display: flex; flex-direction: column; gap: 10px; }
+.gw .details .dp-label { display: flex; align-items: center; justify-content: space-between; min-height: 22px; padding-inline: var(--s3) 6px; margin: 0; font-size: var(--gw-fs-sm); font-weight: 400; color: var(--gw-text-2); }
+.gw .details .panel-card { display: flex; flex-direction: column; padding: 4px; border-radius: var(--gw-r-md); background: var(--gw-bg-pane); border: 0.5px solid var(--gw-border-3); list-style: none; margin: 0; }
+.gw .details .panel-row { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 6px var(--s2); border-radius: var(--gw-r-sm); width: 100%; text-align: start; position: relative; }
+.gw .details .panel-row + .panel-row::before { content: ""; position: absolute; top: 0; inset-inline: var(--s2); height: 0.5px; background: var(--gw-border-2); }
+.gw .details .panel-row__text { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0; }
+.gw .details .panel-row__t { font-size: var(--gw-fs-sm); line-height: 1.5; color: var(--gw-text-1); text-align: start; overflow-wrap: anywhere; }
+.gw .details .panel-row__d { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); overflow-wrap: anywhere; }
+.gw .details .panel-row__meta { flex: none; display: inline-flex; align-items: center; gap: 4px; font-size: var(--gw-fs-xs); color: var(--gw-text-3); }
+.gw .details .panel-row__meta--wait { color: var(--gw-wait-text); }
+.gw .details .dp-now .panel-row__t { display: flex; align-items: center; gap: 6px; }
+.gw .details .link-btn { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: var(--gw-r-xs); font-size: var(--gw-fs-sm); color: var(--gw-text-2); }
+@media (hover: hover) {
+  .gw .details a.panel-row:hover { background: var(--gw-bg-hover); }
+  .gw .details .link-btn:hover { background: var(--gw-bg-hover); color: var(--gw-text-1); }
+}
+.gw .details .num { font-variant-numeric: tabular-nums; }
+.gw .details .muted { color: var(--gw-text-3); }
+.gw .details .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; display: inline-block; background: var(--gw-idle-dot); }
+.gw .details .dot--working { background: var(--gw-accent); }
+.gw .details .dot--waiting { background: var(--gw-wait); }
+.gw .details .face-wrap .dot { position: absolute; bottom: 2px; inset-inline-end: 2px; width: 12px; height: 12px; box-shadow: 0 0 0 3px var(--gw-bg-chrome); }
 .gw .dp-scrim { display: none; }
 
 /* "New agent": one hint line above Lead's composer (design-reference: .new-hint) */

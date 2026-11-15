@@ -51,12 +51,13 @@ const lightScreens = [
   { name: 'rule-suggested', path: '/c/rs-learning/conversations/6a000000-0000-0000-0000-000000000003', state: 'rule-suggested', person: 'reviewer@example.com' },
   { name: 'rule-waiting', path: '/c/rs-learning/approvals', state: 'rule-suggested' },
   { name: 'learning-waiting', path: '/c/rs-learning/settings?section=learning', state: 'rule-suggested' },
+  { name: 'agent-details', path: '/c/rs-learning/chat/69100000-0000-0000-0000-000000000005', state: 'agent-details' },
 ];
 
 export const screens = [
   { name: 'first-run', path: '/first-run', anonymous: true, dark: false },
   ...lightScreens.map(screen => ({ ...screen, dark: false })),
-  ...lightScreens.filter(screen => ['sign-in', 'home', 'chat', 'board', 'card', 'alone-chat', 'alone-settings', 'made-card', 'new-agent', 'made-agent', 'agent-visibility', 'ready-roles', 'rule-saved', 'agent-rules', 'settings-agents', 'settings-main-agent', 'rule-suggested', 'rule-waiting', 'learning-waiting'].includes(screen.name))
+  ...lightScreens.filter(screen => ['sign-in', 'home', 'chat', 'board', 'card', 'alone-chat', 'alone-settings', 'made-card', 'new-agent', 'made-agent', 'agent-visibility', 'ready-roles', 'rule-saved', 'agent-rules', 'settings-agents', 'settings-main-agent', 'rule-suggested', 'rule-waiting', 'learning-waiting', 'agent-details'].includes(screen.name))
     .map(screen => ({ ...screen, name: `${screen.name}-dark`, dark: true })),
 ];
 

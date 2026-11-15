@@ -11,6 +11,7 @@ import { AgentDetails, HeadPill, useDetailsPanel, type DetailsAgent } from '@/ap
 import { OpenedMark } from '@/app/agent-made';
 import Link from '@/lib/link';
 import type { ReadyRole } from '@/lib/ready-roles';
+import type { AgentDetailsView } from '@/app/agent-details-server';
 
 const ReadyMade=lazy(()=>import('@/app/ready-made'));
 
@@ -23,7 +24,7 @@ const ReadyMade=lazy(()=>import('@/app/ready-made'));
 // by them for the first time (#13). The hint line also links to the ready-made gallery (#14), which `gallery` opens over
 // the chat (?new=ready); leaving it gives the focus back to the composer. In a team, a line at the top says the chat is
 // between this person and the Agent only (#25).
-export default function AgentChat({slug,company,agent,writer,team=false,fresh=false,newAgent=false,isNew=false,gallery=null}:{slug:string,company:string,agent:DetailsAgent|null,writer:boolean,team?:boolean,fresh?:boolean,newAgent?:boolean,isNew?:boolean,gallery?:{company:string,alone:boolean,roles:ReadyRole[]}|null}) {
+export default function AgentChat({slug,company,agent,details,writer,team=false,fresh=false,newAgent=false,isNew=false,gallery=null}:{slug:string,company:string,agent:DetailsAgent|null,details:AgentDetailsView|null,writer:boolean,team?:boolean,fresh?:boolean,newAgent?:boolean,isNew?:boolean,gallery?:{company:string,alone:boolean,roles:ReadyRole[]}|null}) {
  const {t}=useI18n(); const router=useRouter(); const [conversation]=useState(newId); const panel=useDetailsPanel();
  const [draft,setDraft]=useState<{text:string,n:number}|null>(null);
  const composer=useRef<HTMLDivElement>(null); const picking=!!gallery; const wasPicking=useRef(picking);
@@ -49,7 +50,7 @@ export default function AgentChat({slug,company,agent,writer,team=false,fresh=fa
     return failure;
    }}/>:<p className="ro-line" role="note"><ShellIcon name="eye"/><span>{agent.main?t('viewOnlyLead'):t('viewOnly')}</span></p>)}</div>
   </div>
-  {agent&&<AgentDetails panel={panel} agent={agent} settingsHref={`/c/${slug}/agents`}/>}
+  {agent&&details&&<AgentDetails panel={panel} agent={agent} details={details} settingsHref={`/c/${slug}/agents`}/>}
   {agent&&isNew&&<OpenedMark company={company} agent={agent.id}/>}
  </div>;
 }
