@@ -6,8 +6,7 @@ select json_build_object(
  'log_follows_edit',exists(select 1 from pg_trigger where tgrelid='public.work_comments'::regclass and tgname='work_comments_log_edit' and tgenabled='O'),
  'mentions_read',exists(select 1 from pg_trigger where tgrelid='public.work_comments'::regclass and tgname='work_comments_mentions' and tgenabled='O'),
  'one_item_per_note',exists(select 1 from pg_indexes where schemaname='public' and tablename='waiting_items' and indexname='waiting_items_one_per_note'),
- 'list_opens_the_note',exists(select 1 from information_schema.routines r join information_schema.parameters p on p.specific_name=r.specific_name
-  where r.routine_schema='public' and r.routine_name='waiting_list' and p.parameter_name='note_id' and p.parameter_mode='OUT'),
+ 'item_opens_the_note',has_column_privilege('authenticated','public.waiting_items','note_id','select'),
  'log_takes_note_replies',pg_get_constraintdef((select oid from pg_constraint where conrelid='public.company_log'::regclass and conname='company_log_source_check')) like '%note_runs%',
  'note_runs_rls',(select relrowsecurity from pg_class where oid='public.note_runs'::regclass),
  'no_client_table_writes',not has_table_privilege('authenticated','public.note_runs','insert,update,delete,truncate')

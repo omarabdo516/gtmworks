@@ -81,10 +81,10 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
 select ok(public.edit_card_note('10000000-0000-0000-0000-000000000001',(select id from notes where label='call'),'شوف ده تاني يا @مراجع، و @عضو و @مشاهد'),'the writer edits a note that named Members');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
-select is((select array_agg(note_id order by note_id) from public.waiting_list('10000000-0000-0000-0000-000000000001') where kind='mention' and note_id in (select id from notes)),array[(select id from notes where label='call')],'the Viewer reads the mention in Waiting on you, with the note it opens');
-select is((select body from public.waiting_list('10000000-0000-0000-0000-000000000001') where kind='mention' and note_id in (select id from notes)),'شوف ده تاني يا @مراجع، و @عضو و @مشاهد','and reads the note as it now stands');
+select is((select array_agg(i.note_id order by i.note_id) from public.waiting_list('10000000-0000-0000-0000-000000000001') l join public.waiting_items i on i.id=l.id where l.kind='mention' and i.note_id in (select id from notes)),array[(select id from notes where label='call')],'the Viewer reads the mention in Waiting on you, with the note it opens');
+select is((select w.body from public.waiting_list('10000000-0000-0000-0000-000000000001') l join public.waiting_items i on i.id=l.id join public.work_comments w on w.id=i.note_id where l.kind='mention' and i.note_id in (select id from notes)),'شوف ده تاني يا @مراجع، و @عضو و @مشاهد','and reads the note as it now stands');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
-select is((select array_agg(note_id order by note_id) from public.waiting_list('10000000-0000-0000-0000-000000000001') where kind='mention' and note_id in (select id from notes)),(select array_agg(id order by id) from notes where label in ('call','twice')),'and each Member reads only their own');
+select is((select array_agg(i.note_id order by i.note_id) from public.waiting_list('10000000-0000-0000-0000-000000000001') l join public.waiting_items i on i.id=l.id where l.kind='mention' and i.note_id in (select id from notes)),(select array_agg(id order by id) from notes where label in ('call','twice')),'and each Member reads only their own');
 
 -- An Agent called in a note: one Run, only for an Agent the writer sees.
 reset role;

@@ -18,13 +18,18 @@ export const approvalQueue=cache(async(db:Awaited<ReturnType<typeof supabase>>,c
  const listed=(listResult.data || []) as WaitingItem[];
  const ids=listed.filter(item=>item.kind==='approval').map(item=>item.id);
  const ruleIds=listed.filter(item=>item.kind==='rule_suggestion').map(item=>item.id);
- const [cardResult,ruleResult]=await Promise.all([
+ const mentionIds=listed.filter(item=>item.kind==='mention').map(item=>item.id);
+ const [cardResult,ruleResult,mentionResult]=await Promise.all([
   ids.length?db.from('work_cards').select('*').eq('company_id',company).in('id',ids):{data:[],error:null},
   ruleIds.length?db.from('waiting_items').select('id,agent_rules(body,hermes_agents(connection_id,name))').in('id',ruleIds):{data:[],error:null},
+  mentionIds.length?db.from('waiting_items').select('id,note_id,work_comments(body)').in('id',mentionIds):{data:[],error:null},
  ]);
  const cards=ids.map(id=>(cardResult.data || []).find(card=>card.id===id)).filter(Boolean) as ApprovalCard[];
  type RuleRow={id:number,agent_rules:{body:string,hermes_agents:{connection_id:string,name:string}|null}|null};
  const rules=new Map(((ruleResult.data || []) as unknown as RuleRow[]).map(row=>[row.id,row.agent_rules]));
- const items=listed.map(item=>{ const rule=rules.get(item.id); return rule?{...item,suggestion:{rule:rule.body,agent:rule.hermes_agents}}:item; });
- return {steps:(stepResult.data || []) as Step[],cards,items,available:!stepResult.error&&!listResult.error&&!cardResult.error&&!ruleResult.error};
+ type MentionRow={id:number,note_id:number|null,work_comments:{body:string}|null};
+ // A mention opens its note and shows the note as it now stands (#22).
+ const mentions=new Map(((mentionResult.data || []) as unknown as MentionRow[]).map(row=>[row.id,row]));
+ const items=listed.map(item=>{ const rule=rules.get(item.id); if(rule) return {...item,suggestion:{rule:rule.body,agent:rule.hermes_agents}}; const mention=mentions.get(item.id); return mention?{...item,note_id:mention.note_id,body:mention.work_comments?.body??item.body}:item; });
+ return {steps:(stepResult.data || []) as Step[],cards,items,available:!stepResult.error&&!listResult.error&&!cardResult.error&&!ruleResult.error&&!mentionResult.error};
 });

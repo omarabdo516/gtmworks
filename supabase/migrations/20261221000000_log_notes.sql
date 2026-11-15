@@ -4,7 +4,8 @@
 -- that calls an Agent the writer sees gets exactly one Run (one row of note_runs), and the Agent's reply is written into
 -- the log under the note. A Viewer writes no note (work_comment_insert already asks work_can_edit).
 -- Additive: a column on work_comments and one on waiting_items, one new table and triggers on work_comments. The
--- previous app version runs against it unchanged: it never changes or deletes a comment and reads waiting_list by name.
+-- previous app version runs against it unchanged: it never changes or deletes a comment, and waiting_list keeps its shape
+-- (the app reads the note a mention opens from the reader's own waiting_items row).
 
 alter table public.work_comments add column edited_at timestamptz;
 
@@ -109,26 +110,6 @@ end $$;
 alter table public.waiting_items add column note_id bigint,
  add foreign key (company_id, card_id, note_id) references public.work_comments(company_id, card_id, id);
 create unique index waiting_items_one_per_note on public.waiting_items(note_id, person_id) where note_id is not null;
-
--- 20261206000001's list, with the note a mention opens and that note's current text.
-drop function public.waiting_list(uuid);
-create function public.waiting_list(c uuid)
-returns table(kind text, id bigint, title text, body text, asked_by text, card_id bigint, conversation_id uuid, created_at timestamptz, note_id bigint)
-language sql stable set search_path='' as $$
- select * from (
-  select 'approval'::text, w.id, w.title, coalesce(a.name,''), ''::text, w.id, null::uuid, coalesce(w.review_entered_at,w.created_at), null::bigint
-   from public.work_cards w
-   join public.work_stages s on s.company_id=w.company_id and s.id=w.stage_id and s.kind='review'
-   left join public.approval_steps a on a.company_id=w.company_id and a.id=w.approval_step_id
-   where w.company_id=c and w.approval_step_id is not null and public.approval_holds(c,w.approval_step_id)
-  union all
-  select i.kind, i.id, i.title, coalesce(left(w.body,4000), i.body), i.asked_by, i.card_id, i.conversation_id, i.created_at, i.note_id
-   from public.waiting_items i left join public.work_comments w on w.id=i.note_id where i.company_id=c and i.person_id=auth.uid() and i.resolved_at is null
- ) x(kind,id,title,body,asked_by,card_id,conversation_id,created_at,note_id)
- order by created_at desc, id desc;
-$$;
-revoke all on function public.waiting_list(uuid) from public,anon,service_role;
-grant execute on function public.waiting_list(uuid) to authenticated;
 
 -- The one Run of a note that calls an Agent, keyed by that note. Everything a start sends is pinned before the first
 -- attempt, as for a channel message (20261219000000): the session (one per Card and Agent, so the Agent keeps the
