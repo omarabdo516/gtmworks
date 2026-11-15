@@ -478,9 +478,6 @@ for(const width of [1440,390]) test(`a real Agent keeps one identity across the 
  } finally { detach(agents); await fake.close(); }
 });
 
-// #8, the rest of the approved reference's shell and chat: the Agent's details beside the chat (over it below 1024px),
-// the chat search, and the parts not built yet (channels, Connect apps, the composer's extras and dictation, the
-// details tabs) drawn as the reference draws them but disabled with "Soon", with no invented counts.
 test('the Agent details panel, the chat search, the account menu sections and the not-built-yet parts follow the reference',async({page})=>{
  test.setTimeout(180000);
  const fake=await fakeHermes(); let agents={};
@@ -495,12 +492,12 @@ test('the Agent details panel, the chat search, the account menu sections and th
   await expect(details).toBeVisible();
   await expect(pill).toHaveAttribute('aria-expanded','true');
   await expect(details.locator('.dp-id__name')).toHaveText('MonaMain');
-  await expect(details.locator('.dp-id__role')).toHaveText('Marketing');
+  await expect(details.locator('.dp-id__role')).toHaveText('Marketing · Idle');
   await expect(details.getByRole('link',{name:'Settings for Mona',exact:true})).toHaveAttribute('href','/c/rs-learning/agents');
-  // The five tabs are drawn, each disabled and saying "Soon".
   const tabs=details.locator('.dp-tabs button');
-  await expect(tabs).toHaveText(['Activity · Soon','Tasks · Soon','Files · Soon','Memory · Soon','Log · Soon']);
-  for(const tab of await tabs.all()) { await expect(tab).toHaveAttribute('aria-disabled','true'); await expect(tab).toHaveAttribute('title','Soon'); }
+  await expect(tabs).toHaveText(['Activity','Tasks','Files · Soon','Memory · Soon','Log']);
+  for(const name of ['Files','Memory']) { const tab=tabs.filter({hasText:name}); await expect(tab).toHaveAttribute('aria-disabled','true'); await expect(tab).toHaveAttribute('title','Soon'); }
+  for(const name of ['Activity','Tasks','Log']) await expect(tabs.filter({hasText:name})).not.toHaveAttribute('aria-disabled','true');
   // The title pill hides and shows the details; the close button hides them and gives the focus back to the pill.
   await pill.click(); await expect(details).toBeHidden(); await expect(pill).toHaveAttribute('aria-expanded','false');
   await pill.click(); await expect(details).toBeVisible();

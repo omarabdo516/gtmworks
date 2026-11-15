@@ -1,11 +1,13 @@
 'use client';
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import '@/app/log.css';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent as KeyEvent, type ReactNode } from 'react';
 import { useI18n } from '@/lib/i18n-client';
 import Link from '@/lib/link';
 import { ShellIcon } from '@/components/shell-icon';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { MadeLine } from '@/app/agent-made';
 import type { Made } from '@/lib/agent-made';
+import type { AgentDetailsView } from '@/app/agent-details-server';
 
 export type DetailsAgent={id:string,connection_id:string,name:string,speciality:string,main:boolean,made?:Made|null};
 // The reference keeps the details beside the chat from 1024px up; below that they slide over it (design-reference:
@@ -32,8 +34,13 @@ export function HeadPill({panel,agent,details,face,title,titleDir}:{panel?:Detai
  return <div className="chat__top"><h1 className="chat__h">{panel&&label?<button type="button" className="head-pill" id="btn-details" aria-controls="details" aria-expanded={panel.expanded} aria-label={`${title} · ${label}`} onClick={panel.toggle}>{inside}</button>:<span className="head-pill">{inside}</span>}</h1></div>;
 }
 
-const tabs=['chatTabActivity','chatTabTasks','chatTabFiles','chatTabMemory','chatTabLog'];
+const tabs=[{key:'activity',label:'chatTabActivity'},{key:'tasks',label:'chatTabTasks'},{key:'files',label:'chatTabFiles',soon:true},{key:'memory',label:'chatTabMemory',soon:true},{key:'log',label:'chatTabLog'}] as const;
+type Tab=Exclude<(typeof tabs)[number],{soon:true}>['key'];
+const open=tabs.filter((tab):tab is Extract<(typeof tabs)[number],{key:Tab}>=>!('soon' in tab));
+const statusKeys={working:'agentStatusWorking',waiting:'agentStatusWaiting',idle:'agentStatusIdle'};
 
+// The frame every details panel shares (an Agent's, a channel's): over the chat it takes the focus, and Escape gives
+// it back to the title pill.
 export function DetailsShell({panel,label,start,children}:{panel:DetailsPanel,label:string,start:ReactNode,children:ReactNode}) {
  const {t}=useI18n(); const close=useRef<HTMLButtonElement>(null);
  const covering=panel.overlay&&panel.expanded;
@@ -58,21 +65,28 @@ export function DetailsShell({panel,label,start,children}:{panel:DetailsPanel,la
  </>;
 }
 
-// The Agent's details (design-reference: #details, renderDetailsPanel): its settings and close buttons, its face,
-// name, main mark, speciality and, for an Agent Lead made, when and at whose request (#13), then the five tabs. Activity, tasks, files, memory and log are not built yet (#20,
-// #21), so the tabs are drawn but say "Soon".
-export function AgentDetails({panel,agent,settingsHref}:{panel:DetailsPanel,agent:DetailsAgent,settingsHref:string}) {
- const {t}=useI18n();
- return <DetailsShell panel={panel} label={t('chatDetailsOf',agent.name)} start={<Link className="circle-btn" href={settingsHref} aria-label={t('chatAgentSettings',agent.name)} title={t('settings')}><ShellIcon name="gear"/></Link>}>
+export function AgentDetails({panel,agent,details,settingsHref}:{panel:DetailsPanel,agent:DetailsAgent,details:AgentDetailsView,settingsHref:string}) {
+ const {t,language}=useI18n();
+ const [tab,setTab]=useState<Tab>('activity');
+ const move=(event:KeyEvent<HTMLButtonElement>)=>{
+  if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight') return;
+  event.preventDefault();
+  const step=(event.key==='ArrowLeft')===(language==='ar')?1:-1;
+  const next=open[(open.findIndex(item=>item.key===tab)+step+open.length)%open.length].key;
+  setTab(next); document.getElementById(`dp-tab-${next}`)?.focus();
+ };
+ return <DetailsShell panel={panel} label={t('chatDetailsOf',agent.name)} start={details.actions&&<Link className="circle-btn" href={settingsHref} aria-label={t('chatAgentSettings',agent.name)} title={t('settings')}><ShellIcon name="gear"/></Link>}>
   <div className="dp-id">
-   <span className="face-wrap face-wrap--lg" aria-hidden="true"><CompanyAgentFace agent={agent} size={64}/></span>
+   <span className="face-wrap face-wrap--lg" aria-hidden="true"><CompanyAgentFace agent={agent} size={64}/><span className={`dot dot--${details.status}`}/></span>
    <div>
     <div className="dp-id__name"><bdi>{agent.name}</bdi>{agent.main&&<span className="badge dp-id__badge">{t('mainAgent')}</span>}</div>
-    {agent.speciality&&<div className="dp-id__role"><bdi>{agent.speciality}</bdi></div>}
+    <div className="dp-id__role">{agent.speciality&&<><bdi>{agent.speciality}</bdi>{'\u00a0'}</>}<span className="dp-id__state">{agent.speciality&&'·\u00a0'}{t(statusKeys[details.status])}</span></div>
     {agent.made&&<MadeLine made={agent.made} where="panel"/>}
    </div>
   </div>
-  <div className="segmented dp-tabs" role="group" aria-label={t('chatDetailsOf',agent.name)}>{tabs.map((key,index)=><button key={key} type="button" aria-disabled="true" title={t('soon')} data-first={index===0||undefined}>{t(key)}<span className="sr-only"> · {t('soon')}</span></button>)}</div>
-  <p className="panel-empty dp-soon">{t('chatDetailsSoon')}</p>
+  <div className="segmented dp-tabs" role="tablist" aria-label={t('chatDetailsOf',agent.name)}>{tabs.map(item=>'soon' in item
+   ?<button key={item.key} type="button" role="tab" id={`dp-tab-${item.key}`} aria-selected="false" aria-disabled="true" tabIndex={-1} title={t('soon')}>{t(item.label)}<span className="sr-only"> · {t('soon')}</span></button>
+   :<button key={item.key} type="button" role="tab" id={`dp-tab-${item.key}`} aria-selected={tab===item.key} aria-controls="dp-panel" tabIndex={tab===item.key?0:-1} onClick={()=>setTab(item.key)} onKeyDown={move}>{t(item.label)}</button>)}</div>
+  <div id="dp-panel" role="tabpanel" aria-labelledby={`dp-tab-${tab}`} className="dp-sections">{details.tabs[tab]}</div>
  </DetailsShell>;
 }
