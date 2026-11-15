@@ -59,7 +59,7 @@ export async function agentDetails(db:Db,{company,agent,slug,me,role}:{company:s
  const board=`/c/${slug}/work/board`;
  const tasksTab=tasks.length?<section className="dp-sec"><h3 className="dp-label"><span>{t('agentOnTheBoard')}</span><Link className="link-btn" href={board}>{t('agentOpenBoard')}</Link></h3>
   <div className="panel-card">{tasks.map(task=><Link key={task.id} className="panel-row" href={`${board}/${task.id}`}>
-   <span className="panel-row__text"><bdi className="panel-row__t">{task.title}</bdi><span className="panel-row__d" dir="auto">{'key' in task.line?t(task.line.key,...task.line.args):task.line.text}</span></span>
+   <span className="panel-row__text"><span className="panel-row__t"><bdi>{task.title}</bdi></span><span className="panel-row__d"><bdi>{'key' in task.line?t(task.line.key,...task.line.args):task.line.text}</bdi></span></span>
    <span className={`panel-row__meta${task.waiting?' panel-row__meta--wait':''}`}>{t(columnLabel(task.column,writer))}</span>
   </Link>)}</div></section>
   :<section className="dp-sec"><div className="panel-card"><p className="panel-empty">{t('agentTasksEmpty')}</p></div></section>;
