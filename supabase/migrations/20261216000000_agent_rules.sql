@@ -58,13 +58,12 @@ revoke all on function public.agent_rules_in_force(uuid) from public,anon,authen
 alter table public.conversation_run_notes add column tools text[], add column rules text[];
 create or replace function public.pinned_run_note(conversation uuid, message_key uuid, c uuid, person uuid) returns text
 language plpgsql security definer set search_path='' as $$
-declare talking_to uuid; offered text[]; kept text;
+declare talking_to uuid; kept text;
 begin
  select r.agent_id into talking_to from public.conversation_run_reservations r where r.conversation_id=conversation and r.send_key=message_key;
- offered:=public.run_tools(c,talking_to,person);
  insert into public.conversation_run_notes(conversation_id,send_key,company_id,note,offers_tools,tools,rules)
   values(conversation,message_key,c,(select n.note from public.member_notes n where n.company_id=c and n.person_id=person),
-   'create_agent'=any(offered),offered,public.agent_rules_in_force(talking_to))
+   public.may_use_lead_tools(c,talking_to,person),public.run_tools(c,talking_to,person),public.agent_rules_in_force(talking_to))
   on conflict (conversation_id,send_key) do nothing;
  select r.note into kept from public.conversation_run_notes r where r.conversation_id=conversation and r.send_key=message_key;
  return kept;
