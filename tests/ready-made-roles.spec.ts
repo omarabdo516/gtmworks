@@ -148,7 +148,7 @@ test('a Company worked alone hears the alone wording: no team, and the coder han
   const alone=page.getByRole('dialog',{name:'Ready-made agents for R&S Consultations'});
   await expect(alone.locator('.modal__sub')).toHaveText('Pick a role and Lead makes it right away, in the chat. This list is private to your workspace. Nobody outside it can see it.');
   await expect(alone.locator('.tpl__cat').first()).toHaveText('Ads');
-  await expect(alone.locator('.tpl').filter({hasText:'Website coding agent'}).locator('.tpl__hand')).toHaveText('It opens the merge request and stops; you review and merge.');
+  await expect(alone.locator('.tpl').filter({hasText:'Website coding agent'}).locator('.tpl__hand')).toHaveText('It opens the pull request and stops; you review and merge.');
   // "Start from scratch" goes back to Lead's chat, ready to type.
   await alone.locator('.modal__foot').getByRole('button',{name:'Start from scratch'}).click();
   await expect(page).toHaveURL(/\/c\/rs-consultations\/chat\?new=agent$/);

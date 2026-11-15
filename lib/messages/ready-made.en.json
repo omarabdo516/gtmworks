@@ -31,8 +31,8 @@
   "line.hook": "Reads each ad as a customer would, checks the first three seconds and the promise, and ranks the alternatives from strongest to weakest.",
   "line.writer": "Writes long-form articles on keywords people search for, and leaves them as drafts in WordPress.",
   "line.numbers": "Reads the ad accounts and the sales sheet, and tells you where the money went and what it brought back.",
-  "line.coder": "Builds a written change request on the website, runs the tests, opens a merge request and stops.",
+  "line.coder": "Builds a written change request on the website, runs the tests, opens a pull request and stops.",
   "hand.writer": "It leaves the article as a draft, and you publish it.",
-  "hand.coder": "It opens the merge request and stops; someone on the team reviews and merges.",
-  "handAlone.coder": "It opens the merge request and stops; you review and merge."
+  "hand.coder": "It opens the pull request and stops; someone on the team reviews and merges.",
+  "handAlone.coder": "It opens the pull request and stops; you review and merge."
 }
