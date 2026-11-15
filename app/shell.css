@@ -152,6 +152,8 @@
 .gw .agent-tile__name { display: block; max-width: 100%; font-size: var(--gw-fs-xs); line-height: 16px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gw .agent-tile__main { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; margin-top: -2px; border-radius: var(--gw-r-full); background: var(--gw-bg-tertiary); font-size: var(--gw-fs-xs); line-height: 1; color: var(--gw-text-2); white-space: nowrap; }
 .gw .agent-tile[aria-current="true"] .agent-tile__main { background: var(--gw-bg-pane); }
+/* "New" on a tile Lead just made, for the person who asked, until they open it (design-reference: .agent-tile__new) */
+.gw .agent-tile__new { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; margin-top: -2px; border-radius: var(--gw-r-full); background: var(--gw-primary); color: var(--gw-on-primary); font-size: var(--gw-fs-xs); line-height: 1; font-weight: 600; white-space: nowrap; }
 .gw .agent-tile--new { border: 1px dashed var(--gw-border-1); padding-block: 7px 5px; }
 .gw .agent-tile--new .agent-tile__name { color: var(--gw-text-2); }
 .gw .agent-tile__plus {

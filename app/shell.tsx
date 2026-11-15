@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 import AccountMenu, { ThemeToggle } from './account-menu';
 import Link from '@/lib/link';
 import { shellNav } from '@/lib/navigation';
-import { companyAgents, waitingLabel } from '@/lib/sidebar.mjs';
+import { companyAgents, isNewFor, waitingLabel } from '@/lib/sidebar.mjs';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { ShellIcon } from '@/components/shell-icon';
 import { agentIdentities } from '@/lib/agent-identities';
@@ -24,8 +24,9 @@ type Company = {id:string,slug:string,name:string};
 // The frame every screen sits in (design-reference: #sidebar). From the top: the Company, search and a new chat with
 // Lead; the four entries; the Agents with Lead first; the channels (not built yet, and absent for a Company worked
 // alone), this person's recent chats and cards; Connect apps (not built yet), the account and theme.
-// `agentId` and `conversationId` mark the open Conversation in the sidebar.
-export default async function Shell({company,companies,section,title,crumbs,personName,role,owner=false,children,approvalCount=0,cardId,agentId,conversationId}:{company?:Company,companies:Company[],section:string,title:string,crumbs?:Crumb[],personName:string,role:string,owner?:boolean,children:ReactNode,approvalCount?:number,cardId?:number,agentId?:string,conversationId?:string}) { const {t,theme}=await getI18n();
+// `agentId` and `conversationId` mark the open Conversation in the sidebar; `personId` is the signed-in person, for
+// whom an Agent Lead made at their request is marked new until they open it (#13).
+export default async function Shell({company,companies,section,title,crumbs,personId,personName,role,owner=false,children,approvalCount=0,cardId,agentId,conversationId}:{company?:Company,companies:Company[],section:string,title:string,crumbs?:Crumb[],personId:string,personName:string,role:string,owner?:boolean,children:ReactNode,approvalCount?:number,cardId?:number,agentId?:string,conversationId?:string}) { const {t,theme}=await getI18n();
  const slug=company?.slug;
  const chat=section==='chat'||section==='conversations';
  const db=await supabase();
@@ -57,11 +58,12 @@ export default async function Shell({company,companies,section,title,crumbs,pers
    </div>)}</div>
    <section className="sb-sec" aria-labelledby="lbl-agents">
     <h2 className="sb-label" id="lbl-agents">{t('agents')}</h2>
-    <ul className="agent-grid">{agents.map(agent=><li key={agent.id}>
-     <Link className="agent-tile" href={`/c/${slug}/chat/${agent.id}`} aria-current={chat&&agentId===agent.id?'true':undefined} aria-label={agent.is_default?`${agent.name} · ${t('mainAgent')}`:agent.name} title={agent.speciality?`${agent.name} · ${agent.speciality}`:agent.name}>
+    <ul className="agent-grid">{agents.map(agent=>{const fresh=isNewFor(agent,personId); return <li key={agent.id}>
+     <Link className="agent-tile" href={`/c/${slug}/chat/${agent.id}`} aria-current={chat&&agentId===agent.id?'true':undefined} aria-label={agent.is_default?`${agent.name} · ${t('mainAgent')}`:fresh?`${agent.name} · ${t('agentNew')}`:agent.name} title={agent.speciality?`${agent.name} · ${agent.speciality}`:agent.name}>
       <span aria-hidden="true"><CompanyAgentFace agent={agent} size={52}/></span><bdi className="agent-tile__name">{agent.name}</bdi>{agent.is_default&&<span className="agent-tile__main" aria-hidden="true">{t('mainAgent')}</span>}
+      {fresh&&<span className="agent-tile__new" aria-hidden="true">{t('agentNew')}</span>}
      </Link>
-    </li>)}
+    </li>;})}
     {owner&&<li><Link className="agent-tile agent-tile--new" href={`/c/${slug}/chat?new=agent`}><span className="agent-tile__plus"><ShellIcon name="plus"/></span><span className="agent-tile__name">{t('newAgent')}</span></Link></li>}</ul>
    </section>
    <section className="sb-sec" id="sb-recent" aria-label={t('recentChats')}>

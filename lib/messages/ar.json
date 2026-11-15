@@ -771,5 +771,6 @@
   "settingsInviteGo": "اعزم",
   "settingsInviteEmailExample": "name@example.com",
   "newAgentHint": "قول لـ {0} محتاج وكيل يعمل إيه، بكلامك، وهو يعمله على طول.",
-  "newAgentExample": "مثلاً: عايز حد يتابع ليدز واتساب ويرد عليهم"
+  "newAgentExample": "مثلاً: عايز حد يتابع ليدز واتساب ويرد عليهم",
+  "agentNew": "جديد"
 }

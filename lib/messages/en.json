@@ -771,5 +771,6 @@
   "settingsInviteGo": "Invite",
   "settingsInviteEmailExample": "name@example.com",
   "newAgentHint": "Tell {0} what you need an agent for, in your own words, and it makes it right away.",
-  "newAgentExample": "e.g. I want someone to follow up on WhatsApp leads and reply to them"
+  "newAgentExample": "e.g. I want someone to follow up on WhatsApp leads and reply to them",
+  "agentNew": "New"
 }

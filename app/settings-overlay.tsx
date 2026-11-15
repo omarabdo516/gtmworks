@@ -14,8 +14,10 @@ import { createClient } from '@supabase/supabase-js';
 import { supabaseConfig } from '@/lib/supabase-config';
 import { readCompanySignIns } from '@/lib/company-sign-in.mjs';
 import { AgentLevel, CompanySubscriptions, MemberNote } from './settings-lazy';
+import { OpenedMark } from './agent-made';
+import { isNewFor } from '@/lib/sidebar.mjs';
 
-type Agent={id:string,connection_id:string,name:string,speciality:string,is_default:boolean};
+type Agent={id:string,connection_id:string,name:string,speciality:string,is_default:boolean,requested_by:string|null,requester_opened_at:string|null};
 type Member={person_id:string,role:string,people:{name:string|null}|null};
 type T=Awaited<ReturnType<typeof getI18n>>['t'];
 const roleRank:Record<string,number>={owner:0,manager:1,contributor:2,viewer:3};
@@ -33,7 +35,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  const section=pickSection(query.section??(query.agent?'agents':undefined),role);
  const owner=role==='owner', canManage=owner||role==='manager', canWrite=role!=='viewer';
  const needAgents=['company','agents'].includes(section);
- const agents:Agent[]=needAgents?agentsMainFirst((await db.from('hermes_agents').select('id,connection_id,name,speciality,is_default').eq('company_id',company.id).order('name')).data||[]):[];
+ const agents:Agent[]=needAgents?agentsMainFirst((await db.from('hermes_agents').select('id,connection_id,name,speciality,is_default,requested_by,requester_opened_at').eq('company_id',company.id).order('name')).data||[]):[];
  const members:Member[]=section==='company'?(((await db.from('members').select('person_id,role,people(name)').eq('company_id',company.id).is('removed_at',null)).data||[]) as unknown as Member[]).sort((a,b)=>(roleRank[a.role]??9)-(roleRank[b.role]??9)||(a.people?.name||'').localeCompare(b.people?.name||'')):[];
  const sharedEngine=section==='company'&&owner?(await db.rpc('bundled_engine_shared',{c:company.id})).data===true:false;
  // The Company's Agent level, and for its Owner the Agents whose engine offers terminal, code or file tools while the
@@ -50,7 +52,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  const ro=!canManage&&<p className="ro-note"><SettingsIcon name="shield"/><span>{t('settingsRO')}</span></p>;
  const page=section==='company'?<CompanySection t={t} company={company} solo={workMode==='alone'} message={query.message} members={members} agents={agents} userId={userId} slug={slug} owner={owner} canManage={canManage} sharedEngine={sharedEngine} agentLevel={agentLevel} toolWarning={toolWarning.map(row=>row.agent_name)} roleNames={roleNames} ro={ro}/>
-  :section==='agents'?(agent?<AgentPage t={t} rtl={rtl} slug={slug} company={company.id} agent={agent} main={agents[0]} owner={owner} canManage={canManage} canWrite={canWrite}/>:<AgentsSection t={t} rtl={rtl} slug={slug} agents={agents} canManage={canManage} canWrite={canWrite} owner={owner}/>)
+  :section==='agents'?(agent?<AgentPage t={t} rtl={rtl} slug={slug} company={company.id} userId={userId} agent={agent} main={agents[0]} owner={owner} canManage={canManage} canWrite={canWrite}/>:<AgentsSection t={t} rtl={rtl} slug={slug} agents={agents} canManage={canManage} canWrite={canWrite} owner={owner}/>)
   :section==='usage'?<UsageSection t={t} locale={locale} slug={slug} company={company.id} rows={usageRows} period={query.period==='30'?30:7}/>
   :section==='account'?<AccountSection t={t} theme={theme} personName={personName} role={role} roleName={roleNames[role]||''} companyName={company.name} company={company.id} memberNote={memberNote}/>
   :<SoonSection t={t} section={section} ro={ro} models={<ModelsSubscriptions company={company.id} owner={owner} subscriptions={subscriptions}/>}/>;
@@ -137,13 +139,14 @@ function AgentsSection({t,rtl,slug,agents,canManage,canWrite,owner}:{t:T,rtl:boo
    :<p className="panel-empty">{t('noAgentsYet')}</p>}</div></>;
 }
 
-function AgentPage({t,rtl,slug,company,agent,main,owner,canManage,canWrite}:{t:T,rtl:boolean,slug:string,company:string,agent:Agent,main?:Agent,owner:boolean,canManage:boolean,canWrite:boolean}) {
+function AgentPage({t,rtl,slug,company,userId,agent,main,owner,canManage,canWrite}:{t:T,rtl:boolean,slug:string,company:string,userId:string,agent:Agent,main?:Agent,owner:boolean,canManage:boolean,canWrite:boolean}) {
  const isMain=agent.is_default;
  const mainSec=owner?<section className="dp-sec" id="set-main" aria-labelledby="set-h-main"><Label id="set-h-main">{t('settingsMainAgent')}</Label><ul className="panel-card">
    {isMain?<li className="panel-row"><span className="panel-row__icon"><SettingsIcon name="check"/></span><span className="panel-row__text"><span className="panel-row__t">{t('settingsIsMain',agent.name)}</span><span className="panel-row__d">{t('settingsIsMainD')}</span></span></li>
     :<MakeMain company={company} agent={agent} current={main?.name||''}/>}</ul></section>
   :isMain?<section className="dp-sec" id="set-main" aria-labelledby="set-h-main"><Label id="set-h-main">{t('settingsMainAgent')}</Label><div className="panel-card"><p className="panel-empty">{t('settingsMainOwnerOnly',agent.name)}</p></div></section>:null;
  return <>
+  {isNewFor(agent,userId)&&<OpenedMark company={company} agent={agent.id}/>}
   <Link className="link-btn sov-back" id="sov-back" href={overlayHref(slug,'agents')} replace><SettingsIcon name="back" rtl={rtl}/><span>{t('settingsAllAgents')}</span></Link>
   <div className="sov-agent-id"><span className="face-wrap face-wrap--lg" aria-hidden="true"><CompanyAgentFace agent={agent} size={48}/></span><div className="od-fill">
    <div className="dp-id__name"><bdi>{agent.name}</bdi>{isMain&&<span className="badge dp-id__badge">{t('mainAgent')}</span>}</div>
