@@ -60,7 +60,6 @@ test('the Owner reads the Agent\'s state, what it is doing for them, its Cards a
  const panel=details.getByRole('tabpanel');
  await expect(panel).toHaveAttribute('aria-labelledby','dp-tab-activity');
 
- // Activity: the run still open first, with the first line of what Omar asked, then this week's log line only.
  await expect(panel.locator('.dp-label')).toHaveText('Latest activity');
  const rows=panel.locator('.panel-row');
  await expect(rows).toHaveCount(2);
@@ -70,7 +69,6 @@ test('the Owner reads the Agent\'s state, what it is doing for them, its Cards a
  await expect(rows.nth(1).locator('.panel-row__t')).toHaveText('عمر added the agent “Meta Ads”');
  await expect(panel).not.toContainText('changed the agent');
 
- // Tasks, reached with the arrow key: the Cards in the board's order, each with its line and column.
  await tab(details,'Activity').focus();
  await page.keyboard.press('ArrowRight');
  await expect(tab(details,'Tasks')).toBeFocused();
@@ -83,7 +81,6 @@ test('the Owner reads the Agent\'s state, what it is doing for them, its Cards a
  await expect(cards.locator('.panel-row__meta')).toHaveText(['Planned','In progress']);
  await expect(cards.nth(1).locator('.panel-row__d')).toHaveText('Write the ad copy · 50%');
 
- // Log, past the two tabs not built yet: both lines, newest first, the count, and the way to the whole log.
  await page.keyboard.press('ArrowRight');
  await expect(tab(details,'Log')).toBeFocused();
  await expect(panel.locator('.dp-label > span')).toHaveText('Log 2');
@@ -96,7 +93,6 @@ test('the Owner reads the Agent\'s state, what it is doing for them, its Cards a
  await expect(page).toHaveURL(new RegExp(`/c/rs-learning/log\\?who=a:${ads}$`));
  await expect(page.locator('.lgp-count')).toHaveText('2 entries');
 
- // A Card opens on the board.
  await page.goto(`/c/rs-learning/chat/${ads}`);
  await tab(details,'Tasks').click();
  await cards.filter({hasText:'June campaign'}).click();
