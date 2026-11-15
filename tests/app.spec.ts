@@ -368,6 +368,9 @@ test.describe('touch board',()=>{
    const swipeStart=Math.max(swipeBox.x,0),swipeEnd=Math.min(swipeBox.x+swipeBox.width,screenWidth);
    expect(swipeEnd-swipeStart,'part of the card is in view to swipe on').toBeGreaterThanOrEqual(44);
    const swipeX=(swipeStart+swipeEnd)/2,swipeY=swipeBox.y+12;
+   // A swipe is a press unless it moves within 250ms; right after the board loads, the page's own work delayed the first
+   // move past that on a cold runner (#64). A person swipes the board once it has finished loading.
+   await idle(page);
    await touch('touchStart',swipeX,swipeY);
    for(let step=1;step<=12;step++) { await touch('touchMove',swipeX-dir*step*14,swipeY); await page.waitForTimeout(16); }
    await touch('touchEnd');
@@ -384,12 +387,16 @@ test.describe('touch board',()=>{
    const viewport=page.viewportSize()!;
    // Grab the part of the card still in view; drop in the middle of the next list, or as near as the screen edge keeps clear of the board's edge scrolling.
    const fromX=dir>0?(Math.max(cardBox.x,boardBox.x+2)+cardBox.x+cardBox.width)/2:(cardBox.x+Math.min(cardBox.x+cardBox.width,boardBox.x+boardBox.width-2))/2,fromY=cardBox.y+12;
-   const toX=dir>0?Math.min(targetBox.x+targetBox.width/2,viewport.width-60):Math.max(targetBox.x+targetBox.width/2,60),toY=targetBox.y+40;
-   expect(Math.abs(toX-(targetBox.x+targetBox.width/2)),'the next list is on screen').toBeLessThan(targetBox.width/2);
+   const aim=(box:{x:number,y:number,width:number})=>({x:dir>0?Math.min(box.x+box.width/2,viewport.width-60):Math.max(box.x+box.width/2,60),y:box.y+40});
+   expect(Math.abs(aim(targetBox).x-(targetBox.x+targetBox.width/2)),'the next list is on screen').toBeLessThan(targetBox.width/2);
    await touch('touchStart',fromX,fromY);
    await page.waitForTimeout(450);
-   for(let step=1;step<=15;step++) { await touch('touchMove',fromX+(toX-fromX)*step/15,fromY+(toY-fromY)*step/15); await page.waitForTimeout(30); }
+   // The finger heads for the next list where it is at each step, as a person's eye would: on CI the board moved by
+   // 218px under a held card and a drop aimed before the drag landed one list further (#64).
+   const target=async()=>aim((await destination.locator('.col__body').boundingBox())!);
+   for(let step=1;step<=15;step++) { const to=await target(); await touch('touchMove',fromX+(to.x-fromX)*step/15,fromY+(to.y-fromY)*step/15); await page.waitForTimeout(30); }
    await page.waitForTimeout(150);
+   const drop=await target(); await touch('touchMove',drop.x,drop.y);
    await touch('touchEnd');
    expect(await page.evaluate(()=>(window as unknown as {pointerCancels:number}).pointerCancels),'no pointercancel ends the drag').toBe(0);
    await expect(page.locator(`.column[data-stage-name="${destinationName}"] .kcard[data-card-id="1"]`)).toBeVisible();
