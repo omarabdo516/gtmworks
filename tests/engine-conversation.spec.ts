@@ -138,7 +138,7 @@ test('integration: Lead makes the Agent the Owner asks for, and nothing for a Ma
  expect(made()).toEqual([]);
  const closed=await Promise.all([close(),close()]);
  expect(closed[0]+closed[1]).toBe(1);
- expect(fake.runs.map(run=>run.tools.map(tool=>tool.name))).toEqual([['create_agent'],['create_agent']]);
+ expect(fake.runs.map(run=>run.tools.map(tool=>tool.name))).toEqual([['create_agent','save_rule'],['create_agent','save_rule']]);
  expect(fake.agentReads).toContain(profile);
  const [agent]=made();
  expect(made()).toEqual([{id:agent.id,name:'Meta Ads',speciality:'Runs the Meta ads.',apps:'Meta Ads Manager|Canva',requested_by:omar,dated:true,is_default:false,profile}]);
@@ -157,7 +157,46 @@ test('integration: Lead makes the Agent the Owner asks for, and nothing for a Ma
  const manager=(await memberClient('manager@example.com')).person;
  const theirs=randomUUID();
  expect(await sendMessage(manager,service,{person:'20000000-0000-0000-0000-000000000002',company,conversation:theirs,sendKey:randomUUID(),agent:lead,message:'I want someone to handle Meta ads',encryptionKey,engineFor:fake.engineFor})).toEqual({conversation:theirs});
- expect(fake.runs[3].tools).toEqual([]);
+ expect(fake.runs[3].tools.map(tool=>tool.name)).toEqual(['save_rule']);
  expect(await closeOpenRuns(service,{encryptionKey,conversation:theirs,engineFor:fake.engineFor})).toBe(1);
  expect(made()).toHaveLength(2);
+});
+
+// #18: an Owner tells an Agent a lasting rule in its Conversation; the fake engine scripts the Agent's save_rule call.
+test('integration: an Agent saves the rule the Owner tells it, with its log row, and every later run carries it',async()=>{
+ test.setTimeout(120000);
+ const fake=fakeEngine(); const {agent,detach}=attachAgent();
+ const rule='من دلوقتي ما تبعتش حاجة للعميل من غير ما أشوفها';
+ fake.settings.toolCalls=input=>input===rule?[{id:'call-0',name:'save_rule',arguments:{rule:` ${rule} `}}]:[];
+ const rules=()=>JSON.parse(query(`select body,said_by,conversation_id,run_id,removed_at from public.agent_rules where agent_id='${agent}'`));
+ const contributor='20000000-0000-0000-0000-000000000005';
+ try {
+  const {service,person}=await clients();
+  const conversation=randomUUID();
+  const send=(message:string)=>sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message,encryptionKey,engineFor:fake.engineFor});
+  const close=()=>closeOpenRuns(service,{encryptionKey,conversation,engineFor:fake.engineFor});
+  expect(await send(rule)).toEqual({conversation});
+  expect(fake.runs[0].tools.map(tool=>tool.name)).toEqual(['save_rule']);
+  expect(fake.runs[0].instructions).toBeNull();
+  // A reader and the worker close the run at once: the rule is saved once, before the reply is stored.
+  const closed=await Promise.all([close(),close()]);
+  expect(closed[0]+closed[1]).toBe(1);
+  expect(rules()).toEqual([{body:rule,said_by:omar,conversation_id:conversation,run_id:fake.runs[0].id,removed_at:null}]);
+  expect(JSON.parse(query(`select actor_id,actor_kind,action,details->>'agent_name' as agent,details->>'rule' as rule from public.company_log where company_id='${company}' and agent_id='${agent}'`)))
+   .toEqual([{actor_id:omar,actor_kind:'person',action:'agent_rule_saved',agent:'Faye',rule}]);
+  expect((await person.from('agent_rules').select('run_id').eq('conversation_id',conversation)).data).toEqual([{run_id:fake.runs[0].id}]);
+
+  expect(await send('Draft the offer email')).toEqual({conversation});
+  expect(fake.runs[1].instructions).toContain(`- ${rule}`);
+  expect(await close()).toBe(1);
+
+  // A Contributor's own Conversation with the same Agent is told the rule, is not offered save_rule, and saves nothing.
+  const theirs=randomUUID();
+  const {person:member}=await memberClient('multi@example.com');
+  expect(await sendMessage(member,service,{person:contributor,company,conversation:theirs,sendKey:randomUUID(),agent,message:rule,encryptionKey,engineFor:fake.engineFor})).toEqual({conversation:theirs});
+  expect(fake.runs[2].tools).toEqual([]);
+  expect(fake.runs[2].instructions).toContain(`- ${rule}`);
+  expect(await closeOpenRuns(service,{encryptionKey,conversation:theirs,owner:contributor,engineFor:fake.engineFor})).toBe(1);
+  expect(rules()).toHaveLength(1);
+ } finally { detach(); }
 });

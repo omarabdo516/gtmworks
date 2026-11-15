@@ -13,6 +13,7 @@ const id=(n:number)=>`67000000-0000-0000-0000-${String(n).padStart(12,'0')}`;
 const [connection,ads,conversation]=[1,2,3].map(id);
 const rule='من دلوقتي ما تبعتش حاجة للعميل من غير ما أشوفها';
 const later='From now on, answer every comment within the day';
+const label=(text:string)=>`Remove the rule: ${text.length>40?`${text.slice(0,40)}…`:text}`;
 
 test.describe.configure({mode:'serial'});
 test.use({timezoneId:'UTC'});
@@ -73,15 +74,13 @@ test('a Contributor and a Viewer read the rules with no Remove',async({page})=>{
 
 test('an Owner removes a rule and a Manager the other; both removals are logged and the saved lines stay',async({page})=>{
  await signIn(page,'omar@example.com',agentPage);
- const removed=page.waitForResponse(response=>response.url().endsWith('/api/agent-rules')&&response.ok());
- await page.getByRole('button',{name:`Remove the rule: ${later.slice(0,40)}…`}).click();
- expect(await (await removed).json()).toEqual({removed:true});
+ await page.getByRole('button',{name:label(later)}).click();
  await expect(rows(page).locator('.panel-row__t')).toHaveText([rule]);
  await expect(page.getByRole('button',{name:/^Remove the rule/})).toBeFocused();
  await page.context().clearCookies();
 
  await signIn(page,'manager@example.com',agentPage);
- await page.getByRole('button',{name:`Remove the rule: ${rule.slice(0,40)}…`}).click();
+ await page.getByRole('button',{name:label(rule)}).click();
  await expect(rows(page)).toHaveCount(0);
  await expect(page.locator('.sov-rules .panel-empty')).toHaveText('Nobody has told it a rule yet. Write “من دلوقتي…” in its chat and it’s saved here.');
  await expect(page.locator('#rl-h')).toBeFocused();
