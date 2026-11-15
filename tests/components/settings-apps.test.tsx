@@ -8,7 +8,7 @@ import { apps } from '@/lib/app-catalogue.mjs';
 
 const replace = vi.fn<(href: string) => void>(), refresh = vi.fn();
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace, refresh, push: vi.fn(), prefetch: vi.fn() }) }));
-vi.mock('@/lib/link', () => ({ default: ({ replace: _, ...props }: ComponentProps<'a'> & { replace?: boolean }) => <a {...props}/> }));
+vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'> & { replace?: boolean }) => <a {...Object.fromEntries(Object.entries(props).filter(([name]) => name !== 'replace'))}/> }));
 afterEach(() => { replace.mockReset(); refresh.mockReset(); vi.unstubAllGlobals(); });
 
 const text: Record<string, string> = en;
