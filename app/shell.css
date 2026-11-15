@@ -334,7 +334,8 @@
 .gw .dp-id { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 4px 16px 12px; text-align: center; }
 .gw .dp-id > div { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; max-width: 100%; }
 .gw .dp-id__name { display: inline-flex; align-items: center; gap: 8px; font-size: var(--gw-fs-lg); font-weight: 600; line-height: 1.4; }
-.gw .dp-id__role { text-align: center; font-size: var(--gw-fs-sm); line-height: 1.5; color: var(--gw-text-2); }
+.gw .dp-id__role { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 0 4px; font-size: var(--gw-fs-sm); line-height: 1.5; color: var(--gw-text-2); }
+.gw .details .dp-id__role { display: block; text-align: center; }
 .gw .dp-id__state { white-space: nowrap; }
 .gw .face-wrap { position: relative; display: inline-flex; flex: none; }
 .gw .segmented { display: flex; justify-content: center; gap: 2px; padding: 4px 16px 10px; }
