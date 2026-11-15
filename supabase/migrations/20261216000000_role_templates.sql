@@ -1,0 +1,39 @@
+-- #14: Lead can start an Agent from a ready-made role (lib/role-templates.mjs). The app passes the role's id and its
+-- instructions, which name the Company as {company}; the database puts in the Company's name and keeps both on the
+-- Agent, and every run to that Agent carries the instructions (lib/conversation-runs.mjs). Nothing existing is
+-- rewritten: an Agent made before has neither.
+alter table public.hermes_agents add column template text, add column instructions text;
+-- The worker reads them for a queued turn, by the claimed turn's Agent and Company.
+grant select(instructions) on public.hermes_agents to service_role;
+
+-- Replaced, not overloaded: the previous app version's call names the first six arguments only, and the new ones default.
+drop function public.lead_create_agent(uuid,text,text,text,text,text[]);
+create function public.lead_create_agent(conversation uuid, run text, call text, agent_name text, job text, apps text[], template text default null, instructions text default null) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare talk public.conversations; linked public.hermes_connections; connection uuid; made uuid;
+begin
+ perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
+ select l.agent_id into made from public.lead_made_agents l where l.conversation_id=conversation and l.run_id=run and l.call_id=call;
+ if found then return jsonb_build_object('state','created','agent',made); end if;
+ select * into talk from public.conversations where id=conversation;
+ if not found or not exists(select 1 from public.conversation_messages m where m.conversation_id=conversation and m.author='person' and m.run_id=run)
+  or not public.may_use_lead_tools(talk.company_id,talk.agent_id,talk.person_id) then return jsonb_build_object('state','refused'); end if;
+ if coalesce(length(trim(agent_name)) between 1 and 100 and length(trim(job)) between 1 and 200 and cardinality(apps)<=8
+  and not exists(select 1 from unnest(apps) app where coalesce(length(trim(app)),0) not between 1 and 40)
+  and (template is null or length(template) between 1 and 40) and (instructions is null or length(instructions) between 1 and 8000),false) is not true then
+  return jsonb_build_object('state','invalid');
+ end if;
+ select h.* into linked from public.hermes_agents a join public.hermes_connections h on h.id=a.connection_id where a.id=talk.agent_id;
+ insert into public.hermes_connections(company_id,owner_id,address,profile,key_encrypted,state,version,features)
+  values(talk.company_id,talk.person_id,linked.address,linked.profile,linked.key_encrypted,linked.state,linked.version,linked.features) returning id into connection;
+ insert into public.hermes_agents(company_id,connection_id,name,speciality,requested_by,apps,template,instructions)
+  values(talk.company_id,connection,trim(agent_name),trim(job),talk.person_id,array(select trim(app) from unnest(apps) app),template,
+   replace(instructions,'{company}',(select c.name from public.companies c where c.id=talk.company_id))) returning id into made;
+ insert into public.lead_made_agents(conversation_id,run_id,call_id,company_id,agent_id) values(conversation,run,call,talk.company_id,made);
+ insert into public.hermes_agent_audit(company_id,actor_id,actor_name,agent_id,action,details)
+  values(talk.company_id,talk.person_id,(select name from public.people where id=talk.person_id),made,'REQUEST_HERMES_AGENT',
+   jsonb_strip_nulls(jsonb_build_object('connection_id',connection,'agent_name',trim(agent_name),'job',trim(job),'conversation_id',conversation,'template',template)));
+ return jsonb_build_object('state','created','agent',made);
+end $$;
+revoke all on function public.lead_create_agent(uuid,text,text,text,text,text[],text,text) from public,anon,authenticated;
+grant execute on function public.lead_create_agent(uuid,text,text,text,text,text[],text,text) to service_role;

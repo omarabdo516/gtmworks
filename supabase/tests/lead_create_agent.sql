@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(17);
+select plan(22);
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
  ('e0000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9','co-10000000000000000000000000000001','ciphertext','connected','0.23.0','{run_submission}');
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('e0000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','e0000000-0000-0000-0000-000000000001','Lead','General',true);
@@ -43,5 +43,17 @@ select results_eq($$select l.run_id,a.name from public.lead_made_agents l join p
  $$values ('run-1','Meta Ads')$$,'the Owner reads the call''s record with its Agent');
 select is(public.open_hermes_agent((select id from public.hermes_agents where name='Meta Ads')),true,'its requester clears the new mark');
 select is(public.open_hermes_agent((select id from public.hermes_agents where name='Meta Ads')),false,'once');
+
+reset role;
+set local role service_role;
+select is(public.lead_create_agent(conversation=>'e1000000-0000-0000-0000-000000000001',run=>'run-1',call=>'call-2',agent_name=>'Writer',job=>'Writes the blog.',apps=>'{WordPress}',
+  template=>'writer',instructions=>'You write for {company}. Keep to {company}''s voice.')->>'state','created','a call from a ready-made role makes the Agent');
+select is(public.lead_create_agent(conversation=>'e1000000-0000-0000-0000-000000000001',run=>'run-1',call=>'call-3',agent_name=>'Writer',job=>'Writes the blog.',apps=>'{}',
+  template=>'writer',instructions=>repeat('x',8001))->>'state','invalid','instructions over 8000 characters make nothing');
+reset role;
+select results_eq($$select template,instructions from public.hermes_agents where name='Writer'$$,
+ $$values ('writer','You write for RS Learning. Keep to RS Learning''s voice.')$$,'the Agent keeps its role and the role''s instructions, fitted with the Company''s name');
+select is((select details->>'template' from public.hermes_agent_audit where agent_id=(select id from public.hermes_agents where name='Writer')),'writer','its audit row names the role');
+select ok((select template is null and instructions is null from public.hermes_agents where name='Meta Ads'),'an Agent made without a role has neither');
 select * from finish();
 rollback;
