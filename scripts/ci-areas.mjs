@@ -23,7 +23,7 @@ const suites = {
     /^tests\/(.+\/)?[^/]+\.spec\.ts$/, /^tests\/[^/]+\.ts$/, /^tests\/visual\.spec\.ts-snapshots\//,
     /^tests\/(visual-screens|lane|fake-hermes|fake-engine|touch-diagnostics)\.mjs$/,
     /^playwright(\.proxy)?\.config\.ts$/, /^Dockerfile$/, /^\.dockerignore$/,
-    /^scripts\/(web\.sh|local-db\.sh|proxy-stack\.sh|ci-image\.sh|playwright-journal-reporter\.mjs|first-run-db\.mjs|local-default-privileges\.sql)$/,
+    /^scripts\/(web\.sh|local-db\.sh|proxy-stack\.sh|ci-image\.sh|first-run-db\.mjs|local-default-privileges\.sql)$/,
     /^supabase\/(migrations\/|config\.toml$|seed\.sql$)/, /^public\//,
   ],
   // The Docker install, update, backup and release: the image and its build inputs, the install and release files, the

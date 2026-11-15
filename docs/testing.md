@@ -55,7 +55,7 @@ the parts are timed from run 43642299138.
 | browser suite (playwright test, 225 tests on 4 lanes: screens, functional, measured, first run) | whole-app browser | journeys, the 72 approved screens, navigation budgets, first run | 13.3 min of `integration`'s 22.2 min (stack start 4 min, image 2.7 min), every non-document PR | inside `integration`: its area or app code (until #81), `main`, or `e2e` input | gated; screens to become component tests (#81) |
 | image health (scripts/ci-image.sh) | whole-app | the built image serves health and runs its worker | inside `integration` | inside `integration` | gated with it |
 | install | install end-to-end | install, repeat, backup, restore, release update, one-line install, rollback | 15.2 min, PRs touching install files, `lib/`, `worker/` or the app build, every `main` push | its own files and `lib/`, `worker/`, `next.config.mjs`, `server.js` (the code it drives against the real Hermes); every `main` push; or `install` input | gated as before on a PR; `app/` and `components/` alone still skip it |
-| compare-failures, flaky-tests | our own CI tooling | names failures inherited from main; files an issue per flaky test | 0.1 to 0.2 min after `integration` | unchanged here | to be replaced by Playwright's own report (#81) |
+| compare-failures, flaky-tests | our own CI tooling | names failures inherited from main; files an issue per flaky test | 0.1 to 0.2 min after `integration` | none | removed (#81): Playwright's HTML report (uploaded by `integration`) and GitHub reporter show each failure and mark each flaky test |
 | check | summary | the one required check | 0.1 min | 0.1 min | keep; judges five stages |
 | design-compare.yml | design tool | a screen against the design reference | its own paths, or by hand | unchanged | keep |
 | visual-baselines.yml | tool | refreshes approved images | by hand | unchanged | keep |
@@ -66,6 +66,9 @@ the parts are timed from run 43642299138.
 | Removed | Why | Still covered by |
 |---|---|---|
 | `app.spec.ts` "landing and screenshots of every charter route" | Its only check was where a person of several companies lands after signing in from the sign-in page; the rest wrote unchecked screenshots. | Landing: merged into `app.spec.ts` "the Owner of every company lands on a Company home from the sign-in page and opens each one with no extra verification step" (the same person, the same page, the same check). Screens: `visual.spec.ts` compares sign-in, Home, approvals and settings members exactly. |
+| `compare-failures.test.mjs` and `scripts/compare-failures.mjs` (#81) | They tested and ran our own job that named PR failures also red on main. Playwright's own report replaces the job. | Nothing replaces the job; the HTML report artifact lists each failure of the run. |
+| `flaky-tests.test.mjs` and `scripts/flaky-tests.mjs` (#81) | They tested and ran our own job that filed an issue per flaky test. Playwright's own report replaces the job. | Playwright's GitHub reporter and HTML report mark a test that passed only on its retry as flaky. |
+| `playwright-journal.test.mjs`, the journal reporter and `docs/ci-test-journal.md` (#81) | They kept our own record of a Playwright run killed before its report, including the tests it never started. #81 removes that record. | Nothing lists the tests a killed run never started; Playwright's list reporter prints in the job log each test that ended. A killed run still fails `check` (`ci-verdict.test.mjs`). |
 | `app.spec.ts` "screenshots for unit routes" | It checked nothing beyond signing in, which every test does; it wrote unchecked screenshots. | `visual.spec.ts` compares the members and agents settings screens exactly. |
 
 ## Flaky tests (#83)
@@ -118,7 +121,6 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `company-log-migration.mjs` | replays the company-log migration (tests/db.sh) | — | — | helper, kept |
 | `company-profiles.test.mjs` | Each company has its own Engine profile with its level's toolsets and never a risky one. | 1.1 s | — | keep |
 | `company-sign-in.spec.ts` | The Owner signs the company in to ChatGPT and out; a member only sees whether it is connected. | 20.5 s | settings-overlay.test.mjs (the Models slot) | keep |
-| `compare-failures.test.mjs` | A PR's failing tests are told apart from those inherited from main. | 0.3 s | — | keep |
 | `connection-key.test.mjs` | A kept Connection key is read only within its own Company. | 0.3 s | hermes-connections.spec.ts | keep |
 | `conversations.spec.ts` | Private conversations: reply without reload, append-only record, isolation by person and company, Viewer refused, restart and lost runs, Hermes unreachable. | 130.7 s | hermes-runs.test.mjs, unknown-starts.test.mjs (driver logic without a browser) | keep |
 | `db.sh` | Database tests: RLS, grants and migrations replayed on legacy data (runs the *-migration.mjs and supabase/tests). | 20 s | — | keep |
@@ -138,7 +140,6 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `first-run-migration.mjs` | replays the first-run migration (tests/db.sh) | — | — | helper, kept |
 | `first-run.spec.ts` | An empty install creates its first Owner and Company only through the setup link; wrong codes, short passwords and races create nothing; no password reaches a log. (first-run project, last) | 24 s | setup-code.test.mjs, first-run.test.mjs (route logic without a browser) | keep (decision #50) |
 | `first-run.test.mjs` | First run accepts authored names and language and refuses invalid input before provisioning. | 0.4 s | first-run.spec.ts | keep |
-| `flaky-tests.test.mjs` | A flaky test is named once, with its first failure. | 0.4 s | — | keep |
 | `frame.spec.ts` | The company frame: section order, placeholders, Viewer navigation, Home's four parts, recent cards, the switcher, the drawer and the account menu. | 100.6 s | — | keep |
 | `fresh-seed.ts` | browser helper: each spec file starts from the seed (new, #69) | — | — | helper, kept |
 | `function-grants-migration.mjs` | replays the function-grants migration (tests/db.sh) | — | — | helper, kept |
@@ -174,7 +175,6 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `password.spec.ts` | Sign-in answers wrong and unknown alike; forgot-password, authenticator, invitation and settings password changes all work. | 21.4 s | password.test.mjs (the rule only) | keep |
 | `password.test.mjs` | A password needs 10 characters (not bytes) and a matching confirmation. | 1.3 s | password.spec.ts | keep |
 | `phone-tap-areas.spec.ts` | At 390px the Numbers and Activity log controls keep 44px tap areas. | 1.4 s | — | keep |
-| `playwright-journal.test.mjs` | A killed Playwright run still leaves a truthful record; `check` still needs a green integration job. | 107.1 s | — | keep |
 | `playwright-projects.test.mjs` | Screens run first on the seed, functional next, first run last, and a failure in one group hides none of the others. | 77.8 s | — | keep |
 | `projects.spec.ts` | Projects are created, cards filed into them, Viewers read only, and a later change by someone else is not overwritten. | 23.3 s | — | keep; flaky cause fixed (#83) |
 | `proxy/production-shape.spec.ts` | Behind a proxy on https and a public-looking host, sign-in, settings and invitations work. (own config) | 14 s | install job (the same through a real install) | keep |
