@@ -211,6 +211,31 @@
 .gw .sov .know-vs__c { display: grid; gap: 6px; align-content: start; padding: var(--s4); border-radius: var(--gw-r-md); background: var(--gw-bg-pane); border: 0.5px solid var(--gw-border-3); }
 .gw .sov .know-vs__c b { display: flex; align-items: center; gap: var(--s2); font-size: var(--gw-fs-base); font-weight: 600; --od-icon-size: 18px; }
 .gw .sov .know-vs__c p { font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-2); }
+/* its parts as chips on a rail, and one part as a page: title and Edit, who edited it and which Agents read it, the text */
+.gw .sov .od-rail { display: flex; gap: var(--s2); overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; }
+.gw .sov .od-rail::-webkit-scrollbar { display: none; }
+.gw .sov .od-rail > * { flex: none; scroll-snap-align: start; }
+.gw .sov .chip {
+  display: inline-flex; align-items: center; gap: var(--s2); height: 34px; padding: 0 var(--s3); border-radius: var(--gw-r-full); background: var(--gw-bg-pane);
+  box-shadow: var(--gw-border-2) 0 0 0 0.5px inset; font-size: var(--gw-fs-sm); white-space: nowrap; transition: background-color var(--gw-dur-fast) var(--gw-ease-out);
+}
+.gw .sov .chip[aria-pressed="true"] { background: var(--gw-primary); color: var(--gw-on-primary); box-shadow: none; }
+@media (hover: hover) { .gw .sov .chip:hover:not([aria-pressed="true"]) { background: var(--gw-bg-elevated-hover); } }
+.gw .sov .know-tabs { padding-block: 2px; margin-bottom: calc(var(--s2) * -1); }
+.gw .sov .know-page { display: grid; gap: var(--s3); padding: var(--s5); border-radius: var(--gw-r-lg); background: var(--gw-bg-pane); border: 0.5px solid var(--gw-border-3); }
+.gw .sov .know-page__top { display: flex; align-items: center; gap: var(--s3); }
+.gw .sov .know-page__h { flex: 1 1 0; min-width: 0; font-size: var(--gw-fs-lg); font-weight: 600; line-height: 1.5; }
+.gw .sov .know-page__top .btn { --od-icon-size: 15px; }
+.gw .sov .know-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); }
+.gw .sov .know-meta .me__av { width: 20px; height: 20px; font-size: 10px; }
+.gw .sov .fstack { display: inline-flex; align-items: center; flex: none; }
+.gw .sov .fstack .agent-face { border-radius: 50%; box-shadow: 0 0 0 2px var(--gw-bg-pane); }
+.gw .sov .fstack .agent-face + .agent-face { margin-inline-start: -5px; }
+.gw .sov .know-body { display: grid; gap: var(--s2); padding-top: var(--s3); border-top: 0.5px solid var(--gw-border-2); font-size: var(--gw-fs-msg); line-height: 1.7; color: var(--gw-text-1); overflow-wrap: anywhere; }
+.gw .sov .know-ul { margin: 0; padding-inline-start: var(--s5); display: grid; gap: var(--s1); list-style: disc; }
+.gw .sov .know-empty { padding: var(--s3) 0 0; border-top: 0.5px solid var(--gw-border-2); }
+.gw .sov .know-ta { min-height: 300px; font-size: var(--gw-fs-msg); }
+.gw .sov .know-status:empty { display: none; }
 
 /* your account */
 .gw .sov .lang-native { display: block; }
@@ -242,6 +267,8 @@
   .gw .sov-page { padding: var(--s5) var(--s4) var(--s12); }
   .gw .sov__co { display: none; }
   .gw .sov .know-vs { grid-template-columns: minmax(0, 1fr); }
+  /* The part chips keep the reference's 34px, with a 44px tap area inside the rail's own padding. */
+  .gw .sov .know-tabs { padding-block: 5px; margin-top: -3px; margin-bottom: calc(var(--s2) * -1 - 3px); }
   .gw .sov .kpis { grid-template-columns: minmax(0, 1fr); }
   /* 44px touch targets on a phone (PRODUCT.md): each control keeps the reference's size, and an invisible ring around
      it (inside the space the reference leaves around it) makes the tap area 44px. */
@@ -249,7 +276,8 @@
   .gw .sov-nav .sb-item::before { content: ""; position: absolute; inset: -4px 0; }
   .gw .sov .circle-btn { width: 36px; height: 36px; position: relative; }
   .gw .sov .circle-btn::before { content: ""; position: absolute; inset: -4px; }
-  .gw .sov :is(.btn--sm, .link-btn, .segmented :is(button, a), .switch) { position: relative; }
+  .gw .sov :is(.btn--sm, .link-btn, .segmented :is(button, a), .switch, .chip) { position: relative; }
+  .gw .sov .chip::before { content: ""; position: absolute; inset: -5px 0; }
   .gw .sov .btn--sm::before { content: ""; position: absolute; inset: -7px 0; }
   .gw .sov .inv-go { position: relative; }
   .gw .sov .inv-go::before { content: ""; position: absolute; inset: -4px 0; }
@@ -258,7 +286,7 @@
   .gw .sov .switch::before { content: ""; position: absolute; inset: -12px -6px; }
   .gw .sov .sov-password :is(input, button[type="submit"]) { height: 44px; }
 }
-@media (prefers-reduced-motion: reduce) { .gw .sov { animation: none; } .gw .sov .switch::after { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .gw .sov { animation: none; } .gw .sov .switch::after, .gw .sov .chip { transition: none; } }
 .gw .sov .co-name-form { display: grid; gap: 6px; }
 .gw .sov .co-name-form p:empty { display: none; }
 

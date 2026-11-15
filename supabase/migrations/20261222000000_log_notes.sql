@@ -264,6 +264,16 @@ revoke all on function public.close_note_run(bigint,text,text,text,bigint,bigint
 grant execute on function public.note_runs_due(bigint,bigint), public.begin_note_start(bigint),
  public.answer_note_start(bigint,integer,text), public.close_note_run(bigint,text,text,text,bigint,bigint) to service_role;
 
+-- A note's Run is given the Company knowledge (#27) as a channel Run is: pinned as its row is made, by the same trigger
+-- function, and read by the driver before each start.
+alter table public.note_runs add column knowledge jsonb;
+create trigger note_runs_knowledge before insert on public.note_runs for each row execute function public.pin_channel_run_knowledge();
+create function public.note_run_knowledge(message bigint) returns jsonb language sql stable security definer set search_path='' as $$
+ select coalesce((select r.knowledge from public.note_runs r where r.note_id=message),'[]'::jsonb);
+$$;
+revoke all on function public.note_run_knowledge(bigint) from public,anon,authenticated;
+grant execute on function public.note_run_knowledge(bigint) to service_role;
+
 alter table public.note_runs enable row level security;
 -- A Member reads a note's Run while they see its Agent: its state only, never what was sent, its Connection, its engine
 -- run id or its reply (read in the log).

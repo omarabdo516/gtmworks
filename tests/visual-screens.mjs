@@ -53,12 +53,16 @@ const lightScreens = [
   { name: 'rule-waiting', path: '/c/rs-learning/approvals', state: 'rule-suggested' },
   { name: 'learning-waiting', path: '/c/rs-learning/settings?section=learning', state: 'rule-suggested' },
   { name: 'agent-details', path: '/c/rs-learning/chat/69100000-0000-0000-0000-000000000005', state: 'agent-details' },
+  // The Company knowledge (#27), over Lead and Meta Ads as in made-agent, read by both: the seeded brand voice the Manager
+  // last edited, and the empty Audience part as its Owner sees it.
+  { name: 'knowledge', path: '/c/rs-learning/settings?section=knowledge', state: 'lead-made' },
+  { name: 'knowledge-empty', path: '/c/rs-learning/settings?section=knowledge&part=audience', state: 'lead-made' },
 ];
 
 export const screens = [
   { name: 'first-run', path: '/first-run', anonymous: true, dark: false },
   ...lightScreens.map(screen => ({ ...screen, dark: false })),
-  ...lightScreens.filter(screen => ['sign-in', 'home', 'chat', 'board', 'card', 'alone-chat', 'alone-settings', 'made-card', 'new-agent', 'made-agent', 'agent-visibility', 'ready-roles', 'rule-saved', 'agent-rules', 'settings-agents', 'settings-main-agent', 'rule-suggested', 'rule-waiting', 'learning-waiting', 'agent-details', 'channel'].includes(screen.name))
+  ...lightScreens.filter(screen => ['sign-in', 'home', 'chat', 'board', 'card', 'alone-chat', 'alone-settings', 'made-card', 'new-agent', 'made-agent', 'agent-visibility', 'ready-roles', 'rule-saved', 'agent-rules', 'settings-agents', 'settings-main-agent', 'rule-suggested', 'rule-waiting', 'learning-waiting', 'agent-details', 'channel', 'knowledge'].includes(screen.name))
     .map(screen => ({ ...screen, name: `${screen.name}-dark`, dark: true })),
 ];
 
