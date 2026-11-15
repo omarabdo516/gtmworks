@@ -8,8 +8,11 @@ import { extname, join, resolve, sep } from 'node:path';
 // The prototype has no URL routes: its sidebar switches views by `data-view` (chat, board, dashboard, log) and the
 // account menu opens the settings overlay (`#sov`) with its sections. Each step is one `click`, `waitFor` or
 // `scrollTo` with a CSS selector; a click on a sidebar item hidden behind the narrow-screen menu opens the menu first.
-// Every screen starts from the prototype's default state: the "viewing as" switcher and its demo worlds are never touched.
+// Every screen starts from the prototype's default state. Only the alone screens touch the "viewing as" switcher, to
+// show the workspace of an Owner working alone (#10); built, that is seeded R&S Consultations, its one Member Omar,
+// with work_mode set to 'alone' (tests/visual.spec.ts, state `alone`).
 const settings = [{ click: '#btn-me' }, { click: '[data-action="sov-open"]' }, { waitFor: '#sov[open] #sov-nav-company' }];
+const alone = [{ click: '#btn-me' }, { click: '[data-action="set-as"][data-person="omar"][data-world="solo"]' }, { waitFor: '#sb-recent' }];
 const settingsSection = section => [...settings, { click: `#sov-nav-${section}` }, { waitFor: `#sov-nav-${section}[aria-current]` }];
 // The ids of the optional comparison fixture (design/COMPARE.md, "Representative captures"). The tool never applies
 // it: a person loads it by hand into a throwaway local database, then passes these ids with --built-path.
@@ -38,6 +41,8 @@ export const screens = {
   // alone has no Agent with that id, so without the fixture the overlay shows the Agents list).
   agent: { reference: { steps: [...settingsSection('agents'), { click: '#sov-ag-lead' }, { waitFor: '#sov-tab-settings' }] }, builtPath: `/c/rs-learning/settings?agent=${fixture.mainAgent}` },
   account: { reference: { steps: settingsSection('account') }, builtPath: '/c/rs-learning/settings?section=account' },
+  'home-alone': { reference: { steps: alone }, builtPath: '/c/rs-consultations/chat' },
+  'settings-alone': { reference: { steps: [...alone, ...settings] }, builtPath: '/c/rs-consultations/settings' },
 };
 
 export const languages = ['ar', 'en'];

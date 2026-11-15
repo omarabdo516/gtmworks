@@ -83,14 +83,16 @@ test('a refused or failed fixture fails the step, so no capture runs on a half-l
 });
 
 test('every screen says how to reach it in the reference and which built page it matches', () => {
-  assert.deepEqual(Object.keys(screens).sort(), ['account', 'agent', 'agent-chat', 'agents', 'board', 'home', 'log', 'numbers', 'settings', 'waiting']);
+  assert.deepEqual(Object.keys(screens).sort(), ['account', 'agent', 'agent-chat', 'agents', 'board', 'home', 'home-alone', 'log', 'numbers', 'settings', 'settings-alone', 'waiting']);
   for (const [name, screen] of Object.entries(screens)) {
     assert.match(name, /^[a-z]+(-[a-z]+)*$/, name);
     assert.deepEqual(Object.keys(screen).sort(), ['builtPath', 'reference'], name);
     // A path, plus one query parameter for the route-backed settings overlay's states.
-    assert.ok(screen.builtPath === null || /^\/c\/rs-learning\/[a-z/]+(\?[a-z]+=[a-z0-9-]+)?$/.test(screen.builtPath), `${name} built path`);
+    assert.ok(screen.builtPath === null || /^\/c\/rs-(learning|consultations)\/[a-z/]+(\?[a-z]+=[a-z0-9-]+)?$/.test(screen.builtPath), `${name} built path`);
     assert.ok(Array.isArray(screen.reference.steps), `${name} steps`);
-    for (const step of screen.reference.steps) {
+    // The alone screens (#10) start by viewing the prototype as Omar working alone; every other screen never touches it.
+    const steps = name.endsWith('-alone') ? screen.reference.steps.slice(3) : screen.reference.steps;
+    for (const step of steps) {
       assert.equal(Object.keys(step).length, 1, `${name}: one action per step`);
       const [[action, selector]] = Object.entries(step);
       assert.ok(['click', 'waitFor', 'scrollTo'].includes(action), `${name}: known action ${action}`);
@@ -112,6 +114,12 @@ test('every screen says how to reach it in the reference and which built page it
   assert.equal(screens.numbers.builtPath, '/c/rs-learning/numbers');
   assert.equal(screens.log.builtPath, '/c/rs-learning/log');
   assert.equal(screens['agent-chat'].builtPath, null, 'agent-chat has no built equivalent yet');
+  // Alone (#10): the prototype viewed as Omar working alone, beside R&S Consultations, whose one Member is Omar.
+  const alone = [{ click: '#btn-me' }, { click: '[data-action="set-as"][data-person="omar"][data-world="solo"]' }, { waitFor: '#sb-recent' }];
+  assert.deepEqual(screens['home-alone'].reference.steps, alone);
+  assert.deepEqual(screens['settings-alone'].reference.steps, [...alone, ...screens.settings.reference.steps]);
+  assert.equal(screens['home-alone'].builtPath, '/c/rs-consultations/chat');
+  assert.equal(screens['settings-alone'].builtPath, '/c/rs-consultations/settings');
 });
 
 test('a screen with no built equivalent needs --built-path or --reference-only', () => {
