@@ -22,8 +22,8 @@ type Crumb={label:string,href?:string};
 type Company = {id:string,slug:string,name:string};
 
 // The frame every screen sits in (design-reference: #sidebar). From the top: the Company, search and a new chat with
-// Lead; the four entries; the Agents with Lead first; the channels (not built yet), this person's recent chats and
-// cards; Connect apps (not built yet), the account and theme.
+// Lead; the four entries; the Agents with Lead first; the channels (not built yet, and absent for a Company worked
+// alone), this person's recent chats and cards; Connect apps (not built yet), the account and theme.
 // `agentId` and `conversationId` mark the open Conversation in the sidebar.
 export default async function Shell({company,companies,section,title,crumbs,personName,role,owner=false,children,approvalCount=0,cardId,agentId,conversationId}:{company?:Company,companies:Company[],section:string,title:string,crumbs?:Crumb[],personName:string,role:string,owner?:boolean,children:ReactNode,approvalCount?:number,cardId?:number,agentId?:string,conversationId?:string}) { const {t,theme}=await getI18n();
  const slug=company?.slug;
@@ -36,6 +36,7 @@ export default async function Shell({company,companies,section,title,crumbs,pers
  const firsts=await Promise.all(conversations.map(async c=>(await db.from('conversation_messages').select('body').eq('conversation_id',c.id).eq('author','person').order('id').limit(1).maybeSingle()).data?.body as string|undefined));
  // A chat is named by the first line of its first message, as its own page names it (lib/conversations titleOf).
  const chats=conversations.map((c,index)=>({id:c.id,created_at:c.created_at,title:firsts[index]?.split('\n')[0]||c.agent_name}));
+ const workMode=company?.id?(await db.from('companies').select('work_mode').eq('id',company.id).maybeSingle()).data?.work_mode as string|null|undefined:undefined;
  const active=(path:string)=>path==='chat'?chat:path==='work/board'?section.startsWith('work/'):section===path;
  const sidebar=<SidebarSearchProvider>
   <div className="sb-top">
@@ -65,10 +66,10 @@ export default async function Shell({company,companies,section,title,crumbs,pers
    </section>
    <section className="sb-sec" id="sb-recent" aria-label={t('recentChats')}>
     {/* Channels (#23, #24) are drawn as the reference draws them, without invented unread counts, and open nothing yet. */}
-    <div className="thread-group">
+    {workMode!=='alone'&&<div className="thread-group">
      <div className="sb-label-row"><h2 className="sb-label" id="lbl-ch">{t('shellChannels')}</h2>{owner&&<button type="button" className="sb-add" aria-disabled="true" aria-label={`${t('shellNewChannel')} · ${t('soon')}`} title={t('soon')}><ShellIcon name="plus"/></button>}</div>
      <ul aria-labelledby="lbl-ch"><li><button type="button" className="sb-item thread-item ch-item" aria-disabled="true" title={t('soon')}><ShellIcon name="hash"/><span className="od-truncate">{t('shellGeneralChannel')}</span><span className="sr-only"> · {t('soon')}</span></button></li></ul>
-    </div>
+    </div>}
     <RecentChats slug={slug} chats={chats} current={conversationId} lead={agents[0]?.name||'Lead'}/>
     {company?.id&&<RecentCards key={company.id} slug={slug}/>}
    </section>
@@ -84,7 +85,7 @@ export default async function Shell({company,companies,section,title,crumbs,pers
  const breadcrumb=crumbs&&crumbs.length>1?<div className="heading m-0 min-w-0 flex-1 overflow-hidden"><Breadcrumb aria-label={t('breadcrumb')} className="min-w-0 overflow-hidden"><BreadcrumbList className="flex-nowrap">{crumbs.map((crumb,index)=>{const last=index===crumbs.length-1;return <Fragment key={index}>{index>0&&<BreadcrumbSeparator/>}<BreadcrumbItem className={last?'min-w-0':'shrink-0'}>{last||!crumb.href?<BreadcrumbPage className="truncate"><bdi>{crumb.label}</bdi></BreadcrumbPage>:<Link className="hover:text-foreground transition-colors" href={crumb.href}><bdi>{crumb.label}</bdi></Link>}</BreadcrumbItem></Fragment>;})}</BreadcrumbList></Breadcrumb></div>:undefined;
  // First run's one question (#9): while the Company has no answer, its Owner is asked before anything else, over an
  // inert workspace.
- const asking=!!company?.id&&owner&&(await db.from('companies').select('work_mode').eq('id',company.id).maybeSingle()).data?.work_mode===null;
+ const asking=!!company?.id&&owner&&workMode===null;
  const mark=<svg className="ws__mark" viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect width="32" height="32" rx="9" fill="var(--gw-accent)"/><path d="M21.5 11.5a7 7 0 1 0 1 7.5h-6.5" fill="none" stroke="#FFFFFF" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"/></svg>;
  const main=agents.find(agent=>agent.is_default);
  const question=asking&&company?<FirstRunChoice slug={company.slug} company={company.id} companyName={company.name} personName={personName} lead={main?{name:main.name,connection_id:main.connection_id}:null} mark={mark} brand={<>gtm<span>works</span></>}/>:null;
