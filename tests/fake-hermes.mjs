@@ -149,7 +149,7 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
    if(server) {
     const name=decodeURIComponent(server[1]);
     if(!home||!servers[name]) return send(response,404,{detail:`Server '${name}' not found`});
-    if(!server[2]&&request.method==='DELETE') { const {[name]:_,...rest}=servers; keepServers(rest); return send(response,200,{ok:true}); }
+    if(!server[2]&&request.method==='DELETE') { const rest={...servers}; delete rest[name]; keepServers(rest); return send(response,200,{ok:true}); }
     if(server[2]==='test'&&request.method==='POST') {
      if(settings.appsUnreachable.has(name)) return send(response,200,{ok:false,error:'Connection failed: /opt/data/mcp-tokens secret detail',tools:[]});
      if(!settings.appTokens.has(`${scoped}:${name}`)) return send(response,200,{ok:false,error:'OAuth authentication required — no token found.',tools:[]});
