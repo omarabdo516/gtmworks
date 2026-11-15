@@ -5,7 +5,7 @@ import { signIn } from './sign-in';
 import { resetFirstRun } from '../scripts/first-run-db.mjs';
 import { idle } from './navigation-measure';
 import { languages, widths, screens, snapshotName } from './visual-screens.mjs';
-import { appOrigin } from './lane.mjs';
+import { appOrigin, dbContainerOf } from './lane.mjs';
 
 // Every listed screen is compared with its approved image (tests/visual.spec.ts-snapshots) in both languages at 1440 and 390.
 // This project runs first on the freshly seeded database (see playwright.config.ts). It leaves the data as the seed built it,
@@ -88,13 +88,22 @@ const readyBy: Record<string, string> = {
   'lead-welcome': '[data-lead-line]',
   'alone-chat': '.chat',
   'alone-settings': '#inv-email',
+  'made-card': '.ac-card',
+  'new-agent': '.new-hint',
+  'made-agent': '.born--sov',
 };
 
 // The states the seed does not hold: first run's two (#9), RS Learning with no answer yet and a new workspace's Lead with
-// the Owner's empty Conversation, and RS Consultations worked alone (#10). Each is set up for its own picture and taken
-// away after it, so the seed stays as built.
+// the Owner's empty Conversation, RS Consultations worked alone (#10), and an Agent Lead made (#13). Each is set up for
+// its own picture and taken away after it, so the seed stays as built.
 const leadWelcome = { connection: '64000000-0000-0000-0000-000000000007', agent: '64000000-0000-0000-0000-000000000008', conversation: '64000000-0000-0000-0000-000000000009' };
-const screenStates: Record<string, { set: string, unset: string }> = {
+// Lead and the Meta Ads it made for Omar on June 10 (#13), with the Conversation that made it (tests/visual-screens.mjs).
+const made = (n: number) => `65000000-0000-0000-0000-00000000000${n}`;
+// A state whose rows are append-only (a Conversation's messages) is set and taken away as the database's own
+// administrator with triggers off, the way tests/fresh-seed.ts puts the seed back, so nothing of it stays behind.
+const asAdmin = (sql: string) => execFileSync('docker', ['exec', '-i', dbContainerOf(), 'psql', '-U', 'supabase_admin', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-q', '--single-transaction'],
+  { input: `set session_replication_role = replica;\n${sql}`, stdio: ['pipe', 'ignore', 'pipe'], encoding: 'utf8' });
+const screenStates: Record<string, { set: string, unset: string, admin?: true }> = {
   unanswered: {
     set: `update public.companies set work_mode=null where id='${rsLearning}'`,
     unset: `update public.companies set work_mode='team' where id='${rsLearning}'`,
@@ -110,6 +119,26 @@ const screenStates: Record<string, { set: string, unset: string }> = {
     unset: `do $$ begin delete from public.conversations where id='${leadWelcome.conversation}';
       delete from public.hermes_agents where id='${leadWelcome.agent}';
       delete from public.hermes_connections where id='${leadWelcome.connection}'; end $$;`,
+  },
+  'lead-made': {
+    admin: true,
+    set: `insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values
+       ('${made(1)}','${rsLearning}','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9/p/visual-lead','visual-made-lead','visual-no-key','unreachable'),
+       ('${made(2)}','${rsLearning}','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9/p/visual-ads','visual-made-ads','visual-no-key','unreachable');
+      insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,created_at,requested_by,apps) values
+       ('${made(3)}','${rsLearning}','${made(1)}','Lead','General',true,null,null,null),
+       ('${made(4)}','${rsLearning}','${made(2)}','Meta Ads','Runs the Meta ads and asks before it publishes or spends.',false,'2026-06-10T09:01:00Z','20000000-0000-0000-0000-000000000001',array['Meta Ads Manager','Canva']);
+      insert into public.conversations(id,company_id,person_id,agent_id,agent_name,created_at) values ('${made(5)}','${rsLearning}','20000000-0000-0000-0000-000000000001','${made(3)}','Lead','2026-06-10T09:00:00Z');
+      insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at) values
+       ('${rsLearning}','${made(5)}','person','20000000-0000-0000-0000-000000000001',null,'Omar','I want someone to handle our Meta ads','${made(6)}','visual-made','2026-06-10T09:00:00Z'),
+       ('${rsLearning}','${made(5)}','agent',null,'${made(3)}','Lead','Done. Meta Ads runs your Meta ads from now on, and asks you before it publishes or spends anything.',null,'visual-made','2026-06-10T09:01:00Z');
+      insert into public.lead_made_agents(conversation_id,run_id,call_id,company_id,agent_id,created_at) values ('${made(5)}','visual-made','call-0','${rsLearning}','${made(4)}','2026-06-10T09:01:00Z');`,
+    unset: `delete from public.lead_made_agents where conversation_id='${made(5)}';
+      delete from public.conversation_usage where conversation_id='${made(5)}';
+      delete from public.conversation_messages where conversation_id='${made(5)}';
+      delete from public.conversations where id='${made(5)}';
+      delete from public.hermes_agents where id in ('${made(3)}','${made(4)}');
+      delete from public.hermes_connections where id in ('${made(1)}','${made(2)}');`,
   },
 };
 
@@ -198,13 +227,14 @@ test.describe('signed-in screens', () => {
         current = language;
       }
       const state = 'state' in screen && typeof screen.state === 'string' ? screenStates[screen.state] : undefined;
-      if (state) { query(state.unset); query(state.set); }
+      const write = state?.admin ? asAdmin : query;
+      if (state) { write(state.unset); write(state.set); }
       try {
         await showScreen(page, screen, width);
         if (screen.dark) await expectDarkContrast(page);
         await expect(page).toHaveScreenshot(`${snapshotName(screen, language, width)}.png`, { fullPage: true });
       } finally {
-        if (state) query(state.unset);
+        if (state) write(state.unset);
       }
     });
   }

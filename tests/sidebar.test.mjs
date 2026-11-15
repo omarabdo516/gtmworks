@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { orderAgents, groupRecents, waitingLabel, themeChoices, companyAgents, matchChats, moreSections } from '../lib/sidebar.mjs';
+import { orderAgents, groupRecents, waitingLabel, themeChoices, companyAgents, matchChats, moreSections, isNewFor } from '../lib/sidebar.mjs';
 import { readFileSync } from 'node:fs';
 
 test('the Inbox entry is named at zero too, so it stays reachable when nothing waits', () => {
@@ -21,9 +21,18 @@ test('the sidebar reads the company’s own real Agents, the main Agent first', 
   order: column => { calls.push(['order', column]); return Promise.resolve({ data: rows }); },
  }; return chain; } };
  assert.deepEqual((await companyAgents(db, 'company-1')).map(agent => agent.id), ['l', 'a']);
- assert.deepEqual(calls, [['from', 'hermes_agents'], ['select', 'id,connection_id,name,speciality,is_default'], ['eq', 'company_id', 'company-1'], ['order', 'name']]);
+ assert.deepEqual(calls, [['from', 'hermes_agents'], ['select', 'id,connection_id,name,speciality,is_default,requested_by,requester_opened_at'], ['eq', 'company_id', 'company-1'], ['order', 'name']]);
  const empty = { from: () => ({ select: () => ({ eq: () => ({ order: () => Promise.resolve({ data: null }) }) }) }) };
  assert.deepEqual(await companyAgents(empty, 'company-1'), []);
+});
+
+test('an Agent Lead made is new for the person who asked for it until they open it, and for nobody else', () => {
+ const made = { is_default: false, requested_by: 'omar', requester_opened_at: null };
+ assert.equal(isNewFor(made, 'omar'), true);
+ assert.equal(isNewFor(made, 'sara'), false, 'another member never sees the mark');
+ assert.equal(isNewFor({ ...made, requester_opened_at: '2026-06-10T09:00:00Z' }, 'omar'), false, 'opened');
+ assert.equal(isNewFor({ ...made, is_default: true }, 'omar'), false, 'the main Agent is never new');
+ assert.equal(isNewFor({ is_default: false, requested_by: null, requester_opened_at: null }, 'omar'), false, 'an attached Agent was asked for by nobody');
 });
 
 test('the main Agent, Lead, comes first and the rest keep their name order', () => {

@@ -4,17 +4,20 @@ import { supabase } from '@/lib/supabase';
 import Shell from '@/app/shell';
 import { approvalQueue } from '@/lib/approval-queue';
 import { uuid } from '@/lib/conversations';
+import { isNewFor } from '@/lib/sidebar.mjs';
+import { madeColumns, madeOf } from '@/lib/agent-made';
 import AgentChat from './agent-chat';
 
 // Opening an Agent: its empty Conversation (design-reference: emptyChatHTML). Without an id it is the main Agent, Lead.
-// The first message starts the Conversation and the page moves to it.
-export default async function AgentChatPage({params}:{params:Promise<{slug:string,agent?:string[]}>}) {
- const {t}=await getI18n(); const {slug,agent:parts}=await params;
+// The first message starts the Conversation and the page moves to it. "New agent" opens it as ?new=agent (#13): for
+// the Owner, Lead's chat ready to type, with a hint line; no form.
+export default async function AgentChatPage({params,searchParams}:{params:Promise<{slug:string,agent?:string[]}>,searchParams:Promise<{new?:string}>}) {
+ const {t}=await getI18n(); const {slug,agent:parts}=await params; const asked=(await searchParams).new==='agent';
  const db=await supabase(); const {data:{user}}=await db.auth.getUser();
  if(!user) redirect(`/sign-in?next=${encodeURIComponent(`/c/${slug}/chat${parts?.length?`/${parts.join('/')}`:''}`)}`);
  const {data:companies}=await db.from('companies').select('id,slug,name').order('name'); const company=companies?.find(c=>c.slug===slug);
  if(!company||(parts&&(parts.length!==1||!uuid.test(parts[0])))) notFound();
- const {data:agents}=await db.from('hermes_agents').select('id,connection_id,name,speciality,is_default').eq('company_id',company.id);
+ const {data:agents}=await db.from('hermes_agents').select(`id,connection_id,name,speciality,is_default,${madeColumns}`).eq('company_id',company.id);
  const agent=parts?agents?.find(a=>a.id===parts[0]):agents?.find(a=>a.is_default)||agents?.[0];
  if(parts&&!agent) notFound();
  const {data:person}=await db.from('people').select('name').eq('id',user.id).single();
@@ -23,7 +26,7 @@ export default async function AgentChatPage({params}:{params:Promise<{slug:strin
  const {data:writer}=await db.rpc('conversation_can_write',{c:company.id});
  const {items:waitingItems}=await approvalQueue(db,company.id,user.id,membership?.role||'');
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
- return <Shell company={company} companies={companies||[]} section="chat" title={t('chats')} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={waitingItems.length} agentId={agent?.id}>
-  <main className="convo-page h-full"><AgentChat slug={slug} company={company.id} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default}:null} writer={!!writer} fresh={agents?.length===1}/></main>
+ return <Shell company={company} companies={companies||[]} personId={user.id} section="chat" title={t('chats')} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={waitingItems.length} agentId={agent?.id}>
+  <main className="convo-page h-full"><AgentChat slug={slug} company={company.id} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} writer={!!writer} fresh={agents?.length===1} newAgent={asked&&membership?.role==='owner'&&!!agent?.is_default} isNew={!!agent&&isNewFor(agent,user.id)}/></main>
  </Shell>;
 }

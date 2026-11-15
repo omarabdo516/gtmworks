@@ -3,5 +3,17 @@
   "conversationQueued": "هيقراها بعد الرد اللي شغال عليه",
   "conversationQueuedFailed": "متبعتتش: محرك الوكلاء مرضيش يبدأها. ابعتها تاني.",
   "conversationAddressed": "لـ {0} · الوكيل متسألش",
-  "conversationStop": "وقّف {0}"
+  "conversationStop": "وقّف {0}",
+  "madeAgentLabel": "وكيل اتعمل: {0}",
+  "madeAgentMade": "اتعمل",
+  "madeAgentJob": "الشغلانة",
+  "madeAgentApps": "التطبيقات",
+  "madeAgentAppsJoin": "، ",
+  "madeAgentNoApps": "من غير تطبيقات: بيشتغل على اللي تبعتهوله",
+  "madeAgentNever": "مش هيعمل من غير ما يسألك",
+  "madeAgentPublish": "ينشر حاجة",
+  "madeAgentSpend": "يصرف فلوس",
+  "madeAgentMessage": "يبعت لعميل",
+  "madeAgentOpen": "افتح {0}",
+  "madeAgentTip": "عايز تغيّر حاجة فيه؟ قولّه في المحادثة بتاعته."
 }

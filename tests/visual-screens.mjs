@@ -26,12 +26,18 @@ const lightScreens = [
   // chat page shows the sidebar with no channels; settings shows the Company with the invitation form and no members.
   { name: 'alone-chat', path: '/c/rs-consultations/chat', state: 'alone' },
   { name: 'alone-settings', path: '/c/rs-consultations/settings', state: 'alone' },
+  // Lead makes an Agent (#13), over Lead and the Meta Ads Lead made for Omar on June 10, not opened yet: the
+  // Conversation with its card (the sidebar marks Meta Ads new), Lead's chat opened by "New agent", and Meta Ads's page
+  // in Settings saying when and at whose request.
+  { name: 'made-card', path: '/c/rs-learning/conversations/65000000-0000-0000-0000-000000000005', state: 'lead-made' },
+  { name: 'new-agent', path: '/c/rs-learning/chat?new=agent', state: 'lead-made' },
+  { name: 'made-agent', path: '/c/rs-learning/settings?agent=65000000-0000-0000-0000-000000000004', state: 'lead-made' },
 ];
 
 export const screens = [
   { name: 'first-run', path: '/first-run', anonymous: true, dark: false },
   ...lightScreens.map(screen => ({ ...screen, dark: false })),
-  ...lightScreens.filter(screen => ['sign-in', 'home', 'chat', 'board', 'card', 'alone-chat', 'alone-settings'].includes(screen.name))
+  ...lightScreens.filter(screen => ['sign-in', 'home', 'chat', 'board', 'card', 'alone-chat', 'alone-settings', 'made-card', 'new-agent', 'made-agent'].includes(screen.name))
     .map(screen => ({ ...screen, name: `${screen.name}-dark`, dark: true })),
 ];
 

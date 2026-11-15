@@ -769,5 +769,13 @@
   "leadTryExample": "عايز حد يمسك إعلانات Meta وGoogle",
   "settingsInviteEmail": "إيميل العضو",
   "settingsInviteGo": "اعزم",
-  "settingsInviteEmailExample": "name@example.com"
+  "settingsInviteEmailExample": "name@example.com",
+  "newAgentHint": "قول لـ {0} محتاج وكيل يعمل إيه، بكلامك، وهو يعمله على طول.",
+  "newAgentExample": "مثلاً: عايز حد يتابع ليدز واتساب ويرد عليهم",
+  "agentNew": "جديد",
+  "agentMadeOn": "اتعمل يوم {0} بطلب من {1}",
+  "agentMadeOnMine": "اتعمل يوم {0} بطلب منك",
+  "agentMadeToday": "اتعمل النهارده {0} بطلب من {1}",
+  "agentMadeTodayMine": "اتعمل النهارده {0} بطلب منك",
+  "agentMadeSeeAsk": "شوف الطلب"
 }

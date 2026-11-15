@@ -35,12 +35,13 @@ CI deploys nothing. An install picks up a merge when its owner runs `sh scripts/
 
 ## Visual comparison
 
-`tests/visual.spec.ts` compares twenty-four screens with approved images, each in Arabic
-and English at 390 and 1440 wide (96 images in `tests/visual.spec.ts-snapshots/`):
+`tests/visual.spec.ts` compares thirty screens with approved images, each in Arabic
+and English at 390 and 1440 wide (120 images in `tests/visual.spec.ts-snapshots/`):
 sign-in, first run, Home, the Conversation with the main Agent, the board, a card, the calendar, approvals, settings
 members, agents and work, Numbers, the Activity log, first run's alone-or-team question, Lead's first words in a new
-workspace, the chat page and the Company settings of a Company worked alone, and sign-in, Home, the Conversation, the
-board, a card and both alone screens in the dark theme. The list lives in `tests/visual-screens.mjs`;
+workspace, the chat page and the Company settings of a Company worked alone, the Conversation with the card of an
+Agent Lead made, Lead's chat opened by "New agent" and that Agent's Settings page, and sign-in, Home, the
+Conversation, the board, a card, both alone screens and the three Lead-made Agent screens in the dark theme. The list lives in `tests/visual-screens.mjs`;
 `tests/visual-baselines.test.mjs` fails when a screen lacks an image or an image has
 no screen.
 

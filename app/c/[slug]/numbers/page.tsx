@@ -47,7 +47,7 @@ export default async function NumbersPage({params,searchParams}:{params:Promise<
   if(item.asked_by) return <span className="lg-av" aria-hidden="true">{Array.from(item.asked_by.trim())[0]}</span>;
   return <SystemMark/>;
  };
- return <Shell company={company} companies={companies||[]} section="numbers" title={t('numbers')} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={items.length}>
+ return <Shell company={company} companies={companies||[]} personId={user.id} section="numbers" title={t('numbers')} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={items.length}>
   <main className="numbers-page">
    <div className="dash">
     <header className="page-head"><div className="od-field"><h1 className="page-title">{t('numbers')}</h1><p className="page-sub">{t('numbersSub')}</p></div>

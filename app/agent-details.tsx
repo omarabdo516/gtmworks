@@ -4,8 +4,10 @@ import { useI18n } from '@/lib/i18n-client';
 import Link from '@/lib/link';
 import { ShellIcon } from '@/components/shell-icon';
 import { CompanyAgentFace } from '@/components/company-agent-face';
+import { MadeLine } from '@/app/agent-made';
+import type { Made } from '@/lib/agent-made';
 
-export type DetailsAgent={id:string,connection_id:string,name:string,speciality:string,main:boolean};
+export type DetailsAgent={id:string,connection_id:string,name:string,speciality:string,main:boolean,made?:Made|null};
 // The reference keeps the details beside the chat from 1024px up; below that they slide over it (design-reference:
 // overlayDetails, @media (max-width: 1023px) .details).
 const overlayQuery='(max-width: 1023px)';
@@ -31,7 +33,7 @@ export function HeadPill({panel,agent,face,title,titleDir}:{panel?:DetailsPanel,
 const tabs=['chatTabActivity','chatTabTasks','chatTabFiles','chatTabMemory','chatTabLog'];
 
 // The Agent's details (design-reference: #details, renderDetailsPanel): its settings and close buttons, its face,
-// name, main mark and speciality, then the five tabs. Activity, tasks, files, memory and log are not built yet (#20,
+// name, main mark, speciality and, for an Agent Lead made, when and at whose request (#13), then the five tabs. Activity, tasks, files, memory and log are not built yet (#20,
 // #21), so the tabs are drawn but say "Soon".
 export function AgentDetails({panel,agent,settingsHref}:{panel:DetailsPanel,agent:DetailsAgent,settingsHref:string}) {
  const {t}=useI18n(); const close=useRef<HTMLButtonElement>(null);
@@ -59,6 +61,7 @@ export function AgentDetails({panel,agent,settingsHref}:{panel:DetailsPanel,agen
      <div>
       <div className="dp-id__name"><bdi>{agent.name}</bdi>{agent.main&&<span className="badge dp-id__badge">{t('mainAgent')}</span>}</div>
       {agent.speciality&&<div className="dp-id__role"><bdi>{agent.speciality}</bdi></div>}
+      {agent.made&&<MadeLine made={agent.made} where="panel"/>}
      </div>
     </div>
     <div className="segmented dp-tabs" role="group" aria-label={t('chatDetailsOf',agent.name)}>{tabs.map((key,index)=><button key={key} type="button" aria-disabled="true" title={t('soon')} data-first={index===0||undefined}>{t(key)}<span className="sr-only"> · {t('soon')}</span></button>)}</div>

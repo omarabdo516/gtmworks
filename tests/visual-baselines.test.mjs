@@ -5,11 +5,11 @@ import { screens, languages, widths, baselineFolder, baselineFile } from './visu
 
 const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
-test('dark comparison includes Home, the chat, board, card, sign-in and both alone screens in both languages and widths', () => {
+test('dark comparison includes Home, the chat, board, card, sign-in, both alone screens and the three #13 screens in both languages and widths', () => {
  const dark = screens.filter(screen => screen.dark);
- assert.deepEqual(dark.map(screen => screen.name).sort(), ['alone-chat-dark', 'alone-settings-dark', 'board-dark', 'card-dark', 'chat-dark', 'home-dark', 'sign-in-dark']);
+ assert.deepEqual(dark.map(screen => screen.name).sort(), ['alone-chat-dark', 'alone-settings-dark', 'board-dark', 'card-dark', 'chat-dark', 'home-dark', 'made-agent-dark', 'made-card-dark', 'new-agent-dark', 'sign-in-dark']);
  const images = dark.flatMap(screen => languages.flatMap(language => widths.map(width => baselineFile(screen, language, width))));
- assert.equal(images.length, 28);
+ assert.equal(images.length, 40);
  console.log('Dark baselines expected:\n' + images.join('\n'));
 });
 

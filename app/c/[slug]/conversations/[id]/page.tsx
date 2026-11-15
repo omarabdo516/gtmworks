@@ -6,6 +6,7 @@ import { approvalQueue } from '@/lib/approval-queue';
 import ConversationView from './conversation';
 import { conversationColumns, titleOf, uuid } from '@/lib/conversations';
 import { conversationRecord } from '@/lib/conversation-record';
+import { madeColumns, madeOf } from '@/lib/agent-made';
 
 // Only the person who started a conversation can read it; everyone else, in this company or another, gets not found.
 export default async function ConversationPage({params}:{params:Promise<{slug:string,id:string}>}) {
@@ -19,7 +20,7 @@ export default async function ConversationPage({params}:{params:Promise<{slug:st
  // Messages, notes to a person and waiting turns, with who the Agent is working for (lib/conversation-record.ts).
  const record=await conversationRecord(db,user.id,company.id,conversation);
  // The Agent's details beside the chat, while it is still attached to the company.
- const {data:agent}=conversation.agent_id?await db.from('hermes_agents').select('id,connection_id,name,speciality,is_default').eq('id',conversation.agent_id).eq('company_id',company.id).maybeSingle():{data:null};
+ const {data:agent}=conversation.agent_id?await db.from('hermes_agents').select(`id,connection_id,name,speciality,is_default,${madeColumns}`).eq('id',conversation.agent_id).eq('company_id',company.id).maybeSingle():{data:null};
  const {data:person}=await db.from('people').select('name').eq('id',user.id).single();
  const {data:membership}=await db.from('members').select('role').eq('company_id',company.id).eq('person_id',user.id).is('removed_at',null).maybeSingle();
  // Any Member but a Viewer may write (#287); the database decides, as it does for every send.
@@ -27,7 +28,7 @@ export default async function ConversationPage({params}:{params:Promise<{slug:st
  const {items:waitingItems}=await approvalQueue(db,company.id,user.id,membership?.role||'');
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  const title=titleOf(record.messages,conversation.agent_name);
- return <Shell company={company} companies={companies||[]} section="conversations" title={title} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={waitingItems.length} agentId={conversation.agent_id||undefined} conversationId={id}>
-  <main className="convo-page h-full"><ConversationView slug={slug} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default}:null} company={company.id} conversation={record.conversation} initial={record} writer={!!writer}/></main>
+ return <Shell company={company} companies={companies||[]} personId={user.id} section="conversations" title={title} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={waitingItems.length} agentId={conversation.agent_id||undefined} conversationId={id}>
+  <main className="convo-page h-full"><ConversationView slug={slug} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} company={company.id} conversation={record.conversation} initial={record} writer={!!writer}/></main>
  </Shell>;
 }
