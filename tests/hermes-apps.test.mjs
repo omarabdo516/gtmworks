@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { provideProfile, readApps, startAppSignIn, pollAppSignIn, cancelAppSignIn, finishAppSignIn, disconnectApp } from '../lib/hermes.mjs';
+import { provideProfile, readApps, prepareApp, startAppSignIn, pollAppSignIn, cancelAppSignIn, finishAppSignIn, disconnectApp } from '../lib/hermes.mjs';
 import { levelConfig, alwaysOff, companyProfile } from '../lib/agent-levels.mjs';
 import { apps, appByKey } from '../lib/app-catalogue.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
@@ -84,9 +84,15 @@ test('a server installed without its list is removed again when the list cannot 
  const {fake,target,servers}=await companyEngine();
  try {
   fake.settings.failStep='config';
+  assert.equal(await prepareApp(target,'airtable',back('airtable')),'failed');
+  assert.equal(servers().airtable,undefined);
   assert.deepEqual(await startAppSignIn(target,'airtable',back('airtable')),{state:'failed',flow:null,url:null});
   assert.equal(servers().airtable,undefined);
   assert.equal(fake.settings.appFlows.size,0,'no sign-in starts');
+  fake.settings.failStep='';
+  assert.equal(await prepareApp(target,'airtable',back('airtable')),null);
+  assert.deepEqual(servers().airtable.tools.include,[...appByKey('airtable').readTools]);
+  assert.equal(fake.settings.appFlows.size,0,'preparing starts no sign-in');
  } finally { await fake.close(); }
 });
 
