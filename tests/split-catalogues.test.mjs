@@ -8,6 +8,7 @@ const owners = [
  ['app/member-note.tsx', 'member-note', /\bt\('([A-Za-z]+)'/g],
  ['app/member-note-actions.ts', 'member-note', /'(memberNote[A-Za-z]*)'/g],
  ['app/c/[slug]/conversations/[id]/conversation.tsx', 'conversation', /\bc\('([A-Za-z]+)'/g],
+ ['app/ready-made.tsx', 'ready-made', /\bt\('([A-Za-z]+)'/g],
 ];
 test('every key a split catalogue owner asks for is in its catalogue in both languages', () => {
  for (const [file, name, pattern] of owners) {

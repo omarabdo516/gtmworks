@@ -104,7 +104,7 @@ test('"New agent" opens Lead\'s chat with the composer focused and a hint line, 
  await openNavigation(page);
  await page.locator('.sidebar .agent-tile--new').click();
  await expect(page).toHaveURL(/\/c\/rs-learning\/chat\?new=agent$/);
- await expect(page.locator('.new-hint[role="note"]')).toHaveText('Tell Lead what you need an agent for, in your own words, and it makes it right away.');
+ await expect(page.locator('.new-hint[role="note"] .new-hint__t')).toHaveText('Tell Lead what you need an agent for, in your own words, and it makes it right away.');
  const box=page.getByRole('textbox',{name:'Message'});
  await expect(box).toBeFocused();
  await expect(box).toHaveAttribute('placeholder','e.g. I want someone to follow up on WhatsApp leads');

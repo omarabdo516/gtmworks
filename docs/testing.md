@@ -145,7 +145,7 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `engine-name.test.mjs` | No message value names the Engine, in any language. | 0.3 s | engine-name.spec.ts | keep |
 | `engine.test.mjs` | The engine driver runs once per idempotency key, offers tools in a run's instructions and reads at most four calls back from the reply, and never sends a key over plain HTTP to a public address. | 0.6 s | — | keep |
 | `fake-engine.mjs` | browser helper: an in-memory engine | — | — | helper, kept |
-| `fake-hermes.mjs` | browser helper: a fake Hermes server | — | — | helper, kept |
+| `fake-hermes.mjs` | browser helper: a fake Hermes server, on a loopback address of its own when a spec needs its fixed management port | — | — | helper, kept |
 | `first-run-db.test.mjs` | The first-run reset and seed restore run in fail-fast transactions. | 0.3 s | — | keep |
 | `first-run-diagnostics.test.mjs` | First-run refusals log distinct causes; failing tests print only matching server lines. | 2 s | — | keep |
 | `first-run-migration.mjs` | replays the first-run migration (tests/db.sh) | — | — | helper, kept |
@@ -191,6 +191,8 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `projects.spec.ts` | Projects are created, cards filed into them, Viewers read only, and a later change by someone else is not overwritten. | 23.3 s | — | keep; flaky cause fixed (#83) |
 | `proxy/production-shape.spec.ts` | Behind a proxy on https and a public-looking host, sign-in, settings and invitations work. (own config) | 14 s | install job (the same through a real install) | keep |
 | `public-tree.test.mjs` | The public tree carries no superseded decision or private wording. | 0.7 s | — | keep |
+| `ready-made-roles.spec.ts` | The Owner opens the ready-made gallery from "New agent" (its own address, ?new=ready), finds roles by search in either language and by category, leaves it with Escape or "Start from scratch", and adds one: Lead gets the message, in Arabic with the role's English words too, and makes the Agent from that role with its log row, the same rows as asking Lead in words; a Company worked alone reads the alone wording; Manager, Contributor and Viewer get neither the link nor the gallery. (#14) | — | ready-made.test.mjs (every role's words), engine-conversation.spec.ts (each role's stored instructions) | new |
+| `ready-made.test.mjs` | Every ready-made role has its words in both catalogues, its English line is the job the Agent gets, and its English name is the one create_agent's template description gives. (#14) | 0.1 s | ready-made-roles.spec.ts | new |
 | `release.test.mjs` | Releases pin every image, publish one tested image and are proven before publishing. (decision 0015) | 4.8 s | install job | keep (decision 0015) |
 | `remove-agency-harness.test.mjs` | The Agency removal harness removes everything before it replays the migration. | 0.2 s | — | keep |
 | `remove-agency-migration.mjs` | replays the Agency removal (tests/db.sh) | — | — | helper, kept |

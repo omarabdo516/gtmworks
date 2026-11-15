@@ -1,6 +1,8 @@
 import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
-export async function fakeHermes({managementPort=0}={}) {
+// `host` is the loopback address both listeners take: a spec that needs the management listener on its fixed port 9119
+// (the driver's default beside the Hermes address) takes an address of its own, so lanes never share that port.
+export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
  // Run ids are unique across fakes, as Hermes's are: the database refuses a Member's run already used elsewhere (#287).
  const instance=randomUUID().slice(0,8);
  // runs: one entry per run Hermes created; the same Idempotency-Key replays the same run.
@@ -140,8 +142,8 @@ export async function fakeHermes({managementPort=0}={}) {
    send(response,404,{detail:'Not Found'});
   });
  });
- await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
- await new Promise(resolve=>management.listen(managementPort,'127.0.0.1',resolve));
+ await new Promise(resolve=>server.listen(0,host,resolve));
+ await new Promise(resolve=>management.listen(managementPort,host,resolve));
  const closing=listener=>new Promise(resolve=>{listener.close(resolve);listener.closeAllConnections();});
- return {settings,address:`http://127.0.0.1:${server.address().port}`,managementAddress:`http://127.0.0.1:${management.address().port}`,close:()=>Promise.all([closing(server),closing(management)]).then(()=>{})};
+ return {settings,address:`http://${host}:${server.address().port}`,managementAddress:`http://${host}:${management.address().port}`,close:()=>Promise.all([closing(server),closing(management)]).then(()=>{})};
 }
