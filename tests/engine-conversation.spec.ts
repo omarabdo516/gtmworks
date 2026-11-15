@@ -145,10 +145,19 @@ test('integration: Lead makes the Agent the Owner asks for, and nothing for a Ma
   .toEqual([{actor_id:omar,action:'agent_requested',name:'Meta Ads',job:'Runs the Meta ads.'}]);
  expect((await person.from('lead_made_agents').select('conversation_id,run_id,agent_id')).data).toEqual([{conversation_id:conversation,run_id:fake.runs[1].id,agent_id:agent.id}]);
 
+ // A reply that is nothing but the call still makes the Agent; the run itself closes failed.
+ const answer=fake.settings.reply;
+ fake.settings.reply=()=>'';
+ fake.settings.toolCalls=()=>[{id:'call-0',name:'create_agent',arguments:{name:'SEO',job:'Writes the blog.',apps:[]}}];
+ expect(await ask()).toEqual({conversation});
+ expect(await close()).toBe(1);
+ expect(made().map((row:{name:string})=>row.name).sort()).toEqual(['Meta Ads','SEO']);
+ fake.settings.reply=answer;
+
  const manager=(await memberClient('manager@example.com')).person;
  const theirs=randomUUID();
  expect(await sendMessage(manager,service,{person:'20000000-0000-0000-0000-000000000002',company,conversation:theirs,sendKey:randomUUID(),agent:lead,message:'I want someone to handle Meta ads',encryptionKey,engineFor:fake.engineFor})).toEqual({conversation:theirs});
- expect(fake.runs[2].tools).toEqual([]);
+ expect(fake.runs[3].tools).toEqual([]);
  expect(await closeOpenRuns(service,{encryptionKey,conversation:theirs,engineFor:fake.engineFor})).toBe(1);
- expect(made()).toHaveLength(1);
+ expect(made()).toHaveLength(2);
 });
