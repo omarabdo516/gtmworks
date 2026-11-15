@@ -800,5 +800,9 @@
   "agentMadeToday": "Made today at {0} at the request of {1}",
   "agentMadeTodayMine": "Made today at {0} at your request",
   "agentMadeSeeAsk": "See the ask",
-  "newAgentReadyMade": "or pick a ready-made one"
+  "newAgentReadyMade": "or pick a ready-made one",
+  "logActAppConnected": "connected",
+  "logActAppDisconnected": "disconnected",
+  "logAppOn": "Connected",
+  "logAppOff": "Not connected"
 }
