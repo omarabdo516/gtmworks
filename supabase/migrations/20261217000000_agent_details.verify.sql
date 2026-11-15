@@ -9,7 +9,7 @@ select json_build_object(
  'open_run_for_people',has_function_privilege('authenticated','public.agent_open_run(uuid,uuid)','execute')
   and not has_function_privilege('anon','public.agent_open_run(uuid,uuid)','execute')
   and not has_function_privilege('service_role','public.agent_open_run(uuid,uuid)','execute'),
- 'open_run_no_text',pg_get_function_result('public.agent_open_run(uuid,uuid)'::regprocedure)='TABLE(started_at timestamp with time zone, conversation uuid)',
+ 'open_run_no_text',pg_get_function_result('public.agent_open_run(uuid,uuid)'::regprocedure)='TABLE(started_at timestamp with time zone, my_conversation uuid)',
  'open_run_definer',(select prosecdef and proconfig=array['search_path=""'] from pg_proc where oid='public.agent_open_run(uuid,uuid)'::regprocedure),
  'open_run_shared_rule',position('conversation_open_run' in pg_get_functiondef('public.agent_open_run(uuid,uuid)'::regprocedure))>0
   and position('can_see_agent' in pg_get_functiondef('public.agent_open_run(uuid,uuid)'::regprocedure))>0

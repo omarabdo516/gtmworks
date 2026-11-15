@@ -23,10 +23,10 @@ set local role authenticated;
 select set_config('request.jwt.claims','{"aal":"aal1"}',true);
 
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
-select results_eq($$select started_at,conversation from public.agent_open_run('10000000-0000-0000-0000-000000000001','a2000000-0000-0000-0000-000000000002')$$,
+select results_eq($$select started_at,my_conversation from public.agent_open_run('10000000-0000-0000-0000-000000000001','a2000000-0000-0000-0000-000000000002')$$,
  $$values ('2026-06-12T10:00:00Z'::timestamptz,null::uuid)$$,'the newest open run is another person''s: when it started, and not which Conversation');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
-select results_eq($$select started_at,conversation from public.agent_open_run('10000000-0000-0000-0000-000000000001','a2000000-0000-0000-0000-000000000002')$$,
+select results_eq($$select started_at,my_conversation from public.agent_open_run('10000000-0000-0000-0000-000000000001','a2000000-0000-0000-0000-000000000002')$$,
  $$values ('2026-06-12T10:00:00Z'::timestamptz,'c2000000-0000-0000-0000-000000000002'::uuid)$$,'its own person learns which Conversation');
 select is((select count(*)::int from public.work_cards where agent_id='a2000000-0000-0000-0000-000000000002'),1,'a Member reads the Agent''s Card');
 
@@ -46,7 +46,7 @@ insert into public.conversation_messages(company_id,conversation_id,author,agent
  ('10000000-0000-0000-0000-000000000001','c2000000-0000-0000-0000-000000000002','agent','a2000000-0000-0000-0000-000000000002','Ads','Answered','details-run-2');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
-select results_eq($$select started_at,conversation from public.agent_open_run('10000000-0000-0000-0000-000000000001','a2000000-0000-0000-0000-000000000002')$$,
+select results_eq($$select started_at,my_conversation from public.agent_open_run('10000000-0000-0000-0000-000000000001','a2000000-0000-0000-0000-000000000002')$$,
  $$values ('2026-06-12T09:00:00Z'::timestamptz,'c2000000-0000-0000-0000-000000000001'::uuid)$$,'an answered run is no longer open');
 
 reset role;

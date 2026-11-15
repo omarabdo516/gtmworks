@@ -26,11 +26,11 @@ export async function agentDetails(db:Db,{company,agent,slug,me,role}:{company:s
  ]);
  const cards=(cardRows||[]) as {id:number,title:string,stage_id:number}[]; const ids=cards.map(card=>card.id);
  const rows=(logRows||[]) as LogRow[];
- const run=(runs as {started_at:string,conversation:string|null}[]|null)?.[0];
+ const run=(runs as {started_at:string,my_conversation:string|null}[]|null)?.[0];
  const [{data:stages},{data:checklist},{data:ask},people]=await Promise.all([
   ids.length?db.from('work_stages').select('id,name,board_column').eq('company_id',company):Promise.resolve({data:[]}),
   ids.length?db.from('work_checklist').select('card_id,title,done').eq('company_id',company).in('card_id',ids).order('id'):Promise.resolve({data:[]}),
-  run?.conversation?db.from('conversation_messages').select('body').eq('conversation_id',run.conversation).eq('author','person').eq('created_at',run.started_at).order('id',{ascending:false}).limit(1).maybeSingle():Promise.resolve({data:null}),
+  run?.my_conversation?db.from('conversation_messages').select('body').eq('conversation_id',run.my_conversation).eq('author','person').eq('created_at',run.started_at).order('id',{ascending:false}).limit(1).maybeSingle():Promise.resolve({data:null}),
   logPeople(db,company,rows.flatMap(row=>row.card_id!=null?[row.card_id]:[])),
  ]);
  const tasks=agentTasks(cards,stages||[],checklist||[],waiting);

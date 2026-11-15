@@ -4,7 +4,7 @@ alter table public.work_cards add column agent_id uuid,
 create index work_cards_agent on public.work_cards(company_id,agent_id) where agent_id is not null;
 create index conversations_agent on public.conversations(company_id,agent_id);
 
-create function public.agent_open_run(c uuid, agent uuid) returns table(started_at timestamptz, conversation uuid)
+create function public.agent_open_run(c uuid, agent uuid) returns table(started_at timestamptz, my_conversation uuid)
 language sql stable security definer set search_path='' as $$
  select m.created_at,case when cv.person_id=auth.uid() then cv.id end
  from public.conversations cv
