@@ -172,12 +172,14 @@ test('integration: Lead makes the Agent the Owner asks for, and nothing for a Ma
 });
 
 // #18: an Owner tells an Agent a lasting rule in its Conversation; the fake engine scripts the Agent's save_rule call.
-test('integration: an Agent saves the rule the Owner tells it, with its log row, and every later run carries it',async()=>{
+// #25: a Contributor's rule is a suggestion, scripted as the suggest_rule call they are offered instead.
+test('integration: an Agent saves the rule the Owner tells it, with its log row, and every later run carries it; a Contributor\'s rule is a suggestion only their own runs carry',async()=>{
  test.setTimeout(120000);
  const fake=fakeEngine(); const {agent,detach}=attachAgent();
  const rule='من دلوقتي ما تبعتش حاجة للعميل من غير ما أشوفها';
- fake.settings.toolCalls=input=>input===rule?[{id:'call-0',name:'save_rule',arguments:{rule:` ${rule} `}}]:[];
- const rules=()=>JSON.parse(query(`select body,said_by,conversation_id,run_id,removed_at from public.agent_rules where agent_id='${agent}'`));
+ const suggestion='From now on, no emojis';
+ fake.settings.toolCalls=input=>input===rule?[{id:'call-0',name:'save_rule',arguments:{rule:` ${rule} `}}]:input===suggestion?[{id:'call-0',name:'suggest_rule',arguments:{rule:suggestion}}]:[];
+ const rules=()=>JSON.parse(query(`select body,said_by,conversation_id,run_id,removed_at,suggestion from public.agent_rules where agent_id='${agent}' order by said_at`));
  const contributor='20000000-0000-0000-0000-000000000005';
  try {
   const {service,person}=await clients();
@@ -190,7 +192,7 @@ test('integration: an Agent saves the rule the Owner tells it, with its log row,
   // A reader and the worker close the run at once: the rule is saved once, before the reply is stored.
   const closed=await Promise.all([close(),close()]);
   expect(closed[0]+closed[1]).toBe(1);
-  expect(rules()).toEqual([{body:rule,said_by:omar,conversation_id:conversation,run_id:fake.runs[0].id,removed_at:null}]);
+  expect(rules()).toEqual([{body:rule,said_by:omar,conversation_id:conversation,run_id:fake.runs[0].id,removed_at:null,suggestion:null}]);
   expect(JSON.parse(query(`select actor_id,actor_kind,action,details->>'agent_name' as agent,details->>'rule' as rule from public.company_log where company_id='${company}' and agent_id='${agent}'`)))
    .toEqual([{actor_id:omar,actor_kind:'person',action:'agent_rule_saved',agent:'Faye',rule}]);
   expect((await person.from('agent_rules').select('run_id').eq('conversation_id',conversation)).data).toEqual([{run_id:fake.runs[0].id}]);
@@ -199,14 +201,32 @@ test('integration: an Agent saves the rule the Owner tells it, with its log row,
   expect(fake.runs[1].instructions).toContain(`- ${rule}`);
   expect(await close()).toBe(1);
 
-  // A Contributor's own Conversation with the same Agent is told the rule, is not offered save_rule, and saves nothing.
+  // The Owner's rule reaches another Member's next run at once: a Contributor's own Conversation with the same Agent is
+  // told it, and offered suggest_rule, not save_rule.
   const theirs=randomUUID();
   const {person:member}=await memberClient('multi@example.com');
-  expect(await sendMessage(member,service,{person:contributor,company,conversation:theirs,sendKey:randomUUID(),agent,message:rule,encryptionKey,engineFor:fake.engineFor})).toEqual({conversation:theirs});
-  expect(fake.runs[2].tools).toEqual([]);
+  const tell=(message:string)=>sendMessage(member,service,{person:contributor,company,conversation:theirs,sendKey:randomUUID(),agent,message,encryptionKey,engineFor:fake.engineFor});
+  const closeTheirs=()=>closeOpenRuns(service,{encryptionKey,conversation:theirs,owner:contributor,engineFor:fake.engineFor});
+  expect(await tell('Draft the teaser')).toEqual({conversation:theirs});
+  expect(fake.runs[2].tools.map(tool=>tool.name)).toEqual(['suggest_rule']);
   expect(fake.runs[2].instructions).toContain(`- ${rule}`);
-  expect(await closeOpenRuns(service,{encryptionKey,conversation:theirs,owner:contributor,engineFor:fake.engineFor})).toBe(1);
-  expect(rules()).toHaveLength(1);
+  expect(await closeTheirs()).toBe(1);
+
+  // The Contributor tells a rule: it is kept as a suggestion waiting on the Owner and the Manager, their own next run
+  // carries it, and another Member's does not.
+  expect(await tell(suggestion)).toEqual({conversation:theirs});
+  expect(await closeTheirs()).toBe(1);
+  expect(rules()[1]).toEqual({body:suggestion,said_by:contributor,conversation_id:theirs,run_id:fake.runs[3].id,removed_at:null,suggestion:'pending'});
+  expect(JSON.parse(query(`select i.person_id from public.waiting_items i join public.agent_rules r on r.id=i.agent_rule_id where r.agent_id='${agent}' and i.resolved_at is null order by i.person_id`)))
+   .toEqual([{person_id:omar},{person_id:'20000000-0000-0000-0000-000000000002'}]);
+  expect(await tell('Draft the next post')).toEqual({conversation:theirs});
+  expect(fake.runs[4].instructions).toContain(`- ${rule}\n- ${suggestion}`);
+  expect(await closeTheirs()).toBe(1);
+  expect(await send('Draft the launch post')).toEqual({conversation});
+  expect(fake.runs[5].instructions).toContain(`- ${rule}`);
+  expect(fake.runs[5].instructions).not.toContain(suggestion);
+  expect(await close()).toBe(1);
+  expect(rules()).toHaveLength(2);
  } finally { detach(); }
 });
 

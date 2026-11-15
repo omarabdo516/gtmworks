@@ -6,9 +6,12 @@
 // A lasting rule the Agent saved in a run (#18) shows as a saved line (`kind` saved) after the Agent's reply of that run,
 // or after the message that told it when the reply was nothing but the call. A rule since removed keeps its line, since
 // the Conversation is the record as people saw it; only its way to the Agent's page goes, with the Agent's.
+// A Contributor's rule is a suggestion (#25): its line names who it was sent to (`sentTo`), and the Owner's or a
+// Manager's decision shows as its own line (`kind` decided) at the time it was made.
 export type MadeAgent={id:string,connection_id:string,name:string,job:string,apps:string[],fresh:boolean,created_at:string};
-export type SavedRule={id:string,agent:string|null,removed:boolean,said_at:string};
-export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved',to?:string,failed?:boolean,made?:MadeAgent[],saved?:SavedRule[]};
+export type SavedRule={id:string,agent:string|null,removed:boolean,said_at:string,sentTo?:string[]};
+export type RuleDecision={approved:boolean,by:string,rule:string,at:string};
+export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided',to?:string,failed?:boolean,made?:MadeAgent[],saved?:SavedRule[],decided?:RuleDecision};
 type StoredMessage=ConversationMessage&{run_id:string};
 export const messageColumns='id,author,author_name,body,run_id,created_at';
 export const conversationColumns='id,agent_id,agent_name,hermes_agents(connection_id)';
@@ -23,6 +26,13 @@ export const shown=(messages:StoredMessage[],usage:{run_id:string,outcome:string
  const last=message.author==='agent'||!replied;
  return last&&rules.length?[...turn,{id:message.id,author:'agent',author_name:agentName,body:'',created_at:rules[0].said_at,kind:'saved',saved:rules}]:turn;
 });
+// Each decision goes before the first item shown after it.
+export const withDecisions=(record:ConversationMessage[],decisions:RuleDecision[],agentName=''):ConversationMessage[]=>{
+ const left=[...decisions].sort((a,b)=>a.at.localeCompare(b.at)).map((decided,index):ConversationMessage=>({id:index,author:'agent',author_name:agentName,body:'',created_at:decided.at,kind:'decided',decided}));
+ const merged:ConversationMessage[]=[];
+ for(const message of record) { while(left.length&&left[0].created_at<=message.created_at) merged.push(left.shift()!); merged.push(message); }
+ return [...merged,...left];
+};
 // What each ended run used, as Hermes reported it; null tokens are unknown, never zero.
 export type RunUsage={run_id:string,outcome:'completed'|'stopped'|'lost'|'failed',input_tokens:number|null,output_tokens:number|null};
 export const usageColumns='run_id,outcome,input_tokens,output_tokens';

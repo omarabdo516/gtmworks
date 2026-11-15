@@ -18,5 +18,8 @@
   "madeAgentTip": "Want to change something? Tell it in its chat.",
   "ruleSaved": "Saved",
   "ruleSavedFor": "A rule for {0} · written in the log",
-  "ruleSeeIt": "See it"
+  "ruleSeeIt": "See it",
+  "ruleSuggested": "Sent as a suggestion to {0} · in “Waiting on you”",
+  "ruleApproved": "{0} approved it, now for the whole team: «{1}»",
+  "ruleDeclined": "{0} didn’t approve it for the team. It stays in your own work only."
 }
