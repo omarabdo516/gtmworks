@@ -110,7 +110,7 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `design-reference.spec.ts` | The production build answers 404 for the design reference. | 0 s | design-reference.test.mjs (the files, not the route) | keep |
 | `design-reference.test.mjs` | The design reference matches its approved checksums, file for file. | 0.3 s | design-reference.spec.ts | keep |
 | `engine-agents.test.mjs` | An Agent is one Engine profile made through the management listener with the install key. | 0.7 s | hermes-agents.spec.ts | keep |
-| `engine-conversation.spec.ts` | On the fake engine a reply is stored once with usage; failed and stopped runs end with usage; a Viewer is refused. | 28.1 s | conversations.spec.ts (the same flow on fake Hermes) | keep |
+| `engine-conversation.spec.ts` | On the fake engine a reply is stored once with usage; failed and stopped runs end with usage; a Viewer is refused; Lead's create_agent call makes the Owner's Agent once, with its log row, and nothing for a Manager. | 28.1 s | conversations.spec.ts (the same flow on fake Hermes) | keep |
 | `engine-name.spec.ts` | No page names the Engine, in English or Arabic. | 16 s | engine-name.test.mjs (catalogues only, not rendered pages) | keep |
 | `engine-name.test.mjs` | No message value names the Engine, in any language. | 0.3 s | engine-name.spec.ts | keep |
 | `engine.test.mjs` | The engine driver runs once per idempotency key, offers tools in a run's instructions and reads at most four calls back from the reply, and never sends a key over plain HTTP to a public address. | 0.6 s | — | keep |

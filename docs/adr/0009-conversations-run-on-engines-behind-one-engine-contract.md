@@ -17,6 +17,11 @@ Omar's decision of 2026-11-11 (vault `decisions/general/2026-11-11-gtmworks-engi
 - Only a driver talks to its engine. The conversation code (`lib/conversation-runs.mjs`, the conversation route and the worker) calls the contract, never Hermes's API. Until a second driver exists, an agent's engine is still found through its Hermes Connection (`hermes_connections`, ADR 0008).
 - A fake engine (`tests/fake-engine.mjs`) speaks the contract in memory, so conversation tests run with no subscription and no network.
 
+## Tools (#13, 2026-11-15)
+
+- gtmworks offers tools to a run through the same contract: a run may carry tool specs (name, description, JSON Schema arguments), and a completed run reports the calls its model made. The model decides when to call one; gtmworks decides whether the call is allowed when it carries it out, in the database, from the Conversation's person and Agent at that moment (`lead_create_agent`). Lead's first tool, `create_agent`, is offered only to an active Owner talking to the Company's main Agent on the Company's own profile, and the offer is pinned with the run's note so a retry sends the same request.
+- The Hermes driver offers the tools in the run's `instructions` with a fixed reply format and reads the calls back out of the reply, because Hermes v0.23.0's `/v1/runs` takes no tools from the caller and its MCP client sends the same headers for every run of a profile, so an MCP call could not say which Conversation made it. A later driver maps the same contract to its engine's own tool calls.
+
 ## What stays from ADR 0008
 
 Everything about the Hermes driver: encrypted profile keys, the allowed addresses, no redirect with a key, the tested-version gate that fails closed, the Connection's owner and RLS, and company agents (#242). Agents still never approve, publish or spend.
