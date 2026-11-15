@@ -20,7 +20,8 @@ the whole-app browser and install suites run only when their own area changed, o
   legacy data) on one local stack, when `supabase/` or a database test file changes.
 - `integration` is the whole-app browser suite: the production-shaped proxy suite, then the screens, the functional
   journeys, the measured navigation and first run. It runs when a browser spec, its helpers, its approved images, the
-  Playwright configs, the stacks it runs on, the seed or `public/` change. Its suite runs on `GTMWORKS_TEST_LANES`
+  Playwright configs, the stacks it runs on, the seed or `public/` change, and, until screens have component tests,
+  when the app itself changes (`app/`, `components/`, `lib/`, `worker/` and the root files the build and server read). Its suite runs on `GTMWORKS_TEST_LANES`
   lanes (four in CI), one per Playwright worker: each lane is a whole local Supabase stack and an app server of its own
   (`tests/lane.mjs`, `scripts/local-db.sh`, `scripts/web.sh`), so spec files run side by side and never share data.
   Each functional spec file starts from the seed (`tests/fresh-seed.ts`); tests inside one file still run in order.
@@ -33,8 +34,9 @@ the whole-app browser and install suites run only when their own area changed, o
 - `check` is the one required check (like Hermes `all-checks-pass`): a suite `changes` did not ask for passes only when
   it was skipped; one it asked for must succeed; a failed or cancelled stage is red (`scripts/ci-verdict.mjs`).
 
-App screens, components, `lib/` and `worker/` changes run static on the pull request; their browser and install proof
-runs on `main` after the merge. Screens move to component tests in a headless browser in a later pull request (#81).
+App screens, components, `lib/` and `worker/` changes run static and the whole-app browser suite on the pull request
+(review run on #79); their install proof runs on `main` after the merge. When screens move to component tests in a
+headless browser (#81), app changes run those instead and the browser suite goes back to its own area.
 
 ## Every suite, before and after (#76)
 
@@ -47,8 +49,8 @@ the parts are timed from run 43642299138.
 | changes | classification | which suites a change needs | 0.1 min, every run (decided only docs-only and install) | 0.1 min, every run; decides database, browser and install | keep; one area script replaces `docs-only.mjs` and `install-related.mjs` |
 | static: lint, types, catalogues, OpenAPI, node --test (about 540 tests) | fast, unit | rules in `lib/`, routes and permissions tables, wording, workflow and release files | 1.6 min, every run | 1.6 min, every run | keep |
 | database: *.verify.sql, check-rls.sql, tests/db.sh (pgTAP, migration replays) | database | row-level security, grants, company isolation, migrations on legacy data | 1.5 min inside `integration` (plus the stack start), every non-document PR | own `database` job, when `supabase/` or a database test changes; every `main` push | moved to its own job; never removed (isolation and permissions) |
-| proxy suite (tests/proxy/, 7 tests) | whole-app browser | sign-in, settings and invitations behind an https proxy | 0.7 min inside `integration`, every non-document PR | inside `integration`: its area, `main`, or `e2e` input | gated |
-| browser suite (playwright test, 225 tests on 4 lanes: screens, functional, measured, first run) | whole-app browser | journeys, the 72 approved screens, navigation budgets, first run | 13.3 min of `integration`'s 22.2 min (stack start 4 min, image 2.7 min), every non-document PR | inside `integration`: its area, `main`, or `e2e` input | gated; screens to become component tests (#81) |
+| proxy suite (tests/proxy/, 7 tests) | whole-app browser | sign-in, settings and invitations behind an https proxy | 0.7 min inside `integration`, every non-document PR | inside `integration`: its area or app code, `main`, or `e2e` input | gated |
+| browser suite (playwright test, 225 tests on 4 lanes: screens, functional, measured, first run) | whole-app browser | journeys, the 72 approved screens, navigation budgets, first run | 13.3 min of `integration`'s 22.2 min (stack start 4 min, image 2.7 min), every non-document PR | inside `integration`: its area or app code (until #81), `main`, or `e2e` input | gated; screens to become component tests (#81) |
 | image health (scripts/ci-image.sh) | whole-app | the built image serves health and runs its worker | inside `integration` | inside `integration` | gated with it |
 | install | install end-to-end | install, repeat, backup, restore, release update, one-line install, rollback | 15.2 min, PRs touching install files, `lib/`, `worker/` or the app build, every `main` push | its own files, every `main` push, or `install` input | gated tighter: `lib/`, `worker/`, `next.config.mjs` and `server.js` no longer start it on a PR |
 | compare-failures, flaky-tests | our own CI tooling | names failures inherited from main; files an issue per flaky test | 0.1 to 0.2 min after `integration` | unchanged here | to be replaced by Playwright's own report (#81) |

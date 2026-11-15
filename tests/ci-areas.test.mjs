@@ -16,9 +16,21 @@ test('design, docs and Markdown run no suite', () => {
   assert.deepEqual(areas('design/conversation.html', 'docs/testing.md', 'docs/api/openapi.yaml', 'README.md', 'AGENTS.md'), none);
 });
 
-test('app, component, library, worker and unit test changes run no long suite: static covers them on every PR', () => {
-  assert.deepEqual(areas('app/page.tsx', 'components/shell/sidebar.tsx', 'lib/engine.mjs', 'worker/index.mjs', 'tests/unit.test.mjs', 'next.config.mjs', 'server.js'), none);
+test('unit test and brand file changes run no long suite: static covers them on every PR', () => {
+  // No screen reads brand/ (the wordmark is text in app/; the favicons are not imported).
+  assert.deepEqual(areas('tests/unit.test.mjs', 'tests/hermes.test.mjs', 'brand/wordmark.png', 'brand/README.md'), none);
 });
+
+// Until screens have component tests (a later PR under #76, #81), the whole-app browser suite is what proves app code
+// before merge, so a change to it runs that suite (review run on #79). It needs neither the database nor the install.
+for (const path of [
+  'app/page.tsx', 'app/globals.css', 'components/shell/sidebar.tsx', 'lib/engine.mjs', 'lib/i18n/messages.en.json', 'worker/index.mjs',
+  'middleware.ts', 'instrumentation.ts', 'next.config.mjs', 'postcss.config.mjs', 'server.js',
+]) {
+  test(`${path} runs the browser suite and neither the database nor the install`, () => {
+    assert.deepEqual(areas(path), { database: 'false', integration: 'true', install: 'false' });
+  });
+}
 
 for (const path of [
   'supabase/migrations/20260101000000_x.sql', 'supabase/tests/foundation.sql', 'supabase/config.toml',
@@ -39,7 +51,7 @@ for (const path of [
   // The public-assets browser test reads every file under public/, Markdown included.
   'public/nested/README.md',
 ]) {
-  test(`${path} runs the browser suite`, () => assert.equal(areas('app/page.tsx', path).integration, 'true'));
+  test(`${path} runs the browser suite`, () => assert.equal(areas('docs/testing.md', path).integration, 'true'));
 }
 
 for (const path of [
@@ -69,8 +81,8 @@ test('on main every suite runs unless every file is a document', () => {
 });
 
 test('stdin accepts NUL-separated git paths without splitting spaces or newlines', () => {
-  assert.equal(run([], 'app/a page.tsx\0docs/a\npage.md\0'), 'database=false\nintegration=false\ninstall=false\n');
-  assert.equal(run([], 'app/a page.tsx\0Dockerfile\0'), 'database=false\nintegration=false\ninstall=true\n');
+  assert.equal(run([], 'docs/a page.md\0docs/a\npage.md\0'), 'database=false\nintegration=false\ninstall=false\n');
+  assert.equal(run([], 'docs/a page.md\0Dockerfile\0'), 'database=false\nintegration=false\ninstall=true\n');
   assert.equal(run(['--main'], 'app/a page.tsx\0'), 'database=true\nintegration=true\ninstall=true\n');
 });
 
