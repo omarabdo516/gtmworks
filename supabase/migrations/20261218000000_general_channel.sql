@@ -88,9 +88,9 @@ $$;
 revoke all on function public.in_channel(uuid) from public,anon,service_role;
 grant execute on function public.in_channel(uuid) to authenticated;
 
-create function public.channel_members(ch uuid) returns table(person uuid, name text, role public.member_role)
+create function public.channel_members(ch uuid) returns table(person uuid, name text, role text)
 language sql stable security definer set search_path='' as $$
- select m.person_id, p.name, m.role from public.channels k
+ select m.person_id, p.name, m.role::text from public.channels k
   join public.members m on m.company_id=k.company_id join public.people p on p.id=m.person_id
  where k.id=ch and public.in_channel(ch) and public.channel_member(ch, m.person_id)
  order by m.role, p.name, m.person_id;
