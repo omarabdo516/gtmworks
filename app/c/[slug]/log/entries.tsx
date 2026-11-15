@@ -1,5 +1,7 @@
 import Link from '@/lib/link';
 import { AgentFace } from '@/components/agent-face';
+import { CompanyAgentFace } from '@/components/company-agent-face';
+import { NoteText } from '@/app/note-edit';
 import { agentIdentities } from '@/lib/agent-identities';
 import { describeEntry, type LogRow, type LogValue } from '@/lib/activity-log.mjs';
 import type { I18n, Language } from '@/lib/i18n.mjs';
@@ -8,8 +10,9 @@ import { LogTime } from './log-client';
 import { PageIcon, SystemMark } from './icons';
 
 type Db=Awaited<ReturnType<typeof supabase>>;
-export const logColumns='id,created_at,actor_kind,actor_id,actor_name,subject,card_id,person_id,agent_id,action,details,body';
-export type Who={kind:'person'|'agent'|'system',id:string|null,name:string,role?:string};
+export const logColumns='id,created_at,actor_kind,actor_id,actor_name,subject,card_id,person_id,agent_id,action,details,body,source,source_id';
+// face: the Connection a company Agent's face is drawn from (components/company-agent-face).
+export type Who={kind:'person'|'agent'|'system',id:string|null,name:string,role?:string,face?:string};
 export type LogPeople=Awaited<ReturnType<typeof logPeople>>;
 
 // The names and faces a log line needs, read as the signed-in person: the Company's Members (people and role Agents),
@@ -34,13 +37,15 @@ export function whoOf(row:LogRow,people:LogPeople,t:I18n['t']):Who {
  if(row.actor_kind==='system'||!row.actor_id) return {kind:'system',id:null,name:t('logSystemName')};
  const member=people.members.find(member=>member.person_id===row.actor_id);
  const identity=people.identities.find(agent=>agent.id===row.actor_id);
- const name=identity?.name||member?.people?.name||row.actor_name||t('logSomeone');
- if(row.actor_kind==='agent') return {kind:'agent',id:row.actor_id,name,role:identity?.role||member?.agent_role||undefined};
+ const agent=people.agents.find(agent=>agent.id===row.actor_id);
+ const name=identity?.name||member?.people?.name||agent?.name||row.actor_name||t('logSomeone');
+ if(row.actor_kind==='agent') return {kind:'agent',id:row.actor_id,name,role:identity?.role||member?.agent_role||undefined,face:agent?.connection_id};
  return {kind:'person',id:row.actor_id,name};
 }
 
 export function WhoFace({who,size=28}:{who:Who,size?:number}) {
  if(who.kind==='system') return <SystemMark size={size}/>;
+ if(who.face) return <span className="lg-face" aria-hidden="true"><CompanyAgentFace agent={{connection_id:who.face,name:who.name}} size={size}/></span>;
  if(who.kind==='agent'&&who.role&&who.id) return <span className="lg-face" aria-hidden="true"><AgentFace id={who.id} role={who.role} name={who.name} size={size}/></span>;
  return <span className="lg-av" style={{'--av':`${size}px`} as React.CSSProperties} aria-hidden="true">{Array.from(who.name.trim())[0]||'?'}</span>;
 }
@@ -65,18 +70,25 @@ export function FeedText({row,people,t,language}:{row:LogRow,people:LogPeople,t:
  return <><b><bdi>{who.name}</bdi></b> {line.act}{object&&<> <bdi>{quoteIn(language)(object)}</bdi></>}{line.to&&<>: <bdi>{line.to}</bdi></>}</>;
 }
 
-export function LogEntry({row,people,me,slug,t,language,cardLink=true,faceSize}:{row:LogRow,people:LogPeople,me:string,slug:string,t:I18n['t'],language:Language,cardLink?:boolean,faceSize?:number}) {
+// A Member's note (#22) is drawn by NoteText, which adds "Edited", Edit while it is open to its writer, and "Locked".
+export function LogEntry({row,people,me,slug,company,canWrite,drawnAt,t,language,cardLink=true,faceSize}:{row:LogRow,people:LogPeople,me:string,slug:string,company:string,canWrite:boolean,drawnAt:number,t:I18n['t'],language:Language,cardLink?:boolean,faceSize?:number}) {
  const who=whoOf(row,people,t);
  const line=entryLine(row,people,t,language);
  const quote=quoteIn(language);
  const cardTitle=row.card_id!=null?people.cards.get(row.card_id):undefined;
+ const meta=<><LogTime value={row.created_at}/>{cardLink&&row.card_id!=null&&cardTitle!=null&&<><span className="lg-dot" aria-hidden="true">·</span><Link className="link-btn lg-card" href={`/c/${slug}/work/board/${row.card_id}`} aria-label={t('logOpenCard',cardTitle)}><PageIcon name="board"/><bdi className="od-truncate">{cardTitle}</bdi></Link></>}</>;
+ const note=row.source==='work_comments'&&row.actor_kind==='person'&&row.source_id!=null;
  return <>
   <WhoFace who={who} size={faceSize}/>
   <div className="lg-body">
    <p className="lg-line"><b className="lg-name"><bdi>{who.name}</bdi></b>{who.id===me&&<> <span className="lg-you">{t('logYou')}</span></>} <span className="lg-act">{line.act}</span>{line.obj&&<> <span className="lg-obj"><bdi>{quote(line.obj)}</bdi></span></>}</p>
    {line.to!=null&&<p className="lg-change">{line.from!=null&&<><span className="sr-only">{t('logFrom')}</span><span className="lg-val lg-val--old" dir="auto">{line.from}</span><PageIcon name="arrow" className="lg-arrow"/><span className="sr-only">{t('logTo')}</span></>}<span className="lg-val" dir="auto">{line.to}</span></p>}
-   {line.note!=null&&<p className="lg-note" dir="auto">{line.note}</p>}
-   <p className="lg-meta"><LogTime value={row.created_at}/>{cardLink&&row.card_id!=null&&cardTitle!=null&&<><span className="lg-dot" aria-hidden="true">·</span><Link className="link-btn lg-card" href={`/c/${slug}/work/board/${row.card_id}`} aria-label={t('logOpenCard',cardTitle)}><PageIcon name="board"/><bdi className="od-truncate">{cardTitle}</bdi></Link></>}</p>
+   {note?<NoteText note={{id:row.source_id!,body:row.body||'',created_at:row.created_at,edited_at:typeof row.details?.edited_at==='string'?row.details.edited_at:null,author_id:row.actor_id}}
+     me={me} canWrite={canWrite} company={company} slug={slug} drawnAt={drawnAt} surface="log" meta={meta}/>
+    :<>{line.note!=null&&<p className="lg-note" dir="auto">{line.note}</p>}<p className="lg-meta">{meta}</p></>}
   </div>
  </>;
 }
+
+// The anchor a mention in "Waiting on you" opens: a note's row is reached by its note's number.
+export const logAnchor=(row:LogRow)=>row.source==='work_comments'&&row.source_id!=null?`note-${row.source_id}`:undefined;

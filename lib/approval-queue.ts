@@ -2,7 +2,8 @@ import { cache } from 'react';
 import type { supabase } from './supabase';
 import type { Step, ApprovalCard } from '@/app/c/[slug]/[[...section]]/approvals';
 // One item of "Waiting on you" (ADR 0013): an approval this person holds, or anything else addressed to them by kind.
-export type WaitingItem={kind:string,id:number,title:string,body:string,asked_by:string,card_id:number|null,conversation_id:string|null,created_at:string};
+// A mention (#22) carries the note it opens.
+export type WaitingItem={kind:string,id:number,title:string,body:string,asked_by:string,card_id:number|null,conversation_id:string|null,created_at:string,note_id?:number|null};
 // "Waiting on you" is one list (#16), read once per request from waiting_list(company) as the signed-in person: the
 // approvals they hold (`cards`, for the card's decision and the counts) and every item, newest first (`items`).
 export const approvalQueue=cache(async(db:Awaited<ReturnType<typeof supabase>>,company:string,person:string,role:string)=>{

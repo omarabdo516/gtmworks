@@ -37,6 +37,13 @@ test('Card, Member and Agent rows say who changed what', () => {
  }
 });
 
+test('an Agent called in a note replies in the log, with its reply as the note under the line (#22)', () => {
+ const reply = describeEntry({ subject: 'card', action: 'note_reply', agent_id: lead, body: 'Here is the draft.', details: { reply_to: 12 } });
+ assert.deepEqual([reply.act, reply.note, reply.from, reply.to], [['logActNoteReply'], 'Here is the draft.', undefined, undefined]);
+ assert.equal(i18n('en').t(reply.act[0]), 'replied in the log');
+ assert.equal(i18n('ar').t(reply.act[0]), 'ردّ في السجل');
+});
+
 test('the filters: everyone, one person, one Agent, gtmworks itself, one Card', () => {
  const rows = [
   { id: 1, actor_kind: 'person', actor_id: omar, card_id: 5, agent_id: null },
