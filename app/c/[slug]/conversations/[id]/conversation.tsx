@@ -3,7 +3,7 @@
 // the catalogue every company route loads (page weight, #55).
 import conversationEn from '@/lib/messages/conversation.en.json';
 import conversationAr from '@/lib/messages/conversation.ar.json';
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from '@/lib/link';
 import { useI18n } from '@/lib/i18n-client';
@@ -13,7 +13,8 @@ import type { AgentDetailsView } from '@/app/agent-details-server';
 import { ShellIcon } from '@/components/shell-icon';
 import { MessageBox, postMessage } from '@/app/conversation-composer';
 import { LeadWelcome } from '@/app/lead-welcome';
-import { titleOf, type MadeAgent, type SavedRule } from '@/lib/conversations';
+import { PrivateLine } from '@/app/private-line';
+import { titleOf, type MadeAgent, type RuleDecision, type SavedRule } from '@/lib/conversations';
 import { overlayHref } from '@/lib/settings-overlay.mjs';
 import { madeDay, useZone } from '@/app/agent-made';
 import type { ConversationRecord } from '@/lib/conversation-record';
@@ -26,10 +27,13 @@ type Conversation={id:string,agent_name:string,face:string};
 // the start side, the person's on the end side, the composer below, and the Agent's details beside it while the
 // Agent is still attached. While the Agent works, everyone reading sees who it is working for; a message sent
 // meanwhile waits as its sender's next turn (marked as the reference marks a queued message), and the person who
-// started the run, or a Manager or Owner, may stop it from the composer's stop square.
-export default function ConversationView({slug,agent,details,company,conversation,initial,writer}:{slug:string,agent:DetailsAgent|null,details:AgentDetailsView|null,company:string,conversation:Conversation,initial:ConversationRecord,writer:boolean}) {
+// started the run, or a Manager or Owner, may stop it from the composer's stop square. In a team, a line at the top says
+// the chat is between this person and the Agent only (#25).
+export default function ConversationView({slug,agent,details,company,conversation,initial,writer,team}:{slug:string,agent:DetailsAgent|null,details:AgentDetailsView|null,company:string,conversation:Conversation,initial:ConversationRecord,writer:boolean,team:boolean}) {
  const {t,language}=useI18n(); const own:Record<string,string>=language==='ar'?conversationAr:conversationEn;
  const c=(key:string,...values:unknown[])=>own[key].replace(/\{(\d+)\}/g,(_,index)=>String(values[Number(index)] ?? ''));
+ // The same, each value isolated in its own direction (a name or a rule in the other script).
+ const cb=(key:string,...values:ReactNode[])=>own[key].split(/\{(\d+)\}/).map((part,index)=>index%2?<bdi key={index}>{values[Number(part)]}</bdi>:part);
  const [record,setRecord]=useState(initial); const [sent,setSent]=useState(0); const panel=useDetailsPanel();
  const {messages,usage,pending,failed,working,canStop}=record;
  // The sidebar's Agents come from the server render: an Agent Lead makes while this page asks again is only on the
@@ -66,8 +70,10 @@ export default function ConversationView({slug,agent,details,company,conversatio
  return <div className="convo"><div className="chat">
   <HeadPill panel={panel} agent={agent?.name} face={face(24)} title={titleOf(messages,conversation.agent_name)} titleDir="auto"/>
   <div className="transcript"><div className="transcript__col">
+   {team&&<PrivateLine agent={conversation.agent_name}/>}
    {welcome&&agent&&<LeadWelcome agent={agent} suggest={writer?text=>setDraft(current=>({text,n:(current?.n||0)+1})):undefined}/>}
-   <ol className="turns" aria-label={t('conversationMessages')}>{messages.map(message=>message.kind==='saved'?<Fragment key={`saved${message.id}`}>{message.saved?.map(rule=><SavedLine key={rule.id} slug={slug} agent={conversation.agent_name} rule={rule} c={c}/>)}</Fragment>:message.author==='person'?<li key={`${message.kind||'m'}${message.id}`} className={`turn turn--user msg${message.kind==='queued'&&!message.failed?' is-queued':''}`} data-author="person" data-kind={message.kind}>
+   <ol className="turns" aria-label={t('conversationMessages')}>{messages.map(message=>message.kind==='saved'?<Fragment key={`saved${message.id}`}>{message.saved?.map(rule=>rule.sentTo?<SuggestedLine key={rule.id} to={rule.sentTo} cb={cb}/>:<SavedLine key={rule.id} slug={slug} agent={conversation.agent_name} rule={rule} c={c}/>)}</Fragment>
+    :message.kind==='decided'&&message.decided?<DecidedLine key={`decided${message.id}`} decided={message.decided} c={c} cb={cb}/>:message.author==='person'?<li key={`${message.kind||'m'}${message.id}`} className={`turn turn--user msg${message.kind==='queued'&&!message.failed?' is-queued':''}`} data-author="person" data-kind={message.kind}>
     <div className="bubble-row"><time className="bubble__time" dateTime={message.created_at}>{time(message.created_at)}</time><div className="bubble bubble--user" dir="auto">{message.body}</div></div>
     {message.kind==='queued'&&!message.failed&&<span className="queued"><ShellIcon name="clock"/>{c('conversationQueued')}</span>}
     {message.kind==='queued'&&message.failed&&<p className="note" role="alert">{c('conversationQueuedFailed')}</p>}
@@ -102,6 +108,22 @@ export default function ConversationView({slug,agent,details,company,conversatio
 function SavedLine({slug,agent,rule,c}:{slug:string,agent:string,rule:SavedRule,c:(key:string,...values:unknown[])=>string}) {
  return <li className="note note--saved" data-kind="saved"><ShellIcon name="check" className="note__icon"/><b className="note__saved">{c('ruleSaved')}</b><span>{c('ruleSavedFor',agent)}</span>
   {rule.agent&&!rule.removed&&<Link className="note__link" href={overlayHref(slug,'agents',{agent:rule.agent})}>{c('ruleSeeIt')}</Link>}</li>;
+}
+
+// A Contributor's rule became a suggestion for the team (#25; design-reference: suggestTurn's note): who it was sent to,
+// and where they decide it.
+function SuggestedLine({to,cb}:{to:string[],cb:(key:string,...values:ReactNode[])=>ReactNode[]}) {
+ const {language}=useI18n();
+ const names=new Intl.ListFormat(localeFor(language),{type:'conjunction'}).formatToParts(to).map((part,index)=>part.type==='element'?<bdi key={index}>{part.value}</bdi>:part.value);
+ return <li className="note note--icon" data-kind="suggested"><ShellIcon name="clock" className="note__icon"/><span>{cb('ruleSuggested',names)}</span></li>;
+}
+
+// An Owner's or a Manager's decision on it, where it happened among the messages (design-reference: lnApprove's notes):
+// approved, it is saved for the whole team; refused, it stays in this person's own work.
+function DecidedLine({decided,c,cb}:{decided:RuleDecision,c:(key:string,...values:unknown[])=>string,cb:(key:string,...values:ReactNode[])=>ReactNode[]}) {
+ return decided.approved
+  ?<li className="note note--saved" data-kind="decided" data-decision="approved"><ShellIcon name="check" className="note__icon"/><b className="note__saved">{c('ruleSaved')}</b><span>{cb('ruleApproved',decided.by,decided.rule)}</span></li>
+  :<li className="note note--icon" data-kind="decided" data-decision="declined"><ShellIcon name="x" className="note__icon"/><span>{cb('ruleDeclined',decided.by)}</span></li>;
 }
 
 // The card for an Agent Lead made (design-reference: agentCardHTML): "Made", with "New" until the person who asked opens

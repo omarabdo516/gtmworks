@@ -6,6 +6,7 @@ import { CompanyAgentFace } from '@/components/company-agent-face';
 import { ShellIcon } from '@/components/shell-icon';
 import { MessageBox, newId, postMessage } from '@/app/conversation-composer';
 import { LeadWelcome } from '@/app/lead-welcome';
+import { PrivateLine } from '@/app/private-line';
 import { AgentDetails, HeadPill, useDetailsPanel, type DetailsAgent } from '@/app/agent-details';
 import { OpenedMark } from '@/app/agent-made';
 import Link from '@/lib/link';
@@ -21,8 +22,9 @@ const ReadyMade=lazy(()=>import('@/app/ready-made'));
 // `newAgent` (design-reference: openLeadForAgent): the composer is focused, its example is an Agent to ask for, and one
 // hint line above it says Lead makes the Agent right away. `isNew`: an Agent Lead made at this person's request, opened
 // by them for the first time (#13). The hint line also links to the ready-made gallery (#14), which `gallery` opens over
-// the chat (?new=ready); leaving it gives the focus back to the composer.
-export default function AgentChat({slug,company,agent,details,writer,fresh=false,newAgent=false,isNew=false,gallery=null}:{slug:string,company:string,agent:DetailsAgent|null,details:AgentDetailsView|null,writer:boolean,fresh?:boolean,newAgent?:boolean,isNew?:boolean,gallery?:{company:string,alone:boolean,roles:ReadyRole[]}|null}) {
+// the chat (?new=ready); leaving it gives the focus back to the composer. In a team, a line at the top says the chat is
+// between this person and the Agent only (#25).
+export default function AgentChat({slug,company,agent,details,writer,team=false,fresh=false,newAgent=false,isNew=false,gallery=null}:{slug:string,company:string,agent:DetailsAgent|null,details:AgentDetailsView|null,writer:boolean,team?:boolean,fresh?:boolean,newAgent?:boolean,isNew?:boolean,gallery?:{company:string,alone:boolean,roles:ReadyRole[]}|null}) {
  const {t}=useI18n(); const router=useRouter(); const [conversation]=useState(newId); const panel=useDetailsPanel();
  const [draft,setDraft]=useState<{text:string,n:number}|null>(null);
  const composer=useRef<HTMLDivElement>(null); const picking=!!gallery; const wasPicking=useRef(picking);
@@ -31,6 +33,7 @@ export default function AgentChat({slug,company,agent,details,writer,fresh=false
   <div className="chat">
    <HeadPill panel={panel} agent={agent?.name} face={agent&&<span aria-hidden="true"><CompanyAgentFace agent={agent} size={24}/></span>} title={t('newChat')}/>
    <div className="transcript"><div className="transcript__col">
+    {agent&&team&&<PrivateLine agent={agent.name}/>}
     {agent&&fresh&&agent.main?<LeadWelcome agent={agent} suggest={writer?text=>setDraft(current=>({text,n:(current?.n||0)+1})):undefined}/>:agent?<div className="empty-chat empty-chat--agent">
      <div className="empty-chat__faces" aria-hidden="true"><CompanyAgentFace agent={agent} size={64}/></div>
      <h2 className="main-h"><bdi>{agent.name}</bdi>{agent.main&&<span className="badge main-badge">{t('mainAgent')}</span>}</h2>

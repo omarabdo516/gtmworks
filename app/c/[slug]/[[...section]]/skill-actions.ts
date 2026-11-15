@@ -32,3 +32,12 @@ export const decideSkillLesson=withActionLog('decideSkillLesson',async function 
  if(error) logActionFailure('decideSkillLesson',error,{form});
  redirect(error?`${path}?failed=1`:path);
 });
+// Only an Owner or a Manager decides a learning suggestion (#25), from their own item in "Waiting on you"; the database
+// checks again, and an agent has no way to reach this action.
+export const decideAgentRule=withActionLog('decideAgentRule',async function decideAgentRule(form:FormData) {
+ const db=await supabase(); const path=`/c/${String(form.get('slug'))}/approvals`;
+ const {error}=!await actionAllowed(db,'decideAgentRule',String(form.get('company')))?{error:{message:'not permitted'}}:await db.rpc('decide_agent_rule',{c:String(form.get('company')),item:Number(form.get('item')),approve:form.get('intent')==='approve'});
+ revalidatePath(path);
+ if(error) logActionFailure('decideAgentRule',error,{form});
+ redirect(error?`${path}?failed=rule`:path);
+});

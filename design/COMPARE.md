@@ -54,7 +54,7 @@ The prototype has no URL routes. Its sidebar switches between four views (`data-
 | `waiting` | The board scrolled to its "Waiting on you" column | `/c/rs-learning/approvals` |
 | `numbers` | Sidebar, Numbers (the dashboard) | `/c/rs-learning/numbers` |
 | `log` | Sidebar, Activity log | `/c/rs-learning/log` |
-| `agent-chat` | The Ads Agent's tile in the sidebar: a Conversation with an Agent other than Lead | none |
+| `agent-chat` | The Ads Agent's tile in the sidebar: a Conversation with an Agent other than Lead, with the private line of a team at its top (#25) | none |
 | `settings` | Account menu, Settings: the overlay's Company section | `/c/rs-learning/settings` |
 | `agents` | Settings, Agents | `/c/rs-learning/settings?section=agents` |
 | `agent` | Settings, Agents, Lead: one Agent's page | `/c/rs-learning/settings?agent=61000000-0000-0000-0000-000000000001` (the fixture's Lead) |
@@ -65,8 +65,9 @@ The prototype has no URL routes. Its sidebar switches between four views (`data-
 | `made-agent` | Settings, Agents, Ads: the page of an Agent Lead made, with when and at whose request, and the rules it was told (#18) | `/c/rs-learning/settings?agent=61000000-0000-0000-0000-000000000002` (the fixture's Ads) |
 | `rule-saved` | Sidebar, the chat in which Omar told Ads a lasting rule (`th-rule-ads`), with the saved line under Ads's reply (#18) | none (a uuid path; with the fixture pass `--built-path /c/rs-learning/conversations/62000000-0000-0000-0000-000000000003`) |
 | `channel` | Sidebar, Channels, عام (`ch-general`): the general channel with its details panel (#23) | `/c/rs-learning/channels/69000000-0000-0000-0000-000000000001` (the seeded general channel; with the fixture it holds the reference's talk) |
+| `learning` | Settings, Learning: Youssef's rule for Ads in "Learning suggestions", with Decline and Make it team-wide (#25). The product decides it where it waits | `/c/rs-learning/approvals` (needs the fixture's suggestion) |
 
-The built settings overlay is route-backed: `/c/<slug>/settings` opens it, `?section=<name>` opens a section and `?agent=<id>` one Agent's page, so each state has one address. The `agent`, `made-card`, `made-agent`, `ready-roles` and `rule-saved` rows need the comparison fixture (below); on the seed alone the overlay shows the Agents list. "none" means the product has no equivalent page yet. Pass `--built-path` once a ticket builds one, and add it to the table in the same change.
+The built settings overlay is route-backed: `/c/<slug>/settings` opens it, `?section=<name>` opens a section and `?agent=<id>` one Agent's page, so each state has one address. The `agent`, `made-card`, `made-agent`, `ready-roles`, `rule-saved` and `learning` rows need the comparison fixture (below); on the seed alone the overlay shows the Agents list. "none" means the product has no equivalent page yet. Pass `--built-path` once a ticket builds one, and add it to the table in the same change.
 
 Every screen starts from the prototype's default state. The "viewing as" switcher is never touched. To add a screen, add a row in `scripts/design-compare-lib.mjs` with its steps (`click`, `waitFor` or `scrollTo`, each with a CSS selector) and its built path.
 
@@ -96,6 +97,8 @@ gh workflow run design-compare.yml --ref <branch> -f screen=made-card -f fixture
 gh workflow run design-compare.yml --ref <branch> -f screen=ready-roles -f fixture=true
 # The chat in which Omar told Ads a lasting rule, with the saved line (#18)
 gh workflow run design-compare.yml --ref <branch> -f screen=rule-saved -f fixture=true -f built_path=/c/rs-learning/conversations/62000000-0000-0000-0000-000000000003
+# The first Contributor's rule for the team waiting in Omar's "Waiting on you", against the reference's Learning suggestions (#25)
+gh workflow run design-compare.yml --ref <branch> -f screen=learning -f fixture=true
 ```
 
 Add `-f lang=en`, `-f theme=light` and `-f width=390` for the other variants; both sides always use the same width, language and theme.

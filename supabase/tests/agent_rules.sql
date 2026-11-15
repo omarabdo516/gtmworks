@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(45);
+select plan(46);
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
  ('e2000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9','rules-test','ciphertext','connected','0.23.0','{run_submission}');
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('e2000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','e2000000-0000-0000-0000-000000000001','Ads','Ads');
@@ -16,10 +16,13 @@ select set_config('test.rule','من دلوقتي ما تبعتش حاجة للع
 
 set local role service_role;
 select results_eq($$select public.agent_save_rule(('e3000000-0000-0000-0000-00000000000'||n)::uuid,'rule-run-'||n,'call-0',current_setting('test.rule'))->>'state' from generate_series(3,4) n order by n$$,
- $$values ('refused'),('refused')$$,'the call in the Contributor''s and the Viewer''s Conversation is refused');
+ $$values ('suggested'),('refused')$$,'the call in the Contributor''s Conversation is now a suggestion for the team (#25), and the Viewer''s is refused');
 reset role;
-select is((select count(*)::int from public.agent_rules),0,'no rule is saved for them');
-select is((select count(*)::int from public.company_log where action='agent_rule_saved'),0,'nor a log row');
+select is((select count(*)::int from public.agent_rules where suggestion is null),0,'no rule is saved for the team from them');
+select is((select count(*)::int from public.company_log where action='agent_rule_saved'),0,'nor logged as saved');
+-- What becomes of a suggestion is rule_suggestions.sql's; the rest of this file is about the rules the team tells.
+delete from public.waiting_items where agent_rule_id is not null;
+delete from public.agent_rules where suggestion is not null;
 
 set local role service_role;
 select is(public.agent_save_rule('e3000000-0000-0000-0000-000000000001','rule-run-1','call-0',E'  '||current_setting('test.rule')||E'\n')->>'state','saved','the Owner''s call saves the rule');
@@ -49,14 +52,17 @@ update public.members set role='contributor' where company_id='10000000-0000-000
 insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id)
  values ('10000000-0000-0000-0000-000000000001','e3000000-0000-0000-0000-000000000002','person','20000000-0000-0000-0000-000000000002','Someone','From now on, no emojis',gen_random_uuid(),'rule-run-5');
 set local role service_role;
-select is(public.agent_save_rule('e3000000-0000-0000-0000-000000000002','rule-run-5','call-0','No emojis')->>'state','refused','a Manager made a Contributor before the run closed saves nothing');
+select is(public.agent_save_rule('e3000000-0000-0000-0000-000000000002','rule-run-5','call-0','From now on, no emojis')->>'state','suggested','a Manager made a Contributor before the run closed saves no rule for the team: it is a suggestion now (#25)');
 reset role;
+select is((select suggestion from public.agent_rules where run_id='rule-run-5'),'pending','waiting for an OK');
+delete from public.waiting_items where agent_rule_id is not null;
+delete from public.agent_rules where suggestion is not null;
 update public.members set role='manager' where company_id='10000000-0000-0000-0000-000000000001' and person_id='20000000-0000-0000-0000-000000000002';
 
 -- A run is pinned at its first start with the text of the tools its person is offered and the Agent's rules in force,
 -- oldest first. The app gives every tool's spec as the text it sends.
 select set_config('test.spec89',public.lead_tools_spec_89(),true);
-select set_config('test.specs','{"create_agent":"{\"name\":\"create_agent\"}","save_rule":"{\"name\":\"save_rule\"}"}',true);
+select set_config('test.specs','{"create_agent":"{\"name\":\"create_agent\"}","save_rule":"{\"name\":\"save_rule\"}","suggest_rule":"{\"name\":\"suggest_rule\"}"}',true);
 update public.agent_rules set said_at=said_at+interval '1 minute' where run_id='rule-run-2';
 insert into public.conversation_run_reservations(conversation_id,send_key,company_id,connection_id,person_id,agent_id,message,profile)
  select ('e3000000-0000-0000-0000-00000000000'||n)::uuid,('e4000000-0000-0000-0000-00000000000'||n)::uuid,'10000000-0000-0000-0000-000000000001','e2000000-0000-0000-0000-000000000001',
@@ -73,9 +79,9 @@ set local role service_role;
 select results_eq($$select public.pin_run(('e3000000-0000-0000-0000-00000000000'||n)::uuid,('e4000000-0000-0000-0000-00000000000'||n)::uuid,current_setting('test.specs')::jsonb) from generate_series(1,4) n order by n$$,
  $$values (jsonb_build_object('tools','[{"name":"save_rule"}]','rules',jsonb_build_array(current_setting('test.rule'),'from now on: answer every comment within the day'))),
   (jsonb_build_object('tools','[{"name":"save_rule"}]','rules',jsonb_build_array(current_setting('test.rule'),'from now on: answer every comment within the day'))),
-  (jsonb_build_object('tools',null,'rules',jsonb_build_array(current_setting('test.rule'),'from now on: answer every comment within the day'))),
+  (jsonb_build_object('tools','[{"name":"suggest_rule"}]','rules',jsonb_build_array(current_setting('test.rule'),'from now on: answer every comment within the day'))),
   (jsonb_build_object('tools',current_setting('test.spec89'),'rules','[]'::jsonb))$$,
- 'the Owner''s and the Manager''s runs are offered save_rule, the Contributor''s is not, every run of Ads is told its rules, and a run pinned before keeps what it had');
+ 'the Owner''s and the Manager''s runs are offered save_rule, the Contributor''s suggest_rule instead (#25), every run of Ads is told its rules, and a run pinned before keeps what it had');
 select is(public.pin_run('e3000000-0000-0000-0000-000000000001','e4000000-0000-0000-0000-000000000005',current_setting('test.specs')::jsonb),'{"tools":null,"rules":[]}'::jsonb,
  'a run the previous app version already tried to start keeps the request it sent: its tools as that version pinned them (none here) and no rules');
 reset role;
