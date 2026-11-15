@@ -13,6 +13,8 @@ select json_build_object(
  'private_answer',not has_function_privilege('authenticated','public.agent_visible_to(uuid,uuid,uuid)','execute')
   and has_function_privilege('authenticated','public.can_see_agent(uuid,uuid)','execute')
   and not has_function_privilege('anon','public.can_see_agent(uuid,uuid)','execute'),
+ 'waiting_and_stop_follow',position('can_see_conversation_agent' in (select qual from pg_policies where schemaname='public' and tablename='waiting_items' and policyname='waiting_items_read'))>0
+  and position('can_see_conversation_agent' in pg_get_functiondef('public.conversation_stop_target(uuid,uuid)'::regprocedure))>0,
  'writes_refused',(select count(*)=3 from pg_trigger where tgfoid='public.refuse_hidden_agent()'::regprocedure and not tgisinternal
   and tgrelid in ('public.conversations'::regclass,'public.conversation_run_reservations'::regclass,'public.conversation_queued_turns'::regclass))
 );

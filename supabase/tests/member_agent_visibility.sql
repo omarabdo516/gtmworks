@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(33);
+select plan(35);
 -- RS Learning with four Agents: Lead (main), Ads, SEO and Coder; Aleem's Lead is another Company's. The Contributor
 -- (…03) has a Conversation with each, a message in two, and every Agent has a row in the log.
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state)
@@ -17,6 +17,9 @@ insert into public.conversations(id,company_id,person_id,agent_id,agent_name)
  from public.hermes_agents, generate_series(1,4) n where id=('a1500000-0000-0000-0000-00000000000'||n)::uuid;
 insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id)
  select '10000000-0000-0000-0000-000000000001',('c1500000-0000-0000-0000-00000000000'||n)::uuid,'person','20000000-0000-0000-0000-000000000003','مراجع','Hello',gen_random_uuid(),'visibility-run-'||n from generate_series(2,4,2) n;
+insert into public.waiting_items(company_id,person_id,kind,title,conversation_id) values
+ ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','question','From Coder','c1500000-0000-0000-0000-000000000004'),
+ ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','question','From SEO','c1500000-0000-0000-0000-000000000003');
 insert into public.hermes_agent_audit(company_id,actor_id,agent_id,action,details)
  select '10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001',('a1500000-0000-0000-0000-00000000000'||n)::uuid,'attach','{}' from generate_series(1,4) n;
 set local role authenticated;
@@ -53,6 +56,8 @@ select is((select count(*)::int from public.hermes_agent_audit where agent_id='a
 select is((select count(*)::int from public.member_agent_access),2,'a Member reads their own switches only');
 select throws_ok($$select public.agent_visible_to('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000005','a1500000-0000-0000-0000-000000000002')$$,'42501',null,'a Member cannot ask whether another person sees an Agent');
 select is(public.can_see_agent('10000000-0000-0000-0000-000000000003','a1500000-0000-0000-0000-000000000005'),false,'nor learn anything of a Company they are not in');
+select is((select string_agg(title,',' order by title) from public.waiting_list('10000000-0000-0000-0000-000000000001') where kind='question'),'From SEO','Waiting on you leaves out the hidden Agent''s question');
+select throws_ok($$select * from public.conversation_stop_target('c1500000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000001')$$,'P0002','conversationNotFound','nor can its run be stopped');
 select throws_ok($$select public.send_conversation_message('c1500000-0000-0000-0000-000000000009','10000000-0000-0000-0000-000000000001','a1500000-0000-0000-0000-000000000004','Hi','e1500000-0000-0000-0000-000000000001','visibility-run-9')$$,'P0002','conversationNotFound','a Conversation with the hidden Agent cannot start, even by its address');
 select throws_ok($$select public.reserve_conversation_turn('c1500000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000001','a1500000-0000-0000-0000-000000000004','e1500000-0000-0000-0000-000000000002','Hi')$$,'P0002','conversationNotFound','nor an older one go on');
 select throws_ok($$insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('c1500000-0000-0000-0000-000000000008','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','a1500000-0000-0000-0000-000000000004','Coder')$$,'42501',null,'the database refuses the insert');

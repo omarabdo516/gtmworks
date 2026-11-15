@@ -38,6 +38,29 @@ alter policy hermes_agent_audit_read on public.hermes_agent_audit using (public.
 alter policy conversations_read on public.conversations using (person_id=auth.uid() and public.is_member(company_id) and public.can_see_agent(company_id,agent_id));
 alter policy company_log_read on public.company_log using (public.is_member(company_id) and public.can_see_agent(company_id,agent_id) and public.can_see_agent(company_id,actor_id));
 
+-- Rows tied to a Conversation follow its Agent for the caller: a question waiting in "Waiting on you" from a hidden
+-- Agent's Conversation, whoever's Conversation it is, is absent too.
+create or replace function public.can_see_conversation_agent(c uuid, conversation uuid) returns boolean language sql stable security definer set search_path='' as $$
+ select conversation is null or public.can_see_agent(c,(select v.agent_id from public.conversations v where v.id=conversation and v.company_id=c));
+$$;
+revoke all on function public.can_see_conversation_agent(uuid,uuid) from public,anon,service_role;
+grant execute on function public.can_see_conversation_agent(uuid,uuid) to authenticated;
+alter policy waiting_items_read on public.waiting_items using (person_id=auth.uid() and public.is_member(company_id) and public.can_see_conversation_agent(company_id,conversation_id));
+
+-- Stopping a run is reaching its Agent: a Conversation whose Agent is hidden from the caller is not found to stop.
+create or replace function public.conversation_stop_target(conversation uuid, c uuid) returns table(run text, connection uuid) language plpgsql stable security definer set search_path='' as $$
+declare running record; linked uuid;
+begin
+ if auth.uid() is null or not public.is_member(c) or not exists(select 1 from public.conversations cv where cv.id=conversation and cv.company_id=c)
+  or not public.can_see_conversation_agent(c,conversation) then
+  raise exception 'conversationNotFound' using errcode='P0002'; end if;
+ select * into running from public.conversation_open_run(conversation);
+ if running.run is null then raise exception 'conversationNothingToStop' using errcode='P0002'; end if;
+ if running.person<>auth.uid() and not public.can_manage_company(c) then raise exception 'conversationStopNotAllowed' using errcode='42501'; end if;
+ select a.connection_id into linked from public.conversations cv join public.hermes_agents a on a.id=cv.agent_id and a.company_id=cv.company_id where cv.id=conversation;
+ return query select running.run,linked;
+end $$;
+
 -- Every way a person reaches an Agent writes one of these rows first (a new Conversation, a reserved run, a queued
 -- turn): an Agent hidden from that person is not found, as if its address did not exist. The worker (service_role) only
 -- finishes a turn the person sent while the Agent was still shown.
