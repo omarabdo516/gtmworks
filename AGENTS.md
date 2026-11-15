@@ -2,12 +2,11 @@
 
 An open-source, self-hosted marketing operating system. Conversations run on an agent engine through one engine contract (ADR 0009): Hermes ships inside the install and is the engine (ADR 0010), and gtmworks writes no model loop itself. Hermes owns agents, their settings, skills, scheduled work and memory; gtmworks owns companies, members, marketing cards, versions, approvals and the record of each conversation as people saw it. People direct, approve and read results; agents never approve, publish or spend (ADR 0006, 0008). RS Learning is the first Company in Omar's installation; R&S Consultations, Aleem and others follow on the same structure. English-first UI, with a complete shipped Arabic translation in Egyptian Arabic, worded as in the approved reference (`design-reference/`). Direction follows the chosen language; content keeps its own direction. Every new interface string belongs in both message catalogues.
 
-## How work arrives
+## How work is done
 
-Work arrives as GitHub issues in this repo, each with an acceptance list; each issue carries what its work needs. It is built on a branch and opened as a pull request whose body starts with `Closes #<n>`. The required check is `check`, and the pull request is reviewed on GitHub before it merges. A UI change with no approved look names its approved prototype in the issue.
+Work arrives as a GitHub issue in this repo with an acceptance list. A UI change with no approved look names its approved prototype in the issue. The pull request body starts with `Closes #<n>`, the required check is `check`, and the pull request is reviewed on GitHub before it merges. CodeRabbit and Codex comments on GitHub are advisory.
 
-CodeRabbit comments are advisory. A builder fixes a comment that names a real defect against the issue.
-The builder answers the rest in one line and never waits for CodeRabbit to merge.
+Every build runs in `/pstack:poteto-mode` and follows its playbooks. No other workflow skill is used in this repo. Impeccable stays the design tool for screens (Design workflow below).
 
 ## Before exploring, read these
 
