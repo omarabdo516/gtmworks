@@ -49,12 +49,14 @@ end;
 $$;
 revoke all on function public.log_company_change() from public,anon,authenticated,service_role;
 
--- The Owner started a sign-in in the Engine: its flow is kept as theirs.
+-- The Owner started a sign-in in the Engine: its flow is kept as theirs, and any other open sign-in of theirs for that
+-- app, in any Company, is forgotten, so the vendor's way back matches one sign-in only.
 create function public.start_app_sign_in(c uuid, app_key text, flow text) returns void
 language plpgsql security definer set search_path='' as $$
 begin
  if not public.is_company_owner(c) then raise exception 'appsNotAllowed' using errcode='42501'; end if;
  if coalesce(app_key,'') !~ '^[a-z][a-z0-9-]{0,63}$' or coalesce(flow,'') !~ '^[A-Za-z0-9_-]{8,128}$' then raise exception 'appsInvalid' using errcode='22023'; end if;
+ delete from public.company_app_sign_ins s where s.started_by=auth.uid() and s.app=app_key and s.finished_at is null;
  insert into public.company_app_sign_ins(company_id,app,flow_id,started_by) values (c,app_key,flow,auth.uid());
 end $$;
 revoke all on function public.start_app_sign_in(uuid,text,text) from public,anon,service_role;

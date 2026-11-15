@@ -75,6 +75,7 @@ test('the apps and their states are the Engine\'s: connected, needing attention 
  await page.locator('#apps-cat-sales').click();
  await expect(page.locator('.app__name')).toHaveText(['Attio','Close','Calendly']);
  await noEngineText(page);
+ await page.locator('#apps-cat-all').click();
  await card(page,'Notion').getByRole('link',{name:'Reconnect Notion'}).click();
  await expect(page.locator('.sheet__meta .badge')).toHaveText('Needs attention');
  await expect(page.getByRole('button',{name:'Reconnect',exact:true})).toBeVisible();

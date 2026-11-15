@@ -22,7 +22,7 @@ function sessions(fake,{person,isOwner,signIns}) {
    if(name==='is_company_owner') return {data:isOwner,error:null};
    if(name==='company_engine_target') return {data:[{connection:'f0000000-0000-0000-0000-000000000002',address:fake.address,profile:companyProfile(args.c)}],error:null};
    if(!isOwner) return {data:null,error:{code:'42501'}};
-   if(name==='start_app_sign_in') { signIns.push({company_id:args.c,app:args.app_key,flow_id:args.flow,started_by:person,finished_at:null,started_at:signIns.length,companies:{slug:'rs-consultations'}}); return {data:null,error:null}; }
+   if(name==='start_app_sign_in') { signIns.splice(0,signIns.length,...signIns.filter(row=>row.started_by!==person||row.app!==args.app_key||row.finished_at)); signIns.push({company_id:args.c,app:args.app_key,flow_id:args.flow,started_by:person,finished_at:null,started_at:signIns.length,companies:{slug:'rs-consultations'}}); return {data:null,error:null}; }
    if(name==='finish_app_sign_in') { const open=signIns.find(row=>row.app===args.app_key&&row.flow_id===args.flow&&row.started_by===person&&!row.finished_at); if(open) open.finished_at='now'; return {data:open?[{company_id:open.company_id,slug:'rs-consultations'}]:[],error:null}; }
    if(name==='record_app_disconnected') return {data:null,error:null};
    return {data:null,error:{message:'unexpected'}};
@@ -30,7 +30,7 @@ function sessions(fake,{person,isOwner,signIns}) {
   from:table=>{
    assert.equal(table,'company_app_sign_ins');
    const filters=[];
-   const chain={select:()=>chain,eq:(column,value)=>{filters.push([column,value]);return chain;},order:()=>chain,limit:()=>chain,
+   const chain={select:()=>chain,eq:(column,value)=>{filters.push([column,value]);return chain;},is:(column,value)=>{filters.push([column,value]);return chain;},order:()=>chain,limit:()=>chain,
     maybeSingle:async()=>({data:isOwner?signIns.filter(row=>filters.every(([column,value])=>row[column]===value)).sort((a,b)=>b.started_at-a.started_at)[0]??null:null,error:null})};
    return chain;
   }};
@@ -74,6 +74,8 @@ test('only an Owner connects, follows or disconnects an app; a Member reads the 
   assert.equal(fake.settings.appCallbacks.length,0,'nothing reaches the Engine without the person\'s own sign-in');
   assert.deepEqual(await finishCompanyAppSignIn(omar.db,omar.service,{person:owner,app:'klaviyo',answer:{code:'c',state:vendorState},encryptionKey,driver}),{slug:'rs-consultations',outcome:'connected'});
   assert.deepEqual(await change('poll'),{status:200,body:{status:'connected'}});
+  assert.deepEqual(await finishCompanyAppSignIn(omar.db,omar.service,{person:owner,app:'klaviyo',answer:{code:'c',state:vendorState},encryptionKey,driver}),{slug:null,outcome:'failed'},'a finished sign-in\'s answer is never applied to another one');
+  assert.equal(fake.settings.appCallbacks.length,1,'the second way back reaches the Engine for no sign-in');
   assert.equal(omar.asked.filter(name=>name==='finish_app_sign_in').length,1);
   assert.equal((await readCompanyApps(omar.db,omar.service,{company,encryptionKey,driver}))?.find(app=>app.key==='klaviyo')?.state,'connected');
 

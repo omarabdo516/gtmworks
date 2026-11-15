@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(20);
+select plan(24);
 -- Only the Owner connects and disconnects a Company's apps (#30); a Manager, a Contributor and a Viewer are refused.
 -- Each connect and disconnect is one row of the Company's log with who did it and the app; a refusal writes none. A
 -- sign-in is finished only by the person who started it while they are still the Company's Owner, and nobody writes
@@ -48,5 +48,10 @@ select is((select jsonb_agg(jsonb_build_array(actor_id,actor_kind,action,details
  jsonb_build_array(jsonb_build_array('20000000-0000-0000-0000-000000000001','person','app_connected',jsonb_build_object('app','klaviyo')),
   jsonb_build_array('20000000-0000-0000-0000-000000000001','person','app_disconnected',jsonb_build_object('app','klaviyo'))),
  'one log row per connect and disconnect, naming who did it and the app');
+select lives_ok($$select public.start_app_sign_in('10000000-0000-0000-0000-000000000001','notion','flow-owner-0003')$$,'the Owner starts a sign-in in one Company');
+select lives_ok($$select public.start_app_sign_in('10000000-0000-0000-0000-000000000002','notion','flow-owner-0004')$$,'and the same app in another');
+select is((select jsonb_agg(flow_id) from public.company_app_sign_ins where started_by='20000000-0000-0000-0000-000000000001' and app='notion' and finished_at is null),
+ jsonb_build_array('flow-owner-0004'),'an Owner of two Companies keeps one open sign-in per app: the newest');
+select is((select count(*) from public.finish_app_sign_in('notion','flow-owner-0003')),0::bigint,'the replaced sign-in finishes nothing');
 select * from finish();
 rollback;
