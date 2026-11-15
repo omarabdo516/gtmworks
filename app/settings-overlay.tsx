@@ -53,8 +53,9 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  // The person's own note for the Agents in this Company (RLS: nobody else reads it).
  const memberNote=section==='account'?(await db.from('member_notes').select('note').eq('company_id',company.id).eq('person_id',userId).maybeSingle()).data?.note||'':'';
  const agent=section==='agents'&&query.agent?agents.find(item=>item.id===query.agent):undefined;
- // The Agent's rules in force (#18), newest first as the reference lists them.
- const rules:Rule[]=agent?(((await db.from('agent_rules').select('id,body,said_by,said_at,teller:people!said_by(name)').eq('agent_id',agent.id).is('removed_at',null).order('said_at',{ascending:false})).data||[]) as unknown as Rule[]):[];
+ // The Agent's rules in force for the team (#18), newest first as the reference lists them: a suggestion only once it is
+ // approved (#25).
+ const rules:Rule[]=agent?(((await db.from('agent_rules').select('id,body,said_by,said_at,teller:people!said_by(name)').eq('agent_id',agent.id).is('removed_at',null).or('suggestion.is.null,suggestion.eq.approved').order('said_at',{ascending:false})).data||[]) as unknown as Rule[]):[];
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  const ro=!canManage&&<p className="ro-note"><SettingsIcon name="shield"/><span>{t('settingsRO')}</span></p>;
  const page=section==='company'?<CompanySection t={t} company={company} solo={workMode==='alone'} message={query.message} members={members} agents={agents} allowed={allowed} userId={userId} slug={slug} owner={owner} canManage={canManage} sharedEngine={sharedEngine} agentLevel={agentLevel} toolWarning={toolWarning.map(row=>row.agent_name)} roleNames={roleNames} ro={ro}/>

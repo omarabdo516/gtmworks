@@ -137,6 +137,7 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `company-profiles.test.mjs` | Each company has its own Engine profile with its level's toolsets and never a risky one. | 1.1 s | — | keep |
 | `company-sign-in.spec.ts` | The Owner signs the company in to ChatGPT and out; a member only sees whether it is connected. | 20.5 s | settings-overlay.test.mjs (the Models slot) | keep |
 | `connection-key.test.mjs` | A kept Connection key is read only within its own Company. | 0.3 s | hermes-connections.spec.ts | keep |
+| `conversations.test.mjs` | A Contributor's Conversation shows the line naming who their rule was sent to under the reply that told it, and each decision on it among the messages and notes at the time it was made. (#25) | 0.1 s | rule-suggestions.spec.ts (the same lines on the page) | new |
 | `conversations.spec.ts` | Private conversations: reply without reload, append-only record, isolation by person and company, Viewer refused, restart and lost runs, Hermes unreachable. | 130.7 s | hermes-runs.test.mjs, unknown-starts.test.mjs (driver logic without a browser) | keep |
 | `db.sh` | Database tests: RLS, grants and migrations replayed on legacy data (runs the *-migration.mjs and supabase/tests). | 20 s | — | keep |
 | `deploy.test.mjs` | Database verification reads plain rows and agent envelopes and names every false key. | 2.7 s | — | keep |

@@ -395,7 +395,7 @@
   "conversationMessage": "Message",
   "conversationSend": "Send",
   "conversationPlaceholder": "Ask the agent, or describe the work…",
-  "conversationPrivate": "Private to you.",
+  "conversationPrivate": "This chat is just between you and {0}",
   "conversationEnterHint": "Enter to send, Shift+Enter for a new line",
   "conversationViewerHelp": "Viewers can read but cannot chat with agents. Ask an Owner or Manager for a role that can.",
   "conversationLoadingAgents": "Loading agents…",

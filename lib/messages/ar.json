@@ -395,7 +395,7 @@
   "conversationMessage": "الرسالة",
   "conversationSend": "ابعت",
   "conversationPlaceholder": "اسأل الوكيل أو صف العمل…",
-  "conversationPrivate": "خاصة بك.",
+  "conversationPrivate": "المحادثة دي بينك وبين {0} بس",
   "conversationEnterHint": "Enter للإرسال، وShift+Enter لسطر جديد",
   "conversationViewerHelp": "يستطيع المشاهد القراءة فقط، ولا يستطيع المحادثة مع الوكلاء. اطلب من المالك أو المدير دورًا يسمح بذلك.",
   "conversationLoadingAgents": "جارٍ تحميل الوكلاء…",

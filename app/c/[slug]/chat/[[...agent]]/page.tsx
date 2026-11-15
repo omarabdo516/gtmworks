@@ -32,6 +32,6 @@ export default async function AgentChatPage({params,searchParams}:{params:Promis
  const gallery=mode==='ready'&&newAgent?{company:company.name,alone,roles:readyRoles(language,alone)}:null;
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  return <Shell company={company} companies={companies||[]} personId={user.id} section="chat" title={t('chats')} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={waitingItems.length} agentId={agent?.id}>
-  <main className="convo-page h-full"><AgentChat slug={slug} company={company.id} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} writer={!!writer} fresh={agents?.length===1} newAgent={newAgent} gallery={gallery} isNew={!!agent&&isNewFor(agent,user.id)}/></main>
+  <main className="convo-page h-full"><AgentChat slug={slug} company={company.id} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} writer={!!writer} team={company.work_mode==='team'} fresh={agents?.length===1} newAgent={newAgent} gallery={gallery} isNew={!!agent&&isNewFor(agent,user.id)}/></main>
  </Shell>;
 }

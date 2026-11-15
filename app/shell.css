@@ -268,6 +268,13 @@
 .gw .note__link { display: inline-flex; align-items: center; padding: 1px 6px; border-radius: var(--gw-r-xs); font-size: var(--gw-fs-xs); font-weight: 600; color: var(--gw-text-1); }
 @media (hover: hover) { .gw .note__link:hover { background: var(--gw-bg-hover); } }
 [dir="ltr"] .gw .note--saved > span { unicode-bidi: plaintext; }
+/* A line led by its icon, as the reference draws a note: a Contributor's rule sent as a suggestion, and the decision on
+   it (#25; design-reference: suggestTurn, lnApprove) */
+.gw .note--icon { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 2px 6px; }
+/* The quiet line at the top of a direct chat in a team (#25; design-reference: .priv-line) */
+.gw .priv-line { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 0 auto; padding: 0 12px; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); text-align: center; }
+.gw .priv-line .gw-icon { width: 13px; height: 13px; flex: none; }
+[dir="ltr"] .gw .priv-line span { unicode-bidi: plaintext; }
 .gw .thinking { padding: 2px 4px; font-size: var(--gw-fs-base); color: var(--gw-text-2); }
 /* A turn waiting for the current reply (also the line under a message to a person), and the stop square
    (design-reference: .queued, .is-queued, .is-stop) */
