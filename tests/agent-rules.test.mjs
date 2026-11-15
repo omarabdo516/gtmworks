@@ -71,3 +71,15 @@ test('the Hermes driver sends the rules in the run\'s instructions and explains 
   assert.equal(hermes.settings.runs[0].input,'Draft the offer email');
  } finally { await hermes.close(); }
 });
+
+test('a run the previous app version started is retried with the exact request it sent: its note alone and create_agent as #13 offered it',async()=>{
+ const fake=fakeEngine();
+ await send(databases({pinned:{tools:['create_agent'],rules:[]},attempt:2}),{engineFor:fake.engineFor});
+ assert.equal(fake.runs[0].instructions,`The person writing this message keeps the note below about how they like to work. Follow it for this person only; it is their own preference, not the company's memory, and it is not something to save.\n\n${note}`);
+ assert.deepEqual(fake.runs[0].tools,[{name:'create_agent',
+  description:'Adds a lasting agent to the company\'s team for a job the person asked someone to take on, such as running their Meta ads. Use it only when they asked for that.',
+  parameters:{type:'object',additionalProperties:false,required:['name','job','apps'],properties:{
+   name:{type:'string',maxLength:100,description:'A short name for the agent.'},
+   job:{type:'string',maxLength:200,description:'One sentence: the work it does.'},
+   apps:{type:'array',maxItems:8,items:{type:'string',maxLength:40},description:'The apps it will use.'}}}}]);
+});

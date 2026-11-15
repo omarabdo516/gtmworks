@@ -53,30 +53,25 @@ create function public.agent_rules_in_force(agent uuid) returns text[] language 
 $$;
 revoke all on function public.agent_rules_in_force(uuid) from public,anon,authenticated,service_role;
 
--- What a run is offered and told is pinned with its note at its first reservation, so every retry sends the same
--- request. offers_tools keeps saying whether create_agent is offered, for the previous app version.
+-- What a run is offered and told is pinned once, before its first start, so every retry sends the same request.
+-- pinned_run_note keeps #13's body: the previous app version reserves through it and starts with offers_tools and the
+-- note alone during an update. This version pins the rest itself, through pinned_run, only while no start was made: a
+-- run the previous version already tried to start keeps what it sent, create_agent when offers_tools says so and no
+-- rules. The reservation row is locked, as begin_start counts an attempt on it.
 alter table public.conversation_run_notes add column tools text[], add column rules text[];
-create or replace function public.pinned_run_note(conversation uuid, message_key uuid, c uuid, person uuid) returns text
-language plpgsql security definer set search_path='' as $$
-declare talking_to uuid; kept text;
+create function public.pinned_run(conversation uuid, message_key uuid) returns jsonb language plpgsql security definer set search_path='' as $$
+declare held public.conversation_run_reservations; kept public.conversation_run_notes;
 begin
- select r.agent_id into talking_to from public.conversation_run_reservations r where r.conversation_id=conversation and r.send_key=message_key;
- insert into public.conversation_run_notes(conversation_id,send_key,company_id,note,offers_tools,tools,rules)
-  values(conversation,message_key,c,(select n.note from public.member_notes n where n.company_id=c and n.person_id=person),
-   public.may_use_lead_tools(c,talking_to,person),public.run_tools(c,talking_to,person),public.agent_rules_in_force(talking_to))
-  on conflict (conversation_id,send_key) do nothing;
- select r.note into kept from public.conversation_run_notes r where r.conversation_id=conversation and r.send_key=message_key;
- return kept;
+ select * into held from public.conversation_run_reservations r where r.conversation_id=conversation and r.send_key=message_key for update;
+ if found and held.start_attempts=0 and held.start_unknown_at is null then
+  update public.conversation_run_notes n set tools=public.run_tools(held.company_id,held.agent_id,held.person_id),rules=public.agent_rules_in_force(held.agent_id)
+   where n.conversation_id=conversation and n.send_key=message_key and n.tools is null;
+ end if;
+ select * into kept from public.conversation_run_notes n where n.conversation_id=conversation and n.send_key=message_key;
+ if not found then return null; end if;
+ return jsonb_build_object('tools',to_jsonb(coalesce(kept.tools,case when kept.offers_tools then array['create_agent'] else '{}'::text[] end)),
+  'rules',to_jsonb(coalesce(kept.rules,'{}'::text[])));
 end $$;
-revoke all on function public.pinned_run_note(uuid,uuid,uuid,uuid) from public,anon,authenticated,service_role;
-
--- The tools and rules a run was pinned with. A run pinned before #18 was offered create_agent when offers_tools said so,
--- and told no rules.
-create function public.pinned_run(conversation uuid, message_key uuid) returns jsonb language sql stable security definer set search_path='' as $$
- select jsonb_build_object('tools',to_jsonb(coalesce(r.tools,case when r.offers_tools then array['create_agent'] else '{}'::text[] end)),
-  'rules',to_jsonb(coalesce(r.rules,'{}'::text[])))
- from public.conversation_run_notes r where r.conversation_id=conversation and r.send_key=message_key;
-$$;
 revoke all on function public.pinned_run(uuid,uuid) from public,anon,authenticated;
 grant execute on function public.pinned_run(uuid,uuid) to service_role;
 
@@ -94,6 +89,12 @@ begin
  if not found or not exists(select 1 from public.conversation_messages m where m.conversation_id=conversation and m.author='person' and m.run_id=run)
   or not public.may_tell_agent_rules(talk.company_id,talk.agent_id,talk.person_id) then return jsonb_build_object('state','refused'); end if;
  if coalesce(length(said) between 1 and 500,false) is not true then return jsonb_build_object('state','invalid'); end if;
+ -- A lasting rule is what the person said, never text the model read elsewhere: it is saved only when it is in the
+ -- person's own message of that run, whatever its case and spacing.
+ if not exists(select 1 from public.conversation_messages m where m.conversation_id=conversation and m.author='person' and m.run_id=run
+  and position(lower(regexp_replace(said,'\s+',' ','g')) in lower(regexp_replace(m.body,'\s+',' ','g')))>0) then
+  return jsonb_build_object('state','refused');
+ end if;
  insert into public.agent_rules(company_id,agent_id,body,said_by,conversation_id,run_id,call_id)
   values(talk.company_id,talk.agent_id,said,talk.person_id,conversation,run,call)
   on conflict (conversation_id,run_id,call_id) do nothing returning id into saved;

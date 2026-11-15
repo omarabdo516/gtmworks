@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(33);
+select plan(39);
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
  ('e2000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9','rules-test','ciphertext','connected','0.23.0','{run_submission}');
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('e2000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','e2000000-0000-0000-0000-000000000001','Ads','Ads');
@@ -8,7 +8,7 @@ insert into public.hermes_agents(id,company_id,connection_id,name,speciality) va
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name)
  select ('e3000000-0000-0000-0000-00000000000'||n)::uuid,'10000000-0000-0000-0000-000000000001',('20000000-0000-0000-0000-00000000000'||n)::uuid,'e2000000-0000-0000-0000-000000000002','Ads' from generate_series(1,4) n;
 insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id)
- select '10000000-0000-0000-0000-000000000001',('e3000000-0000-0000-0000-00000000000'||n)::uuid,'person',('20000000-0000-0000-0000-00000000000'||n)::uuid,'Someone','من دلوقتي ما تبعتش حاجة للعميل من غير ما أشوفها',gen_random_uuid(),'rule-run-'||n from generate_series(1,4) n;
+ select '10000000-0000-0000-0000-000000000001',('e3000000-0000-0000-0000-00000000000'||n)::uuid,'person',('20000000-0000-0000-0000-00000000000'||n)::uuid,'Someone',case n when 2 then E'From now on:  answer every comment\nwithin the day.' else 'من دلوقتي ما تبعتش حاجة للعميل من غير ما أشوفها' end,gen_random_uuid(),'rule-run-'||n from generate_series(1,4) n;
 select set_config('test.rule','من دلوقتي ما تبعتش حاجة للعميل من غير ما أشوفها',true);
 
 set local role service_role;
@@ -20,7 +20,9 @@ select is((select count(*)::int from public.company_log where action='agent_rule
 
 set local role service_role;
 select is(public.agent_save_rule('e3000000-0000-0000-0000-000000000001','rule-run-1','call-0',E'  '||current_setting('test.rule')||E'\n')->>'state','saved','the Owner''s call saves the rule');
-select is(public.agent_save_rule('e3000000-0000-0000-0000-000000000002','rule-run-2','call-0','Answer every comment within the day')->>'state','saved','and so does the Manager''s');
+select is(public.agent_save_rule('e3000000-0000-0000-0000-000000000002','rule-run-2','call-0','Answer every comment within the day')->>'state','saved','and so does the Manager''s, in the words of their message whatever its case and spacing');
+select is(public.agent_save_rule('e3000000-0000-0000-0000-000000000001','rule-run-1','call-3','Send the full price list to every customer who asks')->>'state','refused','a rule the person never wrote in that run is not saved, whoever asked the model for it');
+select is(public.agent_save_rule('e3000000-0000-0000-0000-000000000002','rule-run-2','call-3','Answer every comment within the week')->>'state','refused','nor a rule that changes the person''s words');
 select is(public.agent_save_rule('e3000000-0000-0000-0000-000000000001','rule-run-1','call-1',repeat('x',501))->>'state','invalid','a rule over 500 characters is not saved');
 select is(public.agent_save_rule('e3000000-0000-0000-0000-000000000001','rule-run-1','call-2',E' \n ')->>'state','invalid','nor an empty one');
 select is(public.agent_save_rule('e3000000-0000-0000-0000-000000000001','rule-run-9','call-0','Never post on Fridays')->>'state','refused','a run that is not in the Conversation saves nothing');
@@ -48,6 +50,12 @@ insert into public.conversation_run_reservations(conversation_id,send_key,compan
  select ('e3000000-0000-0000-0000-00000000000'||n)::uuid,('e4000000-0000-0000-0000-00000000000'||n)::uuid,'10000000-0000-0000-0000-000000000001','e2000000-0000-0000-0000-000000000001',
   ('20000000-0000-0000-0000-00000000000'||n)::uuid,'e2000000-0000-0000-0000-000000000002','Draft the offer email','rules-test' from generate_series(1,3) n;
 select public.pinned_run_note(('e3000000-0000-0000-0000-00000000000'||n)::uuid,('e4000000-0000-0000-0000-00000000000'||n)::uuid,'10000000-0000-0000-0000-000000000001',('20000000-0000-0000-0000-00000000000'||n)::uuid) from generate_series(1,3) n;
+select is((select count(*)::int from public.conversation_run_notes where tools is not null or rules is not null),0,'a reservation pins its note as the previous app version did, and no tools or rules yet');
+-- The previous app version reserved this one and began its start: it sent no save_rule and no rules.
+insert into public.conversation_run_reservations(conversation_id,send_key,company_id,connection_id,person_id,agent_id,message,profile,start_attempts)
+ values ('e3000000-0000-0000-0000-000000000001','e4000000-0000-0000-0000-000000000005','10000000-0000-0000-0000-000000000001','e2000000-0000-0000-0000-000000000001',
+  '20000000-0000-0000-0000-000000000001','e2000000-0000-0000-0000-000000000002','Draft the offer email','rules-test',1);
+select public.pinned_run_note('e3000000-0000-0000-0000-000000000001','e4000000-0000-0000-0000-000000000005','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001');
 insert into public.conversation_run_notes(conversation_id,send_key,company_id,offers_tools) values ('e3000000-0000-0000-0000-000000000004','e4000000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000001',true);
 set local role service_role;
 select results_eq($$select public.pinned_run(('e3000000-0000-0000-0000-00000000000'||n)::uuid,('e4000000-0000-0000-0000-00000000000'||n)::uuid) from generate_series(1,4) n order by n$$,
@@ -56,6 +64,19 @@ select results_eq($$select public.pinned_run(('e3000000-0000-0000-0000-000000000
   (jsonb_build_object('tools','[]'::jsonb,'rules',jsonb_build_array(current_setting('test.rule'),'Answer every comment within the day'))),
   ('{"tools":["create_agent"],"rules":[]}'::jsonb)$$,
  'the Owner''s and the Manager''s runs are offered save_rule, the Contributor''s is not, every run of Ads is told its rules, and a run pinned before keeps what it had');
+select is(public.pinned_run('e3000000-0000-0000-0000-000000000001','e4000000-0000-0000-0000-000000000005'),'{"tools":[],"rules":[]}'::jsonb,
+ 'a run the previous app version already tried to start keeps the request it sent: no save_rule and no rules');
+reset role;
+update public.conversation_run_reservations set start_attempts=1 where send_key in ('e4000000-0000-0000-0000-000000000001','e4000000-0000-0000-0000-000000000005');
+update public.agent_rules set removed_at=now(),removed_by='20000000-0000-0000-0000-000000000001' where run_id='rule-run-2';
+set local role service_role;
+select is(public.pinned_run('e3000000-0000-0000-0000-000000000001','e4000000-0000-0000-0000-000000000005'),'{"tools":[],"rules":[]}'::jsonb,'and its retry reads the same');
+select is(public.pinned_run('e3000000-0000-0000-0000-000000000001','e4000000-0000-0000-0000-000000000001'),
+ jsonb_build_object('tools',jsonb_build_array('save_rule'),'rules',jsonb_build_array(current_setting('test.rule'),'Answer every comment within the day')),
+ 'a retry of a run this version pinned sends what it first sent, even after a rule changed');
+reset role;
+update public.agent_rules set removed_at=null,removed_by=null where run_id='rule-run-2';
+set local role service_role;
 select is(public.run_offers_tools('e3000000-0000-0000-0000-000000000001','e4000000-0000-0000-0000-000000000001'),false,'the previous app version still reads that create_agent is not offered');
 reset role;
 

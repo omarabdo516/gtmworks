@@ -16,9 +16,10 @@ select json_build_object(
  'rules_private',(select bool_and(not has_function_privilege(r,'public.may_tell_agent_rules(uuid,uuid,uuid)','execute')
    and not has_function_privilege(r,'public.run_tools(uuid,uuid,uuid)','execute') and not has_function_privilege(r,'public.agent_rules_in_force(uuid)','execute'))
   from unnest(array['anon','authenticated','service_role']) r),
- 'offer_and_rules_pinned',position('run_tools' in pg_get_functiondef('public.pinned_run_note(uuid,uuid,uuid,uuid)'::regprocedure))>0
-  and position('agent_rules_in_force' in pg_get_functiondef('public.pinned_run_note(uuid,uuid,uuid,uuid)'::regprocedure))>0
-  and position('offers_tools' in pg_get_functiondef('public.pinned_run_note(uuid,uuid,uuid,uuid)'::regprocedure))>0,
+ 'offer_and_rules_pinned',position('run_tools' in pg_get_functiondef('public.pinned_run(uuid,uuid)'::regprocedure))>0
+  and position('agent_rules_in_force' in pg_get_functiondef('public.pinned_run(uuid,uuid)'::regprocedure))>0
+  and position('run_tools' in pg_get_functiondef('public.pinned_run_note(uuid,uuid,uuid,uuid)'::regprocedure))=0,
+ 'rule_from_person',position('m.body' in pg_get_functiondef('public.agent_save_rule(uuid,text,text,text)'::regprocedure))>0,
  'previous_app_reads_offer',has_function_privilege('service_role','public.run_offers_tools(uuid,uuid)','execute'),
  'logged_with_rule',public.log_agent_action('AGENT_RULE_SAVED')='agent_rule_saved' and public.log_agent_action('AGENT_RULE_REMOVED')='agent_rule_removed'
   and position('''rule''' in pg_get_functiondef('public.log_agent_change()'::regprocedure))>0
