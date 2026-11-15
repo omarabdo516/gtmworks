@@ -141,6 +141,7 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `lane.mjs` | browser helper: one whole stack per worker (new, #69) | — | — | helper, kept |
 | `language.spec.ts` | English by default, the account language across sessions and devices, automatic content direction, and Arabic sign-in. | 62.6 s | — | keep (direction checks) |
 | `lead-agent-migration.mjs` | replays the lead-agent migration (tests/db.sh) | — | — | helper, kept |
+| `lead-creates-agent.spec.ts` | The Conversation shows the card for each Agent Lead made (under Lead's reply, or alone when the reply was only the call); the list marks it new for its requester only, until they open it; its page and details say when and at whose request; "New agent" and Settings open Lead's chat focused with a hint line, no form. (#13) | 30.7 s | engine-conversation.spec.ts (the tool call that makes the rows), sidebar.test.mjs (who sees the mark) | new |
 | `lead-tools.test.mjs` | Lead's create_agent call is ignored when its tool or arguments do not read, makes nothing until the Engine has the Company's profile ready, then asks the database with the trimmed arguments. | 0.1 s | engine-conversation.spec.ts (the same call on the database) | keep |
 | `lessons.test.mjs` | A lesson is proposed only from a run; deciding is a person's action. | 0.3 s | skill-lessons.spec.ts | keep |
 | `license.test.mjs` | LICENSE is MIT with the owner's copyright and the package stays private. | 0.6 s | — | keep |
@@ -173,7 +174,7 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `setup-code.test.mjs` | The setup code has 256 bits, is compared exactly and travels only after `#`. (#50) | 1.9 s | first-run.spec.ts, install job | keep (decision #50) |
 | `shared-engine.spec.ts` | The Owner is warned, in English and Arabic, while two companies share the bundled Engine profile. | 21.1 s | one-company-install.test.mjs (docs and logic) | keep |
 | `shell-wording.test.mjs` | Empty states and notes speak the reference's Egyptian Arabic. | 0.2 s | — | keep |
-| `sidebar.test.mjs` | The Inbox entry stays named at zero; the account menu offers Light, Dark and Device. | 0.5 s | theme.spec.ts | keep |
+| `sidebar.test.mjs` | The Inbox entry stays named at zero; the account menu offers Light, Dark and Device; an Agent Lead made is new only for its requester until opened, never the main Agent. | 0.5 s | theme.spec.ts | keep |
 | `sign-in-rate-limit.test.mjs` | The sign-in page says to try later on 429, and never logs the password. (#41) | 3.4 s | rate-limit.install.ts | keep |
 | `sign-in.ts` | browser helper: sign in and read emailed links | — | — | helper, kept |
 | `skill-lessons.spec.ts` | An agent proposes a lesson from its run; approving adds it to the skill and rejecting does not. | 37.5 s | lessons.test.mjs (route pieces) | keep |
