@@ -26,6 +26,9 @@ export const fixture = {
   channel: '69000000-0000-0000-0000-000000000001',
   // Omar's Conversation in which he told Ads a lasting rule (#18), as the reference's thread th-rule-ads.
   ruleConversation: '62000000-0000-0000-0000-000000000003',
+  // The first Contributor's Conversation in which they told Ads a rule for the team (#25), as the reference's th-yo-ads;
+  // the rule waits on Omar and the Manager as a learning suggestion.
+  suggestionConversation: '62000000-0000-0000-0000-000000000004',
 };
 export const screens = {
   // The prototype's main screen: the Conversation with the main Agent, Lead, which it opens on.
@@ -36,7 +39,8 @@ export const screens = {
   // The dashboard loads for 650 ms before its figures appear.
   numbers: { reference: { steps: [{ click: '#sb-nav [data-view="dashboard"]' }, { waitFor: '#view-dashboard .kpis' }] }, builtPath: '/c/rs-learning/numbers' },
   log: { reference: { steps: [{ click: '#sb-nav [data-view="log"]' }, { waitFor: '#view-log:not([hidden])' }] }, builtPath: '/c/rs-learning/log' },
-  // A Conversation with an Agent other than Lead, opened from its tile in the sidebar.
+  // A Conversation with an Agent other than Lead, opened from its tile in the sidebar. In a team it starts with the
+  // private line (#25).
   'agent-chat': { reference: { steps: [{ click: '#sb-agents [data-action="open-agent"][data-agent="ads"]' }] }, builtPath: null },
   // The settings overlay opens on its Company section. The built overlay is route-backed (app/settings-overlay.tsx):
   // ?section= opens a section and ?agent=<id> one Agent's page.
@@ -59,6 +63,10 @@ export const screens = {
   // #18. The Conversation in which Omar told Ads a lasting rule, with the saved line under Ads's reply. Built: the
   // fixture's ruleConversation (pass --built-path).
   'rule-saved': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-rule-ads"]' }, { waitFor: '.note--saved' }] }, builtPath: null },
+  // #25. The reference decides a learning suggestion in Settings, Learning ("Learning suggestions": Youssef's rule for
+  // Ads, with Decline and Make it team-wide); the product decides it where it waits, in "Waiting on you". Built: the
+  // fixture's suggestion.
+  learning: { reference: { steps: [...settingsSection('learning'), { waitFor: '.ln-sugg .ln-row' }] }, builtPath: '/c/rs-learning/approvals' },
   // Ads's page in Settings, saying when it was made and at whose request, and listing the rule it was told (#18).
   // Built: the fixture's Ads, which Lead made and Omar told the rule.
   'made-agent': { reference: { steps: [...settingsSection('agents'), { click: '#sov-ag-ads' }, { waitFor: '#sov-tab-settings' }] }, builtPath: `/c/rs-learning/settings?agent=${fixture.agent}` },

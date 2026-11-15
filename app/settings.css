@@ -48,6 +48,8 @@
 .gw .sov-nav__l:first-child { margin-top: 0; }
 .gw .sov-nav .sb-item { flex: none; --od-icon-size: 18px; }
 .gw .sov-nav .sb-item .sov-icon { color: var(--gw-text-2); }
+/* Learning suggestions waiting for the reader's OK (#25; design-reference: the nav item's .sb-count) */
+.gw .sov-count { flex: none; min-width: 20px; height: 20px; padding: 0 6px; border-radius: var(--gw-r-full); background: var(--gw-wait-bg); color: var(--gw-wait-text); font-size: var(--gw-fs-xs); font-weight: 600; display: inline-flex; align-items: center; justify-content: center; }
 .gw .sov-main { overflow-y: auto; min-height: 0; overscroll-behavior: contain; }
 .gw .sov-page { width: min(800px, 100%); padding: var(--s8) var(--s8) var(--s16); display: flex; flex-direction: column; gap: var(--s6); }
 .gw .sov-head { display: flex; align-items: flex-end; gap: var(--s4); flex-wrap: wrap; }
