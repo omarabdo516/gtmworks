@@ -65,13 +65,11 @@ test('only an Owner connects, follows or disconnects an app; a Member reads the 
   const url=new URL(String(started.body.url));
   assert.equal(url.searchParams.get('redirect_uri'),'http://localhost:3000/api/apps/callback/klaviyo');
   assert.deepEqual(await change('poll'),{status:200,body:{status:'waiting'}});
-  // Connecting again while the first window was left open replaces that sign-in.
   const again=await change('connect');
   assert.equal(again.status,200);
-  assert.equal([...fake.settings.appFlows.values()].filter(flow=>flow.status==='authorization_required').length,1);
+  assert.equal([...fake.settings.appFlows.values()].filter(flow=>flow.status==='authorization_required').length,1,'a sign-in left open gives way to the new one');
   const vendorState=new URL(String(again.body.url)).searchParams.get('state');
 
-  // The way back for someone who did not start it goes nowhere; the Owner's own is handed on and logged once.
   assert.deepEqual(await finishCompanyAppSignIn(someone.db,someone.service,{person:member,app:'klaviyo',answer:{code:'c',state:vendorState},encryptionKey,driver}),{slug:null,outcome:'failed'});
   assert.equal(fake.settings.appCallbacks.length,0,'nothing reaches the Engine without the person\'s own sign-in');
   assert.deepEqual(await finishCompanyAppSignIn(omar.db,omar.service,{person:owner,app:'klaviyo',answer:{code:'c',state:vendorState},encryptionKey,driver}),{slug:'rs-consultations',outcome:'connected'});

@@ -68,10 +68,9 @@ test('an app on with any other tool list, or whose server does not answer, needs
   servers().notion.tools.include=[...appByKey('notion').readTools,'notion-update-page'];
   delete servers().canva.tools.prompts;
   assert.deepEqual([(await states(target)).notion,(await states(target)).canva],['attention','attention']);
-  // Connecting again writes the list back.
   const again=await startAppSignIn(target,'notion',back('notion'));
   assert.equal(again.state,'started');
-  assert.deepEqual(servers().notion.tools.include,[...appByKey('notion').readTools]);
+  assert.deepEqual(servers().notion.tools.include,[...appByKey('notion').readTools],'connecting again writes the list back');
   await cancelAppSignIn(target,again.flow);
   assert.equal((await states(target)).notion,'connected');
   fake.settings.appsUnreachable.add('notion');

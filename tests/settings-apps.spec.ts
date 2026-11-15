@@ -32,7 +32,6 @@ test.beforeAll(async({browser},testInfo)=>{
  const page=await browser.newPage();
  try {
   await signIn(page,'omar@example.com','/c/rs-learning/home');
-  // The Company's own Connection, saved through the Owner's route (its key encrypted), then given Lead as the worker does.
   const saved=await page.request.post('/api/hermes-connections',{data:{company,intent:'save',address:fake.address,profile,key:fake.settings.key}});
   expect(saved.status()).toBe(200);
   const connection=(await saved.json()).connection.id;
@@ -68,10 +67,8 @@ test('the apps and their states are the Engine\'s: connected, needing attention 
  await expect(card(page,'Notion').locator('.app__state')).toHaveText('Needs attention');
  await expect(card(page,'Notion').getByRole('link',{name:'Reconnect Notion'})).toBeVisible();
  await expect(card(page,'Canva').locator('.app__state')).toHaveText('Not connected');
- // Only registry apps the Engine offers are listed: not Gamma (left out of this catalogue), never Figma or Webflow.
- await expect(page.locator('.app__name')).toHaveCount(10);
+ await expect(page.locator('.app__name'),'only registry apps this catalogue offers').toHaveCount(10);
  for(const absent of ['Gamma','Figma','Webflow','WordPress.com']) await expect(card(page,absent)).toHaveCount(0);
- // Search and categories narrow the list, in either language.
  await page.locator('#apps-q').fill('كانفا');
  await expect(page.locator('.app__name')).toHaveText(['Canva']);
  await page.locator('#apps-q').fill('');
@@ -102,7 +99,6 @@ test('the Owner connects an app through the vendor\'s window and disconnects it;
  await expect(page.locator('#sov-h')).toHaveText('Connect Canva');
  await expect(page.locator('.app-kv')).toContainText('You sign in through Canva’s own window. The password never passes through us.');
  const [vendor]=await Promise.all([page.waitForEvent('popup'),page.getByRole('button',{name:'Connect',exact:true}).click()]);
- // The way back lands on gtmworks, which shows the app connected; the page that opened it follows on its own.
  await expect(vendor).toHaveURL(new RegExp(`/c/rs-learning/settings\\?section=apps&app=canva$`));
  await expect(vendor.locator('.sheet__meta .badge')).toHaveText('Connected');
  await expect(page.locator('.sheet__meta .badge')).toHaveText('Connected',{timeout:20000});
