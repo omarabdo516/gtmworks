@@ -1,0 +1,7 @@
+{
+  "about": "The settings overlay (#26), over Lead and Meta Ads as in made-agent: the Agents section and the main Agent's page (settings-main-agent). Its Company section of a team is agent-visibility.",
+  "path": "/c/rs-learning/settings?section=agents",
+  "state": "lead-made",
+  "dark": true,
+  "ready": ".sov-ag"
+}
