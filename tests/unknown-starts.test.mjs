@@ -4,7 +4,7 @@ import { startRun, startUnknown } from '../lib/hermes.mjs';
 import { engineFor } from '../lib/engine.mjs';
 import { encryptSecret } from '../lib/agent-crypto.mjs';
 import { noteInstructions, sendMessage, startQueuedTurns } from '../lib/conversation-runs.mjs';
-import { leadTools } from '../lib/lead-tools.mjs';
+import { leadToolSpecs } from '../lib/lead-tools.mjs';
 import { readFileSync } from 'node:fs';
 
 // A start whose outcome was once unknown stays unknown until Hermes names the run (ADR 0015): no later answer can prove
@@ -142,7 +142,7 @@ function hermesKeepingFirstBodies() {
 }
 
 test('a retry of a Lead start sends the tools of its first attempt, though the tools offered changed since', async () => {
- const spec=leadTools.create_agent.spec; const offered=spec.description; const {bodies,restore}=hermesKeepingFirstBodies();
+ const spec=/** @type {import('../lib/engine.mjs').ToolSpec} */(leadToolSpecs.find(tool=>tool.name==='create_agent')); const offered=spec.description; const {bodies,restore}=hermesKeepingFirstBodies();
  const runNote={offersTools:true}; const message='Find me someone to run our Meta ads';
  try {
   const first=databases({runNote});
