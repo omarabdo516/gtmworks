@@ -1,6 +1,5 @@
 // A fake engine that speaks the engine contract (lib/engine.mjs) in memory: no subscription, no network. It replies,
-// fails, replies slowly (pendingReads reads report running first) and stops, as a real driver would. A completed run
-// reports the tool calls settings.toolCalls scripts for its input, and each run keeps the tools it was offered.
+// fails, replies slowly (pendingReads reads report running first) and stops, as a real driver would.
 import { randomUUID } from 'node:crypto';
 /** @typedef {{id:string,key:string,conversation:string,input:string,instructions:string|null,tools:import('../lib/engine.mjs').ToolSpec[],reads:number,stopped:boolean}} FakeRun */
 /** @returns {{settings:{ending:'completed'|'failed',pendingReads:number,reply:(input:string)=>string,toolCalls:(input:string)=>import('../lib/engine.mjs').ToolCall[],usage:{input:number,output:number}|null},runs:FakeRun[],connections:object[],agentReads:string[],engineFor:(connection:object)=>import('../lib/engine.mjs').Engine}} */

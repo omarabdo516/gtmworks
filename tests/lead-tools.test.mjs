@@ -3,8 +3,6 @@ import assert from 'node:assert/strict';
 import { runToolCall } from '../lib/lead-tools.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 
-// Lead's tools (#13): a call is carried out only with arguments that read, and only once the Engine has the Company's
-// profile ready; the database then decides (lead_create_agent).
 const profile='co-10000000000000000000000000000001';
 function harness() {
  const fake=fakeEngine(); const engine=fake.engineFor({}); const rpcs=/** @type {[string,object][]} */([]);

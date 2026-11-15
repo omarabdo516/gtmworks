@@ -1,8 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 select plan(17);
--- #13: RS Learning runs on its own profile with Lead on a bundled Connection, and each of the Owner, the Manager, the
--- Contributor and the Viewer has a Conversation with Lead in which Lead called create_agent (run-<n>, call-0).
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
  ('e0000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9','co-10000000000000000000000000000001','ciphertext','connected','0.23.0','{run_submission}');
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('e0000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','e0000000-0000-0000-0000-000000000001','Lead','General',true);

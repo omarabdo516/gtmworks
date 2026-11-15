@@ -48,8 +48,6 @@ test('the Hermes driver reads failed, lost and unreachable runs in the contract 
  } finally { await fake.close(); }
 });
 
-// Hermes v0.23.0 takes no tools from the caller: the driver offers them in the run's instructions with an exact reply
-// format and reads the calls back out of the reply, which the person then reads without them (ADR 0009).
 const createAgent={name:'create_agent',description:'Add an Agent to the team.',parameters:{type:/** @type {const} */('object'),properties:{name:{type:'string'}},required:['name']}};
 const block=body=>`\`\`\`gtmworks-tool\n${body}\n\`\`\``;
 test('the Hermes driver offers tools in the run\'s instructions and reads the calls out of the reply',async()=>{
@@ -63,7 +61,6 @@ test('the Hermes driver offers tools in the run\'s instructions and reads the ca
   assert.ok(sent.startsWith('Answer in short points.\n\n'));
   assert.ok(sent.includes('```gtmworks-tool\n{"name":"<tool name>"'));
   assert.ok(sent.includes(`- create_agent: Add an Agent to the team. Its arguments, as JSON Schema: ${JSON.stringify(createAgent.parameters)}`));
-  // The same tools make the same request body, so a retry with the same key is the same run.
   assert.equal(await engine.start({...offered,retry:true}),run);
   assert.deepEqual(await engine.read(run),{state:'completed',reply:'Meta Ads is on the team now.',session:'conversation-1',usage:{input:14000,output:12},
    toolCalls:[{id:'call-0',name:'create_agent',arguments:{name:'Meta Ads'}}]});

@@ -1,5 +1,3 @@
--- Lead makes an Agent only through the worker's call, which the database checks; Members read the new Agent's made
--- date, requester and apps; the record of each call is read-only; a Connection Lead made counts as bundled.
 select json_build_object(
  'agent_columns_optional',(select bool_and(not attnotnull) from pg_attribute where attrelid='public.hermes_agents'::regclass and attname in ('created_at','requested_by','apps','requester_opened_at'))
   and (select count(*)=4 from pg_attribute where attrelid='public.hermes_agents'::regclass and attname in ('created_at','requested_by','apps','requester_opened_at') and not attisdropped),

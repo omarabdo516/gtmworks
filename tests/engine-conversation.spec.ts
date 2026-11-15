@@ -111,9 +111,6 @@ test('integration: a Contributor gets a reply on the fake engine and a Viewer is
  } finally { query(`update public.members set role='contributor' where company_id='${company}' and person_id='${contributor}'`); detach(); }
 });
 
-// #13: the Owner asks Lead, on the Company's own profile, for an Agent and the fake engine scripts Lead's create_agent
-// call. The Agent is made once its profile is ready, whichever closer comes second; a Manager's Lead is never offered
-// the tool, and the same call in their Conversation makes nothing.
 test('integration: Lead makes the Agent the Owner asks for, and nothing for a Manager',async()=>{
  test.setTimeout(120000);
  const profile=`co-${company.replaceAll('-','')}`;
@@ -129,7 +126,6 @@ test('integration: Lead makes the Agent the Owner asks for, and nothing for a Ma
  const conversation=randomUUID();
  const ask=()=>sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent:lead,message:'I want someone to handle Meta ads',encryptionKey,engineFor:fake.engineFor});
  const close=()=>closeOpenRuns(service,{encryptionKey,conversation,engineFor:fake.engineFor});
- // The Engine has no profile for the Company yet: the run closes and nothing is made.
  expect(await ask()).toEqual({conversation});
  expect(await close()).toBe(1);
  expect(made()).toEqual([]);
@@ -145,7 +141,6 @@ test('integration: Lead makes the Agent the Owner asks for, and nothing for a Ma
   .toEqual([{actor_id:omar,action:'agent_requested',name:'Meta Ads',job:'Runs the Meta ads.'}]);
  expect((await person.from('lead_made_agents').select('conversation_id,run_id,agent_id')).data).toEqual([{conversation_id:conversation,run_id:fake.runs[1].id,agent_id:agent.id}]);
 
- // A reply that is nothing but the call still makes the Agent; the run itself closes failed.
  const answer=fake.settings.reply;
  fake.settings.reply=()=>'';
  fake.settings.toolCalls=()=>[{id:'call-0',name:'create_agent',arguments:{name:'SEO',job:'Writes the blog.',apps:[]}}];
