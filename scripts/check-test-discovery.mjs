@@ -16,12 +16,14 @@ function files(directory = '.') {
 const { scripts } = JSON.parse(readFileSync('package.json', 'utf8'));
 // Read the actual npm command so reverting to a named list cannot fool the guard.
 const unit = scripts.test.match(/^node --test (['"])([^'"]+)\1$/);
-if (!unit || scripts['test:e2e'] !== 'playwright test' || scripts['test:e2e:proxy'] !== 'playwright test -c playwright.proxy.config.ts' || scripts['test:db'] !== 'bash tests/db.sh') {
+if (!unit || scripts['test:e2e'] !== 'playwright test' || scripts['test:e2e:proxy'] !== 'playwright test -c playwright.proxy.config.ts' || scripts['test:db'] !== 'bash tests/db.sh' || scripts['test:components'] !== 'vitest run') {
  throw new Error('Test runner commands changed; update the discovery check with them.');
 }
 const database = readFileSync('tests/db.sh', 'utf8');
 const covered = new Set([
  ...globSync(unit[2]),
+ // vitest.config.mts includes these; the component tests (#81).
+ ...globSync('tests/components/**/*.test.tsx'),
  ...globSync('supabase/migrations/*.verify.sql'),
  'tests/db.sh',
  ...[...database.matchAll(/^node (tests\/[^\s]+\.mjs)$/gm)].map(match => match[1]),

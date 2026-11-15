@@ -9,8 +9,8 @@ import { resolve } from 'node:path';
 const script = resolve('scripts/ci-areas.mjs');
 const run = (args, input = '') => execFileSync(process.execPath, [script, ...args], { encoding: 'utf8', input });
 const areas = (...paths) => Object.fromEntries(run(paths).trim().split('\n').map(line => line.split('=')));
-const none = { database: 'false', integration: 'false', install: 'false' };
-const all = { database: 'true', integration: 'true', install: 'true' };
+const none = { components: 'false', database: 'false', integration: 'false', install: 'false' };
+const all = { components: 'true', database: 'true', integration: 'true', install: 'true' };
 
 test('design, docs and Markdown run no suite', () => {
   assert.deepEqual(areas('design/conversation.html', 'docs/testing.md', 'docs/api/openapi.yaml', 'README.md', 'AGENTS.md'), none);
@@ -24,16 +24,25 @@ test('unit test and brand file changes run no long suite: static covers them on 
 // Until screens have component tests (a later PR under #76, #81), the whole-app browser suite is what proves app code
 // before merge, so a change to it runs that suite (review run on #79). Screens and the request layer need no install.
 for (const path of ['app/page.tsx', 'app/globals.css', 'components/shell/sidebar.tsx', 'middleware.ts', 'instrumentation.ts', 'postcss.config.mjs']) {
+  const components = /^(app|components)\//.test(path) ? 'true' : 'false';
   test(`${path} runs the browser suite and neither the database nor the install`, () => {
-    assert.deepEqual(areas(path), { database: 'false', integration: 'true', install: 'false' });
+    assert.deepEqual(areas(path), { components, database: 'false', integration: 'true', install: 'false' });
   });
+}
+
+// Screens tested as components (#81): a screen, a component, the library they import, or a component test runs them.
+for (const path of ['app/conversation-composer.tsx', 'components/company-agent-face.tsx', 'lib/messages/en.json', 'tests/components/message-box.test.tsx', 'vitest.config.mts']) {
+  test(`${path} runs the component tests`, () => assert.equal(areas(path).components, 'true'));
+}
+for (const path of ['worker/index.mjs', 'supabase/seed.sql', 'tests/frame.spec.ts', 'tests/unit.test.mjs', 'server.js']) {
+  test(`${path} does not run the component tests`, () => assert.equal(areas(path).components, 'false'));
 }
 
 // The library, the worker and the server the image runs keep their install trigger (#69): only the install drives them
 // against the real bundled Hermes (conversation, Agent, company profiles); the browser suite uses fake engines.
 for (const path of ['lib/engine.mjs', 'lib/i18n/messages.en.json', 'worker/index.mjs', 'next.config.mjs', 'server.js']) {
   test(`${path} runs the browser suite and the install`, () => {
-    assert.deepEqual(areas(path), { database: 'false', integration: 'true', install: 'true' });
+    assert.deepEqual(areas(path), { components: /^lib\//.test(path) ? 'true' : 'false', database: 'false', integration: 'true', install: 'true' });
   });
 }
 
@@ -91,19 +100,19 @@ test('on main every suite runs unless every file is a document', () => {
 });
 
 test('stdin accepts NUL-separated git paths without splitting spaces or newlines', () => {
-  assert.equal(run([], 'docs/a page.md\0docs/a\npage.md\0'), 'database=false\nintegration=false\ninstall=false\n');
-  assert.equal(run([], 'docs/a page.md\0docker-compose.install.yml\0'), 'database=false\nintegration=false\ninstall=true\n');
-  assert.equal(run(['--main'], 'app/a page.tsx\0'), 'database=true\nintegration=true\ninstall=true\n');
+  assert.equal(run([], 'docs/a page.md\0docs/a\npage.md\0'), 'components=false\ndatabase=false\nintegration=false\ninstall=false\n');
+  assert.equal(run([], 'docs/a page.md\0docker-compose.install.yml\0'), 'components=false\ndatabase=false\nintegration=false\ninstall=true\n');
+  assert.equal(run(['--main'], 'app/a page.tsx\0'), 'components=true\ndatabase=true\nintegration=true\ninstall=true\n');
 });
 
 test('an empty, malformed or unreadable list runs every suite', t => {
   for (const paths of [[], [''], ['docs/../app/page.tsx'], ['/docs/guide.md'], ['docs//guide.md']]) {
     assert.deepEqual(areas(...paths), all, JSON.stringify(paths));
   }
-  assert.equal(run([], 'docs/guide.md\0\0'), 'database=true\nintegration=true\ninstall=true\n');
+  assert.equal(run([], 'docs/guide.md\0\0'), 'components=true\ndatabase=true\nintegration=true\ninstall=true\n');
   const directory = openSync('.', 'r');
   t.after(() => closeSync(directory));
   const unreadable = spawnSync(process.execPath, [script], { encoding: 'utf8', stdio: [directory, 'pipe', 'pipe'] });
   assert.equal(unreadable.status, 0);
-  assert.equal(unreadable.stdout, 'database=true\nintegration=true\ninstall=true\n');
+  assert.equal(unreadable.stdout, 'components=true\ndatabase=true\nintegration=true\ninstall=true\n');
 });

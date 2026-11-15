@@ -19,3 +19,4 @@ backups/
 .impeccable/questions/
 .impeccable/mocks/
 .impeccable/review/
+.vitest/

@@ -1,5 +1,6 @@
 # As Hermes and T3 Code run CI (#76): the first job (`changes`, scripts/ci-areas.mjs) decides which suites a change
-# needs. Static (lint, types, catalogues, unit tests) runs on every change. The database tests, the whole-app browser
+# needs. Static (lint, types, catalogues, unit tests) runs on every change; the screen component tests (`components`)
+# run when the app, its components or its library change. The database tests, the whole-app browser
 # suite (`integration`) and the Docker install run on a pull request only when their own files change; a push to main
 # runs all of them unless every file is a document; a manual run starts the browser and install suites only through
 # inputs that default to off. Required `check` (scripts/ci-verdict.mjs) counts a suite nobody asked for as passed when
@@ -33,6 +34,7 @@ jobs:
       contents: read
       actions: read
     outputs:
+      components: ${{ steps.classify.outputs.components }}
       database: ${{ steps.classify.outputs.database }}
       integration: ${{ steps.classify.outputs.integration }}
       install: ${{ steps.classify.outputs.install }}
@@ -53,13 +55,13 @@ jobs:
           E2E: ${{ inputs.e2e }}
           INSTALL: ${{ inputs.install }}
         run: |
-          areas=$'database=true\nintegration=true\ninstall=true'
+          areas=$'components=true\ndatabase=true\nintegration=true\ninstall=true'
           main=
           if [[ "$EVENT_NAME" == workflow_dispatch ]]; then
-            # A manual run: static and the database always; the browser and install suites only when asked.
+            # A manual run: static, the components and the database always; the browser and install suites only when asked.
             [[ $E2E == true ]] || E2E=false
             [[ $INSTALL == true ]] || INSTALL=false
-            printf '%s\n' database=true "integration=$E2E" "install=$INSTALL" | tee -a "$GITHUB_OUTPUT"
+            printf '%s\n' components=true database=true "integration=$E2E" "install=$INSTALL" | tee -a "$GITHUB_OUTPUT"
             exit 0
           fi
           if [[ "$EVENT_NAME" == push ]]; then
@@ -74,7 +76,7 @@ jobs:
             fi
             # No rename detection: a move must check both its old and new paths.
             if git diff --no-ext-diff --no-renames --name-only -z "$range" -- > "$RUNNER_TEMP/changed-files"; then
-              areas=$(node scripts/ci-areas.mjs $main < "$RUNNER_TEMP/changed-files") || areas=$'database=true\nintegration=true\ninstall=true'
+              areas=$(node scripts/ci-areas.mjs $main < "$RUNNER_TEMP/changed-files") || areas=$'components=true\ndatabase=true\nintegration=true\ninstall=true'
             fi
           fi
           echo "$areas" | tee -a "$GITHUB_OUTPUT"
@@ -92,6 +94,29 @@ jobs:
           cache: npm
       - name: static
         run: ./ci.sh static
+
+  # Screens as components in headless Chromium, in two shards, as T3 Code runs them (#81).
+  components:
+    needs: [changes]
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.components != 'false') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1/2, 2/2]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: components
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: ./ci.sh components
 
   # Migrations replayed and verified, row-level security and grants, on one local stack (tests/db.sh).
   database:
@@ -543,7 +568,7 @@ jobs:
         run: docker rm -fv install-docker || true
 
   check:
-    needs: [changes, static, database, integration, install]
+    needs: [changes, static, components, database, integration, install]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     permissions:
@@ -554,6 +579,8 @@ jobs:
         env:
           CHANGES_RESULT: ${{ needs.changes.result }}
           STATIC_RESULT: ${{ needs.static.result }}
+          COMPONENTS_RUN: ${{ needs.changes.outputs.components }}
+          COMPONENTS_RESULT: ${{ needs.components.result }}
           DATABASE_RUN: ${{ needs.changes.outputs.database }}
           DATABASE_RESULT: ${{ needs.database.result }}
           INTEGRATION_RUN: ${{ needs.changes.outputs.integration }}

@@ -2,11 +2,14 @@ import { readFileSync } from 'node:fs';
 
 // Which long suites a change needs (#76), as Hermes `detect` and T3 Code `Changes` decide it: each suite runs only when
 // the files it covers changed. Static (lint, types, catalogues, the node unit tests) runs on every change and needs no
-// entry here. Prints database=, integration= and install= lines for $GITHUB_OUTPUT. With --main (a push to main) every
+// entry here. Prints components=, database=, integration= and install= lines for $GITHUB_OUTPUT. With --main (a push to main) every
 // suite runs unless every file is a document. Accepts path arguments or git diff --name-only -z on stdin; an empty,
 // malformed or unreadable list runs every suite.
 const everything = [/^\.github\/workflows\/ci\.yml$/, /^ci\.sh$/, /^scripts\/ci-(areas|verdict)\.mjs$/, /^package(-lock)?\.json$/];
 const suites = {
+  // Screens as components in headless Chromium (vitest.config.mts, #81): the app's screens and components, the library
+  // they import (catalogues included), and the component tests and their config.
+  components: [/^(app|components|lib)\//, /^tests\/components\//, /^vitest\.config\.mts$/],
   // The database tests: migrations replayed and verified, RLS and grants (tests/db.sh, *.verify.sql, check-rls.sql).
   database: [
     /^supabase\//, /^scripts\/(check-rls\.sql|verify-db\.mjs|local-db\.sh|local-default-privileges\.sql|bootstrap-owner\.mjs)$/,
