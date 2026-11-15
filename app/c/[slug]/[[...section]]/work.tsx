@@ -9,11 +9,13 @@ import { BoardPager, KanbanBoard, KanbanCard, KanbanColumn } from '@/components/
 import { TaskList, TaskListRow } from '@/components/paperclip/TaskList';
 import { BoardIcon } from '@/components/board-icon';
 import { AgentFace } from '@/components/agent-face';
+import { CompanyAgentFace } from '@/components/company-agent-face';
 import { CardDialog } from '@/app/card-dialog';
 import { roleAgents } from '@/lib/role-agents';
 import { useAgentIdentities } from '@/lib/agent-identities-client';
 const NewCard=lazy(()=>import('./new-card'));
 import { workAction } from './work-actions';
+import { decideAgentRule } from './skill-actions';
 import { Decision } from './decision';
 import { ActivityRow, Avatar, isMessage, MessageRow, NoteReplyRow, type WorkActivity, type WorkAttachment, type WorkMember, MemberPicker } from '@/lib/work-activity';
 import { NoteText, type EditableNote } from '@/app/note-edit';
@@ -91,10 +93,20 @@ export default function Work(p:WorkProps) { const {t,locale,language}=useI18n();
    :brief?<span className="kcard__t" dir="auto">{brief}</span>:null}
    <span className="kcard__foot">{person&&<span className="kcard__agent card-avatars">{agent?<AgentFace id={agent} role={agentRole(agent)} name={agentName(agent)} size={18}/>:<Avatar id={person} members={p.members}/>}<bdi className="od-truncate">{agentName(person)}</bdi></span>}{c.channel&&<span>{person?'· ':''}<bdi>{c.channel}</bdi></span>}{due(c)&&<span className="kcard__due od-nowrap">{due(c)}</span>}</span>
   </KanbanCard>; };
+ // A learning suggestion (#25; design-reference: lnRowHTML) is decided where it waits: the rule, its Agent, who told it,
+ // and Decline or Make it team-wide.
+ const named=(key:string,name:string)=>{ const [before,after]=t(key,'\u0000').split('\u0000'); return <>{before}<bdi>{name}</bdi>{after}</>; };
+ const ruleView=(item:WaitingItem)=><div key={`${item.kind}:${item.id}`} className="mcard mcard--rule" data-kind={item.kind} role="group" aria-label={t('waitingRuleLabel',item.body,item.asked_by)}>
+  <span className="mcard__top"><span className="od-fill mcard__who"><b>{t('waitingRuleKind')}</b></span><span className="mcard__time num">{date(item.created_at,language,{month:'short'})}</span></span>
+  <span className="mcard__q" dir="auto">{item.suggestion?.rule??item.title}</span>
+  <span className="ln-meta"><span className="ln-who">{item.suggestion?.agent&&<span aria-hidden="true"><CompanyAgentFace agent={item.suggestion.agent} size={16}/></span>}<bdi>{item.body}</bdi></span><span aria-hidden="true">·</span><span>{named('waitingRuleToldBy',item.asked_by)}</span><span className="badge badge--wait"><span className="dot dot--waiting" aria-hidden="true"/>{t('waitingRuleBadge')}</span></span>
+  <form action={decideAgentRule} className="ln-acts"><input type="hidden" name="company" value={p.company}/><input type="hidden" name="slug" value={p.slug}/><input type="hidden" name="item" value={item.id}/>
+   <button className="btn btn--secondary btn--sm" name="intent" value="reject">{t('waitingRuleDecline')}</button>
+   <button className="btn btn--primary btn--sm" name="intent" value="approve">{t('waitingRuleApprove')}</button></form>
+ </div>;
  // A mention (#22) names who wrote the note and on which Card, shows the note and opens it on its Card.
- const [mentionBefore,mentionAfter]=t('waitingMentionIn','\u0000').split('\u0000');
- const itemView=(item:WaitingItem)=><Link key={`${item.kind}:${item.id}`} className="mcard" data-kind={item.kind} href={item.conversation_id?`/c/${p.slug}/conversations/${item.conversation_id}`:`${base}/board/${item.card_id}${item.note_id?`#note-${item.note_id}`:''}`}>
-  <span className="mcard__top"><span className="od-fill mcard__who">{item.kind==='question'?<b>{item.asked_by?t('waitingQuestionFrom',item.asked_by):t('waitingQuestion')}</b>:item.kind==='mention'?<><b dir="auto">{item.asked_by}</b> {mentionBefore}<bdi>{item.title}</bdi>{mentionAfter}</>:<b dir="auto">{item.asked_by}</b>}</span><span className="mcard__time num">{date(item.created_at,language,{month:'short'})}</span></span>
+ const itemView=(item:WaitingItem)=>item.kind==='rule_suggestion'?ruleView(item):<Link key={`${item.kind}:${item.id}`} className="mcard" data-kind={item.kind} href={item.conversation_id?`/c/${p.slug}/conversations/${item.conversation_id}`:`${base}/board/${item.card_id}${item.note_id?`#note-${item.note_id}`:''}`}>
+  <span className="mcard__top"><span className="od-fill mcard__who">{item.kind==='question'?<b>{item.asked_by?t('waitingQuestionFrom',item.asked_by):t('waitingQuestion')}</b>:item.kind==='mention'?<><b dir="auto">{item.asked_by}</b> {named('waitingMentionIn',item.title)}</>:<b dir="auto">{item.asked_by}</b>}</span><span className="mcard__time num">{date(item.created_at,language,{month:'short'})}</span></span>
   <span className="mcard__q od-clamp-3" dir="auto">{item.kind==='mention'?item.body:<>{item.title}{item.body&&<> {item.body}</>}</>}</span>
  </Link>;
  // A Card's conversation: each message with its current text; under a Member's note, the reply of the Agent it called,
@@ -132,13 +144,14 @@ export default function Work(p:WorkProps) { const {t,locale,language}=useI18n();
   <KanbanBoard label={t('workBoard')} busy={moving} cards={drawnCards.map(c=>({id:c.id,title:c.title,column:columnOfCard(c)}))} columnName={columnName} renderOverlay={id=>cardView(p.cards.find(card=>card.id===id)!,true)} onMove={move}>
    {boardColumns.map(column=>{ const list=drawnCards.filter(c=>columnOfCard(c)===column); const extra=column==='waiting'&&!ownList?items:[]; const stages=stagesIn(column);
     // Mentions of the reader (#22) wait apart from what needs their reply.
-    const groups=[{id:'mn-h-mentions',label:'waitingMentions',items:extra.filter(item=>item.kind==='mention')},{id:'mn-h',label:'waitingNeedsReply',items:extra.filter(item=>item.kind!=='mention')}].filter(group=>group.items.length);
+    const groups=[{id:'mn-h-mentions',label:'waitingMentions',items:extra.filter(item=>item.kind==='mention')},{id:'mn-h',label:'waitingNeedsReply',items:extra.filter(item=>item.kind!=='mention'&&item.kind!=='rule_suggestion')}].filter(group=>group.items.length);
     if(column==='waiting'&&ownList) return <KanbanColumn key={column} column={column} id={`col-${column}-section`} name={columnName(column)} count={ownEntries.length} waiting head={null}>
      {ownEntries.map(entry=>entry.card?<div key={`approval:${entry.card.id}`} className="column" data-stage-id={entry.card.stage_id} data-stage-name={stageName(entry.card)}>{cardView(entry.card)}</div>:itemView(entry.item))}
      {!ownEntries.length&&<div className="col-empty"><b>{t(emptyKey[column][0])}</b>{emptyKey[column][1]&&<span>{t(emptyKey[column][1])}</span>}</div>}
     </KanbanColumn>;
     const add=column==='ideas'&&p.canCreate&&ideasStage?<button type="button" className="circle-btn add-btn add-card" aria-label={t('addCard')} title={t('boardAddIdea')} onClick={()=>openCreate(ideasStage)}><BoardIcon name="plus"/></button>:null;
     return <KanbanColumn key={column} column={column} id={`col-${column}-section`} name={columnName(column)} count={list.length+extra.length} waiting={column==='waiting'} head={add} data-stage-name={stages.length===1?stages[0].name:undefined}>
+     {extra.filter(item=>item.kind==='rule_suggestion').map(ruleView)}
      {groups.map((group,n)=><div key={group.id} className="mn-group" role="group" aria-labelledby={group.id}><h3 className="mn-h" id={group.id}><BoardIcon name="at"/><span>{t(group.label)}</span> <span className="num">{group.items.length}</span></h3>{group.items.map(itemView)}{(list.length>0||n<groups.length-1)&&<div className="mn-sep" role="separator"/>}</div>)}
      {stages.map(stage=>{ const here=list.filter(c=>c.stage_id===stage.id); return here.length?<div key={stage.id} className="column" data-stage-id={stage.id} data-stage-name={stage.name}>{here.map(c=>cardView(c))}</div>:null; })}
      {!list.length&&!extra.length&&<div className="col-empty"><b>{t(emptyKey[column][0])}</b>{emptyKey[column][1]&&<span>{t(emptyKey[column][1])}</span>}</div>}

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { runToolCall } from '../lib/agent-tools.mjs';
+import { runToolCall, toolSpecTexts } from '../lib/agent-tools.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 import { instructionsOf, roleTemplates } from '../lib/role-templates.mjs';
 
@@ -66,4 +66,15 @@ test('save_rule asks the database with the trimmed rule, whatever the Engine\'s 
  assert.deepEqual(fake.agentReads,[]);
  await call('save_rule',{rule:'y'.repeat(500)});
  assert.equal(rpcs.length,2);
+});
+
+test('suggest_rule reads its rule as save_rule does, asks the database the same, and answers the suggestion it kept',async()=>{
+ const {fake,rpcs,call}=harness({},{state:'suggested',rule:'rule-2'});
+ for(const args of /** @type {unknown[]} */([null,{},{rule:'  '},{rule:'x'.repeat(501)}])) assert.deepEqual(await call('suggest_rule',args),{state:'ignored'},JSON.stringify(args)?.slice(0,60));
+ assert.deepEqual(await call('suggest_rule',{rule:' From now on, no emojis\n'}),{state:'suggested',rule:'rule-2'});
+ assert.deepEqual(rpcs,[['agent_save_rule',{conversation:'conversation-1',run:'run-1',call:'call-0',rule:'From now on, no emojis'}]]);
+ assert.deepEqual(fake.agentReads,[]);
+ const specs=toolSpecTexts();
+ assert.deepEqual(JSON.parse(specs.suggest_rule).parameters,JSON.parse(specs.save_rule).parameters,'the model gives the same argument to either');
+ assert.match(JSON.parse(specs.suggest_rule).description,/suggestion for the whole team/);
 });
