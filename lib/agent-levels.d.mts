@@ -2,7 +2,6 @@ export const agentLevels:number[];
 export const levelToolsets:Record<number,string[]>;
 export const alwaysOff:string[];
 export const riskyToolsets:string[];
-export function isAgentLevel(level:unknown):boolean;
 export function levelConfig(level:number):{platform_toolsets:{api_server:string[]},agent:{disabled_toolsets:string[]}};
 export function forbiddenOf(enabled:string[]):string[];
 export function riskyOf(enabled:string[]):string[];

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "scripts/**/*.{mjs,ts}",
+    "tests/**/*.{mjs,ts,tsx}",
+    "playwright.install.config.ts"
+  ],
+  "project": [
+    "app/**/*.{ts,tsx}",
+    "components/**/*.{ts,tsx}",
+    "lib/**/*.{ts,tsx,mjs}",
+    "scripts/**/*.mjs",
+    "tests/**/*.{mjs,ts,tsx}",
+    "worker/**/*.mjs",
+    "*.{ts,mjs,js}"
+  ],
+  "ignore": [
+    "components/paperclip/**"
+  ],
+  "ignoreDependencies": [
+    "server-only",
+    "tailwindcss",
+    "@tailwindcss/typography"
+  ]
+}

@@ -15,7 +15,8 @@ the whole-app browser and install suites run only when their own area changed, o
   A change to the CI definition itself (`ci.yml`, `ci.sh`, the area and verdict scripts) or to `package.json` and its
   lock runs every suite; an empty, malformed or unreadable change list runs every suite; a push to `main` runs every
   suite unless every changed file is a document.
-- `static` runs on every change: the `node --test` files, lint, types, the catalogue and OpenAPI checks.
+- `static` runs on every change: the `node --test` files, lint, types, the unused-code check (`knip`, `knip.json`, as T3
+  Code runs it, #81), the catalogue and OpenAPI checks.
 - `components` tests screens as components in headless Chromium (Vitest browser mode, `vitest.config.mts`,
   `tests/components/`), in two shards, as T3 Code does (#81). It runs when `app/`, `components/`, `lib/` or the
   component tests change.
@@ -53,7 +54,7 @@ the parts are timed from run 43642299138.
 |---|---|---|---|---|---|
 | changes | classification | which suites a change needs | 0.1 min, every run (decided only docs-only and install) | 0.1 min, every run; decides database, browser and install | keep; one area script replaces `docs-only.mjs` and `install-related.mjs` |
 | components: Vitest in headless Chromium, two shards (tests/components/, 10 tests) | screen components | the composer's sending, retry and stop rules in both languages; an Agent's face | none | `app/`, `components/`, `lib/` or its tests; every `main` push | new (#81); the whole-app browser suite still runs on app changes until component tests cover the screens it proves |
-| static: lint, types, catalogues, OpenAPI, node --test (about 540 tests) | fast, unit | rules in `lib/`, routes and permissions tables, wording, workflow and release files | 1.6 min, every run | 1.6 min, every run | keep |
+| static: lint, types, knip, catalogues, OpenAPI, node --test (about 540 tests) | fast, unit | rules in `lib/`, routes and permissions tables, wording, workflow and release files; no unused file, export or dependency (knip, #81) | 1.6 min, every run | 1.6 min, every run | keep |
 | database: *.verify.sql, check-rls.sql, tests/db.sh (pgTAP, migration replays) | database | row-level security, grants, company isolation, migrations on legacy data | 1.5 min inside `integration` (plus the stack start), every non-document PR | own `database` job, when `supabase/` or a database test changes; every `main` push | moved to its own job; never removed (isolation and permissions) |
 | proxy suite (tests/proxy/, 7 tests) | whole-app browser | sign-in, settings and invitations behind an https proxy | 0.7 min inside `integration`, every non-document PR | inside `integration`: its area or app code, `main`, or `e2e` input | gated |
 | browser suite (playwright test, 225 tests on 4 lanes: screens, functional, measured, first run) | whole-app browser | journeys, the 72 approved screens, navigation budgets, first run | 13.3 min of `integration`'s 22.2 min (stack start 4 min, image 2.7 min), every non-document PR | inside `integration`: its area or app code (until #81), `main`, or `e2e` input | gated; screens to become component tests (#81) |
