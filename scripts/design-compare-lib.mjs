@@ -23,6 +23,8 @@ export const fixture = {
   conversation: '62000000-0000-0000-0000-000000000001',
   // Omar's Conversation in which Lead made Ads (#13), as the reference's thread th-made-ads.
   madeConversation: '62000000-0000-0000-0000-000000000002',
+  // Omar's Conversation in which he told Ads a lasting rule (#18), as the reference's thread th-rule-ads.
+  ruleConversation: '62000000-0000-0000-0000-000000000003',
 };
 export const screens = {
   // The prototype's main screen: the Conversation with the main Agent, Lead, which it opens on.
@@ -49,7 +51,11 @@ export const screens = {
   'new-agent': { reference: { steps: [{ click: '#sb-agents [data-action="new-agent"]' }, { waitFor: '.new-hint' }] }, builtPath: '/c/rs-learning/chat?new=agent' },
   // The Conversation in which Lead made Ads, with its card. Built: the fixture's madeConversation (pass --built-path).
   'made-card': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-made-ads"]' }, { waitFor: '.ac-card' }] }, builtPath: null },
-  // Ads's page in Settings, saying when it was made and at whose request. Built: the fixture's Ads, which Lead made.
+  // #18. The Conversation in which Omar told Ads a lasting rule, with the saved line under Ads's reply. Built: the
+  // fixture's ruleConversation (pass --built-path).
+  'rule-saved': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-rule-ads"]' }, { waitFor: '.note--saved' }] }, builtPath: null },
+  // Ads's page in Settings, saying when it was made and at whose request, and listing the rule it was told (#18).
+  // Built: the fixture's Ads, which Lead made and Omar told the rule.
   'made-agent': { reference: { steps: [...settingsSection('agents'), { click: '#sov-ag-ads' }, { waitFor: '#sov-tab-settings' }] }, builtPath: `/c/rs-learning/settings?agent=${fixture.agent}` },
 };
 

@@ -35,12 +35,16 @@ const lightScreens = [
   // Which Agents each Member sees (#15): Company settings over Lead, Meta Ads and SEO, with Meta Ads shown to the Manager
   // and to the first Contributor, and SEO to the Manager.
   { name: 'agent-visibility', path: '/c/rs-learning/settings', state: 'visibility' },
+  // A lasting rule told to an Agent (#18), over Ads and the rule Omar told it on June 10: the Conversation with Ads's
+  // reply and the saved line, and Ads's page in Settings listing the rule, who said it and when, with the Owner's Remove.
+  { name: 'rule-saved', path: '/c/rs-learning/conversations/68000000-0000-0000-0000-000000000003', state: 'rule-told' },
+  { name: 'agent-rules', path: '/c/rs-learning/settings?agent=68000000-0000-0000-0000-000000000002', state: 'rule-told' },
 ];
 
 export const screens = [
   { name: 'first-run', path: '/first-run', anonymous: true, dark: false },
   ...lightScreens.map(screen => ({ ...screen, dark: false })),
-  ...lightScreens.filter(screen => ['sign-in', 'home', 'chat', 'board', 'card', 'alone-chat', 'alone-settings', 'made-card', 'new-agent', 'made-agent', 'agent-visibility'].includes(screen.name))
+  ...lightScreens.filter(screen => ['sign-in', 'home', 'chat', 'board', 'card', 'alone-chat', 'alone-settings', 'made-card', 'new-agent', 'made-agent', 'agent-visibility', 'rule-saved', 'agent-rules'].includes(screen.name))
     .map(screen => ({ ...screen, name: `${screen.name}-dark`, dark: true })),
 ];
 

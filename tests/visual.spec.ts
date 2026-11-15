@@ -92,14 +92,19 @@ const readyBy: Record<string, string> = {
   'new-agent': '.new-hint',
   'agent-visibility': '.ta-table .switch',
   'made-agent': '.born--sov',
+  'rule-saved': '.note--saved',
+  'agent-rules': '.rl-said:not([data-utc])',
 };
 
 // The states the seed does not hold: first run's two (#9), RS Learning with no answer yet and a new workspace's Lead with
-// the Owner's empty Conversation, RS Consultations worked alone (#10), and an Agent Lead made (#13). Each is set up for
-// its own picture and taken away after it, so the seed stays as built.
+// the Owner's empty Conversation, RS Consultations worked alone (#10), an Agent Lead made (#13) and a rule told to an
+// Agent (#18). Each is set up for its own picture and taken away after it, so the seed stays as built.
 const leadWelcome = { connection: '64000000-0000-0000-0000-000000000007', agent: '64000000-0000-0000-0000-000000000008', conversation: '64000000-0000-0000-0000-000000000009' };
 // Lead and the Meta Ads it made for Omar on June 10 (#13), with the Conversation that made it (tests/visual-screens.mjs).
 const made = (n: number) => `65000000-0000-0000-0000-00000000000${n}`;
+// Ads and the lasting rule Omar told it in its Conversation on June 10 (#18), as agent_save_rule keeps it.
+const told = (n: number) => `68000000-0000-0000-0000-00000000000${n}`;
+const rule = 'من دلوقتي ما تبعتش حاجة للعميل من غير ما أشوفها';
 // A state whose rows are append-only (a Conversation's messages) is set and taken away as the database's own
 // administrator with triggers off, the way tests/fresh-seed.ts puts the seed back, so nothing of it stays behind.
 const asAdmin = (sql: string) => execFileSync('docker', ['exec', '-i', dbContainerOf(), 'psql', '-U', 'supabase_admin', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-q', '--single-transaction'],
@@ -157,6 +162,23 @@ const screenStates: Record<string, { set: string, unset: string, admin?: true }>
       delete from public.conversations where id='${made(5)}';
       delete from public.hermes_agents where id in ('${made(3)}','${made(4)}');
       delete from public.hermes_connections where id in ('${made(1)}','${made(2)}');`,
+  },
+  'rule-told': {
+    admin: true,
+    set: `insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('${told(1)}','${rsLearning}','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9/p/visual-rules','visual-rules','visual-no-key','unreachable');
+      insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('${told(2)}','${rsLearning}','${told(1)}','Ads','Runs the Meta and Google ads.');
+      insert into public.conversations(id,company_id,person_id,agent_id,agent_name,created_at) values ('${told(3)}','${rsLearning}','20000000-0000-0000-0000-000000000001','${told(2)}','Ads','2026-06-10T18:39:00Z');
+      insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at) values
+       ('${rsLearning}','${told(3)}','person','20000000-0000-0000-0000-000000000001',null,'Omar','${rule}','${told(4)}','visual-rule','2026-06-10T18:39:00Z'),
+       ('${rsLearning}','${told(3)}','agent',null,'${told(2)}','Ads','تمام يا عمر. من دلوقتي أي حاجة رايحة لعميل، رسالة أو عرض أو رد على تعليق، هجهّزها وأستناك تشوفها الأول، وانت اللي تبعت.',null,'visual-rule','2026-06-10T18:40:00Z');
+      insert into public.agent_rules(id,company_id,agent_id,body,said_by,said_at,conversation_id,run_id,call_id) values
+       ('${told(5)}','${rsLearning}','${told(2)}','${rule}','20000000-0000-0000-0000-000000000001','2026-06-10T18:40:00Z','${told(3)}','visual-rule','call-0');`,
+    unset: `delete from public.agent_rules where conversation_id='${told(3)}';
+      delete from public.conversation_usage where conversation_id='${told(3)}';
+      delete from public.conversation_messages where conversation_id='${told(3)}';
+      delete from public.conversations where id='${told(3)}';
+      delete from public.hermes_agents where id='${told(2)}';
+      delete from public.hermes_connections where id='${told(1)}';`,
   },
 };
 
