@@ -59,8 +59,6 @@ function entryLine(row:LogRow,people:LogPeople,t:I18n['t'],language:Language) {
 
 const quoteIn=(language:Language)=>(text:string)=>language==='ar'?`«${text}»`:`“${text}”`;
 
-// One row as a feed says it (the Numbers page's "What the agents did this week", an Agent's latest activity): who,
-// what, the object or its Card, and the new value.
 export function FeedText({row,people,t,language}:{row:LogRow,people:LogPeople,t:I18n['t'],language:Language}) {
  const who=whoOf(row,people,t); const line=entryLine(row,people,t,language);
  const object=line.obj||(row.card_id!=null?people.cards.get(row.card_id):undefined);

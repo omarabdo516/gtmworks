@@ -115,7 +115,6 @@ const asAdmin = (sql: string) => execFileSync('docker', ['exec', '-i', dbContain
   { input: `set session_replication_role = replica;\n${sql}`, stdio: ['pipe', 'ignore', 'pipe'], encoding: 'utf8' });
 // Lead, Meta Ads and SEO in RS Learning, with the switches the screen shows on (#15).
 const seen = (n: number) => `68000000-0000-0000-0000-00000000000${n}`;
-// Lead and Meta Ads, Meta Ads working on Omar's ask with two lines of its log this week (#20).
 const busy = (n: number) => `69100000-0000-0000-0000-00000000000${n}`;
 const screenStates: Record<string, { set: string, unset: string, admin?: true }> = {
   unanswered: {
@@ -186,8 +185,6 @@ const screenStates: Record<string, { set: string, unset: string, admin?: true }>
       delete from public.hermes_agents where id='${told(2)}';
       delete from public.hermes_connections where id='${told(1)}';`,
   },
-  // The log copies an Agent change from its trigger, which the administrator's replica role turns off: its lines are
-  // written as the trigger would write them.
   'agent-details': {
     admin: true,
     set: `insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values

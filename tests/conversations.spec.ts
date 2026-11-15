@@ -478,9 +478,6 @@ for(const width of [1440,390]) test(`a real Agent keeps one identity across the 
  } finally { detach(agents); await fake.close(); }
 });
 
-// #8, the rest of the approved reference's shell and chat: the Agent's details beside the chat (over it below 1024px),
-// the chat search, and the parts not built yet (channels, Connect apps, the composer's extras and dictation, the Files
-// and Memory tabs) drawn as the reference draws them but disabled with "Soon", with no invented counts.
 test('the Agent details panel, the chat search, the account menu sections and the not-built-yet parts follow the reference',async({page})=>{
  test.setTimeout(180000);
  const fake=await fakeHermes(); let agents={};
@@ -497,7 +494,6 @@ test('the Agent details panel, the chat search, the account menu sections and th
   await expect(details.locator('.dp-id__name')).toHaveText('MonaMain');
   await expect(details.locator('.dp-id__role')).toHaveText('Marketing · Idle');
   await expect(details.getByRole('link',{name:'Settings for Mona',exact:true})).toHaveAttribute('href','/c/rs-learning/agents');
-  // The five tabs are drawn; Activity, Tasks and Log open (#20), Files and Memory are disabled and say "Soon" (#21).
   const tabs=details.locator('.dp-tabs button');
   await expect(tabs).toHaveText(['Activity','Tasks','Files · Soon','Memory · Soon','Log']);
   for(const name of ['Files','Memory']) { const tab=tabs.filter({hasText:name}); await expect(tab).toHaveAttribute('aria-disabled','true'); await expect(tab).toHaveAttribute('title','Soon'); }

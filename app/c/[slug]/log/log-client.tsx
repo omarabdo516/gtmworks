@@ -40,7 +40,6 @@ export function LogDays({items}:{items:{id:number,at:string,node:ReactNode}[]}) 
  </section>)}</>;
 }
 
-// A short "when" for the Numbers page's agent feed and an Agent's latest activity: Today · 8:40 PM.
 export function FeedWhen({value,className='feed__m'}:{value:string,className?:string}) {
  const {zone,name}=useDayName(); const {language}=useI18n();
  const time=timeOf(value,language,zone);

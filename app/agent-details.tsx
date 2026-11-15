@@ -32,15 +32,11 @@ export function HeadPill({panel,agent,face,title,titleDir}:{panel?:DetailsPanel,
  return <div className="chat__top"><h1 className="chat__h">{panel&&agent?<button type="button" className="head-pill" id="btn-details" aria-controls="details" aria-expanded={panel.expanded} aria-label={`${title} · ${t('chatDetailsOf',agent)}`} onClick={panel.toggle}>{inside}</button>:<span className="head-pill">{inside}</span>}</h1></div>;
 }
 
-// The five tabs of the reference; Files and Memory arrive with the Agent's screen (#21) and are drawn as "Soon".
 const tabs=[{key:'activity',label:'chatTabActivity'},{key:'tasks',label:'chatTabTasks'},{key:'files',label:'chatTabFiles',soon:true},{key:'memory',label:'chatTabMemory',soon:true},{key:'log',label:'chatTabLog'}] as const;
 type Tab=Exclude<(typeof tabs)[number],{soon:true}>['key'];
 const open=tabs.filter((tab):tab is Extract<(typeof tabs)[number],{key:Tab}>=>!('soon' in tab));
 const statusKeys={working:'agentStatusWorking',waiting:'agentStatusWaiting',idle:'agentStatusIdle'};
 
-// The Agent's details (design-reference: #details, renderDetailsPanel): its settings and close buttons, its face with
-// a dot for its state, name, main mark, speciality and state, and, for an Agent Lead made, when and at whose request
-// (#13), then the tabs, read on the server (app/agent-details-server.tsx). A Viewer gets no settings button.
 export function AgentDetails({panel,agent,details,settingsHref}:{panel:DetailsPanel,agent:DetailsAgent,details:AgentDetailsView,settingsHref:string}) {
  const {t,language}=useI18n(); const close=useRef<HTMLButtonElement>(null);
  const [tab,setTab]=useState<Tab>('activity');
@@ -55,7 +51,6 @@ export function AgentDetails({panel,agent,details,settingsHref}:{panel:DetailsPa
   document.addEventListener('keydown',escape);
   return ()=>document.removeEventListener('keydown',escape);
  },[covering,done]);
- // Arrow keys move along the tabs that open, toward the reading direction's end first, and choose as they go.
  const move=(event:KeyEvent<HTMLButtonElement>)=>{
   if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight') return;
   event.preventDefault();

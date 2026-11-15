@@ -1,9 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 select plan(12);
--- RS Learning: Lead (main) and Ads, shown to the Contributor (…03) but not to the Viewer (…04). Omar and the Contributor
--- each asked Ads something it has not answered yet; the Contributor asked last. Aleem (…03 Company) has its own Lead,
--- working for the Member there (…05).
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state)
  select ('f2000000-0000-0000-0000-00000000000'||n)::uuid,case when n=3 then '10000000-0000-0000-0000-000000000003' else '10000000-0000-0000-0000-000000000001' end::uuid,
   '20000000-0000-0000-0000-000000000001','http://localhost','details-'||n,'ciphertext','connected' from generate_series(1,3) n;
@@ -44,7 +41,6 @@ select is_empty($$select * from public.agent_open_run('10000000-0000-0000-0000-0
 select set_config('request.jwt.claim.sub','',true);
 select is_empty($$select * from public.agent_open_run('10000000-0000-0000-0000-000000000001','a2000000-0000-0000-0000-000000000002')$$,'nor does a caller with no session');
 
--- The reply closes the Contributor's run: Omar's own run is the newest open one, and it is his.
 reset role;
 insert into public.conversation_messages(company_id,conversation_id,author,agent_id,author_name,body,run_id) values
  ('10000000-0000-0000-0000-000000000001','c2000000-0000-0000-0000-000000000002','agent','a2000000-0000-0000-0000-000000000002','Ads','Answered','details-run-2');

@@ -329,7 +329,6 @@
 }
 .gw .details[hidden] { display: none; }
 .gw .dp-top { display: flex; align-items: center; justify-content: space-between; height: var(--gw-head-h); padding: 12px; }
-/* A Viewer's details have no settings button; the close button keeps its corner. */
 .gw .dp-top .circle-btn:last-child { margin-inline-start: auto; }
 .gw .dp-scroll { overflow-y: auto; min-height: 0; padding-bottom: 32px; }
 .gw .dp-id { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 4px 16px 12px; text-align: center; }
@@ -339,15 +338,12 @@
 .gw .face-wrap { position: relative; display: inline-flex; flex: none; }
 .gw .segmented { display: flex; justify-content: center; gap: 2px; padding: 4px 16px 10px; }
 .gw .segmented button { padding: 4px 10px; border-radius: var(--gw-r-full); font-size: var(--gw-fs-sm); line-height: 18px; color: var(--gw-text-2); }
-/* The five tabs as one even track (design-reference: .dp-scroll > .segmented[role="tablist"]). */
 .gw .dp-tabs { justify-content: stretch; gap: 0; margin: 4px 16px 8px; padding: 2px; border-radius: var(--gw-r-full); box-shadow: var(--gw-border-2) 0 0 0 0.5px inset; }
 .gw .dp-tabs button { flex: 1 1 0; min-width: 0; padding: 5px 0; text-align: center; white-space: nowrap; }
 .gw .dp-tabs button[aria-selected="true"] { background: var(--gw-bg-tertiary); color: var(--gw-text-1); }
 @media (hover: hover) { .gw .dp-tabs button:not([aria-disabled="true"]):hover { color: var(--gw-text-1); } }
 .gw .panel-empty { margin: 0; padding: 10px 8px; font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-3); text-wrap: pretty; }
 
-/* A tab's sections, cards and rows, and the state dots (design-reference: .dp-sections, .dp-sec, .dp-label, .panel-card,
-   .panel-row, .link-btn, .dot, .face-wrap .dot). The log lines inside them are the Activity log's (app/log.css). */
 .gw .details .dp-sections { display: flex; flex-direction: column; gap: 22px; padding: 10px var(--s4) var(--s4); }
 .gw .details .dp-sec { display: flex; flex-direction: column; gap: 10px; }
 .gw .details .dp-label { display: flex; align-items: center; justify-content: space-between; min-height: 22px; padding-inline: var(--s3) 6px; margin: 0; font-size: var(--gw-fs-sm); font-weight: 400; color: var(--gw-text-2); }

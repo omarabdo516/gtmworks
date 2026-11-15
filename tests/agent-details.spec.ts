@@ -2,10 +2,6 @@ import { test, expect, freshSeed, type Locator, type Page } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { signIn } from './sign-in';
 
-// #20, an Agent's details: the header with its state, what it is doing now, its Cards on the board and its lines of the
-// Company log, for the Owner who asked it something, as empty states for an Agent with nothing yet, and for a Viewer
-// with no action in the panel. Meta Ads is working on Omar's request, has two Cards and two log lines, one of them older
-// than a week; SEO has nothing. The Viewer is shown Meta Ads (#15).
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const company='10000000-0000-0000-0000-000000000001';
 const omar='20000000-0000-0000-0000-000000000001';

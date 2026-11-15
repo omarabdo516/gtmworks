@@ -14,12 +14,8 @@ import { PageIcon } from '@/app/c/[slug]/log/icons';
 
 type Db=Awaited<ReturnType<typeof supabase>>;
 export type AgentDetailsView={status:AgentStatus,actions:boolean,tabs:{activity:ReactNode,tasks:ReactNode,log:ReactNode}};
-// The panel shows the Agent's newest log lines; the Activity log, one link away, pages through the rest.
 const logShown=50;
 
-// An Agent's details as the signed-in person may see them (design-reference: renderDetailsPanel, activityHTML,
-// tasksHTML, agentLogHTML), read through their own session: its state, what it is doing now and did this week, its
-// Cards on the board and its lines of the Company log. A Viewer gets the same panel with no action in it.
 export async function agentDetails(db:Db,{company,agent,slug,me,role}:{company:string,agent:string,slug:string,me:string,role:string}):Promise<AgentDetailsView> {
  const {t,language}=await getI18n(); const writer=canCreateCard({role});
  const [{data:cardRows},{data:logRows,count},{data:runs},{items:waiting}]=await Promise.all([
@@ -34,7 +30,6 @@ export async function agentDetails(db:Db,{company,agent,slug,me,role}:{company:s
  const [{data:stages},{data:checklist},{data:ask},people]=await Promise.all([
   ids.length?db.from('work_stages').select('id,name,board_column').eq('company_id',company):Promise.resolve({data:[]}),
   ids.length?db.from('work_checklist').select('card_id,title,done').eq('company_id',company).in('card_id',ids).order('id'):Promise.resolve({data:[]}),
-  // Only the person whose Conversation it is reads what they asked, from their own record.
   run?.conversation?db.from('conversation_messages').select('body').eq('conversation_id',run.conversation).eq('author','person').eq('created_at',run.started_at).order('id',{ascending:false}).limit(1).maybeSingle():Promise.resolve({data:null}),
   logPeople(db,company,rows.flatMap(row=>row.card_id!=null?[row.card_id]:[])),
  ]);

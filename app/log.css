@@ -1,7 +1,7 @@
 /* The Activity log page (#11) and the parts the Numbers page (#35) shares with it, ported from the approved reference
    (design-reference/index.html: page heads, panel-card, link-btn, btn, set-input and "the log, channels and mentions
    round"). Colours come from the shell's gw tokens (app/shell.css); the few it does not carry are set here for both
-   themes. Everything is scoped to the two pages; the log lines are also an Agent's Log tab (app/agent-details.tsx). */
+   themes. */
 .gw :is(.log-page, .numbers-page) {
   --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 24px; --s8: 32px; --s12: 48px;
   --p-wait: #DA830E; --p-btn-secondary-bg: #1C1C1C0F; --p-btn-secondary-ring: transparent; --p-fs-2xl: 28px;
@@ -66,7 +66,6 @@
 .gw :is(.log-page, .numbers-page, .details) .lg-face { display: inline-flex; flex: none; }
 .gw :is(.log-page, .numbers-page, .details) .lg-sys { display: block; flex: none; }
 
-/* one log line: who · what (old → new) · when, with notes as a quiet block; the same lines fill an Agent's Log tab */
 .gw :is(.log-page, .details) .lg-day { display: grid; gap: var(--s2); }
 .gw :is(.log-page, .details) .lg-day__h { margin: 0; padding-inline: var(--s1); font-size: var(--gw-fs-xs); font-weight: 400; line-height: 1.5; color: var(--gw-text-3); }
 .gw :is(.log-page, .details) .lg-day__h[data-utc], .gw :is(.log-page, .numbers-page, .details) time[data-utc] { visibility: hidden; }
@@ -93,7 +92,6 @@
 .gw .log-page .lg-pages { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); }
 .gw .log-page .lg-pages .lg-more { margin-inline-end: auto; }
 
-/* the Log tab of an Agent's details (design-reference: .lg-wrap and its panel variant) */
 .gw .details .lg-wrap { display: grid; gap: var(--s4); }
 .gw .details .lg-wrap .lg-list { padding-inline: var(--s3); }
 .gw .details .lg-wrap .lg-row { grid-template-columns: 24px minmax(0, 1fr); gap: 10px; }

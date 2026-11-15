@@ -45,7 +45,6 @@ const lightScreens = [
   // Its Company section of a team is agent-visibility above.
   { name: 'settings-agents', path: '/c/rs-learning/settings?section=agents', state: 'lead-made' },
   { name: 'settings-main-agent', path: '/c/rs-learning/settings?agent=65000000-0000-0000-0000-000000000003', state: 'lead-made' },
-  // An Agent's details (#20): Meta Ads at work on Omar's request, with this week's lines of its log, beside its chat.
   { name: 'agent-details', path: '/c/rs-learning/chat/69100000-0000-0000-0000-000000000005', state: 'agent-details' },
 ];
 
