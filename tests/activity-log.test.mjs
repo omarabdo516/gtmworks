@@ -115,3 +115,15 @@ test('a day with no zone given follows the runtime zone, also after it changes',
   assert.equal(dayOf('2026-11-12T23:30:00Z'), '2026-11-13');
  } finally { if (before === undefined) delete process.env.TZ; else process.env.TZ = before; }
 });
+
+test('an edit of the Company knowledge names the part by its title, and says when it was cleared, in both languages', () => {
+ const edited = describeEntry({ subject: 'company', action: 'company_knowledge_changed', details: { part: 'banned', cleared: false } });
+ const cleared = describeEntry({ subject: 'company', action: 'company_knowledge_changed', details: { part: 'voice', cleared: true } });
+ assert.deepEqual([edited.act, cleared.act], [['logActCompanyKnowledge', { key: 'knowBanned' }], ['logActCompanyKnowledgeCleared', { key: 'knowVoice' }]]);
+ assert.notEqual(i18n('en').t(edited.act[0], 'x'), i18n('en').t(cleared.act[0], 'x'), 'an edit and a clearing read differently');
+ for (const language of ['en', 'ar']) {
+  const { t } = i18n(language);
+  assert.ok(t(edited.act[0], t('knowBanned')).includes(t('knowBanned')), language);
+  assert.ok(t(cleared.act[0], t('knowVoice')).includes(t('knowVoice')), language);
+ }
+});

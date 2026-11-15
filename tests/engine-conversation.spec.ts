@@ -5,6 +5,7 @@ import { createClient } from '@supabase/supabase-js';
 import { encryptSecret } from '../lib/agent-crypto.mjs';
 import { closeOpenRuns, noteInstructions, sendMessage } from '../lib/conversation-runs.mjs';
 import { instructionsOf, roleAppNames, roleTemplates } from '../lib/role-templates.mjs';
+import { knowledgeInstructions } from '../lib/company-knowledge.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 
 // A conversation on the fake engine (tests/fake-engine.mjs): the engine contract with no subscription and no network,
@@ -12,6 +13,8 @@ import { fakeEngine } from './fake-engine.mjs';
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const status=()=>{ const env=execFileSync('npx',['--no-install','supabase','status','-o','env'],{encoding:'utf8'}); return (name:string)=>env.match(new RegExp(`^${name}="(.*)"$`,'m'))![1]; };
 const company='10000000-0000-0000-0000-000000000001';
+// The seeded Company knowledge (#27) goes with every run of the Company's Agents.
+const knowledge=()=>knowledgeInstructions(JSON.parse(query(`select part,body from public.company_knowledge where company_id='${company}' and body<>'' order by array_position(array['voice','audience','products','banned','decisions'],part)`)));
 const omar='20000000-0000-0000-0000-000000000001';
 const encryptionKey=process.env.WEBHOOK_ENCRYPTION_KEY||'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
 
@@ -188,7 +191,7 @@ test('integration: an Agent saves the rule the Owner tells it, with its log row,
   const close=()=>closeOpenRuns(service,{encryptionKey,conversation,engineFor:fake.engineFor});
   expect(await send(rule)).toEqual({conversation});
   expect(fake.runs[0].tools.map(tool=>tool.name)).toEqual(['save_rule']);
-  expect(fake.runs[0].instructions).toBeNull();
+  expect(fake.runs[0].instructions).toBe(knowledge());
   // A reader and the worker close the run at once: the rule is saved once, before the reply is stored.
   const closed=await Promise.all([close(),close()]);
   expect(closed[0]+closed[1]).toBe(1);
@@ -256,6 +259,6 @@ test('integration: Lead makes an Agent from each ready-made role, fitted with th
   expect((await person.rpc('save_member_note',{c:company,note:'Answer in short points.'})).error).toBeNull();
   const theirs=randomUUID();
   expect(await sendMessage(person,service,{person:omar,company,conversation:theirs,sendKey:randomUUID(),agent:writer.id,message:'Write about the tax diploma',encryptionKey,engineFor:fake.engineFor})).toEqual({conversation:theirs});
-  expect(fake.runs.at(-1)).toMatchObject({conversation:theirs,instructions:`${writer.instructions}\n\n${noteInstructions('Answer in short points.')}`});
+  expect(fake.runs.at(-1)).toMatchObject({conversation:theirs,instructions:`${writer.instructions}\n\n${knowledge()}\n\n${noteInstructions('Answer in short points.')}`});
  } finally { query(`delete from public.member_notes where company_id='${company}'`); }
 });

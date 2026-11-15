@@ -23,14 +23,16 @@ create policy company_app_sign_ins_read on public.company_app_sign_ins for selec
 revoke all on public.company_app_sign_ins from anon,authenticated,service_role;
 grant select on public.company_app_sign_ins to authenticated;
 
--- Connecting and disconnecting are kept in company_audit beside renames and level changes, and copied into the log.
+-- Connecting and disconnecting are kept in company_audit beside renames, level changes and Company knowledge edits
+-- (20261221000000_company_knowledge), and copied into the log.
 alter table public.company_audit add column app text;
 alter table public.company_audit drop constraint company_audit_action_check;
-alter table public.company_audit add constraint company_audit_action_check check (action in ('company_renamed','agent_level_changed','app_connected','app_disconnected'));
+alter table public.company_audit add constraint company_audit_action_check check (action in ('company_renamed','agent_level_changed','company_knowledge_changed','app_connected','app_disconnected'));
 alter table public.company_audit drop constraint company_audit_values;
 alter table public.company_audit add constraint company_audit_values check (
  (action='company_renamed' and old_name is not null and new_name is not null)
  or (action='agent_level_changed' and old_level between 1 and 3 and new_level between 1 and 3)
+ or (action='company_knowledge_changed' and knowledge_part is not null and knowledge_cleared is not null)
  or (action in ('app_connected','app_disconnected') and app is not null));
 
 create or replace function public.log_company_change() returns trigger language plpgsql security definer set search_path='' as $$
@@ -38,6 +40,7 @@ begin
  insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,action,details,source,source_id,created_at)
   values(new.company_id,new.actor_id,public.log_actor_kind(new.company_id,new.actor_id),(select name from public.people where id=new.actor_id),
    'company',new.action,case when new.action='agent_level_changed' then jsonb_build_object('old_level',new.old_level,'new_level',new.new_level)
+    when new.action='company_knowledge_changed' then jsonb_build_object('part',new.knowledge_part,'cleared',new.knowledge_cleared)
     when new.action in ('app_connected','app_disconnected') then jsonb_build_object('app',new.app)
     else jsonb_build_object('old_name',new.old_name,'new_name',new.new_name) end,'company_audit',new.id,new.created_at)
   on conflict (source,source_id) do nothing;

@@ -106,6 +106,8 @@ const readyBy: Record<string, string> = {
   'learning-waiting': '.sov-count',
   'agent-details': '.chat',
   'settings-apps': '.app-card',
+  knowledge: '.know-meta time:not([data-utc])',
+  'knowledge-empty': '.know-empty',
 };
 
 // The states the seed does not hold: first run's two (#9), RS Learning with no answer yet and a new workspace's Lead with
