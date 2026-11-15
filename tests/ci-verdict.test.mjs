@@ -3,10 +3,12 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 
-// The required `check` (#69): a skipped install is allowed only on a pull request that changes no install file; a
-// failed or cancelled stage is always red.
+// The required `check` (#76, like Hermes `all-checks-pass`): a suite the first job did not ask for counts as passed only
+// when it was skipped; a suite it asked for, or one whose need is unknown, must succeed; a failed or cancelled stage is
+// always red.
 const script = resolve('scripts/ci-verdict.mjs');
-const green = { EVENT_NAME: 'pull_request', CHANGES_RESULT: 'success', DOCS_ONLY: 'false', INSTALL_RELATED: 'true', STATIC_RESULT: 'success', INTEGRATION_RESULT: 'success', INSTALL_RESULT: 'success' };
+const stages = ['DATABASE', 'INTEGRATION', 'INSTALL'];
+const green = { CHANGES_RESULT: 'success', STATIC_RESULT: 'success', ...Object.fromEntries(stages.flatMap(stage => [[`${stage}_RUN`, 'true'], [`${stage}_RESULT`, 'success']])) };
 const verdict = overrides => {
   const env = { PATH: process.env.PATH, ...green, ...overrides };
   for (const [key, value] of Object.entries(env)) if (value === undefined) delete env[key];
@@ -15,52 +17,62 @@ const verdict = overrides => {
 
 test('every stage green passes', () => {
   assert.equal(verdict({}), 0);
-  assert.equal(verdict({ EVENT_NAME: 'push' }), 0);
 });
 
-test('a pull request that changes no install file passes with install skipped', () => {
-  assert.equal(verdict({ INSTALL_RELATED: 'false', INSTALL_RESULT: 'skipped' }), 0);
+test('a document-only change passes with every long suite skipped', () => {
+  assert.equal(verdict(Object.fromEntries(stages.flatMap(stage => [[`${stage}_RUN`, 'false'], [`${stage}_RESULT`, 'skipped']]))), 0);
 });
 
-test('a failed or cancelled install is red, even where it could have been skipped', () => {
-  for (const result of ['failure', 'cancelled']) {
-    assert.equal(verdict({ INSTALL_RELATED: 'false', INSTALL_RESULT: result }), 1, result);
-    assert.equal(verdict({ INSTALL_RESULT: result }), 1, result);
+for (const stage of stages) {
+  test(`${stage}: skipped passes only when the first job did not ask for it`, () => {
+    assert.equal(verdict({ [`${stage}_RUN`]: 'false', [`${stage}_RESULT`]: 'skipped' }), 0);
+    assert.equal(verdict({ [`${stage}_RESULT`]: 'skipped' }), 1);
+    assert.equal(verdict({ [`${stage}_RUN`]: '', [`${stage}_RESULT`]: 'skipped' }), 1);
+    assert.equal(verdict({ [`${stage}_RUN`]: undefined, [`${stage}_RESULT`]: 'skipped' }), 1);
+  });
+
+  test(`${stage}: a failed or cancelled run is red, even where it could have been skipped`, () => {
+    for (const result of ['failure', 'cancelled']) {
+      assert.equal(verdict({ [`${stage}_RESULT`]: result }), 1, result);
+      assert.equal(verdict({ [`${stage}_RUN`]: 'false', [`${stage}_RESULT`]: result }), 1, result);
+    }
+  });
+}
+
+test('classification and static must succeed', () => {
+  for (const key of ['CHANGES_RESULT', 'STATIC_RESULT']) {
+    for (const result of ['failure', 'cancelled', 'skipped']) assert.equal(verdict({ [key]: result }), 1, `${key}=${result}`);
   }
 });
 
-test('a skipped install is red when the change touches install files, on main, or when the classification is unknown', () => {
-  assert.equal(verdict({ INSTALL_RESULT: 'skipped' }), 1);
-  assert.equal(verdict({ EVENT_NAME: 'push', INSTALL_RELATED: 'false', INSTALL_RESULT: 'skipped' }), 1);
-  assert.equal(verdict({ INSTALL_RELATED: '', INSTALL_RESULT: 'skipped' }), 1);
-  assert.equal(verdict({ INSTALL_RELATED: undefined, INSTALL_RESULT: 'skipped' }), 1);
-});
-
-test('a document-only change passes only with both long stages skipped', () => {
-  assert.equal(verdict({ DOCS_ONLY: 'true', INTEGRATION_RESULT: 'skipped', INSTALL_RESULT: 'skipped' }), 0);
-  assert.equal(verdict({ DOCS_ONLY: 'true', INTEGRATION_RESULT: 'failure', INSTALL_RESULT: 'skipped' }), 1);
-  assert.equal(verdict({ DOCS_ONLY: 'true', INTEGRATION_RESULT: 'skipped', INSTALL_RESULT: 'failure' }), 1);
-});
-
-test('classification, static and integration must succeed', () => {
-  for (const key of ['CHANGES_RESULT', 'STATIC_RESULT', 'INTEGRATION_RESULT']) {
-    for (const result of ['failure', 'cancelled', 'skipped']) assert.equal(verdict({ [key]: result, INSTALL_RELATED: 'false', INSTALL_RESULT: 'skipped' }), 1, `${key}=${result}`);
-  }
-  assert.equal(verdict({ DOCS_ONLY: '' }), 1);
-});
-
-test('ci.yml runs install by the classification and judges check with this verdict', async () => {
+test('ci.yml decides the suites in its first job, gates each suite on it, and judges check with this verdict', async () => {
   const { load } = await import('js-yaml');
   const { readFileSync } = await import('node:fs');
-  const jobs = load(readFileSync('.github/workflows/ci.yml', 'utf8')).jobs;
+  const workflow = load(readFileSync('.github/workflows/ci.yml', 'utf8'));
+  const { jobs } = workflow;
   const classify = jobs.changes.steps.find(step => step.id === 'classify');
-  assert.match(classify.run, /install_related=true\n/);
-  assert.match(classify.run, /install_related=\$\(node scripts\/install-related\.mjs < "\$RUNNER_TEMP\/changed-files"\)/);
-  assert.equal(jobs.changes.outputs.install_related, '${{ steps.classify.outputs.install_related }}');
-  assert.match(jobs.install.if, /github\.event_name != 'pull_request' \|\| needs\.changes\.outputs\.install_related != 'false'/);
+  assert.match(classify.run, /node scripts\/ci-areas\.mjs \$main < "\$RUNNER_TEMP\/changed-files"/);
+  for (const [job, output] of [['database', 'database'], ['integration', 'integration'], ['install', 'install']]) {
+    assert.equal(jobs.changes.outputs[output], `\${{ steps.classify.outputs.${output} }}`, output);
+    assert.deepEqual(jobs[job].needs, ['changes'], job);
+    assert.equal(jobs[job].if, `\${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.${output} != 'false') }}`, job);
+  }
   const step = jobs.check.steps.at(-1);
   assert.equal(step.run, 'node scripts/ci-verdict.mjs');
   assert.equal(jobs.check.if, '${{ always() }}');
-  assert.deepEqual(jobs.check.needs, ['changes', 'static', 'integration', 'install']);
-  for (const key of ['EVENT_NAME', 'CHANGES_RESULT', 'DOCS_ONLY', 'INSTALL_RELATED', 'STATIC_RESULT', 'INTEGRATION_RESULT', 'INSTALL_RESULT']) assert.ok(step.env[key], key);
+  assert.deepEqual(jobs.check.needs, ['changes', 'static', 'database', 'integration', 'install']);
+  for (const key of Object.keys(green)) assert.ok(step.env[key], key);
+});
+
+test('the browser and install suites never run by default on a manual run: their inputs default to off', async () => {
+  const { load } = await import('js-yaml');
+  const { readFileSync } = await import('node:fs');
+  const workflow = load(readFileSync('.github/workflows/ci.yml', 'utf8'));
+  const inputs = workflow.on.workflow_dispatch.inputs;
+  for (const name of ['e2e', 'install']) assert.deepEqual({ type: inputs[name].type, default: inputs[name].default }, { type: 'boolean', default: false }, name);
+  const classify = workflow.jobs.changes.steps.find(step => step.id === 'classify');
+  assert.equal(classify.env.E2E, '${{ inputs.e2e }}');
+  assert.equal(classify.env.INSTALL, '${{ inputs.install }}');
+  assert.match(classify.run, /integration=\$E2E/);
+  assert.match(classify.run, /install=\$INSTALL/);
 });

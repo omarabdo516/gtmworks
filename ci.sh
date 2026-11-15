@@ -23,8 +23,10 @@ wait_lanes() {
 }
 case "${1:-check}" in
  check)
-  # Both stages in order, for local use. CI runs them as two parallel jobs (.github/workflows/ci.yml).
+  # Every stage in order, for local use. CI runs them as parallel jobs, each only when its files change
+  # (.github/workflows/ci.yml, scripts/ci-areas.mjs).
   bash ci.sh static
+  bash ci.sh database
   bash ci.sh integration
   ;;
  static)
@@ -65,6 +67,17 @@ PY
   npm run typecheck
   npm test
   ;;
+ database)
+  # Migrations replayed and verified, row-level security and grants, on lane 0's stack.
+  if [[ "${CI:-}" == "true" ]]; then
+    npm ci
+  fi
+  bash scripts/local-db.sh
+  for file in supabase/migrations/*.verify.sql scripts/check-rls.sql; do
+    npx --no-install supabase db query --read-only --file "$file" -o json --agent no | node scripts/verify-db.mjs "$file"
+  done
+  npm run test:db
+  ;;
  integration)
   if [[ "${CI:-}" == "true" ]]; then
     npm ci
@@ -75,13 +88,9 @@ PY
   if [[ "${CI:-}" == "true" ]]; then
     bash scripts/ci-image.sh
   fi
-  # The browser suite's build is made while lane 0 serves the checks below; lane 0's web server then only starts it.
+  # The browser suite's build is made while lane 0 serves the proxy suite below; lane 0's web server then only starts it.
   (LANE=0 bash scripts/web.sh build > playwright-report/build.log 2>&1) &
   build_pid=$!
-  for file in supabase/migrations/*.verify.sql scripts/check-rls.sql; do
-    npx --no-install supabase db query --read-only --file "$file" -o json --agent no | node scripts/verify-db.mjs "$file"
-  done
-  npm run test:db
   # The production-shaped stack (proxy, https, public-looking host) runs on the database exactly as the seed builds it and
   # changes it (an enrolled authenticator, an invited member), so the seed is rebuilt before the main browser suite.
   npm run test:e2e:proxy
@@ -98,5 +107,5 @@ PY
   bash scripts/local-db.sh
   npm run test:visual:update
   ;;
- *) echo 'usage: ./ci.sh check | static | integration | visual-update' >&2; exit 2;;
+ *) echo 'usage: ./ci.sh check | static | database | integration | visual-update' >&2; exit 2;;
 esac

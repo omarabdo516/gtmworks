@@ -1,14 +1,25 @@
-# Static always runs; document-only PRs and main pushes skip integration and install.
-# Only design/, docs/ and Markdown qualify (except public/ files read by a browser test).
-# A pull request that changes no file the install exercises (scripts/install-related.mjs) also skips install (#69);
-# main always runs it. Required `check` fails on classification/static errors and on any failed or cancelled stage
-# (scripts/ci-verdict.mjs).
+# As Hermes and T3 Code run CI (#76): the first job (`changes`, scripts/ci-areas.mjs) decides which suites a change
+# needs. Static (lint, types, catalogues, unit tests) runs on every change. The database tests, the whole-app browser
+# suite (`integration`) and the Docker install run on a pull request only when their own files change; a push to main
+# runs all of them unless every file is a document; a manual run starts the browser and install suites only through
+# inputs that default to off. Required `check` (scripts/ci-verdict.mjs) counts a suite nobody asked for as passed when
+# it was skipped, and is red on any failed or cancelled stage.
 name: CI
 
 on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      e2e:
+        description: Run the whole-app browser suite
+        type: boolean
+        default: false
+      install:
+        description: Run the Docker install, update and release checks
+        type: boolean
+        default: false
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -22,8 +33,9 @@ jobs:
       contents: read
       actions: read
     outputs:
-      docs_only: ${{ steps.classify.outputs.docs_only }}
-      install_related: ${{ steps.classify.outputs.install_related }}
+      database: ${{ steps.classify.outputs.database }}
+      integration: ${{ steps.classify.outputs.integration }}
+      install: ${{ steps.classify.outputs.install }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -31,17 +43,27 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: classify changed files (unknown history runs everything)
+      - name: decide which suites run (unknown history runs everything)
         id: classify
         env:
           GH_TOKEN: ${{ github.token }}
           EVENT_NAME: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          E2E: ${{ inputs.e2e }}
+          INSTALL: ${{ inputs.install }}
         run: |
-          docs_only=false
-          install_related=true
+          areas=$'database=true\nintegration=true\ninstall=true'
+          main=
+          if [[ "$EVENT_NAME" == workflow_dispatch ]]; then
+            # A manual run: static and the database always; the browser and install suites only when asked.
+            [[ $E2E == true ]] || E2E=false
+            [[ $INSTALL == true ]] || INSTALL=false
+            printf '%s\n' database=true "integration=$E2E" "install=$INSTALL" | tee -a "$GITHUB_OUTPUT"
+            exit 0
+          fi
           if [[ "$EVENT_NAME" == push ]]; then
+            main=--main
             BASE_SHA=$(gh run list -R "$GITHUB_REPOSITORY" -w CI -b main -e push -s success -L 1 --json headSha -q '.[0].headSha') || BASE_SHA=
           fi
           if [[ "$BASE_SHA" =~ ^[a-f0-9]{40}$ && ! "$BASE_SHA" =~ ^0+$ && "$HEAD_SHA" =~ ^[a-f0-9]{40}$ ]] && git cat-file -e "$BASE_SHA^{commit}"; then
@@ -52,12 +74,10 @@ jobs:
             fi
             # No rename detection: a move must check both its old and new paths.
             if git diff --no-ext-diff --no-renames --name-only -z "$range" -- > "$RUNNER_TEMP/changed-files"; then
-              docs_only=$(node scripts/docs-only.mjs < "$RUNNER_TEMP/changed-files")
-              install_related=$(node scripts/install-related.mjs < "$RUNNER_TEMP/changed-files")
+              areas=$(node scripts/ci-areas.mjs $main < "$RUNNER_TEMP/changed-files") || areas=$'database=true\nintegration=true\ninstall=true'
             fi
           fi
-          echo "docs_only=$docs_only" >> "$GITHUB_OUTPUT"
-          echo "install_related=$install_related" >> "$GITHUB_OUTPUT"
+          echo "$areas" | tee -a "$GITHUB_OUTPUT"
 
   static:
     runs-on: ubuntu-latest
@@ -73,9 +93,27 @@ jobs:
       - name: static
         run: ./ci.sh static
 
+  # Migrations replayed and verified, row-level security and grants, on one local stack (tests/db.sh).
+  database:
+    needs: [changes]
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.database != 'false') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: database
+        run: ./ci.sh database
+
+  # The whole-app browser suite: the screens, the functional journeys and the production-shaped proxy suite.
   integration:
     needs: [changes]
-    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.docs_only != 'true') }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.integration != 'false') }}
     runs-on: ubuntu-latest
     # main's browser suite already took 24 of 25 minutes (run 43398274074); the board, settings, log and numbers specs
     # add to it.
@@ -219,7 +257,7 @@ jobs:
 
   install:
     needs: [changes]
-    if: ${{ !cancelled() && (needs.changes.result != 'success' || (needs.changes.outputs.docs_only != 'true' && (github.event_name != 'pull_request' || needs.changes.outputs.install_related != 'false'))) }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.install != 'false') }}
     runs-on: ubuntu-latest
     # The release install and update below add a fresh stack and an update to the source install checks, and the one-line
     # install adds another, an update, a failed update and a return to an older release from a backup.
@@ -598,7 +636,7 @@ jobs:
         run: docker rm -fv install-docker || true
 
   check:
-    needs: [changes, static, integration, install]
+    needs: [changes, static, database, integration, install]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     permissions:
@@ -607,11 +645,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: all required stages green
         env:
-          EVENT_NAME: ${{ github.event_name }}
           CHANGES_RESULT: ${{ needs.changes.result }}
-          DOCS_ONLY: ${{ needs.changes.outputs.docs_only }}
-          INSTALL_RELATED: ${{ needs.changes.outputs.install_related }}
           STATIC_RESULT: ${{ needs.static.result }}
+          DATABASE_RUN: ${{ needs.changes.outputs.database }}
+          DATABASE_RESULT: ${{ needs.database.result }}
+          INTEGRATION_RUN: ${{ needs.changes.outputs.integration }}
           INTEGRATION_RESULT: ${{ needs.integration.result }}
+          INSTALL_RUN: ${{ needs.changes.outputs.install }}
           INSTALL_RESULT: ${{ needs.install.result }}
         run: node scripts/ci-verdict.mjs
