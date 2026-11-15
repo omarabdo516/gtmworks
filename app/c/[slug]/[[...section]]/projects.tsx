@@ -2,6 +2,7 @@
 import { Inbox } from 'lucide-react';
 import { EmptyState } from '@/components/paperclip/EmptyState';
 import { useState } from 'react';
+import { useFormStatus } from 'react-dom';
 import { useI18n } from '@/lib/i18n-client';
 import { projectAction } from './project-actions';
 const projectStatuses=['active','paused','done'] as const;
@@ -35,5 +36,9 @@ function ProjectRow({project,cards,hidden,status}:{project:Project,cards:number,
   await projectAction(form); // a refused save leaves this page with its message, so only a stored one goes on
   setSaved({from,values:{...project,name:String(form.get('name')||'').trim(),goal:String(form.get('goal')||'').trim(),status:String(form.get('status'))}});
  };
- return <form action={save} className="settings-row" aria-label={shown.name}>{hidden}<input type="hidden" name="project" value={project.id}/><input key={shown.name} dir="auto" required name="name" aria-label={t('projectName')} defaultValue={shown.name}/><input key={shown.goal} dir="auto" name="goal" aria-label={t('goal')} defaultValue={shown.goal}/><select key={shown.status} name="status" aria-label={t('projectStatus')} defaultValue={shown.status}>{projectStatuses.map(s=><option key={s} value={s}>{status(s)}</option>)}</select><span>{t('projectCards',cards)}</span><button>{t('save')}</button></form>;
+ return <form action={save} className="settings-row" aria-label={shown.name}>{hidden}<input type="hidden" name="project" value={project.id}/><input key={shown.name} dir="auto" required name="name" aria-label={t('projectName')} defaultValue={shown.name}/><input key={shown.goal} dir="auto" name="goal" aria-label={t('goal')} defaultValue={shown.goal}/><select key={shown.status} name="status" aria-label={t('projectStatus')} defaultValue={shown.status}>{projectStatuses.map(s=><option key={s} value={s}>{status(s)}</option>)}</select><span>{t('projectCards',cards)}</span><Save/></form>;
 }
+
+// One save at a time: a second one sent before the first ends would race it, and the reset at the first one's end would
+// put back what was typed for the second (#62).
+function Save() { const {t}=useI18n(); const {pending}=useFormStatus(); return <button disabled={pending} aria-busy={pending||undefined}>{t('save')}</button>; }
