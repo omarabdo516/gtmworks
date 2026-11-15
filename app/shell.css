@@ -17,7 +17,7 @@
   --gw-bubble-ring: #1C1C1C0F 0 0 0 0.5px inset; --gw-shadow-card: #1C1C1C1F 0 0 0 0.5px, #1C1C1C09 0 2px 8px;
   --gw-font: var(--font-plex-arabic), "IBM Plex Sans Arabic", "Noto Sans Arabic", Tahoma, system-ui, sans-serif;
   --gw-fs-xs: 12px; --gw-fs-sm: 13px; --gw-fs-base: 14px; --gw-fs-msg: 15px; --gw-fs-lg: 17px; --gw-fs-xl: 22px;
-  --gw-r-xs: 6px; --gw-r-sm: 8px; --gw-r-md: 12px; --gw-r-lg: 16px; --gw-r-bubble: 18px; --gw-r-composer: 22px; --gw-r-full: 9999px;
+  --gw-r-xs: 6px; --gw-r-sm: 8px; --gw-r-md: 12px; --gw-r-lg: 16px; --gw-r-bubble: 18px; --gw-r-composer: 22px; --gw-r-card: 24px; --gw-r-full: 9999px;
   --gw-dur-fast: 150ms; --gw-dur: 200ms; --gw-ease-out: cubic-bezier(0.2, 0, 0, 1);
   --gw-sidebar-w: 300px; --gw-details-w: 320px; --gw-chat-col: 620px; --gw-head-h: 64px; --gw-idle-dot: #B5B5B5;
 }
@@ -341,7 +341,7 @@
 .gw .new-hint__t { margin: 0; flex: 1 1 260px; }
 
 /* The card for an Agent Lead made, in Lead's turn (design-reference: agentCardHTML; .card, .kv, .ac-*, .badge--made) */
-.gw .ac-card { display: flex; flex-direction: column; width: 100%; overflow: clip; background: var(--gw-bg-pane); border-radius: 24px; box-shadow: var(--gw-shadow-card); }
+.gw .ac-card { display: flex; flex-direction: column; width: 100%; overflow: clip; background: var(--gw-bg-pane); border-radius: var(--gw-r-card); box-shadow: var(--gw-shadow-card); }
 .gw .hcard__top { padding: 16px 16px 0; }
 .gw .badge--made { background: var(--gw-primary); color: var(--gw-on-primary); font-weight: 600; }
 .gw .badge--made .gw-icon { width: 13px; height: 13px; }
