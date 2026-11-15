@@ -203,6 +203,7 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `reviewer-conversion.test.mjs` | The reviewer conversion locks what it reads while the old app still serves. | 0.2 s | — | keep |
 | `role-labels.test.mjs` | A member row shows the Role and, for an Owner, a Contributor's Agent role. | 0.3 s | — | keep |
 | `route-permissions.test.mjs` | Every server route and action is in the permission table; a missing one needs Owner. | 3.2 s | — | keep |
+| `rule-suggestions.spec.ts` | In a team a direct Conversation and an Agent's new chat say they are private, and worked alone they do not; a Contributor's rules show who they were sent to as suggestions and stay off the Agent's page; the Owner makes one team-wide and a Manager declines the other from "Waiting on you", Settings' Learning counts what waits; the Contributor reads each decision in their Conversation, and the Activity log names the suggestion for its teller and the deciders only and both decisions for everyone. (#25) | — | rule_suggestions.sql (the same decisions per Role in the database), engine-conversation.spec.ts (the suggest_rule call) | new |
 | `secret-text.test.mjs` | The note form and the database refuse the same secrets. | 0.2 s | team-work.spec.ts | keep |
 | `settings-overlay.spec.ts` | The Settings overlay opens over the page by pointer and by keyboard, lists the real Agents, shows each Role only what it allows, lets only the Owner rename and move the main mark, and fits a phone. | 28.5 s | settings-overlay.test.mjs (sections per role) | keep |
 | `settings-overlay.test.mjs` | The overlay lists the reference's sections, and a Viewer sees only theirs. | 0.3 s | settings-overlay.spec.ts | keep |
@@ -230,5 +231,5 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `usage.spec.ts` | Replies store their tokens and show a running total; stopped and lost runs keep what was reported; an Owner sees each company's tokens. | 23.8 s | hermes-usage.test.mjs (the parsing) | keep |
 | `visual-baselines.test.mjs` | Every listed screen has its approved images and no image lacks a screen. | 0.4 s | visual.spec.ts | keep |
 | `visual-screens.mjs` | helper: the compared screens | — | — | helper, kept |
-| `visual.spec.ts` | Forty-two screens match their approved images in English and Arabic at 390 and 1440, light and dark, on the seed as built. (visual project, first) | 83.6 s | visual-baselines.test.mjs (every screen has its images) | keep |
-| `visual.spec.ts-snapshots/` | The 168 approved screen images `visual.spec.ts` compares with. | — | — | data, kept |
+| `visual.spec.ts` | Forty-eight screens match their approved images in English and Arabic at 390 and 1440, light and dark, on the seed as built. (visual project, first) | 83.6 s | visual-baselines.test.mjs (every screen has its images) | keep |
+| `visual.spec.ts-snapshots/` | The 192 approved screen images `visual.spec.ts` compares with. | — | — | data, kept |

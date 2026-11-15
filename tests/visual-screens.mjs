@@ -3,8 +3,8 @@
 export const languages = ['en', 'ar'];
 export const widths = [1440, 390];
 
-// `anonymous` screens are shown to a visitor who has not signed in; every other screen is the view of the
-// seeded Owner of every company.
+// `anonymous` screens are shown to a visitor who has not signed in; a screen with a `person` is that Member's view;
+// every other screen is the view of the seeded Owner of every company.
 const lightScreens = [
   { name: 'sign-in', path: '/sign-in', anonymous: true },
   { name: 'home', path: '/c/rs-learning/home' },
@@ -45,12 +45,18 @@ const lightScreens = [
   // Its Company section of a team is agent-visibility above.
   { name: 'settings-agents', path: '/c/rs-learning/settings?section=agents', state: 'lead-made' },
   { name: 'settings-main-agent', path: '/c/rs-learning/settings?agent=65000000-0000-0000-0000-000000000003', state: 'lead-made' },
+  // A Contributor's lasting rule sent as a learning suggestion (#25), over Ads and the rule the first Contributor told it
+  // on June 10: their Conversation with the private line, Ads's reply and the line naming who it was sent to; the
+  // Owner's "Waiting on you" holding it with Decline and Make it team-wide; and Settings' Learning counting it.
+  { name: 'rule-suggested', path: '/c/rs-learning/conversations/6a000000-0000-0000-0000-000000000003', state: 'rule-suggested', person: 'reviewer@example.com' },
+  { name: 'rule-waiting', path: '/c/rs-learning/approvals', state: 'rule-suggested' },
+  { name: 'learning-waiting', path: '/c/rs-learning/settings?section=learning', state: 'rule-suggested' },
 ];
 
 export const screens = [
   { name: 'first-run', path: '/first-run', anonymous: true, dark: false },
   ...lightScreens.map(screen => ({ ...screen, dark: false })),
-  ...lightScreens.filter(screen => ['sign-in', 'home', 'chat', 'board', 'card', 'alone-chat', 'alone-settings', 'made-card', 'new-agent', 'made-agent', 'agent-visibility', 'ready-roles', 'rule-saved', 'agent-rules', 'settings-agents', 'settings-main-agent'].includes(screen.name))
+  ...lightScreens.filter(screen => ['sign-in', 'home', 'chat', 'board', 'card', 'alone-chat', 'alone-settings', 'made-card', 'new-agent', 'made-agent', 'agent-visibility', 'ready-roles', 'rule-saved', 'agent-rules', 'settings-agents', 'settings-main-agent', 'rule-suggested', 'rule-waiting', 'learning-waiting'].includes(screen.name))
     .map(screen => ({ ...screen, name: `${screen.name}-dark`, dark: true })),
 ];
 

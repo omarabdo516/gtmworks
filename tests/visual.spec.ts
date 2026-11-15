@@ -97,6 +97,9 @@ const readyBy: Record<string, string> = {
   'agent-rules': '.rl-said:not([data-utc])',
   'settings-agents': '.sov-ag',
   'settings-main-agent': '#set-h-main',
+  'rule-suggested': '[data-kind="suggested"]',
+  'rule-waiting': '.mcard--rule',
+  'learning-waiting': '.sov-count',
 };
 
 // The states the seed does not hold: first run's two (#9), RS Learning with no answer yet and a new workspace's Lead with
@@ -108,6 +111,10 @@ const made = (n: number) => `65000000-0000-0000-0000-00000000000${n}`;
 // Ads and the lasting rule Omar told it in its Conversation on June 10 (#18), as agent_save_rule keeps it.
 const told = (n: number) => `68000000-0000-0000-0000-00000000000${n}`;
 const rule = 'من دلوقتي ما تبعتش حاجة للعميل من غير ما أشوفها';
+// Ads and the lasting rule the first Contributor told it on June 10 (#25), kept as a suggestion waiting on the Owner and
+// the Manager, as agent_save_rule keeps it.
+const suggested = (n: number) => `6a000000-0000-0000-0000-00000000000${n}`;
+const suggestedRule = 'من دلوقتي أي إعلان للسعودية يتكتب بلهجة سعودية خفيفة';
 // A state whose rows are append-only (a Conversation's messages) is set and taken away as the database's own
 // administrator with triggers off, the way tests/fresh-seed.ts puts the seed back, so nothing of it stays behind.
 const asAdmin = (sql: string) => execFileSync('docker', ['exec', '-i', dbContainerOf(), 'psql', '-U', 'supabase_admin', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-q', '--single-transaction'],
@@ -183,6 +190,29 @@ const screenStates: Record<string, { set: string, unset: string, admin?: true }>
       delete from public.hermes_agents where id='${told(2)}';
       delete from public.hermes_connections where id='${told(1)}';`,
   },
+  'rule-suggested': {
+    admin: true,
+    set: `insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('${suggested(1)}','${rsLearning}','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9/p/visual-suggested','visual-suggested','visual-no-key','unreachable');
+      insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('${suggested(2)}','${rsLearning}','${suggested(1)}','Ads','Runs the Meta and Google ads.');
+      insert into public.member_agent_access(company_id,person_id,agent_id) values ('${rsLearning}','20000000-0000-0000-0000-000000000002','${suggested(2)}'),('${rsLearning}','20000000-0000-0000-0000-000000000003','${suggested(2)}');
+      insert into public.conversations(id,company_id,person_id,agent_id,agent_name,created_at) values ('${suggested(3)}','${rsLearning}','20000000-0000-0000-0000-000000000003','${suggested(2)}','Ads','2026-06-10T09:20:00Z');
+      insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at) values
+       ('${rsLearning}','${suggested(3)}','person','20000000-0000-0000-0000-000000000003',null,'مراجع','${suggestedRule}','${suggested(4)}','visual-suggested','2026-06-10T09:20:00Z'),
+       ('${rsLearning}','${suggested(3)}','agent',null,'${suggested(2)}','Ads','تمام، هشتغل كده في شغلي معاك من دلوقتي. وعشان دي حاجة هتمشي على الفريق كله، اقترحتها على عمر ومدير، ولما حد فيهم يوافق هتبقى للكل.',null,'visual-suggested','2026-06-10T09:21:00Z');
+      insert into public.agent_rules(id,company_id,agent_id,body,said_by,said_at,conversation_id,run_id,call_id,suggestion) values
+       ('${suggested(5)}','${rsLearning}','${suggested(2)}','${suggestedRule}','20000000-0000-0000-0000-000000000003','2026-06-10T09:21:00Z','${suggested(3)}','visual-suggested','call-0','pending');
+      insert into public.waiting_items(company_id,person_id,kind,title,body,asked_by,agent_rule_id,created_at) values
+       ('${rsLearning}','20000000-0000-0000-0000-000000000001','rule_suggestion','${suggestedRule}','Ads','مراجع','${suggested(5)}','2026-06-10T09:21:00Z'),
+       ('${rsLearning}','20000000-0000-0000-0000-000000000002','rule_suggestion','${suggestedRule}','Ads','مراجع','${suggested(5)}','2026-06-10T09:21:00Z');`,
+    unset: `delete from public.waiting_items where agent_rule_id='${suggested(5)}';
+      delete from public.agent_rules where conversation_id='${suggested(3)}';
+      delete from public.conversation_usage where conversation_id='${suggested(3)}';
+      delete from public.conversation_messages where conversation_id='${suggested(3)}';
+      delete from public.conversations where id='${suggested(3)}';
+      delete from public.member_agent_access where agent_id='${suggested(2)}';
+      delete from public.hermes_agents where id='${suggested(2)}';
+      delete from public.hermes_connections where id='${suggested(1)}';`,
+  },
 };
 
 async function showScreen(page: Page, screen: (typeof screens)[number], width: number) {
@@ -237,6 +267,20 @@ test.describe('signed-in screens', () => {
   let context: BrowserContext;
   let page: Page;
   let current: Language | null = null;
+  // A screen of another Member (`person`) is drawn in their own window, signed in once. Their language is saved to their
+  // account as choosing it in their settings does, and put back to the seed's English at the end.
+  const others = new Map<string, { context: BrowserContext, page: Page }>();
+  const languageOf = (email: string, language: Language) => query(`update public.people set language='${language}' where id=(select id from auth.users where email='${email}')`);
+  async function windowOf(browser: import('@playwright/test').Browser, email: string, language: Language) {
+    languageOf(email, language);
+    if (!others.has(email)) {
+      const own = await browser.newContext(contextOptions);
+      const opened = { context: own, page: await own.newPage() };
+      await signIn(opened.page, email, '/c/rs-learning/home');
+      others.set(email, opened);
+    }
+    return others.get(email)!.page;
+  }
   test.beforeAll(async ({ browser }) => {
     test.setTimeout(240000);
     // A clean slate if an earlier run stopped half way: the seeded dates, English.
@@ -260,22 +304,25 @@ test.describe('signed-in screens', () => {
       if (page && current !== 'en') await chooseLanguage(page, 'en');
     } finally {
       await context?.close();
+      for (const [email, other] of others) { languageOf(email, 'en'); await other.context.close(); }
     }
   });
 
   for (const language of languages as Language[]) for (const width of widths) for (const screen of screens.filter(s => !s.anonymous)) {
-    test(`${screen.name} ${language} ${width}`, async () => {
-      if (current !== language) {
+    test(`${screen.name} ${language} ${width}`, async ({ browser }) => {
+      const person = 'person' in screen && typeof screen.person === 'string' ? screen.person : null;
+      if (!person && current !== language) {
         await chooseLanguage(page, language);
         current = language;
       }
+      const shown = person ? await windowOf(browser, person, language) : page;
       const state = 'state' in screen && typeof screen.state === 'string' ? screenStates[screen.state] : undefined;
       const write = state?.admin ? asAdmin : query;
       if (state) { write(state.unset); write(state.set); }
       try {
-        await showScreen(page, screen, width);
-        if (screen.dark) await expectDarkContrast(page);
-        await expect(page).toHaveScreenshot(`${snapshotName(screen, language, width)}.png`, { fullPage: true });
+        await showScreen(shown, screen, width);
+        if (screen.dark) await expectDarkContrast(shown);
+        await expect(shown).toHaveScreenshot(`${snapshotName(screen, language, width)}.png`, { fullPage: true });
       } finally {
         if (state) write(state.unset);
       }
