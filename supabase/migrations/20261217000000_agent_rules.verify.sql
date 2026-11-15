@@ -4,6 +4,8 @@ select json_build_object(
   and not has_table_privilege('authenticated','public.agent_rules','insert,update,delete')
   and not has_table_privilege('anon','public.agent_rules','select,insert,update,delete')
   and not has_table_privilege('service_role','public.agent_rules','select,insert,update,delete'),
+ 'rules_follow_visibility',position('can_see_agent' in (select qual from pg_policies where tablename='agent_rules' and policyname='agent_rules_read'))>0
+  and position('agent_visible_to' in pg_get_functiondef('public.may_tell_agent_rules(uuid,uuid,uuid)'::regprocedure))>0,
  'rules_kept_when_agent_goes',(select confdeltype='n' from pg_constraint where conrelid='public.agent_rules'::regclass and contype='f' and confrelid='public.hermes_agents'::regclass),
  'pins_optional',(select count(*)=2 and bool_and(not attnotnull) from pg_attribute where attrelid='public.conversation_run_notes'::regclass and attname in ('tools','rules') and not attisdropped),
  'worker_saves_and_reads_pins',has_function_privilege('service_role','public.agent_save_rule(uuid,text,text,text)','execute')

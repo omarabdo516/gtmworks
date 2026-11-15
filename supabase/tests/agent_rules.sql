@@ -1,9 +1,12 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(41);
+select plan(45);
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
  ('e2000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9','rules-test','ciphertext','connected','0.23.0','{run_submission}');
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('e2000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','e2000000-0000-0000-0000-000000000001','Ads','Ads');
+-- Ads is shown to the Manager (2), the Contributor (3) and the Viewer (4) (#15); the Owner sees every Agent.
+insert into public.member_agent_access(company_id,person_id,agent_id)
+ select '10000000-0000-0000-0000-000000000001',('20000000-0000-0000-0000-00000000000'||n)::uuid,'e2000000-0000-0000-0000-000000000002' from generate_series(2,4) n;
 -- One Conversation with Ads each for the Owner (1), the Manager (2), the Contributor (3) and the Viewer (4).
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name)
  select ('e3000000-0000-0000-0000-00000000000'||n)::uuid,'10000000-0000-0000-0000-000000000001',('20000000-0000-0000-0000-00000000000'||n)::uuid,'e2000000-0000-0000-0000-000000000002','Ads' from generate_series(1,4) n;
@@ -93,6 +96,23 @@ select throws_ok($$select public.remove_agent_rule('10000000-0000-0000-0000-0000
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
 select throws_ok($$select public.remove_agent_rule('10000000-0000-0000-0000-000000000001',(select id from public.agent_rules where run_id='rule-run-1'))$$,'42501',null,'nor can a Contributor');
 reset role;
+-- An Agent hidden from a Member (#15): they read none of its rules, a Manager removes none of them, and a Manager's run
+-- with it is offered no save_rule and saves none.
+delete from public.member_agent_access where agent_id='e2000000-0000-0000-0000-000000000002' and person_id in ('20000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000004');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
+select is((select count(*)::int from public.agent_rules),0,'a Viewer Ads is hidden from reads none of its rules');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select throws_ok($$select public.remove_agent_rule('10000000-0000-0000-0000-000000000001',(select r.id from public.agent_rules r limit 1))$$,'P0002',null,'a Manager Ads is hidden from removes none of its rules');
+reset role;
+select ok(not public.may_tell_agent_rules('10000000-0000-0000-0000-000000000001','e2000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000002'),'nor is offered save_rule with it');
+insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id)
+ values ('10000000-0000-0000-0000-000000000001','e3000000-0000-0000-0000-000000000002','person','20000000-0000-0000-0000-000000000002','Someone','From now on, no emojis',gen_random_uuid(),'rule-run-7');
+set local role service_role;
+select is(public.agent_save_rule('e3000000-0000-0000-0000-000000000002','rule-run-7','call-0','From now on, no emojis')->>'state','refused','nor saves one');
+reset role;
+insert into public.member_agent_access(company_id,person_id,agent_id)
+ select '10000000-0000-0000-0000-000000000001',('20000000-0000-0000-0000-00000000000'||n)::uuid,'e2000000-0000-0000-0000-000000000002' from unnest(array[2,4]) n;
 -- Someone who manages another Company only.
 select set_config('test.first_rule',(select id::text from public.agent_rules where run_id='rule-run-1'),true);
 update public.members set removed_at=now() where company_id='10000000-0000-0000-0000-000000000001' and person_id='20000000-0000-0000-0000-000000000005';

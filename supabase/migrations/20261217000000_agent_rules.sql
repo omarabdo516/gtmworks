@@ -27,16 +27,17 @@ create table public.agent_rules (
 );
 create index agent_rules_by_agent on public.agent_rules(agent_id,said_at) where removed_at is null;
 alter table public.agent_rules enable row level security;
--- Every Member reads the rules of their own Company's Agents (its page, and the saved line in the Conversation that told
--- one); only the functions below write them.
-create policy agent_rules_read on public.agent_rules for select to authenticated using (public.is_member(company_id));
+-- A Member reads the rules of the Company's Agents they see (#15: its page, and the saved line in the Conversation that
+-- told one); only the functions below write them.
+create policy agent_rules_read on public.agent_rules for select to authenticated using (public.is_member(company_id) and public.can_see_agent(company_id,agent_id));
 revoke all on public.agent_rules from anon,authenticated,service_role;
 grant select on public.agent_rules to authenticated;
 
--- Who may tell an Agent a lasting rule, and remove one: an active Owner or Manager of the Company the Agent works in.
+-- Who may tell an Agent a lasting rule, and remove one: an active Owner or Manager of the Company the Agent works in, who
+-- sees that Agent (#15).
 create function public.may_tell_agent_rules(c uuid, agent uuid, person uuid) returns boolean language sql stable security definer set search_path='' as $$
  select exists(select 1 from public.members m where m.company_id=c and m.person_id=person and m.role in ('owner','manager') and m.removed_at is null)
-  and exists(select 1 from public.hermes_agents a where a.id=agent and a.company_id=c);
+  and exists(select 1 from public.hermes_agents a where a.id=agent and a.company_id=c) and public.agent_visible_to(c,person,agent);
 $$;
 revoke all on function public.may_tell_agent_rules(uuid,uuid,uuid) from public,anon,authenticated,service_role;
 
@@ -119,12 +120,12 @@ revoke all on function public.agent_save_rule(uuid,text,text,text) from public,a
 grant execute on function public.agent_save_rule(uuid,text,text,text) to service_role;
 
 -- An Owner or a Manager of the rule's Company removes it, from the Agent's page. It is kept with who removed it and
--- when, and the removal is logged once. A rule of another Company is not found.
+-- when, and the removal is logged once. A rule of another Company, or of an Agent the caller does not see, is not found.
 create function public.remove_agent_rule(c uuid, rule uuid) returns boolean language plpgsql security definer set search_path='' as $$
 declare kept public.agent_rules;
 begin
  select * into kept from public.agent_rules r where r.id=rule and r.company_id=c and r.agent_id is not null for update;
- if not found or not public.is_member(c) then raise exception 'agentRuleNotFound' using errcode='P0002'; end if;
+ if not found or not public.can_see_agent(c,kept.agent_id) then raise exception 'agentRuleNotFound' using errcode='P0002'; end if;
  if not public.may_tell_agent_rules(c,kept.agent_id,auth.uid()) then raise exception 'agentRuleNotAllowed' using errcode='42501'; end if;
  if kept.removed_at is not null then return false; end if;
  update public.agent_rules set removed_at=now(),removed_by=auth.uid() where id=rule;
