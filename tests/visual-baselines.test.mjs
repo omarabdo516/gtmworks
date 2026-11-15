@@ -50,6 +50,7 @@ test('every dark screen is its light twin in the dark theme', () => {
 test('a screen file that is not a screen is refused, naming the file', async t => {
  const refused = [
   ['typo.json', '{"path": "/x", "dark": false, "redy": ".x"}', /typo\.json: unknown field "redy"/],
+  ['inherited.json', '{"path": "/x", "dark": false, "toString": ".x"}', /inherited\.json: unknown field "toString"/],
   ['flag.json', '{"path": "/x", "dark": "yes"}', /flag\.json: "dark" has the wrong type/],
   ['visitor.json', '{"path": "/x", "dark": false, "anonymous": false}', /visitor\.json: "anonymous" has the wrong type/],
   ['nowhere.json', '{"dark": false}', /nowhere\.json: "path" is required/],

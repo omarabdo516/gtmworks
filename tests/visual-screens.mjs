@@ -11,18 +11,16 @@ export const widths = [1440, 390];
 // import.meta does not exist.
 export const screenFolder = 'tests/visual-screens';
 
-// `anonymous` screens are shown to a visitor who has not signed in; a screen with a `person` is that Member's view;
-// every other screen is the view of the seeded Owner of every company. `state` names a picture's set-up in
-// tests/visual.spec.ts, `ready` the element that shows the page has loaded (`.content` when absent), and `dark: true`
-// also compares the screen in the dark theme, as `<name>-dark`.
+// The fields of a screen file. A screen is the view of the seeded Owner of every company unless it names a `person` or
+// is `anonymous`.
 const fields = {
-  about: value => typeof value === 'string',
-  path: value => typeof value === 'string',
-  state: value => typeof value === 'string',
-  person: value => typeof value === 'string',
-  anonymous: value => value === true,
-  dark: value => typeof value === 'boolean',
-  ready: value => typeof value === 'string',
+  path: value => typeof value === 'string', // the address it opens
+  dark: value => typeof value === 'boolean', // true: also compared in the dark theme, as `<name>-dark`
+  anonymous: value => value === true, // shown to a visitor who has not signed in
+  person: value => typeof value === 'string', // shown to this Member, in their own window
+  state: value => typeof value === 'string', // a set-up the seed does not hold (`screenStates` in tests/visual.spec.ts)
+  ready: value => typeof value === 'string', // the element that shows the page has loaded; `.content` when absent
+  about: value => typeof value === 'string', // what the picture shows
 };
 
 /** @typedef {{ name: string, path: string, dark: boolean, about?: string, state?: string, person?: string, anonymous?: true, ready?: string }} Screen */
@@ -40,7 +38,7 @@ function parseScreen(file, text) {
   }
   if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) throw new Error(`${file}: a screen is a JSON object`);
   for (const [key, value] of Object.entries(entry)) {
-    if (!(key in fields)) throw new Error(`${file}: unknown field "${key}"`);
+    if (!Object.hasOwn(fields, key)) throw new Error(`${file}: unknown field "${key}"`);
     if (!fields[key](value)) throw new Error(`${file}: "${key}" has the wrong type`);
   }
   for (const key of ['path', 'dark']) if (!(key in entry)) throw new Error(`${file}: "${key}" is required`);
