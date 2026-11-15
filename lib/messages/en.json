@@ -615,6 +615,7 @@
   "settingsCompany": "Company",
   "settingsKnowledge": "Company knowledge",
   "settingsLearning": "Learning",
+  "settingsLearningWaiting": "{0} waiting for your OK",
   "settingsModels": "Subscription and models",
   "settingsApps": "Apps",
   "settingsRoutines": "Recurring tasks",
