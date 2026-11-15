@@ -8,6 +8,8 @@ Work arrives as a GitHub issue in this repo with an acceptance list. A UI change
 
 Every build runs in `/pstack:poteto-mode` and follows its playbooks. No other workflow skill is used in this repo. Money, secrets, deletion, release tags and repo settings stay with Omar, so in this repo they join the playbooks' always-pause list. Impeccable stays the design tool for screens (Design workflow below).
 
+Every pull request merges itself. Once `check` is green on the head and every review thread is fixed or answered and resolved, the builder turns on GitHub auto-merge (`gh pr merge <n> --auto --squash`), and GitHub merges it. This is the standing request to merge that the Babysit and Shipping playbooks wait for, so no build stops at merge-ready waiting for a person. Never merge directly, bypass the ruleset, or weaken a test to go green.
+
 ## Before exploring, read these
 
 - `GLOSSARY.md`: the product's words. «براند» in Omar's words is a **Company** here.
