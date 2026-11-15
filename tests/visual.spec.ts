@@ -12,6 +12,7 @@ import { appOrigin } from './lane.mjs';
 // except the opened-card record that opening a card always makes, and it restores the owner's language.
 type Language = 'en' | 'ar';
 const rsLearning = '10000000-0000-0000-0000-000000000001';
+const rsConsultations = '10000000-0000-0000-0000-000000000002';
 const seedAuthor = '30000000-0000-0000-0000-000000000001';
 const contextOptions = {
   baseURL: appOrigin,
@@ -85,15 +86,22 @@ const readyBy: Record<string, string> = {
   log: '.log-page',
   'first-run-question': '.fr',
   'lead-welcome': '[data-lead-line]',
+  'alone-chat': '.chat',
+  'alone-settings': '#inv-email',
 };
 
-// The two first-run states (#9) the seed does not hold: RS Learning with no answer yet, and a new workspace's Lead with
-// the Owner's empty Conversation. Each is set up for its own picture and taken away after it, so the seed stays as built.
+// The states the seed does not hold: first run's two (#9), RS Learning with no answer yet and a new workspace's Lead with
+// the Owner's empty Conversation, and RS Consultations worked alone (#10). Each is set up for its own picture and taken
+// away after it, so the seed stays as built.
 const leadWelcome = { connection: '64000000-0000-0000-0000-000000000007', agent: '64000000-0000-0000-0000-000000000008', conversation: '64000000-0000-0000-0000-000000000009' };
 const screenStates: Record<string, { set: string, unset: string }> = {
   unanswered: {
     set: `update public.companies set work_mode=null where id='${rsLearning}'`,
     unset: `update public.companies set work_mode='team' where id='${rsLearning}'`,
+  },
+  alone: {
+    set: `update public.companies set work_mode='alone' where id='${rsConsultations}'`,
+    unset: `update public.companies set work_mode='team' where id='${rsConsultations}'`,
   },
   'lead-welcome': {
     set: `do $$ begin insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('${leadWelcome.connection}','${rsLearning}','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9/p/visual','visual-lead','visual-no-key','unreachable');

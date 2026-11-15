@@ -22,12 +22,16 @@ const lightScreens = [
   // Owner's new, empty Conversation with Lead (tests/visual.spec.ts sets both states up and puts the seed back).
   { name: 'first-run-question', path: '/c/rs-learning/home', state: 'unanswered' },
   { name: 'lead-welcome', path: '/c/rs-learning/conversations/64000000-0000-0000-0000-000000000009', state: 'lead-welcome' },
+  // A Company worked alone (#10): RS Consultations, where Omar is the only Member, set to alone for the picture. The
+  // chat page shows the sidebar with no channels; settings shows the Company with the invitation form and no members.
+  { name: 'alone-chat', path: '/c/rs-consultations/chat', state: 'alone' },
+  { name: 'alone-settings', path: '/c/rs-consultations/settings', state: 'alone' },
 ];
 
 export const screens = [
   { name: 'first-run', path: '/first-run', anonymous: true, dark: false },
   ...lightScreens.map(screen => ({ ...screen, dark: false })),
-  ...lightScreens.filter(screen => ['sign-in', 'home', 'chat', 'board', 'card'].includes(screen.name))
+  ...lightScreens.filter(screen => ['sign-in', 'home', 'chat', 'board', 'card', 'alone-chat', 'alone-settings'].includes(screen.name))
     .map(screen => ({ ...screen, name: `${screen.name}-dark`, dark: true })),
 ];
 
