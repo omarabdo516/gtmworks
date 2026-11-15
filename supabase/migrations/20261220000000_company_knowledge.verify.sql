@@ -25,5 +25,9 @@ select json_build_object(
  'pin_optional',(select format_type(atttypid,atttypmod)='jsonb' and not attnotnull from pg_attribute where attrelid='public.conversation_run_notes'::regclass and attname='knowledge' and not attisdropped)
   and not has_column_privilege('service_role','public.conversation_run_notes','knowledge','select')
   and not has_column_privilege('authenticated','public.conversation_run_notes','knowledge','select'),
- 'parts_private',(select bool_and(not has_function_privilege(r,'public.company_knowledge_parts()','execute')) from unnest(array['anon','authenticated','service_role']) r)
+ 'parts_private',(select bool_and(not has_function_privilege(r,'public.company_knowledge_parts()','execute') and not has_function_privilege(r,'public.company_knowledge_now(uuid)','execute')) from unnest(array['anon','authenticated','service_role']) r),
+ 'channel_runs_pin',exists(select 1 from pg_trigger where tgrelid='public.channel_runs'::regclass and tgname='channel_runs_knowledge' and not tgisinternal)
+  and has_function_privilege('service_role','public.channel_run_knowledge(bigint)','execute')
+  and not has_function_privilege('authenticated','public.channel_run_knowledge(bigint)','execute')
+  and not has_column_privilege('authenticated','public.channel_runs','knowledge','select')
 );

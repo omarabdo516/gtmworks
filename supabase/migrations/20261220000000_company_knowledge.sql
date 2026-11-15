@@ -78,6 +78,13 @@ grant execute on function public.save_company_knowledge(uuid,text,text) to authe
 -- text, in order, as [{part,body}]. A run already tried (an attempt or an unknown start on its reservation, whose row is
 -- locked as begin_start counts one) keeps what it was pinned with, and one the previous app version tried is told none.
 alter table public.conversation_run_notes add column knowledge jsonb;
+-- A Company's written parts now, in order, as a run is given them.
+create function public.company_knowledge_now(c uuid) returns jsonb language sql stable security definer set search_path='' as $$
+ select coalesce(jsonb_agg(jsonb_build_object('part',k.part,'body',k.body) order by array_position(public.company_knowledge_parts(),k.part)),'[]'::jsonb)
+  from public.company_knowledge k where k.company_id=c and k.body<>'';
+$$;
+revoke all on function public.company_knowledge_now(uuid) from public,anon,authenticated,service_role;
+
 create function public.pin_run_knowledge(conversation uuid, message_key uuid) returns jsonb language plpgsql security definer set search_path='' as $$
 declare held public.conversation_run_reservations; kept public.conversation_run_notes;
 begin
@@ -85,11 +92,27 @@ begin
  select * into kept from public.conversation_run_notes n where n.conversation_id=conversation and n.send_key=message_key for update;
  if kept.conversation_id is null then return '[]'::jsonb; end if;
  if kept.knowledge is null and held.conversation_id is not null and held.start_attempts=0 and held.start_unknown_at is null then
-  update public.conversation_run_notes n set knowledge=(select coalesce(jsonb_agg(jsonb_build_object('part',k.part,'body',k.body) order by array_position(public.company_knowledge_parts(),k.part)),'[]'::jsonb)
-    from public.company_knowledge k where k.company_id=held.company_id and k.body<>'')
+  update public.conversation_run_notes n set knowledge=public.company_knowledge_now(held.company_id)
    where n.conversation_id=conversation and n.send_key=message_key returning * into kept;
  end if;
  return coalesce(kept.knowledge,'[]'::jsonb);
 end $$;
 revoke all on function public.pin_run_knowledge(uuid,uuid) from public,anon,authenticated;
 grant execute on function public.pin_run_knowledge(uuid,uuid) to service_role;
+
+-- A general channel run (#23) is given the Company knowledge too. Its row pins it as it is made, as it pins the Agent's
+-- rules, so every attempt sends the same request. A trigger fills it, so the channel's own functions stay as they are,
+-- and a row the previous app version made gets it too.
+alter table public.channel_runs add column knowledge jsonb;
+create function public.pin_channel_run_knowledge() returns trigger language plpgsql security definer set search_path='' as $$
+begin
+ new.knowledge:=public.company_knowledge_now(new.company_id);
+ return new;
+end $$;
+revoke all on function public.pin_channel_run_knowledge() from public,anon,authenticated,service_role;
+create trigger channel_runs_knowledge before insert on public.channel_runs for each row execute function public.pin_channel_run_knowledge();
+create function public.channel_run_knowledge(message bigint) returns jsonb language sql stable security definer set search_path='' as $$
+ select coalesce((select r.knowledge from public.channel_runs r where r.message_id=message),'[]'::jsonb);
+$$;
+revoke all on function public.channel_run_knowledge(bigint) from public,anon,authenticated;
+grant execute on function public.channel_run_knowledge(bigint) to service_role;
