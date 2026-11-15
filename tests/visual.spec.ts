@@ -102,6 +102,8 @@ const readyBy: Record<string, string> = {
   'rule-waiting': '.mcard--rule',
   'learning-waiting': '.sov-count',
   'agent-details': '.chat',
+  knowledge: '.know-meta time:not([data-utc])',
+  'knowledge-empty': '.know-empty',
 };
 
 // The states the seed does not hold: first run's two (#9), RS Learning with no answer yet and a new workspace's Lead with

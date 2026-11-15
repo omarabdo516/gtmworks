@@ -37,15 +37,15 @@ CI deploys nothing. An install picks up a merge when its owner runs `sh scripts/
 
 ## Visual comparison
 
-`tests/visual.spec.ts` compares fifty-two screens with approved images, each in Arabic
-and English at 390 and 1440 wide (208 images in `tests/visual.spec.ts-snapshots/`):
+`tests/visual.spec.ts` compares fifty-five screens with approved images, each in Arabic
+and English at 390 and 1440 wide (220 images in `tests/visual.spec.ts-snapshots/`):
 sign-in, first run, Home, the Conversation with the main Agent, the board, a card, the calendar, approvals, settings
 members, agents and work, Numbers, the Activity log, first run's alone-or-team question, Lead's first words in a new
 workspace, the chat page and the Company settings of a Company worked alone, the Conversation with the card of an
 Agent Lead made, Lead's chat opened by "New agent", the ready-made gallery opened from it and that Agent's Settings page, the Company settings switches of which Agents each
-Member sees, the Conversation in which an Agent saved a lasting rule and that Agent's Settings page listing it, the settings overlay's Agents section and the main Agent's page, an Agent's details while it works, the general channel, a Contributor's Conversation holding a rule sent as a learning suggestion, "Waiting on you" holding it and Settings' Learning counting it, and
+Member sees, the Conversation in which an Agent saved a lasting rule and that Agent's Settings page listing it, the settings overlay's Agents section and the main Agent's page, an Agent's details while it works, the general channel, a Contributor's Conversation holding a rule sent as a learning suggestion, "Waiting on you" holding it and Settings' Learning counting it, the Company knowledge with a written part and an empty one, and
 sign-in, Home, the Conversation, the board, a card, both alone screens, the three Lead-made Agent screens, those
-switches, the ready-made gallery and the two rule screens, the two overlay screens, the Agent's details, the general channel and the three learning suggestion screens in the dark theme. The list lives in `tests/visual-screens.mjs`;
+switches, the ready-made gallery and the two rule screens, the two overlay screens, the Agent's details, the general channel and the three learning suggestion screens and the written Company knowledge in the dark theme. The list lives in `tests/visual-screens.mjs`;
 `tests/visual-baselines.test.mjs` fails when a screen lacks an image or an image has
 no screen.
 
