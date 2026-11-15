@@ -65,3 +65,11 @@ export const snapshotName = (screen, language, width) => `${screen.name}-${langu
 export const baselineFolder = 'tests/visual.spec.ts-snapshots';
 export const baselineFile = (screen, language, width) => `${snapshotName(screen, language, width)}-visual-linux.png`;
 
+
+// What a listing of the approved-image folder lacks and what it holds that no screen owns.
+export function baselineProblems(listing, screens) {
+  const expected = screens.flatMap(screen => languages.flatMap(language => widths.map(width => baselineFile(screen, language, width))));
+  const listed = new Set(listing);
+  const owned = new Set(expected);
+  return { missing: expected.filter(file => !listed.has(file)).sort(), stray: listing.filter(file => !owned.has(file)).sort() };
+}
