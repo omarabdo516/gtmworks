@@ -256,3 +256,40 @@ test('agent creates and submits a card; rejection produces a signed webhook', as
 
  } finally { await new Promise<void>((resolve,reject)=>receiver.close(err=>err?reject(err):resolve())); }
 });
+
+// The caption's lines survive the real save and a reload, in English and in Arabic; its height and direction are
+// checked in components/card-detail.test.tsx.
+test('a caption of several lines in English and Arabic survives saving and a reload',async({page})=>{
+ await signIn(page,'manager@example.com','/c/rs-learning/work/board/1');
+ const caption=page.locator('textarea[name=caption]'); // Found by name: a label's accessible name grows with the text once the field has a value.
+ const save=()=>Promise.all([page.waitForResponse(response=>response.request().method()==='POST' && response.url().includes('/work/board/')), page.getByRole('button',{name:'Save changes'}).click()]);
+ for(const text of ['First line\nSecond line\nThird line','السطر الأول\nالسطر الثاني\nالسطر الثالث']) {
+  await caption.fill(text);
+  await save();
+  await page.reload();
+  await expect(caption).toHaveValue(text);
+ }
+ await caption.fill('');
+ await save(); // Leave the seeded card as the other tests expect it.
+});
+
+test('an error thrown in the page is reported to the server log endpoint',async({page})=>{
+ await page.goto('/sign-in');
+ const reported=page.waitForRequest(request=>request.url().endsWith('/api/client-errors')&&request.method()==='POST');
+ const answered=page.waitForResponse(response=>response.url().endsWith('/api/client-errors'));
+ await page.evaluate(()=>{ setTimeout(()=>{ throw new Error('forced page error'); }); });
+ const body=(await reported).postDataJSON();
+ expect(body).toMatchObject({source:'page',message:'forced page error',path:'/sign-in'});
+ expect(body.stack).toContain('forced page error');
+ expect((await answered).status()).toBe(204);
+});
+
+test('an error thrown right after load on a slow CPU is still reported to the server log endpoint',async({page})=>{
+ const session=await page.context().newCDPSession(page);
+ await session.send('Emulation.setCPUThrottlingRate',{rate:8});
+ await page.goto('/sign-in');
+ const reported=page.waitForRequest(request=>request.url().endsWith('/api/client-errors')&&request.method()==='POST');
+ await page.evaluate(()=>{ setTimeout(()=>{ throw new Error('forced slow page error'); }); });
+ const body=(await reported).postDataJSON();
+ expect(body).toMatchObject({source:'page',message:'forced slow page error',path:'/sign-in'});
+});
