@@ -5,7 +5,9 @@
 //     files and code execution off and its Run API offers none of them. Each profile is pointed at the fake model,
 //     standing in for the company's own sign-in. It prints the first company's profile, whose memory CI then writes.
 //   verify <marker>: a run on each profile answers, and the marker in the first company's memory reaches the model in
-//     that company's run only, never in the second company's.
+//     that company's run only, never in the second company's. Then an Agent made in the first company as the previous
+//     app version made one, on the company's profile, is moved by the worker to its own profile once that profile is
+//     pointed at the fake model (#121), and the marker reaches the main Agent's next run and not the moved Agent's.
 // The companies and their Owners' sign-in are kept between the steps in a file of this container only.
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -28,6 +30,10 @@ const until=async(what,read,seconds)=>{
 const key=process.env.HERMES_API_KEY;
 assert.ok(key,'the install key is in the web container');
 const manage=(path,init={})=>fetch(`http://hermes:9119${path}`,{...init,headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'}});
+const pointAtFakeModel=async profile=>{
+ const pointed=await manage(`/api/config?profile=${profile}`,{method:'PUT',body:JSON.stringify({config:{model:{provider:'custom',default:'fake-model',base_url:'http://web:8080/v1',api_key:'fake-model-key',context_length:128000}}})});
+ assert.equal(pointed.status,200);
+};
 const signedIn=async credentials=>{ const person=createClient(origin,process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,options); await checked(person.auth.signInWithPassword(credentials)); return person; };
 
 if(step==='prepare') {
@@ -53,8 +59,7 @@ if(step==='prepare') {
   const enabled=toolsets.data.filter(toolset=>toolset.enabled).map(toolset=>toolset.name);
   assert.deepEqual(riskyToolsets.filter(name=>enabled.includes(name)),[],`${entry.profile} offers no terminal, file or code tools`);
   assert.ok(enabled.includes('web')&&enabled.includes('memory'),`${entry.profile} keeps its marketing tools`);
-  const pointed=await manage(`/api/config?profile=${entry.profile}`,{method:'PUT',body:JSON.stringify({config:{model:{provider:'custom',default:'fake-model',base_url:'http://web:8080/v1',api_key:'fake-model-key',context_length:128000}}})});
-  assert.equal(pointed.status,200);
+  await pointAtFakeModel(entry.profile);
  }
  assert.notEqual(companies[0].profile,companies[1].profile);
  const listed=(await (await manage('/api/profiles')).json()).profiles.map(profile=>profile.name);
@@ -83,20 +88,45 @@ if(step==='prepare') {
  });
  await new Promise(resolve=>model.listen(8080,'0.0.0.0',resolve));
  try {
+  // A message from the Owner to an Agent of the company in a new Conversation, answered: whether the marker reached the
+  // model, and the Conversation.
+  const ask=async(entry,person,agent,label)=>{
+   const before=asked.length;
+   const conversation=randomUUID();
+   const sent=await sendMessage(person,service,{person:entry.person,company:entry.company,conversation,sendKey:randomUUID(),agent,message:'مرحباً، اكتب عنواناً قصيراً.',encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY});
+   assert.deepEqual(sent,{conversation});
+   const answer=await until(`reply on ${label}`,async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),180);
+   assert.ok(answer.body.includes(reply),answer.body);
+   assert.ok(asked.length>before,`${label} asked the model`);
+   return {remembered:asked.slice(before).some(raw=>raw.includes(marker)),conversation};
+  };
   const seen=[];
   for(const entry of companies) {
    const person=await signedIn(entry.credentials);
-   const before=asked.length;
-   const conversation=randomUUID();
-   const sent=await sendMessage(person,service,{person:entry.person,company:entry.company,conversation,sendKey:randomUUID(),message:'مرحباً، اكتب عنواناً قصيراً.',encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY});
-   assert.deepEqual(sent,{conversation});
-   const answer=await until(`reply on ${entry.profile}`,async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),180);
-   assert.ok(answer.body.includes(reply),answer.body);
-   assert.ok(asked.length>before,`${entry.profile} asked the model`);
-   seen.push(asked.slice(before).some(raw=>raw.includes(marker)));
+   const {remembered,conversation}=await ask(entry,person,entry.agent,entry.profile);
+   seen.push(remembered); entry.conversation=conversation;
   }
   // The first company's memory reached its own run and not the second company's.
   assert.deepEqual(seen,[true,false]);
-  console.log(JSON.stringify({profiles:companies.map(entry=>entry.profile),memory:seen}));
+
+  const [first]=companies;
+  const person=await signedIn(first.credentials);
+  const profileOf=async agent=>{
+   const [linked]=await checked(person.from('hermes_agents').select('connection_id').eq('id',agent));
+   return (await checked(person.from('hermes_connections').select('profile').eq('id',linked.connection_id)))[0].profile;
+  };
+  const [{run_id:run}]=await checked(person.from('conversation_messages').select('run_id').eq('conversation_id',first.conversation).eq('author','person'));
+  const made=await checked(service.rpc('lead_create_agent',{conversation:first.conversation,run,call:'install-check',agent_name:'Install writer',job:'Writes the install check.',apps:[]}));
+  assert.equal(made.state,'created');
+  assert.equal(await profileOf(made.agent),first.profile,'the previous version makes the Agent on the company profile');
+  const own=`ag-${made.agent.replaceAll('-','')}`;
+  await until(`${own} made by the worker`,async()=>(await (await manage('/api/profiles')).json()).profiles.some(profile=>profile.name===own),120);
+  await pointAtFakeModel(own);
+  await until(`the Agent moved to ${own}`,async()=>await profileOf(made.agent)===own,240);
+  assert.equal(await profileOf(first.agent),first.profile,'the main Agent keeps the company profile');
+  const after=[(await ask(first,person,first.agent,first.profile)).remembered,(await ask(first,person,made.agent,own)).remembered];
+  // The memory written in the company profile stayed with the main Agent; the moved Agent starts with an empty one.
+  assert.deepEqual(after,[true,false]);
+  console.log(JSON.stringify({profiles:companies.map(entry=>entry.profile),memory:seen,moved:own,afterMove:after}));
  } finally { model.close(); model.closeAllConnections(); }
 } else throw new Error('usage: prepare | verify <marker>');

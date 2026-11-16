@@ -28,6 +28,7 @@ function databases(fake,{profile,owner=company}) {
   if(name==='claim_conversation_turn') return {data:[{company,agent:'a',person:'p',send_key:'q',message:'Draft the offer email',connection:'f9000000-0000-0000-0000-000000000001',note,retry:false}],error:null};
   if(name==='pin_run') return {data:{tools:null,rules:[rule]},error:null};
   if(['pin_run_knowledge','channel_run_knowledge'].includes(name)) return {data:[{part:'voice',body:voice}],error:null};
+  if(name==='pin_run_history') return {data:null,error:null};
   if(name==='begin_start') return {data:attempt(given.message_key),error:null};
   if(name==='channel_runs_due') return {data:[{message:7,run:null}],error:null};
   if(name==='begin_channel_start') return {data:[{attempt:attempt('channel'),company,connection:'f9000000-0000-0000-0000-000000000001',session:'s',input:'Omar: draft the offer email',instructions:role,rules:[rule]}],error:null};

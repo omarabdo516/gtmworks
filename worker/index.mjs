@@ -3,7 +3,8 @@ import { createWorkerClient, deliverBatch } from './webhooks.mjs';
 import { closeOpenRuns, startQueuedTurns } from '../lib/conversation-runs.mjs';
 import { driveChannelRuns, driveNoteRuns } from '../lib/channel-runs.mjs';
 import { bundledHermes } from '../lib/bundled-hermes.mjs';
-import { keepCompanyProfiles, keepAgentProfiles, checkAgentTools, abandonConversationReservations } from '../lib/company-profiles.mjs';
+import { keepCompanyProfiles, keepAgentProfiles, moveAgentProfiles, checkAgentTools, abandonConversationReservations } from '../lib/company-profiles.mjs';
+import { engineFor } from '../lib/engine.mjs';
 import { appOrigin } from '../lib/app-origin.mjs';
 checkSettings();
 const db=createWorkerClient(process.env.NEXT_PUBLIC_SUPABASE_URL,process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -17,14 +18,14 @@ process.on('SIGTERM',()=>{stopping=true}); process.on('SIGINT',()=>{stopping=tru
 const pause=every=>new Promise(resolve=>{ const end=Date.now()+every; const tick=()=>stopping||Date.now()>=end?resolve():setTimeout(tick,Math.min(1000,end-Date.now())); tick(); });
 const loop=async(name,work,every=1000)=>{ while(!stopping) { try { await work(); } catch(error) { console.error(`${name} worker:`,error.message); } await pause(every); } };
 // A self-hosted install gives each company its own profile in the bundled Hermes and keeps its tools, and those of each
-// Agent's own profile, in step with the company's Agent level (ADR 0014, ADR 0016); a hosted one has none. Every
-// Connection's tools are read for the Owner's warning.
+// Agent's own profile, in step with the company's Agent level (ADR 0014, ADR 0016), and moves each Agent still on its
+// company's profile to its own (#121); a hosted one has none. Every Connection's tools are read for the Owner's warning.
 const hermes=bundledHermes();
-const waiting=new Map();
+const waiting=new Map(); const moving=new Map();
 await Promise.all([loop('Webhook',()=>deliverBatch(db,options)),loop('Conversation runs',()=>closeOpenRuns(db,options)),loop('Queued turns',()=>startQueuedTurns(db,options)),
  loop('Channel runs',()=>driveChannelRuns(db,options)),
  loop('Note runs',()=>driveNoteRuns(db,options)),
  hermes&&loop('Hermes',()=>keepCompanyProfiles(db,{hermes,encryptionKey:options.encryptionKey,waiting}),2000),
- hermes&&loop('Agent profiles',()=>keepAgentProfiles(db,{hermes}),2000),
+ hermes&&loop('Agent profiles',async()=>{ await keepAgentProfiles(db,{hermes}); await moveAgentProfiles(db,{hermes,waiting:moving,driver:engineFor(hermes)}); },2000),
  loop('Agent tools',()=>checkAgentTools(db,{encryptionKey:options.encryptionKey}),300000),
  loop('Reserved runs',()=>abandonConversationReservations(db),60000)]);
