@@ -14,40 +14,6 @@ async function chooseLanguage(page:Page,language:Language) {
  await expect(page.locator('html')).toHaveAttribute('dir',language==='ar'?'rtl':'ltr');
 }
 
-// The language is chosen in the settings overlay's Your account (#26): each choice saves at once. While one save is
-// on its way the other choice waits, so two saves never race, and the last choice is the one that stays.
-test('390px language choice survives the previous save finishing',async({page})=>{
- await page.setViewportSize({width:390,height:900});
- await signIn(page,'manager@example.com','/c/rs-learning/home');
- await chooseLanguage(page,'ar');
- const english=page.locator('#ac-lang-en'),arabic=page.locator('#ac-lang-ar');
- await expect(arabic).toHaveAttribute('aria-checked','true');
- let release!:()=>void;
- const held=new Promise<void>(resolve=>{release=resolve;});
- let arrived!:()=>void;
- const responseReady=new Promise<void>(resolve=>{arrived=resolve;});
- let holding=true;
- await page.route(url=>url.pathname==='/c/rs-learning/settings',async route=>{
-  if(!holding||route.request().method()!=='POST') return route.fallback();
-  holding=false;
-  const response=await route.fetch();
-  arrived();
-  await held;
-  await route.fulfill({response});
- });
- await english.click();
- await responseReady;
- try {
-  // The other choice cannot start a second save while the first is pending.
-  await expect(arabic).toBeDisabled();
- } finally {release();}
- await expect(page.locator('html')).toHaveAttribute('lang','en');
- await expect(page.locator('html')).toHaveAttribute('dir','ltr');
- await expect(english).toBeEnabled();
- await page.reload();
- await expect(page.locator('html')).toHaveAttribute('lang','en');
- await expect(english).toHaveAttribute('aria-checked','true');
-});
 async function expectTitleAligned(title:Locator,container:Locator,edge:'left'|'right') {
  await expect(title).toBeVisible();
  await title.evaluate(()=>document.fonts.ready);

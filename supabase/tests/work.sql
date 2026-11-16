@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(46);
+select plan(48);
 insert into public.companies(id,slug,name) values ('10000000-0000-0000-0000-000000000099','work-isolated','Test');
 insert into public.work_cards(company_id,stage_id,title) select company_id,id,'Private' from public.work_stages where company_id='10000000-0000-0000-0000-000000000099' and position=1;
 insert into public.work_creatives(company_id,card_id,name) select company_id,id,'Private' from public.work_cards where company_id='10000000-0000-0000-0000-000000000099';
@@ -56,5 +56,7 @@ select is((select go_live from public.work_cards where id=1),'2031-11-12 09:15:4
 select is((select count(*)::int from public.work_activity where card_id=1 and details->>'field'='go_live' and evidence='https://example.test/unchanged'),0,'unmodified date creates no activity');
 select lives_ok($$select public.edit_work_card('10000000-0000-0000-0000-000000000001',1,'{"go_live":"2031-11-12T09:16"}','https://example.test/changed')$$,'change displayed minute');
 select is((select count(*)::int from public.work_activity where card_id=1 and details->>'field'='go_live' and evidence='https://example.test/changed'),1,'changed date creates activity');
+select lives_ok($$select public.create_work_card('10000000-0000-0000-0000-000000000001',(select id from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' and name='أفكار'),'اختبار ريل','reel')$$,'a card is made from the reel template in Ideas');
+select is((select array_agg(title order by id) from public.work_checklist where card_id=(select id from public.work_cards where company_id='10000000-0000-0000-0000-000000000001' and title='اختبار ريل')),array['Script Ready','Caption Written','videographer','Video Edited','Review','Approved','ScheduledPublished'],'the reel template''s checklist starts at Script Ready');
 select * from finish();
 rollback;
