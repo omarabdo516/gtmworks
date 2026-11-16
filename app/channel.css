@@ -8,6 +8,8 @@
   border-radius: var(--gw-r-lg); box-shadow: var(--gw-border-2) 0 0 0 0.5px inset; text-align: center;
   font-size: var(--gw-fs-xs); line-height: 1.6; color: var(--gw-text-2);
 }
+/* As the reference draws it: its own width, whichever stylesheet a route loads last (shell.css: .transcript__col > *). */
+.gw .transcript__col > .ch-intro { max-width: 520px; }
 .gw .ch-intro__h { font-size: var(--gw-fs-base); font-weight: 600; color: var(--gw-text-1); }
 .gw .ch-intro p { margin: 0; display: inline-flex; align-items: flex-start; gap: 6px; text-align: start; color: var(--gw-text-2); }
 .gw .ch-intro p .gw-icon { width: 14px; height: 14px; flex: none; margin-top: 2px; color: var(--gw-text-3); }
