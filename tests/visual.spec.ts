@@ -14,6 +14,8 @@ import { appByKey, appConfig } from '../lib/app-catalogue.mjs';
 // This project runs first on the freshly seeded database (see playwright.config.ts). It leaves the data as the seed built it,
 // except the opened-card record that opening a card always makes, and it restores the owner's language.
 type Language = 'en' | 'ar';
+// TEMPORARY (#218 experiment, never merged): every group's screens in reversed order.
+const rev = <T,>(items: readonly T[]): T[] => [...items].reverse();
 const rsLearning = '10000000-0000-0000-0000-000000000001';
 const rsConsultations = '10000000-0000-0000-0000-000000000002';
 const seedAuthor = '30000000-0000-0000-0000-000000000001';
@@ -489,7 +491,7 @@ test.describe('anonymous screens', () => {
   });
   test.afterAll(async () => { await context.close(); });
 
-  for (const language of languages as Language[]) for (const width of widths) for (const screen of screens.filter(s => s.anonymous && s.name !== 'first-run')) {
+  for (const language of rev(languages as Language[])) for (const width of rev(widths)) for (const screen of rev(screens.filter(s => s.anonymous && s.name !== 'first-run'))) {
     test(`${screen.name} ${language} ${width}`, async () => {
       await page.emulateMedia({ colorScheme: screen.dark ? 'dark' : 'light' });
       await page.setViewportSize({ width, height: 900 });
@@ -551,7 +553,7 @@ test.describe('signed-in screens', () => {
     }
   });
 
-  for (const language of languages as Language[]) for (const width of widths) for (const screen of screens.filter(s => !s.anonymous)) {
+  for (const language of rev(languages as Language[])) for (const width of rev(widths)) for (const screen of rev(screens.filter(s => !s.anonymous))) {
     test(`${screen.name} ${language} ${width}`, async ({ browser }) => {
       const person = 'person' in screen && typeof screen.person === 'string' ? screen.person : null;
       if (!person && current !== language) {
@@ -674,7 +676,7 @@ test.describe('first-run screens', () => {
   test.beforeAll(({ baseURL }) => resetFirstRun(baseURL));
   test.afterAll(({ baseURL }) => resetFirstRun(baseURL, true));
   const screen = screens.find(screen => screen.name === 'first-run')!;
-  for (const language of languages) for (const width of widths) {
+  for (const language of rev(languages)) for (const width of rev(widths)) {
     test(`first-run ${language} ${width}`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 });
       // The form shows only through the installer's setup link (issue #50); the screen is the same.
