@@ -40,8 +40,8 @@
    item or text button gives only when it is a link or a button: a plain row opens nothing. */
 .gw :where(button:not([data-slot])) { transition: none; }
 .gw :is(.btn, .circle-btn, .chip, .agent-tile, .head-pill, .corner-pill, .composer__btn, .link-btn, .panel-row, .sb-item, .menu__item) {
-  transition-property: background-color, box-shadow, color, border-color, transform;
-  transition-duration: var(--gw-dur-fast); transition-timing-function: var(--gw-ease-out);
+  transition: background-color var(--gw-dur-fast) var(--gw-ease-out), box-shadow var(--gw-dur-fast) var(--gw-ease-out),
+    color var(--gw-dur-fast) var(--gw-ease-out), border-color var(--gw-dur-fast) var(--gw-ease-out), transform var(--gw-dur-fast) var(--gw-ease-out);
 }
 .gw :is(.btn, .circle-btn, .chip, .agent-tile, .head-pill, .corner-pill, .composer__btn):active:not(:disabled):not([aria-disabled="true"]) { transform: scale(0.96); }
 .gw :is(.panel-row, .sb-item, .menu__item, .link-btn):is(a, button):active:not(:disabled):not([aria-disabled="true"]) { transform: scale(0.985); }
