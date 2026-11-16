@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { agentStatus, agentTasks, latestActivity, agentLogFilter, pickTab, fileSize, agentFiles } from '../lib/agent-details.mjs';
+import { agentStatus, agentTasks, latestActivity, agentLogFilter, pickTab, fileSize, agentFiles, worksWith } from '../lib/agent-details.mjs';
 import { matchesFilters } from '../lib/activity-log.mjs';
 import { columnLabel, progressOf } from '../lib/board-columns.mjs';
 
@@ -95,4 +95,14 @@ test('an Agent\'s files are its Cards\' and the reader\'s own Conversations\' wi
   ['old.png', 'Meta Ads', '/c/rs-learning/files/conversation/4'],
  ]);
  assert.equal(new Set(files.map(file => file.key)).size, 3, 'a Card file and a Conversation file with the same number are two rows');
+});
+
+test('a new Agent works with you in a Company worked alone or when only its sole Owner sees it, else with the whole team', () => {
+ const owner = { person_id: 'omar', role: 'owner' }, sara = { person_id: 'sara', role: 'contributor' };
+ assert.equal(worksWith({ alone: true, me: 'sara', members: [owner, sara], access: ['sara'] }), 'you');
+ assert.equal(worksWith({ alone: false, me: 'omar', members: [owner, sara], access: [] }), 'you');
+ assert.equal(worksWith({ alone: false, me: 'omar', members: [owner, sara], access: ['sara'] }), 'team', 'another Member was given it');
+ assert.equal(worksWith({ alone: false, me: 'omar', members: [owner], access: ['gone'] }), 'you', 'a removed Member\'s row counts for nothing');
+ assert.equal(worksWith({ alone: false, me: 'omar', members: [owner, { person_id: 'mona', role: 'owner' }], access: [] }), 'team', 'every Owner sees every Agent');
+ assert.equal(worksWith({ alone: false, me: 'sara', members: [owner, sara], access: ['sara'] }), 'team', 'a Member is never alone with an Agent: the Owner sees it too');
 });

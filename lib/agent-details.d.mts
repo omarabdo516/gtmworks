@@ -8,3 +8,4 @@ export declare function pickTab(value: unknown): DetailsTab;
 export declare function fileSize(bytes: number): string;
 export type AgentFile = { key: string, name: string, size: number, at: string, href: string, source: string };
 export declare function agentFiles(files: { slug: string, cards: { id: number, title: string }[], cardFiles: { id: number, name: string, size: number, created_at: string, card_id: number }[], conversationFiles: { id: number, name: string, size: number, created_at: string, conversation_id: string, agent_name: string }[], titles: Map<string, string> }): AgentFile[];
+export declare function worksWith(facts: { alone: boolean, me: string, members: { person_id: string, role: string }[], access: string[] }): 'you' | 'team';

@@ -245,9 +245,9 @@ const screenStates: Record<string, { set: string, unset: string, admin?: true }>
     set: `insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values
        ('${made(1)}','${rsLearning}','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9/p/visual-lead','visual-made-lead','visual-no-key','unreachable'),
        ('${made(2)}','${rsLearning}','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9/p/visual-ads','visual-made-ads','visual-no-key','unreachable');
-      insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,created_at,requested_by,apps) values
-       ('${made(3)}','${rsLearning}','${made(1)}','Lead','General',true,null,null,null),
-       ('${made(4)}','${rsLearning}','${made(2)}','Meta Ads','Runs the Meta ads and asks before it publishes or spends.',false,'2026-06-10T09:01:00Z','20000000-0000-0000-0000-000000000001',array['Meta Ads Manager','Canva']);
+      insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,created_at,requested_by,apps,template) values
+       ('${made(3)}','${rsLearning}','${made(1)}','Lead','General',true,null,null,null,null),
+       ('${made(4)}','${rsLearning}','${made(2)}','Meta Ads','Runs the Meta ads and asks before it publishes or spends.',false,'2026-06-10T09:01:00Z','20000000-0000-0000-0000-000000000001',array['Meta Ads Manager','Canva'],'meta');
       insert into public.conversations(id,company_id,person_id,agent_id,agent_name,created_at) values ('${made(5)}','${rsLearning}','20000000-0000-0000-0000-000000000001','${made(3)}','Lead','2026-06-10T09:00:00Z');
       insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at) values
        ('${rsLearning}','${made(5)}','person','20000000-0000-0000-0000-000000000001',null,'Omar','I want someone to handle our Meta ads','${made(6)}','visual-made','2026-06-10T09:00:00Z'),
