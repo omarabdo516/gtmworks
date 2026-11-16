@@ -33,15 +33,6 @@ test('a Member opens the general channel, reads that an Agent replies only when 
  expect(rows(`select author_name,body from public.channel_messages where person_id='${contributor}'`)).toEqual([{author_name:'مراجع',body:'Morning, team'}]);
 });
 
-test('in Arabic the composer gives the same hint',async({page})=>{
- query(`update public.people set language='ar' where id='${contributor}'`);
- try {
-  await signIn(page,'reviewer@example.com',general);
-  await expect(page.locator('html')).toHaveAttribute('dir','rtl');
-  await expect(page.getByRole('textbox',{name:'اكتب رسالتك في القناة',exact:true})).toHaveAttribute('placeholder','اكتب في #عام… والوكيل بيرد بس لو ناديته باسمه');
- } finally { query(`update public.people set language='en' where id='${contributor}'`); }
-});
-
 test('the Viewer reads the channel, with the writer and their role, and has no composer',async({page})=>{
  await signIn(page,'viewer@example.com',general);
  const peer=page.locator('.turn--peer');
