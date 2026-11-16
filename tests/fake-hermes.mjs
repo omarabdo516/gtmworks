@@ -30,6 +30,8 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
   catalog:['klaviyo','canva','notion','airtable','webflow','wordpress-com','amplitude','mixpanel','attio','close','calendly','figma','gamma','intercom'],
   appTools:/** @type {Record<string,string[]>} */({}),appsUnreachable:/** @type {Set<string>} */(new Set()),appTokens:/** @type {Set<string>} */(new Set()),approveApps:true,
   appFlows:/** @type {Map<string,{server:string,profile:string,status:string,state:string,redirect:string}>} */(new Map()),appCallbacks:/** @type {string[]} */([]),
+  // Each profile's own Skills by name (their SKILL.md text), and the Skills each profile locked, as `profile:name`.
+  skills:/** @type {Map<string,Map<string,string>>} */(new Map()),skillLocks:/** @type {Set<string>} */(new Set()),
   approve(session) { const found=settings.signInSessions.get(session); if(!found) return; found.status='approved'; credentialsOf(found.profile)[found.provider]=`codex-token-${randomUUID()}`; }};
  const profileOf=name=>name==='default'?{config:settings.defaultConfig,credentials:settings.defaultCredentials}:settings.profiles.get(name);
  const credentialsOf=name=>profileOf(name)?.credentials||{};
@@ -135,6 +137,28 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
     if(!settings.staleConfig) home.config=merge(home.config,body.config);
     if(scoped==='default') settings.defaultConfig=home.config;
     return send(response,200,{ok:true});
+   }
+   // Skills (hermes_cli/web_routers/skills.py): a profile sees its own and those of each folder its
+   // skills.external_dirs names (a profile's folder is its home's `skills`), and keeps its own locks.
+   const skillsPath=url.pathname.match(/^\/api\/skills(?:\/(content|lock))?$/);
+   if(skillsPath) {
+    if(!home) return send(response,404,{detail:`Profile '${scoped}' does not exist.`});
+    const owners=[scoped,...(home.config?.skills?.external_dirs||[]).map(folder=>/^\/opt\/data\/profiles\/([^/]+)\/skills$/.exec(folder)?.[1]).filter(owner=>settings.profiles.has(owner))];
+    const listed=owners.flatMap((owner,at)=>[...(settings.skills.get(owner)||new Map()).keys()].map(name=>({name,owner,provenance:at?'external':'agent'})));
+    const name=skillsPath[1]==='content'&&request.method==='GET'?url.searchParams.get('name'):body?.name;
+    const found=listed.find(skill=>skill.name===name);
+    const missing=()=>send(response,404,{detail:`Skill '${name}' not found.`});
+    if(!skillsPath[1]&&request.method==='GET') return send(response,200,listed.map(skill=>({name:skill.name,description:'',category:null,locked:settings.skillLocks.has(`${scoped}:${skill.name}`),enabled:true,usage:0,provenance:skill.provenance})));
+    if(!skillsPath[1]&&request.method==='POST') {
+     if(found) return send(response,400,{detail:`A skill named '${name}' already exists.`});
+     if(!settings.skills.has(scoped)) settings.skills.set(scoped,new Map());
+     settings.skills.get(scoped).set(name,body.content);
+     return send(response,200,{success:true,message:`Skill '${name}' created.`});
+    }
+    if(!found) return missing();
+    if(skillsPath[1]==='content'&&request.method==='GET') return send(response,200,{name,content:settings.skills.get(found.owner).get(name),path:`/opt/data/profiles/${found.owner}/skills/${name}/SKILL.md`});
+    if(skillsPath[1]==='content'&&request.method==='PUT') { settings.skills.get(found.owner).set(name,body.content); return send(response,200,{success:true,message:`Skill '${name}' updated.`}); }
+    if(skillsPath[1]==='lock'&&request.method==='PUT') { settings.skillLocks[body.locked?'add':'delete'](`${scoped}:${name}`); return send(response,200,{ok:true,name,locked:body.locked}); }
    }
    // The model providers a profile is signed in to (hermes_cli/web_routers/models.py, get_model_options): a profile with
    // no credential of its own uses the root profile's, and its current provider without one is listed unauthenticated.

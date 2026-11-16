@@ -316,6 +316,10 @@ test('the install job proves profiles per company on the pinned release, after t
  // #121: an Agent made on the company profile as the previous version made one moves out, and the memory stays with the main Agent.
  assert.match(script,/service\.rpc\('lead_create_agent',\{conversation:first\.conversation,run,call:'install-check',agent_name:'Install writer',job:'Writes the install check\.',apps:\[\]\}\)/);
  assert.match(script,/assert\.deepEqual\(after,\[true,false\]\)/);
+ // #122: the Owner approves a Contributor's suggestion; it reaches the first company's Agents only, locked against their edits.
+ assert.match(script,/person\.rpc\('decide_agent_rule',\{c:first\.company,item:item\.id,approve:true\}\)/);
+ assert.match(script,/assert\.deepEqual\(lessons,\[true,true,false\]\)/);
+ assert.match(script,/assert\.equal\(await skill\(spaceOf\(first\)\),written,'team-lessons is unchanged'\)/);
 });
 
 // The person's session and the service role, as sendMessage sees them; every call is recorded in order.
