@@ -110,6 +110,10 @@ test('integration: a note that calls an Agent starts one Run on the fake engine,
   const drive=()=>driveNoteRuns(service,{encryptionKey,engineFor:fake.engineFor,message:note});
   await Promise.all([drive(),drive()]);
   expect(fake.runs.map(run=>({key:run.key,input:run.input}))).toEqual([{key:`note:${note}`,input:'مدير: @Faye draft the teaser'}]);
+  // The writer keeps the Card open while Faye works; her reply shows there without a reload.
+  await signIn(page,'manager@example.com','/c/rs-learning/work/board/4');
+  const under=page.locator(`#note-${note} + li`);
+  await expect(under).toContainText('is working on it');
   const reads=await Promise.all([drive(),drive()]);
   expect(reads[0].closed+reads[1].closed).toBe(1);
   expect(await drive()).toEqual({started:0,closed:0});
@@ -117,11 +121,9 @@ test('integration: a note that calls an Agent starts one Run on the fake engine,
   const reply=`Reply ${stamp} to: مدير: @Faye draft the teaser`;
   expect(rows(`select actor_name,action,body,details->>'reply_to' reply_to from public.company_log where source='note_runs' and source_id=${note}`)).toEqual([{actor_name:'Faye',action:'note_reply',body:reply,reply_to:String(note)}]);
 
-  await signIn(page,'manager@example.com','/c/rs-learning/work/board/4');
-  const under=page.locator(`#note-${note} + li`);
   await expect(under).toHaveAttribute('data-author','agent');
   await expect(under).toContainText('Faye');
-  await expect(under).toContainText('replied in the log');
+  await expect(under).toContainText('replied in the log',{timeout:15000});
   await expect(under.locator('.comment-body')).toHaveText(reply);
   await page.goto('/c/rs-learning/log?card=4');
   const replyRow=page.locator('.lgp-body .lg-row').filter({hasText:reply});

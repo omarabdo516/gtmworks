@@ -65,6 +65,9 @@ export default function Work(p:WorkProps) { const {t,locale,language}=useI18n();
  // After a move the card is drawn again in its new column; the keyboard stays on it.
  useEffect(()=>{ const {id,column}=focusCard.current; if(!id) return; const link=document.querySelector<HTMLElement>(`#board-cols [data-column="${column}"] .kcard[data-card-id="${id}"] a`); if(link) { link.focus({preventScroll:true}); link.scrollIntoView({block:'nearest',inline:'nearest'}); focusCard.current={id:0,column:''}; } });
  // The Inbox opens the board on "Waiting on you".
+ // While an Agent called in a note is still working, the Card reads itself again so its reply shows when it lands (#22).
+ const agentWorking=!!p.notes?.runs.some(run=>!run.outcome);
+ useEffect(()=>{ if(!agentWorking) return; const timer=setInterval(()=>router.refresh(),3000); return ()=>clearInterval(timer); },[agentWorking,router]);
  useEffect(()=>{ if(p.focus==='waiting') document.querySelector('#board-cols > [data-column="waiting"]')?.scrollIntoView({block:'nearest',inline:'nearest'}); },[p.focus]);
  const move=(id:number,to:string)=>{
   const c=p.cards.find(x=>x.id===id); if(!c||!p.canCreate) return;
