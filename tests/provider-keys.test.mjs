@@ -242,6 +242,7 @@ test('only an active Owner sets or removes a key, checked on the server; every m
   const owner=sessions(fake,{owner:true});
   assert.deepEqual(await change(owner,fake,{provider:'Open Router',intent:'set',value:known}),{status:400,body:{error:'keyInvalid'}});
   assert.deepEqual(await change(owner,fake,{intent:'reveal'}),{status:400,body:{error:'keyInvalid'}});
+  assert.deepEqual(await change(owner,fake,{intent:['set'],value:known}),{status:400,body:{error:'keyInvalid'}},'an intent that is no string removes nothing');
   assert.deepEqual(await change(owner,fake,{intent:'set'}),{status:400,body:{error:'keyInvalid'}});
   assert.deepEqual(await change(owner,fake,{intent:'set',value:'short'}),{status:400,body:{error:'keyInvalid'}});
   assert.deepEqual(await change(owner,fake,{provider:'gemini',intent:'set',value:known}),{status:400,body:{error:'keyProviderUnknown'}});
@@ -259,6 +260,7 @@ test('no key reaches an answer, a log line or a database call, when the Engine t
   madeCompany(fake,one);
   const owner=sessions(fake,{owner:true,logFails:true});
   const answers=[await change(owner,fake,{intent:'set',value:known}),await read(owner,fake)];
+  assert.equal(answers[0].body.logged,false,'a change the log did not take says so');
   fake.settings.key='another-install-key';
   answers.push(await change(owner,fake,{intent:'set',value:known}),await read(owner,fake));
   fake.settings.key='test-only-key'; fake.settings.envHang.add(one.space);
