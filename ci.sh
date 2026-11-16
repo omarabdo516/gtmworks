@@ -5,6 +5,10 @@ cd "$(dirname "$0")"
 # every other check uses. Each lane starts in the background and leaves its exit status beside its log.
 lanes=${GTMWORKS_TEST_LANES:-1}
 [[ $lanes =~ ^[1-7]$ ]] || { echo 'GTMWORKS_TEST_LANES must be 1 to 7' >&2; exit 2; }
+# The self-hosted runner has no sudo for the system packages and keeps its browsers between runs.
+install_chromium() {
+  if [[ "${RUNNER_ENVIRONMENT:-}" == self-hosted ]]; then npx playwright install chromium; else npx playwright install --with-deps chromium; fi
+}
 start_lanes() {
   mkdir -p playwright-report
   for ((n = 0; n < lanes; n++)); do
@@ -75,7 +79,7 @@ PY
   if [[ "${CI:-}" == "true" ]]; then
     npm ci
   fi
-  npx playwright install --with-deps chromium
+  install_chromium
   npm run test:components -- ${SHARD:+--shard="$SHARD"}
   ;;
  database)
@@ -92,7 +96,7 @@ PY
  integration)
   if [[ "${CI:-}" == "true" ]]; then
     npm ci
-    npx playwright install --with-deps chromium
+    install_chromium
   fi
   start_lanes
   wait_lanes
@@ -113,7 +117,7 @@ PY
   # The compared screens alone, on lane 0 as the seed builds it: no journeys, no proxy suite, no image (#213).
   if [[ "${CI:-}" == "true" ]]; then
     npm ci
-    npx playwright install --with-deps chromium
+    install_chromium
   fi
   bash scripts/local-db.sh
   GTMWORKS_TEST_LANES=1 npm run test:visual
@@ -122,7 +126,7 @@ PY
   # Rewrites only the approved screen images that changed. Run it where CI runs: the images are made for that system.
   if [[ "${CI:-}" == "true" ]]; then
     npm ci
-    npx playwright install --with-deps chromium
+    install_chromium
   fi
   bash scripts/local-db.sh
   npm run test:visual:update

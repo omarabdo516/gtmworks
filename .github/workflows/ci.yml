@@ -7,6 +7,12 @@
 # run starts the browser and install suites only through inputs that default to off. Required `check`
 # (scripts/ci-verdict.mjs) counts a suite nobody asked for as passed when it was skipped, and is red on any failed or
 # cancelled stage.
+# `database`, `integration` and `install` run on the runner the repo variable CI_RUNNER names (#224): Omar's PC (`pc-ci`)
+# while ci-router keeps it there, else ubuntu-latest. A pull request from a fork runs them on ubuntu-latest, where every
+# other job runs. The stack's ports lie in Linux's range for outgoing connections, so on a GitHub-hosted runner a job
+# reserves them before it starts the stack (#225). The PC shares its Docker with other repositories' CI: there the
+# stack's ports move to a block of their own above that range, a job removes what this repository's runs start before
+# and after it (scripts/ci-runner.mjs), and ~/.npm, the browsers and the image layers stay on the machine.
 name: CI
 
 on:
@@ -124,41 +130,66 @@ jobs:
   database:
     needs: [changes]
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.database != 'false') }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 20
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      - name: reserve the stack's ports
+        if: ${{ runner.environment == 'github-hosted' }}
+        run: |
+          sudo sysctl -w net.ipv4.ip_local_reserved_ports="$(node scripts/ci-runner.mjs reserved-ports)"
+          sysctl net.ipv4.ip_local_reserved_ports
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
+          cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
+      - name: clear an earlier run and move the stack's ports
+        if: ${{ runner.environment == 'self-hosted' }}
+        run: |
+          node scripts/ci-runner.mjs cleanup
+          node scripts/ci-runner.mjs move-ports 640
       - name: database
         run: ./ci.sh database
+      - name: remove what this run started
+        if: ${{ always() }}
+        run: node scripts/ci-runner.mjs cleanup
 
   # The whole-app browser suite: the production-shaped proxy suite in the image, the compared screens and the journeys.
   # When `changes` says `visual` (screens alone, #213), only the compared screens run, with no image.
   integration:
     needs: [changes]
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.integration != 'false') }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.CI_RUNNER || 'ubuntu-latest' }}
     # main's browser suite already took 24 of 25 minutes (run 43398274074); the board, settings, log and numbers specs
     # add to it.
     timeout-minutes: 40
     permissions:
       contents: read
-    env:
-      # One browser test lane per worker, each on a whole stack of its own (tests/lane.mjs, #69).
-      GTMWORKS_TEST_LANES: "4"
     steps:
       - uses: actions/checkout@v4
+      - name: reserve the stack's ports
+        if: ${{ runner.environment == 'github-hosted' }}
+        run: |
+          sudo sysctl -w net.ipv4.ip_local_reserved_ports="$(node scripts/ci-runner.mjs reserved-ports)"
+          sysctl net.ipv4.ip_local_reserved_ports
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
+          cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
+      - name: clear an earlier run and move the stack's ports
+        if: ${{ runner.environment == 'self-hosted' }}
+        run: |
+          node scripts/ci-runner.mjs cleanup
+          node scripts/ci-runner.mjs move-ports 640
+      # One browser test lane per worker, each on a whole stack of its own (tests/lane.mjs, #69): four on a GitHub-hosted
+      # runner, and on the PC as many as its CPUs and free memory carry.
+      - name: choose the browser test lanes
+        run: node scripts/ci-runner.mjs lanes "$RUNNER_ENVIRONMENT" >> "$GITHUB_ENV"
+      # On the PC the image builds on its own Docker, whose layer cache stays between runs.
       - uses: docker/setup-buildx-action@v3
-        if: ${{ needs.changes.outputs.integration != 'visual' }}
+        if: ${{ runner.environment == 'github-hosted' && needs.changes.outputs.integration != 'visual' }}
       - name: build image (layer cache)
         if: ${{ needs.changes.outputs.integration != 'visual' }}
         uses: docker/build-push-action@v6
@@ -167,8 +198,8 @@ jobs:
           load: true
           push: false
           tags: gtmworks:ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: ${{ runner.environment == 'github-hosted' && 'type=gha' || '' }}
+          cache-to: ${{ runner.environment == 'github-hosted' && 'type=gha,mode=max' || '' }}
       - name: integration
         env:
           CI_IMAGE_PREBUILT: "true"
@@ -191,11 +222,14 @@ jobs:
           path: playwright-report/html/
           if-no-files-found: ignore
           retention-days: 30
+      - name: remove what this run started
+        if: ${{ always() }}
+        run: node scripts/ci-runner.mjs cleanup
 
   install:
     needs: [changes]
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.install != 'false') }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.CI_RUNNER || 'ubuntu-latest' }}
     # The release install and update below add a fresh stack and an update to the source install checks, and the one-line
     # install adds another, an update, a failed update and a return to an older release from a backup.
     timeout-minutes: 60
@@ -204,20 +238,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # One isolated Docker machine for both install steps below: the release step reuses the source install's image.
-      # The last step removes it, also after a failure.
+      # The last step removes it, also after a failure. On the PC its images and build cache stay in a volume between
+      # runs, and what an earlier run left running inside it is removed first.
       - name: start the isolated Docker machine
         run: |
+          kept=()
+          if [[ $RUNNER_ENVIRONMENT == self-hosted ]]; then
+            docker rm -f install-docker > /dev/null 2>&1 || true
+            kept=(-v gtmworks-install-docker:/var/lib/docker)
+          fi
           docker run -d --privileged --name install-docker \
             -e DOCKER_TLS_CERTDIR= -p 127.0.0.1:2375:2375 \
-            -v "$PWD:$PWD" docker:28.5.1-dind
+            -v "$PWD:$PWD" "${kept[@]}" docker:28.5.1-dind
           for attempt in $(seq 1 60); do docker --host tcp://127.0.0.1:2375 info >/dev/null 2>&1 && break; sleep 1; done
           docker --host tcp://127.0.0.1:2375 info >/dev/null || { echo 'install check failed: DinD readiness' >&2; exit 1; }
+          if [[ $RUNNER_ENVIRONMENT == self-hosted ]]; then
+            inner() { docker --host tcp://127.0.0.1:2375 "$@"; }
+            containers=$(inner container ls --all --quiet)
+            if [[ -n $containers ]]; then inner container rm --force --volumes $containers > /dev/null; fi
+            volumes=$(inner volume ls --quiet)
+            if [[ -n $volumes ]]; then inner volume rm --force $volumes > /dev/null; fi
+            inner network prune --force > /dev/null
+          fi
       # Only the browser check of the sign-in rate limit uses these, inside the Playwright image; the install itself is
       # Docker only. No install scripts: the image already has the browsers.
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
+          cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
       - name: test packages for the install browser check
         run: npm ci --ignore-scripts
       - name: isolated Docker-only install, repeat and verify

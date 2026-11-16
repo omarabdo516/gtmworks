@@ -56,7 +56,12 @@ test('the public tree deploys nothing of ours', () => {
  const workflows = [...texts.keys()].filter(path => path.startsWith('.github/workflows/'));
  assert.ok(workflows.includes('.github/workflows/ci.yml'), 'the scan sees the workflows');
  const inWorkflows = path => path.startsWith('.github/workflows/');
- assert.deepEqual(offenders(new RegExp(piece('self-', 'hosted')), inWorkflows), [], 'self-hosted runner');
+ // A self-hosted machine is reached only through CI_RUNNER, behind the fork guard (#224, tests/ci-runners.test.mjs).
+ for (const path of workflows) {
+  for (const [name, job] of Object.entries(load(texts.get(path)).jobs ?? {})) {
+   assert.equal(JSON.stringify(job['runs-on'] ?? '').includes(piece('self-', 'hosted')), false, `${path} ${name} names a self-hosted runner`);
+  }
+ }
  assert.deepEqual(offenders(new RegExp(piece('\\benvironment', ':')), inWorkflows), [], 'deployment environment');
  assert.deepEqual(offenders(new RegExp(piece('\\bsecrets', '\\.(?!GITHUB_TOKEN\\b)')), inWorkflows), [], 'secret other than GITHUB_TOKEN');
  const ci = load(texts.get('.github/workflows/ci.yml'));
