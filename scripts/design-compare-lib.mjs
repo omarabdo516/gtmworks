@@ -73,6 +73,9 @@ export const screens = {
   'ready-roles': { reference: { steps: [{ click: '#sb-agents [data-action="new-agent"]' }, { waitFor: '.new-hint' }, { click: '[data-action="open-gallery-alt"]' }, { waitFor: '#modal[open] .tpl' }] }, builtPath: '/c/rs-learning/chat?new=ready' },
   // The Conversation in which Lead made Ads, with its card. Built: the fixture's madeConversation (pass --built-path).
   'made-card': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-made-ads"]' }, { waitFor: '.ac-card' }] }, builtPath: null },
+  // #136. The Meta campaign chat (th-meta) after the first angle is chosen: Ads's reply with the campaign plan's draft card under it. Built: the
+  // draft-shown visual state's Conversation (pass --built-path).
+  'draft-card': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-meta"]' }, { click: '.opt[data-action="choose"]' }, { waitFor: '.card--draft' }] }, builtPath: null },
   // #18. The Conversation in which Omar told Ads a lasting rule, with the saved line under Ads's reply. Built: the
   // fixture's ruleConversation (pass --built-path).
   'rule-saved': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-rule-ads"]' }, { waitFor: '.note--saved' }] }, builtPath: null },

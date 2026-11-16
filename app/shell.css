@@ -546,8 +546,26 @@
 .gw .born__link { display: inline-flex; align-items: center; padding: 2px 6px; margin-inline-start: -6px; border-radius: var(--gw-r-xs); font-size: var(--gw-fs-xs); font-weight: 600; color: var(--gw-text-1); }
 @media (hover: hover) { .gw .born__link:hover { background: var(--gw-bg-hover); } }
 
+/* A card an Agent's reply carries (#136; design-reference: .card, .card__head, .card__sub, .kv, .card--draft,
+   .tool-tile--ink, .card-in): one frame for every kind, after the reply's words. Named reply-card, since .card is the
+   board's (app/globals.css). A draft with no rows keeps the frame's inner space under its head. */
+.gw .reply-card { width: 100%; max-width: 100%; display: flex; flex-direction: column; overflow: clip; background: var(--gw-bg-pane); border-radius: var(--gw-r-card); box-shadow: var(--gw-shadow-card); }
+.gw .reply-card.card-in { animation: gw-rise var(--gw-dur-slow) var(--gw-ease-out); }
+.gw .turn > .bubble + .reply-card { margin-top: 4px; }
+.gw .reply-card .card__head { display: flex; align-items: flex-start; gap: 10px; padding: 16px 16px 4px; }
+.gw .reply-card .card__head:last-child { padding-bottom: 16px; }
+.gw .reply-card .card__sub { font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-2); }
+.gw .reply-card .kv { margin: 12px 16px 0; padding: 2px 0; border-top: 1px solid var(--gw-border-3); border-bottom: 1px solid var(--gw-border-3); }
+.gw .reply-card .kv__row { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 12px; padding: 8px 0; font-size: var(--gw-fs-sm); line-height: 1.6; }
+.gw .reply-card .kv__row + .kv__row { border-top: 1px solid var(--gw-border-3); }
+.gw .reply-card dt { color: var(--gw-text-2); }
+.gw .reply-card dd { margin: 0; color: var(--gw-text-1); overflow-wrap: anywhere; }
+.gw .reply-card--draft .kv { margin-bottom: 16px; }
+.gw .tool-tile--ink { background: var(--gw-primary); color: var(--gw-on-primary); box-shadow: none; }
+.gw .tool-tile--ink .gw-icon { width: 22px; height: 22px; }
+
 /* Authored text inside the English interface takes its direction from its own words. */
-[dir="ltr"] .gw :is(.head-pill__title, .thread-item .od-truncate) { unicode-bidi: plaintext; text-align: left; }
+[dir="ltr"] .gw :is(.head-pill__title, .thread-item .od-truncate, .reply-card .card__title, .reply-card .card__sub, .reply-card .kv__row dd) { unicode-bidi: plaintext; text-align: left; }
 [dir="ltr"] .gw :is(.dp-id__name, .empty-chat h2, .new-hint__t, .born span, .ac-never span, .modal__sub, .tpl__line, .tpl__hand span) { unicode-bidi: plaintext; }
 
 /* ---------- the reference's widths: a narrower sidebar and details below 1280px, the details over the chat below 1024px ---------- */
