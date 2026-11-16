@@ -42,7 +42,7 @@
 .gw :is(.log-page, .numbers-page, .sheet) .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; min-height: 0; padding: 0 var(--s4);
   border: 0; border-radius: var(--gw-r-full); font-size: var(--gw-fs-base); font-weight: 600; white-space: nowrap; text-decoration: none;
-  transition: background-color var(--gw-dur-fast) var(--gw-ease-out); --od-icon-size: 16px;
+  --od-icon-size: 16px;
 }
 .gw :is(.log-page, .numbers-page, .sheet) .btn--secondary { background: var(--p-btn-secondary-bg); color: var(--gw-text-1); box-shadow: var(--p-btn-secondary-ring) 0 0 0 1px inset; }
 .gw :is(.log-page, .numbers-page, .sheet) .btn--sm { height: 30px; padding: 0 var(--s3); font-size: var(--gw-fs-sm); }
