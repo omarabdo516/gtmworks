@@ -27,14 +27,14 @@ const suites = {
     // The whole-app browser suite: the proxy suite, the image, the compared screens and the journeys (functional,
     // measured, first run). Its own area: the specs and their helpers, the Playwright configs, the stacks they run on
     // (every lane is built from the migrations, the stack configuration and the local default privileges), the first-run
-    // reset helpers the specs import, the image the job builds and the proxy suite runs in, the seed, public/ (a browser
-    // test reads every file there), and the code the journeys drive with no component test: server code under app/
+    // reset helpers the specs import, the image the job builds and the proxy suite runs in, the seed, public/ (the app
+    // serves every file there), and the code the journeys drive with no component test: server code under app/
     // (route handlers and server actions, where the server checks permissions), lib/ outside the catalogues, the worker
     // and the root files the build and server read.
     true: [
       /^app\/.+\.ts$/, /^lib\/(?!messages\/)/, /^worker\//, /^(middleware|instrumentation)\.ts$/, /^(next|postcss)\.config\.mjs$/,
       /^server\.js$/, /^tests\/(.+\/)?[^/]+\.spec\.ts$/, /^tests\/[^/]+\.ts$/,
-      /^tests\/(visual-screens|lane|fake-hermes|fake-engine|touch-diagnostics)\.mjs$/,
+      /^tests\/(visual-screens|lane|fake-hermes|fake-engine)\.mjs$/,
       /^playwright(\.proxy)?\.config\.ts$/, /^Dockerfile$/, /^\.dockerignore$/,
       /^scripts\/(web\.sh|local-db\.sh|proxy-stack\.sh|ci-image\.sh|first-run-db\.mjs|local-default-privileges\.sql)$/,
       /^supabase\/(migrations\/|config\.toml$|seed\.sql$)/, /^public\//,

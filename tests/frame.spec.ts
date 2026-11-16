@@ -74,6 +74,12 @@ for(const width of [1440,390]) test(`company frame order, placeholders, LTR and 
    await expect(crumbs.nth(1).locator('a'),path).toHaveAttribute('href','/c/rs-learning/settings');
   } else await expect(page.locator('.topbar'),path).toHaveText(i18n().t(sections[path]));
  }
+ await page.goto('/c/rs-learning/work/board/1');
+ const cardCrumbs=page.locator('.topbar [data-slot="breadcrumb"] li:not([role="presentation"])');
+ await expect(cardCrumbs).toHaveCount(2);
+ await expect(cardCrumbs.first()).toHaveText(i18n().t('work'));
+ await expect(cardCrumbs.first().locator('a')).toHaveAttribute('href','/c/rs-learning/work/board');
+ await expect(cardCrumbs.last()).not.toHaveText('');
  // Sections without a sidebar entry still open, by their address, inside the same shell.
  const placeholders=[['recurring',"No routines yet"],['skills',"No skills yet"],['connections',"No connections yet"],['search',"Search is not available yet"],['history',"No activity log yet"]];
  for(const [path,text] of placeholders) {

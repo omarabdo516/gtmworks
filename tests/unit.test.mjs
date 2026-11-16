@@ -327,6 +327,16 @@ test('the retired palette and display font are absent from shipped UI and design
  }
 });
 
+// Every face is bundled by next/font and served from /_next/static/media (app.spec.ts checks the requests).
+test('public contains no font files, including renamed font binaries', () => {
+ const files=existsSync('public')?readdirSync('public',{recursive:true,withFileTypes:true}).filter(entry=>entry.isFile()).map(entry=>`${entry.parentPath}/${entry.name}`):[];
+ for(const file of files) {
+  assert.doesNotMatch(file,/\.(?:otf|ttf|woff2?|eot|ttc)$/i);
+  const head=readFileSync(file).subarray(0,4);
+  assert.ok(!['OTTO','wOFF','wOF2','ttcf','true','typ1'].includes(head.toString('ascii'))&&!head.equals(Buffer.from([0,1,0,0])),`${file} is a font`);
+ }
+});
+
 test('a work date with hour and minute shows the same instant in the zone asked for, and in the viewer zone when none is given', async () => {
  const {workDate}=await import('../lib/work-date.mjs');
  const instant='2026-11-09T04:59:00Z', time={hour:'2-digit',minute:'2-digit'};
