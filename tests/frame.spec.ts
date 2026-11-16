@@ -6,6 +6,8 @@ import { idle } from './navigation-measure';
 import { i18n } from '../lib/i18n.mjs';
 import { sections } from '../lib/navigation';
 import { appOrigin } from './lane.mjs';
+import { motionTable } from './motion-table.mjs';
+import { computedMotion, referenceComputed, type ComputedStyle } from './motion-css.mjs';
 
 const quote=(sql:string|number)=>`'${String(sql).replaceAll("'","''")}'`;
 
@@ -15,6 +17,54 @@ async function navLabels(page:import('@playwright/test').Page) {
  await openNavigation(page);
  return page.locator('.sidebar .sb-nav .sb-item').allInnerTexts();
 }
+
+// Every button under the shell either moves as the reference's part its table row names (tests/motion-table.mjs) or
+// swaps at once; none takes app/globals.css's 160ms fade (#128). The board's own view tabs, which the reference does not
+// have, are the one exception.
+test('every button on the Conversation, the board and the settings overlay moves as its reference part or swaps at once',async({page})=>{
+ await page.setViewportSize({width:1440,height:900});
+ const rows=[...new Map(motionTable.map(row=>[row.built,row.ref])).entries()];
+ const sweep=async(where:string)=>{
+  await idle(page);
+  const buttons=await page.locator('.gw').first().evaluate((_,rows)=>[...document.querySelectorAll('.gw :is(button, .button)')].filter(button=>!button.matches('.work-toolbar .tabs .button')).map(button=>{
+   const style=getComputedStyle(button);
+   return {
+    button:`${button.tagName.toLowerCase()}.${String(button.className).trim().replaceAll(/\s+/g,'.')}[${button.getAttribute('aria-label')??button.textContent?.trim().slice(0,24)}]`,
+    refs:[...new Set(rows.filter(([built])=>button.matches(built)).map(([,ref])=>ref))],
+    style:{transitionProperty:style.transitionProperty,transitionDuration:style.transitionDuration,transitionDelay:style.transitionDelay,transitionTimingFunction:style.transitionTimingFunction,animationName:style.animationName,animationDuration:style.animationDuration,animationTimingFunction:style.animationTimingFunction} satisfies ComputedStyle,
+   };
+  }),rows);
+  expect(buttons.length,`${where} has buttons`).toBeGreaterThan(0);
+  for(const {button,refs,style} of buttons) {
+   if(refs.length) for(const ref of refs) expect.soft(computedMotion(style),`${where}: ${button} moves as the reference's ${ref}`).toEqual(referenceComputed(ref,1440));
+   else expect.soft(style.transitionDuration,`${where}: ${button} has no row and swaps at once`).toMatch(/^0s(, 0s)*$/);
+  }
+ };
+ // The seed attaches no Agent, so the Conversation would show no head pill, composer or details: RS Learning gets a Lead
+ // on an Engine nobody answers at, which draws them all, and loses it again after.
+ const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
+ const [company,omar,connection,lead]=['10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001',randomUUID(),randomUUID()];
+ query(`do $$ begin
+  insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values (${quote(connection)},${quote(company)},${quote(omar)},'http://127.0.0.1:9/p/sweep-lead','sweep-lead','no-key','unreachable');
+  insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values (${quote(lead)},${quote(company)},${quote(connection)},'Lead','General',true);
+ end $$;`);
+ try {
+  await signIn(page,'omar@example.com','/c/rs-learning/chat');
+  await expect(page.locator('#btn-details')).toHaveAttribute('aria-expanded','true');
+  await expect(page.locator('.details .dp-tabs')).toBeVisible();
+  await page.locator('.sidebar #btn-me').click();
+  await expect(page.getByRole('menu')).toBeVisible();
+  await sweep('the Conversation');
+  await page.goto('/c/rs-learning/work/board');
+  await expect(page.locator('.board-view')).toBeVisible();
+  await sweep('the board');
+  await page.goto('/c/rs-learning/settings');
+  await expect(page.locator('.sov')).toBeVisible();
+  await sweep('the settings overlay');
+ } finally {
+  query(`do $$ begin delete from public.hermes_agents where id=${quote(lead)}; delete from public.hermes_connections where id=${quote(connection)}; end $$;`);
+ }
+});
 
 // The sections the reference has no page for yet open by their address and say so, and a settings page's trail leads
 // back to Settings. The rest of each address's shell is checked by the Viewer's walk below and by language.spec.ts.
