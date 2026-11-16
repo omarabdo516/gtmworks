@@ -32,7 +32,8 @@ export default function ChannelView({person,initial}:{person:string,initial:Chan
   } catch {}
  },[channel.company,channel.id]);
  // Opening the channel is reading it; the page's own render never marks it, since a render can be one nobody saw.
- useEffect(()=>{ void fetch(`/api/channels?company=${channel.company}&channel=${channel.id}`,{cache:'no-store'}).catch(()=>{}); },[channel.company,channel.id]);
+ // The answer is read to its end: a response left unread keeps its request open, and the page never settles.
+ useEffect(()=>{ void fetch(`/api/channels?company=${channel.company}&channel=${channel.id}`,{cache:'no-store'}).then(response=>response.arrayBuffer()).catch(()=>{}); },[channel.company,channel.id]);
  useEffect(()=>{
   let stopped=false; let timer:ReturnType<typeof setTimeout>|undefined;
   const poll=async()=>{
