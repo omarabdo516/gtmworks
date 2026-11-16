@@ -13,8 +13,8 @@ import AgentChat from './agent-chat';
 // Opening an Agent: its empty Conversation (design-reference: emptyChatHTML). Without an id it is the main Agent, Lead.
 // The first message starts the Conversation and the page moves to it. "New agent" opens it as ?new=agent (#13): for
 // the Owner, Lead's chat ready to type, with a hint line; no form. "Ask for an agent" opens the same for a Manager or a
-// Contributor (#17), whose hint names the Owners Lead sends the request to. ?new=ready opens the ready-made gallery over
-// it (#14), for the Owner only: anyone else gets the plain chat, with no gallery drawn.
+// Contributor (#17). ?new=ready opens the ready-made gallery over it (#14), for the Owner only: anyone else gets the
+// plain chat, with no gallery drawn.
 export default async function AgentChatPage({params,searchParams}:{params:Promise<{slug:string,agent?:string[]}>,searchParams:Promise<{new?:string}>}) {
  const {t,language}=await getI18n(); const {slug,agent:parts}=await params; const mode=(await searchParams).new;
  const db=await supabase(); const {data:{user}}=await db.auth.getUser();

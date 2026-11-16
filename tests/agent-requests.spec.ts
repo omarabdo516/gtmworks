@@ -5,11 +5,8 @@ import { fakeHermes } from './fake-hermes.mjs';
 import { openNavigation, signIn } from './sign-in';
 import { lane } from './lane.mjs';
 
-// #17, what people see. Lead is RS Learning's main Agent on the Company's own profile in a fake Hermes that has the
-// profile ready, so «Make it» can make an Agent. The Manager and the first Contributor each asked Lead for an Agent in
-// their own Conversation, kept as lead_request_agent keeps a request when their run closes (the engine side is proven
-// in tests/engine-conversation.spec.ts). The Owner makes one and says no to the other from "Waiting on you"; each Member
-// reads the answer in their Conversation; a Viewer cannot ask; the Activity log names every step.
+// The requests are kept by calling lead_request_agent directly; the engine side is proven in
+// tests/engine-conversation.spec.ts.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const company='10000000-0000-0000-0000-000000000001';
 const [omar,manager,reviewer]=['20000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000003'];
@@ -31,7 +28,7 @@ test.beforeAll(async({browser},testInfo)=>{
  const page=await browser.newPage();
  try {
   await signIn(page,'omar@example.com','/c/rs-learning/home');
-  // The Company's own Connection, saved through the Owner's route (its key encrypted), then given Lead as the worker does.
+  // Saved through the Owner's route so its key is encrypted.
   const saved=await page.request.post('/api/hermes-connections',{data:{company,intent:'save',address:fake.address,profile,key:fake.settings.key}});
   expect(saved.status()).toBe(200);
   const connection=(await saved.json()).connection.id;
@@ -100,7 +97,6 @@ test('the Owner makes one, and says no to the other only with a reason',async({p
  await expect(why).toHaveAttribute('aria-invalid','true');
  await expect(why).toBeFocused();
  expect(requests()).toEqual([{agent_name:'WhatsApp Leads',state:'made',answered_by:omar,reason:null},{agent_name:'Blog Writer',state:'waiting',answered_by:null,reason:null}]);
- // Cancel goes back to the two answers.
  await refused.getByRole('button',{name:'Cancel'}).click();
  await expect(refused.getByRole('button')).toHaveText(['No','Make it']);
  await refused.getByRole('button',{name:'No'}).click();
@@ -172,7 +168,6 @@ test('each step is in the Activity log: the requests, the yes and the no with it
  const log=page.locator('.log-page');
  for(const line of ['asked Lead for an agent','made an agent مدير asked for','Shows for مدير','declined an agent request from مراجع',reason]) await expect(log).toContainText(line);
  await page.context().clearCookies();
- // The Manager reads their own request and its yes, not the Contributor's request or its no.
  await signIn(page,'manager@example.com','/c/rs-learning/log');
  await expect(page.locator('.log-page')).toContainText('made an agent مدير asked for');
  await expect(page.locator('.log-page')).not.toContainText('Blog Writer');

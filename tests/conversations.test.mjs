@@ -34,8 +34,6 @@ test('a decision shows at its time among the messages and notes, and one after t
  assert.deepEqual(order(withNote),[1,2,'note','decided',3,4,'decided']);
 });
 
-// A Member's request for an Agent (#17): its card is in Lead's reply of the run that asked, or Lead's whole turn when Lead
-// wrote nothing but the call; the Owner's answer shows where it happened among the messages.
 const asking=[
  {id:1,author:/** @type {const} */('person'),author_name:'Youssef',body:'I want someone to follow up our WhatsApp leads',run_id:'r1',created_at:at(1)},
  {id:2,author:/** @type {const} */('agent'),author_name:'Lead',body:'I prepared your request and sent it to Omar.',run_id:'r1',created_at:at(2)},

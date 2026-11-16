@@ -5,7 +5,7 @@ import { CompanyAgentFace } from '@/components/company-agent-face';
 
 // The main Agent's first words in a new workspace (#9; design-reference: mainEmptyHTML for the first run): its face, its
 // name marked Main, one line saying it makes an Agent for any job, and one sentence to try, which fills the composer.
-// A Manager or a Contributor asks for an Agent instead (#17): `askOf` names the Owners Lead prepares the request for.
+// `askOf`: the Owners a Manager or a Contributor asks for an Agent instead (#17).
 export function LeadWelcome({agent,suggest,askOf=null}:{agent:{name:string,connection_id:string},suggest?:(text:string)=>void,askOf?:string[]|null}) {
  const {t,language}=useI18n();
  return <div className="empty-chat empty-chat--agent empty-chat--fresh">

@@ -11,8 +11,7 @@
 // Manager's decision shows as its own line (`kind` decided) at the time it was made, as an Owner's answer to a request
 // does.
 export type MadeAgent={id:string,connection_id:string,name:string,job:string,apps:string[],fresh:boolean,created_at:string};
-// A request waits for an Owner (named for "When Omar says yes"), or carries who answered, when, and what: the Agent made
-// (null once it is removed) or the reason for no.
+// `owners` names whom a waiting request waits on ("When Omar says yes"); a made request's `agent` is null once removed.
 type RequestBase={id:number,name:string,job:string,apps:string[],askedBy:string,askedWith:string};
 export type AgentRequestView=RequestBase&({state:'waiting',owners:string[]}|{state:'made',by:string,at:string,agent:Pick<MadeAgent,'id'|'connection_id'|'name'>|null}|{state:'declined',by:string,at:string,reason:string});
 export type LeadCard={kind:'made',agent:MadeAgent}|{kind:'request',request:AgentRequestView};

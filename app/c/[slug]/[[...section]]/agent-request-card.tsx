@@ -4,9 +4,7 @@ import { RequestCard, useCardText } from '@/app/agent-card';
 import type { WaitingItem } from '@/lib/approval-queue';
 import { answerAgentRequest } from './skill-actions';
 
-// A Member's request for an Agent (#17), answered where it waits in the Owner's "Waiting on you" (design-reference:
-// agentCardHTML for the Owner, approveRequest and refuseRequest): No, then Make it. No asks why first; the reason is
-// required, since it goes to the Member in their chat with Lead.
+// design-reference: agentCardHTML for the Owner, approveRequest and refuseRequest.
 export function OwnerRequestCard({slug,company,lead,item}:{slug:string,company:string,lead:string,item:WaitingItem}) {
  const {c,cb}=useCardText();
  const [refusing,setRefusing]=useState(false); const [missing,setMissing]=useState(false);

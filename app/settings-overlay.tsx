@@ -139,8 +139,6 @@ function TalkTip({t,rtl,text,talk}:{t:T,rtl:boolean,text:string,talk?:{href:stri
 
 function AgentsSection({t,rtl,slug,agents,canManage,canWrite,owner}:{t:T,rtl:boolean,slug:string,agents:Agent[],canManage:boolean,canWrite:boolean,owner:boolean}) {
  const main=agents.find(agent=>agent.is_default); const other=agents.find(agent=>!agent.is_default);
- // The Owner asks Lead for an Agent in Lead's chat, as "New agent" does (#13); a Member who may write asks Lead there for
- // one the Owner then makes or not (#17).
  const add=canWrite&&main?<Link className="btn btn--secondary btn--sm" href={`/c/${slug}/chat?new=agent`}><SettingsIcon name="chat"/><span>{owner?t('settingsAskLead',main.name):t('settingsAskAgent')}</span></Link>
   :canWrite&&<button type="button" className="btn btn--secondary btn--sm" aria-disabled="true" title={t('soon')}><SettingsIcon name="chat"/><span>{t('settingsAskAgent')}</span></button>;
  return <><Head title={t('agents')} sub={t('settingsAgentsSub')} extra={add}/>

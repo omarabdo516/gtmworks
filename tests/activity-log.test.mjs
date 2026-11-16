@@ -43,7 +43,6 @@ test('Card, Member and Agent rows say who changed what', () => {
  }
 });
 
-// A Member's request for an Agent (#17): sent to Lead by the Member, then made or declined by an Owner, naming who asked.
 test('a request for an Agent says who asked whom, and the Owner\'s yes or no with its reason, in both languages', () => {
  const sent = describeEntry({ subject: 'agent', action: 'agent_request_sent', agent_id: lead, details: { agent_name: 'Lead', asked_for: 'WhatsApp Leads', job: 'Follows up the leads.' } });
  assert.deepEqual([sent.act, sent.obj, sent.from, sent.to], [['logActAgentRequestSent', { text: 'Lead' }], 'WhatsApp Leads', undefined, { key: 'logAgentRequestWaiting' }]);

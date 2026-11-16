@@ -1,8 +1,8 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 select plan(50);
--- #17. Lead in RS Learning, on the Company's own profile in the bundled Engine, and each seeded person's Conversation
--- with it: the Owner (1), the Manager (2), the Contributors (3, 5) and the Viewer (4), each asking for an Agent in run rq-n.
+-- Each seeded person's Conversation with Lead: the Owner (1), the Manager (2), the Contributors (3, 5) and the Viewer (4),
+-- each asking for an Agent in run rq-n.
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
  ('ea000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9','co-10000000000000000000000000000001','ciphertext','connected','0.23.0','{run_submission}'),
  ('ea000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9','request-test-ads','ciphertext','connected','0.23.0','{run_submission}');
@@ -23,7 +23,6 @@ insert into public.conversation_messages(company_id,conversation_id,author,perso
  ('10000000-0000-0000-0000-000000000001','eb000000-0000-0000-0000-000000000009','person','20000000-0000-0000-0000-000000000002','Someone','I want someone to follow up our WhatsApp leads',gen_random_uuid(),'rq-9');
 select set_config('test.c','10000000-0000-0000-0000-000000000001',true);
 
--- The worker carries out each run's request_agent call: a Manager's and a Contributor's are kept as their requests.
 set local role service_role;
 select is(public.lead_request_agent('eb000000-0000-0000-0000-000000000002','rq-2','call-0',' WhatsApp Leads ','Follows up the WhatsApp leads. ','{WhatsApp Business, Canva}')->>'state','requested','the Manager''s call is kept as a request');
 select is(public.lead_request_agent('eb000000-0000-0000-0000-000000000003','rq-3','call-0','Blog Writer','Writes the blog.','{WordPress}','writer','You write for {company}.')->>'state','requested','so is the Contributor''s');
@@ -55,7 +54,6 @@ select results_eq($$select actor_id,agent_id,details->>'asked_for',details->>'pr
   ('20000000-0000-0000-0000-000000000003'::uuid,'ea000000-0000-0000-0000-000000000002'::uuid,'Blog Writer','owners','20000000-0000-0000-0000-000000000003')$$,
  'each request is logged once, by the Member who asked, about Lead');
 
--- Who reads a request, and on whose list it waits: the Owner's only.
 create temporary table seen(n int, requests int, waiting int, logged int);
 grant insert on seen to authenticated;
 set local role authenticated;
@@ -78,7 +76,6 @@ select results_eq($$select kind,id,title,body,asked_by,card_id is null and conve
  $$values ('agent_request',current_setting('test.m')::bigint,'WhatsApp Leads','Follows up the WhatsApp leads.','مدير',true),('agent_request',current_setting('test.k')::bigint,'Blog Writer','Writes the blog.','مراجع',true)$$,
  'each waits on the Owner by its name and job, asked by the Member');
 
--- No one but an active Owner answers.
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
 select throws_ok($$select public.answer_agent_request(current_setting('test.c')::uuid,current_setting('test.m')::bigint,true)$$,'42501',null,'the Manager cannot make it');
 select throws_ok($$select public.answer_agent_request(current_setting('test.c')::uuid,current_setting('test.k')::bigint,false,'No')$$,'42501',null,'nor say no');
@@ -95,7 +92,6 @@ select throws_ok($$select public.answer_agent_request(current_setting('test.c'):
 reset role;
 select is((select count(*)::int from public.lead_agent_requests where state='waiting'),2,'and both still wait');
 
--- «Make it»: the Agent is made as the Owner's own call makes it, for the Member who asked, who now sees it.
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select is(public.answer_agent_request(current_setting('test.c')::uuid,current_setting('test.m')::bigint,true),'made','the Owner makes the Manager''s');
@@ -121,7 +117,6 @@ select is(public.lead_create_agent('eb000000-0000-0000-0000-000000000003','rq-3'
  'a waiting request''s call is not made without «Make it»');
 reset role;
 
--- «No», with the reason that goes to the Contributor.
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select is(public.answer_agent_request(current_setting('test.c')::uuid,current_setting('test.k')::bigint,false,E' Ads follows WhatsApp leads now.\n'),'declined','the Owner says no to the Contributor''s');
@@ -148,8 +143,6 @@ reset role;
 select results_eq($$select * from told order by n$$,$$values (2,1,0,1),(3,1,1,0),(5,0,0,0)$$,
  'the Manager reads their own request and its yes, not the Contributor''s request or its no; the Contributor reads both of theirs; another Contributor reads none');
 
--- A request that cannot be made now stays waiting; an Owner made later sees it, one made a Manager does not; a Member
--- who left has nothing waiting.
 set local role service_role;
 select is(public.lead_request_agent('eb000000-0000-0000-0000-000000000003','rq-3b','call-0','Blog Writer','Writes the blog.','{WordPress}')->>'state','requested','the Contributor asks again');
 reset role;

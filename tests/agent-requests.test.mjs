@@ -7,8 +7,6 @@ import { fakeEngine } from './fake-engine.mjs';
 const company='10000000-0000-0000-0000-000000000001';
 const profile='co-10000000000000000000000000000001';
 const encryptionKey='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
-// The Owner's session (company_engine_target, answer_agent_request) and the service role that reads only the bundled
-// Connection's key.
 function harness(/** @type {{error?:{code:string,message:string}|null,data?:unknown,target?:unknown}} */ {error=null,data='made',target={connection:'connection-1',address:'http://127.0.0.1:9',profile}}={}) {
  const fake=fakeEngine(); const rpcs=/** @type {[string,object][]} */([]); const keys=/** @type {object[]} */([]);
  const db={rpc:async(/** @type {string} */ name,/** @type {object} */ args)=>{ rpcs.push([name,args]); return name==='company_engine_target'?{data:target?[target]:[],error:null}:{data:error?null:data,error}; }};

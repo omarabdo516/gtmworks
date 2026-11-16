@@ -44,9 +44,7 @@ export const decideAgentRule=withActionLog('decideAgentRule',async function deci
  if(error) logActionFailure('decideAgentRule',error,{form});
  redirect(error?`${path}?failed=rule`:path);
 });
-// Only an active Owner answers a Member's request for an Agent (#17), from "Waiting on you"; the database checks again,
-// and an agent has no way to reach this action. The reason is never logged: a failure line names only the action, the
-// Company and the answer's state.
+// The reason is never logged: a failure line names only the action, the Company and the answer's state.
 export const answerAgentRequest=withActionLog('answerAgentRequest',async function answerAgentRequest(form:FormData) {
  const db=await supabase(); const company=String(form.get('company')); const path=`/c/${String(form.get('slug'))}/approvals`;
  const state=!await actionAllowed(db,'answerAgentRequest',company)?'notAllowed':await answerRequest(db,createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}}),{company,request:Number(form.get('request')),make:form.get('intent')==='make',reason:String(form.get('reason')||''),encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY});

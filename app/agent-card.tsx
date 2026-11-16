@@ -1,6 +1,4 @@
-// Lead's agent cards (design-reference: agentCardHTML): an Agent Lead made, and a Member's request for one (#17) as the
-// Member who asked and the Owner who answers see it. Their strings live in agent-card.en.json and agent-card.ar.json,
-// loaded only by the Conversation and "Waiting on you".
+// Lead's agent cards (design-reference: agentCardHTML).
 import enText from '@/lib/messages/agent-card.en.json';
 import arText from '@/lib/messages/agent-card.ar.json';
 import { Fragment, type ReactNode } from 'react';
@@ -12,8 +10,7 @@ import { ShellIcon } from '@/components/shell-icon';
 import { madeDay, useZone } from '@/app/agent-made';
 import type { AgentRequestView, MadeAgent } from '@/lib/conversations';
 
-// The card's own text: `c` fills its values, `cb` isolates each value in its own direction (a name or a reason in the
-// other script).
+// `cb` isolates each value in its own direction (a name or a reason in the other script).
 export function useCardText() {
  const {language}=useI18n(); const own:Record<string,string>=language==='ar'?arText:enText;
  const c=(key:string,...values:unknown[])=>own[key].replace(/\{(\d+)\}/g,(_,index)=>String(values[Number(index)] ?? ''));
@@ -21,7 +18,7 @@ export function useCardText() {
  return {c,cb};
 }
 
-// Its job, its apps, and the three things no Agent does without a person (ADR 0006, 0008).
+// The three things no Agent does without a person (ADR 0006, 0008).
 const never=['madeAgentPublish','madeAgentSpend','madeAgentMessage'];
 function AgentRows({job,apps,children}:{job:string,apps:string[],children?:ReactNode}) {
  const {c}=useCardText();
@@ -33,8 +30,6 @@ function AgentRows({job,apps,children}:{job:string,apps:string[],children?:React
  </dl>;
 }
 
-// An Agent Lead made: "Made", with "New" until the person who asked opens it and its day after that; and the way into
-// its own chat.
 export function MadeCard({slug,agent}:{slug:string,agent:MadeAgent}) {
  const {t,language}=useI18n(); const zone=useZone(); const {c}=useCardText();
  return <div className="ac-card" role="group" aria-label={c('madeAgentLabel',agent.name)}>
@@ -46,9 +41,7 @@ export function MadeCard({slug,agent}:{slug:string,agent:MadeAgent}) {
  </div>;
 }
 
-// A Member's request: dashed while it is not an Agent. The Member who asked sees it wait for the Owner, then the answer
-// in place: made, with the way into the Agent, or the Owner's no with the reason. The Owner sees who asked and why, and
-// answers with `answer`. A request has no Agent yet, so its face is drawn from the request until one is made.
+// A request has no Agent yet, so its face is drawn from the request until one is made.
 export function RequestCard({slug,request,owner=false,answer}:{slug:string,request:AgentRequestView,owner?:boolean,answer?:ReactNode}) {
  const {language}=useI18n(); const {c,cb}=useCardText();
  const when=(at:string)=><time dateTime={at}>{new Date(at).toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit'})}</time>;

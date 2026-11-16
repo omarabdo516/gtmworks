@@ -39,8 +39,6 @@ export default async function Shell({company,companies,section,title,crumbs,pers
  const chats=conversations.map((c,index)=>({id:c.id,created_at:c.created_at,title:firsts[index]?.split('\n')[0]||c.agent_name}));
  const workMode=company?.id?(await db.from('companies').select('work_mode').eq('id',company.id).maybeSingle()).data?.work_mode as string|null|undefined:undefined;
  const channels=company?.id?((await db.from('channels').select('id,kind').eq('company_id',company.id).order('created_at')).data||[]) as {id:string,kind:'general'}[]:[];
- // Below the Agents, the Owner's "New agent" opens Lead's chat; a Member who may write asks for one there instead (#17); a
- // Viewer has neither.
  const asksForAgents=!!company?.id&&!owner&&(await db.rpc('conversation_can_write',{c:company.id})).data===true;
  const active=(path:string)=>path==='chat'?chat:path==='work/board'?section.startsWith('work/'):section===path;
  const sidebar=<SidebarSearchProvider>

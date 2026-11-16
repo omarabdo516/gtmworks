@@ -133,8 +133,6 @@ const seen = (n: number) => `68000000-0000-0000-0000-00000000000${n}`;
 const general = '69000000-0000-0000-0000-000000000001';
 const talk = (n: number) => `69000000-0000-0000-0000-0000000000${n}`;
 const busy = (n: number) => `69100000-0000-0000-0000-00000000000${n}`;
-// Lead and the request the first Contributor sent it on June 10 (#17), kept as lead_request_agent keeps it: waiting, made
-// by Omar with the Agent shown to them, or refused with a reason.
 const asked = (n: number) => `6b000000-0000-0000-0000-00000000000${n}`;
 const askedWith = 'عايز حد يتابع ليدز واتساب ويجهّز رسايل المتابعة، الليدز بتبرد قبل ما حد يرد عليها';
 const agentRequest = (answer: 'waiting' | 'made' | 'declined') => ({

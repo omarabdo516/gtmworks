@@ -57,9 +57,6 @@ const lightScreens = [
   // last edited, and the empty Audience part as its Owner sees it.
   { name: 'knowledge', path: '/c/rs-learning/settings?section=knowledge', state: 'lead-made' },
   { name: 'knowledge-empty', path: '/c/rs-learning/settings?section=knowledge&part=audience', state: 'lead-made' },
-  // A Member's request for an Agent (#17), over Lead and the request the first Contributor sent it on June 10: Lead's
-  // chat opened by their "Ask for an agent", their Conversation with the request not made yet, the Owner's "Waiting on
-  // you" holding it with No and Make it, and their Conversation once Omar made it and once Omar said no.
   { name: 'ask-agent', path: '/c/rs-learning/chat?new=agent', state: 'agent-request', person: 'reviewer@example.com' },
   { name: 'request-sent', path: '/c/rs-learning/conversations/6b000000-0000-0000-0000-000000000003', state: 'agent-request', person: 'reviewer@example.com' },
   { name: 'request-waiting', path: '/c/rs-learning/approvals', state: 'agent-request' },

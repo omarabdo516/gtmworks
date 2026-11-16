@@ -102,8 +102,6 @@ export default function Work(p:WorkProps) { const {t,locale,language}=useI18n();
    <button className="btn btn--primary btn--sm" name="intent" value="approve">{t('waitingRuleApprove')}</button></form>
  </div>;
  const lead=identities.find(a=>a.role==='account_manager')?.name||'Lead';
- // What is answered where it waits rather than where it came from, by kind: a learning suggestion, and a Member's request
- // for an Agent (#17). On the board both stand apart from the items that need a reply.
  const decidedHere:Record<string,(item:WaitingItem)=>ReactNode>={
   rule_suggestion:ruleView,
   agent_request:item=><OwnerRequestCard key={`${item.kind}:${item.id}`} slug={p.slug} company={p.company} lead={lead} item={item}/>,

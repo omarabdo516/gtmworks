@@ -21,14 +21,12 @@ create or replace function public.may_use_lead_tools(c uuid, agent uuid, person 
   and public.is_company_lead(c,agent);
 $$;
 
--- An active Manager or Contributor talking to Lead asks for an Agent instead.
 create function public.may_ask_lead_for_agents(c uuid, agent uuid, person uuid) returns boolean language sql stable security definer set search_path='' as $$
  select exists(select 1 from public.members m where m.company_id=c and m.person_id=person and m.role in ('manager','contributor') and m.removed_at is null)
   and public.is_company_lead(c,agent);
 $$;
 revoke all on function public.may_ask_lead_for_agents(uuid,uuid,uuid) from public,anon,authenticated,service_role;
 
--- What a create call may carry: the one rule lead_create_agent and a request share.
 create function public.agent_fields_valid(agent_name text, job text, apps text[], template text, instructions text) returns boolean
 language sql immutable set search_path='' as $$
  select coalesce(length(trim(agent_name)) between 1 and 100 and length(trim(job)) between 1 and 200 and cardinality(apps)<=8
@@ -65,7 +63,6 @@ create table public.lead_agent_requests (
 );
 create index lead_agent_requests_waiting on public.lead_agent_requests(company_id,created_at) where state='waiting';
 alter table public.lead_agent_requests enable row level security;
--- The Member who asked reads their own; the Company's active Owners read every one. A Manager reads none but their own.
 create policy lead_agent_requests_read on public.lead_agent_requests for select to authenticated
  using (public.is_member(company_id) and (asked_by=auth.uid() or public.is_company_owner(company_id)));
 revoke all on public.lead_agent_requests from anon,authenticated,service_role;
@@ -77,9 +74,8 @@ create or replace function public.run_tools(c uuid, agent uuid, person uuid) ret
   case when public.may_tell_agent_rules(c,agent,person) then 'save_rule' when public.may_suggest_agent_rules(c,agent,person) then 'suggest_rule' end],null);
 $$;
 
--- A request_agent call of a completed run, carried out by whoever closes it (the worker, or a reader), as a create_agent
--- call is. The Conversation's person must still be an active Manager or Contributor talking to the Company's Lead. It
--- keeps the call as their request and makes nothing; the same run and call again answer the request they kept.
+-- Carried out by whoever closes the run (the worker, or a reader), as a create_agent call is: the same run and call
+-- again answer the request they kept.
 create function public.lead_request_agent(conversation uuid, run text, call text, agent_name text, job text, apps text[], template text default null, instructions text default null) returns jsonb
 language plpgsql security definer set search_path='' as $$
 declare talk public.conversations; asked text; kept public.lead_agent_requests;
@@ -106,9 +102,7 @@ end $$;
 revoke all on function public.lead_request_agent(uuid,text,text,text,text,text[],text,text) from public,anon,authenticated;
 grant execute on function public.lead_request_agent(uuid,text,text,text,text,text[],text,text) to service_role;
 
--- Replaced in place (the previous app version's call names the first six arguments only). Who may: an Owner's own call,
--- as before, or a Member's call an active Owner answered «Make it» (answer_agent_request). The rest is the Owner's flow
--- for either: the Agent's requester is the Conversation's person.
+-- Replaced in place (the previous app version's call names the first six arguments only).
 create or replace function public.lead_create_agent(conversation uuid, run text, call text, agent_name text, job text, apps text[], template text default null, instructions text default null) returns jsonb
 language plpgsql security definer set search_path='' as $$
 declare talk public.conversations; linked public.hermes_connections; connection uuid; made uuid;
@@ -135,10 +129,8 @@ begin
  return jsonb_build_object('state','created','agent',made);
 end $$;
 
--- An active Owner answers a Member's request once, from "Waiting on you". «Make it» makes the Agent as the Owner's own
--- call would and shows it to the Member who asked; a request that cannot be made now (Lead is no longer the Company's
--- main Agent on its own profile) stays waiting. «No» needs a reason, which goes to that Member. The same answer again
--- answers the same and logs nothing more; the other answer is refused.
+-- A request that cannot be made now (Lead is no longer the Company's main Agent on its own profile) stays waiting. The
+-- same answer again answers the same and logs nothing more; the other answer is refused.
 create function public.answer_agent_request(c uuid, request bigint, make boolean, reason text default null) returns text
 language plpgsql security definer set search_path='' as $$
 declare asked public.lead_agent_requests; wanted text:=case when make then 'made' when not make then 'declined' end;
@@ -176,9 +168,7 @@ end $$;
 revoke all on function public.answer_agent_request(uuid,bigint,boolean,text) from public,anon,service_role;
 grant execute on function public.answer_agent_request(uuid,bigint,boolean,text) to authenticated;
 
--- "Waiting on you" (#16): a request waits on every active Owner while it waits, derived as an approval is. An Owner made
--- later sees it, an Owner made a Manager stops seeing it, and the first answer takes it off every list. The Member who
--- asked reads the row too, hence the Owner filter; a request whose Member has left waits on no one.
+-- The Member who asked reads the row too, hence the Owner filter; a request whose Member has left waits on no one.
 create or replace function public.waiting_list(c uuid)
 returns table(kind text, id bigint, title text, body text, asked_by text, card_id bigint, conversation_id uuid, created_at timestamptz)
 language sql stable set search_path='' as $$
@@ -202,9 +192,7 @@ language sql stable set search_path='' as $$
 $$;
 
 -- A request's sending and its refusal stay with the Member who asked and the Company's Owners in the log (`private`
--- 'owners'); #25's `private` rows stay readable by Managers too. «Make it» is for everyone who sees the new Agent.
--- log_agent_action reads AGENT_REQUEST_SENT, AGENT_REQUEST_MADE and AGENT_REQUEST_DECLINED as agent_request_sent,
--- agent_request_made and agent_request_declined.
+-- 'owners'); #25's `private` rows stay readable by Managers too. log_agent_action's lower() already names the new actions.
 alter policy hermes_agent_audit_read on public.hermes_agent_audit using (public.is_member(company_id) and public.can_see_agent(company_id,agent_id)
  and (details->>'private' is null or actor_id=auth.uid() or details->>'teller'=auth.uid()::text
   or case when details->>'private'='owners' then public.is_company_owner(company_id) else public.can_manage_company(company_id) end));

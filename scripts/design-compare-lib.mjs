@@ -75,9 +75,7 @@ export const screens = {
   // Built: the fixture's Ads, which Lead made and Omar told the rule.
   'made-agent': { reference: { steps: [...settingsSection('agents'), { click: '#sov-ag-ads' }, { waitFor: '#sov-tab-settings' }] }, builtPath: `/c/rs-learning/settings?agent=${fixture.agent}` },
   channel: { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="ch-general"]' }, { waitFor: '.ch-intro' }] }, builtPath: `/c/rs-learning/channels/${fixture.channel}` },
-  // A Member's request for an Agent (#17). The reference holds Youssef's request for FollowUp. Lead's chat opened by his
-  // "Ask for an agent"; his chat with the request not made yet; the request as Omar answers it (the reference in Omar's
-  // chat with Lead, the product where it waits); and Youssef's chat once Omar said «Make it».
+  // The reference shows the request Omar answers in his chat with Lead; the product, where it waits.
   'ask-agent': { reference: { steps: [...asYoussef, { click: '#sb-agents [data-action="new-agent"]' }, { waitFor: '.new-hint' }] }, builtPath: '/c/rs-learning/chat?new=agent' },
   'request-sent': { reference: { steps: [...asYoussef, ...youssefRequest] }, builtPath: '/c/rs-learning/conversations/6b000000-0000-0000-0000-000000000003' },
   'request-waiting': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-wa-req"]' }, { waitFor: '.ac-card--req' }] }, builtPath: '/c/rs-learning/approvals' },

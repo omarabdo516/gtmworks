@@ -174,8 +174,6 @@ test('integration: Lead makes the Agent the Owner asks for, and nothing for a Ma
  expect(made()).toHaveLength(2);
 });
 
-// #17: a Manager's or a Contributor's run with Lead is offered request_agent instead; the call is kept as their request
-// for an Owner to answer, and nothing is made, whatever the Engine's state.
 test('integration: Lead keeps a Manager\'s and a Contributor\'s request for an Agent, and makes none',async()=>{
  test.setTimeout(120000);
  const {lead}=bundledLead();

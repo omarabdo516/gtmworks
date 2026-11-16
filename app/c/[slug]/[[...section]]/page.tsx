@@ -57,8 +57,6 @@ export default async function CompanyPage({params,searchParams}:{params:Promise<
  const {data:audit}=section==='settings/members'?await db.from('member_audit').select('id,actor_id,actor_name,person_id,person_name,action,created_at,before_data,after_data').eq('company_id',company.id).order('created_at',{ascending:false}):{data:[]};
  const {data:usageRows}=section==='usage'?await db.rpc('usage_by_day'):{data:[]};
  const query=await searchParams; const message=query.message;
- // What "Waiting on you" says when an answer did not go through (answerAgentRequest, decideAgentRule): the request or the
- // suggestion is left as it was.
  const waitingFailures:Record<string,string>={rule:'waitingRuleFailed','request-engineNotReady':'waitingRequestNotReady','request-engineUnreachable':'waitingRequestUnreachable',
   'request-notMade':'waitingRequestNotMade','request-answered':'waitingRequestAnswered','request-notFound':'waitingRequestAnswered','request-reasonMissing':'waitingRequestReasonMissing'};
  const failed=query.failed||''; const waitingFailure=Object.hasOwn(waitingFailures,failed)?t(waitingFailures[failed]):failed.startsWith('request-')?t('waitingRequestFailed'):message;

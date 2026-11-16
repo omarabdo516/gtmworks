@@ -6,13 +6,11 @@ import { OwnerRequestCard } from '@/app/c/[slug]/[[...section]]/agent-request-ca
 import { LanguageProvider } from '@/lib/i18n-client';
 import type { AgentRequestView } from '@/lib/conversations';
 
-// A server action answers asynchronously.
 const answered = vi.hoisted(() => vi.fn<(form: FormData) => Promise<void>>(async () => {}));
 vi.mock('@/app/c/[slug]/[[...section]]/skill-actions', () => ({ answerAgentRequest: answered }));
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 afterEach(() => { answered.mockClear(); });
 
-// #17: a Member's request for an Agent, as the Member who asked and the Owner who answers see it.
 const asked = { id: 7, name: 'FollowUp', job: 'Follows up the WhatsApp leads.', apps: ['WhatsApp Business', 'Google Sheets'], askedBy: 'Youssef', askedWith: 'The leads go cold before anyone answers' };
 const card = (request: AgentRequestView, language: 'en' | 'ar' = 'en') => render(<LanguageProvider language={language}><RequestCard slug="rs-learning" request={request}/></LanguageProvider>);
 

@@ -23,9 +23,9 @@ const ReadyMade=lazy(()=>import('@/app/ready-made'));
 // `newAgent` (design-reference: openLeadForAgent): the composer is focused, its example is an Agent to ask for, and one
 // hint line above it says Lead makes the Agent right away. `isNew`: an Agent Lead made at this person's request, opened
 // by them for the first time (#13). The hint line also links to the ready-made gallery (#14), which `gallery` opens over
-// the chat (?new=ready); leaving it gives the focus back to the composer. A Manager or a Contributor asks for an Agent
-// instead (#17): `askOf` names the Owners Lead prepares the request for, and the hint has no gallery. In a team, a line at
-// the top says the chat is between this person and the Agent only (#25).
+// the chat (?new=ready); leaving it gives the focus back to the composer. `askOf`: the Owners a Manager or a Contributor
+// asks for an Agent instead (#17). In a team, a line at the top says the chat is between this person and the Agent only
+// (#25).
 export default function AgentChat({slug,company,agent,details,writer,team=false,fresh=false,newAgent=false,askOf=null,isNew=false,gallery=null}:{slug:string,company:string,agent:DetailsAgent|null,details:AgentDetailsView|null,writer:boolean,team?:boolean,fresh?:boolean,newAgent?:boolean,askOf?:string[]|null,isNew?:boolean,gallery?:{company:string,alone:boolean,roles:ReadyRole[]}|null}) {
  const {t,language}=useI18n(); const router=useRouter(); const [conversation]=useState(newId); const panel=useDetailsPanel();
  const [draft,setDraft]=useState<{text:string,n:number}|null>(null);
