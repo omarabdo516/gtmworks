@@ -36,7 +36,7 @@ export default function AgentChat({slug,company,agent,details,writer,team=false,
    <HeadPill panel={panel} agent={agent?.name} face={agent&&<span aria-hidden="true"><CompanyAgentFace agent={agent} size={24}/></span>} title={t('newChat')}/>
    <div className="transcript"><div className="transcript__col">
     {agent&&team&&<PrivateLine agent={agent.name}/>}
-    {agent&&fresh&&agent.main?<LeadWelcome agent={agent} suggest={writer?text=>setDraft(current=>({text,n:(current?.n||0)+1})):undefined}/>:agent?<div className="empty-chat empty-chat--agent">
+    {agent&&fresh&&agent.main?<LeadWelcome agent={agent} askOf={askOf} suggest={writer?text=>setDraft(current=>({text,n:(current?.n||0)+1})):undefined}/>:agent?<div className="empty-chat empty-chat--agent">
      <div className="empty-chat__faces" aria-hidden="true"><CompanyAgentFace agent={agent} size={64}/></div>
      <h2 className="main-h"><bdi>{agent.name}</bdi>{agent.main&&<span className="badge main-badge">{t('mainAgent')}</span>}</h2>
      {agent.speciality&&<p className="empty-chat__role" dir="auto">{agent.speciality}</p>}

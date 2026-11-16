@@ -500,7 +500,9 @@
    dashed while it is not an Agent, quieter once answered. The Owner answers it in "Waiting on you". */
 .gw .ac-card .badge .gw-icon { width: 13px; height: 13px; }
 .gw .badge--req { background: transparent; color: var(--gw-text-1); box-shadow: var(--gw-border-1) 0 0 0 1px inset; font-weight: 600; }
-.gw .ac-card--req { box-shadow: none; outline: 1px dashed var(--gw-border-1); outline-offset: -1px; }
+.gw .ac-card--req { box-shadow: none; outline: 1px dashed var(--gw-border-1); outline-offset: -1px; container-type: inline-size; }
+/* In the narrow "Waiting on you" column each label sits above its value, so the request reads in full. */
+@container (max-width: 420px) { .gw .ac-card--req .kv__row { grid-template-columns: minmax(0, 1fr); gap: 2px; } }
 .gw .ac-card--req .card__head > :first-child { opacity: .72; }
 .gw .ac-card--req.is-resolved .card__head > :first-child { opacity: 1; }
 .gw .ac-card.is-resolved .kv { opacity: .72; }

@@ -31,7 +31,7 @@ export default async function AgentChatPage({params,searchParams}:{params:Promis
  const {items:waitingItems}=await approvalQueue(db,company.id,user.id,membership?.role||'');
  const owner=membership?.role==='owner';
  const newAgent=(mode==='agent'||(mode==='ready'&&owner))&&!!agent?.is_default&&!!writer;
- const askOf=newAgent&&!owner?((((await db.from('members').select('people(name)').eq('company_id',company.id).eq('role','owner').is('removed_at',null)).data||[]) as unknown as {people:{name:string}|null}[])
+ const askOf=(newAgent||(agents?.length===1&&!!agent?.is_default&&!!writer))&&!owner?((((await db.from('members').select('people(name)').eq('company_id',company.id).eq('role','owner').is('removed_at',null)).data||[]) as unknown as {people:{name:string}|null}[])
   .flatMap(row=>row.people?[row.people.name]:[]).sort()):null;
  const alone=company.work_mode==='alone';
  const gallery=mode==='ready'&&newAgent?{company:company.name,alone,roles:readyRoles(language,alone)}:null;

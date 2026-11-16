@@ -83,14 +83,17 @@ test('a refused or failed fixture fails the step, so no capture runs on a half-l
 });
 
 test('every screen says how to reach it in the reference and which built page it matches', () => {
-  assert.deepEqual(Object.keys(screens).sort(), ['account', 'agent', 'agent-chat', 'agents', 'board', 'channel', 'home', 'home-alone', 'knowledge', 'learning', 'log', 'made-agent', 'made-card', 'new-agent', 'numbers', 'ready-roles', 'rule-saved', 'settings', 'settings-alone', 'waiting']);
+  assert.deepEqual(Object.keys(screens).sort(), ['account', 'agent', 'agent-chat', 'agents', 'ask-agent', 'board', 'channel', 'home', 'home-alone', 'knowledge', 'learning', 'log', 'made-agent', 'made-card', 'new-agent', 'numbers', 'ready-roles', 'request-made', 'request-sent', 'request-waiting', 'rule-saved', 'settings', 'settings-alone', 'waiting']);
   for (const [name, screen] of Object.entries(screens)) {
     assert.match(name, /^[a-z]+(-[a-z]+)*$/, name);
     assert.deepEqual(Object.keys(screen).sort(), ['builtPath', 'reference'], name);
     assert.ok(screen.builtPath === null || /^\/c\/rs-(learning|consultations)\/[a-z/]+(\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?(\?[a-z]+=[a-z0-9-]+)?$/.test(screen.builtPath), `${name} built path`);
     assert.ok(Array.isArray(screen.reference.steps), `${name} steps`);
-    // The alone screens (#10) start by viewing the prototype as Omar working alone; every other screen never touches it.
-    const steps = name.endsWith('-alone') ? screen.reference.steps.slice(3) : screen.reference.steps;
+    // The alone screens (#10) start by viewing the prototype as Omar working alone, and a Member's request screens (#17)
+    // view it as Youssef in the team; every other screen never touches it.
+    const youssef = '[data-action="set-as"][data-person="youssef"][data-world="team"]';
+    if (['ask-agent', 'request-sent', 'request-made'].includes(name)) assert.ok(screen.reference.steps.some(step => step.click === youssef), `${name} views as Youssef`);
+    const steps = name.endsWith('-alone') ? screen.reference.steps.slice(3) : screen.reference.steps.filter(step => step.click !== youssef);
     for (const step of steps) {
       assert.equal(Object.keys(step).length, 1, `${name}: one action per step`);
       const [[action, selector]] = Object.entries(step);

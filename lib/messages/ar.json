@@ -853,5 +853,6 @@
   "logActAgentRequestMade": "عمل وكيل طلبه {0}",
   "logActAgentRequestDeclined": "رفض طلب وكيل من {0}",
   "logAgentRequest": "طلب",
-  "logAgentShowsFor": "ظهر عند {0}"
+  "logAgentShowsFor": "ظهر عند {0}",
+  "leadFreshLineMember": "أنا {0}، بمسك شغل التسويق معاك. محتاج وكيل لأي شغلانة؟ قولّي بكلامك وأنا أجهّز الطلب لـ{1}."
 }
