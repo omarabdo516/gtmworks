@@ -54,8 +54,9 @@ export async function channelRecord(db:Database,person:string,company:string,cha
  const {data:manager}=await db.rpc('can_manage_company',{target:company});
  const people=(members||[]) as {person:string,name:string,role:MemberRole}[];
  const seen=(agents||[]) as StoredAgent[];
- const managers=name.kind==='team'?(((await db.from('members').select('role,people(name)').eq('company_id',company).in('role',['owner','manager']).is('removed_at',null).order('role')).data||[]) as unknown as {role:'owner'|'manager',people:{name:string}|null}[])
-  .map(row=>({name:row.people?.name||'',role:row.role})).filter(row=>row.name):[];
+ // Only who is in a team channel can change it (set_channel_person, set_channel_agent), so only they are named: the
+ // Owner first, then the Managers.
+ const managers=name.kind==='team'?(['owner','manager'] as const).flatMap(role=>people.filter(member=>member.role===role&&member.name).map(member=>({name:member.name,role}))):[];
  const newest=latest[0]?.id;
  const runOf=new Map(runs.map(run=>[run.message_id,run]));
  const messages=latest.reverse().map((message):ChannelMessage=>{

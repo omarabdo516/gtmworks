@@ -71,12 +71,13 @@ test('the Manager makes a channel with chosen Members and Agents and changes its
  await expect(details.getByRole('button',{name:'Remove مدير from the channel'})).toHaveCount(0);
  expect(rows(`select count(*)::int n from public.channel_people where channel_id='${channel}' and person_id='20000000-0000-0000-0000-000000000004'`)[0].n).toBe(0);
 
+ // The Manager made it without the Owner: only who is in a channel can change it, so only the Manager is named.
  const contributor=await as(browser,'reviewer@example.com',`/c/rs-learning/channels/${channel}`);
  try {
   await expect(contributor.page.locator('.ch-intro')).toBeVisible();
   await expect(contributor.page.getByRole('button',{name:'New channel',exact:true})).toHaveCount(0);
   await expect(contributor.page.getByRole('button',{name:/^Remove/})).toHaveCount(0);
-  await expect(contributor.page.locator('#details .ch-who')).toHaveText('Members and agents are added and removed by عمر (Owner) and مدير (Manager).');
+  await expect(contributor.page.locator('#details .ch-who')).toHaveText('Members and agents are added and removed by مدير (Manager).');
  } finally { await contributor.close(); }
 });
 
