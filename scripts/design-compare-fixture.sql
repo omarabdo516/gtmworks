@@ -4,8 +4,9 @@
 -- Ads already opened as in the reference, the Conversation in which Omar told Ads a lasting rule on November 14, with
 -- the rule Ads keeps (#18; the reference's th-rule-ads), talk in the general channel (#23), and the first Contributor's
 -- Conversation with Ads in which they told it a rule for the team, waiting on Omar and the Manager as a learning
--- suggestion (#25; the reference's th-yo-ads). Nothing applies it automatically; load it by hand into a throwaway local
--- database only.
+-- suggestion (#25; the reference's th-yo-ads), and the files Ads works from (#21; the reference's ads.files): two on
+-- its Card and one in Omar's Conversation with it. Nothing applies it automatically; load it by hand into a throwaway
+-- local database only. The files are named only: their bytes are not in storage, so opening one finds nothing.
 -- Fixed ids (scripts/design-compare-lib.mjs, fixture); running it again adds nothing. The connections point nowhere
 -- and hold no key: they are never called.
 begin;
@@ -130,6 +131,22 @@ select company_id,channel_id,'agent','61000000-0000-0000-0000-000000000001','Lea
 
 الباقي ماشي لوحده، وهقولكم هنا لو حاجة وقفت.',id
 from public.channel_messages where send_key='63000000-0000-0000-0000-000000000013'
+on conflict do nothing;
+
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+insert into public.work_cards(id,company_id,stage_id,title,agent_id) overriding system value
+select 640001,'10000000-0000-0000-0000-000000000001',id,'حملة Meta للمحاسب الشامل','61000000-0000-0000-0000-000000000002'
+from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' order by position limit 1
+on conflict do nothing;
+insert into public.work_comments(id,company_id,card_id,body,author_id) overriding system value
+values (640002,'10000000-0000-0000-0000-000000000001',640001,'البريف والإعلانات','20000000-0000-0000-0000-000000000001')
+on conflict do nothing;
+insert into public.work_attachments(id,company_id,card_id,comment_id,name,content_type,size,path,created_by,created_at) overriding system value values
+ (640003,'10000000-0000-0000-0000-000000000001',640001,640002,'brief-المحاسب-الشامل.pdf','application/pdf',245760,'10000000-0000-0000-0000-000000000001/design-compare/brief.pdf','20000000-0000-0000-0000-000000000001','2026-11-12T09:00:00Z'),
+ (640004,'10000000-0000-0000-0000-000000000001',640001,640002,'creatives-dec-v2.zip','application/zip',13002342,'10000000-0000-0000-0000-000000000001/design-compare/creatives-dec-v2.zip','20000000-0000-0000-0000-000000000001','2026-11-13T09:00:00Z')
+on conflict do nothing;
+insert into public.conversation_attachments(id,company_id,conversation_id,name,content_type,size,path,created_at) overriding system value
+values (640005,'10000000-0000-0000-0000-000000000001','62000000-0000-0000-0000-000000000003','audiences-oct.csv','text/csv',18432,'10000000-0000-0000-0000-000000000001/design-compare/audiences-oct.csv','2026-11-14T16:40:00Z')
 on conflict do nothing;
 
 commit;
