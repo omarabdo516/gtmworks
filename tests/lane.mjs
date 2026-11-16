@@ -63,7 +63,9 @@ export function launchOptionsFor(args = []) {
  if (!process.env.GTMWORKS_BROWSER_EXECUTABLE) {
   const { browsers } = JSON.parse(readFileSync('node_modules/playwright-core/browsers.json', 'utf8'));
   const { revision } = browsers.find(({ name }) => name === 'chromium-headless-shell');
-  const cache = process.env.PLAYWRIGHT_BROWSERS_PATH || resolve(process.env.HOME, '.cache/ms-playwright');
+  // As Playwright reads it: unset is the user's cache, 0 the folder inside playwright-core.
+  const setting = process.env.PLAYWRIGHT_BROWSERS_PATH;
+  const cache = setting === '0' ? resolve('node_modules/playwright-core/.local-browsers') : setting || resolve(process.env.HOME, '.cache/ms-playwright');
   const shell = resolve(cache, `chromium_headless_shell-${revision}`, 'chrome-headless-shell-linux64', 'chrome-headless-shell');
   if (!existsSync(shell)) throw new Error(`no headless shell at ${shell}: run npx playwright install chromium`);
   process.env.GTMWORKS_BROWSER_EXECUTABLE = shell;

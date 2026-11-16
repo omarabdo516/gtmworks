@@ -53,6 +53,8 @@ function relay(client, rules) {
   const port = buffer.readUInt16BE(4 + length);
   const rest = buffer.subarray(4 + length + 2);
   stage = 'open';
+  // Bytes that arrive while the upstream connection opens wait in the socket; pipe() resumes it once it is open.
+  client.pause();
   client.off('data', onData);
   const host = rules.get(asked.toLowerCase()) ?? asked;
   const upstream = connect({ host, port, family: isIP(host) || undefined });
