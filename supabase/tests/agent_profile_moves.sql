@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(65);
+select plan(66);
 -- An install from before #120: RS Learning (1) has Lead, its main Agent, on the Company's own profile, and Aleem (3) has
 -- its Lead and Copy on Aleem's. Aleem's profile is not ready yet. Every message so far is an hour old.
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
@@ -15,7 +15,9 @@ insert into public.hermes_agent_audit(company_id,actor_id,agent_id,action,detail
  ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','b1100000-0000-0000-0000-000000000001','PROVIDE_BUNDLED_HERMES_AGENT',jsonb_build_object('connection_id','b1000000-0000-0000-0000-000000000001')),
  ('10000000-0000-0000-0000-000000000003','20000000-0000-0000-0000-000000000001','b1100000-0000-0000-0000-000000000003','PROVIDE_BUNDLED_HERMES_AGENT',jsonb_build_object('connection_id','b1000000-0000-0000-0000-000000000003')),
  ('10000000-0000-0000-0000-000000000003','20000000-0000-0000-0000-000000000001','b1100000-0000-0000-0000-000000000004','REQUEST_HERMES_AGENT',jsonb_build_object('connection_id','b1000000-0000-0000-0000-000000000004'));
-insert into public.company_profiles(company_id,profile,tools_level,tools_policy) values ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',1,public.engine_tool_policy());
+insert into public.company_profiles(company_id,profile,tools_level,tools_policy,skills_shared) values ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',1,public.engine_tool_policy(),true);
+-- RS Learning's shared space, made by this version's worker (#122).
+insert into public.company_shared_spaces(company_id,folder) values ('10000000-0000-0000-0000-000000000001','/opt/data/profiles/cs-10000000000000000000000000000001/skills');
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values
  ('b1200000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','b1100000-0000-0000-0000-000000000001','Lead');
 insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id,created_at) values
@@ -54,7 +56,9 @@ set local role service_role;
 select is(public.move_agent_profile((select agent from named where name='writer')),false,'it does not move before its profile''s tools are read back and recorded');
 select ok((select recorded from public.agent_move_work() where agent_id=(select agent from named where name='writer')),'the worker reads that its record exists');
 select public.record_agent_profile(agent,'ag-'||replace(agent::text,'-',''),1,public.engine_tool_policy()) from named where name='writer';
+select is(public.move_agent_profile((select agent from named where name='writer')),false,'nor before its profile reads the Company''s shared folder, confirmed');
 reset role;
+update public.agent_profiles set skills_shared=true where agent_id=(select agent from named where name='writer');
 
 -- Each blocker alone, with nothing else in flight: the move is refused and the Agent is off the worker's list; once it
 -- ends, or the clock passes its window, the Agent is back on the list.
@@ -244,6 +248,9 @@ select results_eq($$select agent_id from public.agent_move_work() order by agent
  'it is listed to move, beside the Agent made on Lead''s profile');
 select results_eq($$select public.begin_agent_profile_move(agent) from named where name in ('ads','seo') order by name$$,$$values (true),(true)$$,'both begin their move');
 select public.record_agent_profile(agent,'ag-'||replace(agent::text,'-',''),1,public.engine_tool_policy()) from named where name in ('ads','seo');
+reset role;
+update public.agent_profiles set skills_shared=true where agent_id in (select agent from named where name in ('ads','seo'));
+set local role service_role;
 select results_eq($$select public.move_agent_profile(agent) from named where name in ('ads','seo') order by name$$,$$values (true),(true)$$,'and both move');
 reset role;
 select is((select string_agg(n.name||'='||(h.profile=public.agent_engine_profile(a.id))::text,',' order by n.name) from named n join public.hermes_agents a on a.id=n.agent join public.hermes_connections h on h.id=a.connection_id),
@@ -258,12 +265,15 @@ select results_eq($$select a.id,a.connection_id,h.profile,h.key_encrypted from p
 select ok(not exists(select 1 from public.company_profile_keepers where company_id='10000000-0000-0000-0000-000000000003')
   and not exists(select 1 from public.agent_profiles where company_id='10000000-0000-0000-0000-000000000003'),'and record no keeper or owner record for Aleem');
 create temporary table rs_after as select a.id,a.connection_id,h.profile from public.hermes_agents a join public.hermes_connections h on h.id=a.connection_id where a.company_id='10000000-0000-0000-0000-000000000001';
-insert into public.company_profiles(company_id,profile,tools_level,tools_policy) values ('10000000-0000-0000-0000-000000000003','co-10000000000000000000000000000003',1,public.engine_tool_policy());
+insert into public.company_profiles(company_id,profile,tools_level,tools_policy,skills_shared) values ('10000000-0000-0000-0000-000000000003','co-10000000000000000000000000000003',1,public.engine_tool_policy(),true);
 set local role service_role;
 select results_eq($$select agent_id,company_id from public.agent_move_work()$$,$$values ('b1100000-0000-0000-0000-000000000004'::uuid,'10000000-0000-0000-0000-000000000003'::uuid)$$,
  'once Aleem''s profile is ready, its Copy is listed, under Aleem');
 select ok(public.begin_agent_profile_move('b1100000-0000-0000-0000-000000000004'),'Copy begins its move');
 select public.record_agent_profile('b1100000-0000-0000-0000-000000000004','ag-b1100000000000000000000000000004',1,public.engine_tool_policy());
+reset role;
+update public.agent_profiles set skills_shared=true where agent_id='b1100000-0000-0000-0000-000000000004';
+set local role service_role;
 select ok(public.move_agent_profile('b1100000-0000-0000-0000-000000000004'),'and moves');
 reset role;
 select is((select agent_id from public.company_profile_keepers where company_id='10000000-0000-0000-0000-000000000003'),'b1100000-0000-0000-0000-000000000003'::uuid,'Aleem''s keeper is Aleem''s Lead');

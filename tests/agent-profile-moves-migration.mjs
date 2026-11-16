@@ -20,9 +20,9 @@ insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_
 insert into public.hermes_agent_audit(company_id,actor_id,agent_id,action,details) values
  ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','c1220000-0000-0000-0000-000000000001','PROVIDE_BUNDLED_HERMES_AGENT',jsonb_build_object('connection_id','c1210000-0000-0000-0000-000000000001')),
  ('10000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000001','c1220000-0000-0000-0000-000000000002','PROVIDE_BUNDLED_HERMES_AGENT',jsonb_build_object('connection_id','c1210000-0000-0000-0000-000000000002'));
-insert into public.company_profiles(company_id,profile,tools_level,tools_policy) values
- ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',1,public.engine_tool_policy()),
- ('10000000-0000-0000-0000-000000000002','co-10000000000000000000000000000002',1,public.engine_tool_policy());
+insert into public.company_profiles(company_id,profile,tools_level,tools_policy,skills_shared) values
+ ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',1,public.engine_tool_policy(),true),
+ ('10000000-0000-0000-0000-000000000002','co-10000000000000000000000000000002',1,public.engine_tool_policy(),true);
 create temporary table made(agent uuid);
 grant all on made to service_role;
 
@@ -58,6 +58,9 @@ set local role service_role;
 select results_eq($$select agent_id from public.agent_move_work() where company_id='10000000-0000-0000-0000-000000000001'$$,$$select agent from made$$,'the new worker lists the Agent it made');
 select ok(public.begin_agent_profile_move((select agent from made)),'begins its move');
 select public.record_agent_profile(agent,'ag-'||replace(agent::text,'-',''),1,public.engine_tool_policy()) from made;
+reset role;
+update public.agent_profiles set skills_shared=true where agent_id=(select agent from made);
+set local role service_role;
 select ok(public.move_agent_profile((select agent from made)),'and moves it to its own profile');
 reset role;
 select is((select h.profile from public.hermes_agents a join public.hermes_connections h on h.id=a.connection_id where a.id=(select agent from made)),(select 'ag-'||replace(agent::text,'-','') from made),

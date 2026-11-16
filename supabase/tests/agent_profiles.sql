@@ -6,7 +6,7 @@ insert into public.hermes_connections(id,company_id,owner_id,address,profile,key
  ('a7000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9','co-10000000000000000000000000000001','ciphertext','connected','0.23.0','{run_submission}');
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('a7000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','a7000000-0000-0000-0000-000000000001','Lead','General',true);
 insert into public.hermes_agent_audit(company_id,actor_id,agent_id,action,details) values ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','a7000000-0000-0000-0000-000000000002','PROVIDE_BUNDLED_HERMES_AGENT',jsonb_build_object('connection_id','a7000000-0000-0000-0000-000000000001'));
-insert into public.company_profiles(company_id,profile,tools_level,tools_policy) values ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',1,public.engine_tool_policy());
+insert into public.company_profiles(company_id,profile,tools_level,tools_policy,skills_shared) values ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',1,public.engine_tool_policy(),true);
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values
  ('a7100000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','a7000000-0000-0000-0000-000000000002','Lead'),
  ('a7100000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','a7000000-0000-0000-0000-000000000002','Lead');
@@ -39,7 +39,7 @@ select is(public.lead_create_agent(conversation=>'a7100000-0000-0000-0000-000000
 reset role;
 select is((select tools_pending from public.agent_profiles where agent_id=(select agent from made where name='own')),true,
  'and the other level''s tools it wrote send the profile back to the worker, so no Run starts on it until its read-back is recorded');
-update public.agent_profiles set tools_pending=false where agent_id=(select agent from made where name='own');
+update public.agent_profiles set tools_pending=false,skills_shared=true where agent_id=(select agent from made where name='own');
 select is((select count(*)::int from public.hermes_agents where company_id='10000000-0000-0000-0000-000000000001' and not is_default),1,'one Agent is made');
 select ok(exists(select 1 from public.hermes_agents a join public.hermes_connections h on h.id=a.connection_id join made m on m.agent=a.id and m.name='own'
   where h.profile=m.profile and h.key_encrypted='ciphertext' and h.owner_id='20000000-0000-0000-0000-000000000001' and h.address='http://127.0.0.1:9' and public.is_bundled_connection(h.id)
