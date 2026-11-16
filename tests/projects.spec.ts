@@ -104,7 +104,7 @@ test('a project is created, a card is filed into it, and the board and list show
    await expect(page.locator('.card')).toHaveCount(1);
    await shoot(page,`projects-board-${language}`);
    await page.locator('.card a').first().click();
-   await page.getByRole('dialog').getByRole('link',{name:'Card details'}).click();
+   await page.getByRole('dialog').getByRole('link',{name:{en:'Card details',ar:'تفاصيل البطاقة'}[language]}).click();
    await expect(page).toHaveURL(/\/work\/board\/\d+$/);
    await expect(page.locator('[data-card-section=project] select')).toBeVisible();
    await shoot(page,`projects-card-${language}`);

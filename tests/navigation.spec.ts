@@ -240,6 +240,8 @@ test('own comments, moves and approvals invalidate prepared pages immediately', 
   await expect(page.locator('.column[data-stage-name="مراجعة"] .card').filter({ hasText: title })).toBeVisible();
   await openNavigation(page);
   await page.locator('.sidebar .sb-count[href$="/approvals"]').click();
+  // The board draws the same Card in its own column, opening its sheet (#116): the queued Card is read on Waiting on you.
+  await expect(page).toHaveURL(/\/approvals$/);
   const queued = page.locator('.approval-card').filter({ hasText: title });
   await expect(queued).toBeVisible();
   await queued.getByRole('link', { name: title }).click();
