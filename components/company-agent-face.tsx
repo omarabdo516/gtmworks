@@ -23,7 +23,7 @@ export function CompanyAgentFace({agent,size}:{agent:Pick<CompanyAgent,'connecti
  const eyes=[16-spread,16+spread];
  return <svg className="agent-face" role="img" aria-label={agent.name} viewBox="0 0 32 32" style={{width:size,height:size,color:ink}}>
   <g fill={fill}><circle cx="16" cy="16" r="16"/></g>
-  <g fill="currentColor" stroke="currentColor">
+  <g className="face__f" fill="currentColor" stroke="currentColor">
    {accessories[face.accessory]}
    {eyes.map(x=>face.shape===1?<rect key={x} x={x-eye} y={15-eye} width={eye*2} height={eye*2} rx=".8" stroke="none"/>:face.shape===2?<g key={x}><rect x={x-3.25} y="12.5" width="6.5" height="5" rx="2" fill="none" strokeWidth="1.5"/><circle cx={x} cy="15" r={eye*.6} stroke="none"/></g>:<circle key={x} cx={x} cy="15" r={eye} stroke="none"/>)}
    {face.shape===2&&<path d={`M${eyes[0]+3.25} 14.5H${eyes[1]-3.25}`} fill="none" strokeWidth="1.5"/>}
