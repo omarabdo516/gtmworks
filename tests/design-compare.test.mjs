@@ -92,8 +92,12 @@ test('every screen says how to reach it in the reference and which built page it
     assert.deepEqual(Object.keys(screen).sort(), ['builtPath', 'reference'], name);
     assert.ok(screen.builtPath === null || /^\/c\/rs-(learning|consultations)\/[a-z/]+(\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?(\?[a-z]+=[a-z0-9-]+)?$/.test(screen.builtPath), `${name} built path`);
     assert.ok(Array.isArray(screen.reference.steps), `${name} steps`);
-    // The alone screens (#10) start by viewing the prototype as Omar working alone; every other screen never touches it.
-    const steps = name.endsWith('-alone') ? screen.reference.steps.slice(3) : screen.reference.steps;
+    // The alone screens (#10) start by viewing the prototype as Omar working alone, and a Member's request screens (#17)
+    // view it as Youssef in the team; every other screen never touches it.
+    const youssef = '[data-action="set-as"][data-person="youssef"][data-world="team"]';
+    const asYoussef = ['ask-agent', 'request-sent', 'request-made'].includes(name);
+    if (asYoussef) assert.ok(screen.reference.steps.some(step => step.click === youssef), `${name} views as Youssef`);
+    const steps = name.endsWith('-alone') ? screen.reference.steps.slice(3) : asYoussef ? screen.reference.steps.filter(step => step.click !== youssef) : screen.reference.steps;
     for (const step of steps) {
       assert.equal(Object.keys(step).length, 1, `${name}: one action per step`);
       const [[action, selector]] = Object.entries(step);

@@ -1,0 +1,8 @@
+{
+  "about": "The first Contributor's Conversation once Omar said no to their request, with the reason and Lead's answer (#17).",
+  "path": "/c/rs-learning/conversations/6b000000-0000-0000-0000-000000000003",
+  "state": "agent-request-declined",
+  "person": "reviewer@example.com",
+  "dark": true,
+  "ready": "[data-request=\"declined\"]"
+}

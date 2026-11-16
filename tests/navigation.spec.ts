@@ -158,7 +158,10 @@ test('visible links fully prefetch page data and closing reuses the visited boar
     if (route.request().headers()['rsc'] !== '1') return route.continue();
     const response = await route.fetch();
     if (route.request().headers()['next-router-prefetch'] !== '1') {
-      prepared.set(new URL(route.request().url()).pathname, await response.text());
+      // Keyed as the link's href: its path and query, without Next's _rsc cache key.
+      const url = new URL(route.request().url());
+      url.searchParams.delete('_rsc');
+      prepared.set(url.pathname + url.search, await response.text());
     }
     await route.fulfill({ response });
   });

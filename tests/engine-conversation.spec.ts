@@ -169,9 +169,42 @@ test('integration: Lead makes the Agent the Owner asks for, and nothing for a Ma
  const manager=(await memberClient('manager@example.com')).person;
  const theirs=randomUUID();
  expect(await sendMessage(manager,service,{person:'20000000-0000-0000-0000-000000000002',company,conversation:theirs,sendKey:randomUUID(),agent:lead,message:'I want someone to handle Meta ads',encryptionKey,engineFor:fake.engineFor})).toEqual({conversation:theirs});
- expect(fake.runs[3].tools.map(tool=>tool.name)).toEqual(['save_rule']);
+ expect(fake.runs[3].tools.map(tool=>tool.name)).toEqual(['request_agent','save_rule']);
  expect(await closeOpenRuns(service,{encryptionKey,conversation:theirs,engineFor:fake.engineFor})).toBe(1);
  expect(made()).toHaveLength(2);
+});
+
+test('integration: Lead keeps a Manager\'s and a Contributor\'s request for an Agent, and makes none',async()=>{
+ test.setTimeout(120000);
+ const {lead}=bundledLead();
+ const fake=fakeEngine();
+ fake.settings.toolCalls=()=>[{id:'call-0',name:'request_agent',arguments:{name:' WhatsApp Leads ',job:'Follows up the WhatsApp leads.',apps:['WhatsApp Business']}}];
+ const agents=()=>JSON.parse(query(`select count(*)::int as n from public.hermes_agents where company_id='${company}'`))[0].n;
+ const before=agents();
+ const {service}=await clients();
+ const [manager,contributor]=['20000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000005'];
+ const asked='I want someone to follow up our WhatsApp leads';
+ // The Engine that would make an Agent does not answer: a request does not ask it.
+ const down=(connection:object)=>({...fake.engineFor(connection),readAgent:async()=>({state:'unreachable' as const,agent:null})});
+ const conversations:string[]=[];
+ for(const [email,person] of [['manager@example.com',manager],['multi@example.com',contributor]]) {
+  const {person:member}=await memberClient(email);
+  const conversation=randomUUID(); conversations.push(conversation);
+  expect(await sendMessage(member,service,{person,company,conversation,sendKey:randomUUID(),agent:lead,message:asked,encryptionKey,engineFor:fake.engineFor})).toEqual({conversation});
+  // A reader and the worker close the run at once: one request is kept.
+  const close=()=>closeOpenRuns(service,{encryptionKey,conversation,owner:person,engineFor:down});
+  const closed=await Promise.all([close(),close()]);
+  expect(closed[0]+closed[1]).toBe(1);
+ }
+ expect(fake.runs.map(run=>run.tools.map(tool=>tool.name))).toEqual([['request_agent','save_rule'],['request_agent','suggest_rule']]);
+ expect(fake.agentReads).toEqual([]);
+ expect(agents()).toBe(before);
+ const listed=`('${conversations.join("','")}')`;
+ expect(JSON.parse(query(`select conversation_id,run_id,call_id,asked_by,asked_with,agent_name,job,array_to_string(apps,'|') as apps,state from public.lead_agent_requests where conversation_id in ${listed} order by id`)))
+  .toEqual(conversations.map((conversation,index)=>({conversation_id:conversation,run_id:fake.runs[index].id,call_id:'call-0',asked_by:[manager,contributor][index],asked_with:asked,agent_name:'WhatsApp Leads',job:'Follows up the WhatsApp leads.',apps:'WhatsApp Business',state:'waiting'})));
+ expect(JSON.parse(query(`select count(*)::int as n from public.lead_made_agents where conversation_id in ${listed}`))[0].n).toBe(0);
+ expect(JSON.parse(query(`select actor_id,action,details->>'asked_for' as asked_for from public.company_log where company_id='${company}' and action in ('agent_request_sent','agent_request_made','agent_request_declined') order by id`)))
+  .toEqual([{actor_id:manager,action:'agent_request_sent',asked_for:'WhatsApp Leads'},{actor_id:contributor,action:'agent_request_sent',asked_for:'WhatsApp Leads'}]);
 });
 
 // #18: an Owner tells an Agent a lasting rule in its Conversation; the fake engine scripts the Agent's save_rule call.

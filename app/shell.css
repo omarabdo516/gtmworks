@@ -450,6 +450,7 @@
 .gw .tpl__hand .gw-icon { width: 14px; height: 14px; margin-top: 2px; color: var(--gw-text-2); }
 .gw .tpl__foot { display: flex; align-items: center; gap: 8px; margin-top: auto; padding-top: 4px; }
 .gw .tpl__tools { display: inline-flex; align-items: center; gap: 4px; flex: 1 1 0; min-width: 0; }
+.gw .ac-card .pp-tools { display: inline-flex; gap: 4px; margin-inline-end: 6px; vertical-align: -6px; }
 /* An app's tile (design-reference: .tool-tile; components/app-tile.tsx): the brand mark or the app's letters, on the
    gallery's cards and in Settings, Apps. A brand mark keeps a white tile in the dark theme, as the reference does. */
 .gw .tool-tile {
@@ -515,6 +516,38 @@
 @media (hover: hover) { .gw .ac-actions .btn:hover { background: var(--gw-primary-hover); } }
 .gw .ac-tip { display: flex; align-items: center; gap: 6px; margin: -6px 0 0; padding: 0 16px 16px; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); }
 .gw .ac-tip .gw-icon { width: 13px; height: 13px; flex: none; color: var(--gw-text-3); }
+
+/* A Member's request for an Agent (#17; design-reference: .ac-card--req, .badge--req, .pp-sub, .pp-form, .card__outcome):
+   dashed while it is not an Agent, quieter once answered. The Owner answers it in "Waiting on you". */
+.gw .ac-card .badge .gw-icon { width: 13px; height: 13px; }
+.gw .badge--req { background: transparent; color: var(--gw-text-1); box-shadow: var(--gw-border-1) 0 0 0 1px inset; font-weight: 600; }
+.gw .ac-card--req { box-shadow: none; outline: 1px dashed var(--gw-border-1); outline-offset: -1px; container-type: inline-size; }
+/* In the narrow "Waiting on you" column each label sits above its value, so the request reads in full. */
+@container (max-width: 420px) { .gw .ac-card--req .kv__row { grid-template-columns: minmax(0, 1fr); gap: 2px; } }
+.gw .ac-card--req .card__head > :first-child { opacity: .72; }
+.gw .ac-card--req.is-resolved .card__head > :first-child { opacity: 1; }
+.gw .ac-card.is-resolved .kv { opacity: .72; }
+.gw .ac-card .pp-sub { display: block; margin-top: 2px; color: var(--gw-text-2); }
+.gw .ac-card .card__outcome { display: flex; align-items: center; gap: 6px; padding: 12px 16px 16px; font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-3); }
+.gw .ac-card .card__outcome > .gw-icon { width: 14px; height: 14px; flex: none; }
+.gw .ac-card .card__outcome > span { overflow-wrap: anywhere; }
+.gw .ac-card .card__outcome .link-btn { flex: none; margin-inline-start: auto; padding: 2px 6px; border-radius: var(--gw-r-xs); font-size: var(--gw-fs-sm); font-weight: 600; color: var(--gw-text-1); }
+.gw .ac-card .card__actions { display: flex; gap: 8px; padding: 14px 16px 16px; }
+.gw .ac-card .card__actions .btn { flex: 1 1 0; padding: 0 10px; }
+.gw .ac-card .pp-form { display: grid; gap: 16px; padding: 12px 16px 0; }
+.gw .ac-card .set-field { display: grid; gap: 6px; }
+.gw .ac-card .set-label { font-size: var(--gw-fs-xs); color: var(--gw-text-2); }
+.gw .ac-card .set-input {
+  display: block; width: 100%; min-height: 88px; padding: 8px 10px; border-radius: var(--gw-r-sm); border: 0.5px solid var(--gw-border-2); background: var(--gw-bg-pane);
+  color: var(--gw-text-1); font: inherit; font-size: var(--gw-fs-sm); line-height: 1.7; resize: vertical; outline: none;
+  transition: border-color var(--gw-dur-fast) var(--gw-ease-out), box-shadow var(--gw-dur-fast) var(--gw-ease-out);
+}
+.gw .ac-card .set-input:focus { border-color: var(--gw-border-1); box-shadow: 0 0 0 3px var(--gw-bg-active); }
+.gw .ac-card .set-input::placeholder { color: var(--gw-text-4); opacity: 1; }
+.gw .ac-card .set-input[aria-invalid="true"] { border-color: var(--gw-danger-text); }
+.gw .ac-card :is(.set-err, .set-hint) { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); }
+.gw .ac-card .set-err { color: var(--gw-danger-text); }
+@media (hover: hover) { .gw .ac-card .card__outcome .link-btn:hover { background: var(--gw-bg-hover); } }
 
 /* When an Agent Lead made was made and at whose request, on its details and its Settings page (design-reference: .born) */
 .gw .born { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; margin: 0; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); }

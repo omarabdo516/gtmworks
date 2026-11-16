@@ -43,6 +43,18 @@ test('Card, Member and Agent rows say who changed what', () => {
  }
 });
 
+test('a request for an Agent says who asked whom, and the Owner\'s yes or no with its reason, in both languages', () => {
+ const sent = describeEntry({ subject: 'agent', action: 'agent_request_sent', agent_id: lead, details: { agent_name: 'Lead', asked_for: 'WhatsApp Leads', job: 'Follows up the leads.' } });
+ assert.deepEqual([sent.act, sent.obj, sent.from, sent.to], [['logActAgentRequestSent', { text: 'Lead' }], 'WhatsApp Leads', undefined, { key: 'logAgentRequestWaiting' }]);
+ const made = describeEntry({ subject: 'agent', action: 'agent_request_made', agent_id: writer, details: { agent_name: 'WhatsApp Leads', asked_by: 'يوسف' } });
+ assert.deepEqual([made.act, made.obj, made.from, made.to], [['logActAgentRequestMade', { text: 'يوسف' }], 'WhatsApp Leads', { key: 'logAgentRequest' }, { key: 'logAgentShowsFor', values: ['يوسف'] }]);
+ const declined = describeEntry({ subject: 'agent', action: 'agent_request_declined', agent_id: lead, details: { agent_name: 'Lead', asked_for: 'WhatsApp Leads', asked_by: 'يوسف', reason: 'Ads follows WhatsApp leads now.' } });
+ assert.deepEqual([declined.act, declined.obj, declined.from, declined.to], [['logActAgentRequestDeclined', { text: 'يوسف' }], 'WhatsApp Leads', { key: 'logAgentRequest' }, { text: 'Ads follows WhatsApp leads now.' }]);
+ assert.deepEqual(['en', 'ar'].map(language => { const { t } = i18n(language); return [t('logActAgentRequestSent', 'Lead'), t('logActAgentRequestMade', 'Youssef'), t('logAgentShowsFor', 'Youssef'), t('logActAgentRequestDeclined', 'Youssef'), t('logAgentRequest'), t('logAgentRequestWaiting')]; }),
+  [['asked Lead for an agent', 'made an agent Youssef asked for', 'Shows for Youssef', 'declined an agent request from Youssef', 'Request', 'Waiting for the Owner’s answer'],
+   ['طلب من Lead وكيل', 'عمل وكيل طلبه Youssef', 'ظهر عند Youssef', 'رفض طلب وكيل من Youssef', 'طلب', 'مستني رد المالك']]);
+});
+
 test('the filters: everyone, one person, one Agent, gtmworks itself, one Card', () => {
  const rows = [
   { id: 1, actor_kind: 'person', actor_id: omar, card_id: 5, agent_id: null },

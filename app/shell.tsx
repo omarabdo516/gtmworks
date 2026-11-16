@@ -43,6 +43,7 @@ export default async function Shell({company,companies,section,title,crumbs,pers
  const workMode=company?.id?(await db.from('companies').select('work_mode').eq('id',company.id).maybeSingle()).data?.work_mode as string|null|undefined:undefined;
  const channels=company?.id?await channelSidebar(db,company.id):[];
  const manage=company?.id?!!(await db.rpc('can_manage_company',{target:company.id})).data:false;
+ const asksForAgents=!!company?.id&&!owner&&(await db.rpc('conversation_can_write',{c:company.id})).data===true;
  const active=(path:string)=>path==='chat'?chat:path==='work/board'?section.startsWith('work/'):section===path;
  const sidebar=<SidebarSearchProvider>
   <div className="sb-top">
@@ -69,7 +70,7 @@ export default async function Shell({company,companies,section,title,crumbs,pers
       {fresh&&<span className="agent-tile__new" aria-hidden="true">{t('agentNew')}</span>}
      </Link>
     </li>;})}
-    {owner&&<li><Link className="agent-tile agent-tile--new" href={`/c/${slug}/chat?new=agent`}><span className="agent-tile__plus"><ShellIcon name="plus"/></span><span className="agent-tile__name">{t('newAgent')}</span></Link></li>}</ul>
+    {(owner||asksForAgents)&&<li><Link className="agent-tile agent-tile--new" href={`/c/${slug}/chat?new=agent`}><span className="agent-tile__plus"><ShellIcon name="plus"/></span><span className="agent-tile__name">{t(owner?'newAgent':'settingsAskAgent')}</span></Link></li>}</ul>
    </section>
    <section className="sb-sec" id="sb-recent" aria-label={t('recentChats')}>
     {company?.id&&<ChannelList slug={slug} company={company.id} person={personId} initial={channels} current={channelId} manage={manage}/>}

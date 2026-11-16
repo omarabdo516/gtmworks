@@ -31,6 +31,10 @@ A named worker running in Hermes, attached to a Company with a free name and spe
 The Company's default Agent, the one people talk to first. The bundled Engine names it Lead; a Company has one at a time, and an Owner may make another of its Agents the main one.
 _Avoid_: default bot, assistant, orchestrator
 
+**Agent request / طلب وكيل**:
+A Manager's or Contributor's ask for a new Agent, which the main Agent prepares in their Conversation and which waits in every Owner's "Waiting on you". An Owner makes it, exactly as when the Owner asks the main Agent, or says no with a reason that goes back to the Member's Conversation. Only an Owner makes Agents.
+_Avoid_: proposal, ticket
+
 **Run / تشغيل**:
 One attempt by an agent to work on one card in one company, with a short-lived credential limited to that card and run. A retry keeps the same card; execution happens outside gtmworks.
 
