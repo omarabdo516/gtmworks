@@ -94,7 +94,8 @@ begin
   insert into public.agent_profiles(agent_id,company_id,tools_level,tools_policy) values(agent,talk.company_id,own_level,own_policy);
  end if;
  insert into public.hermes_connections(company_id,owner_id,address,profile,key_encrypted,state,version,features)
-  values(talk.company_id,talk.person_id,linked.address,case when own_level is null then linked.profile else public.agent_engine_profile(agent) end,
+  values(talk.company_id,talk.person_id,linked.address,
+   case when own_level is not null then public.agent_engine_profile(agent) when linked.profile ~ '^ag-[0-9a-f]{32}$' then public.company_engine_profile(talk.company_id) else linked.profile end,
    linked.key_encrypted,linked.state,linked.version,linked.features) returning id into connection;
  insert into public.hermes_agents(id,company_id,connection_id,name,speciality,requested_by,apps,template,instructions)
   values(agent,talk.company_id,connection,trim(agent_name),trim(job),talk.person_id,array(select trim(app) from unnest(apps) app),template,
@@ -107,6 +108,17 @@ begin
 end $$;
 revoke all on function public.lead_create_agent(uuid,text,text,text,text,text[],text,text,integer,integer) from public,anon,authenticated;
 grant execute on function public.lead_create_agent(uuid,text,text,text,text,text[],text,text,integer,integer) to service_role;
+
+-- Lead is the Company's main Agent on a profile of the Company's in the bundled Engine: the Company's own (ADR 0014), or
+-- its own when the Owner made an Agent with one the main Agent (ADR 0016), so Lead's tools stay with the main Agent. An
+-- Agent that Lead makes without a profile of its own then goes on the Company's profile (lead_create_agent), since an
+-- `ag-` profile serves its one Agent. 20261223000000's, unchanged but for that.
+create or replace function public.is_company_lead(c uuid, agent uuid) returns boolean language sql stable security definer set search_path='' as $$
+ select exists(select 1 from public.hermes_agents a join public.hermes_connections h on h.id=a.connection_id
+  where a.id=agent and a.company_id=c and a.is_default and public.is_bundled_connection(h.id)
+   and (h.profile=public.company_engine_profile(c) or exists(select 1 from public.agent_profiles p where p.profile=h.profile and p.agent_id=a.id and p.company_id=c)));
+$$;
+revoke all on function public.is_company_lead(uuid,uuid) from public,anon,authenticated,service_role;
 
 -- An `ag-` profile serves its one Agent in its one Company: a Connection naming it exists only in the Company its owner
 -- record names, and only that Agent sits on it. This covers the Owner's paste route (any profile name), an attach after

@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(71);
+select plan(74);
 -- RS Learning (1): Lead on the Company's own profile, an Owner's (Omar's) and a Manager's Conversation with Lead.
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
  ('a7000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9','co-10000000000000000000000000000001','ciphertext','connected','0.23.0','{run_submission}');
@@ -230,6 +230,24 @@ select throws_ok($$select public.record_agent_profile((select agent from own),(s
 select public.record_agent_profile((select agent from made where name='lead'),(select profile from made where name='lead'),3,public.engine_tool_policy());
 reset role;
 select is((select count(*)::int from public.agent_profiles),1,'the worker never writes an owner record');
+
+update public.hermes_agents set is_default=false where id='a7000000-0000-0000-0000-000000000002';
+update public.hermes_agents set is_default=true where id=(select agent from made where name='own');
+insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values
+ ('a7100000-0000-0000-0000-000000000009','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001',(select agent from made where name='own'),'Writer');
+insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id) values
+ ('10000000-0000-0000-0000-000000000001','a7100000-0000-0000-0000-000000000009','person','20000000-0000-0000-0000-000000000001','Omar','I want someone for our ads',gen_random_uuid(),'run-9');
+select ok(public.may_use_lead_tools('10000000-0000-0000-0000-000000000001',(select agent from made where name='own'),'20000000-0000-0000-0000-000000000001'),
+ 'an Agent on its own profile that the Owner makes the main Agent is Lead, and the Owner keeps Lead''s tools');
+set local role service_role;
+select is(public.lead_create_agent(conversation=>'a7100000-0000-0000-0000-000000000009',run=>'run-9',call=>'call-0',agent_name=>'Ads',job=>'Runs the ads.',apps=>'{}')->>'state','created',
+ 'that Lead makes Agents');
+reset role;
+select is((select h.profile from public.lead_made_agents m join public.hermes_agents a on a.id=m.agent_id join public.hermes_connections h on h.id=a.connection_id
+  where m.conversation_id='a7100000-0000-0000-0000-000000000009'),'co-10000000000000000000000000000001',
+ 'and one made without a profile of its own goes on the Company''s profile, never on the main Agent''s own');
+update public.hermes_agents set is_default=false where id=(select agent from made where name='own');
+update public.hermes_agents set is_default=true where id='a7000000-0000-0000-0000-000000000002';
 
 set local role authenticated;
 select set_config('request.jwt.claims','{"role":"authenticated"}',true);
