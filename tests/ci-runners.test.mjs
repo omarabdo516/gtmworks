@@ -138,7 +138,7 @@ test('on the self-hosted runner a job clears an earlier run and moves the ports 
   const steps = job.job.steps;
   const prepare = steps.findIndex(step => /ci-runner\.mjs move-ports \d+/.test(step.run ?? ''));
   assert.ok(prepare >= 0 && prepare < steps.findIndex(startsSupabase), `${label(job)} moves the ports first`);
-  assert.equal(condition(steps[prepare]), "runner.environment == 'self-hosted'", label(job));
+  assert.equal(condition(steps[prepare]), "runner.environment != 'github-hosted'", label(job));
   assert.match(steps[prepare].run, /ci-runner\.mjs cleanup[\s\S]*ci-runner\.mjs move-ports/, `${label(job)} clears an earlier run first`);
   assert.doesNotThrow(() => movePorts(config, Number(steps[prepare].run.match(/move-ports (\d+)/)[1])), label(job));
   const last = steps.at(-1);

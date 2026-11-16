@@ -146,7 +146,7 @@ jobs:
           node-version: 22
           cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
       - name: clear an earlier run and move the stack's ports
-        if: ${{ runner.environment == 'self-hosted' }}
+        if: ${{ runner.environment != 'github-hosted' }}
         run: |
           node scripts/ci-runner.mjs cleanup
           node scripts/ci-runner.mjs move-ports 640
@@ -179,7 +179,7 @@ jobs:
           node-version: 22
           cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
       - name: clear an earlier run and move the stack's ports
-        if: ${{ runner.environment == 'self-hosted' }}
+        if: ${{ runner.environment != 'github-hosted' }}
         run: |
           node scripts/ci-runner.mjs cleanup
           node scripts/ci-runner.mjs move-ports 640
@@ -243,7 +243,7 @@ jobs:
       - name: start the isolated Docker machine
         run: |
           kept=()
-          if [[ $RUNNER_ENVIRONMENT == self-hosted ]]; then
+          if [[ $RUNNER_ENVIRONMENT != github-hosted ]]; then
             docker rm -f install-docker > /dev/null 2>&1 || true
             kept=(-v gtmworks-install-docker:/var/lib/docker)
           fi
@@ -252,7 +252,7 @@ jobs:
             -v "$PWD:$PWD" "${kept[@]}" docker:28.5.1-dind
           for attempt in $(seq 1 60); do docker --host tcp://127.0.0.1:2375 info >/dev/null 2>&1 && break; sleep 1; done
           docker --host tcp://127.0.0.1:2375 info >/dev/null || { echo 'install check failed: DinD readiness' >&2; exit 1; }
-          if [[ $RUNNER_ENVIRONMENT == self-hosted ]]; then
+          if [[ $RUNNER_ENVIRONMENT != github-hosted ]]; then
             inner() { docker --host tcp://127.0.0.1:2375 "$@"; }
             containers=$(inner container ls --all --quiet)
             if [[ -n $containers ]]; then inner container rm --force --volumes $containers > /dev/null; fi
