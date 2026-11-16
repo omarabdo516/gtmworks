@@ -195,11 +195,11 @@ test('owner assigns a new Contributor agent through settings, Home follows renam
   await expect(picker.locator('option')).toHaveText(["No agent role","Account manager","Writer","Designer","Critic"]);
   await picker.selectOption('designer');
   await member.getByRole('button',{name:"Save",exact:true}).click();
-  await expect(page.getByRole('status')).toHaveText("This agent role is assigned to another active member in the company. Remove that assignment first.");
+  await expect(page.getByRole('status').filter({hasText:"This agent role is assigned to another active member in the company. Remove that assignment first."})).toHaveText("This agent role is assigned to another active member in the company. Remove that assignment first.");
   expect(JSON.parse(query(`select agent_role from public.members where company_id=${quote(writer.company_id)} and person_id=${quote(person)}`))[0].agent_role).toBeNull();
   await picker.selectOption('writer');
   await member.getByRole('button',{name:"Save",exact:true}).click();
-  await expect(page.getByRole('status')).toHaveText("Change saved.");
+  await expect(page.getByRole('status').filter({hasText:"Change saved."})).toHaveText("Change saved.");
   await expect(picker).toHaveValue('writer');
   await expect(page.locator('.detail-row').filter({hasText:initialName}).filter({hasText:'Agent role: No agent role to Writer'})).toHaveCount(1);
   const [audit]=JSON.parse(query(`select actor_id,after_data->>'agent_role' as agent_role from public.member_audit where company_id=${quote(writer.company_id)} and person_id=${quote(person)} and action='UPDATE' order by id desc limit 1`));
@@ -218,7 +218,7 @@ test('owner assigns a new Contributor agent through settings, Home follows renam
   const renamedMember=page.locator('.member-row').filter({has:page.locator('strong',{hasText:new RegExp(`^${renamed}$`)})});
   await renamedMember.getByRole('combobox',{name:"Member role",exact:true}).selectOption('viewer');
   await renamedMember.getByRole('button',{name:"Save",exact:true}).click();
-  await expect(page.getByRole('status')).toHaveText("Change saved.");
+  await expect(page.getByRole('status').filter({hasText:"Change saved."})).toHaveText("Change saved.");
   await expect(renamedMember.getByRole('combobox',{name:"Agent role",exact:true})).toHaveCount(0);
   expect(JSON.parse(query(`select role,agent_role from public.members where company_id=${quote(writer.company_id)} and person_id=${quote(person)}`))[0]).toEqual({role:'viewer',agent_role:null});
  } finally {

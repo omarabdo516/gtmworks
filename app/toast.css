@@ -1,0 +1,23 @@
+/* The toast (#157), ported from the approved reference (design-reference/index.html: #toast-host, .toast and toastIn,
+   .toast__act, .toast.is-leaving and toastOut). Colours and motion come from the gw tokens (app/tokens.css). It shows
+   in the page, in an open dialog or over the settings overlay, so it sets the reference body's type itself, and it
+   takes the pointer back where a modal from the component kit turns it off for the page. */
+.gw .toast {
+  position: fixed; top: 72px; left: 50%; transform: translateX(-50%); z-index: 100;
+  background: var(--gw-primary); color: var(--gw-on-primary); padding: 7px 14px; border-radius: var(--gw-r-full);
+  font-family: var(--gw-font); font-size: var(--gw-fs-sm); font-weight: 400; line-height: 1.6; -webkit-font-smoothing: antialiased;
+  box-shadow: var(--gw-shadow-pill); display: inline-flex; align-items: center; gap: 8px; pointer-events: auto;
+  animation: toastIn var(--gw-dur) var(--gw-ease-out);
+}
+.gw .toast .gw-icon { display: inline-block; flex: none; width: 16px; height: 16px; }
+@keyframes toastIn { from { opacity: 0; transform: translate(-50%, 4px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.gw .toast.is-leaving { animation: toastOut 140ms var(--gw-ease-in) forwards; }
+@keyframes toastOut { to { opacity: 0; transform: translate(-50%, -4px); } }
+
+/* The product's global button look (app/globals.css) is not the reference's: the action starts bare, hover included. */
+.gw .toast .toast__act, .gw .toast .toast__act:hover {
+  display: inline-block; min-height: 0; margin: 0; border: 0; background: none; font: inherit; text-align: inherit; cursor: pointer; transition: none;
+  font-size: var(--gw-fs-sm); font-weight: 600; color: var(--gw-on-primary); text-decoration: underline; text-underline-offset: 3px;
+  padding: 0 2px; border-radius: var(--gw-r-xs);
+}
+.gw .toast .toast__act:focus-visible { outline: 2px solid var(--gw-on-primary); outline-offset: 2px; }

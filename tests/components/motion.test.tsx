@@ -51,10 +51,10 @@ test.each([['on', 120], ['off', 1000]] as const)('with reduced motion %s a wait 
 const languages = inject('languages'), widths = inject('widths');
 
 // The part in its row's markup, styled by app/globals.css (with the reduced-motion rule), the tokens and keyframes in
-// app/shell.css and its own file, in the order the app loads them. Each is the stylesheet Vite builds for the app
+// app/tokens.css, app/shell.css and its own file, in the order the app loads them. Each is the stylesheet Vite builds for the app
 // (globals.css with Tailwind), taken as text so the next part starts without this one's file.
 async function mount(row: MotionRow): Promise<Element> {
- const files = [...new Set(['app/globals.css', 'app/shell.css', row.file])];
+ const files = [...new Set(['app/globals.css', 'app/tokens.css', 'app/shell.css', row.file])];
  const sheets: string[] = await Promise.all(files.map(async file => (await import(/* @vite-ignore */ `/${file}?inline`)).default));
  const host = document.createElement('div');
  host.innerHTML = row.html;
