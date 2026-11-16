@@ -18,6 +18,9 @@ const settings = [{ click: '#btn-me' }, { click: '[data-action="sov-open"]' }, {
 const alone = [{ click: '#btn-me' }, { click: '[data-action="set-as"][data-person="omar"][data-world="solo"]' }, { waitFor: '#sb-recent' }];
 const asYoussef = [{ click: '#btn-me' }, { click: '[data-action="set-as"][data-person="youssef"][data-world="team"]' }, { waitFor: '#sb-recent' }];
 const youssefRequest = [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-wa"]' }, { waitFor: '.ac-card' }];
+// #185. The Team table's invitation, the same on both sides: open the form, send one, see its "Invite sent" row, then
+// open the form again.
+const inviteSteps = [{ click: '#inv-toggle' }, { fill: ['#inv-email', 'nour.hassan@rslearning.com'] }, { click: '.inv-go' }, { waitFor: '.ta-pending' }, { click: '#inv-toggle' }, { waitFor: '#inv-email' }];
 const board = [{ click: '#sb-nav [data-view="board"]' }, { waitFor: '#board-cols' }];
 const pickChat = [{ click: '#sh-tab-chat' }, { waitFor: '.priv-sheet' }];
 const youssefAsks = 'Plan the Saudi ads for January';
@@ -60,6 +63,7 @@ export const screens = {
   // The settings overlay opens on its Company section. The built overlay is route-backed (app/settings-overlay.tsx):
   // ?section= opens a section and ?agent=<id> one Agent's page.
   settings: { reference: { steps: settings }, builtPath: '/c/rs-learning/settings' },
+  invite: { reference: { steps: [...settings, ...inviteSteps] }, builtPath: '/c/rs-learning/settings', builtSteps: inviteSteps },
   agents: { reference: { steps: settingsSection('agents') }, builtPath: '/c/rs-learning/settings?section=agents' },
   // One Agent's page: Lead's settings inside the overlay. Built: the comparison fixture's main Agent, Lead (the seed
   // alone has no Agent with that id, so without the fixture the overlay shows the Agents list).
@@ -80,6 +84,9 @@ export const screens = {
   // #136. The Meta campaign chat (th-meta) after the first angle is chosen: Ads's reply with the campaign plan's draft card under it. Built: the
   // draft-shown visual state's Conversation (pass --built-path).
   'draft-card': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-meta"]' }, { click: '.opt[data-action="choose"]' }, { waitFor: '.card--draft' }] }, builtPath: null },
+  // #137. The team chat (th-team): Critic's reply with the review card of the December ad texts under it. Built: the
+  // review-shown visual state's Conversation (pass --built-path).
+  'review-card': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-team"]' }, { waitFor: '.rvcard' }, { scrollTo: '.rvcard' }] }, builtPath: null },
   // #18. The Conversation in which Omar told Ads a lasting rule, with the saved line under Ads's reply. Built: the
   // fixture's ruleConversation (pass --built-path).
   'rule-saved': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-rule-ads"]' }, { waitFor: '.note--saved' }] }, builtPath: null },

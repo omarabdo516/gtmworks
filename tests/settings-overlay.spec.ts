@@ -1,7 +1,7 @@
 import { test, expect } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { signIn, openNavigation } from './sign-in';
+import { signIn, openNavigation, emailLink } from './sign-in';
 
 // The settings overlay (#26): opened from the account menu over the page, closed back to it, one address per state,
 // the company's real Agents (the main one first), and the Owner's agent controls checked again on the server.
@@ -185,12 +185,12 @@ test('a Viewer sees only the Agents and their account, read only, and no Owner c
 // is checked for every Role: on screen when the Role's row names it, absent otherwise. A Viewer has no Company section.
 const rsLearning='10000000-0000-0000-0000-000000000001';
 const surfaces={
- company:['#co-name','.ro-text','.ro-note:not(.sov-warn)','.sov-ta table','.inv-sec a.inv-open','[aria-labelledby=co-h-mem] .panel-row'],
+ company:['#co-name','.ro-text','.ro-note:not(.sov-warn)','.sov-ta table','.inv-sec .inv-open','[aria-labelledby=co-h-mem] .panel-row'],
  agents:['a[href$="/chat?new=agent"]','.ro-note','.talk-tip a'],
  agent:['#set-make-main','#danger-delete','.ro-note','.talk-tip a'],
 };
 const roleViews=[
- {role:'Owner',email:'omar@example.com',sections,readOnly:false,movesMain:true,company:['#co-name','.sov-ta table','.inv-sec a.inv-open'],agents:['a[href$="/chat?new=agent"]','.talk-tip a'],agent:['#set-make-main','#danger-delete','.talk-tip a']},
+ {role:'Owner',email:'omar@example.com',sections,readOnly:false,movesMain:true,company:['#co-name','.sov-ta table','.inv-sec .inv-open'],agents:['a[href$="/chat?new=agent"]','.talk-tip a'],agent:['#set-make-main','#danger-delete','.talk-tip a']},
  {role:'Manager',email:'manager@example.com',sections,readOnly:false,movesMain:false,company:['.ro-text','.sov-ta table'],agents:['a[href$="/chat?new=agent"]','.talk-tip a'],agent:['.talk-tip a']},
  {role:'Contributor',email:'reviewer@example.com',sections,readOnly:true,movesMain:false,company:['.ro-text','.ro-note:not(.sov-warn)','[aria-labelledby=co-h-mem] .panel-row'],agents:['a[href$="/chat?new=agent"]','.ro-note','.talk-tip a'],agent:['.ro-note','.talk-tip a']},
  {role:'Viewer',email:'viewer@example.com',sections:['Agents','Your account'],readOnly:true,movesMain:false,company:null,agents:['.ro-note'],agent:['.ro-note']},
@@ -232,4 +232,51 @@ for(const view of roleViews) test(`${view.role}: Settings shows only what the Ro
   query(`delete from public.hermes_agents where id in ('${lead}','${ads}')`);
   query(`delete from public.hermes_connections where id in ('${first}','${second}')`);
  }
+});
+
+// #185: the Owner invites from the Team table without leaving the page; the invited person is a row marked "Invite sent"
+// for the Owner and the Managers, and their ordinary Member row once they accept from the email.
+test('the Owner invites a Member from the Team table, the row says Invite sent, and becomes a Member row when accepted',async({page,context,browser})=>{
+ const local=`team-invite-${Date.now()}`, email=`${local}@example.com`;
+ await signIn(page,'omar@example.com','/c/rs-learning/settings?section=company');
+ const overlay=page.getByRole('dialog',{name:'Settings'});
+ const address=page.url();
+ await overlay.getByRole('button',{name:'Invite a member'}).click();
+ await expect(overlay.locator('#inv-email')).toBeFocused();
+ await overlay.locator('#inv-email').fill(email);
+ await overlay.locator('#inv-role').selectOption('viewer');
+ await overlay.getByRole('button',{name:'Invite',exact:true}).click();
+ await expect(page.locator('.toast')).toHaveText(`Invite sent to ${email}`);
+ await expect(overlay.locator('#inv-toggle')).toBeFocused();
+ const invited=overlay.locator('.ta-table tbody tr').filter({hasText:email});
+ await expect(invited.locator('.ta-role')).toHaveText(`Viewer · ${email}`);
+ await expect(invited.locator('.ta-pending')).toHaveText('Invite sent');
+ expect(page.url()).toBe(address);
+ // The same email in another letter case is already invited: the error shows under the field and nothing is sent.
+ await overlay.getByRole('button',{name:'Invite a member'}).click();
+ await overlay.locator('#inv-email').fill(email.toUpperCase());
+ await overlay.getByRole('button',{name:'Invite',exact:true}).click();
+ await expect(overlay.locator('#inv-email-err')).toHaveText('This email has already been invited.');
+ await expect(overlay.locator('.ta-table tbody tr').filter({hasText:email})).toHaveCount(1);
+ // signIn empties the local mailbox, so the invitation's link is read before the Manager signs in.
+ const link=await emailLink(page,email);
+
+ const other=await browser.newContext(); const manager=await other.newPage();
+ try {
+  await signIn(manager,'manager@example.com','/c/rs-learning/settings?section=company');
+  const theirs=manager.getByRole('dialog',{name:'Settings'});
+  await expect(theirs.locator('.ta-table tbody tr').filter({hasText:email}).locator('.ta-pending')).toHaveText('Invite sent');
+  await expect(theirs.locator('#inv-toggle')).toHaveCount(0);
+ } finally { await other.close(); }
+
+ await context.clearCookies(); await page.goto(link);
+ await page.getByLabel('New password').fill('team-invited-password'); await page.getByLabel('Confirm password').fill('team-invited-password');
+ await page.getByRole('button',{name:'Save password'}).click();
+ await expect(page).toHaveURL(/\/c\/rs-learning\//);
+ await context.clearCookies();
+ await signIn(page,'omar@example.com','/c/rs-learning/settings?section=company');
+ const joined=overlay.locator('.ta-table tbody tr').filter({hasText:local});
+ await expect(joined.locator('.ta-role')).toHaveText('Viewer');
+ await expect(joined.locator('.ta-pending')).toHaveCount(0);
+ await expect(overlay.locator('.ta-table tbody tr').filter({hasText:email})).toHaveCount(0);
 });
