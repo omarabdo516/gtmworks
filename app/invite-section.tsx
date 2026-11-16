@@ -1,5 +1,5 @@
 'use client';
-import { useLayoutEffect, useReducer, useRef, type ReactNode } from 'react';
+import { useEffect, useMemo, useReducer, useRef, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
 import { inviteError } from '@/lib/invite.mjs';
@@ -37,9 +37,9 @@ const isolateEmails=(text:string):ReactNode[]=>text.split(/([\w.+-]+@[\w.-]+)/).
 export function InviteSection({mode,roles,send}:{mode:'table'|'alone',roles:InviteRole[],send:Send}) {
  const {t}=useI18n(); const router=useRouter();
  const alone=mode==='alone';
- const [form,dispatch]=useReducer(step(alone),alone?fresh:{open:false});
+ const [form,dispatch]=useReducer(useMemo(()=>step(alone),[alone]),alone?fresh:{open:false});
  const focusNext=useRef<'inv-email'|'inv-toggle'|null>(null);
- useLayoutEffect(()=>{ if(focusNext.current) { document.getElementById(focusNext.current)?.focus(); focusNext.current=null; } });
+ useEffect(()=>{ if(focusNext.current) { document.getElementById(focusNext.current)?.focus(); focusNext.current=null; } });
  const go=(action:Step,focus:'inv-email'|'inv-toggle')=>{ focusNext.current=focus; dispatch(action); };
  const submit=async()=>{
   if(!form.open||form.pending) return;
