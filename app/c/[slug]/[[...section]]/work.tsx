@@ -17,6 +17,7 @@ import { roleAgents } from '@/lib/role-agents';
 import { useAgentIdentities } from '@/lib/agent-identities-client';
 const NewCard=lazy(()=>import('./new-card'));
 import { workAction } from './work-actions';
+import { ChatCardFoot, useShowCard, type CardAgent } from './board-show';
 import { decideAgentRule } from './skill-actions';
 import { OwnerRequestCard } from './agent-request-card';
 import { Decision } from './decision';
@@ -27,11 +28,11 @@ import { sortWorkCards } from '@/lib/work-sort.mjs';
 import { boardColumns, blockReason, cardAgent, columnLabel, columnOf, keyboardTarget, progressOf } from '@/lib/board-columns.mjs';
 import type { WaitingItem } from '@/lib/approval-queue';
 import '@/app/board.css';
-type Stage={id:number,name:string,position:number,board_column?:string|null}; type Label={id:number,name:string,color:string}; type Card={id:number,title:string,stage_id:number,channel:string,format:string,go_live:string|null,offering:string,segment:string,hook:string,goal:string,caption:string,next_actor:string|null,mode:string|null,approval_step_id:number|null,rejection_reason:string|null,project_id:number|null}; type Project={id:number,name:string}; type Item={id:number,card_id:number,title:string,done:boolean}; type Person=WorkMember & {agent_role?:string|null}; type Activity=WorkActivity; type Creative={id:number,card_id:number,name:string}; type Version={id:number,creative_id:number,path:string,url:string|null}; type CL={card_id:number,label_id:number};
+type Stage={id:number,name:string,position:number,board_column?:string|null}; type Label={id:number,name:string,color:string}; type Card={id:number,title:string,stage_id:number,channel:string,format:string,go_live:string|null,offering:string,segment:string,hook:string,goal:string,caption:string,next_actor:string|null,mode:string|null,approval_step_id:number|null,rejection_reason:string|null,project_id:number|null,agent_id?:string|null}; type Project={id:number,name:string}; type Item={id:number,card_id:number,title:string,done:boolean}; type Person=WorkMember & {agent_role?:string|null}; type Activity=WorkActivity; type Creative={id:number,card_id:number,name:string}; type Version={id:number,creative_id:number,path:string,url:string|null}; type CL={card_id:number,label_id:number};
 // An open Card's notes (#22): each note's current text, the Runs its Agent mentions started and their replies in the
 // log, the Agents those are drawn with, the reader and the moment the page was drawn (for the edit countdown).
 type CardNotes={me:string,drawnAt:number,comments:EditableNote[],runs:{note_id:number,agent_id:string,agent_name:string,outcome:string|null}[],replies:{reply_to:number,actor_id:string,actor_name:string|null,body:string,created_at:string}[],agents:{id:string,name:string,connection_id:string}[]};
-export type WorkProps={slug:string,company:string,section:string,cardId?:number,stages:Stage[],labels:Label[],cards:Card[],items:Item[],members:Person[],activity:Activity[],creatives:Creative[],versions:Version[],cardLabels:CL[],projects:Project[],assignees:{card_id:number,person_id:string}[],message?:string,approvableIds:number[],agents:{person_id:string,role:string,granted:boolean}[],canCreate:boolean,initialCreating:boolean,attachments:WorkAttachment[],waiting?:WaitingItem[],focus?:'waiting',alone?:boolean,notes?:CardNotes,sheet?:CardSheetData};
+export type WorkProps={slug:string,company:string,section:string,cardId?:number,stages:Stage[],labels:Label[],cards:Card[],items:Item[],members:Person[],activity:Activity[],creatives:Creative[],versions:Version[],cardLabels:CL[],projects:Project[],assignees:{card_id:number,person_id:string}[],message?:string,approvableIds:number[],agents:{person_id:string,role:string,granted:boolean}[],canCreate:boolean,initialCreating:boolean,attachments:WorkAttachment[],waiting?:WaitingItem[],focus?:'waiting',alone?:boolean,notes?:CardNotes,sheet?:CardSheetData,show?:number,cardAgents?:CardAgent[]};
 const emptyKey:Record<string,[string,string]>={waiting:['boardEmptyWaiting','boardEmptyWaitingHint'],ideas:['boardEmptyIdeas','boardEmptyIdeasHint'],planned:['boardEmptyPlanned','boardEmptyPlannedHint'],progress:['boardEmptyProgress','boardEmptyProgressHint'],live:['boardEmptyLive','boardEmptyLiveHint'],done:['boardEmptyDone','']};
 export default function Work(p:WorkProps) { const {t,locale,language}=useI18n(); const router=useRouter(); const identities=useAgentIdentities();
  // A change-only form cannot submit before React attaches its handler.
@@ -53,6 +54,9 @@ export default function Work(p:WorkProps) { const {t,locale,language}=useI18n();
  const columnOfCard=(c:Card)=>columnOf(c,p.stages);
  // A card's Agent: its assigned Agent, else the Agent that made it (a card an Agent filed through the API).
  const agentOfCard=(c:Card)=>{ const creator=p.activity.find(a=>a.card_id===c.id&&a.action==='card_created')?.actor_id; return cardAgent(c,p.assignees,agentIds)??(creator&&agentIds.has(creator)?creator:null); };
+ const cardAgentOf=(c:Card)=>c.agent_id?p.cardAgents?.find(a=>a.id===c.agent_id):undefined;
+ const asked=p.show?p.cards.find(c=>c.id===p.show):undefined;
+ useShowCard(p.show,{hides:!!asked&&agentFilter!=='all'&&agentOfCard(asked)!==agentFilter,showAll:()=>setAgentFilter('all'),board:`${base}/board`});
  // The board keeps the month filter of the dated views: a card dated in another month is hidden, an undated one stays.
  const boardCards=visible.filter(c=>(agentFilter==='all'||agentOfCard(c)===agentFilter));
  const items=(p.waiting||[]).filter(item=>item.kind!=='approval');
@@ -85,7 +89,7 @@ export default function Work(p:WorkProps) { const {t,locale,language}=useI18n();
  const keys=(c:Card)=>(event:KeyboardEvent)=>{ if(!event.shiftKey||!p.canCreate) return; const to=keyboardTarget(columnOfCard(c),event.key,rtl); if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight') return; event.preventDefault(); if(to) move(c.id,to); };
  const due=(c:Card)=>c.go_live?date(c.go_live,language,{month:'short'}):'';
  const waitingOn=(c:Card)=>{ const owner=c.next_actor?p.members.find(m=>m.person_id===c.next_actor)?.people?.name?.split(' ')[0]:undefined; return owner?t('boardWaitingOn',owner):t('boardWaitingTeam'); };
- const cardView=(c:Card,isOverlay=false)=>{ const column=columnOfCard(c); const agent=agentOfCard(c); const person=agent||p.assignees.find(a=>a.card_id===c.id)?.person_id||c.next_actor; const mine=p.approvableIds.includes(c.id); const step=(p.waiting||[]).find(item=>item.kind==='approval'&&item.id===c.id)?.body; const progress=column==='progress'?progressOf(c,p.items):null;
+ const cardView=(c:Card,isOverlay=false)=>{ const column=columnOfCard(c); const agent=agentOfCard(c); const person=agent||p.assignees.find(a=>a.card_id===c.id)?.person_id||c.next_actor; const own=cardAgentOf(c); const job=c.channel||own?.speciality||''; const mine=p.approvableIds.includes(c.id); const step=(p.waiting||[]).find(item=>item.kind==='approval'&&item.id===c.id)?.body; const progress=column==='progress'?progressOf(c,p.items):null;
   const brief=stagesIn(column).length>1?stageName(c):[c.hook,c.offering,c.goal].find(Boolean)||'';
   return <KanbanCard id={c.id} column={column} isOverlay={isOverlay} key={c.id} disabled={!p.canCreate} className={mine?'approval-card':''} data-mine={mine||undefined} data-stage-id={c.stage_id} data-stage-name={stageName(c)}>
    {c.mode&&<span className="kcard__kind">{modeChip(c)}</span>}
@@ -97,7 +101,7 @@ export default function Work(p:WorkProps) { const {t,locale,language}=useI18n();
     <span className="badge badge--live"><span className="dot" aria-hidden="true"/>{t('boardLive')}</span><span className="kcard__t" dir="auto">{stageName(c)}</span>
    </>:progress?<span className="kcard__prog"><span className="kcard__t" dir="auto">{progress.next||stageName(c)} · <span className="num">{progress.pct}%</span></span><span className="bar" role="progressbar" aria-label={t('boardProgress')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress.pct}><span className="bar__fill" style={{transform:`scaleX(${progress.pct/100})`}}/></span></span>
    :brief?<span className="kcard__t" dir="auto">{brief}</span>:null}
-   <span className="kcard__foot">{person&&<span className="kcard__agent card-avatars">{agent?<AgentFace id={agent} role={agentRole(agent)} name={agentName(agent)} size={18}/>:<Avatar id={person} members={p.members}/>}<bdi className="od-truncate">{agentName(person)}</bdi></span>}{c.channel&&<span>{person?'· ':''}<bdi>{c.channel}</bdi></span>}{due(c)&&<span className="kcard__due od-nowrap">{due(c)}</span>}</span>
+   {own?<ChatCardFoot agent={own} job={job} due={due(c)&&<span className="kcard__due od-nowrap">{due(c)}</span>}/>:<span className="kcard__foot">{person&&<span className="kcard__agent card-avatars">{agent?<AgentFace id={agent} role={agentRole(agent)} name={agentName(agent)} size={18}/>:<Avatar id={person} members={p.members}/>}<bdi className="od-truncate">{agentName(person)}</bdi></span>}{job&&<span>{person?'· ':''}<bdi>{job}</bdi></span>}{due(c)&&<span className="kcard__due od-nowrap">{due(c)}</span>}</span>}
   </KanbanCard>; };
  // A learning suggestion (#25; design-reference: lnRowHTML) is decided where it waits: the rule, its Agent, who told it,
  // and Decline or Make it team-wide.
@@ -132,10 +136,10 @@ export default function Work(p:WorkProps) { const {t,locale,language}=useI18n();
     :run&&!run.outcome?<NoteReplyRow name={agentOf(run.agent_id)?.name||run.agent_name} face={agentOf(run.agent_id)?.connection_id||null} working={p.members.find(m=>m.person_id===a.actor_id)?.people?.name?.split(' ')[0]||''}/>:null}
   </Fragment>; };
  // A Card opened over the board (#116; design-reference: renderSheetHead): its Agent, else its channel, and where it stands.
- const sheetView=(c:Card,sheet:CardSheetData)=>{ const agent=agentOfCard(c); const column=columnOfCard(c);
+ const sheetView=(c:Card,sheet:CardSheetData)=>{ const agent=agentOfCard(c); const own=cardAgentOf(c); const column=columnOfCard(c);
   return <CardSheet key={c.id} send={workAction} slug={p.slug} company={p.company} title={c.title} sheet={sheet} canWrite={p.canCreate} alone={!!p.alone} message={p.message}
-   face={agent?<span aria-hidden="true"><AgentFace id={agent} role={agentRole(agent)} name={agentName(agent)} size={28}/></span>:null}
-   who={agent?<bdi>{agentName(agent)}</bdi>:c.channel?<bdi>{c.channel}</bdi>:null}
+   face={own?<span aria-hidden="true"><CompanyAgentFace agent={own} size={28}/></span>:agent?<span aria-hidden="true"><AgentFace id={agent} role={agentRole(agent)} name={agentName(agent)} size={28}/></span>:null}
+   who={own?<bdi>{own.name}</bdi>:agent?<bdi>{agentName(agent)}</bdi>:c.channel?<bdi>{c.channel}</bdi>:null}
    badge={column==='waiting'?<span className="badge badge--wait"><span className="dot dot--waiting" aria-hidden="true"/>{p.approvableIds.includes(c.id)?t('boardWaitingYou'):p.canCreate?waitingOn(c):t('boardWaitingTeam')}</span>:<span className="badge">{columnName(column)}</span>}/>; };
  const sheet=p.sheet; const sheetCard=sheet&&p.cards.find(c=>c.id===sheet.id);
  const ideasStage=stagesIn('ideas')[0]?.id;

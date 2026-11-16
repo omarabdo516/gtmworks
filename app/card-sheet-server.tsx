@@ -24,6 +24,6 @@ export async function cardSheet(db:Db,{company,card,slug,me,canWrite,t,language}
    :<div className="panel-card"><p className="panel-empty">{t('sheetLogEmpty')}</p></div>}
   <p className="lg-forever"><PageIcon name="lock"/><span>{t('sheetLogForever')}</span></p>
  </div>;
- // Nothing ties a Card to a Conversation today: no chat makes a Card and no Card names one, so every sheet opens on Log.
+ // A chat's Card names its Conversation (#144), but the sheet's Chat tab comes with #145: every sheet opens on Log.
  return {id:card,log,count:total,working:!!open?.length,chat:null};
 }
