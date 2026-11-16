@@ -46,6 +46,13 @@ test('an older sign-in that serves the main agent only says so, and offers Disco
   expect(document.querySelector('#md-subscriptions > .set-hint')?.textContent).toBe(`${ar.signInHint} ${ar.signInOneCompany}`);
 });
 
+test('a sign-in a stopped Disconnect left in an Agent\'s own profile says so, and keeps Disconnect and Connect again', async () => {
+  const screen = await section({ owner: true, oneCompany: true, signIns: signIns('someAgentsOnly', 'notConnected') });
+  await expect.poll(() => stateOf('openai-codex')).toBe(en.signInSomeAgentsOnly);
+  expect(buttons()).toEqual(['Disconnect ChatGPT', 'Connect ChatGPT']);
+  await screen.unmount();
+});
+
 test('on an install with several companies a root sign-in is shared: the warning shows and no button does', async () => {
   const screen = await section({ owner: true, oneCompany: false, signIns: signIns('shared', 'notConnected') });
   await expect.element(screen.getByRole('note')).toHaveTextContent(en.signInSharedWarning);

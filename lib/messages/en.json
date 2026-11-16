@@ -814,6 +814,7 @@
   "signInShared": "Not connected (shared sign-in on the agent engine’s default space)",
   "signInSharedWarning": "A subscription is signed in on the agent engine’s shared default space. Every company without its own sign-in would run on it, so it never counts as this company’s. Ask whoever installed gtmworks to sign it out there.",
   "signInMainAgentOnly": "Connected for the main agent only. Connect again so every agent uses it.",
+  "signInSomeAgentsOnly": "Still signed in for some agents only. Disconnect to remove it, or connect again so every agent uses it.",
   "signInOneCompany": "This install has one company, so the subscription is signed in once for the whole install and every agent uses it.",
   "conversationAgentLevelPending": "The agents’ tools are being updated to the level the Owner chose. Try again in a moment.",
   "logNotListed": "No longer listed",

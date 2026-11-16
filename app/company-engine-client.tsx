@@ -51,7 +51,7 @@ async function ask(body:object):Promise<{ok:boolean,body:Record<string,unknown>}
 // engine: on an install with one company in its root profile, otherwise in the company's own profile. This page only
 // shows its state, and for the Owner starts ChatGPT's sign-in (a code and a link), follows it until it is connected, or
 // disconnects. Claude signs in from the install's command line only.
-const stateText:Record<SubscriptionState,string>={connected:'signInConnected',mainAgentOnly:'signInMainAgentOnly',shared:'signInShared',notConnected:'signInNotConnected'};
+const stateText:Record<SubscriptionState,string>={connected:'signInConnected',mainAgentOnly:'signInMainAgentOnly',someAgentsOnly:'signInSomeAgentsOnly',shared:'signInShared',notConnected:'signInNotConnected'};
 export function CompanySubscriptions({company,owner,profile,oneCompany,signIns}:{company:string,owner:boolean,profile:string|null,oneCompany:boolean,signIns:CompanySignIns['signIns']}) {
  const {t}=useI18n(); const router=useRouter();
  const [started,setStarted]=useState<Started|null>(null);
@@ -91,8 +91,9 @@ export function CompanySubscriptions({company,owner,profile,oneCompany,signIns}:
  const command=profile?`docker compose --env-file .env.install -f docker-compose.install.yml exec -u hermes hermes hermes${oneCompany?'':` -p ${profile}`} auth add anthropic --type oauth --no-browser`:'';
  const row=(provider:Provider,name:string)=>{
   const state=signIns?.[provider].state; const waiting=started?.provider===provider;
-  // A sign-in that serves the main agent only can be removed, or replaced by one every agent uses.
-  const disconnect=owner&&(state==='connected'||state==='mainAgentOnly'); const connect=owner&&(state==='notConnected'||state==='mainAgentOnly');
+  // A sign-in that serves some agents only can be removed, or replaced by one every agent uses.
+  const partial=state==='mainAgentOnly'||state==='someAgentsOnly';
+  const disconnect=owner&&(state==='connected'||partial); const connect=owner&&(state==='notConnected'||partial);
   const label=name;
   return <div className="sub-row" key={provider} id={`sub-${provider}`}>
    <div className="panel-row"><span className="panel-row__icon"><SettingsIcon name="cpu"/></span>

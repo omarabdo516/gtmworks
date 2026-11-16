@@ -392,9 +392,15 @@ test('on one Company an older sign-in in the Company profile serves the main Age
   // A profile the Engine cannot reach makes the answer an error, and what the others removed is still logged.
   credentials(companyProfile(two))['openai-codex']='company-codex-token';
   const unreachableAgent={...driver,disconnect:(target,provider)=>target.profile===agentProfile?Promise.resolve({state:'unreachable'}):driver.disconnect(target,provider)};
+  credentials(agentProfile)['openai-codex']='agent-codex-token';
   assert.deepEqual(await ask(owner,unreachableAgent,{intent:'disconnect'}),{status:503,body:{error:'signInFailed'}});
   assert.equal(credentials(companyProfile(two))['openai-codex'],undefined);
   assert.deepEqual(owner.logged.map(change=>change.connected),[true,false,false]);
+  // The Agent's sign-in that the stopped Disconnect left is still shown, so the Owner can remove it from Settings.
+  assert.deepEqual(states(await read()),{'openai-codex':'someAgentsOnly',anthropic:'notConnected'});
+  assert.deepEqual(await ask(owner,driver,{intent:'disconnect'}),{status:200,body:{status:'disconnected'}});
+  assert.equal(credentials(agentProfile)['openai-codex'],undefined);
+  assert.deepEqual(states(await read()),{'openai-codex':'notConnected',anthropic:'notConnected'});
  } finally { await fake.close(); }
 });
 
