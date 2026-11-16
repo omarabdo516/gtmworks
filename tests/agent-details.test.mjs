@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { agentStatus, agentTasks, latestActivity, agentLogFilter } from '../lib/agent-details.mjs';
+import { agentStatus, agentTasks, latestActivity, agentLogFilter, pickTab, fileSize, agentFiles } from '../lib/agent-details.mjs';
 import { matchesFilters } from '../lib/activity-log.mjs';
 import { columnLabel, progressOf } from '../lib/board-columns.mjs';
 
@@ -66,4 +66,33 @@ test('a column\'s name and a Card\'s progress are the board\'s', () => {
  assert.equal(columnLabel('unknown', true), 'boardColIdeas');
  assert.deepEqual(progressOf({ id: 1 }, [{ card_id: 1, title: 'A', done: true }, { card_id: 1, title: 'B', done: false }, { card_id: 2, title: 'C', done: false }]), { pct: 50, next: 'B' });
  assert.equal(progressOf({ id: 3 }, []), null);
+});
+
+test('the panel opens on the tab its address names, and on Activity for anything else, Memory included while it waits', () => {
+ assert.deepEqual(['activity', 'tasks', 'files', 'log'].map(pickTab), ['activity', 'tasks', 'files', 'log']);
+ for (const other of ['memory', 'Files', '', undefined, ['files']]) assert.equal(pickTab(other), 'activity');
+});
+
+test('a file\'s size reads as the reference writes it, in Latin digits', () => {
+ assert.deepEqual([300, 88064, 1048576 * 12.4, 1048576 * 240].map(fileSize), ['300 B', '86 KB', '12.4 MB', '240 MB']);
+ assert.equal(fileSize(1536), '2 KB', 'kilobytes are whole, as the reference writes them');
+});
+
+test('an Agent\'s files are its Cards\' and the reader\'s own Conversations\' with it, newest first, each named for where it came from', () => {
+ const files = agentFiles({
+  slug: 'rs-learning',
+  cards: [{ id: 7, title: 'June campaign' }],
+  cardFiles: [{ id: 3, name: 'brief.pdf', size: 1200, created_at: '2026-06-10T09:00:00Z', card_id: 7 }],
+  conversationFiles: [
+   { id: 3, name: 'audiences.csv', size: 18000, created_at: '2026-06-12T09:00:00Z', conversation_id: 'c-1', agent_name: 'Meta Ads' },
+   { id: 4, name: 'old.png', size: 90, created_at: '2026-06-01T09:00:00Z', conversation_id: 'c-2', agent_name: 'Meta Ads' },
+  ],
+  titles: new Map([['c-1', 'Plan the June campaign']]),
+ });
+ assert.deepEqual(files.map(file => [file.name, file.source, file.href]), [
+  ['audiences.csv', 'Plan the June campaign', '/c/rs-learning/files/conversation/3'],
+  ['brief.pdf', 'June campaign', '/c/rs-learning/files/3'],
+  ['old.png', 'Meta Ads', '/c/rs-learning/files/conversation/4'],
+ ]);
+ assert.equal(new Set(files.map(file => file.key)).size, 3, 'a Card file and a Conversation file with the same number are two rows');
 });
