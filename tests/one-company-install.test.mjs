@@ -17,3 +17,16 @@ test('the Owner\'s warning is the same sentence, in both catalogues',()=>{
  assert.equal(en.sharedEngineWarning,sentence);
  assert.match(ar.sharedEngineWarning,/^[^A-Za-z]+$/,'the Arabic warning is Arabic');
 });
+
+// #123, ADR 0016 (Sign-in): with one Company the subscription is signed in once on the root profile, which the Engine
+// lends every Agent profile; with several, a root sign-in reaches every Company, so only then does the README warn.
+const oneCompany='On an install with one company, the subscription is signed in once on the bundled Hermes\'s root profile from Settings, Subscription and models, and every agent of the company uses it.';
+const severalCompanies='On an install with several companies, a subscription signed in on the root profile is shared by every company on the install, and a company that wants its own uses its own API key (#124).';
+
+test('the README says which sign-in an install with one company uses, and warns against the root profile only with several',()=>{
+ const readme=readFileSync('README.md','utf8').replace(/\s+/g,' ');
+ for(const sentence of [oneCompany,severalCompanies]) assert.ok(readme.includes(sentence),sentence);
+ const warnings=[...readme.matchAll(/do not sign in/gi)].map(match=>match.index);
+ assert.equal(warnings.length,1);
+ assert.ok(warnings[0]>readme.indexOf(severalCompanies),'the warning follows the several-companies sentence');
+});

@@ -55,7 +55,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  const toolWarning=section==='company'&&owner?((await db.rpc('agent_tool_warning',{c:company.id})).data||[]) as {agent_name:string}[]:[];
  // The Company's model sign-in, read from its own profile in the agent engine (#3). The service role reads only the
  // key of that Company's bundled Connection, after the database said the person is a member (company_engine_target).
- const subscriptions=section==='models'?await (async()=>{ try { return await readCompanySignIns(db,createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false}}),{company:company.id,encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY}); } catch { return {profile:null,signIns:null}; } })():null;
+ const subscriptions=section==='models'?await (async()=>{ try { return await readCompanySignIns(db,createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false}}),{company:company.id,encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY}); } catch { return {profile:null,oneCompany:false,signIns:null}; } })():null;
  const usageRows:UsageDay[]=section==='usage'?((await db.rpc('usage_by_day')).data||[]) as UsageDay[]:[];
  // The person's own note for the Agents in this Company (RLS: nobody else reads it).
  const memberNote=section==='account'?(await db.from('member_notes').select('note').eq('company_id',company.id).eq('person_id',userId).maybeSingle()).data?.note||'':'';
@@ -236,9 +236,9 @@ function SoonSection({t,section,ro,models}:{t:T,section:OverlaySection,ro:ReactN
   <SoonSec t={t} id="bk-h-list" label={t('settingsBackupList')}/><SoonSec t={t} id="bk-h-in" label={t('settingsBackupHolds')}/></>;
 }
 
-// The company's connected AI subscriptions. A company signs in to its own subscription through the Hermes inside
-// gtmworks (#3, ADR 0014): the state is read on the server from the company's own profile, and the Owner's buttons
-// call /api/company-sign-in, which checks the Owner again.
+// The company's connected AI subscriptions. A company signs in to its subscription through the Hermes inside gtmworks
+// (#3, ADR 0014; #123, ADR 0016): the state is read on the server from the agent engine, and the Owner's buttons call
+// /api/company-sign-in, which checks the Owner again.
 function ModelsSubscriptions({company,owner,subscriptions}:{company:string,owner:boolean,subscriptions:Awaited<ReturnType<typeof readCompanySignIns>>|null}) {
- return <CompanySubscriptions company={company} owner={owner} profile={subscriptions?.profile??null} signIns={subscriptions?.signIns??null}/>;
+ return <CompanySubscriptions company={company} owner={owner} profile={subscriptions?.profile??null} oneCompany={subscriptions?.oneCompany??false} signIns={subscriptions?.signIns??null}/>;
 }

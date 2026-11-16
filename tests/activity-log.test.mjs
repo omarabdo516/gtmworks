@@ -133,6 +133,14 @@ test('an app connected or disconnected names the app and its state before and af
  assert.deepEqual(['logActAppConnected', 'logActAppDisconnected', 'logAppOn', 'logAppOff'].map(key => i18n('ar').t(key)), ['وصّل', 'فصل', 'متوصل', 'مش متوصل']);
 });
 
+test('a subscription connected or disconnected names ChatGPT or Claude and its state before and after', () => {
+ assert.deepEqual(describeEntry({ subject: 'company', action: 'subscription_connected', details: { provider: 'openai-codex' } }),
+  { act: ['logActAppConnected'], obj: 'ChatGPT', from: { key: 'logAppOff' }, to: { key: 'logAppOn' }, note: undefined });
+ const disconnected = describeEntry({ subject: 'company', action: 'subscription_disconnected', details: { provider: 'anthropic' } });
+ assert.deepEqual([disconnected.act, disconnected.obj, disconnected.from, disconnected.to], [['logActAppDisconnected'], 'Claude', { key: 'logAppOn' }, { key: 'logAppOff' }]);
+ assert.equal(describeEntry({ subject: 'company', action: 'subscription_connected', details: { provider: 'constructor' } }).obj, 'constructor');
+});
+
 test('a day with no zone given follows the runtime zone, also after it changes', () => {
  const before = process.env.TZ;
  try {

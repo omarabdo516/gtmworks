@@ -20,10 +20,19 @@ const encryptionKey=()=>process.env.WEBHOOK_ENCRYPTION_KEY;
 // A message is checked, sent to the agent's engine and stored by lib/conversation-runs.mjs (through the engine
 // contract, lib/engine.mjs); this route only checks the request's shape and turns refusals into answers. Who wrote it
 // is the signed-in person: no field of the request names an author, and any such field is ignored.
+// A first message from a Card's sheet names the Card (#145): the database starts the Card's chat with its Agent, or
+// answers the caller's own chat already on it, and the message goes there.
 async function send(db:Database,body:Record<string,unknown>) {
  if(![body.conversation,body.sendKey].every(value=>typeof value==='string'&&uuid.test(value))||body.agent!==undefined&&(typeof body.agent!=='string'||!uuid.test(body.agent))) return refuse('conversationFailed',400);
+ if(body.card!==undefined&&!(typeof body.card==='number'&&Number.isSafeInteger(body.card)&&body.card>0)) return refuse('conversationFailed',400);
  if(typeof body.message!=='string'||!body.message.trim()||body.message.length>20000) return refuse('conversationFailed',400);
- const sent=await sendMessage(db,service(),{company:body.company as string,conversation:body.conversation as string,sendKey:body.sendKey as string,agent:body.agent as string|undefined,message:body.message,encryptionKey:encryptionKey()});
+ let conversation=body.conversation as string;
+ if(body.card!==undefined) {
+  const {data:started,error}=await db.rpc('start_card_conversation',{c:body.company,card:body.card,conversation});
+  if(error) return error.message==='cardChatTaken'?refuse('sheetChatTaken',409):refuseFor(error.code);
+  conversation=started as string;
+ }
+ const sent=await sendMessage(db,service(),{company:body.company as string,conversation,sendKey:body.sendKey as string,agent:body.card===undefined?body.agent as string|undefined:undefined,message:body.message,encryptionKey:encryptionKey()});
  if('code' in sent) return refuseFor(sent.code);
  if('error' in sent) return refuse(sent.error,sent.status);
  return reply(sent);

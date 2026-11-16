@@ -1,0 +1,9 @@
+{
+  "about": "The Manager opens the Card Omar's chat with Ads put In progress (#145) and picks Chat: the lock naming Omar and Ads, the shared-work line and \"Open the log\", and no message of the chat.",
+  "path": "/c/rs-learning/work/board?card=692001",
+  "state": "card-on-board",
+  "person": "manager@example.com",
+  "act": "sheet-chat-tab",
+  "dark": true,
+  "ready": ".sheet[open] #sheet-log"
+}

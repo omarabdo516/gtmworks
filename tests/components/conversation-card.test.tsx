@@ -13,7 +13,8 @@ vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...p
 afterEach(() => { vi.unstubAllGlobals(); });
 
 // Two Runs of the Contributor's chat with Ads, as the database holds them, and the Card the first one put on the board
-// (or none), read through the same record the page and its route read.
+// when its reply came (or none, or one the chat was started from, made before it), read through the same record the
+// page and its route read.
 const at = '2026-06-10T09:41:00Z';
 const stored = {
  conversation_usage: [{ run_id: 'r1', outcome: 'completed', input_tokens: 10, output_tokens: 2 }, { run_id: 'r2', outcome: 'completed', input_tokens: 10, output_tokens: 2 }],
@@ -25,8 +26,10 @@ const stored = {
  ],
  people: [{ name: 'Youssef' }],
 };
-function database(card: { id: number, column: string } | null) {
- const rows: Record<string, unknown[]> = { ...stored, work_cards: card ? [{ id: card.id, work_stages: { board_column: card.column } }] : [] };
+const replied = '2026-06-10T09:42:00Z';
+type TiedCard = { id: number, column: string, made?: string };
+function database(card: TiedCard | null) {
+ const rows: Record<string, unknown[]> = { ...stored, work_cards: card ? [{ id: card.id, created_at: card.made ?? replied, work_stages: { board_column: card.column } }] : [] };
  const table = (name: string) => {
   const found = rows[name] ?? [];
   const query: Record<string, unknown> = { then: (resolve: (value: unknown) => unknown) => resolve({ data: found, error: null }), maybeSingle: async () => ({ data: found[0] ?? null, error: null }) };
@@ -35,7 +38,7 @@ function database(card: { id: number, column: string } | null) {
  };
  return { from: table, rpc: async () => ({ data: null, error: null }) } as unknown as Parameters<typeof conversationRecord>[0];
 }
-const recordWith = (card: { id: number, column: string } | null) => conversationRecord(database(card), 'p-3', 'co-1', { id: 'cv-1', agent_name: 'Ads', hermes_agents: { connection_id: 'c-1' } });
+const recordWith = (card: TiedCard | null) => conversationRecord(database(card), 'p-3', 'co-1', { id: 'cv-1', agent_id: null, agent_name: 'Ads', hermes_agents: { connection_id: 'c-1' } });
 const view = (record: ConversationRecord, { language = 'en', writer = true }: { language?: 'en' | 'ar', writer?: boolean } = {}) => <LanguageProvider language={language}>
  <div className="gw"><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={record.conversation} initial={record} writer={writer} team={false}/></div>
 </LanguageProvider>;
@@ -59,6 +62,13 @@ test('the chat says once, under the Agent\'s first reply, that its Card went on 
  expect(motion.transitionProperty).toBe('background-color, box-shadow, color, border-color, transform');
  expect(motion.transitionDuration).toBe('0.15s, 0.15s, 0.15s, 0.15s, 0.15s');
  expect(new Set(motion.transitionTimingFunction.split(/,\s*(?=cubic)/))).toEqual(new Set(['cubic-bezier(0.2, 0, 0, 1)']));
+});
+
+test('a chat started from its Card (#145) has the pill but no line, since the Card was on the board before it', async () => {
+ const screen = await show(await recordWith({ id: 7, column: 'progress', made: '2026-06-09T08:00:00Z' }));
+ await expect.element(screen.getByRole('link', { name: 'On the board: In progress' })).toBeVisible();
+ expect(document.querySelectorAll('.turns > li[data-kind="boarded"]')).toHaveLength(0);
+ expect(document.querySelectorAll('.turns > li')).toHaveLength(4);
 });
 
 test('a chat with no Card on the board has no pill and no line', async () => {

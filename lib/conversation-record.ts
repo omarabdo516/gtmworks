@@ -12,7 +12,7 @@ type Database=Awaited<ReturnType<typeof supabase>>;
 // Agents its person asked Lead for and the Owner's answer (#17), the cards its Agent showed with its replies (#136), the
 // rules its Agent saved in it: a suggestion with who it was sent to, and how it was decided (RLS: only the person who
 // told it reads one that is not the team's), and the Card it put on the board with that Card's column now (#144).
-export async function conversationRecord(db:Database,person:string,company:string,found:{id:string,agent_name:string,hermes_agents:unknown}) {
+export async function conversationRecord(db:Database,person:string,company:string,found:{id:string,agent_id:string|null,agent_name:string,hermes_agents:unknown}) {
  const conversation=found.id;
  // Usage first: a run closed between the two reads then shows its reply too (both are written in one transaction).
  const usage=((await db.from('conversation_usage').select(usageColumns).eq('conversation_id',conversation)).data||[]) as RunUsage[];
@@ -52,13 +52,14 @@ export async function conversationRecord(db:Database,person:string,company:strin
  const runner=(working as {person:string,name:string}[]|null)?.[0];
  const {data:manages}=runner&&runner.person!==person?await db.rpc('can_manage_company',{target:company}):{data:false};
  const {data:me}=await db.from('people').select('name').eq('id',person).maybeSingle();
- const {data:tied}=await db.from('work_cards').select('id,work_stages(board_column)').eq('company_id',company).eq('conversation_id',conversation).maybeSingle();
- const card=tied as {id:number,work_stages:{board_column:BoardColumn}|null}|null;
+ const {data:tied}=await db.from('work_cards').select('id,created_at,work_stages(board_column)').eq('company_id',company).eq('conversation_id',conversation).maybeSingle();
+ const card=tied as {id:number,created_at:string,work_stages:{board_column:BoardColumn}|null}|null;
  const board=card?.work_stages?{card:card.id,column:card.work_stages.board_column}:undefined;
- const firstRun=messages.find(message=>message.author==='person')?.run_id;
- const firstReply=board?messages.find(message=>message.author==='agent'&&message.run_id===firstRun)?.id:undefined;
+ // Only a Card the chat's first Run put on the board says so; a chat started from its Card (#145) found it there.
+ const first=messages.find(message=>message.author==='person');
+ const firstReply=board&&first&&card&&card.created_at>first.created_at?messages.find(message=>message.author==='agent'&&message.run_id===first.run_id)?.id:undefined;
  return {
-  conversation:{id:found.id,agent_name:found.agent_name,face:faceOf(found)},
+  conversation:{id:found.id,agent_id:found.agent_id,agent_name:found.agent_name,face:faceOf(found)},
   messages:withBoardNote(withTeamWork(withDecisions(shown(messages,usage,cards,found.agent_name,saved),decisions,found.agent_name),notes,queued,me?.name||''),firstReply),
   usage:totalOf(usage),
   pending:waiting(messages,usage).length>0||queuedWaiting(queued),

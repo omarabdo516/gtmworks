@@ -3,17 +3,19 @@ import { render } from 'vitest-browser-react';
 import { userEvent } from 'vitest/browser';
 import type { ComponentProps } from 'react';
 import { CardSheet, type CardSheetData } from '@/app/card-sheet';
+import type { ConversationRecord } from '@/lib/conversation-record';
 import { LanguageProvider } from '@/lib/i18n-client';
 import '@/app/tokens.css';
 import '@/app/shell.css';
 
 const push = vi.fn<(href: string, options?: { scroll?: boolean }) => void>();
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push, refresh: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }) }));
+const refresh = vi.fn();
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push, refresh, replace: vi.fn(), prefetch: vi.fn() }) }));
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 const sent = vi.fn<(form: FormData) => Promise<unknown>>();
-afterEach(() => { vi.useRealTimers(); push.mockReset(); sent.mockReset(); vi.unstubAllGlobals(); });
+afterEach(() => { vi.useRealTimers(); push.mockReset(); refresh.mockReset(); sent.mockReset(); vi.unstubAllGlobals(); });
 
-const sheet = (more: Partial<CardSheetData> = {}): CardSheetData => ({ id: 7, log: <p>Omar moved the card</p>, count: 3, working: false, chat: null, ...more });
+const sheet = (more: Partial<CardSheetData> = {}): CardSheetData => ({ id: 7, log: <p>Omar moved the card</p>, count: 3, working: false, chat: { kind: 'none' }, ...more });
 // The board behind the sheet holds the Card's link, where the keyboard goes back when the sheet closes.
 const show = (value: CardSheetData, canWrite = true) => render(<LanguageProvider language="en">
  <div id="board-cols"><div className="kcard" data-card-id="7"><a href="#card-7">Launch post</a></div></div>
@@ -90,13 +92,109 @@ test('a Viewer reads the log with no note field', async () => {
  await expect.element(screen.getByText('Your account is view-only: you can read the whole log, without writing notes.')).toBeVisible();
 });
 
-test('a Card tied to a Conversation opens on Chat and links to it', async () => {
- const screen = await show(sheet({ chat: { conversationId: 'c0ffee00-0000-0000-0000-000000000001' } }));
+const at = '2026-06-10T10:00:00Z';
+const ads = { id: 'a-1', name: 'Ads', connection_id: 'c-1' };
+const own = (more: Partial<ConversationRecord> = {}): ConversationRecord => ({
+ conversation: { id: 'c0ffee00-0000-0000-0000-000000000001', agent_id: null, agent_name: 'Ads', face: 'c-1' },
+ messages: [
+  { id: 1, author: 'person', author_name: 'Omar', body: 'Plan three ads for the course', created_at: at },
+  { id: 2, author: 'agent', author_name: 'Ads', body: 'On it: the audience first, then three ads.', created_at: at },
+ ],
+ usage: { input: 10, output: 2, unknown: 0 }, pending: false, failed: false, working: null, canStop: false, board: { card: 7, column: 'progress' }, ...more,
+});
+const chatPanel = (screen: Awaited<ReturnType<typeof show>>) => screen.getByRole('tabpanel', { name: 'Chat' });
+
+test('the reader\'s own chat on a Card opens on Chat with its messages and composer, and links to it in Chats', async () => {
+ const screen = await show(sheet({ chat: { kind: 'own', record: own() } }));
  await expect.element(screen.getByRole('tab', { name: 'Chat' })).toHaveAttribute('aria-selected', 'true');
  await expect.element(screen.getByRole('tab', { name: 'Chat' })).not.toHaveAttribute('aria-disabled');
- await expect.element(screen.getByRole('link', { name: 'Open in Chats' }).first()).toHaveAttribute('href', '/c/rs-learning/conversations/c0ffee00-0000-0000-0000-000000000001');
+ await expect.element(chatPanel(screen).getByText('Plan three ads for the course')).toBeVisible();
+ await expect.element(chatPanel(screen).getByText('On it: the audience first, then three ads.')).toBeVisible();
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveFocus();
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveAttribute('placeholder', 'Write to Ads…');
+ await expect.element(screen.getByRole('link', { name: 'Open in Chats' })).toHaveAttribute('href', '/c/rs-learning/conversations/c0ffee00-0000-0000-0000-000000000001');
+ expect(document.querySelector('[data-usage]')).toBeNull();
  await screen.getByRole('tab', { name: 'Log 3' }).click();
  await expect.element(screen.getByRole('textbox', { name: 'Write a note in the card’s log' })).toBeVisible();
+});
+
+test('a message written in the sheet goes into the Card\'s chat and its reply shows there', async () => {
+ const replied = own({ messages: [...own().messages, { id: 3, author: 'person', author_name: 'Omar', body: 'Make the first one shorter', created_at: at }, { id: 4, author: 'agent', author_name: 'Ads', body: 'Shorter it is.', created_at: at }] });
+ const asks = vi.fn(async (_: string, init?: RequestInit) => init?.method === 'POST' ? Response.json({ conversation: replied.conversation.id }) : Response.json(replied));
+ vi.stubGlobal('fetch', asks);
+ const screen = await show(sheet({ chat: { kind: 'own', record: own() } }));
+ await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), 'Make the first one shorter{Enter}');
+ await expect.element(chatPanel(screen).getByText('Shorter it is.')).toBeVisible();
+ const posted = JSON.parse(String(asks.mock.calls.find(([, init]) => init?.method === 'POST')![1]!.body));
+ expect(posted).toMatchObject({ company: 'co-1', conversation: 'c0ffee00-0000-0000-0000-000000000001', message: 'Make the first one shorter' });
+ expect(posted).not.toHaveProperty('card');
+});
+
+test('a message still on its way when the reader turns to Log lands in the chat they come back to, with its reply', async () => {
+ const replied = own({ messages: [...own().messages, { id: 3, author: 'person', author_name: 'Omar', body: 'Make the first one shorter', created_at: at }, { id: 4, author: 'agent', author_name: 'Ads', body: 'Shorter it is.', created_at: at }] });
+ let arrive = () => {};
+ const asks = vi.fn((_: string, init?: RequestInit) => init?.method === 'POST' ? new Promise<Response>(resolve => { arrive = () => resolve(Response.json({ conversation: replied.conversation.id })); }) : Promise.resolve(Response.json(replied)));
+ vi.stubGlobal('fetch', asks);
+ const screen = await show(sheet({ chat: { kind: 'own', record: own() } }));
+ await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), 'Make the first one shorter{Enter}');
+ await expect.poll(() => asks.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(true);
+ await screen.getByRole('tab', { name: 'Log 3' }).click();
+ await expect.element(screen.getByRole('tabpanel', { name: 'Log 3' })).toBeVisible();
+ arrive();
+ await expect.poll(() => asks.mock.calls.some(([, init]) => init?.method !== 'POST')).toBe(true);
+ await screen.getByRole('tab', { name: 'Chat' }).click();
+ await expect.element(chatPanel(screen).getByText('Shorter it is.')).toBeVisible();
+});
+
+test('another Member\'s chat opens the Card on Log; its Chat tab is a lock with the way back to the log and nothing of the chat', async () => {
+ const screen = await show(sheet({ chat: { kind: 'theirs', agent: ads, person: 'Youssef' } }));
+ await expect.element(screen.getByRole('tab', { name: 'Log 3' })).toHaveAttribute('aria-selected', 'true');
+ await expect.element(screen.getByRole('textbox', { name: 'Write a note in the card’s log' })).toHaveFocus();
+ await expect.element(screen.getByRole('link', { name: 'Open in Chats' })).not.toBeInTheDocument();
+ await screen.getByRole('tab', { name: 'Chat' }).click();
+ await expect.element(chatPanel(screen).getByRole('heading', { name: 'This chat is between Youssef and Ads only' })).toBeVisible();
+ await expect.element(chatPanel(screen).getByText('The shared work on this card is its status and its log. If you have something to say, write it as a note in the log and everyone sees it.')).toBeVisible();
+ await expect.element(screen.getByRole('textbox')).not.toBeInTheDocument();
+ expect(document.querySelector('.turns')).toBeNull();
+ await chatPanel(screen).getByRole('button', { name: 'Open the log' }).click();
+ await expect.element(screen.getByRole('tab', { name: 'Log 3' })).toHaveAttribute('aria-selected', 'true');
+ await expect.element(screen.getByRole('tab', { name: 'Log 3' })).toHaveFocus();
+});
+
+test('a Card with an Agent and no chat opens on Chat; the first message starts the Card\'s chat and shows it at once', async () => {
+ const asks = vi.fn(async (_: string, init?: RequestInit) => init?.method === 'POST' ? Response.json({ conversation: JSON.parse(String(init.body)).conversation }) : Response.json(own()));
+ vi.stubGlobal('fetch', asks);
+ const screen = await show(sheet({ chat: { kind: 'empty', agent: ads } }));
+ await expect.element(screen.getByRole('tab', { name: 'Chat' })).toHaveAttribute('aria-selected', 'true');
+ await expect.element(chatPanel(screen).getByRole('heading', { name: 'No chat on this card yet' })).toBeVisible();
+ await expect.element(chatPanel(screen).getByText('Write to Ads below and it’ll start working on it and keep the card updated.')).toBeVisible();
+ await expect.element(screen.getByRole('link', { name: 'Open in Chats' })).not.toBeInTheDocument();
+ const field = screen.getByRole('textbox', { name: 'Message' });
+ await expect.element(field).toHaveFocus();
+ await userEvent.type(field, 'Plan three ads for the course{Enter}');
+ await expect.element(chatPanel(screen).getByText('Plan three ads for the course')).toBeVisible();
+ await expect.element(screen.getByText('Ads is working on a reply…')).toBeVisible();
+ const posted = JSON.parse(String(asks.mock.calls.find(([, init]) => init?.method === 'POST')![1]!.body));
+ expect(posted).toMatchObject({ company: 'co-1', card: 7, message: 'Plan three ads for the course' });
+ expect(posted.conversation).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+ expect(refresh).toHaveBeenCalled();
+ await expect.element(chatPanel(screen).getByText('On it: the audience first, then three ads.')).toBeVisible();
+ expect(asks.mock.calls.filter(([url]) => String(url).includes(`conversation=${posted.conversation}`)).length).toBeGreaterThan(0);
+});
+
+test('when another Member started the Card\'s chat first, the sheet says so and reads the Card again', async () => {
+ vi.stubGlobal('fetch', vi.fn(async () => Response.json({ error: 'sheetChatTaken' }, { status: 409 })));
+ const screen = await show(sheet({ chat: { kind: 'empty', agent: ads } }));
+ await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), 'Plan three ads{Enter}');
+ await expect.element(screen.getByRole('alert').filter({ hasText: 'Someone else started the chat on this card just now.' })).toBeVisible();
+ expect(refresh).toHaveBeenCalled();
+});
+
+test('a Viewer sees the empty state with the view-only line and no composer', async () => {
+ const screen = await show(sheet({ chat: { kind: 'empty', agent: ads } }), false);
+ await expect.element(chatPanel(screen).getByRole('heading', { name: 'No chat on this card yet' })).toBeVisible();
+ await expect.element(screen.getByRole('textbox')).not.toBeInTheDocument();
+ await expect.element(screen.getByText('Your account is view-only: you can read everything you’re allowed to, without writing, approving or changing anything.')).toBeVisible();
 });
 
 // The reference's motion (design-reference/index.html: .sheet[open], .sheet.is-closing, sheetIn/sheetOut and their
