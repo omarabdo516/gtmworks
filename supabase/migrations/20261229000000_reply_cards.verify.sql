@@ -1,6 +1,6 @@
 -- A reply's cards are read-only to people, read by the Conversation's own person only, kept once per run and call, and
 -- written only by the worker's one function; each kind is listed once, in reply_card_valid; any Agent's runs are offered
--- show_draft beside the tools they had; a card's log row carries its kind and title.
+-- show_draft beside the tools they had; a card's log row names the Agent and carries the card's kind and title.
 select json_build_object(
  'cards_read_only',(select relrowsecurity from pg_class where oid='public.reply_cards'::regclass)
   and has_table_privilege('authenticated','public.reply_cards','select')
@@ -25,7 +25,6 @@ select json_build_object(
   unnest(array['public.reply_card_text(jsonb,integer)','public.reply_card_valid(text,text,jsonb)','public.may_show_reply_cards(uuid,uuid,uuid)']) f),
  'offered_beside_the_other_tools',(select bool_and(position(p in pg_get_functiondef('public.run_tools(uuid,uuid,uuid)'::regprocedure))>0)
   from unnest(array['may_use_lead_tools','may_ask_lead_for_agents','may_tell_agent_rules','may_suggest_agent_rules','may_show_reply_cards']) p),
- 'logged_with_its_card',public.log_agent_action('AGENT_CARD_SHOWN')='agent_card_shown'
-  and position('''card''' in pg_get_functiondef('public.log_agent_change()'::regprocedure))>0
-  and position('''teller''' in pg_get_functiondef('public.log_agent_change()'::regprocedure))>0
+ 'logged_by_the_agent',pg_get_constraintdef((select oid from pg_constraint where conrelid='public.company_log'::regclass and conname='company_log_source_check')) like '%reply_cards%'
+  and position('''agent_card_shown''' in pg_get_functiondef('public.agent_show_card(uuid,text,text,text,text,jsonb)'::regprocedure))>0
 );

@@ -317,8 +317,8 @@ test('integration: an Agent shows a draft once under its reply, also when two cl
   expect((await person.from('reply_cards').select('title').eq('conversation_id',conversation).order('id')).data).toEqual([{title:plan.title},{title:most.title}]);
   const {person:owner}=await clients();
   expect((await owner.from('reply_cards').select('id').eq('conversation_id',conversation)).data).toEqual([]);
-  const logged=async(reader:typeof person)=>(await reader.from('company_log').select('actor_id,action,details').eq('agent_id',agent).eq('action','agent_card_shown').order('id')).data;
-  const rows=[plan.title,most.title].map(title=>({actor_id:contributor,action:'agent_card_shown',details:{agent_name:'Faye',card:{kind:'draft',title},private:true,teller:contributor}}));
+  const logged=async(reader:typeof person)=>(await reader.from('company_log').select('actor_id,actor_kind,action,details').eq('agent_id',agent).eq('action','agent_card_shown').order('id')).data;
+  const rows=[plan.title,most.title].map(title=>({actor_id:agent,actor_kind:'agent',action:'agent_card_shown',details:{card:{kind:'draft',title},private:true,teller:contributor}}));
   expect(await logged(person)).toEqual(rows);
   expect(await logged((await memberClient('manager@example.com')).person)).toEqual(rows);
   expect(await logged((await memberClient('reviewer@example.com')).person)).toEqual([]);

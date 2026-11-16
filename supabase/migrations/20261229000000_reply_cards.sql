@@ -96,25 +96,17 @@ begin
  if kept.id is null then
   select * into kept from public.reply_cards r where r.conversation_id=conversation and r.run_id=run and r.call_id=call;
  else
-  insert into public.hermes_agent_audit(company_id,actor_id,actor_name,agent_id,action,details)
-   values(talk.company_id,talk.person_id,(select name from public.people where id=talk.person_id),talk.agent_id,'AGENT_CARD_SHOWN',
-    jsonb_build_object('card',jsonb_build_object('kind',kept.kind,'title',kept.title),'card_id',kept.id,'conversation_id',conversation,'private',true,'teller',talk.person_id));
+  insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,agent_id,action,details,source,source_id,created_at)
+   values(talk.company_id,talk.agent_id,'agent',(select name from public.hermes_agents where id=talk.agent_id),'agent',talk.agent_id,'agent_card_shown',
+    jsonb_build_object('card',jsonb_build_object('kind',kept.kind,'title',kept.title),'private',true,'teller',talk.person_id),'reply_cards',kept.id,kept.created_at)
+   on conflict (source,source_id) do nothing;
  end if;
  return jsonb_build_object('state','shown','card',kept.id);
 end $$;
 revoke all on function public.agent_show_card(uuid,text,text,text,text,jsonb) from public,anon,authenticated;
 grant execute on function public.agent_show_card(uuid,text,text,text,text,jsonb) to service_role;
 
--- The log copies the card's kind and title, the same key for every kind. log_agent_action already names the action
--- (agent_card_shown).
-create or replace function public.log_agent_change() returns trigger language plpgsql security definer set search_path='' as $$
-begin
- insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,agent_id,action,details,source,source_id,created_at)
-  values(new.company_id,new.actor_id,public.log_actor_kind(new.company_id,new.actor_id),coalesce(new.actor_name,(select name from public.people where id=new.actor_id)),
-   'agent',new.agent_id,public.log_agent_action(new.action),
-   jsonb_strip_nulls(jsonb_build_object('agent_name',(select name from public.hermes_agents where id=new.agent_id),'replacement_id',new.details->'replacement_id','job',new.details->'job','rule',new.details->'rule','taught_by',new.details->'taught_by','asked_for',new.details->'asked_for','asked_by',new.details->'asked_by','reason',new.details->'reason','private',new.details->'private','teller',new.details->'teller','card',new.details->'card')),
-   'hermes_agent_audit',new.id,new.created_at)
-  on conflict (source,source_id) do nothing;
- return null;
-end;
-$$;
+-- The Agent is the one who delivered the card, so its log row names the Agent as its actor, as an Agent's reply to a note
+-- does (note_runs); the row keeps the card's kind and title.
+alter table public.company_log drop constraint company_log_source_check;
+alter table public.company_log add constraint company_log_source_check check (source in ('work_activity','work_comments','member_audit','hermes_agent_audit','company_audit','note_runs','reply_cards'));

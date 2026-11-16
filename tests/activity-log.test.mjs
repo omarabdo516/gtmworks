@@ -43,11 +43,11 @@ test('Card, Member and Agent rows say who changed what', () => {
  }
 });
 
-test('a draft an Agent showed its person names the Agent and the draft\'s title, in both languages; a card kind with no words reads as a change (#136)', () => {
- const shown = describeEntry({ subject: 'agent', action: 'agent_card_shown', agent_id: lead, details: { agent_name: 'Ads', card: { kind: 'draft', title: 'خطة الحملة' }, private: true } });
- assert.deepEqual([shown.act, shown.obj, shown.from, shown.to], [['logActDraftShown', { text: 'Ads' }], 'خطة الحملة', undefined, undefined]);
- assert.deepEqual(['en', 'ar'].map(language => i18n(language).t('logActDraftShown', 'Ads')), ['got a draft from Ads', 'استلم مسودة من Ads']);
- const later = describeEntry({ subject: 'agent', action: 'agent_card_shown', agent_id: lead, details: { agent_name: 'Ads', card: { kind: 'review', title: 'Hooks review' } } });
+test('an Agent delivered the draft, named by its title, in both languages; a card kind with no words reads as a change (#136)', () => {
+ const shown = describeEntry({ subject: 'agent', action: 'agent_card_shown', agent_id: lead, details: { card: { kind: 'draft', title: 'خطة الحملة' }, private: true } });
+ assert.deepEqual([shown.act, shown.obj, shown.from, shown.to], [['logActDraftShown'], 'خطة الحملة', undefined, undefined]);
+ assert.deepEqual(['en', 'ar'].map(language => i18n(language).t('logActDraftShown')), ['delivered the draft', 'سلّم المسودة']);
+ const later = describeEntry({ subject: 'agent', action: 'agent_card_shown', agent_id: lead, details: { card: { kind: 'review', title: 'Hooks review' } } }, { agentName: () => 'Ads' });
  assert.deepEqual([later.act, later.obj], [['logActAgentChanged'], 'Ads']);
 });
 

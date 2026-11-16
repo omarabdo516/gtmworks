@@ -60,11 +60,11 @@ select throws_ok($$insert into public.reply_cards(company_id,conversation_id,run
 select results_eq($$select run_id,call_id,kind,title,state,jsonb_array_length(content->'rows') from public.reply_cards order by run_id$$,
  $$values ('card-run-1','call-0','draft',repeat('t',100),'shown',8),('card-run-2','call-0','draft','Campaign plan','shown',0),('card-run-3','call-0','draft','Campaign plan','shown',2)$$,
  'one card for each run and call that was shown, as it was first shown');
-select results_eq($$select actor_id,action,details->'card',details->>'private',details->>'teller' from public.company_log where agent_id='e8000000-0000-0000-0000-000000000002' and source='hermes_agent_audit' order by actor_id$$,
- $$values ('20000000-0000-0000-0000-000000000001'::uuid,'agent_card_shown',jsonb_build_object('kind','draft','title',repeat('t',100)),'true','20000000-0000-0000-0000-000000000001'),
-  ('20000000-0000-0000-0000-000000000002'::uuid,'agent_card_shown','{"kind":"draft","title":"Campaign plan"}'::jsonb,'true','20000000-0000-0000-0000-000000000002'),
-  ('20000000-0000-0000-0000-000000000003'::uuid,'agent_card_shown','{"kind":"draft","title":"Campaign plan"}'::jsonb,'true','20000000-0000-0000-0000-000000000003')$$,
- 'each card shown is logged once, privately, with its kind and title');
+select results_eq($$select actor_id,actor_kind,action,details->'card',details->>'private',details->>'teller' from public.company_log where agent_id='e8000000-0000-0000-0000-000000000002' and source='reply_cards' order by details->>'teller'$$,
+ $$values ('e8000000-0000-0000-0000-000000000002'::uuid,'agent','agent_card_shown',jsonb_build_object('kind','draft','title',repeat('t',100)),'true','20000000-0000-0000-0000-000000000001'),
+  ('e8000000-0000-0000-0000-000000000002'::uuid,'agent','agent_card_shown','{"kind":"draft","title":"Campaign plan"}'::jsonb,'true','20000000-0000-0000-0000-000000000002'),
+  ('e8000000-0000-0000-0000-000000000002'::uuid,'agent','agent_card_shown','{"kind":"draft","title":"Campaign plan"}'::jsonb,'true','20000000-0000-0000-0000-000000000003')$$,
+ 'each card shown is logged once, privately, as the Agent delivering it, with its kind and title');
 
 -- Who reads them: each card only its Conversation's person, the Owner included; each log row its person, the Owner and
 -- the Manager.
