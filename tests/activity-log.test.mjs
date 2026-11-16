@@ -32,10 +32,14 @@ test('Card, Member and Agent rows say who changed what', () => {
  assert.deepEqual([approved.act, approved.obj, approved.to], [['logActRuleApproved', { text: 'Ads' }, { text: 'يوسف' }], rule, { key: 'logRuleTeamWide' }]);
  assert.deepEqual([rejected.act, rejected.obj, rejected.to], [['logActRuleRejected', { text: 'Ads' }, { text: 'يوسف' }], rule, { key: 'logRuleOwnWork' }]);
  assert.equal(i18n('en').t('logActRuleApproved', 'Ads', 'Youssef'), 'approved what Youssef taught Ads');
+ // An invitation names the email and "{Role} · Invite sent" (#185).
+ const invited = describeEntry({ subject: 'member', action: 'member_invited', details: { email: 'nour@rslearning.com', role: 'contributor', private: 'managers' } });
+ assert.deepEqual([invited.act, invited.obj, invited.to], [['logActMemberInvited'], 'nour@rslearning.com', { key: 'logInvitedContributor' }]);
+ assert.deepEqual(['en', 'ar'].map(language => [i18n(language).t('logActMemberInvited'), i18n(language).t('logInvitedContributor')]), [['invited a member', 'Contributor · Invite sent'], ['عزم عضو', 'مساهم · اتبعتله دعوة']]);
  const long = describeEntry({ subject: 'card', action: 'card_changed', details: { field: 'title', old: 'x'.repeat(200), new: 'y' } });
  assert.equal(long.from.text.length, 80);
  // Every act and value key is in both catalogues.
- const rows = [moved, note, handed, caption, role, added, requested, saved, removed, suggested, approved, rejected, describeEntry({ subject: 'card', action: 'unknown' }), describeEntry({ subject: 'member', action: 'agent_granted', details: {} })];
+ const rows = [moved, note, handed, caption, role, added, requested, saved, removed, suggested, approved, rejected, describeEntry({ subject: 'card', action: 'unknown' }), describeEntry({ subject: 'member', action: 'agent_granted', details: {} }), invited, ...['manager', 'viewer'].map(role => describeEntry({ subject: 'member', action: 'member_invited', details: { email: 'a@b.co', role } }))];
  for (const language of ['en', 'ar']) for (const line of rows) {
   const { t } = i18n(language);
   t(line.act[0], ...line.act.slice(1).map(value => 'key' in value ? t(value.key) : value.text));
