@@ -7,7 +7,7 @@ export const startsNewChat=(event:KeyboardEvent)=>event.code==='KeyN'&&!event.ct
  &&!(event.target instanceof Element&&event.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])'))
  &&!document.querySelector('dialog[open], [role="dialog"]:not(#sidebar), [role="alertdialog"]');
 
-// The page a new chat is opening, whose composer takes the focus once it is drawn and nothing covers it. Asking also
+// The address (path and query) a new chat is opening, whose composer takes the focus once it is drawn and nothing covers it. Asking also
 // tells the frame, which closes the phone drawer as it does for a new page.
 let pendingComposerFocus:string|null=null;
 const listeners=new Set<()=>void>();

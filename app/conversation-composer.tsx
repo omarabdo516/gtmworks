@@ -24,7 +24,7 @@ export function MessageBox({placeholder,label,send,stop,draft,focus=false}:{plac
  useEffect(()=>{ const typed=field.current?.value; if(typed) setText(current=>current||typed); },[]);
  const pathname=usePathname()??''; const search=useSearchParams()?.toString()??'';
  // An inert box (behind the phone drawer) leaves the request to the frame, which focuses it once the drawer has closed.
- useEffect(()=>{ const take=()=>{ if(field.current&&!field.current.closest('[inert]')&&takeComposerFocus(pathname)) field.current.focus(); }; take(); return onComposerFocus(take); },[pathname,search]);
+ useEffect(()=>{ const take=()=>{ if(field.current&&!field.current.closest('[inert]')&&takeComposerFocus(search?`${pathname}?${search}`:pathname)) field.current.focus(); }; take(); return onComposerFocus(take); },[pathname,search]);
  async function submit() {
   if(!text.trim()||busy) return;
   setBusy(true); setError('');

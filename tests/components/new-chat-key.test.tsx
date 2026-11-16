@@ -7,11 +7,11 @@ import { MessageBox } from '@/app/conversation-composer';
 import { LanguageProvider } from '@/lib/i18n-client';
 
 const push = vi.hoisted(() => vi.fn());
-const address = vi.hoisted(() => ({ pathname: '/c/rs-learning/work/board' }));
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push }), usePathname: () => address.pathname, useSearchParams: () => new URLSearchParams() }));
+const address = vi.hoisted(() => ({ pathname: '/c/rs-learning/work/board', search: '' }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push }), usePathname: () => address.pathname, useSearchParams: () => new URLSearchParams(address.search) }));
 // The test page's own address, put back after a test that stands on the new chat.
 const start = location.href;
-afterEach(() => { push.mockReset(); address.pathname = '/c/rs-learning/work/board'; history.replaceState(history.state, '', start); });
+afterEach(() => { push.mockReset(); address.pathname = '/c/rs-learning/work/board'; address.search = ''; history.replaceState(history.state, '', start); });
 
 const chat = '/c/rs-learning/chat';
 // The "N" key by its place: on an Arabic layout it types «ى».
@@ -24,6 +24,18 @@ test('"N" on an Arabic layout opens the new chat, whose composer takes the focus
  expect(push.mock.calls).toEqual([[chat]]);
  address.pathname = chat;
  const screen = await render(composer());
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveFocus();
+});
+
+test('on Lead\'s chat opened for a new Agent (?new=agent), "N" leaves the focus for the plain new chat\'s composer', async () => {
+ history.replaceState(history.state, '', `${chat}?new=agent`);
+ address.pathname = chat; address.search = 'new=agent';
+ const screen = await render(<><NewChatKey href={chat}/><LanguageProvider language="en"><MessageBox key="agent" placeholder="Write" send={async () => null}/></LanguageProvider></>);
+ pressN();
+ expect(push.mock.calls).toEqual([[chat]]);
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).not.toHaveFocus();
+ address.search = '';
+ await screen.rerender(<><NewChatKey href={chat}/><LanguageProvider language="en"><MessageBox key="plain" placeholder="Write" send={async () => null}/></LanguageProvider></>);
  await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveFocus();
 });
 

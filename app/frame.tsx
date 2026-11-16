@@ -33,7 +33,7 @@ export function Frame({sidebar,title,breadcrumb,chat=false,children}:{sidebar:Re
   // Closing gives focus back to the menu button, unless a new chat's composer waits for it or has already taken it.
   if(!open) {
    if(wasOpen.current) { const composer=content.current?.querySelector<HTMLTextAreaElement>('.composer__input');
-    if(composer&&takeComposerFocus(location.pathname)) composer.focus();
+    if(composer&&takeComposerFocus(location.pathname+location.search)) composer.focus();
     else if(!document.activeElement||document.activeElement===document.body||drawer.current?.contains(document.activeElement)) menu.current?.focus(); }
    wasOpen.current=false; return;
   }
