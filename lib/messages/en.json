@@ -844,5 +844,9 @@
   "logActAppConnected": "connected",
   "logActAppDisconnected": "disconnected",
   "logAppOn": "Connected",
-  "logAppOff": "Not connected"
+  "logAppOff": "Not connected",
+  "agentFiles": "Files",
+  "agentFilesEmpty": "No files yet. Files from its cards and from your chats with it show here.",
+  "agentScreen": "Agent’s screen",
+  "agentScreenOff": "Nothing is running on the screen right now."
 }

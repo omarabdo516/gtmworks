@@ -10,8 +10,9 @@ import { madeColumns, madeOf } from '@/lib/agent-made';
 import { agentDetails } from '@/app/agent-details-server';
 
 // Only the person who started a conversation can read it; everyone else, in this company or another, gets not found.
-export default async function ConversationPage({params}:{params:Promise<{slug:string,id:string}>}) {
- const {t}=await getI18n(); const {slug,id}=await params;
+// ?tab=<key> opens the Agent's details on that tab.
+export default async function ConversationPage({params,searchParams}:{params:Promise<{slug:string,id:string}>,searchParams:Promise<{tab?:string}>}) {
+ const {t}=await getI18n(); const {slug,id}=await params; const {tab}=await searchParams;
  const db=await supabase(); const {data:{user}}=await db.auth.getUser();
  if(!user) redirect(`/sign-in?next=${encodeURIComponent(`/c/${slug}/conversations/${id}`)}`);
  const {data:companies}=await db.from('companies').select('id,slug,name,work_mode').order('name'); const company=companies?.find(c=>c.slug===slug);
@@ -27,7 +28,7 @@ export default async function ConversationPage({params}:{params:Promise<{slug:st
  // Any Member but a Viewer may write (#287); the database decides, as it does for every send.
  const {data:writer}=await db.rpc('conversation_can_write',{c:company.id});
  const {items:waitingItems}=await approvalQueue(db,company.id,user.id,membership?.role||'');
- const details=agent?await agentDetails(db,{company:company.id,agent:agent.id,slug,me:user.id,role:membership?.role||''}):null;
+ const details=agent?await agentDetails(db,{company:company.id,agent:agent.id,slug,me:user.id,role:membership?.role||'',tab}):null;
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  const title=titleOf(record.messages,conversation.agent_name);
  return <Shell company={company} companies={companies||[]} personId={user.id} section="conversations" title={title} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={waitingItems.length} agentId={conversation.agent_id||undefined} conversationId={id}>
