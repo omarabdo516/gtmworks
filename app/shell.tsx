@@ -16,6 +16,7 @@ import RecentChats from './recent-chats';
 import ChannelList from './channel-list';
 import { channelSidebar } from '@/lib/channels';
 import FirstRunChoice from './first-run-choice';
+import NewChatKey from './new-chat-key';
 import { SidebarSearchProvider, SearchToggle, SearchBox } from './sidebar-search';
 import { Frame } from './frame';
 import type { ReactNode } from 'react';
@@ -44,7 +45,9 @@ export default async function Shell({company,companies,section,title,crumbs,pers
  const workMode=company?.id?(await db.from('companies').select('work_mode').eq('id',company.id).maybeSingle()).data?.work_mode as string|null|undefined:undefined;
  const channels=company?.id?await channelSidebar(db,company.id):[];
  const manage=company?.id?!!(await db.rpc('can_manage_company',{target:company.id})).data:false;
- const asksForAgents=!!company?.id&&!owner&&(await db.rpc('conversation_can_write',{c:company.id})).data===true;
+ // Who can write a chat: "N" opens a new one for them (app/new-chat-key), and a Member asks Lead for an Agent.
+ const writer=!!company?.id&&(owner||(await db.rpc('conversation_can_write',{c:company.id})).data===true);
+ const asksForAgents=writer&&!owner;
  const active=(path:string)=>path==='chat'?chat:path==='work/board'?section.startsWith('work/'):section===path;
  const sidebar=<SidebarSearchProvider>
   <div className="sb-top">
@@ -58,6 +61,7 @@ export default async function Shell({company,companies,section,title,crumbs,pers
    </div>}
   </div>
   {slug&&<SearchBox/>}
+  {slug&&writer&&<NewChatKey href={`/c/${slug}/chat`}/>}
   <nav className="sb-scroll nav" aria-label={t('navigation')}>{slug&&<>
    <div className="sb-nav">{shellNav.map(([path,label,icon])=><div key={path} className="sb-row">
     <Link className="sb-item" href={`/c/${slug}/${path}`} aria-current={active(path)?'page':undefined}><ShellIcon name={icon}/><span className="od-fill">{t(label)}</span></Link>

@@ -10,7 +10,7 @@ import '@/app/shell.css';
 
 const push = vi.fn<(href: string, options?: { scroll?: boolean }) => void>();
 const refresh = vi.fn();
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push, refresh, replace: vi.fn(), prefetch: vi.fn() }) }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push, refresh, replace: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/chat', useSearchParams: () => new URLSearchParams() }));
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 const sent = vi.fn<(form: FormData) => Promise<unknown>>();
 afterEach(() => { vi.useRealTimers(); push.mockReset(); refresh.mockReset(); sent.mockReset(); vi.unstubAllGlobals(); });

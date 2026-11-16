@@ -1,5 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
+import { usePathname, useSearchParams } from 'next/navigation';
+import { takeComposerFocus } from '@/lib/composer-focus';
 import { useI18n } from '@/lib/i18n-client';
 import { ShellIcon } from '@/components/shell-icon';
 
@@ -13,12 +15,15 @@ export const newId=()=>{const b=crypto.getRandomValues(new Uint8Array(16));b[6]=
 // While the Agent works (design-reference: syncComposer), an empty box turns the send arrow into a stop square for a
 // person allowed to stop the run (`stop`); typed text is still sent, and waits for the current reply.
 // `draft` starts the box with a sentence to try (remount with a new key to put another one in); it is focused for editing,
-// as it is with `focus` ("New agent" opens Lead's chat ready to type, #13).
+// as it is with `focus` ("New agent" opens Lead's chat ready to type, #13). A new chat opened with "N" (app/new-chat-key)
+// focuses the box once its page has landed.
 export function MessageBox({placeholder,label,send,stop,draft,focus=false}:{placeholder:string,label?:string,send:(text:string,sendKey:string)=>Promise<string|null>,stop?:{label:string,run:()=>Promise<string|null>},draft?:string,focus?:boolean}) {
  const {t}=useI18n(); const [text,setText]=useState(draft??''); const [key,setKey]=useState(newId); const [busy,setBusy]=useState(false); const [error,setError]=useState('');
  // Text typed into the server-drawn box before this code arrived is the person's own: it is kept, and Send sends it.
  const field=useRef<HTMLTextAreaElement>(null);
  useEffect(()=>{ const typed=field.current?.value; if(typed) setText(current=>current||typed); },[]);
+ const pathname=usePathname()??''; const search=useSearchParams()?.toString()??'';
+ useEffect(()=>{ if(takeComposerFocus(pathname)) field.current?.focus(); },[pathname,search]);
  async function submit() {
   if(!text.trim()||busy) return;
   setBusy(true); setError('');
