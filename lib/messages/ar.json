@@ -860,5 +860,9 @@
   "noteWorkingOn": "شغال على طلب {0}…",
   "logActNoteReply": "ردّ في السجل",
   "waitingMentionIn": "ذكرك في سجل «{0}»",
-  "waitingMentions": "اتذكرت فيها"
+  "waitingMentions": "اتذكرت فيها",
+  "logActAppConnected": "وصّل",
+  "logActAppDisconnected": "فصل",
+  "logAppOn": "متوصل",
+  "logAppOff": "مش متوصل"
 }

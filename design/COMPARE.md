@@ -59,6 +59,7 @@ The prototype has no URL routes. Its sidebar switches between four views (`data-
 | `settings` | Account menu, Settings: the overlay's Company section | `/c/rs-learning/settings` |
 | `agents` | Settings, Agents | `/c/rs-learning/settings?section=agents` |
 | `agent` | Settings, Agents, Lead: one Agent's page | `/c/rs-learning/settings?agent=61000000-0000-0000-0000-000000000001` (the fixture's Lead) |
+| `apps` | Settings, Apps: the app catalogue (#30) | `/c/rs-learning/settings?section=apps` (needs a Company profile in the Engine) |
 | `account` | Settings, Your account | `/c/rs-learning/settings?section=account` |
 | `knowledge` | Settings, Company knowledge, on its first part, Brand voice (#27) | `/c/rs-learning/settings?section=knowledge` |
 | `new-agent` | Sidebar, New agent: Lead's chat with the hint line (#13) | `/c/rs-learning/chat?new=agent` |

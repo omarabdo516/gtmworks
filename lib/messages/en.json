@@ -860,5 +860,9 @@
   "noteWorkingOn": "Working on the request from {0}…",
   "logActNoteReply": "replied in the log",
   "waitingMentionIn": "mentioned you in the log of “{0}”",
-  "waitingMentions": "Mentions of you"
+  "waitingMentions": "Mentions of you",
+  "logActAppConnected": "connected",
+  "logActAppDisconnected": "disconnected",
+  "logAppOn": "Connected",
+  "logAppOff": "Not connected"
 }

@@ -30,6 +30,6 @@ export const approvalQueue=cache(async(db:Awaited<ReturnType<typeof supabase>>,c
  type MentionRow={id:number,note_id:number|null,work_comments:{body:string}|null};
  // A mention opens its note and shows the note as it now stands (#22).
  const mentions=new Map(((mentionResult.data || []) as unknown as MentionRow[]).map(row=>[row.id,row]));
- const items=listed.map(item=>{ const rule=rules.get(item.id); if(rule) return {...item,suggestion:{rule:rule.body,agent:rule.hermes_agents}}; const mention=mentions.get(item.id); return mention?{...item,note_id:mention.note_id,body:mention.work_comments?.body??item.body}:item; });
+ const items=listed.map(item=>{ const rule=item.kind==='rule_suggestion'?rules.get(item.id):undefined; if(rule) return {...item,suggestion:{rule:rule.body,agent:rule.hermes_agents}}; const mention=item.kind==='mention'?mentions.get(item.id):undefined; return mention?{...item,note_id:mention.note_id,body:mention.work_comments?.body??item.body}:item; });
  return {steps:(stepResult.data || []) as Step[],cards,items,available:!stepResult.error&&!listResult.error&&!cardResult.error&&!ruleResult.error&&!mentionResult.error};
 });
