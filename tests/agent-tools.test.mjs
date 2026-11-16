@@ -163,16 +163,18 @@ test('request_agent reads its arguments as create_agent does, and asks the datab
 });
 
 // #136: the database alone judges a draft (reply_card_valid), so what reaches it is the model's words, trimmed, and never
-// a NUL, which the database cannot store.
-test('show_draft asks the database to show the draft as the model wrote it, trimmed and without NUL, and the Engine is not asked',async()=>{
+// a NUL or a lone surrogate, which the database cannot store; a whole emoji is kept.
+test('show_draft asks the database to show the draft as the model wrote it, trimmed and without NUL or a lone surrogate, and the Engine is not asked',async()=>{
  const {fake,rpcs,call}=harness({},{state:'shown',card:42});
  for(const args of /** @type {unknown[]} */([null,'Campaign plan',{title:'Plan',line:'Draft',rows:'Goal'}])) assert.deepEqual(await call('show_draft',args),{state:'ignored'},JSON.stringify(args));
  assert.deepEqual(await call('show_draft',{title:' خطة الحملة ',line:'مسودة · Meta Ads\n',rows:[{label:' الهدف',value:'ليدز على واتساب '}]}),{state:'shown',card:42});
  await call('show_draft',{title:'Plan\u0000',line:'Draft',rows:[{label:'Goal'},'Budget',{label:'Bud\u0000get',value:7}]});
  await call('show_draft',{line:'Draft'});
+ await call('show_draft',{title:'Plan \ud83d',line:'Draft 🚀',rows:[{label:'Goal',value:'\ude80 leads'}]});
  const sent=(/** @type {string|null} */ title,/** @type {object} */ content)=>['agent_show_card',{conversation:'conversation-1',run:'run-1',call:'call-0',kind:'draft',title,content}];
  assert.deepEqual(rpcs,[sent('خطة الحملة',{line:'مسودة · Meta Ads',rows:[{label:'الهدف',value:'ليدز على واتساب'}]}),
-  sent(null,{line:'Draft',rows:[{label:'Goal',value:null},{label:null,value:null},{label:null,value:null}]}),sent(null,{line:'Draft',rows:[]})]);
+  sent(null,{line:'Draft',rows:[{label:'Goal',value:null},{label:null,value:null},{label:null,value:null}]}),sent(null,{line:'Draft',rows:[]}),
+  sent(null,{line:'Draft 🚀',rows:[{label:'Goal',value:null}]})]);
  assert.deepEqual(fake.agentReads,[]);
 });
 

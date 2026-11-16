@@ -291,6 +291,7 @@ test('integration: an Agent shows a draft once under its reply, also when two cl
   'Line over':{...most,line:`${most.line}l`},
   'Label over':{...most,rows:[{...most.rows[0],label:`${most.rows[0].label}k`}]},
   'Value over':{...most,rows:[{...most.rows[0],value:`${most.rows[0].value}v`}]},
+  'Lone surrogate':{...plan,title:'خطة \ud83d'},
  };
  fake.settings.toolCalls=input=>Object.hasOwn(calls,input)?[{id:'call-0',name:'show_draft',arguments:calls[input]}]:[];
  try {
