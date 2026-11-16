@@ -1,6 +1,7 @@
 // CI runs this on stdin inside /app in the installed web container, after the conversation check. It proves, on the
 // pinned release, that the engine contract creates an Agent as a profile in the bundled Engine through its management
-// listener (ADR 0011) with the install key, reads it back, and that a Run then starts for it and is read back.
+// listener (ADR 0011) with the install key, reads it back, that a Run then starts for it and is read back, and that the
+// contract removes the profile again (ADR 0016) so it reads back as missing, while the default profile is never removed.
 // It prints states and names only, never the key.
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -34,4 +35,16 @@ for(let left=60;left>0;left--) {
  if(read.state!=='running') break;
  await new Promise(resolve=>setTimeout(resolve,1000));
 }
-console.log(JSON.stringify({agent:name,created:created.state,read:found.state,ready:found.agent.ready,run,runState:read.state}));
+// The profile's gateway may still hold it just after its Run: the Engine then answers 500, read as unreachable, and the
+// removal is asked again for up to half a minute.
+let removed;
+for(let left=30;left>0;left--) {
+ removed=await engine.removeAgent(name);
+ if(removed.state!=='unreachable') break;
+ await new Promise(resolve=>setTimeout(resolve,1000));
+}
+assert.equal(removed.state,'removed');
+assert.equal((await engine.readAgent(name)).state,'missing');
+assert.equal((await engine.removeAgent(name)).state,'missing');
+assert.equal((await engine.removeAgent('default')).state,'refused');
+console.log(JSON.stringify({agent:name,created:created.state,read:found.state,ready:found.agent.ready,run,runState:read.state,removed:removed.state}));

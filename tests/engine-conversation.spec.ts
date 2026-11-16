@@ -7,6 +7,10 @@ import { closeOpenRuns, noteInstructions, sendMessage } from '../lib/conversatio
 import { instructionsOf, roleAppNames, roleTemplates } from '../lib/role-templates.mjs';
 import { knowledgeInstructions } from '../lib/company-knowledge.mjs';
 import { fakeEngine } from './fake-engine.mjs';
+import { fakeHermes } from './fake-hermes.mjs';
+import { engineFor as driverFor } from '../lib/engine.mjs';
+import { runToolCall } from '../lib/agent-tools.mjs';
+import { levelConfig } from '../lib/agent-levels.mjs';
 
 // A conversation on the fake engine (tests/fake-engine.mjs): the engine contract with no subscription and no network,
 // through the same send and close code the conversation route and the worker run, on the local database.
@@ -294,4 +298,99 @@ test('integration: Lead makes an Agent from each ready-made role, fitted with th
   expect(await sendMessage(person,service,{person:omar,company,conversation:theirs,sendKey:randomUUID(),agent:writer.id,message:'Write about the tax diploma',encryptionKey,engineFor:fake.engineFor})).toEqual({conversation:theirs});
   expect(fake.runs.at(-1)).toMatchObject({conversation:theirs,instructions:`${writer.instructions}\n\n${knowledge()}\n\n${noteInstructions('Answer in short points.')}`});
  } finally { query(`delete from public.member_notes where company_id='${company}'`); }
+});
+
+// ADR 0016: an Agent Lead makes gets its own Engine profile. Lead's runs stay on the fake engine, which scripts the call;
+// reading Lead's profile and making, reading or removing an Agent's go through the real driver to the fake Engine server,
+// whose key is Lead's Connection key (the install key on a bundled install) and whose root profile has a model with a
+// sign-in that a new profile copies.
+async function ownProfiles(profile:string) {
+ const hermes=await fakeHermes();
+ hermes.settings.key='fake-engine-key';
+ hermes.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:'fake-engine-key',config:{},credentials:{}});
+ hermes.settings.seedModel={provider:'openai-codex',model:'gpt-5.5'};
+ hermes.settings.defaultCredentials['openai-codex']='root-codex-token';
+ const fake=fakeEngine();
+ const engineFor=(connection:{address:string,profile:string,key:string})=>{
+  const driver=driverFor({...connection,address:hermes.address,managementAddress:hermes.managementAddress});
+  return {...fake.engineFor(connection),readAgent:driver.readAgent,provideAgent:driver.provideAgent,removeAgent:driver.removeAgent};
+ };
+ return {hermes,fake,engineFor};
+}
+type MadeAgent={id:string,instructions:string,profile:string,lead_key:boolean,derived:boolean,tools_level:number|null,tools_policy:number|null,tools_pending:boolean|null};
+const madeBy=(conversation:string,lead:string,call='call-0'):MadeAgent[]=>JSON.parse(query(`select a.id,a.instructions,h.profile,
+ h.key_encrypted=(select k.key_encrypted from public.hermes_agents l join public.hermes_connections k on k.id=l.connection_id where l.id='${lead}') as lead_key,
+ a.id=public.lead_agent_id(m.conversation_id,m.run_id,'${call}') as derived,p.tools_level,p.tools_policy,p.tools_pending
+ from public.lead_made_agents m join public.hermes_agents a on a.id=m.agent_id join public.hermes_connections h on h.id=a.connection_id
+ left join public.agent_profiles p on p.agent_id=a.id where m.conversation_id='${conversation}' order by m.created_at`));
+const managed=(hermes:Awaited<ReturnType<typeof fakeHermes>>)=>hermes.settings.managementRequests.map(request=>`${request.method} ${request.path?.split('?')[0]}`);
+
+test('integration: Lead\'s call makes the Agent one profile of its own, also when two closers race, and its Runs start there without its instructions',async()=>{
+ test.setTimeout(120000);
+ const {profile,lead}=bundledLead();
+ const {hermes,fake,engineFor}=await ownProfiles(profile);
+ try {
+  fake.settings.toolCalls=()=>[{id:'call-0',name:'create_agent',arguments:{template:'writer'}}];
+  const {service,person}=await clients();
+  const conversation=randomUUID();
+  expect(await sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent:lead,message:'I want the ready-made writer',encryptionKey,engineFor})).toEqual({conversation});
+  // A reader and the worker close the run at once: both may carry the call out, and one Agent is made.
+  const close=()=>closeOpenRuns(service,{encryptionKey,conversation,engineFor});
+  const closed=await Promise.all([close(),close()]);
+  expect(closed[0]+closed[1]).toBe(1);
+  const made=madeBy(conversation,lead);
+  expect(made).toHaveLength(1);
+  const [agent]=made;
+  const own=`ag-${agent.id.replaceAll('-','')}`;
+  expect(agent).toEqual({id:agent.id,instructions:instructionsOf('writer').replaceAll('{company}','RS Learning'),profile:own,lead_key:true,derived:true,tools_level:1,tools_policy:2,tools_pending:false});
+  expect([...hermes.settings.profiles.keys()].filter(name=>name.startsWith('ag-'))).toEqual([own]);
+  const kept=hermes.settings.profiles.get(own)!;
+  expect([kept.soul,kept.key,kept.config]).toEqual([agent.instructions,'fake-engine-key',levelConfig(1)]);
+  const asked=managed(hermes);
+  for(const step of ['POST /api/profiles',`PUT /api/env`,`PUT /api/config`,'GET /api/model/options']) expect([1,2]).toContain(asked.filter(request=>request===step).length);
+  expect(asked.filter(request=>request.startsWith('DELETE'))).toEqual([]);
+  expect(JSON.parse(query(`select actor_id,action,details->>'agent_name' as name from public.company_log where company_id='${company}' and agent_id='${agent.id}'`)))
+   .toEqual([{actor_id:omar,action:'agent_requested',name:roleTemplates.writer.name}]);
+
+  // The same run and call carried out again (a closer stopped before the close) answer the Agent without the Engine.
+  const before=hermes.settings.managementRequests.length;
+  expect(await runToolCall({db:service,engine:engineFor({address:'http://127.0.0.1:9',profile,key:'fake-engine-key'}),profile,conversation,run:fake.runs[0].id},
+   {id:'call-0',name:'create_agent',arguments:{template:'writer'}})).toEqual({state:'created',agent:agent.id});
+  expect(managed(hermes).slice(before)).toEqual([]);
+  expect(madeBy(conversation,lead)).toHaveLength(1);
+
+  const theirs=randomUUID();
+  expect(await sendMessage(person,service,{person:omar,company,conversation:theirs,sendKey:randomUUID(),agent:agent.id,message:'Write about the tax diploma',encryptionKey,engineFor})).toEqual({conversation:theirs});
+  expect(fake.connections.at(-1)).toMatchObject({profile:own,key:'fake-engine-key'});
+  expect(fake.runs.at(-1)).toMatchObject({conversation:theirs,instructions:knowledge()});
+  expect(await closeOpenRuns(service,{encryptionKey,conversation:theirs,engineFor})).toBe(1);
+  expect(agentRows(theirs)).toEqual([{body:'Reply to: Write about the tax diploma'}]);
+ } finally { await hermes.close(); }
+});
+
+test('integration: a profile that cannot be made, still offers a toolset that must stay off, or cannot answer leaves the Agent on Lead\'s profile, and its Runs answer',async()=>{
+ test.setTimeout(120000);
+ const {profile,lead}=bundledLead();
+ const {service,person}=await clients();
+ const cases:[string,(hermes:Awaited<ReturnType<typeof fakeHermes>>)=>void][]=[
+  ['cannot be made',hermes=>{ hermes.settings.failStep='config'; }],
+  ['still offers a toolset that must stay off',hermes=>{ hermes.settings.staleConfig=true; }],
+  ['cannot answer',hermes=>{ hermes.settings.seedModel=null; }]];
+ for(const [why,set] of cases) {
+  const {hermes,fake,engineFor}=await ownProfiles(profile); set(hermes);
+  try {
+   fake.settings.toolCalls=()=>[{id:'call-0',name:'create_agent',arguments:{template:'writer'}}];
+   const conversation=randomUUID();
+   expect(await sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent:lead,message:'I want the ready-made writer',encryptionKey,engineFor})).toEqual({conversation});
+   expect(await closeOpenRuns(service,{encryptionKey,conversation,engineFor})).toBe(1);
+   const [agent]=madeBy(conversation,lead);
+   expect(agent,why).toMatchObject({profile,lead_key:true,derived:true,tools_level:null});
+   expect(managed(hermes).filter(request=>request.startsWith('DELETE')),why).toEqual([]);
+   const theirs=randomUUID();
+   expect(await sendMessage(person,service,{person:omar,company,conversation:theirs,sendKey:randomUUID(),agent:agent.id,message:'Write about the tax diploma',encryptionKey,engineFor})).toEqual({conversation:theirs});
+   expect(fake.runs.at(-1)!.instructions,why).toBe(`${agent.instructions}\n\n${knowledge()}`);
+   expect(await closeOpenRuns(service,{encryptionKey,conversation:theirs,engineFor})).toBe(1);
+   expect(agentRows(theirs),why).toEqual([{body:'Reply to: Write about the tax diploma'}]);
+  } finally { await hermes.close(); }
+ }
 });

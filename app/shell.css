@@ -64,7 +64,7 @@
 /* The product's global button look (app/globals.css: border, padding, 36px floor, half opacity when disabled) is not
    the reference's; the shell's buttons start bare, as the reference's do. The reset has no more weight than one class,
    so every rule below still draws its own button; buttons from the shared component kit (data-slot) keep theirs. */
-.gw :where(.sidebar, .chat, .details) :where(button:not([data-slot])) {
+.gw :where(.sidebar, .chat, .details, .sheet) :where(button:not([data-slot])) {
   border: 0; padding: 0; margin: 0; min-height: 0; background: none; font: inherit; color: inherit; text-align: inherit; border-radius: 0; gap: 0;
 }
 /* Drawn as the reference draws them, but not built yet: they show "Soon" and do nothing. */

@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
 import { dateFormatter, dayOf, daysBack, groupByDay } from '@/lib/activity-log.mjs';
@@ -31,12 +31,16 @@ function useDayName() {
  }};
 }
 
-// The log grouped by day, newest first (design-reference: logGroupsHTML).
-export function LogDays({items}:{items:{id:number,at:string,node:ReactNode,anchor?:string}[]}) {
+// The log grouped by day, newest first on the pages, oldest first under a Card, where it reads like a conversation
+// (design-reference: logGroupsHTML).
+export function LogDays({items,oldestFirst=false}:{items:{id:number,at:string,node:ReactNode,anchor?:string}[],oldestFirst?:boolean}) {
  const {zone,name}=useDayName();
- return <>{groupByDay(items.map(item=>({...item,created_at:item.at})),zone).map(({day,items:rows})=><section className="lg-day" key={day} aria-label={name(day)}>
+ // A row that arrives while the log is open (a note sent, an Agent's reply) rises in once (design-reference: is-just).
+ const [drawn]=useState(()=>new Set(items.map(item=>item.id)));
+ const days=groupByDay(items.map(item=>({...item,created_at:item.at})),zone);
+ return <>{(oldestFirst?days.reverse().map(day=>({...day,items:day.items.reverse()})):days).map(({day,items:rows})=><section className="lg-day" key={day} aria-label={name(day)}>
   <h3 className="lg-day__h" data-utc={zone}>{name(day)}</h3>
-  <ol className="lg-list">{rows.map(row=><li key={row.id} className="lg-row" data-entry={row.id} id={row.anchor}>{row.node}</li>)}</ol>
+  <ol className="lg-list">{rows.map(row=><li key={row.id} className={`lg-row${drawn.has(row.id)?'':' is-just'}`} data-entry={row.id} id={row.anchor}>{row.node}</li>)}</ol>
  </section>)}</>;
 }
 
