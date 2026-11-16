@@ -6,7 +6,7 @@ import { createPortal } from 'react-dom';
 import { ShellIcon, type ShellIconName } from '@/components/shell-icon';
 import { useI18n } from '@/lib/i18n-client';
 import { isolate } from '@/lib/bidi';
-import { leave } from '@/lib/leave';
+import { leave } from '@/lib/motion';
 
 type ToastAction={label:string,run:()=>void};
 type Toast={id:number,text:string,icon:ShellIconName,action?:ToastAction};

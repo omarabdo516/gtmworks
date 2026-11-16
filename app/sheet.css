@@ -1,8 +1,7 @@
 /* A Card's sheet over the board (#116), ported from the approved reference (design-reference/index.html: side sheet,
    "the card sheet", sheet-tabs, sheet-body, note-composer, note-hint, ro-line). Colours come from the shell's gw tokens
    (app/shell.css), which also draws the close button, the badge, the tabs' base and the composer; the log inside is
-   drawn by app/log.css. The reference's 280ms and its ease-in curve are not shell tokens; they are written as the
-   shell's own dialog writes them. */
+   drawn by app/log.css. */
 .gw .sheet {
   --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 24px;
   --p-btn-secondary-bg: var(--gw-btn2-bg); --p-btn-secondary-ring: var(--gw-btn2-ring);
@@ -12,8 +11,8 @@
   font-family: var(--gw-font); font-size: var(--gw-fs-msg); line-height: 1.6;
 }
 .gw .sheet::backdrop { background: var(--gw-bg-scrim); }
-.gw .sheet[open] { animation: sheetIn 280ms var(--gw-ease-out); }
-.gw .sheet.is-closing { animation: sheetOut 190ms cubic-bezier(0.4, 0, 1, 1) forwards; }
+.gw .sheet[open] { animation: sheetIn var(--gw-dur-slow) var(--gw-ease-out); }
+.gw .sheet.is-closing { animation: sheetOut 190ms var(--gw-ease-in) forwards; }
 @keyframes sheetIn { from { transform: translateX(-24px); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes sheetOut { to { transform: translateX(-24px); opacity: 0; } }
 /* It slides in from the inline end: from the left in Arabic, from the right in English. */
@@ -62,8 +61,7 @@
 .gw .sheet .note-hint { display: flex; align-items: center; justify-content: center; gap: 6px; max-width: var(--gw-chat-col); margin: var(--s2) auto 0; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); text-align: center; }
 .gw .sheet .note-hint .gw-icon { width: 13px; height: 13px; }
 .gw .sheet .ro-line { padding-top: var(--s2); }
-.gw .sheet .lg-row.is-just { animation: sheetRowRise var(--gw-dur) var(--gw-ease-out); }
-@keyframes sheetRowRise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.gw .sheet .lg-row.is-just { animation: gw-rise var(--gw-dur) var(--gw-ease-out); }
 @media (prefers-reduced-motion: reduce) { .gw .sheet .lg-row.is-just { animation: none; } }
 .gw .sheet .ro-line .gw-icon { width: 16px; height: 16px; color: var(--gw-text-3); }
 

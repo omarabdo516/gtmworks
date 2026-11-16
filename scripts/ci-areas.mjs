@@ -9,8 +9,13 @@ import { readFileSync } from 'node:fs';
 const everything = [/^\.github\/workflows\/ci\.yml$/, /^ci\.sh$/, /^scripts\/ci-(areas|verdict)\.mjs$/, /^package(-lock)?\.json$/];
 const suites = {
   // Screens as components in headless Chromium (vitest.config.mts, #81): the app's screens and components, the library
-  // they import (catalogues included), and the component tests and their config.
-  components: { true: [/^(app|components|lib)\//, /^tests\/components\//, /^vitest\.config\.mts$/] },
+  // they import (catalogues included), and the component tests and their config. The motion test (#127) also reads the
+  // reference and the motion table through the motion reader, at the compared screens' widths and languages, with the
+  // stylesheets built through PostCSS.
+  components: { true: [
+    /^(app|components|lib)\//, /^tests\/components\//, /^vitest\.config\.mts$/,
+    /^tests\/(motion-table|motion-css|visual-screens)\.mjs$/, /^design-reference\/index\.html$/, /^postcss\.config\.mjs$/,
+  ] },
   // The database tests: migrations replayed and verified, RLS and grants (tests/db.sh, *.verify.sql, check-rls.sql).
   database: {
     true: [

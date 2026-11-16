@@ -5,7 +5,7 @@ import Link from '@/lib/link';
 import { useI18n } from '@/lib/i18n-client';
 import { ShellIcon } from '@/components/shell-icon';
 import { BoardIcon } from '@/components/board-icon';
-import { leave } from '@/lib/leave';
+import { leave } from '@/lib/motion';
 import './log.css';
 import './sheet.css';
 
