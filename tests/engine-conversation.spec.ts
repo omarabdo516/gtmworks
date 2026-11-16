@@ -12,6 +12,7 @@ import { engineFor as driverFor } from '../lib/engine.mjs';
 import { runToolCall } from '../lib/agent-tools.mjs';
 import { levelConfig } from '../lib/agent-levels.mjs';
 import { moveAgentProfiles } from '../lib/company-profiles.mjs';
+import { keepSharedSkills } from '../lib/shared-skills.mjs';
 
 // A conversation on the fake engine (tests/fake-engine.mjs): the engine contract with no subscription and no network,
 // through the same send and close code the conversation route and the worker run, on the local database.
@@ -131,7 +132,8 @@ function bundledLead() {
  query(`insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values ('${connection}','${company}','${omar}','http://127.0.0.1:9','${profile}','${encryptSecret('fake-engine-key',encryptionKey)}','connected','0.23.0','{run_submission}')`);
  query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('${lead}','${company}','${connection}','Lead','General',true)`);
  query(`insert into public.hermes_agent_audit(company_id,actor_id,agent_id,action,details) values ('${company}','${omar}','${lead}','PROVIDE_BUNDLED_HERMES_AGENT',jsonb_build_object('connection_id','${connection}'))`);
- query(`insert into public.company_profiles(company_id,profile,tools_level,tools_policy) select id,'${profile}',agent_level,public.engine_tool_policy() from public.companies where id='${company}' on conflict (company_id) do update set tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false`);
+ query(`insert into public.company_profiles(company_id,profile,tools_level,tools_policy,skills_shared) select id,'${profile}',agent_level,public.engine_tool_policy(),true from public.companies where id='${company}' on conflict (company_id) do update set tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false,skills_shared=true`);
+ query(`delete from public.company_shared_spaces where company_id='${company}'`);
  return {profile,lead};
 }
 
@@ -360,6 +362,8 @@ test('integration: Lead\'s call makes the Agent one profile of its own, also whe
   expect(managed(hermes).slice(before)).toEqual([]);
   expect(madeBy(conversation,lead)).toHaveLength(1);
 
+  // The worker gives the Agent's own profile its Company's shared folder before its first Run (#122).
+  await keepSharedSkills(service,{hermes:{address:hermes.address,managementAddress:hermes.managementAddress,profile:'default',key:'fake-engine-key'}});
   const theirs=randomUUID();
   expect(await sendMessage(person,service,{person:omar,company,conversation:theirs,sendKey:randomUUID(),agent:agent.id,message:'Write about the tax diploma',encryptionKey,engineFor})).toEqual({conversation:theirs});
   expect(fake.connections.at(-1)).toMatchObject({profile:own,key:'fake-engine-key'});
@@ -424,6 +428,9 @@ test('integration: an Agent moved to its own profile keeps its Conversation, and
   // Its own profile gets a model, standing in for the sign-in that lets it answer.
   Object.assign(hermes.settings.profiles.get(own)!,{provider:'openai-codex',model:'gpt-5.5'});
   const bundled={address:hermes.address,managementAddress:hermes.managementAddress,profile:'default',key:'fake-engine-key'};
+  // The worker makes the Agent's own profile, gives it the Company's shared folder (#122), and then moves the Agent.
+  await moveAgentProfiles(service,{hermes:bundled,driver:driverFor(bundled)});
+  await keepSharedSkills(service,{hermes:bundled});
   expect((await moveAgentProfiles(service,{hermes:bundled,driver:driverFor(bundled)})).moved).toBeGreaterThanOrEqual(1);
   expect(JSON.parse(query(`select h.profile from public.hermes_agents a join public.hermes_connections h on h.id=a.connection_id where a.id='${agent.id}'`))).toEqual([{profile:own}]);
   expect(JSON.parse(query(`select h.profile from public.hermes_agents a join public.hermes_connections h on h.id=a.connection_id where a.id='${lead}'`))).toEqual([{profile}]);
