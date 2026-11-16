@@ -6,8 +6,15 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
  // Run ids are unique across fakes, as Hermes's are: the database refuses a Member's run already used elsewhere (#287).
  const instance=randomUUID().slice(0,8);
  // runs: one entry per run Hermes created; the same Idempotency-Key replays the same run.
- const settings={version:'0.23.0',status:200,key:'test-only-key',features:{run_submission:true,run_events_sse:true},requests:/** @type {{method?:string,path?:string,authorization?:string,session?:string,idempotency?:string}[]} */([]),runs:/** @type {{id:string,key?:string,session?:string,input:string,instructions?:string,history?:{role:string,content:string}[],body?:string,reads:number}[]} */([]),pendingReads:0,loseStarts:0,reply:input=>`Reply to: ${input}`,
+ const settings={version:'0.23.0',status:200,key:'test-only-key',features:{run_submission:true,run_events_sse:true},requests:/** @type {{method?:string,path?:string,authorization?:string,session?:string,idempotency?:string}[]} */([]),runs:/** @type {{id:string,key?:string,session?:string,input:string,instructions?:string,history?:{role:string,content:string}[],body?:string,reads:number,stopped?:boolean,asked:{prompt_id:string,question:string,choices:string[],multi_select:boolean,answer?:string,settled:'answered'|'expired'|null}[]}[]} */([]),pendingReads:0,loseStarts:0,reply:input=>`Reply to: ${input}`,
   // How a finished run ends and the usage it reports; a run cleared from runs is one Hermes lost (404).
+  // A run first asks the questions `questions` gives for its input (clarify, #138), one at a time, as the pinned release
+  // does: it stays running with the question in pending_controls until it is answered on the run's clarify route,
+  // expires (expire(run), Hermes's clarify_timeout) or the run is stopped. The reply is given the answers. `answers`
+  // keeps every clarify request's status and body.
+  questions:/** @type {(input:string)=>{question:string,choices?:string[],multi_select?:boolean}[]} */(()=>[]),
+  answers:/** @type {{run:string,status:number,body:any}[]} */([]),
+  expire(run) { const waiting=settings.runs.find(found=>found.id===run)?.asked.find(asked=>!asked.settled); if(waiting) waiting.settled='expired'; return !!waiting; },
   ending:'completed',usage:/** @type {object|undefined} */({input_tokens:14000,output_tokens:12}),
   // The management listener (Hermes's dashboard, a second port): its profiles, and the status it answers with when
   // not 200. A profile made through it has its own Run API key, none until /api/env sets it, as in the pinned release.
@@ -62,7 +69,11 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
     let run=settings.runs.find(run=>key&&run.key===key);
     // As the pinned release does (api_server_runs.py, run idempotency): the same key with another body is a conflict.
     if(run&&run.body!==raw) return send(response,409,{error:{message:'Idempotency-Key reused with a different request',code:'idempotency_conflict'}});
-    if(!run) { const sent=JSON.parse(raw); run={id:`run_${instance}_${settings.runs.length+1}`,key,session:request.headers['x-hermes-session-key'],input:sent.input,instructions:sent.instructions,history:sent.conversation_history,body:raw,reads:0}; settings.runs.push(run); }
+    if(!run) {
+     const sent=JSON.parse(raw);
+     const asked=settings.questions(sent.input).map(each=>({prompt_id:randomUUID().replaceAll('-','').slice(0,10),question:each.question,choices:each.choices??[],multi_select:each.multi_select===true,settled:null}));
+     run={id:`run_${instance}_${settings.runs.length+1}`,key,session:request.headers['x-hermes-session-key'],input:sent.input,instructions:sent.instructions,history:sent.conversation_history,body:raw,reads:0,asked}; settings.runs.push(run);
+    }
     // A start whose answer is lost: the run exists, but the connection closes before any answer (loseStarts of them).
     if(settings.loseStarts>0) { settings.loseStarts--; request.socket.destroy(); return; }
     return send(response,202,{run_id:run.id,status:'started',replayed:run.reads>0});
@@ -70,8 +81,34 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
    if(runPath&&request.method==='GET') {
     const run=settings.runs.find(run=>run.id===runPath[1]);
     if(!run) return send(response,404,{error:{message:`Run not found: ${runPath[1]}`,code:'run_not_found'}});
+    if(run.stopped) return send(response,200,{object:'hermes.run',run_id:run.id,status:'cancelled',session_id:run.session,pending_controls:[]});
+    // As measured on the pinned release: the skip hint is appended to the question, and the first of two or more
+    // choices is marked recommended.
+    const waiting=run.asked?.find(asked=>!asked.settled);
+    if(waiting) return send(response,200,{object:'hermes.run',run_id:run.id,status:'running',session_id:run.session,pending_controls:[{kind:'clarify',prompt_id:waiting.prompt_id,execution_generation:1,
+     question:`${waiting.question}\nReply "skip" to skip this question.`,choices:waiting.choices.map((choice,index)=>index===0&&waiting.choices.length>=2?`${choice} (Recommended)`:choice),multi_select:waiting.multi_select}]});
     const done=run.reads++>=settings.pendingReads;
-    return send(response,200,{object:'hermes.run',run_id:run.id,status:done?settings.ending:'running',session_id:run.session,...(done&&settings.ending==='completed'?{output:settings.reply(run.input)}:{}),...(done&&settings.usage?{usage:settings.usage}:{})});
+    return send(response,200,{object:'hermes.run',run_id:run.id,status:done?settings.ending:'running',session_id:run.session,...(done&&settings.ending==='completed'?{output:settings.reply(run.input,(run.asked||[]).map(asked=>asked.answer??null))}:{}),...(done&&settings.usage?{usage:settings.usage}:{}),pending_controls:[]});
+   }
+   // The run's own routes (api_server_runs.py): stop, and the answer to the question it waits for, which takes exactly
+   // request_id, execution_generation and answer.
+   const runAction=request.url.match(/^\/p\/[^/]+\/v1\/runs\/([^/]+)\/(stop|clarify)$/);
+   if(runAction&&request.method==='POST') {
+    const run=settings.runs.find(run=>run.id===runAction[1]);
+    if(runAction[2]==='stop') {
+     if(!run) return send(response,404,{error:{message:`Run not found: ${runAction[1]}`,code:'run_not_found'}});
+     run.stopped=true; return send(response,200,{run_id:run.id,status:'stopping'});
+    }
+    let body=null; try { body=JSON.parse(raw); } catch { body=null; }
+    const answered=(status,result)=>{ settings.answers.push({run:runAction[1],status,body}); return send(response,status,result); };
+    if(!body||typeof body!=='object'||Object.keys(body).sort().join()!=='answer,execution_generation,request_id'||typeof body.answer!=='string') return answered(400,{error:{message:'Invalid parameters',code:'invalid_params'}});
+    if(!run) return answered(404,{error:{message:`Run not found: ${runAction[1]}`,code:'run_not_found'}});
+    const asked=run.asked?.find(each=>each.prompt_id===body.request_id);
+    const ended=run.stopped||!run.asked?.some(each=>!each.settled)&&run.reads>settings.pendingReads;
+    if(!asked||body.execution_generation!==1||ended||asked.settled==='expired') return answered(409,{error:{message:'Stale generation',code:'stale_generation'}});
+    if(asked.settled) return answered(409,{error:{message:'No clarify request is pending',code:'approval_not_pending'}});
+    Object.assign(asked,{settled:'answered',answer:body.answer});
+    return answered(200,{run_id:run.id,status:'resolved',prompt_id:asked.prompt_id});
    }
    send(response,200,request.url.endsWith('/health')?{status:'ok',platform:'hermes-agent',version:settings.version}:{object:'hermes.api_server.capabilities',platform:'hermes-agent',features:settings.features});
   });
