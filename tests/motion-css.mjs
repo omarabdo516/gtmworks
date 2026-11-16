@@ -13,7 +13,7 @@ import { join } from 'node:path';
 /** @typedef {{ transition: Transition, animation: Animation }} Motion */
 
 export const referenceFile = 'design-reference/index.html';
-export const productFolder = 'app';
+const productFolder = 'app';
 export const tokenFile = 'app/shell.css';
 
 /** @type {Map<string, Sheet>} */ const read = new Map();
@@ -44,7 +44,7 @@ export function productStyles(file) {
 }
 
 /** @param {string} css @returns {Sheet} */
-export function parseSheet(css) {
+function parseSheet(css) {
   const text = css.replace(/\/\*[\s\S]*?\*\//g, '');
   /** @type {Rule[]} */ const rules = [];
   /** @type {Map<string, string>} */ const keyframes = new Map();
@@ -148,10 +148,10 @@ function framesOf(body) {
 }
 
 /** `.9` reads as `0.9`. @param {string} value */
-const number = value => value.replace(/(^|[\s(,])\.(\d)/g, '$10.$2');
+const number = value => value.replace(/(^|[\s(,])\.(\d)/g, (_, before, digit) => `${before}0.${digit}`);
 
 /** The custom properties a sheet defines on one selector outside any at-rule, such as `:root` or `.gw`. @param {Sheet} sheet @param {string} scope */
-export function tokensOf(sheet, scope) {
+function tokensOf(sheet, scope) {
   /** @type {Map<string, string>} */ const tokens = new Map();
   for (const rule of sheet.rules) {
     if (rule.media || !rule.selectors.includes(scope)) continue;
@@ -161,7 +161,7 @@ export function tokensOf(sheet, scope) {
 }
 
 /** @param {string} value @param {Map<string, string>} tokens @returns {string} */
-export function resolve(value, tokens) {
+function resolve(value, tokens) {
   const resolved = value.replace(/var\((--[\w-]+)(?:,\s*([^()]*))?\)/g, (whole, name, fallback) => {
     const token = tokens.get(name) ?? fallback;
     if (token === undefined) throw new Error(`${whole} has no value`);

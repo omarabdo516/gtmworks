@@ -77,7 +77,7 @@ async function computed(page:Page,selector:string):Promise<Computed> {
  const style=await page.locator(selector).first().evaluate(element=>{
   const style=getComputedStyle(element);
   return [style.transitionProperty,style.transitionDuration,style.transitionDelay,style.transitionTimingFunction,style.animationName,style.animationDuration,style.animationTimingFunction];
- });
+ },undefined,{timeout:10000});
  const [properties,durations,delays,easings,names,animationDurations,animationEasings]=style.map(value=>splitTop(value,','));
  const transition=transitionOf({properties,durations:durations.map(milliseconds),delays:delays.map(milliseconds),easings:easings.map(easing)});
  return {properties:transition.properties,durations:transition.durations,easings:transition.easings,names,animationDurations:animationDurations.map(milliseconds),animationEasings:animationEasings.map(easing)};
