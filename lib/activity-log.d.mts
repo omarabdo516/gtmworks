@@ -14,4 +14,5 @@ export function dayOf(iso: string, timeZone?: string): string;
 export function daysBack(day: string, today: string): number;
 export function groupByDay<T extends { id: number, created_at: string }>(rows: T[], timeZone?: string): { day: string, items: T[] }[];
 export const noteEditWindow: number;
+export function currentNoteText<T extends { action: string, details: Record<string, unknown> }>(rows: T[], comments: { id: number, body: string }[]): T[];
 export function drawnAt(): number;

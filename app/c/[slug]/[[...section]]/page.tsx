@@ -8,7 +8,7 @@ import Shell from '@/app/shell';
 import SettingsOverlay from '@/app/settings-overlay';
 import { approvalQueue } from '@/lib/approval-queue';
 import { canCreateCard } from '@/lib/card-permissions.mjs';
-import { drawnAt } from '@/lib/activity-log.mjs';
+import { currentNoteText, drawnAt } from '@/lib/activity-log.mjs';
 import Members from './members';
 import Home from './home';
 import Agents from './agents';
@@ -72,7 +72,9 @@ export default async function CompanyPage({params,searchParams}:{params:Promise<
  const versionRows=workData[6]?.data || [];
  const signed=versionRows.length ? await db.storage.from('creatives').createSignedUrls(versionRows.map(v=>v.path),3600) : {data:[]};
  const versions=versionRows.map((v,i)=>({...v,url:signed.data?.[i]?.signedUrl || null}));
- const activityRows=await Promise.all((workData[4]?.data || []).map(async a=>{
+ const commentIds=(workData[4]?.data || []).filter(a=>a.action==='comment_added').map(a=>Number((a.details as {id?:unknown}|null)?.id)).filter(Number.isSafeInteger);
+ const {data:currentComments}=commentIds.length?await db.from('work_comments').select('id,body').eq('company_id',company.id).in('id',[...new Set(commentIds)]):{data:[]};
+ const activityRows=await Promise.all(currentNoteText(workData[4]?.data || [],(currentComments||[]) as {id:number,body:string}[]).map(async a=>{
   if(typeof a.evidence!=='string' || !a.evidence.startsWith('file:')) return a;
   const {data}=await db.storage.from('creatives').createSignedUrl(a.evidence.slice(5),3600);
   return {...a,evidence_url:data?.signedUrl || null};
