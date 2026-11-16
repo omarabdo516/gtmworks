@@ -60,7 +60,7 @@
 /* buttons */
 .gw .sov .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; padding: 0 var(--s4); border-radius: var(--gw-r-full);
-  font-size: var(--gw-fs-base); font-weight: 600; white-space: nowrap; transition: background-color var(--gw-dur-fast) var(--gw-ease-out); --od-icon-size: 16px;
+  font-size: var(--gw-fs-base); font-weight: 600; white-space: nowrap; --od-icon-size: 16px;
 }
 .gw .sov .btn--primary { background: var(--gw-primary); color: var(--gw-on-primary); }
 .gw .sov .btn--secondary { background: var(--sov-btn2-bg); color: var(--gw-text-1); box-shadow: var(--sov-btn2-ring) 0 0 0 1px inset; }
@@ -159,8 +159,11 @@
 .gw .sov .inv-sec { display: grid; gap: var(--s2); }
 .gw .sov .ta .inv-sec { margin-top: var(--s5); }
 .gw .sov .inv-open { justify-self: start; --od-icon-size: 16px; }
-/* The invitation form of a Company worked alone: the button lines up with the fields under their labels. */
+.gw .sov .inv-sec .dp-label { padding-inline-start: 0; }
+.gw .sov .ta-pending { justify-self: start; margin-top: 4px; height: 20px; --od-icon-size: 12px; color: var(--gw-text-2); }
+/* The invitation form: the button lines up with the fields under their labels. */
 .gw .sov .inv { display: grid; gap: var(--s2); }
+.gw .sov .inv select.set-input { appearance: auto; padding-inline-end: 6px; }
 .gw .sov .inv-row { display: grid; grid-template-columns: minmax(0, 1fr) 148px auto; gap: var(--s2); align-items: start; }
 .gw .sov .inv-go { margin-top: calc(var(--gw-fs-xs) * 1.5 + 6px); min-width: 88px; }
 @media (max-width: 639px) { .gw .sov .inv-row { grid-template-columns: minmax(0, 1fr); } .gw .sov .inv-go { margin-top: 0; justify-self: start; } }
@@ -219,7 +222,7 @@
 .gw .sov .od-rail > * { flex: none; scroll-snap-align: start; }
 .gw .sov .chip {
   display: inline-flex; align-items: center; gap: var(--s2); height: 34px; padding: 0 var(--s3); border-radius: var(--gw-r-full); background: var(--gw-bg-pane);
-  box-shadow: var(--gw-border-2) 0 0 0 0.5px inset; font-size: var(--gw-fs-sm); white-space: nowrap; transition: background-color var(--gw-dur-fast) var(--gw-ease-out);
+  box-shadow: var(--gw-border-2) 0 0 0 0.5px inset; font-size: var(--gw-fs-sm); white-space: nowrap;
 }
 .gw .sov .chip[aria-pressed="true"] { background: var(--gw-primary); color: var(--gw-on-primary); box-shadow: none; }
 @media (hover: hover) { .gw .sov .chip:hover:not([aria-pressed="true"]) { background: var(--gw-bg-elevated-hover); } }

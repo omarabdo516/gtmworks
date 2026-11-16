@@ -3,6 +3,7 @@ import type { ComponentProps } from 'react';
 import { render } from 'vitest-browser-react';
 import ConversationView from '@/app/c/[slug]/conversations/[id]/conversation';
 import { ReplyCard } from '@/app/reply-card';
+import { ShellIcon } from '@/components/shell-icon';
 import { LanguageProvider } from '@/lib/i18n-client';
 import type { ConversationRecord } from '@/lib/conversation-record';
 import type { ReplyCard as Card } from '@/lib/conversations';
@@ -49,6 +50,48 @@ test.each([['en', 'left'], ['ar', 'start']] as const)('in the %s interface, the 
   const title = group.getByText(plan.title, { exact: true }).element().getBoundingClientRect();
   expect(Math.round(title.left - group.element().getBoundingClientRect().left), 'the title starts at the card\'s left edge').toBe(16);
  }
+});
+
+// #137: a review shows one numbered row per reviewed text, the text in the reference's «» quotation marks, its verdict as a
+// badge with its icon and word, and the Agent's note under it; the decision is the card's last row.
+const review: Card = { id: 3, kind: 'review', title: 'مراجعة نصوص إعلانات ديسمبر', line: '2 نصوص · Meta Ads · قبل ما تطلع', items: [
+ { text: 'من خريج تجارة لمحاسب شغال في 3 شهور', fine: true, note: 'الوعد واضح، ومعانا قصص طلبة تثبته.' },
+ { text: 'أضمن طريق لأول وظيفة محاسبة', fine: false, note: '«أضمن» وعد مقدرش نثبته. البديل: «أقصر طريق لأول شغلانة محاسبة».' },
+], decision: '1 جاهز، و1 رجع لـ Ads بالبديل' };
+
+test.each([
+ ['en', 'Review: مراجعة نصوص إعلانات ديسمبر', ['«من خريج تجارة لمحاسب شغال في 3 شهور»', '«أضمن طريق لأول وظيفة محاسبة»'], ['Fine', 'Needs an edit'], 'Decision'],
+ ['ar', 'مراجعة: مراجعة نصوص إعلانات ديسمبر', ['«من خريج تجارة لمحاسب شغال في 3 شهور»', '«أضمن طريق لأول وظيفة محاسبة»'], ['تمام', 'يتعدّل'], 'القرار'],
+] as const)('in the %s interface, a review is named %j and shows each text quoted in order with its badge and note, and the decision last', async (language, name, quotes, words, decision) => {
+ const screen = await render(<LanguageProvider language={language}><div dir={language === 'ar' ? 'rtl' : 'ltr'}><ReplyCard card={review} fresh={false}/>
+  <div data-testid="icons"><ShellIcon name="check"/><ShellIcon name="pencil"/></div></div></LanguageProvider>);
+ const group = screen.getByRole('group', { name });
+ await expect.element(group).toBeVisible();
+ await expect.element(group.getByText(review.title, { exact: true })).toBeVisible();
+ await expect.element(group.getByText(review.line, { exact: true })).toBeVisible();
+ const [check, pencil] = [...screen.getByTestId('icons').element().querySelectorAll('svg')].map(icon => icon.innerHTML);
+ const rows = [...group.element().querySelectorAll('ol > li')].map(row => ({
+  n: row.querySelector('.rv-n')?.textContent, quote: row.querySelector('.rv-q')?.textContent,
+  badge: row.querySelector('.rv-badge')?.textContent, icon: row.querySelector('.rv-badge svg')?.innerHTML, note: row.querySelector('p')?.textContent,
+ }));
+ expect(rows).toEqual([
+  { n: '1', quote: quotes[0], badge: words[0], icon: check, note: review.items[0].note },
+  { n: '2', quote: quotes[1], badge: words[1], icon: pencil, note: review.items[1].note },
+ ]);
+ expect(check).not.toBe(pencil);
+ const last = group.element().lastElementChild;
+ expect(last?.matches('.rv-decision'), 'the decision is the last row').toBe(true);
+ expect([...(last?.children ?? [])].map(part => part.textContent)).toEqual([decision, review.decision]);
+});
+
+// design-reference: the review card sets its direction once, so a reviewed text that starts with a Latin word ("Excel …")
+// stays in the Arabic card's lines, as do its note and the decision.
+test.each(['en', 'ar'] as const)('in the %s interface, every text of an Arabic review follows the card\'s direction', async language => {
+ const card: Card = { ...review, items: [{ text: 'Excel وOdoo والضرايب في كورس واحد بـ 2,400 ج', fine: true, note: 'Odoo: السعر مطابق لصفحة الكورس.' }], decision: 'OK كله جاهز' };
+ const screen = await render(<LanguageProvider language={language}><div dir={language === 'ar' ? 'rtl' : 'ltr'}><ReplyCard card={card} fresh={false}/></div></LanguageProvider>);
+ const group = screen.getByRole('group', { name: language === 'ar' ? `مراجعة: ${card.title}` : `Review: ${card.title}` });
+ await expect.element(group).toBeVisible();
+ for (const part of group.element().querySelectorAll('.rv-q, .rv-note, .rv-decision__t')) expect(part.matches(':dir(rtl)'), part.textContent ?? '').toBe(true);
 });
 
 const at = '2026-06-10T09:41:00Z';

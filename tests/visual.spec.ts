@@ -93,6 +93,14 @@ const suggestedRule = 'من دلوقتي أي إعلان للسعودية يتك
 // agent_show_card keeps it.
 const drafted = (n: number) => `6d000000-0000-0000-0000-00000000000${n}`;
 const plan = { line: 'مسودة · Meta Ads', rows: [['الهدف', 'ليدز على واتساب'], ['الجمهور', 'خريجين تجارة 22–30 · القاهرة والجيزة والإسكندرية'], ['الإعلانات', '3 فيديو + 2 صور'], ['الميزانية', '500 ج يومياً · 15,000 ج للشهر'], ['المتوقع', '26–30 ج لليد']].map(([label, value]) => ({ label, value })) };
+// Critic and the review of the December ad texts it showed Omar under its reply on June 10 (#137), as the reference's
+// th-team thread shows it (message t5) and agent_show_card keeps it.
+const reviewed = (n: number) => `6e000000-0000-0000-0000-00000000000${n}`;
+const review = { line: '3 نصوص · Meta Ads · قبل ما تطلع', items: [
+  { text: 'من خريج تجارة لمحاسب شغال في 3 شهور', fine: true, note: 'الوعد واضح، ومعانا قصص طلبة تثبته.' },
+  { text: 'أضمن طريق لأول وظيفة محاسبة', fine: false, note: '«أضمن» وعد مقدرش نثبته. البديل: «أقصر طريق لأول شغلانة محاسبة».' },
+  { text: 'Excel وOdoo والضرايب في كورس واحد بـ 2,400 ج', fine: true, note: 'السعر مطابق لصفحة الكورس.' },
+], decision: '2 جاهزين، و1 رجع لـ Ads بالبديل' };
 // A state whose rows are append-only (a Conversation's messages) is set and taken away as the database's own
 // administrator with triggers off, the way tests/fresh-seed.ts puts the seed back, so nothing of it stays behind.
 const asAdmin = (sql: string) => execFileSync('docker', ['exec', '-i', dbContainerOf(), 'psql', '-U', 'supabase_admin', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-q', '--single-transaction'],
@@ -269,6 +277,23 @@ const screenStates: Record<string, { set: string, unset: string, admin?: true }>
       delete from public.hermes_agents where id='${drafted(2)}';
       delete from public.hermes_connections where id='${drafted(1)}';`,
   },
+  'review-shown': {
+    admin: true,
+    set: `insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('${reviewed(1)}','${rsLearning}','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9/p/visual-review','visual-review','visual-no-key','unreachable');
+      insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('${reviewed(2)}','${rsLearning}','${reviewed(1)}','Critic','Reviews every text before it goes out.');
+      insert into public.conversations(id,company_id,person_id,agent_id,agent_name,created_at) values ('${reviewed(3)}','${rsLearning}','20000000-0000-0000-0000-000000000001','${reviewed(2)}','Critic','2026-06-10T10:35:00Z');
+      insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at) values
+       ('${rsLearning}','${reviewed(3)}','person','20000000-0000-0000-0000-000000000001',null,'Omar','@Critic راجع نصوص إعلانات ديسمبر قبل ما Ads يرفعها.','${reviewed(4)}','visual-review','2026-06-10T10:35:00Z'),
+       ('${rsLearning}','${reviewed(3)}','agent',null,'${reviewed(2)}','Critic','راجعت النصوص التلاتة سطر سطر:',null,'visual-review','2026-06-10T10:36:00Z');
+      insert into public.reply_cards(company_id,conversation_id,run_id,call_id,kind,title,content,created_at) values
+       ('${rsLearning}','${reviewed(3)}','visual-review','call-0','review','مراجعة نصوص إعلانات ديسمبر','${JSON.stringify(review)}','2026-06-10T10:36:00Z');`,
+    unset: `delete from public.reply_cards where conversation_id='${reviewed(3)}';
+      delete from public.conversation_usage where conversation_id='${reviewed(3)}';
+      delete from public.conversation_messages where conversation_id='${reviewed(3)}';
+      delete from public.conversations where id='${reviewed(3)}';
+      delete from public.hermes_agents where id='${reviewed(2)}';
+      delete from public.hermes_connections where id='${reviewed(1)}';`,
+  },
   'rule-told': {
     admin: true,
     set: `insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('${told(1)}','${rsLearning}','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9/p/visual-rules','visual-rules','visual-no-key','unreachable');
@@ -385,6 +410,20 @@ screenStates['agent-files'] = {
     ${screenStates['agent-details'].unset}`,
 };
 
+// An invitation in the Team table (#185): the visibility state's Agents, and Nour invited as a Contributor with Meta
+// Ads switched on. Written as the administrator so the invitation leaves no row in the permanent Company log.
+const invited = seen(7);
+screenStates.invite = {
+  admin: true,
+  set: `${screenStates.visibility.set}
+    insert into public.member_invitations(id,company_id,email,role,created_at) values ('${invited}','${rsLearning}','nour.hassan@example.com','contributor','2026-06-10T09:00:00Z');
+    insert into public.invitation_agent_access(company_id,invitation_id,agent_id) values ('${rsLearning}','${invited}','${seen(5)}');`,
+  unset: `delete from public.invitation_agent_access where invitation_id='${invited}';
+    delete from public.member_invitations where id='${invited}';
+    delete from public.member_agent_access where agent_id in ('${seen(5)}','${seen(6)}');
+    ${screenStates.visibility.unset}`,
+};
+
 // Settings, Apps (#30) reads the Company's apps from its own profile in the Engine: a fake one, on a loopback address of
 // this lane's own, holding Klaviyo connected, Notion needing attention and every other app off. RS Learning gets the
 // bundled Connection and the profile record the worker would leave, written with triggers off, and loses them after.
@@ -423,6 +462,12 @@ const screenActs: Record<string, (page: Page, language: Language) => Promise<() 
     await expect(page.locator('.toast')).toBeVisible();
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     return () => page.clock.resume();
+  },
+  // The Team table's invitation form, opened from "Invite a member" with the focus in the email field (#185).
+  'invite-open': async page => {
+    await page.locator('#inv-toggle').click();
+    await expect(page.locator('#inv-email')).toBeFocused();
+    return async () => {};
   },
   // Another Member's chat opens its Card on Log (#145); the Chat tab, picked as a person picks it, shows the lock.
   'sheet-chat-tab': async page => {

@@ -32,10 +32,14 @@ test('Card, Member and Agent rows say who changed what', () => {
  assert.deepEqual([approved.act, approved.obj, approved.to], [['logActRuleApproved', { text: 'Ads' }, { text: 'يوسف' }], rule, { key: 'logRuleTeamWide' }]);
  assert.deepEqual([rejected.act, rejected.obj, rejected.to], [['logActRuleRejected', { text: 'Ads' }, { text: 'يوسف' }], rule, { key: 'logRuleOwnWork' }]);
  assert.equal(i18n('en').t('logActRuleApproved', 'Ads', 'Youssef'), 'approved what Youssef taught Ads');
+ // An invitation names the email and "{Role} · Invite sent" (#185).
+ const invited = describeEntry({ subject: 'member', action: 'member_invited', details: { email: 'nour@rslearning.com', role: 'contributor', private: 'managers' } });
+ assert.deepEqual([invited.act, invited.obj, invited.to], [['logActMemberInvited'], 'nour@rslearning.com', { key: 'logInvitedContributor' }]);
+ assert.deepEqual(['en', 'ar'].map(language => [i18n(language).t('logActMemberInvited'), i18n(language).t('logInvitedContributor')]), [['invited a member', 'Contributor · Invite sent'], ['عزم عضو', 'مساهم · اتبعتله دعوة']]);
  const long = describeEntry({ subject: 'card', action: 'card_changed', details: { field: 'title', old: 'x'.repeat(200), new: 'y' } });
  assert.equal(long.from.text.length, 80);
  // Every act and value key is in both catalogues.
- const rows = [moved, note, handed, caption, role, added, requested, saved, removed, suggested, approved, rejected, describeEntry({ subject: 'card', action: 'unknown' }), describeEntry({ subject: 'member', action: 'agent_granted', details: {} })];
+ const rows = [moved, note, handed, caption, role, added, requested, saved, removed, suggested, approved, rejected, describeEntry({ subject: 'card', action: 'unknown' }), describeEntry({ subject: 'member', action: 'agent_granted', details: {} }), invited, ...['manager', 'viewer'].map(role => describeEntry({ subject: 'member', action: 'member_invited', details: { email: 'a@b.co', role } }))];
  for (const language of ['en', 'ar']) for (const line of rows) {
   const { t } = i18n(language);
   t(line.act[0], ...line.act.slice(1).map(value => 'key' in value ? t(value.key) : value.text));
@@ -47,8 +51,19 @@ test('an Agent delivered the draft, named by its title, in both languages; a car
  const shown = describeEntry({ subject: 'agent', action: 'agent_card_shown', agent_id: lead, details: { card: { kind: 'draft', title: 'خطة الحملة' }, private: true } });
  assert.deepEqual([shown.act, shown.obj, shown.from, shown.to], [['logActDraftShown'], 'خطة الحملة', undefined, undefined]);
  assert.deepEqual(['en', 'ar'].map(language => i18n(language).t('logActDraftShown')), ['delivered the draft', 'سلّم المسودة']);
- const later = describeEntry({ subject: 'agent', action: 'agent_card_shown', agent_id: lead, details: { card: { kind: 'review', title: 'Hooks review' } } }, { agentName: () => 'Ads' });
+ const later = describeEntry({ subject: 'agent', action: 'agent_card_shown', agent_id: lead, details: { card: { kind: 'question', title: 'Which angle?' } } }, { agentName: () => 'Ads' });
  assert.deepEqual([later.act, later.obj], [['logActAgentChanged'], 'Ads']);
+});
+
+test('an Agent reviewed, named by the review\'s title, with how many texts are fine and how many need an edit, in both languages; a row with no counts still reads (#137)', () => {
+ const reviewed = describeEntry({ subject: 'agent', action: 'agent_card_shown', agent_id: lead, details: { card: { kind: 'review', title: 'مراجعة نصوص إعلانات ديسمبر', fine: 2, edits: 1 }, private: true } });
+ assert.deepEqual([reviewed.act, reviewed.obj, reviewed.from, reviewed.to], [['logActReviewShown'], 'مراجعة نصوص إعلانات ديسمبر', undefined, { key: 'logReviewCounts', values: ['2', '1'] }]);
+ assert.deepEqual(['en', 'ar'].map(language => { const { t } = i18n(language); return [t('logActReviewShown'), t('logReviewCounts', '2', '1')]; }),
+  [['reviewed', 'Fine: 2 · To edit: 1'], ['راجع', 'تمام: 2 · يتعدّل: 1']]);
+ for (const card of [{ kind: 'review', title: 'Hooks review' }, { kind: 'review', title: 'Hooks review', fine: '2', edits: 1 }, { kind: 'review', title: 'Hooks review', fine: -1, edits: 1 }]) {
+  const line = describeEntry({ subject: 'agent', action: 'agent_card_shown', agent_id: lead, details: { card } });
+  assert.deepEqual([line.act, line.obj, line.to], [['logActReviewShown'], 'Hooks review', undefined], JSON.stringify(card));
+ }
 });
 
 test('an Agent called in a note replies in the log, with its reply as the note under the line (#22)', () => {

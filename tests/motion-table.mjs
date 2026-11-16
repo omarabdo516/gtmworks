@@ -5,8 +5,9 @@
 /**
  * `ref` is the reference's selector (design-reference/index.html), `built` the product's in `file`. `html` is the part
  * as the product draws it (its tag and the attributes rules read) inside the ancestors `built` names, so the part is
- * the one element `built` matches.
- * @typedef {{ ref: string, built: string, file: string, html: string }} MotionRow
+ * the one element `built` matches. `held` is the part's scale while a person holds it down, 1 for a part that does not
+ * move (#128); a row without it is not pressed.
+ * @typedef {{ ref: string, built: string, file: string, html: string, held?: 0.96 | 0.985 | 0.94 | 1 }} MotionRow
  */
 
 /** @type {MotionRow[]} */
@@ -31,7 +32,62 @@ export const motionTable = [
   { ref: '.col', built: '.gw .board-view .col', file: 'app/board.css', html: '<div class="gw"><div class="board-view"><section class="col"></section></div></div>' },
   { ref: '.mcard', built: '.gw .board-view .mcard', file: 'app/board.css', html: '<div class="gw"><div class="board-view"><a class="mcard" href="#"></a></div></div>' },
   // A chat's Card on the board (#144): the corner pill eases its colours and gives under a press.
-  { ref: '.corner-pill', built: '.gw .corner-pill', file: 'app/shell.css', html: '<div class="gw"><div class="chat__corner"><a class="corner-pill" href="#"></a></div></div>' },
+  { ref: '.corner-pill', built: '.gw .corner-pill', file: 'app/shell.css', html: '<div class="gw"><div class="chat__corner"><a class="corner-pill" href="#"></a></div></div>', held: 0.96 },
+  // Everything a person can press fades and gives under the finger (#128), wherever it is drawn. The sidebar:
+  { ref: '.circle-btn', built: '.gw .circle-btn', file: 'app/shell.css', html: '<div class="gw"><aside class="sidebar"><div class="sb-icons"><a class="circle-btn" href="#" aria-label="New chat"></a></div></aside></div>', held: 0.96 },
+  { ref: '.sb-item', built: '.gw .sb-item', file: 'app/shell.css', html: '<div class="gw"><aside class="sidebar"><div class="sb-row"><a class="sb-item" href="#">Board</a></div></aside></div>', held: 0.985 },
+  { ref: '.sb-item', built: '.gw .sb-item', file: 'app/shell.css', html: '<div class="gw"><aside class="sidebar"><div class="sb-foot"><button type="button" class="sb-item sb-apps" aria-disabled="true">Connect apps</button></div></aside></div>', held: 1 },
+  { ref: '.agent-tile', built: '.gw .agent-tile', file: 'app/shell.css', html: '<div class="gw"><aside class="sidebar"><ul class="agent-grid"><li><a class="agent-tile" href="#">Lead</a></li></ul></aside></div>', held: 0.96 },
+  { ref: '.sb-add', built: '.gw .sb-add', file: 'app/shell.css', html: '<div class="gw"><aside class="sidebar"><div class="sb-label-row"><button type="button" class="sb-add" aria-label="New channel"></button></div></aside></div>' },
+  { ref: '.me', built: '.gw .me', file: 'app/shell.css', html: '<div class="gw"><aside class="sidebar"><div class="sb-foot"><button type="button" class="me" aria-expanded="false">Omar</button></div></aside></div>' },
+  { ref: '.menu__item', built: '.gw .menu__item', file: 'app/shell.css', html: '<div class="gw"><aside class="sidebar"><nav class="sb-scroll"></nav><div class="sb-foot"><div class="menu" role="menu"><button type="button" class="menu__item" role="menuitemradio" aria-checked="false">Dark</button></div></div></aside></div>', held: 0.985 },
+  { ref: '.menu__item', built: '.gw .menu__item', file: 'app/shell.css', html: '<div class="gw"><aside class="sidebar"><nav class="sb-scroll"></nav><div class="sb-foot"><div class="menu" role="menu"><button type="button" class="menu__item" role="menuitemradio" aria-checked="false" disabled>Dark</button></div></div></aside></div>', held: 1 },
+  { ref: '.menu__item', built: '.gw .menu__item', file: 'app/shell.css', html: '<div class="gw"><aside class="sidebar"><nav class="sb-scroll"></nav><div class="sb-foot"><div class="menu" role="menu"><button type="button" class="menu__item" role="menuitem" aria-disabled="true">Connect apps</button></div></div></aside></div>', held: 1 },
+  // The chat: its title pill, the composer's buttons (drawn "Soon" today), the send arrow, a reply's buttons and links.
+  { ref: '.head-pill', built: '.gw .head-pill', file: 'app/shell.css', html: '<div class="gw"><div class="chat"><div class="chat__top"><button type="button" class="head-pill">Lead</button></div></div></div>', held: 0.96 },
+  { ref: '.composer__btn', built: '.gw .composer__btn', file: 'app/shell.css', html: '<div class="gw"><div class="chat"><div class="composer"><button type="button" class="composer__btn" aria-label="More"></button></div></div></div>', held: 0.96 },
+  { ref: '.composer__btn', built: '.gw .composer__btn', file: 'app/shell.css', html: '<div class="gw"><div class="chat"><div class="composer"><button type="button" class="composer__btn" aria-disabled="true" aria-label="More · Soon"></button></div></div></div>', held: 1 },
+  { ref: '.composer__send', built: '.gw .composer__send', file: 'app/shell.css', html: '<div class="gw"><div class="chat"><div class="composer"><button type="button" class="composer__send" aria-label="Send"></button></div></div></div>', held: 0.94 },
+  { ref: '.composer__send', built: '.gw .composer__send', file: 'app/shell.css', html: '<div class="gw"><div class="chat"><div class="composer"><button type="button" class="composer__send" aria-label="Send" disabled></button></div></div></div>', held: 1 },
+  { ref: '.btn', built: '.gw .btn', file: 'app/shell.css', html: '<div class="gw"><div class="chat"><div class="ac-card"><div class="ac-actions"><button type="button" class="btn btn--primary">Yes</button></div></div></div></div>', held: 0.96 },
+  { ref: '.link-btn', built: '.gw .link-btn', file: 'app/shell.css', html: '<div class="gw"><div class="chat"><div class="new-hint"><a class="link-btn new-hint__alt" href="#">Ready-made</a></div></div></div>', held: 0.985 },
+  // The details panel: its round buttons, a row that opens a Card, a plain row, a text button; a channel's.
+  { ref: '.circle-btn', built: '.gw .circle-btn', file: 'app/shell.css', html: '<div class="gw"><aside class="details"><div class="dp-top"><button type="button" class="circle-btn" aria-label="Close"></button></div></aside></div>', held: 0.96 },
+  { ref: '.panel-row', built: '.gw .panel-row', file: 'app/shell.css', html: '<div class="gw"><aside class="details"><ul class="panel-card"><a class="panel-row" href="#">A task</a></ul></aside></div>', held: 0.985 },
+  { ref: '.panel-row', built: '.gw .panel-row', file: 'app/shell.css', html: '<div class="gw"><aside class="details"><ul class="panel-card"><li class="panel-row">A file</li></ul></aside></div>', held: 1 },
+  { ref: '.link-btn', built: '.gw .link-btn', file: 'app/shell.css', html: '<div class="gw"><aside class="details"><div class="dp-label"><a class="link-btn" href="#">All</a></div></aside></div>', held: 0.985 },
+  { ref: '.panel-row', built: '.gw .panel-row', file: 'app/channel.css', html: '<div class="gw"><aside class="details"><ul class="panel-card"><button type="button" class="panel-row tm-add">Add a Member</button></ul></aside></div>', held: 0.985 },
+  { ref: '.btn', built: '.gw .btn', file: 'app/channel.css', html: '<div class="gw"><aside class="details"><ul class="panel-card"><li class="panel-row tm-cand"><button type="button" class="btn btn--secondary btn--sm">Add</button></li></ul></aside></div>', held: 0.96 },
+  { ref: '.link-btn', built: '.gw .link-btn', file: 'app/channel.css', html: '<div class="gw"><aside class="details"><div class="dp-label"><button type="button" class="link-btn">Done</button></div></aside></div>', held: 0.985 },
+  // The ready-made gallery.
+  { ref: '.circle-btn', built: '.gw .circle-btn', file: 'app/shell.css', html: '<div role="dialog" class="gw modal" data-state="open"><div class="modal__head"><button type="button" class="circle-btn" aria-label="Close"></button></div></div>', held: 0.96 },
+  { ref: '.chip', built: '.gw .chip', file: 'app/shell.css', html: '<div role="dialog" class="gw modal" data-state="open"><div class="tpl-cats"><button type="button" class="chip" aria-pressed="false">Posts</button></div></div>', held: 0.96 },
+  { ref: '.btn', built: '.gw .btn', file: 'app/shell.css', html: '<div role="dialog" class="gw modal" data-state="open"><div class="modal__foot"><button type="button" class="btn btn--secondary">Describe it</button></div></div>', held: 0.96 },
+  // The board: its buttons, chips, the column pager (disabled at the first column) and the card detail's buttons.
+  { ref: '.btn', built: '.gw .btn', file: 'app/board.css', html: '<div class="gw"><div class="board-view"><button class="btn btn--primary btn--sm">New card</button></div></div>', held: 0.96 },
+  { ref: '.chip', built: '.gw .chip', file: 'app/board.css', html: '<div class="gw"><div class="board-view"><div class="od-rail"><button type="button" class="chip chip--plain" aria-pressed="true">All</button></div></div></div>', held: 0.96 },
+  { ref: '.circle-btn', built: '.gw .circle-btn', file: 'app/board.css', html: '<div class="gw"><div class="board-view"><div class="board-nav"><button type="button" class="circle-btn" aria-label="Next columns"></button></div></div></div>', held: 0.96 },
+  { ref: '.circle-btn', built: '.gw .circle-btn', file: 'app/board.css', html: '<div class="gw"><div class="board-view"><div class="board-nav"><button type="button" class="circle-btn" aria-label="Previous columns" disabled></button></div></div></div>', held: 1 },
+  { ref: '.link-btn', built: '.gw .link-btn', file: 'app/board.css', html: '<div class="gw"><div class="card-detail"><div class="lg-meta"><button type="button" class="link-btn">Edit</button></div></div></div>', held: 0.985 },
+  { ref: '.btn', built: '.gw .btn', file: 'app/board.css', html: '<div class="gw"><div class="card-detail"><div class="lg-edit"><button type="button" class="btn btn--primary">Save</button></div></div></div>', held: 0.96 },
+  // The settings overlay.
+  { ref: '.sb-item', built: '.gw .sb-item', file: 'app/settings.css', html: '<div class="gw sov-root"><div class="sov" role="dialog"><nav class="sov-nav"><a class="sb-item sov-nav__i" href="#">Members</a></nav></div></div>', held: 0.985 },
+  { ref: '.circle-btn', built: '.gw .circle-btn', file: 'app/settings.css', html: '<div class="gw sov-root"><div class="sov" role="dialog"><header class="sov__bar"><button type="button" class="circle-btn" aria-label="Close"></button></header></div></div>', held: 0.96 },
+  { ref: '.btn', built: '.gw .btn', file: 'app/settings.css', html: '<div class="gw sov-root"><div class="sov" role="dialog"><button type="button" class="btn btn--secondary btn--sm">Change</button></div></div>', held: 0.96 },
+  { ref: '.btn', built: '.gw .btn', file: 'app/settings.css', html: '<div class="gw sov-root"><div class="sov" role="dialog"><button type="submit" class="btn btn--primary btn--sm" disabled>Save</button></div></div>', held: 1 },
+  { ref: '.chip', built: '.gw .chip', file: 'app/settings.css', html: '<div class="gw sov-root"><div class="sov" role="dialog"><div class="od-rail"><a class="chip" href="#">Voice</a></div></div></div>', held: 0.96 },
+  { ref: '.link-btn', built: '.gw .link-btn', file: 'app/settings.css', html: '<div class="gw sov-root"><div class="sov" role="dialog"><button type="button" class="link-btn rl-remove">Remove</button></div></div>', held: 0.985 },
+  { ref: '.panel-row', built: '.gw .panel-row', file: 'app/settings.css', html: '<div class="gw sov-root"><div class="sov" role="dialog"><ul class="panel-card"><a class="panel-row sov-ag" href="#">Lead</a></ul></div></div>', held: 0.985 },
+  { ref: '.panel-row', built: '.gw .panel-row', file: 'app/settings.css', html: '<div class="gw sov-root"><div class="sov" role="dialog"><ul class="panel-card"><button type="button" class="panel-row">Arabic</button></ul></div></div>', held: 0.985 },
+  { ref: '.panel-row', built: '.gw .panel-row', file: 'app/settings.css', html: '<div class="gw sov-root"><div class="sov" role="dialog"><ul class="panel-card"><li class="panel-row">Owner</li></ul></div></div>', held: 1 },
+  // First run.
+  { ref: '.btn', built: '.gw .btn', file: 'app/first-run-choice.css', html: '<div class="gw"><div class="fr" role="dialog"><div class="fr__actions"><button type="submit" class="btn btn--primary">Open</button></div></div></div>', held: 0.96 },
+  { ref: '.btn', built: '.gw .btn', file: 'app/first-run-choice.css', html: '<div class="gw"><div class="fr" role="dialog"><div class="fr__actions"><button type="submit" class="btn btn--primary" disabled>Open</button></div></div></div>', held: 1 },
+  // The Activity log and Numbers (whose buttons are app/log.css's).
+  { ref: '.btn', built: '.gw .btn', file: 'app/log.css', html: '<div class="gw"><main class="log-page"><a class="btn btn--secondary btn--sm" href="#">Older</a></main></div>', held: 0.96 },
+  { ref: '.link-btn', built: '.gw .link-btn', file: 'app/log.css', html: '<div class="gw"><main class="log-page"><a class="link-btn lg-card" href="#">A card</a></main></div>', held: 0.985 },
+  { ref: '.btn', built: '.gw .btn', file: 'app/log.css', html: '<div class="gw"><main class="numbers-page"><a class="btn btn--secondary btn--sm" href="#">Activity log</a></main></div>', held: 0.96 },
+  { ref: '.panel-row', built: '.gw .panel-row', file: 'app/numbers.css', html: '<div class="gw"><main class="numbers-page"><div class="panel-card"><a class="panel-row" href="#">Lead</a></div></main></div>', held: 0.985 },
   // The toast rises in and leaves upward (#157).
   { ref: '.toast', built: '.gw .toast', file: 'app/toast.css', html: '<div class="gw toast-host" role="status"><div class="toast"></div></div>' },
   { ref: '.toast.is-leaving', built: '.gw .toast.is-leaving', file: 'app/toast.css', html: '<div class="gw toast-host" role="status"><div class="toast is-leaving"></div></div>' },

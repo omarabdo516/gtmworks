@@ -6,8 +6,9 @@ import { overlayHref } from '@/lib/settings-overlay.mjs';
 import { saveTheme } from './theme-actions';
 import { saveLanguage } from './language-actions';
 import AccountChoicesView from './account-choices-view';
-import { changeMember } from './c/[slug]/[[...section]]/actions';
-import { setAgentVisible } from './agent-visibility-actions';
+import { setAgentVisible, setInvitationAgentVisible } from './agent-visibility-actions';
+import { inviteMember } from './invite-actions';
+import { InviteSection, type InviteRole } from './invite-section';
 import { madeDay, useZone } from './agent-made';
 import { dateFormatter, dayOf } from '@/lib/activity-log.mjs';
 import { localeFor } from '@/lib/i18n.mjs';
@@ -76,32 +77,19 @@ export function CompanyName({company,name}:{company:string,name:string}) {
  </form>;
 }
 
-// The invitation form of a Company worked alone (reference: inviteFormHTML): the chosen Role's description follows the
-// select. It posts to the members action, which checks the Owner again and returns to the overlay.
-export function InviteForm({slug,company,roles}:{slug:string,company:string,roles:{key:string,name:string,description:string}[]}) {
- const {t}=useI18n();
- const [role,setRole]=useState('contributor'); const chosen=roles.find(item=>item.key===role)||roles[0];
- return <form className="inv" action={changeMember}>
-  <input type="hidden" name="op" value="invite"/><input type="hidden" name="slug" value={slug}/><input type="hidden" name="company" value={company}/><input type="hidden" name="back" value="settings"/>
-  <div className="inv-row">
-   <div className="set-field"><label className="set-label" htmlFor="inv-email">{t('settingsInviteEmail')} <span aria-hidden="true">*</span></label>
-    <input className="set-input" id="inv-email" name="email" type="email" dir="ltr" autoComplete="off" spellCheck={false} placeholder={t('settingsInviteEmailExample')} required/></div>
-   <div className="set-field"><label className="set-label" htmlFor="inv-role">{t('settingsRole')}</label>
-    <select className="set-input" id="inv-role" name="role" aria-describedby="inv-role-d" value={role} onChange={event=>setRole(event.target.value)}>{roles.map(item=><option key={item.key} value={item.key}>{item.name}</option>)}</select></div>
-   <button type="submit" className="btn btn--primary inv-go">{t('settingsInviteGo')}</button>
-  </div>
-  <p className="set-hint" id="inv-role-d">{chosen.name}: {chosen.description}</p>
- </form>;
+// "Invite a member" (#185), its send bound to the Owner's server action, which checks the Owner again.
+export function Invite({mode,company,slug,roles}:{mode:'table'|'alone',company:string,slug:string,roles:InviteRole[]}) {
+ return <InviteSection mode={mode} roles={roles} send={(email,role)=>inviteMember(company,slug,email,role)}/>;
 }
 
-// One Member × Agent switch (#15; reference: ta-toggle). It turns at once and goes back, with the reason, when the
-// database refuses.
-export function AgentSwitch({company,person,agent,on,label}:{company:string,person:string,agent:string,on:boolean,label:string}) {
+// One Member × Agent switch (#15; reference: ta-toggle), or one on an invited row (#185), kept with the invitation until
+// the person joins. It turns at once and goes back, with the reason, when the database refuses.
+export function AgentSwitch({company,target,agent,on,label}:{company:string,target:{member:string}|{invitation:string},agent:string,on:boolean,label:string}) {
  const {t}=useI18n(); const router=useRouter();
  const [checked,setChecked]=useState(on); const [pending,startTransition]=useTransition(); const [error,setError]=useState('');
  return <><button type="button" className="switch" role="switch" aria-checked={checked} aria-label={label} disabled={pending} onClick={()=>startTransition(async()=>{
   const next=!checked; setChecked(next); setError('');
-  const failure=await setAgentVisible(company,person,agent,next);
+  const failure='member' in target?await setAgentVisible(company,target.member,agent,next):await setInvitationAgentVisible(company,target.invitation,agent,next);
   if(failure) { setChecked(!next); setError(failure); } else router.refresh();
  })}/>{error&&<span className="set-err" role="alert">{t(error)}</span>}</>;
 }
