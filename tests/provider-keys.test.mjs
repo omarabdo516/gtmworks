@@ -96,6 +96,10 @@ test('a set writes the key to the space, then each profile its key before its mo
   const deepseek=await setProviderKey(install(fake),{space:one.space,profiles:[one.main],provider:'deepseek',value:known});
   assert.deepEqual(deepseek,{state:'written',model:null,profiles:{[one.main]:'noModel'}});
   assert.equal(fake.settings.profiles.get(one.main).provider,'openrouter');
+  fake.settings.modelOptionsFail=true;
+  const unread=await setProviderKey(install(fake),{space:one.space,profiles:[one.main],provider:'anthropic',value:known});
+  assert.deepEqual(unread,{state:'written',model:null,profiles:{[one.main]:'modelUnread'}},'a model list the Engine did not give leaves the profile unsettled, not without a model');
+  assert.equal(fake.settings.profiles.get(one.main).provider,'openrouter');
  } finally { await fake.close(); }
 });
 
@@ -206,6 +210,13 @@ test('a set reaches the Company\'s space and its Agent profiles only, key before
   const forgetful=sessions(fake,{owner:true,unfinishedFails:true});
   assert.deepEqual(await read(forgetful,fake),{keys:(await read(owner,fake)).keys,waiting:null,leftover:null,unknown:[]},'what a change missed cannot be read, so who waits is unknown');
   assert.equal((await change(forgetful,fake,{intent:'set',value:`${known}-rotated`})).body.unfinishedKept,false,'a change whose misses were not kept says so');
+  fake.settings.modelOptionsFail=true;
+  const unsettled=sessions(fake,{owner:true});
+  assert.ok((await change(unsettled,fake,{intent:'set',value:`${known}-model`})).body.agents.every(found=>found.written===false),'no Agent reads as written when its model was not set');
+  assert.deepEqual((await read(unsettled,fake)).waiting.map(found=>found.name),['Lead','Writer','Designer'],'the Agents wait on the Owner until a set picks their model');
+  fake.settings.modelOptionsFail=false;
+  assert.deepEqual((await change(unsettled,fake,{intent:'set',value:`${known}-model`})).body.agents.map(found=>found.written),[true,true,true]);
+  assert.deepEqual((await read(unsettled,fake)).waiting,[]);
   const keeperless=sessions(fake,{owner:true,noKeeper:true});
   fake.settings.envReadFail.add(one.main);
   assert.deepEqual((await read(keeperless,fake)).unknown,[{agent:null,name:null}],'the Company profile is listed when its keeper is gone');

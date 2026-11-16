@@ -44,7 +44,7 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
    {env:'OPENROUTER_BASE_URL',provider:'openrouter',label:'OpenRouter',primary:false,password:false,category:'provider'},
    {env:'FIRECRAWL_API_KEY',provider:'',label:'',primary:false,password:true,category:'tool'}],
   providerModels:/** @type {Record<string,string[]>} */({openrouter:['anthropic/claude-opus-4.6','openai/gpt-5.5'],anthropic:['claude-opus-4-6']}),
-  modelNeedsKey:false,defaultEnv:/** @type {Record<string,string>} */({}),envFail:/** @type {Set<string>} */(new Set()),envReadFail:/** @type {Set<string>} */(new Set()),envDropped:/** @type {Set<string>} */(new Set()),envHang:/** @type {Set<string>} */(new Set()),
+  modelNeedsKey:false,defaultEnv:/** @type {Record<string,string>} */({}),modelOptionsFail:false,envFail:/** @type {Set<string>} */(new Set()),envReadFail:/** @type {Set<string>} */(new Set()),envDropped:/** @type {Set<string>} */(new Set()),envHang:/** @type {Set<string>} */(new Set()),
   approve(session) { const found=settings.signInSessions.get(session); if(!found) return; found.status='approved'; credentialsOf(found.profile)[found.provider]=`codex-token-${randomUUID()}`; }};
  const profileOf=name=>name==='default'?{config:settings.defaultConfig,credentials:settings.defaultCredentials}:settings.profiles.get(name);
  const credentialsOf=name=>profileOf(name)?.credentials||{};
@@ -205,6 +205,7 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
    // The model providers a profile is signed in to (hermes_cli/web_routers/models.py, get_model_options): a profile with
    // no credential of its own uses the root profile's, and its current provider without one is listed unauthenticated.
    if(url.pathname==='/api/model/options'&&request.method==='GET') {
+    if(settings.modelOptionsFail) return send(response,503,{detail:'busy'});
     if(!home) return send(response,404,{detail:`Profile '${scoped}' does not exist.`});
     const own=settings.profiles.get(scoped)||{provider:'auto',model:''};
     const signedIn=['openai-codex','anthropic'].filter(id=>home.credentials[id]||settings.defaultCredentials[id]);
