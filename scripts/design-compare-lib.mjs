@@ -6,8 +6,8 @@ import { extname, join, resolve, sep } from 'node:path';
 
 // A named screen says how to reach it in the reference and which built page it is compared with (null: none yet).
 // The prototype has no URL routes: its sidebar switches views by `data-view` (chat, board, dashboard, log) and the
-// account menu opens the settings overlay (`#sov`) with its sections. Each step is one `click`, `waitFor` or
-// `scrollTo` with a CSS selector; a click on a sidebar item hidden behind the narrow-screen menu opens the menu first.
+// account menu opens the settings overlay (`#sov`) with its sections. Each step is one `click`, `waitFor`, `waitGone`, `fill` ([selector, text]) or
+// `scrollTo` with a CSS selector; a click on a sidebar item hidden behind the narrow-screen menu opens the menu first. A screen's `builtSteps` run the same way on the built page after it opens.
 // Every screen starts from the prototype's default state. Only the alone screens and a Member's request screens touch
 // the "viewing as" switcher: the alone ones show the workspace of an Owner working alone (#10); built, that is seeded
 // R&S Consultations, its one Member Omar, with work_mode set to 'alone' (tests/visual.spec.ts, state `alone`). The
@@ -17,6 +17,9 @@ const settings = [{ click: '#btn-me' }, { click: '[data-action="sov-open"]' }, {
 const alone = [{ click: '#btn-me' }, { click: '[data-action="set-as"][data-person="omar"][data-world="solo"]' }, { waitFor: '#sb-recent' }];
 const asYoussef = [{ click: '#btn-me' }, { click: '[data-action="set-as"][data-person="youssef"][data-world="team"]' }, { waitFor: '#sb-recent' }];
 const youssefRequest = [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-wa"]' }, { waitFor: '.ac-card' }];
+const board = [{ click: '#sb-nav [data-view="board"]' }, { waitFor: '#board-cols' }];
+const pickChat = [{ click: '#sh-tab-chat' }, { waitFor: '.priv-sheet' }];
+const youssefAsks = 'Plan the Saudi ads for January';
 const settingsSection = section => [...settings, { click: `#sov-nav-${section}` }, { waitFor: `#sov-nav-${section}[aria-current]` }];
 // The ids of the optional comparison fixture (design/COMPARE.md, "Representative captures"). The tool never applies
 // it: a person loads it by hand into a throwaway local database, then passes these ids with --built-path.
@@ -76,6 +79,9 @@ export const screens = {
   // #136. The Meta campaign chat (th-meta) after the first angle is chosen: Ads's reply with the campaign plan's draft card under it. Built: the
   // draft-shown visual state's Conversation (pass --built-path).
   'draft-card': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-meta"]' }, { click: '.opt[data-action="choose"]' }, { waitFor: '.card--draft' }] }, builtPath: null },
+  // #137. The team chat (th-team): Critic's reply with the review card of the December ad texts under it. Built: the
+  // review-shown visual state's Conversation (pass --built-path).
+  'review-card': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-team"]' }, { waitFor: '.rvcard' }, { scrollTo: '.rvcard' }] }, builtPath: null },
   // #18. The Conversation in which Omar told Ads a lasting rule, with the saved line under Ads's reply. Built: the
   // fixture's ruleConversation (pass --built-path).
   'rule-saved': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-rule-ads"]' }, { waitFor: '.note--saved' }] }, builtPath: null },
@@ -99,6 +105,16 @@ export const screens = {
   'new-channel': { reference: { steps: [{ click: '#sb-threads [data-action="channel-new"]' }, { waitFor: '#modal[open] #tm-name' }] }, builtPath: `/c/rs-learning/channels/${fixture.channel}?new=channel` },
   // #24. The team channel حملة ديسمبر (th-team) with its members and Agents. Built: a team channel's own address (pass
   // --built-path), such as the visual state's /c/rs-learning/channels/6c000000-0000-0000-0000-000000000007.
+  // #145. A board Card's sheet on its Chat tab: the Card of Omar's own chat with Ads (th-meta), with that chat and its
+  // composer; an idea with an Agent and no chat yet (c-idea2), with the way to start one; and the Card of another
+  // Member's chat, the lock. The reference has no such Card until someone makes one, so Youssef starts a new chat to
+  // @Ads (its Card goes on the board) and Omar opens it. Built, with the fixture: the Card of Omar's chat with Ads,
+  // its idea with Ads, and the Card of the first Contributor's chat with Ads (`builtSteps` picks Chat there too).
+  'card-chat': { reference: { steps: [...board, { click: '.kcard[data-card="c-meta"]' }, { waitFor: '#sheet-transcript .turn' }] }, builtPath: '/c/rs-learning/work/board?card=640006' },
+  'card-chat-empty': { reference: { steps: [...board, { click: '.kcard[data-card="c-idea2"]' }, { waitFor: '#sheet-transcript .empty-chat' }] }, builtPath: '/c/rs-learning/work/board?card=640001' },
+  'card-chat-locked': { reference: { steps: [...asYoussef, { click: '#btn-newchat' }, { fill: ['#ta-main', `@Ads ${youssefAsks}`] },
+   { click: '[data-action="send"][data-key="main"]' }, { waitFor: '#chat-transcript .turn' }, { click: '#btn-me' }, { click: '[data-action="set-as"][data-person="omar"][data-world="team"]' },
+   { waitFor: '#sb-recent' }, { waitGone: '#toast-host .toast' }, ...board, { click: `.kcard[aria-label^="${youssefAsks}"]` }, ...pickChat] }, builtPath: '/c/rs-learning/work/board?card=640007', builtSteps: pickChat },
   'team-channel': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-team"]' }, { waitFor: '.ch-intro' }] }, builtPath: null },
 };
 

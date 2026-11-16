@@ -104,3 +104,18 @@ for (const row of motionTable) test(`${row.built} (${row.file}) moves as the ref
   }
  }
 });
+
+// A person holding the part down: the mouse pressed at its centre and not yet released, its transitions run to their end.
+// At 1440 wide, where the sidebar and the details are panes beside the page rather than drawers off it.
+const heldScale = (held: number) => held === 1 ? 'none' : `matrix(${held}, 0, 0, ${held}, 0, 0)`;
+for (const row of motionTable.filter(row => row.held !== undefined)) test(`${row.html} held down is at ${heldScale(row.held!)}`, async () => {
+ await page.viewport(1440, 900);
+ const part = await mount(row);
+ part.scrollIntoView({ block: 'center' });
+ const box = part.getBoundingClientRect();
+ const at = { x: box.left + box.width / 2, y: box.top + box.height / 2, button: 'left', clickCount: 1 } as const;
+ await cdp().send('Input.dispatchMouseEvent', { type: 'mousePressed', ...at });
+ onTestFinished(async () => { await cdp().send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...at }); });
+ part.getAnimations().forEach(animation => animation.finish());
+ expect(getComputedStyle(part).transform).toBe(heldScale(row.held!));
+});

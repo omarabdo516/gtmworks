@@ -29,7 +29,7 @@ insert into decisions
  select fn,'checks','answers for a Card its Agent hides from the caller, or from the person it names, as for a Card that does not exist' from unnest(array[
   'public.decide_approval(uuid,bigint,text,text,boolean,boolean)','public.decide_skill_lesson(uuid,bigint,boolean)','public.edit_card_note(uuid,bigint,text)',
   'public.enqueue_assignment_webhook()','public.issue_run_key_for(uuid,bigint,uuid,text,integer)','public.lookup_agent_key(text)',
-  'public.propose_skill_lesson(uuid,uuid,text,text,text,text,text)']) fn
+  'public.propose_skill_lesson(uuid,uuid,text,text,text,text,text)','public.start_card_conversation(uuid,bigint,uuid)','public.card_chat_person(uuid,bigint)']) fn
  union all select 'public.can_see_card_file(text)','checks','a stored file follows each Card it belongs to'
  union all select 'public.can_see_card(uuid,bigint)','exempt','the read rule itself'
  union all select fn,'exempt','a trigger: it runs on a write the table''s own rules admitted, answers no caller, and every row it writes is read under card_agent_visible' from unnest(array[
