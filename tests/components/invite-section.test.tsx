@@ -121,4 +121,10 @@ test('in Arabic the errors are the reference\'s, with the email kept left to rig
  expect(error().querySelector('bdi')?.getAttribute('dir')).toBe('ltr');
  await screen.getByRole('button', { name: 'إلغاء' }).click();
  await expect.poll(() => document.activeElement).toBe(toggle());
+ send.mockResolvedValue({});
+ await screen.getByRole('button', { name: 'اعزم عضو' }).click();
+ await userEvent.type(email(), 'nour.hassan@rslearning.com');
+ await screen.getByRole('button', { name: 'اعزم', exact: true }).click();
+ await expect.element(screen.getByRole('status')).toHaveTextContent('اتبعتت دعوة لـ nour.hassan@rslearning.com');
+ expect([...document.querySelectorAll('[role=status] bdi')].map(run => [run.getAttribute('dir'), run.textContent])).toEqual([['ltr', 'nour.hassan@rslearning.com']]);
 });
