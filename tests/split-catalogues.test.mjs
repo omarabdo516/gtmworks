@@ -8,6 +8,7 @@ const owners = [
  ['app/member-note.tsx', 'member-note', /\bt\('([A-Za-z]+)'/g],
  ['app/member-note-actions.ts', 'member-note', /'(memberNote[A-Za-z]*)'/g],
  ['app/c/[slug]/conversations/[id]/conversation.tsx', 'conversation', /\bcb?\('([A-Za-z]+)'/g],
+ ['app/conversation-thread.tsx', 'conversation', /\bcb?\('([A-Za-z]+)'/g],
  ['app/ready-made.tsx', 'ready-made', /\bt\('([A-Za-z]+)'/g],
  ['app/c/[slug]/channels/[id]/channel.tsx', 'channel', /\bc\('([A-Za-z]+)'/g],
  ['app/agent-card.tsx', 'agent-card', /\bcb?\('([A-Za-z]+)'/g],
