@@ -128,8 +128,10 @@ const keyRows=(company,extra=[])=>{ const found=companies[company];
  return [{profile:found.space,kind:'space',agent:null,name:null},...[found.main,...found.agents,...extra].map(profile=>({profile,kind:profile.startsWith('co-')?'company':'agent',agent:agentId(profile),name:found.names[profile]||null}))]; };
 // The person's own session and the service role, as the route hands them over; every call is recorded.
 function sessions(fake,{owner,space=true,extra=[],logFails=false}) {
- const asked=[]; const logged=[];
+ const asked=[]; const logged=[]; const unfinished=new Map();
  const db={rpc:async(name,args)=>{ asked.push({name,args});
+  if(name==='record_unfinished_provider_key') { if(owner) args.missed.length?unfinished.set(args.key_provider,args.missed):unfinished.delete(args.key_provider); return owner?{data:null,error:null}:{data:null,error:{code:'42501'}}; }
+  if(name==='company_key_unfinished_profiles') return {data:owner?[...unfinished].map(([provider,profiles])=>({provider,profiles})):[],error:null};
   if(name==='is_company_owner') return {data:owner,error:null};
   if(name==='company_engine_target') return {data:[{connection:'f0000000-0000-0000-0000-000000000002',address:fake.address,profile:companies[args.c].main,one_company:false,profiles:[]}],error:null};
   if(name==='company_key_profiles') return {data:keyRows(args.c,extra).filter(row=>space||row.kind!=='space'),error:null};
@@ -188,6 +190,15 @@ test('a set reaches the Company\'s space and its Agent profiles only, key before
   await change(owner,fake,{intent:'remove'});
   assert.equal(envOf(fake,one.agents[0]).OPENROUTER_API_KEY,undefined,'the removal is retried');
   assert.deepEqual((await read(owner,fake)).leftover,[]);
+  await change(owner,fake,{intent:'set',value:known});
+  fake.settings.envFail.add(one.agents[0]);
+  const rotated=await change(owner,fake,{intent:'set',value:`${known}-rotated`});
+  assert.deepEqual(rotated.body.agents.filter(agent=>!agent.written).map(agent=>agent.agent),[agentId(one.agents[0])]);
+  assert.equal(envOf(fake,one.agents[0]).OPENROUTER_API_KEY,known,'the Agent kept the old key');
+  assert.deepEqual((await read(owner,fake)).waiting,[{agent:agentId(one.agents[0]),name:companies[first].names[one.agents[0]]}],'an Agent a rotation missed keeps waiting');
+  fake.settings.envFail.clear();
+  await change(owner,fake,{intent:'set',value:`${known}-rotated`});
+  assert.deepEqual((await read(owner,fake)).waiting,[],'the next set reaches it');
   assert.ok(fake.settings.managementRequests.every(request=>!request.path.includes('/reveal')));
  } finally { await fake.close(); }
 });

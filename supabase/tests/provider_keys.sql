@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(26);
+select plan(34);
 -- #124. RS Learning (1): Lead on the Company's own profile through its bundled Connection, the Writer on its own Agent
 -- profile, and the Company's shared space. R&S Consultations (2), where the Manager (2) is no member, has the same.
 -- The Contributor (5) of RS Learning is made a removed Owner. Only an active Owner records a key change, once, by the
@@ -52,10 +52,16 @@ select throws_ok($$select public.record_provider_key_change('10000000-0000-0000-
 select throws_ok($$select public.record_provider_key_change('10000000-0000-0000-0000-000000000001','openrouter',null)$$,'22023','keyInvalid','a change is a set or a removal');
 select throws_ok($$insert into public.company_audit(company_id,actor_id,action,provider) values ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','provider_key_set','openrouter')$$,
  '42501',null,'nobody writes a key change by hand');
+select lives_ok($$select public.record_unfinished_provider_key('10000000-0000-0000-0000-000000000001','openrouter',array['ag-e1260000000000000000000000000021'])$$,'the Owner keeps the profile a change missed');
+select is((select jsonb_agg(jsonb_build_array(provider,profiles)) from public.company_key_unfinished_profiles('10000000-0000-0000-0000-000000000001')),
+ jsonb_build_array(jsonb_build_array('openrouter',array['ag-e1260000000000000000000000000021'])),'and reads it back by provider');
+select throws_ok($$select public.record_unfinished_provider_key('10000000-0000-0000-0000-000000000001','openrouter',array['ag-e1260000000000000000000000000022'])$$,'22023','keyInvalid','only the Company''s own profiles are kept');
+select throws_ok($$select public.record_unfinished_provider_key('10000000-0000-0000-0000-000000000001','openrouter',array['cs-10000000000000000000000000000001'])$$,'22023','keyInvalid','the space is not an Agent profile');
 
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
 select throws_ok($$select public.record_provider_key_change('10000000-0000-0000-0000-000000000001','openrouter',true)$$,'42501','keyNotAllowed','a Manager cannot set a key');
 select throws_ok($$select public.record_provider_key_change('10000000-0000-0000-0000-000000000001','openrouter',false)$$,'42501','keyNotAllowed','a Manager cannot remove a key');
+select throws_ok($$select public.record_unfinished_provider_key('10000000-0000-0000-0000-000000000001','openrouter',array[]::text[])$$,'42501','keyNotAllowed','a Manager cannot change what a change missed');
 select is((select count(*)::int from public.company_key_profiles('10000000-0000-0000-0000-000000000002')),0,'a person outside the Company learns none of its profiles');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
 select throws_ok($$select public.record_provider_key_change('10000000-0000-0000-0000-000000000001','openrouter',true)$$,'42501','keyNotAllowed','a Contributor cannot set a key');
@@ -64,6 +70,7 @@ select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004'
 select throws_ok($$select public.record_provider_key_change('10000000-0000-0000-0000-000000000001','openrouter',true)$$,'42501','keyNotAllowed','a Viewer cannot set a key');
 select throws_ok($$select public.record_provider_key_change('10000000-0000-0000-0000-000000000001','openrouter',false)$$,'42501','keyNotAllowed','a Viewer cannot remove a key');
 select is((select count(*)::int from public.company_key_profiles('10000000-0000-0000-0000-000000000001')),3,'a Viewer still reads which profiles are the Company''s');
+select is((select count(*)::int from public.company_key_unfinished_profiles('10000000-0000-0000-0000-000000000001')),0,'only the Owner reads what a change missed');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000005',true);
 select throws_ok($$select public.record_provider_key_change('10000000-0000-0000-0000-000000000001','openrouter',true)$$,'42501','keyNotAllowed','a removed Owner cannot set a key');
 select throws_ok($$select public.record_provider_key_change('10000000-0000-0000-0000-000000000001','openrouter',false)$$,'42501','keyNotAllowed','a removed Owner cannot remove a key');
@@ -72,6 +79,11 @@ reset role;
 set local role anon;
 select throws_ok($$select public.record_provider_key_change('10000000-0000-0000-0000-000000000001','openrouter',false)$$,'42501',null,'a visitor cannot record a change');
 select throws_ok($$select * from public.company_key_profiles('10000000-0000-0000-0000-000000000001')$$,'42501',null,'nor read the profiles');
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select lives_ok($$select public.record_unfinished_provider_key('10000000-0000-0000-0000-000000000001','openrouter',array[]::text[])$$,'a change that reached every profile');
+select is((select count(*)::int from public.company_key_unfinished_profiles('10000000-0000-0000-0000-000000000001')),0,'clears what was missed');
 reset role;
 
 select is((select jsonb_agg(jsonb_build_array(actor_id,action,provider) order by id) from public.company_audit

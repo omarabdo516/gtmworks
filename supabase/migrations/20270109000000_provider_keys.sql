@@ -65,3 +65,41 @@ begin
 end $$;
 revoke all on function public.record_provider_key_change(uuid,text,boolean) from public,anon,service_role;
 grant execute on function public.record_provider_key_change(uuid,text,boolean) to authenticated;
+
+-- The Company's profiles the last set or removal of a provider's key did not reach. The Engine says only whether a
+-- profile holds a key, so a profile that kept the old key through a failed rotation reads the same as one that took the
+-- new one: the Owner sees it here until a later change reaches it. Profile names only, never a key.
+create table public.company_key_unfinished (
+ company_id uuid not null references public.companies(id) on delete cascade,
+ provider text not null check (provider ~ '^[a-z0-9][a-z0-9._-]{0,63}$'),
+ profiles text[] not null check (cardinality(profiles)>0),
+ primary key (company_id,provider)
+);
+alter table public.company_key_unfinished enable row level security;
+revoke all on public.company_key_unfinished from anon,authenticated,service_role;
+
+-- The Owner records which of the Company's own profiles a change missed; none clears the provider's row.
+create function public.record_unfinished_provider_key(c uuid, key_provider text, missed text[]) returns void
+language plpgsql security definer set search_path='' as $$
+begin
+ if not public.is_company_owner(c) then raise exception 'keyNotAllowed' using errcode='42501'; end if;
+ if coalesce(key_provider,'') !~ '^[a-z0-9][a-z0-9._-]{0,63}$' or missed is null
+  or exists(select 1 from unnest(missed) m where m is null or m not in (select k.profile from public.company_key_profiles(c) k where k.kind<>'space')) then
+  raise exception 'keyInvalid' using errcode='22023';
+ end if;
+ if cardinality(missed)=0 then
+  delete from public.company_key_unfinished u where u.company_id=c and u.provider=key_provider;
+ else
+  insert into public.company_key_unfinished(company_id,provider,profiles) values (c,key_provider,missed)
+   on conflict (company_id,provider) do update set profiles=excluded.profiles;
+ end if;
+end $$;
+revoke all on function public.record_unfinished_provider_key(uuid,text,text[]) from public,anon,service_role;
+grant execute on function public.record_unfinished_provider_key(uuid,text,text[]) to authenticated;
+
+create function public.company_key_unfinished_profiles(c uuid) returns table(provider text, profiles text[])
+language sql stable security definer set search_path='' as $$
+ select u.provider,u.profiles from public.company_key_unfinished u where u.company_id=c and public.is_company_owner(c) order by u.provider;
+$$;
+revoke all on function public.company_key_unfinished_profiles(uuid) from public,anon,service_role;
+grant execute on function public.company_key_unfinished_profiles(uuid) to authenticated;
