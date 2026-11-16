@@ -252,8 +252,9 @@
 .gw .corner-pill {
   display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 16px; border-radius: var(--gw-r-full);
   background: var(--gw-bg-pane); box-shadow: var(--gw-border-3) 0 0 0 1px inset; font-size: var(--gw-fs-sm); color: var(--gw-text-1); white-space: nowrap;
-  transition: background-color var(--gw-dur-fast) var(--gw-ease-out);
+  transition-property: background-color, box-shadow, color, transform; transition-duration: var(--gw-dur-fast); transition-timing-function: var(--gw-ease-out);
 }
+.gw .corner-pill:active { transform: scale(0.96); }
 @media (hover: hover) { .gw .corner-pill:hover { background: var(--gw-bg-elevated-hover); } }
 .gw .corner-pill__col { color: var(--gw-text-2); }
 .gw .corner-pill.is-waiting .corner-pill__col { color: var(--gw-wait-text); font-weight: 600; }
