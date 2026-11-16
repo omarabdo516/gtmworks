@@ -7,8 +7,8 @@ import { instructionsOf, roleAppNames, roleTemplates } from '../lib/role-templat
 import { toolPolicy } from '../lib/agent-levels.mjs';
 
 const profile='co-10000000000000000000000000000001';
-// `plan` is what the database names for a create_agent call (lead_agent_profile): none for a call that already made its
-// Agent or will be refused.
+// `plan` is what the database names for a create_agent call (lead_agent_profile): the Agent a call already made, or
+// none for a call that will be refused.
 function harness(/** @type {object} */ engineOverride={},/** @type {object} */ answer={state:'created',agent:'agent-1'},/** @type {object|null} */ plan=null) {
  const fake=fakeEngine(); const engine={...fake.engineFor({}),...engineOverride}; const rpcs=/** @type {[string,object][]} */([]);
  const db={rpc:async(/** @type {string} */ name,/** @type {object} */ args)=>{ rpcs.push([name,args]); return {data:name==='lead_agent_profile'?plan:answer,error:null}; }};
@@ -28,20 +28,27 @@ test('an unknown tool or arguments that do not read are ignored, and nothing is 
 
 test('create_agent makes nothing while the Engine lacks the Company\'s profile, then asks the database once it is ready',async()=>{
  const {fake,engine,rpcs,call}=harness();
+ const read=['lead_agent_profile',{conversation:'conversation-1',run:'run-1',call:'call-0',instructions:null}];
  assert.deepEqual(await call('create_agent',asked),{state:'engineNotReady'});
- assert.deepEqual([fake.agentReads,rpcs],[[profile],[]]);
+ assert.deepEqual([fake.agentReads,rpcs],[[profile],[read]]);
  await engine.createAgent({name:profile,instructions:''});
  assert.deepEqual(await call('create_agent',asked),{state:'created',agent:'agent-1'});
- assert.deepEqual(rpcs,[['lead_agent_profile',{conversation:'conversation-1',run:'run-1',call:'call-0',instructions:null}],
+ assert.deepEqual(rpcs,[read,read,
   ['lead_create_agent',{conversation:'conversation-1',run:'run-1',call:'call-0',agent_name:'Meta Ads',job:'Runs the Meta ads.',apps:['Meta Ads Manager','Canva']}]]);
  assert.deepEqual(await call('create_agent',{name:'x'.repeat(100),job:'Writes.',apps:Array(8).fill('y'.repeat(40))}),{state:'created',agent:'agent-1'});
  assert.deepEqual(await call('create_agent',{...asked,apps:[]}),{state:'created',agent:'agent-1'});
 });
 
-test('create_agent asks nothing of the database while the Engine does not answer, so the run stays open for a retry',async()=>{
+test('create_agent makes nothing in the database while the Engine does not answer, so the run stays open for a retry',async()=>{
  const {rpcs,call}=harness({readAgent:async()=>({state:'unreachable',agent:null})});
  assert.deepEqual(await call('create_agent',asked),{state:'engineUnreachable'});
- assert.deepEqual(rpcs,[]);
+ assert.deepEqual(rpcs.map(([name])=>name),['lead_agent_profile']);
+});
+
+test('a call that already made its Agent answers that Agent without asking the Engine, even one that does not answer',async()=>{
+ const {fake,rpcs,call}=harness({readAgent:async()=>({state:'unreachable',agent:null})},{state:'refused'},{state:'created',agent:'agent-1'});
+ assert.deepEqual(await call('create_agent',{template:'writer'}),{state:'created',agent:'agent-1'});
+ assert.deepEqual([fake.agentReads,fake.provided,fake.removed,rpcs.map(([name])=>name)],[[],[],[],['lead_agent_profile']]);
 });
 
 test('create_agent starts from a ready-made role: its name, job and apps unless others are given, and its instructions and limits for the database to fit',async()=>{
@@ -99,7 +106,7 @@ test('create_agent asks the database nothing more while the Engine does not answ
  assert.deepEqual(fake.removed,[]);
 });
 
-test('a call that already made its Agent, or that the database will refuse, asks the Engine to make nothing',async()=>{
+test('a call that the database will refuse asks the Engine to make nothing',async()=>{
  const {fake,engine,rpcs,call}=harness({},{state:'refused'});
  await leadReady(engine); fake.settings.agentProfile='provided';
  assert.deepEqual(await call('create_agent',asked),{state:'refused'});

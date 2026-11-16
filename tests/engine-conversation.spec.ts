@@ -352,11 +352,11 @@ test('integration: Lead\'s call makes the Agent one profile of its own, also whe
   expect(JSON.parse(query(`select actor_id,action,details->>'agent_name' as name from public.company_log where company_id='${company}' and agent_id='${agent.id}'`)))
    .toEqual([{actor_id:omar,action:'agent_requested',name:roleTemplates.writer.name}]);
 
-  // The same run and call carried out again (a closer stopped before the close) ask the Engine for no profile.
+  // The same run and call carried out again (a closer stopped before the close) answer the Agent without the Engine.
   const before=hermes.settings.managementRequests.length;
   expect(await runToolCall({db:service,engine:engineFor({address:'http://127.0.0.1:9',profile,key:'fake-engine-key'}),profile,conversation,run:fake.runs[0].id},
    {id:'call-0',name:'create_agent',arguments:{template:'writer'}})).toEqual({state:'created',agent:agent.id});
-  expect(managed(hermes).slice(before)).toEqual(['GET /api/profiles',`GET /api/profiles/${profile}/soul`]);
+  expect(managed(hermes).slice(before)).toEqual([]);
   expect(madeBy(conversation,lead)).toHaveLength(1);
 
   const theirs=randomUUID();

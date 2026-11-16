@@ -28,7 +28,8 @@ select is(public.lead_create_agent(conversation=>'a7100000-0000-0000-0000-000000
  'the Agent made on its own profile has the id derived from the Conversation, run and call');
 select is(public.lead_create_agent(conversation=>'a7100000-0000-0000-0000-000000000001',run=>'run-1',call=>'call-0',agent_name=>'Other',job=>'Other.',apps=>'{}',
   own_level=>1,own_policy=>2),jsonb_build_object('state','created','agent',(select agent from made where name='own')),'the same call again answers the same Agent');
-select is(public.lead_agent_profile('a7100000-0000-0000-0000-000000000001','run-1','call-0','You write for {company}.'),null,'and a repeated call names no profile to make');
+select is(public.lead_agent_profile('a7100000-0000-0000-0000-000000000001','run-1','call-0','You write for {company}.'),
+ jsonb_build_object('state','created','agent',(select agent from made where name='own')),'and a repeated call answers the Agent it made, with no profile to make');
 reset role;
 select is((select count(*)::int from public.hermes_agents where company_id='10000000-0000-0000-0000-000000000001' and not is_default),1,'one Agent is made');
 select ok(exists(select 1 from public.hermes_agents a join public.hermes_connections h on h.id=a.connection_id join made m on m.agent=a.id and m.name='own'

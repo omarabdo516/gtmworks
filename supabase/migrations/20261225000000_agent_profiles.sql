@@ -43,17 +43,19 @@ create function public.agent_engine_profile(agent uuid) returns text language sq
 $$;
 revoke all on function public.agent_engine_profile(uuid) from public,anon,authenticated,service_role;
 
--- What Lead's call would make, read before the Engine is asked (lib/agent-tools.mjs): the profile name, the soul fitted to
--- the Company, and the Company's level. Nothing when the call already made its Agent, or the Conversation is not an
--- active Owner's with Lead, so a repeated call and a call that will be refused ask the Engine for nothing;
--- lead_create_agent still decides.
+-- What Lead's call would make, read before the Engine is asked (lib/agent-tools.mjs). A call that already made its Agent
+-- answers that Agent as lead_create_agent would, so a repeated call never waits on the Engine. Otherwise the profile
+-- name, the soul fitted to the Company and the Company's level; nothing when the Conversation is not an active Owner's
+-- with Lead, so a call that will be refused asks the Engine to make nothing. lead_create_agent still decides.
 create function public.lead_agent_profile(conversation uuid, run text, call text, instructions text default null) returns jsonb
 language sql stable security definer set search_path='' as $$
- select jsonb_build_object('profile',public.agent_engine_profile(public.lead_agent_id(conversation,run,call)),
-  'soul',replace(instructions,'{company}',co.name),'level',co.agent_level)
- from public.conversations v join public.companies co on co.id=v.company_id
- where v.id=conversation and public.may_use_lead_tools(v.company_id,v.agent_id,v.person_id)
-  and not exists(select 1 from public.lead_made_agents l where l.conversation_id=conversation and l.run_id=run and l.call_id=call);
+ select coalesce(
+  (select jsonb_build_object('state','created','agent',l.agent_id) from public.lead_made_agents l
+   where l.conversation_id=conversation and l.run_id=run and l.call_id=call),
+  (select jsonb_build_object('profile',public.agent_engine_profile(public.lead_agent_id(conversation,run,call)),
+    'soul',replace(instructions,'{company}',co.name),'level',co.agent_level)
+   from public.conversations v join public.companies co on co.id=v.company_id
+   where v.id=conversation and public.may_use_lead_tools(v.company_id,v.agent_id,v.person_id)));
 $$;
 revoke all on function public.lead_agent_profile(uuid,text,text,text) from public,anon,authenticated;
 grant execute on function public.lead_agent_profile(uuid,text,text,text) to service_role;
