@@ -64,7 +64,8 @@ test('the first invited Member accepts: the Company is a team and every earlier 
  await signIn(page,'omar@example.com','/c/rs-consultations/settings');
  await page.getByLabel('Member’s email').fill(email);
  await page.getByRole('button',{name:'Invite',exact:true}).click();
- await expect(page.locator('.inv-sec [role=status]')).toHaveText('An invitation link was sent by email.');
+ await expect(page.locator('.toast')).toHaveText(`Invite sent to ${email}`);
+ await expect(page).toHaveURL(/\/c\/rs-consultations\/settings$/);
  // An invitation is not a Member yet: the Company stays alone until it is accepted.
  await expect(page.getByText('Alone · just you and the agents')).toBeVisible();
  expect(rows(`select work_mode from public.companies where id='${company}'`)[0].work_mode).toBe('alone');

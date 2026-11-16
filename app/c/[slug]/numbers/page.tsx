@@ -8,12 +8,13 @@ import { supabase } from '@/lib/supabase';
 import Shell from '@/app/shell';
 import { approvalQueue } from '@/lib/approval-queue';
 import { localeFor } from '@/lib/i18n.mjs';
-import { feedSince, formatFigure, parsePeriod, readNumbers } from '@/lib/numbers.mjs';
+import { feedSince, parsePeriod, readNumbers } from '@/lib/numbers.mjs';
 import type { LogRow } from '@/lib/activity-log.mjs';
 import { FeedWhen } from '../log/log-client';
-import { NumbersPlaceholder, PeriodSwitch } from './numbers-client';
 import { FeedText, WhoFace, logColumns, logPeople, whoOf } from '../log/entries';
-import { PageIcon, SystemMark } from '../log/icons';
+import { SystemMark } from '../log/icons';
+import { NoApp, NumbersFigures, NumbersHead } from './parts';
+import { NumbersPlaceholder } from './numbers-client';
 
 // The Numbers page (#35, design-reference: renderDashboard). The four figures, the leads chart and the channel table
 // are read only from the Company's connected apps; "Waiting for your approval" and "What the agents did this week" are
@@ -37,8 +38,7 @@ export default async function NumbersPage({params,searchParams}:{params:Promise<
  return <Shell company={company} companies={companies||[]} personId={user.id} section="numbers" title={t('numbers')} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={queue.items.length}>
   <main className="numbers-page">
    <div className="dash">
-    <header className="page-head"><div className="od-field"><h1 className="page-title">{t('numbers')}</h1><p className="page-sub">{t('numbersSub')}</p></div>
-     <PeriodSwitch slug={slug} period={period}/></header>
+    <NumbersHead t={t} slug={slug} period={period}/>
     <Suspense key={period} fallback={<NumbersPlaceholder/>}>
      <Figures db={db} company={company.id} slug={slug} period={period} writer={membership?.role!=='viewer'} queue={queue} t={t} language={language}/>
     </Suspense>
@@ -57,10 +57,8 @@ async function Figures({db,company,slug,period,writer,queue:{items,cards},t,lang
  const feed=(agentRows||[]) as LogRow[];
  const people=await logPeople(db,company,[...feed.flatMap(row=>row.card_id!=null?[row.card_id]:[]),...items.flatMap(item=>item.card_id!=null?[item.card_id]:[])]);
  const {data:submitters}=cards.length?await db.from('work_cards').select('id,review_submitter').eq('company_id',company).in('id',cards.map(card=>card.id)):{data:[]};
- const periodLabel=t(period==='7'?'numbersLast7':'numbersLast30');
  const locale=localeFor(language);
- const money=(value:string,currency:string|null)=>currency?(language==='ar'?<>{value}<span className="kpi__unit">{currency}</span></>:<><span className="kpi__unit kpi__unit--pre">{currency}</span>{value}</>):value;
- const noApp=<div className="wait-empty dash-empty"><b>{t('numbersNoApp')}</b><span>{t('numbersNoAppNote')}</span><Link className="btn btn--secondary btn--sm" href={`/c/${slug}/connections`}><PageIcon name="plug"/>{t('numbersConnect')}</Link></div>;
+ const noApp=<NoApp t={t} slug={slug}/>;
  const waitFace=(item:typeof items[number])=>{
   const submitter=item.kind==='approval'?(submitters||[]).find(card=>card.id===item.id)?.review_submitter as string|null|undefined:undefined;
   if(submitter) return <WhoFace who={whoOf({actor_kind:people.identities.some(agent=>agent.id===submitter)||people.members.some(member=>member.person_id===submitter&&member.agent_role)?'agent':'person',actor_id:submitter} as LogRow,people,t)}/>;
@@ -68,11 +66,7 @@ async function Figures({db,company,slug,period,writer,queue:{items,cards},t,lang
   return <SystemMark/>;
  };
  return <div className="dash__inner">
-  <div className="kpis" data-connected={connected}>{tiles.map(tile=>{const value=formatFigure(tile,locale); return <div className="kpi" key={tile.name} data-figure={tile.name}>
-   <span className="kpi__label">{t(tile.label)}</span>
-   {value==null?<span className="kpi__val kpi__val--none" aria-label={t('unavailable')}>—</span>:<span className="kpi__val num">{tile.money?money(value,tile.currency):value}</span>}
-   <span className="kpi__delta">{value==null?t('numbersNoSource'):t('numbersSource',tile.sources.join(language==='ar'?'، ':', '),periodLabel)}</span>
-  </div>;})}</div>
+  <NumbersFigures t={t} language={language} locale={locale} period={period} connected={connected} tiles={tiles}/>
   <div className="dash-row">
    <section className="panel" aria-labelledby="h-chart"><div className="panel__h"><h2 id="h-chart">{t('numbersLeadsPerDay')}</h2></div>
     <div className="chart-empty">{noApp}</div></section>

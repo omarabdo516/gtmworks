@@ -431,6 +431,20 @@ screenStates['agent-files'] = {
     ${screenStates['agent-details'].unset}`,
 };
 
+// An invitation in the Team table (#185): the visibility state's Agents, and Nour invited as a Contributor with Meta
+// Ads switched on. Written as the administrator so the invitation leaves no row in the permanent Company log.
+const invited = seen(7);
+screenStates.invite = {
+  admin: true,
+  set: `${screenStates.visibility.set}
+    insert into public.member_invitations(id,company_id,email,role,created_at) values ('${invited}','${rsLearning}','nour.hassan@example.com','contributor','2026-06-10T09:00:00Z');
+    insert into public.invitation_agent_access(company_id,invitation_id,agent_id) values ('${rsLearning}','${invited}','${seen(5)}');`,
+  unset: `delete from public.invitation_agent_access where invitation_id='${invited}';
+    delete from public.member_invitations where id='${invited}';
+    delete from public.member_agent_access where agent_id in ('${seen(5)}','${seen(6)}');
+    ${screenStates.visibility.unset}`,
+};
+
 // Settings, Apps (#30) reads the Company's apps from its own profile in the Engine: a fake one, on a loopback address of
 // this lane's own, holding Klaviyo connected, Notion needing attention and every other app off. RS Learning gets the
 // bundled Connection and the profile record the worker would leave, written with triggers off, and loses them after.
@@ -495,6 +509,12 @@ const screenActs: Record<string, (page: Page, language: Language) => Promise<() 
     await expect(page.locator('.toast')).toBeVisible();
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     return () => page.clock.resume();
+  },
+  // The Team table's invitation form, opened from "Invite a member" with the focus in the email field (#185).
+  'invite-open': async page => {
+    await page.locator('#inv-toggle').click();
+    await expect(page.locator('#inv-email')).toBeFocused();
+    return async () => {};
   },
   'open-chat-slowly': openSlowly(`/c/rs-learning/conversations/${loading(3)}`, `#sb-recent a[href="/c/rs-learning/conversations/${loading(3)}"]`, '.chat .transcript [aria-busy="true"]'),
   'open-numbers-slowly': openSlowly('/c/rs-learning/numbers', '.nav a[href="/c/rs-learning/numbers"]', '.numbers-page [aria-busy="true"]'),
