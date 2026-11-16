@@ -56,6 +56,19 @@ test('the reference’s shared keyframes are written once, in app/shell.css, and
   }
 });
 
+test('the scrollbar thumb under the pointer takes the reference’s colour in the light theme, the dark one and the device’s dark', () => {
+  /** @param {import('./motion-css.mjs').Rule[]} rules @param {string} selector @param {string} property */
+  const declared = (rules, selector, property, media = '') => rules.filter(rule => rule.media === media && rule.selectors.includes(selector))
+    .flatMap(rule => rule.declarations).filter(([name]) => name === property).at(-1)?.[1];
+  const light = reference.tokens.get('--scroll-thumb-hover');
+  const dark = declared(reference.rules, ':root[data-theme="dark"]', '--scroll-thumb-hover');
+  assert.ok(light && dark && light !== dark, `${referenceFile} --scroll-thumb-hover: ${light}, dark ${dark}`);
+  const shell = readSheet('app/shell.css').rules;
+  assert.equal(declared(shell, '.gw ::-webkit-scrollbar-thumb:hover', 'background-color'), light, 'light');
+  assert.equal(declared(shell, ':root[data-theme="dark"] .gw ::-webkit-scrollbar-thumb:hover', 'background-color'), dark, 'dark');
+  assert.equal(declared(shell, ':root[data-theme="device"] .gw ::-webkit-scrollbar-thumb:hover', 'background-color', '@media (prefers-color-scheme: dark)'), dark, 'the device’s dark');
+});
+
 /** @param {import('./motion-css.mjs').Motion} motion */
 const moves = motion => motion.animation.frames.length > 0 || motion.transition.durations.some(duration => parseFloat(duration) > 0);
 
