@@ -270,3 +270,11 @@ test('the README says a Company on an install with several Companies uses its ow
  assert.ok(readme.includes('On an install with several companies, a subscription signed in on the root profile is shared by every company on the install, and a company that wants its own uses its own API key (#124).'));
  assert.ok(readme.includes(sentence),sentence);
 });
+
+test('the install job sets a key on the pinned Engine for a Company\'s space and Agent profile only, then removes it', () => {
+ const script=readFileSync('scripts/check-install-profiles.mjs','utf8');
+ assert.match(script,/setProviderKey\(engine,\{\.\.\.keyed,provider,value:/);
+ assert.match(script,/assert\.deepEqual\(await providerKeys\(\),\[true,true,false,false\]/);
+ assert.match(script,/removeProviderKey\(engine,\{\.\.\.keyed,provider\}\)/);
+ assert.match(script,/assert\.deepEqual\(await providerKeys\(\),\[false,false,false,false\]/);
+});
