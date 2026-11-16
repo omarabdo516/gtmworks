@@ -159,8 +159,11 @@
 .gw .sov .inv-sec { display: grid; gap: var(--s2); }
 .gw .sov .ta .inv-sec { margin-top: var(--s5); }
 .gw .sov .inv-open { justify-self: start; --od-icon-size: 16px; }
-/* The invitation form of a Company worked alone: the button lines up with the fields under their labels. */
+.gw .sov .inv-sec .dp-label { padding-inline-start: 0; }
+.gw .sov .ta-pending { justify-self: start; margin-top: 4px; height: 20px; --od-icon-size: 12px; color: var(--gw-text-2); }
+/* The invitation form: the button lines up with the fields under their labels. */
 .gw .sov .inv { display: grid; gap: var(--s2); }
+.gw .sov .inv select.set-input { appearance: auto; padding-inline-end: 6px; }
 .gw .sov .inv-row { display: grid; grid-template-columns: minmax(0, 1fr) 148px auto; gap: var(--s2); align-items: start; }
 .gw .sov .inv-go { margin-top: calc(var(--gw-fs-xs) * 1.5 + 6px); min-width: 88px; }
 @media (max-width: 639px) { .gw .sov .inv-row { grid-template-columns: minmax(0, 1fr); } .gw .sov .inv-go { margin-top: 0; justify-self: start; } }
