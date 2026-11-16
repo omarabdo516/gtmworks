@@ -76,6 +76,9 @@ export const screens = {
   // #18. The Conversation in which Omar told Ads a lasting rule, with the saved line under Ads's reply. Built: the
   // fixture's ruleConversation (pass --built-path).
   'rule-saved': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-rule-ads"]' }, { waitFor: '.note--saved' }] }, builtPath: null },
+  // #144. A chat with Ads whose Card is on the board (`th-meta`), with the corner pill "On the board". Built: a
+  // Conversation with an Agent other than the main one whose first reply put its Card In progress (pass --built-path).
+  'chat-on-board': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-meta"]' }, { waitFor: '.corner-pill' }] }, builtPath: null },
   // #25. The reference decides a learning suggestion in Settings, Learning ("Learning suggestions": Youssef's rule for
   // Ads, with Decline and Make it team-wide); the product decides it where it waits, in "Waiting on you". Built: the
   // fixture's suggestion.
