@@ -20,7 +20,7 @@ export default function SignInScreen({next,wordmark,mode='sign-in',invalid,inval
  },[language]);
  const [title,description]=copy[mode];
  return <LanguageProvider language={language}>
-  <div className="absolute top-4 end-4 z-10"><label className="text-xs text-muted-foreground">{t('interfaceLanguage')} <select className={mode==='first-run'?'max-md:min-h-11':undefined} value={language} onChange={event=>setLanguage(event.target.value as Language)}><option value="en">{t('english')}</option><option value="ar">{t('arabic')}</option></select></label></div>
+  <div className="absolute top-8 end-4 z-10"><label className="text-xs text-muted-foreground">{t('interfaceLanguage')} <select className={mode==='first-run'?'max-md:min-h-11':undefined} value={language} onChange={event=>setLanguage(event.target.value as Language)}><option value="en">{t('english')}</option><option value="ar">{t('arabic')}</option></select></label></div>
   <Auth wordmark={wordmark} title={t(title)} description={t(description)}>{mode==='first-run'?<FirstRunForm invalid={invalid}/>:mode==='forgot'?<ForgotForm invalidLink={invalidLink}/>:mode==='reset'?<SetPasswordForm done={next}/>:<Form next={next}/>}</Auth>
  </LanguageProvider>;
 }
