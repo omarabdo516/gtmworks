@@ -6,9 +6,9 @@ import Link from '@/lib/link';
 import { getI18n } from '@/lib/i18n-server';
 import { supabase } from '@/lib/supabase';
 import { CompanyAgentFace } from '@/components/company-agent-face';
-import { visibleSections, pickSection, overlayHref, agentsMainFirst, usageTotals, type OverlaySection } from '@/lib/settings-overlay.mjs';
-import { OverlayFrame } from './settings-overlay-frame';
-import { CloseButton, AccountChoices, MakeMain, DeleteAgent, CompanyName, InviteForm, AgentSwitch, RuleSaid, RemoveRule } from './settings-overlay-client';
+import { pickSection, overlayHref, agentsMainFirst, usageTotals, type OverlaySection } from '@/lib/settings-overlay.mjs';
+import { OverlayChrome } from './settings-overlay-chrome';
+import { AccountChoices, MakeMain, DeleteAgent, CompanyName, InviteForm, AgentSwitch, RuleSaid, RemoveRule } from './settings-overlay-client';
 import { SettingsIcon } from './settings-icons';
 import PasswordSettings from './password-settings';
 import { UsageTable, type UsageDay } from './c/[slug]/[[...section]]/usage';
@@ -72,23 +72,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
   :section==='account'?<AccountSection t={t} theme={theme} personName={personName} role={role} roleName={roleNames[role]||''} companyName={company.name} company={company.id} memberNote={memberNote}/>
   :section==='knowledge'?<><Head title={t('settingsKnowledge')} sub={t('settingsKnowledgeSub')}/>{ro}<CompanyKnowledge slug={slug} company={company.id} canManage={canManage} part={query.part}/></>
   :<SoonSection t={t} section={section} ro={ro} models={<ModelsSubscriptions company={company.id} owner={owner} subscriptions={subscriptions}/>}/>;
- const item=([key,label,icon]:readonly [OverlaySection,string,Parameters<typeof SettingsIcon>[0]['name'],boolean,boolean])=><Link key={key} replace className="sb-item sov-nav__i" id={`sov-nav-${key}`} href={overlayHref(slug,key)} aria-current={key===section?'page':undefined}><SettingsIcon name={icon}/><span className="od-fill">{t(label)}</span>{key==='learning'&&learningWaiting>0&&<span className="sov-count"><span aria-hidden="true">{learningWaiting}</span><span className="sr-only">{t('settingsLearningWaiting',learningWaiting)}</span></span>}</Link>;
- const list=visibleSections(role);
- return <OverlayFrame slug={slug}>
-  <header className="sov__bar">
-   <svg className="ws__mark" viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect width="32" height="32" rx="9" fill="var(--gw-accent)"/><path d="M21.5 11.5a7 7 0 1 0 1 7.5h-6.5" fill="none" stroke="#FFFFFF" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-   <h2 className="sov__title" id="sov-title">{t('settings')}</h2><span className="sov__co"><bdi>{company.name}</bdi></span><span className="od-fill"/>
-   {!canManage&&<span className="badge sov-ro"><SettingsIcon name="eye"/>{t('settingsReadOnly')}</span>}
-   <CloseButton slug={slug}/>
-  </header>
-  <div className="sov__body">
-   <nav className="sov-nav" aria-label={t('settingsSectionsLabel')}>
-    <p className="sov-nav__l"><bdi>{company.name}</bdi></p>{list.filter(entry=>!entry[4]).map(item)}
-    <p className="sov-nav__l">{t('settingsYou')}</p>{list.filter(entry=>entry[4]).map(item)}
-   </nav>
-   <div className="sov-main" id="sov-main"><div className={`sov-page sov-page--${section}`}>{page}</div></div>
-  </div>
- </OverlayFrame>;
+ return <OverlayChrome t={t} slug={slug} companyName={company.name} role={role} readOnly={!canManage} section={section} learningWaiting={learningWaiting}>{page}</OverlayChrome>;
 }
 
 const Head=({title,sub,extra}:{title:string,sub?:string,extra?:ReactNode})=><header className="sov-head"><div className="sov-head__t"><h3 className="sov-h" id="sov-h" tabIndex={-1}>{title}</h3>{sub&&<p className="sov-sub">{sub}</p>}</div>{extra}</header>;
