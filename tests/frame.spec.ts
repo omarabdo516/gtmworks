@@ -372,11 +372,12 @@ test('mobile recent cards record opens while the drawer stays closed',async({pag
  await signIn(page,'reviewer@example.com','/c/rs-learning/work/board');
  await idle(page);
  for(const id of [3,4]) {
-  await page.locator(`.card a[href$="/board/${id}"]`).click();
-  await expect(page.locator('.modal')).toBeVisible();
+  // A Card opens as its sheet over the board (#116), and that open is recorded as one.
+  await page.locator(`.card a[href$="/board?card=${id}"]`).click();
+  await expect(page.locator('.sheet[open]')).toBeVisible();
   await idle(page);
-  await page.locator('.close-card').click();
-  await expect(page.locator('.modal')).toHaveCount(0);
+  await page.getByRole('dialog').getByRole('button',{name:'Close',exact:true}).click();
+  await expect(page.locator('.sheet')).toHaveCount(0);
  }
  await openMoreSection(page,'home');
  await openNavigation(page);

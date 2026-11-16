@@ -282,6 +282,8 @@ test('board moves, date filtering, creative versions and shared card views',asyn
  await page.mouse.up();
  await expect(destination.locator('.column[data-stage-name="بريف جاهز"] .kcard[data-card-id="1"]')).toBeVisible();
  await destination.locator('.kcard[data-card-id="1"] a').click();
+ // The board opens a Card as its sheet (#116); the Card's fields and its stage are one link further, on its page.
+ await page.getByRole('dialog').getByRole('link',{name:'Card details'}).click();
  const stageId=await page.locator('select[aria-label="Move to list"] option').filter({hasText:'كتابة'}).getAttribute('value');
  await page.getByLabel("Move to list").selectOption(stageId!);
  await expect(page.locator('.card-stage-line')).toContainText('كتابة');
@@ -301,6 +303,7 @@ test('board moves, date filtering, creative versions and shared card views',asyn
  await expect(listed).toHaveCount(1);
  await page.goto('/c/rs-learning/work/board');
  await page.locator('.kcard[data-card-id="1"] a').click();
+ await page.getByRole('dialog').getByRole('link',{name:'Card details'}).click();
  await page.getByLabel("Offering", {exact:true}).fill('عرض للاختبار');
  await page.getByLabel("Publishing date", {exact:true}).fill('2026-11-12T12:00');
  await page.getByRole('button',{name:"Save changes"}).click();
