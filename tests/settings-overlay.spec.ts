@@ -255,6 +255,8 @@ test('the Owner invites a Member from the Team table, the row says Invite sent, 
  await overlay.getByRole('button',{name:'Invite',exact:true}).click();
  await expect(overlay.locator('#inv-email-err')).toHaveText('This email has already been invited.');
  await expect(overlay.locator('.ta-table tbody tr').filter({hasText:email})).toHaveCount(1);
+ // signIn empties the local mailbox, so the invitation's link is read before the Manager signs in.
+ const link=await emailLink(page,email);
 
  const other=await browser.newContext(); const manager=await other.newPage();
  try {
@@ -264,7 +266,6 @@ test('the Owner invites a Member from the Team table, the row says Invite sent, 
   await expect(theirs.locator('#inv-toggle')).toHaveCount(0);
  } finally { await other.close(); }
 
- const link=await emailLink(page,email);
  await context.clearCookies(); await page.goto(link);
  await page.getByLabel('New password').fill('team-invited-password'); await page.getByLabel('Confirm password').fill('team-invited-password');
  await page.getByRole('button',{name:'Save password'}).click();
