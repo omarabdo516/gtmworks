@@ -4,7 +4,6 @@ export declare function agentTasks(cards: { id: number, title: string, stage_id:
 export declare function latestActivity<T extends { id: number, created_at: string }>(rows: T[], since: string, n?: number): T[];
 export declare function agentLogFilter(agent: string): string;
 export type DetailsTab = 'activity' | 'tasks' | 'files' | 'log';
-export declare const detailsTabs: DetailsTab[];
 export declare function pickTab(value: unknown): DetailsTab;
 export declare function fileSize(bytes: number): string;
 export type AgentFile = { key: string, name: string, size: number, at: string, href: string, source: string };
