@@ -22,6 +22,8 @@ const phoneBoard = async () => {
  await showWork(props, { width: 390 });
  return document.querySelector<HTMLElement>('.board')!;
 };
+// The board's position once two frames read the same, so a scroll still being laid out is not taken for where it stands.
+const settled = async (board: HTMLElement) => { let last = Number.NaN; while (board.scrollLeft !== last) { last = board.scrollLeft; await new Promise(requestAnimationFrame); } return last; };
 const column = (name: string) => document.querySelector(`.col[data-column="${name}"]`)!.getBoundingClientRect();
 
 test('on a phone a swipe that starts on a card scrolls the board and moves no card', async () => {
@@ -39,7 +41,7 @@ test('on a phone a swipe that starts on a card scrolls the board and moves no ca
 test('on a phone a card held for a moment is carried to the next list and moved there, while the board holds still under the finger', async () => {
  const board = await phoneBoard();
  board.scrollLeft += column('ideas').left - board.getBoundingClientRect().left + column('ideas').width * 0.6;
- const scrolled = board.scrollLeft;
+ const scrolled = await settled(board);
  let cancels = 0;
  window.addEventListener('pointercancel', () => { cancels++; }, true);
  const card = document.querySelector('.kcard[data-card-id="1"]')!.getBoundingClientRect();
@@ -48,8 +50,8 @@ test('on a phone a card held for a moment is carried to the next list and moved 
  await touch('touchStart', from.x, from.y);
  vi.advanceTimersByTime(300);
  for (let step = 1; step <= 15; step++) { const to = aim(); await touch('touchMove', from.x + (to.x - from.x) * step / 15, from.y + (to.y - from.y) * step / 15); }
+ expect(board.scrollLeft, 'the board holds still under the finger').toBe(scrolled);
  await touch('touchEnd');
  await expect.poll(() => sent(props)).toEqual([{ op: 'move-column', company: 'co-1', slug: 'rs-learning', card: '1', column: 'planned' }]);
  expect(cancels, 'no pointercancel ends the drag').toBe(0);
- expect(board.scrollLeft).toBe(scrolled);
 });
