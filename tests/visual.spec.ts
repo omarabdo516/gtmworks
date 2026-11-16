@@ -321,6 +321,7 @@ const screenStates: Record<string, { set: string, unset: string, admin?: true }>
        (692001,'${rsLearning}',(select id from public.work_stages where company_id='${rsLearning}' and board_column='progress' order by position limit 1),'${onBoardAsk}','${onBoard(2)}','${onBoard(3)}');
       insert into public.member_agent_access(company_id,person_id,agent_id) values ('${rsLearning}','20000000-0000-0000-0000-000000000002','${onBoard(2)}');`,
     unset: `delete from public.member_agent_access where agent_id='${onBoard(2)}';
+      delete from public.work_card_visits where card_id=692001;
       delete from public.work_cards where id=692001;
       delete from public.conversation_usage where conversation_id='${onBoard(3)}';
       delete from public.conversation_messages where conversation_id='${onBoard(3)}';
@@ -334,7 +335,8 @@ const screenStates: Record<string, { set: string, unset: string, admin?: true }>
       insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('${cardIdea(2)}','${rsLearning}','${cardIdea(1)}','Ads','Runs the Meta and Google ads.');
       insert into public.work_cards(id,company_id,stage_id,title,agent_id) overriding system value values
        (692002,'${rsLearning}',(select id from public.work_stages where company_id='${rsLearning}' and board_column='ideas' order by position limit 1),'إعلانات Meta لدفعة ديسمبر','${cardIdea(2)}');`,
-    unset: `delete from public.work_cards where id=692002;
+    unset: `delete from public.work_card_visits where card_id=692002;
+      delete from public.work_cards where id=692002;
       delete from public.hermes_agents where id='${cardIdea(2)}';
       delete from public.hermes_connections where id='${cardIdea(1)}';`,
   },
