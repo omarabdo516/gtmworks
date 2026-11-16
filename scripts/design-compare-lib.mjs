@@ -7,7 +7,8 @@ import { extname, join, resolve, sep } from 'node:path';
 // A named screen says how to reach it in the reference and which built page it is compared with (null: none yet).
 // The prototype has no URL routes: its sidebar switches views by `data-view` (chat, board, dashboard, log) and the
 // account menu opens the settings overlay (`#sov`) with its sections. Each step is one `click`, `waitFor`, `waitGone`, `fill` ([selector, text]) or
-// `scrollTo` with a CSS selector; a click on a sidebar item hidden behind the narrow-screen menu opens the menu first. A screen's `builtSteps` run the same way on the built page after it opens.
+// `scrollTo` with a CSS selector, or one `press` with a key as Playwright names it (`{ press: 'ArrowDown' }`), pressed
+// where the focus is; a click on a sidebar item hidden behind the narrow-screen menu opens the menu first. A screen's `builtSteps` run the same way on the built page after it opens.
 // Every screen starts from the prototype's default state. Only the alone screens and a Member's request screens touch
 // the "viewing as" switcher: the alone ones show the workspace of an Owner working alone (#10); built, that is seeded
 // R&S Consultations, its one Member Omar, with work_mode set to 'alone' (tests/visual.spec.ts, state `alone`). The
@@ -112,6 +113,12 @@ export const screens = {
   'card-chat-locked': { reference: { steps: [...asYoussef, { click: '#btn-newchat' }, { fill: ['#ta-main', `@Ads ${youssefAsks}`] },
    { click: '[data-action="send"][data-key="main"]' }, { waitFor: '#chat-transcript .turn' }, { click: '#btn-me' }, { click: '[data-action="set-as"][data-person="omar"][data-world="team"]' },
    { waitFor: '#sb-recent' }, { waitGone: '#toast-host .toast' }, ...board, { click: `.kcard[aria-label^="${youssefAsks}"]` }, ...pickChat] }, builtPath: '/c/rs-learning/work/board?card=640007', builtSteps: pickChat },
+  // #173. The account menu moved through with the keyboard: Arrow Down from the chosen language shows the next entry's
+  // focus ring.
+  'account-menu-keys': { reference: { steps: [{ click: '#btn-me' }, { waitFor: '#me-menu:not([hidden])' }, { press: 'ArrowDown' }] }, builtPath: '/c/rs-learning/chat', builtSteps: [{ click: '#btn-me' }, { waitFor: '#me-menu' }, { press: 'ArrowDown' }] },
+  // #173. "N" on the board opens the new chat with its composer focused. Built, the chat has a composer only when the
+  // Company has an Agent (the comparison fixture's Lead).
+  'new-chat-key': { reference: { steps: [...board, { press: 'n' }, { waitFor: '#ta-main:focus' }] }, builtPath: '/c/rs-learning/work/board', builtSteps: [{ press: 'KeyN' }, { waitFor: '.composer__input:focus' }] },
   'team-channel': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-team"]' }, { waitFor: '.ch-intro' }] }, builtPath: null },
 };
 
