@@ -273,6 +273,23 @@ test('a caption of several lines in English and Arabic survives saving and a rel
  await save(); // Leave the seeded card as the other tests expect it.
 });
 
+// The publishing date's form round trip: an unrelated save leaves the date as it was, and a changed date is read back
+// as its activity on the Card and on Home. The phone layout of these controls is in components/card-detail.test.tsx.
+test('an unrelated save keeps a Card\'s publishing date, and a changed date reads back on the Card and Home',async({page})=>{
+ await signIn(page,'omar@example.com','/c/rs-learning/work/board/2');
+ const dates=page.locator('.detail-row').filter({hasText:'Updated publishing date'});
+ const before=await dates.count();
+ await page.getByLabel("Offering",{exact:true}).fill('عرض محدث دون تعديل الموعد');
+ await page.getByRole('button',{name:"Save changes"}).click();
+ await expect(page.getByText('Updated Offering: عرض محدث دون تعديل الموعد')).toBeVisible();
+ await expect(dates).toHaveCount(before);
+ await page.getByLabel("Publishing date",{exact:true}).fill('2032-11-12T12:00');
+ await page.getByRole('button',{name:"Save changes"}).click();
+ await expect(page.getByText('Updated publishing date: November 12')).toBeVisible();
+ await page.goto('/c/rs-learning/home');
+ await expect(page.locator('.detail-row').filter({has:page.locator('a[href="/c/rs-learning/work/board/2"]')}).getByText('Updated publishing date: November 12')).toBeVisible();
+});
+
 test('an error thrown in the page is reported to the server log endpoint',async({page})=>{
  await page.goto('/sign-in');
  const reported=page.waitForRequest(request=>request.url().endsWith('/api/client-errors')&&request.method()==='POST');
