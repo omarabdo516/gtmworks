@@ -17,12 +17,15 @@ type RequestBase={id:number,name:string,job:string,apps:string[],askedBy:string,
 export type AgentRequestView=RequestBase&({state:'waiting',owners:string[]}|{state:'made',by:string,at:string,agent:Pick<MadeAgent,'id'|'connection_id'|'name'>|null}|{state:'declined',by:string,at:string,reason:string});
 // A card any Agent's reply carries (#136), one variant per kind, every word on it the Agent's. A row of a kind this app
 // version does not know (the database may be newer) is left out.
-export type ReplyCard={id:number,kind:'draft',title:string,line:string,rows:{label:string,value:string}[]};
+type ReviewItem={text:string,fine:boolean,note:string};
+export type ReplyCard={id:number,kind:'draft',title:string,line:string,rows:{label:string,value:string}[]}
+ |{id:number,kind:'review',title:string,line:string,items:ReviewItem[],decision:string};
 export const replyCardColumns='id,run_id,kind,title,content,created_at';
 export type ReplyCardRow={id:number,run_id:string,kind:string,title:string,content:unknown,created_at:string};
 // The database keeps only rows each kind's reader can read (reply_card_valid); a kind with no reader fails the build.
 const replyReaders:{[K in ReplyCard['kind']]:(row:ReplyCardRow)=>Extract<ReplyCard,{kind:K}>}={
  draft:({id,title,content})=>{ const {line,rows}=content as {line:string,rows:{label:string,value:string}[]}; return {id,kind:'draft',title,line,rows}; },
+ review:({id,title,content})=>{ const {line,items,decision}=content as {line:string,items:ReviewItem[],decision:string}; return {id,kind:'review',title,line,items,decision}; },
 };
 export const replyCardOf=(row:ReplyCardRow):ReplyCard|null=>Object.hasOwn(replyReaders,row.kind)?replyReaders[row.kind as ReplyCard['kind']](row):null;
 export type LeadCard={kind:'made',agent:MadeAgent}|{kind:'request',request:AgentRequestView}|{kind:'reply',card:ReplyCard};
