@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(46);
+select plan(50);
 -- #122. RS Learning (1): Lead on the Company's own profile, ready but for its shared folder, and the Writer Lead made on
 -- its own profile. Aleem (3) has its own profile too. The Writer is shown to the Manager (2), the Contributor (3) and
 -- the Viewer (4).
@@ -48,6 +48,11 @@ select throws_ok($$select public.reserve_conversation_run('c5200000-0000-0000-00
  '42501','hermesProfileNotShared','a Run on a shared space is refused');
 reset role;
 
+-- Until a worker of this version lists its work, the previous version's Runs and moves go on as before.
+delete from public.shared_skills_worker;
+select ok(public.company_profile_ready('10000000-0000-0000-0000-000000000001'),'with no worker that confirms shared folders, the Company''s profile is ready as before');
+select is(public.agent_profile_refusal((select profile from named where name='writer'),'10000000-0000-0000-0000-000000000001',(select agent from named where name='writer')),null,'and so is an Agent''s own profile');
+
 -- The worker's list and the readiness of each profile until its shared folder is confirmed.
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 set local role service_role;
@@ -71,6 +76,10 @@ end $$;
 select is(pg_temp.reserved('lead','c5200000-0000-0000-0000-000000000001','c5300000-0000-0000-0000-000000000001'),'agentLevelPending','no Run starts on the Company''s profile before its shared folder is confirmed');
 select is(pg_temp.reserved('writer','c5200000-0000-0000-0000-000000000002','c5300000-0000-0000-0000-000000000002'),'agentLevelPending','nor on an Agent''s own profile');
 select ok(not public.company_profile_ready('10000000-0000-0000-0000-000000000001'),'the Company''s profile is not ready');
+update public.shared_skills_worker set seen_at=now()-interval '11 minutes';
+select ok(public.company_profile_ready('10000000-0000-0000-0000-000000000001'),'once that worker has not listed its work for ten minutes, the wait lapses');
+update public.shared_skills_worker set seen_at=now();
+select ok(not public.company_profile_ready('10000000-0000-0000-0000-000000000001'),'and it holds again when the worker lists its work');
 
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 set local role service_role;

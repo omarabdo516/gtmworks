@@ -6,9 +6,11 @@
 -- reads that back and records it here (skills_shared). No Run starts on a profile it has not recorded, and an Agent
 -- moves to its own profile only once that profile is recorded. No Connection names a shared space.
 --
--- Nothing existing is rewritten: the new table starts empty and every profile starts unconfirmed, so Runs on bundled
--- profiles wait for the new worker's first pass. The previous app version runs against this; its worker confirms no
--- profile, so on bundled profiles its Runs wait and its moves do not happen until the new worker runs.
+-- Nothing existing is rewritten: the new tables start empty and every profile starts unconfirmed. The wait for a
+-- confirmed folder holds only while a worker that confirms folders has listed its work within ten minutes
+-- (shared_skills_active), so the previous app version runs against this as before: while it serves, during an update's
+-- build or after a rollback, no worker of this version lists the work and its Runs and moves go on. Without that worker
+-- a Run only misses the team's lessons; the lock that keeps them from an Agent's edits is the Engine's.
 
 create table public.company_shared_spaces (
  company_id uuid primary key references public.companies(id) on delete cascade,
@@ -18,6 +20,18 @@ create table public.company_shared_spaces (
 );
 alter table public.company_shared_spaces enable row level security;
 revoke all on public.company_shared_spaces from anon,authenticated,service_role;
+
+-- When a worker that confirms shared folders last listed its work: one row.
+create table public.shared_skills_worker (
+ id boolean primary key default true check (id),
+ seen_at timestamptz not null
+);
+alter table public.shared_skills_worker enable row level security;
+revoke all on public.shared_skills_worker from anon,authenticated,service_role;
+create function public.shared_skills_active() returns boolean language sql stable security definer set search_path='' as $$
+ select exists(select 1 from public.shared_skills_worker w where w.seen_at>now()-interval '10 minutes');
+$$;
+revoke all on function public.shared_skills_active() from public,anon,authenticated,service_role;
 
 alter table public.company_profiles add column skills_shared boolean not null default false;
 alter table public.agent_profiles add column skills_shared boolean not null default false;
@@ -51,7 +65,7 @@ create trigger shared_space_agent before insert or update of connection_id on pu
 -- 20261210000002's, unchanged but for that.
 create or replace function public.company_profile_ready(c uuid) returns boolean language sql stable security definer set search_path='' as $$
  select exists(select 1 from public.company_profiles p join public.companies co on co.id=p.company_id
-  where p.company_id=c and p.tools_level=co.agent_level and p.tools_policy=public.engine_tool_policy() and not p.tools_pending and p.skills_shared);
+  where p.company_id=c and p.tools_level=co.agent_level and p.tools_policy=public.engine_tool_policy() and not p.tools_pending and (p.skills_shared or not public.shared_skills_active()));
 $$;
 
 -- Every Run entry asks this (20261226000000): a shared space never runs, and an Agent's own profile runs only once it
@@ -63,7 +77,7 @@ language sql stable security definer set search_path='' as $$
   when coalesce(engine_profile,'') !~ '^ag-[0-9a-f]{32}$' then null
   when not exists(select 1 from public.agent_profiles p where p.profile=engine_profile and p.agent_id=agent and p.company_id=c) then 'hermesProfileNotShared'
   when not exists(select 1 from public.agent_profiles p join public.companies co on co.id=p.company_id
-   where p.agent_id=agent and p.tools_level=co.agent_level and p.tools_policy=public.engine_tool_policy() and not p.tools_pending and p.skills_shared) then 'agentLevelPending'
+   where p.agent_id=agent and p.tools_level=co.agent_level and p.tools_policy=public.engine_tool_policy() and not p.tools_pending and (p.skills_shared or not public.shared_skills_active())) then 'agentLevelPending'
  end;
 $$;
 
@@ -76,7 +90,7 @@ begin
  select * into moving from public.hermes_agents where id=agent;
  if not found or not public.company_profile_ready(moving.company_id) or not public.agent_may_move(agent) or public.agent_move_blocked(agent)
   or not exists(select 1 from public.agent_profiles p join public.companies co on co.id=p.company_id where p.agent_id=agent and p.company_id=moving.company_id
-   and p.tools_level=co.agent_level and p.tools_policy=public.engine_tool_policy() and not p.tools_pending and p.skills_shared) then return false; end if;
+   and p.tools_level=co.agent_level and p.tools_policy=public.engine_tool_policy() and not p.tools_pending and (p.skills_shared or not public.shared_skills_active())) then return false; end if;
  select * into old from public.hermes_connections where id=moving.connection_id;
  select m.person_id into first_owner from public.members m where m.company_id=moving.company_id and m.role='owner' and m.removed_at is null order by m.person_id limit 1;
  insert into public.hermes_connections(company_id,owner_id,address,profile,key_encrypted,state,version,features)
@@ -107,10 +121,13 @@ end $$;
 -- its Owners and Managers approved and nobody removed, oldest first, and each of its recorded profiles whose shared
 -- folder is not confirmed. A rule told directly is not a lesson: only decide_agent_rule approves. Every Company is
 -- listed on each pass, so a Skill changed or lost in the Engine is written again; a hundred at most, in an order that
--- turns every minute.
+-- turns every minute. Listing it marks the worker seen, which turns the wait for a confirmed folder on.
 create function public.shared_skills_work() returns table(company_id uuid, profile text, folder text, lessons jsonb, profiles jsonb)
-language sql stable security definer set search_path='' as $$
- select c.id,public.shared_space_profile(c.id),s.folder,
+language plpgsql security definer set search_path='' as $$
+#variable_conflict use_column
+begin
+ insert into public.shared_skills_worker(id,seen_at) values(true,now()) on conflict (id) do update set seen_at=excluded.seen_at;
+ return query select c.id,public.shared_space_profile(c.id),s.folder,
   coalesce((select jsonb_agg(r.body order by r.said_at,r.id) from public.agent_rules r where r.company_id=c.id and r.suggestion='approved' and r.removed_at is null),'[]'),
   coalesce((select jsonb_agg(jsonb_build_object('profile',x.profile) order by x.profile) from (
    select p.profile from public.company_profiles p where p.company_id=c.id and not p.skills_shared
@@ -121,7 +138,7 @@ language sql stable security definer set search_path='' as $$
   or exists(select 1 from public.agent_profiles p where p.company_id=c.id and p.tools_level is not null)
  order by md5(c.id::text||date_trunc('minute',now())::text)
  limit 100;
-$$;
+end $$;
 revoke all on function public.shared_skills_work() from public,anon,authenticated;
 grant execute on function public.shared_skills_work() to service_role;
 

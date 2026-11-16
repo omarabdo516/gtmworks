@@ -1,6 +1,8 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 select plan(66);
+-- A worker that confirms shared folders runs (#122), so a move waits for its profile's.
+insert into public.shared_skills_worker(id,seen_at) values(true,now()) on conflict (id) do update set seen_at=excluded.seen_at;
 -- An install from before #120: RS Learning (1) has Lead, its main Agent, on the Company's own profile, and Aleem (3) has
 -- its Lead and Copy on Aleem's. Aleem's profile is not ready yet. Every message so far is an hour old.
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
