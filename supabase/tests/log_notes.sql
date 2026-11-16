@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(59);
+select plan(61);
 -- Notes and mentions in the log (#22). Seed people of RS Learning: Omar 0001 owns it, 0002 مدير is a Manager, 0003 مراجع
 -- and 0005 عضو are Contributors, 0004 مشاهد is a Viewer, 30000000-…-0001 is a role Agent. Faye is shown to the Manager;
 -- Secret to nobody but the Owner. 0005 is also a Contributor of Aleem.
@@ -27,6 +27,13 @@ insert into notes select x.label, public.change_work_card('10000000-0000-0000-00
 -- A note dated ahead by its writer is stamped with the time it was written, so its five minutes cannot be stretched.
 insert into public.work_comments(company_id,card_id,body,created_at) values('10000000-0000-0000-0000-000000000001',(select id from card),'Dated ahead',now()+interval '1 day');
 select is((select created_at from public.work_comments where body='Dated ahead' and card_id=(select id from card)),now(),'a note written with a later date gets the time it was written');
+
+-- A comment the database writes with its own time (a migration copying an older one) keeps it, and is already locked.
+reset role;
+insert into public.work_comments(company_id,card_id,body,created_at) values('10000000-0000-0000-0000-000000000001',(select id from card),'Copied earlier','2026-11-11 09:30:00+00');
+select is((select created_at from public.work_comments where body='Copied earlier' and card_id=(select id from card)),timestamptz '2026-11-11 09:30:00+00','a comment the database copies keeps its own time');
+set local role authenticated;
+select throws_ok($$select public.edit_card_note('10000000-0000-0000-0000-000000000001',(select id from public.work_comments where body='Copied earlier' and card_id=(select id from card)),'Rewritten')$$,'42501',null,'and it cannot be edited');
 
 -- The writer edits within five minutes, and the log follows.
 select ok(public.edit_card_note('10000000-0000-0000-0000-000000000001',(select id from notes where label='draft'),'Second draft'),'the writer edits a note in its first five minutes');

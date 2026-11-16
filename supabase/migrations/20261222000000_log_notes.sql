@@ -25,11 +25,12 @@ end $$;
 revoke all on function public.guard_note_edit() from public,anon,authenticated,service_role;
 create trigger work_comments_note_edit before update on public.work_comments for each row execute function public.guard_note_edit();
 
--- The five minutes count from when the note was written, so a signed-in person cannot date their note. Only the
--- database itself (a seed, a restore) writes another time.
+-- The five minutes count from when the note was written, so a person writing through the API (the authenticated
+-- role) cannot date their note. The database itself (a migration copying older comments, a seed, a restore) keeps the
+-- time it writes, and such a note is locked from the start.
 create function public.stamp_note_time() returns trigger language plpgsql set search_path='' as $$
 begin
- if auth.uid() is not null then new.created_at := now(); end if;
+ if current_user = 'authenticated' then new.created_at := now(); end if;
  return new;
 end $$;
 revoke all on function public.stamp_note_time() from public,anon,authenticated,service_role;
