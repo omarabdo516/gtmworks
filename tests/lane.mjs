@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 // The browser suite runs one lane per Playwright worker (#69). Every lane is a whole stack of its own: a local Supabase
@@ -53,3 +53,20 @@ export const mail = `http://127.0.0.1:${portOf('mail')}`;
 export const inbox = `${mail}/api/v1/messages`;
 // `npx supabase db query` and `supabase status` in the tests reach this lane's stack.
 if (lane > 0) process.env.SUPABASE_WORKDIR = workdirOf(lane);
+
+// On the self-hosted runner (Omar's PC) the browser runs in a network namespace of its own, so containers other jobs
+// start in the shared WSL2 network namespace cannot fail its requests with net::ERR_NETWORK_CHANGED (#241,
+// scripts/browser-netns.mjs). GTMWORKS_BROWSER_NETNS=true asks for the same anywhere. The real browser is Playwright's
+// own headless shell, at the revision this Playwright pins.
+export function launchOptionsFor(args = []) {
+ if (process.env.RUNNER_ENVIRONMENT !== 'self-hosted' && process.env.GTMWORKS_BROWSER_NETNS !== 'true') return { args };
+ if (!process.env.GTMWORKS_BROWSER_EXECUTABLE) {
+  const { browsers } = JSON.parse(readFileSync('node_modules/playwright-core/browsers.json', 'utf8'));
+  const { revision } = browsers.find(({ name }) => name === 'chromium-headless-shell');
+  const cache = process.env.PLAYWRIGHT_BROWSERS_PATH || resolve(process.env.HOME, '.cache/ms-playwright');
+  const shell = resolve(cache, `chromium_headless_shell-${revision}`, 'chrome-headless-shell-linux64', 'chrome-headless-shell');
+  if (!existsSync(shell)) throw new Error(`no headless shell at ${shell}: run npx playwright install chromium`);
+  process.env.GTMWORKS_BROWSER_EXECUTABLE = shell;
+ }
+ return { args, executablePath: resolve('scripts/browser-netns.mjs') };
+}

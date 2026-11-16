@@ -1,4 +1,5 @@
 import { defineConfig } from '@playwright/test';
+import { launchOptionsFor } from './tests/lane.mjs';
 const host = 'app.gtmworks.test';
 // The same pages as the main suite, reached the way people reach them on the server: https, a public-looking host
 // name, a reverse proxy in front of the production image (scripts/proxy-stack.sh).
@@ -8,7 +9,7 @@ export default defineConfig({
   timeout: 90000,
   workers: 1,
   reporter: [['list'], ...(process.env.CI ? [['github'] as const] : [])],
-  use: { baseURL: `https://${host}`, ignoreHTTPSErrors: true, launchOptions: { args: [`--host-resolver-rules=MAP ${host} 127.0.0.1`] } },
+  use: { baseURL: `https://${host}`, ignoreHTTPSErrors: true, launchOptions: launchOptionsFor([`--host-resolver-rules=MAP ${host} 127.0.0.1`]) },
   webServer: {
     command: 'bash scripts/proxy-stack.sh',
     wait: { stdout: /PROXY STACK READY/ },

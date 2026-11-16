@@ -21,5 +21,9 @@
     "server-only",
     "tailwindcss",
     "@tailwindcss/typography"
+  ],
+  "ignoreBinaries": [
+    "ip",
+    "unshare"
   ]
 }

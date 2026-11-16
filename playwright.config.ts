@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { defineConfig } from '@playwright/test';
-import { appOrigin, lanes, originOf, serverLogOf } from './tests/lane.mjs';
+import { appOrigin, lanes, launchOptionsFor, originOf, serverLogOf } from './tests/lane.mjs';
 // First run opens only with the install's setup code (issue #50). The web server and the test workers inherit this one.
 process.env.SETUP_CODE ||= randomBytes(32).toString('hex');
 // Each run's spec files restore the seed before they start (tests/fresh-seed.ts); the workers inherit this run's name.
@@ -16,7 +16,8 @@ export default defineConfig({
   workers: lanes,
   // CI retries a failed test once; Playwright reports one that then passes as flaky. Local runs never retry.
   retries: process.env.CI ? 1 : 0,
-  use: { baseURL: appOrigin },
+  // On the PC the browser runs in a network namespace of its own (#241).
+  use: { baseURL: appOrigin, launchOptions: launchOptionsFor() },
   // Lane 0 builds the app and serves it; every other lane serves that build on its own port (scripts/web.sh).
   webServer: Array.from({ length: lanes }, (_, n) => ({ command: `mkdir -p playwright-report && LANE=${n} bash scripts/web.sh production > ${serverLogOf(n)} 2>&1`, url: `${originOf(n)}/sign-in`, reuseExistingServer: false, timeout: 240000 })),
   // Playwright's own reporters only: CI uploads the HTML report, and the GitHub reporter marks failures and flaky tests
