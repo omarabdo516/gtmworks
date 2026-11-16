@@ -23,6 +23,9 @@ async function runStep(page, step) {
   if (action === 'fill') return target.fill(text);
   if (action === 'waitGone') return page.locator(selector).waitFor({ state: 'hidden' });
   if (action === 'scrollTo') return target.scrollIntoViewIfNeeded();
+  // A narrow sidebar still sliding shut (after the "viewing as" switch) reads as visible until its transition ends;
+  // an endless one (a pulse, a spinner) never ends and is not waited for.
+  await page.waitForFunction(() => document.getAnimations().every(animation => animation.playState !== 'running' || animation.effect?.getComputedTiming().endTime === Infinity));
   if (!await target.isVisible() && await page.locator('#mobile-menu').isVisible()) await page.locator('#mobile-menu').click();
   await target.click();
 }
