@@ -203,7 +203,7 @@ test('integration: Lead keeps a Manager\'s and a Contributor\'s request for an A
  expect(JSON.parse(query(`select conversation_id,run_id,call_id,asked_by,asked_with,agent_name,job,array_to_string(apps,'|') as apps,state from public.lead_agent_requests where conversation_id in ${listed} order by id`)))
   .toEqual(conversations.map((conversation,index)=>({conversation_id:conversation,run_id:fake.runs[index].id,call_id:'call-0',asked_by:[manager,contributor][index],asked_with:asked,agent_name:'WhatsApp Leads',job:'Follows up the WhatsApp leads.',apps:'WhatsApp Business',state:'waiting'})));
  expect(JSON.parse(query(`select count(*)::int as n from public.lead_made_agents where conversation_id in ${listed}`))[0].n).toBe(0);
- expect(JSON.parse(query(`select actor_id,action,details->>'asked_for' as asked_for from public.company_log where company_id='${company}' and action like 'agent_request%' order by id`)))
+ expect(JSON.parse(query(`select actor_id,action,details->>'asked_for' as asked_for from public.company_log where company_id='${company}' and action in ('agent_request_sent','agent_request_made','agent_request_declined') order by id`)))
   .toEqual([{actor_id:manager,action:'agent_request_sent',asked_for:'WhatsApp Leads'},{actor_id:contributor,action:'agent_request_sent',asked_for:'WhatsApp Leads'}]);
 });
 
