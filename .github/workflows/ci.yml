@@ -10,8 +10,8 @@
 # `database` and `integration` run on the runner the repo variable CI_RUNNER names (#224): Omar's PC (`pc-ci`) while
 # ci-router keeps it there, else ubuntu-latest. A pull request from a fork runs them on ubuntu-latest, where every other
 # job runs. `install` stays on ubuntu-latest: the PC runs one job at a time, so it would queue `integration` behind it.
-# The compared screens (`visual`) stay on ubuntu-latest too, where their approved images are made: the PC renders text a
-# few pixels differently. The stack's ports lie in Linux's range for outgoing connections, so on a GitHub-hosted runner a
+# The compared screens and the measured navigation budgets (`visual`) stay on ubuntu-latest too: the screens' approved
+# images are made there (the PC renders text a few pixels differently), and the budgets need a machine no other job shares. The stack's ports lie in Linux's range for outgoing connections, so on a GitHub-hosted runner a
 # job reserves them before it starts the stack (#225). The PC shares its Docker with other repositories' CI: there the
 # stack's ports move to a block of their own above that range, a job removes what this repository's runs start before
 # and after it (scripts/ci-runner.mjs), and ~/.npm, the browsers and the image layers stay on the machine.
@@ -163,7 +163,7 @@ jobs:
         run: node scripts/ci-runner.mjs cleanup
 
   # The compared screens (the `visual` Playwright project) on lane 0 as the seed builds it, on the runner their approved
-  # images are made on. When `changes` says `visual` (screens alone, #213), this is all of the browser suite that runs.
+  # images are made on, then the measured navigation budgets. When `changes` says `visual` (screens alone, #213), this is all of the browser suite that runs.
   visual:
     needs: [changes]
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.integration != 'false') }}
@@ -270,6 +270,13 @@ jobs:
           path: playwright-report/html/
           if-no-files-found: ignore
           retention-days: 30
+      # What the lanes used, so the lane count rests on a measurement: the job's own memory (app servers, workers,
+      # Chromium) and each lane's Supabase stack, which runs under the Docker daemon outside the job's memory limit.
+      - name: memory the lanes used
+        if: ${{ always() && runner.environment != 'github-hosted' }}
+        run: |
+          echo "the runner's memory group, peak since it started: $(( $(cat "/sys/fs/cgroup$(sed -n 's/^0:://p' /proc/self/cgroup)/memory.peak" 2> /dev/null || echo 0) / 1048576 )) MiB"
+          docker stats --no-stream --format '{{.Name}} {{.MemUsage}}' | grep -E '_repo(-lane-[0-9]+)? ' || true
       - name: remove what this run started
         if: ${{ always() }}
         run: node scripts/ci-runner.mjs cleanup

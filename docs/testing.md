@@ -13,7 +13,8 @@ the whole-app browser and install suites run only when their own area changed, o
 `database` and `integration` run on the runner the repo variable `CI_RUNNER` names, Omar's PC while ci-router keeps it
 there (#224); a pull request from a fork runs them on `ubuntu-latest`, where every other job runs. `install` stays on
 `ubuntu-latest`: the one PC runner takes one job at a time, so it would queue `integration` behind it. The compared screens run in their own `visual` job on `ubuntu-latest`, where
-their approved images are made; `ci.sh integration` leaves the `visual` project empty (`GTMWORKS_SCREENS_ELSEWHERE`). A job that
+their approved images are made, followed by the measured navigation budgets, which need a machine no other job shares
+(the PC also runs other repositories' CI); `ci.sh integration` leaves both projects empty (`GTMWORKS_HOSTED_ELSEWHERE`). A job that
 starts the local Supabase stack first reserves its ports on a GitHub-hosted runner (#225). On the PC the ports move to a
 block of their own, and `scripts/ci-runner.mjs cleanup` removes what this repository's runs start, before and after.
 

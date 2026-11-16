@@ -112,17 +112,19 @@ PY
   npm run test:e2e:proxy
   bash scripts/local-db.sh
   wait "$build_pid" || { cat playwright-report/build.log >&2; echo 'the browser suite build failed' >&2; exit 1; }
-  # The compared screens run on their own (`ci.sh visual`), on the runner their approved images are made on.
-  GTMWORKS_WEB_PREBUILT=true GTMWORKS_TEST_LANES=$lanes GTMWORKS_SCREENS_ELSEWHERE=true npm run test:e2e
+  # The compared screens and the measured budgets run on their own (`ci.sh visual`), on a GitHub-hosted runner.
+  GTMWORKS_WEB_PREBUILT=true GTMWORKS_TEST_LANES=$lanes GTMWORKS_HOSTED_ELSEWHERE=true npm run test:e2e
   ;;
  visual)
-  # The compared screens alone, on lane 0 as the seed builds it: no journeys, no proxy suite, no image (#213).
+  # The compared screens alone, on lane 0 as the seed builds it: no journeys, no proxy suite, no image (#213). Then the
+  # navigation time budgets, which need a machine of their own (#224).
   if [[ "${CI:-}" == "true" ]]; then
     npm ci
     install_chromium
   fi
   bash scripts/local-db.sh
   GTMWORKS_TEST_LANES=1 npm run test:visual
+  GTMWORKS_TEST_LANES=1 npx playwright test --project=measured --no-deps
   ;;
  visual-update)
   # Rewrites only the approved screen images that changed. Run it where CI runs: the images are made for that system.
