@@ -313,6 +313,9 @@ test('the install job proves profiles per company on the pinned release, after t
  const script=readFileSync('scripts/check-install-profiles.mjs','utf8');
  for(const off of ['terminal','file','code_execution']) assert.ok(script.includes(`'${off}'`),off);
  assert.match(script,/assert\.deepEqual\(seen,\[true,false\]\)/);
+ // #121: an Agent made on the company profile as the previous version made one moves out, and the memory stays with the main Agent.
+ assert.match(script,/service\.rpc\('lead_create_agent',\{conversation:first\.conversation,run,call:'install-check',agent_name:'Install writer',job:'Writes the install check\.',apps:\[\]\}\)/);
+ assert.match(script,/assert\.deepEqual\(after,\[true,false\]\)/);
 });
 
 // The person's session and the service role, as sendMessage sees them; every call is recorded in order.
@@ -327,7 +330,7 @@ function conversationDatabases({profile,reserve=null,record=null}) {
    return {data:null,error:{message:'unexpected'}}; },
   from:()=>{ const chain={select:()=>chain,eq:()=>chain,maybeSingle:async()=>({data:{id:'a9000000-0000-0000-0000-000000000001'},error:null})}; return chain; }};
  const key=encryptSecret('test-only-key',encryptionKey);
- const service={rpc:async(name)=>{ order.push(`service ${name}`); return name==='begin_start'?{data:1,error:null}:name==='pin_run'?{data:{tools:null,rules:[]},error:null}:name==='pin_run_knowledge'?{data:[],error:null}:{data:null,error:{message:'unexpected'}}; },from:table=>{ const filters={}; const chain={select:()=>chain,eq:(column,value)=>{filters[column]=value;return chain;},maybeSingle:async()=>{ order.push(`read ${table} ${filters.id||''}`);
+ const service={rpc:async(name)=>{ order.push(`service ${name}`); return name==='begin_start'?{data:1,error:null}:name==='pin_run'?{data:{tools:null,rules:[]},error:null}:name==='pin_run_knowledge'?{data:[],error:null}:name==='pin_run_history'?{data:null,error:null}:{data:null,error:{message:'unexpected'}}; },from:table=>{ const filters={}; const chain={select:()=>chain,eq:(column,value)=>{filters[column]=value;return chain;},maybeSingle:async()=>{ order.push(`read ${table} ${filters.id||''}`);
    return table==='hermes_connections'?{data:{address:'http://hermes:8642',profile,state:'connected',features:['run_submission'],key_encrypted:key},error:null}:{data:{connection_id:'f9000000-0000-0000-0000-000000000099'},error:null}; }}; return chain; }};
  return {db,service,order};
 }
@@ -342,7 +345,7 @@ test('a run is reserved on its pinned Connection before Hermes is called, and re
  assert.equal(db.args.reserve_conversation_turn.message,'Hi');
  // The record names the Connection the run started on, the one the reservation pinned.
  assert.equal(db.args.send_conversation_message.started_on,'f9000000-0000-0000-0000-000000000001');
- assert.deepEqual(order,['conversation_agent','reserve_conversation_turn','read hermes_connections f9000000-0000-0000-0000-000000000001','service pin_run','service pin_run_knowledge','service begin_start',`start ${companyProfile(two)}`,'send_conversation_message']);
+ assert.deepEqual(order,['conversation_agent','reserve_conversation_turn','read hermes_connections f9000000-0000-0000-0000-000000000001','service pin_run','service pin_run_knowledge','service pin_run_history','service begin_start',`start ${companyProfile(two)}`,'send_conversation_message']);
 });
 
 test('a run never starts on another company\'s profile, nor while the profile\'s tools lag behind the level', async () => {
