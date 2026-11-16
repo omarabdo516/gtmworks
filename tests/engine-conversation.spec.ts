@@ -12,6 +12,7 @@ import { engineFor as driverFor } from '../lib/engine.mjs';
 import { runToolCall } from '../lib/agent-tools.mjs';
 import { levelConfig } from '../lib/agent-levels.mjs';
 import { signIn } from './sign-in';
+import { moveAgentProfiles } from '../lib/company-profiles.mjs';
 
 // A conversation on the fake engine (tests/fake-engine.mjs): the engine contract with no subscription and no network,
 // through the same send and close code the conversation route and the worker run, on the local database.
@@ -394,6 +395,49 @@ test('integration: a profile that cannot be made, still offers a toolset that mu
    expect(agentRows(theirs),why).toEqual([{body:'Reply to: Write about the tax diploma'}]);
   } finally { await hermes.close(); }
  }
+});
+
+// #121: an Agent Lead made on its own profile's fallback runs on the Company's profile, as every Agent did before #120.
+// The worker moves it to the profile the Engine kept under its reserved name once that profile can answer; the
+// Conversation keeps its record, and its next Run starts on the Agent's own profile with that record as its history.
+test('integration: an Agent moved to its own profile keeps its Conversation, and its next Run carries the record as history and is answered',async()=>{
+ test.setTimeout(120000);
+ const {profile,lead}=bundledLead();
+ const {hermes,fake,engineFor}=await ownProfiles(profile);
+ try {
+  hermes.settings.seedModel=null;
+  fake.settings.toolCalls=()=>[{id:'call-0',name:'create_agent',arguments:{template:'writer'}}];
+  const {service,person}=await clients();
+  const asked=randomUUID();
+  expect(await sendMessage(person,service,{person:omar,company,conversation:asked,sendKey:randomUUID(),agent:lead,message:'I want the ready-made writer',encryptionKey,engineFor})).toEqual({conversation:asked});
+  expect(await closeOpenRuns(service,{encryptionKey,conversation:asked,engineFor})).toBe(1);
+  const [agent]=madeBy(asked,lead);
+  expect(agent).toMatchObject({profile,tools_level:null});
+  const own=`ag-${agent.id.replaceAll('-','')}`;
+  const theirs=randomUUID();
+  query(`insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${theirs}','${company}','${omar}','${agent.id}','Writer')`);
+  query(`insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id,created_at) values
+   ('${company}','${theirs}','person','${omar}','Omar','Write about the tax diploma','${randomUUID()}','before-move',now()-interval '10 minutes'),
+   ('${company}','${theirs}','agent',null,'Writer','The tax diploma post.',null,'before-move',now()-interval '10 minutes')`);
+  const record=()=>JSON.parse(query(`select author,body from public.conversation_messages where conversation_id='${theirs}' order by id`));
+  const before=record();
+
+  // Its own profile gets a model, standing in for the sign-in that lets it answer.
+  Object.assign(hermes.settings.profiles.get(own)!,{provider:'openai-codex',model:'gpt-5.5'});
+  const bundled={address:hermes.address,managementAddress:hermes.managementAddress,profile:'default',key:'fake-engine-key'};
+  expect((await moveAgentProfiles(service,{hermes:bundled,driver:driverFor(bundled)})).moved).toBeGreaterThanOrEqual(1);
+  expect(JSON.parse(query(`select h.profile from public.hermes_agents a join public.hermes_connections h on h.id=a.connection_id where a.id='${agent.id}'`))).toEqual([{profile:own}]);
+  expect(JSON.parse(query(`select h.profile from public.hermes_agents a join public.hermes_connections h on h.id=a.connection_id where a.id='${lead}'`))).toEqual([{profile}]);
+  expect(record()).toEqual(before);
+  expect(JSON.parse(query(`select action from public.company_log where agent_id='${agent.id}' and action='agent_own_space'`))).toEqual([{action:'agent_own_space'}]);
+
+  const onEngine=(connection:{address:string,profile:string,key:string})=>driverFor({...connection,address:hermes.address,managementAddress:hermes.managementAddress});
+  expect(await sendMessage(person,service,{person:omar,company,conversation:theirs,sendKey:randomUUID(),agent:agent.id,message:'One more, shorter',encryptionKey,engineFor:onEngine})).toEqual({conversation:theirs});
+  expect(hermes.settings.requests.filter(request=>request.method==='POST').at(-1)?.path).toBe(`/p/${own}/v1/runs`);
+  expect(hermes.settings.runs.at(-1)!.history).toEqual(before.map(({author,body}:{author:string,body:string})=>({role:author==='agent'?'assistant':'user',content:body})));
+  expect(await closeOpenRuns(service,{encryptionKey,conversation:theirs,engineFor:onEngine})).toBe(1);
+  expect(record()).toEqual([...before,{author:'person',body:'One more, shorter'},{author:'agent',body:'Reply to: One more, shorter'}]);
+ } finally { await hermes.close(); }
 });
 
 // #144: the first Run of a new chat with an Agent other than the main one puts its Card on the board, with its log row;

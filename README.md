@@ -77,7 +77,7 @@ No SMTP account is needed for it.
 The install starts the web app, worker, Postgres,
 GoTrue, PostgREST, file Storage, an Nginx gateway, the local mail inbox and the
 Hermes agent engine, which is reachable only inside the install.
-Each company gets its own agent engine profile, with its own memory and sign-in; a company still on the shared default profile from an earlier install shares that memory, so an agent can repeat facts from one company to people in another until it moves.
+Each agent gets its own agent engine profile, with its own memory, once it moves there; until then it shares the company profile with the other agents on it. The agent that was the main agent of a company when the moves began keeps what its agents remembered before, even if another agent is made main later, and an agent moved to its own profile starts with an empty memory. A company still on the shared default profile from an earlier install shares that memory, so an agent can repeat facts from one company to people in another until it moves.
 
 **Company isolation (ADR 0014).** Nothing needs setting up on a fresh server: the
 worker gives every company its own profile in the bundled Hermes
