@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { shown, withDecisions, withTeamWork } from '../lib/conversations.ts';
+import { latestEnded, shown, waiting, withDecisions, withTeamWork } from '../lib/conversations.ts';
 
 // A Contributor's Conversation in a team (#25): the line under the Agent's reply says who their rule was sent to as a
 // suggestion, and the Owner's or a Manager's decision on it shows where it happened among the messages.
@@ -54,4 +54,17 @@ test('an Owner\'s answer to a request shows at its time',()=>{
  const record=withDecisions(shown(asking,[],[{run_id:'r1',at:at(2),card:{kind:/** @type {const} */('request'),request:request(7)}}],'Lead'),[made],'Lead');
  assert.deepEqual(order(record),[1,2,'decided',3]);
  assert.equal(record[2].decided,made);
+});
+
+test('a message whose run Hermes no longer knew is marked lost and waits no more, and the next message waits for its own reply', () => {
+ const first=[{id:1,author:/** @type {const} */('person'),author_name:'Omar',body:'First try',run_id:'r1',created_at:at(1)}];
+ const lost=[{run_id:'r1',outcome:/** @type {const} */('lost'),input_tokens:null,output_tokens:null}];
+ assert.deepEqual(shown(first,lost).map(message=>message.lost),[true]);
+ assert.deepEqual(waiting(first,lost),[]);
+ assert.equal(latestEnded(first,lost),true);
+ assert.deepEqual(shown(first,[{...lost[0],outcome:'stopped'}]).map(message=>message.lost),[false],'a stopped run is not lost');
+ const again=[...first,{id:2,author:/** @type {const} */('person'),author_name:'Omar',body:'Second try',run_id:'r2',created_at:at(2)}];
+ assert.deepEqual(shown(again,lost).map(message=>message.lost),[true,false]);
+ assert.deepEqual(waiting(again,lost).map(message=>message.id),[2]);
+ assert.equal(latestEnded(again,lost),false);
 });
