@@ -236,6 +236,7 @@ test('A Contributor starts a Card\'s chat from its sheet; the Owner, another Con
    await expect(writer.page).toHaveURL(new RegExp(`/c/rs-learning/conversations/${conversation}$`));
    await expect(writer.page.locator('.chat .msg[data-author=person]')).toContainText(text);
    await expect(writer.page.locator('.chat .msg[data-author=agent]')).toContainText(`Reply to: ${text}`);
+   await expect(writer.page.locator('.turns > li[data-kind="boarded"]')).toHaveCount(0);
   } finally { await writer.context.close(); }
   expect(JSON.parse(query(`select (select count(*) from public.conversations where person_id='${reviewer}' and agent_id='${Nour.id}')::int as chats,
    (select count(*) from public.work_cards where conversation_id='${conversation}')::int as cards,(select count(*) from public.work_cards where title='Ideas for the June course')::int as titled,
