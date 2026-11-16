@@ -40,6 +40,12 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      # The stack's ports lie in Linux's range for outgoing connections; reserved, no connection can take one (#225).
+      - name: reserve the stack's ports
+        if: ${{ runner.environment == 'github-hosted' }}
+        run: |
+          sudo sysctl -w net.ipv4.ip_local_reserved_ports="$(node scripts/ci-runner.mjs reserved-ports)"
+          sysctl net.ipv4.ip_local_reserved_ports
       - uses: actions/setup-node@v4
         with:
           node-version: 22

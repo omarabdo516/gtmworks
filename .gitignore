@@ -20,3 +20,4 @@ backups/
 .impeccable/mocks/
 .impeccable/review/
 .vitest/
+.ci-tmp/

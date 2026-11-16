@@ -96,7 +96,7 @@ for (const path of [
 for (const path of [
   'tests/frame.spec.ts', 'tests/proxy/production-shape.spec.ts', 'tests/visual.spec.ts', 'tests/sign-in.ts', 'tests/visual-screens.mjs',
   'tests/lane.mjs', 'tests/fake-hermes.mjs', 'tests/fake-engine.mjs',
-  'tests/touch-diagnostics.mjs', 'playwright.config.ts', 'playwright.proxy.config.ts', 'scripts/web.sh', 'scripts/local-db.sh',
+  'playwright.config.ts', 'playwright.proxy.config.ts', 'scripts/web.sh', 'scripts/local-db.sh',
   'scripts/proxy-stack.sh', 'scripts/ci-image.sh', 'supabase/seed.sql',
   // The first-run and screen specs import its reset helpers; every browser lane is built from the migrations, the
   // stack configuration and the local default privileges (scripts/local-db.sh).
@@ -124,7 +124,7 @@ test('the install browser check is not a browser suite file, and a browser spec 
 });
 
 test('the CI definition itself and the dependencies run every suite', () => {
-  for (const path of ['.github/workflows/ci.yml', 'ci.sh', 'scripts/ci-areas.mjs', 'scripts/ci-verdict.mjs', 'package.json', 'package-lock.json']) {
+  for (const path of ['.github/workflows/ci.yml', 'ci.sh', 'scripts/ci-areas.mjs', 'scripts/ci-verdict.mjs', 'scripts/ci-runner.mjs', 'package.json', 'package-lock.json']) {
     assert.deepEqual(areas(path), all, path);
   }
 });

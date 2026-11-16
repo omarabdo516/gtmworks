@@ -20,10 +20,14 @@ for f in supabase/migrations/*.sql; do
   [[ $f == *.verify.sql ]] || cp "$f" "$tmp_dir/supabase/migrations/"
 done
 if [[ $lane != 0 ]]; then
-  sed -i -e "s/^project_id = .*/project_id = \"repo-lane-$lane\"/" -e "s/\b543\([0-9][0-9]\)\b/$((543 + lane))\1/g" \
+  config="$tmp_dir/supabase/config.toml"
+  # Every port moves from lane 0's, whichever block CI put lane 0 in (scripts/ci-runner.mjs move-ports).
+  awk -v by=$((100 * lane)) '/^(port|shadow_port) = [0-9]+$/ { $3 += by } 1' "$config" > "$config.tmp"
+  mv "$config.tmp" "$config"
+  sed -i -e "s/^project_id = .*/project_id = \"repo-lane-$lane\"/" \
     -e "s/^inspector_port = 8083$/inspector_port = $((8083 + lane))/" -e "s#\(127\.0\.0\.1\|localhost\):3000\b#\1:$((3000 + lane))#g" \
     -e '/^\[\(studio\|analytics\|edge_runtime\)\]$/,/^enabled = / s/^enabled = true$/enabled = false/' \
-    "$tmp_dir/supabase/config.toml"
+    "$config"
 fi
 # A first start applies the migrations and the seed itself; a stack whose database already exists is rebuilt.
 project=$(sed -n 's/^project_id = "\(.*\)"$/\1/p' "$tmp_dir/supabase/config.toml")

@@ -5,6 +5,7 @@ import { appOrigin, lanes, originOf, serverLogOf } from './tests/lane.mjs';
 process.env.SETUP_CODE ||= randomBytes(32).toString('hex');
 // Each run's spec files restore the seed before they start (tests/fresh-seed.ts); the workers inherit this run's name.
 process.env.GTMWORKS_TEST_RUN ||= randomBytes(8).toString('hex');
+const hostedElsewhere = process.env.GTMWORKS_HOSTED_ELSEWHERE === 'true';
 export default defineConfig({
   testDir: './tests',
   testMatch: '*.spec.ts',
@@ -36,9 +37,12 @@ export default defineConfig({
     // The navigation time budgets are measured with the machine to themselves (#69): `measured` is the teardown of an
     // empty anchor that `visual` depends on, so it runs alone after every functional test, and before first run.
     { name: 'measured-anchor', testMatch: /^$/, dependencies: ['seeded'], teardown: 'measured' },
-    { name: 'visual', testMatch: 'visual.spec.ts', outputDir: 'test-results/screenshots/visual', dependencies: ['measured-anchor'], teardown: 'functional' },
+    // CI runs the compared screens and the measured budgets in a job of their own on ubuntu-latest (`./ci.sh visual`):
+    // the screens' images are made there, and the budgets need a machine no other job shares. `ci.sh integration` then
+    // leaves both projects empty, so they still order the projects around them.
+    { name: 'visual', testMatch: hostedElsewhere ? /^$/ : 'visual.spec.ts', outputDir: 'test-results/screenshots/visual', dependencies: ['measured-anchor'], teardown: 'functional' },
     { name: 'functional', testIgnore: ['visual.spec.ts', 'first-run.spec.ts', 'navigation.spec.ts', '**/proxy/**'] },
-    { name: 'measured', testMatch: 'navigation.spec.ts', workers: 1 },
+    { name: 'measured', testMatch: hostedElsewhere ? /^$/ : 'navigation.spec.ts', workers: 1 },
     // Empty-install scenarios mutate the whole local database and run only after seeded functional tests finish.
     { name: 'first-run', testMatch: 'first-run.spec.ts' },
   ],

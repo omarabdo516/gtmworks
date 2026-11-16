@@ -5,6 +5,10 @@ cd "$(dirname "$0")"
 # every other check uses. Each lane starts in the background and leaves its exit status beside its log.
 lanes=${GTMWORKS_TEST_LANES:-1}
 [[ $lanes =~ ^[1-7]$ ]] || { echo 'GTMWORKS_TEST_LANES must be 1 to 7' >&2; exit 2; }
+# The self-hosted runner has no sudo for the system packages and keeps its browsers between runs.
+install_chromium() {
+  if [[ "${RUNNER_ENVIRONMENT:-}" == self-hosted ]]; then npx playwright install chromium; else npx playwright install --with-deps chromium; fi
+}
 start_lanes() {
   mkdir -p playwright-report
   for ((n = 0; n < lanes; n++)); do
@@ -28,6 +32,7 @@ case "${1:-check}" in
   bash ci.sh static
   bash ci.sh components
   bash ci.sh database
+  bash ci.sh visual
   bash ci.sh integration
   ;;
  static)
@@ -75,7 +80,7 @@ PY
   if [[ "${CI:-}" == "true" ]]; then
     npm ci
   fi
-  npx playwright install --with-deps chromium
+  install_chromium
   npm run test:components -- ${SHARD:+--shard="$SHARD"}
   ;;
  database)
@@ -92,7 +97,7 @@ PY
  integration)
   if [[ "${CI:-}" == "true" ]]; then
     npm ci
-    npx playwright install --with-deps chromium
+    install_chromium
   fi
   start_lanes
   wait_lanes
@@ -107,22 +112,25 @@ PY
   npm run test:e2e:proxy
   bash scripts/local-db.sh
   wait "$build_pid" || { cat playwright-report/build.log >&2; echo 'the browser suite build failed' >&2; exit 1; }
-  GTMWORKS_WEB_PREBUILT=true GTMWORKS_TEST_LANES=$lanes npm run test:e2e
+  # The compared screens and the measured budgets run on their own (`ci.sh visual`), on a GitHub-hosted runner.
+  GTMWORKS_WEB_PREBUILT=true GTMWORKS_TEST_LANES=$lanes GTMWORKS_HOSTED_ELSEWHERE=true npm run test:e2e
   ;;
  visual)
-  # The compared screens alone, on lane 0 as the seed builds it: no journeys, no proxy suite, no image (#213).
+  # The compared screens alone, on lane 0 as the seed builds it: no journeys, no proxy suite, no image (#213). Then the
+  # navigation time budgets, which need a machine of their own (#224).
   if [[ "${CI:-}" == "true" ]]; then
     npm ci
-    npx playwright install --with-deps chromium
+    install_chromium
   fi
   bash scripts/local-db.sh
   GTMWORKS_TEST_LANES=1 npm run test:visual
+  GTMWORKS_TEST_LANES=1 npx playwright test --project=measured --no-deps
   ;;
  visual-update)
   # Rewrites only the approved screen images that changed. Run it where CI runs: the images are made for that system.
   if [[ "${CI:-}" == "true" ]]; then
     npm ci
-    npx playwright install --with-deps chromium
+    install_chromium
   fi
   bash scripts/local-db.sh
   npm run test:visual:update

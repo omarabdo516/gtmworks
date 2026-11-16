@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { inbox, mail } from '../lane.mjs';
 import { signIn } from '../sign-in';
 
 // Everything here runs against the production image behind a reverse proxy on https://app.gtmworks.test.
@@ -27,15 +28,15 @@ test('the page is served over https from the public host name through the proxy'
 test('Send invitation shows its confirmation, the address gets the link and the link signs the member in', async ({ page, context }) => {
   watch(page);
   await signIn(page, 'manager@example.com', '/c/rs-learning/settings/members');
-  await page.request.delete('http://127.0.0.1:54324/api/v1/messages');
+  await page.request.delete(inbox);
   await page.getByLabel('Email').fill('proxy-invited@example.com');
   await page.getByRole('button', { name: 'Send invitation' }).click();
   await expect(page.getByRole('status').filter({hasText:'An invitation link was sent'})).toContainText('An invitation link was sent', { timeout: 15000 });
   let link = '';
   for (let i = 0; i < 30 && !link; i++) {
-    const mailbox = await (await page.request.get('http://127.0.0.1:54324/api/v1/messages')).json();
+    const mailbox = await (await page.request.get(inbox)).json();
     const item = mailbox.messages?.find((m: { To: { Address: string }[] }) => m.To.some(to => to.Address === 'proxy-invited@example.com'));
-    if (item) { const message = await (await page.request.get(`http://127.0.0.1:54324/api/v1/message/${item.ID}`)).json(); link = (message.HTML || message.Text).match(/https?:\/\/[^"\s<>]+/g)?.find((url: string) => url.includes('/verify'))?.replaceAll('&amp;', '&') || ''; }
+    if (item) { const message = await (await page.request.get(`${mail}/api/v1/message/${item.ID}`)).json(); link = (message.HTML || message.Text).match(/https?:\/\/[^"\s<>]+/g)?.find((url: string) => url.includes('/verify'))?.replaceAll('&amp;', '&') || ''; }
     if (!link) await page.waitForTimeout(1000);
   }
   expect(link).toBeTruthy();
@@ -52,12 +53,12 @@ test('Send invitation shows its confirmation, the address gets the link and the 
 test('inviting someone who already has an account sends them a sign-in link', async ({ page }) => {
   watch(page);
   await signIn(page, 'manager@example.com', '/c/rs-learning/settings/members');
-  await page.request.delete('http://127.0.0.1:54324/api/v1/messages');
+  await page.request.delete(inbox);
   await page.getByLabel('Email').fill('multi@example.com');
   await page.getByRole('button', { name: 'Send invitation' }).click();
   await expect(page.getByRole('status').filter({hasText:'An invitation link was sent'})).toContainText('An invitation link was sent', { timeout: 15000 });
   await expect(async () => {
-    const mailbox = await (await page.request.get('http://127.0.0.1:54324/api/v1/messages')).json();
+    const mailbox = await (await page.request.get(inbox)).json();
     expect(mailbox.messages?.some((m: { To: { Address: string }[] }) => m.To.some(to => to.Address === 'multi@example.com'))).toBe(true);
   }).toPass({ timeout: 30000 });
 });

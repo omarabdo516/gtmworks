@@ -7,6 +7,16 @@
 # run starts the browser and install suites only through inputs that default to off. Required `check`
 # (scripts/ci-verdict.mjs) counts a suite nobody asked for as passed when it was skipped, and is red on any failed or
 # cancelled stage.
+# `integration` runs on the runner the repo variable CI_RUNNER names (#224): Omar's PC (`pc-ci`) while ci-router keeps
+# it there, else ubuntu-latest. A pull request from a fork runs it on ubuntu-latest, where every other job runs. The PC
+# runs one job at a time, so only the job it shortens goes there: `database` and `install` take as long or longer on it
+# and would queue `integration` behind them. The compared screens and the measured navigation budgets (`visual`) stay on
+# ubuntu-latest too: the screens' approved images are made there (the PC renders text a few pixels differently), and the
+# budgets need a machine no other job shares. The stack's ports lie in Linux's range for outgoing connections, so on a
+# GitHub-hosted runner a job reserves them before it starts the stack (#225). The PC shares its Docker with other
+# repositories' CI: there the stack's ports move to a block of their own above that range, the job removes what this
+# repository's runs start before and after it (scripts/ci-runner.mjs), and ~/.npm, the browsers and the image layers
+# stay on the machine.
 name: CI
 
 on:
@@ -130,6 +140,11 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      - name: reserve the stack's ports
+        if: ${{ runner.environment == 'github-hosted' }}
+        run: |
+          sudo sysctl -w net.ipv4.ip_local_reserved_ports="$(node scripts/ci-runner.mjs reserved-ports)"
+          sysctl net.ipv4.ip_local_reserved_ports
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -137,48 +152,102 @@ jobs:
       - name: database
         run: ./ci.sh database
 
-  # The whole-app browser suite: the production-shaped proxy suite in the image, the compared screens and the journeys.
-  # When `changes` says `visual` (screens alone, #213), only the compared screens run, with no image.
-  integration:
+  # The compared screens (the `visual` Playwright project) on lane 0 as the seed builds it, on the runner their approved
+  # images are made on, then the measured navigation budgets. When `changes` says `visual` (screens alone, #213), this is all of the browser suite that runs.
+  visual:
     needs: [changes]
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.integration != 'false') }}
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: reserve the stack's ports
+        if: ${{ runner.environment == 'github-hosted' }}
+        run: |
+          sudo sysctl -w net.ipv4.ip_local_reserved_ports="$(node scripts/ci-runner.mjs reserved-ports)"
+          sysctl net.ipv4.ip_local_reserved_ports
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: visual
+        run: ./ci.sh visual
+      # A failing comparison writes its expected, actual and difference images here.
+      - name: upload route screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: route-screenshots
+          path: test-results/screenshots/
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-screens
+          path: playwright-report/html/
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # The rest of the whole-app browser suite: the production-shaped proxy suite in the image and the journeys.
+  integration:
+    needs: [changes]
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || (needs.changes.outputs.integration != 'false' && needs.changes.outputs.integration != 'visual')) }}
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.CI_RUNNER || 'ubuntu-latest' }}
     # main's browser suite already took 24 of 25 minutes (run 43398274074); the board, settings, log and numbers specs
     # add to it.
     timeout-minutes: 40
     permissions:
       contents: read
-    env:
-      # One browser test lane per worker, each on a whole stack of its own (tests/lane.mjs, #69).
-      GTMWORKS_TEST_LANES: "4"
     steps:
       - uses: actions/checkout@v4
+      - name: reserve the stack's ports
+        if: ${{ runner.environment == 'github-hosted' }}
+        run: |
+          sudo sysctl -w net.ipv4.ip_local_reserved_ports="$(node scripts/ci-runner.mjs reserved-ports)"
+          sysctl net.ipv4.ip_local_reserved_ports
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
+          cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
+      - name: clear an earlier run and move the stack's ports
+        if: ${{ runner.environment != 'github-hosted' }}
+        # The PC's Docker daemon sees the checkout but not this job's /tmp, so every file a script hands to a container
+        # (mktemp, os.tmpdir()) is written inside the checkout; the next checkout's clean removes it.
+        run: |
+          node scripts/ci-runner.mjs cleanup
+          node scripts/ci-runner.mjs move-ports 640
+          mkdir -p "$GITHUB_WORKSPACE/.ci-tmp"
+          echo "TMPDIR=$GITHUB_WORKSPACE/.ci-tmp" >> "$GITHUB_ENV"
+      # One browser test lane per worker, each on a whole stack of its own (tests/lane.mjs, #69): four on a GitHub-hosted
+      # runner, and on the PC as many as its CPUs and free memory carry.
+      - name: choose the browser test lanes
+        run: node scripts/ci-runner.mjs lanes "$RUNNER_ENVIRONMENT" >> "$GITHUB_ENV"
+      # On the PC the image builds on its own Docker, whose layer cache stays between runs.
       - uses: docker/setup-buildx-action@v3
-        if: ${{ needs.changes.outputs.integration != 'visual' }}
+        if: ${{ runner.environment == 'github-hosted' }}
       - name: build image (layer cache)
-        if: ${{ needs.changes.outputs.integration != 'visual' }}
         uses: docker/build-push-action@v6
         with:
           context: .
           load: true
           push: false
           tags: gtmworks:ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: ${{ runner.environment == 'github-hosted' && 'type=gha' || '' }}
+          cache-to: ${{ runner.environment == 'github-hosted' && 'type=gha,mode=max' || '' }}
       - name: integration
         env:
           CI_IMAGE_PREBUILT: "true"
-        run: ./ci.sh ${{ needs.changes.outputs.integration == 'visual' && 'visual' || 'integration' }}
-      # The screenshots tests write (failing screen comparisons, card and phone checks) are uploaded so a review can see them.
-      - name: upload route screenshots
+        run: ./ci.sh integration
+      # The screenshots the journeys write (card and phone checks) are uploaded so a review can see them.
+      - name: upload journey screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: route-screenshots
+          name: journey-screenshots
           path: test-results/screenshots/
           if-no-files-found: ignore
           retention-days: 14
@@ -191,6 +260,16 @@ jobs:
           path: playwright-report/html/
           if-no-files-found: ignore
           retention-days: 30
+      # What the lanes used, so the lane count rests on a measurement: the job's own memory (app servers, workers,
+      # Chromium) and each lane's Supabase stack, which runs under the Docker daemon outside the job's memory limit.
+      - name: memory the lanes used
+        if: ${{ always() && runner.environment != 'github-hosted' }}
+        run: |
+          echo "the runner's memory group, peak since it started: $(( $(cat "/sys/fs/cgroup$(sed -n 's/^0:://p' /proc/self/cgroup)/memory.peak" 2> /dev/null || echo 0) / 1048576 )) MiB"
+          docker stats --no-stream --format '{{.Name}} {{.MemUsage}}' | grep -E '_repo(-lane-[0-9]+)? ' || true
+      - name: remove what this run started
+        if: ${{ always() }}
+        run: node scripts/ci-runner.mjs cleanup
 
   install:
     needs: [changes]
@@ -578,7 +657,7 @@ jobs:
         run: docker rm -fv install-docker || true
 
   check:
-    needs: [changes, static, components, database, integration, install]
+    needs: [changes, static, components, database, visual, integration, install]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     permissions:
@@ -593,7 +672,10 @@ jobs:
           COMPONENTS_RESULT: ${{ needs.components.result }}
           DATABASE_RUN: ${{ needs.changes.outputs.database }}
           DATABASE_RESULT: ${{ needs.database.result }}
-          INTEGRATION_RUN: ${{ needs.changes.outputs.integration }}
+          VISUAL_RUN: ${{ needs.changes.outputs.integration }}
+          VISUAL_RESULT: ${{ needs.visual.result }}
+          # Screens alone (integration=visual) ask for the compared screens only.
+          INTEGRATION_RUN: ${{ needs.changes.outputs.integration == 'visual' && 'false' || needs.changes.outputs.integration }}
           INTEGRATION_RESULT: ${{ needs.integration.result }}
           INSTALL_RUN: ${{ needs.changes.outputs.install }}
           INSTALL_RESULT: ${{ needs.install.result }}
