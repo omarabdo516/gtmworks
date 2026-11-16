@@ -22,6 +22,7 @@ const paths = {
  plus: <path d="M12 5v14M5 12h14"/>,
  forward: <path d="M15 6l-6 6 6 6"/>,
  back: <path d="M9 6l6 6-6 6"/>,
+ pencil: <><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></>,
 };
 export type SettingsIconName = keyof typeof paths;
 // `forward` points where reading goes (left in Arabic), `back` the other way; English swaps them, as the reference does.

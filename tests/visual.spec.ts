@@ -107,6 +107,8 @@ const readyBy: Record<string, string> = {
   'request-waiting': '.ac-card--req',
   'request-made': '[data-request="made"]',
   'request-declined': '[data-request="declined"]',
+  knowledge: '.know-meta time:not([data-utc])',
+  'knowledge-empty': '.know-empty',
 };
 
 // The states the seed does not hold: first run's two (#9), RS Learning with no answer yet and a new workspace's Lead with
