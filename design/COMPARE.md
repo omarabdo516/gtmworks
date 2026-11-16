@@ -56,6 +56,8 @@ The prototype has no URL routes. Its sidebar switches between four views (`data-
 | `log` | Sidebar, Activity log | `/c/rs-learning/log` |
 | `card-log` | Board, the first card, its sheet's Log tab: the card's log with the note field (#22, #116) | `/c/rs-learning/work/board?card=1` |
 | `agent-chat` | The Ads Agent's tile in the sidebar: a Conversation with an Agent other than Lead, with the private line of a team at its top (#25) | none |
+| `agent-files` | That chat's details, Files tab: the files Ads works from (#21) | `/c/rs-learning/chat/61000000-0000-0000-0000-000000000002?tab=files` (the fixture's Ads; its files are the ones of its Cards and of the signed-in person's own Conversations with it) |
+| `agent-screen` | The SEO Agent's chat, details on Activity: its screen card, asleep (#21). The product always shows the empty frame: the pinned Engine shows no Agent's screen | `/c/rs-learning/chat/61000000-0000-0000-0000-000000000002` (the fixture's Ads) |
 | `settings` | Account menu, Settings: the overlay's Company section | `/c/rs-learning/settings` |
 | `agents` | Settings, Agents | `/c/rs-learning/settings?section=agents` |
 | `agent` | Settings, Agents, Lead: one Agent's page | `/c/rs-learning/settings?agent=61000000-0000-0000-0000-000000000001` (the fixture's Lead) |

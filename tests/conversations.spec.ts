@@ -496,9 +496,9 @@ test('the Agent details panel, the chat search, the account menu sections and th
   await expect(details.locator('.dp-id__role')).toHaveText('Marketing · Idle');
   await expect(details.getByRole('link',{name:'Settings for Mona',exact:true})).toHaveAttribute('href','/c/rs-learning/agents');
   const tabs=details.locator('.dp-tabs button');
-  await expect(tabs).toHaveText(['Activity','Tasks','Files · Soon','Memory · Soon','Log']);
-  for(const name of ['Files','Memory']) { const tab=tabs.filter({hasText:name}); await expect(tab).toHaveAttribute('aria-disabled','true'); await expect(tab).toHaveAttribute('title','Soon'); }
-  for(const name of ['Activity','Tasks','Log']) await expect(tabs.filter({hasText:name})).not.toHaveAttribute('aria-disabled','true');
+  await expect(tabs).toHaveText(['Activity','Tasks','Files','Memory · Soon','Log']);
+  const memory=tabs.filter({hasText:'Memory'}); await expect(memory).toHaveAttribute('aria-disabled','true'); await expect(memory).toHaveAttribute('title','Soon');
+  for(const name of ['Activity','Tasks','Files','Log']) await expect(tabs.filter({hasText:name})).not.toHaveAttribute('aria-disabled','true');
   // The title pill hides and shows the details; the close button hides them and gives the focus back to the pill.
   await pill.click(); await expect(details).toBeHidden(); await expect(pill).toHaveAttribute('aria-expanded','false');
   await pill.click(); await expect(details).toBeVisible();

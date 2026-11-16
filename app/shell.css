@@ -3,7 +3,7 @@
    that the sections inside the shell still use. */
 .gw {
   --gw-bg-chrome: #FCFCFC; --gw-bg-sidebar: #F5F5F5; --gw-bg-pane: #FFFFFF;
-  --gw-bg-hover: #1C1C1C0F; --gw-bg-active: #1C1C1C14; --gw-bg-tertiary: #1C1C1C0F; --gw-bg-secondary-hover: #1C1C1C1A;
+  --gw-bg-hover: #1C1C1C0F; --gw-bg-active: #1C1C1C14; --gw-bg-tertiary: #1C1C1C0F; --gw-bg-secondary-hover: #1C1C1C1A; --gw-bg-subtle: #1C1C1C08;
   --gw-bg-elevated-hover: #F1F1F1; --gw-bg-active-solid: #E9E9E9; --gw-bg-scrim: #00000066;
   --gw-text-1: #1C1C1C; --gw-text-2: #1C1C1CB8; --gw-text-3: #1C1C1CA3; --gw-text-4: #1C1C1C80;
   --gw-border-1: #1C1C1C3D; --gw-border-2: #1C1C1C1F; --gw-border-3: #1C1C1C14;
@@ -24,7 +24,7 @@
 }
 :root[data-theme="dark"] .gw {
   --gw-bg-chrome: #121212; --gw-bg-sidebar: #0E0E0E; --gw-bg-pane: #161616;
-  --gw-bg-hover: #F5F5F50F; --gw-bg-active: #F5F5F514; --gw-bg-tertiary: #F5F5F50F; --gw-bg-secondary-hover: #F5F5F51A;
+  --gw-bg-hover: #F5F5F50F; --gw-bg-active: #F5F5F514; --gw-bg-tertiary: #F5F5F50F; --gw-bg-secondary-hover: #F5F5F51A; --gw-bg-subtle: #F5F5F505;
   --gw-bg-elevated-hover: #2C2C2C; --gw-bg-active-solid: #262626; --gw-bg-scrim: #000000B2;
   --gw-text-1: #F5F5F5; --gw-text-2: #F5F5F5B8; --gw-text-3: #F5F5F599; --gw-text-4: #F5F5F58A;
   --gw-border-1: #F5F5F538; --gw-border-2: #F5F5F51A; --gw-border-3: #F5F5F50F;
@@ -39,7 +39,7 @@
 @media (prefers-color-scheme: dark) {
   :root[data-theme="device"] .gw {
     --gw-bg-chrome: #121212; --gw-bg-sidebar: #0E0E0E; --gw-bg-pane: #161616;
-    --gw-bg-hover: #F5F5F50F; --gw-bg-active: #F5F5F514; --gw-bg-tertiary: #F5F5F50F; --gw-bg-secondary-hover: #F5F5F51A;
+    --gw-bg-hover: #F5F5F50F; --gw-bg-active: #F5F5F514; --gw-bg-tertiary: #F5F5F50F; --gw-bg-secondary-hover: #F5F5F51A; --gw-bg-subtle: #F5F5F505;
     --gw-bg-elevated-hover: #2C2C2C; --gw-bg-active-solid: #262626; --gw-bg-scrim: #000000B2;
     --gw-text-1: #F5F5F5; --gw-text-2: #F5F5F5B8; --gw-text-3: #F5F5F599; --gw-text-4: #F5F5F58A;
     --gw-border-1: #F5F5F538; --gw-border-2: #F5F5F51A; --gw-border-3: #F5F5F50F;
@@ -365,6 +365,29 @@
 .gw .details .panel-row__meta { flex: none; display: inline-flex; align-items: center; gap: 4px; font-size: var(--gw-fs-xs); color: var(--gw-text-3); }
 .gw .details .panel-row__meta--wait { color: var(--gw-wait-text); }
 .gw .details .dp-now .panel-row__t { display: flex; align-items: center; gap: 6px; }
+.gw .details .panel-row__icon { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; flex: none; color: var(--gw-text-2); }
+.gw .details .od-truncate { display: block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.gw .details .dp-file { color: var(--gw-text-1); text-decoration: none; border-radius: var(--gw-r-xs); }
+@media (hover: hover) { .gw .details .dp-file:hover { text-decoration: underline; text-underline-offset: 3px; } }
+/* The Agent's screen (design-reference: .scr, .scr__off, .scr-card, .scr-thumb), drawn in code from tokens so it follows
+   the theme. Sizes inside are container units, as the reference's are; only the empty frame is built (#21). */
+.gw .details .scr {
+  position: relative; display: grid; grid-template-rows: auto minmax(0, 1fr); width: 100%; aspect-ratio: 16 / 10;
+  container-type: size; overflow: hidden; border-radius: var(--gw-r-md); background: var(--gw-bg-pane);
+  box-shadow: var(--gw-border-2) 0 0 0 0.5px inset; color: var(--gw-text-2); text-align: start;
+}
+.gw .details .scr__bar { display: flex; align-items: center; gap: 2.4cqw; padding: 1.1cqw 1.8cqw; background: var(--gw-bg-tertiary); border-bottom: 0.5px solid var(--gw-border-3); }
+.gw .details .scr.is-off .scr__bar { opacity: .6; }
+.gw .details .scr__dots { display: inline-flex; gap: 0.8cqw; flex: none; }
+.gw .details .scr__dots i { display: block; width: 1.2cqw; height: 1.2cqw; border-radius: 50%; background: var(--gw-border-1); }
+.gw .details .scr__url { flex: 1 1 0; min-width: 0; min-height: calc(1.7cqw * 1.5 + 0.8cqw); padding: 0.4cqw 1.6cqw; border-radius: var(--gw-r-full); background: var(--gw-bg-pane); }
+.gw .details .scr__body { display: grid; min-height: 0; }
+.gw .details .scr__off {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.6cqw; padding-inline: 4cqw;
+  background: var(--gw-bg-subtle); color: var(--gw-text-3); font-size: max(2.6cqw, var(--gw-fs-xs)); line-height: 1.5; text-align: center;
+}
+.gw .details .scr__off .gw-icon { width: 7cqw; height: 7cqw; }
+.gw .details .scr-card, .gw .details .scr-thumb { display: block; border-radius: var(--gw-r-md); }
 .gw .details .link-btn { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: var(--gw-r-xs); font-size: var(--gw-fs-sm); color: var(--gw-text-2); }
 @media (hover: hover) {
   .gw .details a.panel-row:hover { background: var(--gw-bg-hover); }

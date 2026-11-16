@@ -888,5 +888,9 @@
   "sheetLogEmpty": "Nothing in this card’s log yet. Any change to it is written here on its own.",
   "sheetNoteLabel": "Write a note in the card’s log",
   "sheetNoteSend": "Add the note",
-  "sheetClose": "Close"
+  "sheetClose": "Close",
+  "agentFiles": "Files",
+  "agentFilesEmpty": "No files yet. Files from its cards and from your chats with it show here.",
+  "agentScreen": "Agent’s screen",
+  "agentScreenOff": "Nothing is running on the screen right now."
 }

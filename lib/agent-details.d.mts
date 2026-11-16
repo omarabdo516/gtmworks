@@ -3,3 +3,8 @@ export declare function agentStatus(facts: { waitingMine: boolean, running: bool
 export declare function agentTasks(cards: { id: number, title: string, stage_id: number }[], stages: { id: number, name: string, board_column?: string | null }[], checklist: { card_id: number, title: string, done: boolean }[], waitingItems: { kind: string, title: string, body: string, card_id: number | null }[]): { id: number, title: string, column: string, line: { key: string, args: string[] } | { text: string }, waiting: boolean }[];
 export declare function latestActivity<T extends { id: number, created_at: string }>(rows: T[], since: string, n?: number): T[];
 export declare function agentLogFilter(agent: string): string;
+export type DetailsTab = 'activity' | 'tasks' | 'files' | 'log';
+export declare function pickTab(value: unknown): DetailsTab;
+export declare function fileSize(bytes: number): string;
+export type AgentFile = { key: string, name: string, size: number, at: string, href: string, source: string };
+export declare function agentFiles(files: { slug: string, cards: { id: number, title: string }[], cardFiles: { id: number, name: string, size: number, created_at: string, card_id: number }[], conversationFiles: { id: number, name: string, size: number, created_at: string, conversation_id: string, agent_name: string }[], titles: Map<string, string> }): AgentFile[];

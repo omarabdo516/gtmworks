@@ -76,7 +76,7 @@ async function serve(request: NextRequest, slug: string, path: string[], agent: 
  }
  if (request.method==='GET' && path.length===4 && path[0]==='cards' && path[2]==='files' && /^\d+$/.test(path[1]) && /^\d+$/.test(path[3])) {
   // A run key got here only for its own card (the check above); a company key reads any card of its company. A file of another card or company is not found.
-  const file=await attachmentFile(db,c,Number(path[3]),Number(path[1]));
+  const file=await attachmentFile(db,c,Number(path[3]),{from:'card',card:Number(path[1])});
   return file || NextResponse.json({error:'not found'},{status:404});
  }
  if (request.method==='POST' && path[0]==='cards' && path.length===3 && (path[2]==='upload' || (path[2]==='comment' && request.headers.get('content-type')?.toLowerCase().startsWith('multipart/form-data'))) && /^\d+$/.test(path[1])) {
