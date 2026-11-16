@@ -4,6 +4,8 @@ status: accepted
 
 # Team-work rules in Conversations
 
+[ADR 0016](0016-the-engine-profile-is-the-agent.md) (#119): each Agent now has its own profile, so a note an Agent remembers reaches the people who talk to that Agent, not every Agent of the Company.
+
 Omar's rules of 2026-11-13 (a, b, c, d, g; ideas from OpenClaw, MIT, no code copied), with the lead's decisions on the review of 2026-11-14. Migrations `20261211000000_team_work` and `20261211000001_team_work_retries`. Everything in ADR 0009 and ADR 0014 still holds.
 
 ## Decision
