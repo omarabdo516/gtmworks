@@ -70,6 +70,7 @@ The prototype has no URL routes. Its sidebar switches between four views (`data-
 | `knowledge` | Settings, Company knowledge, on its first part, Brand voice (#27) | `/c/rs-learning/settings?section=knowledge` |
 | `new-agent` | Sidebar, New agent: Lead's chat with the hint line (#13) | `/c/rs-learning/chat?new=agent` |
 | `ready-roles` | New agent, then the hint line's "or pick a ready-made one": the ready-made gallery (#14) | `/c/rs-learning/chat?new=ready` (needs the fixture's Lead) |
+| `new-agent-empty` | The ready-made SEO content writer added from the gallery: a new Agent's empty chat with its sentence to try (#170) | `/c/rs-learning/chat/61000000-0000-0000-0000-000000000003` (needs the fixture's SEO & Content) |
 | `made-card` | Sidebar, the chat in which Lead made Ads (`th-made-ads`), with the new Agent's card | none (a uuid path; with the fixture pass `--built-path /c/rs-learning/conversations/62000000-0000-0000-0000-000000000002`) |
 | `draft-card` | Sidebar, the Meta campaign chat (`th-meta`), then the first angle: Ads's reply with the campaign plan's draft card under it (#136) | none (a uuid path; on the `draft-shown` visual state pass `--built-path /c/rs-learning/conversations/6d000000-0000-0000-0000-000000000003`) |
 | `review-card` | Sidebar, the team chat (`th-team`): Critic's reply with the review card of the December ad texts under it (#137) | none (a uuid path; on the `review-shown` visual state pass `--built-path /c/rs-learning/conversations/6e000000-0000-0000-0000-000000000003`) |

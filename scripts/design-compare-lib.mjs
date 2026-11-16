@@ -30,6 +30,8 @@ export const fixture = {
   file: 'scripts/design-compare-fixture.sql',
   mainAgent: '61000000-0000-0000-0000-000000000001',
   agent: '61000000-0000-0000-0000-000000000002',
+  // SEO & Content, made from the ready-made SEO content writer, with no Conversation yet (#170).
+  newAgent: '61000000-0000-0000-0000-000000000003',
   conversation: '62000000-0000-0000-0000-000000000001',
   // Omar's Conversation in which Lead made Ads (#13), as the reference's thread th-made-ads.
   madeConversation: '62000000-0000-0000-0000-000000000002',
@@ -78,6 +80,9 @@ export const screens = {
   // #14. The ready-made gallery, opened from that hint line's link. Built, it has its own address and needs a main
   // Agent: the comparison fixture's Lead (the seed alone has none, so it shows the plain chat).
   'ready-roles': { reference: { steps: [{ click: '#sb-agents [data-action="new-agent"]' }, { waitFor: '.new-hint' }, { click: '[data-action="open-gallery-alt"]' }, { waitFor: '#modal[open] .tpl' }] }, builtPath: '/c/rs-learning/chat?new=ready' },
+  // #170. A new Agent's empty chat: the reference adds the ready-made SEO content writer from the gallery and opens it.
+  // Built: the comparison fixture's SEO & Content, made from that role, which Omar has not written to.
+  'new-agent-empty': { reference: { steps: [{ click: '#sb-agents [data-action="new-agent"]' }, { waitFor: '.new-hint' }, { click: '[data-action="open-gallery-alt"]' }, { waitFor: '#modal[open] .tpl' }, { click: '[data-action="tpl-add"][data-tpl="writer"]' }, { waitFor: '#cr-name' }, { click: '[data-action="cr-create"]' }, { waitFor: '.try-one' }] }, builtPath: `/c/rs-learning/chat/${fixture.newAgent}` },
   // The Conversation in which Lead made Ads, with its card. Built: the fixture's madeConversation (pass --built-path).
   'made-card': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-made-ads"]' }, { waitFor: '.ac-card' }] }, builtPath: null },
   // #136. The Meta campaign chat (th-meta) after the first angle is chosen: Ads's reply with the campaign plan's draft card under it. Built: the
