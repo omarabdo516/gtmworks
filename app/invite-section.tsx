@@ -47,7 +47,8 @@ export function InviteSection({mode,roles,send}:{mode:'table'|'alone',roles:Invi
   const wrong=inviteError(email);
   if(wrong) { go({type:'fail',error:wrong},'inv-email'); return; }
   dispatch({type:'send'});
-  const {error}=await send(email,form.role);
+  // A send that never answers (the connection dropped) is a failed one, so the form can be used again.
+ const {error}=await send(email,form.role).catch(()=>({error:'inviteFailed'}));
   if(error) { go({type:'fail',error},'inv-email'); return; }
   toast(t('settingsInviteSent',email));
   go({type:'sent'},alone?'inv-email':'inv-toggle');

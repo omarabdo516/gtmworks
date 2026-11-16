@@ -95,6 +95,16 @@ test('a send closes the form, puts the focus back on the button, says "Invite se
  expect(email().value).toBe('');
 });
 
+test('a send that never answers says it failed and gives the form back', async () => {
+ const screen = await show('alone');
+ send.mockRejectedValue(new TypeError('Failed to fetch'));
+ await userEvent.type(email(), 'nour@rslearning.com');
+ await screen.getByRole('button', { name: 'Invite', exact: true }).click();
+ await expect.element(screen.getByText('Couldn’t send the invite. Try again.')).toBeVisible();
+ await expect.element(screen.getByRole('button', { name: 'Invite', exact: true })).toBeEnabled();
+ expect(email().value).toBe('nour@rslearning.com');
+});
+
 test('a Company worked alone keeps the form open: a send empties it and keeps the focus in the email field', async () => {
  const screen = await show('alone');
  send.mockResolvedValue({});
