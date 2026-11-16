@@ -552,7 +552,7 @@
 .gw .tool-tile--ink .gw-icon { width: 22px; height: 22px; }
 
 /* Authored text inside the English interface takes its direction from its own words. */
-[dir="ltr"] .gw :is(.head-pill__title, .thread-item .od-truncate) { unicode-bidi: plaintext; text-align: left; }
+[dir="ltr"] .gw :is(.head-pill__title, .thread-item .od-truncate, .reply-card .card__title, .reply-card .card__sub, .reply-card .kv__row dd) { unicode-bidi: plaintext; text-align: left; }
 [dir="ltr"] .gw :is(.dp-id__name, .empty-chat h2, .new-hint__t, .born span, .ac-never span, .modal__sub, .tpl__line, .tpl__hand span) { unicode-bidi: plaintext; }
 
 /* ---------- the reference's widths: a narrower sidebar and details below 1280px, the details over the chat below 1024px ---------- */

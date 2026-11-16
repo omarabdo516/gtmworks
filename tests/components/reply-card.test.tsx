@@ -29,6 +29,28 @@ test.each([
  for (const [text, direction] of texts) expect(group.getByText(text, { exact: true }).element().matches(`:dir(${direction})`), text).toBe(true);
 });
 
+// design-reference/index.html: Arabic content inside the English interface takes each line's direction from its own text
+// and keeps the interface's left edge; a label stays in its column. In the Arabic interface nothing changes.
+test.each([['en', 'left'], ['ar', 'start']] as const)('in the %s interface, the title, line and values align %s', async (language, align) => {
+ const sheets = await Promise.all(['app/tokens.css', 'app/shell.css'].map(async file => (await import(/* @vite-ignore */ `/${file}?inline`)).default as string));
+ const styles = sheets.map(css => Object.assign(document.createElement('style'), { textContent: css }));
+ document.head.append(...styles);
+ onTestFinished(() => styles.forEach(style => style.remove()));
+ const screen = await render(<LanguageProvider language={language}><div dir={language === 'ar' ? 'rtl' : 'ltr'}><div className="gw"><ReplyCard card={plan} fresh={false}/></div></div></LanguageProvider>);
+ const group = screen.getByRole('group', { name: plan.title });
+ await expect.element(group).toBeVisible();
+ const style = (text: string) => { const found = getComputedStyle(group.getByText(text, { exact: true }).element()); return [found.textAlign, found.unicodeBidi]; };
+ for (const text of [plan.title, plan.line, plan.rows[0].value]) {
+  expect(style(text)[0], text).toBe(align);
+  if (language === 'en') expect(style(text)[1], text).toBe('plaintext');
+ }
+ expect(style(plan.rows[0].label)[0], 'a label keeps its column').toBe('start');
+ if (language === 'en') {
+  const title = group.getByText(plan.title, { exact: true }).element().getBoundingClientRect();
+  expect(Math.round(title.left - group.element().getBoundingClientRect().left), 'the title starts at the card\'s left edge').toBe(16);
+ }
+});
+
 const at = '2026-06-10T09:41:00Z';
 const turns = (cards: Card[], pending: boolean): ConversationRecord => ({
  conversation: { id: 'cv-1', agent_name: 'Ads', face: 'c-1' },
