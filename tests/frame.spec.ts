@@ -6,6 +6,8 @@ import { idle } from './navigation-measure';
 import { i18n } from '../lib/i18n.mjs';
 import { sections } from '../lib/navigation';
 import { appOrigin } from './lane.mjs';
+import { motionTable } from './motion-table.mjs';
+import { computedMotion, referenceComputed, type ComputedStyle } from './motion-css.mjs';
 
 const quote=(sql:string|number)=>`'${String(sql).replaceAll("'","''")}'`;
 
@@ -15,6 +17,43 @@ async function navLabels(page:import('@playwright/test').Page) {
  await openNavigation(page);
  return page.locator('.sidebar .sb-nav .sb-item').allInnerTexts();
 }
+
+// Every button under the shell either moves as the reference's part its table row names (tests/motion-table.mjs) or
+// swaps at once; none takes app/globals.css's 160ms fade (#128). The board's own view tabs, which the reference does not
+// have, are the one exception.
+test('every button on the Conversation, the board and the settings overlay moves as its reference part or swaps at once',async({page})=>{
+ await page.setViewportSize({width:1440,height:900});
+ const rows=[...new Map(motionTable.map(row=>[row.built,row.ref])).entries()];
+ const sweep=async(where:string)=>{
+  await idle(page);
+  const buttons=await page.locator('.gw').first().evaluate((_,rows)=>[...document.querySelectorAll('.gw :is(button, .button)')].filter(button=>!button.matches('.work-toolbar .tabs .button')).map(button=>{
+   const style=getComputedStyle(button);
+   return {
+    button:`${button.tagName.toLowerCase()}.${String(button.className).trim().replaceAll(/\s+/g,'.')}[${button.getAttribute('aria-label')??button.textContent?.trim().slice(0,24)}]`,
+    refs:[...new Set(rows.filter(([built])=>button.matches(built)).map(([,ref])=>ref))],
+    style:{transitionProperty:style.transitionProperty,transitionDuration:style.transitionDuration,transitionDelay:style.transitionDelay,transitionTimingFunction:style.transitionTimingFunction,animationName:style.animationName,animationDuration:style.animationDuration,animationTimingFunction:style.animationTimingFunction} satisfies ComputedStyle,
+   };
+  }),rows);
+  expect(buttons.length,`${where} has buttons`).toBeGreaterThan(0);
+  for(const {button,refs,style} of buttons) {
+   if(refs.length) for(const ref of refs) expect.soft(computedMotion(style),`${where}: ${button} moves as the reference's ${ref}`).toEqual(referenceComputed(ref,1440));
+   else expect.soft(style.transitionDuration,`${where}: ${button} has no row and swaps at once`).toMatch(/^0s(, 0s)*$/);
+  }
+ };
+ await signIn(page,'omar@example.com','/c/rs-learning/chat');
+ const pill=page.locator('#btn-details');
+ if(await pill.getAttribute('aria-expanded')!=='true') await pill.click();
+ await expect(page.locator('.details .dp-tabs')).toBeVisible();
+ await page.locator('.sidebar #btn-me').click();
+ await expect(page.getByRole('menu')).toBeVisible();
+ await sweep('the Conversation');
+ await page.goto('/c/rs-learning/work/board');
+ await expect(page.locator('.board-view')).toBeVisible();
+ await sweep('the board');
+ await page.goto('/c/rs-learning/settings');
+ await expect(page.locator('.sov')).toBeVisible();
+ await sweep('the settings overlay');
+});
 
 // The sections the reference has no page for yet open by their address and say so, and a settings page's trail leads
 // back to Settings. The rest of each address's shell is checked by the Viewer's walk below and by language.spec.ts.
