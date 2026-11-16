@@ -178,6 +178,22 @@ test('show_draft asks the database to show the draft as the model wrote it, trim
  assert.deepEqual(fake.agentReads,[]);
 });
 
+// #137: as show_draft's, and a verdict reaches the database only as the model's true or false; a review with no texts or no
+// decision still goes to the database, which alone refuses it.
+test('show_review asks the database to show the review as the model wrote it, trimmed, with each verdict only when it is true or false, and the Engine is not asked',async()=>{
+ const {fake,rpcs,call}=harness({},{state:'shown',card:43});
+ for(const args of /** @type {unknown[]} */([null,'Review'])) assert.deepEqual(await call('show_review',args),{state:'ignored'},JSON.stringify(args));
+ assert.deepEqual(await call('show_review',{title:' مراجعة نصوص إعلانات ديسمبر ',line:'3 نصوص · Meta Ads\n',items:[{text:' أضمن طريق لأول وظيفة محاسبة',fine:false,note:'«أضمن» وعد مقدرش نثبته. '}],decision:' 2 جاهزين'}),{state:'shown',card:43});
+ await call('show_review',{title:'Review',line:'Texts',items:[{text:'Hook',fine:'true',note:'Fine'},{text:'Hook\u0000',fine:1,note:7},'Hook',{text:'Hook',fine:true,note:'Fine \ud83d'}],decision:'Done'});
+ await call('show_review',{title:'Review',line:'Texts',items:'Hook',decision:'Done'});
+ await call('show_review',{title:'Review',line:'Texts',items:[{text:'Hook',fine:true,note:'Fine'}]});
+ const sent=(/** @type {string|null} */ title,/** @type {object} */ content)=>['agent_show_card',{conversation:'conversation-1',run:'run-1',call:'call-0',kind:'review',title,content}];
+ assert.deepEqual(rpcs,[sent('مراجعة نصوص إعلانات ديسمبر',{line:'3 نصوص · Meta Ads',items:[{text:'أضمن طريق لأول وظيفة محاسبة',fine:false,note:'«أضمن» وعد مقدرش نثبته.'}],decision:'2 جاهزين'}),
+  sent('Review',{line:'Texts',items:[{text:'Hook',fine:null,note:'Fine'},{text:null,fine:null,note:null},{text:null,fine:null,note:null},{text:'Hook',fine:true,note:null}],decision:'Done'}),
+  sent('Review',{line:'Texts',items:null,decision:'Done'}),sent('Review',{line:'Texts',items:[{text:'Hook',fine:true,note:'Fine'}],decision:null})]);
+ assert.deepEqual(fake.agentReads,[]);
+});
+
 test('an Engine is ready for a new Agent only when it has the Company\'s profile ready',async()=>{
  const {fake,engine}=harness();
  assert.equal(await engineReady(engine,profile),'engineNotReady');
@@ -197,4 +213,5 @@ test('the tool texts a run may already be pinned with stay byte for byte as they
   suggest_rule:'b968872c1d39b12cceba952c080a66432d778dba12b77f1e155c032495a3ac2c',
  });
  assert.equal(sha(specs.show_draft),'14f3e489f8903145db328693857952e95f34678a9071a2b50a48f1180ff4754c','show_draft (#136)');
+ assert.equal(sha(specs.show_review),'5370ac820042bd31ca7cb07dc9a1b7e7002a9e43427ed9ebb33fd6fd926dc9e1','show_review (#137)');
 });
