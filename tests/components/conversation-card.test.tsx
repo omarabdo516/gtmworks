@@ -55,9 +55,9 @@ test('the chat says once, under the Agent\'s first reply, that its Card went on 
  expect(pill()!.querySelector('.dot')!.className).toBe('dot dot--idle');
  // The reference's motion: colours and the press ease over the fast duration, and a press gives a little.
  const motion = getComputedStyle(pill()!);
- expect(motion.transitionProperty).toBe('background-color, box-shadow, color, transform');
- expect(motion.transitionDuration).toBe('0.15s');
- expect(motion.transitionTimingFunction).toBe('cubic-bezier(0.2, 0, 0, 1)');
+ expect(motion.transitionProperty).toBe('background-color, box-shadow, color, border-color, transform');
+ expect(motion.transitionDuration).toBe('0.15s, 0.15s, 0.15s, 0.15s, 0.15s');
+ expect(new Set(motion.transitionTimingFunction.split(/,\s*(?=cubic)/))).toEqual(new Set(['cubic-bezier(0.2, 0, 0, 1)']));
 });
 
 test('a chat with no Card on the board has no pill and no line', async () => {
