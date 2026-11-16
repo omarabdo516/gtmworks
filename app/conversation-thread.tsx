@@ -90,9 +90,16 @@ export function useConversationRecord({company,initial}:{company:string,initial:
 // person's on the end side, with every card and line the Conversation has; then whether the Agent is working, and for
 // whom, or that the reply failed. While the Agent works, a message sent meanwhile waits as its sender's next turn
 // (marked as the reference marks a queued message).
-export function ConversationTurns({slug,record}:{slug:string,record:ConversationRecord}) {
+// A question the Agent waits on (#138) is answered from its card: a pick goes to the waiting Run, and the record is asked
+// for again at once. While it waits, the Agent is not shown working.
+export function ConversationTurns({slug,company,record,asked}:{slug:string,company:string,record:ConversationRecord,asked:()=>void}) {
  const {t,language}=useI18n(); const {c,cb}=useConversationText();
  const {conversation,messages,pending,failed,working}=record;
+ const answer=async(card:number,choice:number,answerKey:string)=>{
+  const failure=await postMessage({company,conversation:conversation.id,intent:'answer',card,choice,answerKey});
+  if(!failure) asked();
+  return failure;
+ };
  // A card an Agent shows while the chat is open rises in once (design-reference: card-in); those already there do not.
  const [drawnCards]=useState(()=>new Set(replyCardIds(messages)));
  const time=(value:string)=>new Date(value).toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit'});
@@ -109,9 +116,9 @@ export function ConversationTurns({slug,record}:{slug:string,record:Conversation
    <div className="sender">{face(20)}<bdi>{message.author_name}</bdi><time className="sender__time" dateTime={message.created_at}>{time(message.created_at)}</time></div>
    {message.body&&<div className="bubble bubble--agent" dir="auto">{message.body}</div>}
    {message.cards?.map(card=>card.kind==='made'?<MadeCard key={card.agent.id} slug={slug} agent={card.agent}/>:card.kind==='request'?<RequestCard key={`request${card.request.id}`} slug={slug} request={card.request}/>
-    :<ReplyCard key={`reply${card.card.id}`} card={card.card} fresh={!drawnCards.has(card.card.id)}/>)}
+    :<ReplyCard key={`reply${card.card.id}`} card={card.card} fresh={!drawnCards.has(card.card.id)} answer={answer}/>)}
   </li>)}</ol>
-  {pending&&<p className="thinking convo-status" role="status">{working?c('conversationWorkingFor',conversation.agent_name,working):t('conversationWorking',conversation.agent_name)}</p>}
+  {pending&&!record.asking&&<p className="thinking convo-status" role="status">{working?c('conversationWorkingFor',conversation.agent_name,working):t('conversationWorking',conversation.agent_name)}</p>}
   {failed&&<p className="note convo-status" role="alert">{t('conversationReplyFailed')}</p>}
  </>;
 }

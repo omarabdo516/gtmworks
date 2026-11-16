@@ -66,6 +66,15 @@ test('an Agent reviewed, named by the review\'s title, with how many texts are f
  }
 });
 
+// #138: the person who answered is the row's actor; the row keeps the question and the answer, privately.
+test('a person answered an Agent\'s question: the Agent is named, the question is the object and the answer what it went to, in both languages', () => {
+ const answered = describeEntry({ subject: 'agent', action: 'agent_question_answered', agent_id: lead, details: { question: { text: 'اختار زاوية الإعلان', answer: 'من خريج لمحاسب شغال' }, private: true } }, { agentName: () => 'Ads' });
+ assert.deepEqual([answered.act, answered.obj, answered.from, answered.to], [['logActQuestionAnswered', { text: 'Ads' }], 'اختار زاوية الإعلان', undefined, { text: 'من خريج لمحاسب شغال' }]);
+ assert.deepEqual(['en', 'ar'].map(language => i18n(language).t('logActQuestionAnswered', 'Ads')), ['answered Ads’s question', 'جاوب سؤال Ads']);
+ const bare = describeEntry({ subject: 'agent', action: 'agent_question_answered', agent_id: lead, details: { question: { text: 7 } } }, { agentName: () => 'Ads' });
+ assert.deepEqual([bare.act, bare.obj, bare.to], [['logActQuestionAnswered', { text: 'Ads' }], undefined, undefined]);
+});
+
 test('an Agent called in a note replies in the log, with its reply as the note under the line (#22)', () => {
  const reply = describeEntry({ subject: 'card', action: 'note_reply', agent_id: lead, body: 'Here is the draft.', details: { reply_to: 12 } });
  assert.deepEqual([reply.act, reply.note, reply.from, reply.to], [['logActNoteReply'], 'Here is the draft.', undefined, undefined]);

@@ -28,7 +28,7 @@ export default function ConversationView({slug,agent,details,company,conversatio
   <div className="transcript"><div className="transcript__col">
    {team&&<PrivateLine agent={conversation.agent_name}/>}
    {welcome&&agent&&<LeadWelcome agent={agent} suggest={writer?text=>setDraft(current=>({text,n:(current?.n||0)+1})):undefined}/>}
-   <ConversationTurns slug={slug} record={record}/>
+   <ConversationTurns slug={slug} company={company} record={record} asked={asked}/>
   </div></div>
   <div className="composer-area"><ConversationComposer company={company} record={record} writer={writer} asked={asked} draft={draft} usage/></div>
  </div>{agent&&details&&<AgentDetails panel={panel} agent={agent} details={details} settingsHref={`/c/${slug}/agents`}/>}</div>;

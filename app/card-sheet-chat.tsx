@@ -72,7 +72,7 @@ function SheetThread({slug,company,initial,writer,shown}:{slug:string,company:st
  useLayoutEffect(()=>{ if(stick.current&&box.current) box.current.scrollTop=box.current.scrollHeight; },[record.messages.length,record.pending,shown]);
  return <>
   <div {...panel} ref={box} onScroll={event=>{ const view=event.currentTarget; stick.current=view.scrollHeight-view.scrollTop-view.clientHeight<80; }}>
-   <div className="transcript__col"><ConversationTurns slug={slug} record={record}/></div>
+   <div className="transcript__col"><ConversationTurns slug={slug} company={company} record={record} asked={asked}/></div>
   </div>
   <div className="composer-area"><ConversationComposer company={company} record={record} writer={writer} asked={asked} usage={false}/></div>
  </>;
