@@ -1,0 +1,8 @@
+{
+  "about": "A Member's request for an Agent (#17): the first Contributor's Lead chat opened by their \"Ask for an agent\", with the hint that Lead prepares the request for the Owner.",
+  "path": "/c/rs-learning/chat?new=agent",
+  "state": "agent-request",
+  "person": "reviewer@example.com",
+  "dark": true,
+  "ready": ".new-hint"
+}

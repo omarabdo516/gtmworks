@@ -12,8 +12,9 @@ import AgentChat from './agent-chat';
 
 // Opening an Agent: its empty Conversation (design-reference: emptyChatHTML). Without an id it is the main Agent, Lead.
 // The first message starts the Conversation and the page moves to it. "New agent" opens it as ?new=agent (#13): for
-// the Owner, Lead's chat ready to type, with a hint line; no form. ?new=ready opens the ready-made gallery over it (#14),
-// for the Owner only: anyone else gets the plain chat, with no gallery drawn. ?tab=<key> opens the details on that tab.
+// the Owner, Lead's chat ready to type, with a hint line; no form. "Ask for an agent" opens the same for a Manager or a
+// Contributor (#17). ?new=ready opens the ready-made gallery over it (#14), for the Owner only: anyone else gets the
+// plain chat, with no gallery drawn. ?tab=<key> opens the details on that tab.
 export default async function AgentChatPage({params,searchParams}:{params:Promise<{slug:string,agent?:string[]}>,searchParams:Promise<{new?:string,tab?:string}>}) {
  const {t,language}=await getI18n(); const {slug,agent:parts}=await params; const {new:mode,tab}=await searchParams;
  const db=await supabase(); const {data:{user}}=await db.auth.getUser();
@@ -28,12 +29,15 @@ export default async function AgentChatPage({params,searchParams}:{params:Promis
  // Any Member but a Viewer may write (#287); the database decides, as it does for every send.
  const {data:writer}=await db.rpc('conversation_can_write',{c:company.id});
  const {items:waitingItems}=await approvalQueue(db,company.id,user.id,membership?.role||'');
- const newAgent=(mode==='agent'||mode==='ready')&&membership?.role==='owner'&&!!agent?.is_default&&!!writer;
+ const owner=membership?.role==='owner';
+ const newAgent=(mode==='agent'||(mode==='ready'&&owner))&&!!agent?.is_default&&!!writer;
+ const askOf=(newAgent||(agents?.length===1&&!!agent?.is_default&&!!writer))&&!owner?((((await db.from('members').select('people(name)').eq('company_id',company.id).eq('role','owner').is('removed_at',null)).data||[]) as unknown as {people:{name:string}|null}[])
+  .flatMap(row=>row.people?[row.people.name]:[]).sort()):null;
  const alone=company.work_mode==='alone';
  const gallery=mode==='ready'&&newAgent?{company:company.name,alone,roles:readyRoles(language,alone)}:null;
  const details=agent?await agentDetails(db,{company:company.id,agent:agent.id,slug,me:user.id,role:membership?.role||'',tab}):null;
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  return <Shell company={company} companies={companies||[]} personId={user.id} section="chat" title={t('chats')} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={waitingItems.length} agentId={agent?.id}>
-  <main className="convo-page h-full"><AgentChat slug={slug} company={company.id} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={details} writer={!!writer} team={company.work_mode==='team'} fresh={agents?.length===1} newAgent={newAgent} gallery={gallery} isNew={!!agent&&isNewFor(agent,user.id)}/></main>
+  <main className="convo-page h-full"><AgentChat slug={slug} company={company.id} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={details} writer={!!writer} team={company.work_mode==='team'} fresh={agents?.length===1} newAgent={newAgent} askOf={askOf} gallery={gallery} isNew={!!agent&&isNewFor(agent,user.id)}/></main>
  </Shell>;
 }

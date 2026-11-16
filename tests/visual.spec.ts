@@ -98,7 +98,39 @@ const seen = (n: number) => `68000000-0000-0000-0000-00000000000${n}`;
 const general = '69000000-0000-0000-0000-000000000001';
 const talk = (n: number) => `69000000-0000-0000-0000-0000000000${n}`;
 const busy = (n: number) => `69100000-0000-0000-0000-00000000000${n}`;
+const asked = (n: number) => `6b000000-0000-0000-0000-00000000000${n}`;
+const askedWith = 'عايز حد يتابع ليدز واتساب ويجهّز رسايل المتابعة، الليدز بتبرد قبل ما حد يرد عليها';
+const agentRequest = (answer: 'waiting' | 'made' | 'declined') => ({
+  admin: true as const,
+  set: `insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values
+       ('${asked(1)}','${rsLearning}','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9/p/visual-asked-lead','visual-asked-lead','visual-no-key','unreachable');
+      insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('${asked(2)}','${rsLearning}','${asked(1)}','Lead','General',true);
+      insert into public.conversations(id,company_id,person_id,agent_id,agent_name,created_at) values ('${asked(3)}','${rsLearning}','20000000-0000-0000-0000-000000000003','${asked(2)}','Lead','2026-06-10T09:40:00Z');
+      insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at) values
+       ('${rsLearning}','${asked(3)}','person','20000000-0000-0000-0000-000000000003',null,'مراجع','${askedWith}','${asked(4)}','visual-asked','2026-06-10T09:40:00Z'),
+       ('${rsLearning}','${asked(3)}','agent',null,'${asked(2)}','Lead','فهمتك. مقدرش أعمل وكلاء غير بطلب من عمر، فجهّزت طلبك زي ما هيبقى بالظبط وبعته له. لسه مفيش وكيل اتعمل، وهقولك هنا أول ما يرد.',null,'visual-asked','2026-06-10T09:41:00Z');
+      insert into public.lead_agent_requests(id,company_id,conversation_id,run_id,call_id,asked_by,asked_with,agent_name,job,apps,state,answered_by,answered_at,reason,created_at) overriding system value values
+       (9001,'${rsLearning}','${asked(3)}','visual-asked','call-0','20000000-0000-0000-0000-000000000003','${askedWith}','FollowUp','بيفرز الليدز الجديدة، ويكتب رسالة متابعة لكل واحد حسب سؤاله.',array['WhatsApp Business','Google Sheets'],
+        '${answer}',${answer === 'waiting' ? 'null,null' : `'20000000-0000-0000-0000-000000000001','2026-06-10T10:05:00Z'`},${answer === 'declined' ? `'Ads بيتابع ليدز واتساب دلوقتي، نجرّبه شهر الأول.'` : 'null'},'2026-06-10T09:41:00Z');
+      ${answer === 'made' ? `insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values
+       ('${asked(5)}','${rsLearning}','20000000-0000-0000-0000-000000000003','http://127.0.0.1:9/p/visual-asked-made','visual-asked-made','visual-no-key','unreachable');
+      insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,created_at,requested_by,apps) values
+       ('${asked(6)}','${rsLearning}','${asked(5)}','FollowUp','بيفرز الليدز الجديدة، ويكتب رسالة متابعة لكل واحد حسب سؤاله.',false,'2026-06-10T10:05:00Z','20000000-0000-0000-0000-000000000003',array['WhatsApp Business','Google Sheets']);
+      insert into public.lead_made_agents(conversation_id,run_id,call_id,company_id,agent_id,created_at) values ('${asked(3)}','visual-asked','call-0','${rsLearning}','${asked(6)}','2026-06-10T10:05:00Z');
+      insert into public.member_agent_access(company_id,person_id,agent_id) values ('${rsLearning}','20000000-0000-0000-0000-000000000003','${asked(6)}');` : ''}`,
+  unset: `delete from public.lead_agent_requests where conversation_id='${asked(3)}';
+      delete from public.lead_made_agents where conversation_id='${asked(3)}';
+      delete from public.conversation_usage where conversation_id='${asked(3)}';
+      delete from public.conversation_messages where conversation_id='${asked(3)}';
+      delete from public.conversations where id='${asked(3)}';
+      delete from public.member_agent_access where agent_id='${asked(6)}';
+      delete from public.hermes_agents where id in ('${asked(2)}','${asked(6)}');
+      delete from public.hermes_connections where id in ('${asked(1)}','${asked(5)}');`,
+});
 const screenStates: Record<string, { set: string, unset: string, admin?: true }> = {
+  'agent-request': agentRequest('waiting'),
+  'agent-request-made': agentRequest('made'),
+  'agent-request-declined': agentRequest('declined'),
   unanswered: {
     set: `update public.companies set work_mode=null where id='${rsLearning}'`,
     unset: `update public.companies set work_mode='team' where id='${rsLearning}'`,

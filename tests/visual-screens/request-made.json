@@ -1,0 +1,8 @@
+{
+  "about": "The first Contributor's Conversation once Omar made the Agent they asked for, with Lead's answer (#17).",
+  "path": "/c/rs-learning/conversations/6b000000-0000-0000-0000-000000000003",
+  "state": "agent-request-made",
+  "person": "reviewer@example.com",
+  "dark": true,
+  "ready": "[data-request=\"made\"]"
+}

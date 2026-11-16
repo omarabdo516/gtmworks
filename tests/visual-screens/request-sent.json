@@ -1,0 +1,8 @@
+{
+  "about": "The first Contributor's Conversation with Lead holding their request for FollowUp, not made yet (#17).",
+  "path": "/c/rs-learning/conversations/6b000000-0000-0000-0000-000000000003",
+  "state": "agent-request",
+  "person": "reviewer@example.com",
+  "dark": true,
+  "ready": "[data-request=\"waiting\"]"
+}
