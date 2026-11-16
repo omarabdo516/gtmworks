@@ -8,6 +8,7 @@ import type { ChannelMessage, ChannelRecord } from '@/lib/channels';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }) }));
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
+vi.mock('@/app/channel-actions', () => ({ changeChannel: vi.fn(), channelChoices: vi.fn() }));
 afterEach(() => { vi.unstubAllGlobals(); });
 
 const at = '2026-06-10T09:05:00Z';

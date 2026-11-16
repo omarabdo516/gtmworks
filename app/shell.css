@@ -173,6 +173,13 @@
 .gw .sb-add .gw-icon { width: 16px; height: 16px; }
 .gw .ch-item .gw-icon { width: 16px; height: 16px; color: var(--gw-text-3); }
 .gw .sb-item[aria-disabled="true"]:hover, .gw .sb-add[aria-disabled="true"]:hover { background: none; }
+/* Each channel's unread count (#24; design-reference: .sb-unread, .thread-item.is-unread). */
+.gw .thread-item.is-unread .od-truncate { font-weight: 600; }
+.gw .sb-unread {
+  flex: none; min-width: 20px; height: 20px; padding: 0 6px; border-radius: var(--gw-r-full);
+  background: var(--gw-primary); color: var(--gw-on-primary); font-size: var(--gw-fs-xs); font-weight: 600; font-variant-numeric: tabular-nums;
+  display: inline-flex; align-items: center; justify-content: center;
+}
 .gw .thread-group ul { margin: 0; padding: 0; list-style: none; }
 .gw .thread-item .od-truncate { flex: 1 1 0; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .gw .thread-item__time { font-size: var(--gw-fs-xs); color: var(--gw-text-3); flex: none; }
@@ -219,6 +226,7 @@
 @media (hover: hover) {
   .gw .circle-btn:hover { background: var(--gw-bg-elevated-hover); }
   .gw .sb-item:hover, .gw .agent-tile:hover, .gw .me:hover, .gw .menu__item:hover { background: var(--gw-bg-hover); }
+  .gw .sb-add:not([aria-disabled="true"]):hover { background: var(--gw-bg-hover); color: var(--gw-text-1); }
 }
 
 /* ---------- the Agent Conversation ---------- */

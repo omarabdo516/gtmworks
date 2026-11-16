@@ -453,6 +453,8 @@
   "shellChannels": "Channels",
   "shellGeneralChannel": "general",
   "shellNewChannel": "New channel",
+  "channelNewMessage": "{0} new message",
+  "channelNewMessages": "{0} new messages",
   "shellConnectApps": "Connect apps",
   "shellMoreSections": "More sections",
   "shellNoChatsMatch": "No chats match “{0}”",

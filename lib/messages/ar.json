@@ -453,6 +453,8 @@
   "shellChannels": "القنوات",
   "shellGeneralChannel": "عام",
   "shellNewChannel": "قناة جديدة",
+  "channelNewMessage": "{0} رسالة جديدة",
+  "channelNewMessages": "{0} رسايل جديدة",
   "shellConnectApps": "ربط التطبيقات",
   "shellMoreSections": "أقسام تانية",
   "shellNoChatsMatch": "مفيش محادثة فيها «{0}»",
