@@ -1,0 +1,143 @@
+import { test, expect, freshSeed, type Page } from './fresh-seed';
+import { execFileSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { fakeHermes } from './fake-hermes.mjs';
+import { signIn } from './sign-in';
+import { appOrigin, lane } from './lane.mjs';
+import { appByKey, appConfig } from '../lib/app-catalogue.mjs';
+
+// #30, Settings, Apps. RS Learning runs on its own profile in a fake Engine whose MCP catalogue and sign-ins answer as the
+// pinned release's do. The list and each app's state come from that Engine; the Owner connects an app through the
+// vendor's window, which returns through gtmworks, and disconnects it; both are in the Activity log. A Manager reads the
+// states only, and the server refuses them. No screen names the Engine or shows a file path.
+const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
+const company='10000000-0000-0000-0000-000000000001';
+const omar='20000000-0000-0000-0000-000000000001';
+const profile=`co-${company.replaceAll('-','')}`;
+const lead=randomUUID();
+// The driver reaches the management listener on port 9119 beside the Engine's address, as in the install; this file's
+// fake takes a loopback address of its own on each lane, so it never shares that port with another file.
+let fake:Awaited<ReturnType<typeof fakeHermes>>;
+const servers=()=>fake.settings.profiles.get(profile)!.config.mcp_servers||{};
+// An app as gtmworks leaves it after a sign-in: installed, its read tools and its way back written.
+const installed=(key:string)=>({url:`https://mcp.${key}.example/mcp`,auth:'oauth',...appConfig(appByKey(key)!,`${appOrigin}/api/apps/callback/${key}`).mcp_servers[key]});
+
+test.describe.configure({mode:'serial'});
+test.use({actionTimeout:15000});
+test.beforeAll(async({browser},testInfo)=>{
+ freshSeed(testInfo.file);
+ fake=await fakeHermes({host:`127.0.0.${40+lane}`,managementPort:9119});
+ fake.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
+ query(`update public.people set language='en' where id in ('${omar}','20000000-0000-0000-0000-000000000002')`);
+ const page=await browser.newPage();
+ try {
+  await signIn(page,'omar@example.com','/c/rs-learning/home');
+  const saved=await page.request.post('/api/hermes-connections',{data:{company,intent:'save',address:fake.address,profile,key:fake.settings.key}});
+  expect(saved.status()).toBe(200);
+  const connection=(await saved.json()).connection.id;
+  query(`do $$ begin
+   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('${lead}','${company}','${connection}','Lead','General',true);
+   insert into public.hermes_agent_audit(company_id,actor_id,agent_id,action,details) values ('${company}','${omar}','${lead}','PROVIDE_BUNDLED_HERMES_AGENT',jsonb_build_object('connection_id','${connection}'));
+   insert into public.company_profiles(company_id,profile,tools_level,tools_policy) select id,'${profile}',agent_level,public.engine_tool_policy() from public.companies where id='${company}'
+    on conflict (company_id) do update set profile=excluded.profile,tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false;
+  end $$;`);
+ } finally { await page.close(); }
+});
+test.afterAll(async()=>{ await fake?.close(); });
+
+const card=(page:Page,name:string)=>page.locator('.app-card').filter({has:page.getByRole('heading',{name,exact:true})});
+async function noEngineText(page:Page) {
+ const shown=await page.locator('.sov').innerText();
+ expect(shown).not.toMatch(/hermes|هيرمس|هرمس/i);
+ expect(shown).not.toMatch(/\/(opt|data|home|root|tmp)\/|config\.yaml|mcp_servers/i);
+}
+
+test('the apps and their states are the Engine\'s: connected, needing attention or not connected, then all off',async({page})=>{
+ fake.settings.catalog=fake.settings.catalog.filter(name=>name!=='gamma');
+ fake.settings.profiles.get(profile)!.config.mcp_servers={klaviyo:installed('klaviyo'),notion:installed('notion')};
+ fake.settings.appTokens.add(`${profile}:klaviyo`);
+ await signIn(page,'omar@example.com','/c/rs-learning/home');
+ await page.goto('/c/rs-learning/settings?section=apps');
+ await expect(page.locator('#sov-h')).toHaveText('Connect apps');
+ await expect(page.locator('.apps-count'),'the chip counts every app in the Connected group, as the reference does').toHaveText('2 connected');
+ const on=page.locator('.apps-sec').filter({has:page.getByRole('heading',{name:/^Connected/})});
+ await expect(on.locator('.app__name')).toHaveText(['Klaviyo','Notion']);
+ await expect(card(page,'Klaviyo').locator('.app__state')).toHaveText('Connected');
+ await expect(card(page,'Klaviyo').getByRole('link',{name:'Manage Klaviyo'})).toBeVisible();
+ await expect(card(page,'Notion').locator('.app__state')).toHaveText('Needs attention');
+ await expect(card(page,'Notion').getByRole('link',{name:'Reconnect Notion'})).toBeVisible();
+ await expect(card(page,'Canva').locator('.app__state')).toHaveText('Not connected');
+ await expect(page.locator('.app__name'),'only registry apps this catalogue offers').toHaveCount(6);
+ for(const absent of ['Gamma','Figma','Webflow','WordPress.com']) await expect(card(page,absent)).toHaveCount(0);
+ await page.locator('#apps-q').fill('كانفا');
+ await expect(page.locator('.app__name')).toHaveText(['Canva']);
+ await page.locator('#apps-q').fill('');
+ await page.locator('#apps-cat-analytics').click();
+ await expect(page.locator('.app__name')).toHaveText(['Amplitude','Mixpanel']);
+ await noEngineText(page);
+ await page.locator('#apps-cat-all').click();
+ await card(page,'Notion').getByRole('link',{name:'Reconnect Notion'}).click();
+ await expect(page.locator('.sheet__meta .badge')).toHaveText('Needs attention');
+ await expect(page.getByRole('button',{name:'Reconnect',exact:true})).toBeVisible();
+ await noEngineText(page);
+
+ fake.settings.profiles.get(profile)!.config.mcp_servers={};
+ await page.goto('/c/rs-learning/settings?section=apps');
+ await expect(page.locator('.apps-count')).toHaveText('0 connected');
+ await expect(page.locator('.app__state')).toHaveText(Array(6).fill('Not connected'));
+ fake.settings.catalog.push('gamma');
+});
+
+test('the Owner connects an app through the vendor\'s window and disconnects it; both are in the Activity log',async({page,context})=>{
+ // The vendor's sign-in page approves at once and sends the browser back to the address it was given, as a vendor does.
+ await context.route(/^https:\/\/auth\.[a-z-]+\.example\//,route=>{
+  const asked=new URL(route.request().url());
+  return route.fulfill({status:302,headers:{location:`${asked.searchParams.get('redirect_uri')}?code=vendor-code&state=${asked.searchParams.get('state')}&scope=all`}});
+ });
+ await signIn(page,'omar@example.com','/c/rs-learning/home');
+ await page.goto('/c/rs-learning/settings?section=apps');
+ await card(page,'Canva').getByRole('link',{name:'Connect Canva'}).click();
+ await expect(page.locator('#sov-h')).toHaveText('Connect Canva');
+ await expect(page.locator('.app-kv')).toContainText('You sign in through Canva’s own window. The password never passes through us.');
+ const [vendor]=await Promise.all([page.waitForEvent('popup'),page.getByRole('button',{name:'Connect',exact:true}).click()]);
+ await expect(vendor).toHaveURL(new RegExp(`/c/rs-learning/settings\\?section=apps&app=canva$`));
+ await expect(vendor.locator('.sheet__meta .badge')).toHaveText('Connected');
+ await expect(page.locator('.sheet__meta .badge')).toHaveText('Connected',{timeout:20000});
+ expect(servers().canva.tools).toEqual({include:[...appByKey('canva')!.readTools],prompts:false,resources:false});
+ expect(servers().canva.oauth.redirect_uri).toBe(`${appOrigin}/api/apps/callback/canva`);
+ expect(fake.settings.appCallbacks.map(search=>[...new URLSearchParams(search).keys()])).toEqual([['code','state']]);
+ await noEngineText(vendor);
+ await vendor.close();
+
+ await page.locator('#app-off').click();
+ await expect(page.locator('#app-off-t')).toHaveText('Disconnect Canva? Your agents won’t be able to reach it until you connect it again.');
+ await page.locator('#app-off-go').click();
+ await expect(page).toHaveURL(/\/c\/rs-learning\/settings\?section=apps$/);
+ await expect(card(page,'Canva').locator('.app__state')).toHaveText('Not connected');
+ expect(servers().canva).toBeUndefined();
+
+ expect(JSON.parse(query(`select actor_id,action,details->>'app' as app from public.company_log where company_id='${company}' and action in ('app_connected','app_disconnected') order by id`)))
+  .toEqual([{actor_id:omar,action:'app_connected',app:'canva'},{actor_id:omar,action:'app_disconnected',app:'canva'}]);
+ await page.goto('/c/rs-learning/log');
+ for(const act of ['connected','disconnected']) {
+  const row=page.locator('.lgp-body .lg-row').filter({has:page.locator('.lg-act',{hasText:new RegExp(`^${act}$`)})}).filter({has:page.locator('.lg-obj',{hasText:'Canva'})}).first();
+  await expect(row.locator('.lg-name')).toHaveText('عمر');
+ }
+});
+
+test('a Manager reads the states with no button, and the server refuses their connect and their way back',async({browser})=>{
+ const context=await browser.newContext(); const manager=await context.newPage();
+ try {
+  const flows=fake.settings.appFlows.size, callbacks=fake.settings.appCallbacks.length;
+  await signIn(manager,'manager@example.com','/c/rs-learning/home');
+  await manager.goto('/c/rs-learning/settings?section=apps');
+  await expect(manager.locator('.apps-sub')).toHaveText('Connecting apps and choosing which agents use them is done by the Owner only.');
+  await expect(card(manager,'Canva').locator('.app__state')).toHaveText('Not connected');
+  await expect(manager.locator('.app-card').getByRole('link')).toHaveCount(0);
+  const refused=await manager.request.post('/api/company-apps',{data:{company,app:'canva',action:'connect'}});
+  expect(refused.status()).toBe(403);
+  await manager.goto('/api/apps/callback/canva?code=stolen&state=guess');
+  await expect(manager).not.toHaveURL(/callback/);
+  expect([fake.settings.appFlows.size,fake.settings.appCallbacks.length]).toEqual([flows,callbacks]);
+ } finally { await context.close(); }
+});

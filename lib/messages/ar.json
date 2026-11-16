@@ -842,5 +842,9 @@
   "newAgentReadyMade": "أو اختار من الجاهزين",
   "channelNotFound": "القناة دي مش مفتوحة لك.",
   "channelNotAllowed": "دورك بيقرا القناة دي بس، ومينفعش يكتب فيها.",
-  "channelFailed": "الرسالة متبعتتش. جرّب تاني."
+  "channelFailed": "الرسالة متبعتتش. جرّب تاني.",
+  "logActAppConnected": "وصّل",
+  "logActAppDisconnected": "فصل",
+  "logAppOn": "متوصل",
+  "logAppOff": "مش متوصل"
 }

@@ -5,6 +5,7 @@ import { useI18n } from '@/lib/i18n-client';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/paperclip/ui/dialog';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { ShellIcon } from '@/components/shell-icon';
+import { AppTile } from '@/components/app-tile';
 import { newId, postMessage } from '@/app/conversation-composer';
 import type { ReadyRole } from '@/lib/ready-roles';
 import enText from '@/lib/messages/ready-made.en.json';
@@ -62,7 +63,8 @@ export default function ReadyMade({slug,company,agent,companyName,alone,lead,rol
      <p className="tpl__line">{role.line}</p>
      {role.handoff&&<p className="tpl__hand"><ShellIcon name="hand"/><span>{role.handoff}</span></p>}
      <div className="tpl__foot">
-      <span className="tpl__tools">{role.apps.length?<span className="tpl__apps">{role.apps.map((app,index)=><Fragment key={app}>{index>0&&' · '}<bdi>{app}</bdi></Fragment>)}</span>:<span className="tpl__none">{t('noApps')}</span>}</span>
+      {/* The tiles draw the apps (design-reference: tplCardHTML); a screen reader reads their names. */}
+      <span className="tpl__tools">{role.apps.length?<>{role.apps.map(app=><AppTile key={app.key} app={app}/>)}<span className="tpl__apps sr-only">{role.apps.map((app,index)=><Fragment key={app.key}>{index>0&&' · '}<bdi>{app.name}</bdi></Fragment>)}</span></>:<span className="tpl__none">{t('noApps')}</span>}</span>
       <button type="button" className="btn btn--secondary btn--sm" aria-label={t('addLabel',role.role)} disabled={sending} onClick={()=>void add(role)}>{t('add')}</button>
      </div>
     </article>):<div className="tpl-empty"><b>{needle?t('noMatch',query.trim()):t('noneHere')}</b><span>{t('emptyHint')}</span>

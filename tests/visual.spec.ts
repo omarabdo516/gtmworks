@@ -5,7 +5,10 @@ import { signIn } from './sign-in';
 import { resetFirstRun } from '../scripts/first-run-db.mjs';
 import { idle } from './navigation-measure';
 import { languages, widths, screens, snapshotName } from './visual-screens.mjs';
-import { appOrigin, dbContainerOf } from './lane.mjs';
+import { appOrigin, dbContainerOf, lane } from './lane.mjs';
+import { fakeHermes } from './fake-hermes.mjs';
+import { encryptSecret } from '../lib/agent-crypto.mjs';
+import { appByKey, appConfig } from '../lib/app-catalogue.mjs';
 
 // Every listed screen is compared with its approved image (tests/visual.spec.ts-snapshots) in both languages at 1440 and 390.
 // This project runs first on the freshly seeded database (see playwright.config.ts). It leaves the data as the seed built it,
@@ -276,6 +279,29 @@ const screenStates: Record<string, { set: string, unset: string, admin?: true }>
   },
 };
 
+// Settings, Apps (#30) reads the Company's apps from its own profile in the Engine: a fake one, on a loopback address of
+// this lane's own, holding Klaviyo connected, Notion needing attention and every other app off. RS Learning gets the
+// bundled Connection and the profile record the worker would leave, written with triggers off, and loses them after.
+const apps = (n: number) => `6b000000-0000-0000-0000-00000000000${n}`;
+async function appsEngine() {
+  const fake = await fakeHermes({ host: `127.0.0.${50 + lane}`, managementPort: 9119 });
+  const profile = `co-${rsLearning.replaceAll('-', '')}`;
+  const installed = (key: string) => ({ url: `https://mcp.${key}.example/mcp`, auth: 'oauth', ...appConfig(appByKey(key)!, `${appOrigin}/api/apps/callback/${key}`).mcp_servers[key] });
+  fake.settings.profiles.set(profile, { soul: '', provider: 'auto', model: '', key: fake.settings.key, config: { mcp_servers: { klaviyo: installed('klaviyo'), notion: installed('notion') } }, credentials: {} });
+  fake.settings.appTokens.add(`${profile}:klaviyo`);
+  const key = encryptSecret(fake.settings.key, process.env.WEBHOOK_ENCRYPTION_KEY || 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=');
+  const unset = `delete from public.company_profiles where company_id='${rsLearning}';
+    delete from public.hermes_agent_audit where agent_id='${apps(2)}';
+    delete from public.hermes_agents where id='${apps(2)}';
+    delete from public.hermes_connections where id='${apps(1)}';`;
+  asAdmin(unset);
+  asAdmin(`insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('${apps(1)}','${rsLearning}','20000000-0000-0000-0000-000000000001','${fake.address}','${profile}','${key}','connected');
+    insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('${apps(2)}','${rsLearning}','${apps(1)}','Lead','General',true);
+    insert into public.hermes_agent_audit(company_id,actor_id,agent_id,action,details) values ('${rsLearning}','20000000-0000-0000-0000-000000000001','${apps(2)}','PROVIDE_BUNDLED_HERMES_AGENT',jsonb_build_object('connection_id','${apps(1)}'));
+    insert into public.company_profiles(company_id,profile,tools_level,tools_policy) select id,'${profile}',agent_level,public.engine_tool_policy() from public.companies where id='${rsLearning}';`);
+  return async () => { asAdmin(unset); await fake.close(); };
+}
+
 async function showScreen(page: Page, screen: (typeof screens)[number], width: number) {
   await page.emulateMedia({ colorScheme: screen.dark ? 'dark' : 'light' });
   await page.setViewportSize({ width, height: 900 });
@@ -380,12 +406,14 @@ test.describe('signed-in screens', () => {
       const state = 'state' in screen && typeof screen.state === 'string' ? screenStates[screen.state] : undefined;
       const write = state?.admin ? asAdmin : query;
       if (state) { write(state.unset); write(state.set); }
+      const engine = 'state' in screen && screen.state === 'apps' ? await appsEngine() : undefined;
       try {
         await showScreen(shown, screen, width);
         if (screen.dark) await expectDarkContrast(shown);
         await expect(shown).toHaveScreenshot(`${snapshotName(screen, language, width)}.png`, { fullPage: true });
       } finally {
         if (state) write(state.unset);
+        await engine?.();
       }
     });
   }

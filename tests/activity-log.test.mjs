@@ -96,6 +96,16 @@ test('a Company rename names the old name and the new one, in both languages', (
  assert.equal(i18n('ar').t('logActCompanyRenamed'), 'غيّر اسم الشركة');
 });
 
+test('an app connected or disconnected names the app and its state before and after, in both languages', () => {
+ const connected = describeEntry({ subject: 'company', action: 'app_connected', details: { app: 'klaviyo' } });
+ assert.deepEqual(connected, { act: ['logActAppConnected'], obj: 'Klaviyo', from: { key: 'logAppOff' }, to: { key: 'logAppOn' }, note: undefined });
+ const disconnected = describeEntry({ subject: 'company', action: 'app_disconnected', details: { app: 'notion' } });
+ assert.deepEqual([disconnected.act, disconnected.obj, disconnected.from, disconnected.to], [['logActAppDisconnected'], 'Notion', { key: 'logAppOn' }, { key: 'logAppOff' }]);
+ assert.equal(describeEntry({ subject: 'company', action: 'app_connected', details: { app: 'retired-app' } }).obj, 'retired-app');
+ assert.deepEqual(['logActAppConnected', 'logActAppDisconnected', 'logAppOn', 'logAppOff'].map(key => i18n('en').t(key)), ['connected', 'disconnected', 'Connected', 'Not connected']);
+ assert.deepEqual(['logActAppConnected', 'logActAppDisconnected', 'logAppOn', 'logAppOff'].map(key => i18n('ar').t(key)), ['وصّل', 'فصل', 'متوصل', 'مش متوصل']);
+});
+
 test('a day with no zone given follows the runtime zone, also after it changes', () => {
  const before = process.env.TZ;
  try {
