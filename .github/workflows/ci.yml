@@ -1,10 +1,12 @@
 # As Hermes and T3 Code run CI (#76): the first job (`changes`, scripts/ci-areas.mjs) decides which suites a change
 # needs. Static (lint, types, catalogues, unit tests) runs on every change; the screen component tests (`components`)
 # run when the app, its components or its library change. The database tests, the whole-app browser
-# suite (`integration`) and the Docker install run on a pull request only when their own files change; a push to main
-# runs all of them unless every file is a document; a manual run starts the browser and install suites only through
-# inputs that default to off. Required `check` (scripts/ci-verdict.mjs) counts a suite nobody asked for as passed when
-# it was skipped, and is red on any failed or cancelled stage.
+# suite (`integration`) and the Docker install run on a pull request only when their own files change; screens alone
+# (the app's screens, components, catalogues, compared screens and approved images) run only the compared screens from
+# the browser suite (integration=visual, #213). A push to main runs every suite unless every file is a document; a manual
+# run starts the browser and install suites only through inputs that default to off. Required `check`
+# (scripts/ci-verdict.mjs) counts a suite nobody asked for as passed when it was skipped, and is red on any failed or
+# cancelled stage.
 name: CI
 
 on:
@@ -135,7 +137,8 @@ jobs:
       - name: database
         run: ./ci.sh database
 
-  # The whole-app browser suite: the screens, the functional journeys and the production-shaped proxy suite.
+  # The whole-app browser suite: the production-shaped proxy suite in the image, the compared screens and the journeys.
+  # When `changes` says `visual` (screens alone, #213), only the compared screens run, with no image.
   integration:
     needs: [changes]
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.integration != 'false') }}
@@ -155,7 +158,9 @@ jobs:
           node-version: 22
           cache: npm
       - uses: docker/setup-buildx-action@v3
+        if: ${{ needs.changes.outputs.integration != 'visual' }}
       - name: build image (layer cache)
+        if: ${{ needs.changes.outputs.integration != 'visual' }}
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -167,7 +172,7 @@ jobs:
       - name: integration
         env:
           CI_IMAGE_PREBUILT: "true"
-        run: ./ci.sh integration
+        run: ./ci.sh ${{ needs.changes.outputs.integration == 'visual' && 'visual' || 'integration' }}
       # The screenshots tests write (failing screen comparisons, card and phone checks) are uploaded so a review can see them.
       - name: upload route screenshots
         if: always()
