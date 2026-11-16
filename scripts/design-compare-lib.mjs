@@ -17,6 +17,9 @@ const settings = [{ click: '#btn-me' }, { click: '[data-action="sov-open"]' }, {
 const alone = [{ click: '#btn-me' }, { click: '[data-action="set-as"][data-person="omar"][data-world="solo"]' }, { waitFor: '#sb-recent' }];
 const asYoussef = [{ click: '#btn-me' }, { click: '[data-action="set-as"][data-person="youssef"][data-world="team"]' }, { waitFor: '#sb-recent' }];
 const youssefRequest = [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-wa"]' }, { waitFor: '.ac-card' }];
+// #185. The Team table's invitation, the same on both sides: open the form, send one, see its "Invite sent" row, then
+// open the form again.
+const inviteSteps = [{ click: '#inv-toggle' }, { fill: ['#inv-email', 'nour.hassan@rslearning.com'] }, { click: '.inv-go' }, { waitFor: '.ta-pending' }, { click: '#inv-toggle' }, { waitFor: '#inv-email' }];
 const board = [{ click: '#sb-nav [data-view="board"]' }, { waitFor: '#board-cols' }];
 const pickChat = [{ click: '#sh-tab-chat' }, { waitFor: '.priv-sheet' }];
 const youssefAsks = 'Plan the Saudi ads for January';
@@ -59,6 +62,7 @@ export const screens = {
   // The settings overlay opens on its Company section. The built overlay is route-backed (app/settings-overlay.tsx):
   // ?section= opens a section and ?agent=<id> one Agent's page.
   settings: { reference: { steps: settings }, builtPath: '/c/rs-learning/settings' },
+  invite: { reference: { steps: [...settings, ...inviteSteps] }, builtPath: '/c/rs-learning/settings', builtSteps: inviteSteps },
   agents: { reference: { steps: settingsSection('agents') }, builtPath: '/c/rs-learning/settings?section=agents' },
   // One Agent's page: Lead's settings inside the overlay. Built: the comparison fixture's main Agent, Lead (the seed
   // alone has no Agent with that id, so without the fixture the overlay shows the Agents list).
