@@ -32,6 +32,7 @@ case "${1:-check}" in
   bash ci.sh static
   bash ci.sh components
   bash ci.sh database
+  bash ci.sh visual
   bash ci.sh integration
   ;;
  static)
@@ -111,7 +112,8 @@ PY
   npm run test:e2e:proxy
   bash scripts/local-db.sh
   wait "$build_pid" || { cat playwright-report/build.log >&2; echo 'the browser suite build failed' >&2; exit 1; }
-  GTMWORKS_WEB_PREBUILT=true GTMWORKS_TEST_LANES=$lanes npm run test:e2e
+  # The compared screens run on their own (`ci.sh visual`), on the runner their approved images are made on.
+  GTMWORKS_WEB_PREBUILT=true GTMWORKS_TEST_LANES=$lanes GTMWORKS_SCREENS_ELSEWHERE=true npm run test:e2e
   ;;
  visual)
   # The compared screens alone, on lane 0 as the seed builds it: no journeys, no proxy suite, no image (#213).

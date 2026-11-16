@@ -7,10 +7,12 @@
 # run starts the browser and install suites only through inputs that default to off. Required `check`
 # (scripts/ci-verdict.mjs) counts a suite nobody asked for as passed when it was skipped, and is red on any failed or
 # cancelled stage.
-# `database`, `integration` and `install` run on the runner the repo variable CI_RUNNER names (#224): Omar's PC (`pc-ci`)
-# while ci-router keeps it there, else ubuntu-latest. A pull request from a fork runs them on ubuntu-latest, where every
-# other job runs. The stack's ports lie in Linux's range for outgoing connections, so on a GitHub-hosted runner a job
-# reserves them before it starts the stack (#225). The PC shares its Docker with other repositories' CI: there the
+# `database` and `integration` run on the runner the repo variable CI_RUNNER names (#224): Omar's PC (`pc-ci`) while
+# ci-router keeps it there, else ubuntu-latest. A pull request from a fork runs them on ubuntu-latest, where every other
+# job runs. `install` stays on ubuntu-latest: the PC runs one job at a time, so it would queue `integration` behind it.
+# The compared screens (`visual`) stay on ubuntu-latest too, where their approved images are made: the PC renders text a
+# few pixels differently. The stack's ports lie in Linux's range for outgoing connections, so on a GitHub-hosted runner a
+# job reserves them before it starts the stack (#225). The PC shares its Docker with other repositories' CI: there the
 # stack's ports move to a block of their own above that range, a job removes what this repository's runs start before
 # and after it (scripts/ci-runner.mjs), and ~/.npm, the browsers and the image layers stay on the machine.
 name: CI
@@ -160,11 +162,50 @@ jobs:
         if: ${{ always() }}
         run: node scripts/ci-runner.mjs cleanup
 
-  # The whole-app browser suite: the production-shaped proxy suite in the image, the compared screens and the journeys.
-  # When `changes` says `visual` (screens alone, #213), only the compared screens run, with no image.
-  integration:
+  # The compared screens (the `visual` Playwright project) on lane 0 as the seed builds it, on the runner their approved
+  # images are made on. When `changes` says `visual` (screens alone, #213), this is all of the browser suite that runs.
+  visual:
     needs: [changes]
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.integration != 'false') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: reserve the stack's ports
+        if: ${{ runner.environment == 'github-hosted' }}
+        run: |
+          sudo sysctl -w net.ipv4.ip_local_reserved_ports="$(node scripts/ci-runner.mjs reserved-ports)"
+          sysctl net.ipv4.ip_local_reserved_ports
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: visual
+        run: ./ci.sh visual
+      # A failing comparison writes its expected, actual and difference images here.
+      - name: upload route screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: route-screenshots
+          path: test-results/screenshots/
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-screens
+          path: playwright-report/html/
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # The rest of the whole-app browser suite: the production-shaped proxy suite in the image and the journeys.
+  integration:
+    needs: [changes]
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || (needs.changes.outputs.integration != 'false' && needs.changes.outputs.integration != 'visual')) }}
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.CI_RUNNER || 'ubuntu-latest' }}
     # main's browser suite already took 24 of 25 minutes (run 43398274074); the board, settings, log and numbers specs
     # add to it.
@@ -197,9 +238,8 @@ jobs:
         run: node scripts/ci-runner.mjs lanes "$RUNNER_ENVIRONMENT" >> "$GITHUB_ENV"
       # On the PC the image builds on its own Docker, whose layer cache stays between runs.
       - uses: docker/setup-buildx-action@v3
-        if: ${{ runner.environment == 'github-hosted' && needs.changes.outputs.integration != 'visual' }}
+        if: ${{ runner.environment == 'github-hosted' }}
       - name: build image (layer cache)
-        if: ${{ needs.changes.outputs.integration != 'visual' }}
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -211,13 +251,13 @@ jobs:
       - name: integration
         env:
           CI_IMAGE_PREBUILT: "true"
-        run: ./ci.sh ${{ needs.changes.outputs.integration == 'visual' && 'visual' || 'integration' }}
-      # The screenshots tests write (failing screen comparisons, card and phone checks) are uploaded so a review can see them.
-      - name: upload route screenshots
+        run: ./ci.sh integration
+      # The screenshots the journeys write (card and phone checks) are uploaded so a review can see them.
+      - name: upload journey screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: route-screenshots
+          name: journey-screenshots
           path: test-results/screenshots/
           if-no-files-found: ignore
           retention-days: 14
@@ -237,7 +277,7 @@ jobs:
   install:
     needs: [changes]
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.install != 'false') }}
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.CI_RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     # The release install and update below add a fresh stack and an update to the source install checks, and the one-line
     # install adds another, an update, a failed update and a return to an older release from a backup.
     timeout-minutes: 60
@@ -246,37 +286,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # One isolated Docker machine for both install steps below: the release step reuses the source install's image.
-      # The last step removes it, also after a failure. On the PC its images and build cache stay in a volume between
-      # runs, and what an earlier run left running inside it is removed first.
+      # The last step removes it, also after a failure.
       - name: start the isolated Docker machine
         run: |
-          kept=()
-          if [[ $RUNNER_ENVIRONMENT != github-hosted ]]; then
-            docker rm -f install-docker > /dev/null 2>&1 || true
-            kept=(-v gtmworks-install-docker:/var/lib/docker)
-          fi
           docker run -d --privileged --name install-docker \
             -e DOCKER_TLS_CERTDIR= -p 127.0.0.1:2375:2375 \
-            -v "$PWD:$PWD" "${kept[@]}" docker:28.5.1-dind
+            -v "$PWD:$PWD" docker:28.5.1-dind
           for attempt in $(seq 1 60); do docker --host tcp://127.0.0.1:2375 info >/dev/null 2>&1 && break; sleep 1; done
           docker --host tcp://127.0.0.1:2375 info >/dev/null || { echo 'install check failed: DinD readiness' >&2; exit 1; }
-          if [[ $RUNNER_ENVIRONMENT != github-hosted ]]; then
-            inner() { docker --host tcp://127.0.0.1:2375 "$@"; }
-            containers=$(inner container ls --all --quiet)
-            if [[ -n $containers ]]; then inner container rm --force --volumes $containers > /dev/null; fi
-            volumes=$(inner volume ls --quiet)
-            if [[ -n $volumes ]]; then inner volume rm --force $volumes > /dev/null; fi
-            inner network prune --force > /dev/null
-          fi
       # Only the browser check of the sign-in rate limit uses these, inside the Playwright image; the install itself is
       # Docker only. No install scripts: the image already has the browsers.
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
-      # The PC's Docker CLI has no Compose plugin; the install and its checks drive Compose.
-      - uses: docker/setup-compose-action@v1
-        if: ${{ runner.environment != 'github-hosted' }}
+          cache: npm
       - name: test packages for the install browser check
         run: npm ci --ignore-scripts
       - name: isolated Docker-only install, repeat and verify
@@ -636,7 +659,7 @@ jobs:
         run: docker rm -fv install-docker || true
 
   check:
-    needs: [changes, static, components, database, integration, install]
+    needs: [changes, static, components, database, visual, integration, install]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     permissions:
@@ -651,7 +674,10 @@ jobs:
           COMPONENTS_RESULT: ${{ needs.components.result }}
           DATABASE_RUN: ${{ needs.changes.outputs.database }}
           DATABASE_RESULT: ${{ needs.database.result }}
-          INTEGRATION_RUN: ${{ needs.changes.outputs.integration }}
+          VISUAL_RUN: ${{ needs.changes.outputs.integration }}
+          VISUAL_RESULT: ${{ needs.visual.result }}
+          # Screens alone (integration=visual) ask for the compared screens only.
+          INTEGRATION_RUN: ${{ needs.changes.outputs.integration == 'visual' && 'false' || needs.changes.outputs.integration }}
           INTEGRATION_RESULT: ${{ needs.integration.result }}
           INSTALL_RUN: ${{ needs.changes.outputs.install }}
           INSTALL_RESULT: ${{ needs.install.result }}

@@ -36,7 +36,9 @@ export default defineConfig({
     // The navigation time budgets are measured with the machine to themselves (#69): `measured` is the teardown of an
     // empty anchor that `visual` depends on, so it runs alone after every functional test, and before first run.
     { name: 'measured-anchor', testMatch: /^$/, dependencies: ['seeded'], teardown: 'measured' },
-    { name: 'visual', testMatch: 'visual.spec.ts', outputDir: 'test-results/screenshots/visual', dependencies: ['measured-anchor'], teardown: 'functional' },
+    // CI compares the screens in a job of their own, on the runner their images are made on (`./ci.sh visual`); there
+    // `ci.sh integration` leaves this project empty, so it still orders the projects after it.
+    { name: 'visual', testMatch: process.env.GTMWORKS_SCREENS_ELSEWHERE === 'true' ? /^$/ : 'visual.spec.ts', outputDir: 'test-results/screenshots/visual', dependencies: ['measured-anchor'], teardown: 'functional' },
     { name: 'functional', testIgnore: ['visual.spec.ts', 'first-run.spec.ts', 'navigation.spec.ts', '**/proxy/**'] },
     { name: 'measured', testMatch: 'navigation.spec.ts', workers: 1 },
     // Empty-install scenarios mutate the whole local database and run only after seeded functional tests finish.

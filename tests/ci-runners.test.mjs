@@ -21,7 +21,7 @@ const jobs = workflows.flatMap(({ path, yaml }) => Object.entries(yaml.jobs ?? {
 const ci = workflows.find(file => file.path === `${dir}/ci.yml`).yaml;
 
 const heavyRunner = "${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.CI_RUNNER || 'ubuntu-latest' }}";
-const heavyJobs = ['database', 'integration', 'install'];
+const heavyJobs = ['database', 'integration'];
 const isHeavy = ({ path, name }) => path === `${dir}/ci.yml` && heavyJobs.includes(name);
 
 function triggers(yaml) {
