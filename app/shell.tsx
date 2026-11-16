@@ -1,3 +1,4 @@
+import './tokens.css';
 import './shell.css';
 import { getI18n } from '@/lib/i18n-server';
 import { supabase } from '@/lib/supabase';

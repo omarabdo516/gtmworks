@@ -1,3 +1,4 @@
+import './tokens.css';
 import './shell.css';
 import './settings.css';
 import type { ReactNode } from 'react';
