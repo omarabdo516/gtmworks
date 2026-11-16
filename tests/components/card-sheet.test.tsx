@@ -104,3 +104,15 @@ for (const [dir, shift, suffix] of [['rtl', '-24px', ''], ['ltr', '24px', 'Ltr']
  expect(getComputedStyle(dialog(), '::backdrop').animationName).toBe('none');
  document.documentElement.dir = '';
 });
+
+// The title sits at the interface's start, beside the face, whatever language it is written in (design-reference:
+// renderSheetHead, bx); inside its <bdi> it keeps its own direction.
+for (const [dir, language, title] of [['ltr', 'en', 'أفكار لمحتوى الشهر'], ['rtl', 'ar', 'Launch post for June']] as const) test(`a ${dir === 'ltr' ? 'Arabic title in the English' : 'English title in the Arabic'} interface starts beside the face`, async () => {
+ document.documentElement.dir = dir;
+ await render(<div className="gw" dir={dir}><LanguageProvider language={language}><CardSheet slug="rs-learning" company="co-1" title={title} face={<span data-face style={{ display: 'inline-block', width: 28, height: 28 }}/>} who={null} badge={null} sheet={sheet()} canWrite alone={false} send={sent}/></LanguageProvider></div>);
+ const heading = document.querySelector('#sheet-title')!, text = heading.querySelector('bdi')!.getBoundingClientRect(), box = heading.getBoundingClientRect(), face = document.querySelector('[data-face]')!.getBoundingClientRect();
+ expect(getComputedStyle(heading).direction).toBe(dir);
+ if (dir === 'ltr') { expect(Math.abs(text.left - box.left)).toBeLessThan(1); expect(box.left).toBeGreaterThanOrEqual(face.right); }
+ else { expect(Math.abs(text.right - box.right)).toBeLessThan(1); expect(box.right).toBeLessThanOrEqual(face.left); }
+ document.documentElement.dir = '';
+});

@@ -53,7 +53,7 @@ export function CardSheet({slug,company,title,face,who,badge,sheet,canWrite,alon
  return <dialog ref={box} className={`sheet${leaving?' is-closing':''}`} aria-labelledby="sheet-title" onCancel={event=>{ if(event.cancelable) { event.preventDefault(); close(); } }} onClose={closed} onClick={event=>{ if(event.target===event.currentTarget) close(); }}>
   <div className="sheet__inner">
    <header className="sheet__head" id="sheet-head">
-    <div className="sheet__top">{face}<h2 className="sheet__title authored-title" id="sheet-title" dir="auto">{title}</h2>
+    <div className="sheet__top">{face}<h2 className="sheet__title" id="sheet-title"><bdi>{title}</bdi></h2>
      <button type="button" className="circle-btn" aria-label={t('sheetClose')} onClick={close}><ShellIcon name="x"/></button></div>
     <div className="sheet__meta">{who&&<>{who}<span aria-hidden="true">·</span></>}{badge}
      {chatLink&&<Link className="link-btn" href={chatLink}><ShellIcon name="open"/><span>{t('sheetOpenInChats')}</span></Link>}
