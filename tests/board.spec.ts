@@ -46,11 +46,13 @@ test('a card moves by drag and by keyboard, and both moves are logged',async({pa
  await page.mouse.move(from.x+from.width/2+8,from.y+20,{steps:2});
  await page.mouse.move(to.x+to.width/2,to.y+40,{steps:10});
  await page.mouse.up();
+ await expect(page.locator('.toast')).toHaveText('Moved to “Planned”');
  await expect(page.locator(`.col[data-column="planned"] .kcard[data-card-id="${card.id}"]`)).toBeVisible();
  await expect(page).toHaveURL(/\/work\/board$/);
  // Keyboard: Shift and the arrow toward the reading end is the next column; the card keeps the focus.
  await page.locator(`.kcard[data-card-id="${card.id}"] a`).focus();
  await page.keyboard.press('Shift+ArrowRight');
+ await expect(page.locator('.toast')).toHaveText('Moved to “In progress”');
  await expect(page.locator(`.col[data-column="progress"] .kcard[data-card-id="${card.id}"]`)).toBeVisible();
  await expect(page.locator(`.col[data-column="progress"] .kcard[data-card-id="${card.id}"] a`)).toBeFocused();
  await page.reload();
@@ -65,8 +67,33 @@ test('a card moves by drag and by keyboard, and both moves are logged',async({pa
  for(let step=0;step<3;step++) { const before=await landedColumn(page,card.id); if(before==='waiting'||before==='ideas') break; await page.keyboard.press('Shift+ArrowLeft'); await expect.poll(async()=>{ const now=await columnOf(page,card.id); return now!==null&&now!==before; }).toBe(true); await page.locator(`.kcard[data-card-id="${card.id}"] a`).focus(); }
  expect(await columnOf(page,card.id)).toBe('ideas');
  await page.keyboard.press('Shift+ArrowLeft');
- await expect(page.locator('.board-status')).toContainText('“Waiting on you” fills up on its own');
+ await expect(page.locator('.toast')).toContainText('“Waiting on you” fills up on its own');
+ await expect(page.locator('.board-status')).toHaveCount(0);
  expect(await columnOf(page,card.id)).toBe('ideas');
+});
+
+test('a card waiting for a decision moves only by it: a drop on Live opens the card, a drop elsewhere says to decide in the chat',async({page})=>{
+ // Wide enough to show Waiting on you and Live together, so the card is carried from one to the other.
+ await page.setViewportSize({width:2200,height:900});
+ await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ const source=page.locator('.col[data-column="waiting"] .kcard[data-card-id="5"]');
+ await expect(source).toBeVisible();
+ const from=(await source.boundingBox())!,to=(await page.locator('.col[data-column="live"] .col__body').boundingBox())!;
+ await page.mouse.move(from.x+from.width/2,from.y+20);
+ await page.mouse.down();
+ await page.mouse.move(from.x+from.width/2+8,from.y+20,{steps:2});
+ await page.mouse.move(to.x+to.width/2,to.y+40,{steps:10});
+ await page.mouse.up();
+ // The toast raised on the board is still there on the card the drop opened.
+ await expect(page).toHaveURL(/\/work\/board\/5$/);
+ await expect(page.locator('.toast')).toHaveText('It needs your OK first. Decide here and the card moves on its own');
+ await page.goto('/c/rs-learning/work/board');
+ await page.locator('.kcard[data-card-id="5"] a').focus();
+ await page.keyboard.press('Shift+ArrowRight');
+ await expect(page.locator('.toast')).toHaveText('This card is waiting for your decision. Decide in the chat first');
+ await expect(page).toHaveURL(/\/work\/board\/5$/);
+ await page.goto('/c/rs-learning/work/board');
+ expect(await landedColumn(page,5)).toBe('waiting');
 });
 
 test('the Agent filter shows only that Agent’s cards',async({page})=>{

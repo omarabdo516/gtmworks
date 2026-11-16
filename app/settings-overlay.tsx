@@ -1,3 +1,4 @@
+import './tokens.css';
 import './shell.css';
 import './settings.css';
 import type { ReactNode } from 'react';
@@ -6,7 +7,8 @@ import { getI18n } from '@/lib/i18n-server';
 import { supabase } from '@/lib/supabase';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { visibleSections, pickSection, overlayHref, agentsMainFirst, usageTotals, type OverlaySection } from '@/lib/settings-overlay.mjs';
-import { OverlayFrame, CloseButton, AccountChoices, MakeMain, DeleteAgent, CompanyName, InviteForm, AgentSwitch, RuleSaid, RemoveRule } from './settings-overlay-client';
+import { OverlayFrame } from './settings-overlay-frame';
+import { CloseButton, AccountChoices, MakeMain, DeleteAgent, CompanyName, InviteForm, AgentSwitch, RuleSaid, RemoveRule } from './settings-overlay-client';
 import { SettingsIcon } from './settings-icons';
 import PasswordSettings from './password-settings';
 import { UsageTable, type UsageDay } from './c/[slug]/[[...section]]/usage';
@@ -17,6 +19,7 @@ import { AgentLevel, CompanySubscriptions, MemberNote } from './settings-lazy';
 import { MadeLine, OpenedMark } from './agent-made';
 import { madeColumns, madeOf } from '@/lib/agent-made';
 import { isNewFor } from '@/lib/sidebar.mjs';
+import { isolate } from '@/lib/bidi';
 import AppsSection from './settings-apps';
 import { CompanyKnowledge } from './company-knowledge';
 
@@ -131,10 +134,6 @@ function CompanySection({t,company,solo,message,members,agents,allowed,userId,sl
   {name}{mode}<AgentLevel company={company.id} level={agentLevel} owner={owner}/>{solo?invite:canManage?table:list}</>;
 }
 
-// A line keeps the interface's direction and isolates the runs of the other script it quotes (design-reference: bx,
-// bxLtr): the Arabic example in English, an Agent's Latin name in Arabic.
-const isolate=(text:string,rtl:boolean)=>text.split(rtl?/([A-Za-z](?:[A-Za-z0-9 &.-]*[A-Za-z0-9])?)/:/([\u0600-\u06FF](?:[^A-Za-z“”"]*[\u0600-\u06FF])?)/)
- .map((part,index)=>index%2?<bdi key={index} dir={rtl?'ltr':'rtl'}>{part}</bdi>:part);
 function TalkTip({t,rtl,text,talk}:{t:T,rtl:boolean,text:string,talk?:{href:string,name:string}}) {
  return <p className="talk-tip"><SettingsIcon name="chat"/><span>{isolate(text,rtl)}</span>{talk&&<Link className="link-btn" href={talk.href}>{t('settingsTalkTo',talk.name)}</Link>}</p>;
 }

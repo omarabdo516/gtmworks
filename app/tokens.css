@@ -1,0 +1,56 @@
+/* The approved reference's tokens (design-reference/index.html :root), for the shell and everything drawn the way it
+   is (app/shell.css, the settings overlay, the toast). They carry a gw- prefix so they never collide with the Paperclip
+   tokens that the sections inside the shell still use. They hold only custom properties, so where this file sits among
+   the others never changes what wins. */
+.gw {
+  --gw-bg-chrome: #FCFCFC; --gw-bg-sidebar: #F5F5F5; --gw-bg-pane: #FFFFFF;
+  --gw-bg-hover: #1C1C1C0F; --gw-bg-active: #1C1C1C14; --gw-bg-tertiary: #1C1C1C0F; --gw-bg-secondary-hover: #1C1C1C1A; --gw-bg-subtle: #1C1C1C08;
+  --gw-bg-elevated-hover: #F1F1F1; --gw-bg-active-solid: #E9E9E9; --gw-bg-scrim: #00000066;
+  --gw-text-1: #1C1C1C; --gw-text-2: #1C1C1CB8; --gw-text-3: #1C1C1CA3; --gw-text-4: #1C1C1C80;
+  --gw-border-1: #1C1C1C3D; --gw-border-2: #1C1C1C1F; --gw-border-3: #1C1C1C14;
+  --gw-primary: #1C1C1C; --gw-primary-hover: #363636; --gw-on-primary: #FCFCFC; --gw-primary-disabled: #1C1C1C26;
+  --gw-btn2-bg: #1C1C1C0F; --gw-btn2-ring: transparent; --gw-btn2-hover: #1C1C1C1A;
+  --gw-bubble-agent: #1C1C1C0F; --gw-bubble-user: #1C1C1C; --gw-on-bubble-user: #FFFFFF;
+  --gw-accent: #0F766E; --gw-focus: #0F766E; --gw-wait-text: #985500; --gw-wait-bg: #F5931217; --gw-danger-text: #CD2834;
+  --gw-shadow-pill: #1C1C1C14 0 4px 12px -1px, #1C1C1C0A 0 1px 2px;
+  --gw-shadow-composer: #0000000D 0 2px 8px -1px, #00000008 0 1px 2px;
+  --gw-shadow-popover: #1C1C1C1A 0 10px 20px -3px, #1C1C1C14 0 4px 6px -4px;
+  --gw-shadow-modal: #1C1C1C1A 0 20px 32px -5px, #1C1C1C1A 0 8px 12px -6px;
+  --gw-bubble-ring: #1C1C1C0F 0 0 0 0.5px inset; --gw-shadow-card: #1C1C1C1F 0 0 0 0.5px, #1C1C1C09 0 2px 8px;
+  --gw-font: var(--font-plex-arabic), "IBM Plex Sans Arabic", "Noto Sans Arabic", Tahoma, system-ui, sans-serif;
+  --gw-fs-xs: 12px; --gw-fs-sm: 13px; --gw-fs-base: 14px; --gw-fs-msg: 15px; --gw-fs-lg: 17px; --gw-fs-xl: 22px;
+  --gw-r-xs: 6px; --gw-r-sm: 8px; --gw-r-md: 12px; --gw-r-lg: 16px; --gw-r-bubble: 18px; --gw-r-composer: 22px; --gw-r-card: 24px; --gw-r-full: 9999px;
+  --gw-dur-fast: 150ms; --gw-dur: 200ms; --gw-dur-slow: 280ms;
+  --gw-ease-out: cubic-bezier(0.2, 0, 0, 1); --gw-ease-in: cubic-bezier(0.4, 0, 1, 1); --gw-ease-spring: cubic-bezier(0.34, 1.45, 0.64, 1);
+  --gw-sidebar-w: 300px; --gw-details-w: 320px; --gw-chat-col: 620px; --gw-head-h: 64px; --gw-idle-dot: #B5B5B5; --gw-wait: #DA830E;
+}
+:root[data-theme="dark"] .gw {
+  --gw-bg-chrome: #121212; --gw-bg-sidebar: #0E0E0E; --gw-bg-pane: #161616;
+  --gw-bg-hover: #F5F5F50F; --gw-bg-active: #F5F5F514; --gw-bg-tertiary: #F5F5F50F; --gw-bg-secondary-hover: #F5F5F51A; --gw-bg-subtle: #F5F5F505;
+  --gw-bg-elevated-hover: #2C2C2C; --gw-bg-active-solid: #262626; --gw-bg-scrim: #000000B2;
+  --gw-text-1: #F5F5F5; --gw-text-2: #F5F5F5B8; --gw-text-3: #F5F5F599; --gw-text-4: #F5F5F58A;
+  --gw-border-1: #F5F5F538; --gw-border-2: #F5F5F51A; --gw-border-3: #F5F5F50F;
+  --gw-primary: #F5F5F5; --gw-primary-hover: #DBDBDB; --gw-on-primary: #121212; --gw-primary-disabled: #F5F5F521;
+  --gw-btn2-bg: #F5F5F524; --gw-btn2-ring: #F5F5F55C; --gw-btn2-hover: #F5F5F533;
+  --gw-bubble-agent: #F5F5F50F; --gw-bubble-user: #F5F5F52E; --gw-on-bubble-user: #FFFFFF;
+  --gw-accent: #2CC3AE; --gw-focus: #5EE0CC; --gw-wait-text: #F0A443; --gw-wait-bg: #F694121F; --gw-danger-text: #FF6463; --gw-wait: #E8962A; --gw-idle-dot: #5C5C5C;
+  --gw-shadow-pill: #F5F5F51A 0 0 0 0.5px; --gw-shadow-composer: #F5F5F51A 0 0 0 0.5px;
+  --gw-shadow-popover: #000000 0 10px 20px -3px, #F5F5F51A 0 0 0 0.5px; --gw-shadow-modal: #000000 0 20px 32px -5px, #F5F5F51A 0 0 0 0.5px;
+  --gw-bubble-ring: #F5F5F50F 0 0 0 0.5px inset; --gw-shadow-card: #F5F5F51A 0 0 0 0.5px;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="device"] .gw {
+    --gw-bg-chrome: #121212; --gw-bg-sidebar: #0E0E0E; --gw-bg-pane: #161616;
+    --gw-bg-hover: #F5F5F50F; --gw-bg-active: #F5F5F514; --gw-bg-tertiary: #F5F5F50F; --gw-bg-secondary-hover: #F5F5F51A; --gw-bg-subtle: #F5F5F505;
+    --gw-bg-elevated-hover: #2C2C2C; --gw-bg-active-solid: #262626; --gw-bg-scrim: #000000B2;
+    --gw-text-1: #F5F5F5; --gw-text-2: #F5F5F5B8; --gw-text-3: #F5F5F599; --gw-text-4: #F5F5F58A;
+    --gw-border-1: #F5F5F538; --gw-border-2: #F5F5F51A; --gw-border-3: #F5F5F50F;
+    --gw-primary: #F5F5F5; --gw-primary-hover: #DBDBDB; --gw-on-primary: #121212; --gw-primary-disabled: #F5F5F521;
+    --gw-btn2-bg: #F5F5F524; --gw-btn2-ring: #F5F5F55C; --gw-btn2-hover: #F5F5F533;
+    --gw-bubble-agent: #F5F5F50F; --gw-bubble-user: #F5F5F52E; --gw-on-bubble-user: #FFFFFF;
+    --gw-accent: #2CC3AE; --gw-focus: #5EE0CC; --gw-wait-text: #F0A443; --gw-wait-bg: #F694121F; --gw-danger-text: #FF6463; --gw-wait: #E8962A; --gw-idle-dot: #5C5C5C;
+    --gw-shadow-pill: #F5F5F51A 0 0 0 0.5px; --gw-shadow-composer: #F5F5F51A 0 0 0 0.5px;
+    --gw-shadow-popover: #000000 0 10px 20px -3px, #F5F5F51A 0 0 0 0.5px; --gw-shadow-modal: #000000 0 20px 32px -5px, #F5F5F51A 0 0 0 0.5px;
+    --gw-bubble-ring: #F5F5F50F 0 0 0 0.5px inset; --gw-shadow-card: #F5F5F51A 0 0 0 0.5px;
+  }
+}

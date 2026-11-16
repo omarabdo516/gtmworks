@@ -1,0 +1,8 @@
+{
+  "path": "/c/rs-learning/work/board",
+  "dark": true,
+  "ready": ".board",
+  "person": "manager@example.com",
+  "act": "board-toast",
+  "about": "The board's toast (#157), top centre over the Manager's board: a card dropped on \"Waiting on you\" is refused with the clock and \"Waiting on you\" fills up on its own when an agent needs your OK"
+}
