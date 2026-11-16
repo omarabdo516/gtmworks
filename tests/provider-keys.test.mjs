@@ -127,7 +127,7 @@ const encryptionKey=Buffer.alloc(32,9).toString('base64');
 const keyRows=(company,extra=[])=>{ const found=companies[company];
  return [{profile:found.space,kind:'space',agent:null,name:null},...[found.main,...found.agents,...extra].map(profile=>({profile,kind:profile.startsWith('co-')?'company':'agent',agent:agentId(profile),name:found.names[profile]||null}))]; };
 // The person's own session and the service role, as the route hands them over; every call is recorded.
-function sessions(fake,{owner,space=true,extra=[],logFails=false,unfinishedFails=false}) {
+function sessions(fake,{owner,space=true,extra=[],logFails=false,unfinishedFails=false,noKeeper=false}) {
  const asked=[]; const logged=[]; const unfinished=new Map();
  const db={rpc:async(name,args)=>{ asked.push({name,args});
   if(unfinishedFails&&name.includes('unfinished')) return {data:null,error:{code:'XX000',message:'the database is down'}};
@@ -135,7 +135,7 @@ function sessions(fake,{owner,space=true,extra=[],logFails=false,unfinishedFails
   if(name==='company_key_unfinished_profiles') return {data:owner?[...unfinished].map(([provider,profiles])=>({provider,profiles})):[],error:null};
   if(name==='is_company_owner') return {data:owner,error:null};
   if(name==='company_engine_target') return {data:[{connection:'f0000000-0000-0000-0000-000000000002',address:fake.address,profile:companies[args.c].main,one_company:false,profiles:[]}],error:null};
-  if(name==='company_key_profiles') return {data:keyRows(args.c,extra).filter(row=>space||row.kind!=='space'),error:null};
+  if(name==='company_key_profiles') return {data:keyRows(args.c,extra).filter(row=>space||row.kind!=='space').map(row=>noKeeper&&row.kind==='company'?{...row,agent:null,name:null}:row),error:null};
   if(name==='record_provider_key_change') { logged.push(args); return logFails?{data:null,error:{code:'XX000',message:'the database is down'}}:{data:null,error:null}; }
   return {data:null,error:{message:'unexpected'}}; }};
  const key=encryptSecret('test-only-key',encryptionKey);
@@ -206,6 +206,10 @@ test('a set reaches the Company\'s space and its Agent profiles only, key before
   const forgetful=sessions(fake,{owner:true,unfinishedFails:true});
   assert.deepEqual(await read(forgetful,fake),{keys:(await read(owner,fake)).keys,waiting:null,leftover:null,unknown:[]},'what a change missed cannot be read, so who waits is unknown');
   assert.equal((await change(forgetful,fake,{intent:'set',value:`${known}-rotated`})).body.unfinishedKept,false,'a change whose misses were not kept says so');
+  const keeperless=sessions(fake,{owner:true,noKeeper:true});
+  fake.settings.envReadFail.add(one.main);
+  assert.deepEqual((await read(keeperless,fake)).unknown,[{agent:null,name:null}],'the Company profile is listed when its keeper is gone');
+  fake.settings.envReadFail.clear();
   assert.ok(fake.settings.managementRequests.every(request=>!request.path.includes('/reveal')));
  } finally { await fake.close(); }
 });
