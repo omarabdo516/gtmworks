@@ -1,6 +1,7 @@
 import type { supabase } from './supabase';
-import { faceOf, latestEnded, messageColumns, noteColumns, queuedColumns, queuedWaiting, shown, totalOf, usageColumns, waiting, withDecisions, withTeamWork, type AgentRequestView, type Decision, type LeadCard, type QueuedTurn, type SavedRule, type RunUsage, type StoredNote } from './conversations';
+import { faceOf, latestEnded, messageColumns, noteColumns, queuedColumns, queuedWaiting, shown, totalOf, usageColumns, waiting, withBoardNote, withDecisions, withTeamWork, type AgentRequestView, type Decision, type LeadCard, type QueuedTurn, type SavedRule, type RunUsage, type StoredNote } from './conversations';
 import { isNewFor } from './sidebar.mjs';
+import type { BoardColumn } from './board-columns.mjs';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
 
@@ -8,8 +9,9 @@ type Database=Awaited<ReturnType<typeof supabase>>;
 // (RLS): messages, notes addressed to a person, turns still waiting, the usage of ended runs, who the Agent is working
 // for, and whether this person may stop the open run (its own person, or a Manager or Owner of the Company; the
 // database checks that again when they stop it), the Agents Lead made in it (an Agent since removed has no card), the
-// Agents its person asked Lead for and the Owner's answer (#17), and the rules its Agent saved in it: a suggestion with
-// who it was sent to, and how it was decided (RLS: only the person who told it reads one that is not the team's).
+// Agents its person asked Lead for and the Owner's answer (#17), the rules its Agent saved in it: a suggestion with
+// who it was sent to, and how it was decided (RLS: only the person who told it reads one that is not the team's), and
+// the Card it put on the board with that Card's column now (#144).
 export async function conversationRecord(db:Database,person:string,company:string,found:{id:string,agent_name:string,hermes_agents:unknown}) {
  const conversation=found.id;
  // Usage first: a run closed between the two reads then shows its reply too (both are written in one transaction).
@@ -48,14 +50,20 @@ export async function conversationRecord(db:Database,person:string,company:strin
  const runner=(working as {person:string,name:string}[]|null)?.[0];
  const {data:manages}=runner&&runner.person!==person?await db.rpc('can_manage_company',{target:company}):{data:false};
  const {data:me}=await db.from('people').select('name').eq('id',person).maybeSingle();
+ const {data:tied}=await db.from('work_cards').select('id,work_stages(board_column)').eq('company_id',company).eq('conversation_id',conversation).maybeSingle();
+ const card=tied as {id:number,work_stages:{board_column:BoardColumn}|null}|null;
+ const board=card?.work_stages?{card:card.id,column:card.work_stages.board_column}:undefined;
+ const firstRun=messages.find(message=>message.author==='person')?.run_id;
+ const firstReply=board?messages.find(message=>message.author==='agent'&&message.run_id===firstRun)?.id:undefined;
  return {
   conversation:{id:found.id,agent_name:found.agent_name,face:faceOf(found)},
-  messages:withTeamWork(withDecisions(shown(messages,usage,cards,found.agent_name,saved),decisions,found.agent_name),notes,queued,me?.name||''),
+  messages:withBoardNote(withTeamWork(withDecisions(shown(messages,usage,cards,found.agent_name,saved),decisions,found.agent_name),notes,queued,me?.name||''),firstReply),
   usage:totalOf(usage),
   pending:waiting(messages,usage).length>0||queuedWaiting(queued),
   failed:latestEnded(messages,usage),
   working:runner?.name??null,
   canStop:!!runner&&(runner.person===person||manages===true),
+  ...(board?{board}:{}),
  };
 }
 export type ConversationRecord=Awaited<ReturnType<typeof conversationRecord>>;

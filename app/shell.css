@@ -247,6 +247,18 @@
 .gw .head-pill > span[aria-hidden] { display: inline-flex; flex: none; }
 @media (hover: hover) { .gw button.head-pill:hover { background: var(--gw-bg-elevated-hover); } }
 .gw .head-pill__title { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* The chat's Card on the board, in the bar's end corner (#144; design-reference: .chat__corner, .corner-pill) */
+.gw .chat__corner { position: absolute; inset-inline-end: 12px; top: 14px; display: flex; gap: 8px; }
+.gw .corner-pill {
+  display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 16px; border-radius: var(--gw-r-full);
+  background: var(--gw-bg-pane); box-shadow: var(--gw-border-3) 0 0 0 1px inset; font-size: var(--gw-fs-sm); color: var(--gw-text-1); white-space: nowrap;
+  transition: background-color var(--gw-dur-fast) var(--gw-ease-out);
+}
+@media (hover: hover) { .gw .corner-pill:hover { background: var(--gw-bg-elevated-hover); } }
+.gw .corner-pill__col { color: var(--gw-text-2); }
+.gw .corner-pill.is-waiting .corner-pill__col { color: var(--gw-wait-text); font-weight: 600; }
+.gw .corner-pill .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; display: inline-block; background: var(--gw-idle-dot); }
+.gw .corner-pill .dot--waiting { background: var(--gw-wait); }
 .gw .transcript {
   overflow-y: auto; overflow-x: hidden; min-height: 0; overscroll-behavior: contain; padding: calc(var(--gw-head-h) + 24px) 16px 24px;
   -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 var(--gw-head-h)); mask-image: linear-gradient(180deg, transparent 0, #000 var(--gw-head-h));
@@ -645,6 +657,10 @@
   .gw .transcript { padding: calc(var(--gw-head-h) + 16px) 12px 20px; }
   .gw .composer-area { padding: 0 12px 12px; }
   .gw .head-pill { max-width: calc(100% - 150px); }
+  .gw .corner-pill__lbl { display: none; }
+  .gw .corner-pill { position: relative; padding: 0 12px; }
+  /* The pill keeps the reference's 36px; an invisible band above and below makes its tap area 44px. */
+  .gw .corner-pill::before { content: ""; position: absolute; inset: -4px 0; }
   .gw .empty-chat h2 { font-size: var(--gw-fs-lg); }
   .gw .bubble { max-width: 100%; }
 }
