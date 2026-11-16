@@ -1,13 +1,15 @@
-import { expect, test, vi } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import { act } from 'react';
 import { hydrateRoot } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 import { render } from 'vitest-browser-react';
-import { userEvent } from 'vitest/browser';
-import { MessageBox } from '@/app/conversation-composer';
+import { page, userEvent } from 'vitest/browser';
+import { MessageBox, postMessage } from '@/app/conversation-composer';
 import { LanguageProvider } from '@/lib/i18n-client';
 import type { Language } from '@/lib/i18n.mjs';
+import '@/app/shell.css';
 
+afterEach(() => { vi.unstubAllGlobals(); });
 type Send = (text: string, sendKey: string) => Promise<string | null>;
 const box = (props: { send: Send, stop?: { label: string, run: () => Promise<string | null> }, draft?: string }, language: Language = 'en') =>
  render(<LanguageProvider language={language}><MessageBox placeholder="Write" {...props}/></LanguageProvider>);
@@ -103,4 +105,24 @@ test('text typed into the server-drawn box before the page hydrates is kept, and
   await expect.poll(() => send.mock.calls.length).toBe(1);
   expect(send.mock.calls[0][0]).toBe('typed early');
  } finally { act(() => root.unmount()); host.remove(); }
+});
+
+test('when the server cannot reach the agent engine the box keeps the text and says the message was not sent', async () => {
+ vi.stubGlobal('fetch', vi.fn(async () => Response.json({ error: 'conversationHermesFailed' }, { status: 502 })));
+ const screen = await box({ send: (message, sendKey) => postMessage({ company: 'co-1', conversation: 'cv-1', message, sendKey }) });
+ await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), 'Are you there?');
+ await screen.getByRole('button', { name: 'Send' }).click();
+ await expect.element(screen.getByRole('alert')).toHaveTextContent('The agent engine could not be reached. Your message was not sent; it is still in the box.');
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('Are you there?');
+});
+
+test('on a phone the send arrow is the reference\'s 28px circle, and a tap anywhere in the 44px square around it lands on it', async () => {
+ await page.viewport(390, 900);
+ const screen = await render(<div className="gw"><div className="composer-area"><LanguageProvider language="en"><MessageBox placeholder="Write" send={async () => null}/></LanguageProvider></div></div>);
+ const arrow = screen.getByRole('button', { name: 'Send' }).element();
+ const circle = arrow.getBoundingClientRect();
+ expect([circle.width, circle.height]).toEqual([28, 28]);
+ const [x, y] = [circle.left + circle.width / 2, circle.top + circle.height / 2];
+ const misses = [[-21, -21], [0, -21], [21, -21], [-21, 0], [21, 0], [-21, 21], [0, 21], [21, 21]].filter(([dx, dy]) => !document.elementFromPoint(x + dx, y + dy)?.closest('button')?.isSameNode(arrow));
+ expect(misses, 'taps inside the 44px square that miss the send arrow').toEqual([]);
 });
