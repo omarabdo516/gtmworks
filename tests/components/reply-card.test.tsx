@@ -84,6 +84,16 @@ test.each([
  expect([...(last?.children ?? [])].map(part => part.textContent)).toEqual([decision, review.decision]);
 });
 
+// design-reference: the review card sets its direction once, so a reviewed text that starts with a Latin word ("Excel …")
+// stays in the Arabic card's lines, as do its note and the decision.
+test.each(['en', 'ar'] as const)('in the %s interface, every text of an Arabic review follows the card\'s direction', async language => {
+ const card: Card = { ...review, items: [{ text: 'Excel وOdoo والضرايب في كورس واحد بـ 2,400 ج', fine: true, note: 'Odoo: السعر مطابق لصفحة الكورس.' }], decision: 'OK كله جاهز' };
+ const screen = await render(<LanguageProvider language={language}><div dir={language === 'ar' ? 'rtl' : 'ltr'}><ReplyCard card={card} fresh={false}/></div></LanguageProvider>);
+ const group = screen.getByRole('group', { name: language === 'ar' ? `مراجعة: ${card.title}` : `Review: ${card.title}` });
+ await expect.element(group).toBeVisible();
+ for (const part of group.element().querySelectorAll('.rv-q, .rv-note, .rv-decision__t')) expect(part.matches(':dir(rtl)'), part.textContent ?? '').toBe(true);
+});
+
 const at = '2026-06-10T09:41:00Z';
 const turns = (cards: Card[], pending: boolean): ConversationRecord => ({
  conversation: { id: 'cv-1', agent_name: 'Ads', face: 'c-1' },

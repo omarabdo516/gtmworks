@@ -37,9 +37,9 @@ function ReviewBody({card}:{card:Extract<Card,{kind:'review'}>}) {
   <div className="card__head"><span className="tool-tile tool-tile--lg tool-tile--ink" aria-hidden="true"><ShellIcon name="review"/></span>
    <div className="card__titles"><span className="card__title">{card.title}</span><span className="card__sub" dir="auto">{card.line}</span></div></div>
   <ol className="rv-list">{card.items.map((item,index)=><li key={index} className="rv-item">
-   <div className="rv-item__top"><span className="rv-n num">{index+1}</span><span className="rv-q" dir="auto">{t('replyReviewQuote',item.text)}</span>
+   <div className="rv-item__top"><span className="rv-n num">{index+1}</span><span className="rv-q">{t('replyReviewQuote',item.text)}</span>
     <span className={`badge rv-badge${item.fine?'':' is-fix'}`}><ShellIcon name={item.fine?'check':'pencil'}/>{t(item.fine?'replyReviewFine':'replyReviewEdit')}</span></div>
-   <p className="rv-note" dir="auto">{item.note}</p></li>)}</ol>
-  <div className="rv-decision"><span className="rv-decision__l">{t('replyReviewDecision')}</span><span className="rv-decision__t" dir="auto">{card.decision}</span></div>
+   <p className="rv-note">{item.note}</p></li>)}</ol>
+  <div className="rv-decision"><span className="rv-decision__l">{t('replyReviewDecision')}</span><span className="rv-decision__t">{card.decision}</span></div>
  </>;
 }
