@@ -12,6 +12,7 @@ import { AgentFace } from '@/components/agent-face';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { CardDialog } from '@/app/card-dialog';
 import { CardSheet, type CardSheetData } from '@/app/card-sheet';
+import { toast } from '@/app/toast';
 import { roleAgents } from '@/lib/role-agents';
 import { useAgentIdentities } from '@/lib/agent-identities-client';
 const NewCard=lazy(()=>import('./new-card'));
@@ -36,7 +37,7 @@ const emptyKey:Record<string,[string,string]>={waiting:['boardEmptyWaiting','boa
 export default function Work(p:WorkProps) { const {t,locale,language}=useI18n(); const router=useRouter(); const identities=useAgentIdentities();
  // A change-only form cannot submit before React attaches its handler.
  const hydrated=useSyncExternalStore(()=>()=>{},()=>true,()=>false);
- const [moving,setMoving]=useState(false); const [notice,setNotice]=useState(''); const focusCard=useRef({id:0,column:''}); const [agentFilter,setAgentFilter]=useState('all'); const [kind,setKind]=useState<'all'|'mkt'>('all'); const [month,setMonth]=useState(p.section==='work/calendar'?new Date().toISOString().slice(0,7):''); const [creating,setCreating]=useState(false); const [composing,setComposing]=useState(p.initialCreating && p.canCreate); const [target,setTarget]=useState(p.stages[0]?.id||0); const [project,setProject]=useState(''); const [sort,setSort]=useState('title'); const [direction,setDirection]=useState<'ascending'|'descending'>('ascending');
+ const [moving,setMoving]=useState(false); const focusCard=useRef({id:0,column:''}); const [agentFilter,setAgentFilter]=useState('all'); const [kind,setKind]=useState<'all'|'mkt'>('all'); const [month,setMonth]=useState(p.section==='work/calendar'?new Date().toISOString().slice(0,7):''); const [creating,setCreating]=useState(false); const [composing,setComposing]=useState(p.initialCreating && p.canCreate); const [target,setTarget]=useState(p.stages[0]?.id||0); const [project,setProject]=useState(''); const [sort,setSort]=useState('title'); const [direction,setDirection]=useState<'ascending'|'descending'>('ascending');
  const base=`/c/${p.slug}/work`; const card=p.cards.find(c=>c.id===p.cardId); const shown=p.cards.filter(c=>!project||String(c.project_id)===project); const visible=shown.filter(c=>!month||!c.go_live||c.go_live.slice(0,7)===month); const hidden=(op:string)=><><input type="hidden" name="op" value={op}/><input type="hidden" name="slug" value={p.slug}/><input type="hidden" name="company" value={p.company}/></>;
  if(card&&creating) setCreating(false);
  if(card&&composing) setComposing(false);
@@ -79,11 +80,11 @@ export default function Work(p:WorkProps) { const {t,locale,language}=useI18n();
   const c=p.cards.find(x=>x.id===id); if(!c||!p.canCreate) return;
   const why=blockReason(columnOfCard(c),to);
   if(why==='same') return;
-  if(why==='waiting') { setNotice(t('boardWaitingFillsItself')); return; }
-  if(why==='decide') { setNotice(t('boardDecideFirst')); router.push(`${base}/board/${c.id}`); return; }
+  if(why==='waiting') { toast(t('boardWaitingFillsItself'),{icon:'clock'}); return; }
+  if(why==='decide') { toast(t(to==='live'||to==='done'?'boardDecideFirst':'boardWaitingForDecision'),{icon:'hand'}); router.push(`${base}/board/${c.id}`); return; }
   const form=new FormData(); form.set('op','move-column'); form.set('company',p.company); form.set('slug',p.slug); form.set('card',String(id)); form.set('column',to);
-  focusCard.current={id,column:to}; setMoving(true); setNotice('');
-  void workAction(form).then(()=>{setNotice(t('boardMoved',columnName(to))); focusCard.current={id,column:to};}).finally(()=>setMoving(false));
+  focusCard.current={id,column:to}; setMoving(true);
+  void workAction(form).then(()=>{toast(t('boardMoved',columnName(to))); focusCard.current={id,column:to};}).finally(()=>setMoving(false));
  };
  const keys=(c:Card)=>(event:KeyboardEvent)=>{ if(!event.shiftKey||!p.canCreate) return; const to=keyboardTarget(columnOfCard(c),event.key,rtl); if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight') return; event.preventDefault(); if(to) move(c.id,to); };
  const due=(c:Card)=>c.go_live?date(c.go_live,language,{month:'short'}):'';
@@ -161,7 +162,7 @@ export default function Work(p:WorkProps) { const {t,locale,language}=useI18n();
    <span className="board-tools__summary">{!p.canCreate?<><BoardIcon name="eye"/>{t('boardReadOnly')}</>:waitingCount?<><span className="dot dot--waiting" aria-hidden="true"/>{items.length?t('thingsWaitingOnYou',waitingCount):t(waitingCount>1?'boardWaitingMany':'boardWaitingOne',waitingCount)}</>:<><BoardIcon name="check"/>{t('boardNothingWaiting')}</>}</span>
    <BoardPager/>
   </div>
-  {(moving||notice)&&<p role="status" className="board-status">{moving?t('movingCard'):notice}</p>}
+  {moving&&<p role="status" className="board-status">{t('movingCard')}</p>}
   {!p.cards.length&&!items.length&&<div className="board-bare" role="note"><p>{t('boardEmpty',identities.find(a=>a.role==='account_manager')?.name||'Lead')}</p>{p.canCreate&&<Link className="btn btn--secondary btn--sm" href={`/c/${p.slug}/chat`}><BoardIcon name="chat"/><span>{t('boardTalkTo',identities.find(a=>a.role==='account_manager')?.name||'Lead')}</span></Link>}</div>}
   <KanbanBoard label={t('workBoard')} busy={moving} cards={drawnCards.map(c=>({id:c.id,title:c.title,column:columnOfCard(c)}))} columnName={columnName} renderOverlay={id=>cardView(p.cards.find(card=>card.id===id)!,true)} onMove={move}>
    {boardColumns.map(column=>{ const list=drawnCards.filter(c=>columnOfCard(c)===column); const extra=column==='waiting'&&!ownList?items:[]; const stages=stagesIn(column);

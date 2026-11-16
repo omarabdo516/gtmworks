@@ -19,11 +19,12 @@ const fields = {
   anonymous: value => value === true, // shown to a visitor who has not signed in
   person: value => typeof value === 'string', // shown to this Member, in their own window
   state: value => typeof value === 'string', // a set-up the seed does not hold (`screenStates` in tests/visual.spec.ts)
+  act: value => typeof value === 'string', // a step taken on the shown page before its picture (`screenActs` in tests/visual.spec.ts)
   ready: value => typeof value === 'string', // the element that shows the page has loaded; `.content` when absent
   about: value => typeof value === 'string', // what the picture shows
 };
 
-/** @typedef {{ name: string, path: string, dark: boolean, about?: string, state?: string, person?: string, anonymous?: true, ready?: string }} Screen */
+/** @typedef {{ name: string, path: string, dark: boolean, about?: string, state?: string, act?: string, person?: string, anonymous?: true, ready?: string }} Screen */
 
 /** @returns {Screen} */
 function parseScreen(file, text) {

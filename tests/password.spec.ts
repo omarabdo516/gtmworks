@@ -57,7 +57,7 @@ test('Forgot password emails a link that opens only the set-password page, works
  await expect(page).toHaveURL(/\/forgot-password\?language=en$/);
  await page.getByLabel('Email',{exact:true}).fill(email);
  await page.getByRole('button',{name:'Send reset link'}).click();
- await expect(page.getByRole('status')).toHaveText('If an account uses this email, a link to set a new password is on its way.');
+ await expect(page.getByRole('status').filter({hasText:'If an account uses this email, a link to set a new password is on its way.'})).toHaveText('If an account uses this email, a link to set a new password is on its way.');
  const link=await emailLink(page,email);
  // The link works without anything the asking browser kept: it may be opened on another device.
  await context.clearCookies();
@@ -116,7 +116,7 @@ test('with a verified authenticator the password changes only after the second s
  await page.goto('/forgot-password?language=en');
  await page.getByLabel('Email',{exact:true}).fill(email);
  await page.getByRole('button',{name:'Send reset link'}).click();
- await expect(page.getByRole('status')).toHaveText('If an account uses this email, a link to set a new password is on its way.');
+ await expect(page.getByRole('status').filter({hasText:'If an account uses this email, a link to set a new password is on its way.'})).toHaveText('If an account uses this email, a link to set a new password is on its way.');
  const link=await emailLink(page,email);
  await context.clearCookies();
  await page.goto(link);
@@ -146,7 +146,7 @@ test('an invited Member sets a password from the invitation and signs in with it
  await page.request.delete(inbox);
  await page.getByLabel('Email').fill(email);
  await page.getByRole('button',{name:'Send invitation'}).click();
- await expect(page.getByRole('status')).toContainText('An invitation link was sent');
+ await expect(page.getByRole('status').filter({hasText:'An invitation link was sent'})).toContainText('An invitation link was sent');
  const link=await emailLink(page,email);
  await context.clearCookies();
  await page.goto(link);

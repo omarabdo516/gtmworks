@@ -5,6 +5,7 @@ import { page } from 'vitest/browser';
 import ConversationView from '@/app/c/[slug]/conversations/[id]/conversation';
 import { LanguageProvider } from '@/lib/i18n-client';
 import { conversationRecord, type ConversationRecord } from '@/lib/conversation-record';
+import '@/app/tokens.css';
 import '@/app/shell.css';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }) }));

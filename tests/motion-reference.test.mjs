@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { cssOf, easing, milliseconds, motionOf, productFiles, productStyles, readSheet, referenceFile, referenceStyles, tokenFile } from './motion-css.mjs';
+import { cssOf, easing, milliseconds, keyframeFile, motionOf, productFiles, productStyles, readSheet, referenceFile, referenceStyles, tokenFile } from './motion-css.mjs';
 import { builtToken, motionTable, motionTokens, sharedKeyframes } from './motion-table.mjs';
 import { widths } from './visual-screens.mjs';
 
@@ -15,7 +15,7 @@ test('the six motion tokens carry the reference’s values', () => {
   }
 });
 
-test('the design sidecar names the six motion tokens with the values app/shell.css carries', () => {
+test('the design sidecar names the six motion tokens with the values app/tokens.css carries', () => {
   const sidecar = JSON.parse(readFileSync('.impeccable/design.json', 'utf8')).extensions.motion;
   for (const token of motionTokens) {
     const name = builtToken(token).slice(2);
@@ -43,10 +43,10 @@ test('a motion value the reference writes only through its token is written only
 });
 
 test('the reference’s shared keyframes are written once, in app/shell.css, and no stylesheet repeats their frames', () => {
-  const shell = readSheet(tokenFile);
+  const shell = readSheet(keyframeFile);
   for (const [name, built] of Object.entries(sharedKeyframes)) {
     assert.ok(reference.keyframes.has(name), `${referenceFile} has @keyframes ${name}`);
-    assert.equal(shell.keyframes.get(built), reference.keyframes.get(name), `${tokenFile} @keyframes ${built} moves as ${name}`);
+    assert.equal(shell.keyframes.get(built), reference.keyframes.get(name), `${keyframeFile} @keyframes ${built} moves as ${name}`);
   }
   const all = productFiles().flatMap(file => [...cssOf(file).matchAll(/@keyframes\s+([\w-]+)\s*\{/g)]
     .map(([, name]) => ({ file, name, frames: readSheet(file).keyframes.get(name) })));

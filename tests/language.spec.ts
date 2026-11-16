@@ -250,5 +250,5 @@ test('anonymous sign-in defaults to English and can render Arabic including its 
  await expect(page.locator('html')).toHaveAttribute('dir','rtl');
  await page.getByLabel(t('email'),{exact:true}).fill('viewer@example.com');
  await page.getByRole('button',{name:t('sendResetLink')}).click();
- await expect(page.getByRole('status')).toHaveText(t('checkYourEmailForAResetLink'));
+ await expect(page.getByRole('status').filter({hasText:t('checkYourEmailForAResetLink')})).toHaveText(t('checkYourEmailForAResetLink'));
 });

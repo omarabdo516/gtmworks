@@ -5,6 +5,7 @@ import Link from '@/lib/link';
 import { useI18n } from '@/lib/i18n-client';
 import { ShellIcon } from '@/components/shell-icon';
 import { BoardIcon } from '@/components/board-icon';
+import { leave } from '@/lib/motion';
 import './log.css';
 import './sheet.css';
 
@@ -24,14 +25,14 @@ const leaveMs=190;
 // send is the board's note action (work-actions.ts), handed in so this client file never imports the server module.
 export function CardSheet({slug,company,title,face,who,badge,sheet,canWrite,alone,message,send:sendNote}:{slug:string,company:string,title:string,face:ReactNode,who:ReactNode,badge:ReactNode,sheet:CardSheetData,canWrite:boolean,alone:boolean,message?:string,send:(form:FormData)=>Promise<unknown>}) {
  const {t}=useI18n(); const router=useRouter();
- const box=useRef<HTMLDialogElement>(null); const logBox=useRef<HTMLDivElement>(null); const timer=useRef<ReturnType<typeof setTimeout>>(undefined); const stick=useRef(true);
+ const box=useRef<HTMLDialogElement>(null); const logBox=useRef<HTMLDivElement>(null); const stopLeaving=useRef(()=>{}); const stick=useRef(true);
  const [tab,setTab]=useState<SheetTab>(sheet.chat?'chat':'log'); const [leaving,setLeaving]=useState(false); const [filled,setFilled]=useState(false);
  const [,send,sending]=useActionState(async(_:null,form:FormData)=>{ await sendNote(form); setFilled(false); return null; },null);
  const board=`/c/${slug}/work/board`;
  useLayoutEffect(()=>{
   if(!box.current?.open) box.current?.showModal();
   const frame=requestAnimationFrame(()=>document.getElementById('ta-note')?.focus());
-  return ()=>{ cancelAnimationFrame(frame); clearTimeout(timer.current); };
+  return ()=>{ cancelAnimationFrame(frame); stopLeaving.current(); };
  },[]);
  // The log stays on its newest row while the reader is there: when it opens, after a note, when a reply lands.
  useLayoutEffect(()=>{ if(stick.current&&logBox.current) logBox.current.scrollTop=logBox.current.scrollHeight; },[sheet.log,tab]);
@@ -39,12 +40,11 @@ export function CardSheet({slug,company,title,face,who,badge,sheet,canWrite,alon
  useEffect(()=>{ if(!sheet.working) return; const refresh=setInterval(()=>router.refresh(),3000); return ()=>clearInterval(refresh); },[sheet.working,router]);
  const close=()=>{
   const dialog=box.current; if(!dialog?.open||leaving) return;
-  if(matchMedia('(prefers-reduced-motion: reduce)').matches) { dialog.close(); return; }
-  setLeaving(true); timer.current=setTimeout(()=>dialog.close(),leaveMs);
+  stopLeaving.current=leave(leaveMs,()=>setLeaving(true),()=>dialog.close());
  };
  // However it closed (after its leave animation, or at once when the browser would not wait), the Card gets the keyboard back.
  const closed=()=>{
-  clearTimeout(timer.current); setLeaving(false);
+  stopLeaving.current(); setLeaving(false);
   document.querySelector<HTMLElement>(`#board-cols .kcard[data-card-id="${sheet.id}"] a`)?.focus();
   router.push(board,{scroll:false});
  };

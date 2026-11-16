@@ -371,6 +371,24 @@ async function appsEngine() {
   return async () => { asAdmin(unset); await fake.close(); };
 }
 
+// What a person does on a shown page to bring up something that does not stay, taken before its picture. Each returns
+// what puts the page back.
+const screenActs: Record<string, (page: Page, language: Language) => Promise<() => Promise<void>>> = {
+  // The board's toast for a drop on "Waiting on you" (#157), raised from the keyboard on the first Idea, focused where it
+  // is so a narrow board does not scroll to it. The page's clock stands still from before the toast until after the
+  // picture, so the toast cannot leave during it. A Member's own window (`person`) keeps that clock away from every other
+  // screen.
+  'board-toast': async (page, language) => {
+    await page.clock.install();
+    await page.clock.pauseAt(Date.now() + 1000);
+    await page.locator('.col[data-column="ideas"] .kcard a').first().evaluate(link => (link as HTMLElement).focus({ preventScroll: true }));
+    await page.keyboard.press(language === 'ar' ? 'Shift+ArrowRight' : 'Shift+ArrowLeft');
+    await expect(page.locator('.toast')).toBeVisible();
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    return () => page.clock.resume();
+  },
+};
+
 async function showScreen(page: Page, screen: (typeof screens)[number], width: number) {
   await page.emulateMedia({ colorScheme: screen.dark ? 'dark' : 'light' });
   await page.setViewportSize({ width, height: 900 });
@@ -476,11 +494,15 @@ test.describe('signed-in screens', () => {
       const write = state?.admin ? asAdmin : query;
       if (state) { write(state.unset); write(state.set); }
       const engine = 'state' in screen && screen.state === 'apps' ? await appsEngine() : undefined;
+      const act = 'act' in screen && typeof screen.act === 'string' ? screenActs[screen.act] : undefined;
+      let undoAct: (() => Promise<void>) | undefined;
       try {
         await showScreen(shown, screen, width);
+        undoAct = await act?.(shown, language);
         if (screen.dark) await expectDarkContrast(shown);
         await expect(shown).toHaveScreenshot(`${snapshotName(screen, language, width)}.png`, { fullPage: true });
       } finally {
+        await undoAct?.();
         if (state) write(state.unset);
         await engine?.();
       }

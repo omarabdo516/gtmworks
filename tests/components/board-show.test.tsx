@@ -2,6 +2,7 @@ import { afterEach, expect, test, vi } from 'vitest';
 import { useState } from 'react';
 import { render } from 'vitest-browser-react';
 import { ChatCardFoot, useShowCard, type CardAgent } from '@/app/c/[slug]/[[...section]]/board-show';
+import '@/app/tokens.css';
 import '@/app/shell.css';
 import '@/app/board.css';
 

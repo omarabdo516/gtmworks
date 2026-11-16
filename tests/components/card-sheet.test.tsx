@@ -4,6 +4,7 @@ import { userEvent } from 'vitest/browser';
 import type { ComponentProps } from 'react';
 import { CardSheet, type CardSheetData } from '@/app/card-sheet';
 import { LanguageProvider } from '@/lib/i18n-client';
+import '@/app/tokens.css';
 import '@/app/shell.css';
 
 const push = vi.fn<(href: string, options?: { scroll?: boolean }) => void>();

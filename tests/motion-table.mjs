@@ -30,6 +30,9 @@ export const motionTable = [
   { ref: '.mcard', built: '.gw .board-view .mcard', file: 'app/board.css', html: '<div class="gw"><div class="board-view"><a class="mcard" href="#"></a></div></div>' },
   // A chat's Card on the board (#144): the corner pill eases its colours and gives under a press.
   { ref: '.corner-pill', built: '.gw .corner-pill', file: 'app/shell.css', html: '<div class="gw"><div class="chat__corner"><a class="corner-pill" href="#"></a></div></div>' },
+  // The toast rises in and leaves upward (#157).
+  { ref: '.toast', built: '.gw .toast', file: 'app/toast.css', html: '<div class="gw toast-host" role="status"><div class="toast"></div></div>' },
+  { ref: '.toast.is-leaving', built: '.gw .toast.is-leaving', file: 'app/toast.css', html: '<div class="gw toast-host" role="status"><div class="toast is-leaving"></div></div>' },
   // The settings overlay fades in; a Member × Agent switch.
   { ref: '.sov[open]', built: '.gw .sov', file: 'app/settings.css', html: '<div class="gw"><div class="sov" role="dialog"></div></div>' },
   { ref: '.switch', built: '.gw .sov .switch', file: 'app/settings.css', html: '<div class="gw"><div class="sov" role="dialog"><button type="button" class="switch" role="switch" aria-checked="false"></button></div></div>' },
