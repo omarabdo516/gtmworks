@@ -40,13 +40,17 @@ test('on a phone a swipe that starts on a card scrolls the board and moves no ca
 
 test('on a phone a card held for a moment is carried to the next list and moved there, while the board holds still under the finger', async () => {
  const board = await phoneBoard();
- board.scrollLeft += column('ideas').left - board.getBoundingClientRect().left + column('ideas').width * 0.6;
+ // dnd-kit scrolls the board by itself, on real time, while the finger is within 20% of its edge (78px at 390). The finger
+ // starts and ends outside those bands, so only the browser could move the board, which is what the test is about.
+ const edge = board.getBoundingClientRect(), band = edge.width * 0.2 + 12;
+ board.scrollLeft += column('planned').left - (edge.right - band - 48);
  const scrolled = await settled(board);
  let cancels = 0;
  window.addEventListener('pointercancel', () => { cancels++; }, true);
  const card = document.querySelector('.kcard[data-card-id="1"]')!.getBoundingClientRect();
- const from = { x: (Math.max(card.left, 2) + card.right) / 2, y: card.top + 12 };
- const aim = () => { const box = column('planned'); return { x: Math.min(box.left + box.width / 2, 390 - 60), y: box.top + 140 }; };
+ const from = { x: Math.max(card.left, edge.left + band) + 10, y: card.top + 12 };
+ const aim = () => { const box = column('planned'); return { x: Math.min(box.left + box.width / 2, edge.right - band - 4), y: box.top + 140 }; };
+ expect([from.x, aim().x].every(x => x >= edge.left + band && x <= edge.right - band), 'the finger stays out of the bands where the board scrolls by itself').toBe(true);
  await touch('touchStart', from.x, from.y);
  vi.advanceTimersByTime(300);
  for (let step = 1; step <= 15; step++) { const to = aim(); await touch('touchMove', from.x + (to.x - from.x) * step / 15, from.y + (to.y - from.y) * step / 15); }
