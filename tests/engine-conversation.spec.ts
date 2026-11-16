@@ -11,6 +11,7 @@ import { fakeHermes } from './fake-hermes.mjs';
 import { engineFor as driverFor } from '../lib/engine.mjs';
 import { runToolCall } from '../lib/agent-tools.mjs';
 import { levelConfig } from '../lib/agent-levels.mjs';
+import { signIn } from './sign-in';
 
 // A conversation on the fake engine (tests/fake-engine.mjs): the engine contract with no subscription and no network,
 // through the same send and close code the conversation route and the worker run, on the local database.
@@ -393,4 +394,64 @@ test('integration: a profile that cannot be made, still offers a toolset that mu
    expect(agentRows(theirs),why).toEqual([{body:'Reply to: Write about the tax diploma'}]);
   } finally { await hermes.close(); }
  }
+});
+
+// #144: the first Run of a new chat with an Agent other than the main one puts its Card on the board, with its log row;
+// the chat says so once, also after a reload and a second Run, and its corner pill names the Card's column, follows it
+// when it moves, shows the column alone on a phone, in Arabic too, and opens the board on the Card.
+test('a new chat with an Agent puts its Card on the board, and the chat\'s line and pill follow it there',async({page})=>{
+ test.setTimeout(180000);
+ const fake=fakeEngine(); const {service,person}=await clients(); const {agent,detach}=attachAgent();
+ const language=(value:'en'|'ar')=>query(`update public.people set language='${value}' where id='${omar}'`);
+ try {
+  const conversation=randomUUID();
+  const send=async(message:string)=>{
+   expect(await sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message,encryptionKey,engineFor:fake.engineFor})).toEqual({conversation});
+   expect(await closeOpenRuns(service,{encryptionKey,conversation,engineFor:fake.engineFor})).toBe(1);
+  };
+  const cards=()=>JSON.parse(query(`select c.id,c.title,c.agent_id,s.board_column from public.work_cards c join public.work_stages s on s.id=c.stage_id where c.conversation_id='${conversation}'`));
+  await send('Plan the launch week\nThree posts and one reel');
+  const [card]=cards();
+  expect(cards()).toEqual([{id:card.id,title:'Plan the launch week',agent_id:agent,board_column:'progress'}]);
+  expect(JSON.parse(query(`select action,actor_kind from public.company_log where card_id=${card.id}`))).toEqual([{action:'card_created',actor_kind:'system'}]);
+
+  language('en');
+  await page.setViewportSize({width:1440,height:900});
+  await signIn(page,'omar@example.com',`/c/rs-learning/conversations/${conversation}`);
+  const kinds=()=>page.locator('.turns > li').evaluateAll(rows=>rows.map(row=>row.getAttribute('data-author')||row.getAttribute('data-kind')));
+  const line=page.locator('.turns > li[data-kind="boarded"]'), pill=page.locator('.chat__corner .corner-pill');
+  await expect(line).toHaveText('This card was added to the board under “In progress”');
+  expect(await kinds()).toEqual(['person','agent','boarded']);
+  await expect(pill).toHaveAccessibleName('On the board: In progress');
+  await expect(pill.locator('.corner-pill__lbl')).toHaveText('On the board:');
+  await send('Add a teaser');
+  expect(cards()).toHaveLength(1);
+  await page.reload();
+  await expect(page.locator('.msg[data-author=agent]')).toHaveCount(2);
+  expect(await kinds()).toEqual(['person','agent','boarded','person','agent']);
+
+  query(`select public.move_work_card_to_column('${company}',${card.id},'planned')`);
+  await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+  await expect(pill).toHaveAccessibleName('On the board: Planned');
+  await page.setViewportSize({width:390,height:900});
+  await expect(pill.locator('.corner-pill__lbl')).toBeHidden();
+  await expect(pill.locator('.corner-pill__col')).toHaveText('Planned');
+  language('ar');
+  for(const width of [390,1440]) {
+   await page.setViewportSize({width,height:900});
+   await page.reload();
+   await expect(pill).toHaveAccessibleName('على اللوحة: متخطط');
+   await expect(pill.locator('.corner-pill__lbl')).toBeVisible({visible:width===1440});
+   await expect(line).toHaveText('الكارت ده اتضاف للوحة في «شغالين عليه»');
+  }
+
+  language('en');
+  await page.reload();
+  await pill.click();
+  await expect(page).toHaveURL(/\/c\/rs-learning\/work\/board$/);
+  const shown=page.locator(`#board-cols .kcard[data-card-id="${card.id}"]`);
+  await expect(shown.locator('a')).toBeFocused();
+  await expect(page.getByRole('group',{name:'Filter by agent'}).getByRole('button',{name:'All',exact:true})).toHaveAttribute('aria-pressed','true');
+  await expect(shown.locator('.kcard__foot')).toHaveText('Faye· Marketing');
+ } finally { language('en'); detach(); }
 });
