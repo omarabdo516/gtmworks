@@ -1,7 +1,7 @@
 'use client';
 // A chat's Card on the board (#144), kept apart from the board's server actions so a component test reaches only client
 // modules.
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 
 // A Card's own Agent (work_cards.agent_id), the one whose chat put it on the board.
@@ -10,7 +10,10 @@ export type CardAgent={id:string,connection_id:string,name:string,speciality:str
 // The chat's corner pill opens the board on its Card (design-reference: show-on-board): an Agent filter that would hide
 // it goes back to all, then the Card comes into view, takes the keyboard and flashes once.
 export function useShowCard(show:number|undefined,{hides,showAll,board}:{hides:boolean,showAll:()=>void,board:string}) {
- if(show&&hides) showAll();
+ // Once per Card shown: clearing `show` from the address leaves it in the board's props, and a filter the person picks
+ // afterwards must stay.
+ const [seen,setSeen]=useState<number|undefined>();
+ if(show!==seen) { setSeen(show); if(show&&hides) showAll(); }
  useEffect(()=>{
   if(!show) return;
   const shown=document.querySelector<HTMLElement>(`#board-cols .kcard[data-card-id="${show}"]`);

@@ -46,6 +46,11 @@ test('the pill opens the board on its Card: an Agent filter hiding it goes back 
  expect([motion.animationName, motion.animationDuration, motion.animationTimingFunction, motion.animationIterationCount]).toEqual(['kcard-flash', '1.4s', 'cubic-bezier(0.2, 0, 0, 1)', '1']);
  expect(cleared.mock.calls).toEqual([[null, '', '/c/rs-learning/work/board']]);
  await expect.poll(() => shownCard()!.classList.contains('is-flash'), { timeout: 4000 }).toBe(false);
+
+ // The board keeps `show` in its props after the address drops it: a filter picked afterwards stays.
+ await filters.getByRole('button', { name: 'Writer' }).click();
+ await expect.element(filters.getByRole('button', { name: 'Writer' })).toHaveAttribute('aria-pressed', 'true');
+ await expect.element(screen.getByRole('link', { name: 'Plan the June campaign' })).not.toBeInTheDocument();
 });
 
 test('with reduced motion the board jumps to the Card instead of gliding', async () => {
