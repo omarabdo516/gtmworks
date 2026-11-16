@@ -134,6 +134,8 @@ const agentRequest = (answer: 'waiting' | 'made' | 'declined') => ({
 // Ads and the Card Omar's chat with it put In progress on June 10 (#144): the chat with its line and its corner pill.
 const onBoard = (n: number) => `6d000000-0000-0000-0000-00000000000${n}`;
 const onBoardAsk = 'خطة إعلانات Meta لكورس المحاسب الشامل';
+// Ads and an idea under it with no chat yet (#145): the Card's sheet opens on the way to start one.
+const cardIdea = (n: number) => `6e000000-0000-0000-0000-00000000000${n}`;
 // #حملة ديسمبر (#24): the Owner, the Manager and the first Contributor with Meta Ads and SEO, SEO hidden from the
 // Contributor everywhere else; the Manager calls SEO there, and wrote once in the general channel.
 const team = (n: number) => `6c000000-0000-0000-0000-0000000000${String(n).padStart(2, '0')}`;
@@ -316,13 +318,27 @@ const screenStates: Record<string, { set: string, unset: string, admin?: true }>
        ('${rsLearning}','${onBoard(3)}','person','20000000-0000-0000-0000-000000000001',null,'Omar','${onBoardAsk}','${onBoard(4)}','visual-on-board','2026-06-10T10:00:00Z'),
        ('${rsLearning}','${onBoard(3)}','agent',null,'${onBoard(2)}','Ads','تمام، هبدأ بالجمهور وبعدها أكتب 3 إعلانات وأبعتهملك تشوفهم.',null,'visual-on-board','2026-06-10T10:01:00Z');
       insert into public.work_cards(id,company_id,stage_id,title,agent_id,conversation_id) overriding system value values
-       (692001,'${rsLearning}',(select id from public.work_stages where company_id='${rsLearning}' and board_column='progress' order by position limit 1),'${onBoardAsk}','${onBoard(2)}','${onBoard(3)}');`,
-    unset: `delete from public.work_cards where id=692001;
+       (692001,'${rsLearning}',(select id from public.work_stages where company_id='${rsLearning}' and board_column='progress' order by position limit 1),'${onBoardAsk}','${onBoard(2)}','${onBoard(3)}');
+      insert into public.member_agent_access(company_id,person_id,agent_id) values ('${rsLearning}','20000000-0000-0000-0000-000000000002','${onBoard(2)}');`,
+    unset: `delete from public.member_agent_access where agent_id='${onBoard(2)}';
+      delete from public.work_card_visits where card_id=692001;
+      delete from public.work_cards where id=692001;
       delete from public.conversation_usage where conversation_id='${onBoard(3)}';
       delete from public.conversation_messages where conversation_id='${onBoard(3)}';
       delete from public.conversations where id='${onBoard(3)}';
       delete from public.hermes_agents where id='${onBoard(2)}';
       delete from public.hermes_connections where id='${onBoard(1)}';`,
+  },
+  'card-chat-empty': {
+    admin: true,
+    set: `insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('${cardIdea(1)}','${rsLearning}','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9/p/visual-card-idea','visual-card-idea','visual-no-key','unreachable');
+      insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('${cardIdea(2)}','${rsLearning}','${cardIdea(1)}','Ads','Runs the Meta and Google ads.');
+      insert into public.work_cards(id,company_id,stage_id,title,agent_id) overriding system value values
+       (692002,'${rsLearning}',(select id from public.work_stages where company_id='${rsLearning}' and board_column='ideas' order by position limit 1),'إعلانات Meta لدفعة ديسمبر','${cardIdea(2)}');`,
+    unset: `delete from public.work_card_visits where card_id=692002;
+      delete from public.work_cards where id=692002;
+      delete from public.hermes_agents where id='${cardIdea(2)}';
+      delete from public.hermes_connections where id='${cardIdea(1)}';`,
   },
   'agent-details': {
     admin: true,
@@ -426,6 +442,13 @@ const screenActs: Record<string, (page: Page, language: Language) => Promise<() 
   'invite-open': async page => {
     await page.locator('#inv-toggle').click();
     await expect(page.locator('#inv-email')).toBeFocused();
+    return async () => {};
+  },
+  // Another Member's chat opens its Card on Log (#145); the Chat tab, picked as a person picks it, shows the lock.
+  'sheet-chat-tab': async page => {
+    await page.locator('.sheet #sh-tab-chat').click();
+    await expect(page.locator('.sheet .priv-sheet')).toBeVisible();
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     return async () => {};
   },
 };
