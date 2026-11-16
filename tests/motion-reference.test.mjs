@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { cssOf, easing, milliseconds, motionOf, productFiles, productStyles, readSheet, referenceFile, referenceStyles, tokenFile } from './motion-css.mjs';
 import { builtToken, motionTable, motionTokens, sharedKeyframes } from './motion-table.mjs';
 import { widths } from './visual-screens.mjs';
@@ -11,6 +12,14 @@ test('the six motion tokens carry the reference’s values', () => {
   for (const token of motionTokens) {
     assert.ok(reference.tokens.has(token), `${referenceFile} :root defines ${token}`);
     assert.equal(product.tokens.get(builtToken(token)), reference.tokens.get(token), `${tokenFile} .gw ${builtToken(token)}`);
+  }
+});
+
+test('the design sidecar names the six motion tokens with the values app/shell.css carries', () => {
+  const sidecar = JSON.parse(readFileSync('.impeccable/design.json', 'utf8')).extensions.motion;
+  for (const token of motionTokens) {
+    const name = builtToken(token).slice(2);
+    assert.equal(sidecar.find((/** @type {{ name: string }} */ entry) => entry.name === name)?.value, product.tokens.get(builtToken(token)), `.impeccable/design.json motion ${name}`);
   }
 });
 
