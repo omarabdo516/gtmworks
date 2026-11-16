@@ -10,9 +10,8 @@ import { channelTitle, type ChannelSummary } from '@/lib/channels';
 const NewChannel=lazy(()=>import('./new-channel-dialog'));
 const pollEvery=5000;
 
-// The channels this person is in (#23, #24; design-reference: renderThreadList), the general one first, each with how
-// many messages are new to them, asked again while the page shows. The open one is being read, so it has none. An Owner
-// or a Manager makes a channel from "+", or by opening any page with ?new=channel.
+// design-reference: renderThreadList. The open channel is being read, so it shows no count; ?new=channel opens New
+// channel from any page, which is how its compared screen reaches it.
 export default function ChannelList({slug,company,person,initial,current,manage}:{slug:string,company:string,person:string,initial:ChannelSummary[],current?:string,manage:boolean}) {
  const {t,language}=useI18n();
  const router=useRouter(); const path=usePathname(); const search=useSearchParams();

@@ -16,9 +16,7 @@ type NameError=''|'channelNameMissing'|'channelNameTaken'|'channelCreateFailed';
 // The name as the channel list will show it: without the '#' or the spaces typed around it.
 const bare=(name:string)=>name.trim().replace(/^#+/,'').trim();
 
-// "New channel" (#24; design-reference: teamCreateHTML, openTeamCreate, createTeam). The creator is always in it; the
-// Members and Agents offered are the ones channelChoices returns (the Agents the creator sees). The same request key is
-// kept for the dialog's life, so a retried Create makes one channel. Made, the page moves to it.
+// design-reference: teamCreateHTML. One request key for the dialog's life, so a retried Create makes one channel.
 export default function NewChannelDialog({slug,company,person,close}:{slug:string,company:string,person:string,close:()=>void}) {
  const {t,language}=useI18n(); const own:Record<string,string>=language==='ar'?channelAr:channelEn;
  const c=(key:string,...values:unknown[])=>own[key].replace(/\{(\d+)\}/g,(_,index)=>String(values[Number(index)] ?? ''));
@@ -34,11 +32,12 @@ export default function NewChannelDialog({slug,company,person,close}:{slug:strin
   if(saving) return;
   if(!bare(name)) { setError('channelNameMissing'); field.current?.focus(); return; }
   setSaving(true); setError('');
-  const made=await createChannel(company,{key:key.current,name,people:people.filter(id=>id!==person),agents});
+  const made=await createChannel(company,{key:key.current,name,people,agents});
   if('channel' in made) { close(); router.push(`/c/${slug}/channels/${made.channel}`); return; }
   setSaving(false);
-  setError(made.refused==='channelNameTaken'||made.refused==='channelNameMissing'?made.refused:'channelCreateFailed');
-  if(made.refused==='channelNameTaken'||made.refused==='channelNameMissing') field.current?.focus();
+  const {refused}=made;
+  if(refused==='channelNameTaken'||refused==='channelNameMissing') { setError(refused); field.current?.focus(); }
+  else setError('channelCreateFailed');
  }
  const chosen=new Set([person,...people]);
  const pool=choices?.agents||[];

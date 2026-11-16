@@ -6,7 +6,6 @@ type MentionState='open'|'answered'|'unanswered';
 export type ChannelMessage=
  | {id:number,author:'person',mine:boolean,name:string,role:MemberRole|null,body:string,at:string,mention:{agent:string,state:MentionState}|null}
  | {id:number,author:'agent',name:string,face:string,body:string,at:string};
-// A channel is the Company's general channel or a team channel an Owner or a Manager named (#24).
 export type ChannelName={kind:'general'}|{kind:'team',name:string};
 export type ChannelSummary=ChannelName&{id:string,unread:number};
 // `only`: shown to the reader in this channel and hidden from them everywhere else.
@@ -32,13 +31,12 @@ const stateOf=(outcome:string|null):MentionState=>outcome===null?'open':outcome=
 const nameOf=(row:{kind:string,name:string|null}):ChannelName=>row.kind==='team'&&row.name?{kind:'team',name:row.name}:{kind:'general'};
 export const channelTitle=(t:(key:string)=>string,channel:ChannelName)=>channel.kind==='team'?channel.name:t('shellGeneralChannel');
 
-// The reader's channels in one Company, the general one first, each with how many messages are new to them.
 export async function channelSidebar(db:Database,company:string):Promise<ChannelSummary[]> {
  const {data}=await db.rpc('channel_sidebar',{c:company});
  return ((data||[]) as {id:string,kind:string,name:string|null,unread:number}[]).map(row=>({...nameOf(row),id:row.id,unread:row.unread}));
 }
 
-// What the reader sees of one channel. Reading it is opening it: the reader has then read every message it returns.
+// Reading a channel is opening it: the reader has then read every message it returns.
 export async function channelRecord(db:Database,person:string,company:string,channel:string):Promise<ChannelRecord|null> {
  const {data:found}=await db.from('channels').select('id,company_id,kind,name').eq('id',channel).eq('company_id',company).maybeSingle();
  if(!found) return null;

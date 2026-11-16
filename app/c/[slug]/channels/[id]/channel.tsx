@@ -103,9 +103,7 @@ function Turn({message,time,c}:{message:ChannelMessage,time:(value:string)=>stri
 
 const Initial=({name,size}:{name:string,size:number})=><span className="me__av lg-av" style={{'--av':`${size}px`} as CSSProperties} aria-hidden="true">{Array.from(name.trim())[0]||'?'}</span>;
 
-// The channel's details (design-reference: renderTeamDetails, its people and Agents). In a team channel an Owner or a
-// Manager adds and takes out Members and Agents; a Member who cannot is told who can. "On the board" and "Handoffs" are
-// not built.
+// design-reference: renderTeamDetails; its "On the board" and "Handoffs" sections are not built.
 function ChannelDetails({panel,name,person,record,tip,c,refresh}:{panel:DetailsPanel,name:string,person:string,record:ChannelRecord,tip:ReactNode,c:Say,refresh:()=>Promise<void>}) {
  const {t,language}=useI18n();
  const count=(value:number)=>new Intl.NumberFormat(localeFor(language)).format(value);
@@ -113,8 +111,8 @@ function ChannelDetails({panel,name,person,record,tip,c,refresh}:{panel:DetailsP
  const team=channel.kind==='team';
  const [addingPerson,setAddingPerson]=useState(false); const [addingAgent,setAddingAgent]=useState(false);
  const [choices,setChoices]=useState<Choices|null>(null); const [failed,setFailed]=useState(false);
- const pick=async(open:boolean,set:(value:boolean)=>void,opener:string)=>{
-  set(open); document.getElementById(opener)?.focus();
+ const pick=async(open:boolean,set:(value:boolean)=>void)=>{
+  set(open);
   if(open&&!choices) setChoices(await channelChoices(channel.company));
  };
  const change=async(made:{person:string,present:boolean}|{agent:string,present:boolean},opener:string)=>{
@@ -147,7 +145,7 @@ function ChannelDetails({panel,name,person,record,tip,c,refresh}:{panel:DetailsP
       <span className="panel-row__text"><span className="panel-row__t"><bdi>{member.name}</bdi>{member.person===person&&<> <span className="ch-you">{c('channelYou')}</span></>}</span>
        <span className="panel-row__d">{t(roleKeys[member.role])}{member.role==='viewer'&&` · ${c('channelReadsOnly')}`}</span></span>
       {manage&&member.person!==person&&remove(`ch-rm-${member.person}`,member.name,{person:member.person,present:false},'ch-add-open')}</li>)}
-     {manage&&addRow('ch-add-open',addingPerson,c('channelAddMember'),()=>void pick(!addingPerson,setAddingPerson,'ch-add-open'))}
+     {manage&&addRow('ch-add-open',addingPerson,c('channelAddMember'),()=>void pick(!addingPerson,setAddingPerson))}
      {manage&&addingPerson&&choices&&(personCandidates.length?personCandidates.map(candidate=><li key={candidate.person} className="panel-row tm-cand"><Initial name={candidate.name} size={28}/>
       <span className="panel-row__text"><span className="panel-row__t"><bdi>{candidate.name}</bdi></span><span className="panel-row__d">{t(roleKeys[candidate.role])}</span></span>
       <button type="button" className="btn btn--secondary btn--sm" id={`ch-add-${candidate.person}`} onClick={()=>void change({person:candidate.person,present:true},'ch-add-open')}>{c('channelAdd')}</button></li>)
@@ -162,7 +160,7 @@ function ChannelDetails({panel,name,person,record,tip,c,refresh}:{panel:DetailsP
       <span className="panel-row__text"><span className="panel-row__t"><bdi>{agent.name}</bdi></span>{agent.only?<span className="panel-row__d">{c('channelShownHere')}</span>:agent.speciality&&<span className="panel-row__d"><bdi>{agent.speciality}</bdi></span>}</span>
       {manage&&remove(`tm-rm-${agent.id}`,agent.name,{agent:agent.id,present:false},'tm-add-open')}</li>)
      :empty(team?c('channelNoAgentsYet'):c('channelNoAgents'))}
-     {manage&&addRow('tm-add-open',addingAgent,c('channelAddAgent'),()=>void pick(!addingAgent,setAddingAgent,'tm-add-open'))}
+     {manage&&addRow('tm-add-open',addingAgent,c('channelAddAgent'),()=>void pick(!addingAgent,setAddingAgent))}
      {manage&&addingAgent&&choices&&(agentCandidates.length?agentCandidates.map(candidate=><li key={candidate.id} className="panel-row tm-cand"><span aria-hidden="true"><CompanyAgentFace agent={candidate} size={28}/></span>
       <span className="panel-row__text"><span className="panel-row__t"><bdi>{candidate.name}</bdi></span><span className="panel-row__d"><bdi>{candidate.speciality||t('newAgent')}</bdi></span></span>
       <button type="button" className="btn btn--secondary btn--sm" id={`tm-add-${candidate.id}`} onClick={()=>void change({agent:candidate.id,present:true},'tm-add-open')}>{c('channelAdd')}</button></li>)

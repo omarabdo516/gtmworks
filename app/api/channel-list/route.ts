@@ -7,7 +7,6 @@ import { uuid } from '@/lib/conversations';
 
 const reply=(body:unknown,status=200)=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store'}});
 
-// The reader's channels in one Company with their unread counts (#24), which the sidebar asks for again while it shows.
 export async function GET(request:NextRequest) {
  try {
   const db=await supabase(); const {data:{user}}=await db.auth.getUser();
