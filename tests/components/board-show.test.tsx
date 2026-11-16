@@ -6,10 +6,10 @@ import '@/app/tokens.css';
 import '@/app/shell.css';
 import '@/app/board.css';
 
-const replace = vi.fn<(href: string, options?: { scroll?: boolean }) => void>();
-vi.mock('next/navigation', () => ({ useRouter: () => ({ replace, push: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }) }));
+// Clearing `show` changes the address alone, with no navigation, so the board keeps the Card the server read for it.
+const replace = () => vi.spyOn(window.history, 'replaceState').mockImplementation(() => {});
 
-afterEach(() => { replace.mockReset(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 // RS Learning's board as the board draws it: the Writer's idea, and the Card Ads's chat put In progress (#144), with
 // an Agent filter that hides every Card of another Agent.
@@ -30,6 +30,7 @@ const shownCard = () => document.querySelector<HTMLElement>('#board-cols .kcard[
 
 test('the pill opens the board on its Card: an Agent filter hiding it goes back to all, and the Card scrolls into view, takes the keyboard and flashes once', async () => {
  const scrolled = vi.spyOn(HTMLElement.prototype, 'scrollIntoView');
+ const cleared = replace();
  const screen = await render(<Board/>);
  const filters = screen.getByRole('group', { name: 'Filter by agent' });
  await filters.getByRole('button', { name: 'Writer' }).click();
@@ -43,12 +44,13 @@ test('the pill opens the board on its Card: an Agent filter hiding it goes back 
  expect(shownCard()!.classList.contains('is-flash')).toBe(true);
  const motion = getComputedStyle(shownCard()!);
  expect([motion.animationName, motion.animationDuration, motion.animationTimingFunction, motion.animationIterationCount]).toEqual(['kcard-flash', '1.4s', 'cubic-bezier(0.2, 0, 0, 1)', '1']);
- expect(replace.mock.calls).toEqual([['/c/rs-learning/work/board', { scroll: false }]]);
+ expect(cleared.mock.calls).toEqual([[null, '', '/c/rs-learning/work/board']]);
  await expect.poll(() => shownCard()!.classList.contains('is-flash'), { timeout: 4000 }).toBe(false);
 });
 
 test('with reduced motion the board jumps to the Card instead of gliding', async () => {
  vi.stubGlobal('matchMedia', (query: string) => ({ matches: query.includes('reduce'), media: query, addEventListener() {}, removeEventListener() {} }));
+ replace();
  const scrolled = vi.spyOn(HTMLElement.prototype, 'scrollIntoView');
  const screen = await render(<Board show={7}/>);
  await expect.element(screen.getByRole('link', { name: 'Plan the June campaign' })).toHaveFocus();
@@ -56,10 +58,11 @@ test('with reduced motion the board jumps to the Card instead of gliding', async
 });
 
 test('a chat\'s Card shows its Agent whole and the Agent\'s job on its foot, and a board opened without a Card shows none', async () => {
+ const cleared = replace();
  await render(<Board/>);
  const foot = shownCard()!.querySelector('.kcard__foot')!;
  expect(foot.querySelector('.kcard__agent bdi')!.textContent).toBe('Ads');
  expect(foot.querySelector('.kcard__agent .agent-face')!.getAttribute('aria-label')).toBe('Ads');
  expect(foot.textContent).toBe('Ads· Runs the Meta ads.');
- expect(replace).not.toHaveBeenCalled();
+ expect(cleared).not.toHaveBeenCalled();
 });

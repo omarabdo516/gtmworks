@@ -2,7 +2,6 @@
 // A chat's Card on the board (#144), kept apart from the board's server actions so a component test reaches only client
 // modules.
 import { useEffect, type ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 
 // A Card's own Agent (work_cards.agent_id), the one whose chat put it on the board.
@@ -11,7 +10,6 @@ export type CardAgent={id:string,connection_id:string,name:string,speciality:str
 // The chat's corner pill opens the board on its Card (design-reference: show-on-board): an Agent filter that would hide
 // it goes back to all, then the Card comes into view, takes the keyboard and flashes once.
 export function useShowCard(show:number|undefined,{hides,showAll,board}:{hides:boolean,showAll:()=>void,board:string}) {
- const router=useRouter();
  if(show&&hides) showAll();
  useEffect(()=>{
   if(!show) return;
@@ -22,9 +20,10 @@ export function useShowCard(show:number|undefined,{hides,showAll,board}:{hides:b
    shown.addEventListener('animationend',()=>shown.classList.remove('is-flash'),{once:true});
    shown.querySelector<HTMLElement>('a')?.focus({preventScroll:true});
   }
-  // Shown once: a reload of the board does not show it again.
-  router.replace(board,{scroll:false});
- },[show,router,board]);
+  // Shown once: a reload does not show it again. Only the address changes, so the board keeps the Card the server read
+  // for `show` past the list's cap (Next keeps native history updates in step with the router).
+  window.history.replaceState(null,'',board);
+ },[show,board]);
 }
 
 // The foot of a Card a chat put on the board: its Agent whole, then the Agent's job (the reference's chan), then its date.
