@@ -6,11 +6,11 @@ import Link from '@/lib/link';
 import { roleAgents } from '@/lib/role-agents';
 import { MemberPicker, type WorkMember } from '@/lib/work-activity';
 import { CardDialog } from '@/app/card-dialog';
-import { workAction } from './work-actions';
+import type { WorkAction } from './work';
 function Send({ready}:{ready:boolean}) { const {t}=useI18n(); const {pending}=useFormStatus(); return <button className="primary" disabled={!ready||pending}>{t('createCard')}</button>; }
 // Loaded only when a new card is started, so the board's first load stays small.
 // stage 0 is a message to an agent; a stage id is the quick form of that column (title and template).
-export default function NewCard({slug,company,agents:roster,members,stage,fromRoute,onClose}:{slug:string,company:string,agents:{person_id:string,role:string,granted:boolean}[],members:WorkMember[],stage:number,fromRoute:boolean,onClose:()=>void}) { const {t}=useI18n();
+export default function NewCard({slug,company,agents:roster,members,stage,fromRoute,workAction,onClose}:{workAction:WorkAction,slug:string,company:string,agents:{person_id:string,role:string,granted:boolean}[],members:WorkMember[],stage:number,fromRoute:boolean,onClose:()=>void}) { const {t}=useI18n();
  // One key per opened composer: a double click or a retried request is one card. The form cannot submit before React attaches its handler.
  const key=useRef(''); const hydrated=useSyncExternalStore(()=>()=>{},()=>true,()=>false);
  const agents=roleAgents.flatMap(role=>roster.filter(a=>a.granted&&a.role===role.key).map(a=>({person_id:a.person_id,people:{name:members.find(member=>member.person_id===a.person_id)?.people?.name||t(role.name)}})));

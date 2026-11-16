@@ -28,3 +28,10 @@ test('no migration controls its own transaction or needs a transaction block at 
   .map(({name,index,statement})=>`${name} statement ${index}: ${statement.slice(0,60)}`));
  assert.deepEqual(problems,[]);
 });
+
+// #228 changes how functions that read Cards answer and nothing else, so the previous app version runs against it.
+test("#228's migration only replaces functions", () => {
+ const statements=topLevelStatements(readFileSync('supabase/migrations/20270103000000_hidden_card_readers.sql','utf8'));
+ assert.ok(statements.length>0,'the migration was read');
+ assert.deepEqual(statements.filter(statement=>!/^create\s+or\s+replace\s+function\s+public\.\w+\s*\(/i.test(statement)).map(statement=>statement.slice(0,60)),[]);
+});

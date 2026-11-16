@@ -12,6 +12,9 @@ function sandbox(t, { visual, functional, firstRun = true, measured }) {
  const dir = mkdtempSync(join(output, 'projects-'));
  t.after(() => rmSync(dir, { recursive: true, force: true }));
  copyFileSync('package.json', join(dir, 'package.json'));
+ // tests/lane.mjs, which the config imports, reads the stack's ports from the repository root's Supabase config.
+ mkdirSync(join(dir, 'supabase'));
+ copyFileSync('supabase/config.toml', join(dir, 'supabase/config.toml'));
  symlinkSync(resolve('node_modules'), join(dir, 'node_modules'), 'dir');
  mkdirSync(join(dir, 'tests'));
  writeFileSync(join(dir, 'playwright.config.ts'), `import base from ${JSON.stringify(resolve('playwright.config.ts'))};
