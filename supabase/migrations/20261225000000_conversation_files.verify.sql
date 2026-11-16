@@ -8,5 +8,7 @@ select json_build_object(
  'no_policy_writes_them',not exists(select 1 from pg_policies where schemaname='public' and tablename='conversation_attachments' and cmd<>'SELECT'),
  'a_path_stays_in_its_company_folder',exists(select 1 from pg_constraint where conrelid='public.conversation_attachments'::regclass and contype='c' and pg_get_constraintdef(oid) like '%split_part%'),
  'a_file_belongs_to_a_conversation_of_its_company',exists(select 1 from pg_constraint where conrelid='public.conversation_attachments'::regclass and contype='f' and confrelid='public.conversations'::regclass and array_length(conkey,1)=2),
+ 'company_rules_skip_the_conversations_folder',(select bool_and(coalesce(qual,with_check) like '%conversations%') from pg_policies where schemaname='storage' and tablename='objects' and policyname in ('creative_read','creative_write')),
+ 'only_the_conversations_person_reads_its_bytes',exists(select 1 from pg_policies where schemaname='storage' and tablename='objects' and policyname='conversation_file_read' and cmd='SELECT' and qual like '%person_id = auth.uid()%' and qual like '%can_see_agent%'),
  'a_file_is_named_once_per_company',exists(select 1 from pg_constraint where conrelid='public.conversation_attachments'::regclass and contype='u' and pg_get_constraintdef(oid) like '%company_id, path%')
 );

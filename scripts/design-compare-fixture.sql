@@ -146,7 +146,7 @@ insert into public.work_attachments(id,company_id,card_id,comment_id,name,conten
  (640004,'10000000-0000-0000-0000-000000000001',640001,640002,'creatives-dec-v2.zip','application/zip',13002342,'10000000-0000-0000-0000-000000000001/design-compare/creatives-dec-v2.zip','20000000-0000-0000-0000-000000000001','2026-11-13T09:00:00Z')
 on conflict do nothing;
 insert into public.conversation_attachments(id,company_id,conversation_id,name,content_type,size,path,created_at) overriding system value
-values (640005,'10000000-0000-0000-0000-000000000001','62000000-0000-0000-0000-000000000003','audiences-oct.csv','text/csv',18432,'10000000-0000-0000-0000-000000000001/design-compare/audiences-oct.csv','2026-11-14T16:40:00Z')
+values (640005,'10000000-0000-0000-0000-000000000001','62000000-0000-0000-0000-000000000003','audiences-oct.csv','text/csv',18432,'10000000-0000-0000-0000-000000000001/conversations/62000000-0000-0000-0000-000000000003/audiences-oct.csv','2026-11-14T16:40:00Z')
 on conflict do nothing;
 
 commit;
