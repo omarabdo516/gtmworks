@@ -11,6 +11,8 @@ import type { ReplyCard as Card } from '@/lib/conversations';
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }) }));
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+// The record as the server hands it over once it is read: React's use() takes a promise it can see is settled at once.
+const arrived = (record: ConversationRecord) => Object.assign(Promise.resolve(record), { status: 'fulfilled', value: record });
 
 // #136: every word on a draft card is the Agent's, so the card is laid out in its title's direction and each text keeps
 // its own, whichever the interface's.
@@ -112,7 +114,7 @@ test('a card that arrives while the Conversation is open rises in once; the card
  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
  const asks = vi.fn(async () => Response.json(turns([outline, plan], false)));
  vi.stubGlobal('fetch', asks);
- const screen = await render(<LanguageProvider language="en"><div className="gw"><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={{ id: 'cv-1', agent_name: 'Ads', face: 'c-1' }} initial={turns([outline], true)} writer={false} team={false}/></div></LanguageProvider>);
+ const screen = await render(<LanguageProvider language="en"><div className="gw"><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={{ id: 'cv-1', agent_name: 'Ads', face: 'c-1' }} record={arrived(turns([outline], true))} title="" writer={false} team={false}/></div></LanguageProvider>);
  const rising = (card: Card) => getComputedStyle(screen.getByRole('group', { name: card.title }).element()).animationName;
  await expect.element(screen.getByRole('group', { name: outline.title })).toBeVisible();
  expect(rising(outline)).toBe('none');

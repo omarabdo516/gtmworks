@@ -11,6 +11,8 @@ import '@/app/shell.css';
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }) }));
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+// The record as the server hands it over once it is read: React's use() takes a promise it can see is settled at once.
+const arrived = (record: ConversationRecord) => Object.assign(Promise.resolve(record), { status: 'fulfilled', value: record });
 
 const at = '2026-06-10T09:41:00Z';
 const reason = 'Ads follows WhatsApp leads now.';
@@ -33,7 +35,7 @@ test('a Member who keeps their Conversation open sees the Owner\'s answer arrive
  const answers = [waiting, declined];
  const asks = vi.fn(async () => Response.json(answers.shift() ?? declined));
  vi.stubGlobal('fetch', asks);
- const screen = await render(<LanguageProvider language="en"><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={waiting.conversation} initial={waiting} writer={false} team={false}/></LanguageProvider>);
+ const screen = await render(<LanguageProvider language="en"><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={waiting.conversation} record={arrived(waiting)} title="" writer={false} team={false}/></LanguageProvider>);
  const request = screen.getByRole('group', { name: 'Agent request: FollowUp' });
  await expect.element(request.getByText('Request · not made yet')).toBeVisible();
 
@@ -53,7 +55,7 @@ test('a Member who keeps their Conversation open sees the Owner\'s answer arrive
 const talk = (messages: ConversationRecord['messages'], more: Partial<ConversationRecord> = {}): ConversationRecord => ({
  conversation: { id: 'cv-2', agent_name: 'Mona', face: 'c-2' }, messages, usage: { input: 0, output: 0, unknown: 0 }, pending: false, failed: false, working: null, canStop: false, ...more,
 });
-const view = (initial: ConversationRecord, language: 'en' | 'ar' = 'en') => <LanguageProvider language={language}><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={initial.conversation} initial={initial} writer team={false}/></LanguageProvider>;
+const view = (initial: ConversationRecord, language: 'en' | 'ar' = 'en') => <LanguageProvider language={language}><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={initial.conversation} record={arrived(initial)} title="" writer team={false}/></LanguageProvider>;
 const sent = { id: 1, author: 'person' as const, author_name: 'Omar', body: 'Draft the long launch plan', created_at: at };
 
 test('while the Agent works the page says so, and the line goes once the reply is in the record', async () => {

@@ -86,6 +86,18 @@ export function useConversationRecord({company,initial}:{company:string,initial:
  return {record,asked};
 }
 
+// The transcript while the Conversation is still loading (#172; design-reference: skeletonHTML): the person's message,
+// a reply with its face, and a reply with a card.
+export function ChatPlaceholder() {
+ const {c}=useConversationText();
+ const line=(width:number)=><div className="sk sk-line" style={{width:`${width}%`}}/>;
+ return <div className="transcript__col sk-hold" aria-busy="true" aria-label={c('chatLoading')}>
+  <div className="sk-msg" style={{alignSelf:'flex-end',width:'55%'}}>{line(100)}{line(70)}</div>
+  <div className="sk-msg" style={{width:'80%'}}><div className="sk" style={{width:20,height:20,borderRadius:'50%'}}/>{line(90)}{line(95)}{line(60)}</div>
+  <div className="sk-msg" style={{width:'90%'}}>{line(100)}{line(80)}<div className="sk" style={{height:180,borderRadius:'var(--gw-r-card)',width:'100%'}}/></div>
+ </div>;
+}
+
 // The messages as the reference draws them (design-reference: msgHTML): the Agent's turns on the start side, the
 // person's on the end side, with every card and line the Conversation has; then whether the Agent is working, and for
 // whom, or that the reply failed. While the Agent works, a message sent meanwhile waits as its sender's next turn

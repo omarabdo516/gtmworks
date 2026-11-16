@@ -236,6 +236,20 @@
 }
 .gw .transcript__col { max-width: var(--gw-chat-col); margin: 0 auto; display: flex; flex-direction: column; gap: 24px; min-height: 100%; justify-content: flex-end; }
 .gw .transcript__col > * { max-width: 100%; }
+/* The placeholder of a Conversation or Numbers still loading (#172; design-reference: .sk, .sk-line, .sk-msg). It shows
+   only after 400ms: React keeps a placeholder it has drawn for at least 300ms, so a page that arrives at once never
+   shows one. */
+.gw .sk { background: var(--gw-bg-tertiary); border-radius: var(--gw-r-sm); position: relative; overflow: hidden; }
+.gw .sk::after {
+  content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, var(--gw-bg-subtle), transparent);
+  animation: gw-shimmer 1.2s infinite; transform: translateX(-100%);
+}
+@keyframes gw-shimmer { to { transform: translateX(100%); } }
+.gw .sk-line { height: 14px; }
+.gw .sk-msg { display: grid; gap: 8px; }
+.gw .sk-hold { animation: gw-sk-hold 0s 400ms both; }
+@keyframes gw-sk-hold { from { visibility: hidden; } }
+@media (prefers-reduced-motion: reduce) { .gw .sk::after { animation: none; } }
 .gw .turns { display: flex; flex-direction: column; gap: 24px; margin: 0; padding: 0; list-style: none; }
 .gw .turn { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; width: 100%; }
 .gw .turn--user { align-items: flex-end; }

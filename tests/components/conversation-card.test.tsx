@@ -11,6 +11,8 @@ import '@/app/shell.css';
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }) }));
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 afterEach(() => { vi.unstubAllGlobals(); });
+// The record as the server hands it over once it is read: React's use() takes a promise it can see is settled at once.
+const arrived = (record: ConversationRecord) => Object.assign(Promise.resolve(record), { status: 'fulfilled', value: record });
 
 // Two Runs of the Contributor's chat with Ads, as the database holds them, and the Card the first one put on the board
 // when its reply came (or none, or one the chat was started from, made before it), read through the same record the
@@ -40,7 +42,7 @@ function database(card: TiedCard | null) {
 }
 const recordWith = (card: TiedCard | null) => conversationRecord(database(card), 'p-3', 'co-1', { id: 'cv-1', agent_name: 'Ads', hermes_agents: { connection_id: 'c-1' } });
 const view = (record: ConversationRecord, { language = 'en', writer = true }: { language?: 'en' | 'ar', writer?: boolean } = {}) => <LanguageProvider language={language}>
- <div className="gw"><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={record.conversation} initial={record} writer={writer} team={false}/></div>
+ <div className="gw"><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={record.conversation} record={arrived(record)} title="" writer={writer} team={false}/></div>
 </LanguageProvider>;
 const show = (...args: Parameters<typeof view>) => render(view(...args));
 const pill = () => document.querySelector<HTMLElement>('.corner-pill');
