@@ -21,6 +21,7 @@ import { overlayHref } from '@/lib/settings-overlay.mjs';
 import type { ConversationRecord } from '@/lib/conversation-record';
 import { localeFor } from '@/lib/i18n.mjs';
 import { columnLabel } from '@/lib/board-columns.mjs';
+import { useReportRun } from '@/lib/live-runs';
 type Conversation={id:string,agent_name:string,face:string};
 const requestWaits=(messages:ConversationRecord['messages'])=>messages.some(message=>message.cards?.some(card=>card.kind==='request'&&card.request.state==='waiting'));
 const replyCardIds=(messages:ConversationRecord['messages'])=>messages.flatMap(message=>message.cards?.flatMap(card=>card.kind==='reply'?[card.card.id]:[])??[]);
@@ -41,6 +42,7 @@ export default function ConversationView({slug,agent,details,company,conversatio
  const cb=(key:string,...values:ReactNode[])=>own[key].split(/\{(\d+)\}/).map((part,index)=>index%2?<bdi key={index}>{values[Number(part)]}</bdi>:part);
  const [record,setRecord]=useState(initial); const [sent,setSent]=useState(0); const panel=useDetailsPanel();
  const {messages,usage,pending,failed,working,canStop}=record;
+ useReportRun(agent?.id,pending);
  // The sidebar's Agents come from the server render: an Agent Lead makes while this page asks again is only on the
  // page once the server parts are drawn again, so its tile and its "new" mark show without a reload.
  const router=useRouter(); const madeCount=(rows:ConversationRecord['messages'])=>rows.reduce((sum,message)=>sum+(message.cards?.filter(card=>card.kind==='made').length||0),0);

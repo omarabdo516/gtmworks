@@ -6,6 +6,8 @@ import Link from '@/lib/link';
 import { getI18n } from '@/lib/i18n-server';
 import { supabase } from '@/lib/supabase';
 import { CompanyAgentFace } from '@/components/company-agent-face';
+import { AgentFaceDot } from './agent-face-dot';
+import { agentStates, statusKeys, type AgentStatus } from '@/lib/agent-details.mjs';
 import { pickSection, overlayHref, agentsMainFirst, usageTotals, type OverlaySection } from '@/lib/settings-overlay.mjs';
 import { OverlayChrome } from './settings-overlay-chrome';
 import { AccountChoices, MakeMain, DeleteAgent, CompanyName, InviteForm, AgentSwitch, RuleSaid, RemoveRule } from './settings-overlay-client';
@@ -58,6 +60,8 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  // The person's own note for the Agents in this Company (RLS: nobody else reads it).
  const memberNote=section==='account'?(await db.from('member_notes').select('note').eq('company_id',company.id).eq('person_id',userId).maybeSingle()).data?.note||'':'';
  const agent=section==='agents'&&query.agent?agents.find(item=>item.id===query.agent):undefined;
+ // Each Agent's state for this reader, read in one call as the sidebar reads it (#184).
+ const stateOf=agentStates(section==='agents'?(await db.rpc('agent_states',{c:company.id})).data:null);
  // The Agent's rules in force for the team (#18), newest first as the reference lists them: a suggestion only once it is
  // approved (#25).
  // Learning suggestions waiting for this Owner's or Manager's OK (#25): their open items in "Waiting on you".
@@ -66,7 +70,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  const ro=!canManage&&<p className="ro-note"><SettingsIcon name="shield"/><span>{t('settingsRO')}</span></p>;
  const page=section==='company'?<CompanySection t={t} company={company} solo={workMode==='alone'} message={query.message} members={members} agents={agents} allowed={allowed} userId={userId} slug={slug} owner={owner} canManage={canManage} sharedEngine={sharedEngine} agentLevel={agentLevel} toolWarning={toolWarning.map(row=>row.agent_name)} roleNames={roleNames} ro={ro}/>
-  :section==='agents'?(agent?<AgentPage t={t} rtl={rtl} slug={slug} company={company.id} userId={userId} agent={agent} main={agents[0]} rules={rules} owner={owner} canManage={canManage} canWrite={canWrite}/>:<AgentsSection t={t} rtl={rtl} slug={slug} agents={agents} canManage={canManage} canWrite={canWrite} owner={owner}/>)
+  :section==='agents'?(agent?<AgentPage t={t} rtl={rtl} slug={slug} company={company.id} userId={userId} agent={agent} status={stateOf(agent.id)} main={agents[0]} rules={rules} owner={owner} canManage={canManage} canWrite={canWrite}/>:<AgentsSection t={t} rtl={rtl} slug={slug} agents={agents} stateOf={stateOf} canManage={canManage} canWrite={canWrite} owner={owner}/>)
   :section==='apps'?<AppsSection slug={slug} company={company.id} owner={owner} rtl={rtl} app={query.app} failed={query.signin==='failed'}/>
   :section==='usage'?<UsageSection t={t} locale={locale} slug={slug} company={company.id} rows={usageRows} period={query.period==='30'?30:7}/>
   :section==='account'?<AccountSection t={t} theme={theme} personName={personName} role={role} roleName={roleNames[role]||''} companyName={company.name} company={company.id} memberNote={memberNote}/>
@@ -118,11 +122,14 @@ function CompanySection({t,company,solo,message,members,agents,allowed,userId,sl
   {name}{mode}<AgentLevel company={company.id} level={agentLevel} owner={owner}/>{solo?invite:canManage?table:list}</>;
 }
 
+// What a face needs of an Agent: the client component is handed no more of the row than it draws.
+const face=({id,connection_id,name}:Agent)=>({id,connection_id,name});
+
 function TalkTip({t,rtl,text,talk}:{t:T,rtl:boolean,text:string,talk?:{href:string,name:string}}) {
  return <p className="talk-tip"><SettingsIcon name="chat"/><span>{isolate(text,rtl)}</span>{talk&&<Link className="link-btn" href={talk.href}>{t('settingsTalkTo',talk.name)}</Link>}</p>;
 }
 
-function AgentsSection({t,rtl,slug,agents,canManage,canWrite,owner}:{t:T,rtl:boolean,slug:string,agents:Agent[],canManage:boolean,canWrite:boolean,owner:boolean}) {
+function AgentsSection({t,rtl,slug,agents,stateOf,canManage,canWrite,owner}:{t:T,rtl:boolean,slug:string,agents:Agent[],stateOf:(agent:string)=>AgentStatus,canManage:boolean,canWrite:boolean,owner:boolean}) {
  const main=agents.find(agent=>agent.is_default); const other=agents.find(agent=>!agent.is_default);
  const add=canWrite&&main?<Link className="btn btn--secondary btn--sm" href={`/c/${slug}/chat?new=agent`}><SettingsIcon name="chat"/><span>{owner?t('settingsAskLead',main.name):t('settingsAskAgent')}</span></Link>
   :canWrite&&<button type="button" className="btn btn--secondary btn--sm" aria-disabled="true" title={t('soon')}><SettingsIcon name="chat"/><span>{t('settingsAskAgent')}</span></button>;
@@ -130,14 +137,15 @@ function AgentsSection({t,rtl,slug,agents,canManage,canWrite,owner}:{t:T,rtl:boo
   {!canManage&&<p className="ro-note"><SettingsIcon name="shield"/><span>{t('settingsAgentsRO')}</span></p>}
   <TalkTip t={t} rtl={rtl} text={t('settingsTalkTip')} talk={canWrite&&other?{href:`/c/${slug}/chat/${other.id}`,name:other.name}:undefined}/>
   <div className="panel-card sov-ags">{agents.length?agents.map(agent=><Link key={agent.id} className="panel-row sov-ag" id={`sov-ag-${agent.id}`} href={overlayHref(slug,'agents',{agent:agent.id})}>
-   <span className="face-wrap" aria-hidden="true"><CompanyAgentFace agent={agent} size={36}/></span>
+   <AgentFaceDot agent={face(agent)} size={36} status={stateOf(agent.id)}/>
    <span className="panel-row__text"><span className="panel-row__t"><bdi>{agent.name}</bdi>{agent.is_default&&<> <span className="badge sov-badge">{t('mainAgent')}</span></>}</span>
     {agent.speciality&&<span className="panel-row__d"><bdi>{agent.speciality}</bdi></span>}</span>
+   <span className="panel-row__meta">{t(statusKeys[stateOf(agent.id)])}</span>
    <span className="panel-row__icon sov-chev"><SettingsIcon name="forward" rtl={rtl}/></span></Link>)
    :<p className="panel-empty">{t('noAgentsYet')}</p>}</div></>;
 }
 
-function AgentPage({t,rtl,slug,company,userId,agent,main,rules,owner,canManage,canWrite}:{t:T,rtl:boolean,slug:string,company:string,userId:string,agent:Agent,main?:Agent,rules:Rule[],owner:boolean,canManage:boolean,canWrite:boolean}) {
+function AgentPage({t,rtl,slug,company,userId,agent,status,main,rules,owner,canManage,canWrite}:{t:T,rtl:boolean,slug:string,company:string,userId:string,agent:Agent,status:AgentStatus,main?:Agent,rules:Rule[],owner:boolean,canManage:boolean,canWrite:boolean}) {
  const isMain=agent.is_default; const made=madeOf(agent,userId,slug);
  const mainSec=owner?<section className="dp-sec" id="set-main" aria-labelledby="set-h-main"><Label id="set-h-main">{t('settingsMainAgent')}</Label><ul className="panel-card">
    {isMain?<li className="panel-row"><span className="panel-row__icon"><SettingsIcon name="check"/></span><span className="panel-row__text"><span className="panel-row__t">{t('settingsIsMain',agent.name)}</span><span className="panel-row__d">{t('settingsIsMainD')}</span></span></li>
@@ -146,9 +154,9 @@ function AgentPage({t,rtl,slug,company,userId,agent,main,rules,owner,canManage,c
  return <>
   {isNewFor(agent,userId)&&<OpenedMark company={company} agent={agent.id}/>}
   <Link className="link-btn sov-back" id="sov-back" href={overlayHref(slug,'agents')} replace><SettingsIcon name="back" rtl={rtl}/><span>{t('settingsAllAgents')}</span></Link>
-  <div className="sov-agent-id"><span className="face-wrap face-wrap--lg" aria-hidden="true"><CompanyAgentFace agent={agent} size={48}/></span><div className="od-fill">
+  <div className="sov-agent-id"><AgentFaceDot agent={face(agent)} size={48} status={status} lg/><div className="od-fill">
    <div className="dp-id__name"><bdi>{agent.name}</bdi>{isMain&&<span className="badge dp-id__badge">{t('mainAgent')}</span>}</div>
-   {agent.speciality&&<div className="dp-id__role"><bdi>{agent.speciality}</bdi></div>}{made&&<MadeLine made={made} where="sov"/>}</div></div>
+   <div className="dp-id__role"><span>{agent.speciality&&<><bdi>{agent.speciality}</bdi> · </>}</span>{t(statusKeys[status])}</div>{made&&<MadeLine made={made} where="sov"/>}</div></div>
   {/* The Memory tab (#21) is not built yet. */}
   <div className="segmented sov-tabs" role="tablist" aria-label={agent.name}>
    <button type="button" role="tab" id="sov-tab-settings" aria-selected="true" aria-controls="sov-agent-panel" tabIndex={0}>{t('settings')}</button>

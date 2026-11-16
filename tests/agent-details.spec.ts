@@ -11,6 +11,8 @@ const viewer='20000000-0000-0000-0000-000000000004';
 const reviewer='20000000-0000-0000-0000-000000000003';
 const id=(n:number)=>`69000000-0000-0000-0000-${String(n).padStart(12,'0')}`;
 const [leadConnection,adsConnection,seoConnection,lead,ads,seo,conversation]=[1,2,3,4,5,6,7].map(id);
+// Copy (#184) has a Card with an item waiting on Omar, and the Contributor and the Viewer are shown it.
+const [copyConnection,copy]=[12,13].map(id);
 // The files (#21): one on a Meta Ads Card, one in Omar's own Conversation with it and one in the Contributor's.
 const paths={card:`${company}/agent-details/${randomUUID()}.pdf`,mine:`${company}/conversations/${conversation}/${randomUUID()}.csv`,theirs:`${company}/conversations/${id(11)}/${randomUUID()}.txt`};
 const bytes=Buffer.from('June audiences\n');
@@ -24,8 +26,10 @@ test.beforeAll(({},testInfo)=>{
   insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values
    ('${leadConnection}','${company}','${omar}','http://127.0.0.1:9/p/lead','details-lead','no-key','unreachable'),
    ('${adsConnection}','${company}','${omar}','http://127.0.0.1:9/p/ads','details-ads','no-key','unreachable'),
-   ('${seoConnection}','${company}','${omar}','http://127.0.0.1:9/p/seo','details-seo','no-key','unreachable');
+   ('${seoConnection}','${company}','${omar}','http://127.0.0.1:9/p/seo','details-seo','no-key','unreachable'),
+   ('${copyConnection}','${company}','${omar}','http://127.0.0.1:9/p/copy','details-copy','no-key','unreachable');
   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,created_at,requested_by) values
+   ('${copy}','${company}','${copyConnection}','Copy','Writes the copy.',false,null,null),
    ('${lead}','${company}','${leadConnection}','Lead','General',true,null,null),
    ('${ads}','${company}','${adsConnection}','Meta Ads','Runs the Meta ads.',false,'2026-06-10T09:01:00Z','${omar}'),
    ('${seo}','${company}','${seoConnection}','SEO','Writes the blog.',false,null,null);
@@ -41,6 +45,9 @@ test.beforeAll(({},testInfo)=>{
   insert into public.work_cards(company_id,stage_id,title,agent_id) values ('${company}',${stage('progress')},'June campaign','${ads}') returning id into card;
   insert into public.work_checklist(company_id,card_id,title,done) values ('${company}',card,'Pick the audience',true),('${company}',card,'Write the ad copy',false);
   insert into public.work_cards(company_id,stage_id,title,agent_id) values ('${company}',${stage('planned')},'Retargeting ads','${ads}');
+  insert into public.work_cards(company_id,stage_id,title,agent_id) values ('${company}',${stage('ideas')},'Spring copy','${copy}') returning id into card;
+  insert into public.waiting_items(company_id,person_id,kind,title,card_id) values ('${company}','${omar}','question','Which tone for spring?',card);
+  insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','${viewer}','${copy}'),('${company}','${reviewer}','${copy}');
   insert into public.hermes_agent_audit(company_id,actor_id,agent_id,action,details,created_at) values
    ('${company}','${omar}','${ads}','ATTACH_HERMES_AGENT','{}',now()-interval '1 minute'),
    ('${company}','${omar}','${ads}','RENAME_HERMES_AGENT','{}',now()-interval '10 days');
@@ -220,4 +227,38 @@ test('every file of the Agent is listed, past fifty, and the heading counts what
  await expect(panel.locator('.panel-row')).toHaveCount(51);
  await expect(panel.locator('.panel-row__t').first()).toHaveText('file-51.txt');
  await expect(panel.locator('.panel-row__t').last()).toHaveText('file-1.txt');
+});
+
+// Each tile carries the reader's own state of its Agent (#184): Meta Ads has an open Run, Copy an item waiting on Omar,
+// Lead and SEO nothing. The Contributor and the Viewer see Copy without the waiting dot, and not SEO, hidden from them.
+const tiles=(page:Page)=>page.locator('.sidebar .agent-tile:not(.agent-tile--new)');
+for(const [who,email,shown] of [
+ ['the Owner','omar@example.com',[['Lead · Main · General · Idle','idle'],['Copy · Writes the copy. · Waiting on you','waiting'],[/^Meta Ads · (New · )?Runs the Meta ads\. · Working$/,'working'],['SEO · Writes the blog. · Idle','idle']]],
+ ['a Contributor','reviewer@example.com',[['Lead · Main · General · Idle','idle'],['Copy · Writes the copy. · Idle','idle'],['Meta Ads · Runs the Meta ads. · Working','working']]],
+ ['a Viewer','viewer@example.com',[['Lead · Main · General · Idle','idle'],['Copy · Writes the copy. · Idle','idle'],['Meta Ads · Runs the Meta ads. · Working','working']]],
+] as const) test(`the sidebar shows ${who} each Agent's state as a dot on its face and at the end of its name`,async({page})=>{
+ await page.setViewportSize({width:1440,height:900});
+ await signIn(page,email,`/c/rs-learning/chat/${lead}`);
+ await expect(tiles(page)).toHaveCount(shown.length);
+ for(const [index,[label,status]] of shown.entries()) {
+  await expect(tiles(page).nth(index)).toHaveAccessibleName(label);
+  await expect(tiles(page).nth(index).locator('.face-wrap > .dot')).toHaveClass(`dot dot--${status}`);
+ }
+});
+
+test('Settings shows the same dot on each Agent, with its state as text in the list and after the role on its page',async({page})=>{
+ await page.setViewportSize({width:1440,height:900});
+ await signIn(page,'omar@example.com','/c/rs-learning/settings?section=agents');
+ const row=(agent:string)=>page.locator(`#sov-ag-${agent}`);
+ for(const [agent,status,word] of [[lead,'idle','Idle'],[copy,'waiting','Waiting on you'],[ads,'working','Working'],[seo,'idle','Idle']] as const) {
+  await expect(row(agent).locator('.face-wrap > .dot')).toHaveClass(`dot dot--${status}`);
+  await expect(row(agent).locator('.panel-row__meta')).toHaveText(word);
+ }
+ await row(copy).click();
+ await expect(page.locator('.sov-agent-id .face-wrap--lg > .dot')).toHaveClass('dot dot--waiting');
+ await expect(page.locator('.sov-agent-id .dp-id__role')).toHaveText('Writes the copy. · Waiting on you');
+ await page.context().clearCookies();
+ await signIn(page,'reviewer@example.com',`/c/rs-learning/settings?agent=${copy}`);
+ await expect(page.locator('.sov-agent-id .face-wrap--lg > .dot')).toHaveClass('dot dot--idle');
+ await expect(page.locator('.sov-agent-id .dp-id__role')).toHaveText('Writes the copy. · Idle');
 });
