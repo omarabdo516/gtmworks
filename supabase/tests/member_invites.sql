@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(24);
+select plan(26);
 -- #185: RS Learning with Lead (main), Ads, SEO and Coder. The Owner invites a Member from the Team table, switches two
 -- Agents on for the invitation, and the invited person joins seeing those and no other.
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state)
@@ -11,6 +11,8 @@ insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_
  ('a1850000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','f1850000-0000-0000-0000-000000000003','SEO','SEO',false),
  ('a1850000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000001','f1850000-0000-0000-0000-000000000004','Coder','Code',false);
 insert into auth.users(id,email) values ('a1850000-0000-0000-0000-000000000010','nour@example.test');
+-- The Manager works with SEO, so it is one of the Agents whose switch they may turn.
+insert into public.member_agent_access(company_id,person_id,agent_id) values ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','a1850000-0000-0000-0000-000000000003');
 create temporary table invited(id uuid) on commit drop;
 grant all on invited to authenticated;
 set local role authenticated;
@@ -25,6 +27,9 @@ select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004'
 select throws_ok($$select public.invite_member('10000000-0000-0000-0000-000000000001','someone@example.test','viewer')$$,'42501','inviteNotAllowed','nor a Viewer');
 
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+-- The check before the email is sent writes nothing: no invitation and no log row.
+select is(public.invite_member('10000000-0000-0000-0000-000000000001','nour@example.test','contributor',true),null,'the check alone returns no invitation');
+select is((select count(*)::int from public.member_invitations where email='nour@example.test')+(select count(*)::int from public.company_log where action='member_invited'),0,'and makes no invitation and no log row');
 select lives_ok($$insert into invited select public.invite_member('10000000-0000-0000-0000-000000000001','  Nour@Example.test ','contributor')$$,'the Owner invites a Contributor');
 select is((select email from public.member_invitations where id=(select id from invited)),'nour@example.test','the email is kept trimmed and in lower case');
 

@@ -24,7 +24,7 @@ begin
  select * into chosen from public.hermes_agents where id=agent and company_id=c and public.agent_visible_to(c,auth.uid(),agent);
  if not found then raise exception 'agentNotFound' using errcode='P0002'; end if;
  if chosen.is_default then raise exception 'mainAgentShownToAll' using errcode='42501'; end if;
- select * into target from public.member_invitations where id=invitation and company_id=c and claimed_at is null;
+ select * into target from public.member_invitations where id=invitation and company_id=c and claimed_at is null for update;
  if not found then raise exception 'invitationNotFound' using errcode='P0002'; end if;
  if target.role='owner' then raise exception 'ownerSeesEveryAgent' using errcode='42501'; end if;
  if visible then insert into public.invitation_agent_access(company_id,invitation_id,agent_id) values(c,invitation,agent) on conflict do nothing;
@@ -37,8 +37,9 @@ grant execute on function public.set_invitation_agent_visible(uuid,uuid,uuid,boo
 
 -- The Owner's invitation, checked as the reference's inviteErr checks it: an empty email, one that is not an address,
 -- and one already invited or already a Member here, in any letter case, are each refused with their own code. A closed
--- invitation of a person who has left is opened again. Returns the invitation's id.
-create function public.invite_member(c uuid, mail text, member_role public.member_role) returns uuid language plpgsql security definer set search_path='' as $$
+-- invitation of a person who has left is opened again. Returns the invitation's id. With check_only it only checks and
+-- writes nothing, so the email can be sent first and a failed send leaves no invitation in the way of a retry.
+create function public.invite_member(c uuid, mail text, member_role public.member_role, check_only boolean default false) returns uuid language plpgsql security definer set search_path='' as $$
 declare address text := lower(btrim(coalesce(mail,''), E' \t\r\n')); invitation uuid;
 begin
  if not public.is_company_owner(c) then raise exception 'inviteNotAllowed' using errcode='42501'; end if;
@@ -49,6 +50,7 @@ begin
  if exists(select 1 from public.member_invitations where company_id=c and lower(email)=address and claimed_at is null)
   or exists(select 1 from public.members m join auth.users u on u.id=m.person_id where m.company_id=c and m.removed_at is null and lower(u.email)=address) then
   raise exception 'inviteEmailTaken' using errcode='23505'; end if;
+ if check_only then return null; end if;
  update public.member_invitations set email=address, role=member_role, grant_publishing=false, grant_money_figures=false, grant_customer_data=false, claimed_at=null, created_at=now()
   where id=(select id from public.member_invitations where company_id=c and lower(email)=address order by email=address desc, created_at desc limit 1)
   returning id into invitation;
@@ -58,8 +60,8 @@ begin
  return invitation;
 end;
 $$;
-revoke all on function public.invite_member(uuid,text,public.member_role) from public,anon,service_role;
-grant execute on function public.invite_member(uuid,text,public.member_role) to authenticated;
+revoke all on function public.invite_member(uuid,text,public.member_role,boolean) from public,anon,service_role;
+grant execute on function public.invite_member(uuid,text,public.member_role,boolean) to authenticated;
 
 -- "invited a member" (design-reference: sendInvite's log line): who invited, the email and the Role, for the Owner and
 -- the Managers. An invitation has no bigint id of its own, so its log rows take theirs from a sequence.
