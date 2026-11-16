@@ -13,7 +13,7 @@ const refresh = vi.fn();
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push, refresh, replace: vi.fn(), prefetch: vi.fn() }) }));
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 const sent = vi.fn<(form: FormData) => Promise<unknown>>();
-afterEach(() => { push.mockReset(); refresh.mockReset(); sent.mockReset(); vi.unstubAllGlobals(); });
+afterEach(() => { vi.useRealTimers(); push.mockReset(); refresh.mockReset(); sent.mockReset(); vi.unstubAllGlobals(); });
 
 const sheet = (more: Partial<CardSheetData> = {}): CardSheetData => ({ id: 7, log: <p>Omar moved the card</p>, count: 3, working: false, chat: { kind: 'none' }, ...more });
 // The board behind the sheet holds the Card's link, where the keyboard goes back when the sheet closes.
@@ -22,6 +22,7 @@ const show = (value: CardSheetData, canWrite = true) => render(<LanguageProvider
  <CardSheet slug="rs-learning" company="co-1" title="Launch post" face={null} who={<bdi>Ads</bdi>} badge={<span className="badge">Ideas</span>} sheet={value} canWrite={canWrite} alone={false} send={sent}/>
 </LanguageProvider>);
 const dialog = () => document.querySelector('dialog')!;
+const fakeClock = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
 
 test('a Card opens as a modal sheet on its Log, with the count, the note field ready and the Card page one link away', async () => {
  const screen = await show(sheet());
@@ -36,13 +37,21 @@ test('a Card opens as a modal sheet on its Log, with the count, the note field r
 });
 
 test('Close slides the sheet out before it closes, then the board comes back with the keyboard on the Card', async () => {
+ fakeClock();
  const screen = await show(sheet());
- await screen.getByRole('button', { name: 'Close', exact: true }).click();
+ // Pressed in the page itself, since a driver click moves a fake clock by its own wall time; React then renders.
+ (screen.getByRole('button', { name: 'Close', exact: true }).element() as HTMLButtonElement).click();
+ await vi.advanceTimersByTimeAsync(0);
  expect(dialog().open).toBe(true);
  expect(dialog().classList.contains('is-closing')).toBe(true);
  expect(push).not.toHaveBeenCalled();
- await expect.poll(() => push.mock.calls).toEqual([['/c/rs-learning/work/board', { scroll: false }]]);
+ await vi.advanceTimersByTimeAsync(189);
+ expect(dialog().open).toBe(true);
+ expect(dialog().classList.contains('is-closing')).toBe(true);
+ expect(push).not.toHaveBeenCalled();
+ await vi.advanceTimersByTimeAsync(1);
  expect(dialog().open).toBe(false);
+ await expect.poll(() => push.mock.calls).toEqual([['/c/rs-learning/work/board', { scroll: false }]]);
  await expect.element(screen.getByRole('link', { name: 'Launch post' })).toHaveFocus();
 });
 
@@ -177,10 +186,11 @@ test('a Viewer sees the empty state with the view-only line and no composer', as
 const motion = () => { const style = getComputedStyle(dialog()); const [move] = document.getAnimations().filter(a => (a.effect as KeyframeEffect | null)?.target === dialog());
  return { name: style.animationName, duration: style.animationDuration, easing: style.animationTimingFunction, frames: (move?.effect as KeyframeEffect | undefined)?.getKeyframes().map(k => [k.transform, k.opacity]) }; };
 for (const [dir, shift, suffix] of [['rtl', '-24px', ''], ['ltr', '24px', 'Ltr']] as const) test(`in ${dir} the sheet slides in and out as the reference does`, async () => {
+ fakeClock();
  document.documentElement.dir = dir;
  const screen = await render(<div className="gw"><LanguageProvider language={dir === 'rtl' ? 'ar' : 'en'}><CardSheet slug="rs-learning" company="co-1" title="Launch post" face={null} who={null} badge={null} sheet={sheet()} canWrite alone={false} send={sent}/></LanguageProvider></div>);
  expect(motion()).toEqual({ name: `sheetIn${suffix}`, duration: '0.28s', easing: 'cubic-bezier(0.2, 0, 0, 1)', frames: [[`translateX(${shift})`, '0'], ['none', '1']] });
- // Pressed in the page itself, so the leave is read inside its 190ms rather than after a driver round trip.
+ // Pressed in the page itself, since a driver click moves a fake clock by its own wall time; the leave is read a frame later.
  (screen.getByRole('button', { name: dir === 'rtl' ? 'اقفل' : 'Close', exact: true }).element() as HTMLButtonElement).click();
  await new Promise(requestAnimationFrame);
  expect(motion()).toEqual({ name: `sheetOut${suffix}`, duration: '0.19s', easing: 'cubic-bezier(0.4, 0, 1, 1)', frames: [['none', '1'], [`translateX(${shift})`, '0']] });

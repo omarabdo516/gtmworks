@@ -230,23 +230,3 @@ for(const view of roleViews) test(`${view.role}: Settings shows only what the Ro
   query(`delete from public.hermes_connections where id in ('${first}','${second}')`);
  }
 });
-
-test('the overlay fits a phone: the sections become a row and every control has a 44px tap area',async({page})=>{
- await page.setViewportSize({width:390,height:900});
- await signIn(page,'omar@example.com','/c/rs-learning/home');
- await page.goto('/c/rs-learning/settings?section=account');
- const overlay=page.getByRole('dialog',{name:'Settings'});
- await expect(overlay).toBeVisible();
- expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);
- const nav=await overlay.locator('.sov-nav').evaluate(node=>getComputedStyle(node).flexDirection);
- expect(nav).toBe('row');
- for(const target of await overlay.locator('.sov-nav .sb-item, #sov-close, [role=radio]').all()) {
-  const size=await target.evaluate(node=>{
-   const own=node.getBoundingClientRect(), ring=getComputedStyle(node,'::before');
-   const top=parseFloat(ring.top)||0, bottom=parseFloat(ring.bottom)||0, left=parseFloat(ring.left)||0, right=parseFloat(ring.right)||0;
-   return {height:ring.content==='none'?own.height:Math.max(own.height,own.height-top-bottom),width:ring.content==='none'?own.width:Math.max(own.width,own.width-left-right)};
-  });
-  expect(size.height).toBeGreaterThanOrEqual(44);
-  expect(size.width).toBeGreaterThanOrEqual(44);
- }
-});

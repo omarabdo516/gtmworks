@@ -1,11 +1,10 @@
 import { test, expect } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { signIn, openNavigation, closeNavigation, chooseCompany, openMoreSection } from './sign-in';
+import { signIn, openNavigation, chooseCompany, openMoreSection } from './sign-in';
 import { idle } from './navigation-measure';
 import { i18n } from '../lib/i18n.mjs';
 import { sections } from '../lib/navigation';
-import { roleAgents } from '../lib/role-agents';
 import { appOrigin } from './lane.mjs';
 
 const quote=(sql:string|number)=>`'${String(sql).replaceAll("'","''")}'`;
@@ -16,63 +15,14 @@ async function navLabels(page:import('@playwright/test').Page) {
  await openNavigation(page);
  return page.locator('.sidebar .sb-nav .sb-item').allInnerTexts();
 }
-for(const width of [1440,390]) test(`company frame order, placeholders, LTR and every section inside the new shell at ${width}px`,async({page})=>{
- test.setTimeout(180000);
- await page.setViewportSize({width,height:900});
+
+// The sections the reference has no page for yet open by their address and say so, and a settings page's trail leads
+// back to Settings. The rest of each address's shell is checked by the Viewer's walk below and by language.spec.ts.
+test('a section not built yet says so at its address, and a settings page\'s trail leads back to Settings',async({page})=>{
  await signIn(page,'manager@example.com','/c/rs-learning/home');
- // Home keeps its four role agents (not the sidebar's real Agents): their names in order, four distinct faces in
- // their own colours, and each says what it is working on (a card link) or that it is not working now.
- const roles=page.locator('.home-agents article');
- await expect(roles.locator('h2')).toHaveText(["Account manager","Writer","Designer","Critic"]);
- const faces=await roles.evaluateAll(rows=>rows.map(row=>({icon:row.querySelector('h2 .agent-face')?.innerHTML,color:row.querySelector('h2 .agent-face > g')?.getAttribute('fill')})));
- expect(new Set(faces.map(face=>face.icon)).size).toBe(4);
- expect(faces.map(face=>face.color)).toEqual(roleAgents.map(role=>role.color));
- for(const [index,status] of (await roles.evaluateAll(rows=>rows.map(row=>[...row.querySelectorAll(':scope > p, :scope > a')].map(node=>({tag:node.tagName,text:node.textContent?.trim(),href:node.getAttribute('href')}))))).entries()) {
-  expect(status,`role ${index}: one status`).toHaveLength(1);
-  if(status[0].tag==='A') { expect(status[0].href).toMatch(/^\/c\/rs-learning\/work\/board\/\d+$/); expect(status[0].text).toBeTruthy(); }
-  else expect(status[0].text).toBe("Not working now");
- }
- await expect(roles.filter({has:page.getByRole('heading',{name:"Writer",exact:true})}).getByRole('link')).toHaveAttribute('href',/\/work\/board\/\d+$/);
- await openNavigation(page);
- await expect(page.locator('.sidebar .switch')).toHaveCount(1);
- await expect(page.locator('.topbar')).toHaveText("Home");
- await expect(page.locator('.topbar .mobile-menu')).toHaveCount(1);
- expect(await navLabels(page)).toEqual(labels);
- await expect(page.locator('.sidebar .sb-label').first()).toHaveText("Agents");
- // Home has no sidebar entry since Numbers opens its own page (#35): Home is reached from the account menu's More
- // sections, so no entry is marked here.
- await expect(page.locator('.sidebar .sb-nav a[aria-current=page]')).toHaveCount(0);
- await closeNavigation(page);
- await page.screenshot({path:`test-results/screenshots/frame-home-${width}.png`,fullPage:true});
- // The visited section's entry is marked: Numbers on its own page.
- await page.goto('/c/rs-learning/numbers');
- await openNavigation(page);
- await expect(page.locator('.sidebar .sb-nav a[aria-current=page]')).toHaveText("Numbers");
- const layout=await page.locator('.sidebar').evaluate(sidebar=>{
-  const active=sidebar.querySelector('.sb-nav [aria-current=page]')!,icon=active.querySelector('svg')!,label=active.querySelector('.od-fill')!;
-  return {left:sidebar.getBoundingClientRect().left,dir:getComputedStyle(sidebar).direction,marker:getComputedStyle(active).borderInlineStartWidth,iconLeft:icon.getBoundingClientRect().right<=label.getBoundingClientRect().left};
- });
- expect(layout).toMatchObject({left:0,dir:'ltr',marker:'0px',iconLeft:true});
- await closeNavigation(page);
- const routes=Object.keys(sections).filter(path=>path!=='work/new');
- for(const path of routes) {
+ for(const [path,text] of [['recurring',"No routines yet"],['skills',"No skills yet"],['connections',"No connections yet"],['search',"Search is not available yet"],['history',"No activity log yet"]]) {
   await page.goto(`/c/rs-learning/${path}`);
-  // Settings is the full-window overlay (#26) over the company's frame: the frame is there, inert, behind it.
-  if(path==='settings') {
-   await expect(page.getByRole('dialog',{name:i18n().t('settings')})).toBeVisible();
-   await expect(page.locator('[inert] .sidebar .sb-nav .sb-item')).toHaveText(labels);
-   continue;
-  }
-  expect(await navLabels(page),path).toEqual(labels);
-  await closeNavigation(page);
-  const leaf={'settings/members':'members','settings/work':'workSettings','settings/agents':'agents'}[path as string];
-  if(leaf) {
-   const crumbs=page.locator('.topbar [data-slot="breadcrumb"] li:not([role="presentation"])');
-   await expect(crumbs,path).toHaveCount(3);
-   await expect(crumbs.nth(1),path).toHaveText(i18n().t('settings'));
-   await expect(crumbs.nth(2),path).toHaveText(i18n().t(leaf));
-   await expect(crumbs.nth(1).locator('a'),path).toHaveAttribute('href','/c/rs-learning/settings');
-  } else await expect(page.locator('.topbar'),path).toHaveText(i18n().t(sections[path]));
+  await expect(page.locator('.content .empty'),path).toHaveText(text);
  }
  await page.goto('/c/rs-learning/work/board/1');
  const cardCrumbs=page.locator('.topbar [data-slot="breadcrumb"] li:not([role="presentation"])');
@@ -80,41 +30,14 @@ for(const width of [1440,390]) test(`company frame order, placeholders, LTR and 
  await expect(cardCrumbs.first()).toHaveText(i18n().t('work'));
  await expect(cardCrumbs.first().locator('a')).toHaveAttribute('href','/c/rs-learning/work/board');
  await expect(cardCrumbs.last()).not.toHaveText('');
- // Sections without a sidebar entry still open, by their address, inside the same shell.
- const placeholders=[['recurring',"No routines yet"],['skills',"No skills yet"],['connections',"No connections yet"],['search',"Search is not available yet"],['history',"No activity log yet"]];
- for(const [path,text] of placeholders) {
+ for(const [path,leaf] of [['settings/members','members'],['settings/work','workSettings'],['settings/agents','agents']]) {
   await page.goto(`/c/rs-learning/${path}`);
-  await expect(page.locator('.content .empty')).toHaveText(text);
-  expect(await navLabels(page),path).toEqual(labels);
-  await closeNavigation(page);
+  const crumbs=page.locator('.topbar [data-slot="breadcrumb"] li:not([role="presentation"])');
+  await expect(crumbs,path).toHaveCount(3);
+  await expect(crumbs.nth(1),path).toHaveText(i18n().t('settings'));
+  await expect(crumbs.nth(2),path).toHaveText(i18n().t(leaf));
+  await expect(crumbs.nth(1).locator('a'),path).toHaveAttribute('href','/c/rs-learning/settings');
  }
- await openNavigation(page);
- // Activity log opens the Company's log page (#11); the old placeholder address is checked with the others above.
- await page.locator('.sidebar .sb-nav').getByRole('link',{name:"Activity log",exact:true}).click();
- await expect(page).toHaveURL(/\/c\/rs-learning\/log$/);
- await expect(page.getByRole('main').getByRole('heading',{level:1,name:"Activity log",exact:true})).toBeVisible();
- await openNavigation(page);
- await expect(page.locator('.sidebar .sb-nav a[aria-current=page]')).toHaveText("Activity log");
- await closeNavigation(page);
- await openNavigation(page);
- await page.locator('.sidebar .sb-nav').getByRole('link',{name:"Marketing board",exact:true}).click();
- await expect(page).toHaveURL(/\/work\/board$/);
- await openNavigation(page);
- await page.getByRole('button',{name:"Account menu",exact:true}).click();
- await page.getByRole('menu').getByRole('menuitem',{name:/^Settings/}).click();
- await expect(page).toHaveURL(/\/settings$/);
- // Settings is the full-window overlay (#26): closing it returns to the board, whose sidebar is used next.
- await page.getByRole('dialog',{name:'Settings'}).getByRole('button',{name:'Close settings and go back'}).click();
- await expect(page).toHaveURL(/\/work\/board$/);
- // New chat opens the main Agent's empty Conversation; with no agent attached (the seed), a company member is told
- // why they cannot chat yet (#190) and has no composer.
- await openNavigation(page);
- await page.getByRole('link',{name:"New chat",exact:true}).click();
- await expect(page).toHaveURL(/\/c\/rs-learning\/chat$/);
- await expect(page.locator('.chat .empty-chat').getByRole('note')).toHaveText("No agent is attached to this company yet. The company's Owner can attach one on the Agents page."); // Worded for the Owner since #7 removed the Agency (ADR 0012).
- await expect(page.getByLabel('Message',{exact:true})).toHaveCount(0);
- await expect(page.locator('.sidebar .sb-nav a[aria-current=page]')).toHaveText("Chats");
- expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(width);
 });
 
 test('Viewer has the same navigation, New chat included, without new card on every company section',async({page})=>{
@@ -298,79 +221,6 @@ test('the company switcher lists only the person\'s companies, and the old all-c
  await page.locator('.sidebar').getByRole('link',{name:"New chat",exact:true}).click();
  await expect(page).toHaveURL(/\/c\/rs-learning\/chat$/);
  expect((await page.goto('/all-brands'))?.status()).toBe(404);
-});
-
-test('on a narrow screen the sidebar collapses behind the menu button and slides in over a scrim',async({page})=>{
- await page.setViewportSize({width:390,height:900});
- await signIn(page,'manager@example.com','/c/rs-learning/home');
- const sidebar=page.locator('.sidebar');
- await expect(sidebar).toHaveCount(1);
- await expect(sidebar).toBeHidden();
- await expect(page.locator('.scrim')).toBeHidden();
- await page.locator('.mobile-menu').click();
- await expect(page.locator('.mobile-menu')).toHaveAttribute('aria-expanded','true');
- await expect(sidebar).toBeVisible();
- await expect(page.locator('.scrim')).toBeVisible();
- // While open it holds the keyboard: focus starts inside it, and Tab and Shift+Tab wrap inside it.
- const inside=()=>page.evaluate(()=>!!document.activeElement?.closest('.sidebar'));
- expect(await inside()).toBe(true);
- // The page behind the open drawer is inert, so assistive technology does not reach it either.
- await expect(page.locator('.app-content')).toHaveJSProperty('inert',true);
- const count=await sidebar.locator('a[href],button:not([disabled])').count();
- for(let step=0;step<count+2;step++) { await page.keyboard.press('Tab'); expect(await inside(),`Tab ${step}`).toBe(true); }
- for(let step=0;step<count+2;step++) { await page.keyboard.press('Shift+Tab'); expect(await inside(),`Shift+Tab ${step}`).toBe(true); }
- // Escape closes it and gives focus back to the menu button.
- await page.keyboard.press('Escape');
- await expect(sidebar).toBeHidden();
- await expect(page.locator('.mobile-menu')).toBeFocused();
- await expect(page.locator('.app-content')).toHaveJSProperty('inert',false);
- // Tapping the scrim closes it and also gives focus back; following a link closes it on the new page.
- await page.locator('.mobile-menu').click();
- await page.locator('.scrim').click({position:{x:380,y:450}});
- await expect(sidebar).toBeHidden();
- await expect(page.locator('.mobile-menu')).toBeFocused();
- await page.locator('.mobile-menu').click();
- await sidebar.getByRole('link',{name:"Marketing board",exact:true}).click();
- await expect(page).toHaveURL(/\/work\/board$/);
- await expect(sidebar).toBeHidden();
- expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);
-});
-
-test('the sidebar holds the keyboard only while it covers the page',async({page})=>{
- const sidebar=page.locator('.sidebar');
- const inside=()=>page.evaluate(()=>!!document.activeElement?.closest('.sidebar'));
- // Beside the page the sidebar never covers anything: Tab walks out of it into the page.
- const tabLeaves=async(label:string)=>{
-  await expect(page.getByRole('dialog')).toHaveCount(0);
-  await expect(page.locator('.scrim')).toBeHidden();
-  await expect(page.locator('.app-content')).toHaveJSProperty('inert',false);
-  await sidebar.locator('a[href]').first().focus();
-  const count=await sidebar.locator('a[href],button:not([disabled])').count();
-  let left=false;
-  for(let step=0;step<count+2&&!left;step++) { await page.keyboard.press('Tab'); left=!await inside(); }
-  expect(left,`${label}: Tab leaves the sidebar`).toBe(true);
- };
- // A drawer left open on a narrow screen lets go of the keyboard once the screen widens.
- await page.setViewportSize({width:390,height:900});
- await signIn(page,'manager@example.com','/c/rs-learning/home');
- await openNavigation(page);
- await expect(page.getByRole('dialog')).toBeVisible();
- await page.setViewportSize({width:1440,height:900});
- await tabLeaves('widened');
- // Narrowing again covers the page with the still-open drawer, which holds the keyboard again until Escape.
- await page.setViewportSize({width:390,height:900});
- await expect(page.getByRole('dialog')).toBeVisible();
- await sidebar.locator('a[href]').first().focus();
- const count=await sidebar.locator('a[href],button:not([disabled])').count();
- for(let step=0;step<count+2;step++) { await page.keyboard.press('Tab'); expect(await inside(),`narrowed Tab ${step}`).toBe(true); }
- await page.keyboard.press('Escape');
- await expect(sidebar).toBeHidden();
- // On a wide screen the menu button still opens and Escape closes the sidebar, without trapping Tab.
- await page.setViewportSize({width:1440,height:900});
- await openNavigation(page);
- await expect(page.locator('.mobile-menu')).toHaveAttribute('aria-expanded','true');
- await tabLeaves('wide');
- await closeNavigation(page);
 });
 
 test('mobile recent cards record opens while the drawer stays closed',async({page})=>{

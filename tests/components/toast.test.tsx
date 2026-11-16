@@ -77,10 +77,15 @@ test('a toast with an action stays 6 seconds, then takes the same leaving step',
 test('a toast rises in and lifts out with the reference’s motion, and the toast that replaces it rises in again', async () => {
  fakeClock();
  const started: { name: string, duration: string, easing: string, fill: string, frames: (string | number | null | undefined)[][] }[] = [];
- // Read when each animation starts, so a slow page cannot miss one that has already run.
- const record = (event: AnimationEvent) => { const target = event.target as HTMLElement, style = getComputedStyle(target), [run] = target.getAnimations();
-  started.push({ name: event.animationName, duration: style.animationDuration, easing: style.animationTimingFunction, fill: style.animationFillMode, frames: (run.effect as KeyframeEffect).getKeyframes().map(frame => [frame.transform, frame.opacity]) }); };
- document.addEventListener('animationstart', record);
+ // Read in the same task as the DOM change that starts each animation, so neither a late frame nor a finished run loses one.
+ const seen = new Set<Animation>();
+ const record = new MutationObserver(() => { for (const target of document.querySelectorAll<HTMLElement>('.toast')) for (const run of target.getAnimations()) {
+  if (seen.has(run)) continue;
+  seen.add(run);
+  const style = getComputedStyle(target);
+  started.push({ name: style.animationName, duration: style.animationDuration, easing: style.animationTimingFunction, fill: style.animationFillMode, frames: (run.effect as KeyframeEffect).getKeyframes().map(frame => [frame.transform, frame.opacity]) });
+ } });
+ record.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['class'] });
  try {
   await show();
   toast('Moved to “Planned”');
@@ -91,7 +96,7 @@ test('a toast rises in and lifts out with the reference’s motion, and the toas
   await expect.poll(() => started.length).toBe(3);
   const rise = { name: 'toastIn', duration: '0.2s', easing: 'cubic-bezier(0.2, 0, 0, 1)', fill: 'none', frames: [['translate(-50%, 4px)', '0'], ['translate(-50%)', '1']] };
   expect(started).toEqual([rise, rise, { name: 'toastOut', duration: '0.14s', easing: 'cubic-bezier(0.4, 0, 1, 1)', fill: 'forwards', frames: [['translateX(-50%)', '1'], ['translate(-50%, -4px)', '0']] }]);
- } finally { document.removeEventListener('animationstart', record); }
+ } finally { record.disconnect(); }
 });
 
 test('with reduced motion a toast is removed at once, with no leaving step', async () => {
