@@ -17,10 +17,12 @@ export async function conversationRecord(db:Database,person:string,company:strin
  const messages=(await db.from('conversation_messages').select(messageColumns).eq('conversation_id',conversation).order('id')).data||[];
  const notes=((await db.from('conversation_notes').select(noteColumns).eq('conversation_id',conversation).order('id')).data||[]) as StoredNote[];
  const queued=((await db.from('conversation_queued_turns').select(queuedColumns).eq('conversation_id',conversation).order('queued_at')).data||[]) as QueuedTurn[];
- type MadeRow={run_id:string,call_id:string,created_at:string,hermes_agents:{id:string,connection_id:string,name:string,speciality:string,apps:string[]|null,is_default:boolean,requested_by:string|null,requester_opened_at:string|null}|null};
- const madeRows=((await db.from('lead_made_agents').select('run_id,call_id,created_at,hermes_agents(id,connection_id,name,speciality,apps,is_default,requested_by,requester_opened_at)').eq('conversation_id',conversation).order('created_at')).data||[]) as unknown as MadeRow[];
+ // Requests first: an Owner's yes writes the request's state and the made Agent in one transaction, so a made request
+ // read here always finds its Agent in the read after it.
  type RequestRow={id:number,run_id:string,call_id:string,agent_name:string,job:string,apps:string[],asked_with:string,state:AgentRequestView['state'],answered_at:string|null,reason:string|null,created_at:string,answerer:{name:string}|null,asker:{name:string}|null};
  const requestRows=((await db.from('lead_agent_requests').select('id,run_id,call_id,agent_name,job,apps,asked_with,state,answered_at,reason,created_at,answerer:people!answered_by(name),asker:people!asked_by(name)').eq('conversation_id',conversation).order('id')).data||[]) as unknown as RequestRow[];
+ type MadeRow={run_id:string,call_id:string,created_at:string,hermes_agents:{id:string,connection_id:string,name:string,speciality:string,apps:string[]|null,is_default:boolean,requested_by:string|null,requester_opened_at:string|null}|null};
+ const madeRows=((await db.from('lead_made_agents').select('run_id,call_id,created_at,hermes_agents(id,connection_id,name,speciality,apps,is_default,requested_by,requester_opened_at)').eq('conversation_id',conversation).order('created_at')).data||[]) as unknown as MadeRow[];
  const owners=requestRows.some(row=>row.state==='waiting')?((((await db.from('members').select('people(name)').eq('company_id',company).eq('role','owner').is('removed_at',null)).data||[]) as unknown as {people:{name:string}|null}[])
   .flatMap(row=>row.people?[row.people.name]:[]).sort()):[];
  // The Agent made for a request shows in the request's own card, so one card holds the request and its outcome.
