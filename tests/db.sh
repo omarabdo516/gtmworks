@@ -19,3 +19,4 @@ node tests/lead-agent-migration.mjs
 node tests/remove-agency-migration.mjs
 node tests/company-log-migration.mjs
 node tests/member-agent-visibility-migration.mjs
+node tests/agent-profile-moves-migration.mjs
