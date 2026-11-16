@@ -50,7 +50,7 @@ test('a screen together with a file of the journeys\' area runs the whole browse
 // The request layer and server code under app/ (route handlers and server actions, where the server checks
 // permissions) run the whole browser suite: its journeys drive them and no component test does. They need no install.
 for (const [path, components] of [
-  ['middleware.ts', 'false'], ['instrumentation.ts', 'false'], ['postcss.config.mjs', 'false'],
+  ['middleware.ts', 'false'], ['instrumentation.ts', 'false'], ['postcss.config.mjs', 'true'],
   ['app/api/health/route.ts', 'true'], ['app/sign-in/actions.ts', 'true'],
 ]) {
   test(`${path} runs the whole browser suite and neither the database nor the install`, () => {
@@ -58,9 +58,17 @@ for (const [path, components] of [
   });
 }
 
-// Screens tested as components (#81): a screen, a component, the library they import, or a component test runs them.
-for (const path of ['app/conversation-composer.tsx', 'components/company-agent-face.tsx', 'lib/messages/en.json', 'tests/components/message-box.test.tsx', 'vitest.config.mts']) {
+// Screens tested as components (#81): a screen, a component, the library they import, or a component test runs them,
+// and so do the compared widths and languages, the reference and the stylesheet build the motion test reads (#127).
+for (const path of [
+  'app/conversation-composer.tsx', 'components/company-agent-face.tsx', 'lib/messages/en.json', 'tests/components/message-box.test.tsx', 'vitest.config.mts',
+  'tests/visual-screens.mjs', 'design-reference/index.html', 'postcss.config.mjs',
+]) {
   test(`${path} runs the component tests`, () => assert.equal(areas(path).components, 'true'));
+}
+// The motion table and its reader feed the motion component test, and no browser spec (#127).
+for (const path of ['tests/motion-table.mjs', 'tests/motion-css.mjs']) {
+  test(`${path} runs the component tests and no other long suite`, () => assert.deepEqual(areas(path), { ...none, components: 'true' }));
 }
 for (const path of ['worker/index.mjs', 'supabase/seed.sql', 'tests/frame.spec.ts', 'tests/unit.test.mjs', 'server.js']) {
   test(`${path} does not run the component tests`, () => assert.equal(areas(path).components, 'false'));

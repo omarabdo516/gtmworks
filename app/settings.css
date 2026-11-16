@@ -29,8 +29,7 @@
 .gw .sov :is(p, h3, .panel-row__t, .panel-row__d, .set-hint) { text-wrap: pretty; }
 
 /* the overlay: full window, a bar, the section list and the page */
-.gw .sov { width: 100%; height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); background: var(--gw-bg-chrome); animation: sov-in var(--gw-dur) var(--gw-ease-out); }
-@keyframes sov-in { from { opacity: 0; } }
+.gw .sov { width: 100%; height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); background: var(--gw-bg-chrome); animation: gw-fade-in var(--gw-dur) var(--gw-ease-out); }
 .gw .sov__bar { display: flex; align-items: center; gap: var(--s3); height: var(--gw-head-h); padding-inline: var(--s5) var(--s4); border-bottom: 0.5px solid var(--gw-border-3); }
 .gw .sov__bar .ws__mark { display: inline-flex; width: 28px; height: 28px; flex: none; }
 .gw .sov__title { font-size: var(--gw-fs-lg); line-height: 1.4; font-weight: 600; }

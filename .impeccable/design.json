@@ -278,39 +278,69 @@
     ],
     "motion": [
       {
+        "name": "gw-dur-fast",
+        "value": "150ms",
+        "purpose": "Reference screens (the shell, the Conversation and its details panel, the settings overlay, first run, the dialog, the board, the Activity log and Numbers): hover and colour changes."
+      },
+      {
+        "name": "gw-dur",
+        "value": "200ms",
+        "purpose": "Reference screens: the drawer and the details panel sliding, the settings overlay and first run fading in."
+      },
+      {
+        "name": "gw-dur-slow",
+        "value": "280ms",
+        "purpose": "Reference screens: the dialog and first run's column rising into view."
+      },
+      {
+        "name": "gw-ease-out",
+        "value": "cubic-bezier(0.2, 0, 0, 1)",
+        "purpose": "Reference screens: what arrives or answers the pointer."
+      },
+      {
+        "name": "gw-ease-in",
+        "value": "cubic-bezier(0.4, 0, 1, 1)",
+        "purpose": "Reference screens: what leaves, such as the dialog closing."
+      },
+      {
+        "name": "gw-ease-spring",
+        "value": "cubic-bezier(0.34, 1.45, 0.64, 1)",
+        "purpose": "Reference screens: a small overshoot for a switch, a face or a count."
+      },
+      {
         "name": "duration-instant",
         "value": "80ms",
-        "purpose": "Smallest state change."
+        "purpose": "Paperclip screens: the smallest state change."
       },
       {
         "name": "duration-fast",
         "value": "160ms",
-        "purpose": "Hover, colour and border transitions on controls and board cards."
+        "purpose": "Paperclip screens: hover, colour and border transitions on controls (app/globals.css)."
       },
       {
         "name": "duration-base",
         "value": "240ms",
-        "purpose": "Mobile bottom bar exit."
+        "purpose": "Paperclip screens: the mobile bottom bar exit."
       },
       {
         "name": "duration-slow",
         "value": "360ms",
-        "purpose": "Mobile bottom bar enter."
+        "purpose": "Paperclip screens: the mobile bottom bar enter."
       },
       {
         "name": "duration-deliberate",
         "value": "520ms",
-        "purpose": "Deliberate pane motion."
+        "purpose": "Paperclip screens: deliberate pane motion."
       },
       {
         "name": "ease-out-expo",
         "value": "cubic-bezier(0.16, 1, 0.3, 1)",
-        "purpose": "Entrances."
+        "purpose": "Paperclip screens: entrances."
       },
       {
         "name": "ease-standard",
         "value": "cubic-bezier(0.4, 0, 0.2, 1)",
-        "purpose": "Exits."
+        "purpose": "Paperclip screens: exits."
       }
     ],
     "breakpoints": [

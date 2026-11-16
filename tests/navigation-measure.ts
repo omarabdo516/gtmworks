@@ -67,7 +67,7 @@ export async function measureClick(page: Page, step: Step): Promise<Timing> {
         }
         if (shown && animations.length === 0) {
           const settled = performance.now() - start;
-          document.querySelectorAll('.shell *, .sidebar *').forEach(el => {
+          document.querySelectorAll('.gw, .gw *').forEach(el => {
             // Pinned Paperclip SidebarSection carets use transition-all for rotation/visibility.
             // Keep that copied motion; report unlisted broad transitions elsewhere.
             const copiedCaret=el.matches('.group\\/sidebar-section svg.transition-all');

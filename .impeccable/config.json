@@ -5,5 +5,17 @@
       "maxFindings": 5,
       "maxChars": 8000
     }
+  },
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "bounce-easing",
+        "value": "cubic-bezier(0.34, 1.45, 0.64, 1)",
+        "createdAt": "2026-11-16T05:44:32.760Z",
+        "reason": "Omar: the approved reference defines --ease-spring as this curve (design-reference/index.html:1423) and #127 ports it as --gw-ease-spring"
+      }
+    ]
   }
 }
