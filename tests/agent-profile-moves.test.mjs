@@ -10,8 +10,8 @@ import { i18n } from '../lib/i18n.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
 // An Agent still on its Company's profile moves to its own (#121, ADR 0016): the worker asks the Engine only about the
-// Agent's own profile, moves the Agent only once that profile can answer, and the first Run of a moved Agent's
-// Conversation carries gtmworks's record of it as the Run's history.
+// Agent's own profile, moves the Agent only once that profile can answer, and each Run of a Conversation from
+// before the move carries gtmworks's record of it as the Run's history.
 const encryptionKey=Buffer.alloc(32,6).toString('base64');
 const company='10000000-0000-0000-0000-000000000001';
 const [writer,critic]=['a0000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002'];
@@ -127,7 +127,7 @@ function runDatabases(fake,{history}) {
  return {db,service};
 }
 
-test('the first Run of a moved Agent\'s Conversation carries its record as the Run\'s history, sent now or waiting, and its retry the same body',async()=>{
+test('a Run of a moved Agent\'s Conversation carries its record as the Run\'s history, sent now or waiting, and its retry the same body',async()=>{
  const fake=await fakeHermes();
  try {
   const {db,service}=runDatabases(fake,{history:record});

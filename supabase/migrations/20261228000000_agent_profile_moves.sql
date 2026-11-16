@@ -7,8 +7,11 @@
 --
 -- A Conversation's session stays in the profile it ran on: an imported session is never the one a Run with the
 -- Conversation's session key loads (Engine v0.23.0 hermes_state_portability.py 789-803, gateway/platforms/api_server.py
--- 1603-1621). So the first Run of each Conversation after its Agent moved carries gtmworks's record of the Conversation as
--- the Run's history (pin_run_history; api_server_runs.py 488-525).
+-- 1603-1621). So every Run of a Conversation that began before its Agent moved carries gtmworks's record of the
+-- Conversation as the Run's history (pin_run_history; api_server_runs.py 488-525). Every Run, not only the first: the
+-- Engine writes only the new turn of a Run to the session and treats the history it was given as already saved
+-- (agent/session_persistence.py 336-344), and a given history replaces the session's for that Run
+-- (api_server_runs.py 843-847), so nothing is counted twice.
 --
 -- Nothing existing is rewritten: the new table and column start empty and every Agent stays where it is until the new
 -- worker moves it. The previous app version runs against this: its reserve, record and close calls, lead_create_agent and
@@ -136,7 +139,7 @@ create or replace function public.log_agent_action(action text) returns text lan
 $$;
 
 -- The history a Run carries, pinned at its first start as its knowledge is (pin_run_knowledge): when the Run is reserved
--- on its Agent's own profile and no reply of the Agent was written in this Conversation since the Agent moved there, the
+-- on its Agent's own profile and the Conversation has a message from before the Agent moved there, the
 -- Conversation's messages in order as [{role,content}], the newest kept within 6,000,000 bytes (the Engine takes a body
 -- of 10 MB, api_server.py 170). Every retry sends what was pinned; any other Run, and one the previous app version
 -- already tried to start, carries none.
@@ -150,7 +153,7 @@ begin
  if kept.history is null and held.conversation_id is not null and held.start_attempts=0 and held.start_unknown_at is null
   and held.profile=public.agent_engine_profile(held.agent_id) then
   select max(u.created_at) into moved_at from public.hermes_agent_audit u where u.agent_id=held.agent_id and u.company_id=held.company_id and u.action='MOVE_AGENT_PROFILE';
-  if moved_at is not null and not exists(select 1 from public.conversation_messages m where m.conversation_id=conversation and m.author='agent' and m.created_at>=moved_at) then
+  if moved_at is not null and exists(select 1 from public.conversation_messages m where m.conversation_id=conversation and m.created_at<moved_at) then
    select jsonb_agg(x.entry order by x.id) into record from (
     select m.id,e.entry,sum(octet_length(e.entry::text)) over (order by m.id desc) as total
     from public.conversation_messages m,

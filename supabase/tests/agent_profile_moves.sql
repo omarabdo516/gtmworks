@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(64);
+select plan(65);
 -- An install from before #120: RS Learning (1) has Lead, its main Agent, on the Company's own profile, and Aleem (3) has
 -- its Lead and Copy on Aleem's. Aleem's profile is not ready yet. Every message so far is an hour old.
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
@@ -138,8 +138,8 @@ reset role;
 select results_eq($$select right(person::text,1),sees from readers order by person$$,$$values ('1',1),('2',1),('3',1),('4',1),('5',0)$$,
  'the Owner, Manager, Contributor and Viewer who see the Writer read its row; a Contributor it is not shown to does not');
 
--- The Writer's next Run carries its Conversation's record as history; a retry carries the same, and once it answered on
--- its own profile, a later Run carries none.
+-- Every Run of a Conversation that began before the Writer moved carries the record as history, its retry the same, and
+-- a later Run the record with what was said since; a Conversation begun after the move carries none.
 create temporary table sent(name text primary key, result jsonb);
 grant all on sent to authenticated,service_role;
 set local role authenticated;
@@ -178,8 +178,19 @@ insert into sent select 'later',public.reserve_conversation_turn('b1200000-0000-
 reset role;
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 set local role service_role;
-select is(public.pin_run_history('b1200000-0000-0000-0000-000000000002','b1300000-0000-0000-0000-000000000004'),null,
- 'once the Writer answered on its own profile, a later Run carries no history: the Engine keeps the Conversation there');
+select is(public.pin_run_history('b1200000-0000-0000-0000-000000000002','b1300000-0000-0000-0000-000000000004'),
+ '[{"role":"user","content":"Write the first post"},{"role":"user","content":"Shorter, please"},{"role":"assistant","content":"Here it is, shorter."},{"role":"user","content":"Next draft"},{"role":"assistant","content":"The next draft."}]'::jsonb,
+ 'a later Run carries the whole record again: the Engine never saves a given history into the session');
+reset role;
+insert into public.conversations(id,company_id,person_id,agent_id,agent_name) select 'b1200000-0000-0000-0000-000000000009','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001',agent,'Writer' from named where name='writer';
+set local role authenticated;
+select set_config('request.jwt.claims','{"role":"authenticated"}',true);
+insert into sent select 'fresh',public.reserve_conversation_turn('b1200000-0000-0000-0000-000000000009','10000000-0000-0000-0000-000000000001',agent,'b1300000-0000-0000-0000-000000000009','A new topic') from named where name='writer';
+reset role;
+select set_config('request.jwt.claims','{"role":"service_role"}',true);
+set local role service_role;
+select is(public.pin_run_history('b1200000-0000-0000-0000-000000000009','b1300000-0000-0000-0000-000000000009'),null,
+ 'a Conversation begun after the move carries none: its session is in the Agent''s own profile');
 reset role;
 
 -- The newest messages are kept within 6,000,000 bytes: of 31 messages of 200,000 characters, the 29 newest.
