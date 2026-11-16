@@ -5,7 +5,8 @@ import { agentLevels, levelToolsets, alwaysOff, riskyToolsets, levelConfig, forb
 import { createHash } from 'node:crypto';
 import { readdirSync } from 'node:fs';
 import { provideProfile, configureProfile, readToolsets, readSignIns, startSignIn, pollSignIn, cancelSignIn, disconnectSignIn } from '../lib/hermes.mjs';
-import { keepCompanyProfiles, checkAgentTools } from '../lib/company-profiles.mjs';
+import { keepCompanyProfiles, keepAgentProfiles, checkAgentTools } from '../lib/company-profiles.mjs';
+import { engineFor } from '../lib/engine.mjs';
 import { changeCompanySignIn, readCompanySignIns } from '../lib/company-sign-in.mjs';
 import { encryptSecret, decryptSecret } from '../lib/agent-crypto.mjs';
 import { describeEntry } from '../lib/activity-log.mjs';
@@ -428,4 +429,94 @@ test('a run that never started releases its reservation at once; a started one l
  const started=conversationDatabases({profile:companyProfile(two)});
  assert.deepEqual(await sendMessage(started.db,started.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...engine(started.order)}),{conversation:'c'});
  assert.ok(!started.order.includes('release_conversation_run'));
+});
+
+// Each Agent's own profile (ADR 0016), as the worker sees it: the profiles whose tools lag (agent_profile_work, lost ones
+// first), the mark before a change, the recorded read-back, and tool health forgetting a lost profile. `log` is shared
+// with the driver, so the order of marks, writes and records shows.
+function agentWorkerDatabase(rows,{log=[],failRecord=false}={}) {
+ const lags=row=>row.tools_level==null||row.tools_level!==row.agent_level||row.tools_policy!==toolPolicy||row.tools_pending;
+ return {log,rows,rpc:async(name,args)=>{
+  log.push({name,args});
+  const row=rows.find(found=>found.agent_id===(args?.agent));
+  if(name==='agent_profile_work') return {data:rows.filter(lags).sort((a,b)=>Number(a.tools_level!=null)-Number(b.tools_level!=null)).map(found=>({...found})),error:null};
+  if(name==='begin_agent_tools') { row.tools_pending=true; return {data:null,error:null}; }
+  if(name==='record_agent_profile') {
+   if(failRecord||args.engine_profile!==row.profile||args.policy!==toolPolicy) return {data:null,error:{message:'agentProfileInvalid'}};
+   Object.assign(row,{tools_level:args.level,tools_policy:args.policy,tools_pending:false}); return {data:null,error:null};
+  }
+  if(name==='forget_company_profile') { const lost=rows.find(found=>found.connection===args.connection); Object.assign(lost,{tools_level:null,tools_policy:null,tools_pending:false}); return {data:true,error:null}; }
+  return {data:null,error:{message:`unexpected ${name}`}};
+ }};
+}
+const [writer,critic]=['a0000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002'];
+const agentRow=(agent,extra={})=>({agent_id:agent,profile:`ag-${agent.replaceAll('-','')}`,agent_level:1,tools_level:1,tools_policy:toolPolicy,tools_pending:false,instructions:`You are ${agent}.`,...extra});
+// A driver that records what it is asked in the database's log, and answers as `answer` says.
+const recordingDriver=(log,answer=()=>({state:'configured',toolsets:[]}))=>({
+ provide:async(hermes,profile)=>{ log.push({name:'provide',args:profile}); return answer('provide',profile); },
+ configure:async(hermes,profile)=>{ log.push({name:'configure',args:profile}); return answer('configure',profile); }});
+const hermesOf={address:'http://hermes:8642',profile:'default',key:'test-only-key'};
+
+test('after a level change every Agent profile gets the new tools, each marked before the write and recorded after its read-back', async () => {
+ const db=agentWorkerDatabase([agentRow(writer,{agent_level:3}),agentRow(critic,{agent_level:3})]);
+ assert.deepEqual(await keepAgentProfiles(db,{hermes:hermesOf,driver:recordingDriver(db.log)}),{provided:0,configured:2});
+ assert.deepEqual(db.log.map(({name,args})=>`${name} ${args?.agent||args?.name||''}`.trim()),['agent_profile_work',
+  `begin_agent_tools ${writer}`,`configure ag-${writer.replaceAll('-','')}`,`record_agent_profile ${writer}`,
+  `begin_agent_tools ${critic}`,`configure ag-${critic.replaceAll('-','')}`,`record_agent_profile ${critic}`]);
+ for(const call of db.log.filter(({name})=>name==='configure')) assert.deepEqual(call.args,{name:call.args.name,config:levelConfig(3),forbidden:levelConfig(3).agent.disabled_toolsets});
+ assert.deepEqual(db.log.filter(({name})=>name==='record_agent_profile').map(({args})=>args),[writer,critic].map(agent=>({agent,engine_profile:`ag-${agent.replaceAll('-','')}`,level:3,policy:toolPolicy})));
+ assert.ok(db.rows.every(row=>row.tools_level===3&&!row.tools_pending));
+ // In step: nothing to do, and the Engine is not asked.
+ db.log.length=0;
+ assert.deepEqual(await keepAgentProfiles(db,{hermes:hermesOf,driver:recordingDriver(db.log)}),{provided:0,configured:0});
+ assert.deepEqual(db.log.map(({name})=>name),['agent_profile_work']);
+ assert.deepEqual(await keepAgentProfiles(db,{hermes:null}),{provided:0,configured:0});
+});
+
+test('a write the Engine did not apply leaves its profile marked and unrecorded, so no Run starts on it, and the next profile is still kept', async () => {
+ const db=agentWorkerDatabase([agentRow(writer,{agent_level:3}),agentRow(critic,{agent_level:3,tools_policy:1})]);
+ const driver=recordingDriver(db.log,(step,profile)=>({state:profile.name===agentRow(writer).profile?'failed':'configured',toolsets:null}));
+ assert.deepEqual(await keepAgentProfiles(db,{hermes:hermesOf,driver}),{provided:0,configured:1});
+ assert.deepEqual(db.rows.map(row=>[row.tools_level,row.tools_pending]),[[1,true],[3,false]]);
+ assert.ok(!db.log.some(({name,args})=>name==='record_agent_profile'&&args.agent===writer));
+ // A record the database refuses leaves the mark too, and is reported, not thrown.
+ const refusing=agentWorkerDatabase([agentRow(writer,{agent_level:2})],{failRecord:true});
+ const logged=[]; const error=console.error; console.error=(...args)=>{ logged.push(args.join(' ')); };
+ try { assert.deepEqual(await keepAgentProfiles(refusing,{hermes:hermesOf,driver:recordingDriver(refusing.log)}),{provided:0,configured:0}); }
+ finally { console.error=error; }
+ assert.equal(refusing.rows[0].tools_pending,true);
+ assert.deepEqual(logged,[`Agent profile not kept: ${writer} agentProfileInvalid`]);
+});
+
+test('a lost Agent profile is made again first, empty, with the Agent\'s instructions as its soul, or the Company profile\'s', async () => {
+ const db=agentWorkerDatabase([agentRow(writer,{agent_level:2}),agentRow(critic,{tools_level:null,tools_policy:null,instructions:null})]);
+ assert.deepEqual(await keepAgentProfiles(db,{hermes:hermesOf,driver:recordingDriver(db.log)}),{provided:1,configured:1});
+ assert.deepEqual(db.log.map(({name})=>name),['agent_profile_work','provide','record_agent_profile','begin_agent_tools','configure','record_agent_profile']);
+ const made=db.log.find(({name})=>name==='provide').args;
+ assert.deepEqual(made,{name:`ag-${critic.replaceAll('-','')}`,config:levelConfig(1),forbidden:levelConfig(1).agent.disabled_toolsets,soul:made.soul});
+ assert.match(made.soul,/^You are a marketing agent working for one company in gtmworks\./);
+ db.rows[1].tools_level=null; db.rows[1].tools_policy=null; db.rows[1].instructions='You are the ad critic.'; db.log.length=0;
+ await keepAgentProfiles(db,{hermes:hermesOf,driver:recordingDriver(db.log)});
+ assert.equal(db.log.find(({name})=>name==='provide').args.soul,'You are the ad critic.');
+});
+
+test('an Agent profile the Engine no longer serves is forgotten by tool health and made again, empty, with its soul and the install key', async () => {
+ const fake=await fakeHermes();
+ try {
+  const name=`ag-${writer.replaceAll('-','')}`;
+  await provideProfile(install(fake),{name,soul:'You are the writer.',config:levelConfig(1),forbidden:alwaysOff});
+  fake.settings.profiles.get(name).credentials['openai-codex']='its-own-sign-in';
+  assert.deepEqual(await engineFor(install(fake)).removeAgent(name),{state:'removed'});
+  const db=agentWorkerDatabase([agentRow(writer,{connection:'own',instructions:'You are the writer.'})]);
+  const tools={rpc:async(rpc,args)=>rpc==='engine_tools_due'?{data:[{connection:'own',address:fake.address,profile:name,key_encrypted:encryptSecret('test-only-key',encryptionKey)}],error:null}:db.rpc(rpc,args)};
+  assert.equal(await checkAgentTools(tools,{encryptionKey}),0);
+  assert.deepEqual(db.log.map(({name:called,args})=>[called,args]),[['forget_company_profile',{connection:'own'}]]);
+  fake.settings.managementRequests.length=0;
+  assert.deepEqual(await keepAgentProfiles(db,{hermes:install(fake)}),{provided:1,configured:0});
+  const created=fake.settings.managementRequests.find(request=>request.method==='POST'&&request.path==='/api/profiles');
+  assert.deepEqual(created.body,{name,soul:'You are the writer.'},'made, never cloned from another profile');
+  const profile=fake.settings.profiles.get(name);
+  assert.deepEqual([profile.key,profile.credentials,profile.config],['test-only-key',{},levelConfig(1)]);
+  assert.deepEqual(db.rows[0],{...agentRow(writer,{connection:'own',instructions:'You are the writer.'})});
+ } finally { await fake.close(); }
 });
