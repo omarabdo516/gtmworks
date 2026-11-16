@@ -8,32 +8,36 @@ import type { Locator } from '@playwright/test';
 // clipping at the padding edge instead of the border edge, overflow-clip-margin, and inline boxes, which overflow does
 // not clip. A page that starts using one of these needs this helper extended first.
 export async function tapOverlaps(targets: Locator) {
-  return targets.evaluateAll(nodes => {
-    // Whether a box is the containing block of an absolute descendant.
-    const contains = (style: CSSStyleDeclaration) => style.position !== 'static' || style.transform !== 'none' || style.perspective !== 'none'
-      || style.filter !== 'none' || /transform|perspective|filter/.test(style.willChange) || /paint|layout|strict|content/.test(style.contain);
-    const reach = (node: Element) => {
-      const own = node.getBoundingClientRect();
-      const box = { left: own.left, top: own.top, right: own.right, bottom: own.bottom };
-      let position = getComputedStyle(node).position;
-      for (let parent = node.parentElement; parent && position !== 'fixed'; parent = parent.parentElement) {
-        const style = getComputedStyle(parent);
-        const clips = position !== 'absolute' || contains(style);
-        if (clips) {
-          const clip = parent.getBoundingClientRect();
-          if (style.overflowX !== 'visible') { box.left = Math.max(box.left, clip.left); box.right = Math.min(box.right, clip.right); }
-          if (style.overflowY !== 'visible') { box.top = Math.max(box.top, clip.top); box.bottom = Math.min(box.bottom, clip.bottom); }
-        }
-        // Past its containing block an absolute element is clipped like the block itself; a positioned ancestor
-        // (absolute or fixed) then decides for everything above it.
-        if (clips || position !== 'absolute') position = style.position === 'absolute' || style.position === 'fixed' ? style.position : 'static';
+  return targets.evaluateAll(overlapsOf);
+}
+
+// The pairs of targets that overlap, named by their text. It uses nothing outside its own body: Playwright sends its
+// source to the page, and the component test calls it on the page it draws.
+export function overlapsOf(nodes: Element[]) {
+  // Whether a box is the containing block of an absolute descendant.
+  const contains = (style: CSSStyleDeclaration) => style.position !== 'static' || style.transform !== 'none' || style.perspective !== 'none'
+    || style.filter !== 'none' || /transform|perspective|filter/.test(style.willChange) || /paint|layout|strict|content/.test(style.contain);
+  const reach = (node: Element) => {
+    const own = node.getBoundingClientRect();
+    const box = { left: own.left, top: own.top, right: own.right, bottom: own.bottom };
+    let position = getComputedStyle(node).position;
+    for (let parent = node.parentElement; parent && position !== 'fixed'; parent = parent.parentElement) {
+      const style = getComputedStyle(parent);
+      const clips = position !== 'absolute' || contains(style);
+      if (clips) {
+        const clip = parent.getBoundingClientRect();
+        if (style.overflowX !== 'visible') { box.left = Math.max(box.left, clip.left); box.right = Math.min(box.right, clip.right); }
+        if (style.overflowY !== 'visible') { box.top = Math.max(box.top, clip.top); box.bottom = Math.min(box.bottom, clip.bottom); }
       }
-      return box;
-    };
-    return nodes.flatMap((node, index) => nodes.slice(index + 1).filter(other => {
-      const a = reach(node), b = reach(other);
-      const shown = a.right > a.left && a.bottom > a.top && b.right > b.left && b.bottom > b.top;
-      return shown && !node.contains(other) && !other.contains(node) && a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
-    }).map(other => `${node.textContent} / ${other.textContent}`));
-  });
+      // Past its containing block an absolute element is clipped like the block itself; a positioned ancestor
+      // (absolute or fixed) then decides for everything above it.
+      if (clips || position !== 'absolute') position = style.position === 'absolute' || style.position === 'fixed' ? style.position : 'static';
+    }
+    return box;
+  };
+  return nodes.flatMap((node, index) => nodes.slice(index + 1).filter(other => {
+    const a = reach(node), b = reach(other);
+    const shown = a.right > a.left && a.bottom > a.top && b.right > b.left && b.bottom > b.top;
+    return shown && !node.contains(other) && !other.contains(node) && a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+  }).map(other => `${node.textContent} / ${other.textContent}`));
 }
