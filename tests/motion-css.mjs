@@ -241,10 +241,10 @@ export function motionOf(styles, selector, width) {
   const transition = listed('transition', declared.transition, 'properties');
   const animation = listed('animation', declared.animation, 'names');
   return {
-    transition: {
+    transition: transitionOf({
       properties: transition.properties, durations: transition.durations.map(milliseconds), delays: transition.delays.map(milliseconds),
       easings: transition.easings.map(easing),
-    },
+    }),
     animation: {
       frames: animation.names.filter(name => name !== 'none').map(name => {
         const frames = styles.keyframes.get(name);
@@ -255,6 +255,14 @@ export function motionOf(styles, selector, width) {
       iterations: animation.iterations, fills: animation.fills,
     },
   };
+}
+
+// A transition with no duration and no delay never runs, so it reads as none however it is written: the reference's
+// `.modal` declares none and `.gw.modal` writes `transition: none` over the copied dialog's.
+/** @param {Transition} transition @returns {Transition} */
+export function transitionOf(transition) {
+  const still = [...transition.durations, ...transition.delays].every(time => parseFloat(time) === 0);
+  return still ? { properties: ['none'], durations: ['0ms'], delays: ['0ms'], easings: ['ease'] } : transition;
 }
 
 // A shorter list repeats to the length of the property (or name) list, as the browser reads it.

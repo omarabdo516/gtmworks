@@ -418,14 +418,14 @@
 
 /* The ready-made gallery (#14; design-reference: .modal, .tpl-*, .tpl, .chip): a centred dialog over Lead's chat. It is
    the copied Radix dialog (app/ready-made.tsx), portalled out of the shell, so it carries the gw tokens itself and drops
-   the copied dialog's own size, place and frame; the scrim stays the copied dialog's. The secondary buttons take
-   --gw-btn2-*. */
+   the copied dialog's own size, place, frame and 150ms transition of every property; the scrim stays the copied
+   dialog's. The secondary buttons take --gw-btn2-*. */
 .gw.modal {
   position: fixed; inset: 0; margin: auto; translate: none; display: block; padding: 0; border: 0; gap: 0;
   width: min(940px, calc(100vw - 48px)); height: min(760px, calc(100dvh - 48px)); max-width: none; max-height: none;
   border-radius: var(--gw-r-lg); background: var(--gw-bg-chrome); color: var(--gw-text-1); box-shadow: var(--gw-shadow-modal); overflow: hidden;
   font-family: var(--gw-font); font-size: var(--gw-fs-base); line-height: 1.5; -webkit-font-smoothing: antialiased;
-  animation: gw-rise var(--gw-dur-slow) var(--gw-ease-out);
+  transition: none; animation: gw-rise var(--gw-dur-slow) var(--gw-ease-out);
 }
 .gw.modal[data-state="closed"] { animation: gw-modal-out 190ms var(--gw-ease-in) forwards; }
 :where(.gw.modal) :where(button:not([data-slot])) { border: 0; padding: 0; margin: 0; min-height: 0; background: none; font: inherit; color: inherit; text-align: inherit; border-radius: 0; gap: 0; }
