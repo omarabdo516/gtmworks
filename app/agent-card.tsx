@@ -43,8 +43,8 @@ export function MadeCard({slug,agent}:{slug:string,agent:MadeAgent}) {
 
 // A request has no Agent yet, so its face is drawn from the request until one is made.
 export function RequestCard({slug,request,owner=false,answer}:{slug:string,request:AgentRequestView,owner?:boolean,answer?:ReactNode}) {
- const {language}=useI18n(); const {c,cb}=useCardText();
- const when=(at:string)=><time dateTime={at}>{new Date(at).toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit'})}</time>;
+ const {language}=useI18n(); const zone=useZone(); const {c,cb}=useCardText();
+ const when=(at:string)=><time dateTime={at} data-utc={zone}>{new Date(at).toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit',timeZone:zone})}</time>;
  const made=request.state==='made'?request.agent:null;
  const badge=request.state==='waiting'?<span className="badge badge--req"><ShellIcon name="userPlus"/>{owner?cb('requestBadgeFrom',request.askedBy):c('requestBadge')}</span>
   :request.state==='made'?<span className="badge badge--made"><ShellIcon name="check"/>{cb('requestBadgeMade',request.by)}</span>
