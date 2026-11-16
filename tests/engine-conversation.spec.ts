@@ -350,15 +350,18 @@ test('integration: an Agent shows a review once under its reply, shows none for 
  try {
   const {service,person}=await clients();
   const conversation=randomUUID();
-  const before=work();
-  for(const [index,message] of Object.keys(calls).entries()) {
+  const send=async(message:string)=>{
    expect(await sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message,encryptionKey,engineFor:fake.engineFor})).toEqual({conversation});
-   expect(fake.runs[index].tools.map(tool=>tool.name)).toEqual(['save_rule','show_draft','show_review']);
+   expect(fake.runs.at(-1)?.tools.map(tool=>tool.name)).toEqual(['save_rule','show_draft','show_review']);
    expect(await closeOpenRuns(service,{encryptionKey,conversation,engineFor:fake.engineFor})).toBe(1);
-  }
-  expect(agentRows(conversation)).toEqual(Object.keys(calls).map(message=>({body:`Reply to: ${message}`})));
+  };
+  // The Conversation's first Run puts its Card on the board (#144), so the review's runs are measured after it.
+  await send('Draft the December ad texts');
+  const before=work();
+  for(const message of Object.keys(calls)) await send(message);
+  expect(agentRows(conversation)).toEqual(['Draft the December ad texts',...Object.keys(calls)].map(message=>({body:`Reply to: ${message}`})));
   const cards=JSON.parse(query(`select run_id,call_id,kind,title,content,state from public.reply_cards where conversation_id='${conversation}' order by id`));
-  expect(cards).toEqual([{run_id:fake.runs[0].id,call_id:'call-0',kind:'review',title:review.title,content:{line:review.line,items:review.items,decision:review.decision},state:'shown'}]);
+  expect(cards).toEqual([{run_id:fake.runs[1].id,call_id:'call-0',kind:'review',title:review.title,content:{line:review.line,items:review.items,decision:review.decision},state:'shown'}]);
   expect(work()).toEqual(before);
 
   expect((await person.from('reply_cards').select('kind,title').eq('conversation_id',conversation)).data).toEqual([{kind:'review',title:review.title}]);
