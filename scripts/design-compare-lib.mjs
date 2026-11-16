@@ -8,11 +8,15 @@ import { extname, join, resolve, sep } from 'node:path';
 // The prototype has no URL routes: its sidebar switches views by `data-view` (chat, board, dashboard, log) and the
 // account menu opens the settings overlay (`#sov`) with its sections. Each step is one `click`, `waitFor` or
 // `scrollTo` with a CSS selector; a click on a sidebar item hidden behind the narrow-screen menu opens the menu first.
-// Every screen starts from the prototype's default state. Only the alone screens touch the "viewing as" switcher, to
-// show the workspace of an Owner working alone (#10); built, that is seeded R&S Consultations, its one Member Omar,
-// with work_mode set to 'alone' (tests/visual.spec.ts, state `alone`).
+// Every screen starts from the prototype's default state. Only the alone screens and a Member's request screens touch
+// the "viewing as" switcher: the alone ones show the workspace of an Owner working alone (#10); built, that is seeded
+// R&S Consultations, its one Member Omar, with work_mode set to 'alone' (tests/visual.spec.ts, state `alone`). The
+// request ones show Youssef, a Contributor in the team (#17); built, that is the first Contributor, signed in with
+// --sign-in reviewer@example.com, over the visual state `agent-request` (or `-made`).
 const settings = [{ click: '#btn-me' }, { click: '[data-action="sov-open"]' }, { waitFor: '#sov[open] #sov-nav-company' }];
 const alone = [{ click: '#btn-me' }, { click: '[data-action="set-as"][data-person="omar"][data-world="solo"]' }, { waitFor: '#sb-recent' }];
+const asYoussef = [{ click: '#btn-me' }, { click: '[data-action="set-as"][data-person="youssef"][data-world="team"]' }, { waitFor: '#sb-recent' }];
+const youssefRequest = [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-wa"]' }, { waitFor: '.ac-card' }];
 const settingsSection = section => [...settings, { click: `#sov-nav-${section}` }, { waitFor: `#sov-nav-${section}[aria-current]` }];
 // The ids of the optional comparison fixture (design/COMPARE.md, "Representative captures"). The tool never applies
 // it: a person loads it by hand into a throwaway local database, then passes these ids with --built-path.
@@ -73,6 +77,11 @@ export const screens = {
   // Built: the fixture's Ads, which Lead made and Omar told the rule.
   'made-agent': { reference: { steps: [...settingsSection('agents'), { click: '#sov-ag-ads' }, { waitFor: '#sov-tab-settings' }] }, builtPath: `/c/rs-learning/settings?agent=${fixture.agent}` },
   channel: { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="ch-general"]' }, { waitFor: '.ch-intro' }] }, builtPath: `/c/rs-learning/channels/${fixture.channel}` },
+  // The reference shows the request Omar answers in his chat with Lead; the product, where it waits.
+  'ask-agent': { reference: { steps: [...asYoussef, { click: '#sb-agents [data-action="new-agent"]' }, { waitFor: '.new-hint' }] }, builtPath: '/c/rs-learning/chat?new=agent' },
+  'request-sent': { reference: { steps: [...asYoussef, ...youssefRequest] }, builtPath: '/c/rs-learning/conversations/6b000000-0000-0000-0000-000000000003' },
+  'request-waiting': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-wa-req"]' }, { waitFor: '.ac-card--req' }] }, builtPath: '/c/rs-learning/approvals' },
+  'request-made': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-wa-req"]' }, { click: '#ac-yes-rq-seed' }, { waitFor: '.ac-card:not(.ac-card--req)' }, ...asYoussef, ...youssefRequest] }, builtPath: '/c/rs-learning/conversations/6b000000-0000-0000-0000-000000000003' },
 };
 
 export const languages = ['ar', 'en'];

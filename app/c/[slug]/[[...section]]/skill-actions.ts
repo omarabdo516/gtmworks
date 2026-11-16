@@ -5,6 +5,9 @@ import { redirect } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { actionAllowed } from '@/lib/route-permissions.mjs';
 import { skillLibrary } from '@/lib/skill-library.mjs';
+import { answerRequest } from '@/lib/agent-requests.mjs';
+import { createClient } from '@supabase/supabase-js';
+import { supabaseConfig } from '@/lib/supabase-config';
 // The stored copy is the only source of a skill's instructions: a library skill is read from the code, never from the form.
 export const installSkill=withActionLog('installSkill',async function installSkill(form:FormData) {
  const db=await supabase(); const slug=String(form.get('slug')); const path=`/c/${slug}/skills`; const kind=String(form.get('source'));
@@ -40,4 +43,12 @@ export const decideAgentRule=withActionLog('decideAgentRule',async function deci
  revalidatePath(path);
  if(error) logActionFailure('decideAgentRule',error,{form});
  redirect(error?`${path}?failed=rule`:path);
+});
+// The reason is never logged: a failure line names only the action, the Company and the answer's state.
+export const answerAgentRequest=withActionLog('answerAgentRequest',async function answerAgentRequest(form:FormData) {
+ const db=await supabase(); const company=String(form.get('company')); const path=`/c/${String(form.get('slug'))}/approvals`;
+ const state=!await actionAllowed(db,'answerAgentRequest',company)?'notAllowed':await answerRequest(db,createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}}),{company,request:Number(form.get('request')),make:form.get('intent')==='make',reason:String(form.get('reason')||''),encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY});
+ revalidatePath(path);
+ if(state!=='made'&&state!=='declined') logActionFailure('answerAgentRequest',{message:state},{form});
+ redirect(state==='made'||state==='declined'?path:`${path}?failed=request-${state}`);
 });
