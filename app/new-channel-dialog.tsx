@@ -32,7 +32,9 @@ export default function NewChannelDialog({slug,company,person,close}:{slug:strin
   if(saving) return;
   if(!bare(name)) { setError('channelNameMissing'); field.current?.focus(); return; }
   setSaving(true); setError('');
-  const made=await createChannel(company,{key:key.current,name,people,agents});
+  let made:Awaited<ReturnType<typeof createChannel>>;
+  try { made=await createChannel(company,{key:key.current,name,people,agents}); }
+  catch { setSaving(false); setError('channelCreateFailed'); return; }
   if('channel' in made) { close(); router.push(`/c/${slug}/channels/${made.channel}`); return; }
   setSaving(false);
   const {refused}=made;

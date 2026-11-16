@@ -80,3 +80,16 @@ test('a name in use is said so, and trying again sends the same request key', as
  expect(second.key).toBe(first.key);
  expect(second.name).toBe('عام 2 جديد');
 });
+
+test('a request that fails is said so, and Create works again with the same request key', async () => {
+ vi.mocked(createChannel).mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ channel: 'ch-9' });
+ const { screen } = await dialog();
+ await userEvent.type(screen.getByRole('textbox', { name: 'Channel name' }), 'Launch week');
+ const create = screen.getByRole('button', { name: 'Create the channel' });
+ await create.click();
+ await expect.element(screen.getByText('Couldn’t create the channel. Try again.')).toBeVisible();
+ await create.click();
+ await expect.poll(() => push.mock.calls).toEqual([['/c/rs/channels/ch-9']]);
+ const [first, second] = vi.mocked(createChannel).mock.calls.map(([, request]) => request);
+ expect(second.key).toBe(first.key);
+});

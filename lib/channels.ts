@@ -36,8 +36,9 @@ export async function channelSidebar(db:Database,company:string):Promise<Channel
  return ((data||[]) as {id:string,kind:string,name:string|null,unread:number}[]).map(row=>({...nameOf(row),id:row.id,unread:row.unread}));
 }
 
-// Reading a channel is opening it: the reader has then read every message it returns.
-export async function channelRecord(db:Database,person:string,company:string,channel:string):Promise<ChannelRecord|null> {
+// With `read`, the reader has read every message it returns. Only the open channel asks for that: a page render can be
+// a link's prefetch, which nobody saw.
+export async function channelRecord(db:Database,person:string,company:string,channel:string,read=false):Promise<ChannelRecord|null> {
  const {data:found}=await db.from('channels').select('id,company_id,kind,name').eq('id',channel).eq('company_id',company).maybeSingle();
  if(!found) return null;
  const name=nameOf(found);
@@ -62,7 +63,7 @@ export async function channelRecord(db:Database,person:string,company:string,cha
   const run=runOf.get(message.id);
   return {id:message.id,author:'person',mine:message.person_id===person,name:message.author_name,role:people.find(member=>member.person===message.person_id)?.role??null,body:message.body,at:message.created_at,mention:run?{agent:run.agent_name,state:stateOf(run.outcome)}:null};
  });
- if(newest!==undefined) await db.rpc('read_channel',{ch:channel,through:newest});
+ if(read&&newest!==undefined) await db.rpc('read_channel',{ch:channel,through:newest});
  return {
   channel:{id:found.id,company:found.company_id,...name},
   members:people,

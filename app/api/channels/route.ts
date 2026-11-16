@@ -29,11 +29,11 @@ async function respond(request:NextRequest) {
    const sent=await postChannelMessage(db,service(),{channel:body.channel,sendKey:body.sendKey,message:body.message,encryptionKey:encryptionKey()});
    return 'refused' in sent?refuse(sent.refused,sent.status):reply(sent);
   }
-  const record=await channelRecord(db,user.id,body.company,body.channel);
+  const record=await channelRecord(db,user.id,body.company,body.channel,true);
   if(!record) return refuse('channelNotFound',404);
   if(!record.open) return reply(record);
   await driveChannelRuns(service(),{encryptionKey:encryptionKey(),channel:body.channel});
-  return reply(await channelRecord(db,user.id,body.company,body.channel)??record);
+  return reply(await channelRecord(db,user.id,body.company,body.channel,true)??record);
  } catch { logActionFailure('channel',new Error('Channel request failed')); return refuse('channelFailed',400); }
 }
 export const GET=respond;

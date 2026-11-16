@@ -13,9 +13,10 @@ export * from '@playwright/test';
 // another lane starts that lane from the seed, as the file itself did.
 const snapshot = seedSnapshotOf();
 const marker = join(dirname(snapshot), 'seeded-for');
-export function freshSeed(file: string) {
+// `again` restores it even for the file that ran last: a serial file's retry starts from the beginning.
+export function freshSeed(file: string, again = false) {
   const owner = `${process.env.GTMWORKS_TEST_RUN} ${file}`;
-  try { if (readFileSync(marker, 'utf8') === owner) return; } catch { /* no file has used this lane yet */ }
+  try { if (!again && readFileSync(marker, 'utf8') === owner) return; } catch { /* no file has used this lane yet */ }
   // One transaction: the lane's app or worker may still be finishing a query of the previous file, and a restore that
   // meets it in a deadlock is rolled back whole and tried again; any other error fails the test at once.
   for (let attempt = 1; ; attempt++) {

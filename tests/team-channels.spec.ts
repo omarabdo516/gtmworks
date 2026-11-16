@@ -17,7 +17,7 @@ let channel='';
 
 test.describe.configure({mode:'serial'});
 test.beforeAll(({},testInfo)=>{
- freshSeed(testInfo.file);
+ freshSeed(testInfo.file,testInfo.retry>0);
  query(`do $$ begin
   update public.people set language='en' where id::text like '20000000-%';
   insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values
@@ -42,8 +42,12 @@ const channels=(page:Page)=>page.locator('.sidebar .ch-item');
 
 test('the Manager makes a channel with chosen Members and Agents and changes its Members; a Contributor has no "+"',async({page,browser})=>{
  await signIn(page,'manager@example.com','/c/rs-learning/home');
- await page.getByRole('button',{name:'New channel',exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'New channel'});
+ // "+" does nothing until the sidebar has hydrated, so the click is repeated until the dialog opens.
+ await expect(async()=>{
+  if(!await dialog.count()) await page.getByRole('button',{name:'New channel',exact:true}).click();
+  await expect(dialog.getByRole('textbox',{name:'Channel name'})).toBeVisible({timeout:2000});
+ }).toPass({timeout:30000});
  await dialog.getByRole('textbox',{name:'Channel name'}).fill('#December campaign');
  await expect(dialog.getByText('Shows under channels as: #December campaign')).toBeVisible();
  await dialog.getByRole('checkbox',{name:/^مراجع/}).click();

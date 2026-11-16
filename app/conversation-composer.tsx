@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { useI18n } from '@/lib/i18n-client';
 import { ShellIcon } from '@/components/shell-icon';
 
@@ -15,6 +15,8 @@ export const newId=()=>{const b=crypto.getRandomValues(new Uint8Array(16));b[6]=
 // `draft` starts the box with a sentence to try (remount with a new key to put another one in); it is focused for editing,
 // as it is with `focus` ("New agent" opens Lead's chat ready to type, #13).
 export function MessageBox({placeholder,label,send,stop,draft,focus=false}:{placeholder:string,label?:string,send:(text:string,sendKey:string)=>Promise<string|null>,stop?:{label:string,run:()=>Promise<string|null>},draft?:string,focus?:boolean}) {
+ // Read-only until hydrated: text typed into the server-drawn box before this chunk arrives would be lost.
+ const hydrated=useSyncExternalStore(()=>()=>{},()=>true,()=>false);
  const {t}=useI18n(); const [text,setText]=useState(draft??''); const [key,setKey]=useState(newId); const [busy,setBusy]=useState(false); const [error,setError]=useState('');
  async function submit() {
   if(!text.trim()||busy) return;
@@ -32,7 +34,7 @@ export function MessageBox({placeholder,label,send,stop,draft,focus=false}:{plac
  return <div className="composer">
   <div className="composer__row">
    <button type="button" className="composer__btn" aria-disabled="true" aria-label={`${t('chatMore')} · ${t('soon')}`} title={t('soon')}><ShellIcon name="plus"/></button>
-   <textarea className="composer__input" dir="auto" rows={1} autoFocus={!!draft||focus} readOnly={busy} aria-busy={busy} aria-label={label??t('conversationMessage')} placeholder={placeholder} value={text} onChange={event=>{setText(event.target.value);setKey(newId());}} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing){event.preventDefault();void submit();}}}/>
+   <textarea className="composer__input" dir="auto" rows={1} autoFocus={!!draft||focus} readOnly={busy||!hydrated} aria-busy={busy} aria-label={label??t('conversationMessage')} placeholder={placeholder} value={text} onChange={event=>{setText(event.target.value);setKey(newId());}} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing){event.preventDefault();void submit();}}}/>
    <button type="button" className="composer__btn composer__mic" aria-disabled="true" aria-label={`${t('chatDictation')} · ${t('soon')}`} title={t('soon')}><ShellIcon name="mic"/></button>
    {stop&&!text.trim()?<button type="button" className="composer__send is-stop" aria-label={stop.label} title={stop.label} disabled={busy} onClick={()=>void halt(stop)}><svg className="gw-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/></svg></button>
    :<button type="button" className="composer__send" aria-label={t('conversationSend')} disabled={!text.trim()||busy} onClick={()=>void submit()}><ShellIcon name="send"/></button>}
