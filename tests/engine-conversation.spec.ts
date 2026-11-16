@@ -11,7 +11,9 @@ import { fakeHermes } from './fake-hermes.mjs';
 import { engineFor as driverFor } from '../lib/engine.mjs';
 import { runToolCall, toolSpecTexts } from '../lib/agent-tools.mjs';
 import { levelConfig } from '../lib/agent-levels.mjs';
+import { signIn } from './sign-in';
 import { moveAgentProfiles } from '../lib/company-profiles.mjs';
+import { keepSharedSkills } from '../lib/shared-skills.mjs';
 
 // A conversation on the fake engine (tests/fake-engine.mjs): the engine contract with no subscription and no network,
 // through the same send and close code the conversation route and the worker run, on the local database.
@@ -125,13 +127,15 @@ test('integration: a Contributor gets a reply on the fake engine and a Viewer is
 // Lead, the main Agent, on the Company's own profile in the bundled Engine (ADR 0014); the tests below share it.
 function bundledLead() {
  const profile=`co-${company.replaceAll('-','')}`;
+ // Each test's Engine is new, so it has no shared space yet (#122).
+ query(`delete from public.company_shared_spaces where company_id='${company}'`);
  const [made]=JSON.parse(query(`select id from public.hermes_agents where company_id='${company}' and is_default`));
  if(made) return {profile,lead:made.id as string};
  const [connection,lead]=[randomUUID(),randomUUID()];
  query(`insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values ('${connection}','${company}','${omar}','http://127.0.0.1:9','${profile}','${encryptSecret('fake-engine-key',encryptionKey)}','connected','0.23.0','{run_submission}')`);
  query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('${lead}','${company}','${connection}','Lead','General',true)`);
  query(`insert into public.hermes_agent_audit(company_id,actor_id,agent_id,action,details) values ('${company}','${omar}','${lead}','PROVIDE_BUNDLED_HERMES_AGENT',jsonb_build_object('connection_id','${connection}'))`);
- query(`insert into public.company_profiles(company_id,profile,tools_level,tools_policy) select id,'${profile}',agent_level,public.engine_tool_policy() from public.companies where id='${company}' on conflict (company_id) do update set tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false`);
+ query(`insert into public.company_profiles(company_id,profile,tools_level,tools_policy,skills_shared) select id,'${profile}',agent_level,public.engine_tool_policy(),true from public.companies where id='${company}' on conflict (company_id) do update set tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false,skills_shared=true`);
  return {profile,lead};
 }
 
@@ -415,6 +419,8 @@ test('integration: Lead\'s call makes the Agent one profile of its own, also whe
   expect(managed(hermes).slice(before)).toEqual([]);
   expect(madeBy(conversation,lead)).toHaveLength(1);
 
+  // The worker gives the Agent's own profile its Company's shared folder before its first Run (#122).
+  await keepSharedSkills(service,{hermes:{address:hermes.address,managementAddress:hermes.managementAddress,profile:'default',key:'fake-engine-key'}});
   const theirs=randomUUID();
   expect(await sendMessage(person,service,{person:omar,company,conversation:theirs,sendKey:randomUUID(),agent:agent.id,message:'Write about the tax diploma',encryptionKey,engineFor})).toEqual({conversation:theirs});
   expect(fake.connections.at(-1)).toMatchObject({profile:own,key:'fake-engine-key'});
@@ -479,6 +485,11 @@ test('integration: an Agent moved to its own profile keeps its Conversation, and
   // Its own profile gets a model, standing in for the sign-in that lets it answer.
   Object.assign(hermes.settings.profiles.get(own)!,{provider:'openai-codex',model:'gpt-5.5'});
   const bundled={address:hermes.address,managementAddress:hermes.managementAddress,profile:'default',key:'fake-engine-key'};
+  // The worker makes the Company's shared space (#122), makes the Agent's own profile, which does not take the Agent
+  // before it reads the space's folder, gives it that folder, and then moves the Agent.
+  await keepSharedSkills(service,{hermes:bundled});
+  expect((await moveAgentProfiles(service,{hermes:bundled,driver:driverFor(bundled)})).moved).toBe(0);
+  await keepSharedSkills(service,{hermes:bundled});
   expect((await moveAgentProfiles(service,{hermes:bundled,driver:driverFor(bundled)})).moved).toBeGreaterThanOrEqual(1);
   expect(JSON.parse(query(`select h.profile from public.hermes_agents a join public.hermes_connections h on h.id=a.connection_id where a.id='${agent.id}'`))).toEqual([{profile:own}]);
   expect(JSON.parse(query(`select h.profile from public.hermes_agents a join public.hermes_connections h on h.id=a.connection_id where a.id='${lead}'`))).toEqual([{profile}]);
@@ -494,3 +505,62 @@ test('integration: an Agent moved to its own profile keeps its Conversation, and
  } finally { await hermes.close(); }
 });
 
+// #144: the first Run of a new chat with an Agent other than the main one puts its Card on the board, with its log row;
+// the chat says so once, also after a reload and a second Run, and its corner pill names the Card's column, follows it
+// when it moves, shows the column alone on a phone, in Arabic too, and opens the board on the Card.
+test('a new chat with an Agent puts its Card on the board, and the chat\'s line and pill follow it there',async({page})=>{
+ test.setTimeout(180000);
+ const fake=fakeEngine(); const {service,person}=await clients(); const {agent,detach}=attachAgent();
+ const language=(value:'en'|'ar')=>query(`update public.people set language='${value}' where id='${omar}'`);
+ try {
+  const conversation=randomUUID();
+  const send=async(message:string)=>{
+   expect(await sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message,encryptionKey,engineFor:fake.engineFor})).toEqual({conversation});
+   expect(await closeOpenRuns(service,{encryptionKey,conversation,engineFor:fake.engineFor})).toBe(1);
+  };
+  const cards=()=>JSON.parse(query(`select c.id,c.title,c.agent_id,s.board_column from public.work_cards c join public.work_stages s on s.id=c.stage_id where c.conversation_id='${conversation}'`));
+  await send('Plan the launch week\nThree posts and one reel');
+  const [card]=cards();
+  expect(cards()).toEqual([{id:card.id,title:'Plan the launch week',agent_id:agent,board_column:'progress'}]);
+  expect(JSON.parse(query(`select action,actor_kind from public.company_log where card_id=${card.id}`))).toEqual([{action:'card_created',actor_kind:'system'}]);
+
+  language('en');
+  await page.setViewportSize({width:1440,height:900});
+  await signIn(page,'omar@example.com',`/c/rs-learning/conversations/${conversation}`);
+  const kinds=()=>page.locator('.turns > li').evaluateAll(rows=>rows.map(row=>row.getAttribute('data-author')||row.getAttribute('data-kind')));
+  const line=page.locator('.turns > li[data-kind="boarded"]'), pill=page.locator('.chat__corner .corner-pill');
+  await expect(line).toHaveText('This card was added to the board under “In progress”');
+  expect(await kinds()).toEqual(['person','agent','boarded']);
+  await expect(pill).toHaveAccessibleName('On the board: In progress');
+  await expect(pill.locator('.corner-pill__lbl')).toHaveText('On the board:');
+  await send('Add a teaser');
+  expect(cards()).toHaveLength(1);
+  await page.reload();
+  await expect(page.locator('.msg[data-author=agent]')).toHaveCount(2);
+  expect(await kinds()).toEqual(['person','agent','boarded','person','agent']);
+
+  query(`select public.move_work_card_to_column('${company}',${card.id},'planned')`);
+  await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+  await expect(pill).toHaveAccessibleName('On the board: Planned');
+  await page.setViewportSize({width:390,height:900});
+  await expect(pill.locator('.corner-pill__lbl')).toBeHidden();
+  await expect(pill.locator('.corner-pill__col')).toHaveText('Planned');
+  language('ar');
+  for(const width of [390,1440]) {
+   await page.setViewportSize({width,height:900});
+   await page.reload();
+   await expect(pill).toHaveAccessibleName('على اللوحة: متخطط');
+   await expect(pill.locator('.corner-pill__lbl')).toBeVisible({visible:width===1440});
+   await expect(line).toHaveText('البطاقة دي اتضافت للوحة في «شغالين عليه»');
+  }
+
+  language('en');
+  await page.reload();
+  await pill.click();
+  await expect(page).toHaveURL(/\/c\/rs-learning\/work\/board$/);
+  const shown=page.locator(`#board-cols .kcard[data-card-id="${card.id}"]`);
+  await expect(shown.locator('a')).toBeFocused();
+  await expect(page.getByRole('group',{name:'Filter by agent'}).getByRole('button',{name:'All',exact:true})).toHaveAttribute('aria-pressed','true');
+  await expect(shown.locator('.kcard__foot')).toHaveText('Faye· Marketing');
+ } finally { language('en'); detach(); }
+});

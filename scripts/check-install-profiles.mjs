@@ -8,6 +8,10 @@
 //     that company's run only, never in the second company's. Then an Agent made in the first company as the previous
 //     app version made one, on the company's profile, is moved by the worker to its own profile once that profile is
 //     pointed at the fake model (#121), and the marker reaches the main Agent's next run and not the moved Agent's.
+//     Then a Contributor's suggestion the Owner approves lands in the first company's shared Skill "team-lessons"
+//     (#122): each of its Agent profiles reads only its company's shared folder and holds the Skill locked, the next run
+//     of each of its Agents carries the lesson and the second company's does not, and a run whose model tries to change
+//     the Skill is refused by the Engine and leaves it as it was.
 // The companies and their Owners' sign-in are kept between the steps in a file of this container only.
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -18,6 +22,8 @@ const {sendMessage}=await import(`${process.cwd()}/lib/conversation-runs.mjs`);
 const {companyProfile,riskyToolsets}=await import(`${process.cwd()}/lib/agent-levels.mjs`);
 
 const [step,marker]=process.argv.slice(2);
+// A message holding this makes the fake model ask the Engine to rewrite the shared Skill.
+const trigger='Change the team lessons now.';
 const state='/tmp/check-install-profiles.json';
 const origin='http://gateway:8080';
 const options={auth:{persistSession:false,autoRefreshToken:false}};
@@ -70,35 +76,42 @@ if(step==='prepare') {
  assert.match(marker||'',/^[a-z0-9-]{8,64}$/);
  const companies=JSON.parse(readFileSync(state,'utf8'));
  // The fake model: one Arabic reply, streamed or not, and every request it was sent.
+ // A request whose last message is the person's and holds the trigger is answered with a skill_manage call that rewrites
+ // the shared Skill; the Engine's answer to it (the next request's last message) is kept.
  const reply='أهلاً، هذا رد من النموذج التجريبي.';
- const asked=[];
+ const asked=[]; const toolResults=[];
  const model=createServer((request,response)=>{
   let raw=''; request.on('data',chunk=>{raw+=chunk;}); request.on('end',()=>{
    if(request.method!=='POST'||!request.url.endsWith('/chat/completions')) { response.writeHead(404); return response.end(); }
    const body=JSON.parse(raw||'{}'); asked.push(raw);
+   const last=body.messages?.at(-1);
+   if(last?.role==='tool') toolResults.push(String(last.content));
+   const call=last?.role==='user'&&JSON.stringify(last.content).includes(trigger)?{id:'call_lessons',type:'function',function:{name:'skill_manage',
+    arguments:JSON.stringify({operations:[{action:'patch',name:'team-lessons',content:'---\nname: team-lessons\ndescription: Changed by an agent\n---\nChanged.\n'}]})}}:null;
+   const finish=call?'tool_calls':'stop';
    const usage={prompt_tokens:20,completion_tokens:8,total_tokens:28};
-   if(!body.stream) { response.writeHead(200,{'Content-Type':'application/json'}); return response.end(JSON.stringify({id:'fake',object:'chat.completion',created:0,model:body.model,choices:[{index:0,message:{role:'assistant',content:reply},finish_reason:'stop'}],usage})); }
+   if(!body.stream) { response.writeHead(200,{'Content-Type':'application/json'}); return response.end(JSON.stringify({id:'fake',object:'chat.completion',created:0,model:body.model,choices:[{index:0,message:call?{role:'assistant',content:null,tool_calls:[call]}:{role:'assistant',content:reply},finish_reason:finish}],usage})); }
    response.writeHead(200,{'Content-Type':'text/event-stream'});
    const chunk=(choices,extra={})=>response.write(`data: ${JSON.stringify({id:'fake',object:'chat.completion.chunk',created:0,model:body.model,choices,...extra})}\n\n`);
-   chunk([{index:0,delta:{role:'assistant',content:reply},finish_reason:null}]);
-   chunk([{index:0,delta:{},finish_reason:'stop'}]);
+   chunk([{index:0,delta:call?{role:'assistant',tool_calls:[{index:0,...call}]}:{role:'assistant',content:reply},finish_reason:null}]);
+   chunk([{index:0,delta:{},finish_reason:finish}]);
    chunk([],{usage});
    response.end('data: [DONE]\n\n');
   });
  });
  await new Promise(resolve=>model.listen(8080,'0.0.0.0',resolve));
  try {
-  // A message from the Owner to an Agent of the company in a new Conversation, answered: whether the marker reached the
-  // model, and the Conversation.
-  const ask=async(entry,person,agent,label)=>{
+  // A message from the entry's person to an Agent of the company in a new Conversation, answered: whether the marker
+  // reached the model, the Conversation, and what the model was sent.
+  const ask=async(entry,person,agent,label,message='مرحباً، اكتب عنواناً قصيراً.')=>{
    const before=asked.length;
    const conversation=randomUUID();
-   const sent=await sendMessage(person,service,{person:entry.person,company:entry.company,conversation,sendKey:randomUUID(),agent,message:'مرحباً، اكتب عنواناً قصيراً.',encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY});
+   const sent=await sendMessage(person,service,{person:entry.person,company:entry.company,conversation,sendKey:randomUUID(),agent,message,encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY});
    assert.deepEqual(sent,{conversation});
    const answer=await until(`reply on ${label}`,async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),180);
    assert.ok(answer.body.includes(reply),answer.body);
    assert.ok(asked.length>before,`${label} asked the model`);
-   return {remembered:asked.slice(before).some(raw=>raw.includes(marker)),conversation};
+   return {remembered:asked.slice(before).some(raw=>raw.includes(marker)),conversation,sent:asked.slice(before)};
   };
   const seen=[];
   for(const entry of companies) {
@@ -127,6 +140,42 @@ if(step==='prepare') {
   const after=[(await ask(first,person,first.agent,first.profile)).remembered,(await ask(first,person,made.agent,own)).remembered];
   // The memory written in the company profile stayed with the main Agent; the moved Agent starts with an empty one.
   assert.deepEqual(after,[true,false]);
-  console.log(JSON.stringify({profiles:companies.map(entry=>entry.profile),memory:seen,moved:own,afterMove:after}));
+
+  // A Contributor tells the main Agent a lasting rule, a suggestion; the Owner approves it from "Waiting on you".
+  const teller={email:`lessons-${randomUUID().slice(0,8)}@example.com`,password:`Lessons-${randomUUID()}`};
+  const {user:told}=await checked(service.auth.admin.createUser({...teller,email_confirm:true}));
+  await checked(service.from('people').insert({id:told.id,name:'Lesson teller'}));
+  await checked(service.from('members').insert({company_id:first.company,person_id:told.id,role:'contributor'}));
+  const lesson=`From now on, sign every post as team ${randomUUID().slice(0,8)}.`;
+  const contributor=await signedIn(teller);
+  const said=(await ask({...first,person:told.id},contributor,first.agent,first.profile,lesson)).conversation;
+  const [{run_id:saidRun}]=await checked(contributor.from('conversation_messages').select('run_id').eq('conversation_id',said).eq('author','person'));
+  const suggested=await checked(service.rpc('agent_save_rule',{conversation:said,run:saidRun,call:'install-lesson',rule:lesson}));
+  assert.equal(suggested.state,'suggested');
+  const [item]=await checked(person.from('waiting_items').select('id').eq('agent_rule_id',suggested.rule));
+  assert.equal(await checked(person.rpc('decide_agent_rule',{c:first.company,item:item.id,approve:true})),'approved');
+
+  // The worker writes it to the first company's shared space, which the second company's Agents never read.
+  const homes=Object.fromEntries((await (await manage('/api/profiles')).json()).profiles.map(profile=>[profile.name,profile.path]));
+  const spaceOf=entry=>`cs-${entry.company.replaceAll('-','')}`;
+  const skill=async space=>(await (await manage(`/api/skills/content?profile=${space}&name=team-lessons`)).json()).content;
+  const written=await until('the approved lesson in team-lessons',async()=>{ const content=await skill(spaceOf(first)); return content?.includes(lesson)&&content; },60);
+  assert.ok(!(await skill(spaceOf(companies[1]))).includes(lesson),'the second company\'s shared Skill holds none of the first\'s lessons');
+  for(const [entry,profile] of [[first,first.profile],[first,own],[companies[1],companies[1].profile]]) {
+   const {skills:config}=await (await manage(`/api/config?profile=${profile}`)).json();
+   const listed=(await (await manage(`/api/skills?profile=${profile}`)).json()).find(found=>found.name==='team-lessons');
+   assert.deepEqual(config.external_dirs,[`${homes[spaceOf(entry)]}/skills`],`${profile} reads its own company's shared folder alone`);
+   assert.ok(config.auto_load.includes('team-lessons')&&listed?.provenance==='external'&&listed.locked===true,`${profile} loads team-lessons and holds it locked`);
+  }
+  const carried=[[first,person,first.agent,first.profile],[first,person,made.agent,own],[companies[1],await signedIn(companies[1].credentials),companies[1].agent,companies[1].profile]];
+  const lessons=[];
+  for(const [entry,asker,agent,label] of carried) lessons.push((await ask(entry,asker,agent,label)).sent.some(raw=>raw.includes(lesson)));
+  assert.deepEqual(lessons,[true,true,false]);
+
+  // A Run whose model rewrites the Skill with the Agent's own tool is refused by the Engine, and the Skill stays.
+  await ask(first,person,made.agent,own,trigger);
+  assert.ok(toolResults.some(result=>result.includes('"success": false')&&result.includes('locked')),JSON.stringify(toolResults));
+  assert.equal(await skill(spaceOf(first)),written,'team-lessons is unchanged');
+  console.log(JSON.stringify({profiles:companies.map(entry=>entry.profile),memory:seen,moved:own,afterMove:after,lessons}));
  } finally { model.close(); model.closeAllConnections(); }
 } else throw new Error('usage: prepare | verify <marker>');

@@ -29,7 +29,7 @@ export type LeadCard={kind:'made',agent:MadeAgent}|{kind:'request',request:Agent
 export type SavedRule={id:string,agent:string|null,removed:boolean,said_at:string,sentTo?:string[]};
 type RuleDecision={approved:boolean,by:string,rule:string,at:string};
 export type Decision=({kind:'rule'}&RuleDecision)|({kind:'request',by:string,name:string,at:string}&({made:true}|{made:false,reason:string}));
-export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided',to?:string,failed?:boolean,cards?:LeadCard[],saved?:SavedRule[],decided?:Decision};
+export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided'|'boarded',to?:string,failed?:boolean,cards?:LeadCard[],saved?:SavedRule[],decided?:Decision};
 type StoredMessage=ConversationMessage&{run_id:string};
 export const messageColumns='id,author,author_name,body,run_id,created_at';
 export const conversationColumns='id,agent_id,agent_name,hermes_agents(connection_id)';
@@ -44,6 +44,10 @@ export const shown=(messages:StoredMessage[],usage:{run_id:string,outcome:string
  const last=message.author==='agent'||!replied;
  return last&&rules.length?[...turn,{id:message.id,author:'agent',author_name:agentName,body:'',created_at:rules[0].said_at,kind:'saved',saved:rules}]:turn;
 });
+// A Conversation that put its Card on the board (#144) says so once, under the Agent's reply to its first Run
+// (`kind` boarded; design-reference: send's note after the first reply).
+export const withBoardNote=(record:ConversationMessage[],reply:number|undefined):ConversationMessage[]=>record.flatMap(message=>
+ message.author==='agent'&&!message.kind&&message.id===reply?[message,{id:message.id,author:'agent',author_name:message.author_name,body:'',created_at:message.created_at,kind:'boarded'}]:[message]);
 // Each decision goes before the first item shown after it.
 export const withDecisions=(record:ConversationMessage[],decisions:Decision[],agentName=''):ConversationMessage[]=>{
  const left=[...decisions].sort((a,b)=>a.at.localeCompare(b.at)).map((decided,index):ConversationMessage=>({id:index,author:'agent',author_name:agentName,body:'',created_at:decided.at,kind:'decided',decided}));
