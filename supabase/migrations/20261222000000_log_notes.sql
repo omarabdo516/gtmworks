@@ -25,6 +25,16 @@ end $$;
 revoke all on function public.guard_note_edit() from public,anon,authenticated,service_role;
 create trigger work_comments_note_edit before update on public.work_comments for each row execute function public.guard_note_edit();
 
+-- The five minutes count from when the note was written, so a signed-in person cannot date their note. Only the
+-- database itself (a seed, a restore) writes another time.
+create function public.stamp_note_time() returns trigger language plpgsql set search_path='' as $$
+begin
+ if auth.uid() is not null then new.created_at := now(); end if;
+ return new;
+end $$;
+revoke all on function public.stamp_note_time() from public,anon,authenticated,service_role;
+create trigger work_comments_note_time before insert on public.work_comments for each row execute function public.stamp_note_time();
+
 create function public.refuse_note_delete() returns trigger language plpgsql set search_path='' as $$
 begin raise exception 'noteIsPermanent' using errcode='42501'; end $$;
 revoke all on function public.refuse_note_delete() from public,anon,authenticated,service_role;

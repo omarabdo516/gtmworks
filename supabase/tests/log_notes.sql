@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(58);
+select plan(59);
 -- Notes and mentions in the log (#22). Seed people of RS Learning: Omar 0001 owns it, 0002 مدير is a Manager, 0003 مراجع
 -- and 0005 عضو are Contributors, 0004 مشاهد is a Viewer, 30000000-…-0001 is a role Agent. Faye is shown to the Manager;
 -- Secret to nobody but the Owner. 0005 is also a Contributor of Aleem.
@@ -23,6 +23,10 @@ select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002'
 insert into notes select x.label, public.change_work_card('10000000-0000-0000-0000-000000000001',(select id from card),'comment',jsonb_build_object('body',x.body)) from (values
  ('draft','First draft'),('fresh','Fresh note'),('call','شوف ده يا @مراجع، و @عضو و @مشاهد'),('self','@مدير remember this'),('longer','@مراجعة النهارده'),
  ('twice','@مراجع then again @مراجع'),('faye','@Faye draft the post'),('secret','@Secret look')) x(label,body);
+
+-- A note dated ahead by its writer is stamped with the time it was written, so its five minutes cannot be stretched.
+insert into public.work_comments(company_id,card_id,body,created_at) values('10000000-0000-0000-0000-000000000001',(select id from card),'Dated ahead',now()+interval '1 day');
+select is((select created_at from public.work_comments where body='Dated ahead' and card_id=(select id from card)),now(),'a note written with a later date gets the time it was written');
 
 -- The writer edits within five minutes, and the log follows.
 select ok(public.edit_card_note('10000000-0000-0000-0000-000000000001',(select id from notes where label='draft'),'Second draft'),'the writer edits a note in its first five minutes');
