@@ -200,6 +200,9 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `member-agent-visibility-migration.mjs` | replays the member-agent-visibility migration: every Member keeps the Agents they saw before the update (tests/db.sh) | — | — | helper, new |
 | `member-picker.spec.ts` | Saving a card unchanged clears a next actor who left the company. | 11.2 s | — | keep |
 | `migration-statements.test.mjs` | Both migration runners split statements alike and no migration controls its own transaction. | 0.4 s | — | keep |
+| `motion-css.mjs` | helper: reads a part's transition and animation from the reference's stylesheet and from `app/`, tokens and keyframes resolved (#127) | — | — | helper, new |
+| `motion-reference.test.mjs` | The six motion tokens carry the reference's values; a value the reference writes only through its token (280ms, the leave curve) is written only through the token under `app/`; the reference's shared keyframes are written once; every part in `motion-table.mjs` declares the transition or animation of its reference rule at 1440 and 390 wide. (new, #127) | 0.3 s | motion.spec.ts (computed on the pages) | new |
+| `motion-table.mjs` | data: the parts whose motion is the reference's, as reference rule against built rule and the screen each shows on (#127) | — | — | data, new |
 | `navigation-measure.ts` | browser helper: navigation timing | — | — | helper, kept |
 | `navigation-path.test.mjs` | The measured navigation path keeps the Inbox and the Activity log. | 1.4 s | navigation.spec.ts | keep |
 | `navigation.spec.ts` | Prepared navigation stays within its time budgets, prefetches, honours reduced motion, invalidates on own changes; drawer tap areas. (measured project, alone) | 56.9 s | navigation-path.test.mjs (the measured path only) | keep |
