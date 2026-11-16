@@ -11,6 +11,7 @@ import { LogDays, LogFilters } from './log-client';
 import { canCreateCard } from '@/lib/card-permissions.mjs';
 import { LogEntry, logAnchor, logColumns, logPeople } from './entries';
 import { PageIcon } from './icons';
+import { LogEmpty } from './parts';
 
 // A page shows logPageSize rows, newest first; "Older entries" opens the next page. The count names every row that matches.
 const shown=logPageSize;
@@ -67,7 +68,7 @@ export default async function ActivityLogPage({params,searchParams}:{params:Prom
     <LogFilters slug={slug} who={whoValue} card={card!=null?String(card):'all'} people={peopleOptions} agents={agentOptions} cards={cardOptions} count={n}/>
     <div className="lgp-body">
      {entries.length?<LogDays items={entries.map(row=>({id:row.id,at:row.created_at,anchor:logAnchor(row),node:<LogEntry row={row} people={people} me={user.id} slug={slug} company={company.id} canWrite={writer} drawnAt={drawn} t={t} language={language}/>}))}/>
-      :<div className="panel-card lgp-empty"><p className="panel-empty">{total?t('logNoMatch'):t('logEmpty')}</p>{total?<a className="btn btn--secondary btn--sm" href={`/c/${slug}/log`}>{t('logShowAll')}</a>:null}</div>}
+      :<LogEmpty t={t} slug={slug} total={total??0}/>}
      {(older||before)&&<nav className="lg-pages" aria-label={t('logPages')}>
       <p className="lg-more">{t(before?'logShowingOlder':'logShowing',entries.length)}</p>
       {before&&<Link className="btn btn--secondary btn--sm" href={pageLink(null)}>{t('logNewest')}</Link>}
