@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(50);
+select plan(52);
 -- Each seeded person's Conversation with Lead: the Owner (1), the Manager (2), the Contributors (3, 5) and the Viewer (4),
 -- each asking for an Agent in run rq-n.
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
@@ -70,6 +70,14 @@ insert into seen select 5,(select count(*) from public.lead_agent_requests),(sel
 reset role;
 select results_eq($$select * from seen order by n$$,$$values (1,2,2,2),(2,1,0,1),(3,1,0,1),(4,0,0,0),(5,0,0,0)$$,
  'the Owner reads both and has both waiting; each asker reads only their own and has nothing waiting; the Viewer and another Contributor read none');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+update public.members set role='owner' where company_id='10000000-0000-0000-0000-000000000003' and person_id='20000000-0000-0000-0000-000000000005';
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000005',true);
+select is((select count(*)::int from public.lead_agent_requests),0,'an Owner of another Company reads none of these requests');
+select is((select count(*)::int from public.waiting_list('10000000-0000-0000-0000-000000000003') where kind='agent_request'),0,'and none waits on them in their own Company');
+reset role;
+update public.members set role='contributor' where company_id='10000000-0000-0000-0000-000000000003' and person_id='20000000-0000-0000-0000-000000000005';
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select results_eq($$select kind,id,title,body,asked_by,card_id is null and conversation_id is null from public.waiting_list(current_setting('test.c')::uuid) where kind='agent_request' order by id$$,
