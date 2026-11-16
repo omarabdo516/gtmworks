@@ -873,6 +873,7 @@
   "waitingRequestReasonMissing": "Write the reason for the no, so the person who asked knows why.",
   "waitingRequestFailed": "This request could not be answered. Try again.",
   "logActAgentRequestSent": "asked {0} for an agent",
+  "logActDraftShown": "got a draft from {0}",
   "logAgentRequestWaiting": "Waiting for the Owner’s answer",
   "logActAgentRequestMade": "made an agent {0} asked for",
   "logActAgentRequestDeclined": "declined an agent request from {0}",

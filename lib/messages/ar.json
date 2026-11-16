@@ -873,6 +873,7 @@
   "waitingRequestReasonMissing": "اكتب سبب الرفض، عشان اللي طلب يعرف ليه.",
   "waitingRequestFailed": "الطلب ده ماتردّش عليه. جرّب تاني.",
   "logActAgentRequestSent": "طلب من {0} وكيل",
+  "logActDraftShown": "استلم مسودة من {0}",
   "logAgentRequestWaiting": "مستني رد المالك",
   "logActAgentRequestMade": "عمل وكيل طلبه {0}",
   "logActAgentRequestDeclined": "رفض طلب وكيل من {0}",
