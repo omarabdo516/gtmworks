@@ -58,6 +58,9 @@
 /* The Chat tab (#145): the Conversation across the sheet's width, and its empty and lock states centred in it
    (design-reference: .sheet .transcript__col, emptyChatHTML's sheet branch, .priv-sheet__ic). Every reply card is
    already the column's width. */
+/* The Chat tab's transcript and composer are the body's two rows while it shows; hidden, it keeps its state. */
+.gw .sheet .sheet-pane { display: contents; }
+.gw .sheet .sheet-pane[hidden] { display: none; }
 .gw .sheet .transcript__col { max-width: none; }
 .gw .sheet .empty-chat--sheet h2 { font-size: var(--gw-fs-lg); }
 .gw .sheet .priv-sheet__ic { width: 48px; height: 48px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--gw-bg-tertiary); color: var(--gw-text-2); }

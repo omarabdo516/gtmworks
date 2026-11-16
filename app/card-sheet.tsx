@@ -30,7 +30,7 @@ export function CardSheet({slug,company,title,face,who,badge,sheet,canWrite,alon
  const board=`/c/${slug}/work/board`;
  useLayoutEffect(()=>{
   if(!box.current?.open) box.current?.showModal();
-  const frame=requestAnimationFrame(()=>box.current?.querySelector<HTMLElement>('.sheet-body .composer-area textarea')?.focus());
+  const frame=requestAnimationFrame(()=>box.current?.querySelector<HTMLElement>('.sheet-body > .composer-area textarea, .sheet-pane:not([hidden]) > .composer-area textarea')?.focus());
   return ()=>{ cancelAnimationFrame(frame); stopLeaving.current(); };
  },[]);
  // The log stays on its newest row while the reader is there: when it opens, after a note, when a reply lands.
@@ -63,7 +63,7 @@ export function CardSheet({slug,company,title,face,who,badge,sheet,canWrite,alon
      <button type="button" role="tab" id="sh-tab-log" aria-selected={tab==='log'} aria-controls={tab==='log'?'sheet-log':undefined} tabIndex={tab==='log'?0:-1} onClick={()=>pick('log')}>{t('sheetTabLog')} <span className="num sheet-tabs__n">{sheet.count}</span></button>
     </div>
    </header>
-   <div className="sheet-body">{tab==='log'?<>
+   <div className="sheet-body">{tab==='log'&&<>
     <div ref={logBox} className="transcript sheet-log" id="sheet-log" role="tabpanel" aria-labelledby="sh-tab-log" tabIndex={-1} onScroll={event=>{ const view=event.currentTarget; stick.current=view.scrollHeight-view.scrollTop-view.clientHeight<80; }}>{sheet.log}</div>
     <div className="composer-area">{message&&<p role="alert" className="composer-error">{message}</p>}{canWrite?<>
      <form className="composer note-composer" action={send}>
@@ -78,7 +78,9 @@ export function CardSheet({slug,company,title,face,who,badge,sheet,canWrite,alon
      </form>
      <p className="note-hint" id="note-hint"><BoardIcon name="clock"/><span>{t('noteHint')}</span></p>
     </>:<p className="ro-line"><BoardIcon name="eye"/><span>{t('noteViewOnly')}</span></p>}</div>
-   </>:<CardSheetChat slug={slug} company={company} card={sheet.id} chat={sheet.chat} writer={canWrite} openLog={()=>pick('log')}/>}</div>
+   </>}
+    {/* Kept while Log shows, so a message on its way, and the reply it waits for, still land in the chat. */}
+    <div className="sheet-pane" hidden={tab!=='chat'}><CardSheetChat slug={slug} company={company} card={sheet.id} chat={sheet.chat} writer={canWrite} shown={tab==='chat'} openLog={()=>pick('log')}/></div></div>
   </div>
  </dialog>;
 }

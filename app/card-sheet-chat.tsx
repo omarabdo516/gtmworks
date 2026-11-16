@@ -26,11 +26,11 @@ const panel={className:'transcript',id:'sheet-transcript',role:'tabpanel',['aria
 // branch). A first message from the empty state starts the Card's chat in the database, which moves a Card under Ideas
 // or Planned to In progress; the chat shows at once and the board behind is drawn again, so the head, the Log and the
 // Card's column follow. It stays mounted through that redraw, so the chat keeps its place.
-export function CardSheetChat({slug,company,card,chat,writer,openLog}:{slug:string,company:string,card:number,chat:SheetChat,writer:boolean,openLog:()=>void}) {
+export function CardSheetChat({slug,company,card,chat,writer,shown,openLog}:{slug:string,company:string,card:number,chat:SheetChat,writer:boolean,shown:boolean,openLog:()=>void}) {
  const {t}=useI18n(); const router=useRouter();
  const [started,setStarted]=useState<ConversationRecord|null>(null); const [id]=useState(newId);
  const record=chat.kind==='own'?chat.record:started;
- if(record) return <SheetThread key={record.conversation.id} slug={slug} company={company} initial={record} writer={writer}/>;
+ if(record) return <SheetThread key={record.conversation.id} slug={slug} company={company} initial={record} writer={writer} shown={shown}/>;
  if(chat.kind==='theirs') return <>
   <div {...panel}><div className="transcript__col"><div className="empty-chat priv-sheet">
    <span className="priv-sheet__ic" aria-hidden="true"><ShellIcon name="lock"/></span>
@@ -66,10 +66,10 @@ function Between({person,agent}:{person:string,agent:string}) {
 }
 
 // The reader's own chat on the Card, kept on its newest message while they are there.
-function SheetThread({slug,company,initial,writer}:{slug:string,company:string,initial:ConversationRecord,writer:boolean}) {
+function SheetThread({slug,company,initial,writer,shown}:{slug:string,company:string,initial:ConversationRecord,writer:boolean,shown:boolean}) {
  const {record,asked}=useConversationRecord({company,initial});
  const box=useRef<HTMLDivElement>(null); const stick=useRef(true);
- useLayoutEffect(()=>{ if(stick.current&&box.current) box.current.scrollTop=box.current.scrollHeight; },[record.messages.length,record.pending]);
+ useLayoutEffect(()=>{ if(stick.current&&box.current) box.current.scrollTop=box.current.scrollHeight; },[record.messages.length,record.pending,shown]);
  return <>
   <div {...panel} ref={box} onScroll={event=>{ const view=event.currentTarget; stick.current=view.scrollHeight-view.scrollTop-view.clientHeight<80; }}>
    <div className="transcript__col"><ConversationTurns slug={slug} record={record}/></div>

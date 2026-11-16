@@ -130,6 +130,22 @@ test('a message written in the sheet goes into the Card\'s chat and its reply sh
  expect(posted).not.toHaveProperty('card');
 });
 
+test('a message still on its way when the reader turns to Log lands in the chat they come back to, with its reply', async () => {
+ const replied = own({ messages: [...own().messages, { id: 3, author: 'person', author_name: 'Omar', body: 'Make the first one shorter', created_at: at }, { id: 4, author: 'agent', author_name: 'Ads', body: 'Shorter it is.', created_at: at }] });
+ let arrive = () => {};
+ const asks = vi.fn((_: string, init?: RequestInit) => init?.method === 'POST' ? new Promise<Response>(resolve => { arrive = () => resolve(Response.json({ conversation: replied.conversation.id })); }) : Promise.resolve(Response.json(replied)));
+ vi.stubGlobal('fetch', asks);
+ const screen = await show(sheet({ chat: { kind: 'own', record: own() } }));
+ await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), 'Make the first one shorter{Enter}');
+ await expect.poll(() => asks.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(true);
+ await screen.getByRole('tab', { name: 'Log 3' }).click();
+ await expect.element(screen.getByRole('tabpanel', { name: 'Log 3' })).toBeVisible();
+ arrive();
+ await expect.poll(() => asks.mock.calls.some(([, init]) => init?.method !== 'POST')).toBe(true);
+ await screen.getByRole('tab', { name: 'Chat' }).click();
+ await expect.element(chatPanel(screen).getByText('Shorter it is.')).toBeVisible();
+});
+
 test('another Member\'s chat opens the Card on Log; its Chat tab is a lock with the way back to the log and nothing of the chat', async () => {
  const screen = await show(sheet({ chat: { kind: 'theirs', agent: ads, person: 'Youssef' } }));
  await expect.element(screen.getByRole('tab', { name: 'Log 3' })).toHaveAttribute('aria-selected', 'true');
