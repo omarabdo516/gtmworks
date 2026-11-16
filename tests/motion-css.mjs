@@ -3,7 +3,7 @@ import { join } from 'node:path';
 
 // Reads the motion of a part from the stylesheets: the reference's one <style> block, and the product's stylesheets
 // under app/. A brace-level reader is enough for these files: they nest only inside at-rules and hold no brace in a
-// string. Paths are from the repository root, as Playwright compiles this file to CommonJS, where import.meta is missing.
+// string. Paths are from the repository root, as tests/motion-table.mjs names them.
 
 /** @typedef {{ selectors: string[], media: string, declarations: [string, string][] }} Rule */
 /** @typedef {{ rules: Rule[], keyframes: Map<string, string> }} Sheet */
@@ -11,6 +11,11 @@ import { join } from 'node:path';
 /** @typedef {{ properties: string[], durations: string[], delays: string[], easings: string[] }} Transition */
 /** `frames` holds each named keyframe's frames, so two names that move alike compare equal. @typedef {{ frames: string[], durations: string[], delays: string[], easings: string[], iterations: string[], fills: string[] }} Animation */
 /** @typedef {{ transition: Transition, animation: Animation }} Motion */
+/**
+ * A part's motion as the browser computes it, times in milliseconds and curves spelled out; `names` are keyframe names.
+ * @typedef {{ properties: string[], durations: string[], easings: string[], names: string[], animationDurations: string[], animationEasings: string[] }} ComputedMotion
+ */
+/** @typedef {Pick<CSSStyleDeclaration, 'transitionProperty' | 'transitionDuration' | 'transitionDelay' | 'transitionTimingFunction' | 'animationName' | 'animationDuration' | 'animationTimingFunction'>} ComputedStyle */
 
 export const referenceFile = 'design-reference/index.html';
 const productFolder = 'app';
@@ -254,6 +259,35 @@ export function motionOf(styles, selector, width) {
       durations: animation.durations.map(milliseconds), delays: animation.delays.map(milliseconds), easings: animation.easings.map(easing),
       iterations: animation.iterations, fills: animation.fills,
     },
+  };
+}
+
+/**
+ * What a part computes at a window width when it moves as the reference's `selector`. Each keyframe goes by the
+ * product's name for the same frames, which is one name because tests/motion-reference.test.mjs allows no repeat.
+ * @param {string} selector @param {number} width @returns {ComputedMotion}
+ */
+export function referenceComputed(selector, width) {
+  const motion = motionOf(referenceStyles(), selector, width);
+  if (!motion) throw new Error(`${selector} is not in ${referenceFile}`);
+  const productNames = new Map(productFiles().flatMap(file => [...readSheet(file).keyframes].map(([name, frames]) => [frames, name])));
+  const names = motion.animation.frames.map(frames => productNames.get(frames) ?? `(no keyframes under ${productFolder}/ move as ${selector}'s)`);
+  return {
+    properties: motion.transition.properties, durations: motion.transition.durations, easings: motion.transition.easings,
+    names: names.length ? names : ['none'], animationDurations: motion.animation.durations, animationEasings: motion.animation.easings,
+  };
+}
+
+/** A part's computed style, read as `referenceComputed` reads the reference. @param {ComputedStyle} style @returns {ComputedMotion} */
+export function computedMotion(style) {
+  const list = (/** @type {string} */ value) => splitTop(value, ',');
+  const transition = transitionOf({
+    properties: list(style.transitionProperty), durations: list(style.transitionDuration).map(milliseconds),
+    delays: list(style.transitionDelay).map(milliseconds), easings: list(style.transitionTimingFunction).map(easing),
+  });
+  return {
+    properties: transition.properties, durations: transition.durations, easings: transition.easings, names: list(style.animationName),
+    animationDurations: list(style.animationDuration).map(milliseconds), animationEasings: list(style.animationTimingFunction).map(easing),
   };
 }
 

@@ -8,8 +8,13 @@ import { readFileSync } from 'node:fs';
 const everything = [/^\.github\/workflows\/ci\.yml$/, /^ci\.sh$/, /^scripts\/ci-(areas|verdict)\.mjs$/, /^package(-lock)?\.json$/];
 const suites = {
   // Screens as components in headless Chromium (vitest.config.mts, #81): the app's screens and components, the library
-  // they import (catalogues included), and the component tests and their config.
-  components: [/^(app|components|lib)\//, /^tests\/components\//, /^vitest\.config\.mts$/],
+  // they import (catalogues included), and the component tests and their config. The motion test also reads the
+  // reference and the motion table through the motion reader, at the compared screens' widths and languages, with the
+  // stylesheets built through PostCSS.
+  components: [
+    /^(app|components|lib)\//, /^tests\/components\//, /^vitest\.config\.mts$/,
+    /^tests\/(motion-table|motion-css|visual-screens)\.mjs$/, /^design-reference\/index\.html$/, /^postcss\.config\.mjs$/,
+  ],
   // The database tests: migrations replayed and verified, RLS and grants (tests/db.sh, *.verify.sql, check-rls.sql).
   database: [
     /^supabase\//, /^scripts\/(check-rls\.sql|verify-db\.mjs|local-db\.sh|local-default-privileges\.sql|bootstrap-owner\.mjs)$/,
@@ -24,7 +29,7 @@ const suites = {
   integration: [
     /^(app|components|lib|worker)\//, /^(middleware|instrumentation)\.ts$/, /^(next|postcss)\.config\.mjs$/, /^server\.js$/,
     /^tests\/(.+\/)?[^/]+\.spec\.ts$/, /^tests\/[^/]+\.ts$/, /^tests\/visual\.spec\.ts-snapshots\//,
-    /^tests\/(visual-screens|lane|fake-hermes|fake-engine|touch-diagnostics|motion-table|motion-css)\.mjs$/, /^tests\/visual-screens\//,
+    /^tests\/(visual-screens|lane|fake-hermes|fake-engine|touch-diagnostics)\.mjs$/, /^tests\/visual-screens\//,
     /^playwright(\.proxy)?\.config\.ts$/, /^Dockerfile$/, /^\.dockerignore$/,
     /^scripts\/(web\.sh|local-db\.sh|proxy-stack\.sh|ci-image\.sh|first-run-db\.mjs|local-default-privileges\.sql)$/,
     /^supabase\/(migrations\/|config\.toml$|seed\.sql$)/, /^public\//,
