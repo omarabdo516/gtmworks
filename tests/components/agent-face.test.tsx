@@ -7,6 +7,11 @@ import { MemberPicker } from '@/lib/work-activity';
 import { AgentIdentitiesProvider } from '@/lib/agent-identities-client';
 import { LanguageProvider } from '@/lib/i18n-client';
 import { roleAgents } from '@/lib/role-agents';
+import '@/app/globals.css';
+import '@/app/tokens.css';
+import '@/app/shell.css';
+import '@/app/board.css';
+import '@/app/settings.css';
 
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 
@@ -14,16 +19,23 @@ const writer = { id: '30000000-0000-0000-0000-000000000001', role: 'writer', nam
 const critic = { id: '30000000-0000-0000-0000-000000000005', role: 'critic', name: 'الناقد' };
 
 test('an agent\'s face is a still picture named for it in its role\'s colour, drawn the same at every size and after a pointer passes', async () => {
- const screen = await render(<>
-  <AgentFace {...writer} size={20}/><AgentFace {...writer} size={52}/><AgentFace {...critic} size={20}/>
- </>);
- const [small, large, other] = screen.getByRole('img').elements();
+ // Drawn inside the app's own stylesheets, where Home, a board card and Settings draw a face, so a rule that animates a
+ // face there is caught.
+ const screen = await render(<div className="gw">
+  <div className="home-agents"><AgentFace {...writer} size={20}/><AgentFace {...writer} size={52}/><AgentFace {...critic} size={20}/></div>
+  <div className="board-view"><div className="kcard"><span className="kcard__agent"><AgentFace {...writer}/></span></div></div>
+  <div className="sov"><span className="fstack"><AgentFace {...writer}/><AgentFace {...critic}/></span></div>
+ </div>);
+ const faces = screen.getByRole('img').elements();
+ const [small, large, other] = faces;
+ const still = () => faces.flatMap(face => face.getAnimations({ subtree: true }));
  await expect.element(screen.getByRole('img', { name: 'وكيل المحتوى' }).first()).toBeVisible();
  expect(small.querySelector('g')!.getAttribute('fill')).toBe(roleAgents.find(agent => agent.key === 'writer')!.color);
- expect(small.getAnimations({ subtree: true })).toEqual([]);
+ expect(still()).toEqual([]);
  expect(large.innerHTML).toBe(small.innerHTML);
  expect(other.innerHTML).not.toBe(small.innerHTML);
  await screen.getByRole('img', { name: 'وكيل المحتوى' }).first().hover();
+ expect(still()).toEqual([]);
  expect(small.innerHTML).toBe(large.innerHTML);
 });
 
