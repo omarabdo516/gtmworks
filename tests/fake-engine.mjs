@@ -1,7 +1,7 @@
 // A fake engine that speaks the engine contract (lib/engine.mjs) in memory: no subscription, no network. It replies,
 // fails, replies slowly (pendingReads reads report running first) and stops, as a real driver would.
 import { randomUUID } from 'node:crypto';
-/** @typedef {{id:string,key:string,conversation:string,input:string,instructions:string|null,tools:import('../lib/engine.mjs').ToolSpec[],reads:number,stopped:boolean}} FakeRun */
+/** @typedef {{id:string,key:string,conversation:string,input:string,instructions:string|null,tools:import('../lib/engine.mjs').ToolSpec[],history:import('../lib/engine.mjs').HistoryEntry[]|null,reads:number,stopped:boolean}} FakeRun */
 /** @returns {{settings:{ending:'completed'|'failed',pendingReads:number,reply:(input:string)=>string,toolCalls:(input:string)=>import('../lib/engine.mjs').ToolCall[],usage:{input:number,output:number}|null,agentProfile:import('../lib/engine.mjs').ProvidedAgent['state']},runs:FakeRun[],connections:object[],agentReads:string[],provided:{name:string,instructions:string,level:number}[],removed:string[],engineFor:(connection:object)=>import('../lib/engine.mjs').Engine}} */
 export function fakeEngine() {
  const settings={ending:/** @type {'completed'|'failed'} */('completed'),pendingReads:0,reply:(/** @type {string} */ input)=>`Reply to: ${input}`,toolCalls:/** @type {(input:string)=>import('../lib/engine.mjs').ToolCall[]} */(()=>[]),usage:/** @type {{input:number,output:number}|null} */({input:14000,output:12}),
@@ -19,9 +19,9 @@ export function fakeEngine() {
  const engine={
   // The same idempotency key is the same run.
   // A run's instructions (the sender's own note) are kept with it, as an engine keeps them for that run only.
-  async start({conversation,input,idempotencyKey,instructions,tools}) {
+  async start({conversation,input,idempotencyKey,instructions,tools,history}) {
    let run=runs.find(run=>run.key===idempotencyKey);
-   if(!run) { run={id:`fake_run_${instance}_${runs.length+1}`,key:idempotencyKey,conversation,input,instructions:instructions??null,tools:tools??[],reads:0,stopped:false}; runs.push(run); }
+   if(!run) { run={id:`fake_run_${instance}_${runs.length+1}`,key:idempotencyKey,conversation,input,instructions:instructions??null,tools:tools??[],history:history??null,reads:0,stopped:false}; runs.push(run); }
    return run.id;
   },
   async read(id) {
