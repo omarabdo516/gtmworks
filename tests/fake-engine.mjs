@@ -2,14 +2,18 @@
 // fails, replies slowly (pendingReads reads report running first) and stops, as a real driver would.
 import { randomUUID } from 'node:crypto';
 /** @typedef {{id:string,key:string,conversation:string,input:string,instructions:string|null,tools:import('../lib/engine.mjs').ToolSpec[],reads:number,stopped:boolean}} FakeRun */
-/** @returns {{settings:{ending:'completed'|'failed',pendingReads:number,reply:(input:string)=>string,toolCalls:(input:string)=>import('../lib/engine.mjs').ToolCall[],usage:{input:number,output:number}|null},runs:FakeRun[],connections:object[],agentReads:string[],engineFor:(connection:object)=>import('../lib/engine.mjs').Engine}} */
+/** @returns {{settings:{ending:'completed'|'failed',pendingReads:number,reply:(input:string)=>string,toolCalls:(input:string)=>import('../lib/engine.mjs').ToolCall[],usage:{input:number,output:number}|null,agentProfile:import('../lib/engine.mjs').ProvidedAgent['state']},runs:FakeRun[],connections:object[],agentReads:string[],provided:{name:string,instructions:string,level:number}[],removed:string[],engineFor:(connection:object)=>import('../lib/engine.mjs').Engine}} */
 export function fakeEngine() {
- const settings={ending:/** @type {'completed'|'failed'} */('completed'),pendingReads:0,reply:(/** @type {string} */ input)=>`Reply to: ${input}`,toolCalls:/** @type {(input:string)=>import('../lib/engine.mjs').ToolCall[]} */(()=>[]),usage:/** @type {{input:number,output:number}|null} */({input:14000,output:12})};
+ const settings={ending:/** @type {'completed'|'failed'} */('completed'),pendingReads:0,reply:(/** @type {string} */ input)=>`Reply to: ${input}`,toolCalls:/** @type {(input:string)=>import('../lib/engine.mjs').ToolCall[]} */(()=>[]),usage:/** @type {{input:number,output:number}|null} */({input:14000,output:12}),
+  // How providing an Agent's own profile ends: with no subscription, a made profile has no model to answer with.
+  agentProfile:/** @type {import('../lib/engine.mjs').ProvidedAgent['state']} */('noModel')};
  // Run ids are unique across fakes, as an engine's are: the database refuses a Member's run already used elsewhere (#287).
  const instance=randomUUID().slice(0,8);
  const runs=/** @type {FakeRun[]} */([]);
  const connections=/** @type {object[]} */([]);
  const agentReads=/** @type {string[]} */([]);
+ const provided=/** @type {{name:string,instructions:string,level:number}[]} */([]);
+ const removed=/** @type {string[]} */([]);
  const agents=/** @type {Map<string,import('../lib/engine.mjs').Agent>} */(new Map());
  /** @type {import('../lib/engine.mjs').Engine} */
  const engine={
@@ -43,6 +47,17 @@ export function fakeEngine() {
    const agent=agents.get(name);
    return agent?{state:'found',agent}:{state:'missing',agent:null};
   },
+  // A profile under the reserved name is made, or the one there finished; a made one stays until it is removed.
+  async provideAgent({name,instructions,level}) {
+   provided.push({name,instructions,level});
+   if(['provided','noModel','forbidden'].includes(settings.agentProfile)) agents.set(name,{name,instructions,model:null,ready:true});
+   return {state:settings.agentProfile};
+  },
+  async removeAgent(name) {
+   removed.push(name);
+   if(name==='default'||!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(name)) return {state:'refused'};
+   return {state:agents.delete(name)?'removed':'missing'};
+  },
  };
- return {settings,runs,connections,agentReads,engineFor:connection=>{ connections.push(connection); return engine; }};
+ return {settings,runs,connections,agentReads,provided,removed,engineFor:connection=>{ connections.push(connection); return engine; }};
 }

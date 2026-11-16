@@ -8,6 +8,9 @@ export type Agent={name:string,instructions:string,model:string|null,ready:boole
 export type AgentRequest={name:string,instructions:string,model?:string|null};
 export type CreatedAgent={state:'created',agent:Agent}|{state:'exists'|'refused'|'unreachable'|'failed',agent:null};
 export type FoundAgent={state:'found',agent:Agent}|{state:'missing'|'refused'|'unreachable',agent:null};
+export type AgentLevel=1|2|3;
+export type ProvidedAgent={state:'provided'|'noModel'|'forbidden'|'failed'|'refused'|'unreachable'};
+export type RemovedAgent={state:'removed'|'missing'|'refused'|'unreachable'};
 export type StartUnknown={readonly state:'unknown'};
 export function startOutcomeUnknown(result:unknown):result is StartUnknown;
 export type Engine={
@@ -16,6 +19,8 @@ export type Engine={
  stop(run:string):Promise<boolean>,
  createAgent(agent:AgentRequest):Promise<CreatedAgent>,
  readAgent(name:string):Promise<FoundAgent>,
+ provideAgent(agent:{name:string,instructions:string,level:AgentLevel}):Promise<ProvidedAgent>,
+ removeAgent(name:string):Promise<RemovedAgent>,
 };
 export function engineFor(connection:EngineConnection):Engine;
 export function outcomeOf(run:Pick<RunState,'state'|'reply'>):'completed'|'failed'|'stopped'|'lost'|null;

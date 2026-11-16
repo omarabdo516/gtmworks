@@ -19,8 +19,11 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
   signInSessions:/** @type {Map<string,{provider:string,profile:string,status:string}>} */(new Map()),
   // Ignore the disabled list when reporting toolsets, as a Hermes that did not apply it would.
   ignoreDisabled:false,staleConfig:false,
-  // Profiles the Run API answers 404 for, as Hermes does for one it does not serve.
+  // Profiles the Run API answers 404 for, as Hermes does for one it does not serve; a removed profile joins them.
   unknownProfiles:/** @type {string[]} */([]),
+  // The root profile's model block, which a new profile copies (hermes_cli/profiles.py, _seed_model_config); none
+  // leaves a new profile with no model. A removal whose identity settlement stays pending still answers ok.
+  seedModel:/** @type {{provider:string,model:string}|null} */(null),settlementPending:false,
   // The MCP catalogue the pinned release ships (optional-mcps/), the tools each app's server offers, the apps whose
   // server does not answer, and the OAuth sign-ins of apps (hermes_cli/web_routers/mcp.py): a sign-in's token stays on
   // disk when its server is removed, as in the pinned release. approveApps:false keeps a delivered sign-in waiting.
@@ -94,8 +97,18 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
    if(url.pathname==='/api/profiles'&&request.method==='GET') return send(response,200,{profiles:[{name:'default',path:'/opt/data',is_default:true,model:'default-model',provider:'auto'},...[...settings.profiles].map(([name,profile])=>({name,path:`/opt/data/profiles/${name}`,is_default:false,model:profile.model,provider:profile.provider}))]});
    if(url.pathname==='/api/profiles'&&request.method==='POST') {
     if(body?.name==='default'||settings.profiles.has(body?.name)) return send(response,400,{detail:`A profile named '${body.name}' already exists. Choose another name.`});
-    settings.profiles.set(body.name,{soul:body.soul||'',provider:'auto',model:'',key:null,config:{},credentials:{}});
+    settings.profiles.set(body.name,{soul:body.soul||'',provider:settings.seedModel?.provider||'auto',model:settings.seedModel?.model||'',key:null,config:{},credentials:{}});
     return send(response,200,{ok:true,name:body.name,path:`/opt/data/profiles/${body.name}`,model_set:false,model_error:'No provider given',soul_set:Boolean(body.soul)});
+   }
+   // As delete_profile_endpoint answers (hermes_cli/web_routers/profiles.py 984-1002).
+   const removing=url.pathname.match(/^\/api\/profiles\/([^/]+)$/);
+   if(removing&&request.method==='DELETE') {
+    const name=decodeURIComponent(removing[1]);
+    if(name==='default'||!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(name)) return send(response,400,{detail:name==='default'?'Cannot delete the default profile (~/.hermes).':`Invalid profile name '${name}'`});
+    if(!settings.profiles.has(name)) return send(response,404,{detail:`Profile '${name}' does not exist.`});
+    settings.profiles.delete(name); settings.unknownProfiles.push(name);
+    const path=`/opt/data/profiles/${name}`;
+    return send(response,200,settings.settlementPending?{ok:true,path,identity_settled:false,settlement_pending:true,retry_command:`hermes profile delete ${name}`}:{ok:true,path});
    }
    const profilePath=url.pathname.match(/^\/api\/profiles\/([^/]+)\/(soul|model)$/);
    const profile=profilePath&&settings.profiles.get(decodeURIComponent(profilePath[1]));
@@ -122,6 +135,16 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
     if(!settings.staleConfig) home.config=merge(home.config,body.config);
     if(scoped==='default') settings.defaultConfig=home.config;
     return send(response,200,{ok:true});
+   }
+   // The model providers a profile is signed in to (hermes_cli/web_routers/models.py, get_model_options): a profile with
+   // no credential of its own uses the root profile's, and its current provider without one is listed unauthenticated.
+   if(url.pathname==='/api/model/options'&&request.method==='GET') {
+    if(!home) return send(response,404,{detail:`Profile '${scoped}' does not exist.`});
+    const own=settings.profiles.get(scoped)||{provider:'auto',model:''};
+    const signedIn=['openai-codex','anthropic'].filter(id=>home.credentials[id]||settings.defaultCredentials[id]);
+    const providers=signedIn.map(slug=>({slug,name:slug,is_current:slug===own.provider,models:own.provider===slug&&own.model?[own.model]:[],source:'authenticated'}));
+    if(own.provider!=='auto'&&!signedIn.includes(own.provider)) providers.push({slug:own.provider,name:own.provider,is_current:true,authenticated:false,models:own.model?[own.model]:[],source:'configured-current'});
+    return send(response,200,{providers,model:own.model,provider:own.provider});
    }
    // Apps (hermes_cli/web_routers/mcp.py): the catalogue with what this profile installed, an install, a probe with the
    // stored sign-in, an OAuth sign-in through a flow, and removal. A flow is not tied to a profile in its own routes.
