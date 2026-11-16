@@ -4,18 +4,13 @@ import { userEvent } from 'vitest/browser';
 import type { ComponentProps, ReactNode } from 'react';
 import { ToastHost, toast } from '@/app/toast';
 import { CardSheet } from '@/app/card-sheet';
-import { OverlayFrame } from '@/app/settings-overlay-client';
+import { OverlayFrame } from '@/app/settings-overlay-frame';
 import { ShellIcon } from '@/components/shell-icon';
 import { LanguageProvider } from '@/lib/i18n-client';
 import '@/app/settings.css';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }) }));
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
-// The settings overlay's own controls save through server actions; its frame never calls them.
-vi.mock('@/app/theme-actions', () => ({ saveTheme: vi.fn() }));
-vi.mock('@/app/language-actions', () => ({ saveLanguage: vi.fn() }));
-vi.mock('@/app/agent-visibility-actions', () => ({ setAgentVisible: vi.fn() }));
-vi.mock('@/app/c/[slug]/[[...section]]/actions', () => ({ changeMember: vi.fn() }));
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 const show = (page: ReactNode = null, language: 'en' | 'ar' = 'en') => render(<LanguageProvider language={language}>{page}<ToastHost/></LanguageProvider>);

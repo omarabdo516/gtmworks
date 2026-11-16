@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useState, useSyncExternalStore, useTransition, type KeyboardEvent, type ReactNode } from 'react';
+import { useState, useSyncExternalStore, useTransition, type KeyboardEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
 import { closeTarget, overlayHref } from '@/lib/settings-overlay.mjs';
@@ -14,19 +14,6 @@ import { dateFormatter, dayOf } from '@/lib/activity-log.mjs';
 import { localeFor } from '@/lib/i18n.mjs';
 
 
-// The full-window overlay (reference: dialog#sov): it holds the keyboard's first stop and closes on Escape.
-export function OverlayFrame({slug,children}:{slug:string,children:ReactNode}) {
- const router=useRouter();
- const box=useRef<HTMLDivElement>(null);
- // Opening moves focus into the overlay (the dialog itself), so Tab starts at its close button and section list.
- useEffect(()=>{ if(!box.current?.contains(document.activeElement)) box.current?.focus({preventScroll:true}); },[]);
- useEffect(()=>{
-  const keys=(event:globalThis.KeyboardEvent)=>{ if(event.key==='Escape'&&!event.defaultPrevented) router.push(closeTarget(storedFrom(),slug)); };
-  document.addEventListener('keydown',keys);
-  return ()=>document.removeEventListener('keydown',keys);
- },[router,slug]);
- return <div className="gw sov-root"><div ref={box} className="sov" role="dialog" aria-modal="true" aria-labelledby="sov-title" tabIndex={-1}>{children}</div></div>;
-}
 
 export function CloseButton({slug}:{slug:string}) {
  const {t}=useI18n(); const router=useRouter();
