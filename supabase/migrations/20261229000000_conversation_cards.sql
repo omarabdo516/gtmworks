@@ -67,3 +67,24 @@ do $$ declare t text; begin
   execute format('create policy card_agent_visible on public.%I as restrictive for select to authenticated using (public.can_see_card(company_id,card_id))',t);
  end loop;
 end $$;
+-- Nor does that Member add to it: an insert needs no read of the Card, so each table checks it on write too.
+do $$ declare t text; begin
+ foreach t in array array['work_checklist','work_card_labels','work_assignees','work_creatives','work_versions','work_comments','work_activity',
+  'work_attachments','work_card_visits','note_runs','skill_lessons','waiting_items','company_log'] loop
+  execute format('create policy card_agent_visible_write on public.%I as restrictive for insert to authenticated with check (public.can_see_card(company_id,card_id))',t);
+ end loop;
+end $$;
+
+-- A Card's stored files follow it: those under its own folder (<company>/<card>/…) and those its attachment and version
+-- rows name (a new Card's files sit under a folder of their own). Every other object reads and writes as before.
+create function public.can_see_card_file(object text) returns boolean language sql stable security definer set search_path='' as $$
+ select case when coalesce((storage.foldername(object))[1],'') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then true else
+  coalesce((select bool_and(public.can_see_card(f.company,f.card)) from (
+   select (storage.foldername(object))[1]::uuid as company,(storage.foldername(object))[2]::bigint as card where (storage.foldername(object))[2] ~ '^[0-9]{1,18}$'
+   union all select a.company_id,a.card_id from public.work_attachments a where a.path=object
+   union all select v.company_id,v.card_id from public.work_versions v where v.path=object) f),true) end;
+$$;
+revoke all on function public.can_see_card_file(text) from public,anon,service_role;
+grant execute on function public.can_see_card_file(text) to authenticated;
+create policy card_file_visible on storage.objects as restrictive for select to authenticated using (bucket_id<>'creatives' or public.can_see_card_file(name));
+create policy card_file_visible_write on storage.objects as restrictive for insert to authenticated with check (bucket_id<>'creatives' or public.can_see_card_file(name));

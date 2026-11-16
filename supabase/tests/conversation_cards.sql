@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(40);
+select plan(46);
 -- RS Learning with Lead (main) and Ads. Ads is shown to the Manager, both Contributors and the Viewer; the first
 -- Contributor (…03) starts every Conversation below. The Card is made when the reply's transaction ends, so here it is
 -- judged at once, as a Run closed in its own transaction is; the deferral itself is checked near the end.
@@ -75,6 +75,11 @@ select results_eq($$select action,actor_kind,actor_id is null from public.compan
  $$values ('card_created'::text,'system'::text,true)$$,'the log has one row for the new Card, as gtmworks');
 select is((select count(*)::int from public.work_activity where card_id=current_setting('test.card')::bigint),1,'and the Card one activity row');
 insert into public.work_comments(company_id,card_id,body,author_id) values ('10000000-0000-0000-0000-000000000001',current_setting('test.card')::bigint,'Looks good','20000000-0000-0000-0000-000000000001');
+-- Its stored files: one in its own folder, one its note's attachment names; and a file of an untied Card.
+insert into public.work_attachments(company_id,card_id,comment_id,name,content_type,size,path,created_by) select company_id,card_id,id,'brief.pdf','application/pdf',10,
+ '10000000-0000-0000-0000-000000000001/new-card/0','20000000-0000-0000-0000-000000000001' from public.work_comments where card_id=current_setting('test.card')::bigint;
+insert into storage.objects(bucket_id,name) values ('creatives','10000000-0000-0000-0000-000000000001/'||current_setting('test.card')||'/brief.pdf'),
+ ('creatives','10000000-0000-0000-0000-000000000001/new-card/0'),('creatives','10000000-0000-0000-0000-000000000001/1/brief.pdf');
 
 -- Who reads what: every Member who sees Ads reads the Card and what is written on it; only its person reads the chat.
 set local role authenticated;
@@ -124,8 +129,14 @@ select is((select count(*)::int from public.company_log where card_id=current_se
 select is((select count(*)::int from public.conversations where id='e1440000-0000-0000-0000-000000000001'),0,'nor the chat');
 select is((select count(*)::text from public.work_cards where company_id='10000000-0000-0000-0000-000000000001' and conversation_id is null),current_setting('test.untied'),'while every untied Card reads as before');
 select throws_ok($$select public.move_work_card_to_column('10000000-0000-0000-0000-000000000001',current_setting('test.card')::bigint,'planned')$$,'P0001','card not found or not permitted','and they cannot move it');
+select throws_ok($$insert into public.work_comments(company_id,card_id,body) values ('10000000-0000-0000-0000-000000000001',current_setting('test.card')::bigint,'Sneaking a note in')$$,'42501',null,'nor write a note on it');
+select throws_ok($$insert into public.work_checklist(company_id,card_id,title) values ('10000000-0000-0000-0000-000000000001',current_setting('test.card')::bigint,'Sneaking a step in')$$,'42501',null,'nor add a step to it');
+select is((select count(*)::int from storage.objects where bucket_id='creatives' and name in ('10000000-0000-0000-0000-000000000001/'||current_setting('test.card')||'/brief.pdf','10000000-0000-0000-0000-000000000001/new-card/0')),0,'nor read its stored files, in its folder or named by its attachment');
+select is((select count(*)::int from storage.objects where bucket_id='creatives' and name='10000000-0000-0000-0000-000000000001/1/brief.pdf'),1,'while an untied Card''s file reads as before');
+select throws_ok($$insert into storage.objects(bucket_id,name) values ('creatives','10000000-0000-0000-0000-000000000001/'||current_setting('test.card')||'/sneaked.pdf')$$,'42501',null,'nor store a file in its folder');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
 select is((select count(*)::int from public.work_cards where id=current_setting('test.card')::bigint),1,'the Manager still sees it');
+select is((select count(*)::int from storage.objects where bucket_id='creatives' and name in ('10000000-0000-0000-0000-000000000001/'||current_setting('test.card')||'/brief.pdf','10000000-0000-0000-0000-000000000001/new-card/0')),2,'and its stored files');
 
 -- The tie is the database's: a Member who may edit Cards moves this one like any other, and never sets its chat.
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
