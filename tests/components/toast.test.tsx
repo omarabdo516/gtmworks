@@ -137,6 +137,17 @@ test('a toast raised over the open card sheet shows above it, and stays on the p
  expect(onTop()).toBe(true);
 });
 
+test('a toast already showing when the card sheet opens moves above it', async () => {
+ const screen = await show();
+ toast('Moved to “Planned”');
+ await expect.element(screen.getByText('Moved to “Planned”')).toBeVisible();
+ await screen.rerender(<LanguageProvider language="en"><div className="gw">
+  <CardSheet slug="rs-learning" company="co-1" title="Launch post" face={null} who={null} badge={null} sheet={{ id: 7, log: null, count: 0, working: false, chat: null }} canWrite={false} alone={false} send={vi.fn()}/>
+ </div><ToastHost/></LanguageProvider>);
+ await expect.element(screen.getByRole('dialog', { name: 'Launch post' })).toBeVisible();
+ await expect.poll(onTop).toBe(true);
+});
+
 test('a toast raised while the settings overlay is open shows above it', async () => {
  const screen = await show(<OverlayFrame slug="rs-learning"><h2 id="sov-title">Settings</h2></OverlayFrame>);
  await expect.element(screen.getByRole('dialog', { name: 'Settings' })).toBeVisible();

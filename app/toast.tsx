@@ -21,8 +21,8 @@ function show(next:ToastState) { shown=next; listeners.forEach(listener=>listene
 function subscribe(listener:()=>void) { listeners.add(listener); return ()=>{ listeners.delete(listener); }; }
 
 // The polite live region stays one element for the whole visit, so a toast is announced as a change to it. A modal
-// dialog puts the rest of the page under it and makes it inert, so before each toast the region moves into the
-// topmost open dialog, and out again when that dialog closes (the card sheet closes, then the page changes).
+// dialog puts the rest of the page under it and makes it inert, so the region sits in the topmost open dialog: it moves
+// when a toast is raised and whenever a dialog opens or closes, so a toast already showing follows the card sheet in.
 let region:HTMLDivElement|undefined;
 function liveRegion() {
  if(!region) { region=document.createElement('div'); region.className='gw toast-host'; region.setAttribute('role','status'); region.setAttribute('aria-live','polite'); }
@@ -31,7 +31,6 @@ function liveRegion() {
 function place() {
  const home=[...document.querySelectorAll('dialog[open]')].pop()??document.body;
  if(liveRegion().parentElement!==home) home.append(liveRegion());
- if(home instanceof HTMLDialogElement) home.addEventListener('close',place,{once:true});
 }
 
 // A new toast replaces the one showing and stops its clock, whichever step it is in, then starts its own: 2.8 seconds,
@@ -47,7 +46,12 @@ export function toast(text:string,{icon='check',action}:{icon?:ShellIconName,act
 export function ToastHost() {
  const {language}=useI18n();
  const state=useSyncExternalStore(subscribe,()=>shown,()=>null);
- useEffect(()=>{ place(); return ()=>{ stop(); show(null); liveRegion().remove(); }; },[]);
+ useEffect(()=>{
+  place();
+  const dialogs=new MutationObserver(place);
+  dialogs.observe(document.body,{subtree:true,attributes:true,attributeFilter:['open']});
+  return ()=>{ dialogs.disconnect(); stop(); show(null); liveRegion().remove(); };
+ },[]);
  if(!state) return null;
  const {toast:current,leaving}=state;
  return createPortal(<div key={current.id} className={`toast${leaving?' is-leaving':''}`}>
