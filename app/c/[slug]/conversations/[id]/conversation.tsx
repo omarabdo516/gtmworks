@@ -73,7 +73,7 @@ export default function ConversationView({slug,agent,details,company,conversatio
    {team&&<PrivateLine agent={conversation.agent_name}/>}
    {welcome&&agent&&<LeadWelcome agent={agent} suggest={writer?text=>setDraft(current=>({text,n:(current?.n||0)+1})):undefined}/>}
    <ol className="turns" aria-label={t('conversationMessages')}>{messages.map(message=>message.kind==='saved'?<Fragment key={`saved${message.id}`}>{message.saved?.map(rule=>rule.sentTo?<SuggestedLine key={rule.id} to={rule.sentTo} cb={cb}/>:<SavedLine key={rule.id} slug={slug} agent={conversation.agent_name} rule={rule} c={c}/>)}</Fragment>
-    :message.kind==='decided'&&message.decided?<DecidedLine key={`decided${message.id}`} decided={message.decided} c={c} cb={cb}/>:message.author==='person'?<li key={`${message.kind||'m'}${message.id}`} className={`turn turn--user msg${message.kind==='queued'&&!message.failed?' is-queued':''}`} data-author="person" data-kind={message.kind}>
+    :message.kind==='decided'&&message.decided?<DecidedLine key={`decided${message.id}`} decided={message.decided} c={c} cb={cb} lead={<div className="sender">{face(20)}<bdi>{conversation.agent_name}</bdi><time className="sender__time" dateTime={message.created_at}>{time(message.created_at)}</time></div>}/>:message.author==='person'?<li key={`${message.kind||'m'}${message.id}`} className={`turn turn--user msg${message.kind==='queued'&&!message.failed?' is-queued':''}`} data-author="person" data-kind={message.kind}>
     <div className="bubble-row"><time className="bubble__time" dateTime={message.created_at}>{time(message.created_at)}</time><div className="bubble bubble--user" dir="auto">{message.body}</div></div>
     {message.kind==='queued'&&!message.failed&&<span className="queued"><ShellIcon name="clock"/>{c('conversationQueued')}</span>}
     {message.kind==='queued'&&message.failed&&<p className="note" role="alert">{c('conversationQueuedFailed')}</p>}
@@ -120,11 +120,11 @@ function SuggestedLine({to,cb}:{to:string[],cb:(key:string,...values:ReactNode[]
 
 // An Owner's or a Manager's decision on it, where it happened among the messages (design-reference: lnApprove's notes):
 // approved, it is saved for the whole team; refused, it stays in this person's own work. An Owner's answer to this
-// person's request for an Agent (#17; design-reference: approveRequest and refuseRequest's messages) shows the same way.
-function DecidedLine({decided,c,cb}:{decided:Decision,c:(key:string,...values:unknown[])=>string,cb:(key:string,...values:ReactNode[])=>ReactNode[]}) {
- if(decided.kind==='request') return decided.made
-  ?<li className="note note--icon" data-kind="decided" data-decision="made"><ShellIcon name="check" className="note__icon"/><span>{cb('requestAnsweredMade',decided.by,decided.name)}</span></li>
-  :<li className="note note--icon" data-kind="decided" data-decision="declined"><ShellIcon name="x" className="note__icon"/><span>{cb('requestAnsweredDeclined',decided.by,decided.name,decided.reason)}</span></li>;
+// person's request for an Agent (#17; design-reference: approveRequest and refuseRequest's messages) is drawn as Lead's
+// message, as the reference posts it, though it is read from the request rather than written.
+function DecidedLine({decided,c,cb,lead}:{decided:Decision,c:(key:string,...values:unknown[])=>string,cb:(key:string,...values:ReactNode[])=>ReactNode[],lead:ReactNode}) {
+ if(decided.kind==='request') return <li className="turn turn--agent msg" data-author="agent" data-kind="decided" data-decision={decided.made?'made':'declined'}>
+  {lead}<div className="bubble bubble--agent" dir="auto">{decided.made?cb('requestAnsweredMade',decided.by,decided.name):cb('requestAnsweredDeclined',decided.by,decided.name,decided.reason)}</div></li>;
  return decided.approved
   ?<li className="note note--saved" data-kind="decided" data-decision="approved"><ShellIcon name="check" className="note__icon"/><b className="note__saved">{c('ruleSaved')}</b><span>{cb('ruleApproved',decided.by,decided.rule)}</span></li>
   :<li className="note note--icon" data-kind="decided" data-decision="declined"><ShellIcon name="x" className="note__icon"/><span>{cb('ruleDeclined',decided.by)}</span></li>;

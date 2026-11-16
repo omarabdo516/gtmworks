@@ -111,7 +111,7 @@ test('each Member reads the Owner\'s answer in their Conversation with Lead',asy
  const made=page.getByRole('group',{name:'Agent request: WhatsApp Leads'});
  await expect(made.locator('.badge--made')).toHaveText('Made after عمر said yes');
  await expect(made.locator('.card__outcome span').first()).toContainText('now shows for مدير.');
- await expect(page.locator('.note[data-decision="made"]')).toHaveText('عمر said yes to your request, and WhatsApp Leads was made. You’ll find it in your agents: open it and give it its first job.');
+ await expect(page.locator('[data-kind="decided"][data-decision="made"] .bubble')).toHaveText('عمر said yes to your request, and WhatsApp Leads was made. You’ll find it in your agents: open it and give it its first job.');
  await openNavigation(page);
  await expect(page.locator('.sidebar .agent-tile').filter({hasText:'WhatsApp Leads'})).toHaveCount(1);
  await made.getByRole('link',{name:'Open WhatsApp Leads'}).click();
@@ -123,7 +123,7 @@ test('each Member reads the Owner\'s answer in their Conversation with Lead',asy
  const declined=page.getByRole('group',{name:'Agent request: Blog Writer'});
  await expect(declined.locator('.hcard__top .badge')).toHaveText('عمر said no');
  await expect(declined.locator('.card__outcome')).toContainText(`Reason: «${reason}»`);
- await expect(page.locator('.note[data-decision="declined"]')).toHaveText(`عمر said no to Blog Writer for now. Reason: «${reason}» If you want to change the request and send it again, tell me here.`);
+ await expect(page.locator('[data-kind="decided"][data-decision="declined"] .bubble')).toHaveText(`عمر said no to Blog Writer for now. Reason: «${reason}» If you want to change the request and send it again, tell me here.`);
 });
 
 test('a Manager and a Contributor ask for an agent from the sidebar; a Viewer has no button and is told they cannot ask',async({page})=>{
