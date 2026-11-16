@@ -39,6 +39,11 @@ for (const stage of stages) {
   });
 }
 
+test('the compared screens alone (integration=visual) were asked for, so they must succeed (#213)', () => {
+  assert.equal(verdict({ INTEGRATION_RUN: 'visual', INTEGRATION_RESULT: 'success' }), 0);
+  assert.equal(verdict({ INTEGRATION_RUN: 'visual', INTEGRATION_RESULT: 'skipped' }), 1);
+});
+
 test('classification and static must succeed', () => {
   for (const key of ['CHANGES_RESULT', 'STATIC_RESULT']) {
     for (const result of ['failure', 'cancelled', 'skipped']) assert.equal(verdict({ [key]: result }), 1, `${key}=${result}`);
