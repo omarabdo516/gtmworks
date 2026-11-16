@@ -26,12 +26,12 @@ export function useDetailsPanel():DetailsPanel {
 }
 
 // The chat's floating title (design-reference: .head-pill). With an Agent, or a channel's `details` label, it is the
-// button that shows the details.
-export function HeadPill({panel,agent,details,face,title,titleDir}:{panel?:DetailsPanel,agent?:string,details?:string,face:ReactNode,title:string,titleDir?:'auto'}) {
+// button that shows the details. `corner` sits in the bar's end corner (design-reference: .chat__corner).
+export function HeadPill({panel,agent,details,face,title,titleDir,corner}:{panel?:DetailsPanel,agent?:string,details?:string,face:ReactNode,title:string,titleDir?:'auto',corner?:ReactNode}) {
  const {t}=useI18n();
  const inside=<>{face}<span className="head-pill__title" dir={titleDir}>{title}</span></>;
  const label=details??(agent?t('chatDetailsOf',agent):undefined);
- return <div className="chat__top"><h1 className="chat__h">{panel&&label?<button type="button" className="head-pill" id="btn-details" aria-controls="details" aria-expanded={panel.expanded} aria-label={`${title} · ${label}`} onClick={panel.toggle}>{inside}</button>:<span className="head-pill">{inside}</span>}</h1></div>;
+ return <div className="chat__top"><h1 className="chat__h">{panel&&label?<button type="button" className="head-pill" id="btn-details" aria-controls="details" aria-expanded={panel.expanded} aria-label={`${title} · ${label}`} onClick={panel.toggle}>{inside}</button>:<span className="head-pill">{inside}</span>}</h1>{corner}</div>;
 }
 
 const tabs=[{key:'activity',label:'chatTabActivity'},{key:'tasks',label:'chatTabTasks'},{key:'files',label:'chatTabFiles'},{key:'memory',label:'chatTabMemory',soon:true},{key:'log',label:'chatTabLog'}] as const;

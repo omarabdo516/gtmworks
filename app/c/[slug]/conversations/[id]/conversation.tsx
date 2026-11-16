@@ -20,6 +20,7 @@ import { ReplyCard } from '@/app/reply-card';
 import { overlayHref } from '@/lib/settings-overlay.mjs';
 import type { ConversationRecord } from '@/lib/conversation-record';
 import { localeFor } from '@/lib/i18n.mjs';
+import { columnLabel } from '@/lib/board-columns.mjs';
 type Conversation={id:string,agent_name:string,face:string};
 const requestWaits=(messages:ConversationRecord['messages'])=>messages.some(message=>message.cards?.some(card=>card.kind==='request'&&card.request.state==='waiting'));
 const replyCardIds=(messages:ConversationRecord['messages'])=>messages.flatMap(message=>message.cards?.flatMap(card=>card.kind==='reply'?[card.card.id]:[])??[]);
@@ -68,6 +69,20 @@ export default function ConversationView({slug,agent,details,company,conversatio
   let timer=setTimeout(poll,500);
   return ()=>{stopped=true;clearTimeout(timer);};
  },[asking,sent,company,conversation.id,router]);
+ // The Card may move on the board in another window: coming back to this one reads its column again.
+ const tied=!!record.board;
+ useEffect(()=>{
+  if(!tied) return;
+  const again=async()=>{
+   try {
+    const response=await fetch(`/api/conversations?company=${company}&conversation=${conversation.id}`,{cache:'no-store'});
+    // The column alone: an answer that was on its way while a message was sent is older than the chat now shown.
+    if(response.ok) { const {board}=await response.json() as ConversationRecord; setRecord(current=>({...current,board})); }
+   } catch { /* The column shown stays until the next read. */ }
+  };
+  window.addEventListener('focus',again);
+  return ()=>window.removeEventListener('focus',again);
+ },[tied,company,conversation.id]);
  const count=(value:number)=>new Intl.NumberFormat(localeFor(language)).format(value);
  const time=(value:string)=>new Date(value).toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit'});
  const face=(size:number)=><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:conversation.face,name:conversation.agent_name}} size={size}/></span>;
@@ -76,11 +91,11 @@ export default function ConversationView({slug,agent,details,company,conversatio
  const welcome=!messages.length&&agent?.main;
  const asked=()=>{ setRecord(current=>({...current,pending:true})); setSent(value=>value+1); };
  return <div className="convo"><div className="chat">
-  <HeadPill panel={panel} agent={agent?.name} face={face(24)} title={titleOf(messages,conversation.agent_name)} titleDir="auto"/>
+  <HeadPill panel={panel} agent={agent?.name} face={face(24)} title={titleOf(messages,conversation.agent_name)} titleDir="auto" corner={record.board&&<CornerPill slug={slug} board={record.board} writer={writer} c={c}/>}/>
   <div className="transcript"><div className="transcript__col">
    {team&&<PrivateLine agent={conversation.agent_name}/>}
    {welcome&&agent&&<LeadWelcome agent={agent} suggest={writer?text=>setDraft(current=>({text,n:(current?.n||0)+1})):undefined}/>}
-   <ol className="turns" aria-label={t('conversationMessages')}>{messages.map(message=>message.kind==='saved'?<Fragment key={`saved${message.id}`}>{message.saved?.map(rule=>rule.sentTo?<SuggestedLine key={rule.id} to={rule.sentTo} cb={cb}/>:<SavedLine key={rule.id} slug={slug} agent={conversation.agent_name} rule={rule} c={c}/>)}</Fragment>
+   <ol className="turns" aria-label={t('conversationMessages')}>{messages.map(message=>message.kind==='boarded'?<li key={`boarded${message.id}`} className="note" data-kind="boarded"><span>{c('cardAddedToBoard')}</span></li>:message.kind==='saved'?<Fragment key={`saved${message.id}`}>{message.saved?.map(rule=>rule.sentTo?<SuggestedLine key={rule.id} to={rule.sentTo} cb={cb}/>:<SavedLine key={rule.id} slug={slug} agent={conversation.agent_name} rule={rule} c={c}/>)}</Fragment>
     :message.kind==='decided'&&message.decided?<DecidedLine key={`decided${message.id}`} decided={message.decided} c={c} cb={cb} lead={<div className="sender">{face(20)}<bdi>{conversation.agent_name}</bdi><time className="sender__time" dateTime={message.created_at}>{time(message.created_at)}</time></div>}/>:message.author==='person'?<li key={`${message.kind||'m'}${message.id}`} className={`turn turn--user msg${message.kind==='queued'&&!message.failed?' is-queued':''}`} data-author="person" data-kind={message.kind}>
     <div className="bubble-row"><time className="bubble__time" dateTime={message.created_at}>{time(message.created_at)}</time><div className="bubble bubble--user" dir="auto">{message.body}</div></div>
     {message.kind==='queued'&&!message.failed&&<span className="queued"><ShellIcon name="clock"/>{c('conversationQueued')}</span>}
@@ -109,6 +124,15 @@ export default function ConversationView({slug,agent,details,company,conversatio
    <p className="chat-usage" data-usage>{t('conversationUsage',count(usage.input+usage.output),count(usage.input),count(usage.output))}{usage.unknown>0&&<> · {t('usageUnknownRuns',count(usage.unknown))}</>}</p>
   </div>
  </div>{agent&&details&&<AgentDetails panel={panel} agent={agent} details={details} settingsHref={`/c/${slug}/agents`}/>}</div>;
+}
+
+// The chat's Card on the board (#144; design-reference: renderChat's corner pill): its column now, and the way to it on
+// the board. A phone shows the column alone.
+function CornerPill({slug,board,writer,c}:{slug:string,board:NonNullable<ConversationRecord['board']>,writer:boolean,c:(key:string,...values:unknown[])=>string}) {
+ const {t}=useI18n(); const waiting=board.column==='waiting'; const column=t(columnLabel(board.column,writer));
+ return <div className="chat__corner"><Link className={`corner-pill${waiting?' is-waiting':''}`} href={`/c/${slug}/work/board?show=${board.card}`} aria-label={`${c('onTheBoard')} ${column}`}>
+  <span className={`dot dot--${waiting?'waiting':'idle'}`} aria-hidden="true"/><span className="corner-pill__lbl">{c('onTheBoard')}</span><span className="corner-pill__col">{column}</span>
+ </Link></div>;
 }
 
 // The line under the Agent's reply when it saved a lasting rule it was told (#18; design-reference: ruleTurn, the
