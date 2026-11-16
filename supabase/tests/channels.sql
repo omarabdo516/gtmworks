@@ -179,6 +179,7 @@ set local role service_role;
 select cmp_ok(public.provide_bundled_hermes('http://hermes:8642','default','encrypted','0.23.0','{run_submission}'),'>=',1,'Aleem gets Lead on the shared profile');
 select lives_ok($$select public.record_company_profile('10000000-0000-0000-0000-000000000003','co-10000000000000000000000000000003',1,public.engine_tool_policy())$$,'and its own profile is made');
 reset role;
+update public.company_profiles set skills_shared=true where company_id='10000000-0000-0000-0000-000000000003';
 set local role authenticated;
 select set_config('request.jwt.claim.sub','b2300000-0000-0000-0000-000000000003',true);
 insert into sent values ('aleem',public.post_channel_message((select id from public.channels where company_id='10000000-0000-0000-0000-000000000003'),gen_random_uuid(),'@Lead hello'));

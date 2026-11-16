@@ -12,6 +12,9 @@ select ok((select attach and not move and profile='co-10000000000000000000000000
 select is(public.attach_company_profile('10000000-0000-0000-0000-000000000002','http://hermes:8642','encrypted','0.23.0','{run_submission}'),false,'nothing is attached before Hermes made the profile');
 select throws_ok($$select public.record_company_profile('10000000-0000-0000-0000-000000000002','co-10000000000000000000000000000003',1,public.engine_tool_policy())$$,'22023','companyProfileInvalid','a company is recorded only on its own profile');
 select lives_ok($$select public.record_company_profile('10000000-0000-0000-0000-000000000002','co-10000000000000000000000000000002',1,public.engine_tool_policy())$$,'the worker records the profile Hermes made');
+reset role;
+update public.company_profiles set skills_shared=true where company_id='10000000-0000-0000-0000-000000000002';
+set local role service_role;
 select throws_ok($$select public.attach_company_profile('10000000-0000-0000-0000-000000000002','http://hermes:8642','encrypted','0.23.0','{}')$$,'22023','hermesAgentFailed','a profile that takes no runs is not attached');
 select is(public.attach_company_profile('10000000-0000-0000-0000-000000000002','http://hermes:8642','encrypted','0.23.0','{run_submission}'),true,'the company is attached to its own profile');
 select is(public.attach_company_profile('10000000-0000-0000-0000-000000000002','http://hermes:8642','encrypted','0.23.0','{run_submission}'),false,'attaching again adds nothing');
@@ -33,6 +36,7 @@ set local role service_role;
 select is(public.move_company_profile('10000000-0000-0000-0000-000000000003','http://hermes:8642','encrypted','0.23.0','{run_submission}'),0,'nothing moves before its own profile is made');
 select lives_ok($$select public.record_company_profile('10000000-0000-0000-0000-000000000003','co-10000000000000000000000000000003',1,public.engine_tool_policy())$$,'Aleem''s profile is recorded');
 reset role;
+update public.company_profiles set skills_shared=true where company_id='10000000-0000-0000-0000-000000000003';
 -- An open Run of Aleem's Lead holds the move.
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name) select 'c0000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000003','20000000-0000-0000-0000-000000000001',id,name
  from public.hermes_agents where company_id='10000000-0000-0000-0000-000000000003';

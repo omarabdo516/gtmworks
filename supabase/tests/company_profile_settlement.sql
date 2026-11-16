@@ -5,6 +5,9 @@ select plan(27);
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 set local role service_role;
 select public.record_company_profile('10000000-0000-0000-0000-000000000002','co-10000000000000000000000000000002',1,public.engine_tool_policy());
+reset role;
+update public.company_profiles set skills_shared=true where company_id='10000000-0000-0000-0000-000000000002';
+set local role service_role;
 select public.attach_company_profile('10000000-0000-0000-0000-000000000002','http://hermes:8642','encrypted','0.23.0','{run_submission}');
 
 -- 1. The tool policy is versioned: a profile applied under an older policy is applied again, and runs wait for it.
@@ -63,6 +66,7 @@ select public.record_company_profile('10000000-0000-0000-0000-000000000002','co-
 select cmp_ok(public.provide_bundled_hermes('http://hermes:8642','default','encrypted','0.23.0','{run_submission}'),'>=',1,'Aleem is on the shared profile');
 select public.record_company_profile('10000000-0000-0000-0000-000000000003','co-10000000000000000000000000000003',1,public.engine_tool_policy());
 reset role;
+update public.company_profiles set skills_shared=true where company_id='10000000-0000-0000-0000-000000000003';
 create temporary table aleem as select id as agent,connection_id from public.hermes_agents where company_id='10000000-0000-0000-0000-000000000003';
 grant select on aleem to authenticated,service_role;
 set local role authenticated;
