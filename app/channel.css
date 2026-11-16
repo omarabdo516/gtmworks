@@ -48,7 +48,7 @@
 .gw .details :is(.tm-add, .tm-cand)::before { content: ""; position: absolute; top: 0; inset-inline: var(--s2); height: 0.5px; background: var(--gw-border-2); }
 .gw .details .btn {
   display: inline-flex; align-items: center; justify-content: center; flex: none; height: 30px; padding: 0 var(--s3); border-radius: var(--gw-r-full);
-  font-size: var(--gw-fs-sm); font-weight: 600; white-space: nowrap; transition: background-color var(--gw-dur-fast) var(--gw-ease-out);
+  font-size: var(--gw-fs-sm); font-weight: 600; white-space: nowrap;
 }
 .gw .details .btn--secondary { background: var(--gw-btn2-bg); color: var(--gw-text-1); box-shadow: var(--gw-btn2-ring) 0 0 0 1px inset; }
 .gw .details :is(.ch-who, .set-err) { margin: 0; padding-inline: var(--s3); font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); text-wrap: pretty; }

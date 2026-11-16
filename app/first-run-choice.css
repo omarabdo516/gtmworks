@@ -42,7 +42,7 @@
 .gw .fr__hint { flex: 1 1 0; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); }
 .gw .fr .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; min-width: 120px; padding: 0 16px; border: 0; border-radius: var(--gw-r-full);
-  font: inherit; font-size: var(--gw-fs-base); font-weight: 600; white-space: nowrap; transition: background-color var(--gw-dur-fast) var(--gw-ease-out);
+  font: inherit; font-size: var(--gw-fs-base); font-weight: 600; white-space: nowrap;
 }
 .gw .fr .btn--primary { background: var(--gw-primary); color: var(--gw-on-primary); cursor: pointer; }
 .gw .fr .btn--primary:disabled { background: var(--gw-primary-disabled); color: var(--gw-text-4); cursor: default; }
