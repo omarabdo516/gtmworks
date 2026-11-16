@@ -68,6 +68,7 @@ test('The Owner starts a private conversation from the board and from Home, and 
   expect(runs.map(request=>[request.path,request.session])).toEqual([[`/p/${Nour.profile}/v1/runs`,conversation]]);
 
   await page.goto('/c/rs-learning/home');
+  await expect(page.locator('.sidebar #btn-apps')).toHaveAttribute('aria-disabled','true');
   // New chat opens the main Agent (Mona is this company's default).
   await page.locator('.sidebar').getByRole('link',{name:'New chat',exact:true}).click();
   await expect(page.locator('.chat .empty-chat h2')).toContainText('Mona');
@@ -157,5 +158,32 @@ test('A Viewer has no composer and the server refuses their message',async({page
    expect(refused.status()).toBe(403); expect((await refused.json()).error).toBe('conversationNotAllowed');
   } finally { await context.close(); }
   expect(fake.settings.runs).toHaveLength(0);
+ } finally { detach(agents); await fake.close(); }
+});
+
+const agentRows=(conversation:string)=>JSON.parse(query(`select body from public.conversation_messages where conversation_id='${conversation}' and author='agent' order by id`));
+const usageRows=(conversation:string)=>JSON.parse(query(`select outcome,input_tokens,output_tokens from public.conversation_usage where conversation_id='${conversation}' order by run_id`));
+
+test('integration: a run unknown to Hermes is recorded as lost and the conversation accepts a new message',async({page})=>{
+ const fake=await fakeHermes(); fake.settings.pendingReads=1e9; let agents={};
+ try {
+  await ownerSignIn(page); agents=await attachAgents(page,fake);
+  const conversation=randomUUID();
+  expect((await send(page,{conversation,message:'First try',sendKey:randomUUID()})).status()).toBe(200);
+  // Hermes forgets the run: it now answers not found for it.
+  fake.settings.runs[0].id='forgotten-by-hermes';
+  const read=async()=>(await (await page.request.get(`/api/conversations?company=${company}&conversation=${conversation}`)).json());
+  const lost=await read();
+  expect(lost.pending).toBe(false);
+  expect(lost.failed).toBe(true);
+  expect(lost.messages.map((row:{author:string,lost:boolean})=>[row.author,row.lost])).toEqual([['person',true]]);
+  expect(agentRows(conversation)).toEqual([]);
+  expect(usageRows(conversation)).toEqual([{outcome:'lost',input_tokens:null,output_tokens:null}]);
+  await page.goto(`/c/rs-learning/conversations/${conversation}`);
+  await expect(page.locator('[data-outcome=lost]')).toContainText('Lost');
+  fake.settings.pendingReads=0;
+  expect((await send(page,{conversation,message:'Second try',sendKey:randomUUID()})).status()).toBe(200);
+  await expect.poll(async()=>(await read()).messages.at(-1).body).toBe('Reply to: Second try');
+  expect(fake.settings.runs).toHaveLength(2);
  } finally { detach(agents); await fake.close(); }
 });
