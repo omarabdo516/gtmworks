@@ -4,6 +4,8 @@ status: accepted
 
 # One Hermes profile per Company, with Agent levels set by the profile's tools
 
+Partly superseded by [ADR 0016](0016-the-engine-profile-is-the-agent.md) (#119): each Agent now has its own profile instead of sharing the Company's, and sign-in follows the Engine's own sharing from `default` on an install with one Company. ADR 0016 lists which rules below are kept and which are superseded.
+
 Omar's decisions of 2026-11-13 on #2 and #3 (their "Decision 2026-11-13" sections), and rules e and f of the same day. This supersedes, where they conflict, the consequence of [ADR 0010](0010-hermes-ships-inside-the-gtmworks-install-and-is-the-engine.md) that the companies of one install share the bundled `default` profile, and the rule of [ADR 0011](0011-agents-are-engine-profiles-made-on-the-management-listener.md) that one Agent is one Engine profile, for the bundled Engine. Everything else in ADR 0008 to 0012 still holds.
 
 ## Context

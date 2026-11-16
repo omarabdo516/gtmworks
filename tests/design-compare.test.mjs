@@ -90,7 +90,7 @@ test('every screen says how to reach it in the reference and which built page it
   for (const [name, screen] of Object.entries(screens)) {
     assert.match(name, /^[a-z]+(-[a-z]+)*$/, name);
     assert.deepEqual(Object.keys(screen).sort(), ['builtPath', 'reference'], name);
-    assert.ok(screen.builtPath === null || /^\/c\/rs-(learning|consultations)\/[a-z/]+(\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?(\?[a-z]+=[a-z0-9-]+)?$/.test(screen.builtPath), `${name} built path`);
+    assert.ok(screen.builtPath === null || /^\/c\/rs-(learning|consultations)\/[a-z/]+(\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|\/[1-9][0-9]*)?(\?[a-z]+=[a-z0-9-]+)?$/.test(screen.builtPath), `${name} built path`);
     assert.ok(Array.isArray(screen.reference.steps), `${name} steps`);
     // The alone screens (#10) start by viewing the prototype as Omar working alone, and a Member's request screens (#17)
     // view it as Youssef in the team; every other screen never touches it.

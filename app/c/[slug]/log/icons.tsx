@@ -1,8 +1,9 @@
-// The reference's line icons used by the Activity log and Numbers pages (design-reference/app.js, ICONS), drawn the
-// same way as components/shell-icon.tsx: 24px box, 1.75 stroke, current colour.
+// The reference's line icons used by the Activity log and Numbers pages and a Card's notes (design-reference/app.js,
+// ICONS), drawn the same way as components/shell-icon.tsx: 24px box, 1.75 stroke, current colour.
 const paths = {
  board: <><rect x="3.5" y="4" width="5" height="16" rx="1.5"/><rect x="10.5" y="4" width="5" height="10" rx="1.5"/><rect x="17.5" y="4" width="3.5" height="13" rx="1.5"/></>,
  lock: <><rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></>,
+ pencil: <><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></>,
  // The reference's arrow points to the reading direction's end: left in Arabic, mirrored in English (log.css).
  arrow: <><path d="M19 12H5"/><path d="M11 6l-6 6 6 6"/></>,
  plug: <><path d="M9 3.5v4.5M15 3.5v4.5"/><path d="M6.5 8h11v3.5a5.5 5.5 0 0 1-11 0z"/><path d="M12 17v3.5"/></>,

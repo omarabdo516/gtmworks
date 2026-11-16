@@ -91,25 +91,18 @@ language sql stable security definer set search_path='' as $$
 $$;
 revoke all on function public.channel_agent(uuid,uuid,uuid) from public,anon,authenticated,service_role;
 
--- The Agent a message calls, by 20261219000000's rules (channel_mention), among the Agents callable in this channel.
+-- The Agent a message calls, by channel_mention's rules (20261224000000: the earliest call wins, then the longer name,
+-- then the main Agent), among the Agents callable in this channel.
 create function public.channel_mention_in(ch uuid, person uuid, message text) returns uuid
 language plpgsql stable security definer set search_path='' as $$
-declare a record; t text := lower(message); best uuid; best_at int; best_len int; found_at int; from_at int;
+declare a record; best uuid; best_at int; best_len int; found_at int;
 begin
- for a in select h.id, '@'||lower(btrim(h.name)) handle from public.channels k join public.hermes_agents h on h.company_id=k.company_id
+ for a in select h.id, btrim(h.name) agent_name from public.channels k join public.hermes_agents h on h.company_id=k.company_id
    where k.id=ch and btrim(h.name)<>'' and public.channel_agent(ch, person, h.id) order by h.is_default desc, h.id loop
-  from_at := 1;
-  loop
-   found_at := strpos(substr(t, from_at), a.handle); exit when found_at = 0; found_at := found_at + from_at - 1;
-   if (found_at = 1 or substr(t, found_at-1, 1) ~ '[[:space:][:punct:]،؛؟]')
-      and (found_at + length(a.handle) > length(t) or substr(t, found_at+length(a.handle), 1) ~ '[[:space:][:punct:]،؛؟]') then
-    if best is null or found_at < best_at or (found_at = best_at and length(a.handle) > best_len) then
-     best := a.id; best_at := found_at; best_len := length(a.handle);
-    end if;
-    exit;
-   end if;
-   from_at := found_at + 1;
-  end loop;
+  found_at := public.mention_at(message, a.agent_name);
+  if found_at > 0 and (best is null or found_at < best_at or (found_at = best_at and length(lower(a.agent_name)) > best_len)) then
+   best := a.id; best_at := found_at; best_len := length(lower(a.agent_name));
+  end if;
  end loop;
  return best;
 end $$;

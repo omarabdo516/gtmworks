@@ -212,3 +212,56 @@
 }
 @media (max-width: 639px) { .gw .board-view .board-tools .kind-seg { order: -1; } }
 .gw .board-view .chip__face { display: inline-flex; }
+
+/* A Card's notes (#22; design-reference: entryHTML, note-hint, ro-line): under a Member's note when it was written,
+   "Edited", for its writer in its first five minutes Edit and the time left, then "Locked"; the field that replaces it
+   while its writer edits; an Agent's reply or the line that it is working on it; the composer's hint, and a Viewer's
+   read-only line in its place. */
+.gw .card-detail { --s2: 8px; --s3: 12px; }
+.gw .card-detail .pg-icon { width: var(--od-icon-size, 14px); height: var(--od-icon-size, 14px); flex: none; display: inline-block; }
+.gw .card-detail .lg-meta { margin: 6px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; font-size: var(--gw-fs-xs); line-height: 1.6; color: var(--gw-text-3); --od-icon-size: 13px; }
+.gw .card-detail .lg-meta time { font-size: inherit; }
+.gw .card-detail .lg-meta .link-btn {
+  display: inline-flex; align-items: center; gap: 4px; min-height: 24px; padding: 0 4px; margin-inline: -4px; border: 0; border-radius: var(--gw-r-xs);
+  background: transparent; font-size: var(--gw-fs-xs); font-weight: 400; color: var(--gw-text-2);
+}
+.gw .card-detail :is(.lg-left, .lg-lock, .lg-edited) { display: inline-flex; align-items: center; gap: 4px; }
+.gw .card-detail .lg-left .num { color: var(--gw-text-1); font-weight: 600; font-variant-numeric: tabular-nums; }
+.gw .card-detail .lg-status { color: var(--gw-text-2); }
+.gw .card-detail .lg-edit { display: grid; gap: var(--s2); margin-top: var(--s2); }
+.gw .card-detail .lg-edit__t {
+  display: block; width: 100%; min-height: 72px; padding: var(--s2) 10px; border: 0.5px solid var(--gw-border-2); border-radius: var(--gw-r-sm);
+  background: var(--gw-bg-pane); color: var(--gw-text-1); font-size: var(--gw-fs-base); line-height: 1.7; resize: vertical; outline: none;
+}
+.gw .card-detail .lg-edit__t:focus { border-color: var(--gw-border-1); box-shadow: 0 0 0 3px var(--gw-bg-active); }
+.gw .card-detail .lg-edit__row { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; font-size: var(--gw-fs-xs); color: var(--gw-text-3); }
+.gw .card-detail .lg-edit__row .od-fill { flex: 1 1 0; min-width: 0; }
+.gw .card-detail .set-err { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-danger-text); }
+.gw .card-detail .lg-edit .btn {
+  height: 30px; min-height: 0; padding: 0 var(--s3); border: 0; border-radius: var(--gw-r-full); font-size: var(--gw-fs-sm); font-weight: 600;
+  white-space: nowrap; transition: background-color var(--gw-dur-fast) var(--gw-ease-out);
+}
+.gw .card-detail .lg-edit .btn--primary { background: var(--gw-primary); color: var(--gw-on-primary); }
+.gw .card-detail .lg-edit .btn--secondary { background: var(--gw-btn2-bg); color: var(--gw-text-1); box-shadow: var(--gw-btn2-ring) 0 0 0 1px inset; }
+.gw .card-detail .lg-edit .btn:disabled { background: var(--gw-primary-disabled); color: var(--gw-text-4); box-shadow: none; opacity: 1; }
+@media (hover: hover) {
+  .gw .card-detail .lg-meta .link-btn:hover { background: var(--gw-bg-hover); color: var(--gw-text-1); }
+  .gw .card-detail .lg-edit .btn--primary:hover:not(:disabled) { background: var(--gw-primary-hover); }
+  .gw .card-detail .lg-edit .btn--secondary:hover:not(:disabled) { background: var(--gw-btn2-hover); }
+}
+.gw .card-detail .note-face { display: inline-flex; flex: none; }
+.gw .card-detail .note-act { font-size: 12px; color: var(--gw-text-3); }
+.gw .card-detail .note-working { display: flex; align-items: center; gap: var(--s2); color: var(--gw-text-2) !important; }
+.gw .card-detail .note-working .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--gw-accent); }
+.gw .card-detail .note-hint {
+  display: flex; align-items: center; gap: 6px; margin: var(--s2) 0 0; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3);
+}
+.gw .card-detail .note-hint .gw-icon { width: 13px; height: 13px; }
+.gw .card-detail .ro-line { justify-content: flex-start; max-width: none; padding-inline: 0; }
+.gw .card-detail .ro-line .gw-icon { width: 16px; height: 16px; }
+@media (max-width: 767px) {
+  /* 44px touch targets on a phone (PRODUCT.md), where the reference draws a 24px Edit link and 30px buttons. */
+  .gw .card-detail :is(.lg-meta .link-btn, .lg-edit .btn) { position: relative; }
+  .gw .card-detail .lg-meta .link-btn::before { content: ""; position: absolute; inset: -10px 0; }
+  .gw .card-detail .lg-edit .btn::before { content: ""; position: absolute; inset: -7px 0; }
+}

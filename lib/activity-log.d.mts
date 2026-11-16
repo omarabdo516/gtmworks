@@ -1,5 +1,5 @@
 export type LogValue = { text: string } | { key: string, values?: string[] };
-export type LogRow = { id: number, created_at: string, actor_kind: 'person' | 'agent' | 'system', actor_id: string | null, actor_name?: string | null, subject: 'card' | 'member' | 'agent' | 'company', card_id?: number | null, person_id?: string | null, agent_id?: string | null, action: string, details?: Record<string, unknown> | null, body?: string | null };
+export type LogRow = { id: number, created_at: string, actor_kind: 'person' | 'agent' | 'system', actor_id: string | null, actor_name?: string | null, subject: 'card' | 'member' | 'agent' | 'company', card_id?: number | null, person_id?: string | null, agent_id?: string | null, action: string, details?: Record<string, unknown> | null, body?: string | null, source?: string, source_id?: number };
 export type LogLine = { act: [string, ...LogValue[]], obj?: string, from?: LogValue, to?: LogValue, note?: string };
 export function describeEntry(row: Pick<LogRow, 'action' | 'subject' | 'details' | 'body' | 'person_id' | 'agent_id'>, names?: { name?: (id: string) => string | undefined, agentName?: (id: string) => string | undefined }): LogLine;
 export type Who = { kind: 'all' } | { kind: 'system' } | { kind: 'person' | 'agent', id: string };
@@ -13,3 +13,6 @@ export function dateFormatter(locale: string, options: Intl.DateTimeFormatOption
 export function dayOf(iso: string, timeZone?: string): string;
 export function daysBack(day: string, today: string): number;
 export function groupByDay<T extends { id: number, created_at: string }>(rows: T[], timeZone?: string): { day: string, items: T[] }[];
+export const noteEditWindow: number;
+export function currentNoteText<T extends { action: string, details: Record<string, unknown> }>(rows: T[], comments: { id: number, body: string }[]): T[];
+export function drawnAt(): number;
