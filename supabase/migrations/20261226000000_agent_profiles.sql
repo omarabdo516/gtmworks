@@ -72,7 +72,14 @@ declare talk public.conversations; linked public.hermes_connections; connection 
 begin
  perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
  select l.agent_id into made from public.lead_made_agents l where l.conversation_id=conversation and l.run_id=run and l.call_id=call;
- if found then return jsonb_build_object('state','created','agent',made); end if;
+ if found then
+  -- A closer that raced the one that made the Agent wrote its tools to the same profile, perhaps after the worker had
+  -- recorded a later level: unless they are the recorded ones, the worker writes and reads them back again first.
+  if own_level is not null then
+   update public.agent_profiles p set tools_pending=true where p.agent_id=made and (p.tools_level is distinct from own_level or p.tools_policy is distinct from own_policy);
+  end if;
+  return jsonb_build_object('state','created','agent',made);
+ end if;
  select * into talk from public.conversations where id=conversation;
  if not found or not exists(select 1 from public.conversation_messages m where m.conversation_id=conversation and m.author='person' and m.run_id=run)
   or not (public.may_use_lead_tools(talk.company_id,talk.agent_id,talk.person_id)

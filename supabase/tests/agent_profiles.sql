@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(68);
+select plan(71);
 -- RS Learning (1): Lead on the Company's own profile, an Owner's (Omar's) and a Manager's Conversation with Lead.
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
  ('a7000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9','co-10000000000000000000000000000001','ciphertext','connected','0.23.0','{run_submission}');
@@ -31,6 +31,15 @@ select is(public.lead_create_agent(conversation=>'a7100000-0000-0000-0000-000000
 select is(public.lead_agent_profile('a7100000-0000-0000-0000-000000000001','run-1','call-0','You write for {company}.'),
  jsonb_build_object('state','created','agent',(select agent from made where name='own')),'and a repeated call answers the Agent it made, with no profile to make');
 reset role;
+select is((select tools_pending from public.agent_profiles where agent_id=(select agent from made where name='own')),false,
+ 'a racing closer that wrote the recorded tools leaves them confirmed');
+set local role service_role;
+select is(public.lead_create_agent(conversation=>'a7100000-0000-0000-0000-000000000001',run=>'run-1',call=>'call-0',agent_name=>'Writer',job=>'Writes the blog.',apps=>'{WordPress}',
+  own_level=>3,own_policy=>2),jsonb_build_object('state','created','agent',(select agent from made where name='own')),'a closer that raced a level change answers the same Agent');
+reset role;
+select is((select tools_pending from public.agent_profiles where agent_id=(select agent from made where name='own')),true,
+ 'and the other level''s tools it wrote send the profile back to the worker, so no Run starts on it until its read-back is recorded');
+update public.agent_profiles set tools_pending=false where agent_id=(select agent from made where name='own');
 select is((select count(*)::int from public.hermes_agents where company_id='10000000-0000-0000-0000-000000000001' and not is_default),1,'one Agent is made');
 select ok(exists(select 1 from public.hermes_agents a join public.hermes_connections h on h.id=a.connection_id join made m on m.agent=a.id and m.name='own'
   where h.profile=m.profile and h.key_encrypted='ciphertext' and h.owner_id='20000000-0000-0000-0000-000000000001' and h.address='http://127.0.0.1:9' and public.is_bundled_connection(h.id)
