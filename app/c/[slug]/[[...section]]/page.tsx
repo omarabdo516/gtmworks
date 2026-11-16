@@ -74,6 +74,8 @@ export default async function CompanyPage({params,searchParams}:{params:Promise<
  const sheet=sheetId!=null&&workData[2]?.data?.some(c=>c.id===sheetId)?await cardSheet(db,{company:company.id,card:sheetId,slug,me:user.id,canWrite:canCreate,t,language}):undefined;
  // A chat's corner pill opens the board on its Card (#144); a Card's own Agent draws its face, name and job.
  const shownId=section==='work/board'&&!cardId?parseCard(query.show)??undefined:undefined;
+ // The Card list is capped, so the shown Card is read by id (the reader's own rights, this Company) when the list missed it.
+ if(shownId!=null&&workData[2]?.data&&!workData[2].data.some(c=>c.id===shownId)) { const {data:asked}=await db.from('work_cards').select('*').eq('company_id',company.id).eq('id',shownId).maybeSingle(); if(asked) workData[2].data.push(asked); }
  const {data:cardAgents}=section==='work/board'?await db.from('hermes_agents').select('id,connection_id,name,speciality').eq('company_id',company.id):{data:[]};
  const {data:workMembers}=(isWork||section==='home'||section==='approvals')?await db.from('members').select('person_id,role,agent_role,people(name)').is('removed_at',null).eq('company_id',company.id):{data:[]};
  const {data:workAgents}=isWork?await db.rpc('company_agents',{c:company.id}):{data:[]};
