@@ -7,7 +7,7 @@ import { extname, join, resolve, sep } from 'node:path';
 // A named screen says how to reach it in the reference and which built page it is compared with (null: none yet).
 // The prototype has no URL routes: its sidebar switches views by `data-view` (chat, board, dashboard, log) and the
 // account menu opens the settings overlay (`#sov`) with its sections. Each step is one `click`, `waitFor` or
-// `scrollTo` with a CSS selector; a click on a sidebar item hidden behind the narrow-screen menu opens the menu first.
+// `scrollTo` with a CSS selector, or one `fill` with a selector and its text; a click on a sidebar item hidden behind the narrow-screen menu opens the menu first.
 // Every screen starts from the prototype's default state. Only the alone screens and a Member's request screens touch
 // the "viewing as" switcher: the alone ones show the workspace of an Owner working alone (#10); built, that is seeded
 // R&S Consultations, its one Member Omar, with work_mode set to 'alone' (tests/visual.spec.ts, state `alone`). The
@@ -17,6 +17,9 @@ const settings = [{ click: '#btn-me' }, { click: '[data-action="sov-open"]' }, {
 const alone = [{ click: '#btn-me' }, { click: '[data-action="set-as"][data-person="omar"][data-world="solo"]' }, { waitFor: '#sb-recent' }];
 const asYoussef = [{ click: '#btn-me' }, { click: '[data-action="set-as"][data-person="youssef"][data-world="team"]' }, { waitFor: '#sb-recent' }];
 const youssefRequest = [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-wa"]' }, { waitFor: '.ac-card' }];
+// #185. The Team table's invitation, the same on both sides: open the form, send one, see its "Invite sent" row, then
+// open the form again. A `fill` step types its text into the field it names.
+const inviteSteps = [{ click: '#inv-toggle' }, { fill: ['#inv-email', 'nour.hassan@rslearning.com'] }, { click: '.inv-go' }, { waitFor: '.ta-pending' }, { click: '#inv-toggle' }, { waitFor: '#inv-email' }];
 const settingsSection = section => [...settings, { click: `#sov-nav-${section}` }, { waitFor: `#sov-nav-${section}[aria-current]` }];
 // The ids of the optional comparison fixture (design/COMPARE.md, "Representative captures"). The tool never applies
 // it: a person loads it by hand into a throwaway local database, then passes these ids with --built-path.
@@ -56,6 +59,8 @@ export const screens = {
   // The settings overlay opens on its Company section. The built overlay is route-backed (app/settings-overlay.tsx):
   // ?section= opens a section and ?agent=<id> one Agent's page.
   settings: { reference: { steps: settings }, builtPath: '/c/rs-learning/settings' },
+  // A screen with `built.steps` runs them on the built page too, after it loads.
+  invite: { reference: { steps: [...settings, ...inviteSteps] }, built: { steps: inviteSteps }, builtPath: '/c/rs-learning/settings' },
   agents: { reference: { steps: settingsSection('agents') }, builtPath: '/c/rs-learning/settings?section=agents' },
   // One Agent's page: Lead's settings inside the overlay. Built: the comparison fixture's main Agent, Lead (the seed
   // alone has no Agent with that id, so without the fixture the overlay shows the Agents list).

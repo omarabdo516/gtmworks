@@ -20,6 +20,7 @@ async function runStep(page, step) {
   const target = page.locator(selector).first();
   if (action === 'waitFor') return target.waitFor({ state: 'visible' });
   if (action === 'scrollTo') return target.scrollIntoViewIfNeeded();
+  if (action === 'fill') return page.locator(selector[0]).first().fill(selector[1]);
   if (!await target.isVisible() && await page.locator('#mobile-menu').isVisible()) await page.locator('#mobile-menu').click();
   await target.click();
 }
@@ -83,6 +84,9 @@ async function captureBuilt(browser, options) {
       if (capture !== page.url()) await page.goto(capture);
     }
     await settle(page);
+    const steps = screens[options.screen].built?.steps ?? [];
+    for (const step of steps) await runStep(page, step);
+    if (steps.length) await settle(page);
     const shown = await page.evaluate(() => document.documentElement.lang);
     if (shown !== options.lang) console.warn(`Warning: the built page shows ${shown}, not ${options.lang}; its caption still says ${options.lang}.`);
     const landed = new URL(page.url()).pathname;

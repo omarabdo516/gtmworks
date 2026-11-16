@@ -89,7 +89,8 @@ test('every screen says how to reach it in the reference and which built page it
   }
   for (const [name, screen] of Object.entries(screens)) {
     assert.match(name, /^[a-z]+(-[a-z]+)*$/, name);
-    assert.deepEqual(Object.keys(screen).sort(), ['builtPath', 'reference'], name);
+    assert.deepEqual(Object.keys(screen).filter(key => key !== 'built').sort(), ['builtPath', 'reference'], name);
+    if (screen.built) assert.ok(Array.isArray(screen.built.steps) && screen.builtPath !== null, `${name} built steps on a built page`);
     assert.ok(screen.builtPath === null || /^\/c\/rs-(learning|consultations)\/[a-z/]+(\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|\/[1-9][0-9]*)?(\?[a-z]+=[a-z0-9-]+)?$/.test(screen.builtPath), `${name} built path`);
     assert.ok(Array.isArray(screen.reference.steps), `${name} steps`);
     // The alone screens (#10) start by viewing the prototype as Omar working alone, and a Member's request screens (#17)
@@ -98,10 +99,12 @@ test('every screen says how to reach it in the reference and which built page it
     const asYoussef = ['ask-agent', 'request-sent', 'request-made'].includes(name);
     if (asYoussef) assert.ok(screen.reference.steps.some(step => step.click === youssef), `${name} views as Youssef`);
     const steps = name.endsWith('-alone') ? screen.reference.steps.slice(3) : asYoussef ? screen.reference.steps.filter(step => step.click !== youssef) : screen.reference.steps;
-    for (const step of steps) {
+    for (const step of [...steps, ...(screen.built?.steps ?? [])]) {
       assert.equal(Object.keys(step).length, 1, `${name}: one action per step`);
-      const [[action, selector]] = Object.entries(step);
-      assert.ok(['click', 'waitFor', 'scrollTo'].includes(action), `${name}: known action ${action}`);
+      const [[action, target]] = Object.entries(step);
+      assert.ok(['click', 'waitFor', 'scrollTo', 'fill'].includes(action), `${name}: known action ${action}`);
+      if (action === 'fill') assert.ok(Array.isArray(target) && target.length === 2 && typeof target[1] === 'string', `${name}: a fill names its field and text`);
+      const selector = action === 'fill' ? target[0] : target;
       assert.ok(typeof selector === 'string' && selector.length > 0, `${name}: selector`);
       assert.doesNotMatch(selector, /viewing|world|persona|view-as/i, `${name}: the demo-world switcher is never touched`);
     }
