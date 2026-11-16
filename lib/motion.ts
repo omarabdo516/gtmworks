@@ -8,3 +8,13 @@ export function prefersReducedMotion(): boolean {
 export function later(ms:number,run:()=>void): number {
  return window.setTimeout(run,prefersReducedMotion()?Math.min(ms,120):ms);
 }
+
+// Something that leaves with the design's exit animation (design-reference: closeSheet, toast): its leaving look starts
+// and it is gone once the animation has run; with reduced motion it is gone at once, with no leaving look. Returns what
+// cancels a removal still pending.
+export function leave(ms:number,start:()=>void,gone:()=>void):()=>void {
+ if(prefersReducedMotion()) { gone(); return ()=>{}; }
+ start();
+ const timer=window.setTimeout(gone,ms);
+ return ()=>clearTimeout(timer);
+}

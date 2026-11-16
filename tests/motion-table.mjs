@@ -28,6 +28,9 @@ export const motionTable = [
   // The board: a column lights up under a carried card; an item waiting on the reader.
   { ref: '.col', built: '.gw .board-view .col', file: 'app/board.css', html: '<div class="gw"><div class="board-view"><section class="col"></section></div></div>' },
   { ref: '.mcard', built: '.gw .board-view .mcard', file: 'app/board.css', html: '<div class="gw"><div class="board-view"><a class="mcard" href="#"></a></div></div>' },
+  // The toast rises in and leaves upward (#157).
+  { ref: '.toast', built: '.gw .toast', file: 'app/toast.css', html: '<div class="gw toast-host" role="status"><div class="toast"></div></div>' },
+  { ref: '.toast.is-leaving', built: '.gw .toast.is-leaving', file: 'app/toast.css', html: '<div class="gw toast-host" role="status"><div class="toast is-leaving"></div></div>' },
   // The settings overlay fades in; a Member × Agent switch.
   { ref: '.sov[open]', built: '.gw .sov', file: 'app/settings.css', html: '<div class="gw"><div class="sov" role="dialog"></div></div>' },
   { ref: '.switch', built: '.gw .sov .switch', file: 'app/settings.css', html: '<div class="gw"><div class="sov" role="dialog"><button type="button" class="switch" role="switch" aria-checked="false"></button></div></div>' },

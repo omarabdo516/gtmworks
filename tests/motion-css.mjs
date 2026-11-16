@@ -19,7 +19,8 @@ import { join } from 'node:path';
 
 export const referenceFile = 'design-reference/index.html';
 const productFolder = 'app';
-export const tokenFile = 'app/shell.css';
+export const tokenFile = 'app/tokens.css';
+export const keyframeFile = 'app/shell.css';
 
 /** @type {Map<string, Sheet>} */ const read = new Map();
 /** @param {string} file @returns {Sheet} */
