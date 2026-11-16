@@ -1,5 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
+import { page } from 'vitest/browser';
+import { Frame } from '@/app/frame';
 import NewChatKey from '@/app/new-chat-key';
 import { MessageBox } from '@/app/conversation-composer';
 import { LanguageProvider } from '@/lib/i18n-client';
@@ -32,6 +34,21 @@ test('already on the new chat, "N" focuses its composer and opens nothing', asyn
  pressN();
  await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveFocus();
  expect(push).not.toHaveBeenCalled();
+});
+
+test('on a phone, "N" pressed in the open drawer on the new chat closes the drawer and focuses the composer', async () => {
+ history.replaceState(history.state, '', chat);
+ address.pathname = chat;
+ await page.viewport(390, 900);
+ const screen = await render(<LanguageProvider language="en"><Frame title="Chats" sidebar={<nav aria-label="Navigation"><NewChatKey href={chat}/><a href="#board">Marketing board</a></nav>}>{composer()}</Frame></LanguageProvider>);
+ const menu = screen.getByRole('button', { name: 'Open menu' });
+ await menu.click();
+ await expect.element(screen.getByRole('link', { name: 'Marketing board' })).toHaveFocus();
+ pressN(document.activeElement!);
+ await expect.element(menu).toHaveAttribute('aria-expanded', 'false');
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveFocus();
+ expect(push).not.toHaveBeenCalled();
+ await page.viewport(1440, 900);
 });
 
 for (const [field, element] of [['a field', <input key="f" aria-label="field"/>], ['a text area', <textarea key="f" aria-label="field"/>], ['a select', <select key="f" aria-label="field"><option>One</option></select>]] as const) test(`"N" typed in ${field} does nothing`, async () => {

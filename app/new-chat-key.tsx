@@ -11,8 +11,8 @@ export default function NewChatKey({href}:{href:string}) {
   const press=(event:KeyboardEvent)=>{
    if(!startsNewChat(event)) return;
    event.preventDefault();
-   if(location.pathname===href&&!location.search) document.querySelector<HTMLTextAreaElement>('.composer__input')?.focus();
-   else { askComposerFocus(href); router.push(href); }
+   askComposerFocus(href);
+   if(location.pathname!==href||location.search) router.push(href);
   };
   document.addEventListener('keydown',press); return ()=>document.removeEventListener('keydown',press);
  },[href,router]);

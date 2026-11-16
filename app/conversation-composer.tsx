@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { takeComposerFocus } from '@/lib/composer-focus';
+import { onComposerFocus, takeComposerFocus } from '@/lib/composer-focus';
 import { useI18n } from '@/lib/i18n-client';
 import { ShellIcon } from '@/components/shell-icon';
 
@@ -23,7 +23,8 @@ export function MessageBox({placeholder,label,send,stop,draft,focus=false}:{plac
  const field=useRef<HTMLTextAreaElement>(null);
  useEffect(()=>{ const typed=field.current?.value; if(typed) setText(current=>current||typed); },[]);
  const pathname=usePathname()??''; const search=useSearchParams()?.toString()??'';
- useEffect(()=>{ if(takeComposerFocus(pathname)) field.current?.focus(); },[pathname,search]);
+ // An inert box (behind the phone drawer) leaves the request to the frame, which focuses it once the drawer has closed.
+ useEffect(()=>{ const take=()=>{ if(field.current&&!field.current.closest('[inert]')&&takeComposerFocus(pathname)) field.current.focus(); }; take(); return onComposerFocus(take); },[pathname,search]);
  async function submit() {
   if(!text.trim()||busy) return;
   setBusy(true); setError('');

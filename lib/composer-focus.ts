@@ -7,7 +7,10 @@ export const startsNewChat=(event:KeyboardEvent)=>event.code==='KeyN'&&!event.ct
  &&!(event.target instanceof Element&&event.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])'))
  &&!document.querySelector('dialog[open], [role="dialog"]:not(#sidebar), [role="alertdialog"]');
 
-// The page a new chat is opening, whose composer takes the focus once it is drawn.
+// The page a new chat is opening, whose composer takes the focus once it is drawn and nothing covers it. Asking also
+// tells the frame, which closes the phone drawer as it does for a new page.
 let pendingComposerFocus:string|null=null;
-export const askComposerFocus=(path:string)=>{ pendingComposerFocus=path; };
+const listeners=new Set<()=>void>();
+export const askComposerFocus=(path:string)=>{ pendingComposerFocus=path; listeners.forEach(listener=>listener()); };
+export const onComposerFocus=(listener:()=>void)=>{ listeners.add(listener); return ()=>{ listeners.delete(listener); }; };
 export const takeComposerFocus=(path:string)=>{ if(pendingComposerFocus!==path) return false; pendingComposerFocus=null; return true; };
