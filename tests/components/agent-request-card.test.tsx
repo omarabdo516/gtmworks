@@ -10,6 +10,8 @@ const answered = vi.hoisted(() => vi.fn<(form: FormData) => Promise<void>>(async
 vi.mock('@/app/c/[slug]/[[...section]]/skill-actions', () => ({ answerAgentRequest: answered }));
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 afterEach(() => { answered.mockClear(); });
+// An answer still on its way: the action resolves only when the test lets it.
+const held = () => { let send = () => {}; answered.mockImplementationOnce(() => new Promise<void>(resolve => { send = resolve; })); return () => send(); };
 
 const asked = { id: 7, name: 'FollowUp', job: 'Follows up the WhatsApp leads.', apps: ['WhatsApp Business', 'Google Sheets'], askedBy: 'Youssef', askedWith: 'The leads go cold before anyone answers' };
 const card = (request: AgentRequestView, language: 'en' | 'ar' = 'en') => render(<LanguageProvider language={language}><RequestCard slug="rs-learning" request={request}/></LanguageProvider>);
@@ -58,8 +60,15 @@ test('the Owner makes one request at once, and says no to another only with a re
  const made = screen.getByRole('group', { name: 'Agent request: FollowUp 8' });
  await expect.element(made.getByText('Agent request from Youssef')).toBeVisible();
  expect(made.element().textContent).toContain('Youssef«The leads go cold»');
+ const makeSent = held();
  await made.getByRole('button', { name: 'Make it' }).click();
  await expect.poll(() => answered.mock.calls.length).toBe(1);
+ await expect.element(made.getByRole('button', { name: 'Make it' })).toBeDisabled();
+ await expect.element(made.getByRole('button', { name: 'Make it' })).toHaveAttribute('aria-busy', 'true');
+ await expect.element(made.getByRole('button', { name: 'No' })).toBeDisabled();
+ await expect.element(screen.getByRole('group', { name: 'Agent request: FollowUp 7' }).getByRole('button', { name: 'Make it' })).toBeEnabled();
+ makeSent();
+ await expect.element(made.getByRole('button', { name: 'Make it' })).toBeEnabled();
  expect(['request', 'intent', 'reason'].map(name => answered.mock.calls[0][0].get(name))).toEqual(['8', 'make', null]);
 
  const request = screen.getByRole('group', { name: 'Agent request: FollowUp 7' });
@@ -76,8 +85,14 @@ test('the Owner makes one request at once, and says no to another only with a re
  await expect.element(request.getByRole('button', { name: 'No' })).toHaveFocus();
  await request.getByRole('button', { name: 'No' }).click();
  await request.getByRole('textbox', { name: 'Why not?' }).fill('Ads follows WhatsApp leads now.');
+ const noSent = held();
  await request.getByRole('button', { name: 'Send the no' }).click();
  await expect.poll(() => answered.mock.calls.length).toBe(2);
+ await expect.element(request.getByRole('button', { name: 'Send the no' })).toBeDisabled();
+ await expect.element(request.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+ await expect.element(request.getByRole('textbox', { name: 'Why not?' })).toHaveAttribute('readonly');
+ noSent();
+ await expect.element(request.getByRole('button', { name: 'Send the no' })).toBeEnabled();
  expect(Object.fromEntries(['company', 'slug', 'request', 'intent', 'reason'].map(name => [name, answered.mock.calls[1][0].get(name)])))
   .toEqual({ company: 'co-1', slug: 'rs-learning', request: '7', intent: 'no', reason: 'Ads follows WhatsApp leads now.' });
 });
