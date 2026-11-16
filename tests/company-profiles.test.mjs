@@ -313,6 +313,9 @@ test('the install job proves profiles per company on the pinned release, after t
  const script=readFileSync('scripts/check-install-profiles.mjs','utf8');
  for(const off of ['terminal','file','code_execution']) assert.ok(script.includes(`'${off}'`),off);
  assert.match(script,/assert\.deepEqual\(seen,\[true,false\]\)/);
+ // #121: an Agent made on the company profile as the previous version made one moves out, and the memory stays with the main Agent.
+ assert.match(script,/service\.rpc\('lead_create_agent',\{conversation:first\.conversation,run,call:'install-check',agent_name:'Install writer',job:'Writes the install check\.',apps:\[\]\}\)/);
+ assert.match(script,/assert\.deepEqual\(after,\[true,false\]\)/);
 });
 
 // The person's session and the service role, as sendMessage sees them; every call is recorded in order.
