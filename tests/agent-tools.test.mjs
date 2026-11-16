@@ -4,11 +4,14 @@ import { createHash } from 'node:crypto';
 import { engineReady, runToolCall, toolSpecTexts } from '../lib/agent-tools.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 import { instructionsOf, roleAppNames, roleTemplates } from '../lib/role-templates.mjs';
+import { toolPolicy } from '../lib/agent-levels.mjs';
 
 const profile='co-10000000000000000000000000000001';
-function harness(/** @type {object} */ engineOverride={},/** @type {object} */ answer={state:'created',agent:'agent-1'}) {
+// `plan` is what the database names for a create_agent call (lead_agent_profile): none for a call that already made its
+// Agent or will be refused.
+function harness(/** @type {object} */ engineOverride={},/** @type {object} */ answer={state:'created',agent:'agent-1'},/** @type {object|null} */ plan=null) {
  const fake=fakeEngine(); const engine={...fake.engineFor({}),...engineOverride}; const rpcs=/** @type {[string,object][]} */([]);
- const db={rpc:async(/** @type {string} */ name,/** @type {object} */ args)=>{ rpcs.push([name,args]); return {data:answer,error:null}; }};
+ const db={rpc:async(/** @type {string} */ name,/** @type {object} */ args)=>{ rpcs.push([name,args]); return {data:name==='lead_agent_profile'?plan:answer,error:null}; }};
  const call=(/** @type {string} */ name,/** @type {unknown} */ args)=>runToolCall({db,engine,profile,conversation:'conversation-1',run:'run-1'},{id:'call-0',name,arguments:args});
  return {fake,engine,rpcs,call};
 }
@@ -29,7 +32,8 @@ test('create_agent makes nothing while the Engine lacks the Company\'s profile, 
  assert.deepEqual([fake.agentReads,rpcs],[[profile],[]]);
  await engine.createAgent({name:profile,instructions:''});
  assert.deepEqual(await call('create_agent',asked),{state:'created',agent:'agent-1'});
- assert.deepEqual(rpcs,[['lead_create_agent',{conversation:'conversation-1',run:'run-1',call:'call-0',agent_name:'Meta Ads',job:'Runs the Meta ads.',apps:['Meta Ads Manager','Canva']}]]);
+ assert.deepEqual(rpcs,[['lead_agent_profile',{conversation:'conversation-1',run:'run-1',call:'call-0',instructions:null}],
+  ['lead_create_agent',{conversation:'conversation-1',run:'run-1',call:'call-0',agent_name:'Meta Ads',job:'Runs the Meta ads.',apps:['Meta Ads Manager','Canva']}]]);
  assert.deepEqual(await call('create_agent',{name:'x'.repeat(100),job:'Writes.',apps:Array(8).fill('y'.repeat(40))}),{state:'created',agent:'agent-1'});
  assert.deepEqual(await call('create_agent',{...asked,apps:[]}),{state:'created',agent:'agent-1'});
 });
@@ -51,6 +55,64 @@ test('create_agent starts from a ready-made role: its name, job and apps unless 
  }
  assert.deepEqual(await call('create_agent',{template:'writer',name:' Penny ',apps:['WordPress'],job:null}),{state:'created',agent:'agent-1'});
  assert.deepEqual(rpcs.at(-1)?.[1],{conversation:'conversation-1',run:'run-1',call:'call-0',agent_name:'Penny',job:roleTemplates.writer.job,apps:['WordPress'],template:'writer',instructions:instructionsOf('writer')});
+});
+
+// An Agent Lead makes gets its own Engine profile (ADR 0016), made before the database's one step that makes the Agent.
+const own={profile:'ag-a0000000000000000000000000000001',soul:'You write for RS Learning.',level:3};
+const writerCall={conversation:'conversation-1',run:'run-1',call:'call-0',agent_name:roleTemplates.writer.name,job:roleTemplates.writer.job,apps:roleAppNames('writer'),template:'writer',instructions:instructionsOf('writer')};
+/** @param {ReturnType<typeof harness>['engine']} engine */
+const leadReady=engine=>engine.createAgent({name:profile,instructions:''});
+
+test('create_agent makes the Agent its own profile, and the database attaches it there only when the Engine provided it',async()=>{
+ const {fake,engine,rpcs,call}=harness({},{state:'created',agent:'agent-1'},own);
+ await leadReady(engine); fake.settings.agentProfile='provided';
+ assert.deepEqual(await call('create_agent',{template:'writer'}),{state:'created',agent:'agent-1'});
+ assert.deepEqual(fake.provided,[{name:own.profile,instructions:own.soul,level:3}]);
+ assert.deepEqual(rpcs,[['lead_agent_profile',{conversation:'conversation-1',run:'run-1',call:'call-0',instructions:instructionsOf('writer')}],
+  ['lead_create_agent',{...writerCall,own_level:3,own_policy:toolPolicy}]]);
+ assert.deepEqual(fake.removed,[]);
+});
+
+test('a profile the Engine made but could not provide leaves the Agent on Lead\'s profile, and stays in the Engine',async()=>{
+ for(const state of /** @type {const} */(['noModel','forbidden','failed','refused'])) {
+  const {fake,engine,rpcs,call}=harness({},{state:'created',agent:'agent-1'},own);
+  await leadReady(engine); fake.settings.agentProfile=state;
+  assert.deepEqual(await call('create_agent',{template:'writer'}),{state:'created',agent:'agent-1'},state);
+  assert.deepEqual(rpcs.at(-1),['lead_create_agent',writerCall],state);
+  assert.deepEqual(fake.removed,[],state);
+ }
+});
+
+test('a profile made for a call the database then refuses is removed again, and only then',async()=>{
+ for(const answer of [{state:'refused'},{state:'invalid'}]) for(const state of /** @type {const} */(['provided','noModel'])) {
+  const {fake,engine,call}=harness({},answer,own);
+  await leadReady(engine); fake.settings.agentProfile=state;
+  assert.deepEqual(await call('create_agent',{template:'writer'}),answer);
+  assert.deepEqual(fake.removed,[own.profile],`${answer.state} ${state}`);
+ }
+});
+
+test('create_agent asks the database nothing more while the Engine does not answer the profile\'s making, so the run stays open',async()=>{
+ const {fake,engine,rpcs,call}=harness({},{state:'created',agent:'agent-1'},own);
+ await leadReady(engine); fake.settings.agentProfile='unreachable';
+ assert.deepEqual(await call('create_agent',{template:'writer'}),{state:'engineUnreachable'});
+ assert.deepEqual(rpcs.map(([name])=>name),['lead_agent_profile']);
+ assert.deepEqual(fake.removed,[]);
+});
+
+test('a call that already made its Agent, or that the database will refuse, asks the Engine to make nothing',async()=>{
+ const {fake,engine,rpcs,call}=harness({},{state:'refused'});
+ await leadReady(engine); fake.settings.agentProfile='provided';
+ assert.deepEqual(await call('create_agent',asked),{state:'refused'});
+ assert.deepEqual([fake.provided,fake.removed],[[],[]]);
+ assert.deepEqual(rpcs.map(([name])=>name),['lead_agent_profile','lead_create_agent']);
+});
+
+test('an Agent asked for in words, with no role, gets the Company profile\'s soul',async()=>{
+ const {fake,engine,call}=harness({},{state:'created',agent:'agent-1'},{...own,soul:null});
+ await leadReady(engine); fake.settings.agentProfile='provided';
+ await call('create_agent',asked);
+ assert.match(fake.provided[0].instructions,/^You are a marketing agent working for one company in gtmworks\./);
 });
 
 test('a save_rule call whose rule does not read is ignored, and nothing is asked of the database',async()=>{
