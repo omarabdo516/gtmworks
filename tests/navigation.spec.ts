@@ -178,7 +178,8 @@ test('visible links fully prefetch page data and closing reuses the visited boar
     })));
     return links.filter((_, index) => visible[index]).map(link => link.getAttribute('href')!);
   });
-  expect(links.some(link => /\/board\/\d+$/.test(link))).toBe(true);
+  // A board Card opens as its sheet (#116), at the board's own address with the Card named in it.
+  expect(links.some(link => /\/board\?card=\d+$/.test(link))).toBe(true);
   for (const link of new Set(links)) {
     // The current page already carries its data; it needs no prefetch of itself.
     if (link === '/c/rs-learning/work/board') continue;
@@ -188,18 +189,19 @@ test('visible links fully prefetch page data and closing reuses the visited boar
     expect(body, `${link}: page data, not a partial layout/loading shell`).toContain('"content"');
     if (link.endsWith('/home')) expect(body).toContain("Recent activity");
     if (/\/board\/\d+$/.test(link)) expect(body).toContain(`"cardId":${link.split('/').pop()}`);
+    if (/\/board\?card=\d+$/.test(link)) expect(body).toContain(`"sheet":{"id":${link.split('=').pop()}`);
     if (link.endsWith('/work/calendar')) expect(body).toContain('work/calendar');
     if (link.endsWith('/work/list')) expect(body).toContain('work/list');
   }
-  await page.locator('.card a[href$="/board/1"]').click();
-  await expect(page.locator('.modal')).toBeVisible();
+  await page.locator('.card a[href$="/board?card=1"]').click();
+  await expect(page.locator('.sheet[open]')).toBeVisible();
   await idle(page);
   const requests: string[] = [];
   page.on('request', request => {
     if (new URL(request.url()).pathname.startsWith('/c/')) requests.push(request.url());
   });
-  await page.locator('.close-card').click();
-  await expect(page.locator('.modal')).toHaveCount(0);
+  await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(page.locator('.sheet')).toHaveCount(0);
   await idle(page);
   expect(requests, 'return to the board must make no company server request').toEqual([]);
 });
@@ -207,7 +209,7 @@ test('visible links fully prefetch page data and closing reuses the visited boar
 test('reduced motion disables hover, veil and card animation', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await signIn(page, 'manager@example.com', '/c/rs-learning/work/board');
-  for (const step of clickPath.slice(0, 4)) {
+  for (const step of clickPath.slice(0, 5)) {
     const timing = await measureClick(page, step);
     expect(timing.longest).toBe(0);
     expect(timing.all).toEqual([]);

@@ -286,6 +286,7 @@ test('With Hermes unreachable, sending keeps the text in the composer and says s
   expect(JSON.parse(query(`select count(*)::int as n from public.conversation_messages where conversation_id='${conversation}' and author='person'`))[0].n).toBe(1);
   await page.goto('/c/rs-learning/work/board');
   await page.locator('.card[data-card-id="1"] a').click();
+  await page.getByRole('dialog').getByRole('link',{name:'Card details'}).click();
   await expect(page.locator('.card-stage-line')).toBeVisible();
   await page.goto('/c/rs-learning/approvals');
   await expect(page.locator('.approval-count')).toBeVisible();
