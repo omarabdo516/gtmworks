@@ -95,6 +95,9 @@ const seen = (n: number) => `68000000-0000-0000-0000-00000000000${n}`;
 const general = '69000000-0000-0000-0000-000000000001';
 const talk = (n: number) => `69000000-0000-0000-0000-0000000000${n}`;
 const busy = (n: number) => `69100000-0000-0000-0000-00000000000${n}`;
+// #حملة ديسمبر (#24): the Owner, the Manager and the first Contributor with Meta Ads and SEO, SEO hidden from the
+// Contributor everywhere else; the Manager calls SEO there, and wrote once in the general channel.
+const team = (n: number) => `6b000000-0000-0000-0000-0000000000${String(n).padStart(2, '0')}`;
 const screenStates: Record<string, { set: string, unset: string, admin?: true }> = {
   unanswered: {
     set: `update public.companies set work_mode=null where id='${rsLearning}'`,
@@ -147,6 +150,43 @@ const screenStates: Record<string, { set: string, unset: string, admin?: true }>
       delete from public.channel_messages where channel_id='${general}';
       delete from public.hermes_agents where id='${talk(11)}';
       delete from public.hermes_connections where id='${talk(10)}';`,
+  },
+  'team-channel': {
+    admin: true,
+    set: `insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values
+       ('${team(1)}','${rsLearning}','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9/p/visual-team-lead','visual-team-lead','visual-no-key','unreachable'),
+       ('${team(2)}','${rsLearning}','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9/p/visual-team-ads','visual-team-ads','visual-no-key','unreachable'),
+       ('${team(3)}','${rsLearning}','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9/p/visual-team-seo','visual-team-seo','visual-no-key','unreachable');
+      insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values
+       ('${team(4)}','${rsLearning}','${team(1)}','Lead','General',true),
+       ('${team(5)}','${rsLearning}','${team(2)}','Meta Ads','Runs the Meta ads.',false),
+       ('${team(6)}','${rsLearning}','${team(3)}','SEO','Writes the blog.',false);
+      insert into public.member_agent_access(company_id,person_id,agent_id) values
+       ('${rsLearning}','20000000-0000-0000-0000-000000000002','${team(5)}'),('${rsLearning}','20000000-0000-0000-0000-000000000002','${team(6)}'),
+       ('${rsLearning}','20000000-0000-0000-0000-000000000003','${team(5)}');
+      insert into public.channels(id,company_id,kind,name,created_by,create_key,created_at) values
+       ('${team(7)}','${rsLearning}','team','حملة ديسمبر','20000000-0000-0000-0000-000000000001','${team(8)}','2026-06-10T09:00:00Z');
+      insert into public.channel_people(channel_id,company_id,person_id,added_by) select '${team(7)}','${rsLearning}',p,'20000000-0000-0000-0000-000000000001'
+       from unnest(array['20000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000003']::uuid[]) p;
+      insert into public.channel_agents(channel_id,company_id,agent_id,added_by) values
+       ('${team(7)}','${rsLearning}','${team(5)}','20000000-0000-0000-0000-000000000001'),('${team(7)}','${rsLearning}','${team(6)}','20000000-0000-0000-0000-000000000001');
+      insert into public.channel_messages(company_id,channel_id,author,person_id,author_name,body,send_key,created_at) values
+       ('${rsLearning}','${general}','person','20000000-0000-0000-0000-000000000002','مدير','الدفعة الجديدة بتبدأ 1 ديسمبر.','${team(9)}','2026-06-10T09:05:00Z'),
+       ('${rsLearning}','${team(7)}','person','20000000-0000-0000-0000-000000000002','مدير','@SEO محتاجين مقال لحملة ديسمبر يودّي على صفحة «المحاسب الشامل».','${team(10)}','2026-06-10T10:31:00Z');
+      insert into public.channel_runs(message_id,company_id,channel_id,agent_id,agent_name,session,input,attempts,attempted_at,run_id,outcome,created_at,closed_at)
+       select id,company_id,channel_id,'${team(6)}','SEO','${team(11)}','مدير: '||body,1,'2026-06-10T10:31:00Z','visual-team','completed','2026-06-10T10:31:00Z','2026-06-10T10:32:00Z' from public.channel_messages where send_key='${team(10)}';
+      insert into public.channel_messages(company_id,channel_id,author,agent_id,author_name,body,reply_to,created_at)
+       select company_id,channel_id,'agent','${team(6)}','SEO','بدأت المقال على «كورس محاسب شامل اونلاين»، وهبعته هنا أول ما يخلص.',id,'2026-06-10T10:32:00Z' from public.channel_messages where send_key='${team(10)}';`,
+    unset: `delete from public.channel_runs where channel_id='${team(7)}';
+      delete from public.channel_messages where channel_id in ('${general}','${team(7)}');
+      delete from public.channel_reads where channel_id='${team(7)}';
+      update public.channel_reads set read_through=0 where channel_id='${general}';
+      delete from public.channel_people where channel_id='${team(7)}';
+      delete from public.channel_agents where channel_id='${team(7)}';
+      delete from public.channels where id='${team(7)}';
+      delete from public.member_agent_access where agent_id in ('${team(5)}','${team(6)}');
+      delete from public.hermes_agents where id in ('${team(4)}','${team(5)}','${team(6)}');
+      delete from public.hermes_connections where id in ('${team(1)}','${team(2)}','${team(3)}');`,
   },
   'lead-made': {
     admin: true,
@@ -254,8 +294,8 @@ async function showScreen(page: Page, screen: (typeof screens)[number], width: n
   // The fixed text is shorter than a real date, so it changes how rows wrap and how tall the page is. It goes in before the
   // window is sized, otherwise the window is sized for the real date and the picture keeps blank space that depends on the day.
   await fixClockText(page);
-  // The question and the gallery cover the window over an inert page: the window keeps its size, as a person sees it.
-  if (!['first-run-question', 'ready-roles'].includes(screen.name.replace('-dark', ''))) await showWholePage(page, width);
+  // The question and the dialogs cover the window over an inert page: the window keeps its size, as a person sees it.
+  if (!['first-run-question', 'ready-roles', 'new-channel'].includes(screen.name.replace('-dark', ''))) await showWholePage(page, width);
 }
 
 test.describe('anonymous screens', () => {

@@ -71,6 +71,11 @@ export const screens = {
   // Built: the fixture's Ads, which Lead made and Omar told the rule.
   'made-agent': { reference: { steps: [...settingsSection('agents'), { click: '#sov-ag-ads' }, { waitFor: '#sov-tab-settings' }] }, builtPath: `/c/rs-learning/settings?agent=${fixture.agent}` },
   channel: { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="ch-general"]' }, { waitFor: '.ch-intro' }] }, builtPath: `/c/rs-learning/channels/${fixture.channel}` },
+  // #24. New channel, from the "+" beside Channels; built, ?new=channel opens it over any page.
+  'new-channel': { reference: { steps: [{ click: '#sb-threads [data-action="channel-new"]' }, { waitFor: '#modal[open] #tm-name' }] }, builtPath: `/c/rs-learning/channels/${fixture.channel}?new=channel` },
+  // #24. The team channel حملة ديسمبر (th-team) with its members and Agents. Built: a team channel's own address (pass
+  // --built-path), such as the visual state's /c/rs-learning/channels/6b000000-0000-0000-0000-000000000007.
+  'team-channel': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-team"]' }, { waitFor: '.ch-intro' }] }, builtPath: null },
 };
 
 export const languages = ['ar', 'en'];

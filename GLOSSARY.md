@@ -38,6 +38,10 @@ One attempt by an agent to work on one card in one company, with a short-lived c
 One person's exchange with one Agent, started from New. It stays with that Agent for its whole life and maps to one session in the Agent's Engine (a Hermes session today), where the Agent's working context lives. gtmworks keeps its own append-only record of it as people saw it: who wrote each message, the Agent's reply and the time; the copy flows one way, from Hermes to gtmworks. A conversation is private to the person who started it. Any Member except a Viewer may start or write in one.
 _Avoid_: chat, thread, session
 
+**Channel / قناة**:
+A conversation that a Company's Members and Agents share, where an Agent reads and replies only when a message calls it by name. A Company that works as a team has its general channel («عام»), which holds every Member; an Owner or a Manager makes a team channel, for a campaign or a department, with the Members and Agents they choose, and changes both later. A Member outside a team channel does not see that it exists, the Owner included. Inside a channel its Members see and call its Agents, even one hidden from them elsewhere; outside it nothing changes, and a direct Conversation with that Agent stays impossible. Each Member's unread count is the messages others wrote since they last opened it.
+_Avoid_: room, group chat, thread
+
 **Engine / المحرك**:
 The agent program that runs a Conversation's replies, today the Hermes that ships inside the install (ADR 0010). gtmworks talks to every engine through one engine contract (start a run with an idempotency key, read its state and usage, stop it); a driver is the code that speaks the contract for one engine. gtmworks writes no model loop of its own.
 _Avoid_: model, provider, backend
