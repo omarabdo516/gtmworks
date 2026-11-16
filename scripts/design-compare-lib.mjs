@@ -120,6 +120,12 @@ export const screens = {
    { click: '[data-action="send"][data-key="main"]' }, { waitFor: '#chat-transcript .turn' }, { click: '#btn-me' }, { click: '[data-action="set-as"][data-person="omar"][data-world="team"]' },
    { waitFor: '#sb-recent' }, { waitGone: '#toast-host .toast' }, ...board, { click: `.kcard[aria-label^="${youssefAsks}"]` }, ...pickChat] }, builtPath: '/c/rs-learning/work/board?card=640007', builtSteps: pickChat },
   'team-channel': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-team"]' }, { waitFor: '.ch-intro' }] }, builtPath: null },
+  // #172. The placeholders the reference shows while a chat or the dashboard loads, held on screen (`hold`: the
+  // prototype's timers of 100ms or more never fire, so the content that replaces them never comes). The built
+  // placeholder shows only while the server is slow, which the capture cannot make: its pictures are the approved
+  // images of tests/visual-screens/chat-loading.json and numbers-loading.json.
+  'chat-loading': { reference: { hold: true, steps: [{ waitFor: '#chat-transcript [aria-busy="true"]' }] }, builtPath: null },
+  'numbers-loading': { reference: { hold: true, steps: [{ click: '#sb-nav [data-view="dashboard"]' }, { waitFor: '#view-dashboard [aria-busy="true"]' }] }, builtPath: null },
 };
 
 export const languages = ['ar', 'en'];

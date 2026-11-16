@@ -37,6 +37,11 @@ async function captureReference(browser, options) {
     const page = await context.newPage();
     // The prototype keeps its theme under this key and reads it before it draws.
     await page.addInitScript(theme => { localStorage.setItem('gtm-theme-v2', theme); }, options.theme);
+    // A loading state the prototype shows for a moment (#172): it stays, since what replaces it waits on a timer.
+    if (screens[options.screen].reference.hold) await page.addInitScript(() => {
+      const start = window.setTimeout.bind(window);
+      window.setTimeout = ((run, ms, ...rest) => (ms ?? 0) >= 100 ? 0 : start(run, ms, ...rest));
+    });
     const fontFailures = [];
     page.on('requestfailed', request => { if (/fonts\.(googleapis|gstatic)\.com/.test(request.url())) fontFailures.push(request.url()); });
     const { port } = server.address();

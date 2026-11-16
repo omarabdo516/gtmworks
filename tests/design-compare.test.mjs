@@ -26,6 +26,7 @@ test('a full set of arguments gives the options with per-screen defaults', () =>
 test('the main screen of the reference is named home and maps to the built Conversation with the main Agent', () => {
   assert.equal(screens.home.builtPath, '/c/rs-learning/chat');
   assert.deepEqual(screens.home.reference.steps, [], 'home is the state the prototype opens on');
+  assert.deepEqual(Object.entries(screens).filter(([, screen]) => screen.reference.hold).map(([name]) => name), ['chat-loading', 'numbers-loading'], 'only the loading placeholders hold the prototype on screen');
 });
 
 test('the optional compare fixture holds the reference agent grid, Lead as the main Agent and a populated Conversation', () => {
