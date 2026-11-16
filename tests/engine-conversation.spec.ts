@@ -484,8 +484,10 @@ test('integration: an Agent moved to its own profile keeps its Conversation, and
   // Its own profile gets a model, standing in for the sign-in that lets it answer.
   Object.assign(hermes.settings.profiles.get(own)!,{provider:'openai-codex',model:'gpt-5.5'});
   const bundled={address:hermes.address,managementAddress:hermes.managementAddress,profile:'default',key:'fake-engine-key'};
-  // The worker makes the Agent's own profile, gives it the Company's shared folder (#122), and then moves the Agent.
-  await moveAgentProfiles(service,{hermes:bundled,driver:driverFor(bundled)});
+  // The worker makes the Company's shared space (#122), makes the Agent's own profile, which does not take the Agent
+  // before it reads the space's folder, gives it that folder, and then moves the Agent.
+  await keepSharedSkills(service,{hermes:bundled});
+  expect((await moveAgentProfiles(service,{hermes:bundled,driver:driverFor(bundled)})).moved).toBe(0);
   await keepSharedSkills(service,{hermes:bundled});
   expect((await moveAgentProfiles(service,{hermes:bundled,driver:driverFor(bundled)})).moved).toBeGreaterThanOrEqual(1);
   expect(JSON.parse(query(`select h.profile from public.hermes_agents a join public.hermes_connections h on h.id=a.connection_id where a.id='${agent.id}'`))).toEqual([{profile:own}]);
