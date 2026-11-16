@@ -34,7 +34,7 @@ insert into decisions
  union all select 'public.can_see_card(uuid,bigint)','exempt','the read rule itself'
  union all select fn,'exempt','a trigger: it runs on a write the table''s own rules admitted, answers no caller, and every row it writes is read under card_agent_visible' from unnest(array[
   'public.approval_card_guard()','public.conversation_reply_card()','public.log_agent_change()','public.log_card_activity()','public.log_card_comment()',
-  'public.log_company_change()','public.log_member_change()','public.log_note_edit()','public.note_mentions()','public.pin_channel_run_knowledge()',
+  'public.log_company_change()','public.log_member_change()','public.log_member_invitation()','public.log_note_edit()','public.note_mentions()','public.pin_channel_run_knowledge()',
   'public.resolve_waiting_on_card()','public.resolve_waiting_on_reply()','public.schedule_approved_card()','public.work_audit()','public.work_guard()']) fn
  union all select 'public.enqueue_person_webhook()','exempt','a trigger whose delivery goes to the Company webhook, which only Owners set and read, and an Owner sees every Agent'
  union all select fn,'exempt','the worker''s, callable by the service role only: it answers the worker, never a Member, and the rows it writes are read under card_agent_visible' from unnest(array[
