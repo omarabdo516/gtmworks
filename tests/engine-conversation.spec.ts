@@ -442,7 +442,7 @@ test('a new chat with an Agent puts its Card on the board, and the chat\'s line 
    await page.reload();
    await expect(pill).toHaveAccessibleName('على اللوحة: متخطط');
    await expect(pill.locator('.corner-pill__lbl')).toBeVisible({visible:width===1440});
-   await expect(line).toHaveText('الكارت ده اتضاف للوحة في «شغالين عليه»');
+   await expect(line).toHaveText('البطاقة دي اتضافت للوحة في «شغالين عليه»');
   }
 
   language('en');

@@ -80,7 +80,7 @@ test('on a phone the pill shows the column alone, in Arabic too', async () => {
   const link = screen.getByRole('link', { name: 'على اللوحة: شغالين عليه' });
   await expect.element(link.getByText('شغالين عليه')).toBeVisible();
   await expect.element(link.getByText('على اللوحة:')).not.toBeVisible();
-  await expect.element(screen.getByText('الكارت ده اتضاف للوحة في «شغالين عليه»')).toBeVisible();
+  await expect.element(screen.getByText('البطاقة دي اتضافت للوحة في «شغالين عليه»')).toBeVisible();
   expect(pill()!.getBoundingClientRect().height).toBe(36);
  } finally { await page.viewport(1440, 900); }
 });
