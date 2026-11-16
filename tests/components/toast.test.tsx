@@ -125,7 +125,7 @@ test('the action is a button the keyboard reaches, and pressing it runs it', asy
 
 test('a toast raised over the open card sheet shows above it, and stays on the page after the sheet closes', async () => {
  const screen = await show(<div className="gw">
-  <CardSheet slug="rs-learning" company="co-1" title="Launch post" face={null} who={null} badge={null} sheet={{ id: 7, log: null, count: 0, working: false, chat: null }} canWrite={false} alone={false} send={vi.fn()}/>
+  <CardSheet slug="rs-learning" company="co-1" title="Launch post" face={null} who={null} badge={null} sheet={{ id: 7, log: null, count: 0, working: false, chat: { kind: 'none' } }} canWrite={false} alone={false} send={vi.fn()}/>
  </div>);
  await expect.element(screen.getByRole('dialog', { name: 'Launch post' })).toBeVisible();
  toast('Saved to the card');
@@ -142,7 +142,7 @@ test('a toast already showing when the card sheet opens moves above it', async (
  toast('Moved to “Planned”');
  await expect.element(screen.getByText('Moved to “Planned”')).toBeVisible();
  await screen.rerender(<LanguageProvider language="en"><div className="gw">
-  <CardSheet slug="rs-learning" company="co-1" title="Launch post" face={null} who={null} badge={null} sheet={{ id: 7, log: null, count: 0, working: false, chat: null }} canWrite={false} alone={false} send={vi.fn()}/>
+  <CardSheet slug="rs-learning" company="co-1" title="Launch post" face={null} who={null} badge={null} sheet={{ id: 7, log: null, count: 0, working: false, chat: { kind: 'none' } }} canWrite={false} alone={false} send={vi.fn()}/>
  </div><ToastHost/></LanguageProvider>);
  await expect.element(screen.getByRole('dialog', { name: 'Launch post' })).toBeVisible();
  await expect.poll(onTop).toBe(true);
@@ -150,7 +150,7 @@ test('a toast already showing when the card sheet opens moves above it', async (
 
 test('a toast showing in the card sheet stays on the page when the sheet is taken away open', async () => {
  const sheet = <div className="gw">
-  <CardSheet slug="rs-learning" company="co-1" title="Launch post" face={null} who={null} badge={null} sheet={{ id: 7, log: null, count: 0, working: false, chat: null }} canWrite={false} alone={false} send={vi.fn()}/>
+  <CardSheet slug="rs-learning" company="co-1" title="Launch post" face={null} who={null} badge={null} sheet={{ id: 7, log: null, count: 0, working: false, chat: { kind: 'none' } }} canWrite={false} alone={false} send={vi.fn()}/>
  </div>;
  const screen = await show(sheet);
  await expect.element(screen.getByRole('dialog', { name: 'Launch post' })).toBeVisible();

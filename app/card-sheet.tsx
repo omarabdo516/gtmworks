@@ -6,32 +6,31 @@ import { useI18n } from '@/lib/i18n-client';
 import { ShellIcon } from '@/components/shell-icon';
 import { BoardIcon } from '@/components/board-icon';
 import { leave } from '@/lib/motion';
+import { CardSheetChat, opensOn, type SheetChat } from '@/app/card-sheet-chat';
 import './log.css';
 import './sheet.css';
 
 type SheetTab='chat'|'log';
-// The Conversation a Card came from, when the reader may open it. Nothing ties a Card to a Conversation yet (#116).
-type ChatTie={conversationId:string};
 // What the server reads for an open Card: its Log tab, drawn there, the number of its rows, whether an Agent called in
-// one of its notes is still working, and its Conversation.
-export type CardSheetData={id:number,log:ReactNode,count:number,working:boolean,chat:ChatTie|null};
+// one of its notes is still working, and its Chat tab (#145).
+export type CardSheetData={id:number,log:ReactNode,count:number,working:boolean,chat:SheetChat};
 
 // sheetOut in sheet.css.
 const leaveMs=190;
 
 // A Card opened over the board (#116; design-reference: openSheet, renderSheetHead, renderSheetBody, closeSheet): a modal
 // dialog at the inline end, so the board behind it is inert, with the Card's head, its Chat and Log tabs and, on Log,
-// the note field. Closing slides it out first; then the board's own address comes back and the keyboard is on the Card.
+// the note field. It opens on the tab the Card's chat calls for, with the keyboard in that tab's field. Closing slides it out first; then the board's own address comes back and the keyboard is on the Card.
 // send is the board's note action (work-actions.ts), handed in so this client file never imports the server module.
 export function CardSheet({slug,company,title,face,who,badge,sheet,canWrite,alone,message,send:sendNote}:{slug:string,company:string,title:string,face:ReactNode,who:ReactNode,badge:ReactNode,sheet:CardSheetData,canWrite:boolean,alone:boolean,message?:string,send:(form:FormData)=>Promise<unknown>}) {
  const {t}=useI18n(); const router=useRouter();
  const box=useRef<HTMLDialogElement>(null); const logBox=useRef<HTMLDivElement>(null); const stopLeaving=useRef(()=>{}); const stick=useRef(true);
- const [tab,setTab]=useState<SheetTab>(sheet.chat?'chat':'log'); const [leaving,setLeaving]=useState(false); const [filled,setFilled]=useState(false);
+ const [tab,setTab]=useState<SheetTab>(opensOn(sheet.chat)); const [leaving,setLeaving]=useState(false); const [filled,setFilled]=useState(false);
  const [,send,sending]=useActionState(async(_:null,form:FormData)=>{ await sendNote(form); setFilled(false); return null; },null);
  const board=`/c/${slug}/work/board`;
  useLayoutEffect(()=>{
   if(!box.current?.open) box.current?.showModal();
-  const frame=requestAnimationFrame(()=>document.getElementById('ta-note')?.focus());
+  const frame=requestAnimationFrame(()=>box.current?.querySelector<HTMLElement>('.sheet-body .composer-area textarea')?.focus());
   return ()=>{ cancelAnimationFrame(frame); stopLeaving.current(); };
  },[]);
  // The log stays on its newest row while the reader is there: when it opens, after a note, when a reply lands.
@@ -48,8 +47,9 @@ export function CardSheet({slug,company,title,face,who,badge,sheet,canWrite,alon
   document.querySelector<HTMLElement>(`#board-cols .kcard[data-card-id="${sheet.id}"] a`)?.focus();
   router.push(board,{scroll:false});
  };
- const pick=(next:SheetTab)=>{ if(next==='chat'&&!sheet.chat) return; setTab(next); document.getElementById(`sh-tab-${next}`)?.focus(); };
- const chatLink=sheet.chat&&`/c/${slug}/conversations/${sheet.chat.conversationId}`;
+ const none=sheet.chat.kind==='none';
+ const pick=(next:SheetTab)=>{ if(next==='chat'&&none) return; setTab(next); document.getElementById(`sh-tab-${next}`)?.focus(); };
+ const chatLink=sheet.chat.kind==='own'&&`/c/${slug}/conversations/${sheet.chat.record.conversation.id}`;
  return <dialog ref={box} className={`sheet${leaving?' is-closing':''}`} aria-labelledby="sheet-title" onCancel={event=>{ if(event.cancelable) { event.preventDefault(); close(); } }} onClose={closed} onClick={event=>{ if(event.target===event.currentTarget) close(); }}>
   <div className="sheet__inner">
    <header className="sheet__head" id="sheet-head">
@@ -59,7 +59,7 @@ export function CardSheet({slug,company,title,face,who,badge,sheet,canWrite,alon
      {chatLink&&<Link className="link-btn" href={chatLink}><ShellIcon name="open"/><span>{t('sheetOpenInChats')}</span></Link>}
      <Link className="link-btn" href={`${board}/${sheet.id}`}>{t('sheetCardDetails')}</Link></div>
     <div className="segmented sheet-tabs" role="tablist" aria-label={t('sheetTabs')} onKeyDown={event=>{ if(['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) { event.preventDefault(); pick(event.key==='Home'?'chat':event.key==='End'?'log':tab==='log'?'chat':'log'); } }}>
-     <button type="button" role="tab" id="sh-tab-chat" aria-selected={tab==='chat'} aria-controls={tab==='chat'?'sheet-transcript':undefined} aria-disabled={!sheet.chat||undefined} tabIndex={tab==='chat'?0:-1} onClick={()=>pick('chat')}>{t('sheetTabChat')}</button>
+     <button type="button" role="tab" id="sh-tab-chat" aria-selected={tab==='chat'} aria-controls={tab==='chat'?'sheet-transcript':undefined} aria-disabled={none||undefined} tabIndex={tab==='chat'?0:-1} onClick={()=>pick('chat')}>{t('sheetTabChat')}</button>
      <button type="button" role="tab" id="sh-tab-log" aria-selected={tab==='log'} aria-controls={tab==='log'?'sheet-log':undefined} tabIndex={tab==='log'?0:-1} onClick={()=>pick('log')}>{t('sheetTabLog')} <span className="num sheet-tabs__n">{sheet.count}</span></button>
     </div>
    </header>
@@ -78,11 +78,7 @@ export function CardSheet({slug,company,title,face,who,badge,sheet,canWrite,alon
      </form>
      <p className="note-hint" id="note-hint"><BoardIcon name="clock"/><span>{t('noteHint')}</span></p>
     </>:<p className="ro-line"><BoardIcon name="eye"/><span>{t('noteViewOnly')}</span></p>}</div>
-   </>:<>
-    {/* The Conversation itself is not drawn here yet; its tab opens it in Chats. */}
-    <div className="transcript" id="sheet-transcript" role="tabpanel" aria-labelledby="sh-tab-chat" tabIndex={-1}>{chatLink&&<Link className="btn btn--secondary" href={chatLink}><ShellIcon name="open"/><span>{t('sheetOpenInChats')}</span></Link>}</div>
-    <div className="composer-area"/>
-   </>}</div>
+   </>:<CardSheetChat slug={slug} company={company} card={sheet.id} chat={sheet.chat} writer={canWrite} openLog={()=>pick('log')}/>}</div>
   </div>
  </dialog>;
 }

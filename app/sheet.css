@@ -41,7 +41,7 @@
 .gw .sheet .dot--waiting { background: var(--gw-wait); }
 .gw .sheet .badge .dot { width: 6px; height: 6px; }
 
-/* «المحادثة» | «السجل»: Chat is drawn but not open until a Card has a Conversation (app/card-sheet.tsx). */
+/* «المحادثة» | «السجل»: Chat is drawn but not open on a Card with no Agent the reader sees (app/card-sheet-chat.tsx). */
 .gw .sheet .sheet-tabs { justify-content: flex-start; padding: 2px 0 0; margin-inline-start: -4px; }
 /* A plain button, as the reference's: the product's flex buttons would drop the space before the Log count. */
 .gw .sheet .sheet-tabs button { display: inline-block; }
@@ -55,7 +55,13 @@
 .gw .sheet .sheet-log { padding: var(--s5); }
 .gw .sheet .lg-wrap { display: grid; gap: var(--s5); }
 .gw .sheet .panel-card { display: flex; flex-direction: column; padding: 4px; border-radius: var(--gw-r-md); background: var(--gw-bg-pane); border: 0.5px solid var(--gw-border-3); list-style: none; margin: 0; }
-.gw .sheet #sheet-transcript { display: grid; place-content: center; }
+/* The Chat tab (#145): the Conversation across the sheet's width, and its empty and lock states centred in it
+   (design-reference: .sheet .transcript__col, emptyChatHTML's sheet branch, .priv-sheet__ic). Every reply card is
+   already the column's width. */
+.gw .sheet .transcript__col { max-width: none; }
+.gw .sheet .empty-chat--sheet h2 { font-size: var(--gw-fs-lg); }
+.gw .sheet .priv-sheet__ic { width: 48px; height: 48px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--gw-bg-tertiary); color: var(--gw-text-2); }
+.gw .sheet .priv-sheet__ic .gw-icon { width: 20px; height: 20px; }
 .gw .sheet .composer-area { padding: var(--s2) var(--s4) var(--s4); }
 .gw .sheet .note-composer .composer__input { padding-inline-start: var(--s2); }
 .gw .sheet .note-hint { display: flex; align-items: center; justify-content: center; gap: 6px; max-width: var(--gw-chat-col); margin: var(--s2) auto 0; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); text-align: center; }
