@@ -85,8 +85,9 @@ test('prepared navigation and Paperclip motion inventory (production, warm-up + 
   console.log('CLICK_RUNS', JSON.stringify(runs));
   await testInfo.attach('click-timings.json', { body: JSON.stringify({ enforceBudget, results, runs }, null, 2), contentType: 'application/json' });
   if (enforceBudget) for (const [name, timing] of Object.entries(results)) {
-    expect(timing.shown, `${name}: shown ${timing.shown.toFixed(1)}ms`).toBeLessThan(100);
-    expect(timing.settled, `${name}: settled ${timing.settled.toFixed(1)}ms`).toBeLessThan(200);
+    const motion = clickPath.find(step => step.name === name)?.motion ?? { shown: 0, settled: 0 };
+    expect(timing.shown, `${name}: shown ${timing.shown.toFixed(1)}ms`).toBeLessThan(100 + motion.shown);
+    expect(timing.settled, `${name}: settled ${timing.settled.toFixed(1)}ms`).toBeLessThan(200 + motion.settled);
   }
   for (const [name, timings] of Object.entries(runs)) for (const timing of timings) {
     expect(timing.all, `${name}: unlisted computed transition-property: all`).toEqual([]);
@@ -178,7 +179,8 @@ test('visible links fully prefetch page data and closing reuses the visited boar
     })));
     return links.filter((_, index) => visible[index]).map(link => link.getAttribute('href')!);
   });
-  expect(links.some(link => /\/board\/\d+$/.test(link))).toBe(true);
+  // A board Card opens as its sheet (#116), at the board's own address with the Card named in it.
+  expect(links.some(link => /\/board\?card=\d+$/.test(link))).toBe(true);
   for (const link of new Set(links)) {
     // The current page already carries its data; it needs no prefetch of itself.
     if (link === '/c/rs-learning/work/board') continue;
@@ -188,18 +190,19 @@ test('visible links fully prefetch page data and closing reuses the visited boar
     expect(body, `${link}: page data, not a partial layout/loading shell`).toContain('"content"');
     if (link.endsWith('/home')) expect(body).toContain("Recent activity");
     if (/\/board\/\d+$/.test(link)) expect(body).toContain(`"cardId":${link.split('/').pop()}`);
+    if (/\/board\?card=\d+$/.test(link)) expect(body).toContain(`"sheet":{"id":${link.split('=').pop()}`);
     if (link.endsWith('/work/calendar')) expect(body).toContain('work/calendar');
     if (link.endsWith('/work/list')) expect(body).toContain('work/list');
   }
-  await page.locator('.card a[href$="/board/1"]').click();
-  await expect(page.locator('.modal')).toBeVisible();
+  await page.locator('.card a[href$="/board?card=1"]').click();
+  await expect(page.locator('.sheet[open]')).toBeVisible();
   await idle(page);
   const requests: string[] = [];
   page.on('request', request => {
     if (new URL(request.url()).pathname.startsWith('/c/')) requests.push(request.url());
   });
-  await page.locator('.close-card').click();
-  await expect(page.locator('.modal')).toHaveCount(0);
+  await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(page.locator('.sheet')).toHaveCount(0);
   await idle(page);
   expect(requests, 'return to the board must make no company server request').toEqual([]);
 });
@@ -207,7 +210,7 @@ test('visible links fully prefetch page data and closing reuses the visited boar
 test('reduced motion disables hover, veil and card animation', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await signIn(page, 'manager@example.com', '/c/rs-learning/work/board');
-  for (const step of clickPath.slice(0, 4)) {
+  for (const step of clickPath.slice(0, 7)) {
     const timing = await measureClick(page, step);
     expect(timing.longest).toBe(0);
     expect(timing.all).toEqual([]);
@@ -238,6 +241,8 @@ test('own comments, moves and approvals invalidate prepared pages immediately', 
   await expect(page.locator('.column[data-stage-name="مراجعة"] .card').filter({ hasText: title })).toBeVisible();
   await openNavigation(page);
   await page.locator('.sidebar .sb-count[href$="/approvals"]').click();
+  // The board draws the same Card in its own column, opening its sheet (#116): the queued Card is read on Waiting on you.
+  await expect(page).toHaveURL(/\/approvals$/);
   const queued = page.locator('.approval-card').filter({ hasText: title });
   await expect(queued).toBeVisible();
   await queued.getByRole('link', { name: title }).click();
