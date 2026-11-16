@@ -23,7 +23,7 @@ the whole-app browser and install suites run only when their own area changed, o
 - `database` runs the migration verifications, `check-rls.sql` and `tests/db.sh` (RLS, grants, migrations replayed on
   legacy data) on one local stack, when `supabase/` or a database test file changes.
 - `integration` is the whole-app browser suite: the production-shaped proxy suite, then the screens, the functional
-  journeys, the measured navigation and first run. It runs when a browser spec, its helpers, its approved images, the
+  journeys, the measured navigation and first run. It runs when a browser spec, its helpers, the compared screens, its approved images, the
   Playwright configs, the stacks it runs on (migrations, stack configuration, local default privileges, the first-run
   reset helpers, the image the proxy suite runs in), the seed or `public/` change, and, until screens have component tests, when the app itself changes
   (`app/`, `components/`, `lib/`, `worker/` and the root files the build and server read). Its suite runs on `GTMWORKS_TEST_LANES`
@@ -242,7 +242,8 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `unit.test.mjs` | Glossary terms, Role-only access and other small rules across lib/. | 2 s | — | keep |
 | `unknown-starts.test.mjs` | A start whose outcome was unknown stays unknown until Hermes names the run; a run to an Agent with its own instructions carries them before its sender's note, sent now or queued; a retry of a Lead start sends its first attempt's tools, though the tools offered changed since, also when the previous app version made that attempt during an update. | 0.3 s | team-work.spec.ts | keep |
 | `usage.spec.ts` | Replies store their tokens and show a running total; stopped and lost runs keep what was reported; an Owner sees each company's tokens. | 23.8 s | hermes-usage.test.mjs (the parsing) | keep |
-| `visual-baselines.test.mjs` | Every listed screen has its approved images and no image lacks a screen. | 0.4 s | visual.spec.ts | keep |
-| `visual-screens.mjs` | helper: the compared screens | — | — | helper, kept |
-| `visual.spec.ts` | Fifty-two screens match their approved images in English and Arabic at 390 and 1440, light and dark, on the seed as built. (visual project, first) | 83.6 s | visual-baselines.test.mjs (every screen has its images) | keep |
-| `visual.spec.ts-snapshots/` | The 208 approved screen images `visual.spec.ts` compares with. | — | — | data, kept |
+| `visual-baselines.test.mjs` | Every listed screen has its approved images and no image lacks a screen; a screen file that is not a screen is refused; two branches that each add a screen merge without a conflict. | 0.4 s | visual.spec.ts | keep |
+| `visual-screens.mjs` | helper: reads the compared screens from `visual-screens/` | — | — | helper, kept |
+| `visual-screens/` | The compared screens, one file each: its address, its set-up, what shows it has loaded and whether it is also compared dark. | — | — | data, kept |
+| `visual.spec.ts` | Every screen in `visual-screens/` matches its approved images (English and Arabic, 390 and 1440, and dark when the screen asks for it) on the seed as built. (visual project, first) | 83.6 s | visual-baselines.test.mjs (every screen has its images) | keep |
+| `visual.spec.ts-snapshots/` | The approved screen images `visual.spec.ts` compares with, one per screen, language and width. | — | — | data, kept |
