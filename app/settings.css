@@ -181,7 +181,10 @@
 .gw .sov .sov-back { align-self: flex-start; margin-inline-start: -6px; margin-bottom: calc(var(--s3) * -1); }
 .gw .sov .sov-agent-id { display: flex; align-items: center; gap: var(--s3); }
 .gw .sov .sov-agent-id .od-fill { display: grid; }
-.gw .sov .face-wrap .dot { position: absolute; bottom: 1px; inset-inline-end: 1px; }
+.gw .sov .face-wrap .dot { position: absolute; bottom: 1px; inset-inline-end: 1px; width: 8px; height: 8px; border-radius: 50%; background: var(--gw-idle-dot); box-shadow: 0 0 0 2.5px var(--gw-bg-sidebar); }
+.gw .sov .face-wrap--lg .dot { width: 12px; height: 12px; bottom: 2px; inset-inline-end: 2px; box-shadow: 0 0 0 3px var(--gw-bg-chrome); }
+.gw .sov .face-wrap .dot--working { background: var(--gw-accent); }
+.gw .sov .face-wrap .dot--waiting { background: var(--gw-wait); }
 .gw .sov .dp-id__name { display: flex; justify-content: flex-start; align-items: center; gap: var(--s2); font-size: var(--gw-fs-lg); font-weight: 600; line-height: 1.4; }
 .gw .sov .dp-id__badge { font-weight: 400; align-self: center; }
 .gw .sov .dp-id__role { display: flex; align-items: center; justify-content: flex-start; gap: 6px; font-size: var(--gw-fs-sm); line-height: 1.5; color: var(--gw-text-2); }

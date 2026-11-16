@@ -7,6 +7,7 @@ import { ShellIcon } from '@/components/shell-icon';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { MadeLine } from '@/app/agent-made';
 import type { Made } from '@/lib/agent-made';
+import { statusKeys } from '@/lib/agent-details.mjs';
 import type { AgentDetailsView } from '@/app/agent-details-server';
 
 export type DetailsAgent={id:string,connection_id:string,name:string,speciality:string,main:boolean,made?:Made|null};
@@ -37,7 +38,6 @@ export function HeadPill({panel,agent,details,face,title,titleDir,corner}:{panel
 const tabs=[{key:'activity',label:'chatTabActivity'},{key:'tasks',label:'chatTabTasks'},{key:'files',label:'chatTabFiles'},{key:'memory',label:'chatTabMemory',soon:true},{key:'log',label:'chatTabLog'}] as const;
 type Tab=Exclude<(typeof tabs)[number],{soon:true}>['key'];
 const open=tabs.filter((tab):tab is Extract<(typeof tabs)[number],{key:Tab}>=>!('soon' in tab));
-const statusKeys={working:'agentStatusWorking',waiting:'agentStatusWaiting',idle:'agentStatusIdle'};
 
 // The frame every details panel shares (an Agent's, a channel's): over the chat it takes the focus, and Escape gives
 // it back to the title pill.

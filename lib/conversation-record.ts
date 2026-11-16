@@ -12,7 +12,7 @@ type Database=Awaited<ReturnType<typeof supabase>>;
 // Agents its person asked Lead for and the Owner's answer (#17), the cards its Agent showed with its replies (#136), the
 // rules its Agent saved in it: a suggestion with who it was sent to, and how it was decided (RLS: only the person who
 // told it reads one that is not the team's), and the Card it put on the board with that Card's column now (#144).
-export async function conversationRecord(db:Database,person:string,company:string,found:{id:string,agent_name:string,hermes_agents:unknown}) {
+export async function conversationRecord(db:Database,person:string,company:string,found:{id:string,agent_id:string|null,agent_name:string,hermes_agents:unknown}) {
  const conversation=found.id;
  // Usage first: a run closed between the two reads then shows its reply too (both are written in one transaction).
  const usage=((await db.from('conversation_usage').select(usageColumns).eq('conversation_id',conversation)).data||[]) as RunUsage[];
@@ -59,7 +59,7 @@ export async function conversationRecord(db:Database,person:string,company:strin
  const first=messages.find(message=>message.author==='person');
  const firstReply=board&&first&&card&&card.created_at>first.created_at?messages.find(message=>message.author==='agent'&&message.run_id===first.run_id)?.id:undefined;
  return {
-  conversation:{id:found.id,agent_name:found.agent_name,face:faceOf(found)},
+  conversation:{id:found.id,agent_id:found.agent_id,agent_name:found.agent_name,face:faceOf(found)},
   messages:withBoardNote(withTeamWork(withDecisions(shown(messages,usage,cards,found.agent_name,saved),decisions,found.agent_name),notes,queued,me?.name||''),firstReply),
   usage:totalOf(usage),
   pending:waiting(messages,usage).length>0||queuedWaiting(queued),
