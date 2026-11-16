@@ -153,6 +153,20 @@ test('a space the Engine lost is forgotten, and made again with its Skill and it
  } finally { await fake.close(); }
 });
 
+test('a profile with its own team-lessons keeps it and stays unconfirmed, and the space and the other profiles are kept', async () => {
+ const fake=await fakeHermes();
+ try {
+  profilesOn(fake,[lead,made]);
+  const own='---\nname: team-lessons\ndescription: The Agent\'s own\n---\nMine.\n';
+  fake.settings.skills.set(made,new Map([['team-lessons',own]]));
+  const db=sharedDatabase({[rs]:{profiles:[lead,made],rules:[]}});
+  for(let pass=0;pass<2;pass++) await keepSharedSkills(db,{hermes:install(fake)});
+  assert.deepEqual(db.calls.filter(call=>call.startsWith('forget_shared_space')),[],'the space is never forgotten');
+  assert.deepEqual([...db.shared],[lead],'only the profile that reads the shared Skill is confirmed');
+  assert.equal(fake.settings.skills.get(made).get('team-lessons'),own,'the profile\'s own Skill is kept');
+ } finally { await fake.close(); }
+});
+
 // The worker with a fake driver: every call, in order, in one log the database shares.
 function drivenDatabase(work,{fail}={}) {
  const log=[];

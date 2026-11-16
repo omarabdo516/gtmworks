@@ -1,8 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 select plan(66);
--- A worker that confirms shared folders runs (#122), so a move waits for its profile's.
-insert into public.shared_skills_worker(id,seen_at) values(true,now()) on conflict (id) do update set seen_at=excluded.seen_at;
 -- An install from before #120: RS Learning (1) has Lead, its main Agent, on the Company's own profile, and Aleem (3) has
 -- its Lead and Copy on Aleem's. Aleem's profile is not ready yet. Every message so far is an hour old.
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
@@ -18,6 +16,8 @@ insert into public.hermes_agent_audit(company_id,actor_id,agent_id,action,detail
  ('10000000-0000-0000-0000-000000000003','20000000-0000-0000-0000-000000000001','b1100000-0000-0000-0000-000000000003','PROVIDE_BUNDLED_HERMES_AGENT',jsonb_build_object('connection_id','b1000000-0000-0000-0000-000000000003')),
  ('10000000-0000-0000-0000-000000000003','20000000-0000-0000-0000-000000000001','b1100000-0000-0000-0000-000000000004','REQUEST_HERMES_AGENT',jsonb_build_object('connection_id','b1000000-0000-0000-0000-000000000004'));
 insert into public.company_profiles(company_id,profile,tools_level,tools_policy,skills_shared) values ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',1,public.engine_tool_policy(),true);
+-- RS Learning's shared space, made by this version's worker (#122).
+insert into public.company_shared_spaces(company_id,folder) values ('10000000-0000-0000-0000-000000000001','/opt/data/profiles/cs-10000000000000000000000000000001/skills');
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values
  ('b1200000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','b1100000-0000-0000-0000-000000000001','Lead');
 insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id,created_at) values

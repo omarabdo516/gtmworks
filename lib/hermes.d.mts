@@ -29,4 +29,4 @@ export function finishAppSignIn(connection:import('./engine.mjs').EngineConnecti
 export function disconnectApp(connection:import('./engine.mjs').EngineConnection,key:string):Promise<{state:'disconnected'|'refused'|'unreachable'|'failed'}>;
 export function provideSharedSpace(connection:import('./engine.mjs').EngineConnection,space:{name:string}):Promise<{state:'provided',folder:string}|{state:'refused'|'unreachable'|'failed',folder:null}>;
 export function writeSharedSkill(connection:import('./engine.mjs').EngineConnection,skill:{space:string,name:string,content:string}):Promise<{state:'unchanged'|'written'|'missing'|'refused'|'unreachable'|'failed'}>;
-export function shareSkills(connection:import('./engine.mjs').EngineConnection,sharing:{profile:string,folder:string,skill:string}):Promise<{state:'shared'|'missing'|'refused'|'unreachable'|'failed'}>;
+export function shareSkills(connection:import('./engine.mjs').EngineConnection,sharing:{profile:string,folder:string,skill:string}):Promise<{state:'shared'|'shadowed'|'missing'|'refused'|'unreachable'|'failed'}>;

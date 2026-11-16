@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(50);
+select plan(51);
 -- #122. RS Learning (1): Lead on the Company's own profile, ready but for its shared folder, and the Writer Lead made on
 -- its own profile. Aleem (3) has its own profile too. The Writer is shown to the Manager (2), the Contributor (3) and
 -- the Viewer (4).
@@ -48,8 +48,7 @@ select throws_ok($$select public.reserve_conversation_run('c5200000-0000-0000-00
  '42501','hermesProfileNotShared','a Run on a shared space is refused');
 reset role;
 
--- Until a worker of this version lists its work, the previous version's Runs and moves go on as before.
-delete from public.shared_skills_worker;
+-- Until a worker of this version makes the Company's space, the previous version's Runs and moves go on as before.
 select ok(public.company_profile_ready('10000000-0000-0000-0000-000000000001'),'with no worker that confirms shared folders, the Company''s profile is ready as before');
 select is(public.agent_profile_refusal((select profile from named where name='writer'),'10000000-0000-0000-0000-000000000001',(select agent from named where name='writer')),null,'and so is an Agent''s own profile');
 
@@ -63,23 +62,6 @@ select results_eq($$select company_id,profile,folder,lessons,profiles from publi
  'each Company with a recorded profile is listed with its space, no folder yet, and every profile to confirm');
 select is(public.record_shared_skills('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001'),false,'no profile is confirmed before its Company''s space is recorded');
 reset role;
-create function pg_temp.reserved(agent text, conversation text, message_key text) returns text language plpgsql as $$
-begin
- perform set_config('request.jwt.claims','{"role":"authenticated"}',true);
- perform set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
- set local role authenticated;
- perform public.reserve_conversation_run(conversation::uuid,'10000000-0000-0000-0000-000000000001',(select n.agent from named n where n.name=reserved.agent),message_key::uuid,'Hello');
- reset role;
- return 'reserved';
-exception when others then reset role; return sqlerrm;
-end $$;
-select is(pg_temp.reserved('lead','c5200000-0000-0000-0000-000000000001','c5300000-0000-0000-0000-000000000001'),'agentLevelPending','no Run starts on the Company''s profile before its shared folder is confirmed');
-select is(pg_temp.reserved('writer','c5200000-0000-0000-0000-000000000002','c5300000-0000-0000-0000-000000000002'),'agentLevelPending','nor on an Agent''s own profile');
-select ok(not public.company_profile_ready('10000000-0000-0000-0000-000000000001'),'the Company''s profile is not ready');
-update public.shared_skills_worker set seen_at=now()-interval '11 minutes';
-select ok(public.company_profile_ready('10000000-0000-0000-0000-000000000001'),'once that worker has not listed its work for ten minutes, the wait lapses');
-update public.shared_skills_worker set seen_at=now();
-select ok(not public.company_profile_ready('10000000-0000-0000-0000-000000000001'),'and it holds again when the worker lists its work');
 
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 set local role service_role;
@@ -95,6 +77,27 @@ reset role;
 select is((select count(*)::int from public.company_shared_spaces),1,'one space');
 set local role service_role;
 select is((select folder from public.shared_skills_work() where company_id='10000000-0000-0000-0000-000000000001'),'/opt/data/profiles/cs-10000000000000000000000000000001/skills','and the worker reads its folder');
+reset role;
+create function pg_temp.reserved(agent text, conversation text, message_key text) returns text language plpgsql as $$
+begin
+ perform set_config('request.jwt.claims','{"role":"authenticated"}',true);
+ perform set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+ set local role authenticated;
+ perform public.reserve_conversation_run(conversation::uuid,'10000000-0000-0000-0000-000000000001',(select n.agent from named n where n.name=reserved.agent),message_key::uuid,'Hello');
+ reset role;
+ return 'reserved';
+exception when others then reset role; return sqlerrm;
+end $$;
+select is(pg_temp.reserved('lead','c5200000-0000-0000-0000-000000000001','c5300000-0000-0000-0000-000000000001'),'agentLevelPending','no Run starts on the Company''s profile before its shared folder is confirmed');
+select is(pg_temp.reserved('writer','c5200000-0000-0000-0000-000000000002','c5300000-0000-0000-0000-000000000002'),'agentLevelPending','nor on an Agent''s own profile');
+select ok(not public.company_profile_ready('10000000-0000-0000-0000-000000000001'),'the Company''s profile is not ready');
+update public.company_shared_spaces set seen_at=now()-interval '11 minutes';
+select ok(public.company_profile_ready('10000000-0000-0000-0000-000000000001'),'once that worker has not listed its work for ten minutes, the wait lapses');
+set local role service_role;
+select is((select count(*)::int from public.shared_skills_work() where company_id='10000000-0000-0000-0000-000000000001'),1,'the worker lists the Company again');
+reset role;
+select ok(not public.company_profile_ready('10000000-0000-0000-0000-000000000001'),'and it holds again when the worker lists its work');
+set local role service_role;
 select is(public.record_shared_skills('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000003'),false,'another Company''s profile is never confirmed with this Company''s folder');
 select is(public.record_shared_skills('10000000-0000-0000-0000-000000000003','co-10000000000000000000000000000001'),false,'nor this Company''s with another''s');
 select is(public.record_shared_skills('10000000-0000-0000-0000-000000000001','default'),false,'nor a profile that is not the Company''s');
@@ -111,7 +114,8 @@ select is((select profiles from public.shared_skills_work() where company_id='10
 reset role;
 select is(pg_temp.reserved('writer','c5200000-0000-0000-0000-000000000002','c5300000-0000-0000-0000-000000000002'),'reserved','a Run on the Writer''s profile is reserved once confirmed');
 
--- A profile the Engine lost is confirmed again once made again; a space the Engine lost holds every profile of its Company.
+-- A profile the Engine lost is confirmed again once made again; a space the Engine lost is made again, and every
+-- profile of its Company is confirmed again.
 set local role service_role;
 select ok(public.forget_company_profile((select connection from named where name='writer')),'tool health forgets the Writer''s lost profile');
 reset role;
@@ -122,7 +126,7 @@ select lives_ok($$select public.forget_shared_space('10000000-0000-0000-0000-000
 reset role;
 select ok(not exists(select 1 from public.company_shared_spaces) and not exists(select 1 from public.company_profiles where skills_shared) and not exists(select 1 from public.agent_profiles where skills_shared),
  'its record goes, and no profile of the Company is confirmed');
-select is(pg_temp.reserved('lead','c5200000-0000-0000-0000-000000000003','c5300000-0000-0000-0000-000000000003'),'agentLevelPending','so no Run starts on them');
+select is(pg_temp.reserved('lead','c5200000-0000-0000-0000-000000000003','c5300000-0000-0000-0000-000000000003'),'reserved','until the space is made again, a Run goes on without the team''s lessons');
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 set local role service_role;
 select is(public.record_shared_skills('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001'),false,'until the space is made and recorded again');
