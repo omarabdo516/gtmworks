@@ -878,5 +878,14 @@
   "logActAppConnected": "وصّل",
   "logActAppDisconnected": "فصل",
   "logAppOn": "متوصل",
-  "logAppOff": "مش متوصل"
+  "logAppOff": "مش متوصل",
+  "sheetTabs": "البطاقة",
+  "sheetTabChat": "المحادثة",
+  "sheetTabLog": "السجل",
+  "sheetOpenInChats": "افتح في المحادثات",
+  "sheetCardDetails": "تفاصيل البطاقة",
+  "sheetLogEmpty": "لسه مفيش حاجة في سجل البطاقة دي. أي تغيير عليها هيتكتب هنا لوحده.",
+  "sheetNoteLabel": "اكتب ملاحظة في سجل البطاقة",
+  "sheetNoteSend": "سجّل الملاحظة",
+  "sheetClose": "اقفل"
 }

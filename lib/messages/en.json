@@ -878,5 +878,14 @@
   "logActAppConnected": "connected",
   "logActAppDisconnected": "disconnected",
   "logAppOn": "Connected",
-  "logAppOff": "Not connected"
+  "logAppOff": "Not connected",
+  "sheetTabs": "The card",
+  "sheetTabChat": "Chat",
+  "sheetTabLog": "Log",
+  "sheetOpenInChats": "Open in Chats",
+  "sheetCardDetails": "Card details",
+  "sheetLogEmpty": "Nothing in this card’s log yet. Any change to it is written here on its own.",
+  "sheetNoteLabel": "Write a note in the card’s log",
+  "sheetNoteSend": "Add the note",
+  "sheetClose": "Close"
 }
