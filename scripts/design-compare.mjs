@@ -16,9 +16,11 @@ async function settle(page) {
 // One step of the screen table. Below 1024 px the prototype's sidebar sits behind #mobile-menu, so a hidden target
 // inside it opens the menu first.
 async function runStep(page, step) {
-  const [[action, selector]] = Object.entries(step);
+  const [[action, value]] = Object.entries(step);
+  const [selector, text] = Array.isArray(value) ? value : [value];
   const target = page.locator(selector).first();
   if (action === 'waitFor') return target.waitFor({ state: 'visible' });
+  if (action === 'fill') return target.fill(text);
   if (action === 'scrollTo') return target.scrollIntoViewIfNeeded();
   if (!await target.isVisible() && await page.locator('#mobile-menu').isVisible()) await page.locator('#mobile-menu').click();
   await target.click();
@@ -83,6 +85,8 @@ async function captureBuilt(browser, options) {
       if (capture !== page.url()) await page.goto(capture);
     }
     await settle(page);
+    for (const step of screens[options.screen].builtSteps ?? []) await runStep(page, step);
+    if (screens[options.screen].builtSteps) await settle(page);
     const shown = await page.evaluate(() => document.documentElement.lang);
     if (shown !== options.lang) console.warn(`Warning: the built page shows ${shown}, not ${options.lang}; its caption still says ${options.lang}.`);
     const landed = new URL(page.url()).pathname;
