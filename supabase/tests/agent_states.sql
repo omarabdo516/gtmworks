@@ -49,10 +49,11 @@ select results_eq($$select agent,running,waiting_mine from public.agent_states('
  $$values ('a1840000-0000-0000-0000-000000000001'::uuid,false,false),('a1840000-0000-0000-0000-000000000002'::uuid,true,false)$$,
  'the Viewer reads the Agents shown to them, and nothing waits on a Viewer');
 
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+select is_empty($$select * from public.agent_states('10000000-0000-0000-0000-000000000003')$$,'a person outside Aleem learns nothing of its Agents');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000005',true);
-select is_empty($$select * from public.agent_states('10000000-0000-0000-0000-000000000001')$$,'a member of another Company learns nothing');
 select results_eq($$select agent,running,waiting_mine from public.agent_states('10000000-0000-0000-0000-000000000003')$$,
- $$values ('a1840000-0000-0000-0000-000000000004'::uuid,false,false)$$,'and reads their own Company''s Lead');
+ $$values ('a1840000-0000-0000-0000-000000000004'::uuid,false,false)$$,'a member of Aleem reads its Lead');
 select set_config('request.jwt.claim.sub','',true);
 select is_empty($$select * from public.agent_states('10000000-0000-0000-0000-000000000001')$$,'nor does a caller with no session');
 
