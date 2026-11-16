@@ -10,7 +10,7 @@ import { fakeEngine } from './fake-engine.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 import { engineFor as driverFor } from '../lib/engine.mjs';
 import { runToolCall, toolSpecTexts } from '../lib/agent-tools.mjs';
-import { levelConfig } from '../lib/agent-levels.mjs';
+import { levelConfig, toolPolicy } from '../lib/agent-levels.mjs';
 import { signIn } from './sign-in';
 import { moveAgentProfiles } from '../lib/company-profiles.mjs';
 import { keepSharedSkills } from '../lib/shared-skills.mjs';
@@ -442,7 +442,7 @@ test('integration: Lead\'s call makes the Agent one profile of its own, also whe
   expect(made).toHaveLength(1);
   const [agent]=made;
   const own=`ag-${agent.id.replaceAll('-','')}`;
-  expect(agent).toEqual({id:agent.id,instructions:instructionsOf('writer').replaceAll('{company}','RS Learning'),profile:own,lead_key:true,derived:true,tools_level:1,tools_policy:2,tools_pending:false});
+  expect(agent).toEqual({id:agent.id,instructions:instructionsOf('writer').replaceAll('{company}','RS Learning'),profile:own,lead_key:true,derived:true,tools_level:1,tools_policy:toolPolicy,tools_pending:false});
   expect([...hermes.settings.profiles.keys()].filter(name=>name.startsWith('ag-'))).toEqual([own]);
   const kept=hermes.settings.profiles.get(own)!;
   expect([kept.soul,kept.key,kept.config]).toEqual([agent.instructions,'fake-engine-key',levelConfig(1)]);
