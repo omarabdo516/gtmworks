@@ -5,6 +5,8 @@ import { levelConfig, toolPolicy, companyProfile } from '../lib/agent-levels.mjs
 import { moveAgentProfiles } from '../lib/company-profiles.mjs';
 import { engineFor } from '../lib/engine.mjs';
 import { sendMessage, startQueuedTurns } from '../lib/conversation-runs.mjs';
+import { describeEntry } from '../lib/activity-log.mjs';
+import { i18n } from '../lib/i18n.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
 // An Agent still on its Company's profile moves to its own (#121, ADR 0016): the worker asks the Engine only about the
@@ -148,4 +150,10 @@ test('a Run with no history pinned sends the body it sent before',async()=>{
   assert.deepEqual(await sendMessage(db,service,{company,conversation:'c',sendKey:'k',message:'Next draft',encryptionKey}),{conversation:'c'});
   assert.deepEqual(JSON.parse(/** @type {string} */(fake.settings.runs[0].body)),{input:'Next draft'});
  } finally { await fake.close(); }
+});
+
+test('a move reads in the Company\'s log as the Agent getting its own space, in both languages',()=>{
+ assert.deepEqual(describeEntry({subject:'agent',action:'agent_own_space',details:{agent_name:'Writer'}}),{act:['logActAgentOwnSpace'],obj:'Writer',from:undefined,to:undefined,note:undefined});
+ assert.equal(i18n('en').t('logActAgentOwnSpace'),'got its own space in the agent engine');
+ assert.notEqual(i18n('ar').t('logActAgentOwnSpace'),'logActAgentOwnSpace');
 });
