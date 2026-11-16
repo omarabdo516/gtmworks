@@ -1,14 +1,15 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { lane, originOf, portOf } from '../tests/lane.mjs';
 const root=process.cwd();
 // A browser test worker runs on its own local stack (tests/lane.mjs, #69): lane n has the app on port 3000+n and every
 // Supabase port moved by 100*n. Outside a worker the lane is 0, the stack every other script uses.
-const lane=Number.parseInt(process.env.TEST_PARALLEL_INDEX||'0',10)||0;
-const database=`postgresql://postgres:postgres@127.0.0.1:${54322+100*lane}/postgres`;
+const database=`postgresql://postgres:postgres@127.0.0.1:${portOf('db')}/postgres`;
+const api=`http://127.0.0.1:${portOf('api')}`;
 
-export function assertLocalTarget(baseURL, apiURL=process.env.NEXT_PUBLIC_SUPABASE_URL || `http://127.0.0.1:${54321+100*lane}`) {
- if(baseURL!==`http://127.0.0.1:${3000+lane}` || apiURL!==`http://127.0.0.1:${54321+100*lane}`) throw new Error('First-run tests refuse non-local targets');
+export function assertLocalTarget(baseURL, apiURL=process.env.NEXT_PUBLIC_SUPABASE_URL || api) {
+ if(baseURL!==originOf() || apiURL!==api) throw new Error('First-run tests refuse non-local targets');
 }
 export function localQuery(sql,baseURL) {
  assertLocalTarget(baseURL);

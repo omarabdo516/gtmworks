@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 // first of its levels whose files changed, or false: `true` runs the whole suite, and the browser suite's `visual` runs
 // only its compared screens (#213). With --main (a push to main) every suite runs unless every file is a document.
 // Accepts path arguments or git diff --name-only -z on stdin; an empty, malformed or unreadable list runs every suite.
-const everything = [/^\.github\/workflows\/ci\.yml$/, /^ci\.sh$/, /^scripts\/ci-(areas|verdict)\.mjs$/, /^package(-lock)?\.json$/];
+const everything = [/^\.github\/workflows\/ci\.yml$/, /^ci\.sh$/, /^scripts\/ci-(areas|verdict|runner)\.mjs$/, /^package(-lock)?\.json$/];
 const suites = {
   // Screens as components in headless Chromium (vitest.config.mts, #81): the app's screens and components, the library
   // they import (catalogues included), and the component tests and their config. The motion test (#127) also reads the

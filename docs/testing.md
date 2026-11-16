@@ -10,11 +10,19 @@ English/Arabic direction checks are never removed.
 
 As Hermes and T3 Code run their CI (#76): a first job decides what runs, the fast layers run on every pull request, and
 the whole-app browser and install suites run only when their own area changed, on `main`, or when asked for by hand.
+`integration` runs on the runner the repo variable `CI_RUNNER` names, Omar's PC while ci-router keeps it there (#224);
+a pull request from a fork runs it on `ubuntu-latest`, where every other job runs. The one PC runner takes one job at a
+time, and `database` and `install` take as long or longer there, so they stay on `ubuntu-latest` instead of queueing
+`integration` behind them. The compared screens run in their own `visual` job on `ubuntu-latest`, where their approved
+images are made, followed by the measured navigation budgets, which need a machine no other job shares (the PC also
+runs other repositories' CI); `ci.sh integration` leaves both projects empty (`GTMWORKS_HOSTED_ELSEWHERE`). A job that
+starts the local Supabase stack first reserves its ports on a GitHub-hosted runner (#225). On the PC the ports move to a
+block of their own, and `scripts/ci-runner.mjs cleanup` removes what this repository's runs start, before and after.
 
 - `changes` decides which suites a change needs (`scripts/ci-areas.mjs`, like Hermes `detect` and T3 Code `Changes`).
-  A change to the CI definition itself (`ci.yml`, `ci.sh`, the area and verdict scripts) or to `package.json` and its
-  lock runs every suite; an empty, malformed or unreadable change list runs every suite; a push to `main` runs every
-  suite unless every changed file is a document.
+  A change to the CI definition itself (`ci.yml`, `ci.sh`, the area, verdict and runner scripts) or to `package.json`
+  and its lock runs every suite; an empty, malformed or unreadable change list runs every suite; a push to `main` runs
+  every suite unless every changed file is a document.
 - `static` runs on every change: the `node --test` files, lint, types, the unused-code check (`knip`, `knip.json`, as T3
   Code runs it, #81), the catalogue and OpenAPI checks.
   `component-imports.test.mjs` fails there in seconds when a component test's imports reach `server-only` (#218).
@@ -34,8 +42,9 @@ the whole-app browser and install suites run only when their own area changed, o
   screens in `tests/visual-screens/` and their approved images) run only the compared screens. For them `changes`
   prints `integration=visual`, and the job runs `./ci.sh visual` (`npm run test:visual`, Playwright's `visual` project
   on lane 0 as the seed builds it) with no image, no proxy suite and no journeys (#213). Its suite runs on `GTMWORKS_TEST_LANES`
-  lanes (four in CI), one per Playwright worker: each lane is a whole local Supabase stack and an app server of its own
-  (`tests/lane.mjs`, `scripts/local-db.sh`, `scripts/web.sh`), so spec files run side by side and never share data.
+  lanes (four on a GitHub-hosted runner, as many as its CPUs and memory carry on the PC), one per Playwright worker:
+  each lane is a whole local Supabase stack and an app server of its own (`tests/lane.mjs`, `scripts/local-db.sh`,
+  `scripts/web.sh`), so spec files run side by side and never share data.
   Each functional spec file starts from the seed (`tests/fresh-seed.ts`); tests inside one file still run in order.
   The screens run first, on the seed as built; the navigation time budgets (project `measured`) run after every
   functional test with the machine to themselves, and first run last.
@@ -184,7 +193,7 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `channel-runs.spec.ts` | On the fake engine, ordinary talk in the general channel starts no Run; a message that calls an Agent starts exactly one, under the key `channel:<message>`, reading the writer's first name and the message with the Company knowledge before the Agent's rules (#27), and its slow reply is posted in the channel once, also with two drivers at once; after a lost answer only the sender's resend asks again, with the same key; a refused first start ends failed with no reply; a Viewer is refused and calling a Member starts nothing. (#23) | — | supabase/tests/channels.sql (mentions, the Run's steps, every Role) | new |
 | `channels.spec.ts` | A Contributor opens the general channel from the sidebar, reads the composer's hint in English and Arabic and the intro's route tip, and posts a message that stays after a reload and starts no Run; the Viewer reads it with its writer's name and role and has no composer. (#23) | — | channel-runs.spec.ts (Runs), components/channel.test.tsx (the drawing) | new |
 | `choose-language.ts` | browser helper: choose the language in Settings | — | — | helper, kept |
-| `ci-runners.test.mjs` | Every workflow runs on free GitHub-hosted runners and a PR reads no secret. | 0.5 s | — | keep |
+| `ci-runners.test.mjs` | Every job runs on `ubuntu-latest` except `integration`, which runs where `CI_RUNNER` says and on `ubuntu-latest` for a fork's PR, read no secret and write nothing; the release workflows stay on `ubuntu-latest`; a PR reads no secret. A job that starts Supabase reserves its ports first, on GitHub-hosted runners only, and every lane's port lies in that range (#225); on the PC it clears an earlier run and moves the ports first and cleans up last. `scripts/ci-runner.mjs`: the moved port block, the lane count, and a cleanup that removes only this repository's Docker objects and checkout processes (#224). | 4.3 s | — | keep, extended |
 | `ci-areas.test.mjs` | Each suite runs only when its own files change; screens alone run only the compared screens from the browser suite (#213); main runs all unless the change is documents only; an unknown list runs all. (new, #76; replaces docs-only and install-related) | 3.1 s | — | new |
 | `ci-verdict.test.mjs` | `check` counts a suite as passed only when it was skipped because nobody asked for it, is red on any failed or cancelled stage, and the browser and install inputs default to off. (#69, #76) | 3 s | — | keep, extended |
 | `company-apps.test.mjs` | Only the Owner connects, follows or disconnects a Company's app, checked for every step; a Member reads the states; the browser gets the vendor's page and states, never the Engine's flow; the way back is handed on only for the person's own open sign-in, and each connect and disconnect is logged once. (#30) | 0.3 s | settings-apps.spec.ts; supabase/tests/company_apps.sql (every Role, the log) | new |

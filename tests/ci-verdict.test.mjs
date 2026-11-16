@@ -7,7 +7,7 @@ import { resolve } from 'node:path';
 // when it was skipped; a suite it asked for, or one whose need is unknown, must succeed; a failed or cancelled stage is
 // always red.
 const script = resolve('scripts/ci-verdict.mjs');
-const stages = ['COMPONENTS', 'DATABASE', 'INTEGRATION', 'INSTALL'];
+const stages = ['COMPONENTS', 'DATABASE', 'VISUAL', 'INTEGRATION', 'INSTALL'];
 const green = { CHANGES_RESULT: 'success', STATIC_RESULT: 'success', ...Object.fromEntries(stages.flatMap(stage => [[`${stage}_RUN`, 'true'], [`${stage}_RESULT`, 'success']])) };
 const verdict = overrides => {
   const env = { PATH: process.env.PATH, ...green, ...overrides };
@@ -40,8 +40,10 @@ for (const stage of stages) {
 }
 
 test('the compared screens alone (integration=visual) were asked for, so they must succeed (#213)', () => {
-  assert.equal(verdict({ INTEGRATION_RUN: 'visual', INTEGRATION_RESULT: 'success' }), 0);
-  assert.equal(verdict({ INTEGRATION_RUN: 'visual', INTEGRATION_RESULT: 'skipped' }), 1);
+  const screensAlone = { VISUAL_RUN: 'visual', INTEGRATION_RUN: 'false', INTEGRATION_RESULT: 'skipped' };
+  assert.equal(verdict({ ...screensAlone, VISUAL_RESULT: 'success' }), 0);
+  assert.equal(verdict({ ...screensAlone, VISUAL_RESULT: 'skipped' }), 1);
+  assert.equal(verdict({ ...screensAlone, VISUAL_RESULT: 'failure' }), 1);
 });
 
 test('classification and static must succeed', () => {
@@ -57,15 +59,20 @@ test('ci.yml decides the suites in its first job, gates each suite on it, and ju
   const { jobs } = workflow;
   const classify = jobs.changes.steps.find(step => step.id === 'classify');
   assert.match(classify.run, /node scripts\/ci-areas\.mjs \$main < "\$RUNNER_TEMP\/changed-files"/);
-  for (const [job, output] of [['components', 'components'], ['database', 'database'], ['integration', 'integration'], ['install', 'install']]) {
+  for (const [job, output] of [['components', 'components'], ['database', 'database'], ['visual', 'integration'], ['install', 'install']]) {
     assert.equal(jobs.changes.outputs[output], `\${{ steps.classify.outputs.${output} }}`, output);
     assert.deepEqual(jobs[job].needs, ['changes'], job);
     assert.equal(jobs[job].if, `\${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.${output} != 'false') }}`, job);
   }
+  // Screens alone (integration=visual) run only the compared screens, and `check` does not ask for the rest.
+  assert.deepEqual(jobs.integration.needs, ['changes']);
+  assert.equal(jobs.integration.if, "${{ !cancelled() && (needs.changes.result != 'success' || (needs.changes.outputs.integration != 'false' && needs.changes.outputs.integration != 'visual')) }}");
   const step = jobs.check.steps.at(-1);
+  assert.equal(step.env.VISUAL_RUN, '${{ needs.changes.outputs.integration }}');
+  assert.equal(step.env.INTEGRATION_RUN, "${{ needs.changes.outputs.integration == 'visual' && 'false' || needs.changes.outputs.integration }}");
   assert.equal(step.run, 'node scripts/ci-verdict.mjs');
   assert.equal(jobs.check.if, '${{ always() }}');
-  assert.deepEqual(jobs.check.needs, ['changes', 'static', 'components', 'database', 'integration', 'install']);
+  assert.deepEqual(jobs.check.needs, ['changes', 'static', 'components', 'database', 'visual', 'integration', 'install']);
   for (const key of Object.keys(green)) assert.ok(step.env[key], key);
 });
 
