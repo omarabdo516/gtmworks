@@ -69,9 +69,9 @@ test('the error leaves while typing as soon as the email is right', async () => 
  await userEvent.type(email(), 'nour@');
  await screen.getByRole('button', { name: 'Invite', exact: true }).click();
  expect(error().hidden).toBe(false);
- await userEvent.type(email(), 'rslearning.co');
+ await userEvent.type(email(), 'rslearning.c');
  expect(error().hidden).toBe(false);
- await userEvent.type(email(), 'm');
+ await userEvent.type(email(), 'o');
  expect(error().hidden).toBe(true);
  expect(email().hasAttribute('aria-invalid')).toBe(false);
  expect(send).not.toHaveBeenCalled();
