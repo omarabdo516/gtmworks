@@ -53,12 +53,20 @@ const lightScreens = [
   { name: 'rule-waiting', path: '/c/rs-learning/approvals', state: 'rule-suggested' },
   { name: 'learning-waiting', path: '/c/rs-learning/settings?section=learning', state: 'rule-suggested' },
   { name: 'agent-details', path: '/c/rs-learning/chat/69100000-0000-0000-0000-000000000005', state: 'agent-details' },
+  // A Member's request for an Agent (#17), over Lead and the request the first Contributor sent it on June 10: Lead's
+  // chat opened by their "Ask for an agent", their Conversation with the request not made yet, the Owner's "Waiting on
+  // you" holding it with No and Make it, and their Conversation once Omar made it and once Omar said no.
+  { name: 'ask-agent', path: '/c/rs-learning/chat?new=agent', state: 'agent-request', person: 'reviewer@example.com' },
+  { name: 'request-sent', path: '/c/rs-learning/conversations/6b000000-0000-0000-0000-000000000003', state: 'agent-request', person: 'reviewer@example.com' },
+  { name: 'request-waiting', path: '/c/rs-learning/approvals', state: 'agent-request' },
+  { name: 'request-made', path: '/c/rs-learning/conversations/6b000000-0000-0000-0000-000000000003', state: 'agent-request-made', person: 'reviewer@example.com' },
+  { name: 'request-declined', path: '/c/rs-learning/conversations/6b000000-0000-0000-0000-000000000003', state: 'agent-request-declined', person: 'reviewer@example.com' },
 ];
 
 export const screens = [
   { name: 'first-run', path: '/first-run', anonymous: true, dark: false },
   ...lightScreens.map(screen => ({ ...screen, dark: false })),
-  ...lightScreens.filter(screen => ['sign-in', 'home', 'chat', 'board', 'card', 'alone-chat', 'alone-settings', 'made-card', 'new-agent', 'made-agent', 'agent-visibility', 'ready-roles', 'rule-saved', 'agent-rules', 'settings-agents', 'settings-main-agent', 'rule-suggested', 'rule-waiting', 'learning-waiting', 'agent-details', 'channel'].includes(screen.name))
+  ...lightScreens.filter(screen => ['sign-in', 'home', 'chat', 'board', 'card', 'alone-chat', 'alone-settings', 'made-card', 'new-agent', 'made-agent', 'agent-visibility', 'ready-roles', 'rule-saved', 'agent-rules', 'settings-agents', 'settings-main-agent', 'rule-suggested', 'rule-waiting', 'learning-waiting', 'agent-details', 'channel', 'ask-agent', 'request-sent', 'request-waiting', 'request-made', 'request-declined'].includes(screen.name))
     .map(screen => ({ ...screen, name: `${screen.name}-dark`, dark: true })),
 ];
 
