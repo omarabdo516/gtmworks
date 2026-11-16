@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { pickSection, overlayHref, agentsMainFirst, usageTotals, type OverlaySection } from '@/lib/settings-overlay.mjs';
 import { OverlayChrome } from './settings-overlay-chrome';
-import { AccountChoices, MakeMain, DeleteAgent, CompanyName, InviteForm, AgentSwitch, RuleSaid, RemoveRule } from './settings-overlay-client';
+import { AccountChoices, MakeMain, DeleteAgent, CompanyName, Invite, AgentSwitch, RuleSaid, RemoveRule } from './settings-overlay-client';
 import { SettingsIcon } from './settings-icons';
 import PasswordSettings from './password-settings';
 import { UsageTable, type UsageDay } from './c/[slug]/[[...section]]/usage';
@@ -20,11 +20,13 @@ import { MadeLine, OpenedMark } from './agent-made';
 import { madeColumns, madeOf } from '@/lib/agent-made';
 import { isNewFor } from '@/lib/sidebar.mjs';
 import { isolate } from '@/lib/bidi';
+import { inviteeName } from '@/lib/invite.mjs';
 import AppsSection from './settings-apps';
 import { CompanyKnowledge } from './company-knowledge';
 
 type Agent={id:string,connection_id:string,name:string,speciality:string,is_default:boolean,created_at:string|null,requested_by:string|null,requester_opened_at:string|null,requester:unknown,lead_made_agents:unknown};
 type Member={person_id:string,role:string,people:{name:string|null}|null};
+type Invitation={id:string,email:string,role:string};
 type Rule={id:string,body:string,said_by:string,said_at:string,teller:{name:string|null}|null};
 type T=Awaited<ReturnType<typeof getI18n>>['t'];
 const roleRank:Record<string,number>={owner:0,manager:1,contributor:2,viewer:3};
@@ -46,6 +48,9 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  const members:Member[]=section==='company'?(((await db.from('members').select('person_id,role,people(name)').eq('company_id',company.id).is('removed_at',null)).data||[]) as unknown as Member[]).sort((a,b)=>(roleRank[a.role]??9)-(roleRank[b.role]??9)||(a.people?.name||'').localeCompare(b.people?.name||'')):[];
  // Which Agents each Member sees (#15): every Member's switches, read by an Owner or a Manager.
  const allowed=new Set(section==='company'&&canManage?((await db.from('member_agent_access').select('person_id,agent_id').eq('company_id',company.id)).data||[]).map(row=>`${row.person_id}:${row.agent_id}`):[]);
+ // Open invitations are rows of the same table (#185), with their own switches, until the person joins.
+ const invitations:Invitation[]=section==='company'&&canManage?((await db.from('member_invitations').select('id,email,role').eq('company_id',company.id).is('claimed_at',null).order('created_at')).data||[]):[];
+ const invitedAllowed=new Set(invitations.length?((await db.from('invitation_agent_access').select('invitation_id,agent_id').eq('company_id',company.id)).data||[]).map(row=>`${row.invitation_id}:${row.agent_id}`):[]);
  const sharedEngine=section==='company'&&owner?(await db.rpc('bundled_engine_shared',{c:company.id})).data===true:false;
  // The Company's Agent level, and for its Owner the Agents whose engine offers terminal, code or file tools while the
  // Company has more than one member (agent_tool_warning returns nothing to anyone else).
@@ -65,7 +70,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  const rules:Rule[]=agent?(((await db.from('agent_rules').select('id,body,said_by,said_at,teller:people!said_by(name)').eq('agent_id',agent.id).is('removed_at',null).or('suggestion.is.null,suggestion.eq.approved').order('said_at',{ascending:false})).data||[]) as unknown as Rule[]):[];
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  const ro=!canManage&&<p className="ro-note"><SettingsIcon name="shield"/><span>{t('settingsRO')}</span></p>;
- const page=section==='company'?<CompanySection t={t} company={company} solo={workMode==='alone'} message={query.message} members={members} agents={agents} allowed={allowed} userId={userId} slug={slug} owner={owner} canManage={canManage} sharedEngine={sharedEngine} agentLevel={agentLevel} toolWarning={toolWarning.map(row=>row.agent_name)} roleNames={roleNames} ro={ro}/>
+ const page=section==='company'?<CompanySection t={t} company={company} solo={workMode==='alone'} members={members} invitations={invitations} agents={agents} allowed={allowed} invitedAllowed={invitedAllowed} userId={userId} slug={slug} owner={owner} canManage={canManage} sharedEngine={sharedEngine} agentLevel={agentLevel} toolWarning={toolWarning.map(row=>row.agent_name)} roleNames={roleNames} ro={ro}/>
   :section==='agents'?(agent?<AgentPage t={t} rtl={rtl} slug={slug} company={company.id} userId={userId} agent={agent} main={agents[0]} rules={rules} owner={owner} canManage={canManage} canWrite={canWrite}/>:<AgentsSection t={t} rtl={rtl} slug={slug} agents={agents} canManage={canManage} canWrite={canWrite} owner={owner}/>)
   :section==='apps'?<AppsSection slug={slug} company={company.id} owner={owner} rtl={rtl} app={query.app} failed={query.signin==='failed'}/>
   :section==='usage'?<UsageSection t={t} locale={locale} slug={slug} company={company.id} rows={usageRows} period={query.period==='30'?30:7}/>
@@ -82,7 +87,7 @@ const Soon=({t}:{t:T})=><div className="panel-card sov-soon" aria-disabled="true
 const SoonSec=({t,id,label}:{t:T,id:string,label:string})=><section className="dp-sec" aria-labelledby={id}><Label id={id}>{label}</Label><Soon t={t}/></section>;
 const initial=(name:string)=>name.trim().slice(0,1).toUpperCase()||'?';
 
-function CompanySection({t,company,solo,message,members,agents,allowed,userId,slug,owner,canManage,sharedEngine,agentLevel,toolWarning,roleNames,ro}:{t:T,company:{id:string,name:string},solo:boolean,message?:string,members:Member[],agents:Agent[],allowed:Set<string>,userId:string,slug:string,owner:boolean,canManage:boolean,sharedEngine:boolean,agentLevel:number,toolWarning:string[],roleNames:Record<string,string>,ro:ReactNode}) {
+function CompanySection({t,company,solo,members,invitations,agents,allowed,invitedAllowed,userId,slug,owner,canManage,sharedEngine,agentLevel,toolWarning,roleNames,ro}:{t:T,company:{id:string,name:string},solo:boolean,members:Member[],invitations:Invitation[],agents:Agent[],allowed:Set<string>,invitedAllowed:Set<string>,userId:string,slug:string,owner:boolean,canManage:boolean,sharedEngine:boolean,agentLevel:number,toolWarning:string[],roleNames:Record<string,string>,ro:ReactNode}) {
  const count=members.length;
  const name=<section className="dp-sec" aria-labelledby="co-h-name"><Label id="co-h-name">{t('settingsCompanyName')}</Label>
   <div className="panel-card set-card">{owner?<div className="set-field"><label className="set-label" htmlFor="co-name">{t('settingsCompanyNameHint')}</label>
@@ -93,6 +98,7 @@ function CompanySection({t,company,solo,message,members,agents,allowed,userId,sl
   <div className="panel-card"><div className="panel-row"><span className="panel-row__icon"><SettingsIcon name={solo?'user':'team'}/></span><span className="panel-row__text">
    <span className="panel-row__t">{solo?t('settingsModeAlone'):t('settingsModeTeam',count)}</span><span className="panel-row__d">{solo?t('settingsModeAloneD'):t('settingsModeTeamD')}</span></span></div></div></section>;
  const others=agents.filter(agent=>!agent.is_default);
+ const inviteRoles=(['manager','contributor','viewer'] as const).map(key=>({key,name:roleNames[key],description:t(roleDescription[key])}));
  const who=(member:Member)=>{const label=member.people?.name||t('member'); return <span className="ta-who"><span className="me__av pp-av" aria-hidden="true">{initial(label)}</span><span className="od-field"><span className="ta-name"><bdi>{label}</bdi>{member.person_id===userId&&<> <span className="ch-you">{t('settingsYouMark')}</span></>}</span><span className="ta-role">{roleNames[member.role]||''}</span></span></span>;};
  const table=<section className="dp-sec" aria-labelledby="co-h-mem"><Label id="co-h-mem">{t('settingsMembersAgents')}</Label><div className="ta sov-ta">
   <div className="table-wrap"><table className="table ta-table">
@@ -100,16 +106,19 @@ function CompanySection({t,company,solo,message,members,agents,allowed,userId,sl
    <tbody>{members.map(member=><tr key={member.person_id}><th scope="row">{who(member)}</th>
     {agents.length>0&&<td><span className="ta-all">{t('settingsShownToAll')}</span></td>}
     {member.role==='owner'?(others.length>0&&<td colSpan={others.length}><span className="ta-all">{t('settingsOwnerSeesAll')}</span></td>)
-     :others.map(agent=><td key={agent.id}><AgentSwitch company={company.id} person={member.person_id} agent={agent.id} on={allowed.has(`${member.person_id}:${agent.id}`)} label={`${member.people?.name||t('member')} · ${agent.name}`}/></td>)}
-   </tr>)}</tbody></table></div>
+     :others.map(agent=><td key={agent.id}><AgentSwitch company={company.id} target={{member:member.person_id}} agent={agent.id} on={allowed.has(`${member.person_id}:${agent.id}`)} label={`${member.people?.name||t('member')} · ${agent.name}`}/></td>)}
+   </tr>)}
+   {/* An invited person, drawn as the reference draws a pending one (teamTableHTML: Q.pending). */}
+   {invitations.map(invitation=>{const name=inviteeName(invitation.email); return <tr key={invitation.id}><th scope="row"><span className="ta-who"><span className="me__av pp-av" aria-hidden="true">{initial(name)}</span><span className="od-field"><span className="ta-name"><bdi>{name}</bdi></span><span className="ta-role">{roleNames[invitation.role]||''} · <bdi dir="ltr">{invitation.email}</bdi></span><span className="badge ta-pending"><SettingsIcon name="clock"/>{t('settingsInvitePending')}</span></span></span></th>
+    {agents.length>0&&<td><span className="ta-all">{t('settingsShownToAll')}</span></td>}
+    {others.map(agent=><td key={agent.id}><AgentSwitch company={company.id} target={{invitation:invitation.id}} agent={agent.id} on={invitedAllowed.has(`${invitation.id}:${agent.id}`)} label={`${name} · ${agent.name}`}/></td>)}
+   </tr>;})}</tbody></table></div>
   <p className="set-hint ta-hint">{t('settingsTeamHint')}</p>
-  {owner&&<section className="inv-sec" aria-labelledby="inv-h"><h4 className="sr-only" id="inv-h">{t('settingsInvite')}</h4><Link className="btn btn--secondary inv-open" href={`/c/${slug}/settings/members`}><SettingsIcon name="plus"/><span>{t('settingsInvite')}</span></Link></section>}
+  {owner&&<Invite mode="table" company={company.id} slug={slug} roles={inviteRoles}/>}
  </div></section>;
  // Alone (#10): no members, no per-member Agents; the Owner invites the first Member here, and the Company becomes a
  // team when that Member accepts.
- const invite=owner&&<section className="inv-sec" aria-labelledby="inv-h"><Label id="inv-h">{t('settingsInvite')}</Label>
-  <InviteForm slug={slug} company={company.id} roles={(['manager','contributor','viewer'] as const).map(key=>({key,name:roleNames[key],description:t(roleDescription[key])}))}/>
-  {message&&<p className="set-hint" role="status">{message}</p>}</section>;
+ const invite=owner&&<Invite mode="alone" company={company.id} slug={slug} roles={inviteRoles}/>;
  const list=<section className="dp-sec" aria-labelledby="co-h-mem"><Label id="co-h-mem">{t('members')} <span className="muted num">{count}</span></Label>
   <div className="panel-card">{members.map(member=><div className="panel-row" key={member.person_id}><span className="me__av pp-av" aria-hidden="true">{initial(member.people?.name||t('member'))}</span><span className="panel-row__text"><span className="panel-row__t"><bdi>{member.people?.name||t('member')}</bdi>{member.person_id===userId&&<> <span className="ch-you">{t('settingsYouMark')}</span></>}</span><span className="panel-row__d">{roleNames[member.role]||''}</span></span></div>)}</div></section>;
  return <><Head title={t('settingsCompany')} sub={t('settingsCompanySub')}/>{ro}
