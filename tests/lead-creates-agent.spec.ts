@@ -56,7 +56,7 @@ test('the Conversation shows the new Agent\'s card, the list marks it new, and o
 
  await openNavigation(page);
  const tile=(name:string)=>page.locator('.sidebar .agent-tile').filter({hasText:name});
- await expect(tile('Meta Ads')).toHaveAccessibleName('Meta Ads · New');
+ await expect(tile('Meta Ads')).toHaveAccessibleName('Meta Ads · New · Runs the Meta ads. · Idle');
  await expect(tile('Meta Ads').locator('.agent-tile__new')).toHaveText('New');
  await expect(tile('SEO').locator('.agent-tile__new')).toHaveText('New');
  await expect(tile('Lead').locator('.agent-tile__new')).toHaveCount(0);
@@ -67,7 +67,7 @@ test('the Conversation shows the new Agent\'s card, the list marks it new, and o
  expect(await (await opened).json()).toEqual({opened:true});
  await page.reload();
  await openNavigation(page);
- await expect(tile('Meta Ads')).toHaveAccessibleName('Meta Ads');
+ await expect(tile('Meta Ads')).toHaveAccessibleName('Meta Ads · Runs the Meta ads. · Idle');
  await expect(tile('Meta Ads').locator('.agent-tile__new')).toHaveCount(0);
  await expect(tile('SEO').locator('.agent-tile__new')).toHaveText('New');
  await page.goto(`/c/rs-learning/conversations/${conversation}`);
