@@ -5,6 +5,7 @@ import type { ComponentProps } from 'react';
 import { CardSheet, type CardSheetData } from '@/app/card-sheet';
 import { workAction } from '@/app/c/[slug]/[[...section]]/work-actions';
 import { LanguageProvider } from '@/lib/i18n-client';
+import '@/app/shell.css';
 
 const push = vi.fn<(href: string, options?: { scroll?: boolean }) => void>();
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push, refresh: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }) }));
@@ -88,4 +89,20 @@ test('a Card tied to a Conversation opens on Chat and links to it', async () => 
  await expect.element(screen.getByRole('link', { name: 'Open in Chats' }).first()).toHaveAttribute('href', '/c/rs-learning/conversations/c0ffee00-0000-0000-0000-000000000001');
  await screen.getByRole('tab', { name: 'Log 3' }).click();
  await expect.element(screen.getByRole('textbox', { name: 'Write a note in the card’s log' })).toBeVisible();
+});
+
+// The reference's motion (design-reference/index.html: .sheet[open], .sheet.is-closing, sheetIn/sheetOut and their
+// LTR twins): in over 280ms easing out, out over 190ms easing in, each 24px from the inline end with the opacity.
+const motion = () => { const style = getComputedStyle(dialog()); const [move] = document.getAnimations().filter(a => (a.effect as KeyframeEffect | null)?.target === dialog());
+ return { name: style.animationName, duration: style.animationDuration, easing: style.animationTimingFunction, frames: (move?.effect as KeyframeEffect | undefined)?.getKeyframes().map(k => [k.transform, k.opacity]) }; };
+for (const [dir, shift, suffix] of [['rtl', '-24px', ''], ['ltr', '24px', 'Ltr']] as const) test(`in ${dir} the sheet slides in and out as the reference does`, async () => {
+ document.documentElement.dir = dir;
+ const screen = await render(<div className="gw"><LanguageProvider language={dir === 'rtl' ? 'ar' : 'en'}><CardSheet slug="rs-learning" company="co-1" title="Launch post" face={null} who={null} badge={null} sheet={sheet()} canWrite alone={false}/></LanguageProvider></div>);
+ expect(motion()).toEqual({ name: `sheetIn${suffix}`, duration: '0.28s', easing: 'cubic-bezier(0.2, 0, 0, 1)', frames: [[`translateX(${shift})`, '0'], ['none', '1']] });
+ // Pressed in the page itself, so the leave is read inside its 190ms rather than after a driver round trip.
+ (screen.getByRole('button', { name: dir === 'rtl' ? 'اقفل' : 'Close', exact: true }).element() as HTMLButtonElement).click();
+ await new Promise(requestAnimationFrame);
+ expect(motion()).toEqual({ name: `sheetOut${suffix}`, duration: '0.19s', easing: 'cubic-bezier(0.4, 0, 1, 1)', frames: [['none', '1'], [`translateX(${shift})`, '0']] });
+ expect(getComputedStyle(dialog(), '::backdrop').animationName).toBe('none');
+ document.documentElement.dir = '';
 });

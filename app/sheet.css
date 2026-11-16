@@ -61,6 +61,9 @@
 .gw .sheet .note-hint { display: flex; align-items: center; justify-content: center; gap: 6px; max-width: var(--gw-chat-col); margin: var(--s2) auto 0; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); text-align: center; }
 .gw .sheet .note-hint .gw-icon { width: 13px; height: 13px; }
 .gw .sheet .ro-line { padding-top: var(--s2); }
+.gw .sheet .lg-row.is-just { animation: sheetRowRise var(--gw-dur) var(--gw-ease-out); }
+@keyframes sheetRowRise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .gw .sheet .lg-row.is-just { animation: none; } }
 .gw .sheet .ro-line .gw-icon { width: 16px; height: 16px; color: var(--gw-text-3); }
 
 @media (max-width: 767px) {
