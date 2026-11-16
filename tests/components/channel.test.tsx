@@ -15,10 +15,10 @@ const peer: ChannelMessage = { id: 1, author: 'person', mine: false, name: 'Sara
 const called = (state: 'open' | 'answered' | 'unanswered'): ChannelMessage => ({ id: 2, author: 'person', mine: true, name: 'Omar', role: 'owner', body: 'Hey @lead, what is due today?', at, mention: { agent: 'Lead', state } });
 const reply: ChannelMessage = { id: 3, author: 'agent', name: 'Lead', face: 'c-1', body: 'Two things are due.', at };
 const record = (messages: ChannelMessage[], more: Partial<ChannelRecord> = {}): ChannelRecord => ({
- channel: { id: 'ch-1', company: 'co-1' },
+ channel: { id: 'ch-1', company: 'co-1', kind: 'general' },
  members: [{ person: 'p-1', name: 'Omar', role: 'owner' }, { person: 'p-2', name: 'Sara Adel', role: 'manager' }],
- agents: [{ id: 'a-1', connection_id: 'c-1', name: 'Lead', speciality: 'General', main: true }],
- writer: true, messages, open: messages.some(message => message.author === 'person' && message.mention?.state === 'open'), ...more,
+ agents: [{ id: 'a-1', connection_id: 'c-1', name: 'Lead', speciality: 'General', main: true, only: false }],
+ writer: true, manage: false, managers: [], messages, open: messages.some(message => message.author === 'person' && message.mention?.state === 'open'), ...more,
 });
 const channel = (initial: ChannelRecord) => render(<LanguageProvider language="en"><ChannelView person="p-1" initial={initial}/></LanguageProvider>);
 
