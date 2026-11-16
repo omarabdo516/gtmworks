@@ -53,6 +53,8 @@ export const screens = {
   // One Agent's page: Lead's settings inside the overlay. Built: the comparison fixture's main Agent, Lead (the seed
   // alone has no Agent with that id, so without the fixture the overlay shows the Agents list).
   agent: { reference: { steps: [...settingsSection('agents'), { click: '#sov-ag-lead' }, { waitFor: '#sov-tab-settings' }] }, builtPath: `/c/rs-learning/settings?agent=${fixture.mainAgent}` },
+  // #30. Settings, Apps: the reference draws its app catalogue there; built, the apps the Engine offers the Company.
+  apps: { reference: { steps: [...settingsSection('apps'), { waitFor: '#sov-apps .app-card' }] }, builtPath: '/c/rs-learning/settings?section=apps' },
   account: { reference: { steps: settingsSection('account') }, builtPath: '/c/rs-learning/settings?section=account' },
   knowledge: { reference: { steps: settingsSection('knowledge') }, builtPath: '/c/rs-learning/settings?section=knowledge' },
   'home-alone': { reference: { steps: alone }, builtPath: '/c/rs-consultations/chat' },

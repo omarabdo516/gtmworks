@@ -7,6 +7,9 @@ import { useI18n } from '@/lib/i18n-client';
 import { localeFor } from '@/lib/i18n.mjs';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { ShellIcon } from '@/components/shell-icon';
+import { AppTile } from '@/components/app-tile';
+import { apps as catalogue } from '@/lib/app-catalogue.mjs';
+import { roleApps } from '@/lib/role-templates.mjs';
 import { madeDay, useZone } from '@/app/agent-made';
 import type { AgentRequestView, MadeAgent } from '@/lib/conversations';
 
@@ -20,11 +23,19 @@ export function useCardText() {
 
 // The three things no Agent does without a person (ADR 0006, 0008).
 const never=['madeAgentPublish','madeAgentSpend','madeAgentMessage'];
-function AgentRows({job,apps,children}:{job:string,apps:string[]|null,children?:ReactNode}) {
+// A request names its apps in words, so its tile is the known app of that name, else the name's own letters.
+const known=[...Object.entries(roleApps).map(([key,app])=>({key,...app})),...catalogue];
+function appOf(name:string) {
+ const found=known.find(app=>app.name.toLowerCase()===name.toLowerCase());
+ if(found) return found;
+ const words=name.trim().split(/\s+/);
+ return {key:'',mark:(words.length>1?words[0][0]+words[1][0]:words[0].slice(0,2)).toUpperCase()};
+}
+function AgentRows({job,apps,tiles=false,children}:{job:string,apps:string[]|null,tiles?:boolean,children?:ReactNode}) {
  const {c}=useCardText();
  return <dl className="kv ac-kv">
   <div className="kv__row"><dt>{c('madeAgentJob')}</dt><dd dir="auto">{job}</dd></div>
-  {apps&&<div className="kv__row"><dt>{c('madeAgentApps')}</dt><dd>{apps.length?apps.map((app,index)=><Fragment key={index}>{index>0&&c('madeAgentAppsJoin')}<bdi>{app}</bdi></Fragment>):c('madeAgentNoApps')}</dd></div>}
+  {apps&&<div className="kv__row"><dt>{c('madeAgentApps')}</dt><dd>{tiles&&apps.length>0&&<span className="pp-tools">{apps.map((app,index)=><AppTile key={index} app={appOf(app)}/>)}</span>}{apps.length?apps.map((app,index)=><Fragment key={index}>{index>0&&c('madeAgentAppsJoin')}<bdi>{app}</bdi></Fragment>):c('madeAgentNoApps')}</dd></div>}
   <div className="kv__row"><dt>{c('madeAgentNever')}</dt><dd><ul className="ac-never">{never.map(key=><li key={key}><ShellIcon name="hand"/><span>{c(key)}</span></li>)}</ul></dd></div>
   {children}
  </dl>;
@@ -54,7 +65,7 @@ export function RequestCard({slug,request,owner=false,unread=false,answer}:{slug
  return <div className={`ac-card${request.state!=='made'?' ac-card--req':''}${request.state==='waiting'?'':' is-resolved'}`} role="group" aria-label={c('requestLabel',made?.name??request.name)} data-request={request.state}>
   <div className="hcard__top">{badge}</div>
   <div className="card__head"><span aria-hidden="true"><CompanyAgentFace agent={made??{connection_id:`agent-request-${request.id}`,name:request.name}} size={44}/></span><div className="card__titles"><span className="card__title"><bdi>{made?.name??request.name}</bdi></span></div></div>
-  <AgentRows job={request.job} apps={unread?null:request.apps}>
+  <AgentRows job={request.job} apps={unread?null:request.apps} tiles>
    <div className="kv__row"><dt>{c('requestAskedBy')}</dt><dd><bdi>{request.askedBy}</bdi>{!unread&&<span className="pp-sub" dir="auto">«{request.askedWith}»</span>}</dd></div>
    <div className="kv__row"><dt>{c('requestShowsFor')}</dt><dd>{cb('requestShowsForWho',request.askedBy)}</dd></div>
   </AgentRows>

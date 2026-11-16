@@ -442,6 +442,19 @@
 .gw .tpl__hand .gw-icon { width: 14px; height: 14px; margin-top: 2px; color: var(--gw-text-2); }
 .gw .tpl__foot { display: flex; align-items: center; gap: 8px; margin-top: auto; padding-top: 4px; }
 .gw .tpl__tools { display: inline-flex; align-items: center; gap: 4px; flex: 1 1 0; min-width: 0; }
+.gw .ac-card .pp-tools { display: inline-flex; gap: 4px; margin-inline-end: 6px; vertical-align: -6px; }
+/* An app's tile (design-reference: .tool-tile; components/app-tile.tsx): the brand mark or the app's letters, on the
+   gallery's cards and in Settings, Apps. A brand mark keeps a white tile in the dark theme, as the reference does. */
+.gw .tool-tile {
+  width: 24px; height: 24px; border-radius: var(--gw-r-xs); flex: none; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--gw-bg-pane); box-shadow: var(--gw-border-2) 0 0 0 0.5px inset;
+  font-size: 10px; font-weight: 600; line-height: 1; color: var(--gw-text-2); direction: ltr; font-family: system-ui, sans-serif;
+}
+.gw .tool-tile--lg { width: 44px; height: 44px; border-radius: var(--gw-r-sm); font-size: 13px; }
+.gw .tool-tile .tool-logo { width: 15px; height: 15px; display: block; }
+.gw .tool-tile--lg .tool-logo { width: 26px; height: 26px; }
+:root[data-theme="dark"] .gw .tool-tile:has(.tool-logo) { background: #fff; }
+@media (prefers-color-scheme: dark) { :root[data-theme="device"] .gw .tool-tile:has(.tool-logo) { background: #fff; } }
 .gw :is(.tpl__apps, .tpl__none) { min-width: 0; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); overflow-wrap: anywhere; }
 .gw .tpl-empty {
   grid-column: 1 / -1; display: grid; justify-items: center; gap: 6px; text-align: center;

@@ -1,0 +1,7 @@
+{
+  "about": "Settings, Apps (#30), over RS Learning's own profile in a fake Engine (tests/visual.spec.ts, state apps): Klaviyo connected, Notion needing attention and every other app not connected.",
+  "path": "/c/rs-learning/settings?section=apps",
+  "state": "apps",
+  "dark": true,
+  "ready": ".app-card"
+}
