@@ -134,8 +134,6 @@
 @keyframes gw-think-in { from { opacity: 0; transform: translateY(3px) scale(.8); } }
 .gw .face-wrap.is-thinking > .dot { background: var(--gw-accent); }
 .gw .face-wrap.is-thinking > .dot::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: var(--gw-accent); animation: gw-dot-ping 1.6s var(--gw-ease-out) infinite; }
-/* A dot waiting on the reader keeps the waiting colour while its Agent works (#184). */
-.gw .face-wrap.is-thinking > .dot--waiting, .gw .face-wrap.is-thinking > .dot--waiting::after { background: var(--gw-wait); }
 @keyframes gw-dot-ping { 0% { transform: scale(1); opacity: .55; } 80%, 100% { transform: scale(2.4); opacity: 0; } }
 .gw .face-wrap .done-ck {
   position: absolute; bottom: -2px; inset-inline-end: -2px; width: 16px; height: 16px; border-radius: 50%;
