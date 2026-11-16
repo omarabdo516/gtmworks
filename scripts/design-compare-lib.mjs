@@ -48,6 +48,11 @@ export const screens = {
   // A Conversation with an Agent other than Lead, opened from its tile in the sidebar. In a team it starts with the
   // private line (#25).
   'agent-chat': { reference: { steps: [{ click: '#sb-agents [data-action="open-agent"][data-agent="ads"]' }] }, builtPath: null },
+  // #21. The details beside that chat: the Files tab of Ads; and the Activity tab of SEO, whose screen is asleep, the
+  // empty frame the product always shows. Built: the fixture's Ads, with the files of its Cards and of Omar's own
+  // Conversations with it.
+  'agent-files': { reference: { steps: [{ click: '#sb-agents [data-action="open-agent"][data-agent="ads"]' }, { click: '#dp-tab-files' }, { waitFor: '#dp-tab-files[aria-selected="true"]' }] }, builtPath: `/c/rs-learning/chat/${fixture.agent}?tab=files` },
+  'agent-screen': { reference: { steps: [{ click: '#sb-agents [data-action="open-agent"][data-agent="seo"]' }, { waitFor: '.scr-card' }] }, builtPath: `/c/rs-learning/chat/${fixture.agent}` },
   // The settings overlay opens on its Company section. The built overlay is route-backed (app/settings-overlay.tsx):
   // ?section= opens a section and ?agent=<id> one Agent's page.
   settings: { reference: { steps: settings }, builtPath: '/c/rs-learning/settings' },

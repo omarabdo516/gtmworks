@@ -34,7 +34,7 @@ export function HeadPill({panel,agent,details,face,title,titleDir}:{panel?:Detai
  return <div className="chat__top"><h1 className="chat__h">{panel&&label?<button type="button" className="head-pill" id="btn-details" aria-controls="details" aria-expanded={panel.expanded} aria-label={`${title} · ${label}`} onClick={panel.toggle}>{inside}</button>:<span className="head-pill">{inside}</span>}</h1></div>;
 }
 
-const tabs=[{key:'activity',label:'chatTabActivity'},{key:'tasks',label:'chatTabTasks'},{key:'files',label:'chatTabFiles',soon:true},{key:'memory',label:'chatTabMemory',soon:true},{key:'log',label:'chatTabLog'}] as const;
+const tabs=[{key:'activity',label:'chatTabActivity'},{key:'tasks',label:'chatTabTasks'},{key:'files',label:'chatTabFiles'},{key:'memory',label:'chatTabMemory',soon:true},{key:'log',label:'chatTabLog'}] as const;
 type Tab=Exclude<(typeof tabs)[number],{soon:true}>['key'];
 const open=tabs.filter((tab):tab is Extract<(typeof tabs)[number],{key:Tab}>=>!('soon' in tab));
 const statusKeys={working:'agentStatusWorking',waiting:'agentStatusWaiting',idle:'agentStatusIdle'};
@@ -67,7 +67,7 @@ export function DetailsShell({panel,label,start,children}:{panel:DetailsPanel,la
 
 export function AgentDetails({panel,agent,details,settingsHref}:{panel:DetailsPanel,agent:DetailsAgent,details:AgentDetailsView,settingsHref:string}) {
  const {t,language}=useI18n();
- const [tab,setTab]=useState<Tab>('activity');
+ const [tab,setTab]=useState<Tab>(details.tab);
  const move=(event:KeyEvent<HTMLButtonElement>)=>{
   if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight') return;
   event.preventDefault();

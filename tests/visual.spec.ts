@@ -310,6 +310,23 @@ const screenStates: Record<string, { set: string, unset: string, admin?: true }>
       delete from public.hermes_connections where id in ('${busy(1)}','${busy(2)}');`,
   },
 };
+// The Agent details' Files tab (#21): Meta Ads with a file on its June brief Card and one in Omar's own Conversation with
+// it, as the agent-details state holds them, written with triggers off and taken away after.
+screenStates['agent-files'] = {
+  admin: true,
+  set: `${screenStates['agent-details'].set}
+    insert into public.work_cards(id,company_id,stage_id,title,agent_id) overriding system value values (691010,'${rsLearning}',(select id from public.work_stages where company_id='${rsLearning}' order by position limit 1),'June brief','${busy(5)}');
+    insert into public.work_comments(id,company_id,card_id,body,author_id) overriding system value values (691011,'${rsLearning}',691010,'The brief','20000000-0000-0000-0000-000000000001');
+    insert into public.work_attachments(id,company_id,card_id,comment_id,name,content_type,size,path,created_by,created_at) overriding system value values
+     (691012,'${rsLearning}',691010,691011,'brief-june-course.pdf','application/pdf',88064,'${rsLearning}/visual/brief-june-course.pdf','20000000-0000-0000-0000-000000000001','2026-06-10T09:00:00Z');
+    insert into public.conversation_attachments(id,company_id,conversation_id,name,content_type,size,path,created_at) overriding system value values
+     (691013,'${rsLearning}','${busy(6)}','audiences-june.csv','text/csv',18432,'${rsLearning}/conversations/${busy(6)}/audiences-june.csv','2026-06-12T09:00:00Z');`,
+  unset: `delete from public.conversation_attachments where id=691013;
+    delete from public.work_attachments where id=691012;
+    delete from public.work_comments where id=691011;
+    delete from public.work_cards where id=691010;
+    ${screenStates['agent-details'].unset}`,
+};
 
 // Settings, Apps (#30) reads the Company's apps from its own profile in the Engine: a fake one, on a loopback address of
 // this lane's own, holding Klaviyo connected, Notion needing attention and every other app off. RS Learning gets the
