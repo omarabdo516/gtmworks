@@ -15,7 +15,7 @@ import { PageIcon } from '@/app/c/[slug]/log/icons';
 
 type Db=Awaited<ReturnType<typeof supabase>>;
 export type AgentDetailsView={status:AgentStatus,actions:boolean,tab:DetailsTab,tabs:Record<DetailsTab,ReactNode>};
-const logShown=50; const filesShown=50;
+const logShown=50;
 
 export async function agentDetails(db:Db,{company,agent,slug,me,role,tab}:{company:string,agent:string,slug:string,me:string,role:string,tab?:string}):Promise<AgentDetailsView> {
  const {t,language}=await getI18n(); const writer=canCreateCard({role}); const drawn=drawnAt();
@@ -26,7 +26,7 @@ export async function agentDetails(db:Db,{company,agent,slug,me,role,tab}:{compa
   approvalQueue(db,company,me,role),
   // The files of the reader's own Conversations with the Agent (#21): row-level security shows a person only theirs.
   db.from('conversation_attachments').select('id,name,size,created_at,conversation_id,conversations!inner(agent_name)',{count:'exact'}).eq('company_id',company).eq('conversations.agent_id',agent)
-   .order('created_at',{ascending:false}).order('id',{ascending:false}).limit(filesShown),
+   .order('created_at',{ascending:false}).order('id',{ascending:false}),
  ]);
  const cards=(cardRows||[]) as {id:number,title:string,stage_id:number}[]; const ids=cards.map(card=>card.id);
  const rows=(logRows||[]) as LogRow[];
@@ -38,7 +38,7 @@ export async function agentDetails(db:Db,{company,agent,slug,me,role,tab}:{compa
   ids.length?db.from('work_checklist').select('card_id,title,done').eq('company_id',company).in('card_id',ids).order('id'):Promise.resolve({data:[]}),
   run?.my_conversation?db.from('conversation_messages').select('body').eq('conversation_id',run.my_conversation).eq('author','person').eq('created_at',run.started_at).order('id',{ascending:false}).limit(1).maybeSingle():Promise.resolve({data:null}),
   logPeople(db,company,rows.flatMap(row=>row.card_id!=null?[row.card_id]:[])),
-  ids.length?db.from('work_attachments').select('id,name,size,created_at,card_id',{count:'exact'}).eq('company_id',company).in('card_id',ids).order('created_at',{ascending:false}).order('id',{ascending:false}).limit(filesShown):Promise.resolve({data:[],count:0}),
+  ids.length?db.from('work_attachments').select('id,name,size,created_at,card_id',{count:'exact'}).eq('company_id',company).in('card_id',ids).order('created_at',{ascending:false}).order('id',{ascending:false}):Promise.resolve({data:[],count:0}),
   // A Conversation is named as the sidebar names it: the first line of its person's first message.
   Promise.all(talks.map(async talk=>(await db.from('conversation_messages').select('body').eq('conversation_id',talk).eq('author','person').order('id').limit(1).maybeSingle()).data?.body as string|undefined)),
  ]);

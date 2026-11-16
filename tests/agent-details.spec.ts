@@ -12,7 +12,7 @@ const reviewer='20000000-0000-0000-0000-000000000003';
 const id=(n:number)=>`69000000-0000-0000-0000-${String(n).padStart(12,'0')}`;
 const [leadConnection,adsConnection,seoConnection,lead,ads,seo,conversation]=[1,2,3,4,5,6,7].map(id);
 // The files (#21): one on a Meta Ads Card, one in Omar's own Conversation with it and one in the Contributor's.
-const paths={card:`${company}/agent-details/${randomUUID()}.pdf`,mine:`${company}/agent-details/${randomUUID()}.csv`,theirs:`${company}/agent-details/${randomUUID()}.txt`};
+const paths={card:`${company}/agent-details/${randomUUID()}.pdf`,mine:`${company}/conversations/${conversation}/${randomUUID()}.csv`,theirs:`${company}/conversations/${id(11)}/${randomUUID()}.txt`};
 const bytes=Buffer.from('June audiences\n');
 const stage=(column:string)=>`(select id from public.work_stages where company_id='${company}' and board_column='${column}' order by position limit 1)`;
 
@@ -204,4 +204,20 @@ test('a Viewer reads the same panel with no action in it and without another per
  await expect(panel.locator('a.panel-row .panel-row__t')).toHaveText(['Retargeting ads','June campaign']);
  await tab(details,'Log').click();
  await expect(panel.locator('.lg-row')).toHaveCount(2);
+});
+
+test('every file of the Agent is listed, past fifty, and the heading counts what the list holds',async({page})=>{
+ query(`do $$ declare card bigint; message bigint; begin
+  insert into public.work_cards(company_id,stage_id,title,agent_id) values ('${company}',${stage('planned')},'Many files','${seo}') returning id into card;
+  insert into public.work_comments(company_id,card_id,body,author_id) values ('${company}',card,'The files','${omar}') returning id into message;
+  insert into public.work_attachments(company_id,card_id,comment_id,name,content_type,size,path,created_by,created_at)
+   select '${company}',card,message,'file-'||n||'.txt','text/plain',10,'${company}/agent-details-many/'||n||'.txt','${omar}',timestamptz '2026-06-01T09:00:00Z'+n*interval '1 minute' from generate_series(1,51) n;
+ end $$;`);
+ const details=await openDetails(page,'omar@example.com',seo,'SEO');
+ await tab(details,'Files').click();
+ const panel=details.getByRole('tabpanel');
+ await expect(panel.locator('.dp-label > span')).toHaveText('Files 51');
+ await expect(panel.locator('.panel-row')).toHaveCount(51);
+ await expect(panel.locator('.panel-row__t').first()).toHaveText('file-51.txt');
+ await expect(panel.locator('.panel-row__t').last()).toHaveText('file-1.txt');
 });
