@@ -18,8 +18,9 @@ test.describe.configure({mode:'serial'});
 test.beforeAll(({},testInfo)=>{
  freshSeed(testInfo.file);
  // Lead and Ads, Omar's Conversation with Lead and an empty one, a question Lead asked him, and a Contributor's request
- // for an Agent that waits on him.
+ // for an Agent that waits on him. Added once: a retry on the same lane keeps this file's data (tests/fresh-seed.ts).
  query(`do $$ begin
+  if exists (select 1 from public.hermes_connections where id='${leadLink}') then return; end if;
   insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values
    ('${leadLink}','${company}','${omar}','http://127.0.0.1:9/p/motion-lead','motion-lead','no-key','unreachable'),
    ('${adsLink}','${company}','${omar}','http://127.0.0.1:9/p/motion-ads','motion-ads','no-key','unreachable');
