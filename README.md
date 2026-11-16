@@ -81,18 +81,25 @@ Each agent gets its own agent engine profile, with its own memory, once it moves
 
 **Company isolation (ADR 0014).** Nothing needs setting up on a fresh server: the
 worker gives every company its own profile in the bundled Hermes
-(`co-<company id>`), with its own memory, skills, sessions and model sign-in, and
-attaches the company's agents to it. A company's agents get marketing tools only:
+(`co-<company id>`), with its own memory, skills and sessions, and attaches the
+company's agents to it. A company's agents get marketing tools only:
 terminal, file, code-execution, browser and desktop tools are turned off in that
 profile at every Agent level, so a member cannot ask an agent to read another
 company's files. The Owner chooses the Agent level in Settings, Company (read and
 draft, act on approval, or scheduled work); new companies start at read and draft.
-Each company connects its own subscription in Settings, Subscription and models:
-ChatGPT signs in from that page; Claude signs in only from the install's command
-line, with the command shown there, run from this folder:
-`docker compose --env-file .env.install -f docker-compose.install.yml exec -u hermes hermes hermes -p <profile> auth add anthropic --type oauth --no-browser`.
-Do not sign in to a subscription on Hermes's own `default` profile: Hermes lets
-every company profile without its own sign-in use that one. An install updated
+The Owner connects a subscription in Settings, Subscription and models: ChatGPT
+signs in from that page; Claude signs in only from the install's command line,
+with the command shown there, run from this folder.
+On an install with one company, the subscription is signed in once on the bundled
+Hermes's root profile from Settings, Subscription and models, and every agent of
+the company uses it. Claude's command for it is
+`docker compose --env-file .env.install -f docker-compose.install.yml exec -u hermes hermes hermes auth add anthropic --type oauth --no-browser`.
+On an install with several companies, a subscription signed in on the root
+profile is shared by every company on the install, and a company that wants its
+own uses its own API key (#124). So on such an install, do not sign in to a
+subscription on Hermes's own `default` (root) profile: each company signs in on its
+own profile from Settings, and its Claude command adds `-p <profile>` after
+`hermes hermes hermes`. An install updated
 from before ADR 0014 keeps its companies running on the shared `default` profile
 until a company's own profile holds a sign-in; the worker then moves it there.
 Memory already written on `default` stays there and is not split between companies,
