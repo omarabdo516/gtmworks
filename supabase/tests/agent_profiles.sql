@@ -18,7 +18,6 @@ insert into made values ('own',public.lead_agent_id('a7100000-0000-0000-0000-000
 update made set profile=public.agent_engine_profile(agent);
 grant select on made to authenticated,service_role;
 
--- 1. Lead's call names one profile, and the one step that makes the Agent attaches it to that profile.
 set local role service_role;
 select is(public.lead_agent_profile('a7100000-0000-0000-0000-000000000001','run-1','call-0','You write for {company}.'),
  jsonb_build_object('profile',(select profile from made where name='own'),'soul','You write for RS Learning.','level',1),
@@ -43,7 +42,6 @@ select lives_ok($$set constraints all immediate$$,'the record written before its
 select results_eq($$select actor_id,action,details->>'agent_name',details->>'job' from public.company_log where agent_id=(select agent from made where name='own')$$,
  $$values ('20000000-0000-0000-0000-000000000001'::uuid,'agent_requested','Writer','Writes the blog.')$$,'the log has its one "requested an Agent" row, as before');
 
--- 2. Without a made profile the Agent is made on Lead's profile as today, and nothing half given is accepted.
 set local role service_role;
 select is(public.lead_create_agent('a7100000-0000-0000-0000-000000000001','run-1','call-1','SEO','Writes the blog.','{}')->>'agent',(select agent::text from made where name='lead'),
  'the previous app version''s call makes it on Lead''s profile, under the derived id');
@@ -55,7 +53,6 @@ select ok(exists(select 1 from public.hermes_agents a join public.hermes_connect
 select is((select count(*)::int from public.agent_profiles),1,'and no owner record');
 select is((select count(*)::int from public.hermes_agents where company_id='10000000-0000-0000-0000-000000000001'),3,'the refused calls made no Agent');
 
--- 3. The Company's work never moves an Agent off its own profile, though its Connection is bundled.
 set local role service_role;
 select ok(not exists(select 1 from public.company_profile_work() where company_id='10000000-0000-0000-0000-000000000001' and move),'the Company has no move to make');
 select is(public.move_company_profile('10000000-0000-0000-0000-000000000001','http://hermes:8642','encrypted','0.23.0','{run_submission}'),0,'a move moves nothing');
@@ -65,7 +62,6 @@ select is((select h.profile from public.hermes_agents a join public.hermes_conne
 create temporary table own as select a.id as agent,a.connection_id as connection from public.hermes_agents a join made m on m.agent=a.id and m.name='own';
 grant select on own to authenticated,service_role;
 
--- 4. An Agent profile serves its one Agent in its one Company, whoever writes.
 set local role authenticated;
 select set_config('request.jwt.claims','{"role":"authenticated"}',true);
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
@@ -102,7 +98,6 @@ select throws_ok($$update public.hermes_agents set company_id='10000000-0000-000
 select throws_ok($$update public.hermes_agents set id=gen_random_uuid() where id=(select agent from own)$$,'42501','hermesProfileNotShared','nor gives its Agent another id');
 select throws_ok($$update public.hermes_connections set company_id='10000000-0000-0000-0000-000000000002' where id=(select connection from own)$$,'42501','hermesProfileNotShared','nor moves its Connection to another Company');
 
--- 5. A Run of the Agent is reserved on its own profile only while that profile's tools are the Company level's.
 create temporary table reserve(key uuid primary key, conversation uuid);
 grant select on reserve to authenticated;
 set local role authenticated;
@@ -156,7 +151,6 @@ select is(public.reserve_conversation_run('a7200000-0000-0000-0000-000000000001'
  (select connection from own),'then Runs are reserved at the new level');
 reset role;
 
--- 6. Another Agent on a Connection naming the profile, in the same Company or another, starts no Run anywhere.
 set local session_replication_role=replica;
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) select 'a7000000-0000-0000-0000-000000000011','10000000-0000-0000-0000-000000000001',
  '20000000-0000-0000-0000-000000000001','http://127.0.0.1:9',profile,'ciphertext','connected','0.23.0','{run_submission}' from made where name='own';
@@ -210,7 +204,6 @@ select results_eq($$select connection from public.claim_conversation_turn('a7200
 select results_eq($$select connection from public.begin_channel_start(-2)$$,$$select connection from own$$,'and its channel Run');
 select results_eq($$select connection from public.begin_note_start(-2)$$,$$select connection from own$$,'and its note Run');
 
--- 7. A profile the Engine lost keeps its owner record, loses its tool state, is listed first, and holds its Runs.
 select ok(public.forget_company_profile((select connection from own)),'tool health forgets the lost profile');
 reset role;
 select results_eq($$select tools_level,tools_policy,tools_pending from public.agent_profiles$$,$$values (null::smallint,null::integer,false)$$,'its record stays, with no tool state');
@@ -228,7 +221,6 @@ select public.record_agent_profile((select agent from made where name='lead'),(s
 reset role;
 select is((select count(*)::int from public.agent_profiles),1,'the worker never writes an owner record');
 
--- 8. An Owner removing the Agent removes its record with it.
 set local role authenticated;
 select set_config('request.jwt.claims','{"role":"authenticated"}',true);
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);

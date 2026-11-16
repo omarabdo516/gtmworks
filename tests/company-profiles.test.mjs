@@ -466,7 +466,6 @@ test('after a level change every Agent profile gets the new tools, each marked b
  for(const call of db.log.filter(({name})=>name==='configure')) assert.deepEqual(call.args,{name:call.args.name,config:levelConfig(3),forbidden:levelConfig(3).agent.disabled_toolsets});
  assert.deepEqual(db.log.filter(({name})=>name==='record_agent_profile').map(({args})=>args),[writer,critic].map(agent=>({agent,engine_profile:`ag-${agent.replaceAll('-','')}`,level:3,policy:toolPolicy})));
  assert.ok(db.rows.every(row=>row.tools_level===3&&!row.tools_pending));
- // In step: nothing to do, and the Engine is not asked.
  db.log.length=0;
  assert.deepEqual(await keepAgentProfiles(db,{hermes:hermesOf,driver:recordingDriver(db.log)}),{provided:0,configured:0});
  assert.deepEqual(db.log.map(({name})=>name),['agent_profile_work']);
@@ -479,7 +478,6 @@ test('a write the Engine did not apply leaves its profile marked and unrecorded,
  assert.deepEqual(await keepAgentProfiles(db,{hermes:hermesOf,driver}),{provided:0,configured:1});
  assert.deepEqual(db.rows.map(row=>[row.tools_level,row.tools_pending]),[[1,true],[3,false]]);
  assert.ok(!db.log.some(({name,args})=>name==='record_agent_profile'&&args.agent===writer));
- // A record the database refuses leaves the mark too, and is reported, not thrown.
  const refusing=agentWorkerDatabase([agentRow(writer,{agent_level:2})],{failRecord:true});
  const logged=[]; const error=console.error; console.error=(...args)=>{ logged.push(args.join(' ')); };
  try { assert.deepEqual(await keepAgentProfiles(refusing,{hermes:hermesOf,driver:recordingDriver(refusing.log)}),{provided:0,configured:0}); }

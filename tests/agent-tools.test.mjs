@@ -57,7 +57,6 @@ test('create_agent starts from a ready-made role: its name, job and apps unless 
  assert.deepEqual(rpcs.at(-1)?.[1],{conversation:'conversation-1',run:'run-1',call:'call-0',agent_name:'Penny',job:roleTemplates.writer.job,apps:['WordPress'],template:'writer',instructions:instructionsOf('writer')});
 });
 
-// An Agent Lead makes gets its own Engine profile (ADR 0016), made before the database's one step that makes the Agent.
 const own={profile:'ag-a0000000000000000000000000000001',soul:'You write for RS Learning.',level:3};
 const writerCall={conversation:'conversation-1',run:'run-1',call:'call-0',agent_name:roleTemplates.writer.name,job:roleTemplates.writer.job,apps:roleAppNames('writer'),template:'writer',instructions:instructionsOf('writer')};
 /** @param {ReturnType<typeof harness>['engine']} engine */

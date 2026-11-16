@@ -359,7 +359,6 @@ test('integration: Lead\'s call makes the Agent one profile of its own, also whe
   expect(managed(hermes).slice(before)).toEqual(['GET /api/profiles',`GET /api/profiles/${profile}/soul`]);
   expect(madeBy(conversation,lead)).toHaveLength(1);
 
-  // A message to the new Agent starts on its own profile, with the Company knowledge and no instructions of its own.
   const theirs=randomUUID();
   expect(await sendMessage(person,service,{person:omar,company,conversation:theirs,sendKey:randomUUID(),agent:agent.id,message:'Write about the tax diploma',encryptionKey,engineFor})).toEqual({conversation:theirs});
   expect(fake.connections.at(-1)).toMatchObject({profile:own,key:'fake-engine-key'});

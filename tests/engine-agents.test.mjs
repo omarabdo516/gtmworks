@@ -210,7 +210,6 @@ test('providing an Agent its own profile makes it with its soul, the key and the
    {method:'GET',path:`/api/model/options?profile=${own}`,body:null},
   ]);
   assert.deepEqual(fake.settings.requests.map(request=>request.path),[`/p/${own}/v1/toolsets`]);
-  // The name is reserved for one Agent, so asking again finishes the profile there, and makes no second one.
   assert.deepEqual(await engine.provideAgent({name:own,instructions:'Run the Meta ads.',level:3}),{state:'provided'});
   assert.deepEqual([...fake.settings.profiles.keys()],[own]);
  } finally { await fake.close(); }
