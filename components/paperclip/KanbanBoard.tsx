@@ -1,9 +1,10 @@
 'use client';
-import { useEffect, useState, type ComponentProps, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import { DndContext, DragOverlay, MouseSensor, TouchSensor, useDraggable, useDroppable, useSensor, useSensors } from '@dnd-kit/core';
 import { useI18n } from '@/lib/i18n-client';
 import { BoardIcon } from '@/components/board-icon';
 import { prefersReducedMotion } from '@/lib/motion';
+import { inEdgeBand } from '@/lib/board-columns.mjs';
 import '@/app/board.css';
 
 // The approved design's board (design-reference: #board-cols, .col, .kcard). A card is carried to another column with
@@ -32,8 +33,24 @@ export function KanbanBoard({label,busy,cards,columnName,onMove,renderOverlay,ch
  // A mouse drags after 5px. A finger must rest on the card for a moment first: a quicker swipe belongs to the browser and scrolls the board
  // (a pointer sensor starts on touch too, and the browser then cancels it with pointercancel at about 24px).
  const sensors=useSensors(useSensor(MouseSensor,{activationConstraint:{distance:5}}),useSensor(TouchSensor,{activationConstraint:{delay:250,tolerance:8}}));
+ // dnd-kit scrolls a box by itself while the finger is near its edge, but while the finger crosses into another column it
+ // can pair the board with the box it measured for the card's own list (the two lists of scrolling boxes update apart),
+ // so a finger in the middle of the board scrolled it. A box scrolls by itself only while the finger is really in its
+ // own edge bands, measured now, on an axis it can scroll.
+ const finger=useRef<{x:number,y:number}|null>(null);
+ useEffect(()=>{
+  const follow=(event:TouchEvent|MouseEvent)=>{ const at='touches' in event?event.touches[0]:event; if(at) finger.current={x:at.clientX,y:at.clientY}; };
+  const options={capture:true,passive:true};
+  window.addEventListener('touchstart',follow,options); window.addEventListener('touchmove',follow,options); window.addEventListener('mousedown',follow,options); window.addEventListener('mousemove',follow,options);
+  return ()=>{ window.removeEventListener('touchstart',follow,options); window.removeEventListener('touchmove',follow,options); window.removeEventListener('mousedown',follow,options); window.removeEventListener('mousemove',follow,options); };
+ },[]);
+ const canScroll=(element:Element)=>{
+  if(!finger.current) return true;
+  const box=element===document.scrollingElement?{left:0,top:0,right:innerWidth,bottom:innerHeight,width:innerWidth,height:innerHeight}:element.getBoundingClientRect();
+  return inEdgeBand(box,finger.current,{x:element.scrollWidth>element.clientWidth,y:element.scrollHeight>element.clientHeight});
+ };
  const columnFor=(id:string|number|undefined)=>id===undefined?undefined:String(id).startsWith('column:')?String(id).slice(7):cards.find(card=>card.id===Number(id))?.column;
- return <DndContext id="work-board" sensors={sensors} onDragStart={({active})=>setActiveId(Number(active.id))} onDragCancel={()=>setActiveId(null)} onDragEnd={({active,over})=>{
+ return <DndContext id="work-board" sensors={sensors} autoScroll={{canScroll}} onDragStart={({active})=>setActiveId(Number(active.id))} onDragCancel={()=>setActiveId(null)} onDragEnd={({active,over})=>{
   setActiveId(null);
   const column=columnFor(over?.id),card=cards.find(card=>card.id===Number(active.id));
   if(card&&column) onMove(card.id,column);
