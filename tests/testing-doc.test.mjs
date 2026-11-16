@@ -13,3 +13,20 @@ test('docs/testing.md has exactly one row per file under tests/', () => {
   assert.deepEqual([...rows].sort(), [...new Set(tracked)].sort());
   assert.equal(new Set(rows).size, rows.length, 'a file has more than one row');
 });
+
+// #218: each case of a browser spec named in "The browser suite, case by case" has its decision. A case that stays is
+// still in its file; a case that moved or was removed is gone from it.
+test('every case of a decided browser spec has its decision, and only kept cases are still in the file', () => {
+  const doc = readFileSync('docs/testing.md', 'utf8');
+  const section = doc.slice(doc.indexOf('## The browser suite, case by case'));
+  const rows = [...section.matchAll(/^\| `([\w-]+\.spec\.ts)` "(.+)" \| (stays|moved|removed) \|/gm)]
+    .map(([, file, title, decision]) => ({ file, title, decision }));
+  assert.ok(rows.length > 0, 'the case-by-case table has no rows');
+  for (const file of new Set(rows.map(row => row.file))) {
+    const source = readFileSync(`tests/${file}`, 'utf8');
+    const cases = [...source.matchAll(/\btest\((['`])((?:\\.|(?!\1).)*)\1/g)].map(match => match[2].replaceAll("\\'", "'"));
+    const decided = rows.filter(row => row.file === file);
+    assert.deepEqual(decided.filter(row => row.decision === 'stays').map(row => row.title).sort(), [...cases].sort(), `${file}: the cases still in the file are the ones that stay`);
+    assert.equal(new Set(decided.map(row => row.title)).size, decided.length, `${file}: a case has more than one row`);
+  }
+});

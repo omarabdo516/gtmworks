@@ -89,6 +89,10 @@ const rule = 'من دلوقتي ما تبعتش حاجة للعميل من غي�
 // the Manager, as agent_save_rule keeps it.
 const suggested = (n: number) => `6a000000-0000-0000-0000-00000000000${n}`;
 const suggestedRule = 'من دلوقتي أي إعلان للسعودية يتكتب بلهجة سعودية خفيفة';
+// Ads and the campaign plan it showed Omar under its reply on June 10 (#136), as the reference's chooseAngle shows it and
+// agent_show_card keeps it.
+const drafted = (n: number) => `6d000000-0000-0000-0000-00000000000${n}`;
+const plan = { line: 'مسودة · Meta Ads', rows: [['الهدف', 'ليدز على واتساب'], ['الجمهور', 'خريجين تجارة 22–30 · القاهرة والجيزة والإسكندرية'], ['الإعلانات', '3 فيديو + 2 صور'], ['الميزانية', '500 ج يومياً · 15,000 ج للشهر'], ['المتوقع', '26–30 ج لليد']].map(([label, value]) => ({ label, value })) };
 // A state whose rows are append-only (a Conversation's messages) is set and taken away as the database's own
 // administrator with triggers off, the way tests/fresh-seed.ts puts the seed back, so nothing of it stays behind.
 const asAdmin = (sql: string) => execFileSync('docker', ['exec', '-i', dbContainerOf(), 'psql', '-U', 'supabase_admin', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-q', '--single-transaction'],
@@ -242,6 +246,23 @@ const screenStates: Record<string, { set: string, unset: string, admin?: true }>
       delete from public.conversations where id='${made(5)}';
       delete from public.hermes_agents where id in ('${made(3)}','${made(4)}');
       delete from public.hermes_connections where id in ('${made(1)}','${made(2)}');`,
+  },
+  'draft-shown': {
+    admin: true,
+    set: `insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('${drafted(1)}','${rsLearning}','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9/p/visual-draft','visual-draft','visual-no-key','unreachable');
+      insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('${drafted(2)}','${rsLearning}','${drafted(1)}','Ads','Runs the Meta and Google ads.');
+      insert into public.conversations(id,company_id,person_id,agent_id,agent_name,created_at) values ('${drafted(3)}','${rsLearning}','20000000-0000-0000-0000-000000000001','${drafted(2)}','Ads','2026-06-10T11:00:00Z');
+      insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at) values
+       ('${rsLearning}','${drafted(3)}','person','20000000-0000-0000-0000-000000000001',null,'Omar','نمشي بزاوية «من خريج لمحاسب شغال»','${drafted(4)}','visual-draft','2026-06-10T11:00:00Z'),
+       ('${rsLearning}','${drafted(3)}','agent',null,'${drafted(2)}','Ads','تمام، دي خطة الحملة بزاوية «من خريج لمحاسب شغال». جهّزت 3 إعلانات فيديو و2 صور في Meta Ads كمسودة، ومحتاج موافقتك قبل ما أطلقها وأبدأ أصرف.',null,'visual-draft','2026-06-10T11:01:00Z');
+      insert into public.reply_cards(company_id,conversation_id,run_id,call_id,kind,title,content,created_at) values
+       ('${rsLearning}','${drafted(3)}','visual-draft','call-0','draft','خطة الحملة','${JSON.stringify(plan)}','2026-06-10T11:01:00Z');`,
+    unset: `delete from public.reply_cards where conversation_id='${drafted(3)}';
+      delete from public.conversation_usage where conversation_id='${drafted(3)}';
+      delete from public.conversation_messages where conversation_id='${drafted(3)}';
+      delete from public.conversations where id='${drafted(3)}';
+      delete from public.hermes_agents where id='${drafted(2)}';
+      delete from public.hermes_connections where id='${drafted(1)}';`,
   },
   'rule-told': {
     admin: true,
