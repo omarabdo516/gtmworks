@@ -72,7 +72,8 @@ export default function ConversationView({slug,agent,details,company,conversatio
   const again=async()=>{
    try {
     const response=await fetch(`/api/conversations?company=${company}&conversation=${conversation.id}`,{cache:'no-store'});
-    if(response.ok) setRecord(await response.json() as ConversationRecord);
+    // The column alone: an answer that was on its way while a message was sent is older than the chat now shown.
+    if(response.ok) { const {board}=await response.json() as ConversationRecord; setRecord(current=>({...current,board})); }
    } catch { /* The column shown stays until the next read. */ }
   };
   window.addEventListener('focus',again);

@@ -90,8 +90,10 @@ test('on a phone the pill shows the column alone, in Arabic too', async () => {
  } finally { await page.viewport(1440, 900); }
 });
 
-test('coming back to the chat after the Card moved on the board shows its new column', async () => {
- const moved = await recordWith({ id: 7, column: 'live' });
+test('coming back to the chat after the Card moved on the board shows its new column, and only that', async () => {
+ // An answer older than the chat on screen (it left before the last message was sent) moves the pill and nothing else.
+ const moved = { ...await recordWith({ id: 7, column: 'live' }), pending: false };
+ moved.messages = moved.messages.slice(0, 2);
  const asks = vi.fn(async () => Response.json(moved));
  vi.stubGlobal('fetch', asks);
  const screen = await show(await recordWith({ id: 7, column: 'progress' }));
@@ -100,4 +102,5 @@ test('coming back to the chat after the Card moved on the board shows its new co
  await expect.element(screen.getByRole('link', { name: 'On the board: Live' })).toBeVisible();
  expect(asks).toHaveBeenCalledWith('/api/conversations?company=co-1&conversation=cv-1', { cache: 'no-store' });
  await expect.element(screen.getByText('This card was added to the board under “In progress”')).toBeVisible();
+ await expect.element(screen.getByText('Added.')).toBeVisible();
 });
