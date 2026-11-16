@@ -20,9 +20,11 @@ import { overlayHref } from '@/lib/settings-overlay.mjs';
 import type { ConversationRecord } from '@/lib/conversation-record';
 import { localeFor } from '@/lib/i18n.mjs';
 type Conversation={id:string,agent_name:string,face:string};
+const requestWaits=(messages:ConversationRecord['messages'])=>messages.some(message=>message.cards?.some(card=>card.kind==='request'&&card.request.state==='waiting'));
 
 // The reply is collected by the server from Hermes; the page asks again until it is in the record. Each send restarts
-// the asking, so an answer about an earlier run cannot stop it before the new reply arrives.
+// the asking, so an answer about an earlier run cannot stop it before the new reply arrives. An Owner answers a request
+// for an Agent from their own page, so while one waits the page also asks again, less often (#17).
 // Drawn as the reference's chat (design-reference: renderChat, msgHTML): a floating title pill, the Agent's turns on
 // the start side, the person's on the end side, the composer below, and the Agent's details beside it while the
 // Agent is still attached. While the Agent works, everyone reading sees who it is working for; a message sent
@@ -43,23 +45,25 @@ export default function ConversationView({slug,agent,details,company,conversatio
  // A queued turn keeps `pending` true from one run to the next; each run's start and reply add a message.
  const runKey=`${pending}:${messages.length}`; const drawnRun=useRef(runKey);
  useEffect(()=>{ if(drawnRun.current===runKey) return; drawnRun.current=runKey; router.refresh(); },[runKey,router]);
+ const asking=pending||requestWaits(messages);
  useEffect(()=>{
-  if(!pending) return;
-  let stopped=false;
+  if(!asking) return;
+  let stopped=false; let every=1500;
   const poll=async()=>{
    try {
     const response=await fetch(`/api/conversations?company=${company}&conversation=${conversation.id}`,{cache:'no-store'});
     if(response.ok&&!stopped) {
      const result=await response.json() as ConversationRecord; setRecord(result);
      const now=madeCount(result.messages); if(now>made.current) router.refresh(); made.current=now;
-     if(!result.pending) return;
+     if(!result.pending&&!requestWaits(result.messages)) return;
+     every=result.pending?1500:5000;
     }
    } catch { /* Hermes or the network is down: ask again. */ }
-   if(!stopped) timer=setTimeout(poll,1500);
+   if(!stopped) timer=setTimeout(poll,every);
   };
   let timer=setTimeout(poll,500);
   return ()=>{stopped=true;clearTimeout(timer);};
- },[pending,sent,company,conversation.id,router]);
+ },[asking,sent,company,conversation.id,router]);
  const count=(value:number)=>new Intl.NumberFormat(localeFor(language)).format(value);
  const time=(value:string)=>new Date(value).toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit'});
  const face=(size:number)=><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:conversation.face,name:conversation.agent_name}} size={size}/></span>;
