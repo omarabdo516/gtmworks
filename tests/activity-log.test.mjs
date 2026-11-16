@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { dayOf, daysBack, describeEntry, groupByDay, logCursor, matchesFilters, parseBefore, parseCard, parseWho } from '../lib/activity-log.mjs';
+import { currentNoteText, dayOf, daysBack, describeEntry, groupByDay, logCursor, matchesFilters, parseBefore, parseCard, parseWho } from '../lib/activity-log.mjs';
 import { i18n } from '../lib/i18n.mjs';
 
 // One log for the Company (#11): what each kind of row says, the page's filters and its days.
@@ -41,6 +41,13 @@ test('Card, Member and Agent rows say who changed what', () => {
   t(line.act[0], ...line.act.slice(1).map(value => 'key' in value ? t(value.key) : value.text));
   for (const value of [line.from, line.to]) if (value && 'key' in value) t(value.key);
  }
+});
+
+test('an Agent called in a note replies in the log, with its reply as the note under the line (#22)', () => {
+ const reply = describeEntry({ subject: 'card', action: 'note_reply', agent_id: lead, body: 'Here is the draft.', details: { reply_to: 12 } });
+ assert.deepEqual([reply.act, reply.note, reply.from, reply.to], [['logActNoteReply'], 'Here is the draft.', undefined, undefined]);
+ assert.equal(i18n('en').t(reply.act[0]), 'replied in the log');
+ assert.equal(i18n('ar').t(reply.act[0]), 'ردّ في السجل');
 });
 
 test('a request for an Agent says who asked whom, and the Owner\'s yes or no with its reason, in both languages', () => {
@@ -138,4 +145,15 @@ test('an edit of the Company knowledge names the part by its title, and says whe
   assert.ok(t(edited.act[0], t('knowBanned')).includes(t('knowBanned')), language);
   assert.ok(t(cleared.act[0], t('knowVoice')).includes(t('knowVoice')), language);
  }
+});
+
+test('a comment in the Card activity reads as its note now stands, and nothing else changes (#22)', () => {
+ const rows = [
+  { id: 1, action: 'comment_added', details: { id: 41, body: 'First text' } },
+  { id: 2, action: 'comment_added', details: { id: 42, body: 'Never edited' } },
+  { id: 3, action: 'card_changed', details: { id: 41, field: 'title' } },
+ ];
+ const shown = currentNoteText(rows, [{ id: 41, body: 'Edited text' }]);
+ assert.deepEqual(shown.map(row => row.details), [{ id: 41, body: 'Edited text' }, { id: 42, body: 'Never edited' }, { id: 41, field: 'title' }]);
+ assert.equal(rows[0].details.body, 'First text', 'the rows read from the database are left as they are');
 });

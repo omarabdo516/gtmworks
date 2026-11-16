@@ -8,7 +8,7 @@ import { canCreateCard } from '@/lib/card-permissions.mjs';
 import { columnLabel } from '@/lib/board-columns.mjs';
 import { agentFiles, agentLogFilter, agentStatus, agentTasks, fileSize, latestActivity, pickTab, type AgentStatus, type DetailsTab } from '@/lib/agent-details.mjs';
 import { ShellIcon } from '@/components/shell-icon';
-import type { LogRow } from '@/lib/activity-log.mjs';
+import { drawnAt, type LogRow } from '@/lib/activity-log.mjs';
 import { FeedWhen, LogDays } from '@/app/c/[slug]/log/log-client';
 import { FeedText, LogEntry, logColumns, logPeople } from '@/app/c/[slug]/log/entries';
 import { PageIcon } from '@/app/c/[slug]/log/icons';
@@ -18,7 +18,7 @@ export type AgentDetailsView={status:AgentStatus,actions:boolean,tab:DetailsTab,
 const logShown=50; const filesShown=50;
 
 export async function agentDetails(db:Db,{company,agent,slug,me,role,tab}:{company:string,agent:string,slug:string,me:string,role:string,tab?:string}):Promise<AgentDetailsView> {
- const {t,language}=await getI18n(); const writer=canCreateCard({role});
+ const {t,language}=await getI18n(); const writer=canCreateCard({role}); const drawn=drawnAt();
  const [{data:cardRows},{data:logRows,count},{data:runs},{items:waiting},{data:talkFileRows,count:talkFileCount}]=await Promise.all([
   db.from('work_cards').select('id,title,stage_id').eq('company_id',company).eq('agent_id',agent).order('id'),
   db.from('company_log').select(logColumns,{count:'exact'}).eq('company_id',company).or(agentLogFilter(agent)).order('created_at',{ascending:false}).order('id',{ascending:false}).limit(logShown),
@@ -85,7 +85,7 @@ export async function agentDetails(db:Db,{company,agent,slug,me,role,tab}:{compa
   :<div className="panel-card"><p className="panel-empty">{t('agentFilesEmpty')}</p></div>}</section>;
 
  const log=<section className="dp-sec"><h3 className="dp-label"><span>{t('chatTabLog')} <span className="muted num">{count??rows.length}</span></span><Link className="link-btn" href={`/c/${slug}/log?who=a:${agent}`}>{t('agentOpenLog')}</Link></h3>
-  {rows.length?<div className="lg-wrap"><LogDays items={rows.map(row=>({id:row.id,at:row.created_at,node:<LogEntry row={row} people={people} me={me} slug={slug} t={t} language={language} faceSize={24}/>}))}/></div>
+  {rows.length?<div className="lg-wrap"><LogDays items={rows.map(row=>({id:row.id,at:row.created_at,node:<LogEntry row={row} people={people} me={me} slug={slug} company={company} canWrite={writer} drawnAt={drawn} t={t} language={language} faceSize={24}/>}))}/></div>
    :<div className="panel-card"><p className="panel-empty">{t('agentLogEmpty')}</p></div>}
   <p className="lg-forever"><PageIcon name="lock"/><span>{t('logForever')}</span></p>
  </section>;

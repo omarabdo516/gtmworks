@@ -1,6 +1,7 @@
 'use client';
-import { useState, useSyncExternalStore } from 'react';
+import { useState, useSyncExternalStore, type ReactNode } from 'react';
 import { AgentFace } from '@/components/agent-face';
+import { CompanyAgentFace } from '@/components/company-agent-face';
 import { useAgentIdentities } from './agent-identities-client';
 import { ChevronDown } from 'lucide-react';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem } from '@/components/paperclip/ui/dropdown-menu';
@@ -41,4 +42,13 @@ export function ActivityRow({activity:a,members,slug,showCard=false}:{activity:W
 // One message in a card's conversation: who wrote it, whether that was a person or an agent (an agent in its role colour), and the text in its own direction.
 export type WorkAttachment={id:number,card_id:number,comment_id:number,name:string,content_type:string};
 export const isMessage=(a:WorkActivity)=>a.action==='comment_added'&&typeof a.details?.body==='string';
-export function MessageRow({activity:a,members,files=[],slug=''}:{activity:WorkActivity,members:WorkMember[],files?:WorkAttachment[],slug?:string}) { const {t}=useI18n(); const agent=useAgentIdentity(a.actor_id,members); const name=agent?.name||members.find(m=>m.person_id===a.actor_id)?.people?.name||t('member'); const color=agent?roleAgents.find(r=>r.key===agent.role)?.color:undefined; return <li className="detail-row message" data-author={agent?'agent':'person'}><Avatar id={a.actor_id} members={members} nameVisible/><div><strong dir="auto">{name}</strong><span className="author-chip" style={color?{borderColor:color}:undefined}>{color&&<i style={{background:color}}/>}{agent?t('agentLabel'):t('personLabel')}</span><p dir="auto" className="comment-body">{String(a.details.body)}</p>{files.length>0&&<ul className="attachments">{files.map(f=>{ const href=`/c/${slug}/files/${f.id}`; return <li key={f.id}>{isThumbnail(f.content_type)?<a href={href} target="_blank" rel="noreferrer"><img src={href} alt={f.name}/></a>:<a dir="auto" href={href}>{f.name}</a>}</li>; })}</ul>}<ActivityTime value={a.created_at}/><Evidence a={a}/></div></li>; }
+// A person's message on a Card is a note (#22): `note` draws its text, files and time when given (app/note-edit), and
+// `anchor` is what a mention in "Waiting on you" opens.
+export function MessageRow({activity:a,members,files=[],slug='',anchor,note}:{activity:WorkActivity,members:WorkMember[],files?:WorkAttachment[],slug?:string,anchor?:string,note?:(files:ReactNode,time:ReactNode)=>ReactNode}) { const {t}=useI18n(); const agent=useAgentIdentity(a.actor_id,members); const name=agent?.name||members.find(m=>m.person_id===a.actor_id)?.people?.name||t('member'); const color=agent?roleAgents.find(r=>r.key===agent.role)?.color:undefined;
+ const fileList=files.length>0&&<ul className="attachments">{files.map(f=>{ const href=`/c/${slug}/files/${f.id}`; return <li key={f.id}>{isThumbnail(f.content_type)?<a href={href} target="_blank" rel="noreferrer"><img src={href} alt={f.name}/></a>:<a dir="auto" href={href}>{f.name}</a>}</li>; })}</ul>;
+ const time=<ActivityTime value={a.created_at}/>;
+ return <li className="detail-row message" data-author={agent?'agent':'person'} id={anchor}><Avatar id={a.actor_id} members={members} nameVisible/><div><strong dir="auto">{name}</strong><span className="author-chip" style={color?{borderColor:color}:undefined}>{color&&<i style={{background:color}}/>}{agent?t('agentLabel'):t('personLabel')}</span>{note&&!agent?note(fileList,time):<><p dir="auto" className="comment-body">{String(a.details.body)}</p>{fileList}{time}</>}<Evidence a={a}/></div></li>; }
+// The reply of an Agent a note called (#22), written in the log under that note, or the line that it is working on it.
+export function NoteReplyRow({name,face,body,at,working}:{name:string,face:string|null,body?:string,at?:string,working?:string}) { const {t}=useI18n();
+ return <li className="detail-row message" data-author="agent">{face?<span className="note-face" aria-hidden="true"><CompanyAgentFace agent={{connection_id:face,name}} size={24}/></span>:<span dir="auto" className="avatar" aria-hidden="true">{name.slice(0,1)}</span>}<div><strong dir="auto">{name}</strong><span className="author-chip">{t('agentLabel')}</span> <span className="note-act">{working?t('noteWorking'):t('logActNoteReply')}</span>
+  {working?<p className="comment-body note-working"><span className="dot dot--working" aria-hidden="true"/>{t('noteWorkingOn',working)}</p>:<p dir="auto" className="comment-body">{body}</p>}{at&&<ActivityTime value={at}/>}</div></li>; }

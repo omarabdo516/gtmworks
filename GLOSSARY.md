@@ -25,10 +25,10 @@ A person's place in one company, carrying the role they hold there. One person c
 _Avoid_: user, seat, staff
 
 **Agent / وكيل**:
-A named worker running in Hermes, attached to a Company with a free name and speciality. Each Company has one default Agent for new conversations, its main Agent. A Hermes profile normally serves one Company because its memory belongs to that profile; an Owner must explicitly confirm the memory-sharing warning before attaching it to another Company. Legacy role agents retain their company grants during the transition. An Agent never approves, rejects, publishes or spends at this stage.
+A named worker running in Hermes, attached to a Company with a free name and speciality. On the bundled Engine an Agent is one Engine profile, with its own memory, Skills and settings (ADR 0016); the people who talk to the same Agent share its memory. Each Company has one default Agent for new conversations, its main Agent. A profile in the bundled Engine serves one Company only. On a pasted Hermes, a profile normally serves one Company because its memory belongs to that profile; an Owner must explicitly confirm the memory-sharing warning before attaching it to another Company. Legacy role agents retain their company grants during the transition. An Agent never approves, rejects, publishes or spends at this stage.
 
 **Main Agent / الوكيل الرئيسي**:
-The Company's default Agent, the one people talk to first. The bundled Engine names it Lead; a Company has one at a time, and an Owner may make another of its Agents the main one.
+The Company's default Agent, the one people talk to first. The bundled Engine names it Lead; a Company has one at a time, and an Owner may make another of its Agents the main one. The Agent that was main when its Company moved to a profile per Agent keeps the Company's first profile, `co-<company id>`, with everything in it; every other Agent gets `ag-<agent id>`.
 _Avoid_: default bot, assistant, orchestrator
 
 **Agent request / طلب وكيل**:
@@ -124,6 +124,14 @@ Recurring work specifying who, what and when; each occurrence creates an ordinar
 
 **Skill / مهارة**:
 Instructions in SKILL.md enabled per agent per company and loaded by its runtime. Any team member may install one; outside skills are scanned before enabling, and installs and enables are audited. Agent-written lessons retain their source edit or rejection and can be cancelled.
+
+**Company's shared Skills / مهارات الشركة المشتركة**:
+One folder of Skills per Company, kept in the Company's shared space (`cs-<company id>`), which every Agent of that Company reads. A lesson approved for the whole team lands there. No Run ever starts on the shared space.
+_Avoid_: team skills, global skills
+
+**Install-wide / للتثبيت كله**:
+A setting or sign-in that the Engine holds once for the whole install instead of per Agent, such as a subscription signed in on Hermes's root `default` profile, which every profile with no sign-in of its own for that provider uses. Settings shows such a value as install-wide, because changing it changes it for every Company on the install.
+_Avoid_: global, system-wide, default
 
 **Lesson / درس**:
 One thing an agent learned on a card, proposed as a single added line in one of its skills, with the reason and the card it was learned on. It waits in the Inbox of the people who manage the company; nothing reaches the skill until one approves it, and a rejected lesson never does.

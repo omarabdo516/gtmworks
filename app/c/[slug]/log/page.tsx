@@ -5,10 +5,11 @@ import { getI18n } from '@/lib/i18n-server';
 import { supabase } from '@/lib/supabase';
 import Shell from '@/app/shell';
 import { approvalQueue } from '@/lib/approval-queue';
-import { logCursor, logPageSize, parseBefore, parseCard, parseWho, type LogRow } from '@/lib/activity-log.mjs';
+import { drawnAt, logCursor, logPageSize, parseBefore, parseCard, parseWho, type LogRow } from '@/lib/activity-log.mjs';
 import { agentLogFilter } from '@/lib/agent-details.mjs';
 import { LogDays, LogFilters } from './log-client';
-import { LogEntry, logColumns, logPeople } from './entries';
+import { canCreateCard } from '@/lib/card-permissions.mjs';
+import { LogEntry, logAnchor, logColumns, logPeople } from './entries';
 import { PageIcon } from './icons';
 
 // A page shows logPageSize rows, newest first; "Older entries" opens the next page. The count names every row that matches.
@@ -48,6 +49,7 @@ export default async function ActivityLogPage({params,searchParams}:{params:Prom
  const people=await logPeople(db,company.id,[...loggedCards,...entries.flatMap(row=>row.card_id!=null?[row.card_id]:[])]);
  const {items:waitingItems}=await approvalQueue(db,company.id,user.id,membership?.role||'');
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
+ const writer=canCreateCard({role:membership?.role}); const drawn=drawnAt();
  const live=people.members.filter(member=>!member.removed_at);
  const peopleOptions=live.filter(member=>!member.agent_role).map(member=>({value:`p:${member.person_id}`,label:member.people?.name||t('logSomeone')}));
  const agentOptions=[...live.filter(member=>member.agent_role).map(member=>({value:`a:${member.person_id}`,label:people.identities.find(agent=>agent.id===member.person_id)?.name||member.people?.name||t('logSomeone')})),
@@ -64,7 +66,7 @@ export default async function ActivityLogPage({params,searchParams}:{params:Prom
     <header className="page-head"><div className="od-field"><h1 className="page-title">{t('activityLog')}</h1><p className="page-sub"><bdi>{t('logSub',company.name)}</bdi></p></div></header>
     <LogFilters slug={slug} who={whoValue} card={card!=null?String(card):'all'} people={peopleOptions} agents={agentOptions} cards={cardOptions} count={n}/>
     <div className="lgp-body">
-     {entries.length?<LogDays items={entries.map(row=>({id:row.id,at:row.created_at,node:<LogEntry row={row} people={people} me={user.id} slug={slug} t={t} language={language}/>}))}/>
+     {entries.length?<LogDays items={entries.map(row=>({id:row.id,at:row.created_at,anchor:logAnchor(row),node:<LogEntry row={row} people={people} me={user.id} slug={slug} company={company.id} canWrite={writer} drawnAt={drawn} t={t} language={language}/>}))}/>
       :<div className="panel-card lgp-empty"><p className="panel-empty">{total?t('logNoMatch'):t('logEmpty')}</p>{total?<a className="btn btn--secondary btn--sm" href={`/c/${slug}/log`}>{t('logShowAll')}</a>:null}</div>}
      {(older||before)&&<nav className="lg-pages" aria-label={t('logPages')}>
       <p className="lg-more">{t(before?'logShowingOlder':'logShowing',entries.length)}</p>
