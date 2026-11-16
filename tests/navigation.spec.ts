@@ -85,8 +85,9 @@ test('prepared navigation and Paperclip motion inventory (production, warm-up + 
   console.log('CLICK_RUNS', JSON.stringify(runs));
   await testInfo.attach('click-timings.json', { body: JSON.stringify({ enforceBudget, results, runs }, null, 2), contentType: 'application/json' });
   if (enforceBudget) for (const [name, timing] of Object.entries(results)) {
-    expect(timing.shown, `${name}: shown ${timing.shown.toFixed(1)}ms`).toBeLessThan(100);
-    expect(timing.settled, `${name}: settled ${timing.settled.toFixed(1)}ms`).toBeLessThan(200);
+    const motion = clickPath.find(step => step.name === name)?.motion ?? { shown: 0, settled: 0 };
+    expect(timing.shown, `${name}: shown ${timing.shown.toFixed(1)}ms`).toBeLessThan(100 + motion.shown);
+    expect(timing.settled, `${name}: settled ${timing.settled.toFixed(1)}ms`).toBeLessThan(200 + motion.settled);
   }
   for (const [name, timings] of Object.entries(runs)) for (const timing of timings) {
     expect(timing.all, `${name}: unlisted computed transition-property: all`).toEqual([]);
@@ -209,7 +210,7 @@ test('visible links fully prefetch page data and closing reuses the visited boar
 test('reduced motion disables hover, veil and card animation', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await signIn(page, 'manager@example.com', '/c/rs-learning/work/board');
-  for (const step of clickPath.slice(0, 5)) {
+  for (const step of clickPath.slice(0, 7)) {
     const timing = await measureClick(page, step);
     expect(timing.longest).toBe(0);
     expect(timing.all).toEqual([]);

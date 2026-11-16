@@ -1,14 +1,18 @@
 import { expect, type Page } from '@playwright/test';
 
+type Step = { name: string, link: string, path: string, content: string, search?: string, gone?: string, motion?: { shown: number, settled: number } };
 // Each step leaves from a sidebar entry the shell has (#8): Numbers opens its own page (#35) where Home used to be the
-// first entry, and Activity log opens /log (#11). On the board a Card opens as its sheet (#116), whose approved slide
-// (280ms in, 190ms out) is longer than the settle budget, so the Card's page is opened from the list, where it still is.
-export const clickPath = [
+// first entry, and Activity log opens /log (#11). On the board a Card opens as its sheet (#116). The sheet's approved
+// motion is its allowance over the budgets (design-reference/index.html, .sheet): the 280ms slide-in runs after it is
+// shown, and the 190ms slide-out runs before the board is shown again. The Card's page still opens from the list.
+export const clickPath: Step[] = [
   { name: 'numbers', link: '.nav a[href$="/numbers"]', path: '/numbers', content: '.numbers-page' },
   { name: 'work', link: '.nav a[href$="/work/board"]', path: '/work/board', content: '.board' },
+  { name: 'open sheet', link: '#board-cols .kcard[data-card-id="1"] a', path: '/work/board', search: '?card=1', content: '.sheet[open]', motion: { shown: 0, settled: 280 } },
+  { name: 'close sheet', link: '.sheet[open] .sheet__top .circle-btn', path: '/work/board', search: '', content: '.board', gone: '.sheet[open]', motion: { shown: 190, settled: 190 } },
   { name: 'list', link: '.tabs a[href$="/work/list"]', path: '/work/list', content: '.table tbody tr' },
   { name: 'open card', link: '.table a[href$="/board/1"]', path: '/work/board/1', content: '.modal' },
-  { name: 'close card', link: '.close-card', path: '/work/board', content: '.board' },
+  { name: 'close card', link: '.close-card', path: '/work/board', content: '.board', gone: '.modal' },
   { name: 'calendar', link: '.tabs a[href$="/work/calendar"]', path: '/work/calendar', content: '.calendar' },
   // The Inbox opens from the approvals entry beside Marketing board; Activity log is the sidebar's last entry.
   { name: 'inbox', link: '.nav a[href$="/approvals"]', path: '/approvals', content: '.approvals' },
@@ -28,7 +32,7 @@ export async function idle(page: Page) {
 
 // Measure in the browser from the actual click event, excluding Playwright's actionability waits.
 // The same probe also runs against origin/main for the before/after evidence.
-export async function measureClick(page: Page, step: typeof clickPath[number]): Promise<Timing> {
+export async function measureClick(page: Page, step: Step): Promise<Timing> {
   await page.locator(step.link).hover();
   await idle(page);
   await page.evaluate(step => {
@@ -56,8 +60,8 @@ export async function measureClick(page: Page, step: typeof clickPath[number]): 
           longest = Math.max(longest, duration);
         }
         const element = document.querySelector(step.content);
-        const ready = location.pathname === `/c/rs-learning${step.path}` && element?.getBoundingClientRect().height &&
-          (step.name !== 'close card' || !document.querySelector('.modal'));
+        const ready = location.pathname === `/c/rs-learning${step.path}` && (step.search === undefined || location.search === step.search) &&
+          element?.getBoundingClientRect().height && (!step.gone || !document.querySelector(step.gone));
         if (ready && !shown) {
           shown = performance.now() - start;
         }
