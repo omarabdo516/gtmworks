@@ -73,49 +73,11 @@ async function fixClockText(page: Page) {
   });
 }
 
-const readyBy: Record<string, string> = {
-  home: '.home-dashboard',
-  chat: '.chat',
-  board: '.board',
-  card: '.modal',
-  calendar: '.calendar',
-  approvals: '.approvals',
-  members: '.member-row',
-  'work-settings': '.settings-row',
-  numbers: '.numbers-page',
-  log: '.log-page',
-  'first-run-question': '.fr',
-  'lead-welcome': '[data-lead-line]',
-  'alone-chat': '.chat',
-  'alone-settings': '#inv-email',
-  'made-card': '.ac-card',
-  'new-agent': '.new-hint',
-  'agent-visibility': '.ta-table .switch',
-  'ready-roles': '.modal .tpl',
-  'made-agent': '.born--sov',
-  channel: '.ch-intro',
-  'rule-saved': '.note--saved',
-  'agent-rules': '.rl-said:not([data-utc])',
-  'settings-agents': '.sov-ag',
-  'settings-main-agent': '#set-h-main',
-  'rule-suggested': '[data-kind="suggested"]',
-  'rule-waiting': '.mcard--rule',
-  'learning-waiting': '.sov-count',
-  'agent-details': '.chat',
-  'ask-agent': '.new-hint',
-  'request-sent': '[data-request="waiting"]',
-  'request-waiting': '.ac-card--req',
-  'request-made': '[data-request="made"]',
-  'request-declined': '[data-request="declined"]',
-  knowledge: '.know-meta time:not([data-utc])',
-  'knowledge-empty': '.know-empty',
-};
-
 // The states the seed does not hold: first run's two (#9), RS Learning with no answer yet and a new workspace's Lead with
 // the Owner's empty Conversation, RS Consultations worked alone (#10), an Agent Lead made (#13) and a rule told to an
 // Agent (#18). Each is set up for its own picture and taken away after it, so the seed stays as built.
 const leadWelcome = { connection: '64000000-0000-0000-0000-000000000007', agent: '64000000-0000-0000-0000-000000000008', conversation: '64000000-0000-0000-0000-000000000009' };
-// Lead and the Meta Ads it made for Omar on June 10 (#13), with the Conversation that made it (tests/visual-screens.mjs).
+// Lead and the Meta Ads it made for Omar on June 10 (#13), with the Conversation that made it (tests/visual-screens/made-card.json).
 const made = (n: number) => `65000000-0000-0000-0000-00000000000${n}`;
 // Ads and the lasting rule Omar told it in its Conversation on June 10 (#18), as agent_save_rule keeps it.
 const told = (n: number) => `68000000-0000-0000-0000-00000000000${n}`;
@@ -310,7 +272,7 @@ async function showScreen(page: Page, screen: (typeof screens)[number], width: n
   await page.emulateMedia({ colorScheme: screen.dark ? 'dark' : 'light' });
   await page.setViewportSize({ width, height: 900 });
   await page.goto(screen.path);
-  await expect(page.locator(readyBy[screen.name.replace('-dark', '')] ?? '.content').first()).toBeVisible();
+  await expect(page.locator(screen.ready ?? '.content').first()).toBeVisible();
   if (screen.name === 'calendar') {
     // The calendar opens on the current month; every run compares the month the seeded cards are pinned to.
     const title = page.locator('.calendar-title');

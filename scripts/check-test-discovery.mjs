@@ -47,10 +47,11 @@ for (const config of readdirSync('.').filter(name => /^playwright(\.[a-z]+)?\.co
  browserFiles(browser.suites);
 }
 
-// Playwright's approved images (`<spec>-snapshots/`) are data for a spec, not tests.
-const approvedImage = path => /(^|\/)[^/]+-snapshots\//.test(path);
+// Playwright's approved images (`<spec>-snapshots/`) and the compared screens (`tests/visual-screens/`) are data for a
+// spec, not tests.
+const specData = path => /(^|\/)[^/]+-snapshots\//.test(path) || path.startsWith('tests/visual-screens/');
 const orphans = files().filter(path =>
- !approvedImage(path) &&
+ !specData(path) &&
  (/(^|\/)(tests?|__tests__)\//.test(path) || /\.(test|spec)\.[^/]+$/.test(path) || path.endsWith('.verify.sql')) &&
  !helpers.has(path) && !covered.has(path) && !covered.has(resolve(path))
 ).sort();

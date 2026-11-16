@@ -1,78 +1,72 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 // The screens that are compared with approved images, shared by the browser tests and the baseline-folder check.
 // Each screen is compared once per language and width, so it owns languages x widths approved images.
 export const languages = ['en', 'ar'];
 export const widths = [1440, 390];
 
-// `anonymous` screens are shown to a visitor who has not signed in; a screen with a `person` is that Member's view;
-// every other screen is the view of the seeded Owner of every company.
-const lightScreens = [
-  { name: 'sign-in', path: '/sign-in', anonymous: true },
-  { name: 'home', path: '/c/rs-learning/home' },
-  { name: 'chat', path: '/c/rs-learning/chat' },
-  { name: 'board', path: '/c/rs-learning/work/board' },
-  { name: 'card', path: '/c/rs-learning/work/board/1' },
-  { name: 'calendar', path: '/c/rs-learning/work/calendar' },
-  { name: 'approvals', path: '/c/rs-learning/approvals' },
-  { name: 'members', path: '/c/rs-learning/settings/members' },
-  { name: 'agents', path: '/c/rs-learning/settings/agents' },
-  { name: 'work-settings', path: '/c/rs-learning/settings/work' },
-  { name: 'numbers', path: '/c/rs-learning/numbers' },
-  { name: 'log', path: '/c/rs-learning/log' },
-  // First run's one question (#9), over RS Learning made unanswered for the picture, and Lead's first words in the
-  // Owner's new, empty Conversation with Lead (tests/visual.spec.ts sets both states up and puts the seed back).
-  { name: 'first-run-question', path: '/c/rs-learning/home', state: 'unanswered' },
-  { name: 'lead-welcome', path: '/c/rs-learning/conversations/64000000-0000-0000-0000-000000000009', state: 'lead-welcome' },
-  // A Company worked alone (#10): RS Consultations, where Omar is the only Member, set to alone for the picture. The
-  // chat page shows the sidebar with no channels; settings shows the Company with the invitation form and no members.
-  { name: 'alone-chat', path: '/c/rs-consultations/chat', state: 'alone' },
-  { name: 'alone-settings', path: '/c/rs-consultations/settings', state: 'alone' },
-  // Lead makes an Agent (#13), over Lead and the Meta Ads Lead made for Omar on June 10, not opened yet: the
-  // Conversation with its card (the sidebar marks Meta Ads new), Lead's chat opened by "New agent", and Meta Ads's page
-  // in Settings saying when and at whose request.
-  { name: 'made-card', path: '/c/rs-learning/conversations/65000000-0000-0000-0000-000000000005', state: 'lead-made' },
-  { name: 'new-agent', path: '/c/rs-learning/chat?new=agent', state: 'lead-made' },
-  // The ready-made gallery (#14) over that chat, where the link in its hint line leads.
-  { name: 'ready-roles', path: '/c/rs-learning/chat?new=ready', state: 'lead-made' },
-  { name: 'made-agent', path: '/c/rs-learning/settings?agent=65000000-0000-0000-0000-000000000004', state: 'lead-made' },
-  // Which Agents each Member sees (#15): Company settings over Lead, Meta Ads and SEO, with Meta Ads shown to the Manager
-  // and to the first Contributor, and SEO to the Manager.
-  { name: 'agent-visibility', path: '/c/rs-learning/settings', state: 'visibility' },
-  { name: 'channel', path: '/c/rs-learning/channels/69000000-0000-0000-0000-000000000001', state: 'channel' },
-  // A lasting rule told to an Agent (#18), over Ads and the rule Omar told it on June 10: the Conversation with Ads's
-  // reply and the saved line, and Ads's page in Settings listing the rule, who said it and when, with the Owner's Remove.
-  { name: 'rule-saved', path: '/c/rs-learning/conversations/68000000-0000-0000-0000-000000000003', state: 'rule-told' },
-  { name: 'agent-rules', path: '/c/rs-learning/settings?agent=68000000-0000-0000-0000-000000000002', state: 'rule-told' },
-  // The settings overlay (#26), over Lead and Meta Ads as in made-agent: the Agents section and the main Agent's page.
-  // Its Company section of a team is agent-visibility above.
-  { name: 'settings-agents', path: '/c/rs-learning/settings?section=agents', state: 'lead-made' },
-  { name: 'settings-main-agent', path: '/c/rs-learning/settings?agent=65000000-0000-0000-0000-000000000003', state: 'lead-made' },
-  // A Contributor's lasting rule sent as a learning suggestion (#25), over Ads and the rule the first Contributor told it
-  // on June 10: their Conversation with the private line, Ads's reply and the line naming who it was sent to; the
-  // Owner's "Waiting on you" holding it with Decline and Make it team-wide; and Settings' Learning counting it.
-  { name: 'rule-suggested', path: '/c/rs-learning/conversations/6a000000-0000-0000-0000-000000000003', state: 'rule-suggested', person: 'reviewer@example.com' },
-  { name: 'rule-waiting', path: '/c/rs-learning/approvals', state: 'rule-suggested' },
-  { name: 'learning-waiting', path: '/c/rs-learning/settings?section=learning', state: 'rule-suggested' },
-  { name: 'agent-details', path: '/c/rs-learning/chat/69100000-0000-0000-0000-000000000005', state: 'agent-details' },
-  // The Company knowledge (#27), over Lead and Meta Ads as in made-agent, read by both: the seeded brand voice the Manager
-  // last edited, and the empty Audience part as its Owner sees it.
-  { name: 'knowledge', path: '/c/rs-learning/settings?section=knowledge', state: 'lead-made' },
-  { name: 'knowledge-empty', path: '/c/rs-learning/settings?section=knowledge&part=audience', state: 'lead-made' },
-  { name: 'ask-agent', path: '/c/rs-learning/chat?new=agent', state: 'agent-request', person: 'reviewer@example.com' },
-  { name: 'request-sent', path: '/c/rs-learning/conversations/6b000000-0000-0000-0000-000000000003', state: 'agent-request', person: 'reviewer@example.com' },
-  { name: 'request-waiting', path: '/c/rs-learning/approvals', state: 'agent-request' },
-  { name: 'request-made', path: '/c/rs-learning/conversations/6b000000-0000-0000-0000-000000000003', state: 'agent-request-made', person: 'reviewer@example.com' },
-  { name: 'request-declined', path: '/c/rs-learning/conversations/6b000000-0000-0000-0000-000000000003', state: 'agent-request-declined', person: 'reviewer@example.com' },
-];
+// One file per screen, named for the screen, so two branches that each add a screen never touch the same file. The path
+// is from the repository root, as the baseline folder's is: Playwright compiles this file to CommonJS, where
+// import.meta does not exist.
+export const screenFolder = 'tests/visual-screens';
 
-export const screens = [
-  { name: 'first-run', path: '/first-run', anonymous: true, dark: false },
-  ...lightScreens.map(screen => ({ ...screen, dark: false })),
-  ...lightScreens.filter(screen => ['sign-in', 'home', 'chat', 'board', 'card', 'alone-chat', 'alone-settings', 'made-card', 'new-agent', 'made-agent', 'agent-visibility', 'ready-roles', 'rule-saved', 'agent-rules', 'settings-agents', 'settings-main-agent', 'rule-suggested', 'rule-waiting', 'learning-waiting', 'agent-details', 'channel', 'knowledge', 'ask-agent', 'request-sent', 'request-waiting', 'request-made', 'request-declined'].includes(screen.name))
-    .map(screen => ({ ...screen, name: `${screen.name}-dark`, dark: true })),
-];
+// The fields of a screen file. A screen is the view of the seeded Owner of every company unless it names a `person` or
+// is `anonymous`.
+const fields = {
+  path: value => typeof value === 'string', // the address it opens
+  dark: value => typeof value === 'boolean', // true: also compared in the dark theme, as `<name>-dark`
+  anonymous: value => value === true, // shown to a visitor who has not signed in
+  person: value => typeof value === 'string', // shown to this Member, in their own window
+  state: value => typeof value === 'string', // a set-up the seed does not hold (`screenStates` in tests/visual.spec.ts)
+  ready: value => typeof value === 'string', // the element that shows the page has loaded; `.content` when absent
+  about: value => typeof value === 'string', // what the picture shows
+};
+
+/** @typedef {{ name: string, path: string, dark: boolean, about?: string, state?: string, person?: string, anonymous?: true, ready?: string }} Screen */
+
+/** @returns {Screen} */
+function parseScreen(file, text) {
+  const name = file.replace(/\.json$/, '');
+  if (!/^[a-z0-9]+(-[a-z0-9]+)*\.json$/.test(file)) throw new Error(`${file}: a screen file is named <kebab-case-name>.json`);
+  if (name.endsWith('-dark')) throw new Error(`${file}: a dark screen is made by "dark": true on its light screen`);
+  let entry;
+  try {
+    entry = JSON.parse(text);
+  } catch (error) {
+    throw new Error(`${file}: ${error.message}`);
+  }
+  if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) throw new Error(`${file}: a screen is a JSON object`);
+  for (const [key, value] of Object.entries(entry)) {
+    if (!Object.hasOwn(fields, key)) throw new Error(`${file}: unknown field "${key}"`);
+    if (!fields[key](value)) throw new Error(`${file}: "${key}" has the wrong type`);
+  }
+  for (const key of ['path', 'dark']) if (!(key in entry)) throw new Error(`${file}: "${key}" is required`);
+  return { name, ...entry };
+}
+
+/** @param {string} folder @returns {Screen[]} */
+export function loadScreens(folder) {
+  const light = readdirSync(folder).map(file => parseScreen(file, readFileSync(join(folder, file), 'utf8')))
+    .sort((a, b) => (a.name < b.name ? -1 : 1));
+  return [
+    ...light.map(screen => ({ ...screen, dark: false })),
+    ...light.filter(screen => screen.dark).map(screen => ({ ...screen, name: `${screen.name}-dark`, dark: true })),
+  ];
+}
+
+export const screens = loadScreens(screenFolder);
 
 export const snapshotName = (screen, language, width) => `${screen.name}-${language}-${width}`;
 
 // Playwright names a baseline `<name>-<project>-<platform>.png`. CI renders on Linux, so only Linux baselines count.
 export const baselineFolder = 'tests/visual.spec.ts-snapshots';
 export const baselineFile = (screen, language, width) => `${snapshotName(screen, language, width)}-visual-linux.png`;
+
+// What a listing of the approved-image folder lacks and what it holds that no screen owns.
+export function baselineProblems(listing, screens) {
+  const expected = screens.flatMap(screen => languages.flatMap(language => widths.map(width => baselineFile(screen, language, width))));
+  const listed = new Set(listing);
+  const owned = new Set(expected);
+  return { missing: expected.filter(file => !listed.has(file)).sort(), stray: listing.filter(file => !owned.has(file)).sort() };
+}
