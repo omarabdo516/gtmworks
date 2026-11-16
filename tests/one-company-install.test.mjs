@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 // on the Company's profile, and an Agent moved out of it starts empty (#121). A company still on the shared default
 // profile of an earlier install shares its memory until it moves (#2, ADR 0014). The README, the installer's closing
 // words and the Owner's settings warning say so in the same words.
-const sentence='Each agent gets its own agent engine profile, with its own memory; the main agent of a company keeps what its agents remembered before, and an agent moved to its own profile starts with an empty memory. A company still on the shared default profile from an earlier install shares that memory, so an agent can repeat facts from one company to people in another until it moves.';
+const sentence='Each agent gets its own agent engine profile, with its own memory, once it moves there; until then it shares the company profile with the other agents on it. The agent that was the main agent of a company when the moves began keeps what its agents remembered before, even if another agent is made main later, and an agent moved to its own profile starts with an empty memory. A company still on the shared default profile from an earlier install shares that memory, so an agent can repeat facts from one company to people in another until it moves.';
 
 test('the README and the install guide say what each Agent remembers, and what a shared profile means',()=>{
  for(const file of ['README.md','scripts/install.sh']) assert.ok(readFileSync(file,'utf8').replace(/\s+/g,' ').includes(sentence),`${file} has the sentence`);

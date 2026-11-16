@@ -114,7 +114,7 @@
   "general": "General",
   "companySettings": "Company settings",
   "manageCompanyAndTeamSettings": "Manage company and team settings.",
-  "sharedEngineWarning": "Each agent gets its own agent engine profile, with its own memory; the main agent of a company keeps what its agents remembered before, and an agent moved to its own profile starts with an empty memory. A company still on the shared default profile from an earlier install shares that memory, so an agent can repeat facts from one company to people in another until it moves.",
+  "sharedEngineWarning": "Each agent gets its own agent engine profile, with its own memory, once it moves there; until then it shares the company profile with the other agents on it. The agent that was the main agent of a company when the moves began keeps what its agents remembered before, even if another agent is made main later, and an agent moved to its own profile starts with an empty memory. A company still on the shared default profile from an earlier install shares that memory, so an agent can repeat facts from one company to people in another until it moves.",
   "manageMembers": "Manage members",
   "noDataToDisplayYet": "No data to display yet.",
   "notWorkingNow": "Not working now",
