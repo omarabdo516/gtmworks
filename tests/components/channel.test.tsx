@@ -39,6 +39,13 @@ test('another member writes on the start side with their first name and role, th
  await expect.element(box).toHaveAttribute('placeholder', 'Write in #general… an agent replies only when called by name');
 });
 
+test('in Arabic the composer gives the same hint, with the general channel named عام', async () => {
+ vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
+ const screen = await render(<LanguageProvider language="ar"><ChannelView person="p-1" initial={record([peer])}/></LanguageProvider>);
+ const box = screen.getByRole('textbox', { name: 'اكتب رسالتك في القناة', exact: true });
+ await expect.element(box).toHaveAttribute('placeholder', 'اكتب في #عام… والوكيل بيرد بس لو ناديته باسمه');
+});
+
 test('while the called Agent replies the page says so and asks again, and a reply that never came says it could not', async () => {
  const asked = vi.fn<(url: string) => void>();
  vi.stubGlobal('fetch', async (url: string) => { asked(url); return new Response(JSON.stringify(record([called('answered'), reply]))); });
