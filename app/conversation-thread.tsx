@@ -17,6 +17,7 @@ import { ReplyCard } from '@/app/reply-card';
 import { overlayHref } from '@/lib/settings-overlay.mjs';
 import type { ConversationRecord } from '@/lib/conversation-record';
 import { localeFor } from '@/lib/i18n.mjs';
+import { useReportRun } from '@/lib/live-runs';
 
 export type ThreadConversation=ConversationRecord['conversation'];
 type Text=(key:string,...values:unknown[])=>string;
@@ -41,6 +42,8 @@ export function useConversationRecord({company,initial}:{company:string,initial:
  const id=initial.conversation.id;
  const [record,setRecord]=useState(initial); const [sent,setSent]=useState(0);
  const {messages,pending}=record;
+ // The open Run moves its Agent's tile in the sidebar, from the page and from a Card's sheet alike (#184).
+ useReportRun(record.conversation.agent_id??undefined,pending);
  // The sidebar's Agents and the board come from the server render: an Agent Lead makes while the record is asked for
  // again, or a Card's new column, is only on the page once the server parts are drawn again, so they show without a
  // reload.
