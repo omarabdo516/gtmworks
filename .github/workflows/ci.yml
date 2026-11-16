@@ -7,14 +7,16 @@
 # run starts the browser and install suites only through inputs that default to off. Required `check`
 # (scripts/ci-verdict.mjs) counts a suite nobody asked for as passed when it was skipped, and is red on any failed or
 # cancelled stage.
-# `database` and `integration` run on the runner the repo variable CI_RUNNER names (#224): Omar's PC (`pc-ci`) while
-# ci-router keeps it there, else ubuntu-latest. A pull request from a fork runs them on ubuntu-latest, where every other
-# job runs. `install` stays on ubuntu-latest: the PC runs one job at a time, so it would queue `integration` behind it.
-# The compared screens and the measured navigation budgets (`visual`) stay on ubuntu-latest too: the screens' approved
-# images are made there (the PC renders text a few pixels differently), and the budgets need a machine no other job shares. The stack's ports lie in Linux's range for outgoing connections, so on a GitHub-hosted runner a
-# job reserves them before it starts the stack (#225). The PC shares its Docker with other repositories' CI: there the
-# stack's ports move to a block of their own above that range, a job removes what this repository's runs start before
-# and after it (scripts/ci-runner.mjs), and ~/.npm, the browsers and the image layers stay on the machine.
+# `integration` runs on the runner the repo variable CI_RUNNER names (#224): Omar's PC (`pc-ci`) while ci-router keeps
+# it there, else ubuntu-latest. A pull request from a fork runs it on ubuntu-latest, where every other job runs. The PC
+# runs one job at a time, so only the job it shortens goes there: `database` and `install` take as long or longer on it
+# and would queue `integration` behind them. The compared screens and the measured navigation budgets (`visual`) stay on
+# ubuntu-latest too: the screens' approved images are made there (the PC renders text a few pixels differently), and the
+# budgets need a machine no other job shares. The stack's ports lie in Linux's range for outgoing connections, so on a
+# GitHub-hosted runner a job reserves them before it starts the stack (#225). The PC shares its Docker with other
+# repositories' CI: there the stack's ports move to a block of their own above that range, the job removes what this
+# repository's runs start before and after it (scripts/ci-runner.mjs), and ~/.npm, the browsers and the image layers
+# stay on the machine.
 name: CI
 
 on:
@@ -132,7 +134,7 @@ jobs:
   database:
     needs: [changes]
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.database != 'false') }}
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.CI_RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
       contents: read
@@ -146,21 +148,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
-      - name: clear an earlier run and move the stack's ports
-        if: ${{ runner.environment != 'github-hosted' }}
-        # The PC's Docker daemon sees the checkout but not this job's /tmp, so every file a script hands to a container
-        # (mktemp, os.tmpdir()) is written inside the checkout; the next checkout's clean removes it.
-        run: |
-          node scripts/ci-runner.mjs cleanup
-          node scripts/ci-runner.mjs move-ports 640
-          mkdir -p "$GITHUB_WORKSPACE/.ci-tmp"
-          echo "TMPDIR=$GITHUB_WORKSPACE/.ci-tmp" >> "$GITHUB_ENV"
+          cache: npm
       - name: database
         run: ./ci.sh database
-      - name: remove what this run started
-        if: ${{ always() }}
-        run: node scripts/ci-runner.mjs cleanup
 
   # The compared screens (the `visual` Playwright project) on lane 0 as the seed builds it, on the runner their approved
   # images are made on, then the measured navigation budgets. When `changes` says `visual` (screens alone, #213), this is all of the browser suite that runs.

@@ -21,7 +21,7 @@ const jobs = workflows.flatMap(({ path, yaml }) => Object.entries(yaml.jobs ?? {
 const ci = workflows.find(file => file.path === `${dir}/ci.yml`).yaml;
 
 const heavyRunner = "${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.CI_RUNNER || 'ubuntu-latest' }}";
-const heavyJobs = ['database', 'integration'];
+const heavyJobs = ['integration'];
 const isHeavy = ({ path, name }) => path === `${dir}/ci.yml` && heavyJobs.includes(name);
 
 function triggers(yaml) {
@@ -133,7 +133,7 @@ test('the scripts accept exactly the lanes tests/lane.mjs reserves ports for', (
 test('on the self-hosted runner a job clears an earlier run and moves the ports before the stack starts, and cleans up last (#224)', () => {
  const config = readFileSync('supabase/config.toml', 'utf8');
  const checked = supabaseJobs.filter(({ job }) => job['runs-on'] === heavyRunner);
- for (const name of ['database', 'integration']) assert.ok(checked.some(job => job.name === name), name);
+ for (const name of heavyJobs) assert.ok(checked.some(job => job.name === name), name);
  for (const job of checked) {
   const steps = job.job.steps;
   const prepare = steps.findIndex(step => /ci-runner\.mjs move-ports \d+/.test(step.run ?? ''));
