@@ -16,11 +16,13 @@ import { LeadWelcome } from '@/app/lead-welcome';
 import { PrivateLine } from '@/app/private-line';
 import { titleOf, type Decision, type SavedRule } from '@/lib/conversations';
 import { MadeCard, RequestCard } from '@/app/agent-card';
+import { ReplyCard } from '@/app/reply-card';
 import { overlayHref } from '@/lib/settings-overlay.mjs';
 import type { ConversationRecord } from '@/lib/conversation-record';
 import { localeFor } from '@/lib/i18n.mjs';
 type Conversation={id:string,agent_name:string,face:string};
 const requestWaits=(messages:ConversationRecord['messages'])=>messages.some(message=>message.cards?.some(card=>card.kind==='request'&&card.request.state==='waiting'));
+const replyCardIds=(messages:ConversationRecord['messages'])=>messages.flatMap(message=>message.cards?.flatMap(card=>card.kind==='reply'?[card.card.id]:[])??[]);
 
 // The reply is collected by the server from Hermes; the page asks again until it is in the record. Each send restarts
 // the asking, so an answer about an earlier run cannot stop it before the new reply arrives. An Owner answers a request
@@ -42,6 +44,8 @@ export default function ConversationView({slug,agent,details,company,conversatio
  // page once the server parts are drawn again, so its tile and its "new" mark show without a reload.
  const router=useRouter(); const madeCount=(rows:ConversationRecord['messages'])=>rows.reduce((sum,message)=>sum+(message.cards?.filter(card=>card.kind==='made').length||0),0);
  const made=useRef(madeCount(initial.messages));
+ // A card an Agent shows while the page is open rises in once (design-reference: card-in); those already there do not.
+ const [drawnCards]=useState(()=>new Set(replyCardIds(initial.messages)));
  // A queued turn keeps `pending` true from one run to the next; each run's start and reply add a message.
  const runKey=`${pending}:${messages.length}`; const drawnRun=useRef(runKey);
  useEffect(()=>{ if(drawnRun.current===runKey) return; drawnRun.current=runKey; router.refresh(); },[runKey,router]);
@@ -86,7 +90,8 @@ export default function ConversationView({slug,agent,details,company,conversatio
    </li>:<li key={`${message.kind||'m'}${message.id}`} className="turn turn--agent msg" data-author="agent" data-kind={message.kind}>
     <div className="sender">{face(20)}<bdi>{message.author_name}</bdi><time className="sender__time" dateTime={message.created_at}>{time(message.created_at)}</time></div>
     {message.body&&<div className="bubble bubble--agent" dir="auto">{message.body}</div>}
-    {message.cards?.map(card=>card.kind==='made'?<MadeCard key={card.agent.id} slug={slug} agent={card.agent}/>:<RequestCard key={`request${card.request.id}`} slug={slug} request={card.request}/>)}
+    {message.cards?.map(card=>card.kind==='made'?<MadeCard key={card.agent.id} slug={slug} agent={card.agent}/>:card.kind==='request'?<RequestCard key={`request${card.request.id}`} slug={slug} request={card.request}/>
+     :<ReplyCard key={`reply${card.card.id}`} card={card.card} fresh={!drawnCards.has(card.card.id)}/>)}
    </li>)}</ol>
    {pending&&<p className="thinking convo-status" role="status">{working?c('conversationWorkingFor',conversation.agent_name,working):t('conversationWorking',conversation.agent_name)}</p>}
    {failed&&<p className="note convo-status" role="alert">{t('conversationReplyFailed')}</p>}

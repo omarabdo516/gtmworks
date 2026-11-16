@@ -9,7 +9,7 @@ import { knowledgeInstructions } from '../lib/company-knowledge.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 import { engineFor as driverFor } from '../lib/engine.mjs';
-import { runToolCall } from '../lib/agent-tools.mjs';
+import { runToolCall, toolSpecTexts } from '../lib/agent-tools.mjs';
 import { levelConfig } from '../lib/agent-levels.mjs';
 import { moveAgentProfiles } from '../lib/company-profiles.mjs';
 
@@ -155,7 +155,7 @@ test('integration: Lead makes the Agent the Owner asks for, and nothing for a Ma
  expect(made()).toEqual([]);
  const closed=await Promise.all([close(),close()]);
  expect(closed[0]+closed[1]).toBe(1);
- expect(fake.runs.map(run=>run.tools.map(tool=>tool.name))).toEqual([['create_agent','save_rule'],['create_agent','save_rule']]);
+ expect(fake.runs.map(run=>run.tools.map(tool=>tool.name))).toEqual([['create_agent','save_rule','show_draft'],['create_agent','save_rule','show_draft']]);
  expect(fake.agentReads).toContain(profile);
  const [agent]=made();
  expect(made()).toEqual([{id:agent.id,name:'Meta Ads',speciality:'Runs the Meta ads.',apps:'Meta Ads Manager|Canva',requested_by:omar,dated:true,is_default:false,profile}]);
@@ -174,7 +174,7 @@ test('integration: Lead makes the Agent the Owner asks for, and nothing for a Ma
  const manager=(await memberClient('manager@example.com')).person;
  const theirs=randomUUID();
  expect(await sendMessage(manager,service,{person:'20000000-0000-0000-0000-000000000002',company,conversation:theirs,sendKey:randomUUID(),agent:lead,message:'I want someone to handle Meta ads',encryptionKey,engineFor:fake.engineFor})).toEqual({conversation:theirs});
- expect(fake.runs[3].tools.map(tool=>tool.name)).toEqual(['request_agent','save_rule']);
+ expect(fake.runs[3].tools.map(tool=>tool.name)).toEqual(['request_agent','save_rule','show_draft']);
  expect(await closeOpenRuns(service,{encryptionKey,conversation:theirs,engineFor:fake.engineFor})).toBe(1);
  expect(made()).toHaveLength(2);
 });
@@ -201,7 +201,7 @@ test('integration: Lead keeps a Manager\'s and a Contributor\'s request for an A
   const closed=await Promise.all([close(),close()]);
   expect(closed[0]+closed[1]).toBe(1);
  }
- expect(fake.runs.map(run=>run.tools.map(tool=>tool.name))).toEqual([['request_agent','save_rule'],['request_agent','suggest_rule']]);
+ expect(fake.runs.map(run=>run.tools.map(tool=>tool.name))).toEqual([['request_agent','save_rule','show_draft'],['request_agent','suggest_rule','show_draft']]);
  expect(fake.agentReads).toEqual([]);
  expect(agents()).toBe(before);
  const listed=`('${conversations.join("','")}')`;
@@ -228,7 +228,7 @@ test('integration: an Agent saves the rule the Owner tells it, with its log row,
   const send=(message:string)=>sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message,encryptionKey,engineFor:fake.engineFor});
   const close=()=>closeOpenRuns(service,{encryptionKey,conversation,engineFor:fake.engineFor});
   expect(await send(rule)).toEqual({conversation});
-  expect(fake.runs[0].tools.map(tool=>tool.name)).toEqual(['save_rule']);
+  expect(fake.runs[0].tools.map(tool=>tool.name)).toEqual(['save_rule','show_draft']);
   expect(fake.runs[0].instructions).toBe(knowledge());
   // A reader and the worker close the run at once: the rule is saved once, before the reply is stored.
   const closed=await Promise.all([close(),close()]);
@@ -249,7 +249,7 @@ test('integration: an Agent saves the rule the Owner tells it, with its log row,
   const tell=(message:string)=>sendMessage(member,service,{person:contributor,company,conversation:theirs,sendKey:randomUUID(),agent,message,encryptionKey,engineFor:fake.engineFor});
   const closeTheirs=()=>closeOpenRuns(service,{encryptionKey,conversation:theirs,owner:contributor,engineFor:fake.engineFor});
   expect(await tell('Draft the teaser')).toEqual({conversation:theirs});
-  expect(fake.runs[2].tools.map(tool=>tool.name)).toEqual(['suggest_rule']);
+  expect(fake.runs[2].tools.map(tool=>tool.name)).toEqual(['suggest_rule','show_draft']);
   expect(fake.runs[2].instructions).toContain(`- ${rule}`);
   expect(await closeTheirs()).toBe(1);
 
@@ -268,6 +268,61 @@ test('integration: an Agent saves the rule the Owner tells it, with its log row,
   expect(fake.runs[5].instructions).not.toContain(suggestion);
   expect(await close()).toBe(1);
   expect(rules()).toHaveLength(2);
+ } finally { detach(); }
+});
+
+// #136: an Agent shows a Contributor a draft as a card under its reply; the fake engine scripts its show_draft call. The
+// limits the model is told (the spec's maxLength and maxItems) are the ones the database keeps: a draft at every limit
+// is shown, and one over any of them is not.
+test('integration: an Agent shows a draft once under its reply, also when two closers race, shows none for a call that does not hold, still closes the run with its reply, and logs it for its person and the Managers',async()=>{
+ test.setTimeout(120000);
+ const fake=fakeEngine(); const {agent,detach}=attachAgent();
+ const contributor='20000000-0000-0000-0000-000000000005';
+ const plan={title:'خطة الحملة',line:'مسودة · Meta Ads',rows:[{label:'الهدف',value:'ليدز على واتساب'},{label:'الميزانية',value:'500 ج يومياً · 15,000 ج للشهر'}]};
+ const {title,line,rows}=JSON.parse(toolSpecTexts().show_draft).parameters.properties;
+ const most={title:'t'.repeat(title.maxLength),line:'l'.repeat(line.maxLength),
+  rows:Array.from({length:rows.maxItems},()=>({label:'k'.repeat(rows.items.properties.label.maxLength),value:'v'.repeat(rows.items.properties.value.maxLength)}))};
+ const calls:Record<string,unknown>={
+  'Plan the campaign':{...plan,title:` ${plan.title} `},
+  'At every limit':most,
+  'No title':{line:plan.line,rows:plan.rows},
+  'One row too many':{...most,rows:[...most.rows,most.rows[0]]},
+  'Title over':{...most,title:`${most.title}t`},
+  'Line over':{...most,line:`${most.line}l`},
+  'Label over':{...most,rows:[{...most.rows[0],label:`${most.rows[0].label}k`}]},
+  'Value over':{...most,rows:[{...most.rows[0],value:`${most.rows[0].value}v`}]},
+  'Lone surrogate':{...plan,title:'خطة \ud83d'},
+ };
+ fake.settings.toolCalls=input=>Object.hasOwn(calls,input)?[{id:'call-0',name:'show_draft',arguments:calls[input]}]:[];
+ try {
+  const {service,person}=await memberClient('multi@example.com');
+  const conversation=randomUUID();
+  const close=()=>closeOpenRuns(service,{encryptionKey,conversation,owner:contributor,engineFor:fake.engineFor});
+  for(const [index,message] of Object.keys(calls).entries()) {
+   expect(await sendMessage(person,service,{person:contributor,company,conversation,sendKey:randomUUID(),agent,message,encryptionKey,engineFor:fake.engineFor})).toEqual({conversation});
+   expect(fake.runs[index].tools.map(tool=>tool.name)).toEqual(['suggest_rule','show_draft']);
+   // A reader and the worker close the run at once: the card is kept once, before the reply is stored.
+   const closed=await Promise.all([close(),close()]);
+   expect(closed[0]+closed[1]).toBe(1);
+  }
+  expect(agentRows(conversation)).toEqual(Object.keys(calls).map(message=>({body:`Reply to: ${message}`})));
+  const cards=JSON.parse(query(`select run_id,call_id,kind,title,content,state from public.reply_cards where conversation_id='${conversation}' order by id`));
+  expect(cards).toEqual([{run_id:fake.runs[0].id,call_id:'call-0',kind:'draft',title:plan.title,content:{line:plan.line,rows:plan.rows},state:'shown'},
+   {run_id:fake.runs[1].id,call_id:'call-0',kind:'draft',title:most.title,content:{line:most.line,rows:most.rows},state:'shown'}]);
+  // The same run and call carried out again (a closer stopped before the close) answer the card they showed.
+  const [{id}]=JSON.parse(query(`select id from public.reply_cards where run_id='${fake.runs[0].id}'`));
+  expect(await runToolCall({db:service,engine:fake.engineFor({}),profile:'',conversation,run:fake.runs[0].id},{id:'call-0',name:'show_draft',arguments:{...plan,title:'Something else'}})).toEqual({state:'shown',card:Number(id)});
+  expect(JSON.parse(query(`select count(*)::int as n from public.reply_cards where conversation_id='${conversation}'`))[0].n).toBe(2);
+
+  // Only the Conversation's person reads the cards; the log rows are read by that person and by a Manager.
+  expect((await person.from('reply_cards').select('title').eq('conversation_id',conversation).order('id')).data).toEqual([{title:plan.title},{title:most.title}]);
+  const {person:owner}=await clients();
+  expect((await owner.from('reply_cards').select('id').eq('conversation_id',conversation)).data).toEqual([]);
+  const logged=async(reader:typeof person)=>(await reader.from('company_log').select('actor_id,actor_kind,action,details').eq('agent_id',agent).eq('action','agent_card_shown').order('id')).data;
+  const rows=[plan.title,most.title].map(title=>({actor_id:agent,actor_kind:'agent',action:'agent_card_shown',details:{card:{kind:'draft',title},private:true,teller:contributor}}));
+  expect(await logged(person)).toEqual(rows);
+  expect(await logged((await memberClient('manager@example.com')).person)).toEqual(rows);
+  expect(await logged((await memberClient('reviewer@example.com')).person)).toEqual([]);
  } finally { detach(); }
 });
 
