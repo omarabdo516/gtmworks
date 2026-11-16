@@ -1,7 +1,9 @@
 {
   "channelPlaceholder": "اكتب في #{0}… والوكيل بيرد بس لو ناديته باسمه",
   "channelMessageLabel": "اكتب رسالتك في القناة",
+  "channelMember": "{0} عضو",
   "channelMembers": "{0} أعضاء",
+  "channelAgent": "{0} وكيل",
   "channelAgents": "{0} وكلاء",
   "channelNoAgents": "مفيش وكلاء",
   "channelRouteTip": "الوكلاء مش بيقروا ولا بيردّوا غير لما حد يناديهم باسمهم، زي @{0}. الكلام العادي بين الأعضاء مش بيروح لأي وكيل.",

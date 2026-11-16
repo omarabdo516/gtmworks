@@ -62,7 +62,7 @@ export default function ChannelView({person,initial}:{person:string,initial:Chan
   <div className="transcript" ref={transcript}><div className="transcript__col">
    <div className="ch-intro">
     <span className="ch-intro__h">#<bdi>{name}</bdi></span>
-    <span>{c('channelMembers',count(members.length))} · {agents.length?<Names agents={agents} c={c}/>:c('channelNoAgents')}</span>
+    <span>{c(members.length===1?'channelMember':'channelMembers',count(members.length))} · {agents.length?<Names agents={agents} c={c}/>:c('channelNoAgents')}</span>
     <p><ShellIcon name="at"/><span>{tip}</span></p>
     {only.length>0&&<p className="ch-intro__only"><ShellIcon name="eye"/><span>{onlyBefore}<Names agents={only} c={c}/>{onlyAfter}</span></p>}
    </div>
@@ -135,7 +135,7 @@ function ChannelDetails({panel,name,person,record,tip,c,refresh}:{panel:DetailsP
  return <DetailsShell panel={panel} label={c('channelDetails')} start={<span className="dp-top__l">{c('channelKind')}</span>}>
   <div className="dp-id">
    <span className="hp-hash hp-hash--xl" aria-hidden="true"><ShellIcon name="hash"/></span>
-   <div><div className="dp-id__name">#<bdi>{name}</bdi></div><div className="dp-id__role">{c('channelMembers',count(members.length))} · {c('channelAgents',count(agents.length))}</div></div>
+   <div><div className="dp-id__name">#<bdi>{name}</bdi></div><div className="dp-id__role">{c(members.length===1?'channelMember':'channelMembers',count(members.length))} · {c(agents.length===1?'channelAgent':'channelAgents',count(agents.length))}</div></div>
   </div>
   <div className="dp-sections">
    <section className="dp-sec" aria-labelledby="ch-h-p">
