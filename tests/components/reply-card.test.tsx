@@ -52,7 +52,7 @@ test.each([['en', 'left'], ['ar', 'start']] as const)('in the %s interface, the 
  }
 });
 
-// #137: a review shows one numbered row per reviewed text, the text in the interface's quotation marks, its verdict as a
+// #137: a review shows one numbered row per reviewed text, the text in the reference's «» quotation marks, its verdict as a
 // badge with its icon and word, and the Agent's note under it; the decision is the card's last row.
 const review: Card = { id: 3, kind: 'review', title: 'مراجعة نصوص إعلانات ديسمبر', line: '2 نصوص · Meta Ads · قبل ما تطلع', items: [
  { text: 'من خريج تجارة لمحاسب شغال في 3 شهور', fine: true, note: 'الوعد واضح، ومعانا قصص طلبة تثبته.' },
@@ -60,7 +60,7 @@ const review: Card = { id: 3, kind: 'review', title: 'مراجعة نصوص إع
 ], decision: '1 جاهز، و1 رجع لـ Ads بالبديل' };
 
 test.each([
- ['en', 'Review: مراجعة نصوص إعلانات ديسمبر', ['“من خريج تجارة لمحاسب شغال في 3 شهور”', '“أضمن طريق لأول وظيفة محاسبة”'], ['Fine', 'Needs an edit'], 'Decision'],
+ ['en', 'Review: مراجعة نصوص إعلانات ديسمبر', ['«من خريج تجارة لمحاسب شغال في 3 شهور»', '«أضمن طريق لأول وظيفة محاسبة»'], ['Fine', 'Needs an edit'], 'Decision'],
  ['ar', 'مراجعة: مراجعة نصوص إعلانات ديسمبر', ['«من خريج تجارة لمحاسب شغال في 3 شهور»', '«أضمن طريق لأول وظيفة محاسبة»'], ['تمام', 'يتعدّل'], 'القرار'],
 ] as const)('in the %s interface, a review is named %j and shows each text quoted in order with its badge and note, and the decision last', async (language, name, quotes, words, decision) => {
  const screen = await render(<LanguageProvider language={language}><div dir={language === 'ar' ? 'rtl' : 'ltr'}><ReplyCard card={review} fresh={false}/>
