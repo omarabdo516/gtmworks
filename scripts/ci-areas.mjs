@@ -24,7 +24,7 @@ const suites = {
   integration: [
     /^(app|components|lib|worker)\//, /^(middleware|instrumentation)\.ts$/, /^(next|postcss)\.config\.mjs$/, /^server\.js$/,
     /^tests\/(.+\/)?[^/]+\.spec\.ts$/, /^tests\/[^/]+\.ts$/, /^tests\/visual\.spec\.ts-snapshots\//,
-    /^tests\/(visual-screens|lane|fake-hermes|fake-engine|touch-diagnostics)\.mjs$/,
+    /^tests\/(visual-screens|lane|fake-hermes|fake-engine|touch-diagnostics)\.mjs$/, /^tests\/visual-screens\//,
     /^playwright(\.proxy)?\.config\.ts$/, /^Dockerfile$/, /^\.dockerignore$/,
     /^scripts\/(web\.sh|local-db\.sh|proxy-stack\.sh|ci-image\.sh|first-run-db\.mjs|local-default-privileges\.sql)$/,
     /^supabase\/(migrations\/|config\.toml$|seed\.sql$)/, /^public\//,

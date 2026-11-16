@@ -1,0 +1,6 @@
+{
+  "path": "/c/rs-learning/settings?agent=68000000-0000-0000-0000-000000000002",
+  "state": "rule-told",
+  "dark": true,
+  "ready": ".rl-said:not([data-utc])"
+}

@@ -1,24 +1,31 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
-import { screens, languages, widths, baselineFolder, baselineFile } from './visual-screens.mjs';
+import { execFileSync } from 'node:child_process';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { devNull, tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { screens, languages, widths, screenFolder, loadScreens, baselineFolder, baselineFile, baselineProblems } from './visual-screens.mjs';
 
 const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
-test('dark comparison includes Home, the chat, board, card, sign-in, both alone screens, the three #13 screens, the #15 switches, the #14 gallery, the two #18 screens, the two settings overlay screens (#26), the #20 Agent details, the #23 channel and the three learning suggestion screens (#25) and the #27 Company knowledge in both languages and widths', () => {
- const dark = screens.filter(screen => screen.dark);
- assert.deepEqual(dark.map(screen => screen.name).sort(), ['agent-details-dark', 'agent-rules-dark', 'agent-visibility-dark', 'alone-chat-dark', 'alone-settings-dark', 'board-dark', 'card-dark', 'channel-dark', 'chat-dark', 'home-dark', 'knowledge-dark', 'learning-waiting-dark', 'made-agent-dark', 'made-card-dark', 'new-agent-dark', 'ready-roles-dark', 'rule-saved-dark', 'rule-suggested-dark', 'rule-waiting-dark', 'settings-agents-dark', 'settings-main-agent-dark', 'sign-in-dark']);
- const images = dark.flatMap(screen => languages.flatMap(language => widths.map(width => baselineFile(screen, language, width))));
- assert.equal(images.length, 88);
- console.log('Dark baselines expected:\n' + images.join('\n'));
-});
+function temporaryFolder(t) {
+ const folder = mkdtempSync(join(tmpdir(), 'gtmworks-visual-screens-'));
+ t.after(() => rmSync(folder, { recursive: true, force: true }));
+ return folder;
+}
 
 test('every listed screen has an approved image per language and width, and nothing else is approved', () => {
- const expected = screens.flatMap(screen => languages.flatMap(language => widths.map(width => baselineFile(screen, language, width)))).sort();
- assert.equal(expected.length, screens.length * languages.length * widths.length);
  assert.deepEqual([...languages].sort(), ['ar', 'en']);
  assert.deepEqual([...widths].sort((a, b) => a - b), [390, 1440]);
- assert.deepEqual(readdirSync(baselineFolder).sort(), expected);
+ assert.deepEqual(baselineProblems(readdirSync(baselineFolder), screens), { missing: [], stray: [] });
+});
+
+test('an approved image taken away is missing, and an image no screen owns is stray', () => {
+ const listing = readdirSync(baselineFolder);
+ const [taken] = listing;
+ assert.deepEqual(baselineProblems(listing.filter(file => file !== taken), screens), { missing: [taken], stray: [] });
+ const stray = 'retired-screen-en-1440-visual-linux.png';
+ assert.deepEqual(baselineProblems([...listing, stray], screens), { missing: [], stray: [stray] });
 });
 
 test('approved images are PNG pictures at the width they are named for', () => {
@@ -29,3 +36,69 @@ test('approved images are PNG pictures at the width they are named for', () => {
   assert.ok(bytes.readUInt32BE(20) >= 600, `${screen.name} ${language} ${width} is too short to be a screen`);
  }
 });
+
+test('every dark screen is its light twin in the dark theme', () => {
+ const dark = screens.filter(screen => screen.dark);
+ assert.ok(dark.length > 0, 'some screen is compared dark');
+ for (const screen of dark) {
+  const twin = screens.find(light => !light.dark && `${light.name}-dark` === screen.name);
+  assert.ok(twin, `${screen.name} has a light twin`);
+  assert.deepEqual({ ...screen, name: twin.name, dark: false }, twin, `${screen.name} shows what its light twin shows`);
+ }
+});
+
+test('a screen file that is not a screen is refused, naming the file', async t => {
+ const refused = [
+  ['typo.json', '{"path": "/x", "dark": false, "redy": ".x"}', /typo\.json: unknown field "redy"/],
+  ['inherited.json', '{"path": "/x", "dark": false, "toString": ".x"}', /inherited\.json: unknown field "toString"/],
+  ['flag.json', '{"path": "/x", "dark": "yes"}', /flag\.json: "dark" has the wrong type/],
+  ['visitor.json', '{"path": "/x", "dark": false, "anonymous": false}', /visitor\.json: "anonymous" has the wrong type/],
+  ['nowhere.json', '{"dark": false}', /nowhere\.json: "path" is required/],
+  ['undecided.json', '{"path": "/x"}', /undecided\.json: "dark" is required/],
+  ['broken.json', '{"path": "/x",', /broken\.json: /],
+  ['list.json', '[]', /list\.json: a screen is a JSON object/],
+  ['home-dark.json', '{"path": "/x", "dark": false}', /home-dark\.json: a dark screen is made by "dark": true/],
+  ['Home.json', '{"path": "/x", "dark": false}', /Home\.json: a screen file is named <kebab-case-name>\.json/],
+  ['notes.md', 'a note', /notes\.md: a screen file is named <kebab-case-name>\.json/],
+ ];
+ for (const [file, text, message] of refused) {
+  await t.test(file, t => {
+   const folder = temporaryFolder(t);
+   writeFileSync(join(folder, 'home.json'), '{"path": "/c/rs-learning/home", "dark": true}');
+   writeFileSync(join(folder, file), text);
+   assert.throws(() => loadScreens(folder), message);
+  });
+ }
+});
+
+// The conflict this layout removes: two pull requests that each add a screen, merged as GitHub merges them.
+const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], {
+ cwd, encoding: 'utf8',
+ env: { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_'))), GIT_CONFIG_GLOBAL: devNull, GIT_CONFIG_NOSYSTEM: '1' },
+});
+
+for (const [first, second] of [['aa-first', 'zz-last'], ['zz-a', 'zz-b']]) {
+ test(`two branches that add ${first} and ${second} merge without a conflict`, t => {
+  const repository = temporaryFolder(t);
+  const folder = join(repository, screenFolder);
+  mkdirSync(folder, { recursive: true });
+  cpSync(screenFolder, folder, { recursive: true });
+  git(repository, 'init', '-q', '-b', 'main');
+  git(repository, 'add', '.');
+  git(repository, 'commit', '-q', '-m', 'main');
+  for (const name of [first, second]) {
+   git(repository, 'switch', '-q', '-c', name, 'main');
+   writeFileSync(join(folder, `${name}.json`), `${JSON.stringify({ path: `/c/rs-learning/${name}`, dark: true }, null, 2)}\n`);
+   git(repository, 'add', '.');
+   git(repository, 'commit', '-q', '-m', name);
+  }
+  const tree = git(repository, 'merge-tree', '--write-tree', first, second).trim();
+  assert.match(tree, /^[0-9a-f]{40,64}$/, 'merge-tree reports a clean merge as only the merged tree');
+  const merged = git(repository, 'ls-tree', '--name-only', tree, `${screenFolder}/`).split('\n').filter(Boolean);
+  assert.ok(merged.includes(`${screenFolder}/${first}.json`) && merged.includes(`${screenFolder}/${second}.json`), 'both new screens are in the merge');
+  git(repository, 'read-tree', '-u', '--reset', tree);
+  const names = loadScreens(folder).map(screen => screen.name);
+  for (const name of [first, second, `${first}-dark`, `${second}-dark`]) assert.ok(names.includes(name), `${name} is compared after the merge`);
+  assert.equal(names.length, screens.length + 4);
+ });
+}
