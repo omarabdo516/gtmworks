@@ -5,7 +5,6 @@ import Link from '@/lib/link';
 import { useI18n } from '@/lib/i18n-client';
 import { ShellIcon } from '@/components/shell-icon';
 import { BoardIcon } from '@/components/board-icon';
-import { workAction } from '@/app/c/[slug]/[[...section]]/work-actions';
 import './log.css';
 import './sheet.css';
 
@@ -22,11 +21,12 @@ const leaveMs=190;
 // A Card opened over the board (#116; design-reference: openSheet, renderSheetHead, renderSheetBody, closeSheet): a modal
 // dialog at the inline end, so the board behind it is inert, with the Card's head, its Chat and Log tabs and, on Log,
 // the note field. Closing slides it out first; then the board's own address comes back and the keyboard is on the Card.
-export function CardSheet({slug,company,title,face,who,badge,sheet,canWrite,alone,message}:{slug:string,company:string,title:string,face:ReactNode,who:ReactNode,badge:ReactNode,sheet:CardSheetData,canWrite:boolean,alone:boolean,message?:string}) {
+// send is the board's note action (work-actions.ts), handed in so this client file never imports the server module.
+export function CardSheet({slug,company,title,face,who,badge,sheet,canWrite,alone,message,send:sendNote}:{slug:string,company:string,title:string,face:ReactNode,who:ReactNode,badge:ReactNode,sheet:CardSheetData,canWrite:boolean,alone:boolean,message?:string,send:(form:FormData)=>Promise<unknown>}) {
  const {t}=useI18n(); const router=useRouter();
  const box=useRef<HTMLDialogElement>(null); const logBox=useRef<HTMLDivElement>(null); const timer=useRef<ReturnType<typeof setTimeout>>(undefined); const stick=useRef(true);
  const [tab,setTab]=useState<SheetTab>(sheet.chat?'chat':'log'); const [leaving,setLeaving]=useState(false); const [filled,setFilled]=useState(false);
- const [,send,sending]=useActionState(async(_:null,form:FormData)=>{ await workAction(form); setFilled(false); return null; },null);
+ const [,send,sending]=useActionState(async(_:null,form:FormData)=>{ await sendNote(form); setFilled(false); return null; },null);
  const board=`/c/${slug}/work/board`;
  useLayoutEffect(()=>{
   if(!box.current?.open) box.current?.showModal();

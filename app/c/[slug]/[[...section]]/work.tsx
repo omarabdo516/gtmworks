@@ -132,7 +132,7 @@ export default function Work(p:WorkProps) { const {t,locale,language}=useI18n();
   </Fragment>; };
  // A Card opened over the board (#116; design-reference: renderSheetHead): its Agent, else its channel, and where it stands.
  const sheetView=(c:Card,sheet:CardSheetData)=>{ const agent=agentOfCard(c); const column=columnOfCard(c);
-  return <CardSheet key={c.id} slug={p.slug} company={p.company} title={c.title} sheet={sheet} canWrite={p.canCreate} alone={!!p.alone} message={p.message}
+  return <CardSheet key={c.id} send={workAction} slug={p.slug} company={p.company} title={c.title} sheet={sheet} canWrite={p.canCreate} alone={!!p.alone} message={p.message}
    face={agent?<span aria-hidden="true"><AgentFace id={agent} role={agentRole(agent)} name={agentName(agent)} size={28}/></span>:null}
    who={agent?<bdi>{agentName(agent)}</bdi>:c.channel?<bdi>{c.channel}</bdi>:null}
    badge={column==='waiting'?<span className="badge badge--wait"><span className="dot dot--waiting" aria-hidden="true"/>{p.approvableIds.includes(c.id)?t('boardWaitingYou'):p.canCreate?waitingOn(c):t('boardWaitingTeam')}</span>:<span className="badge">{columnName(column)}</span>}/>; };

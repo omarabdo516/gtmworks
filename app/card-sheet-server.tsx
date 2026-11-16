@@ -22,7 +22,7 @@ export async function cardSheet(db:Db,{company,card,slug,me,canWrite,t,language}
   {total>rows.length&&<p className="lg-more">{t('logShowing',rows.length)}</p>}
   {rows.length?<LogDays oldestFirst items={rows.map(row=>({id:row.id,at:row.created_at,anchor:logAnchor(row),node:<LogEntry row={row} people={people} me={me} slug={slug} company={company} canWrite={canWrite} drawnAt={drawn} t={t} language={language} cardLink={false}/>}))}/>
    :<div className="panel-card"><p className="panel-empty">{t('sheetLogEmpty')}</p></div>}
-  <p className="lg-forever"><PageIcon name="lock"/><span>{t('logForever')}</span></p>
+  <p className="lg-forever"><PageIcon name="lock"/><span>{t('sheetLogForever')}</span></p>
  </div>;
  // Nothing ties a Card to a Conversation today: no chat makes a Card and no Card names one, so every sheet opens on Log.
  return {id:card,log,count:total,working:!!open?.length,chat:null};

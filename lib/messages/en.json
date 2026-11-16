@@ -494,6 +494,7 @@
   "logEmpty": "Nothing in the log yet. As soon as Lead makes an agent, or someone changes something, it’s written here on its own.",
   "logNoMatch": "No entries match these filters. Try “Everyone”, or another card.",
   "logForever": "Nothing in the log is ever deleted, not even by the Owner.",
+  "sheetLogForever": "Nothing in the log is ever deleted, not even by the Owner. Only the writer can edit a note, in its first 5 minutes.",
   "logYou": "(you)",
   "logToday": "Today",
   "logYesterday": "Yesterday",

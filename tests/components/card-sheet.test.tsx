@@ -3,22 +3,20 @@ import { render } from 'vitest-browser-react';
 import { userEvent } from 'vitest/browser';
 import type { ComponentProps } from 'react';
 import { CardSheet, type CardSheetData } from '@/app/card-sheet';
-import { workAction } from '@/app/c/[slug]/[[...section]]/work-actions';
 import { LanguageProvider } from '@/lib/i18n-client';
 import '@/app/shell.css';
 
 const push = vi.fn<(href: string, options?: { scroll?: boolean }) => void>();
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push, refresh: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }) }));
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
-vi.mock('@/app/c/[slug]/[[...section]]/work-actions', () => ({ workAction: vi.fn() }));
-const sent = vi.mocked(workAction);
+const sent = vi.fn<(form: FormData) => Promise<unknown>>();
 afterEach(() => { push.mockReset(); sent.mockReset(); vi.unstubAllGlobals(); });
 
 const sheet = (more: Partial<CardSheetData> = {}): CardSheetData => ({ id: 7, log: <p>Omar moved the card</p>, count: 3, working: false, chat: null, ...more });
 // The board behind the sheet holds the Card's link, where the keyboard goes back when the sheet closes.
 const show = (value: CardSheetData, canWrite = true) => render(<LanguageProvider language="en">
  <div id="board-cols"><div className="kcard" data-card-id="7"><a href="#card-7">Launch post</a></div></div>
- <CardSheet slug="rs-learning" company="co-1" title="Launch post" face={null} who={<bdi>Ads</bdi>} badge={<span className="badge">Ideas</span>} sheet={value} canWrite={canWrite} alone={false}/>
+ <CardSheet slug="rs-learning" company="co-1" title="Launch post" face={null} who={<bdi>Ads</bdi>} badge={<span className="badge">Ideas</span>} sheet={value} canWrite={canWrite} alone={false} send={sent}/>
 </LanguageProvider>);
 const dialog = () => document.querySelector('dialog')!;
 
@@ -97,7 +95,7 @@ const motion = () => { const style = getComputedStyle(dialog()); const [move] = 
  return { name: style.animationName, duration: style.animationDuration, easing: style.animationTimingFunction, frames: (move?.effect as KeyframeEffect | undefined)?.getKeyframes().map(k => [k.transform, k.opacity]) }; };
 for (const [dir, shift, suffix] of [['rtl', '-24px', ''], ['ltr', '24px', 'Ltr']] as const) test(`in ${dir} the sheet slides in and out as the reference does`, async () => {
  document.documentElement.dir = dir;
- const screen = await render(<div className="gw"><LanguageProvider language={dir === 'rtl' ? 'ar' : 'en'}><CardSheet slug="rs-learning" company="co-1" title="Launch post" face={null} who={null} badge={null} sheet={sheet()} canWrite alone={false}/></LanguageProvider></div>);
+ const screen = await render(<div className="gw"><LanguageProvider language={dir === 'rtl' ? 'ar' : 'en'}><CardSheet slug="rs-learning" company="co-1" title="Launch post" face={null} who={null} badge={null} sheet={sheet()} canWrite alone={false} send={sent}/></LanguageProvider></div>);
  expect(motion()).toEqual({ name: `sheetIn${suffix}`, duration: '0.28s', easing: 'cubic-bezier(0.2, 0, 0, 1)', frames: [[`translateX(${shift})`, '0'], ['none', '1']] });
  // Pressed in the page itself, so the leave is read inside its 190ms rather than after a driver round trip.
  (screen.getByRole('button', { name: dir === 'rtl' ? 'اقفل' : 'Close', exact: true }).element() as HTMLButtonElement).click();
