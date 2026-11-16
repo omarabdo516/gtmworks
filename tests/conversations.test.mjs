@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { shown, withDecisions, withTeamWork } from '../lib/conversations.ts';
+import { replyCardOf, shown, withDecisions, withTeamWork } from '../lib/conversations.ts';
 
 // A Contributor's Conversation in a team (#25): the line under the Agent's reply says who their rule was sent to as a
 // suggestion, and the Owner's or a Manager's decision on it shows where it happened among the messages.
@@ -54,4 +54,28 @@ test('an Owner\'s answer to a request shows at its time',()=>{
  const record=withDecisions(shown(asking,[],[{run_id:'r1',at:at(2),card:{kind:/** @type {const} */('request'),request:request(7)}}],'Lead'),[made],'Lead');
  assert.deepEqual(order(record),[1,2,'decided',3]);
  assert.equal(record[2].decided,made);
+});
+
+// #136: a card any Agent shows with its reply, read from its row; a row of a kind this version does not know is left out.
+const planning=[
+ {id:1,author:/** @type {const} */('person'),author_name:'Omar',body:'نمشي بزاوية «من خريج لمحاسب شغال»',run_id:'r1',created_at:at(1)},
+ {id:2,author:/** @type {const} */('agent'),author_name:'Ads',body:'تمام، دي خطة الحملة.',run_id:'r1',created_at:at(2)},
+ {id:3,author:/** @type {const} */('person'),author_name:'Omar',body:'And the article outline',run_id:'r2',created_at:at(10)},
+];
+const row=(/** @type {number} */ id,/** @type {string} */ run_id,kind='draft')=>({id,run_id,kind,title:'خطة الحملة',content:{line:'مسودة · Meta Ads',rows:[{label:'الهدف',value:'ليدز على واتساب'}]},created_at:at(id===1?2:11)});
+const draft=(/** @type {number} */ id)=>({id,kind:'draft',title:'خطة الحملة',line:'مسودة · Meta Ads',rows:[{label:'الهدف',value:'ليدز على واتساب'}]});
+
+test('a draft card is read from its row, and a row of a kind this version does not know is left out',()=>{
+ assert.deepEqual(replyCardOf(row(1,'r1')),draft(1));
+ assert.equal(replyCardOf(row(9,'r1','review')),null);
+ assert.equal(replyCardOf(row(9,'r1','toString')),null);
+});
+
+test('a draft card is under the Agent\'s reply of its run, or is the Agent\'s whole turn when the reply was nothing but the call',()=>{
+ const cards=[row(1,'r1'),row(2,'r2')].map(stored=>({run_id:stored.run_id,at:stored.created_at,card:{kind:/** @type {const} */('reply'),card:/** @type {import('../lib/conversations.ts').ReplyCard} */(replyCardOf(stored))}}));
+ const record=shown(planning,[{run_id:'r2',outcome:'failed'}],cards,'Ads');
+ assert.deepEqual(order(record),[1,2,3,'made']);
+ assert.deepEqual(record[1].cards,[{kind:'reply',card:draft(1)}]);
+ assert.equal(record[1].body,'تمام، دي خطة الحملة.');
+ assert.deepEqual(record[3],{id:3,author:'agent',author_name:'Ads',body:'',created_at:at(11),kind:'made',cards:[{kind:'reply',card:draft(2)}]});
 });

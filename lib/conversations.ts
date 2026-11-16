@@ -3,7 +3,8 @@
 // not sent because the engine would not start it (`failed`).
 // What Lead's turn of a run holds besides its words is a card: an Agent Lead made in it (#13), or a Member's request for
 // an Agent kept in it (#17), which shows the Owner's answer once there is one. The card is in Lead's reply of that run;
-// when Lead wrote nothing but the call, it is Lead's whole turn (`kind` made) after the message that asked.
+// when Lead wrote nothing but the call, it is Lead's whole turn (`kind` made) after the message that asked. A card any
+// Agent shows with its reply (#136) is placed the same way.
 // A lasting rule the Agent saved in a run (#18) shows as a saved line (`kind` saved) after the Agent's reply of that run,
 // or after the message that told it when the reply was nothing but the call. A rule since removed keeps its line, since
 // the Conversation is the record as people saw it; only its way to the Agent's page goes, with the Agent's.
@@ -14,7 +15,17 @@ export type MadeAgent={id:string,connection_id:string,name:string,job:string,app
 // `owners` names whom a waiting request waits on ("When Omar says yes"); a made request's `agent` is null once removed.
 type RequestBase={id:number,name:string,job:string,apps:string[],askedBy:string,askedWith:string};
 export type AgentRequestView=RequestBase&({state:'waiting',owners:string[]}|{state:'made',by:string,at:string,agent:Pick<MadeAgent,'id'|'connection_id'|'name'>|null}|{state:'declined',by:string,at:string,reason:string});
-export type LeadCard={kind:'made',agent:MadeAgent}|{kind:'request',request:AgentRequestView};
+// A card any Agent's reply carries (#136), one variant per kind, every word on it the Agent's. A row of a kind this app
+// version does not know (the database may be newer) is left out.
+export type ReplyCard={id:number,kind:'draft',title:string,line:string,rows:{label:string,value:string}[]};
+export const replyCardColumns='id,run_id,kind,title,content,created_at';
+export type ReplyCardRow={id:number,run_id:string,kind:string,title:string,content:unknown,created_at:string};
+// The database keeps only rows each kind's reader can read (reply_card_valid); a kind with no reader fails the build.
+const replyReaders:{[K in ReplyCard['kind']]:(row:ReplyCardRow)=>Extract<ReplyCard,{kind:K}>}={
+ draft:({id,title,content})=>{ const {line,rows}=content as {line:string,rows:{label:string,value:string}[]}; return {id,kind:'draft',title,line,rows}; },
+};
+export const replyCardOf=(row:ReplyCardRow):ReplyCard|null=>Object.hasOwn(replyReaders,row.kind)?replyReaders[row.kind as ReplyCard['kind']](row):null;
+export type LeadCard={kind:'made',agent:MadeAgent}|{kind:'request',request:AgentRequestView}|{kind:'reply',card:ReplyCard};
 export type SavedRule={id:string,agent:string|null,removed:boolean,said_at:string,sentTo?:string[]};
 type RuleDecision={approved:boolean,by:string,rule:string,at:string};
 export type Decision=({kind:'rule'}&RuleDecision)|({kind:'request',by:string,name:string,at:string}&({made:true}|{made:false,reason:string}));
