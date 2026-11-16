@@ -21,6 +21,7 @@ async function runStep(page, step) {
   const target = page.locator(selector).first();
   if (action === 'waitFor') return target.waitFor({ state: 'visible' });
   if (action === 'fill') return target.fill(text);
+  if (action === 'waitGone') return page.locator(selector).waitFor({ state: 'hidden' });
   if (action === 'scrollTo') return target.scrollIntoViewIfNeeded();
   if (!await target.isVisible() && await page.locator('#mobile-menu').isVisible()) await page.locator('#mobile-menu').click();
   await target.click();

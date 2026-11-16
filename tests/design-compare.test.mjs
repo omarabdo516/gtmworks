@@ -106,7 +106,7 @@ test('every screen says how to reach it in the reference and which built page it
       const [[action, value]] = Object.entries(step);
       const selector = action === 'fill' ? value[0] : value;
       if (action === 'fill') assert.ok(typeof value[1] === 'string' && value[1].length > 0, `${name}: fill text`);
-      assert.ok(['click', 'waitFor', 'scrollTo', 'fill'].includes(action), `${name}: known action ${action}`);
+      assert.ok(['click', 'waitFor', 'waitGone', 'scrollTo', 'fill'].includes(action), `${name}: known action ${action}`);
       assert.ok(typeof selector === 'string' && selector.length > 0, `${name}: selector`);
       assert.doesNotMatch(selector, /viewing|world|persona|view-as/i, `${name}: the demo-world switcher is never touched`);
     }
