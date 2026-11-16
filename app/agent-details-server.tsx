@@ -7,7 +7,6 @@ import { feedSince } from '@/lib/numbers.mjs';
 import { canCreateCard } from '@/lib/card-permissions.mjs';
 import { columnLabel } from '@/lib/board-columns.mjs';
 import { agentFiles, agentLogFilter, agentStatus, agentTasks, fileSize, latestActivity, pickTab, type AgentStatus, type DetailsTab } from '@/lib/agent-details.mjs';
-import { workDate } from '@/lib/work-date.mjs';
 import { ShellIcon } from '@/components/shell-icon';
 import type { LogRow } from '@/lib/activity-log.mjs';
 import { FeedWhen, LogDays } from '@/app/c/[slug]/log/log-client';
@@ -82,7 +81,7 @@ export async function agentDetails(db:Db,{company,agent,slug,me,role,tab}:{compa
  const filesTab=<section className="dp-sec" aria-labelledby="dp-files-h"><h3 className="dp-label" id="dp-files-h"><span>{t('agentFiles')} <span className="muted num">{(cardFileCount??0)+(talkFileCount??0)}</span></span></h3>
   {files.length?<ul className="panel-card">{files.map(file=><li key={file.key} className="panel-row"><span className="panel-row__icon"><ShellIcon name="file"/></span><span className="panel-row__text">
    <a className="panel-row__t od-truncate dp-file" href={file.href} target="_blank" rel="noreferrer" title={file.name}><bdi dir="auto">{file.name}</bdi></a>
-   <span className="panel-row__d"><bdi dir="ltr">{fileSize(file.size)}</bdi> · <bdi>{file.source}</bdi> · <time dateTime={file.at}>{workDate(file.at,language,{month:'short'})}</time></span></span></li>)}</ul>
+   <span className="panel-row__d"><bdi dir="ltr">{fileSize(file.size)}</bdi> · <bdi>{file.source}</bdi></span></span></li>)}</ul>
   :<div className="panel-card"><p className="panel-empty">{t('agentFilesEmpty')}</p></div>}</section>;
 
  const log=<section className="dp-sec"><h3 className="dp-label"><span>{t('chatTabLog')} <span className="muted num">{count??rows.length}</span></span><Link className="link-btn" href={`/c/${slug}/log?who=a:${agent}`}>{t('agentOpenLog')}</Link></h3>

@@ -144,7 +144,7 @@ test('the Files tab lists the Agent\'s Card files and the reader\'s own Conversa
  await expect(panel.locator('.dp-label > span')).toHaveText('Files 2');
  const rows=panel.locator('.panel-row');
  await expect(rows.locator('.panel-row__t')).toHaveText(['audiences.csv','june-brief.pdf']);
- await expect(rows.locator('.panel-row__d')).toHaveText(['18 KB · Plan the June campaign · Jun 12','86 KB · June campaign · Jun 10']);
+ await expect(rows.locator('.panel-row__d')).toHaveText(['18 KB · Plan the June campaign','86 KB · June campaign']);
  await expect(panel).not.toContainText('reviewer-notes.txt');
  const links=await rows.getByRole('link').evaluateAll(anchors=>anchors.map(anchor=>anchor.getAttribute('href')));
  expect(links).toEqual([`/c/rs-learning/files/conversation/${fileId('audiences.csv')}`,expect.stringMatching(/^\/c\/rs-learning\/files\/\d+$/)]);
