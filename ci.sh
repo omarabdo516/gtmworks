@@ -109,6 +109,15 @@ PY
   wait "$build_pid" || { cat playwright-report/build.log >&2; echo 'the browser suite build failed' >&2; exit 1; }
   GTMWORKS_WEB_PREBUILT=true GTMWORKS_TEST_LANES=$lanes npm run test:e2e
   ;;
+ visual)
+  # The compared screens alone, on lane 0 as the seed builds it: no journeys, no proxy suite, no image (#213).
+  if [[ "${CI:-}" == "true" ]]; then
+    npm ci
+    npx playwright install --with-deps chromium
+  fi
+  bash scripts/local-db.sh
+  GTMWORKS_TEST_LANES=1 npm run test:visual
+  ;;
  visual-update)
   # Rewrites only the approved screen images that changed. Run it where CI runs: the images are made for that system.
   if [[ "${CI:-}" == "true" ]]; then
@@ -118,5 +127,5 @@ PY
   bash scripts/local-db.sh
   npm run test:visual:update
   ;;
- *) echo 'usage: ./ci.sh check | static | components | database | integration | visual-update' >&2; exit 2;;
+ *) echo 'usage: ./ci.sh check | static | components | database | integration | visual | visual-update' >&2; exit 2;;
 esac

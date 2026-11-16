@@ -21,18 +21,54 @@ test('unit test and brand file changes run no long suite: static covers them on 
   assert.deepEqual(areas('tests/unit.test.mjs', 'tests/hermes.test.mjs', 'brand/wordmark.png', 'brand/README.md'), none);
 });
 
-// Until screens have component tests (a later PR under #76, #81), the whole-app browser suite is what proves app code
-// before merge, so a change to it runs that suite (review run on #79). Screens and the request layer need no install.
-for (const path of ['app/page.tsx', 'app/globals.css', 'components/shell/sidebar.tsx', 'middleware.ts', 'instrumentation.ts', 'postcss.config.mjs']) {
-  const components = /^(app|components)\//.test(path) ? 'true' : 'false';
-  test(`${path} runs the browser suite and neither the database nor the install`, () => {
+// Screens alone (#213): the component tests prove how they behave, and from the whole-app browser suite only the
+// compared screens run (integration=visual), so an unintended change to an approved screen is still caught before
+// merge. A component test alone runs only the component tests. None of them runs the database or the install.
+const screens = {
+  'app/page.tsx': { components: 'true', database: 'false', integration: 'visual', install: 'false' },
+  'app/globals.css': { components: 'true', database: 'false', integration: 'visual', install: 'false' },
+  'components/shell/sidebar.tsx': { components: 'true', database: 'false', integration: 'visual', install: 'false' },
+  'lib/messages/en.json': { components: 'true', database: 'false', integration: 'visual', install: 'false' },
+  'tests/visual-screens/home.json': { components: 'false', database: 'false', integration: 'visual', install: 'false' },
+  'tests/visual.spec.ts-snapshots/home-en-1440-linux.png': { components: 'false', database: 'false', integration: 'visual', install: 'false' },
+  'tests/components/message-box.test.tsx': { components: 'true', database: 'false', integration: 'false', install: 'false' },
+};
+for (const [path, expected] of Object.entries(screens)) {
+  test(`${path} alone runs no journey, database or install`, () => assert.deepEqual(areas(path), expected));
+}
+
+test('screens together run the component tests and the compared screens only', () => {
+  assert.deepEqual(areas(...Object.keys(screens)), { components: 'true', database: 'false', integration: 'visual', install: 'false' });
+});
+
+test('a screen together with a file of the journeys\' area runs the whole browser suite', () => {
+  for (const path of ['tests/frame.spec.ts', 'app/api/health/route.ts', 'lib/engine.mjs']) {
+    assert.equal(areas('app/page.tsx', 'lib/messages/en.json', path).integration, 'true', path);
+  }
+});
+
+// The request layer and server code under app/ (route handlers and server actions, where the server checks
+// permissions) run the whole browser suite: its journeys drive them and no component test does. They need no install.
+for (const [path, components] of [
+  ['middleware.ts', 'false'], ['instrumentation.ts', 'false'], ['postcss.config.mjs', 'true'],
+  ['app/api/health/route.ts', 'true'], ['app/sign-in/actions.ts', 'true'],
+]) {
+  test(`${path} runs the whole browser suite and neither the database nor the install`, () => {
     assert.deepEqual(areas(path), { components, database: 'false', integration: 'true', install: 'false' });
   });
 }
 
-// Screens tested as components (#81): a screen, a component, the library they import, or a component test runs them.
-for (const path of ['app/conversation-composer.tsx', 'components/company-agent-face.tsx', 'lib/messages/en.json', 'tests/components/message-box.test.tsx', 'vitest.config.mts']) {
+// Screens tested as components (#81): a screen, a component, the library they import, or a component test runs them,
+// and so do the compared widths and languages, the reference and the stylesheet build the motion test reads (#127).
+for (const path of [
+  'app/conversation-composer.tsx', 'components/company-agent-face.tsx', 'lib/messages/en.json', 'tests/components/message-box.test.tsx', 'vitest.config.mts',
+  'tests/visual-screens.mjs', 'design-reference/index.html', 'postcss.config.mjs',
+]) {
   test(`${path} runs the component tests`, () => assert.equal(areas(path).components, 'true'));
+}
+// The motion table and its reader feed the motion component test, and no browser spec (#127).
+for (const path of ['tests/motion-table.mjs', 'tests/motion-css.mjs']) {
+  test(`${path} runs the component tests and no other long suite`, () => assert.deepEqual(areas(path), { ...none, components: 'true' }));
 }
 for (const path of ['worker/index.mjs', 'supabase/seed.sql', 'tests/frame.spec.ts', 'tests/unit.test.mjs', 'server.js']) {
   test(`${path} does not run the component tests`, () => assert.equal(areas(path).components, 'false'));
@@ -58,8 +94,8 @@ for (const path of [
 }
 
 for (const path of [
-  'tests/frame.spec.ts', 'tests/proxy/production-shape.spec.ts', 'tests/sign-in.ts', 'tests/visual-screens.mjs', 'tests/visual-screens/home.json',
-  'tests/visual.spec.ts-snapshots/home-en-1440-linux.png', 'tests/lane.mjs', 'tests/fake-hermes.mjs', 'tests/fake-engine.mjs',
+  'tests/frame.spec.ts', 'tests/proxy/production-shape.spec.ts', 'tests/visual.spec.ts', 'tests/sign-in.ts', 'tests/visual-screens.mjs',
+  'tests/lane.mjs', 'tests/fake-hermes.mjs', 'tests/fake-engine.mjs',
   'tests/touch-diagnostics.mjs', 'playwright.config.ts', 'playwright.proxy.config.ts', 'scripts/web.sh', 'scripts/local-db.sh',
   'scripts/proxy-stack.sh', 'scripts/ci-image.sh', 'supabase/seed.sql',
   // The first-run and screen specs import its reset helpers; every browser lane is built from the migrations, the

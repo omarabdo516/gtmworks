@@ -3,6 +3,7 @@ import { useEffect, useState, type ComponentProps, type ReactNode } from 'react'
 import { DndContext, DragOverlay, MouseSensor, TouchSensor, useDraggable, useDroppable, useSensor, useSensors } from '@dnd-kit/core';
 import { useI18n } from '@/lib/i18n-client';
 import { BoardIcon } from '@/components/board-icon';
+import { prefersReducedMotion } from '@/lib/motion';
 import '@/app/board.css';
 
 // The approved design's board (design-reference: #board-cols, .col, .kcard). A card is carried to another column with
@@ -67,7 +68,7 @@ export function BoardPager() {
   const columns=[...scroller.querySelectorAll<HTMLElement>(':scope > .col')]; const target=columns[direction==='next'?view.last:view.first-2]; if(!target) return;
   const box=scroller.getBoundingClientRect(),r=target.getBoundingClientRect(),pad=parseFloat(getComputedStyle(scroller).paddingInlineStart)||0,rtl=language==='ar';
   const delta=(direction==='next')===rtl?r.left-(box.left+pad):r.right-(box.right-pad);
-  scroller.scrollBy({left:delta,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});
+  scroller.scrollBy({left:delta,behavior:prefersReducedMotion()?'auto':'smooth'});
  };
  return <div className="board-nav" role="group" aria-label={t('boardColumnsNav')} hidden={view.hidden}>
   <span className="board-nav__pos num" aria-live="polite">{view.hidden?t('boardColumnsCount',view.count):t('boardColumnsRange',view.first,view.last,view.count)}</span>

@@ -19,30 +19,50 @@ the whole-app browser and install suites run only when their own area changed, o
   Code runs it, #81), the catalogue and OpenAPI checks.
 - `components` tests screens as components in headless Chromium (Vitest browser mode, `vitest.config.mts`,
   `tests/components/`), in two shards, as T3 Code does (#81). It runs when `app/`, `components/`, `lib/` or the
-  component tests change.
+  component tests change, and when a file the motion test reads changes: the motion table and its reader, the compared
+  widths and languages (`tests/visual-screens.mjs`), the reference and `postcss.config.mjs` (#127).
 - `database` runs the migration verifications, `check-rls.sql` and `tests/db.sh` (RLS, grants, migrations replayed on
   legacy data) on one local stack, when `supabase/` or a database test file changes.
 - `integration` is the whole-app browser suite: the production-shaped proxy suite, then the screens, the functional
-  journeys, the measured navigation and first run. It runs when a browser spec, its helpers, the compared screens, its approved images, the
-  Playwright configs, the stacks it runs on (migrations, stack configuration, local default privileges, the first-run
-  reset helpers, the image the proxy suite runs in), the seed or `public/` change, and, until screens have component tests, when the app itself changes
-  (`app/`, `components/`, `lib/`, `worker/` and the root files the build and server read). Its suite runs on `GTMWORKS_TEST_LANES`
+  journeys, the measured navigation and first run. All of it runs when the journeys' own area changes: a browser spec or
+  its helpers, the fake engines, the Playwright configs, the stacks it runs on (migrations, stack configuration, local
+  default privileges, the first-run reset helpers, the image the proxy suite runs in), the seed, `public/`, and the code
+  the journeys drive that no component test covers. That code is the server code under `app/` (its `.ts` route handlers
+  and server actions, where the server checks permissions), `lib/` outside the catalogues, `worker/` and the root files
+  the build and server read. Screens alone (the rest of `app/`, `components/`, the catalogues in `lib/messages/`, the compared
+  screens in `tests/visual-screens/` and their approved images) run only the compared screens. For them `changes`
+  prints `integration=visual`, and the job runs `./ci.sh visual` (`npm run test:visual`, Playwright's `visual` project
+  on lane 0 as the seed builds it) with no image, no proxy suite and no journeys (#213). Its suite runs on `GTMWORKS_TEST_LANES`
   lanes (four in CI), one per Playwright worker: each lane is a whole local Supabase stack and an app server of its own
   (`tests/lane.mjs`, `scripts/local-db.sh`, `scripts/web.sh`), so spec files run side by side and never share data.
   Each functional spec file starts from the seed (`tests/fresh-seed.ts`); tests inside one file still run in order.
   The screens run first, on the seed as built; the navigation time budgets (project `measured`) run after every
   functional test with the machine to themselves, and first run last.
 - `install` is the Docker install, update, backup, restore, release and one-line install. It runs when the image, its
-  build inputs, the install and release files, the migrations it applies or its own checks change, and when `lib/`,
-  `worker/`, `next.config.mjs` or `server.js` change: only the install drives that code against the real bundled Hermes.
+  build inputs, the install and release files, the migrations it applies or its own checks change, and when `lib/`
+  outside the catalogues, `worker/`, `next.config.mjs` or `server.js` change: only the install drives that code against
+  the real bundled Hermes.
 - A manual run (`gh workflow run ci.yml --ref <branch>`) runs static and the database; the browser suite and the install
   run only with `-f e2e=true` and `-f install=true`, both off by default (like Hermes `e2e` and `e2e_upgrade`).
 - `check` is the one required check (like Hermes `all-checks-pass`): a suite `changes` did not ask for passes only when
   it was skipped; one it asked for must succeed; a failed or cancelled stage is red (`scripts/ci-verdict.mjs`).
 
-App screens, components, `lib/` and `worker/` changes run static and the whole-app browser suite on the pull request
-(review run on #79); `lib/` and `worker/` also run the install, and screens alone get their install proof on `main`. When screens move to component tests in a
-headless browser (#81), app changes run those instead and the browser suite goes back to its own area.
+A pull request that changes only screens runs static, the component tests and the compared screens (#213). A failed
+comparison still uploads its expected, actual and difference images in `route-screenshots`. A change to the journeys'
+area runs the whole browser suite, and `lib/` outside the catalogues and `worker/` also run the install. Screens alone
+get their journeys and install proof on `main`, where every push runs every suite unless every file is a document.
+
+The tests that guard money, sign-in, permissions and Company isolation run as follows:
+
+- The node tests in `static` (for example `route-permissions.test.mjs`, `hermes-usage.test.mjs`, `password.test.mjs`)
+  run on every change.
+- The database tests (row-level security, grants, the migration verifications, `tests/db.sh`) run in `database` when
+  `supabase/` or a database test file changes.
+- The browser specs (for example `conversations.spec.ts`, `agent-visibility.spec.ts`, `password.spec.ts`,
+  `usage.spec.ts`, `proxy/production-shape.spec.ts`) run in `integration` when the journeys' area changes. That area
+  includes the server code under `app/` and `lib/` outside the catalogues, where the server checks roles and the caller's
+  Company.
+- Every push to `main` runs all three, and a manual run with `-f e2e=true` runs the whole browser suite.
 
 ## Every suite, before and after (#76)
 
@@ -53,13 +73,13 @@ the parts are timed from run 43642299138.
 | Suite | Layer | What it guards | Before | After | Decision |
 |---|---|---|---|---|---|
 | changes | classification | which suites a change needs | 0.1 min, every run (decided only docs-only and install) | 0.1 min, every run; decides database, browser and install | keep; one area script replaces `docs-only.mjs` and `install-related.mjs` |
-| components: Vitest in headless Chromium, two shards (tests/components/, 10 tests) | screen components | the composer's sending, retry and stop rules in both languages; an Agent's face | none | `app/`, `components/`, `lib/` or its tests; every `main` push | new (#81); the whole-app browser suite still runs on app changes until component tests cover the screens it proves |
+| components: Vitest in headless Chromium, two shards (tests/components/, 10 tests) | screen components | the composer's sending, retry and stop rules in both languages; an Agent's face | none | `app/`, `components/`, `lib/` or its tests; every `main` push | new (#81); with them, screens alone run only the compared screens from the browser suite (#213) |
 | static: lint, types, knip, catalogues, OpenAPI, node --test (about 540 tests) | fast, unit | rules in `lib/`, routes and permissions tables, wording, workflow and release files; no unused file, export or dependency (knip, #81) | 1.6 min, every run | 1.6 min, every run | keep |
 | database: *.verify.sql, check-rls.sql, tests/db.sh (pgTAP, migration replays) | database | row-level security, grants, company isolation, migrations on legacy data | 1.5 min inside `integration` (plus the stack start), every non-document PR | own `database` job, when `supabase/` or a database test changes; every `main` push | moved to its own job; never removed (isolation and permissions) |
-| proxy suite (tests/proxy/, 7 tests) | whole-app browser | sign-in, settings and invitations behind an https proxy | 0.7 min inside `integration`, every non-document PR | inside `integration`: its area or app code, `main`, or `e2e` input | gated |
-| browser suite (playwright test, 225 tests on 4 lanes: screens, functional, measured, first run) | whole-app browser | journeys, the 72 approved screens, navigation budgets, first run | 13.3 min of `integration`'s 22.2 min (stack start 4 min, image 2.7 min), every non-document PR | inside `integration`: its area or app code (until #81), `main`, or `e2e` input | gated; screens to become component tests (#81) |
-| image health (scripts/ci-image.sh) | whole-app | the built image serves health and runs its worker | inside `integration` | inside `integration` | gated with it |
-| install | install end-to-end | install, repeat, backup, restore, release update, one-line install, rollback | 15.2 min, PRs touching install files, `lib/`, `worker/` or the app build, every `main` push | its own files and `lib/`, `worker/`, `next.config.mjs`, `server.js` (the code it drives against the real Hermes); every `main` push; or `install` input | gated as before on a PR; `app/` and `components/` alone still skip it |
+| proxy suite (tests/proxy/, 7 tests) | whole-app browser | sign-in, settings and invitations behind an https proxy | 0.7 min inside `integration`, every non-document PR | inside `integration`: the journeys' area, `main`, or `e2e` input; not for screens alone (#213) | gated |
+| browser suite (playwright test, 225 tests on 4 lanes: screens, functional, measured, first run) | whole-app browser | journeys, the 72 approved screens, navigation budgets, first run | 13.3 min of `integration`'s 22.2 min (stack start 4 min, image 2.7 min), every non-document PR | inside `integration`: the journeys' area, `main`, or `e2e` input; screens alone run only the screens (`visual`, #213) | gated; screens alone run the comparisons only (#213) |
+| image health (scripts/ci-image.sh) | whole-app | the built image serves health and runs its worker | inside `integration` | inside `integration`, not for screens alone (#213) | gated with it |
+| install | install end-to-end | install, repeat, backup, restore, release update, one-line install, rollback | 15.2 min, PRs touching install files, `lib/`, `worker/` or the app build, every `main` push | its own files and `lib/` outside the catalogues, `worker/`, `next.config.mjs`, `server.js` (the code it drives against the real Hermes); every `main` push; or `install` input | gated as before on a PR; `app/` and `components/` alone still skip it |
 | compare-failures, flaky-tests | our own CI tooling | names failures inherited from main; files an issue per flaky test | 0.1 to 0.2 min after `integration` | none | removed (#81): Playwright's HTML report (uploaded by `integration`) and GitHub reporter show each failure and mark each flaky test |
 | check | summary | the one required check | 0.1 min | 0.1 min | keep; judges five stages |
 | design-compare.yml | design tool | a screen against the design reference | its own paths, or by hand | unchanged | keep |
@@ -137,7 +157,7 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `channels.spec.ts` | A Contributor opens the general channel from the sidebar, reads the composer's hint in English and Arabic and the intro's route tip, and posts a message that stays after a reload and starts no Run; the Viewer reads it with its writer's name and role and has no composer. (#23) | — | channel-runs.spec.ts (Runs), components/channel.test.tsx (the drawing) | new |
 | `choose-language.ts` | browser helper: choose the language in Settings | — | — | helper, kept |
 | `ci-runners.test.mjs` | Every workflow runs on free GitHub-hosted runners and a PR reads no secret. | 0.5 s | — | keep |
-| `ci-areas.test.mjs` | Each suite runs only when its own files change; main runs all unless the change is documents only; an unknown list runs all. (new, #76; replaces docs-only and install-related) | 3.1 s | — | new |
+| `ci-areas.test.mjs` | Each suite runs only when its own files change; screens alone run only the compared screens from the browser suite (#213); main runs all unless the change is documents only; an unknown list runs all. (new, #76; replaces docs-only and install-related) | 3.1 s | — | new |
 | `ci-verdict.test.mjs` | `check` counts a suite as passed only when it was skipped because nobody asked for it, is red on any failed or cancelled stage, and the browser and install inputs default to off. (#69, #76) | 3 s | — | keep, extended |
 | `company-apps.test.mjs` | Only the Owner connects, follows or disconnects a Company's app, checked for every step; a Member reads the states; the browser gets the vendor's page and states, never the Engine's flow; the way back is handed on only for the person's own open sign-in, and each connect and disconnect is logged once. (#30) | 0.3 s | settings-apps.spec.ts; supabase/tests/company_apps.sql (every Role, the log) | new |
 | `company-knowledge.spec.ts` | A Manager fills an empty part of the Company knowledge and sees it with who edited it, leaves the editor with Escape, saves with Ctrl+S (the same text changes nothing) and clears the part back to its empty state; each change is logged and named in the Activity log; a Contributor reads it with no Edit button and the server refuses their save. (#27) | — | company_knowledge.sql (who may read and edit each part, in the database) | new |
@@ -154,6 +174,7 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `components/conversation-card.test.tsx` | A Conversation whose first Run put a Card on the board says so once, under the Agent's reply to that Run; its corner pill names the Card's column ("Waiting on you" for a writer, "Waiting on the team" for a reader who cannot write), links to the board at `?show=<card>`, shows the column alone on a phone, in Arabic too, and reads the column again when the window comes back into focus; a chat with no Card has neither. (#144) | — | supabase/tests/conversation_cards.sql (which Run makes the Card, and who reads it); engine-conversation.spec.ts (the line, the pill and the log row on the app) | new |
 | `components/conversation.test.tsx` | A Member's open Conversation keeps asking while their request for an Agent waits, shows the Owner's answer when it arrives without a reload, and stops asking once nothing waits. (#17) | 0.5 s | agent-requests.spec.ts (the answer on the page) | new |
 | `components/message-box.test.tsx` | The composer sends once on Enter (Shift+Enter adds a line), keeps text and shows why on a failed send, retries with the same send key and gives a new text a new key, offers stop on an empty box while the Agent works, starts with a focused draft, and speaks Arabic with the text keeping its own direction. (#81) | 1.6 s | conversations.spec.ts, lead-creates-agent.spec.ts (the composer inside whole journeys) | new |
+| `components/motion.test.tsx` | With reduced motion on, the motion helper says so, the board's pager jumps to the next columns (`auto`) and a wait lasts at most 120ms; with it off, the pager glides (`smooth`) and the wait keeps its length. Every part in `motion-table.mjs`, drawn from its row's markup inside the app's own stylesheets (`app/globals.css` through Tailwind, `app/shell.css` and the part's file), computes the transition and animation of its reference rule in English and Arabic at 1440 and 390 wide; with reduced motion nothing under `.gw` moves for more than 1ms, repeats or scrolls smoothly. (new, #127) | 5.6 s | motion-reference.test.mjs (the rules in the files) | new |
 | `components/new-channel-dialog.test.tsx` | New channel keeps its creator in it, counts the Members and Agents chosen, says a Viewer will only read and an Agent with no speciality is new, refuses an empty name before asking, shows the name as the channel list will, sends the people and Agents chosen and opens the channel made, says when a name is in use and sends the same request key when tried again, in both languages. (#24) | — | team-channels.spec.ts (the dialog on the app) | new |
 | `components/note-edit.test.tsx` | A note's writer edits it in its first five minutes from where the log shows it: Edit opens a focused field with the text, an empty note is refused with the reference's message, Save sends the new text once and says so, Cancel saves nothing; after five minutes it is locked for everyone with "Locked" and "Edited" when it changed; another Member or a Viewer gets no Edit; the time running out while editing locks it as it was; a save the database refuses as too late says so, and one that fails keeps the field and its text; the marks in Arabic. (#22) | 6 s | log-notes.spec.ts (the same control on the Card and the Activity log) | new |
 | `components/ready-made.test.tsx` | "Add it" in the ready-made gallery opens the Conversation once Lead got the message, and a send still on its way when the gallery closes never moves the page that took its place. (#14) | 0.8 s | ready-made-roles.spec.ts (the whole Owner journey with fake Hermes) | new |
@@ -207,9 +228,12 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `member-agent-visibility-migration.mjs` | replays the member-agent-visibility migration: every Member keeps the Agents they saw before the update (tests/db.sh) | — | — | helper, new |
 | `member-picker.spec.ts` | Saving a card unchanged clears a next actor who left the company. | 11.2 s | — | keep |
 | `migration-statements.test.mjs` | Both migration runners split statements alike and no migration controls its own transaction. | 0.4 s | — | keep |
+| `motion-css.mjs` | helper: reads a part's transition and animation from the reference's stylesheet and from `app/`, tokens and keyframes resolved, and a computed style the same way; the component test calls it through the Vitest browser commands in `vitest.config.mts` (#127) | — | — | helper, new |
+| `motion-reference.test.mjs` | The six motion tokens carry the reference's values; a value the reference writes only through its token (280ms, the leave curve) is written only through the token under `app/`; the reference's shared keyframes are written once; every part in `motion-table.mjs` declares the transition or animation of its reference rule at 1440 and 390 wide. (new, #127) | 0.3 s | components/motion.test.tsx (computed in the browser) | new |
+| `motion-table.mjs` | data: the parts whose motion is the reference's, as reference rule against built rule, each with the markup the component test draws it in (#127) | — | — | data, new |
 | `navigation-measure.ts` | browser helper: navigation timing | — | — | helper, kept |
 | `navigation-path.test.mjs` | The measured navigation path keeps the Inbox and the Activity log. | 1.4 s | navigation.spec.ts | keep |
-| `navigation.spec.ts` | Prepared navigation stays within its time budgets, prefetches, honours reduced motion, invalidates on own changes; drawer tap areas. (measured project, alone) | 56.9 s | navigation-path.test.mjs (the measured path only) | keep |
+| `navigation.spec.ts` | Prepared navigation stays within its time budgets with no unlisted `transition-property: all` under `.gw`, prefetches, honours reduced motion, invalidates on own changes; drawer tap areas. (measured project, alone) | 56.9 s | navigation-path.test.mjs (the measured path only) | keep |
 | `no-agency-strings.test.mjs` | No interface string mentions an Agency or a reviewer. | 0.6 s | — | keep |
 | `numbers.spec.ts` | The Numbers page shows its empty state with no app and lists what waits on its reader. | 1.8 s | numbers.test.mjs (figures and sources) | keep |
 | `numbers.test.mjs` | Every Numbers figure comes from a connected app with its source and period. | 0.8 s | numbers.spec.ts | keep |
