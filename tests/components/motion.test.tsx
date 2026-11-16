@@ -37,8 +37,8 @@ test.each([['on', true, 'auto'], ['off', false, 'smooth']] as const)('with reduc
  expect(scrollBy).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ behavior }));
 });
 
-test.each([['on', true, 120], ['off', false, 1000]] as const)('with reduced motion %s a wait of 1000ms ends after %sms', async (_, on, ms) => {
- await reducedMotion(on);
+test.each([['on', 120], ['off', 1000]] as const)('with reduced motion %s a wait of 1000ms ends after %sms', async (on, ms) => {
+ await reducedMotion(on === 'on');
  vi.useFakeTimers();
  const done = vi.fn();
  later(1000, done);
