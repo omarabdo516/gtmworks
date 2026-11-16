@@ -40,19 +40,30 @@ test('every button on the Conversation, the board and the settings overlay moves
    else expect.soft(style.transitionDuration,`${where}: ${button} has no row and swaps at once`).toMatch(/^0s(, 0s)*$/);
   }
  };
- await signIn(page,'omar@example.com','/c/rs-learning/chat');
- const pill=page.locator('#btn-details');
- if(await pill.getAttribute('aria-expanded')!=='true') await pill.click();
- await expect(page.locator('.details .dp-tabs')).toBeVisible();
- await page.locator('.sidebar #btn-me').click();
- await expect(page.getByRole('menu')).toBeVisible();
- await sweep('the Conversation');
- await page.goto('/c/rs-learning/work/board');
- await expect(page.locator('.board-view')).toBeVisible();
- await sweep('the board');
- await page.goto('/c/rs-learning/settings');
- await expect(page.locator('.sov')).toBeVisible();
- await sweep('the settings overlay');
+ // The seed attaches no Agent, so the Conversation would show no head pill, composer or details: RS Learning gets a Lead
+ // on an Engine nobody answers at, which draws them all, and loses it again after.
+ const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
+ const [company,omar,connection,lead]=['10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001',randomUUID(),randomUUID()];
+ query(`do $$ begin
+  insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values (${quote(connection)},${quote(company)},${quote(omar)},'http://127.0.0.1:9/p/sweep-lead','sweep-lead','no-key','unreachable');
+  insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values (${quote(lead)},${quote(company)},${quote(connection)},'Lead','General',true);
+ end $$;`);
+ try {
+  await signIn(page,'omar@example.com','/c/rs-learning/chat');
+  await expect(page.locator('#btn-details')).toHaveAttribute('aria-expanded','true');
+  await expect(page.locator('.details .dp-tabs')).toBeVisible();
+  await page.locator('.sidebar #btn-me').click();
+  await expect(page.getByRole('menu')).toBeVisible();
+  await sweep('the Conversation');
+  await page.goto('/c/rs-learning/work/board');
+  await expect(page.locator('.board-view')).toBeVisible();
+  await sweep('the board');
+  await page.goto('/c/rs-learning/settings');
+  await expect(page.locator('.sov')).toBeVisible();
+  await sweep('the settings overlay');
+ } finally {
+  query(`do $$ begin delete from public.hermes_agents where id=${quote(lead)}; delete from public.hermes_connections where id=${quote(connection)}; end $$;`);
+ }
 });
 
 // The sections the reference has no page for yet open by their address and say so, and a settings page's trail leads
