@@ -11,7 +11,7 @@ import { ShellIcon } from '@/components/shell-icon';
 import { drawnAt, type LogRow } from '@/lib/activity-log.mjs';
 import { FeedWhen, LogDays } from '@/app/c/[slug]/log/log-client';
 import { FeedText, LogEntry, logColumns, logPeople } from '@/app/c/[slug]/log/entries';
-import { PageIcon } from '@/app/c/[slug]/log/icons';
+import { detailsTabs } from '@/app/agent-details-tabs';
 
 type Db=Awaited<ReturnType<typeof supabase>>;
 export type AgentDetailsView={status:AgentStatus,actions:boolean,tab:DetailsTab,tabs:Record<DetailsTab,ReactNode>};
@@ -46,8 +46,7 @@ export async function agentDetails(db:Db,{company,agent,slug,me,role,tab}:{compa
  const recent=latestActivity(rows,feedSince());
  const asked=(ask as {body:string}|null)?.body.split('\n')[0].slice(0,200);
 
- const activity=<section className="dp-sec"><h3 className="dp-label"><span>{t('agentLatestActivity')}</span></h3>
-  {run||recent.length?<ul className="panel-card">
+ const activity=run||recent.length?<ul className="panel-card">
    {run&&<li className="panel-row dp-now"><span className="panel-row__text">
     <span className="panel-row__t"><span className="dot dot--working" aria-hidden="true"/>{t('agentWorkingNow')}</span>
     <span className="panel-row__d">{asked?<>{t('agentOnYourRequest')} <bdi>{asked}</bdi></>:t('agentOnTeammateRequest')}</span>
@@ -57,39 +56,23 @@ export async function agentDetails(db:Db,{company,agent,slug,me,role,tab}:{compa
     <span className="panel-row__t"><FeedText row={row} people={people} t={t} language={language}/></span>
     <FeedWhen value={row.created_at} className="panel-row__d"/>
    </span></li>)}
-  </ul>:<div className="panel-card"><p className="panel-empty">{t('agentActivityEmpty')}</p></div>}
- </section>;
- // design-reference: screenSecHTML. The pinned Engine shows no Agent's screen, and gtmworks keeps the browser and
- // computer tools off (lib/agent-levels.mjs), so the screen is always the reference's asleep frame: not a button.
- const screen=<section className="dp-sec" aria-labelledby="scr-h"><h3 className="dp-label"><span id="scr-h">{t('agentScreen')}</span></h3>
-  <div className="scr-card"><div className="scr-thumb is-static"><div className="scr is-off">
-   <span className="scr__bar" aria-hidden="true"><span className="scr__dots"><i/><i/><i/></span><span className="scr__url" dir="ltr"/></span>
-   <span className="scr__body"><span className="scr__off"><ShellIcon name="moon"/><span>{t('agentScreenOff')}</span></span></span>
-  </div></div></div></section>;
+  </ul>:undefined;
 
  const board=`/c/${slug}/work/board`;
  const tasksTab=tasks.length?<section className="dp-sec"><h3 className="dp-label"><span>{t('agentOnTheBoard')}</span><Link className="link-btn" href={board}>{t('agentOpenBoard')}</Link></h3>
   <div className="panel-card">{tasks.map(task=><Link key={task.id} className="panel-row" href={`${board}/${task.id}`}>
    <span className="panel-row__text"><span className="panel-row__t"><bdi>{task.title}</bdi></span><span className="panel-row__d"><bdi>{'key' in task.line?t(task.line.key,...task.line.args):task.line.text}</bdi></span></span>
    <span className={`panel-row__meta${task.waiting?' panel-row__meta--wait':''}`}>{t(columnLabel(task.column,writer))}</span>
-  </Link>)}</div></section>
-  :<section className="dp-sec"><div className="panel-card"><p className="panel-empty">{t('agentTasksEmpty')}</p></div></section>;
+  </Link>)}</div></section>:undefined;
 
- // design-reference: filesTabHTML, without its Add button and its library, which are not built.
  const titles=new Map(talks.flatMap((talk,index)=>{ const line=firsts[index]?.split('\n')[0]; return line?[[talk,line] as [string,string]]:[]; }));
  const files=agentFiles({slug,cards,cardFiles:(cardFileRows||[]) as {id:number,name:string,size:number,created_at:string,card_id:number}[],conversationFiles:talkFiles,titles});
- const filesTab=<section className="dp-sec" aria-labelledby="dp-files-h"><h3 className="dp-label" id="dp-files-h"><span>{t('agentFiles')} <span className="muted num">{(cardFileCount??0)+(talkFileCount??0)}</span></span></h3>
-  {files.length?<ul className="panel-card">{files.map(file=><li key={file.key} className="panel-row"><span className="panel-row__icon"><ShellIcon name="file"/></span><span className="panel-row__text">
+ const filesList=files.length?<ul className="panel-card">{files.map(file=><li key={file.key} className="panel-row"><span className="panel-row__icon"><ShellIcon name="file"/></span><span className="panel-row__text">
    <a className="panel-row__t od-truncate dp-file" href={file.href} target="_blank" rel="noreferrer" title={file.name}><bdi dir="auto">{file.name}</bdi></a>
-   <span className="panel-row__d"><bdi dir="ltr">{fileSize(file.size)}</bdi> · <bdi>{file.source}</bdi></span></span></li>)}</ul>
-  :<div className="panel-card"><p className="panel-empty">{t('agentFilesEmpty')}</p></div>}</section>;
+   <span className="panel-row__d"><bdi dir="ltr">{fileSize(file.size)}</bdi> · <bdi>{file.source}</bdi></span></span></li>)}</ul>:undefined;
 
- const log=<section className="dp-sec"><h3 className="dp-label"><span>{t('chatTabLog')} <span className="muted num">{count??rows.length}</span></span><Link className="link-btn" href={`/c/${slug}/log?who=a:${agent}`}>{t('agentOpenLog')}</Link></h3>
-  {rows.length?<div className="lg-wrap"><LogDays items={rows.map(row=>({id:row.id,at:row.created_at,node:<LogEntry row={row} people={people} me={me} slug={slug} company={company} canWrite={writer} drawnAt={drawn} t={t} language={language} faceSize={24}/>}))}/></div>
-   :<div className="panel-card"><p className="panel-empty">{t('agentLogEmpty')}</p></div>}
-  <p className="lg-forever"><PageIcon name="lock"/><span>{t('logForever')}</span></p>
- </section>;
+ const log=rows.length?<div className="lg-wrap"><LogDays items={rows.map(row=>({id:row.id,at:row.created_at,node:<LogEntry row={row} people={people} me={me} slug={slug} company={company} canWrite={writer} drawnAt={drawn} t={t} language={language} faceSize={24}/>}))}/></div>:undefined;
 
  return {status:agentStatus({waitingMine:waiting.some(item=>item.card_id!=null&&ids.includes(item.card_id)),running:!!run}),actions:writer,tab:pickTab(tab),
-  tabs:{activity:<>{screen}{activity}</>,tasks:tasksTab,files:filesTab,log}};
+  tabs:detailsTabs({t,slug,agent,activity,tasks:tasksTab,files:filesList,fileCount:(cardFileCount??0)+(talkFileCount??0),log,logCount:count??rows.length})};
 }

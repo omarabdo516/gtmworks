@@ -135,14 +135,6 @@ test('the Owner reads the Agent\'s state, what it is doing for them, its Cards a
  await expect(page.locator('.modal')).toContainText('June campaign');
 });
 
-test('the Activity tab starts with the Agent\'s screen, empty: the Engine shows none, and it is no button',async({page})=>{
- const details=await openDetails(page,'omar@example.com',ads,'Meta Ads');
- const screen=details.getByRole('tabpanel').locator('section.dp-sec').first();
- await expect(screen.getByRole('heading',{level:3})).toHaveText('Agent’s screen');
- await expect(screen.locator('.scr-thumb.is-static .scr.is-off .scr__off')).toHaveText('Nothing is running on the screen right now.');
- await expect(screen.locator('button, a, [tabindex]')).toHaveCount(0);
-});
-
 test('the Files tab lists the Agent\'s Card files and the reader\'s own Conversation file, newest first, and opens them',async({page})=>{
  const details=await openDetails(page,'omar@example.com',ads,'Meta Ads');
  await tab(details,'Files').click();
@@ -177,25 +169,6 @@ test('a Contributor sees the Card file and their own Conversation file, never an
  await expect(panel).not.toContainText('audiences.csv');
  expect((await page.request.get(`/c/rs-learning/files/conversation/${fileId('reviewer-notes.txt')}`)).status()).toBe(200);
  expect((await page.request.get(`/c/rs-learning/files/conversation/${fileId('audiences.csv')}`)).status()).toBe(404);
-});
-
-test('an Agent with nothing yet shows the reference\'s empty states',async({page})=>{
- const details=await openDetails(page,'omar@example.com',seo,'SEO');
- await expect(details.locator('.dp-id__role')).toHaveText('Writes the blog. · Idle');
- await expect(details.locator('.face-wrap .dot')).toHaveClass(/\bdot--idle\b/);
- const panel=details.getByRole('tabpanel');
- await expect(panel.locator('.panel-empty')).toHaveText('Nothing done this week yet. Send it a message and it’ll start.');
- await tab(details,'Tasks').click();
- await expect(panel.locator('.panel-empty')).toHaveText('No cards on the board for this agent yet.');
- await expect(panel.locator('.dp-label')).toHaveCount(0);
- await tab(details,'Files').click();
- await expect(panel.locator('.dp-label > span')).toHaveText('Files 0');
- await expect(panel.locator('.panel-empty')).toHaveText('No files yet. Files from its cards and from your chats with it show here.');
- await tab(details,'Log').click();
- await expect(panel.locator('.dp-label > span')).toHaveText('Log 0');
- await expect(panel.locator('.panel-empty')).toHaveText('Nothing in this agent’s log yet.');
- await expect(panel.locator('.lg-row')).toHaveCount(0);
- await expect(panel.locator('.lg-forever')).toBeVisible();
 });
 
 test('a Viewer reads the same panel with no action in it and without another person\'s request',async({page})=>{

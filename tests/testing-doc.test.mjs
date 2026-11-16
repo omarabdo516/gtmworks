@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 // docs/testing.md keeps one row per file under tests/ (#69): what it guards, its runtime and the decision.
 // The approved images and the compared screens are data folders with one row each, so adding a screen needs no row.
@@ -15,7 +15,7 @@ test('docs/testing.md has exactly one row per file under tests/', () => {
 });
 
 // #218: each case of a browser spec named in "The browser suite, case by case" has its decision. A case that stays is
-// still in its file; a case that moved or was removed is gone from it.
+// still in its file; a case that moved or was removed is gone from it, and a spec with no case left is deleted.
 test('every case of a decided browser spec has its decision, and only kept cases are still in the file', () => {
   const doc = readFileSync('docs/testing.md', 'utf8');
   const section = doc.slice(doc.indexOf('## The browser suite, case by case'));
@@ -23,7 +23,7 @@ test('every case of a decided browser spec has its decision, and only kept cases
     .map(([, file, title, decision]) => ({ file, title, decision }));
   assert.ok(rows.length > 0, 'the case-by-case table has no rows');
   for (const file of new Set(rows.map(row => row.file))) {
-    const source = readFileSync(`tests/${file}`, 'utf8');
+    const source = existsSync(`tests/${file}`) ? readFileSync(`tests/${file}`, 'utf8') : '';
     const cases = [...source.matchAll(/\btest\((['`])((?:\\.|(?!\1).)*)\1/g)].map(match => match[2].replaceAll("\\'", "'"));
     const decided = rows.filter(row => row.file === file);
     assert.deepEqual(decided.filter(row => row.decision === 'stays').map(row => row.title).sort(), [...cases].sort(), `${file}: the cases still in the file are the ones that stay`);
