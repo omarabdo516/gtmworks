@@ -36,8 +36,8 @@ test('the list groups connected and attention apps apart from the rest, and sear
   await screen.getByRole('searchbox', { name: 'Search apps' }).fill('zzz');
   await expect.element(screen.getByText('No app matches “zzz”')).toBeVisible();
   await screen.getByRole('button', { name: 'Clear search' }).click();
-  await screen.getByRole('button', { name: /^Sales/ }).click();
-  expect(screen.getByRole('heading', { level: 5 }).elements().map(element => element.textContent)).toEqual(['Attio', 'Close', 'Calendly']);
+  await screen.getByRole('button', { name: /^Analytics/ }).click();
+  expect(screen.getByRole('heading', { level: 5 }).elements().map(element => element.textContent)).toEqual(['Amplitude', 'Mixpanel']);
 });
 
 test('a Member who is not the Owner reads the states with no button', async () => {

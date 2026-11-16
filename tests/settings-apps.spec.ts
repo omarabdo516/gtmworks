@@ -67,13 +67,13 @@ test('the apps and their states are the Engine\'s: connected, needing attention 
  await expect(card(page,'Notion').locator('.app__state')).toHaveText('Needs attention');
  await expect(card(page,'Notion').getByRole('link',{name:'Reconnect Notion'})).toBeVisible();
  await expect(card(page,'Canva').locator('.app__state')).toHaveText('Not connected');
- await expect(page.locator('.app__name'),'only registry apps this catalogue offers').toHaveCount(10);
+ await expect(page.locator('.app__name'),'only registry apps this catalogue offers').toHaveCount(6);
  for(const absent of ['Gamma','Figma','Webflow','WordPress.com']) await expect(card(page,absent)).toHaveCount(0);
  await page.locator('#apps-q').fill('كانفا');
  await expect(page.locator('.app__name')).toHaveText(['Canva']);
  await page.locator('#apps-q').fill('');
- await page.locator('#apps-cat-sales').click();
- await expect(page.locator('.app__name')).toHaveText(['Attio','Close','Calendly']);
+ await page.locator('#apps-cat-analytics').click();
+ await expect(page.locator('.app__name')).toHaveText(['Amplitude','Mixpanel']);
  await noEngineText(page);
  await page.locator('#apps-cat-all').click();
  await card(page,'Notion').getByRole('link',{name:'Reconnect Notion'}).click();
@@ -84,7 +84,7 @@ test('the apps and their states are the Engine\'s: connected, needing attention 
  fake.settings.profiles.get(profile)!.config.mcp_servers={};
  await page.goto('/c/rs-learning/settings?section=apps');
  await expect(page.locator('.apps-count')).toHaveText('0 connected');
- await expect(page.locator('.app__state')).toHaveText(Array(10).fill('Not connected'));
+ await expect(page.locator('.app__state')).toHaveText(Array(6).fill('Not connected'));
  fake.settings.catalog.push('gamma');
 });
 

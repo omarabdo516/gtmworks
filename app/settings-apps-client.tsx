@@ -103,6 +103,7 @@ export function AppDetail({slug,company,owner,rtl,item,text,soon,failed}:{slug:s
   const answer=await ask({company,app:item.key,action:'disconnect'});
   if(!answer.ok) { setError(`error.${String(answer.body.error||'appsFailed')}`); return; }
   router.replace(list);
+  router.refresh();
  });
  const busy=pending||waiting;
  const back=<Link className="btn btn--secondary" id="app-cancel" href={list} replace>{say(owner&&state==='off'?'cancel':'done')}</Link>;

@@ -99,18 +99,18 @@ test('a server installed without its list is removed again when the list cannot 
 test('a second sign-in waits for the first, a cancelled or unknown one never finishes, and a bad answer is not passed on as text', async () => {
  const {fake,target}=await companyEngine();
  try {
-  const first=await startAppSignIn(target,'close',back('close'));
-  assert.equal((await startAppSignIn(target,'close',back('close'))).state,'busy');
+  const first=await startAppSignIn(target,'airtable',back('airtable'));
+  assert.equal((await startAppSignIn(target,'airtable',back('airtable'))).state,'busy');
   assert.deepEqual(await cancelAppSignIn(target,first.flow),{state:'cancelled'});
   assert.deepEqual(await pollAppSignIn(target,first.flow),{state:'failed'});
-  assert.deepEqual(await finishAppSignIn(target,{key:'close',flow:first.flow,answer:{code:'c',state:signInState(first.url)}}),{state:'expired'});
-  const second=await startAppSignIn(target,'close',back('close'));
-  assert.deepEqual(await finishAppSignIn(target,{key:'close',flow:second.flow,answer:{code:'c',state:'forged'}}),{state:'expired'});
-  assert.deepEqual(await finishAppSignIn(target,{key:'close',flow:second.flow,answer:{error:'access_denied',state:signInState(second.url)}}),{state:'failed'});
+  assert.deepEqual(await finishAppSignIn(target,{key:'airtable',flow:first.flow,answer:{code:'c',state:signInState(first.url)}}),{state:'expired'});
+  const second=await startAppSignIn(target,'airtable',back('airtable'));
+  assert.deepEqual(await finishAppSignIn(target,{key:'airtable',flow:second.flow,answer:{code:'c',state:'forged'}}),{state:'expired'});
+  assert.deepEqual(await finishAppSignIn(target,{key:'airtable',flow:second.flow,answer:{error:'access_denied',state:signInState(second.url)}}),{state:'failed'});
   assert.deepEqual(await pollAppSignIn(target,'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'),{state:'expired'});
   fake.settings.approveApps=false;
-  const third=await startAppSignIn(target,'close',back('close'));
-  assert.deepEqual(await finishAppSignIn(target,{key:'close',flow:third.flow,answer:{code:'c',state:signInState(third.url)},settle:2}),{state:'waiting'});
+  const third=await startAppSignIn(target,'airtable',back('airtable'));
+  assert.deepEqual(await finishAppSignIn(target,{key:'airtable',flow:third.flow,answer:{code:'c',state:signInState(third.url)},settle:2}),{state:'waiting'});
  } finally { await fake.close(); }
 });
 

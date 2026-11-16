@@ -41,8 +41,8 @@ test('the config written for every app turns it on with only its read tools and 
 });
 
 test('the registry holds the reviewed apps once each, keyed by the catalogue name, and nothing that moves money', () => {
- assert.deepEqual(apps.map(app=>app.key),['klaviyo','canva','notion','airtable','gamma','intercom','amplitude','mixpanel','attio','close','calendly']);
- for (const left of ['figma','webflow','wordpress-com','stripe','paypal']) assert.equal(appByKey(left),undefined,left);
+ assert.deepEqual(apps.map(app=>app.key),['klaviyo','canva','notion','airtable','gamma','amplitude','mixpanel']);
+ for (const left of ['figma','webflow','wordpress-com','stripe','paypal','intercom','attio','close','calendly']) assert.equal(appByKey(left),undefined,left);
  assert.equal(appByKey('notion')?.name,'Notion');
  assert.throws(()=>{ /** @type {any} */(apps[0].readTools).push('delete_campaign'); },TypeError,'a list cannot grow at run time');
 });
