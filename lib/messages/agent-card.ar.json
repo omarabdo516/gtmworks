@@ -29,5 +29,6 @@
   "requestWhyMissing": "اكتب السبب، عشان {0} يعرف ليه.",
   "requestWhyGoesTo": "السبب هيوصل لـ {0} في محادثته مع {1}.",
   "requestCancel": "إلغاء",
-  "requestSendNo": "ابعت الرفض"
+  "requestSendNo": "ابعت الرفض",
+  "requestUnread": "جزء من الطلب ما اتحمّلش، فمينفعش ترد عليه دلوقتي. حمّل الصفحة تاني وجرّب."
 }

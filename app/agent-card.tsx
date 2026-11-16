@@ -20,11 +20,11 @@ export function useCardText() {
 
 // The three things no Agent does without a person (ADR 0006, 0008).
 const never=['madeAgentPublish','madeAgentSpend','madeAgentMessage'];
-function AgentRows({job,apps,children}:{job:string,apps:string[],children?:ReactNode}) {
+function AgentRows({job,apps,children}:{job:string,apps:string[]|null,children?:ReactNode}) {
  const {c}=useCardText();
  return <dl className="kv ac-kv">
   <div className="kv__row"><dt>{c('madeAgentJob')}</dt><dd dir="auto">{job}</dd></div>
-  <div className="kv__row"><dt>{c('madeAgentApps')}</dt><dd>{apps.length?apps.map((app,index)=><Fragment key={index}>{index>0&&c('madeAgentAppsJoin')}<bdi>{app}</bdi></Fragment>):c('madeAgentNoApps')}</dd></div>
+  {apps&&<div className="kv__row"><dt>{c('madeAgentApps')}</dt><dd>{apps.length?apps.map((app,index)=><Fragment key={index}>{index>0&&c('madeAgentAppsJoin')}<bdi>{app}</bdi></Fragment>):c('madeAgentNoApps')}</dd></div>}
   <div className="kv__row"><dt>{c('madeAgentNever')}</dt><dd><ul className="ac-never">{never.map(key=><li key={key}><ShellIcon name="hand"/><span>{c(key)}</span></li>)}</ul></dd></div>
   {children}
  </dl>;
@@ -41,8 +41,9 @@ export function MadeCard({slug,agent}:{slug:string,agent:MadeAgent}) {
  </div>;
 }
 
-// A request has no Agent yet, so its face is drawn from the request until one is made.
-export function RequestCard({slug,request,owner=false,answer}:{slug:string,request:AgentRequestView,owner?:boolean,answer?:ReactNode}) {
+// A request has no Agent yet, so its face is drawn from the request until one is made. An `unread` request leaves out its
+// apps and the message that asked, which could not be read, rather than show them empty.
+export function RequestCard({slug,request,owner=false,unread=false,answer}:{slug:string,request:AgentRequestView,owner?:boolean,unread?:boolean,answer?:ReactNode}) {
  const {language}=useI18n(); const zone=useZone(); const {c,cb}=useCardText();
  const when=(at:string)=><time dateTime={at} data-utc={zone}>{new Date(at).toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit',timeZone:zone})}</time>;
  const made=request.state==='made'?request.agent:null;
@@ -53,8 +54,8 @@ export function RequestCard({slug,request,owner=false,answer}:{slug:string,reque
  return <div className={`ac-card${request.state!=='made'?' ac-card--req':''}${request.state==='waiting'?'':' is-resolved'}`} role="group" aria-label={c('requestLabel',made?.name??request.name)} data-request={request.state}>
   <div className="hcard__top">{badge}</div>
   <div className="card__head"><span aria-hidden="true"><CompanyAgentFace agent={made??{connection_id:`agent-request-${request.id}`,name:request.name}} size={44}/></span><div className="card__titles"><span className="card__title"><bdi>{made?.name??request.name}</bdi></span></div></div>
-  <AgentRows job={request.job} apps={request.apps}>
-   <div className="kv__row"><dt>{c('requestAskedBy')}</dt><dd><bdi>{request.askedBy}</bdi><span className="pp-sub" dir="auto">«{request.askedWith}»</span></dd></div>
+  <AgentRows job={request.job} apps={unread?null:request.apps}>
+   <div className="kv__row"><dt>{c('requestAskedBy')}</dt><dd><bdi>{request.askedBy}</bdi>{!unread&&<span className="pp-sub" dir="auto">«{request.askedWith}»</span>}</dd></div>
    <div className="kv__row"><dt>{c('requestShowsFor')}</dt><dd>{cb('requestShowsForWho',request.askedBy)}</dd></div>
   </AgentRows>
   {request.state==='made'?<div className="card__outcome"><ShellIcon name="check"/><span>{cb('requestMade',request.by,when(request.at),made?.name??request.name,request.askedBy)}</span>

@@ -40,7 +40,19 @@ test('the Member who asked sees the request wait for the Owners, then the answer
 });
 
 // Both of the Owner's answers in one render: after a form action has run, this browser window draws no new root.
+// So the request whose details did not load, which runs no action, comes first.
 const item = (id: number) => ({ kind: 'agent_request', id, title: `FollowUp ${id}`, body: 'Follows up the WhatsApp leads.', asked_by: 'Youssef', card_id: null, conversation_id: null, created_at: '2026-06-10T09:41:00Z', request: { apps: ['WhatsApp Business'], asked_with: 'The leads go cold' } });
+test('a request whose apps and asking message did not load shows neither and cannot be answered until they do', async () => {
+ const screen = await render(<LanguageProvider language="en"><OwnerRequestCard slug="rs-learning" company="co-1" lead="Lead" item={{ ...item(9), request: null }}/></LanguageProvider>);
+ const request = screen.getByRole('group', { name: 'Agent request: FollowUp 9' });
+ await expect.element(request.getByRole('note')).toHaveTextContent('Part of this request didn’t load, so it can’t be answered yet. Reload the page to try again.');
+ for (const text of ['Agent request from Youssef', 'Follows up the WhatsApp leads.', 'Youssef and the Owner']) expect(request.element().textContent).toContain(text);
+ for (const text of ['Apps', 'No apps', '«']) expect(request.element().textContent).not.toContain(text);
+ await expect.element(request.getByRole('button', { name: 'Make it' })).toBeDisabled();
+ await expect.element(request.getByRole('button', { name: 'No' })).toBeDisabled();
+ expect(answered).not.toHaveBeenCalled();
+});
+
 test('the Owner makes one request at once, and says no to another only with a reason, which goes to the Member', async () => {
  const screen = await render(<LanguageProvider language="en">{[7, 8].map(id => <OwnerRequestCard key={id} slug="rs-learning" company="co-1" lead="Lead" item={item(id)}/>)}</LanguageProvider>);
  const made = screen.getByRole('group', { name: 'Agent request: FollowUp 8' });

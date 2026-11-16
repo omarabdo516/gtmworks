@@ -1,6 +1,7 @@
 'use client';
 import { useRef, useState } from 'react';
 import { RequestCard, useCardText } from '@/app/agent-card';
+import { ShellIcon } from '@/components/shell-icon';
 import type { WaitingItem } from '@/lib/approval-queue';
 import { answerAgentRequest } from './skill-actions';
 
@@ -11,6 +12,10 @@ export function OwnerRequestCard({slug,company,lead,item}:{slug:string,company:s
  const why=useRef<HTMLTextAreaElement>(null); const no=useRef<HTMLButtonElement>(null);
  const ids={why:`ac-why-${item.id}`,error:`ac-why-err-${item.id}`,hint:`ac-why-hint-${item.id}`};
  const request={id:item.id,name:item.title,job:item.body,apps:item.request?.apps??[],askedBy:item.asked_by,askedWith:item.request?.asked_with??'',state:'waiting' as const,owners:[]};
+ if(!item.request) return <RequestCard slug={slug} request={request} owner unread answer={<>
+  <div className="card__outcome" role="note"><ShellIcon name="clock"/><span>{c('requestUnread')}</span></div>
+  <div className="card__actions"><button type="button" className="btn btn--secondary" disabled>{c('requestNo')}</button><button type="button" className="btn btn--primary" disabled>{c('requestMake')}</button></div>
+ </>}/>;
  const fields=<><input type="hidden" name="company" value={company}/><input type="hidden" name="slug" value={slug}/><input type="hidden" name="request" value={item.id}/></>;
  const answer=refusing?<form action={answerAgentRequest} noValidate onSubmit={event=>{ if(why.current?.value.trim()) return; event.preventDefault(); setMissing(true); why.current?.focus(); }}>
   {fields}<input type="hidden" name="intent" value="no"/>

@@ -29,5 +29,6 @@
   "requestWhyMissing": "Write the reason, so {0} knows why.",
   "requestWhyGoesTo": "The reason goes to {0} in their chat with {1}.",
   "requestCancel": "Cancel",
-  "requestSendNo": "Send the no"
+  "requestSendNo": "Send the no",
+  "requestUnread": "Part of this request didn’t load, so it can’t be answered yet. Reload the page to try again."
 }

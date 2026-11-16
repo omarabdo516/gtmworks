@@ -4,10 +4,11 @@ import type { Step, ApprovalCard } from '@/app/c/[slug]/[[...section]]/approvals
 // One item of "Waiting on you" (ADR 0013): an approval this person holds, or anything else addressed to them by kind.
 // A learning suggestion (#25, kind rule_suggestion: title the rule, body the Agent's name, asked_by who told it) also
 // carries the whole rule and the Agent's face. A Member's request for an Agent (#17, kind agent_request: title its name,
-// body its job, asked_by the Member) also carries its apps and the message that asked.
+// body its job, asked_by the Member) also carries its apps and the message that asked, or null when those could not be
+// read, so the Owner never answers a request seen in part.
 type RuleSuggestion={rule:string,agent:{connection_id:string,name:string}|null};
 type AgentRequest={apps:string[],asked_with:string};
-export type WaitingItem={kind:string,id:number,title:string,body:string,asked_by:string,card_id:number|null,conversation_id:string|null,created_at:string,suggestion?:RuleSuggestion,request?:AgentRequest};
+export type WaitingItem={kind:string,id:number,title:string,body:string,asked_by:string,card_id:number|null,conversation_id:string|null,created_at:string,suggestion?:RuleSuggestion,request?:AgentRequest|null};
 // "Waiting on you" is one list (#16), read once per request from waiting_list(company) as the signed-in person: the
 // approvals they hold (`cards`, for the card's decision and the counts) and every item, newest first (`items`).
 export const approvalQueue=cache(async(db:Awaited<ReturnType<typeof supabase>>,company:string,person:string,role:string)=>{
@@ -30,8 +31,9 @@ export const approvalQueue=cache(async(db:Awaited<ReturnType<typeof supabase>>,c
  const rules=new Map(((ruleResult.data || []) as unknown as RuleRow[]).map(row=>[row.id,row.agent_rules]));
  const requests=new Map(((requestResult.data || []) as (AgentRequest&{id:number})[]).map(({id,...request})=>[id,request]));
  const items=listed.map(item=>{
-  const rule=item.kind==='rule_suggestion'&&rules.get(item.id); const request=item.kind==='agent_request'&&requests.get(item.id);
-  return rule?{...item,suggestion:{rule:rule.body,agent:rule.hermes_agents}}:request?{...item,request}:item;
+  if(item.kind==='agent_request') return {...item,request:requests.get(item.id)??null};
+  const rule=item.kind==='rule_suggestion'&&rules.get(item.id);
+  return rule?{...item,suggestion:{rule:rule.body,agent:rule.hermes_agents}}:item;
  });
  return {steps:(stepResult.data || []) as Step[],cards,items,available:!stepResult.error&&!listResult.error&&!cardResult.error&&!ruleResult.error&&!requestResult.error};
 });
