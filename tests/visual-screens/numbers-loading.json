@@ -1,0 +1,7 @@
+{
+  "about": "Numbers while its figures are on their way (#172): from Home, Omar opens Numbers from the sidebar while its log reads are slow; under the title and the period switch it shows the reference's four tiles and two rows of panels (renderDashboard's loading branch).",
+  "path": "/c/rs-learning/home",
+  "state": "numbers-loading",
+  "act": "open-numbers-slowly",
+  "dark": true
+}
