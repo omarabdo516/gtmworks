@@ -17,6 +17,7 @@ import { AgentLevel, CompanySubscriptions, MemberNote } from './settings-lazy';
 import { MadeLine, OpenedMark } from './agent-made';
 import { madeColumns, madeOf } from '@/lib/agent-made';
 import { isNewFor } from '@/lib/sidebar.mjs';
+import { isolate } from '@/lib/bidi';
 import AppsSection from './settings-apps';
 import { CompanyKnowledge } from './company-knowledge';
 
@@ -131,10 +132,6 @@ function CompanySection({t,company,solo,message,members,agents,allowed,userId,sl
   {name}{mode}<AgentLevel company={company.id} level={agentLevel} owner={owner}/>{solo?invite:canManage?table:list}</>;
 }
 
-// A line keeps the interface's direction and isolates the runs of the other script it quotes (design-reference: bx,
-// bxLtr): the Arabic example in English, an Agent's Latin name in Arabic.
-const isolate=(text:string,rtl:boolean)=>text.split(rtl?/([A-Za-z](?:[A-Za-z0-9 &.-]*[A-Za-z0-9])?)/:/([\u0600-\u06FF](?:[^A-Za-z“”"]*[\u0600-\u06FF])?)/)
- .map((part,index)=>index%2?<bdi key={index} dir={rtl?'ltr':'rtl'}>{part}</bdi>:part);
 function TalkTip({t,rtl,text,talk}:{t:T,rtl:boolean,text:string,talk?:{href:string,name:string}}) {
  return <p className="talk-tip"><SettingsIcon name="chat"/><span>{isolate(text,rtl)}</span>{talk&&<Link className="link-btn" href={talk.href}>{t('settingsTalkTo',talk.name)}</Link>}</p>;
 }
