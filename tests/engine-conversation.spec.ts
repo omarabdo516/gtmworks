@@ -126,6 +126,8 @@ test('integration: a Contributor gets a reply on the fake engine and a Viewer is
 // Lead, the main Agent, on the Company's own profile in the bundled Engine (ADR 0014); the tests below share it.
 function bundledLead() {
  const profile=`co-${company.replaceAll('-','')}`;
+ // Each test's Engine is new, so it has no shared space yet (#122).
+ query(`delete from public.company_shared_spaces where company_id='${company}'`);
  const [made]=JSON.parse(query(`select id from public.hermes_agents where company_id='${company}' and is_default`));
  if(made) return {profile,lead:made.id as string};
  const [connection,lead]=[randomUUID(),randomUUID()];
@@ -133,7 +135,6 @@ function bundledLead() {
  query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('${lead}','${company}','${connection}','Lead','General',true)`);
  query(`insert into public.hermes_agent_audit(company_id,actor_id,agent_id,action,details) values ('${company}','${omar}','${lead}','PROVIDE_BUNDLED_HERMES_AGENT',jsonb_build_object('connection_id','${connection}'))`);
  query(`insert into public.company_profiles(company_id,profile,tools_level,tools_policy,skills_shared) select id,'${profile}',agent_level,public.engine_tool_policy(),true from public.companies where id='${company}' on conflict (company_id) do update set tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false,skills_shared=true`);
- query(`delete from public.company_shared_spaces where company_id='${company}'`);
  return {profile,lead};
 }
 
