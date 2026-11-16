@@ -147,9 +147,13 @@ jobs:
           cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
       - name: clear an earlier run and move the stack's ports
         if: ${{ runner.environment != 'github-hosted' }}
+        # The PC's Docker daemon sees the checkout but not this job's /tmp, so every file a script hands to a container
+        # (mktemp, os.tmpdir()) is written inside the checkout; the next checkout's clean removes it.
         run: |
           node scripts/ci-runner.mjs cleanup
           node scripts/ci-runner.mjs move-ports 640
+          mkdir -p "$GITHUB_WORKSPACE/.ci-tmp"
+          echo "TMPDIR=$GITHUB_WORKSPACE/.ci-tmp" >> "$GITHUB_ENV"
       - name: database
         run: ./ci.sh database
       - name: remove what this run started
@@ -180,9 +184,13 @@ jobs:
           cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
       - name: clear an earlier run and move the stack's ports
         if: ${{ runner.environment != 'github-hosted' }}
+        # The PC's Docker daemon sees the checkout but not this job's /tmp, so every file a script hands to a container
+        # (mktemp, os.tmpdir()) is written inside the checkout; the next checkout's clean removes it.
         run: |
           node scripts/ci-runner.mjs cleanup
           node scripts/ci-runner.mjs move-ports 640
+          mkdir -p "$GITHUB_WORKSPACE/.ci-tmp"
+          echo "TMPDIR=$GITHUB_WORKSPACE/.ci-tmp" >> "$GITHUB_ENV"
       # One browser test lane per worker, each on a whole stack of its own (tests/lane.mjs, #69): four on a GitHub-hosted
       # runner, and on the PC as many as its CPUs and free memory carry.
       - name: choose the browser test lanes
@@ -266,6 +274,9 @@ jobs:
         with:
           node-version: 22
           cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
+      # The PC's Docker CLI has no Compose plugin; the install and its checks drive Compose.
+      - uses: docker/setup-compose-action@v1
+        if: ${{ runner.environment != 'github-hosted' }}
       - name: test packages for the install browser check
         run: npm ci --ignore-scripts
       - name: isolated Docker-only install, repeat and verify

@@ -141,6 +141,8 @@ test('on the self-hosted runner a job clears an earlier run and moves the ports 
   assert.equal(condition(steps[prepare]), "runner.environment != 'github-hosted'", label(job));
   assert.match(steps[prepare].run, /ci-runner\.mjs cleanup[\s\S]*ci-runner\.mjs move-ports/, `${label(job)} clears an earlier run first`);
   assert.doesNotThrow(() => movePorts(config, Number(steps[prepare].run.match(/move-ports (\d+)/)[1])), label(job));
+  // The PC's Docker daemon does not see the job's /tmp: files handed to a container are written in the checkout.
+  assert.match(steps[prepare].run, /echo "TMPDIR=\$GITHUB_WORKSPACE\/[^"]+" >> "\$GITHUB_ENV"/, `${label(job)} keeps its temporary files where the daemon sees them`);
   const last = steps.at(-1);
   assert.match(condition(last), /\balways\(\)/, label(job));
   assert.match(last.run ?? '', /ci-runner\.mjs cleanup/, `${label(job)} removes what it started`);
