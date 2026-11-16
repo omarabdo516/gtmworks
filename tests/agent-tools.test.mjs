@@ -162,6 +162,20 @@ test('request_agent reads its arguments as create_agent does, and asks the datab
  assert.match(JSON.parse(specs.request_agent).description,/Nothing is made until the Owner says yes/);
 });
 
+// #136: the database alone judges a draft (reply_card_valid), so what reaches it is the model's words, trimmed, and never
+// a NUL, which the database cannot store.
+test('show_draft asks the database to show the draft as the model wrote it, trimmed and without NUL, and the Engine is not asked',async()=>{
+ const {fake,rpcs,call}=harness({},{state:'shown',card:42});
+ for(const args of /** @type {unknown[]} */([null,'Campaign plan',{title:'Plan',line:'Draft',rows:'Goal'}])) assert.deepEqual(await call('show_draft',args),{state:'ignored'},JSON.stringify(args));
+ assert.deepEqual(await call('show_draft',{title:' خطة الحملة ',line:'مسودة · Meta Ads\n',rows:[{label:' الهدف',value:'ليدز على واتساب '}]}),{state:'shown',card:42});
+ await call('show_draft',{title:'Plan\u0000',line:'Draft',rows:[{label:'Goal'},'Budget',{label:'Bud\u0000get',value:7}]});
+ await call('show_draft',{line:'Draft'});
+ const sent=(/** @type {string|null} */ title,/** @type {object} */ content)=>['agent_show_card',{conversation:'conversation-1',run:'run-1',call:'call-0',kind:'draft',title,content}];
+ assert.deepEqual(rpcs,[sent('خطة الحملة',{line:'مسودة · Meta Ads',rows:[{label:'الهدف',value:'ليدز على واتساب'}]}),
+  sent(null,{line:'Draft',rows:[{label:'Goal',value:null},{label:null,value:null},{label:null,value:null}]}),sent(null,{line:'Draft',rows:[]})]);
+ assert.deepEqual(fake.agentReads,[]);
+});
+
 test('an Engine is ready for a new Agent only when it has the Company\'s profile ready',async()=>{
  const {fake,engine}=harness();
  assert.equal(await engineReady(engine,profile),'engineNotReady');
@@ -180,4 +194,5 @@ test('the tool texts a run may already be pinned with stay byte for byte as they
   save_rule:'57d671d0e25a566996b232a7502f7b5701de124fde7d637072b73d0148797093',
   suggest_rule:'b968872c1d39b12cceba952c080a66432d778dba12b77f1e155c032495a3ac2c',
  });
+ assert.equal(sha(specs.show_draft),'14f3e489f8903145db328693857952e95f34678a9071a2b50a48f1180ff4754c','show_draft (#136)');
 });
