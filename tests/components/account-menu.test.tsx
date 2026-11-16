@@ -2,13 +2,11 @@ import { afterEach, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
 import { userEvent } from 'vitest/browser';
 import type { ComponentProps, MouseEvent } from 'react';
-import AccountMenu from '@/app/account-menu';
+import AccountMenuView from '@/app/account-menu-view';
 import { LanguageProvider } from '@/lib/i18n-client';
 import type { Language } from '@/lib/i18n.mjs';
 
 const saveLanguage = vi.hoisted(() => vi.fn<(state: string, form: FormData) => Promise<string>>());
-vi.mock('@/app/language-actions', () => ({ saveLanguage }));
-vi.mock('@/app/theme-actions', () => ({ saveTheme: vi.fn(async () => '') }));
 vi.mock('next/navigation', () => ({ usePathname: () => '/c/rs-learning/chat' }));
 // A link stays on the test page: following it is the app's router's work, not the menu's.
 vi.mock('@/lib/link', () => ({
@@ -19,7 +17,7 @@ vi.mock('@/lib/link', () => ({
 afterEach(async () => { if (document.querySelector('[role="menu"]')) await userEvent.keyboard('{Escape}'); saveLanguage.mockReset(); });
 
 const menu = (language: Language) => render(<LanguageProvider language={language}>
- <AccountMenu slug="rs-learning" personName="Omar" role="Owner" theme="light" companyName="RS Learning" settingsHref="/c/rs-learning/settings"/>
+ <AccountMenuView saveLanguage={saveLanguage} saveTheme={async () => ''} slug="rs-learning" personName="Omar" role="Owner" theme="light" companyName="RS Learning" settingsHref="/c/rs-learning/settings"/>
 </LanguageProvider>);
 
 for (const [language, accountMenu, chosen, other, saved] of [['en', 'Account menu', 'English', 'العربية', 'ar'], ['ar', 'قائمة الحساب', 'العربية', 'English', 'en']] as const) test(`in ${chosen} the menu marks it chosen, and choosing ${other} saves it to the account and closes the menu`, async () => {
