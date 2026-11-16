@@ -31,9 +31,13 @@ export default function ChannelView({person,initial}:{person:string,initial:Chan
    if(response.ok) setRecord(await response.json() as ChannelRecord);
   } catch {}
  },[channel.company,channel.id]);
- // Opening the channel is reading it; the page's own render never marks it, since a render can be one nobody saw.
- // The answer is read to its end: a response left unread keeps its request open, and the page never settles.
- useEffect(()=>{ void fetch(`/api/channels?company=${channel.company}&channel=${channel.id}`,{cache:'no-store'}).then(response=>response.arrayBuffer()).catch(()=>{}); },[channel.company,channel.id]);
+ // Opening the channel reads it, and asks for it fresh: the page may be a prefetch drawn before the newest messages. The
+ // answer replaces only that first drawing, never a newer one from a poll or a send.
+ useEffect(()=>{
+  void fetch(`/api/channels?company=${channel.company}&channel=${channel.id}`,{cache:'no-store'}).then(async response=>{
+   if(response.ok) { const fresh=await response.json() as ChannelRecord; setRecord(current=>current===initial?fresh:current); } else await response.arrayBuffer();
+  }).catch(()=>{});
+ },[channel.company,channel.id,initial]);
  useEffect(()=>{
   let stopped=false; let timer:ReturnType<typeof setTimeout>|undefined;
   const poll=async()=>{

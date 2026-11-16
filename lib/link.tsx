@@ -68,7 +68,7 @@ function Pending({ href }: { href: string }) {
   return pending ? <Feedback href={href} /> : null;
 }
 
-export default function Link({ children, prefetch = true, ...props }: ComponentProps<typeof NextLink>) {
+export default function Link({ children, ...props }: ComponentProps<typeof NextLink>) {
   const target = props.as || props.href;
   const href = typeof target === 'string' ? target : target.pathname || '';
   // A plain click or Enter (which the browser turns into a click) opens the page here; a modified click opens it
@@ -77,5 +77,5 @@ export default function Link({ children, prefetch = true, ...props }: ComponentP
     props.onClick?.(event);
     if (!event.defaultPrevented && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && (!props.target || props.target === '_self')) opening = new URL(href, location.href).pathname;
   };
-  return <NextLink {...props} onClick={onClick} prefetch={prefetch}>{children}<Pending href={href} /></NextLink>;
+  return <NextLink {...props} onClick={onClick} prefetch>{children}<Pending href={href} /></NextLink>;
 }

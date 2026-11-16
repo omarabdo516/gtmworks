@@ -11,8 +11,7 @@ const NewChannel=lazy(()=>import('./new-channel-dialog'));
 const pollEvery=5000;
 
 // design-reference: renderThreadList. The open channel is being read, so it shows no count; ?new=channel opens New
-// channel from any page, which is how its compared screen reaches it. A channel's page is never prefetched: a render
-// nobody saw would be served stale on the click.
+// channel from any page, which is how its compared screen reaches it.
 export default function ChannelList({slug,company,person,initial,current,manage}:{slug:string,company:string,person:string,initial:ChannelSummary[],current?:string,manage:boolean}) {
  const {t,language}=useI18n();
  const router=useRouter(); const path=usePathname(); const search=useSearchParams();
@@ -49,7 +48,7 @@ export default function ChannelList({slug,company,person,initial,current,manage}
    {manage&&<button type="button" className="sb-add" aria-label={t('shellNewChannel')} title={t('shellNewChannel')} onClick={()=>setOpened(true)}><ShellIcon name="plus"/></button>}</div>
   <ul aria-labelledby="lbl-ch">{channels.map(channel=>{
    const unread=channel.id===current?0:channel.unread;
-   return <li key={channel.id}><Link prefetch={false} className={`sb-item thread-item ch-item${unread?' is-unread':''}`} href={`/c/${slug}/channels/${channel.id}`} aria-current={channel.id===current?'true':undefined}>
+   return <li key={channel.id}><Link className={`sb-item thread-item ch-item${unread?' is-unread':''}`} href={`/c/${slug}/channels/${channel.id}`} aria-current={channel.id===current?'true':undefined}>
     <ShellIcon name="hash"/><span className="od-truncate"><bdi>{channelTitle(t,channel)}</bdi></span>
     {unread>0&&<span className="sb-unread num" aria-label={t(unread===1?'channelNewMessage':'channelNewMessages',count(unread))}>{count(unread)}</span>}
    </Link></li>;

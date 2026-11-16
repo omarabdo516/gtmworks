@@ -107,7 +107,7 @@ test('a Member calls the channel\'s Agent hidden from them elsewhere, sees its m
  await signIn(page,'reviewer@example.com',`/c/rs-learning/channels/${channel}`);
  await expect(page.locator('.ch-intro__only')).toHaveText('SEO is shown to you in this channel only, and you can call it here. Outside the channel it stays hidden.');
  await expect(page.locator('#details .panel-row').filter({hasText:'SEO'})).toContainText('Shown to you in this channel only');
- await expect(page.locator('.sidebar .agent-tile__name')).toHaveText(['Lead','Meta Ads']);
+ await expect(page.locator('.sidebar .agent-tile__name')).toHaveText(['Lead','Meta Ads','Ask for an agent']);
  const box=page.getByRole('textbox',{name:'Write your message in the channel',exact:true});
  await box.fill('@SEO draft the December article'); await box.press('Enter');
  await expect(page.locator('.turn--user .bubble--user').last()).toContainText('draft the December article');
