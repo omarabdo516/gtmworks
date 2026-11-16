@@ -901,6 +901,8 @@
   "leadFreshLineMember": "أنا {0}، بمسك شغل التسويق معاك. محتاج وكيل لأي شغلانة؟ قولّي بكلامك وأنا أجهّز الطلب لـ{1}.",
   "logActAppConnected": "وصّل",
   "logActAppDisconnected": "فصل",
+  "logActProviderKeySet": "حط مفتاح API بتاع",
+  "logActProviderKeyRemoved": "شال مفتاح API بتاع",
   "logAppOn": "متوصل",
   "logAppOff": "مش متوصل",
   "sheetTabs": "البطاقة",
