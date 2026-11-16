@@ -29,7 +29,6 @@ test('the providers that take a key are the Engine\'s primary password rows, wit
   const answer=JSON.stringify(read);
   for(const secret of [known,`${known.slice(0,4)}...${known.slice(-4)}`,known.slice(-4),'OPENROUTER_API_KEY','redacted']) assert.ok(!answer.includes(secret),secret);
   assert.ok(fake.settings.managementRequests.every(request=>!request.path.includes('/reveal')),'the reveal route is never asked');
-  // Each Agent profile that lacks a key the space holds is named.
   fake.settings.profiles.get(one.main).env={OPENROUTER_API_KEY:known};
   assert.deepEqual((await readProviderKeys(install(fake),{space:one.space,profiles:[one.main,...one.agents]})).lacking,one.agents);
  } finally { await fake.close(); }
@@ -94,7 +93,6 @@ test('a set writes the key to the space, then each profile its key before its mo
   const again=await setProviderKey(install(fake),{space:one.space,profiles,provider:'openrouter',value:known});
   assert.deepEqual(again.profiles,{[one.main]:'written',[one.agents[0]]:'written',[one.agents[1]]:'written'});
   assert.deepEqual((await readProviderKeys(install(fake),{space:one.space,profiles})).lacking,[]);
-  // A provider the Engine lists no model for gets the key and keeps the profile's model.
   const deepseek=await setProviderKey(install(fake),{space:one.space,profiles:[one.main],provider:'deepseek',value:known});
   assert.deepEqual(deepseek,{state:'written',model:null,profiles:{[one.main]:'noModel'}});
   assert.equal(fake.settings.profiles.get(one.main).provider,'openrouter');
