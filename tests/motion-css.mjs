@@ -43,10 +43,14 @@ export function referenceStyles() {
   return { ...sheet, tokens: tokensOf(sheet, ':root') };
 }
 
-/** One product file's rules, with the keyframes of every stylesheet under app/ and the `.gw` tokens. @param {string} file @returns {Styles} */
+/**
+ * One product file's rules after app/shell.css's, as every page loads them, with the keyframes of every stylesheet under
+ * app/ and the `.gw` tokens. @param {string} file @returns {Styles}
+ */
 export function productStyles(file) {
   const keyframes = new Map(productFiles().flatMap(each => [...readSheet(each).keyframes]));
-  return { rules: readSheet(file).rules, keyframes, tokens: tokensOf(readSheet(tokenFile), '.gw') };
+  const rules = file === keyframeFile ? readSheet(file).rules : [...readSheet(keyframeFile).rules, ...readSheet(file).rules];
+  return { rules, keyframes, tokens: tokensOf(readSheet(tokenFile), '.gw') };
 }
 
 /** @param {string} css @returns {Sheet} */
@@ -282,9 +286,15 @@ export function referenceComputed(selector, width) {
 /** A part's computed style, read as `referenceComputed` reads the reference. @param {ComputedStyle} style @returns {ComputedMotion} */
 export function computedMotion(style) {
   const list = (/** @type {string} */ value) => splitTop(value, ',');
+  const properties = list(style.transitionProperty);
+  // The browser keeps a longhand's shorter list as written (`0.15s` beside five properties); read it repeated, as it acts.
+  const each = (/** @type {string} */ value) => {
+    const values = list(value);
+    return properties.map((_, index) => values[index % values.length]);
+  };
   const transition = transitionOf({
-    properties: list(style.transitionProperty), durations: list(style.transitionDuration).map(milliseconds),
-    delays: list(style.transitionDelay).map(milliseconds), easings: list(style.transitionTimingFunction).map(easing),
+    properties, durations: each(style.transitionDuration).map(milliseconds),
+    delays: each(style.transitionDelay).map(milliseconds), easings: each(style.transitionTimingFunction).map(easing),
   });
   return {
     properties: transition.properties, durations: transition.durations, easings: transition.easings, names: list(style.animationName),

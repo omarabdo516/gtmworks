@@ -3,10 +3,13 @@ import { act } from 'react';
 import { hydrateRoot } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 import { render } from 'vitest-browser-react';
-import { page, userEvent } from 'vitest/browser';
+import { cdp, page, userEvent } from 'vitest/browser';
+// Gives cdp() Playwright's session type (its send), as the config's provider does at run time.
+import type {} from '@vitest/browser-playwright';
 import { MessageBox, postMessage } from '@/app/conversation-composer';
 import { LanguageProvider } from '@/lib/i18n-client';
 import type { Language } from '@/lib/i18n.mjs';
+import '@/app/tokens.css';
 import '@/app/shell.css';
 
 afterEach(() => { vi.unstubAllGlobals(); });
@@ -125,4 +128,35 @@ test('on a phone the send arrow is the reference\'s 28px circle, and a tap anywh
  const [x, y] = [circle.left + circle.width / 2, circle.top + circle.height / 2];
  const misses = [[-21, -21], [0, -21], [21, -21], [-21, 0], [21, 0], [-21, 21], [0, 21], [21, 21]].filter(([dx, dy]) => !document.elementFromPoint(x + dx, y + dy)?.closest('button')?.isSameNode(arrow));
  expect(misses, 'taps inside the 44px square that miss the send arrow').toEqual([]);
+});
+
+// The button's transform while a person holds it down: the mouse pressed at its centre, its transitions run to their end.
+const held = async (button: Element) => {
+ const box = button.getBoundingClientRect();
+ const at = { x: box.left + box.width / 2, y: box.top + box.height / 2, button: 'left', clickCount: 1 } as const;
+ await cdp().send('Input.dispatchMouseEvent', { type: 'mousePressed', ...at });
+ try {
+  button.getAnimations().forEach(animation => animation.finish());
+  return getComputedStyle(button).transform;
+ } finally { await cdp().send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...at }); }
+};
+const fades = 'background-color 0.15s cubic-bezier(0.2, 0, 0, 1), transform 0.15s cubic-bezier(0.2, 0, 0, 1)';
+const gwBox = (props: Parameters<typeof box>[0]) => render(<div className="gw"><div className="composer-area"><LanguageProvider language="en"><MessageBox placeholder="Write" {...props}/></LanguageProvider></div></div>);
+
+test('the send arrow fades its colour and size over 150ms and gives to 94% while held, but not while the box is empty', async () => {
+ const screen = await gwBox({ send: vi.fn<Send>(async () => null) });
+ const arrow = screen.getByRole('button', { name: 'Send' });
+ expect(getComputedStyle(arrow.element()).transition).toBe(fades);
+ expect(await held(arrow.element())).toBe('none');
+ await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), 'hello');
+ await expect.element(arrow).toBeEnabled();
+ expect(getComputedStyle(arrow.element()).transition).toBe(fades);
+ expect(await held(arrow.element())).toBe('matrix(0.94, 0, 0, 0.94, 0, 0)');
+});
+
+test('the stop square fades and gives to 94% while held, as the send arrow does', async () => {
+ const screen = await gwBox({ send: async () => null, stop: { label: 'Stop', run: vi.fn(async () => null) } });
+ const stop = screen.getByRole('button', { name: 'Stop' }).element();
+ expect(getComputedStyle(stop).transition).toBe(fades);
+ expect(await held(stop)).toBe('matrix(0.94, 0, 0, 0.94, 0, 0)');
 });
