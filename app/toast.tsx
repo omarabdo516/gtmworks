@@ -22,7 +22,8 @@ function subscribe(listener:()=>void) { listeners.add(listener); return ()=>{ li
 
 // The polite live region stays one element for the whole visit, so a toast is announced as a change to it. A modal
 // dialog puts the rest of the page under it and makes it inert, so the region sits in the topmost open dialog: it moves
-// when a toast is raised and whenever a dialog opens or closes, so a toast already showing follows the card sheet in.
+// when a toast is raised and whenever a dialog opens, closes or leaves the page with the region in it (Back from
+// the card sheet unmounts it open), so a toast already showing follows the sheet in and survives it.
 let region:HTMLDivElement|undefined;
 function liveRegion() {
  if(!region) { region=document.createElement('div'); region.className='gw toast-host'; region.setAttribute('role','status'); region.setAttribute('aria-live','polite'); }
@@ -49,7 +50,7 @@ export function ToastHost() {
  useEffect(()=>{
   place();
   const dialogs=new MutationObserver(place);
-  dialogs.observe(document.body,{subtree:true,attributes:true,attributeFilter:['open']});
+  dialogs.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['open']});
   return ()=>{ dialogs.disconnect(); stop(); show(null); liveRegion().remove(); };
  },[]);
  if(!state) return null;
