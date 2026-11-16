@@ -67,8 +67,15 @@ const draft=(/** @type {number} */ id)=>({id,kind:'draft',title:'خطة الحم
 
 test('a draft card is read from its row, and a row of a kind this version does not know is left out',()=>{
  assert.deepEqual(replyCardOf(row(1,'r1')),draft(1));
- assert.equal(replyCardOf(row(9,'r1','review')),null);
+ assert.equal(replyCardOf(row(9,'r1','question')),null);
  assert.equal(replyCardOf(row(9,'r1','toString')),null);
+});
+
+// #137: a review card, read from its row with each verdict, in the order the Agent gave them.
+test('a review card is read from its row, its texts in order with their verdicts and notes, and its decision',()=>{
+ const items=[{text:'من خريج تجارة لمحاسب شغال في 3 شهور',fine:true,note:'الوعد واضح.'},{text:'أضمن طريق لأول وظيفة محاسبة',fine:false,note:'«أضمن» وعد مقدرش نثبته.'}];
+ const stored={id:4,run_id:'r1',kind:'review',title:'مراجعة نصوص إعلانات ديسمبر',content:{line:'2 نصوص · Meta Ads',items,decision:'1 جاهز، و1 رجع لـ Ads'},created_at:at(2)};
+ assert.deepEqual(replyCardOf(stored),{id:4,kind:'review',title:'مراجعة نصوص إعلانات ديسمبر',line:'2 نصوص · Meta Ads',items,decision:'1 جاهز، و1 رجع لـ Ads'});
 });
 
 test('a draft card is under the Agent\'s reply of its run, or is the Agent\'s whole turn when the reply was nothing but the call',()=>{
