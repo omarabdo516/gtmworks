@@ -54,7 +54,7 @@ The prototype has no URL routes. Its sidebar switches between four views (`data-
 | `waiting` | The board scrolled to its "Waiting on you" column | `/c/rs-learning/approvals` |
 | `numbers` | Sidebar, Numbers (the dashboard) | `/c/rs-learning/numbers` |
 | `log` | Sidebar, Activity log | `/c/rs-learning/log` |
-| `card-log` | Board, the first card, its sheet's Log tab: the card's log with the note field (#22) | `/c/rs-learning/work/board/1` |
+| `card-log` | Board, the first card, its sheet's Log tab: the card's log with the note field (#22, #116) | `/c/rs-learning/work/board?card=1` |
 | `agent-chat` | The Ads Agent's tile in the sidebar: a Conversation with an Agent other than Lead, with the private line of a team at its top (#25) | none |
 | `settings` | Account menu, Settings: the overlay's Company section | `/c/rs-learning/settings` |
 | `agents` | Settings, Agents | `/c/rs-learning/settings?section=agents` |
