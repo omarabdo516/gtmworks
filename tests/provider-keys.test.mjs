@@ -121,7 +121,7 @@ const companies={
  '10000000-0000-0000-0000-000000000001':{...one,names:{[one.main]:'Lead',[one.agents[0]]:'Writer',[one.agents[1]]:'Designer'}},
  '10000000-0000-0000-0000-000000000002':{...two,names:{[two.main]:'Lead two',[two.agents[0]]:'Writer two',[two.agents[1]]:'Designer two'}},
 };
-const [first]=Object.keys(companies);
+const [first,second]=Object.keys(companies);
 const agentId=profile=>`${profile.slice(3,11)}-${profile.slice(11,15)}-${profile.slice(15,19)}-${profile.slice(19,23)}-${profile.slice(23)}`;
 const encryptionKey=Buffer.alloc(32,9).toString('base64');
 const keyRows=(company,extra=[])=>{ const found=companies[company];
@@ -260,6 +260,26 @@ test('only an active Owner sets or removes a key, checked on the server; every m
   assert.deepEqual(await change(sessions(fake,{owner:true,space:false}),fake,{intent:'set',value:known}),{status:409,body:{error:'keyNoSpace'}});
   assert.deepEqual(await read(sessions(fake,{owner:true,space:false}),fake),{keys:null,waiting:null,leftover:null,unknown:null});
   assert.deepEqual(owner.logged,[]);
+ } finally { await fake.close(); }
+});
+
+test('two changes of one Company\'s key run one after the other, and another Company\'s change does not wait', async () => {
+ const fake=await fakeHermes();
+ try {
+  madeCompany(fake,one); madeCompany(fake,two);
+  const owner=sessions(fake,{owner:true});
+  const steps=[]; let open; const gate=new Promise(resolve=>{ open=resolve; });
+  const held=name=>({set:async()=>{ steps.push(`${name} starts`); if(name==='A') await gate; steps.push(`${name} ends`); return {state:'written',model:null,profiles:{}}; }});
+  const changeAs=(name,company)=>changeCompanyKey(owner.db,owner.service,{company,provider:'openrouter',intent:'set',value:known,encryptionKey,driver:held(name)});
+  const a=changeAs('A',first); const b=changeAs('B',first); const other=changeAs('C',second);
+  assert.equal((await other).status,200);
+  assert.deepEqual(steps,['A starts','C starts','C ends'],'the second change of the first Company waits; the other Company does not');
+  open();
+  assert.deepEqual([(await a).status,(await b).status],[200,200]);
+  assert.deepEqual(steps.slice(3),['A ends','B starts','B ends']);
+  const failing=changeCompanyKey(owner.db,owner.service,{company:first,provider:'openrouter',intent:'set',value:known,encryptionKey,driver:{set:async()=>{ throw new Error('down'); }}});
+  await assert.rejects(failing);
+  assert.equal((await changeAs('D',first)).status,200,'a change that threw does not hold the next');
  } finally { await fake.close(); }
 });
 
