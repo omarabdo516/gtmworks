@@ -1,0 +1,24 @@
+﻿2026-11-16T19:15:13.7791886Z Current runner version: '2.338.2'
+2026-11-16T19:15:13.7796415Z Runner name: 'omar-pc-ci_gtmworks'
+2026-11-16T19:15:13.7797129Z Runner group name: 'Default'
+[excerpt: lines omitted]
+2026-11-16T19:16:52.7021471Z 
+2026-11-16T19:16:52.7021960Z added 537 packages, and audited 538 packages in 16s
+2026-11-16T19:16:52.7022146Z 
+2026-11-16T19:16:52.7022236Z 179 packages are looking for funding
+2026-11-16T19:16:52.7022416Z   run `npm fund` for details
+2026-11-16T19:16:52.8011643Z 
+2026-11-16T19:16:52.8011983Z 11 vulnerabilities (10 moderate, 1 high)
+2026-11-16T19:16:52.8012133Z 
+2026-11-16T19:16:52.8012338Z To address issues that do not require attention, run:
+2026-11-16T19:16:52.8012538Z   npm audit fix
+2026-11-16T19:16:52.8012615Z 
+2026-11-16T19:16:52.8012744Z To address all issues (including breaking changes), run:
+2026-11-16T19:16:52.8013198Z   npm audit fix --force
+2026-11-16T19:16:52.8013307Z 
+2026-11-16T19:16:52.8013384Z Run `npm audit` for details.
+2026-11-16T19:17:17.1588681Z ##[error]Process completed with exit code 130.
+[excerpt: lines omitted]
+2026-11-16T19:17:17.1806309Z ##[endgroup]
+2026-11-16T19:17:17.7661696Z ##[error]The runner has received a shutdown signal. This can happen when the runner service is stopped, or a manually started runner is canceled.
+2026-11-16T19:17:17.8190990Z ##[error]The operation was canceled.

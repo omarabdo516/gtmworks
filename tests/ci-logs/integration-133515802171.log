@@ -1,0 +1,108 @@
+﻿2026-11-16T18:29:10.4506739Z Current runner version: '2.338.2'
+2026-11-16T18:29:10.4513290Z Runner name: 'omar-pc-ci_gtmworks'
+2026-11-16T18:29:10.4513760Z Runner group name: 'Default'
+[excerpt: lines omitted]
+2026-11-16T18:33:59.0346711Z ##[error]  1) [functional] › tests/agent-attachments.spec.ts:34:5 › a file attached in the composer and in a reply shows as a thumbnail, in both languages 
+    Error: expect(locator).toHaveAttribute(expected) failed
+
+    Locator:  locator('html')
+    Expected: "en"
+    Received: "ar"
+    Timeout:  3000ms
+
+    Call log:
+      - Expect "toHaveAttribute" locator('html') with timeout 3000ms
+      - waiting for locator('html')
+        10 × locator resolved to <html lang="ar" dir="rtl" data-theme="device" class="__variable_6768c4 __variable_2e852f">…</html>
+           - unexpected value "ar"
+[excerpt: lines omitted]
+2026-11-16T18:34:22.2891265Z ##[error]  2) [functional] › tests/app.spec.ts:8:5 › Paperclip Inter and Arabic-only Vazirmatn load locally ─
+    Error: page.goto: net::ERR_NETWORK_CHANGED at http://127.0.0.1:3001/c/rs-learning/settings
+    Call log:
+      - navigating to "http://127.0.0.1:3001/c/rs-learning/settings", waiting until "load"
+
+
+      21 |   for(const [path,width] of [...['home','work/board','work/board/1','work/calendar','work/list','approvals','agents','settings'].map(path=>[path,1440] as const),['work/list',390] as const,['agents',390] as const]) {
+      22 |    await page.setViewportSize({width,height:900});
+    > 23 |    await page.goto(`/c/rs-learning/${path}`);
+         |               ^
+      24 |    await page.evaluate(()=>document.fonts.ready);
+      25 |    const family=await page.locator('body').evaluate(el=>getComputedStyle(el).fontFamily.split(',')[0].trim().replaceAll(/["']/g,''));
+      26 |    expect(family).toMatch(language==='en'?/^InterVariable$/:/^(?:__)?Vazirmatn(?:_|$)/);
+[excerpt: lines omitted]
+2026-11-16T18:39:15.9996566Z ##[error]  3) [functional] › tests/settings-apps.spec.ts:55:5 › the apps and their states are the Engine's: connected, needing attention or not connected, then all off 
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+    Error: Command failed: npx --no-install supabase db query do $$ begin
+       insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('b4146077-c9eb-4b60-b8bd-69aa0854dbc7','10000000-0000-0000-0000-000000000001','1df28e53-79a5-4dc7-98cc-3ff1b54d6d6c','Lead','General',true);
+       insert into public.hermes_agent_audit(company_id,actor_id,agent_id,action,details) values ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','b4146077-c9eb-4b60-b8bd-69aa0854dbc7','PROVIDE_BUNDLED_HERMES_AGENT',jsonb_build_object('connection_id','1df28e53-79a5-4dc7-98cc-3ff1b54d6d6c'));
+       insert into public.company_profiles(company_id,profile,tools_level,tools_policy) select id,'co-10000000000000000000000000000001',agent_level,public.engine_tool_policy() from public.companies where id='10000000-0000-0000-0000-000000000001'
+        on conflict (company_id) do update set profile=excluded.profile,tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false;
+      end $$; -o json --agent no
+    Target: local stack (127.0.0.1:64022)
+    failed to execute query: error: duplicate key value violates unique constraint "hermes_one_default"
+    Try rerunning the command with --debug to troubleshoot the error.
+
+[excerpt: lines omitted]
+2026-11-16T18:39:16.0306539Z ##[error]  4) [functional] › tests/settings-apps.spec.ts:91:5 › the Owner connects an app through the vendor's window and disconnects it; both are in the Activity log 
+    Error: Command failed: npx --no-install supabase db query select actor_id,action,details->>'app' as app from public.company_log where company_id='10000000-0000-0000-0000-000000000001' and action in ('app_connected','app_disconnected') order by id -o json --agent no
+    Target: local stack (127.0.0.1:64022)
+    failed to connect to postgres: failed to connect to `host=127.0.0.1 user=postgres database=postgres`: timeout expired
+    Try rerunning the command with --debug to troubleshoot the error.
+
+
+      11 | // vendor's window, which returns through gtmworks, and disconnects it; both are in the Activity log. A Manager reads the
+      12 | // states only, and the server refuses them. No screen names the Engine or shows a file path.
+    > 13 | const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
+         |                                       ^
+      14 | const company='10000000-0000-0000-0000-000000000001';
+      15 | const omar='20000000-0000-0000-0000-000000000001';
+[excerpt: lines omitted]
+2026-11-16T18:40:12.0731423Z ##[error]  5) [functional] › tests/skills.spec.ts:18:5 › a team member installs and enables a skill for the Writer, a bad skill is refused, and the agent reads exactly its enabled skills 
+    Error: expect(locator).toHaveAttribute(expected) failed
+
+    Locator:  locator('html')
+    Expected: "ar"
+    Received: "en"
+    Timeout:  3000ms
+
+    Call log:
+      - Expect "toHaveAttribute" locator('html') with timeout 3000ms
+      - waiting for locator('html')
+        10 × locator resolved to <html lang="en" dir="ltr" data-theme="device" class="__variable_6768c4 __variable_2e852f">…</html>
+           - unexpected value "en"
+[excerpt: lines omitted]
+2026-11-16T18:40:12.0775674Z ##[error]  5) [functional] › tests/skills.spec.ts:18:5 › a team member installs and enables a skill for the Writer, a bad skill is refused, and the agent reads exactly its enabled skills 
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+    Error: Command failed: npx --no-install supabase db query delete from public.agent_keys where key_hash='95755575b750968a052d41601bf816f460d570cd7da0611825925ba701d1a0be' -o json --agent no
+    Target: local stack (127.0.0.1:64222)
+    failed to execute query: error: update or delete on table "agent_keys" violates foreign key constraint "agent_rate_limits_key_id_fkey" on table "agent_rate_limits"
+    Try rerunning the command with --debug to troubleshoot the error.
+
+
+       9 | const headers={Authorization:`***;
+      10 | // Supabase CLI targets the local test database by default; never pass --remote.
+    > 11 | const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
+         |                                       ^
+[excerpt: lines omitted]
+2026-11-16T18:41:02.1370072Z 
+2026-11-16T18:41:02.1370461Z     Error: page.goto: net::ERR_NETWORK_CHANGED at http://127.0.0.1:3001/c/rs-learning/settings
+2026-11-16T18:41:02.1370816Z     Call log:
+[excerpt: lines omitted]
+2026-11-16T18:41:02.1386932Z   3 flaky
+2026-11-16T18:41:02.1387353Z     [functional] › tests/agent-attachments.spec.ts:34:5 › a file attached in the composer and in a reply shows as a thumbnail, in both languages 
+2026-11-16T18:41:02.1387838Z     [functional] › tests/app.spec.ts:8:5 › Paperclip Inter and Arabic-only Vazirmatn load locally ──
+2026-11-16T18:41:02.1388357Z     [functional] › tests/settings-apps.spec.ts:55:5 › the apps and their states are the Engine's: connected, needing attention or not connected, then all off 
+2026-11-16T18:41:02.1388689Z   1 did not run
+2026-11-16T18:41:02.1388806Z   191 passed (7.9m)
+2026-11-16T18:41:02.5194034Z ##[notice]  2 failed
+    [functional] › tests/settings-apps.spec.ts:91:5 › the Owner connects an app through the vendor's window and disconnects it; both are in the Activity log 
+    [functional] › tests/skills.spec.ts:18:5 › a team member installs and enables a skill for the Writer, a bad skill is refused, and the agent reads exactly its enabled skills 
+  3 flaky
+    [functional] › tests/agent-attachments.spec.ts:34:5 › a file attached in the composer and in a reply shows as a thumbnail, in both languages 
+    [functional] › tests/app.spec.ts:8:5 › Paperclip Inter and Arabic-only Vazirmatn load locally ──
+    [functional] › tests/settings-apps.spec.ts:55:5 › the apps and their states are the Engine's: connected, needing attention or not connected, then all off 
+  1 did not run
+  191 passed (7.9m)
+2026-11-16T18:41:02.7824736Z ##[error]Process completed with exit code 1.
