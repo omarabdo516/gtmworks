@@ -1,7 +1,7 @@
 import { test, expect, type BrowserContext, type Page } from '@playwright/test';
 import { chooseLanguageInSettings } from './choose-language';
 import { execFileSync } from 'node:child_process';
-import { signIn } from './sign-in';
+import { signIn, openNavigation } from './sign-in';
 import { resetFirstRun } from '../scripts/first-run-db.mjs';
 import { idle } from './navigation-measure';
 import { languages, widths, screens, snapshotName } from './visual-screens.mjs';
@@ -522,6 +522,7 @@ test.describe('signed-in screens', () => {
         undoAct = await act?.(shown, language);
         if (screen.dark) await expectDarkContrast(shown);
         await expect(shown).toHaveScreenshot(`${snapshotName(screen, language, width)}.png`, { fullPage: true });
+        if (!screen.dark && quietText[screen.name]) await expectQuietContrast(shown, quietText[screen.name]);
       } finally {
         await undoAct?.();
         if (state) write(state.unset);
@@ -530,6 +531,52 @@ test.describe('signed-in screens', () => {
     });
   }
 });
+
+// Secondary text in the light theme: each quiet label keeps 4.5:1 on what is behind it and stays weaker than the body
+// text there. Measured after the picture, on the screens that draw it; on a phone the sidebar's labels are read with the
+// drawer open.
+const quietText: Record<string, [kind: string, selector: string, pseudo?: string][]> = {
+  home: [['chart subtitle', '.home-charts article h2 + span'], ['sidebar heading', '.sidebar .sb-label'], ['account role', '.sidebar .me__role']],
+  board: [['toolbar label', '.work-toolbar .tabs a:not(.active), .work-toolbar .tabs button:not(.active)']],
+  card: [['comment placeholder', '.modal textarea[name=body]', '::placeholder']],
+};
+for (const name of Object.keys(quietText)) if (!screens.some(screen => screen.name === name)) throw new Error(`${name}: quiet text is measured only on a compared screen`);
+
+async function expectQuietContrast(page: Page, checks: (typeof quietText)[string]) {
+  if (checks.some(([, selector]) => selector.startsWith('.sidebar'))) await openNavigation(page);
+  for (const [kind, selector, pseudo] of checks) {
+    const found = await textContrast(page, selector, pseudo);
+    expect(found.length, `${kind}: nothing to measure`).toBeGreaterThan(0);
+    for (const item of found) {
+      expect(item.secondary, `${kind} "${item.text}"`).toBeGreaterThanOrEqual(4.5);
+      expect(item.secondary, `${kind} "${item.text}" must stay weaker than body text`).toBeLessThan(item.body);
+    }
+  }
+}
+
+// Contrast is computed from what the browser draws: the text color (with its own opacity and its parents' opacity) laid over
+// the background colors stacked behind it, so a faded copy of a darker color is measured as faded.
+async function textContrast(page: Page, selector: string, pseudo?: string) {
+  return page.evaluate(({ selector, pseudo }) => {
+    const context = Object.assign(document.createElement('canvas'), { width: 1, height: 1 }).getContext('2d', { willReadFrequently: true })!;
+    const rgba = (css: string) => { context.clearRect(0, 0, 1, 1); context.fillStyle = '#000'; context.fillStyle = css; context.fillRect(0, 0, 1, 1); const d = context.getImageData(0, 0, 1, 1).data; return [d[0], d[1], d[2], d[3] / 255]; };
+    const over = (top: number[], below: number[]) => [0, 1, 2].map(i => top[i] * top[3] + below[i] * (1 - top[3]));
+    const light = (color: number[]) => { const [r, g, b] = color.slice(0, 3).map(v => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+    const ratio = (a: number[], b: number[]) => { const [x, y] = [light(a), light(b)].sort((m, n) => n - m); return (x + 0.05) / (y + 0.05); };
+    const bodyColor = rgba(getComputedStyle(document.body).color);
+    return Array.from(document.querySelectorAll(selector)).filter(element => { const box = element.getBoundingClientRect(); return box.width > 0 && box.height > 0 && getComputedStyle(element).visibility !== 'hidden'; }).map(element => {
+      let background = [255, 255, 255];
+      const chain: Element[] = []; let opacity = 1;
+      for (let node: Element | null = element; node; node = node.parentElement) { chain.unshift(node); opacity *= Number(getComputedStyle(node).opacity); }
+      for (const node of chain) background = over(rgba(getComputedStyle(node).backgroundColor), background);
+      const style = getComputedStyle(element, pseudo);
+      const color = rgba(style.color);
+      const shown = over([color[0], color[1], color[2], color[3] * opacity * (pseudo ? Number(style.opacity) : 1)], background);
+      const body = over([bodyColor[0], bodyColor[1], bodyColor[2], bodyColor[3]], background);
+      return { text: (element.textContent || (element as HTMLTextAreaElement).placeholder || '').trim(), secondary: ratio(shown, background), body: ratio(body, background) };
+    });
+  }, { selector, pseudo });
+}
 
 async function expectDarkContrast(page: Page) {
   const result = await page.evaluate(() => {

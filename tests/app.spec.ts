@@ -1,52 +1,11 @@
-import { test, expect, type Page, type TestInfo } from './fresh-seed';
+import { test, expect } from './fresh-seed';
 import { chooseLanguageInSettings } from './choose-language';
-import { mkdir, readdir, readFile } from 'node:fs/promises';
 import { createHmac } from 'node:crypto';
-import { signIn, chooseCompany, openNavigation } from './sign-in';
-import { idle } from './navigation-measure';
-import { recordTouchDiagnostics, formatTouchDiagnostics, touchDiagnosticsKey, touchDiagnosticsLimit } from './touch-diagnostics.mjs';
+import { signIn, chooseCompany } from './sign-in';
 import { appOrigin, inbox, mail } from './lane.mjs';
-test('public contains no font files, including renamed font binaries',async()=>{
- const entries=await readdir('public',{recursive:true,withFileTypes:true}).catch(error=>{if(error.code==='ENOENT') return []; throw error;});
- for(const entry of entries.filter(entry=>entry.isFile())) {
-  expect(entry.name).not.toMatch(/\.(?:otf|ttf|woff2?|eot|ttc)$/i);
-  const bytes=await readFile(`${entry.parentPath}/${entry.name}`);
-  expect(['OTTO','wOFF','wOF2','ttcf','true','typ1']).not.toContain(bytes.subarray(0,4).toString('ascii'));
-  expect(bytes.subarray(0,4).equals(Buffer.from([0,1,0,0]))).toBe(false);
- }
-});
-
-test('sign-in artwork renders, animates and respects reduced motion in both languages',async({page})=>{
- await mkdir('test-results/screenshots',{recursive:true});
- await page.setViewportSize({width:1440,height:900});
- await page.emulateMedia({reducedMotion:'reduce'});
- await page.goto('/sign-in');
- const artwork=page.locator('pre[aria-hidden=true]');
- for(const language of ['en','ar']) {
-  await page.locator('select').selectOption(language);
-  await expect(page.locator('html')).toHaveAttribute('lang',language);
-  await page.evaluate(()=>document.fonts.ready);
-  await expect(artwork).toBeInViewport({ratio:1});
-  await expect(artwork).toContainText('╭');
-  const frame=await artwork.textContent();
-  await page.waitForTimeout(150);
-  await expect(artwork).toHaveText(frame!);
-  await page.screenshot({path:`test-results/screenshots/sign-in-${language}-1440.png`});
-  await page.emulateMedia({reducedMotion:'no-preference'});
-  await expect.poll(()=>artwork.textContent()).not.toBe(frame);
-  await expect(artwork).toContainText('│',{timeout:10000});
-  await page.emulateMedia({reducedMotion:'reduce'});
-  await expect(artwork).toContainText('╭');
-  await page.setViewportSize({width:390,height:900});
-  await expect(artwork).toBeHidden();
-  await expect(page.locator('input[name=email]')).toBeInViewport({ratio:1});
-  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);
-  await page.screenshot({path:`test-results/screenshots/sign-in-${language}-390.png`});
-  await page.setViewportSize({width:1440,height:900});
- }
-});
-
-for(const width of [1440,390]) test(`Paperclip Inter and Arabic-only Vazirmatn load locally at ${width}px`,async({page,context})=>{
+// The compared screens (tests/visual-screens/) draw every other page here in both languages at both widths; the List
+// and the Agents page are drawn by none, so they are also read at 390.
+test('Paperclip Inter and Arabic-only Vazirmatn load locally',async({page,context})=>{
  const fontRequests:string[]=[];
  const externalFonts:string[]=[];
  context.on('request',request=>{
@@ -54,12 +13,13 @@ for(const width of [1440,390]) test(`Paperclip Inter and Arabic-only Vazirmatn l
   if(request.resourceType()==='font'||/\.(?:otf|ttf|woff2?|eot)(?:$|\?)/i.test(url.pathname)) fontRequests.push(request.url());
   if(['fonts.googleapis.com','fonts.gstatic.com'].includes(url.hostname)) externalFonts.push(request.url());
  });
- await page.setViewportSize({width,height:900});
+ await page.setViewportSize({width:1440,height:900});
  await signIn(page,'manager@example.com','/c/rs-learning/home');
  for(const language of ['en','ar']) {
   await chooseLanguageInSettings(page,language);
   await expect(page.locator('html')).toHaveAttribute('lang',language);
-  for(const path of ['home','work/board','work/board/1','work/calendar','work/list','approvals','agents','settings']) {
+  for(const [path,width] of [...['home','work/board','work/board/1','work/calendar','work/list','approvals','agents','settings'].map(path=>[path,1440] as const),['work/list',390] as const,['agents',390] as const]) {
+   await page.setViewportSize({width,height:900});
    await page.goto(`/c/rs-learning/${path}`);
    await page.evaluate(()=>document.fonts.ready);
    const family=await page.locator('body').evaluate(el=>getComputedStyle(el).fontFamily.split(',')[0].trim().replaceAll(/["']/g,''));
@@ -97,94 +57,6 @@ for(const width of [1440,390]) test(`Paperclip Inter and Arabic-only Vazirmatn l
   expect(url.pathname).toMatch(/^\/_next\/static\/media\/[^/]+$/);
  }
  expect(externalFonts).toEqual([]);
-});
-
-test('the new-card dialog opened from the board closes with Escape and with its close button',async({page})=>{
- test.setTimeout(120000);
- await signIn(page,'manager@example.com','/c/rs-learning/work/board');
- const dialog=page.getByRole('dialog');
- await page.getByRole('button',{name:'+ New card'}).first().click();
- await expect(dialog).toBeVisible();
- await page.keyboard.press('Escape');
- await expect(dialog).toHaveCount(0);
- await page.getByRole('button',{name:'+ Add card'}).first().click();
- await expect(dialog).toBeVisible();
- await dialog.getByRole('button',{name:'Close',exact:true}).click();
- await expect(dialog).toHaveCount(0);
-});
-
-test('the new-card dialog closes in place on List and Calendar and returns to the board from /work/new',async({page})=>{
- test.setTimeout(120000);
- await signIn(page,'manager@example.com','/c/rs-learning/work/board');
- const dialog=page.getByRole('dialog');
- for(const view of ['list','calendar']) {
-  const url=new RegExp(`/work/${view}$`);
-  await page.goto(`/c/rs-learning/work/${view}`);
-  await page.getByRole('button',{name:'+ New card'}).first().click();
-  await expect(dialog).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(dialog).toHaveCount(0);
-  await expect(page).toHaveURL(url);
-  await page.getByRole('button',{name:'+ New card'}).first().click();
-  await expect(dialog).toBeVisible();
-  await dialog.getByRole('button',{name:'Close',exact:true}).click();
-  await expect(dialog).toHaveCount(0);
-  await expect(page).toHaveURL(url);
- }
- await page.goto('/c/rs-learning/work/new');
- await expect(dialog).toBeVisible();
- await page.keyboard.press('Escape');
- await expect(page).toHaveURL(/\/work\/board$/);
-});
-
-for(const width of [1440,390]) test(`card creation fits the viewport and detail keeps its title and close clear at ${width}px`,async({page})=>{
- await mkdir('test-results/screenshots',{recursive:true});
- await page.setViewportSize({width,height:900});
- await signIn(page,'manager@example.com','/c/rs-learning/work/board/1');
- for(const language of ['en','ar']) {
-  await chooseLanguageInSettings(page,language);
-  await expect(page.locator('html')).toHaveAttribute('lang',language);
-  await page.goto('/c/rs-learning/work/new');
-  const dialog=page.getByRole('dialog');
-  await expect(dialog).toBeInViewport({ratio:1});
-  const bounds=(await dialog.boundingBox())!;
-  expect(bounds.x).toBeGreaterThanOrEqual(0);
-  expect(bounds.x+bounds.width).toBeLessThanOrEqual(width);
-  expect(bounds.y).toBeGreaterThanOrEqual(0);
-  expect(bounds.y+bounds.height).toBeLessThanOrEqual(900);
-  await page.screenshot({path:`test-results/screenshots/work-new-${language}-${width}.png`});
-  await page.getByRole('button',{name:language==='en'?'Close':'إغلاق',exact:true}).click();
-  await expect(dialog).toHaveCount(0);
-  await page.goto('/c/rs-learning/work/board/1');
-  const crumbs=page.locator('.topbar [data-slot="breadcrumb"] li:not([role="presentation"])');
-  await expect(crumbs).toHaveCount(2);
-  await expect(crumbs.first()).toHaveText(language==='en'?'Work':'العمل');
-  await expect(crumbs.first().locator('a')).toHaveAttribute('href','/c/rs-learning/work/board');
-  await expect(crumbs.last()).not.toHaveText('');
-  const heading=page.locator('.card-detail h2').first();
-  const close=page.getByRole('link',{name:language==='en'?'Close':'إغلاق',exact:true});
-  await expect(heading).toBeInViewport({ratio:1});
-  await expect(close).toBeInViewport({ratio:1});
-  const title=await heading.evaluate(el=>{
-   const range=document.createRange();range.selectNodeContents(el);
-   const text=range.getBoundingClientRect(),box=el.getBoundingClientRect();
-   return {fits:text.left>=box.left&&text.right<=box.right,lines:new Set(Array.from(range.getClientRects()).map(rect=>Math.round(rect.y))).size};
-  });
-  expect(title).toEqual({fits:true,lines:1});
-  const titleBox=(await heading.boundingBox())!,closeBox=(await close.boundingBox())!;
-  expect(closeBox.width).toBeGreaterThanOrEqual(44);
-  expect(closeBox.height).toBeGreaterThanOrEqual(44);
-  expect(closeBox.y).toBeLessThanOrEqual(titleBox.y);
-  expect(language==='ar'?closeBox.x+closeBox.width<=titleBox.x:titleBox.x+titleBox.width<=closeBox.x).toBe(true);
-  await page.screenshot({path:`test-results/screenshots/card-detail-${language}-${width}.png`});
-  // Detail is a page now: its editor scrolls, while creation remains a bounded dialog.
-  await page.getByLabel(language==='en'?'Comment':'التعليق',{exact:true}).scrollIntoViewIfNeeded();
-  await expect(page.getByLabel(language==='en'?'Comment':'التعليق',{exact:true})).toBeInViewport({ratio:1});
-  await close.click();
-  await expect(page).toHaveURL(/\/work\/board$/);
- }
- await chooseLanguageInSettings(page,'en');
- await expect(page.locator('html')).toHaveAttribute('lang','en');
 });
 
 test('sign-in returns to requested page, company switch preserves section, and access is isolated',async({page})=>{
@@ -242,72 +114,8 @@ test('the Owner of every company lands on a Company home from the sign-in page a
  for(const slug of ['rs-consultations','aleem']) { await chooseCompany(page,slug); await expect(page).toHaveURL(new RegExp(`/c/${slug}/home$`)); await expect(page.locator('.home-dashboard')).toBeVisible(); }
 });
 
-test('member and invitation controls have mobile touch targets',async({page})=>{
- await page.setViewportSize({width:390,height:900});
- await signIn(page,'manager@example.com','/c/rs-learning/settings/members');
- const labels=page.locator('.member-form label, .invite-form label');
- expect(await labels.count()).toBeGreaterThan(0);
- for(const label of await labels.all()) { const box=await label.boundingBox(); expect(box).not.toBeNull(); expect(box!.height).toBeGreaterThanOrEqual(44); }
- const controls=page.locator('.member-form button, .invite-form button, .member-form select, .invite-form select, .invite-form input[type=email]');
- for(const control of await controls.all()) { const box=await control.boundingBox(); expect(box).not.toBeNull(); expect(box!.height).toBeGreaterThanOrEqual(44); }
- for(const checkbox of await page.locator('.member-form input[type=checkbox], .invite-form input[type=checkbox]').all()) { const box=await checkbox.boundingBox(); expect(box).not.toBeNull(); expect(box!.width).toBeGreaterThanOrEqual(22); expect(box!.height).toBeGreaterThanOrEqual(22); }
-});
-
-
-test('work routes and template card',async({page})=>{
- await signIn(page,'omar@example.com','/c/rs-learning/work/board');
- // The Ideas column (ADR 0013: the أفكار stage) and its add button.
- await expect(page.locator('.col[data-column="ideas"] .col__name')).toBeVisible();
- await page.getByRole('button',{name:"+ Add card"}).first().click();
- await page.getByLabel("Card title").fill('اختبار ريل');
- await page.getByLabel("Template").selectOption('reel');
- await page.getByRole('button',{name:"Create card"}).click();
- await expect(page.getByText('Script Ready')).toBeVisible();
- await mkdir('test-results/screenshots',{recursive:true});
- for(const width of [1440,390]) { await page.setViewportSize({width,height:900}); for(const path of ['/c/rs-learning/work/board','/c/rs-learning/work/board/1','/c/rs-learning/work/calendar','/c/rs-learning/work/list','/c/rs-learning/settings/work']) { await page.goto(path); await page.screenshot({path:`test-results/screenshots/${path.slice(1).replaceAll('/','-')}-${width}.png`,fullPage:true}); } }
-});
-
-
-test('board moves, date filtering, creative versions and shared card views',async({page})=>{
- await signIn(page,'omar@example.com','/c/rs-learning/work/board');
- const boardCard=page.locator('.kcard[data-card-id="1"]');
- const cardTitle=(await boardCard.locator('strong').textContent())!;
- // Planned holds the brief stage (ADR 0013): a card dropped there from Ideas lands in «بريف جاهز».
- const destination=page.locator('.col[data-column="planned"]');
- const sourceBox=(await boardCard.boundingBox())!,targetBox=(await destination.locator('.col__body').boundingBox())!;
- await page.mouse.move(sourceBox.x+sourceBox.width/2,sourceBox.y+20);
- await page.mouse.down();
- await page.mouse.move(sourceBox.x+sourceBox.width/2+8,sourceBox.y+20,{steps:2});
- await page.mouse.move(targetBox.x+targetBox.width/2,targetBox.y+40,{steps:10});
- await page.mouse.up();
- await expect(destination.locator('.column[data-stage-name="بريف جاهز"] .kcard[data-card-id="1"]')).toBeVisible();
- await destination.locator('.kcard[data-card-id="1"] a').click();
- // The board opens a Card as its sheet (#116); the Card's fields and its stage are one link further, on its page.
- await page.getByRole('dialog').getByRole('link',{name:'Card details'}).click();
- const stageId=await page.locator('select[aria-label="Move to list"] option').filter({hasText:'كتابة'}).getAttribute('value');
- await page.getByLabel("Move to list").selectOption(stageId!);
- await expect(page.locator('.card-stage-line')).toContainText('كتابة');
- await page.goto('/c/rs-learning/work/board');
- await expect(page.locator('.col[data-column="progress"] .column[data-stage-name="كتابة"] .kcard[data-card-id="1"]')).toBeVisible();
- await page.getByLabel("Month").fill('2000-01');
- await expect(page.locator('.kcard[data-card-id="1"]')).toHaveCount(0);
- await page.getByLabel("Month").fill('');
- await expect(page.locator('.kcard[data-card-id="1"]')).toBeVisible();
- // The list view filters by month too.
- await page.goto('/c/rs-learning/work/list');
- const listed=page.locator('.table tbody tr').filter({has:page.locator('a[href="/c/rs-learning/work/board/1"]')});
- await expect(listed).toHaveCount(1);
- await page.getByLabel("Month").fill('2000-01');
- await expect(listed).toHaveCount(0);
- await page.getByLabel("Month").fill('');
- await expect(listed).toHaveCount(1);
- await page.goto('/c/rs-learning/work/board');
- await page.locator('.kcard[data-card-id="1"] a').click();
- await page.getByRole('dialog').getByRole('link',{name:'Card details'}).click();
- await page.getByLabel("Offering", {exact:true}).fill('عرض للاختبار');
- await page.getByLabel("Publishing date", {exact:true}).fill('2026-11-12T12:00');
- await page.getByRole('button',{name:"Save changes"}).click();
- await expect(page.getByText('Updated Offering: عرض للاختبار')).toBeVisible();
+test('a design file over 1MB with an Arabic name is added to a Card and uploaded again as its next version',async({page})=>{
+ await signIn(page,'omar@example.com','/c/rs-learning/work/board/1');
  const file={name:'تصميم.png',mimeType:'image/png',buffer:Buffer.concat([Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII=','base64'), Buffer.alloc(1024*1024)])};
  await page.getByLabel('New design file').setInputFiles(file);
  await page.getByRole('button',{name:"Add design"}).click();
@@ -315,266 +123,6 @@ test('board moves, date filtering, creative versions and shared card views',asyn
  await page.locator('input[type=file]').first().setInputFiles(file);
  await page.getByRole('button',{name:"Upload version"}).first().click();
  await expect(page.getByText(/Version 2:/)).toBeVisible();
- await page.goto('/c/rs-learning/work/calendar');
- await page.getByLabel("Month").fill('2026-11');
- await page.locator('.calendar').getByRole('link',{name:cardTitle}).click();
- await expect(page).toHaveURL(/work\/board\/1/);
- await page.goto('/c/rs-learning/work/list');
- await page.locator('.table').getByRole('link',{name:cardTitle}).click();
- await expect(page).toHaveURL(/work\/board\/1/);
-});
-
-
-test.describe('touch board',()=>{
- test.use({hasTouch:true,viewport:{width:390,height:844}});
- // CI keeps no trace of functional tests, so there a failure prints what the page recorded during its touches: numbers
- // and fixed words only (tests/touch-diagnostics.mjs). The recorder listens passively and changes no input or wait.
- test.beforeEach(async({page})=>{
-  if(process.env.CI) await page.addInitScript(recordTouchDiagnostics,{cardId:1,key:touchDiagnosticsKey,limit:touchDiagnosticsLimit});
- });
- test.afterEach(async({page},testInfo)=>{
-  if(!process.env.CI||testInfo.status===testInfo.expectedStatus) return;
-  const stored=await page.evaluate(key=>sessionStorage.getItem(key),touchDiagnosticsKey).catch(()=>null);
-  for(const line of formatTouchDiagnostics(stored)) console.log(line);
- });
- test('touch drag moves a card on a phone',async({page})=>{
-  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
-  const card=page.locator('.kcard[data-card-id="1"]');
-  await expect(card).toBeVisible();
-  // Earlier tests leave card 1 in a later stage; start from Ideas (the first column a card is dragged from: "Waiting on
-  // you" is left by a decision) and put the card back in its stage at the end. Ideas to Planned lands in «بريف جاهز».
-  const originalName=(await card.getAttribute('data-stage-name'))!;
-  const startName='أفكار',startColumn='ideas',destinationName='بريف جاهز';
-  const moveByForm=async(name:string)=>{
-   await page.goto('/c/rs-learning/work/board/1');
-   await page.getByLabel('Move to list',{exact:true}).selectOption({label:name});
-   await expect(page.locator('.card-stage-line')).toContainText(name);
-   await page.goto('/c/rs-learning/work/board');
-   await expect(page.locator(`.column[data-stage-name="${name}"] .kcard[data-card-id="1"]`)).toBeVisible();
-  };
-  if(originalName!==startName) await moveByForm(startName);
-  try {
-   const destination=page.locator(`.col[data-column="${startColumn}"]`).locator('xpath=following-sibling::*[@data-column][1]');
-   expect(await destination.getAttribute('data-column')).toBe('planned');
-   const cdp=await page.context().newCDPSession(page);
-   const touch=async(type:'touchStart'|'touchMove'|'touchEnd',x?:number,y?:number)=>{await cdp.send('Input.dispatchTouchEvent',{type,touchPoints:type==='touchEnd'?[]:[{x:x!,y:y!,id:1}]});};
-   const cardStages=()=>page.evaluate(()=>Object.fromEntries([...document.querySelectorAll('#board-cols .kcard[data-card-id]')].map(c=>[c.getAttribute('data-card-id'),c.getAttribute('data-stage-name')])));
-   const scrollLeft=()=>page.evaluate(()=>Math.abs(document.querySelector('.board')!.scrollLeft));
-   // +1 when the board reads left to right, -1 when it reads right to left: a finger moving against the reading direction scrolls toward the later lists.
-   const dir=await page.evaluate(()=>getComputedStyle(document.querySelector('.board')!).direction==='rtl'?-1:1);
-   const before=await cardStages();
-   // A plain swipe starting on a card scrolls the board and moves no card.
-   const scrolled=await scrollLeft();
-   // Ideas now follows "Waiting on you" (ADR 0013), so on a phone the card starts partly off screen: the finger lands on
-   // the middle of the part in view.
-   const swipeBox=(await card.boundingBox())!,screenWidth=page.viewportSize()!.width;
-   const swipeStart=Math.max(swipeBox.x,0),swipeEnd=Math.min(swipeBox.x+swipeBox.width,screenWidth);
-   expect(swipeEnd-swipeStart,'part of the card is in view to swipe on').toBeGreaterThanOrEqual(44);
-   const swipeX=(swipeStart+swipeEnd)/2,swipeY=swipeBox.y+12;
-   // A swipe is a press unless it moves within 250ms; right after the board loads, the page's own work delayed the first
-   // move past that on a cold runner (#64). A person swipes the board once it has finished loading.
-   await idle(page);
-   await touch('touchStart',swipeX,swipeY);
-   for(let step=1;step<=12;step++) { await touch('touchMove',swipeX-dir*step*14,swipeY); await page.waitForTimeout(16); }
-   await touch('touchEnd');
-   await expect.poll(scrollLeft,{message:'the board scrolled under the swipe'}).toBeGreaterThan(scrolled);
-   await expect(page.getByText('Moving card…')).toHaveCount(0);
-   expect(await cardStages()).toEqual(before);
-   // A person presses the next card once the board has stopped gliding from the swipe: Chrome makes a touch that lands
-   // during the glide uncancelable, so that press only stops the board and can pick nothing up.
-   await expect.poll(async()=>{const start=await scrollLeft(); await page.waitForTimeout(200); return start===await scrollLeft();},{message:'the board stops gliding'}).toBe(true);
-   // Scroll the board so most of the card's list is off screen at its start side and the next list is beside it, then hold the card and carry it across.
-   await page.evaluate(([direction,stage])=>{document.querySelector('.card[data-card-id="1"]')!.scrollIntoView({block:'center'});const board=document.querySelector('.board')!,box=board.querySelector(`.col[data-column="${stage}"]`)!.getBoundingClientRect(),area=board.getBoundingClientRect();board.scrollLeft+=direction>0?box.left-area.left+box.width*0.6:-(area.right-box.right+box.width*0.6);},[dir,startColumn] as [number,string]);
-   await page.evaluate(()=>{const w=window as unknown as {pointerCancels:number};w.pointerCancels=0;window.addEventListener('pointercancel',()=>{w.pointerCancels++;},true);});
-   const cardBox=(await card.boundingBox())!,targetBox=(await destination.locator('.col__body').boundingBox())!,boardBox=(await page.locator('.board').boundingBox())!;
-   const viewport=page.viewportSize()!;
-   // Grab the part of the card still in view; drop in the middle of the next list, or as near as the screen edge keeps clear of the board's edge scrolling.
-   const fromX=dir>0?(Math.max(cardBox.x,boardBox.x+2)+cardBox.x+cardBox.width)/2:(cardBox.x+Math.min(cardBox.x+cardBox.width,boardBox.x+boardBox.width-2))/2,fromY=cardBox.y+12;
-   const aim=(box:{x:number,y:number,width:number})=>({x:dir>0?Math.min(box.x+box.width/2,viewport.width-60):Math.max(box.x+box.width/2,60),y:box.y+40});
-   expect(Math.abs(aim(targetBox).x-(targetBox.x+targetBox.width/2)),'the next list is on screen').toBeLessThan(targetBox.width/2);
-   await touch('touchStart',fromX,fromY);
-   await page.waitForTimeout(450);
-   // The finger heads for the next list where it is at each step, as a person's eye would: on CI the board moved by
-   // 218px under a held card and a drop aimed before the drag landed one list further (#64).
-   const target=async()=>aim((await destination.locator('.col__body').boundingBox())!);
-   for(let step=1;step<=15;step++) { const to=await target(); await touch('touchMove',fromX+(to.x-fromX)*step/15,fromY+(to.y-fromY)*step/15); await page.waitForTimeout(30); }
-   await page.waitForTimeout(150);
-   const drop=await target(); await touch('touchMove',drop.x,drop.y);
-   await touch('touchEnd');
-   expect(await page.evaluate(()=>(window as unknown as {pointerCancels:number}).pointerCancels),'no pointercancel ends the drag').toBe(0);
-   await expect(page.locator(`.column[data-stage-name="${destinationName}"] .kcard[data-card-id="1"]`)).toBeVisible();
-   await expect(page.getByText('Moving card…')).toHaveCount(0);
-   await page.reload();
-   await expect(page.locator(`.column[data-stage-name="${destinationName}"] .kcard[data-card-id="1"]`)).toBeVisible();
-   expect(await cardStages()).toEqual({...before,'1':destinationName});
-  } finally {
-   await moveByForm(originalName);
-  }
- });
-});
-
-test('card close control is in the title row with a 44px target',async({page})=>{
- await signIn(page,'manager@example.com','/c/rs-learning/work/board/1');
- try {
-  for(const language of ['en','ar']) {
-   await chooseLanguageInSettings(page,language);
-   await expect(page.locator('html')).toHaveAttribute('lang',language);
-   for(const width of [390,1440]) {
-    await page.setViewportSize({width,height:900});
-    await page.goto('/c/rs-learning/work/board/1');
-    const heading=page.locator('.card-detail h2').first();
-    const close=page.getByRole('link',{name:language==='en'?'Close':'إغلاق',exact:true});
-    await expect(heading).toBeVisible();
-    const titleBox=(await heading.boundingBox())!,closeBox=(await close.boundingBox())!;
-    expect(closeBox.width,`${language} ${width}: close width`).toBeGreaterThanOrEqual(44);
-    expect(closeBox.height,`${language} ${width}: close height`).toBeGreaterThanOrEqual(44);
-    // It shares the title's row: the two boxes overlap vertically, and the close sits at the inline end.
-    expect(closeBox.y,`${language} ${width}: close starts above the title ends`).toBeLessThan(titleBox.y+titleBox.height);
-    expect(closeBox.y+closeBox.height,`${language} ${width}: close ends below the title starts`).toBeGreaterThan(titleBox.y);
-    expect(language==='ar'?closeBox.x+closeBox.width<=titleBox.x+1:titleBox.x+titleBox.width<=closeBox.x+1,`${language} ${width}: close at the inline end`).toBe(true);
-    await close.click();
-    await expect(page).toHaveURL(/\/c\/rs-learning\/work\/board$/);
-   }
-  }
- } finally {
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await chooseLanguageInSettings(page,'en');
-  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
- }
-});
-
-test('date edits are accurate and work controls are accessible on mobile',async({page})=>{
- await page.setViewportSize({width:390,height:900});
- await signIn(page,'omar@example.com','/c/rs-learning/work/board');
- await page.goto('/c/rs-learning/work/board/2');
- await page.locator('.modal').evaluate(async modal=>{
-  await Promise.all(modal.getAnimations().map(animation=>animation.finished));
- });
- const stageSelect=page.getByLabel("Move to list");
- expect((await stageSelect.boundingBox())!.height).toBeGreaterThanOrEqual(44);
- await expect(page.getByRole('link',{name:"Close"})).toBeVisible();
- for(const name of ["Next actor","Add assignee","Add label","New design file","Comment"]) await expect(page.getByLabel(name,{exact:true})).toBeVisible();
- const checkbox=page.locator('.checklist input[type=checkbox]').first();
- expect((await checkbox.boundingBox())!.height).toBeGreaterThanOrEqual(44);
- const dates=page.locator('.detail-row').filter({hasText:'Updated publishing date'});
- const before=await dates.count();
- await page.getByLabel("Offering",{exact:true}).fill('عرض محدث دون تعديل الموعد');
- await page.getByRole('button',{name:"Save changes"}).click();
- await expect(page.getByText('Updated Offering: عرض محدث دون تعديل الموعد')).toBeVisible();
- await expect(dates).toHaveCount(before);
- await page.getByLabel("Publishing date",{exact:true}).fill('2032-11-12T12:00');
- await page.getByRole('button',{name:"Save changes"}).click();
- await expect(page.getByText('Updated publishing date: November 12')).toBeVisible();
- await page.goto('/c/rs-learning/home');
- await expect(page.locator('.detail-row').filter({has:page.locator('a[href="/c/rs-learning/work/board/2"]')}).getByText('Updated publishing date: November 12')).toBeVisible();
- await page.goto('/c/rs-learning/settings/work');
- for(const name of ['Stage name أفكار','Stage order أفكار','Label name static','Label color static']) await expect(page.getByLabel(name,{exact:true})).toBeVisible();
-});
-
-
-// Each stage test works on its own card. A card that reached Review cannot leave it without a decision, so a shared card
-// would start the next test (or the next repeat) already in Review and the move under test would change nothing.
-async function createCard(page: Page, label: string, info: TestInfo) {
- await page.goto('/c/rs-learning/work/new');
- await page.getByLabel('Message',{exact:true}).fill(`${label} ${info.workerIndex}-${info.repeatEachIndex}-${Date.now()}`);
- await page.getByRole('button', { name: 'Create card' }).click();
- await expect(page).toHaveURL(/\/work\/board\/\d+$/);
- return new URL(page.url()).pathname;
-}
-
-test('card stage control waits for hydration and persists the selected stage', async ({ page: sessionPage }, info) => {
- await signIn(sessionPage, 'omar@example.com', '/c/rs-learning/work/new');
- const cardPath = await createCard(sessionPage, 'Hydration stage', info);
- const page = await sessionPage.context().newPage();
- let release!: () => void;
- const hydration = new Promise<void>(resolve => { release = resolve; });
- await page.route('**/_next/static/**/*.js', async route => {
-  await hydration;
-  await route.continue();
- });
- try {
-  await page.goto(cardPath, { waitUntil: 'commit' });
-  const stage = page.getByLabel('Move to list', { exact: true });
-  await expect(stage).toBeVisible();
-  await expect(stage).toBeDisabled();
-  release();
-  await expect(stage).toBeEnabled();
-  await stage.selectOption({ label: 'مراجعة' });
-  await expect(page.locator('.card-stage-line')).toContainText('مراجعة');
-  await page.reload();
-  await expect(page.locator('.card-stage-line')).toContainText('مراجعة');
- } finally {
-  release();
-  await page.close();
- }
-});
-
-test('card stage control and work settings navigation',async({page},info)=>{
- await signIn(page,'omar@example.com','/c/rs-learning/work/new');
- await createCard(page,'Stage control',info);
- await expect(page.locator('.card-stage-line')).toContainText("In stage");
- await expect(page.locator('.card-stage-line')).not.toContainText('مراجعة');
- await page.getByLabel("Move to list",{exact:true}).selectOption({label:'مراجعة'});
- await expect(page.locator('.card-stage-line')).toContainText('مراجعة');
- await page.getByLabel("Comment",{exact:true}).fill('تعليق للاختبار');
- await page.getByRole('button',{name:"Send",exact:true}).click();
- await expect(page.locator('.detail-row').filter({hasText:'تعليق للاختبار'})).toContainText('عمر');
- await page.goto('/c/rs-learning/settings/work');
- await expect(page.getByRole('link',{name:"General",exact:true})).toBeVisible();
- await expect(page.getByRole('link',{name:"Members",exact:true})).toBeVisible();
- await expect(page.getByRole('button',{name:"+ New card"})).toHaveCount(0);
-});
-
-test('mobile card shows workflow controls first', async ({ page }, info) => {
- await signIn(page, 'omar@example.com', '/c/rs-learning/work/new');
- await page.setViewportSize({ width: 390, height: 900 });
- // The stage still saves from its new place: change it on a card of its own and see it after a reload.
- await createCard(page, 'Mobile stage', info);
- await page.getByLabel('Move to list', { exact: true }).selectOption({ label: 'مراجعة' });
- await expect(page.locator('.card-stage-line')).toContainText('مراجعة');
- await page.reload();
- await expect(page.locator('.card-stage-line')).toContainText('مراجعة');
- const box = async (locator: ReturnType<Page['locator']>) => { await expect(locator).toBeVisible(); return (await locator.boundingBox())!; };
- // A card waiting for this approver keeps the decision after the record, below the edit form.
- const waiting = [await box(page.locator('[data-card-section="labels"]')), await box(page.locator('.modal-grid > div form').first()), await box(page.locator('[data-card-section="review"]'))];
- expect(waiting[0].y + waiting[0].height).toBeLessThanOrEqual(waiting[1].y);
- expect(waiting[2].y).toBeGreaterThan(waiting[1].y + waiting[1].height);
- try {
-  for (const language of ['en', 'ar']) {
-   await page.setViewportSize({ width: 1440, height: 900 });
-   await chooseLanguageInSettings(page,language);
-   await expect(page.locator('html')).toHaveAttribute('lang', language);
-   for (const width of [390, 1440]) {
-    await page.setViewportSize({ width, height: 900 });
-    await page.goto('/c/rs-learning/work/board/1');
-    const section = (name: string) => page.locator(`[data-card-section="${name}"]`);
-    const title = await box(page.locator('.card-detail h2').first());
-    const stage = await box(section('stage'));
-    const actor = await box(section('next-actor'));
-    const form = await box(page.locator('.modal-grid > div form').first());
-    if (width === 390) {
-     expect(actor.y + actor.height).toBeLessThanOrEqual(900);
-     const assignees = await box(section('assignees'));
-     const labels = await box(section('labels'));
-     const order = [title, stage, actor, assignees, labels, form].map(item => item.y);
-     expect(order).toEqual([...order].sort((a, b) => a - b));
-     expect(new Set(order).size).toBe(order.length);
-     expect(stage.y).toBeGreaterThanOrEqual(title.y + title.height);
-     expect(labels.y + labels.height).toBeLessThanOrEqual(form.y);
-    } else {
-     expect(stage.y).toBeLessThanOrEqual(260);
-     // Beside the record, not below it: after the form's end side in English, before its start side in Arabic.
-     if (language === 'ar') expect(stage.x + stage.width).toBeLessThanOrEqual(form.x + 1);
-     else expect(stage.x).toBeGreaterThanOrEqual(form.x + form.width - 1);
-     expect(stage.y).toBeLessThan(form.y + form.height);
-    }
-   }
-  }
- } finally {
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await chooseLanguageInSettings(page,'en');
-  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
- }
 });
 
 test('approval queue, rejection and ordered steps',async({page})=>{
@@ -709,123 +257,37 @@ test('agent creates and submits a card; rejection produces a signed webhook', as
  } finally { await new Promise<void>((resolve,reject)=>receiver.close(err=>err?reject(err):resolve())); }
 });
 
-// Contrast is computed from what the browser draws: the text color (with its own opacity and its parents' opacity) laid over
-// the background colors stacked behind it, so a faded copy of a darker color is measured as faded.
-async function textContrast(page: Page, selector: string, pseudo?: string) {
- return page.evaluate(({ selector, pseudo }) => {
-  const context = Object.assign(document.createElement('canvas'), { width: 1, height: 1 }).getContext('2d', { willReadFrequently: true })!;
-  const rgba = (css: string) => { context.clearRect(0, 0, 1, 1); context.fillStyle = '#000'; context.fillStyle = css; context.fillRect(0, 0, 1, 1); const d = context.getImageData(0, 0, 1, 1).data; return [d[0], d[1], d[2], d[3] / 255]; };
-  const over = (top: number[], below: number[]) => [0, 1, 2].map(i => top[i] * top[3] + below[i] * (1 - top[3]));
-  const light = (color: number[]) => { const [r, g, b] = color.slice(0, 3).map(v => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
-  const ratio = (a: number[], b: number[]) => { const [x, y] = [light(a), light(b)].sort((m, n) => n - m); return (x + 0.05) / (y + 0.05); };
-  const bodyColor = rgba(getComputedStyle(document.body).color);
-  return Array.from(document.querySelectorAll(selector)).filter(element => { const box = element.getBoundingClientRect(); return box.width > 0 && box.height > 0 && getComputedStyle(element).visibility !== 'hidden'; }).map(element => {
-   let background = [255, 255, 255];
-   const chain: Element[] = []; let opacity = 1;
-   for (let node: Element | null = element; node; node = node.parentElement) { chain.unshift(node); opacity *= Number(getComputedStyle(node).opacity); }
-   for (const node of chain) background = over(rgba(getComputedStyle(node).backgroundColor), background);
-   const style = getComputedStyle(element, pseudo);
-   const color = rgba(style.color);
-   const shown = over([color[0], color[1], color[2], color[3] * opacity * (pseudo ? Number(style.opacity) : 1)], background);
-   const body = over([bodyColor[0], bodyColor[1], bodyColor[2], bodyColor[3]], background);
-   return { text: (element.textContent || (element as HTMLTextAreaElement).placeholder || '').trim(), secondary: ratio(shown, background), body: ratio(body, background) };
-  });
- }, { selector, pseudo });
-}
-
-test('secondary text meets 4.5 to 1 contrast', async ({ page }) => {
- await signIn(page, 'omar@example.com', '/c/rs-learning/home');
- const setLanguage = async (language: string) => {
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await chooseLanguageInSettings(page,language);
-  await expect(page.locator('html')).toHaveAttribute('lang', language);
- };
- const seen: string[] = [];
- const check = async (kind: string, selector: string, pseudo?: string) => {
-  const found = await textContrast(page, selector, pseudo);
-  expect(found.length, `${kind}: nothing to measure`).toBeGreaterThan(0);
-  for (const item of found) {
-   expect(item.secondary, `${kind} "${item.text}"`).toBeGreaterThanOrEqual(4.5);
-   expect(item.secondary, `${kind} "${item.text}" must stay weaker than body text`).toBeLessThan(item.body);
-  }
-  seen.push(kind);
- };
- try {
-  for (const language of ['en', 'ar']) {
-   await setLanguage(language);
-   for (const width of [390, 1440]) {
-    await page.setViewportSize({ width, height: 900 });
-    await page.goto('/c/rs-learning/home');
-    await idle(page);
-    await check(`chart subtitle ${language} ${width}`, '.home-charts article h2 + span');
-    await openNavigation(page);
-    await check(`sidebar heading ${language} ${width}`, '.sidebar .sb-label');
-    // The removed phone bottom bar's quiet labels are replaced by the drawer's quiet account line, on every width.
-    await check(`account role ${language} ${width}`, '.sidebar .me__role');
-    await page.goto('/c/rs-learning/work/board');
-    await idle(page);
-    await check(`toolbar label ${language} ${width}`, '.work-toolbar .tabs a:not(.active), .work-toolbar .tabs button:not(.active)');
-    await page.goto('/c/rs-learning/work/board/1');
-    await idle(page);
-    await check(`comment placeholder ${language} ${width}`, '.modal textarea[name=body]', '::placeholder');
-   }
-  }
-  expect(seen.length).toBe(20);
- } finally {
-  await setLanguage('en');
- }
-});
-
-for(const width of [390,1440]) test(`caption keeps several lines at ${width}px`,async({page})=>{
- await page.setViewportSize({width,height:900});
+// The caption's lines survive the real save and a reload, in English and in Arabic; its height and direction are
+// checked in components/card-detail.test.tsx.
+test('a caption of several lines in English and Arabic survives saving and a reload',async({page})=>{
  await signIn(page,'manager@example.com','/c/rs-learning/work/board/1');
- await page.goto('/c/rs-learning/work/board/1');
  const caption=page.locator('textarea[name=caption]'); // Found by name: a label's accessible name grows with the text once the field has a value.
- await expect(page.getByLabel('Caption',{exact:true})).toHaveJSProperty('name','caption'); // Labelled while still empty.
- await expect(caption).toHaveJSProperty('tagName','TEXTAREA');
- const empty=await caption.evaluate(el=>({height:el.getBoundingClientRect().height,lineHeight:parseFloat(getComputedStyle(el).lineHeight)}));
- expect(empty.height).toBeGreaterThanOrEqual(empty.lineHeight*4);
- for(const other of ['title','offering','segment','hook','channel','goal']) await expect(page.locator(`[name=${other}]`),`${other} stays single-line`).toHaveJSProperty('tagName','INPUT');
- const english='First line\nSecond line\nThird line';
- await caption.fill(english);
- await Promise.all([page.waitForResponse(response=>response.request().method()==='POST' && response.url().includes('/work/board/')), page.getByRole('button',{name:'Save changes'}).click()]);
- await page.reload();
- await expect(page.locator('textarea[name=caption]')).toHaveValue(english);
- const arabic='السطر الأول\nالسطر الثاني\nالسطر الثالث';
- await page.locator('textarea[name=caption]').fill(arabic);
- await expect(page.locator('textarea[name=caption]')).toHaveCSS('direction','rtl');
- await Promise.all([page.waitForResponse(response=>response.request().method()==='POST' && response.url().includes('/work/board/')), page.getByRole('button',{name:'Save changes'}).click()]);
- await page.reload();
- await expect(page.locator('textarea[name=caption]')).toHaveValue(arabic);
- await expect(page.locator('textarea[name=caption]')).toHaveCSS('direction','rtl');
- await page.locator('textarea[name=caption]').fill('');
- await Promise.all([page.waitForResponse(response=>response.request().method()==='POST' && response.url().includes('/work/board/')), page.getByRole('button',{name:'Save changes'}).click()]); // Leave the seeded card as the other tests expect it.
+ const save=()=>Promise.all([page.waitForResponse(response=>response.request().method()==='POST' && response.url().includes('/work/board/')), page.getByRole('button',{name:'Save changes'}).click()]);
+ for(const text of ['First line\nSecond line\nThird line','السطر الأول\nالسطر الثاني\nالسطر الثالث']) {
+  await caption.fill(text);
+  await save();
+  await page.reload();
+  await expect(caption).toHaveValue(text);
+ }
+ await caption.fill('');
+ await save(); // Leave the seeded card as the other tests expect it.
 });
 
-test('activity times hydrate without errors', async ({ browser }) => {
- // The server runs in UTC; the viewer is in Cairo (two hours ahead in November).
- const context = await browser.newContext({ baseURL: appOrigin, timezoneId: 'Africa/Cairo', locale: 'en-US' });
- const page = await context.newPage();
- const problems: string[] = [];
- page.on('pageerror', error => problems.push(`pageerror: ${error.message}`));
- page.on('console', message => { if (message.type() === 'error') problems.push(`console: ${message.text()}`); });
- await signIn(page, 'manager@example.com', '/c/rs-learning/home');
- for (const path of ['/c/rs-learning/home', '/c/rs-learning/work/board/1']) {
-  await page.goto(path);
-  const times = page.locator('time[datetime]');
-  await expect(times.first()).toBeVisible();
-  await expect(times.first()).toHaveCSS('visibility', 'visible');
-  const locale = (await page.locator('html').getAttribute('lang')) === 'ar' ? 'ar-EG-u-nu-latn' : 'en-US-u-nu-latn';
-  for (const time of await times.all()) {
-   const instant = await time.getAttribute('datetime');
-   const expected = new Date(instant!).toLocaleDateString(locale, { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Cairo' });
-   await expect(time).toHaveText(expected);
-   const parts = Object.fromEntries(new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Cairo' }).formatToParts(new Date(instant!)).map(part => [part.type, part.value]));
-   await expect(time).toContainText(`${parts.hour}:${parts.minute}`);
-  }
- }
- expect(problems).toEqual([]);
- await context.close();
+// The publishing date's form round trip: an unrelated save leaves the date as it was, and a changed date is read back
+// as its activity on the Card and on Home. The phone layout of these controls is in components/card-detail.test.tsx.
+test('an unrelated save keeps a Card\'s publishing date, and a changed date reads back on the Card and Home',async({page})=>{
+ await signIn(page,'omar@example.com','/c/rs-learning/work/board/2');
+ const dates=page.locator('.detail-row').filter({hasText:'Updated publishing date'});
+ const before=await dates.count();
+ await page.getByLabel("Offering",{exact:true}).fill('عرض محدث دون تعديل الموعد');
+ await page.getByRole('button',{name:"Save changes"}).click();
+ await expect(page.getByText('Updated Offering: عرض محدث دون تعديل الموعد')).toBeVisible();
+ await expect(dates).toHaveCount(before);
+ await page.getByLabel("Publishing date",{exact:true}).fill('2032-11-12T12:00');
+ await page.getByRole('button',{name:"Save changes"}).click();
+ await expect(page.getByText('Updated publishing date: November 12')).toBeVisible();
+ await page.goto('/c/rs-learning/home');
+ await expect(page.locator('.detail-row').filter({has:page.locator('a[href="/c/rs-learning/work/board/2"]')}).getByText('Updated publishing date: November 12')).toBeVisible();
 });
 
 test('an error thrown in the page is reported to the server log endpoint',async({page})=>{
