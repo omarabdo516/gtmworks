@@ -128,6 +128,30 @@ test('a message sent before the record arrives is posted at once, and once the c
  await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('');
 });
 
+test('a message sent while the chat loads whose answer is lost after it loaded comes back in the box, and sending it again is the same send', async () => {
+ const { record, arrive } = held();
+ const keys: string[] = [];
+ let lose!: () => void;
+ vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => {
+  if (init?.method !== 'POST') return Response.json(talk([asked]));
+  keys.push(JSON.parse(String(init.body)).sendKey);
+  if (keys.length === 1) await new Promise<void>(resolve => { lose = resolve; }).then(() => { throw new TypeError('Failed to fetch'); });
+  return Response.json({});
+ }));
+ const screen = await opened(record);
+ await screen.getByRole('textbox', { name: 'Message' }).fill('And the budget');
+ await screen.getByRole('button', { name: 'Send' }).click();
+ await expect.poll(() => keys.length).toBe(1);
+ arrive(talk([asked]));
+ await expect.element(screen.getByLabelText('Loading the chat')).not.toBeInTheDocument();
+ lose();
+ const field = screen.getByRole('textbox', { name: 'Message' });
+ await expect.element(field).toHaveValue('And the budget');
+ await screen.getByRole('button', { name: 'Send' }).click();
+ await expect.poll(() => keys.length).toBe(2);
+ expect(keys[1]).toBe(keys[0]);
+});
+
 const numbers = (language: 'en' | 'ar') => render(<LanguageProvider language={language}><div className="gw" dir={language === 'ar' ? 'rtl' : 'ltr'}>
  <main className="numbers-page"><div className="dash"><NumbersPlaceholder/></div></main>
 </div></LanguageProvider>);

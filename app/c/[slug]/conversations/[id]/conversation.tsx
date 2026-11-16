@@ -14,7 +14,9 @@ import type { ConversationRecord } from '@/lib/conversation-record';
 import { columnLabel } from '@/lib/board-columns.mjs';
 import { ChatPlaceholder, ConversationComposer, ConversationTurns, useConversationRecord, useConversationText, type ThreadConversation } from '@/app/conversation-thread';
 
-type Draft={text:string,n:number}|null;
+type Draft={text:string,n:number,key?:string}|null;
+// What is in the loading chat's box; `key` while it is a send whose answer never came.
+type Typed={text:string,key?:string};
 // Where the focus and the caret were in the loading chat when it gave way to the loaded one.
 type Left={start:number,end:number,focus:'box'|'head'|Element|null};
 
@@ -26,12 +28,12 @@ type Left={start:number,end:number,focus:'box'|'head'|Element|null};
 // carry into the loaded chat, and a message sent from it has its reply asked for once the chat is loaded.
 export default function ConversationView({slug,agent,details,company,conversation,record,title,writer,team}:{slug:string,agent:DetailsAgent|null,details:AgentDetailsView|null,company:string,conversation:ThreadConversation,record:Promise<ConversationRecord>,title:string,writer:boolean,team:boolean}) {
  const panel=useDetailsPanel();
- const [draft,setDraft]=useState<Draft>(null); const [typed,setTyped]=useState(''); const [early,setEarly]=useState(0);
+ const [draft,setDraft]=useState<Draft>(null); const [typed,setTyped]=useState<Typed>({text:''}); const [early,setEarly]=useState(0);
  const leftRef=useRef<Left|null>(null);
  const view={slug,agent,company,conversation,writer,panel,leftRef};
  return <div className="convo"><div className="chat">
   <Suspense fallback={<Loading {...view} title={title} setTyped={setTyped} setDraft={setDraft} sent={()=>setEarly(count=>count+1)}/>}>
-   <Loaded {...view} record={record} team={team} draft={draft??(typed?{text:typed,n:0}:null)} setDraft={setDraft} early={early}/>
+   <Loaded {...view} record={record} team={team} draft={draft??(typed.text?{text:typed.text,n:0,key:typed.key}:null)} setDraft={setDraft} early={early}/>
   </Suspense>
  </div>{agent&&details&&<AgentDetails panel={panel} agent={agent} details={details} settingsHref={`/c/${slug}/agents`}/>}</div>;
 }
@@ -39,7 +41,7 @@ export default function ConversationView({slug,agent,details,company,conversatio
 type View={slug:string,agent:DetailsAgent|null,company:string,conversation:ThreadConversation,writer:boolean,panel:DetailsPanel,leftRef:RefObject<Left|null>};
 const Face=({conversation,size}:{conversation:ThreadConversation,size:number})=><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:conversation.face,name:conversation.agent_name}} size={size}/></span>;
 
-function Loading({agent,company,conversation,writer,panel,leftRef,title,setTyped,setDraft,sent}:View&{title:string,setTyped:(text:string)=>void,setDraft:(next:(current:Draft)=>Draft)=>void,sent:()=>void}) {
+function Loading({agent,company,conversation,writer,panel,leftRef,title,setTyped,setDraft,sent}:View&{title:string,setTyped:(typed:Typed)=>void,setDraft:(next:(current:Draft)=>Draft)=>void,sent:()=>void}) {
  const {t}=useI18n(); const area=useRef<HTMLDivElement>(null); const shown=useRef(true);
  useLayoutEffect(()=>{
   const box=area.current?.querySelector('textarea');
@@ -52,13 +54,13 @@ function Loading({agent,company,conversation,writer,panel,leftRef,title,setTyped
  return <>
   <HeadPill panel={panel} agent={agent?.name} face={<Face conversation={conversation} size={24}/>} title={title} titleDir="auto"/>
   <div className="transcript"><ChatPlaceholder/></div>
-  <div className="composer-area" ref={area} onInput={event=>setTyped((event.target as HTMLTextAreaElement).value)}>
+  <div className="composer-area" ref={area} onInput={event=>setTyped({text:(event.target as HTMLTextAreaElement).value})}>
    {writer?<MessageBox placeholder={t('writeTo',conversation.agent_name)} send={async(message,sendKey)=>{
-    setTyped('');
+    setTyped({text:''});
     const failure=await postMessage({company,conversation:conversation.id,message,sendKey});
     if(!failure) sent();
-    else if(shown.current) setTyped(message);
-    else setDraft(current=>({text:message,n:(current?.n||0)+1}));
+    else if(shown.current) setTyped({text:message,key:sendKey});
+    else setDraft(current=>({text:message,n:(current?.n||0)+1,key:sendKey}));
     return failure;
    }}/>:<p className="ro-line" role="note"><ShellIcon name="eye"/><span>{t('viewOnly')}</span></p>}
    {/* The usage line's place, so the composer does not move when it arrives. */}
