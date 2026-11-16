@@ -242,7 +242,11 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
      if(found.profile!==scoped) return send(response,400,{detail:'OAuth session profile mismatch'});
      return send(response,200,{session_id:session,status:found.status,error_message:found.status==='error'?'secret detail':null});
     }
-    if(!step&&request.method==='DELETE') { delete home.credentials[provider]; return send(response,200,{ok:true,provider}); }
+    // clear_provider_auth clears the scoped profile's own store only, and nothing there is a 409 (oauth.py 774-815).
+    if(!step&&request.method==='DELETE') {
+     if(!home.credentials[provider]) return send(response,409,{detail:`No stored credentials were removed for ${provider==='anthropic'?'Anthropic Account':'ChatGPT or Codex Subscription'}.`});
+     delete home.credentials[provider]; return send(response,200,{ok:true,provider});
+    }
    }
    send(response,404,{detail:'Not Found'});
   });
