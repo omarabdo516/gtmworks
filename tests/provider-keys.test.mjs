@@ -25,7 +25,7 @@ test('the providers that take a key are the Engine\'s primary password rows, wit
   madeCompany(fake,one);
   fake.settings.profiles.get(one.space).env={OPENROUTER_API_KEY:known,FIRECRAWL_API_KEY:'fc-tool-key-0123456789'};
   const read=await readProviderKeys(install(fake),{space:one.space,profiles:[]});
-  assert.deepEqual(read,{state:'found',keys:[{provider:'openrouter',label:'OpenRouter',set:true},{provider:'anthropic',label:'Anthropic',set:false},{provider:'deepseek',label:'DeepSeek',set:false}],lacking:[],leftover:[]});
+  assert.deepEqual(read,{state:'found',keys:[{provider:'openrouter',label:'OpenRouter',set:true},{provider:'anthropic',label:'Anthropic',set:false},{provider:'deepseek',label:'DeepSeek',set:false}],lacking:[],leftover:[],unread:[]});
   const answer=JSON.stringify(read);
   for(const secret of [known,`${known.slice(0,4)}...${known.slice(-4)}`,known.slice(-4),'OPENROUTER_API_KEY','redacted']) assert.ok(!answer.includes(secret),secret);
   assert.ok(fake.settings.managementRequests.every(request=>!request.path.includes('/reveal')),'the reveal route is never asked');
@@ -38,10 +38,10 @@ test('a refused, missing, failing or silent Engine is a state, never its text', 
  const fake=await fakeHermes();
  try {
   madeCompany(fake,one);
-  assert.deepEqual(await readProviderKeys({...install(fake),key:'wrong-key'},{space:one.space,profiles:[]}),{state:'refused',keys:null,lacking:null,leftover:null});
-  assert.deepEqual(await readProviderKeys(install(fake),{space:two.space,profiles:[]}),{state:'failed',keys:null,lacking:null,leftover:null});
+  assert.deepEqual(await readProviderKeys({...install(fake),key:'wrong-key'},{space:one.space,profiles:[]}),{state:'refused',keys:null,lacking:null,leftover:null,unread:null});
+  assert.deepEqual(await readProviderKeys(install(fake),{space:two.space,profiles:[]}),{state:'failed',keys:null,lacking:null,leftover:null,unread:null});
   fake.settings.managementStatus=500;
-  assert.deepEqual(await readProviderKeys(install(fake),{space:one.space,profiles:[]}),{state:'unreachable',keys:null,lacking:null,leftover:null});
+  assert.deepEqual(await readProviderKeys(install(fake),{space:one.space,profiles:[]}),{state:'unreachable',keys:null,lacking:null,leftover:null,unread:null});
   assert.deepEqual(await setProviderKey(install(fake),{space:one.space,profiles:[],provider:'openrouter',value:known}),{state:'unreachable',model:null,profiles:null});
   fake.settings.managementStatus=200;
   assert.deepEqual(await setProviderKey(install(fake),{space:one.space,profiles:[],provider:'gemini',value:known}),{state:'unknownProvider',model:null,profiles:null});
@@ -127,9 +127,10 @@ const encryptionKey=Buffer.alloc(32,9).toString('base64');
 const keyRows=(company,extra=[])=>{ const found=companies[company];
  return [{profile:found.space,kind:'space',agent:null,name:null},...[found.main,...found.agents,...extra].map(profile=>({profile,kind:profile.startsWith('co-')?'company':'agent',agent:agentId(profile),name:found.names[profile]||null}))]; };
 // The person's own session and the service role, as the route hands them over; every call is recorded.
-function sessions(fake,{owner,space=true,extra=[],logFails=false}) {
+function sessions(fake,{owner,space=true,extra=[],logFails=false,unfinishedFails=false}) {
  const asked=[]; const logged=[]; const unfinished=new Map();
  const db={rpc:async(name,args)=>{ asked.push({name,args});
+  if(unfinishedFails&&name.includes('unfinished')) return {data:null,error:{code:'XX000',message:'the database is down'}};
   if(name==='record_unfinished_provider_key') { if(owner) args.missed.length?unfinished.set(args.key_provider,args.missed):unfinished.delete(args.key_provider); return owner?{data:null,error:null}:{data:null,error:{code:'42501'}}; }
   if(name==='company_key_unfinished_profiles') return {data:owner?[...unfinished].map(([provider,profiles])=>({provider,profiles})):[],error:null};
   if(name==='is_company_owner') return {data:owner,error:null};
@@ -199,6 +200,12 @@ test('a set reaches the Company\'s space and its Agent profiles only, key before
   fake.settings.envFail.clear();
   await change(owner,fake,{intent:'set',value:`${known}-rotated`});
   assert.deepEqual((await read(owner,fake)).waiting,[],'the next set reaches it');
+  fake.settings.envReadFail.add(one.agents[0]);
+  assert.deepEqual((await read(owner,fake)).unknown,[{agent:agentId(one.agents[0]),name:companies[first].names[one.agents[0]]}],'an Agent profile the Engine cannot read is unknown, not done');
+  fake.settings.envReadFail.clear();
+  const forgetful=sessions(fake,{owner:true,unfinishedFails:true});
+  assert.deepEqual(await read(forgetful,fake),{keys:(await read(owner,fake)).keys,waiting:null,leftover:null,unknown:[]},'what a change missed cannot be read, so who waits is unknown');
+  assert.equal((await change(forgetful,fake,{intent:'set',value:`${known}-rotated`})).body.unfinishedKept,false,'a change whose misses were not kept says so');
   assert.ok(fake.settings.managementRequests.every(request=>!request.path.includes('/reveal')));
  } finally { await fake.close(); }
 });
@@ -235,7 +242,7 @@ test('only an active Owner sets or removes a key, checked on the server; every m
    const member=sessions(fake,{owner:false});
    for(const intent of ['set','remove']) assert.deepEqual(await change(member,fake,{intent,value:known}),{status:403,body:{error:'keyNotAllowed'}},`${role} ${intent}`);
    assert.deepEqual(member.logged,[]);
-   assert.deepEqual(await read(member,fake),{keys:[{provider:'openrouter',label:'OpenRouter',set:true},{provider:'anthropic',label:'Anthropic',set:false},{provider:'deepseek',label:'DeepSeek',set:false}],waiting:null,leftover:null},role);
+   assert.deepEqual(await read(member,fake),{keys:[{provider:'openrouter',label:'OpenRouter',set:true},{provider:'anthropic',label:'Anthropic',set:false},{provider:'deepseek',label:'DeepSeek',set:false}],waiting:null,leftover:null,unknown:null},role);
   }
   assert.ok(fake.settings.managementRequests.every(request=>request.method==='GET'),'a member never writes to the Engine');
   assert.ok(Object.values(fake.settings.profiles.get(one.main).env||{}).length===0);
@@ -247,7 +254,7 @@ test('only an active Owner sets or removes a key, checked on the server; every m
   assert.deepEqual(await change(owner,fake,{intent:'set',value:'short'}),{status:400,body:{error:'keyInvalid'}});
   assert.deepEqual(await change(owner,fake,{provider:'gemini',intent:'set',value:known}),{status:400,body:{error:'keyProviderUnknown'}});
   assert.deepEqual(await change(sessions(fake,{owner:true,space:false}),fake,{intent:'set',value:known}),{status:409,body:{error:'keyNoSpace'}});
-  assert.deepEqual(await read(sessions(fake,{owner:true,space:false}),fake),{keys:null,waiting:null,leftover:null});
+  assert.deepEqual(await read(sessions(fake,{owner:true,space:false}),fake),{keys:null,waiting:null,leftover:null,unknown:null});
   assert.deepEqual(owner.logged,[]);
  } finally { await fake.close(); }
 });

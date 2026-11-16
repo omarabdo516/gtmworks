@@ -44,7 +44,7 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
    {env:'OPENROUTER_BASE_URL',provider:'openrouter',label:'OpenRouter',primary:false,password:false,category:'provider'},
    {env:'FIRECRAWL_API_KEY',provider:'',label:'',primary:false,password:true,category:'tool'}],
   providerModels:/** @type {Record<string,string[]>} */({openrouter:['anthropic/claude-opus-4.6','openai/gpt-5.5'],anthropic:['claude-opus-4-6']}),
-  modelNeedsKey:false,defaultEnv:/** @type {Record<string,string>} */({}),envFail:/** @type {Set<string>} */(new Set()),envDropped:/** @type {Set<string>} */(new Set()),envHang:/** @type {Set<string>} */(new Set()),
+  modelNeedsKey:false,defaultEnv:/** @type {Record<string,string>} */({}),envFail:/** @type {Set<string>} */(new Set()),envReadFail:/** @type {Set<string>} */(new Set()),envDropped:/** @type {Set<string>} */(new Set()),envHang:/** @type {Set<string>} */(new Set()),
   approve(session) { const found=settings.signInSessions.get(session); if(!found) return; found.status='approved'; credentialsOf(found.profile)[found.provider]=`codex-token-${randomUUID()}`; }};
  const profileOf=name=>name==='default'?{config:settings.defaultConfig,credentials:settings.defaultCredentials}:settings.profiles.get(name);
  const credentialsOf=name=>profileOf(name)?.credentials||{};
@@ -142,6 +142,7 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
     const target=settings.profiles.get(named);
     const envOf=()=>named==='default'?settings.defaultEnv:(target.env||={});
     if(request.method==='GET') {
+     if(settings.envReadFail.has(named)) return send(response,500,{detail:'Internal Server Error'});
      if(named!=='default'&&!target) return send(response,404,{detail:`Profile '${named}' does not exist.`});
      const env=envOf();
      // The Engine's own preview of a set value, which gtmworks must never pass on.
