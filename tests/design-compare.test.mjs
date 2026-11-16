@@ -95,8 +95,9 @@ test('every screen says how to reach it in the reference and which built page it
     // The alone screens (#10) start by viewing the prototype as Omar working alone, and a Member's request screens (#17)
     // view it as Youssef in the team; every other screen never touches it.
     const youssef = '[data-action="set-as"][data-person="youssef"][data-world="team"]';
-    if (['ask-agent', 'request-sent', 'request-made'].includes(name)) assert.ok(screen.reference.steps.some(step => step.click === youssef), `${name} views as Youssef`);
-    const steps = name.endsWith('-alone') ? screen.reference.steps.slice(3) : screen.reference.steps.filter(step => step.click !== youssef);
+    const asYoussef = ['ask-agent', 'request-sent', 'request-made'].includes(name);
+    if (asYoussef) assert.ok(screen.reference.steps.some(step => step.click === youssef), `${name} views as Youssef`);
+    const steps = name.endsWith('-alone') ? screen.reference.steps.slice(3) : asYoussef ? screen.reference.steps.filter(step => step.click !== youssef) : screen.reference.steps;
     for (const step of steps) {
       assert.equal(Object.keys(step).length, 1, `${name}: one action per step`);
       const [[action, selector]] = Object.entries(step);
