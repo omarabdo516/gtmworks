@@ -893,6 +893,7 @@
   "sheetNoteLabel": "Write a note in the card’s log",
   "sheetNoteSend": "Add the note",
   "sheetClose": "Close",
+  "sheetChatTaken": "Someone else started the chat on this card just now.",
   "agentFiles": "Files",
   "agentFilesEmpty": "No files yet. Files from its cards and from your chats with it show here.",
   "agentScreen": "Agent’s screen",
