@@ -19,7 +19,8 @@
   --gw-font: var(--font-plex-arabic), "IBM Plex Sans Arabic", "Noto Sans Arabic", Tahoma, system-ui, sans-serif;
   --gw-fs-xs: 12px; --gw-fs-sm: 13px; --gw-fs-base: 14px; --gw-fs-msg: 15px; --gw-fs-lg: 17px; --gw-fs-xl: 22px;
   --gw-r-xs: 6px; --gw-r-sm: 8px; --gw-r-md: 12px; --gw-r-lg: 16px; --gw-r-bubble: 18px; --gw-r-composer: 22px; --gw-r-card: 24px; --gw-r-full: 9999px;
-  --gw-dur-fast: 150ms; --gw-dur: 200ms; --gw-ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --gw-dur-fast: 150ms; --gw-dur: 200ms; --gw-dur-slow: 280ms;
+  --gw-ease-out: cubic-bezier(0.2, 0, 0, 1); --gw-ease-in: cubic-bezier(0.4, 0, 1, 1); --gw-ease-spring: cubic-bezier(0.34, 1.45, 0.64, 1);
   --gw-sidebar-w: 300px; --gw-details-w: 320px; --gw-chat-col: 620px; --gw-head-h: 64px; --gw-idle-dot: #B5B5B5; --gw-wait: #DA830E;
 }
 :root[data-theme="dark"] .gw {
@@ -52,6 +53,13 @@
     --gw-bubble-ring: #F5F5F50F 0 0 0 0.5px inset; --gw-shadow-card: #F5F5F51A 0 0 0 0.5px;
   }
 }
+
+/* The reference's shared keyframes (design-reference: fadeIn, rise, breathe, modalOut), written once. Keyframe names are
+   global like tokens, so they carry the same gw- prefix. */
+@keyframes gw-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes gw-rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes gw-breathe { 0%, 100% { opacity: .9; } 50% { opacity: .3; } }
+@keyframes gw-modal-out { to { opacity: 0; transform: translateY(4px); } }
 
 /* The product's global button look (app/globals.css: border, padding, 36px floor, half opacity when disabled) is not
    the reference's; the shell's buttons start bare, as the reference's do. The reset has no more weight than one class,
@@ -417,12 +425,10 @@
   width: min(940px, calc(100vw - 48px)); height: min(760px, calc(100dvh - 48px)); max-width: none; max-height: none;
   border-radius: var(--gw-r-lg); background: var(--gw-bg-chrome); color: var(--gw-text-1); box-shadow: var(--gw-shadow-modal); overflow: hidden;
   font-family: var(--gw-font); font-size: var(--gw-fs-base); line-height: 1.5; -webkit-font-smoothing: antialiased;
-  animation: modal-rise 280ms var(--gw-ease-out);
+  animation: gw-rise var(--gw-dur-slow) var(--gw-ease-out);
 }
-.gw.modal[data-state="closed"] { animation: modal-out 190ms cubic-bezier(0.4, 0, 1, 1) forwards; }
+.gw.modal[data-state="closed"] { animation: gw-modal-out 190ms var(--gw-ease-in) forwards; }
 :where(.gw.modal) :where(button:not([data-slot])) { border: 0; padding: 0; margin: 0; min-height: 0; background: none; font: inherit; color: inherit; text-align: inherit; border-radius: 0; gap: 0; }
-@keyframes modal-rise { from { opacity: 0; transform: translateY(4px); } }
-@keyframes modal-out { to { opacity: 0; transform: translateY(4px); } }
 .gw .modal__inner { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; height: 100%; min-height: 0; }
 .gw .modal__head { display: flex; align-items: flex-start; gap: 12px; padding: 20px 24px 12px; }
 .gw .modal__titles { flex: 1 1 0; min-width: 0; display: grid; gap: 2px; }
