@@ -7,6 +7,15 @@ import { supabase } from '@/lib/supabase';
 import { actionAllowed } from '@/lib/route-permissions.mjs';
 import { fingerprint } from '@/lib/agent-crypto.mjs';
 import { filesProblem } from '@/lib/attachments.mjs';
+import { createClient } from '@supabase/supabase-js';
+import { supabaseConfig } from '@/lib/supabase-config';
+import { driveNoteRuns } from '@/lib/channel-runs.mjs';
+// A note that calls an Agent starts its one Run at once (#22), as a channel message does; the worker reads the reply. A
+// start that fails is left to the worker and logged without the note.
+async function startNoteRun(note:number) {
+ try { await driveNoteRuns(createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}}),{encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY,message:note}); }
+ catch(failure) { console.error('Note run not started:',note,failure instanceof Error?failure.message:'unknown error'); }
+}
 // Files chosen in a form are stored in the company's folder first; the database then records them against a message.
 async function storeFiles(db: Awaited<ReturnType<typeof supabase>>, company: string, form: FormData, folder: string) {
  const chosen=form.getAll('files').filter((f): f is File=>f instanceof File && f.size>0);
@@ -49,8 +58,10 @@ export const workAction=withActionLog('workAction',async function workAction(for
  else if(op==='comment') {
   const stored=await storeFiles(db,company,form,`${card}/${crypto.randomUUID()}`); error=stored.error;
   if(!error) {
-   const sent=await db.rpc('change_work_card',{c:company,card,operation:'comment',payload:{body:String(form.get('body')||'')},evidence}); error=sent.error;
+   const body=String(form.get('body')||'');
+   const sent=await db.rpc('change_work_card',{c:company,card,operation:'comment',payload:{body},evidence}); error=sent.error;
    if(!error && stored.files.length) error=(await db.rpc('attach_files',{c:company,card,message:sent.data,files:stored.files})).error;
+   if(!error && body.includes('@')) await startNoteRun(sent.data);
   }
  }
  else if(['actor','assignee','label','check'].includes(op)) { const payload=Object.fromEntries(['person','label','item','done','body'].map(k=>[k,String(form.get(k)||'')])); ({error}=await db.rpc('change_work_card',{c:company,card,operation:op,payload,evidence})); }

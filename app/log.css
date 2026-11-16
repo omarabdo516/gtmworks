@@ -88,6 +88,19 @@
 .gw :is(.log-page, .details) .lg-card .od-truncate { max-width: 260px; }
 .gw :is(.log-page, .details) .lg-forever { margin: 0; display: flex; align-items: flex-start; gap: 6px; padding-inline: var(--s1); font-size: var(--gw-fs-xs); line-height: 1.6; color: var(--gw-text-3); --od-icon-size: 14px; }
 .gw :is(.log-page, .details) .lg-forever .pg-icon { margin-top: 2px; }
+/* a note (#22): "Edited", the time its writer has left to edit it, "Locked", and the field that replaces it while its
+   writer edits (design-reference: lg-edit, lg-left, lg-edited, lg-lock) */
+.gw :is(.log-page, .details) :is(.lg-left, .lg-lock, .lg-edited) { display: inline-flex; align-items: center; gap: 4px; }
+.gw :is(.log-page, .details) .lg-left .num { color: var(--gw-text-1); font-weight: 600; font-variant-numeric: tabular-nums; }
+.gw .log-page .lg-status { color: var(--gw-text-2); }
+.gw .log-page .lg-edit { display: grid; gap: var(--s2, 8px); }
+.gw .log-page .lg-edit__t { height: auto; min-height: 72px; padding: var(--s2, 8px) 10px; font-size: var(--gw-fs-base); line-height: 1.7; resize: vertical; }
+.gw .log-page .lg-edit__row { display: flex; align-items: center; gap: var(--s2, 8px); flex-wrap: wrap; font-size: var(--gw-fs-xs); color: var(--gw-text-3); }
+.gw .log-page .lg-edit__row .od-fill { flex: 1 1 0; min-width: 0; }
+.gw .log-page .set-err { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-danger-text); }
+.gw .log-page .btn--primary { background: var(--gw-primary); color: var(--gw-on-primary); }
+.gw .log-page :is(.btn--primary, .btn--secondary):disabled { background: var(--gw-primary-disabled); color: var(--gw-text-4); box-shadow: none; }
+@media (hover: hover) { .gw .log-page .btn--primary:hover:not(:disabled) { background: var(--gw-primary-hover); } }
 .gw .log-page .lg-more { margin: 0; padding-inline: var(--s1); font-size: var(--gw-fs-xs); color: var(--gw-text-3); }
 .gw .log-page .lg-pages { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); }
 .gw .log-page .lg-pages .lg-more { margin-inline-end: auto; }
@@ -129,8 +142,8 @@
   .gw .log-page .lg-meta .link-btn { position: relative; }
   .gw .log-page .lg-meta .link-btn::before { content: ""; position: absolute; inset: -10px 0; }
   /* The page buttons keep their 30px look; a ring makes each tap area 44px tall. */
-  .gw .log-page .lg-pages .btn { position: relative; }
-  .gw .log-page .lg-pages .btn::before { content: ""; position: absolute; inset: -7px 0; }
+  .gw .log-page :is(.lg-pages, .lg-edit) .btn { position: relative; }
+  .gw .log-page :is(.lg-pages, .lg-edit) .btn::before { content: ""; position: absolute; inset: -7px 0; }
 }
 @media (max-width: 599px) {
   .gw .log-page .lgp-field { flex: 1 1 100%; }
