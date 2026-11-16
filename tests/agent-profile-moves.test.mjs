@@ -1,15 +1,106 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { encryptSecret } from '../lib/agent-crypto.mjs';
+import { levelConfig, toolPolicy, companyProfile } from '../lib/agent-levels.mjs';
+import { moveAgentProfiles } from '../lib/company-profiles.mjs';
+import { engineFor } from '../lib/engine.mjs';
 import { sendMessage, startQueuedTurns } from '../lib/conversation-runs.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
-// The first Run of the Conversation of an Agent that moved to its own profile (#121, ADR 0016) carries gtmworks's record
-// of it as the Run's history.
+// An Agent still on its Company's profile moves to its own (#121, ADR 0016): the worker asks the Engine only about the
+// Agent's own profile, moves the Agent only once that profile can answer, and the first Run of a moved Agent's
+// Conversation carries gtmworks's record of it as the Run's history.
 const encryptionKey=Buffer.alloc(32,6).toString('base64');
 const company='10000000-0000-0000-0000-000000000001';
-const writer='a0000000-0000-0000-0000-000000000001';
+const [writer,critic]=['a0000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002'];
 const own=agent=>`ag-${agent.replaceAll('-','')}`;
+const hermes={address:'http://hermes:8642',profile:'default',key:'test-only-key'};
+const row=(agent,extra={})=>({agent_id:agent,company_id:company,profile:own(agent),agent_level:2,instructions:`You are ${agent}.`,recorded:false,...extra});
+
+// The worker's database: the work it lists, and every call it gets, in order, in `log`, which the driver shares, with
+// its arguments in `calls`. `begun` is what begin_agent_profile_move answers; `fail` names a call refused for one Agent.
+function moveDatabase(rows,{log=[],begun=true,fail={}}={}) {
+ const calls=[];
+ return {log,calls,rpc:async(name,args)=>{
+  log.push(`${name}${args?` ${args.agent}`:''}`); calls.push({name,args});
+  if(name in fail&&fail[name]===args?.agent) return {data:null,error:{message:`${name} refused`}};
+  if(name==='agent_move_work') return {data:rows.map(found=>({...found})),error:null};
+  if(name==='begin_agent_profile_move') return {data:begun,error:null};
+  if(name==='move_agent_profile') return {data:true,error:null};
+  if(name==='record_agent_profile') return {data:null,error:null};
+  return {data:null,error:{message:`unexpected ${name}`}};
+ }};
+}
+const answering=(log,state=()=>'provided')=>({provideAgent:async agent=>{ log.push(`provideAgent ${agent.name}`); return {state:state(agent)}; }});
+
+test('the worker begins, has the Agent\'s own profile provided, records its tools and moves it, one Agent after another',async()=>{
+ const db=moveDatabase([row(writer),row(critic,{recorded:true,instructions:null})]);
+ const asked=[];
+ const driver={provideAgent:async agent=>{ asked.push(agent); db.log.push(`provideAgent ${agent.name}`); return {state:'provided'}; }};
+ assert.deepEqual(await moveAgentProfiles(db,{hermes,driver}),{moved:2});
+ assert.deepEqual(db.log,['agent_move_work',
+  `begin_agent_profile_move ${writer}`,`provideAgent ${own(writer)}`,`record_agent_profile ${writer}`,`move_agent_profile ${writer}`,
+  `provideAgent ${own(critic)}`,`record_agent_profile ${critic}`,`move_agent_profile ${critic}`]);
+ assert.deepEqual(asked[0],{name:own(writer),instructions:`You are ${writer}.`,level:2});
+ assert.match(asked[1].instructions,/^You are a marketing agent working for one company in gtmworks\./,'an Agent with no instructions gets the Company profile\'s soul');
+ assert.deepEqual(db.calls.filter(call=>call.name==='record_agent_profile').map(call=>call.args),[writer,critic].map(agent=>({agent,engine_profile:own(agent),level:2,policy:toolPolicy})));
+ assert.deepEqual(await moveAgentProfiles(db,{hermes:null,driver}),{moved:0});
+});
+
+test('an Agent whose own profile cannot answer, or was not made as it must be, stays where it is',async()=>{
+ for(const state of ['noModel','forbidden','failed','refused','unreachable']) {
+  const db=moveDatabase([row(writer)]);
+  assert.deepEqual(await moveAgentProfiles(db,{hermes,driver:answering(db.log,()=>state)}),{moved:0},state);
+  assert.deepEqual(db.log,['agent_move_work',`begin_agent_profile_move ${writer}`,`provideAgent ${own(writer)}`],state);
+ }
+ const refused=moveDatabase([row(writer)],{begun:false});
+ assert.deepEqual(await moveAgentProfiles(refused,{hermes,driver:answering(refused.log)}),{moved:0});
+ assert.deepEqual(refused.log,['agent_move_work',`begin_agent_profile_move ${writer}`],'a move the database will not begin asks the Engine nothing');
+});
+
+test('an Agent waiting to move is asked about at most once a minute',async()=>{
+ let clock=0; const waiting=new Map();
+ const db=moveDatabase([row(writer,{recorded:true})]);
+ const options={hermes,waiting,now:()=>clock,driver:answering(db.log,()=>'noModel')};
+ await moveAgentProfiles(db,options);
+ clock+=59999;
+ await moveAgentProfiles(db,options);
+ assert.deepEqual(db.log,['agent_move_work',`provideAgent ${own(writer)}`,'agent_move_work']);
+ clock+=1;
+ await moveAgentProfiles(db,options);
+ assert.deepEqual(db.log.slice(3),['agent_move_work',`provideAgent ${own(writer)}`]);
+});
+
+test('one Agent that fails never holds back another',async()=>{
+ const db=moveDatabase([row(writer),row(critic)],{fail:{record_agent_profile:writer}});
+ const logged=[]; const error=console.error; console.error=(...args)=>{ logged.push(args.join(' ')); };
+ try { assert.deepEqual(await moveAgentProfiles(db,{hermes,driver:answering(db.log)}),{moved:1}); }
+ finally { console.error=error; }
+ assert.ok(!db.log.includes(`move_agent_profile ${writer}`));
+ assert.ok(db.log.includes(`move_agent_profile ${critic}`));
+ assert.deepEqual(logged,[`Agent not moved: ${writer} record_agent_profile refused`]);
+});
+
+test('on the Engine server a move asks about the Agent\'s own profile only: nothing names the keeper\'s profile',async()=>{
+ const fake=await fakeHermes();
+ try {
+  const kept=companyProfile(company);
+  fake.settings.profiles.set(kept,{soul:'The Company\'s soul.',provider:'openai-codex',model:'gpt-5.5',key:'test-only-key',config:{memory:{memory_enabled:true}},credentials:{'openai-codex':'company-token'}});
+  const before=structuredClone(fake.settings.profiles.get(kept));
+  fake.settings.seedModel={provider:'openai-codex',model:'gpt-5.5'};
+  fake.settings.defaultCredentials['openai-codex']='root-codex-token';
+  const db=moveDatabase([row(writer)]);
+  const bundled={address:fake.address,managementAddress:fake.managementAddress,profile:'default',key:'test-only-key'};
+  assert.deepEqual(await moveAgentProfiles(db,{hermes:bundled,driver:engineFor(bundled)}),{moved:1});
+  const requests=[...fake.settings.managementRequests.map(request=>`${request.method} ${request.path}`),...fake.settings.requests.map(request=>`${request.method} ${request.path}`)];
+  assert.deepEqual(requests.filter(request=>request.includes(kept)),[],'no request names the keeper\'s profile');
+  assert.deepEqual(fake.settings.managementRequests.filter(request=>request.method==='DELETE'),[]);
+  assert.deepEqual(fake.settings.managementRequests.find(request=>request.method==='POST').body,{name:own(writer),soul:`You are ${writer}.`},'made, never cloned');
+  assert.ok(requests.includes(`GET /api/model/options?profile=${own(writer)}`),'the Engine is asked whether the Agent\'s own profile can answer');
+  assert.deepEqual(fake.settings.profiles.get(kept),before,'the keeper\'s profile is as it was');
+  assert.deepEqual(fake.settings.profiles.get(own(writer)).config,levelConfig(2));
+ } finally { await fake.close(); }
+});
 
 // The run paths as a moved Agent's Conversation sees them: its pinned Connection to the Agent's own profile, and the
 // history pin_run_history pinned for the send key (none for the others).
