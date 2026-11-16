@@ -1,0 +1,56 @@
+/* "New channel" (#24; design-reference/index.html: .modal--sm, .modal__body, .cr, .set-*, .panel-card, .panel-row, .tm-pick,
+   .tm-check, .cr-hint, .modal__foot--end, .btn--primary). The copied Radix dialog is portalled out of the shell, so it
+   carries the gw tokens itself, as the ready-made gallery does (app/shell.css, .gw.modal). */
+.gw.modal.modal--sm { --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 24px; width: min(560px, calc(100vw - 32px)); height: min(820px, calc(100dvh - 48px)); }
+.gw.modal--sm .modal__inner { grid-template-rows: auto minmax(0, 1fr) auto; }
+.gw .modal__body { overflow-y: auto; min-height: 0; overscroll-behavior: contain; padding: 0 var(--s6) var(--s6); }
+.gw .cr { display: flex; flex-direction: column; gap: var(--s5); }
+.gw .cr .set-field { display: grid; gap: 6px; }
+.gw .cr .set-label { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-2); }
+.gw .cr .set-input {
+  display: block; width: 100%; height: 34px; min-height: 0; margin: 0; padding: 0 10px; border-radius: var(--gw-r-sm); border: 0.5px solid var(--gw-border-2);
+  background: var(--gw-bg-pane); color: var(--gw-text-1); font: inherit; font-size: var(--gw-fs-sm); outline: none; box-shadow: none;
+  transition: border-color var(--gw-dur-fast) var(--gw-ease-out), box-shadow var(--gw-dur-fast) var(--gw-ease-out);
+}
+.gw .cr .set-input:focus { border-color: var(--gw-border-1); box-shadow: 0 0 0 3px var(--gw-bg-active); }
+.gw .cr .set-input::placeholder { color: var(--gw-text-4); opacity: 1; }
+.gw .cr .set-hint { margin: 0; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); text-wrap: pretty; }
+.gw .cr .set-err { margin: 0; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-danger-text); }
+.gw .cr .set-err[hidden] { display: none; }
+.gw .cr .num { font-variant-numeric: tabular-nums; }
+.gw .cr .panel-card { display: flex; flex-direction: column; padding: 4px; border-radius: var(--gw-r-md); background: var(--gw-bg-pane); border: 0.5px solid var(--gw-border-3); }
+.gw .cr .panel-row { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 6px var(--s2); border-radius: var(--gw-r-sm); width: 100%; text-align: start; position: relative; color: var(--gw-text-1); }
+.gw .cr .panel-row + .panel-row::before { content: ""; position: absolute; top: 0; inset-inline: var(--s2); height: 0.5px; background: var(--gw-border-2); }
+.gw .cr .panel-row > span[aria-hidden] { display: inline-flex; flex: none; }
+.gw .cr .panel-row__text { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0; }
+.gw .cr .panel-row__t { font-size: var(--gw-fs-sm); line-height: 1.5; color: var(--gw-text-1); overflow-wrap: anywhere; }
+.gw .cr .panel-row__d { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); overflow-wrap: anywhere; }
+.gw .cr .ch-you { color: var(--gw-text-3); font-weight: 400; }
+.gw .cr .me__av.lg-av { width: var(--av, 28px); height: var(--av, 28px); font-size: var(--gw-fs-xs); line-height: 1; }
+.gw .tm-pick { cursor: pointer; }
+.gw .tm-pick[aria-disabled="true"] { cursor: default; }
+.gw .tm-check {
+  width: 18px; height: 18px; flex: none; border-radius: var(--gw-r-xs); display: inline-flex; align-items: center; justify-content: center;
+  box-shadow: var(--gw-border-1) 0 0 0 1px inset; color: var(--gw-on-primary); transition: background-color var(--gw-dur-fast) var(--gw-ease-out);
+}
+.gw .tm-check .gw-icon { width: 14px; height: 14px; }
+.gw .tm-pick[aria-checked="true"] .tm-check { background: var(--gw-primary); box-shadow: none; }
+.gw .tm-pick[aria-disabled="true"] .tm-check { background: var(--gw-primary-disabled); }
+.gw .cr-hint { padding: var(--s3); border-radius: var(--gw-r-md); border: 1px dashed var(--gw-border-2); line-height: 1.7; }
+.gw .cr-hint .gw-icon { width: 14px; height: 14px; vertical-align: -2px; color: var(--gw-text-3); }
+.gw .modal__foot--end { justify-content: flex-end; }
+.gw .modal__foot--end .btn { min-width: 96px; }
+.gw.modal .btn--primary { background: var(--gw-primary); color: var(--gw-on-primary); }
+.gw.modal :is(.btn--primary, .btn--secondary):disabled { background: var(--gw-primary-disabled); color: var(--gw-text-4); box-shadow: none; }
+@media (hover: hover) {
+  .gw .cr button.panel-row:not([aria-disabled="true"]):hover { background: var(--gw-bg-hover); }
+  .gw.modal .btn--primary:hover:not(:disabled) { background: var(--gw-primary-hover); }
+}
+@media (max-width: 599px) {
+  .gw.modal.modal--sm { width: 100vw; height: 100dvh; border-radius: 0; }
+  .gw .modal__body { padding-inline: var(--s4); }
+  /* 44px touch targets on a phone (PRODUCT.md): the footer buttons keep the reference's 36px with an invisible band. */
+  .gw .modal__foot--end .btn { position: relative; }
+  .gw .modal__foot--end .btn::before { content: ""; position: absolute; inset: -4px 0; }
+}
+[dir="ltr"] .gw .cr :is(.panel-row__t, .panel-row__d) { unicode-bidi: plaintext; }
