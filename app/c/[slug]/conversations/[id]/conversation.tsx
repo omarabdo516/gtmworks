@@ -14,15 +14,17 @@ import { ShellIcon } from '@/components/shell-icon';
 import { MessageBox, postMessage } from '@/app/conversation-composer';
 import { LeadWelcome } from '@/app/lead-welcome';
 import { PrivateLine } from '@/app/private-line';
-import { titleOf, type MadeAgent, type RuleDecision, type SavedRule } from '@/lib/conversations';
+import { titleOf, type Decision, type SavedRule } from '@/lib/conversations';
+import { MadeCard, RequestCard } from '@/app/agent-card';
 import { overlayHref } from '@/lib/settings-overlay.mjs';
-import { madeDay, useZone } from '@/app/agent-made';
 import type { ConversationRecord } from '@/lib/conversation-record';
 import { localeFor } from '@/lib/i18n.mjs';
 type Conversation={id:string,agent_name:string,face:string};
+const requestWaits=(messages:ConversationRecord['messages'])=>messages.some(message=>message.cards?.some(card=>card.kind==='request'&&card.request.state==='waiting'));
 
 // The reply is collected by the server from Hermes; the page asks again until it is in the record. Each send restarts
-// the asking, so an answer about an earlier run cannot stop it before the new reply arrives.
+// the asking, so an answer about an earlier run cannot stop it before the new reply arrives. An Owner answers a request
+// for an Agent from their own page, so while one waits the page also asks again, less often (#17).
 // Drawn as the reference's chat (design-reference: renderChat, msgHTML): a floating title pill, the Agent's turns on
 // the start side, the person's on the end side, the composer below, and the Agent's details beside it while the
 // Agent is still attached. While the Agent works, everyone reading sees who it is working for; a message sent
@@ -38,28 +40,30 @@ export default function ConversationView({slug,agent,details,company,conversatio
  const {messages,usage,pending,failed,working,canStop}=record;
  // The sidebar's Agents come from the server render: an Agent Lead makes while this page asks again is only on the
  // page once the server parts are drawn again, so its tile and its "new" mark show without a reload.
- const router=useRouter(); const madeCount=(rows:ConversationRecord['messages'])=>rows.reduce((sum,message)=>sum+(message.made?.length||0),0);
+ const router=useRouter(); const madeCount=(rows:ConversationRecord['messages'])=>rows.reduce((sum,message)=>sum+(message.cards?.filter(card=>card.kind==='made').length||0),0);
  const made=useRef(madeCount(initial.messages));
  // A queued turn keeps `pending` true from one run to the next; each run's start and reply add a message.
  const runKey=`${pending}:${messages.length}`; const drawnRun=useRef(runKey);
  useEffect(()=>{ if(drawnRun.current===runKey) return; drawnRun.current=runKey; router.refresh(); },[runKey,router]);
+ const asking=pending||requestWaits(messages);
  useEffect(()=>{
-  if(!pending) return;
-  let stopped=false;
+  if(!asking) return;
+  let stopped=false; let every=1500;
   const poll=async()=>{
    try {
     const response=await fetch(`/api/conversations?company=${company}&conversation=${conversation.id}`,{cache:'no-store'});
     if(response.ok&&!stopped) {
      const result=await response.json() as ConversationRecord; setRecord(result);
      const now=madeCount(result.messages); if(now>made.current) router.refresh(); made.current=now;
-     if(!result.pending) return;
+     if(!result.pending&&!requestWaits(result.messages)) return;
+     every=result.pending?1500:5000;
     }
    } catch { /* Hermes or the network is down: ask again. */ }
-   if(!stopped) timer=setTimeout(poll,1500);
+   if(!stopped) timer=setTimeout(poll,every);
   };
   let timer=setTimeout(poll,500);
   return ()=>{stopped=true;clearTimeout(timer);};
- },[pending,sent,company,conversation.id,router]);
+ },[asking,sent,company,conversation.id,router]);
  const count=(value:number)=>new Intl.NumberFormat(localeFor(language)).format(value);
  const time=(value:string)=>new Date(value).toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit'});
  const face=(size:number)=><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:conversation.face,name:conversation.agent_name}} size={size}/></span>;
@@ -73,7 +77,7 @@ export default function ConversationView({slug,agent,details,company,conversatio
    {team&&<PrivateLine agent={conversation.agent_name}/>}
    {welcome&&agent&&<LeadWelcome agent={agent} suggest={writer?text=>setDraft(current=>({text,n:(current?.n||0)+1})):undefined}/>}
    <ol className="turns" aria-label={t('conversationMessages')}>{messages.map(message=>message.kind==='saved'?<Fragment key={`saved${message.id}`}>{message.saved?.map(rule=>rule.sentTo?<SuggestedLine key={rule.id} to={rule.sentTo} cb={cb}/>:<SavedLine key={rule.id} slug={slug} agent={conversation.agent_name} rule={rule} c={c}/>)}</Fragment>
-    :message.kind==='decided'&&message.decided?<DecidedLine key={`decided${message.id}`} decided={message.decided} c={c} cb={cb}/>:message.author==='person'?<li key={`${message.kind||'m'}${message.id}`} className={`turn turn--user msg${message.kind==='queued'&&!message.failed?' is-queued':''}`} data-author="person" data-kind={message.kind}>
+    :message.kind==='decided'&&message.decided?<DecidedLine key={`decided${message.id}`} decided={message.decided} c={c} cb={cb} lead={<div className="sender">{face(20)}<bdi>{conversation.agent_name}</bdi><time className="sender__time" dateTime={message.created_at}>{time(message.created_at)}</time></div>}/>:message.author==='person'?<li key={`${message.kind||'m'}${message.id}`} className={`turn turn--user msg${message.kind==='queued'&&!message.failed?' is-queued':''}`} data-author="person" data-kind={message.kind}>
     <div className="bubble-row"><time className="bubble__time" dateTime={message.created_at}>{time(message.created_at)}</time><div className="bubble bubble--user" dir="auto">{message.body}</div></div>
     {message.kind==='queued'&&!message.failed&&<span className="queued"><ShellIcon name="clock"/>{c('conversationQueued')}</span>}
     {message.kind==='queued'&&message.failed&&<p className="note" role="alert">{c('conversationQueuedFailed')}</p>}
@@ -82,7 +86,7 @@ export default function ConversationView({slug,agent,details,company,conversatio
    </li>:<li key={`${message.kind||'m'}${message.id}`} className="turn turn--agent msg" data-author="agent" data-kind={message.kind}>
     <div className="sender">{face(20)}<bdi>{message.author_name}</bdi><time className="sender__time" dateTime={message.created_at}>{time(message.created_at)}</time></div>
     {message.body&&<div className="bubble bubble--agent" dir="auto">{message.body}</div>}
-    {message.made?.map(made=><MadeCard key={made.id} slug={slug} agent={made} c={c}/>)}
+    {message.cards?.map(card=>card.kind==='made'?<MadeCard key={card.agent.id} slug={slug} agent={card.agent}/>:<RequestCard key={`request${card.request.id}`} slug={slug} request={card.request}/>)}
    </li>)}</ol>
    {pending&&<p className="thinking convo-status" role="status">{working?c('conversationWorkingFor',conversation.agent_name,working):t('conversationWorking',conversation.agent_name)}</p>}
    {failed&&<p className="note convo-status" role="alert">{t('conversationReplyFailed')}</p>}
@@ -119,28 +123,13 @@ function SuggestedLine({to,cb}:{to:string[],cb:(key:string,...values:ReactNode[]
 }
 
 // An Owner's or a Manager's decision on it, where it happened among the messages (design-reference: lnApprove's notes):
-// approved, it is saved for the whole team; refused, it stays in this person's own work.
-function DecidedLine({decided,c,cb}:{decided:RuleDecision,c:(key:string,...values:unknown[])=>string,cb:(key:string,...values:ReactNode[])=>ReactNode[]}) {
+// approved, it is saved for the whole team; refused, it stays in this person's own work. An Owner's answer to this
+// person's request for an Agent (#17; design-reference: approveRequest and refuseRequest's messages) is drawn as Lead's
+// message, as the reference posts it, though it is read from the request rather than written.
+function DecidedLine({decided,c,cb,lead}:{decided:Decision,c:(key:string,...values:unknown[])=>string,cb:(key:string,...values:ReactNode[])=>ReactNode[],lead:ReactNode}) {
+ if(decided.kind==='request') return <li className="turn turn--agent msg" data-author="agent" data-kind="decided" data-decision={decided.made?'made':'declined'}>
+  {lead}<div className="bubble bubble--agent" dir="auto">{decided.made?cb('requestAnsweredMade',decided.by,decided.name):cb('requestAnsweredDeclined',decided.by,decided.name,decided.reason)}</div></li>;
  return decided.approved
   ?<li className="note note--saved" data-kind="decided" data-decision="approved"><ShellIcon name="check" className="note__icon"/><b className="note__saved">{c('ruleSaved')}</b><span>{cb('ruleApproved',decided.by,decided.rule)}</span></li>
   :<li className="note note--icon" data-kind="decided" data-decision="declined"><ShellIcon name="x" className="note__icon"/><span>{cb('ruleDeclined',decided.by)}</span></li>;
-}
-
-// The card for an Agent Lead made (design-reference: agentCardHTML): "Made", with "New" until the person who asked opens
-// it and its day after that; its name, job and apps; the three things no Agent does without a person (ADR 0006, 0008);
-// and the way into its own chat.
-const never=['madeAgentPublish','madeAgentSpend','madeAgentMessage'];
-function MadeCard({slug,agent,c}:{slug:string,agent:MadeAgent,c:(key:string,...values:unknown[])=>string}) {
- const {t,language}=useI18n(); const zone=useZone();
- return <div className="ac-card" role="group" aria-label={c('madeAgentLabel',agent.name)}>
-  <div className="hcard__top"><span className="badge badge--made" data-utc={agent.fresh?undefined:zone}><ShellIcon name="check"/>{c('madeAgentMade')} · {agent.fresh?t('agentNew'):madeDay(agent.created_at,language,zone)}</span></div>
-  <div className="card__head"><span aria-hidden="true"><CompanyAgentFace agent={agent} size={44}/></span><div className="card__titles"><span className="card__title"><bdi>{agent.name}</bdi></span></div></div>
-  <dl className="kv ac-kv">
-   <div className="kv__row"><dt>{c('madeAgentJob')}</dt><dd dir="auto">{agent.job}</dd></div>
-   <div className="kv__row"><dt>{c('madeAgentApps')}</dt><dd>{agent.apps.length?agent.apps.map((app,index)=><Fragment key={index}>{index>0&&c('madeAgentAppsJoin')}<bdi>{app}</bdi></Fragment>):c('madeAgentNoApps')}</dd></div>
-   <div className="kv__row"><dt>{c('madeAgentNever')}</dt><dd><ul className="ac-never">{never.map(key=><li key={key}><ShellIcon name="hand"/><span>{c(key)}</span></li>)}</ul></dd></div>
-  </dl>
-  <div className="ac-actions"><Link className="btn btn--primary" href={`/c/${slug}/chat/${agent.id}`}>{c('madeAgentOpen',agent.name)}</Link></div>
-  <p className="ac-tip"><ShellIcon name="chat"/><span>{c('madeAgentTip')}</span></p>
- </div>;
 }

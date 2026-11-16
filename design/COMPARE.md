@@ -68,11 +68,15 @@ The prototype has no URL routes. Its sidebar switches between four views (`data-
 | `made-agent` | Settings, Agents, Ads: the page of an Agent Lead made, with when and at whose request, and the rules it was told (#18) | `/c/rs-learning/settings?agent=61000000-0000-0000-0000-000000000002` (the fixture's Ads) |
 | `rule-saved` | Sidebar, the chat in which Omar told Ads a lasting rule (`th-rule-ads`), with the saved line under Ads's reply (#18) | none (a uuid path; with the fixture pass `--built-path /c/rs-learning/conversations/62000000-0000-0000-0000-000000000003`) |
 | `channel` | Sidebar, Channels, عام (`ch-general`): the general channel with its details panel (#23) | `/c/rs-learning/channels/69000000-0000-0000-0000-000000000001` (the seeded general channel; with the fixture it holds the reference's talk) |
+| `ask-agent` | Viewing as Youssef (team), his "Ask for an agent" tile: Lead's chat with the Member's hint (#17) | `/c/rs-learning/chat?new=agent` (with `--sign-in reviewer@example.com`) |
+| `request-sent` | Viewing as Youssef, his chat with Lead (`th-wa`) holding his request, not made yet (#17) | `/c/rs-learning/conversations/6b000000-0000-0000-0000-000000000003` (with `--sign-in reviewer@example.com`, over the visual state `agent-request`) |
+| `request-waiting` | Omar's chat with Lead (`th-wa-req`): Youssef's request with No and Make it. The product decides it where it waits (#17) | `/c/rs-learning/approvals` (over the visual state `agent-request`) |
+| `request-made` | Omar presses Make it, then viewing as Youssef, his chat with the made request (#17) | `/c/rs-learning/conversations/6b000000-0000-0000-0000-000000000003` (with `--sign-in reviewer@example.com`, over the visual state `agent-request-made`) |
 | `learning` | Settings, Learning: Youssef's rule for Ads in "Learning suggestions", with Decline and Make it team-wide (#25). The product decides it where it waits | `/c/rs-learning/approvals` (needs the fixture's suggestion) |
 
 The built settings overlay is route-backed: `/c/<slug>/settings` opens it, `?section=<name>` opens a section and `?agent=<id>` one Agent's page, so each state has one address. The `agent`, `made-card`, `made-agent`, `ready-roles`, `rule-saved` and `learning` rows need the comparison fixture (below); on the seed alone the overlay shows the Agents list. "none" means the product has no equivalent page yet. Pass `--built-path` once a ticket builds one, and add it to the table in the same change.
 
-Every screen starts from the prototype's default state. The "viewing as" switcher is never touched. To add a screen, add a row in `scripts/design-compare-lib.mjs` with its steps (`click`, `waitFor` or `scrollTo`, each with a CSS selector) and its built path.
+Every screen starts from the prototype's default state. The "viewing as" switcher is touched only by the alone screens and by `ask-agent`, `request-sent` and `request-made`, which show Youssef, a Contributor (#17). To add a screen, add a row in `scripts/design-compare-lib.mjs` with its steps (`click`, `waitFor` or `scrollTo`, each with a CSS selector) and its built path.
 
 ### Where the database exists
 
