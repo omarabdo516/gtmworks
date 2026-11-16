@@ -42,9 +42,12 @@ test('the keyboard alone opens Settings from the account menu, moves between sec
  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
  await openNavigation(page);
  const settings=page.getByRole('menu').getByRole('menuitem').filter({hasText:/^Settings/});
- // Opening the menu puts focus on its first item, Settings. A key press that lands while the page is still being
- // swapped in is repeated until the menu opens.
- await expect(async()=>{ if(!await settings.isVisible()) await page.locator('.sidebar #btn-me').press('Enter'); await expect(settings).toBeFocused({timeout:2000}); }).toPass({timeout:30000});
+ // Opening the menu puts focus on the chosen language, as the reference does (#173), and Home moves it to the first item,
+ // Settings. A key press that lands while the page is still being swapped in is repeated until the menu opens.
+ const chosen=page.getByRole('menu').getByRole('menuitemradio',{name:/^English/});
+ await expect(async()=>{ if(!await settings.isVisible()) await page.locator('.sidebar #btn-me').press('Enter'); await expect(chosen).toBeFocused({timeout:2000}); }).toPass({timeout:30000});
+ await page.keyboard.press('Home');
+ await expect(settings).toBeFocused();
  await page.keyboard.press('Enter');
  const overlay=page.getByRole('dialog',{name:'Settings'});
  await expect(overlay).toBeVisible();
