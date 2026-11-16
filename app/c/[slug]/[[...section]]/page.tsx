@@ -71,11 +71,13 @@ export default async function CompanyPage({params,searchParams}:{params:Promise<
  if(workData[2]?.data) { const known=new Set(workData[2].data.map((c:{id:number})=>c.id)); workData[2].data.push(...(myCards||[]).filter((c:{id:number})=>!known.has(c.id))); }
  // A Card open over the board (#116) is named in the board's address; one the reader's own board does not hold opens nothing.
  const sheetId=section==='work/board'&&!cardId?parseCard(query.card):null;
- const sheet=sheetId!=null&&workData[2]?.data?.some(c=>c.id===sheetId)?await cardSheet(db,{company:company.id,card:sheetId,slug,me:user.id,canWrite:canCreate,t,language}):undefined;
- // A chat's corner pill opens the board on its Card (#144); a Card's own Agent draws its face, name and job.
+ // A chat's corner pill opens the board on its Card (#144).
  const shownId=section==='work/board'&&!cardId?parseCard(query.show)??undefined:undefined;
- // The Card list is capped, so the shown Card is read by id (the reader's own rights, this Company) when the list missed it.
- if(shownId!=null&&workData[2]?.data&&!workData[2].data.some(c=>c.id===shownId)) { const {data:asked}=await db.from('work_cards').select('*').eq('company_id',company.id).eq('id',shownId).maybeSingle(); if(asked) workData[2].data.push(asked); }
+ // The Card list is capped, so a Card the address names (open over the board, or shown from a chat) is read by id (the
+ // reader's own rights, this Company) when the list missed it.
+ for(const named of [sheetId,shownId]) if(named!=null&&workData[2]?.data&&!workData[2].data.some(c=>c.id===named)) { const {data:asked}=await db.from('work_cards').select('*').eq('company_id',company.id).eq('id',named).maybeSingle(); if(asked) workData[2].data.push(asked); }
+ const sheet=sheetId!=null&&workData[2]?.data?.some(c=>c.id===sheetId)?await cardSheet(db,{company:company.id,card:sheetId,slug,me:user.id,canWrite:canCreate,t,language}):undefined;
+ // A Card a chat put on the board draws its own Agent's face, name and job (#144).
  const {data:cardAgents}=section==='work/board'?await db.from('hermes_agents').select('id,connection_id,name,speciality').eq('company_id',company.id):{data:[]};
  const {data:workMembers}=(isWork||section==='home'||section==='approvals')?await db.from('members').select('person_id,role,agent_role,people(name)').is('removed_at',null).eq('company_id',company.id):{data:[]};
  const {data:workAgents}=isWork?await db.rpc('company_agents',{c:company.id}):{data:[]};
