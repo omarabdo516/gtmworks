@@ -1,4 +1,7 @@
 import { expect, test, vi } from 'vitest';
+import { act } from 'react';
+import { hydrateRoot } from 'react-dom/client';
+import { renderToString } from 'react-dom/server';
 import { render } from 'vitest-browser-react';
 import { userEvent } from 'vitest/browser';
 import { MessageBox } from '@/app/conversation-composer';
@@ -83,4 +86,21 @@ test('in Arabic the box speaks Arabic and its text keeps its own direction', asy
  await expect.element(message).toHaveAttribute('dir', 'auto');
  await expect.element(screen.getByRole('button', { name: 'ابعت' })).toBeDisabled();
  await expect.element(screen.getByRole('button', { name: 'إضافات · قريبًا' })).toBeVisible();
+});
+
+test('text typed into the server-drawn box before the page hydrates is kept, and Send sends it', async () => {
+ const send = vi.fn<Send>(async () => null);
+ const page = <LanguageProvider language="en"><MessageBox placeholder="Write" send={send}/></LanguageProvider>;
+ const host = document.body.appendChild(document.createElement('div'));
+ host.innerHTML = renderToString(page);
+ host.querySelector('textarea')!.value = 'typed early';
+ const root = await act(async () => hydrateRoot(host, page));
+ try {
+  const sendButton = host.querySelector<HTMLButtonElement>('button[aria-label="Send"]')!;
+  await expect.poll(() => sendButton.disabled).toBe(false);
+  expect(host.querySelector('textarea')!.value).toBe('typed early');
+  await act(async () => sendButton.click());
+  await expect.poll(() => send.mock.calls.length).toBe(1);
+  expect(send.mock.calls[0][0]).toBe('typed early');
+ } finally { act(() => root.unmount()); host.remove(); }
 });

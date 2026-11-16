@@ -13,6 +13,7 @@
 .gw .ch-intro__h { font-size: var(--gw-fs-base); font-weight: 600; color: var(--gw-text-1); }
 .gw .ch-intro p { margin: 0; display: inline-flex; align-items: flex-start; gap: 6px; text-align: start; color: var(--gw-text-2); }
 .gw .ch-intro p .gw-icon { width: 14px; height: 14px; flex: none; margin-top: 2px; color: var(--gw-text-3); }
+.gw .ch-intro__only { padding-top: 4px; border-top: 0.5px solid var(--gw-border-2); }
 
 .gw .divider { align-self: center; margin-bottom: -8px; font-size: var(--gw-fs-xs); color: var(--gw-text-3); list-style: none; }
 .gw .turn--peer { align-items: flex-start; }
@@ -39,5 +40,29 @@
 .gw .details .tm-hint { display: flex; align-items: flex-start; gap: 6px; margin-inline: 8px; padding: 10px 0 8px; border-top: 0.5px solid var(--gw-border-2); font-size: var(--gw-fs-xs); line-height: 1.6; color: var(--gw-text-3); }
 .gw .details .tm-hint .gw-icon { width: 14px; height: 14px; flex: none; margin-top: 2px; }
 .gw .details .tm-hint + .tm-hint { border-top: 0; padding-top: 0; }
+/* Adding and taking out a team channel's Members and Agents (#24; design-reference: .tm-add, .tm-cand, .link-btn, .ch-who) */
+.gw .details .panel-row__icon { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; flex: none; color: var(--gw-text-2); }
+.gw .details .panel-row__icon .gw-icon { width: 18px; height: 18px; }
+.gw .details .tm-add { color: var(--gw-text-2); cursor: pointer; }
+.gw .details .tm-add .panel-row__t { color: var(--gw-text-2); }
+.gw .details :is(.tm-add, .tm-cand)::before { content: ""; position: absolute; top: 0; inset-inline: var(--s2); height: 0.5px; background: var(--gw-border-2); }
+.gw .details .btn {
+  display: inline-flex; align-items: center; justify-content: center; flex: none; height: 30px; padding: 0 var(--s3); border-radius: var(--gw-r-full);
+  font-size: var(--gw-fs-sm); font-weight: 600; white-space: nowrap; transition: background-color var(--gw-dur-fast) var(--gw-ease-out);
+}
+.gw .details .btn--secondary { background: var(--gw-btn2-bg); color: var(--gw-text-1); box-shadow: var(--gw-btn2-ring) 0 0 0 1px inset; }
+.gw .details :is(.ch-who, .set-err) { margin: 0; padding-inline: var(--s3); font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); text-wrap: pretty; }
+.gw .details .set-err { color: var(--gw-danger-text); }
+@media (hover: hover) {
+  .gw .details button.panel-row:hover { background: var(--gw-bg-hover); }
+  .gw .details .tm-add:hover .panel-row__t { color: var(--gw-text-1); }
+  .gw .details .btn--secondary:hover { background: var(--gw-btn2-hover); }
+}
+@media (max-width: 767px) {
+  /* 44px touch targets on a phone (PRODUCT.md): Remove and Add keep the reference's size with an invisible band. */
+  .gw .details :is(.link-btn, .btn) { position: relative; }
+  .gw .details .link-btn::before { content: ""; position: absolute; inset: -11px 0; }
+  .gw .details .btn::before { content: ""; position: absolute; inset: -7px 0; }
+}
 
 [dir="ltr"] .gw :is(.ch-intro__h, .details .panel-row__t, .details .panel-row__d) { unicode-bidi: plaintext; }
