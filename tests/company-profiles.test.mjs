@@ -243,56 +243,212 @@ test('the sign-in driver passes on states, a code and an https link, never a cre
   assert.deepEqual(await disconnectSignIn(target,'openai-codex'),{state:'disconnected'});
   assert.equal((await readSignIns(target)).signIns['openai-codex'].connected,false);
   assert.equal(fake.settings.profiles.get(name).credentials['openai-codex'],undefined);
+  // Nothing of the profile's own left to remove, or a profile the Engine does not serve, is not a failure.
+  assert.deepEqual(await disconnectSignIn(target,'openai-codex'),{state:'nothing'});
+  assert.deepEqual(await disconnectSignIn({...target,profile:'ag-a0000000000000000000000000000009'},'openai-codex'),{state:'nothing'});
   const again=await startSignIn(target,'openai-codex');
   assert.deepEqual(await cancelSignIn(target,again.session),{state:'cancelled'});
   assert.deepEqual(await pollSignIn(target,'openai-codex',again.session),{state:'expired'});
   assert.equal((await startSignIn(target,'gemini')).state,'failed');
   assert.equal((await startSignIn({...target,key:'wrong'},'openai-codex')).state,'refused');
+  fake.settings.managementStatus=503;
+  assert.deepEqual(await disconnectSignIn(target,'openai-codex'),{state:'failed'});
+  fake.settings.managementStatus=200;
+  // The root profile, given as `default`, is asked with no profile at all, and its sign-in lands there.
+  const root=install(fake);
+  fake.settings.managementRequests.length=0;
+  const atRoot=await startSignIn(root,'openai-codex');
+  assert.deepEqual(await pollSignIn(target,'openai-codex',atRoot.session),{state:'failed'},'a company profile cannot follow the root\'s sign-in');
+  fake.settings.approve(atRoot.session);
+  assert.deepEqual(await pollSignIn(root,'openai-codex',atRoot.session),{state:'approved'});
+  assert.ok(fake.settings.defaultCredentials['openai-codex']);
+  assert.deepEqual(await disconnectSignIn(root,'openai-codex'),{state:'disconnected'});
+  assert.deepEqual(await disconnectSignIn(root,'openai-codex'),{state:'nothing'});
+  const cancelled=await startSignIn(root,'openai-codex');
+  assert.deepEqual(await cancelSignIn(root,cancelled.session),{state:'cancelled'});
+  assert.deepEqual(fake.settings.managementRequests.map(request=>`${request.method} ${request.path}`),[
+   'POST /api/providers/oauth/openai-codex/start',`GET /api/providers/oauth/openai-codex/poll/${atRoot.session}?profile=${name}`,
+   `GET /api/providers/oauth/openai-codex/poll/${atRoot.session}`,'DELETE /api/providers/oauth/openai-codex','DELETE /api/providers/oauth/openai-codex',
+   'POST /api/providers/oauth/openai-codex/start',`DELETE /api/providers/oauth/sessions/${cancelled.session}`]);
  } finally { await fake.close(); }
 });
 
-// The person's own session (is_company_owner, company_engine_target) and the service role reading the key.
-function sessions(fake,{owner}) {
- const asked=[];
- const db={rpc:async(name,args)=>{ asked.push(name);
+// The person's own session (is_company_owner, company_engine_target, record_subscription_change) and the service role
+// reading the key. `oneCompany` is what the database says of the install, `agents` the Company's Agent profiles, and
+// `logged` each change the Company's log was asked to record.
+function sessions(fake,{owner,oneCompany=false,agents=[],logFails=false}) {
+ const asked=[]; const logged=[];
+ const db={rpc:async(name,args)=>{ asked.push({name,args});
   if(name==='is_company_owner') return {data:owner,error:null};
-  if(name==='company_engine_target') return {data:[{connection:'f0000000-0000-0000-0000-000000000002',address:fake.address,profile:companyProfile(args.c)}],error:null};
+  if(name==='company_engine_target') return {data:[{connection:'f0000000-0000-0000-0000-000000000002',address:fake.address,profile:companyProfile(args.c),one_company:oneCompany,profiles:[companyProfile(args.c),...agents]}],error:null};
+  if(name==='record_subscription_change') { logged.push(args); return logFails?{data:null,error:{code:'XX000',message:'the database is down'}}:{data:null,error:null}; }
   return {data:null,error:{message:'unexpected'}}; }};
  const key=encryptSecret('test-only-key',encryptionKey);
  const service={from:()=>({select:()=>({eq:()=>({eq:()=>({maybeSingle:async()=>({data:{key_encrypted:key},error:null})})})})})};
- return {db,service,asked};
+ return {db,service,asked,logged};
 }
+// The fake's management listener is not on port 9119 of the run address, so the driver is pointed at it.
+const pointedAt=fake=>{ const at=target=>({...target,managementAddress:fake.managementAddress});
+ return {start:(target,provider)=>startSignIn(at(target),provider),poll:(target,provider,session)=>pollSignIn(at(target),provider,session),
+  cancel:(target,session)=>cancelSignIn(at(target),session),disconnect:(target,provider)=>disconnectSignIn(at(target),provider),read:target=>readSignIns(at(target))}; };
+const ask=(person,driver,change)=>changeCompanySignIn(person.db,person.service,{company:two,provider:'openai-codex',encryptionKey,driver,...change});
+const states=read=>read.signIns&&Object.fromEntries(Object.entries(read.signIns).map(([id,found])=>[id,found.state]));
+const signInPaths=fake=>fake.settings.managementRequests.filter(request=>request.path.startsWith('/api/providers/oauth/')).map(request=>`${request.method} ${request.path}`);
 
 test('only an Owner starts, follows or removes a company sign-in, checked on the server for every step', async () => {
  const fake=await fakeHermes({managementPort:0});
  try {
-  // The fake's management listener is not on port 9119 of the run address, so the driver is pointed at it.
-  const driver={start:(target,provider)=>startSignIn({...target,managementAddress:fake.managementAddress},provider),
-   poll:(target,provider,session)=>pollSignIn({...target,managementAddress:fake.managementAddress},provider,session),
-   disconnect:(target,provider)=>disconnectSignIn({...target,managementAddress:fake.managementAddress},provider),
-   read:target=>readSignIns({...target,managementAddress:fake.managementAddress})};
+  const driver=pointedAt(fake);
   await provideProfile(install(fake),{name:companyProfile(two),soul:'',config:levelConfig(1),forbidden:alwaysOff});
-  const member=sessions(fake,{owner:false});
-  for(const intent of ['start','poll','cancel','disconnect']) {
-   const refused=await changeCompanySignIn(member.db,member.service,{company:two,provider:'openai-codex',intent,session:'abcdefgh',encryptionKey,driver});
-   assert.deepEqual(refused,{status:403,body:{error:'signInNotAllowed'}});
+  for(const oneCompany of [false,true]) {
+   const member=sessions(fake,{owner:false,oneCompany});
+   for(const intent of ['start','poll','cancel','disconnect']) assert.deepEqual(await ask(member,driver,{intent,session:'abcdefgh'}),{status:403,body:{error:'signInNotAllowed'}});
+   assert.deepEqual(member.logged,[]);
   }
   assert.equal(fake.settings.signInSessions.size,0,'a member never reaches Hermes');
   // A member still reads whether the company is connected.
-  assert.deepEqual(await readCompanySignIns(member.db,member.service,{company:two,encryptionKey,driver}),{profile:companyProfile(two),signIns:{'openai-codex':{connected:false,shared:false,flow:'device_code'},anthropic:{connected:false,shared:false,flow:'external'}}});
+  const member=sessions(fake,{owner:false});
+  assert.deepEqual(await readCompanySignIns(member.db,member.service,{company:two,encryptionKey,driver}),{profile:companyProfile(two),oneCompany:false,signIns:{'openai-codex':{state:'notConnected',flow:'device_code'},anthropic:{state:'notConnected',flow:'external'}}});
   const owner=sessions(fake,{owner:true});
-  const started=await changeCompanySignIn(owner.db,owner.service,{company:two,provider:'openai-codex',intent:'start',encryptionKey,driver});
+  const started=await ask(owner,driver,{intent:'start'});
   assert.equal(started.status,200);
   assert.deepEqual(Object.keys(started.body).sort(),['code','expiresIn','interval','link','session']);
-  const poll=()=>changeCompanySignIn(owner.db,owner.service,{company:two,provider:'openai-codex',intent:'poll',session:started.body.session,encryptionKey,driver});
+  const poll=()=>ask(owner,driver,{intent:'poll',session:started.body.session});
   assert.deepEqual(await poll(),{status:200,body:{status:'pending'}});
   fake.settings.approve(started.body.session);
   assert.deepEqual(await poll(),{status:200,body:{status:'approved'}});
-  assert.deepEqual(await changeCompanySignIn(owner.db,owner.service,{company:two,provider:'openai-codex',intent:'disconnect',encryptionKey,driver}),{status:200,body:{status:'disconnected'}});
+  assert.deepEqual(await ask(owner,driver,{intent:'disconnect'}),{status:200,body:{status:'disconnected'}});
   assert.equal(fake.settings.profiles.get(companyProfile(two)).credentials['openai-codex'],undefined);
-  assert.deepEqual(await changeCompanySignIn(owner.db,owner.service,{company:two,provider:'anthropic',intent:'start',encryptionKey,driver}),{status:409,body:{error:'signInTerminalOnly',profile:companyProfile(two)}});
-  assert.deepEqual(await changeCompanySignIn(owner.db,owner.service,{company:two,provider:'gemini',intent:'start',encryptionKey,driver}),{status:400,body:{error:'signInInvalid'}});
+  assert.deepEqual(owner.logged,[{c:two,provider:'openai-codex',connected:true,session:started.body.session},{c:two,provider:'openai-codex',connected:false,session:null}],'one log row asked for per connect and disconnect');
+  assert.deepEqual(await ask(owner,driver,{provider:'anthropic',intent:'start'}),{status:409,body:{error:'signInTerminalOnly',profile:companyProfile(two)}});
+  assert.deepEqual(await ask(owner,driver,{provider:'gemini',intent:'start'}),{status:400,body:{error:'signInInvalid'}});
  } finally { await fake.close(); }
+});
+
+const agentProfile='ag-a0000000000000000000000000000001';
+test('on an install with one Company the Owner signs in once on the root profile, and an Agent profile with none of its own can then answer', async () => {
+ const fake=await fakeHermes({managementPort:0});
+ try {
+  const driver=pointedAt(fake);
+  fake.settings.seedModel={provider:'openai-codex',model:'gpt-5.5'};
+  await provideProfile(install(fake),{name:companyProfile(two),soul:'',config:levelConfig(1),forbidden:alwaysOff});
+  const engine=engineFor(install(fake));
+  const provideWriter=()=>engine.provideAgent({name:agentProfile,instructions:'Write.',level:1});
+  assert.deepEqual(await provideWriter(),{state:'noModel'},'no sign-in yet');
+  const owner=sessions(fake,{owner:true,oneCompany:true,agents:[agentProfile]});
+  const read=()=>readCompanySignIns(owner.db,owner.service,{company:two,encryptionKey,driver});
+  assert.deepEqual(await read(),{profile:companyProfile(two),oneCompany:true,signIns:{'openai-codex':{state:'notConnected',flow:'device_code'},anthropic:{state:'notConnected',flow:'external'}}});
+  fake.settings.managementRequests.length=0;
+  const started=await ask(owner,driver,{intent:'start'});
+  assert.equal(started.status,200);
+  const {session}=started.body;
+  assert.equal(fake.settings.signInSessions.get(session).profile,'default');
+  assert.deepEqual(await ask(owner,driver,{intent:'poll',session}),{status:200,body:{status:'pending'}});
+  fake.settings.approve(session);
+  assert.deepEqual(await ask(owner,driver,{intent:'poll',session}),{status:200,body:{status:'approved'}});
+  assert.deepEqual(signInPaths(fake),['POST /api/providers/oauth/openai-codex/start',`GET /api/providers/oauth/openai-codex/poll/${session}`,`GET /api/providers/oauth/openai-codex/poll/${session}`],'every sign-in request names no profile: the root');
+  assert.ok(fake.settings.defaultCredentials['openai-codex']);
+  assert.equal(fake.settings.profiles.get(companyProfile(two)).credentials['openai-codex'],undefined);
+  assert.deepEqual(states(await read()),{'openai-codex':'connected',anthropic:'notConnected'});
+  assert.deepEqual(owner.logged,[{c:two,provider:'openai-codex',connected:true,session}]);
+  // The Engine lends the root's sign-in to a profile with none of its own.
+  assert.deepEqual(await provideWriter(),{state:'provided'});
+  assert.deepEqual(fake.settings.profiles.get(agentProfile).credentials,{});
+  // Claude is the install's command, run on the root profile.
+  assert.deepEqual(await ask(owner,driver,{provider:'anthropic',intent:'start'}),{status:409,body:{error:'signInTerminalOnly'}});
+  const cancelled=await ask(owner,driver,{intent:'start'});
+  assert.deepEqual(await ask(owner,driver,{intent:'cancel',session:cancelled.body.session}),{status:200,body:{status:'cancelled'}});
+  assert.equal(fake.settings.signInSessions.has(cancelled.body.session),false);
+ } finally { await fake.close(); }
+});
+
+test('on one Company an older sign-in in the Company profile serves the main Agent only; Disconnect removes it, the root\'s and its Agents\', and no other Company\'s', async () => {
+ const fake=await fakeHermes({managementPort:0});
+ try {
+  const driver=pointedAt(fake);
+  for(const name of [companyProfile(two),agentProfile,companyProfile(three)]) await provideProfile(install(fake),{name,soul:'',config:levelConfig(1),forbidden:alwaysOff});
+  const credentials=name=>fake.settings.profiles.get(name).credentials;
+  credentials(companyProfile(two))['openai-codex']='company-codex-token';
+  credentials(agentProfile)['openai-codex']='agent-codex-token';
+  credentials(companyProfile(three))['openai-codex']='other-company-token';
+  const owner=sessions(fake,{owner:true,oneCompany:true,agents:[agentProfile]});
+  const read=()=>readCompanySignIns(owner.db,owner.service,{company:two,encryptionKey,driver});
+  assert.deepEqual(states(await read()),{'openai-codex':'mainAgentOnly',anthropic:'notConnected'});
+  const started=await ask(owner,driver,{intent:'start'});
+  fake.settings.approve(started.body.session);
+  assert.deepEqual(await ask(owner,driver,{intent:'poll',session:started.body.session}),{status:200,body:{status:'approved'}});
+  assert.deepEqual(states(await read()),{'openai-codex':'connected',anthropic:'notConnected'});
+  assert.equal(credentials(companyProfile(two))['openai-codex'],'company-codex-token','the older sign-in is kept until the Owner disconnects');
+  fake.settings.managementRequests.length=0;
+  assert.deepEqual(await ask(owner,driver,{intent:'disconnect'}),{status:200,body:{status:'disconnected'}});
+  assert.deepEqual(signInPaths(fake),['DELETE /api/providers/oauth/openai-codex',`DELETE /api/providers/oauth/openai-codex?profile=${companyProfile(two)}`,`DELETE /api/providers/oauth/openai-codex?profile=${agentProfile}`]);
+  assert.deepEqual([fake.settings.defaultCredentials['openai-codex'],credentials(companyProfile(two))['openai-codex'],credentials(agentProfile)['openai-codex']],[undefined,undefined,undefined]);
+  assert.equal(credentials(companyProfile(three))['openai-codex'],'other-company-token');
+  assert.deepEqual(states(await read()),{'openai-codex':'notConnected',anthropic:'notConnected'});
+  assert.deepEqual(owner.logged.map(change=>[change.provider,change.connected]),[['openai-codex',true],['openai-codex',false]]);
+  // Nothing left anywhere: Disconnect still answers, and logs nothing more.
+  assert.deepEqual(await ask(owner,driver,{intent:'disconnect'}),{status:200,body:{status:'disconnected'}});
+  assert.equal(owner.logged.length,2);
+  // A profile the Engine cannot reach makes the answer an error, and what the others removed is still logged.
+  credentials(companyProfile(two))['openai-codex']='company-codex-token';
+  const unreachableAgent={...driver,disconnect:(target,provider)=>target.profile===agentProfile?Promise.resolve({state:'unreachable'}):driver.disconnect(target,provider)};
+  assert.deepEqual(await ask(owner,unreachableAgent,{intent:'disconnect'}),{status:503,body:{error:'signInFailed'}});
+  assert.equal(credentials(companyProfile(two))['openai-codex'],undefined);
+  assert.deepEqual(owner.logged.map(change=>change.connected),[true,false,false]);
+ } finally { await fake.close(); }
+});
+
+test('on an install with several Companies a sign-in on the root profile shows as shared, and the Owner\'s steps never reach the root', async () => {
+ const fake=await fakeHermes({managementPort:0});
+ try {
+  const driver=pointedAt(fake);
+  await provideProfile(install(fake),{name:companyProfile(two),soul:'',config:levelConfig(1),forbidden:alwaysOff});
+  fake.settings.defaultCredentials['openai-codex']='root-codex-token';
+  const owner=sessions(fake,{owner:true,agents:[agentProfile]});
+  const read=()=>readCompanySignIns(owner.db,owner.service,{company:two,encryptionKey,driver});
+  assert.deepEqual(states(await read()),{'openai-codex':'shared',anthropic:'notConnected'});
+  fake.settings.managementRequests.length=0;
+  const started=await ask(owner,driver,{intent:'start'});
+  assert.equal(fake.settings.signInSessions.get(started.body.session).profile,companyProfile(two));
+  fake.settings.approve(started.body.session);
+  assert.deepEqual(await ask(owner,driver,{intent:'poll',session:started.body.session}),{status:200,body:{status:'approved'}});
+  assert.deepEqual(states(await read()),{'openai-codex':'shared',anthropic:'notConnected'},'never the Company\'s while the root holds one');
+  assert.deepEqual(await ask(owner,driver,{intent:'disconnect'}),{status:200,body:{status:'disconnected'}});
+  assert.ok(signInPaths(fake).every(path=>path.includes(`?profile=${companyProfile(two)}`)),signInPaths(fake).join('\n'));
+  assert.equal(fake.settings.defaultCredentials['openai-codex'],'root-codex-token');
+  delete fake.settings.defaultCredentials['openai-codex'];
+  assert.deepEqual(states(await read()),{'openai-codex':'notConnected',anthropic:'notConnected'});
+ } finally { await fake.close(); }
+});
+
+test('no credential reaches an answer, a log row or the console, and a log that cannot be written fails no step', async () => {
+ const fake=await fakeHermes({managementPort:0});
+ const printed=[]; const kept={};
+ for(const level of ['log','info','warn','error','debug']) { kept[level]=console[level]; console[level]=(...args)=>{ printed.push(args.map(String).join(' ')); }; }
+ try {
+  const driver=pointedAt(fake);
+  const token='codex-token-known-0123456789abcdef';
+  await provideProfile(install(fake),{name:companyProfile(two),soul:'',config:levelConfig(1),forbidden:alwaysOff});
+  fake.settings.defaultCredentials['openai-codex']=token;
+  fake.settings.profiles.get(companyProfile(two)).credentials['openai-codex']=token;
+  const owner=sessions(fake,{owner:true,oneCompany:true,logFails:true});
+  const answers=[await readCompanySignIns(owner.db,owner.service,{company:two,encryptionKey,driver})];
+  const started=await ask(owner,driver,{intent:'start'});
+  fake.settings.approve(started.body.session);
+  answers.push(started,await ask(owner,driver,{intent:'poll',session:started.body.session}));
+  const approved=fake.settings.defaultCredentials['openai-codex'];
+  answers.push(await readCompanySignIns(owner.db,owner.service,{company:two,encryptionKey,driver}),await ask(owner,driver,{intent:'disconnect'}),
+   await readCompanySignIns(owner.db,owner.service,{company:two,encryptionKey,driver}));
+  assert.deepEqual(answers.slice(1,3).map(answer=>answer.status),[200,200]);
+  assert.deepEqual(answers[4],{status:200,body:{status:'disconnected'}});
+  assert.equal(owner.logged.length,2,'both changes were asked to be logged');
+  assert.ok(printed.length>0,'the failed log writes are reported');
+  const seen=JSON.stringify([answers,owner.asked,printed]);
+  for(const secret of [token,token.slice(-6),approved,approved.slice(-6)]) assert.ok(!seen.includes(secret),secret);
+ } finally {
+  for(const level of Object.keys(kept)) console[level]=kept[level];
+  await fake.close();
+ }
 });
 
 test('a level change and a move read in the company log in both languages', () => {
