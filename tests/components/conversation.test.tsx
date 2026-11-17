@@ -5,7 +5,7 @@ import { page } from 'vitest/browser';
 import ConversationView, { ConversationLoaded } from '@/app/c/[slug]/conversations/[id]/conversation';
 import { LanguageProvider } from '@/lib/i18n-client';
 import type { ConversationRecord } from '@/lib/conversation-record';
-import type { AgentRequestView } from '@/lib/conversations';
+import { latestEnded, shown, type AgentRequestView } from '@/lib/conversations';
 import '@/app/shell.css';
 // The loaded chat once its record is read, as the page streams it.
 const Arrived = ({ record, team }: { record: Promise<ConversationRecord>, team: boolean }) => <ConversationLoaded initial={use(record)} team={team}/>;
@@ -100,4 +100,22 @@ test('Lead\'s sentence to try in a new workspace keeps the text already typed an
  await screen.getByRole('button', { name: 'I want someone to run our Meta and Google ads' }).click();
  await expect.element(field).toHaveValue('First, the numbers\nI want someone to run our Meta and Google ads');
  await expect.element(field).toHaveFocus();
+});
+
+// #227: a reply that is only a card is a whole reply. Its Run is recorded completed, so the turn is the card with no
+// failure line; the same turn recorded failed shows the line.
+const asking = { id: 1, author: 'person' as const, author_name: 'Omar', body: 'Plan the December campaign', created_at: at, run_id: 'run-1' };
+const draft = { run_id: 'run-1', at, card: { kind: 'reply' as const, card: { id: 5, kind: 'draft' as const, title: 'Campaign plan', line: 'Draft · Meta Ads', rows: [{ label: 'Goal', value: 'WhatsApp leads' }] } } };
+const onlyCard = (outcome: 'completed' | 'failed') => {
+ const usage = [{ run_id: 'run-1', outcome, input_tokens: null, output_tokens: null }];
+ return talk(shown([asking], usage, [draft], 'Mona'), { failed: latestEnded([asking], usage) });
+};
+for (const [language, line] of [['en', 'The agent could not finish this reply. Send the message again to retry.'], ['ar', 'الوكيل مقدرش يكمّل الرد ده. ابعت الرسالة تاني عشان تجرّب من الأول.']] as const) test(`in ${language} a reply that is only a card shows the card and no failure line, and a failed one shows the line`, async () => {
+ const done = await render(view(onlyCard('completed'), language));
+ await expect.element(done.getByRole('group', { name: 'Campaign plan' })).toBeVisible();
+ await expect.element(done.getByRole('alert').filter({ hasText: line })).not.toBeInTheDocument();
+ await done.unmount();
+ const failed = await render(view(onlyCard('failed'), language));
+ await expect.element(failed.getByRole('group', { name: 'Campaign plan' })).toBeVisible();
+ await expect.element(failed.getByRole('alert').filter({ hasText: line })).toBeVisible();
 });
