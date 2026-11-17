@@ -723,7 +723,7 @@
 @media (hover: hover) {
   .gw .reply-card .btn--primary:hover:not(:disabled) { background: var(--gw-primary-hover); }
 }
-.gw .reply-card :is(.hand__error, .permission__error) { margin: -6px 0 0; padding: 0 16px 16px; font-size: var(--gw-fs-sm); color: var(--gw-danger-text); }
+.gw .reply-card :is(.hand__error, .permission__error, .connect__error) { margin: -6px 0 0; padding: 0 16px 16px; font-size: var(--gw-fs-sm); color: var(--gw-danger-text); }
 .gw .reply-card.is-just .card__outcome .gw-icon path { stroke-dasharray: 40; stroke-dashoffset: 40; animation: gw-draw-check 380ms var(--gw-ease-out) 140ms forwards; }
 /* A request to allow an action (#163; design-reference: the approval card, .card, .kv, .card__actions, .card__outcome,
    .card.is-just): the hand card's frame, rows, buttons and outcome line, as one card system. Its title may be the

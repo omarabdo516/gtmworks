@@ -115,3 +115,14 @@ test('the role is read again on every request: a role lowered between two reques
   assert.equal(await permitted({ auth: { getUser: async () => ({ data: { user: null } }) } }, 'signedIn'), false);
   assert.equal(await permitted({}, 'public'), true);
 });
+
+// #203: "Connect" on an Agent's connect card is #30's own route, so its POST lets the Owner through and refuses every
+// other Role before anything is asked; "Later" goes through the conversation route, where the database refuses anyone but
+// the Owner (supabase/tests/connect_cards.sql).
+test('the connect card\'s Connect is the Owner\'s alone: a Manager, a Contributor and a Viewer are refused by the route', async () => {
+  const company = '10000000-0000-0000-0000-000000000001';
+  const level = requiredFor(routePermissions, 'app/api/company-apps/route.ts', 'POST');
+  const outcomes = [];
+  for (const role of ['owner', 'manager', 'contributor', 'viewer']) outcomes.push([role, await permitted(members([role]).db, level, company)]);
+  assert.deepEqual(outcomes, [['owner', true], ['manager', false], ['contributor', false], ['viewer', false]]);
+});
