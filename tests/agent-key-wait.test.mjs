@@ -25,9 +25,9 @@ const rowsOf=extra=>[{profile:space,kind:'space',agent:null,name:null},{profile:
 // The person's own session and the service role, as the route hands them over; every call of either is recorded.
 // `waits` are the Agent profiles the database holds for the key: finish_provider_key_change ends those a set reached
 // and answers the rest while the key is held. `failing` names the service-role calls that answer an error, and
-// `failingOnce` those that answer one the first time only. `joined` are rows listed from the second read of the
+// `failingOnce` those that answer one the first time only, and `failingSecond` the second time only. `joined` are rows listed from the second read of the
 // profiles on, as an Agent made while a set wrote is.
-function sessions(fake,{owner=true,extra=[],waits=[],failing=[],failingOnce=[],joined=[]}={}) {
+function sessions(fake,{owner=true,extra=[],waits=[],failing=[],failingOnce=[],failingSecond=[],joined=[]}={}) {
  const asked=[]; const unfinished=new Map(); const waiting=new Set(waits); const failedOnce=new Set();
  const db={rpc:async(name,args)=>{ asked.push({name,args});
   if(name==='is_company_owner') return {data:owner,error:null};
@@ -40,7 +40,8 @@ function sessions(fake,{owner=true,extra=[],waits=[],failing=[],failingOnce=[],j
  const key=encryptSecret('test-only-key',encryptionKey);
  const service={from:(...args)=>{ asked.push({name:'from',args}); return {select:()=>({eq:()=>({eq:()=>({maybeSingle:async()=>({data:{key_encrypted:key},error:null})})})})}; },
   rpc:async(name,args)=>{ asked.push({name,args,engineAsked:fake.settings.managementRequests.length});
-   if(failing.includes(name)||failingOnce.includes(name)&&!failedOnce.has(name)&&failedOnce.add(name)) return {data:null,error:{code:'XX000',message:'the database is down'}};
+   const second=failingSecond.includes(name)&&asked.filter(call=>call.name===name).length===2;
+   if(second||failing.includes(name)||failingOnce.includes(name)&&!failedOnce.has(name)&&failedOnce.add(name)) return {data:null,error:{code:'XX000',message:'the database is down'}};
    if(['begin_provider_key_change','forget_agent_profile_leftovers','settle_provider_key_holds'].includes(name)) return {data:null,error:null};
    if(name==='finish_provider_key_change') { if(args.now_held!==true) return {data:[],error:null}; for(const profile of args.reached) waiting.delete(profile); return {data:[...waiting],error:null}; }
    return {data:null,error:{message:'unexpected'}}; }};
@@ -94,10 +95,10 @@ test('a set the Engine never answered is settled from what the space holds, read
  try {
   made(fake,space,main,writer);
   fake.settings.profiles.get(space).env={OPENROUTER_API_KEY:known};
-  const {outcome,calls}=await leadMakes(fake,{lead_key_settle:{company,space},settle_provider_key_holds:null});
+  const {outcome,calls}=await leadMakes(fake,{lead_key_settle:{company,space,seen:3},settle_provider_key_holds:null});
   assert.equal(outcome.state,'created');
   assert.deepEqual(calls.map(([name])=>name),['lead_agent_profile','lead_key_settle','settle_provider_key_holds','lead_create_agent']);
-  assert.deepEqual(calls[2][1],{c:company,held:['openrouter']});
+  assert.deepEqual(calls[2][1],{c:company,held:['openrouter'],seen:3},'with the version the read was taken at');
   assert.ok(!JSON.stringify(calls).includes(known),'no key reaches the database');
  } finally { await fake.close(); }
 });
@@ -284,6 +285,19 @@ test('a late round writes only the late profiles, never the space again, one it 
   assert.deepEqual(owner.calls('record_unfinished_provider_key'),[{c:company,key_provider:'openrouter',missed:[lost]}],'the late profile it could not write is kept as unfinished');
   assert.deepEqual(set.body.agents,[{agent:agentId(main),name:'Lead',written:true},{agent:agentId(writer),name:'Writer',written:true},
    {agent:agentId(lost),name:'Lost',written:false},{agent:agentId(late),name:'Late',written:true}],'the answer names the Agents the late rounds reached or missed after those listed first');
+ } finally { await fake.close(); }
+});
+
+test('when the finish after a late round fails, the set finishes once more naming the late profile too, so its wait ends', async () => {
+ const fake=await fakeHermes();
+ try {
+  const late=`ag-e${tail}`;
+  made(fake,space,main,writer,late);
+  const owner=sessions(fake,{waits:[late],joined:[{profile:late,kind:'agent',agent:agentId(late),name:'Late'}],failingSecond:['finish_provider_key_change']});
+  assert.equal((await change(owner,fake,{intent:'set',value:known})).status,200);
+  assert.equal(envOf(fake,late).OPENROUTER_API_KEY,known);
+  assert.deepEqual(owner.calls('finish_provider_key_change').map(args=>args.reached),[[main,writer],[late],[main,writer,late]],'the failed finish is made once more with every profile written');
+  assert.deepEqual([...owner.waiting],[],'and the late Agent no longer waits');
  } finally { await fake.close(); }
 });
 

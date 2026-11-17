@@ -12,10 +12,10 @@
 -- begin_provider_key_change before the Engine is asked anything, under the lock lead_create_agent takes, so an Agent made
 -- while a change is under way waits; finish_provider_key_change with the Engine's answer, under that lock too; and
 -- settle_provider_key_holds with what the Company's space holds, read by the Owner's read or, once a set the Engine
--- never answered is ten minutes old, by Lead's next create (lead_key_settle). A change counts for ten minutes from its
--- begin, so a process that died mid-change holds no Company for good. A set the Engine never answered may have landed,
--- so it counts until the space settles it: an Agent made meanwhile waits on its own profile, never on Lead's, and an
--- Engine that cannot say leaves it counted. finish and settle are the only ends of a wait, so no Owner ends one from
+-- never answered, or a change a stopped process never finished, is ten minutes old, by Lead's next create
+-- (lead_key_settle), with the version it read so a change begun or ended meanwhile is never undone. A change and a set
+-- the Engine never answered may have landed, so each counts until the space settles it: an Agent made meanwhile waits
+-- on its own profile, never on Lead's, and an Engine that cannot say leaves it counted. finish and settle are the only ends of a wait, so no Owner ends one from
 -- the browser.
 --
 -- Nothing existing is rewritten: the new tables start empty but company_key_holds, which is filled once from each
@@ -83,6 +83,9 @@ create table public.company_key_holds (
  -- When the last change began, or a set was finished unanswered: the start of the window in which a change counts, and
  -- in which a read keeps an unanswered set held although the space does not show its key.
  changed_at timestamptz,
+ -- Counts every begin and finish: a read of the space taken in another process applies only when no change began or
+ -- ended since the version it saw (lead_key_settle, settle_provider_key_holds).
+ version bigint not null default 0,
  primary key (company_id,provider)
 );
 alter table public.company_key_holds enable row level security;
@@ -94,11 +97,11 @@ insert into public.company_key_holds(company_id,provider,held,changing)
  select distinct on (a.company_id,a.provider) a.company_id,a.provider,a.action='provider_key_set',false from public.company_audit a
   where a.action in ('provider_key_set','provider_key_removed') order by a.company_id,a.provider,a.created_at desc,a.id desc;
 
--- Some provider's key is held, a change of one began within ten minutes, or a set of one went unanswered and the space has
--- not settled it yet: an Agent made now waits for the Owner's next set.
+-- Some provider's key is held, a change of one has not finished, or a set of one went unanswered, and the space has not
+-- settled it yet: an Agent made now waits for the Owner's next set.
 create function public.company_holds_provider_key(c uuid) returns boolean language sql stable security definer set search_path='' as $$
  select exists(select 1 from public.company_key_holds h where h.company_id=c
-  and (h.held or (h.changing and h.changed_at>now()-interval '10 minutes') or h.uncertain));
+  and (h.held or h.changing or h.uncertain));
 $$;
 revoke all on function public.company_holds_provider_key(uuid) from public,anon,authenticated,service_role;
 
@@ -110,8 +113,8 @@ language plpgsql security definer set search_path='' as $$
 begin
  if coalesce(key_provider,'') !~ '^[a-z0-9][a-z0-9._-]{0,63}$' then raise exception 'keyInvalid' using errcode='22023'; end if;
  perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
- insert into public.company_key_holds(company_id,provider,held,changing,changed_at) values(c,key_provider,false,true,now())
-  on conflict (company_id,provider) do update set changing=true,changed_at=now();
+ insert into public.company_key_holds(company_id,provider,held,changing,changed_at,version) values(c,key_provider,false,true,now(),1)
+  on conflict (company_id,provider) do update set changing=true,changed_at=now(),version=public.company_key_holds.version+1;
 end $$;
 revoke all on function public.begin_provider_key_change(uuid,text) from public,anon,authenticated;
 grant execute on function public.begin_provider_key_change(uuid,text) to service_role;
@@ -130,12 +133,12 @@ begin
  if coalesce(key_provider,'') !~ '^[a-z0-9][a-z0-9._-]{0,63}$' then raise exception 'keyInvalid' using errcode='22023'; end if;
  perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
  -- A change whose begin the database did not take has no row yet: its finish records the hold all the same.
- insert into public.company_key_holds as h(company_id,provider,held,changing,uncertain,changed_at)
-  values(c,key_provider,case when not answered then false else coalesce(now_held,false) end,false,coalesce(not answered,false),case when not answered then now() end)
+ insert into public.company_key_holds as h(company_id,provider,held,changing,uncertain,changed_at,version)
+  values(c,key_provider,case when not answered then false else coalesce(now_held,false) end,false,coalesce(not answered,false),case when not answered then now() end,1)
   -- An unanswered set keeps the hold the Company had: its mark holds the Company's Agents until the space settles it.
   on conflict (company_id,provider) do update set held=case when not answered then h.held else coalesce(now_held,h.held) end,changing=false,
    uncertain=case when not answered then true when answered and now_held then false else h.uncertain end,
-   changed_at=case when not answered then now() else h.changed_at end
+   changed_at=case when not answered then now() else h.changed_at end,version=h.version+1
   returning h.held into kept;
  if not public.company_holds_provider_key(c) then
   delete from public.agent_key_waits w where w.company_id=c;
@@ -157,19 +160,21 @@ grant execute on function public.finish_provider_key_change(uuid,text,boolean,te
 -- goes with it. A seed the log got wrong, or a change the previous app version made, is right again from the next read.
 -- A name that is no provider's is skipped, so one odd name the Engine lists never keeps a Company unsettled. A space
 -- holding no key ends every wait, as a removal does.
-create function public.settle_provider_key_holds(c uuid, held text[]) returns void
+create function public.settle_provider_key_holds(c uuid, held text[], seen bigint default null) returns void
 language plpgsql security definer set search_path='' as $$
 declare since timestamptz:=now()-interval '10 minutes';
 begin
  if held is null then raise exception 'keyInvalid' using errcode='22023'; end if;
+ -- A read taken before a change began or ended in another process says nothing about that change.
+ if settle_provider_key_holds.seen is not null and exists(select 1 from public.company_key_holds k where k.company_id=c and k.version>settle_provider_key_holds.seen) then return; end if;
  -- Each row's new values are computed once, from the row as read; a row another change wrote meanwhile is a newer row
  -- (ctid), left as that change wrote it for the next read. A row left as it was is not written, and no lock is taken, so
  -- a page read queues behind no other Company's Agents or key changes.
  update public.company_key_holds h set held=n.held,changing=false,uncertain=n.uncertain
-  from (select k.ctid as seen,coalesce(k.provider=any(settle_provider_key_holds.held),false) as held,
+  from (select k.ctid as row_at,coalesce(k.provider=any(settle_provider_key_holds.held),false) as held,
     k.uncertain and coalesce(k.changed_at>since,false) and not coalesce(k.provider=any(settle_provider_key_holds.held),false) as uncertain
    from public.company_key_holds k where k.company_id=c and not (k.changing and coalesce(k.changed_at>since,false))) n
-  where h.ctid=n.seen and (h.held,h.changing,h.uncertain) is distinct from (n.held,false,n.uncertain);
+  where h.ctid=n.row_at and (h.held,h.changing,h.uncertain) is distinct from (n.held,false,n.uncertain);
  insert into public.company_key_holds(company_id,provider,held,changing)
   select c,p,true,false from unnest(settle_provider_key_holds.held) p where p ~ '^[a-z0-9][a-z0-9._-]{0,63}$'
   on conflict (company_id,provider) do nothing;
@@ -179,17 +184,18 @@ begin
   delete from public.agent_key_waits w where w.company_id=c and not public.company_holds_provider_key(c);
  end if;
 end $$;
-revoke all on function public.settle_provider_key_holds(uuid,text[]) from public,anon,authenticated;
-grant execute on function public.settle_provider_key_holds(uuid,text[]) to service_role;
+revoke all on function public.settle_provider_key_holds(uuid,text[],bigint) from public,anon,authenticated;
+grant execute on function public.settle_provider_key_holds(uuid,text[],bigint) to service_role;
 
 -- Lead's next create settles a set the Engine never answered once its window has passed (lib/agent-tools.mjs), so an
 -- Owner who never opens the key page does not leave the Company's Agents waiting for good: the Conversation's Company and
 -- its shared space, whose keys the server reads from the Engine. Null when no such set waits or the Company has no space.
 create function public.lead_key_settle(conversation uuid) returns jsonb
 language sql stable security definer set search_path='' as $$
- select jsonb_build_object('company',v.company_id,'space',s.profile) from public.conversations v
+ select jsonb_build_object('company',v.company_id,'space',s.profile,
+   'seen',(select max(h.version) from public.company_key_holds h where h.company_id=v.company_id)) from public.conversations v
   join public.company_shared_spaces s on s.company_id=v.company_id
-  where v.id=conversation and exists(select 1 from public.company_key_holds h where h.company_id=v.company_id and h.uncertain
+  where v.id=conversation and exists(select 1 from public.company_key_holds h where h.company_id=v.company_id and (h.uncertain or h.changing)
    and not coalesce(h.changed_at>now()-interval '10 minutes',false));
 $$;
 revoke all on function public.lead_key_settle(uuid) from public,anon,authenticated;

@@ -123,7 +123,7 @@ test('a call that the database will refuse asks the Engine to make nothing',asyn
 });
 
 // A set the Engine never answered, past its window, that the database still counts as a held key (lead_key_settle, #299).
-const unsettled={company:'10000000-0000-0000-0000-000000000001',space:'cs-10000000000000000000000000000001'};
+const unsettled={company:'10000000-0000-0000-0000-000000000001',space:'cs-10000000000000000000000000000001',seen:4};
 const metaCall=['lead_create_agent',{conversation:'conversation-1',run:'run-1',call:'call-0',agent_name:'Meta Ads',job:'Runs the Meta ads.',apps:['Meta Ads Manager','Canva']}];
 
 test('a set the Engine never answered is settled from the space before the Agent is made, naming only the providers held whose name reads',async()=>{
@@ -133,13 +133,14 @@ test('a set the Engine never answered is settled from the space before the Agent
  await leadReady(engine);
  assert.deepEqual(await call('create_agent',asked),{state:'created',agent:'agent-1'});
  assert.deepEqual(spaces,[unsettled.space],'the Engine is asked for the space the database named');
- assert.deepEqual(rpcs.slice(1),[['lead_key_settle',{conversation:'conversation-1'}],['settle_provider_key_holds',{c:unsettled.company,held:['openrouter']}],metaCall]);
+ assert.deepEqual(rpcs.slice(1),[['lead_key_settle',{conversation:'conversation-1'}],['settle_provider_key_holds',{c:unsettled.company,held:['openrouter'],seen:4}],metaCall],'the settle names the version the read was taken at');
 });
 
 test('a space the Engine could not read, or nothing to settle, settles nothing, and the Agent is still asked for, so the database keeps it waiting',async()=>{
  let reads=0;
  for(const [label,readKeys,settle] of /** @type {[string,()=>Promise<unknown>,unknown][]} */([['unreachable',async()=>({state:'unreachable',keys:null}),unsettled],
-  ['thrown',async()=>{ throw new Error('down'); },unsettled],['nothing to settle',async()=>{ reads++; return {state:'found',keys:[]}; },null],['an odd answer',async()=>{ reads++; return {state:'found',keys:[]}; },{company:7,space:unsettled.space}]])) {
+  ['thrown',async()=>{ throw new Error('down'); },unsettled],['nothing to settle',async()=>{ reads++; return {state:'found',keys:[]}; },null],['an odd answer',async()=>{ reads++; return {state:'found',keys:[]}; },{company:7,space:unsettled.space,seen:4}],
+  ['no version to settle against',async()=>{ reads++; return {state:'found',keys:[]}; },{company:unsettled.company,space:unsettled.space}]])) {
   const {engine,rpcs,call}=harness({readKeys},{state:'created',agent:'agent-1'},null,{lead_key_settle:settle});
   await leadReady(engine);
   assert.deepEqual(await call('create_agent',asked),{state:'created',agent:'agent-1'},label);

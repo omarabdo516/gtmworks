@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(100);
+select plan(102);
 -- #299. Nothing in this transaction takes lead_create_agent's lock before the first key change begins.
 create temporary view held_agent_lock as select exists(select 1 from pg_locks where locktype='advisory' and pid=pg_backend_pid() and granted
  and ((classid::bigint<<32)|objid::bigint)=hashtextextended('hermes_agents',0)) as held;
@@ -181,8 +181,15 @@ select is((select changing from public.company_key_holds where company_id='10000
 select is(public.company_holds_provider_key('10000000-0000-0000-0000-000000000001'),true,'so the Company still counts as holding a key');
 select is((select count(*)::int from public.agent_key_waits where company_id='10000000-0000-0000-0000-000000000001'),1,'and its Agent still waits');
 update public.company_key_holds set changed_at=now()-interval '11 minutes' where company_id='10000000-0000-0000-0000-000000000001' and provider='openrouter';
-select is(public.company_holds_provider_key('10000000-0000-0000-0000-000000000001'),false,'ten minutes after its begin the change no longer counts');
--- The Agent left waiting has its tools recorded, as the worker would, so only its wait could hold its Runs.
+select is(public.company_holds_provider_key('10000000-0000-0000-0000-000000000001'),true,'a change no process finished still counts after ten minutes, until the space settles it');
+set local role service_role;
+select lives_ok($$select public.settle_provider_key_holds('10000000-0000-0000-0000-000000000001','{}')$$,'the Owner''s read settles it to a space holding no key');
+reset role;
+select results_eq($$select held,changing from public.company_key_holds where company_id='10000000-0000-0000-0000-000000000001' and provider='openrouter'$$,$$values (false,false)$$,'so no key is held and none is changing');
+select is((select count(*)::int from public.agent_key_waits where company_id='10000000-0000-0000-0000-000000000001'),0,'and no Agent waits for one');
+-- A wait that outlived the Company's hold: its Agent's tools are recorded, as the worker would, so only the wait could
+-- hold its Runs.
+insert into public.agent_key_waits(agent_id,company_id) select agent,'10000000-0000-0000-0000-000000000001' from made where name='bare';
 update public.agent_profiles p set tools_level=co.agent_level,tools_policy=public.engine_tool_policy(),tools_pending=false,skills_shared=true
  from public.companies co,public.agent_key_waits w where co.id=p.company_id and w.agent_id=p.agent_id and w.company_id='10000000-0000-0000-0000-000000000001';
 select is(public.agent_profile_refusal((select p.profile from public.agent_key_waits w join public.agent_profiles p on p.agent_id=w.agent_id where w.company_id='10000000-0000-0000-0000-000000000001'),'10000000-0000-0000-0000-000000000001',
@@ -191,11 +198,6 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select is((select count(*)::int from public.waiting_list('10000000-0000-0000-0000-000000000001') where kind='agent_key'),0,'nor shows in "Waiting on you"');
 reset role;
-set local role service_role;
-select lives_ok($$select public.settle_provider_key_holds('10000000-0000-0000-0000-000000000001','{}')$$,'the Owner''s read settles it to a space holding no key');
-reset role;
-select results_eq($$select held,changing from public.company_key_holds where company_id='10000000-0000-0000-0000-000000000001' and provider='openrouter'$$,$$values (false,false)$$,'so no key is held and none is changing');
-select is((select count(*)::int from public.agent_key_waits where company_id='10000000-0000-0000-0000-000000000001'),0,'and no Agent waits for one');
 select set_config('test.row',(select ctid::text from public.company_key_holds where company_id='10000000-0000-0000-0000-000000000001' and provider='openrouter'),true);
 set local role service_role;
 select lives_ok($$select public.settle_provider_key_holds('10000000-0000-0000-0000-000000000001','{deepseek,"Not a provider",NULL}')$$,
@@ -241,8 +243,13 @@ update public.company_key_holds set changed_at=now()-interval '11 minutes' where
 select is(public.company_holds_provider_key('10000000-0000-0000-0000-000000000002'),true,'after them it still counts, until the space settles it');
 set local role service_role;
 select is(public.lead_key_settle('e2991000-0000-0000-0000-000000000003'),
- jsonb_build_object('company','10000000-0000-0000-0000-000000000002','space','cs-10000000000000000000000000000002'),'so Lead''s next create is asked to settle it from the Company''s space');
+ jsonb_build_object('company','10000000-0000-0000-0000-000000000002','space','cs-10000000000000000000000000000002',
+  'seen',(select max(version) from public.company_key_holds where company_id='10000000-0000-0000-0000-000000000002')),
+ 'so Lead''s next create is asked to settle it from the Company''s space, with the version it read');
+select lives_ok($$select public.settle_provider_key_holds('10000000-0000-0000-0000-000000000002','{}',
+  (select max(version)-1 from public.company_key_holds where company_id='10000000-0000-0000-0000-000000000002'))$$,'a read taken before the last change began or ended');
 reset role;
+select is(public.company_holds_provider_key('10000000-0000-0000-0000-000000000002'),true,'settles nothing');
 set local role service_role;
 select lives_ok($$select public.finish_provider_key_change('10000000-0000-0000-0000-000000000002','openrouter',true,'{}',false)$$,'another set the Engine never answered');
 reset role;
