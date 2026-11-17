@@ -5,7 +5,7 @@ import { signIn, openNavigation } from './sign-in';
 // #13, what people see when Lead makes an Agent: the card in the Conversation, the "new" mark until the Agent is
 // opened, when and at whose request on its page, and "New agent" opening Lead's chat ready to type. The rows are
 // written as lead_create_agent writes them (the engine side is proven in tests/engine-conversation.spec.ts): Meta Ads
-// under Lead's reply, and SEO from a run whose reply was nothing but the call, so it closed failed.
+// under Lead's reply, and SEO from a run whose reply was nothing but the call, which closed done (#227).
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const company='10000000-0000-0000-0000-000000000001';
 const omar='20000000-0000-0000-0000-000000000001';
@@ -32,7 +32,7 @@ test.beforeAll(({},testInfo)=>{
    ('${company}','${conversation}','person','${omar}',null,'Omar','I want someone to handle Meta ads','${id(8)}','made-run-1'),
    ('${company}','${conversation}','agent',null,'${lead}','Lead','Done. Meta Ads runs your Meta ads from now on.',null,'made-run-1'),
    ('${company}','${conversation}','person','${omar}',null,'Omar','And someone for the blog','${id(9)}','made-run-2');
-  insert into public.conversation_usage(company_id,conversation_id,run_id,outcome) values ('${company}','${conversation}','made-run-2','failed');
+  insert into public.conversation_usage(company_id,conversation_id,run_id,outcome) values ('${company}','${conversation}','made-run-2','completed');
   insert into public.lead_made_agents(conversation_id,run_id,call_id,company_id,agent_id,created_at) values
    ('${conversation}','made-run-1','call-0','${company}','${ads}','2026-06-10T09:01:00Z'),
    ('${conversation}','made-run-2','call-0','${company}','${seo}','2026-06-11T09:01:00Z');
@@ -53,6 +53,7 @@ test('the Conversation shows the new Agent\'s card, the list marks it new, and o
  await expect(alone.getByRole('group',{name:'Agent made: SEO'})).toBeVisible();
  await expect(alone.locator('.kv__row').filter({hasText:'Apps'}).locator('dd')).toHaveText('No apps: it works on what you send it');
  await expect(page.locator('.turns > li').nth(3)).toHaveAttribute('data-kind','made');
+ await expect(page.getByText('The agent could not finish this reply')).toHaveCount(0);
 
  await openNavigation(page);
  const tile=(name:string)=>page.locator('.sidebar .agent-tile').filter({hasText:name});
