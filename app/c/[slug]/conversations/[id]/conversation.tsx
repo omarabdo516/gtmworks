@@ -30,21 +30,21 @@ type Left={start:number,end:number,focus:'box'|'head'|Element|null};
 export default function ConversationView({slug,agent,details,company,conversation,title,writer,children}:{slug:string,agent:DetailsAgent|null,details:AgentDetailsView|null,company:string,conversation:ThreadConversation,title:string,writer:boolean,children:ReactNode}) {
  const panel=useDetailsPanel();
  const [draft,setDraft]=useState<Draft>(null); const [typed,setTyped]=useState<Typed>({text:''}); const [early,setEarly]=useState(0);
- const leftRef=useRef<Left|null>(null);
- const view:View={slug,agent,company,conversation,writer,panel,leftRef,draft:draft??(typed.text?{text:typed.text,n:0,key:typed.key}:null),setDraft,early};
+ const leftRef=useRef<Left|null>(null); const loadedBox=useRef<HTMLDivElement>(null);
+ const view:View={slug,agent,company,conversation,writer,panel,leftRef,loadedBox,draft:draft??(typed.text?{text:typed.text,n:0,key:typed.key}:null),setDraft,early};
  return <ChatView value={view}><div className="convo"><div className="chat">
   <Suspense fallback={<Loading title={title} setTyped={setTyped} sent={()=>setEarly(count=>count+1)}/>}>{children}</Suspense>
  </div>{agent&&details&&<AgentDetails panel={panel} agent={agent} details={details} settingsHref={`/c/${slug}/agents`}/>}</div></ChatView>;
 }
 
-type View={slug:string,agent:DetailsAgent|null,company:string,conversation:ThreadConversation,writer:boolean,panel:DetailsPanel,leftRef:RefObject<Left|null>,draft:Draft,setDraft:(next:(current:Draft)=>Draft)=>void,early:number};
+type View={slug:string,agent:DetailsAgent|null,company:string,conversation:ThreadConversation,writer:boolean,panel:DetailsPanel,leftRef:RefObject<Left|null>,loadedBox:RefObject<HTMLDivElement|null>,draft:Draft,setDraft:(next:(current:Draft)=>Draft)=>void,early:number};
 // The chat around the record: what the loading chat and the loaded one share.
 const ChatView=createContext<View|null>(null);
 const useView=()=>use(ChatView)!;
 const Face=({conversation,size}:{conversation:ThreadConversation,size:number})=><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:conversation.face,name:conversation.agent_name}} size={size}/></span>;
 
 function Loading({title,setTyped,sent}:{title:string,setTyped:(typed:Typed)=>void,sent:()=>void}) {
- const {agent,company,conversation,writer,panel,leftRef,setDraft}=useView();
+ const {agent,company,conversation,writer,panel,leftRef,loadedBox,setDraft}=useView();
  const {t}=useI18n(); const area=useRef<HTMLDivElement>(null); const shown=useRef(true);
  useLayoutEffect(()=>{
   const box=area.current?.querySelector('textarea');
@@ -63,7 +63,8 @@ function Loading({title,setTyped,sent}:{title:string,setTyped:(typed:Typed)=>voi
     const failure=await postMessage({company,conversation:conversation.id,message,sendKey});
     if(!failure) sent();
     else if(shown.current) setTyped({text:message,key:sendKey});
-    else setDraft(current=>({text:message,n:(current?.n||0)+1,key:sendKey}));
+    // In the loaded chat it comes back only to an empty box: what the person has typed since stays theirs.
+    else if(!loadedBox.current?.querySelector('textarea')?.value.trim()) setDraft(current=>({text:message,n:(current?.n||0)+1,key:sendKey}));
     return failure;
    }}/>:<p className="ro-line" role="note"><ShellIcon name="eye"/><span>{t('viewOnly')}</span></p>}
    {/* The usage line's place, so the composer does not move when it arrives. */}
@@ -74,11 +75,11 @@ function Loading({title,setTyped,sent}:{title:string,setTyped:(typed:Typed)=>voi
 
 // The chat once its record is read, in place of the loading one.
 export function ConversationLoaded({initial,team}:{initial:ConversationRecord,team:boolean}) {
- const {slug,agent,company,conversation,writer,panel,leftRef,draft,setDraft,early}=useView();
+ const {slug,agent,company,conversation,writer,panel,leftRef,loadedBox:area,draft,setDraft,early}=useView();
  const {c}=useConversationText();
  const {record,asked}=useConversationRecord({company,initial});
  const {messages}=record;
- const box=useRef<HTMLDivElement>(null); const stick=useRef(true); const area=useRef<HTMLDivElement>(null);
+ const box=useRef<HTMLDivElement>(null); const stick=useRef(true);
  // Kept on the newest message while the reader is there (design-reference: renderTranscript).
  useLayoutEffect(()=>{ if(stick.current&&box.current) box.current.scrollTop=box.current.scrollHeight; },[messages.length,record.pending]);
  useLayoutEffect(()=>{

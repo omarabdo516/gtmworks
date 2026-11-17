@@ -154,6 +154,27 @@ test('a message sent while the chat loads whose answer is lost after it loaded c
  expect(keys[1]).toBe(keys[0]);
 });
 
+test('a lost answer to a message sent while the chat loaded leaves alone what the person has typed since', async () => {
+ const { record, arrive } = held();
+ let lose!: () => void;
+ vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => {
+  if (init?.method !== 'POST') return Response.json(talk([asked]));
+  await new Promise<void>(resolve => { lose = resolve; });
+  throw new TypeError('Failed to fetch');
+ }));
+ const screen = await opened(record);
+ await screen.getByRole('textbox', { name: 'Message' }).fill('And the budget');
+ await screen.getByRole('button', { name: 'Send' }).click();
+ await expect.poll(() => typeof lose).toBe('function');
+ arrive(talk([asked]));
+ await expect.element(screen.getByLabelText('Loading the chat')).not.toBeInTheDocument();
+ const field = screen.getByRole('textbox', { name: 'Message' });
+ await field.fill('And the dates');
+ lose();
+ await new Promise(resolve => setTimeout(resolve, 100));
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('And the dates');
+});
+
 const numbers = (language: 'en' | 'ar') => render(<LanguageProvider language={language}><div className="gw" dir={language === 'ar' ? 'rtl' : 'ltr'}>
  <main className="numbers-page"><div className="dash"><NumbersPlaceholder/></div></main>
 </div></LanguageProvider>);
