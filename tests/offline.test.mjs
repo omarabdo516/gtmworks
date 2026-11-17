@@ -62,8 +62,8 @@ test('a file that swallows a refused outside request fails, and the run names th
       "  assert.equal(child.status, 1);",
       '});',
       "test('a port written as a padded string is still a port', async () => {",
-      "  const error = await new Promise(done => new net.Socket().on('error', done).connect(' 443', '8.8.8.8'));",
-      "  assert.equal(error.message, 'offline test run: refused a connection to 8.8.8.8:443 (tests/offline.mjs)');",
+      "  const error = await new Promise(done => new net.Socket().on('error', done).connect(' 443', '192.0.2.1'));",
+      "  assert.equal(error.message, 'offline test run: refused a connection to 192.0.2.1:443 (tests/offline.mjs)');",
       '});',
     ].join('\n'));
     const env = { ...process.env, NODE_TEST_CONTEXT: undefined, GTMWORKS_OFFLINE_LOG: undefined, GTMWORKS_OFFLINE_LOG_OWNER: undefined };
