@@ -76,6 +76,20 @@ test('a read from a number gets only the events after it, and one the Engine no 
  } finally { await fake.close(); }
 });
 
+test('a follower that read up to the Run\'s end leaves the closer a read that finds the end, so their steps are not broken',async()=>{
+ const fake=await fakeHermes();
+ try {
+  const {engine,run}=await begin(fake);
+  fake.settings.emit(run,started('web_search','audiences','call_1'));
+  fake.settings.emit(run,completed('web_search',false,'call_1'));
+  await finish(engine,run);
+  const followed=await all(engine.steps(run));
+  assert.deepEqual(followed.at(-1),{end:'ended'});
+  const last=/** @type {{seq:number}} */(followed.at(-2)).seq;
+  assert.deepEqual(await all(engine.steps(run,{after:last})),[{end:'ended'}],'after the last event, the close alone says the Run ended');
+ } finally { await fake.close(); }
+});
+
 test('a preview that holds a path, looks like a key or names the Engine is dropped, and the line is the tool\'s name alone',async()=>{
  const fake=await fakeHermes();
  try {
