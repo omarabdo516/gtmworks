@@ -1,5 +1,5 @@
 import type { supabase } from './supabase';
-import { faceOf, latestEnded, messageColumns, noteColumns, queuedColumns, queuedWaiting, replyCardColumns, replyCardOf, shown, totalOf, usageColumns, waiting, withBoardNote, withDecisions, withTeamWork, type AgentRequestView, type Decision, type LeadCard, type PlacedCard, type QueuedTurn, type ReplyCardRow, type SavedRule, type RunUsage, type StoredNote } from './conversations';
+import { faceOf, latestEnded, messageColumns, noteColumns, queuedColumns, queuedWaiting, questionParts, replyCardColumns, replyCardOf, shown, totalOf, usageColumns, waiting, withBoardNote, withDecisions, withTeamWork, type AgentRequestView, type Decision, type LeadCard, type PlacedCard, type QueuedTurn, type ReplyCardRow, type SavedRule, type RunUsage, type StoredNote } from './conversations';
 import { isNewFor } from './sidebar.mjs';
 import type { BoardColumn } from './board-columns.mjs';
 
@@ -78,12 +78,4 @@ export async function tiedCard(db:Database,company:string,conversation:string) {
  const {data}=await db.from('work_cards').select('id,created_at,work_stages(board_column)').eq('company_id',company).eq('conversation_id',conversation).maybeSingle();
  const card=data as {id:number,created_at:string,work_stages:{board_column:BoardColumn}|null}|null;
  return card?.work_stages?{card:card.id,column:card.work_stages.board_column,created_at:card.created_at}:undefined;
-}
-
-// What a question adds to its place in the record (#138): the answer its person gave, at the time they gave it, and for
-// the main Agent the plain words it is drawn as (the question, then each choice on its own line).
-function questionParts(row:ReplyCardRow,card:NonNullable<ReturnType<typeof replyCardOf>>,lead:boolean):Pick<PlacedCard,'answer'|'words'> {
- if(card.kind!=='question') return {};
- const {answer}=row.content as {answer?:string};
- return {...(answer!==undefined&&row.answered_at?{answer:{body:answer,at:row.answered_at}}:{}),...(lead?{words:[card.question,...card.choices.map(choice=>`- ${choice}`)].join('\n')}:{})};
 }

@@ -2,6 +2,7 @@
   "conversationWorkingFor": "{0} is working on a reply for {1}…",
   "conversationQueued": "It’ll read this after the current reply",
   "conversationQueuedFailed": "Not sent: the agent engine wouldn’t start it. Send it again.",
+  "conversationAnswerNotDelivered": "Not delivered: the agent had stopped waiting for this answer.",
   "conversationAddressed": "To {0} · the agent wasn’t asked",
   "conversationStop": "Stop {0}",
   "ruleSaved": "Saved",
