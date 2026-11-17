@@ -149,7 +149,7 @@ test('the summary has a row per layer with its reason, marks a layer over budget
     job('components (2/2)', 'components', 'success', { budget_s: 90 }),
     job('components (1/2)', 'components', 'success', { budget_s: 90 }),
     job('database', 'database', 'failure', { budget_s: 180, classification: { label: 'infrastructure', cause: 'port in use', evidence: 'failed to bind host port 0.0.0.0:54322/tcp: address already in use' } }),
-    job('visual', 'visual', 'skipped', { skip_reason: areaRule, budget_s: 300 }),
+    job('visual', 'visual', 'skipped', { skip_reason: areaRule, budget_s: 540 }),
     job('integration', 'integration', 'failure', { budget_s: 720, classification: { label: 'your change', cause: null, evidence: null } }),
     job('check', 'check', 'success'),
   ];

@@ -3,8 +3,8 @@ import { chooseLanguageInSettings } from './choose-language';
 import { createHmac } from 'node:crypto';
 import { signIn, chooseCompany } from './sign-in';
 import { appOrigin, inbox, mail } from './lane.mjs';
-// Every other page here is drawn in both languages at both widths by the journeys; the List and the Agents page are
-// drawn by none, so they are also read at 390.
+// Every page here is read in both languages at both widths: the visual lane draws Arabic only, so this is where the
+// English faces are checked at 390 (#257).
 test('Paperclip Inter and Arabic-only Vazirmatn load locally',async({page,context})=>{
  const fontRequests:string[]=[];
  const externalFonts:string[]=[];
@@ -18,7 +18,7 @@ test('Paperclip Inter and Arabic-only Vazirmatn load locally',async({page,contex
  for(const language of ['en','ar']) {
   await chooseLanguageInSettings(page,language);
   await expect(page.locator('html')).toHaveAttribute('lang',language);
-  for(const [path,width] of [...['home','work/board','work/board/1','work/calendar','work/list','approvals','agents','settings'].map(path=>[path,1440] as const),['work/list',390] as const,['agents',390] as const]) {
+  for(const [path,width] of ['home','work/board','work/board/1','work/calendar','work/list','approvals','agents','settings'].flatMap(path=>[[path,1440],[path,390]] as const)) {
    await page.setViewportSize({width,height:900});
    await page.goto(`/c/rs-learning/${path}`);
    await page.evaluate(()=>document.fonts.ready);

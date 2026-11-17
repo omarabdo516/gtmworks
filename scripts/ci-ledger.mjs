@@ -8,7 +8,7 @@ import { classify, failedStep } from './ci-classify.mjs';
 
 // Seconds, reported only (spec #255 D16). `changes` has no budget.
 export const budgets = {
-  layers: { static: 90, components: 90, database: 180, visual: 300, integration: { 'self-hosted': 480, 'github-hosted': 720 }, install: 720 },
+  layers: { static: 90, components: 90, database: 180, visual: 540, integration: { 'self-hosted': 480, 'github-hosted': 720 }, install: 720 },
   run: { pull_request: 600, otherwise: 840 },
 };
 export const layers = ['changes', 'static', 'components', 'database', 'visual', 'integration', 'install'];

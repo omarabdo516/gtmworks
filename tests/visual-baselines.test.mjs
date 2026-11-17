@@ -3,15 +3,17 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { imageFolder, laneImages, laneImageProblems, loadLaneScreens, parseLaneScreens } from './visual-lane.mjs';
 
-// The one inventory of compared screens (#257): the visual lane's twelve key screens in tests/visual-lane/screens.json,
-// each owning exactly its four approved images in tests/visual-lane/images/: Arabic, at 1440 and 390, light and dark.
-const keyScreens = ['sign-in', 'first-run', 'home', 'board', 'card', 'chat', 'channel', 'agents', 'agent-details', 'members', 'numbers', 'approvals'];
+// The one inventory of compared screens (#257): the visual lane's key screens in tests/visual-lane/screens.json (the one
+// list, at most 15), each owning exactly its four approved images in tests/visual-lane/images/: Arabic, at 1440 and 390,
+// light and dark.
 const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const list = count => JSON.stringify(Object.fromEntries(Array.from({ length: count }, (_, n) => [`screen-${n + 1}`, { path: `/s/${n + 1}` }])));
 const listing = () => (existsSync(imageFolder) ? readdirSync(imageFolder) : []);
 
-test('the lane lists exactly the twelve key screens', () => {
-  assert.deepEqual(loadLaneScreens().map(screen => screen.name), keyScreens);
+test('the lane list holds at most 15 screens, among them the ones the contrast checks and the Agent chips need', () => {
+  const names = loadLaneScreens().map(screen => screen.name);
+  assert.ok(names.length > 0 && names.length <= 15, `${names.length} screens`);
+  for (const name of ['home', 'board', 'card']) assert.ok(names.includes(name), name);
 });
 
 test('the list holds at most 15 screens', () => {

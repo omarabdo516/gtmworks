@@ -260,12 +260,13 @@ jobs:
           ARTIFACT_URL: ${{ steps.screenshots.outputs.artifact-url }}
         run: |
           body=$(node scripts/visual-regression.mjs ci-ledger/visual "$GITHUB_SHA" "$RUN_URL" "$ARTIFACT_URL")
-          gh label create visual-regression -R "$GITHUB_REPOSITORY" --color B60205 --description 'Compared screens failed on main' 2> /dev/null || true
+          title=$(node scripts/visual-regression.mjs --title ci-ledger/visual "$GITHUB_SHA" "$RUN_URL" "$ARTIFACT_URL")
+          gh label create visual-regression -R "$GITHUB_REPOSITORY" --color B60205 --description 'The visual job failed on main' 2> /dev/null || true
           issue=$(gh issue list -R "$GITHUB_REPOSITORY" --label visual-regression --state open --limit 1 --json number -q '.[0].number')
           if [[ -n $issue ]]; then
             gh issue comment "$issue" -R "$GITHUB_REPOSITORY" --body "$body"
           else
-            gh issue create -R "$GITHUB_REPOSITORY" --label visual-regression --title 'Compared screens differ on main' --body "$body"
+            gh issue create -R "$GITHUB_REPOSITORY" --label visual-regression --title "$title" --body "$body"
           fi
       - name: upload ledger results
         if: always()

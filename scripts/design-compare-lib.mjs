@@ -16,7 +16,7 @@ import { extname, join, resolve, sep } from 'node:path';
 // the "viewing as" switcher: the alone ones show the workspace of an Owner working alone (#10); built, that is seeded
 // R&S Consultations, its one Member Omar, with work_mode set to 'alone'. The
 // request ones show Youssef, a Contributor in the team (#17); built, that is the first Contributor, signed in with
-// --sign-in reviewer@example.com, over the visual state `agent-request` (or `-made`).
+// --sign-in reviewer@example.com, over a request set up by hand (the compared screens' state for it went with #257).
 const settings = [{ click: '#btn-me' }, { click: '[data-action="sov-open"]' }, { waitFor: '#sov[open] #sov-nav-company' }];
 const alone = [{ click: '#btn-me' }, { click: '[data-action="set-as"][data-person="omar"][data-world="solo"]' }, { waitFor: '#sb-recent' }];
 const asYoussef = [{ click: '#btn-me' }, { click: '[data-action="set-as"][data-person="youssef"][data-world="team"]' }, { waitFor: '#sb-recent' }];
@@ -102,11 +102,11 @@ export const screens = {
   'new-agent-empty': { reference: { steps: [{ click: '#sb-agents [data-action="new-agent"]' }, { waitFor: '.new-hint' }, { click: '[data-action="open-gallery-alt"]' }, { waitFor: '#modal[open] .tpl' }, { click: '[data-action="tpl-add"][data-tpl="writer"]' }, { waitFor: '.card__actions [data-action="ac-open"]' }, { click: '.card__actions [data-action="ac-open"]' }, { waitFor: '.try-one' }] }, builtPath: `/c/rs-learning/chat/${fixture.newAgent}` },
   // The Conversation in which Lead made Ads, with its card. Built: the fixture's madeConversation (pass --built-path).
   'made-card': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-made-ads"]' }, { waitFor: '.ac-card' }] }, builtPath: null },
-  // #136. The Meta campaign chat (th-meta) after the first angle is chosen: Ads's reply with the campaign plan's draft card under it. Built: the
-  // draft-shown visual state's Conversation (pass --built-path).
+  // #136. The Meta campaign chat (th-meta) after the first angle is chosen: Ads's reply with the campaign plan's draft card under it. Built: none
+  // since #257 removed the state that held it; set the Conversation up by hand and pass --built-path.
   'draft-card': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-meta"]' }, { click: '.opt[data-action="choose"]' }, { waitFor: '.card--draft' }] }, builtPath: null },
-  // #137. The team chat (th-team): Critic's reply with the review card of the December ad texts under it. Built: the
-  // review-shown visual state's Conversation (pass --built-path).
+  // #137. The team chat (th-team): Critic's reply with the review card of the December ad texts under it. Built: none
+  // since #257 removed the state that held it; set the Conversation up by hand and pass --built-path.
   'review-card': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-team"]' }, { waitFor: '.rvcard' }, { scrollTo: '.rvcard' }] }, builtPath: null },
   // #138. The Meta campaign chat (th-meta): Ads's question card, the angle to take, before it is answered. Built: the
   // fixture's questionConversation (pass --built-path).
@@ -133,7 +133,7 @@ export const screens = {
   // #24. New channel, from the "+" beside Channels; built, ?new=channel opens it over any page.
   'new-channel': { reference: { steps: [{ click: '#sb-threads [data-action="channel-new"]' }, { waitFor: '#modal[open] #tm-name' }] }, builtPath: `/c/rs-learning/channels/${fixture.channel}?new=channel` },
   // #24. The team channel حملة ديسمبر (th-team) with its members and Agents. Built: a team channel's own address (pass
-  // --built-path), such as the visual state's /c/rs-learning/channels/6c000000-0000-0000-0000-000000000007.
+  // --built-path) of a team channel set up by hand.
   // #145. A board Card's sheet on its Chat tab: the Card of Omar's own chat with Ads (th-meta), with that chat and its
   // composer; an idea with an Agent and no chat yet (c-idea2), with the way to start one; and the Card of another
   // Member's chat, the lock. The reference has no such Card until someone makes one, so Youssef starts a new chat to

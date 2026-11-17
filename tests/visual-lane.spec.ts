@@ -140,13 +140,16 @@ for (const screen of ordered) {
     let page: Page;
     test.beforeAll(async ({ browser, baseURL }) => {
       test.setTimeout(120000);
-      freshSeed(test.info().file, true);
-      fixPublishingDates();
+      // A visitor's screen draws no Company data: sign-in needs nothing, and first run empties the installation itself.
       if (screen.name === 'first-run') resetFirstRun(baseURL);
+      if (!screen.anonymous) {
+        freshSeed(test.info().file, true);
+        fixPublishingDates();
+        asAdmin(`update public.people set language='ar' where id='${omar}'`);
+      }
       context = await laneContext(browser);
       page = await context.newPage();
       if (screen.anonymous) return;
-      query(`update public.people set language='ar' where id='${omar}'`);
       await signIn(page, 'omar@example.com', '/c/rs-learning/home');
       // The sidebar lists recently opened Cards and the board orders Ideas by last change: opening Card 1 first gives
       // every screen the same list.
@@ -184,8 +187,22 @@ for (const screen of ordered) {
           await expect(page).toHaveScreenshot(laneImage(screen, width, theme), { fullPage: true });
           const quiet = quietText[screen.name];
           if (theme === 'light' && quiet) {
-            if (quiet.some(([, selector]) => selector.startsWith('.sidebar'))) await openNavigation(page);
-            await expectQuietContrast(page, quiet);
+            const measure = async () => {
+              if (quiet.some(([, selector]) => selector.startsWith('.sidebar'))) await openNavigation(page);
+              await expectQuietContrast(page, quiet);
+            };
+            await measure();
+            // The same labels in English, measured with no picture: the lane draws Arabic only, contrast is kept in both.
+            asAdmin(`update public.people set language='en' where id='${omar}'`);
+            try {
+              await page.reload();
+              await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+              await expect(page.locator(screen.ready ?? '.content').first()).toBeVisible();
+              await idle(page);
+              await measure();
+            } finally {
+              asAdmin(`update public.people set language='ar' where id='${omar}'`);
+            }
           }
         } finally {
           if (state) asAdmin(state.unset);
