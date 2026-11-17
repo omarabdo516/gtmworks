@@ -170,6 +170,10 @@ test('every screen says how to reach it in the reference and which built page it
   assert.equal(screens['permission-card'].builtPath, null, 'the Conversation has a uuid path: pass the fixture\'s permissionConversation');
   assert.equal(fixture.permissionConversation, '62000000-0000-0000-0000-000000000008');
   assert.ok(readFileSync(fixture.file, 'utf8').includes(`'${fixture.permissionConversation}','design-compare-fixture-permission','design-compare-approval-1','permission'`), 'its open request');
+  // An app an Agent asks for (#203): the reference shows the card open in the weekly report chat.
+  assert.equal(screens['connect-card'].builtPath, null, 'the Conversation has a uuid path: pass the fixture\'s connectConversation');
+  assert.equal(fixture.connectConversation, '62000000-0000-0000-0000-000000000009');
+  assert.ok(readFileSync(fixture.file, 'utf8').includes(`'${fixture.connectConversation}','design-compare-fixture-connect','call-0','connect'`), 'its open connect card');
   assert.equal(screens['made-agent'].builtPath, `/c/rs-learning/settings?agent=${fixture.agent}`);
   // A lasting rule told to Ads (#18): the saved line in the Conversation; Ads's page above lists the rule.
   assert.equal(screens['rule-saved'].builtPath, null, 'the Conversation has a uuid path: pass the fixture\'s ruleConversation');
