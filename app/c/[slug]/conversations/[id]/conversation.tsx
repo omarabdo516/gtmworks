@@ -88,7 +88,7 @@ export function ConversationLoaded({initial,team}:{initial:ConversationRecord,te
   const target=was.focus==='box'?field:was.focus==='head'?document.getElementById('btn-details'):was.focus;
   if(target instanceof HTMLElement) target.focus();
   if(was.focus==='box') field?.setSelectionRange(was.start,was.end);
- },[leftRef]);
+ },[leftRef,area]);
  const answered=useRef(0);
  useEffect(()=>{ if(early>answered.current) { answered.current=early; asked(); } });
  // A new workspace opens on the Owner's Conversation with Lead before anything is said in it (#9): Lead's first words.
