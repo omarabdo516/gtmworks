@@ -46,7 +46,6 @@ function databases(/** @type {ReturnType<typeof fakeEngine>} */ fake) {
    Object.assign(card,{state:'sending',decidedAt:'2026-06-10T10:20:00.000Z',content:{...card.content,choice:args.choice}});
    return ok({state:'decided',choice:args.choice,at:card.decidedAt,first:true});
   },
-  from:()=>{ /** @type {number|null} */ let id=null; const chain={select:()=>chain,eq:(/** @type {string} */ _column,/** @type {number} */ value)=>{ id=value; return chain; },maybeSingle:async()=>ok(cards.find(card=>card.id===id)?{state:cards.find(card=>card.id===id)?.state}:null)}; return chain; },
  };
  return {service,person,cards,calls,closed};
 }
@@ -59,8 +58,17 @@ const asking=(/** @type {{description:string,command:string,choices?:import('../
 };
 const start=async(/** @type {ReturnType<typeof fakeEngine>} */ fake)=>/** @type {string} */(await fake.engineFor({}).start({conversation,input:'Clean up',idempotencyKey:`${conversation}:k`}));
 const close=(/** @type {any} */ service,/** @type {ReturnType<typeof fakeEngine>} */ fake)=>closeOpenRuns(service,{encryptionKey,conversation,engineFor:fake.engineFor});
-const decide=(/** @type {any} */ person,/** @type {any} */ service,/** @type {ReturnType<typeof fakeEngine>} */ fake,/** @type {import('../lib/engine.mjs').PermissionChoice} */ choice,card=1)=>
- decidePermission(person,service,{company:'co',conversation,card,choice,encryptionKey,engineFor:fake.engineFor});
+// A press as the route makes it: answered first, its delivery run after the answer (the route's after()).
+const pressOf=(/** @type {any} */ person,/** @type {any} */ service,/** @type {ReturnType<typeof fakeEngine>} */ fake,/** @type {import('../lib/engine.mjs').PermissionChoice} */ choice,card=1)=>{
+ const later=/** @type {(()=>Promise<void>)[]} */([]);
+ return {later,answered:decidePermission(person,service,{company:'co',conversation,card,choice,encryptionKey,engineFor:fake.engineFor,later:deliver=>{ later.push(deliver); }})};
+};
+const decide=async(/** @type {any} */ person,/** @type {any} */ service,/** @type {ReturnType<typeof fakeEngine>} */ fake,/** @type {import('../lib/engine.mjs').PermissionChoice} */ choice,card=1)=>{
+ const {later,answered}=pressOf(person,service,fake,choice,card);
+ const pressed=await answered;
+ for(const deliver of later) await deliver();
+ return pressed;
+};
 
 test('a waiting request is kept once with the engine\'s words and choices, and its Run stays open and working while it waits',async()=>{
  const fake=asking(); const {service,cards,closed}=databases(fake);
@@ -88,6 +96,22 @@ for(const choice of /** @type {const} */(['once','always','deny'])) test(`${choi
  assert.equal(await close(service,fake),1);
  assert.equal(closed.get(run).reply,`Reply to: Clean up (${choice})`);
  assert.equal(fake.runs.length,1,'no second Run');
+});
+
+test('a press is answered as soon as its choice is kept, before anything is sent, and the choice goes after the answer',async()=>{
+ const fake=asking(); const {service,person,cards}=databases(fake);
+ const run=await start(fake); await close(service,fake);
+ const first=pressOf(person,service,fake,'once');
+ assert.deepEqual(await first.answered,{state:'decided',choice:'once',at:'2026-06-10T10:20:00.000Z',first:true});
+ assert.deepEqual(fake.permits,[],'nothing is sent before the answer');
+ assert.equal(cards[0].state,'sending');
+ const second=pressOf(person,service,fake,'deny');
+ assert.deepEqual(await second.answered,{state:'decided',choice:'once',at:'2026-06-10T10:20:00.000Z',first:false});
+ assert.equal(second.later.length,0,'a press that was not first delivers nothing');
+ assert.equal(first.later.length,1);
+ await first.later[0]();
+ assert.deepEqual(fake.permits,[{run,permission:`${run}_p1`,choice:'once'}]);
+ assert.equal(cards[0].state,'decided');
 });
 
 test('a double press sends the choice once and answers the first press again',async()=>{
@@ -140,14 +164,15 @@ test('a time limit: once the engine stops waiting the card closes, a press after
  assert.deepEqual(fake.permits,[]);
 });
 
-test('a choice the engine no longer takes when it arrives closes the card, and the press is told so',async()=>{
+test('a choice the engine no longer takes when it arrives closes the card, and the next press is told so',async()=>{
  const fake=asking(); const {service,person,cards}=databases(fake);
  const run=await start(fake); await close(service,fake);
  // The Run still works after its request timed out, so the choice is sent and found no longer waited on.
  fake.settings.pendingReads=1;
  fake.expire(run);
- assert.deepEqual(await decide(person,service,fake,'once'),{state:'closed',choice:null,at:null,first:true});
+ assert.deepEqual(await decide(person,service,fake,'once'),{state:'decided',choice:'once',at:'2026-06-10T10:20:00.000Z',first:true},'answered before it is sent');
  assert.equal(cards[0].state,'closed');
+ assert.deepEqual(await decide(person,service,fake,'deny'),{state:'closed',choice:null,at:null,first:false});
  assert.deepEqual(fake.permits.map(sent=>sent.choice),['once'],'sent once, and gone');
 });
 
@@ -213,7 +238,7 @@ test('nothing the request says reaches the server\'s log when a step fails, and 
   await close(service,fake);
   const failing={...service,rpc:async(/** @type {string} */ name,/** @type {any} */ args)=>name==='track_run_permission'||name==='settle_permission'?{data:null,error:{message:'new row for relation "reply_cards" violates check constraint',code:'23514'}}:service.rpc(name,args)};
   assert.equal(await close(failing,fake),0);
-  assert.deepEqual(await decidePermission(person,{...failing,rpc:async()=>{ throw new Error('connection reset'); }},{company:'co',conversation,card:1,choice:'once',encryptionKey,engineFor:fake.engineFor}),{state:'decided',choice:'once',at:'2026-06-10T10:20:00.000Z',first:true});
+  assert.deepEqual(await decide(person,{...failing,rpc:async()=>{ throw new Error('connection reset'); }},fake,'once'),{state:'decided',choice:'once',at:'2026-06-10T10:20:00.000Z',first:true});
  } finally { for(const [level,write] of spied) console[level]=write; }
  assert.ok(lines.length>=2,'the failures were logged');
  for(const line of lines) for(const word of [secret,'delete the old exports','private-client-list']) assert.ok(!line.includes(word),`${line} names the request`);

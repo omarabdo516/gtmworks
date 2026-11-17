@@ -29,7 +29,7 @@ const plainTile={key:'',mark:'·'};
 export function PermissionCard({card,fresh,offered,decide}:{card:PermissionRequest,fresh:boolean,offered:PermissionChoice[],decide?:DecidePermission}) {
  const {t,language}=useI18n(); const zone=useZone();
  const [pressed,setPressed]=useState<PermissionOutcome|null>(null); const [error,setError]=useState(''); const [just,setJust]=useState(false);
- const busy=useRef(false);
+ const [pending,setPending]=useState<PermissionChoice|null>(null); const busy=useRef(false);
  useEffect(()=>{
   if(!just) return;
   const timer=setTimeout(()=>setJust(false),settling);
@@ -39,8 +39,9 @@ export function PermissionCard({card,fresh,offered,decide}:{card:PermissionReque
  const shown=card.state==='decided'?{state:'decided' as const,choice:card.choice,at:card.at}:card.state==='closed'?{state:'closed' as const}:pressed;
  const press=async(choice:PermissionChoice)=>{
   if(busy.current||!decide) return;
-  busy.current=true; setError('');
+  busy.current=true; setPending(choice); setError('');
   const result=await decide(card.id,choice);
+  setPending(null);
   if('state' in result) { setPressed(result); setJust(result.first&&result.state==='decided'); }
   else { setError(result.error==='conversationFailed'?'permissionFailed':result.error); busy.current=false; }
  };
@@ -56,8 +57,8 @@ export function PermissionCard({card,fresh,offered,decide}:{card:PermissionReque
   {command&&<dl className="kv"><div className="kv__row"><dt>{t('permissionCommand')}</dt><dd><bdi dir="auto">{command}</bdi></dd></div></dl>}
   {shown?.state==='decided'?line(shown.choice==='deny'?'x':'check',<>{t(outcomes[shown.choice])} · <time dateTime={shown.at} data-utc={zone}>{when(shown.at)}</time></>)
    :shown?.state==='closed'?line('clock',t('permissionClosed'))
-   :decide&&offered.length?<div className="card__actions">{offered.map(choice=>
-    <button key={choice} type="button" className={`btn ${choice==='once'?'btn--primary':'btn--secondary'}`} onClick={()=>void press(choice)}>{t(labels[choice])}</button>)}</div>
+   :decide&&offered.length?<div className="card__actions" aria-busy={pending?true:undefined}>{offered.map(choice=>
+    <button key={choice} type="button" className={`btn ${choice==='once'?'btn--primary':'btn--secondary'}`} disabled={!!pending} aria-busy={pending===choice||undefined} onClick={()=>void press(choice)}>{t(labels[choice])}</button>)}</div>
    :line('clock',t('permissionWaitTeam'))}
   {error&&!shown&&<p className="permission__error" role="alert">{t(error)}</p>}
  </div>;

@@ -69,7 +69,8 @@ test.each([['en', 'once'], ['en', 'always'], ['en', 'deny'], ['ar', 'once'], ['a
  const screen = await drawn(request(), language, decide);
  const group = screen.getByRole('group', { name: words[language].label });
  const button = group.getByRole('button', { name: words[language][choice] });
- await button.click(); await button.click();
+ // The second press lands on the button the first one disabled.
+ await button.click(); await button.click({ force: true });
  expect(decide.mock.calls).toEqual([[7, choice]]);
  answer({ state: 'decided', choice, at, first: true });
  await expect.poll(() => outcomeOf(group)).toBe(`${words[language].outcome[choice]} · ${timeOf(at, language)}`);
@@ -122,6 +123,23 @@ test('a refusal keeps the buttons, says why, and the next press is sent', async 
  await expect.element(group.getByRole('alert')).toHaveTextContent(words.en.refused);
  await group.getByRole('button', { name: words.en.deny }).click();
  expect(decide.mock.calls).toEqual([[7, 'once'], [7, 'deny']]);
+});
+
+test('while a press is on its way every button is disabled and the pressed one is marked busy, and a refusal brings them back', async () => {
+ let answer: (outcome: PermissionOutcome | { error: string }) => void = () => {};
+ const decide = vi.fn<DecidePermission>(() => new Promise(resolve => { answer = resolve; }));
+ const screen = await drawn(request(), 'en', decide);
+ const group = screen.getByRole('group', { name: words.en.label });
+ const state = () => [...group.element().querySelectorAll('button')].map(button => [button.textContent, button.disabled, button.getAttribute('aria-busy')]);
+ const actions = () => group.element().querySelector('.card__actions')?.getAttribute('aria-busy');
+ await group.getByRole('button', { name: words.en.always }).click();
+ await expect.poll(state).toEqual([[words.en.deny, true, null], [words.en.always, true, 'true'], [words.en.once, true, null]]);
+ expect(actions(), 'the buttons are busy').toBe('true');
+ expect(group.element().querySelector('.card__outcome'), 'nothing is decided yet').toBeNull();
+ answer({ error: 'conversationNotAllowed' });
+ await expect.element(group.getByRole('alert')).toHaveTextContent(words.en.refused);
+ expect(state()).toEqual([[words.en.deny, false, null], [words.en.always, false, null], [words.en.once, false, null]]);
+ expect(actions()).toBeNull();
 });
 
 test('a request that arrives while the chat is open rises in, and one already there does not', async () => {

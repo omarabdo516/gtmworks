@@ -88,13 +88,14 @@ async function done(db:Database,body:Record<string,unknown>) {
 }
 
 // A choice on the request the Agent's Run waits on (#163): one of three fixed words, never text. Only the Conversation's
-// person decides, with a choice their role may send and the Engine offered (decide_permission), and the choice then goes
-// to the waiting Run. A second press, another tab, or a request the Engine no longer waits on answers what the card
-// shows now. Nothing of the request is logged.
+// person decides, with a choice their role may send and the Engine offered (decide_permission). The press is answered
+// once the choice is kept, as "Done it" is, and the choice then goes to the waiting Run after the answer. A second
+// press, another tab, or a request the Engine no longer waits on answers what the card shows now. Nothing of the
+// request is logged.
 async function permit(db:Database,body:Record<string,unknown>) {
  if(typeof body.conversation!=='string'||!uuid.test(body.conversation)||!(typeof body.card==='number'&&Number.isSafeInteger(body.card)&&body.card>0)) return refuse('conversationFailed',400);
  if(!permissionChoices.includes(body.choice)) return refuse('conversationFailed',400);
- const decided=await decidePermission(db,service(),{company:body.company as string,conversation:body.conversation,card:body.card,choice:body.choice as PermissionChoice,encryptionKey:encryptionKey()});
+ const decided=await decidePermission(db,service(),{company:body.company as string,conversation:body.conversation,card:body.card,choice:body.choice as PermissionChoice,encryptionKey:encryptionKey(),later:after});
  if('code' in decided) return decided.code==='22023'?refuse('conversationFailed',400):refuseFor(decided.code);
  return reply(decided);
 }
