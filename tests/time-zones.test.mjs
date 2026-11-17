@@ -20,27 +20,28 @@ test('the workflow reads the code only, names no secret and never runs a fork\'s
   assert.equal(Object.keys(workflow.jobs).length, 1);
 });
 
-test('both fast layers run under the matrix zone, Cairo and a west-of-UTC one, and components runs after a red static', () => {
+test('the node and component tests run under the matrix zone, Cairo and a west-of-UTC one, and components runs after red node tests', () => {
   assert.ok(zones.includes('Africa/Cairo'));
   assert.ok(west, `a zone west of UTC all year: ${zones}`);
   assert.equal(job.env.TZ, '${{ matrix.zone }}');
   assert.equal(job.strategy['fail-fast'], false);
   const steps = Object.fromEntries(job.steps.filter(step => step.id).map(step => [step.id, step]));
-  assert.equal(steps.static.run, './ci.sh static');
+  assert.equal(steps['node-tests'].run, 'npm test');
+  assert.ok(job.steps.findIndex(step => step.run === 'npm ci') < job.steps.findIndex(step => step.id === 'node-tests'), 'installed first');
   assert.equal(steps.components.run, './ci.sh components');
   assert.equal(steps.components.if, '${{ !cancelled() }}');
   assert.equal(job.steps.at(-1).if, 'always()');
   assert.match(job.steps.at(-1).run, /GITHUB_STEP_SUMMARY/);
 });
 
-test('the nightly run starts within 15 minutes before midnight in the west zone', () => {
+test('the nightly run starts within 30 minutes before midnight in the west zone', () => {
   const [minute, hour] = workflow.on.schedule[0].cron.split(' ').map(Number);
   for (const day of ['2026-01-15', '2026-07-15', '2026-11-17']) {
     const [year, month, date] = day.split('-').map(Number);
     const start = new Date(Date.UTC(year, month - 1, date, hour, minute));
     const localDay = new Intl.DateTimeFormat('en-CA', { timeZone: west }).format(start);
     const left = beforeMidnight(localDay, west, 0) - start;
-    assert.ok(left > 0 && left <= 15 * 60 * 1000, `${day}: ${left / 60000} minutes before midnight in ${west}`);
+    assert.ok(left > 0 && left <= 30 * 60 * 1000, `${day}: ${left / 60000} minutes before midnight in ${west}`);
   }
 });
 

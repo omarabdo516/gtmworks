@@ -1,10 +1,12 @@
-# The fast layers again under a second time zone, near its midnight (#266): the runner's clock and zone must not decide
-# a test. 02:50 UTC is 23:50 in America/Sao_Paulo (UTC-3 all year), while Cairo and UTC are already on the next day.
+# The tests that read the clock again under a second time zone, near its midnight (#266): the runner's clock and zone
+# must not decide a test. The node tests and the component tests run, and nothing whose answer the zone cannot change
+# (lint, types, unused code), so the tests start soon after 02:35 UTC, which is 23:35 in America/Sao_Paulo (UTC-3 all
+# year), while Cairo and UTC are already on the next day. It reads the code only and is given no secret.
 name: Time zones
 
 on:
   schedule:
-    - cron: '50 2 * * *'
+    - cron: '35 2 * * *'
   workflow_dispatch:
   pull_request:
     paths:
@@ -21,7 +23,7 @@ concurrency:
 
 jobs:
   fast-layers:
-    name: static and components (${{ matrix.zone }})
+    name: node and component tests (${{ matrix.zone }})
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
@@ -39,9 +41,11 @@ jobs:
       - name: local start time
         id: start
         run: echo "at=$(date '+%Y-%m-%d %H:%M:%S %Z')" >> "$GITHUB_OUTPUT"
-      - name: static
-        id: static
-        run: ./ci.sh static
+      - name: install
+        run: npm ci
+      - name: node tests
+        id: node-tests
+        run: npm test
       - name: components
         id: components
         if: ${{ !cancelled() }}
@@ -50,13 +54,13 @@ jobs:
         if: always()
         env:
           STARTED: ${{ steps.start.outputs.at }}
-          STATIC: ${{ steps.static.outcome }}
+          NODE_TESTS: ${{ steps.node-tests.outcome }}
           COMPONENTS: ${{ steps.components.outcome }}
         run: |
           ended=$(date '+%Y-%m-%d %H:%M:%S %Z')
           crossed=no; [ "${STARTED%% *}" = "${ended%% *}" ] || crossed=yes
           {
-            echo '| zone | local start | local end | crossed local midnight | static | components |'
+            echo '| zone | local start | local end | crossed local midnight | node tests | components |'
             echo '| --- | --- | --- | --- | --- | --- |'
-            echo "| $TZ | $STARTED | $ended | $crossed | $STATIC | $COMPONENTS |"
+            echo "| $TZ | $STARTED | $ended | $crossed | $NODE_TESTS | $COMPONENTS |"
           } >> "$GITHUB_STEP_SUMMARY"

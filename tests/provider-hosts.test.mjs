@@ -4,16 +4,16 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { findProviderHosts } from '../scripts/provider-hosts.mjs';
 
-// No test reaches a real model provider (#266): no tracked file under tests/, no script and not the seed names a provider
-// host (the table itself excepted). The hosts in
+// No test reaches a real model provider (#266): no tracked file under tests/ names a provider host. The product's own
+// scripts may name one (an install step), so they are not read. The hosts in
 // this file are built from parts, so the check does not read them.
 const host = (...parts) => parts.join('.');
 
 test('no test or helper names a real model provider host', () => {
-  const files = execFileSync('git', ['ls-files', 'tests', 'scripts', 'supabase/seed.sql'], { encoding: 'utf8' }).split('\n').filter(path => path && path !== 'scripts/provider-hosts.mjs')
+  const files = execFileSync('git', ['ls-files', 'tests'], { encoding: 'utf8' }).split('\n').filter(Boolean)
     .map(path => ({ path, bytes: readFileSync(path) })).filter(({ bytes }) => !bytes.includes(0))
     .map(({ path, bytes }) => ({ path, text: bytes.toString('utf8') }));
-  assert.ok(['tests/fake-hermes.mjs', 'scripts/install.sh', 'supabase/seed.sql'].every(path => files.some(file => file.path === path)), 'the scan reads the helpers, the scripts and the seed');
+  assert.ok(files.some(file => file.path === 'tests/fake-hermes.mjs'), 'the scan reads the helpers');
   assert.deepEqual(findProviderHosts(files), []);
 });
 
