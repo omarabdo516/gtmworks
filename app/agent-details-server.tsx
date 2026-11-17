@@ -14,7 +14,7 @@ import { FeedText, LogEntry, logColumns, logPeople } from '@/app/c/[slug]/log/en
 import { detailsTabs } from '@/app/agent-details-tabs';
 
 type Db=Awaited<ReturnType<typeof supabase>>;
-export type AgentDetailsView={status:AgentStatus,actions:boolean,tab:DetailsTab,tabs:Record<DetailsTab,ReactNode>};
+export type AgentDetailsView={status:AgentStatus,tab:DetailsTab,tabs:Record<DetailsTab,ReactNode>};
 const logShown=50;
 
 export async function agentDetails(db:Db,{company,agent,slug,me,role,tab}:{company:string,agent:string,slug:string,me:string,role:string,tab?:string}):Promise<AgentDetailsView> {
@@ -73,6 +73,6 @@ export async function agentDetails(db:Db,{company,agent,slug,me,role,tab}:{compa
 
  const log=rows.length?<div className="lg-wrap"><LogDays items={rows.map(row=>({id:row.id,at:row.created_at,node:<LogEntry row={row} people={people} me={me} slug={slug} company={company} canWrite={writer} drawnAt={drawn} t={t} language={language} faceSize={24}/>}))}/></div>:undefined;
 
- return {status:agentStatus({waitingMine:waiting.some(item=>item.card_id!=null&&ids.includes(item.card_id)),running:!!run}),actions:writer,tab:pickTab(tab),
+ return {status:agentStatus({waitingMine:waiting.some(item=>item.card_id!=null&&ids.includes(item.card_id)),running:!!run}),tab:pickTab(tab),
   tabs:detailsTabs({t,slug,agent,activity,tasks:tasksTab,files:filesList,fileCount:(cardFileCount??0)+(talkFileCount??0),log,logCount:count??rows.length})};
 }

@@ -51,6 +51,7 @@ replay tests/remove-agency-migration.mjs
 replay tests/company-log-migration.mjs
 replay tests/member-agent-visibility-migration.mjs
 replay tests/agent-profile-moves-migration.mjs
+replay tests/agent-key-waits-migration.mjs
 stamped() {
   npx --no-install supabase test db "$replays" 2>&1 | while IFS= read -r line; do
     printf '%s\n' "$line"

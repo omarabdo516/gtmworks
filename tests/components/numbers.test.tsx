@@ -2,7 +2,7 @@ import { afterEach, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
 import { page } from 'vitest/browser';
 import type { ComponentProps } from 'react';
-import { NoApp, NumbersFigures, NumbersHead } from '@/app/c/[slug]/numbers/parts';
+import { NoApp, NumbersFigures, NumbersHead, WaitingRow } from '@/app/c/[slug]/numbers/parts';
 import { LogFilters } from '@/app/c/[slug]/log/log-client';
 import { LanguageProvider } from '@/lib/i18n-client';
 import { i18n, localeFor, type Language } from '@/lib/i18n.mjs';
@@ -78,4 +78,17 @@ test('on a phone the Activity log\'s filters keep the reference\'s 34px fields, 
  const fields = screen.getByRole('group', { name: 'Log filters' }).getByRole('combobox').elements();
  expect(fields).toHaveLength(2);
  for (const field of fields) expect(tapArea(field)).toEqual({ reach: 44, seen: 34 });
+});
+
+for (const language of ['en', 'ar'] as const) test(`in ${language} an Agent waiting for the company's key gives the reason and opens "Waiting on you"`, async () => {
+ const { t } = i18n(language);
+ const item = { kind: 'agent_key', id: 3, title: 'Writer', body: '', asked_by: '', card_id: null, conversation_id: null, created_at: '2026-06-10T09:41:00Z' };
+ const screen = await render(<LanguageProvider language={language}><div className="gw" dir={language === 'ar' ? 'rtl' : 'ltr'}><div className="panel-card">
+  <WaitingRow t={t} slug="rs-learning" writer item={item} face={null}/>
+ </div></div></LanguageProvider>);
+ const row = screen.getByRole('link');
+ await expect.element(row).toHaveAttribute('href', '/c/rs-learning/approvals');
+ await expect.element(row.getByText('Writer', { exact: true })).toBeVisible();
+ await expect.element(row.getByText(t('waitingAgentKeyReason'), { exact: true })).toBeVisible();
+ await expect.element(row.getByText(t('numbersWaitingOnYou'), { exact: true })).toBeVisible();
 });

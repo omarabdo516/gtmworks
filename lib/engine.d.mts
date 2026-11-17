@@ -20,6 +20,7 @@ export type FoundAgent={state:'found',agent:Agent}|{state:'missing'|'refused'|'u
 export type AgentLevel=1|2|3;
 export type ProvidedAgent={state:'provided'|'noModel'|'forbidden'|'failed'|'refused'|'unreachable'};
 export type RemovedAgent={state:'removed'|'missing'|'refused'|'unreachable'};
+export type ProviderKeys={state:'found',keys:import('./hermes.mjs').ProviderKey[]}|{state:'refused'|'unreachable'|'failed',keys:null};
 export type StartUnknown={readonly state:'unknown'};
 export function startOutcomeUnknown(result:unknown):result is StartUnknown;
 export type Engine={
@@ -34,6 +35,7 @@ export type Engine={
  readAgent(name:string):Promise<FoundAgent>,
  provideAgent(agent:{name:string,instructions:string,level:AgentLevel}):Promise<ProvidedAgent>,
  removeAgent(name:string):Promise<RemovedAgent>,
+ readKeys?(space:string):Promise<ProviderKeys>,
 };
 export function engineFor(connection:EngineConnection):Engine;
 export function outcomeOf(run:Pick<RunState,'state'|'reply'>):'completed'|'failed'|'stopped'|'lost'|null;

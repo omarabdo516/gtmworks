@@ -187,10 +187,10 @@ const rsLearning='10000000-0000-0000-0000-000000000001';
 const surfaces={
  company:['#co-name','.ro-text','.ro-note:not(.sov-warn)','.sov-ta table','.inv-sec .inv-open','[aria-labelledby=co-h-mem] .panel-row'],
  agents:['a[href$="/chat?new=agent"]','.ro-note','.talk-tip a'],
- agent:['#set-make-main','#danger-delete','.ro-note','.talk-tip a'],
+ agent:['#set-make-main','#danger-pause','#danger-delete','.ro-note','.talk-tip a'],
 };
 const roleViews=[
- {role:'Owner',email:'omar@example.com',sections,readOnly:false,movesMain:true,company:['#co-name','.sov-ta table','.inv-sec .inv-open'],agents:['a[href$="/chat?new=agent"]','.talk-tip a'],agent:['#set-make-main','#danger-delete','.talk-tip a']},
+ {role:'Owner',email:'omar@example.com',sections,readOnly:false,movesMain:true,company:['#co-name','.sov-ta table','.inv-sec .inv-open'],agents:['a[href$="/chat?new=agent"]','.talk-tip a'],agent:['#set-make-main','#danger-pause','#danger-delete','.talk-tip a']},
  {role:'Manager',email:'manager@example.com',sections,readOnly:false,movesMain:false,company:['.ro-text','.sov-ta table'],agents:['a[href$="/chat?new=agent"]','.talk-tip a'],agent:['.talk-tip a']},
  {role:'Contributor',email:'reviewer@example.com',sections,readOnly:true,movesMain:false,company:['.ro-text','.ro-note:not(.sov-warn)','[aria-labelledby=co-h-mem] .panel-row'],agents:['a[href$="/chat?new=agent"]','.ro-note','.talk-tip a'],agent:['.ro-note','.talk-tip a']},
  {role:'Viewer',email:'viewer@example.com',sections:['Agents','Your account'],readOnly:true,movesMain:false,company:null,agents:['.ro-note'],agent:['.ro-note']},
@@ -224,6 +224,20 @@ for(const view of roleViews) test(`${view.role}: Settings shows only what the Ro
   await page.goto(`/c/rs-learning/settings?agent=${ads}`);
   await expect(overlay.locator('#set-name')).toHaveValue('Ads');
   await shows('agent',view.agent);
+  // The pinned Engine has no paused state for a profile, so Pause stays "Soon" and opens nothing (#177); force, as Playwright waits on aria-disabled.
+  // Delete's confirm is drawn after the click on Pause, so a confirm Pause opened would be drawn by then too.
+  if(view.agent.includes('#danger-pause')) {
+   const pause=overlay.locator('#danger-pause');
+   await expect(pause).toHaveAttribute('aria-disabled','true');
+   await expect(pause).toHaveAttribute('title','Soon');
+   await pause.click({force:true});
+   await overlay.locator('#danger-delete').click();
+   await expect(overlay.getByRole('group',{name:'Delete Ads'})).toBeVisible();
+   await expect(overlay.locator('.danger-confirm')).toHaveCount(1);
+   await expect(pause).not.toHaveAttribute('aria-expanded','true');
+   await overlay.locator('#danger-delete').click();
+   await expect(overlay.locator('.danger-confirm')).toHaveCount(0);
+  }
   // The same request from every Role: the server checks the Role again, whatever the page offered.
   const answer=await page.request.post('/api/hermes-agents',{data:{company:rsLearning,intent:'default',agent:ads}});
   expect(answer.status()).toBe(view.movesMain?200:403);
