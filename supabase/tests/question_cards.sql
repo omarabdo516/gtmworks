@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(32);
+select plan(34);
 -- #138. Ads in RS Learning, shown to the Manager (2), the Contributors (3, 5) and the Viewer (4); the Owner (1) sees every
 -- Agent. One Conversation with Ads each, and in it the message of one run.
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
@@ -44,8 +44,8 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000005',true);
 select throws_ok($$select public.answer_question('10000000-0000-0000-0000-000000000001','f2000000-0000-0000-0000-000000000003',current_setting('test.card')::bigint,1,null,'f3000000-0000-0000-0000-000000000005')$$,
  'P0002','conversationNotFound','another Member cannot answer the question');
-select throws_ok($$select public.answer_question('10000000-0000-0000-0000-000000000003','f2000000-0000-0000-0000-000000000003',current_setting('test.card')::bigint,1,null,'f3000000-0000-0000-0000-00000000000b')$$,
- 'P0002','conversationNotFound','a Member of another Company, naming that Company, cannot answer this Company''s question');
+select throws_ok($$select public.answer_question('10000000-0000-0000-0000-000000000003','f2000000-0000-0000-0000-000000000005',null,null,'Students','f3000000-0000-0000-0000-00000000000b')$$,
+ 'P0002','conversationNotFound','a person naming another Company they belong to cannot answer in their own Conversation of this Company');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
 select throws_ok($$select public.answer_question('10000000-0000-0000-0000-000000000001','f2000000-0000-0000-0000-000000000004',(select id from public.reply_cards where conversation_id='f2000000-0000-0000-0000-000000000004'),1,null,'f3000000-0000-0000-0000-000000000004')$$,
  '42501','conversationNotAllowed','a Viewer cannot answer, even a question of their own Conversation');
@@ -168,6 +168,7 @@ select public.track_run_question('f2000000-0000-0000-0000-000000000001','q-run-1
 reset role;
 insert into public.conversation_usage(company_id,conversation_id,run_id,outcome) values ('10000000-0000-0000-0000-000000000001','f2000000-0000-0000-0000-000000000001','q-run-1b','completed');
 select set_config('test.ended_card',(select id::text from public.reply_cards where call_id='p6@1'),true);
+select is((select state from public.reply_cards where call_id='p6@1'),'closed','the question closes as its Run ends, before anyone answers it');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select is(public.answer_question('10000000-0000-0000-0000-000000000001','f2000000-0000-0000-0000-000000000001',current_setting('test.ended_card')::bigint,1,null,'f3000000-0000-0000-0000-00000000000d'),'closed',
@@ -175,6 +176,18 @@ select is(public.answer_question('10000000-0000-0000-0000-000000000001','f200000
 reset role;
 select results_eq($$select state,content ? 'answer' from public.reply_cards where call_id='p6@1'$$,$$values ('closed',false)$$,
  'it closes, holding no answer, so the Conversation can wait on its next question');
+
+-- An answer claimed as its Run ends is never delivered: the Run's end closes it with the answer kept, and the
+-- Conversation's next question is kept again.
+insert into public.conversation_usage(company_id,conversation_id,run_id,outcome) values ('10000000-0000-0000-0000-000000000001','f2000000-0000-0000-0000-000000000002','q-run-2','completed');
+insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id)
+ values ('10000000-0000-0000-0000-000000000001','f2000000-0000-0000-0000-000000000002','person','20000000-0000-0000-0000-000000000002','Someone','Next one',gen_random_uuid(),'q-run-2b');
+set local role service_role;
+select public.track_run_question('f2000000-0000-0000-0000-000000000002','q-run-2b','{"id":"p7@1","text":"Which day?","choices":["Monday","Friday"],"multiple":false}',false,'2026-06-10T10:40:00Z');
+reset role;
+select results_eq($$select call_id,state,content->>'answer' from public.reply_cards where call_id in ('p4@1','p7@1') order by id$$,
+ $$values ('p4@1','closed','Google'),('p7@1','open',null)$$,
+ 'a claimed answer whose Run ended closes with the answer kept, and the next question is kept again');
 
 select * from finish();
 rollback;
