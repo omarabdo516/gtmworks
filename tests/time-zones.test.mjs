@@ -49,6 +49,9 @@ test('beforeMidnight is the instant before a local day ends, a clock change incl
   assert.equal(beforeMidnight('2026-11-17', 'America/Sao_Paulo').toISOString(), '2026-11-18T02:59:30.000Z');
   assert.equal(beforeMidnight('2026-11-01', 'America/New_York').toISOString(), '2026-11-02T04:59:30.000Z');
   assert.equal(beforeMidnight('2026-11-17', 'UTC', 1).toISOString(), '2026-11-17T23:59:59.000Z');
+  // Clocks that jump forward at midnight: the day still ends at 23:59:59 on its own clock, an hour before the jump's UTC.
+  assert.equal(beforeMidnight('2026-03-07', 'America/Havana', 1).toISOString(), '2026-03-08T04:59:59.000Z');
+  assert.equal(beforeMidnight('2026-04-23', 'Africa/Cairo').toISOString(), '2026-04-23T21:59:30.000Z');
 });
 
 test('uuid gives the n-th fixed id in the shape of a version 4 UUID', () => {

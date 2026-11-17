@@ -8,13 +8,13 @@ const offsetAt = (instant, timeZone) => {
   return Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second) - Math.floor(instant / 1000) * 1000;
 };
 
-// The instant `seconds` before the local day `day` (YYYY-MM-DD) ends in `timeZone`. The next day's midnight is found
-// with the offset at a first guess and checked again with the offset there, so a day with a clock change still ends right.
+// The instant `seconds` before the local day `day` (YYYY-MM-DD) ends in `timeZone`, read on its wall clock (23:59:30 by
+// default). The offset is taken at a first guess and again at the result, so a day whose clocks change, even at
+// midnight, still ends right.
 export function beforeMidnight(day, timeZone = runnerZone, seconds = 30) {
   const [year, month, date] = day.split('-').map(Number);
-  const wall = Date.UTC(year, month - 1, date + 1);
-  const guess = wall - offsetAt(wall, timeZone);
-  return new Date(wall - offsetAt(guess, timeZone) - seconds * 1000);
+  const wall = Date.UTC(year, month - 1, date + 1) - seconds * 1000;
+  return new Date(wall - offsetAt(wall - offsetAt(wall, timeZone), timeZone));
 }
 
 // The n-th fixed id, shaped as a version 4 UUID.
