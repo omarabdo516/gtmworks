@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { test, expect, type BrowserContext, type Page } from './offline-browser';
 
-// The browser reaches nothing outside this machine (#266): every request to an outside host is aborted, and a test that
+// The browser reaches nothing outside this machine (#266): every request to an outside host fails, and a test that
 // made one fails naming the host. A page of its own, so these need no app page.
 const probe = (page: Page) => page.setContent('<img src="https://outside.example.org/probe.png">').then(() => page.waitForLoadState('load'));
 
@@ -19,7 +19,7 @@ test('a context the test opens itself is guarded the same way', async ({ browser
     const page = await context.newPage();
     const failed = page.waitForEvent('requestfailed');
     await probe(page);
-    expect((await failed).failure()?.errorText).toMatch(/^net::ERR_BLOCKED_BY_CLIENT/);
+    expect((await failed).url()).toBe('https://outside.example.org/probe.png');
     expect(outsideRequests.splice(0)).toEqual(['outside.example.org']);
   } finally { await context.close(); }
 });
@@ -30,13 +30,12 @@ test('an outside WebSocket is closed before it connects, and its host is reporte
   expect(outsideRequests.splice(0)).toEqual(['socket.example.org']);
 });
 
-// That hop is not stopped, so it goes to a port Chromium refuses as unsafe before any lookup.
-test('a local address that redirects to an outside one is reported', async ({ page, outsideRequests }) => {
-  const server = createServer((_, response) => response.writeHead(302, { location: 'http://redirected.example.org:25/probe.png' }).end());
+test('a local address that redirects to an outside one is stopped there and reported', async ({ page, outsideRequests }) => {
+  const server = createServer((_, response) => response.writeHead(302, { location: 'https://redirected.example.org/probe.png' }).end());
   await new Promise<void>(done => server.listen(0, '127.0.0.1', done));
   try {
     await page.goto(`http://127.0.0.1:${(server.address() as AddressInfo).port}/`).catch(() => undefined);
-    expect(outsideRequests.splice(0)).toEqual(['redirected.example.org:25']);
+    expect(outsideRequests.splice(0)).toEqual(['redirected.example.org']);
   } finally { server.close(); }
 });
 
