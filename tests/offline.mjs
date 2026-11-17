@@ -68,7 +68,8 @@ const ownUrl = (() => {
 
 // What NODE_OPTIONS holds without the guard (this checkout's or any other), for the one process that must reach
 // outside: the app build fetches its Google fonts (scripts/web.sh).
-export const nodeOptionsBefore = (process.env.NODE_OPTIONS ?? '').replace(/\s*--import[= ]\S*\/tests\/offline\.mjs/g, '').trim();
+// The whole argument goes, quoted or not, so no lone quote is left for the processes it starts.
+export const nodeOptionsBefore = (process.env.NODE_OPTIONS ?? '').replace(/\s*--import[= ](?:"[^"]*\/tests\/offline\.mjs"|'[^']*\/tests\/offline\.mjs'|[^\s"']*\/tests\/offline\.mjs)(?=\s|$)/g, '').trim();
 
 // Every refusal of a run, by any process the run started (a server or worker that swallowed its error included), is
 // written to one file, which the run reads at its end: a `node --test` file at exit (below), a Playwright run in its

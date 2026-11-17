@@ -145,6 +145,16 @@ test('the app build gets NODE_OPTIONS without the guard, also when it was inheri
     { env: { NODE_OPTIONS: `--max-old-space-size=4096 --import=${guard}` } });
   assert.equal(read.status, 0, read.stderr);
   assert.equal(JSON.parse(read.stdout), '--max-old-space-size=4096');
+  const dir = mkdtempSync(join(tmpdir(), 'offline-quoted-')), spaced = join(dir, 'a checkout', 'tests');
+  try {
+    mkdirSync(spaced, { recursive: true });
+    copyFileSync('tests/offline.mjs', join(spaced, 'offline.mjs'));
+    for (const inherited of ['--import "./tests/offline.mjs" --max-old-space-size=4096', `--import "${join(spaced, 'offline.mjs')}" --max-old-space-size=4096`]) {
+      const quoted = node(['--input-type=module', '-e', `import { nodeOptionsBefore } from ${JSON.stringify(guard)}; console.log(JSON.stringify(nodeOptionsBefore));`], { env: { NODE_OPTIONS: inherited } });
+      assert.equal(quoted.status, 0, quoted.stderr);
+      assert.equal(JSON.parse(quoted.stdout), '--max-old-space-size=4096', inherited);
+    }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 // The proofs above load the guard themselves, so this pins that every runner still loads it.
