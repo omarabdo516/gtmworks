@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, expect } from 'vitest';
+import { afterEach, expect } from 'vitest';
 import { commands } from 'vitest/browser';
 import type {} from '@vitest/browser-playwright';
 
@@ -11,5 +11,6 @@ declare module 'vitest/browser' {
 
 // Every component test file runs offline (#266, vitest.config.mts): the browser aborts outside requests, and a test that
 // made one fails naming each host.
-beforeAll(() => commands.blockOutside());
+// Awaited here, before the test file itself loads, so a request the file makes while it loads is guarded too.
+await commands.blockOutside();
 afterEach(async () => { expect(await commands.outsideRequests(), 'outside requests the browser made (tests/components/offline-setup.ts)').toEqual([]); });

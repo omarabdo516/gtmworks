@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { globSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -39,11 +39,22 @@ test('a file that swallows a refused outside request fails, and the run names th
     writeFileSync(join(dir, 'swallow.test.mjs'), [
       "import { test } from 'node:test';",
       "import assert from 'node:assert/strict';",
+      "import net from 'node:net';",
+      "import { spawnSync } from 'node:child_process';",
       "test('swallows an outside request', async () => { await fetch('https://outside.example.org/').catch(() => {}); });",
       "test('the refusal names the host and reads as refused', async () => {",
       "  const error = await fetch('https://outside.example.org/').then(() => undefined, error => error.cause);",
       "  assert.equal(error?.code, 'ECONNREFUSED');",
       "  assert.equal(error.message, 'offline test run: refused a connection to outside.example.org:443 (tests/offline.mjs)');",
+      '});',
+      "test('a process the test starts refuses too, and fails', () => {",
+      "  const child = spawnSync(process.execPath, ['-e', \"fetch('https://child.example.org/').catch(error => console.log(error.cause.message))\"], { encoding: 'utf8' });",
+      "  assert.equal(child.stdout.trim(), 'offline test run: refused a connection to child.example.org:443 (tests/offline.mjs)');",
+      "  assert.equal(child.status, 1);",
+      '});',
+      "test('a port written as a padded string is still a port', async () => {",
+      "  const error = await new Promise(done => new net.Socket().on('error', done).connect(' 443', '8.8.8.8'));",
+      "  assert.equal(error.message, 'offline test run: refused a connection to 8.8.8.8:443 (tests/offline.mjs)');",
       '});',
     ].join('\n'));
     const env = { ...process.env, NODE_TEST_CONTEXT: undefined };
@@ -53,5 +64,19 @@ test('a file that swallows a refused outside request fails, and the run names th
     assert.match(output, /refused a connection to outside\.example\.org:443/);
     assert.match(output, /✔ the refusal names the host and reads as refused/);
     assert.match(output, /✔ swallows an outside request/);
+    assert.match(output, /✔ a port written as a padded string is still a port/);
+    assert.match(output, /✔ a process the test starts refuses too, and fails/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+// The proofs above load the guard themselves, so this pins that every runner still loads it.
+test('every test runner loads the guard, and every browser spec but the compared screens uses the guarded test', () => {
+  const read = path => readFileSync(path, 'utf8');
+  assert.match(JSON.parse(read('package.json')).scripts.test, /^node --import \.\/tests\/offline\.mjs --test /);
+  assert.match(read('ci.sh'), /node --import \.\/tests\/offline\.mjs --test /);
+  for (const config of ['playwright.config.ts', 'playwright.proxy.config.ts', 'vitest.config.mts']) assert.match(read(config), /from '\.\/tests\/offline\.mjs'|import '\.\/tests\/offline\.mjs'/, config);
+  assert.match(read('vitest.config.mts'), /setupFiles: \['tests\/components\/offline-setup\.ts'\]/);
+  assert.match(read('tests/fresh-seed.ts'), /from '\.\/offline-browser'/);
+  const specs = globSync('tests/**/*.spec.ts').filter(path => path !== 'tests/visual.spec.ts');
+  assert.deepEqual(specs.filter(path => !/import \{[^}]*\btest\b[^}]*\} from '\.\.?\/(fresh-seed|offline-browser)'/.test(read(path))), []);
 });

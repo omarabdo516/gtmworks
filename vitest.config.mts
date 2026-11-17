@@ -3,7 +3,7 @@ import { playwright } from '@vitest/browser-playwright';
 import { computedMotion, referenceComputed, type ComputedStyle } from './tests/motion-css.mjs';
 import { languages, widths } from './tests/visual-screens.mjs';
 // Offline by default (#266): the runner refuses outside connections and names the host; the browser's are aborted below.
-import { isLocalUrl } from './tests/offline.mjs';
+import { blockOutside } from './tests/offline.mjs';
 
 // Outside requests each test browser session made (a session has its own context and runs its files one at a time), read
 // and emptied by tests/components/offline-setup.ts after each test.
@@ -31,7 +31,7 @@ export default defineConfig({
           if (outside.has(context)) return;
           const hosts: string[] = [];
           outside.set(context, hosts);
-          await context.route(url => !isLocalUrl(url), route => { hosts.push(new URL(route.request().url()).host); return route.abort('blockedbyclient'); });
+          await blockOutside(context, host => hosts.push(host));
         },
         outsideRequests: ({ context }) => outside.get(context)?.splice(0) ?? [],
       },

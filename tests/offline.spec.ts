@@ -1,4 +1,6 @@
-import { test, expect, type Page } from './offline-browser';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { test, expect, type BrowserContext, type Page } from './offline-browser';
 
 // The browser reaches nothing outside this machine (#266): every request to an outside host is aborted, and a test that
 // made one fails naming the host. A page of its own, so these need no app page.
@@ -20,6 +22,31 @@ test('a context the test opens itself is guarded the same way', async ({ browser
     expect((await failed).failure()?.errorText).toMatch(/^net::ERR_BLOCKED_BY_CLIENT/);
     expect(outsideRequests.splice(0)).toEqual(['outside.example.org']);
   } finally { await context.close(); }
+});
+
+test('an outside WebSocket is closed before it connects, and its host is reported', async ({ page, outsideRequests }) => {
+  await page.setContent('<p>socket</p>');
+  await page.evaluate(() => new Promise(done => { new WebSocket('wss://socket.example.org/live').onclose = done; }));
+  expect(outsideRequests.splice(0)).toEqual(['socket.example.org']);
+});
+
+// That hop is not stopped, so it goes to a port Chromium refuses as unsafe before any lookup.
+test('a local address that redirects to an outside one is reported', async ({ page, outsideRequests }) => {
+  const server = createServer((_, response) => response.writeHead(302, { location: 'http://redirected.example.org:25/probe.png' }).end());
+  await new Promise<void>(done => server.listen(0, '127.0.0.1', done));
+  try {
+    await page.goto(`http://127.0.0.1:${(server.address() as AddressInfo).port}/`).catch(() => undefined);
+    expect(outsideRequests.splice(0)).toEqual(['redirected.example.org:25']);
+  } finally { server.close(); }
+});
+
+test.describe('a hook', () => {
+  let opened: BrowserContext;
+  test.beforeAll(async ({ browser }) => { opened = await browser.newContext(); await probe(await opened.newPage()); });
+  test.afterAll(() => opened.close());
+  test('an outside request a beforeAll made fails the next test, naming the host', async ({ outsideRequests }) => {
+    expect(outsideRequests.splice(0)).toEqual(['outside.example.org']);
+  });
 });
 
 test('a test that leaves an outside request fails', async ({ page }) => {
