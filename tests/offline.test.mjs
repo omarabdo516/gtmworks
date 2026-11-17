@@ -140,6 +140,11 @@ test('under Vitest, whose bundled config holds the guard, every process it start
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('a test\'s own npm does not ask the registry for a newer npm', () => {
+  const child = node(['--import', guard, '-e', "console.log(require('node:child_process').execFileSync(process.execPath, ['-p', 'process.env.npm_config_update_notifier'], { encoding: 'utf8' }).trim())"], { env: { npm_config_update_notifier: undefined } });
+  assert.equal(child.stdout.trim(), 'false', child.stderr);
+});
+
 test('the app build gets NODE_OPTIONS without the guard, also when it was inherited', () => {
   const read = node(['--input-type=module', '-e', `import { nodeOptionsBefore } from ${JSON.stringify(guard)}; console.log(JSON.stringify(nodeOptionsBefore));`],
     { env: { NODE_OPTIONS: `--max-old-space-size=4096 --import=${guard}` } });

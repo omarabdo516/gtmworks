@@ -117,6 +117,8 @@ if (!net.Socket.prototype.connect[installed]) {
     return { host: typeof second === 'string' ? second : 'localhost', port: first };
   };
   if (!process.env[logKey]) freshLog();
+  // A test's own `npm` would ask the registry for a newer npm on a machine it does not take for CI; that is not the test.
+  process.env.npm_config_update_notifier = 'false';
   net.Socket.prototype.connect = Object.assign(function (...args) {
     const to = target(args);
     if (!to || isLocalHost(to.host)) return connect.apply(this, args);
