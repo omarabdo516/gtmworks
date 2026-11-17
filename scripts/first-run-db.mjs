@@ -11,11 +11,17 @@ const api=`http://127.0.0.1:${portOf('api')}`;
 export function assertLocalTarget(baseURL, apiURL=process.env.NEXT_PUBLIC_SUPABASE_URL || api) {
  if(baseURL!==originOf() || apiURL!==api) throw new Error('First-run tests refuse non-local targets');
 }
-export function localQuery(sql,baseURL) {
+function localRun(sql,baseURL) {
  assertLocalTarget(baseURL);
  // Fixed connection, never the linked project or a caller-supplied database URL.
- const output=execFileSync('npx',['--no-install','supabase','db','query',sql,'--db-url',database,'--yes','-o','json','--agent','no'],{cwd:root,encoding:'utf8'});
- const result=JSON.parse(output);
+ return execFileSync('npx',['--no-install','supabase','db','query',sql,'--db-url',database,'--yes','-o','json','--agent','no'],{cwd:root,encoding:'utf8'});
+}
+// A statement that returns no rows (a DO block): the CLI prints its command tag, not JSON.
+export function localStatement(sql,baseURL) {
+ localRun(sql,baseURL);
+}
+export function localQuery(sql,baseURL) {
+ const result=JSON.parse(localRun(sql,baseURL));
  // With --agent no, the CLI returns a plain array of row objects.
  if(!Array.isArray(result)) throw new Error('Local query returned an unexpected JSON result');
  return result;
