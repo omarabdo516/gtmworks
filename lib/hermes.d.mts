@@ -32,6 +32,7 @@ export function writeSharedSkill(connection:import('./engine.mjs').EngineConnect
 export function shareSkills(connection:import('./engine.mjs').EngineConnection,sharing:{profile:string,folder:string,skill:string}):Promise<{state:'shared'|'shadowed'|'missing'|'refused'|'unreachable'|'failed'}>;
 export type ProviderKey={provider:string,label:string,set:boolean};
 export function readProviderKeys(connection:import('./engine.mjs').EngineConnection,target:{space:string,profiles:string[]}):Promise<{state:'found',keys:ProviderKey[],lacking:string[],leftover:string[],unread:string[]}|{state:'refused'|'unreachable'|'failed',keys:null,lacking:null,leftover:null,unread:null}>;
+export function readHeldKeys(connection:import('./engine.mjs').EngineConnection,target:{space:string,profiles:string[]}):Promise<{state:'found',holding:string[],unread:string[]}|{state:'refused'|'unreachable'|'failed',holding:null,unread:null}>;
 export type ProfileKeyState='written'|'noModel'|'modelUnread'|'refused'|'unreachable'|'failed';
 export function setProviderKey(connection:import('./engine.mjs').EngineConnection,key:{space:string,profiles:string[],provider:string,value:string}):Promise<{state:'written',model:string|null,profiles:Record<string,ProfileKeyState>}|{state:'unknownProvider'|'invalid'|'refused'|'unreachable'|'failed',model:null,profiles:null}>;
 export type ProfileKeyRemoval='removed'|'nothing'|'refused'|'unreachable'|'failed';
