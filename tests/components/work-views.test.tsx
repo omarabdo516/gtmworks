@@ -110,17 +110,17 @@ test('a Card two Agents worked on carries both faces and "Worked on it", and say
  const screen = await showWork(crewBoard());
  const crew = document.querySelector('#board-cols .kcard[data-card-id="1"] .kcard__crew')!;
  expect([...crew.querySelectorAll('.fstack[aria-hidden="true"] .agent-face')].map(face => face.getAttribute('aria-label'))).toEqual(['SEO', 'Ads']);
- expect(crew.querySelector('.kcard__crew-t')!.textContent).toBe('Worked on it: SEO, Ads');
+ expect(crew.querySelector('.kcard__crew-t')!.textContent).toBe('Worked on it: SEO and Ads');
  expect(crew.nextElementSibling).toBe(foot(1));
- await expect.element(screen.getByRole('link', { name: 'أفكار لمحتوى الشهر · Worked on it: SEO, Ads', exact: true })).toBeVisible();
+ await expect.element(screen.getByRole('link', { name: 'أفكار لمحتوى الشهر · Worked on it: SEO and Ads', exact: true })).toBeVisible();
  expect(document.querySelectorAll('#board-cols .kcard__crew')).toHaveLength(1);
  await expect.element(screen.getByRole('link', { name: 'Design', exact: true })).toBeVisible();
 });
 
-test('in Arabic the crew\'s names are joined with the Arabic comma, each kept in its own direction', async () => {
+test('in Arabic the crew\'s names are joined as Arabic joins a list, each kept in its own direction', async () => {
  const screen = await showWork(crewBoard(), { language: 'ar' });
  const line = document.querySelector('#board-cols .kcard[data-card-id="1"] .kcard__crew-t')!;
- expect(line.textContent).toBe('اشتغل عليها: SEO، Ads');
+ expect(line.textContent).toBe('اشتغل عليها: SEO وAds');
  expect([...line.querySelectorAll('bdi')].map(name => name.textContent)).toEqual(['SEO', 'Ads']);
- await expect.element(screen.getByRole('link', { name: 'أفكار لمحتوى الشهر · اشتغل عليها SEO، Ads', exact: true })).toBeVisible();
+ await expect.element(screen.getByRole('link', { name: 'أفكار لمحتوى الشهر · اشتغل عليها: SEO وAds', exact: true })).toBeVisible();
 });

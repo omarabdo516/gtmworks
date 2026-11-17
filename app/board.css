@@ -165,9 +165,6 @@
 .gw .kcard__crew { display: flex; align-items: flex-start; gap: 6px; min-width: 0; font-size: var(--gw-fs-xs); line-height: 18px; color: var(--gw-text-3); }
 .gw .kcard__crew-t { flex: 1 1 0; min-width: 0; overflow-wrap: anywhere; text-wrap: pretty; }
 .gw .kcard__crew-t bdi { white-space: nowrap; }
-.gw .kcard__crew .fstack { display: inline-flex; align-items: center; flex: none; }
-.gw .kcard__crew .fstack .agent-face { border-radius: 50%; box-shadow: 0 0 0 2px var(--gw-bg-pane); }
-.gw .kcard__crew .fstack .agent-face + .agent-face { margin-inline-start: -5.4px; }
 .gw .kcard__due { margin-inline-start: auto; flex: none; }
 .gw .kcard__kind { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .gw .kcard .mode-chip { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 var(--s2, 8px); border: 1px solid; border-radius: var(--gw-r-full); font-size: var(--gw-fs-xs); font-weight: 600; }
