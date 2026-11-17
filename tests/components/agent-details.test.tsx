@@ -1,7 +1,9 @@
 import { expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
 import { page, userEvent } from 'vitest/browser';
-import type { ComponentProps } from 'react';
+import { act, type ComponentProps } from 'react';
+import { hydrateRoot } from 'react-dom/client';
+import { renderToString } from 'react-dom/server';
 import AgentChat from '@/app/c/[slug]/chat/[[...agent]]/agent-chat';
 import NewChatKey from '@/app/new-chat-key';
 import { detailsTabs } from '@/app/agent-details-tabs';
@@ -74,6 +76,21 @@ for (const [width, where] of [[1440, 'beside the chat'], [900, 'below 1024px, wh
   await expect.element(details.getByRole('link', { name: 'Settings for Mona' })).toHaveFocus();
   expect(sessionStorage.getItem('gw-return-focus')).toBeNull();
  } finally { sessionStorage.clear(); }
+});
+
+// A full page load: the first hydrated render reads the window as wide, as the server drew it, before the real width.
+test('back from the settings on a full page load below 1024px, the details open over the chat and the gear has the focus', async () => {
+ await page.viewport(900, 900);
+ sessionStorage.setItem('gw-return-focus', 'dp-settings');
+ const chatPage = <div className="gw"><LanguageProvider language="en"><AgentChat slug="rs-learning" company="co-1" agent={mona} details={{ status: 'idle', tab: 'activity', tabs }} writer/></LanguageProvider></div>;
+ const container = document.createElement('div'); document.body.append(container);
+ container.innerHTML = renderToString(chatPage);
+ const root = await act(async () => hydrateRoot(container, chatPage, { onRecoverableError: () => {} }));
+ try {
+  await expect.poll(() => container.querySelector('#details')?.classList.contains('is-open')).toBe(true);
+  await expect.poll(() => document.activeElement?.id).toBe('dp-settings');
+  expect(sessionStorage.getItem('gw-return-focus')).toBeNull();
+ } finally { act(() => root.unmount()); container.remove(); sessionStorage.clear(); }
 });
 
 test('another page\'s return focus is left for that page', async () => {

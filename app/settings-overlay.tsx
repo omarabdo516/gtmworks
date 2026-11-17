@@ -82,11 +82,14 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
   :section==='account'?<AccountSection t={t} theme={theme} personName={personName} role={role} roleName={roleNames[role]||''} companyName={company.name} company={company.id} memberNote={memberNote}/>
   :section==='knowledge'?<><Head title={t('settingsKnowledge')} sub={t('settingsKnowledgeSub')}/>{ro}<CompanyKnowledge slug={slug} company={company.id} canManage={canManage} part={query.part}/></>
   :<SoonSection t={t} section={section} ro={ro} models={<ModelsSubscriptions company={company.id} owner={owner} subscriptions={subscriptions}/>}/>;
- return <OverlayChrome t={t} slug={slug} companyName={company.name} role={role} readOnly={!canManage} section={section} learningWaiting={learningWaiting}>{page}</OverlayChrome>;
+ return <OverlayChrome t={t} slug={slug} companyName={company.name} role={role} readOnly={!canManage} section={section} learningWaiting={learningWaiting} initialFocus={agent?'sov-tab-settings':undefined}>{page}</OverlayChrome>;
 }
 
 const Head=({title,sub,extra}:{title:string,sub?:string,extra?:ReactNode})=><header className="sov-head"><div className="sov-head__t"><h3 className="sov-h" id="sov-h" tabIndex={-1}>{title}</h3>{sub&&<p className="sov-sub">{sub}</p>}</div>{extra}</header>;
-const Label=({id,children,extra}:{id:string,children:ReactNode,extra?:ReactNode})=><h4 className="dp-label" id={id}><span>{children}</span>{extra}</h4>;
+const Label=({id,children}:{id:string,children:ReactNode})=><h4 className="dp-label" id={id}><span>{children}</span></h4>;
+// A label with a link at its end (reference: "Back" beside "The job"): the link sits outside the heading, so the heading
+// and the section it names read as the title alone.
+const LabelRow=({id,children,extra}:{id:string,children:ReactNode,extra:ReactNode})=><div className="dp-label"><h4 className="dp-label__h" id={id}>{children}</h4>{extra}</div>;
 // A part of the reference whose feature is not built yet: drawn in its place, empty, and saying "Soon".
 const Soon=({t}:{t:T})=><div className="panel-card sov-soon" aria-disabled="true" title={t('soon')}><p className="panel-empty">{t('soon')}</p></div>;
 const SoonSec=({t,id,label}:{t:T,id:string,label:string})=><section className="dp-sec" aria-labelledby={id}><Label id={id}>{label}</Label><Soon t={t}/></section>;
@@ -152,7 +155,7 @@ function AgentsSection({t,rtl,slug,agents,stateOf,canManage,canWrite,owner}:{t:T
     {agent.speciality&&<span className="panel-row__d"><bdi>{agent.speciality}</bdi></span>}</span>
    <span className="panel-row__meta">{t(statusKeys[stateOf(agent.id)])}</span>
    <span className="panel-row__icon sov-chev"><SettingsIcon name="forward" rtl={rtl}/></span></Link>)
-   :<p className="panel-empty">{t('noAgentsYet')}</p>}</div><FocusReturn ids={agents.map(agent=>`sov-ag-${agent.id}`)}/></>;
+   :<p className="panel-empty">{t('noAgentsYet')}</p>}</div><FocusReturn/></>;
 }
 
 function AgentPage({t,rtl,slug,company,userId,agent,status,main,rules,owner,canManage,canWrite}:{t:T,rtl:boolean,slug:string,company:string,userId:string,agent:Agent,status:AgentStatus,main?:Agent,rules:Rule[],owner:boolean,canManage:boolean,canWrite:boolean}) {
@@ -177,7 +180,7 @@ function AgentPage({t,rtl,slug,company,userId,agent,status,main,rules,owner,canM
    <div className="dp-sections sov-rules"><AgentRules t={t} company={company} userId={userId} rules={rules} canManage={canManage}/></div>
    <div className="dp-sections">
     {!canManage&&<p className="ro-note"><SettingsIcon name="shield"/><span>{t('settingsAgentsRO')}</span></p>}
-    <section className="dp-sec" aria-labelledby="set-h-job"><Label id="set-h-job" extra={<BackLink className="link-btn" slug={slug} agent={agent.id}>{t('settingsBack')}</BackLink>}>{t('settingsJob')}</Label>
+    <section className="dp-sec" aria-labelledby="set-h-job"><LabelRow id="set-h-job" extra={<BackLink className="link-btn" slug={slug} agent={agent.id}>{t('settingsBack')}</BackLink>}>{t('settingsJob')}</LabelRow>
      {/* Renaming an Agent or changing its role is not built yet: the fields show them read only. */}
      <div className="panel-card set-card">
       <div className="set-field"><label className="set-label" htmlFor="set-name">{t('settingsName')}</label><input className="set-input" id="set-name" type="text" dir="auto" readOnly aria-disabled="true" title={t('soon')} defaultValue={agent.name}/></div>

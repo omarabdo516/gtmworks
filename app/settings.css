@@ -81,6 +81,7 @@
 .gw .sov .dp-sections { display: flex; flex-direction: column; gap: var(--s6); }
 .gw .sov .dp-sec { display: flex; flex-direction: column; gap: 10px; }
 .gw .sov .dp-label { display: flex; align-items: center; justify-content: space-between; min-height: 22px; padding-inline: 2px; font-size: var(--gw-fs-sm); font-weight: 400; line-height: 1.6; color: var(--gw-text-2); }
+.gw .sov .dp-label__h { margin: 0; font: inherit; color: inherit; }
 .gw .sov .panel-card { display: flex; flex-direction: column; padding: 4px; border-radius: var(--gw-r-md); background: var(--gw-bg-pane); border: 0.5px solid var(--gw-border-3); list-style: none; margin: 0; }
 .gw .sov .panel-row { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 6px var(--s2); border-radius: var(--gw-r-sm); width: 100%; text-align: start; position: relative; color: var(--gw-text-1); }
 .gw .sov .panel-row + .panel-row::before { content: ""; position: absolute; top: 0; inset-inline: var(--s2); height: 0.5px; background: var(--gw-border-2); }

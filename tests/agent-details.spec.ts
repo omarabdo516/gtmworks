@@ -171,7 +171,7 @@ test('a Contributor sees the Card file and their own Conversation file, never an
  expect((await page.request.get(`/c/rs-learning/files/conversation/${fileId('audiences.csv')}`)).status()).toBe(404);
 });
 
-test('a Viewer reads the same panel with no action in it, only the gear to the settings they read, and without another person\'s request',async({page})=>{
+test('a Viewer\'s panel has only the gear and Close as actions, and no other person\'s request',async({page})=>{
  const details=await openDetails(page,'viewer@example.com',ads,'Meta Ads');
  await expect(details.locator('.dp-id__role')).toHaveText('Runs the Meta ads. · Working');
  await expect(details.locator('.dp-top a')).toHaveCount(1);
@@ -267,8 +267,9 @@ for(const [where,path] of [['a Conversation',`/c/rs-learning/conversations/${con
 test('"Back" beside The job and "All agents" return to the Agents list with the focus on that Agent\'s row',async({page})=>{
  await page.setViewportSize({width:1440,height:900});
  await signIn(page,'omar@example.com',`/c/rs-learning/settings?agent=${ads}`);
- const back=page.locator('#set-h-job').getByRole('link',{name:'Back',exact:true});
- await expect(page.locator('#set-h-job')).toHaveText('The jobBack');
+ const job=page.getByRole('region',{name:'The job',exact:true});
+ await expect(job.getByRole('heading',{name:'The job',exact:true})).toBeVisible();
+ const back=job.getByRole('link',{name:'Back',exact:true});
  await back.click();
  await expect(page).toHaveURL(/\/c\/rs-learning\/settings\?section=agents$/);
  await expect(page.locator(`#sov-ag-${ads}`)).toBeFocused();

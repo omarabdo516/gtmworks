@@ -64,11 +64,11 @@ test('while the chosen language is being saved the other choice waits, so the ch
 });
 
 // An Agent's page as the server draws its focus targets: the Settings tab, "All agents" and "Back" beside The job.
-const agentPage = () => render(<LanguageProvider language="en"><OverlayFrame slug="rs-learning">
+const agentPage = () => render(<LanguageProvider language="en"><OverlayFrame slug="rs-learning" initialFocus="sov-tab-settings">
  <CloseButton slug="rs-learning"/>
  <BackLink className="link-btn sov-back" id="sov-back" slug="rs-learning" agent="ag-2">All agents</BackLink>
  <div role="tablist"><button type="button" role="tab" id="sov-tab-settings" aria-selected="true">Settings</button></div>
- <h4 className="dp-label" id="set-h-job"><span>The job</span><BackLink className="link-btn" slug="rs-learning" agent="ag-2">Back</BackLink></h4>
+ <div className="dp-label"><h4 className="dp-label__h" id="set-h-job">The job</h4><BackLink className="link-btn" slug="rs-learning" agent="ag-2">Back</BackLink></div>
 </OverlayFrame></LanguageProvider>);
 
 test('an Agent\'s page opens with the focus on its Settings tab', async () => {
@@ -82,11 +82,32 @@ test('closing goes back to where the gear was pressed and leaves the gear its fo
  await screen.getByRole('button', { name: 'Close settings and go back' }).click();
  expect(push).toHaveBeenLastCalledWith('/c/rs-learning/conversations/cv-1');
  expect(sessionStorage.getItem('gw-return-focus')).toBe('dp-settings');
+ expect(sessionStorage.getItem('gw-settings-from')).toBeNull();
  sessionStorage.removeItem('gw-return-focus');
+ sessionStorage.setItem('gw-settings-from', JSON.stringify({ from: '/c/rs-learning/conversations/cv-1', focus: 'dp-settings' }));
  await userEvent.keyboard('{Escape}');
  expect(push).toHaveBeenCalledTimes(2);
  expect(push).toHaveBeenLastCalledWith('/c/rs-learning/conversations/cv-1');
  expect(sessionStorage.getItem('gw-return-focus')).toBe('dp-settings');
+});
+
+test('the place it was opened from is used once: the next close with none stored goes to the chat and focuses nothing', async () => {
+ sessionStorage.setItem('gw-settings-from', JSON.stringify({ from: '/c/rs-learning/conversations/cv-1', focus: 'dp-settings' }));
+ const screen = await agentPage();
+ const close = screen.getByRole('button', { name: 'Close settings and go back' });
+ await close.click();
+ sessionStorage.removeItem('gw-return-focus');
+ await close.click();
+ expect(push).toHaveBeenLastCalledWith('/c/rs-learning/chat');
+ expect(sessionStorage.getItem('gw-return-focus')).toBeNull();
+});
+
+for (const [from, why] of [['/c/aleem/conversations/cv-9', 'another Company'], ['/c/rs-learning/settings?section=agents', 'the settings themselves']] as const) test(`closing to the chat instead of ${why} leaves no gear focus to take there`, async () => {
+ sessionStorage.setItem('gw-settings-from', JSON.stringify({ from, focus: 'dp-settings' }));
+ const screen = await agentPage();
+ await screen.getByRole('button', { name: 'Close settings and go back' }).click();
+ expect(push).toHaveBeenLastCalledWith('/c/rs-learning/chat');
+ expect(sessionStorage.getItem('gw-return-focus')).toBeNull();
 });
 
 test('an address stored before the focus was kept still closes to it, with no focus to return', async () => {
@@ -104,10 +125,10 @@ for (const name of ['Back', 'All agents']) test(`"${name}" goes to the Agents li
  link.element().addEventListener('click', event => event.preventDefault());
  await link.click();
  expect(sessionStorage.getItem('gw-return-focus')).toBe('sov-ag-ag-2');
- const list = await render(<div><a href="#1" id="sov-ag-ag-1">Lead</a><a href="#2" id="sov-ag-ag-2">SEO</a><FocusReturn ids={['sov-ag-ag-1', 'sov-ag-ag-2']}/></div>);
+ const list = await render(<div><a href="#1" id="sov-ag-ag-1">Lead</a><a href="#2" id="sov-ag-ag-2">SEO</a><FocusReturn/></div>);
  await expect.element(list.getByRole('link', { name: 'SEO' })).toHaveFocus();
  expect(sessionStorage.getItem('gw-return-focus')).toBeNull();
  (document.activeElement as HTMLElement).blur();
- await list.rerender(<div><a href="#1" id="sov-ag-ag-1">Lead</a><a href="#2" id="sov-ag-ag-2">SEO</a><FocusReturn key="again" ids={['sov-ag-ag-1', 'sov-ag-ag-2']}/></div>);
+ await list.rerender(<div><a href="#1" id="sov-ag-ag-1">Lead</a><a href="#2" id="sov-ag-ag-2">SEO</a><FocusReturn key="again"/></div>);
  await expect.element(list.getByRole('link', { name: 'SEO' })).not.toHaveFocus();
 });

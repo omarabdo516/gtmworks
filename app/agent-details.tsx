@@ -26,7 +26,8 @@ export function useDetailsPanel():DetailsPanel {
  const overlay=useSyncExternalStore(subscribe,()=>window.matchMedia(overlayQuery).matches,()=>false);
  const [beside,setBeside]=useState(true); const [over,setOver]=useState(false);
  const close=useCallback(()=>(overlay?setOver:setBeside)(false),[overlay]);
- return {overlay,expanded:overlay?over:beside,toggle:()=>(overlay?setOver:setBeside)(value=>!value),open:()=>(overlay?setOver:setBeside)(true),close};
+ const open=useCallback(()=>(overlay?setOver:setBeside)(true),[overlay]);
+ return {overlay,expanded:overlay?over:beside,toggle:()=>(overlay?setOver:setBeside)(value=>!value),open,close};
 }
 
 // The chat's floating title (design-reference: .head-pill). With an Agent, or a channel's `details` label, it is the
@@ -75,12 +76,13 @@ export function AgentDetails({panel,agent,details,slug}:{panel:DetailsPanel,agen
  const {t,language}=useI18n();
  const [tab,setTab]=useState<Tab>(details.tab);
  // Back from the Agent's settings the gear takes the focus again (reference: the overlay's close); over the chat the
- // panel starts closed, so it opens first. This runs after the panel's own focus on its close button.
+ // panel starts closed, so it opens first. This runs after the panel's own focus on its close button. The first
+ // hydrated render reads the window as wide (the server's answer), so it waits until the width is the real one.
  const back=useRef<boolean|null>(null);
  const {overlay,expanded,open:show}=panel;
  useEffect(()=>{
-  back.current??=takeReturnFocus('dp-settings');
-  if(!back.current) return;
+  back.current??=takeReturnFocus(id=>id==='dp-settings')!==null;
+  if(!back.current||window.matchMedia(overlayQuery).matches!==overlay) return;
   if(overlay&&!expanded) { show(); return; }
   document.getElementById('dp-settings')?.focus(); back.current=false;
  },[overlay,expanded,show]);
