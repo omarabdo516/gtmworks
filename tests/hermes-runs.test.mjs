@@ -257,6 +257,24 @@ test('a choice for a request Hermes no longer waits on is gone: answered already
  } finally { await fake.close(); }
 });
 
+test('a refusal whose code is at the top of the body reads the same: a request Hermes no longer waits on is gone',async()=>{
+ const fake=await fakeHermes(); permits(fake,[deletes,deletes]);
+ fake.settings.flatPermitErrors=true;
+ try {
+  const engine=engineFor(connection(fake)); const run=/** @type {string} */(await engine.start({conversation:'s',input:'Clean up',idempotencyKey:'k'}));
+  const first=/** @type {string} */((await engine.read(run)).permission?.id);
+  assert.equal(await engine.permit(run,first,'once'),'answered');
+  assert.equal(await engine.permit(run,first,'deny'),'gone','approval_not_pending');
+  await engine.read(run);
+  assert.equal(await engine.permit('run_unknown',first,'once'),'gone','run_not_found');
+  const second=/** @type {string} */((await engine.read(run)).permission?.id);
+  assert.equal(await engine.permit(run,second,'once'),'answered');
+  await engine.read(run);
+  assert.equal(await engine.permit(run,second,'once'),'gone','approval_not_active');
+  assert.deepEqual(sentPermits(fake).map(([status,body])=>[status,body.choice]),[[200,'once'],[409,'deny'],[404,'once'],[200,'once'],[409,'once']]);
+ } finally { await fake.close(); }
+});
+
 test('a stop: the waiting Run is stopped with no request left, and a choice for it is gone',async()=>{
  const fake=await fakeHermes(); permits(fake,[deletes]);
  try {

@@ -33,9 +33,11 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
   // the pinned release does (api_server_runs.py _make_approval_notify): its status is waiting_for_approval with the
   // request in `approval` until it is answered on the run's approval route, times out (expireApproval(run), the
   // profile's approvals.timeout) or the run is stopped. The reply is given each request's choice, null for one that timed
-  // out. `permits` keeps every approval request's status and body.
+  // out.
   approvals:/** @type {(input:string)=>{description:string,command:string,choices?:string[]}[]} */(()=>[]),
-  permits:/** @type {{run:string,status:number,body:any}[]} */([]),
+  // `permits` keeps every approval request's status and body; with `flatPermitErrors` the route answers a refusal's code
+  // at the top of its body instead of under `error`.
+  permits:/** @type {{run:string,status:number,body:any}[]} */([]),flatPermitErrors:false,
   expireApproval(run) { const waiting=settings.runs.find(found=>found.id===run)?.approvals.find(asking=>!asking.settled); if(waiting) waiting.settled='expired'; return !!waiting; },
   ending:'completed',usage:/** @type {object|undefined} */({input_tokens:14000,output_tokens:12}),
   // The management listener (Hermes's dashboard, a second port): its profiles, and the status it answers with when
@@ -156,7 +158,7 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
     }
     let body=null; try { body=JSON.parse(raw); } catch { body=null; }
     if(runAction[2]==='approval') {
-     const permitted=(status,result)=>{ settings.permits.push({run:runAction[1],status,body}); return send(response,status,result); };
+     const permitted=(status,result)=>{ settings.permits.push({run:runAction[1],status,body}); return send(response,status,settings.flatPermitErrors&&result.error?result.error:result); };
      if(!run) return permitted(404,{error:{message:`Run not found: ${runAction[1]}`,code:'run_not_found'}});
      if(!body||typeof body!=='object') return permitted(400,{error:{message:'Invalid JSON'}});
      const choice=String(body.choice??'').trim().toLowerCase(); const id=typeof body.request_id==='string'?body.request_id.trim():'';
