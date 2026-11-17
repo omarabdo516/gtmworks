@@ -31,9 +31,9 @@ const stored = {
  people: [{ name: 'Youssef' }],
 };
 const replied = '2026-06-10T09:42:00Z';
-type TiedCard = { id: number, column: string, made?: string };
+type TiedCard = { id: number, column: string, made?: string, wait?: { person: string, kind: 'question' | 'hand', title: string } };
 function database(card: TiedCard | null) {
- const rows: Record<string, unknown[]> = { ...stored, work_cards: card ? [{ id: card.id, created_at: card.made ?? replied, work_stages: { board_column: card.column } }] : [] };
+ const rows: Record<string, unknown[]> = { ...stored, work_cards: card ? [{ id: card.id, created_at: card.made ?? replied, stage_id: 3, wait: card.wait ?? null, work_stages: { id: 3, board_column: card.column } }] : [] };
  const table = (name: string) => {
   const found = rows[name] ?? [];
   const query: Record<string, unknown> = { then: (resolve: (value: unknown) => unknown) => resolve({ data: found, error: null }), maybeSingle: async () => ({ data: found[0] ?? null, error: null }) };
@@ -43,8 +43,9 @@ function database(card: TiedCard | null) {
  return { from: table, rpc: async () => ({ data: null, error: null }) } as unknown as Parameters<typeof conversationRecord>[0];
 }
 const recordWith = (card: TiedCard | null) => conversationRecord(database(card), 'p-3', 'co-1', { id: 'cv-1', agent_id: null, agent_name: 'Ads', hermes_agents: { connection_id: 'c-1' } });
+// The page reads the chat's Card beside the record and hands it to the frame, as here.
 const view = (record: ConversationRecord, { language = 'en', writer = true }: { language?: 'en' | 'ar', writer?: boolean } = {}) => <LanguageProvider language={language}>
- <div className="gw"><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={record.conversation} title="" writer={writer}><Arrived record={arrived(record)} team={false}/></ConversationView></div>
+ <div className="gw"><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={record.conversation} title="" writer={writer} board={record.board}><Arrived record={arrived(record)} team={false}/></ConversationView></div>
 </LanguageProvider>;
 const show = (...args: Parameters<typeof view>) => render(view(...args));
 const pill = () => document.querySelector<HTMLElement>('.corner-pill');
@@ -90,6 +91,34 @@ test('a Card waiting on a decision reads "Waiting on you" for its writer and "Wa
  expect(pill()!.querySelector('.dot')!.className).toBe('dot dot--waiting');
  await screen.rerender(view(record, { writer: false }));
  await expect.element(screen.getByRole('link', { name: 'On the board: Waiting on the team' })).toBeVisible();
+});
+
+// #146: the chat's handed step waits on its person while its Card stays In progress; the pill turns to its waiting state
+// and shakes once as it does (design-reference: renderChat's pill, syncWaitMarks), and names its column again after.
+test('while its chat waits on its person the pill reads "Waiting on you" and shakes once, "Waiting on the team" for a reader who cannot write, and its column again after', async () => {
+ const wait = { person: 'p-3', kind: 'hand', title: 'انشر المقال' } as const;
+ const answers = [{ ...await recordWith({ id: 7, column: 'progress', wait }), pending: false }, { ...await recordWith({ id: 7, column: 'progress' }), pending: false }];
+ vi.stubGlobal('fetch', vi.fn(async () => Response.json(answers.shift())));
+ const record = await recordWith({ id: 7, column: 'progress' });
+ const screen = await show(record);
+ await expect.element(screen.getByRole('link', { name: 'On the board: In progress' })).toBeVisible();
+ window.dispatchEvent(new Event('focus'));
+ await expect.element(screen.getByRole('link', { name: 'On the board: Waiting on you' })).toBeVisible();
+ expect(pill()!.className).toBe('corner-pill is-waiting is-new');
+ expect(pill()!.querySelector('.dot')!.className).toBe('dot dot--waiting');
+ const shake = getComputedStyle(pill()!);
+ expect([shake.animationName, shake.animationDuration, shake.animationTimingFunction]).toEqual(['gw-nudge', '0.52s', 'cubic-bezier(0.2, 0, 0, 1)']);
+ await screen.rerender(view(record, { writer: false }));
+ await expect.element(screen.getByRole('link', { name: 'On the board: Waiting on the team' })).toBeVisible();
+ window.dispatchEvent(new Event('focus'));
+ await expect.element(screen.getByRole('link', { name: 'On the board: In progress' })).toBeVisible();
+ expect(pill()!.className).toBe('corner-pill');
+});
+
+test('a chat opened while it waits reads "Waiting on you" from the start, with no shake', async () => {
+ const screen = await show(await recordWith({ id: 7, column: 'progress', wait: { person: 'p-3', kind: 'question', title: 'Which audience first?' } }), { language: 'ar' });
+ await expect.element(screen.getByRole('link', { name: 'على اللوحة: مستنيك' })).toBeVisible();
+ expect(pill()!.className).toBe('corner-pill is-waiting');
 });
 
 test('on a phone the pill shows the column alone, in Arabic too', async () => {
