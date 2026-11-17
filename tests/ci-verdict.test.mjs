@@ -97,6 +97,8 @@ test('ci.yml decides the suites in its first job, gates each suite on it, and ju
   const { jobs } = workflow;
   const classify = jobs.changes.steps.find(step => step.id === 'classify');
   assert.match(classify.run, /node scripts\/ci-areas\.mjs \$main < "\$RUNNER_TEMP\/changed-files"/);
+  // The fast job's component step reads this output; without it the step would always run and never be skippable.
+  assert.equal(jobs.changes.outputs.components, '${{ steps.classify.outputs.components }}');
   for (const [job, output] of [['database', 'database'], ['integration', 'integration'], ['install', 'install']]) {
     assert.equal(jobs.changes.outputs[output], `\${{ steps.classify.outputs.${output} }}`, output);
     assert.deepEqual(jobs[job].needs, ['changes'], job);
