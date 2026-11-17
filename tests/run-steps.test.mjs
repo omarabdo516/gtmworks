@@ -11,8 +11,8 @@ import { fakeEngine } from './fake-engine.mjs';
 const encryptionKey=Buffer.alloc(32,7).toString('base64');
 const conversation='c1000000-0000-0000-0000-000000000001';
 
-/** @typedef {{steps:import('../lib/engine.mjs').RunStep[],readTo:number,broken:boolean,seconds:number|null,sealed:number|null}} Row */
-function database(/** @type {ReturnType<typeof fakeEngine>} */ fake,{stale=false}={}) {
+/** @typedef {{steps:import('../lib/engine.mjs').RunStep[],readTo:number,broken:boolean,ended:boolean,seconds:number|null,sealed:number|null}} Row */
+function database(/** @type {ReturnType<typeof fakeEngine>} */ fake,{stale=false,features=['run_submission','run_events_sse']}={}) {
  const rows=/** @type {Map<string,Row>} */(new Map()); const closed=/** @type {Map<string,any>} */(new Map()); const seals=/** @type {any[]} */([]);
  let sealedAt=0;
  const key=encryptSecret('test-only-key',encryptionKey);
@@ -22,20 +22,20 @@ function database(/** @type {ReturnType<typeof fakeEngine>} */ fake,{stale=false
   const row=rows.get(args.run);
   if(row?.sealed) return false;
   const further=!row||args.upto>=row.readTo;
-  rows.set(args.run,{steps:further?args.noted:row.steps,readTo:Math.max(row?.readTo??-1,args.upto),broken:!!row?.broken||args.lost,seconds:sealing?args.took:null,sealed:sealing?++sealedAt:null});
+  rows.set(args.run,{steps:further?args.noted:row.steps,readTo:Math.max(row?.readTo??-1,args.upto),broken:!!row?.broken||args.lost,ended:!!row?.ended||!!args.done,seconds:args.took??row?.seconds??null,sealed:sealing?++sealedAt:null});
   return true;
  };
  const db={
   rpc:async(/** @type {string} */ name,/** @type {any} */ args)=>{
    if(name==='open_conversation_runs') return ok(fake.runs.filter(run=>stale||!closed.has(run.id)).map((run,index)=>({message:index+1,conversation,run:run.id,person:'p',connection:'f9000000-0000-0000-0000-000000000001',address:'http://hermes:8642',profile:'writer',state:'connected'})));
    if(name==='track_run_question') return ok([]);
-   if(name==='run_steps_progress') { const row=rows.get(args.run); return ok(row?[{steps:row.steps,read_to:row.readTo,broken:row.broken,sealed:row.sealed!==null}]:[]); }
+   if(name==='run_steps_progress') { const row=rows.get(args.run); return ok(row?[{steps:row.steps,read_to:row.readTo,broken:row.broken,ended:row.ended,seconds:row.seconds,sealed:row.sealed!==null}]:[]); }
    if(name==='note_run_steps') return ok(keep(args,false));
    if(name==='seal_run_steps') { seals.push(args); return ok(keep(args,true)); }
    if(name==='close_conversation_run') { if(closed.has(args.run)) return ok(false); closed.set(args.run,args); return ok(true); }
    return {data:null,error:{message:'unexpected'}};
   },
-  from:()=>{ const chain={select:()=>chain,eq:()=>chain,maybeSingle:async()=>ok({key_encrypted:key})}; return chain; },
+  from:()=>{ const chain={select:()=>chain,eq:()=>chain,maybeSingle:async()=>ok({key_encrypted:key,features})}; return chain; },
  };
  return {db,rows,closed,seals};
 }
@@ -56,11 +56,11 @@ test('a completed Run\'s tool calls are kept once with its reply, a failed call 
  const run=await start(fake);
  assert.equal(await close(db,fake),1);
  assert.equal(closed.get(run).reply,'Reply to: Plan the ads');
- assert.deepEqual(rows.get(run),{steps:sealed,readTo:7,broken:false,seconds:41,sealed:1});
+ assert.deepEqual(rows.get(run),{steps:sealed,readTo:7,broken:false,ended:false,seconds:41,sealed:1});
  assert.equal(await close(db,fake),0,'a second closer that still found the Run open');
  assert.equal(seals.length,1,'it found the steps sealed and kept nothing');
  assert.deepEqual([...rows.keys()],[run]);
- assert.deepEqual(rows.get(run),{steps:sealed,readTo:7,broken:false,seconds:41,sealed:1});
+ assert.deepEqual(rows.get(run),{steps:sealed,readTo:7,broken:false,ended:false,seconds:41,sealed:1});
 });
 
 test('the follower keeps what it read while the Run works, and the closer reads only the events after it',async()=>{
@@ -69,12 +69,12 @@ test('the follower keeps what it read while the Run works, and the closer reads 
  const run=await start(fake);
  const following=new Map();
  await follow(db,fake,following);
- assert.deepEqual(rows.get(run),{steps:sealed,readTo:7,broken:false,seconds:null,sealed:null});
+ assert.deepEqual(rows.get(run),{steps:sealed,readTo:7,broken:false,ended:false,seconds:null,sealed:null});
  assert.equal(following.size,0,'a follower whose stream closed is started again on a later pass');
  fake.forget(run,8);
  assert.equal(await close(db,fake),0,'still working');
  assert.equal(await close(db,fake),1);
- assert.deepEqual(rows.get(run),{steps:sealed,readTo:7,broken:false,seconds:41,sealed:1},'the events the Engine no longer keeps had all been read');
+ assert.deepEqual(rows.get(run),{steps:sealed,readTo:7,broken:false,ended:false,seconds:41,sealed:1},'the events the Engine no longer keeps had all been read');
 });
 
 test('a read again from an earlier number ends at the same steps',async()=>{
@@ -163,4 +163,43 @@ test('a call past the most a list holds breaks the list rather than showing fewe
  const over=withEvent(full,started(1000));
  assert.equal(over.steps.length,1000); assert.equal(over.broken,true,'the 1,001st call breaks the list');
  assert.equal(withEvent(full,{seq:1000,step:{call:'call_3',tool:'web_search',preview:null,state:'done'}}).broken,false,'an end of a call already listed does not');
+});
+
+test('a follower that read the Run\'s end keeps it with the length and stays until the Run closes, and the closer then reads nothing',async()=>{
+ const fake=fakeEngine(); fake.settings.steps=calls; fake.settings.pendingReads=1;
+ const {db,rows}=database(fake);
+ const run=await start(fake);
+ const engine=fake.engineFor({});
+ assert.equal((await engine.read(run)).state,'running');
+ assert.equal((await engine.read(run)).state,'completed','the Run ended, and is not closed yet');
+ const following=new Map();
+ await follow(db,fake,following);
+ assert.deepEqual(rows.get(run),{steps:sealed,readTo:7,broken:false,ended:true,seconds:41,sealed:null});
+ assert.equal(following.size,1,'the follower that read the end stays');
+ const reads=fake.eventReads.count;
+ await follow(db,fake,following);
+ assert.equal(fake.eventReads.count,reads,'and is not started again while the Run stays open');
+ assert.equal(await close(db,fake),1);
+ assert.equal(fake.eventReads.count,reads,'the closer seals what was kept without reading the events again');
+ assert.deepEqual(rows.get(run),{steps:sealed,readTo:7,broken:false,ended:true,seconds:41,sealed:1});
+ await follow(db,fake,following);
+ assert.equal(following.size,0,'the closed Run is followed no more');
+});
+
+test('a Run on a Connection that offers no events is not followed, and its steps are not kept',async()=>{
+ const fake=fakeEngine(); fake.settings.steps=calls; fake.settings.pendingReads=1;
+ const {db,rows}=database(fake,{features:['run_submission']});
+ const run=await start(fake);
+ const following=new Map();
+ await follow(db,fake,following);
+ assert.equal(following.size,0); assert.equal(fake.eventReads.count,0); assert.equal(rows.has(run),false);
+});
+
+test('an end that names no call settles only a call that had no id either, never one that has its own',()=>{
+ const progress=[
+  {seq:0,step:{call:'call_1',tool:'web_search',preview:'audiences',state:/** @type {const} */('started')}},
+  {seq:1,step:{call:'seq:1',tool:'web_search',preview:'campaigns',state:/** @type {const} */('started')}},
+  {seq:2,step:{call:null,tool:'web_search',preview:null,state:/** @type {const} */('failed')}},
+  {seq:3,step:{call:'call_1',tool:'web_search',preview:null,state:/** @type {const} */('done')}}].reduce(withEvent,{steps:[],readTo:-1,broken:false,endedAt:null});
+ assert.deepEqual(progress.steps.map(({call,state})=>[call,state]),[['call_1','done'],['seq:1','failed']]);
 });

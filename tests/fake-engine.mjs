@@ -8,7 +8,7 @@ import { randomUUID } from 'node:crypto';
 /** @typedef {{id:string,text:string,choices:string[],multiple:boolean,answer?:string|null,settled:'answered'|'expired'|null}} FakeQuestion */
 /** @typedef {{tool:string,preview?:string|null,call?:string|null,failed?:boolean,open?:boolean}} FakeStep */
 /** @typedef {{id:string,key:string,conversation:string,input:string,instructions:string|null,tools:import('../lib/engine.mjs').ToolSpec[],history:import('../lib/engine.mjs').HistoryEntry[]|null,reads:number,stopped:boolean,ended:boolean,asked:FakeQuestion[],events:import('../lib/engine.mjs').RunStepEvent[],oldest:number,swept:boolean}} FakeRun */
-/** @returns {{settings:{ending:'completed'|'failed',pendingReads:number,reply:(input:string,answers:(string|null)[])=>string,toolCalls:(input:string)=>import('../lib/engine.mjs').ToolCall[],usage:{input:number,output:number}|null,agentProfile:import('../lib/engine.mjs').ProvidedAgent['state'],questions:(input:string)=>{text:string,choices?:string[],multiple?:boolean}[],unreachableAnswers:number,steps:(input:string)=>FakeStep[],seconds:number,unreachableSteps:number},runs:FakeRun[],connections:object[],agentReads:string[],provided:{name:string,instructions:string,level:number}[],removed:string[],answers:{run:string,question:string,text:string}[],expire:(run:string)=>boolean,forget:(run:string,count:number)=>void,sweep:(run:string)=>void,engineFor:(connection:object)=>import('../lib/engine.mjs').Engine}} */
+/** @returns {{settings:{ending:'completed'|'failed',pendingReads:number,reply:(input:string,answers:(string|null)[])=>string,toolCalls:(input:string)=>import('../lib/engine.mjs').ToolCall[],usage:{input:number,output:number}|null,agentProfile:import('../lib/engine.mjs').ProvidedAgent['state'],questions:(input:string)=>{text:string,choices?:string[],multiple?:boolean}[],unreachableAnswers:number,steps:(input:string)=>FakeStep[],seconds:number,unreachableSteps:number},runs:FakeRun[],connections:object[],eventReads:{count:number},agentReads:string[],provided:{name:string,instructions:string,level:number}[],removed:string[],answers:{run:string,question:string,text:string}[],expire:(run:string)=>boolean,forget:(run:string,count:number)=>void,sweep:(run:string)=>void,engineFor:(connection:object)=>import('../lib/engine.mjs').Engine}} */
 export function fakeEngine() {
  const settings={ending:/** @type {'completed'|'failed'} */('completed'),pendingReads:0,reply:(/** @type {string} */ input)=>`Reply to: ${input}`,toolCalls:/** @type {(input:string)=>import('../lib/engine.mjs').ToolCall[]} */(()=>[]),usage:/** @type {{input:number,output:number}|null} */({input:14000,output:12}),
   // How providing an Agent's own profile ends: with no subscription, a made profile has no model to answer with.
@@ -25,6 +25,8 @@ export function fakeEngine() {
  const provided=/** @type {{name:string,instructions:string,level:number}[]} */([]);
  const removed=/** @type {string[]} */([]);
  const answers=/** @type {{run:string,question:string,text:string}[]} */([]);
+ // How many reads of a run's events were made.
+ const eventReads={count:0};
  // The engine's own time limit runs out on the question a run waits for: it stops waiting, and the run goes on.
  const expire=(/** @type {string} */ id)=>{ const waiting=runs.find(run=>run.id===id)?.asked.find(question=>!question.settled); if(waiting) waiting.settled='expired'; return !!waiting; };
  const forget=(/** @type {string} */ id,/** @type {number} */ count)=>{ const run=runs.find(run=>run.id===id); if(run) run.oldest+=count; };
@@ -66,6 +68,7 @@ export function fakeEngine() {
   // A run's events after a number: those it still keeps, a loss when older ones it had are gone, and its end once the
   // run has ended.
   async *steps(id,{after=-1}={}) {
+   eventReads.count++;
    const run=runs.find(run=>run.id===id);
    if(settings.unreachableSteps>0) { settings.unreachableSteps--; yield {end:'unreachable'}; return; }
    if(!run||run.swept) { yield {end:'gone'}; return; }
@@ -108,5 +111,5 @@ export function fakeEngine() {
    return {state:agents.delete(name)?'removed':'missing'};
   },
  };
- return {settings,runs,connections,agentReads,provided,removed,answers,expire,forget,sweep,engineFor:connection=>{ connections.push(connection); return engine; }};
+ return {settings,runs,connections,agentReads,provided,removed,answers,eventReads,expire,forget,sweep,engineFor:connection=>{ connections.push(connection); return engine; }};
 }

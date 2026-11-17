@@ -16,7 +16,7 @@ select json_build_object(
   and not has_table_privilege('anon','public.conversation_run_steps','select,insert,update,delete')
   and not has_table_privilege('service_role','public.conversation_run_steps','select,insert,update,delete'),
  'service_writes',(select bool_and(has_function_privilege('service_role',f,'execute') and not has_function_privilege('authenticated',f,'execute') and not has_function_privilege('anon',f,'execute'))
-  from unnest(array['public.run_steps_progress(uuid,text)','public.note_run_steps(uuid,text,jsonb,integer,boolean)','public.seal_run_steps(uuid,text,jsonb,integer,boolean,integer)']) f),
+  from unnest(array['public.run_steps_progress(uuid,text)','public.note_run_steps(uuid,text,jsonb,integer,boolean,boolean,integer)','public.seal_run_steps(uuid,text,jsonb,integer,boolean,integer)']) f),
  'helpers_private',(select bool_and(not has_function_privilege(r,f,'execute'))
-  from unnest(array['public.run_steps_valid(jsonb)','public.keep_run_steps(uuid,text,jsonb,integer,boolean,integer,boolean)']) f cross join unnest(array['anon','authenticated','service_role']) r)
+  from unnest(array['public.run_steps_valid(jsonb)','public.keep_run_steps(uuid,text,jsonb,integer,boolean,boolean,integer,boolean)']) f cross join unnest(array['anon','authenticated','service_role']) r)
 );

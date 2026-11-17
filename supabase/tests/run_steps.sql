@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(22);
+select plan(25);
 -- #141. RS Learning: Omar (1) is Owner, 2 Manager, 3 and 5 Contributors (5 is also in Aleem), 4 Viewer; an outsider is a
 -- Member of Aleem only. Each of the five has a Conversation with Ads and in it the message of one run; person 3 has a
 -- second, closed run and a third that the follower reads twice.
@@ -29,7 +29,7 @@ select results_eq($$select public.note_run_steps(('d4200000-0000-0000-0000-00000
 select results_eq($$select public.seal_run_steps(('d4200000-0000-0000-0000-00000000000'||n)::uuid,'steps-run-'||n,current_setting('test.steps')::jsonb,9,false,41) from generate_series(1,5) n$$,
  $$select true from generate_series(1,5)$$,'each Run''s steps are sealed when it closes');
 select results_eq($$select * from public.run_steps_progress('d4200000-0000-0000-0000-000000000003','steps-run-3')$$,
- $$select current_setting('test.steps')::jsonb,9,false,true$$,'the sealed steps are the ones read to the end');
+ $$select current_setting('test.steps')::jsonb,9,false,false,41,true$$,'the sealed steps are the ones read to the end, with the Run\'s length');
 
 -- A sealed row never changes again; a closed Run and a Run of another Conversation are refused.
 select is(public.note_run_steps('d4200000-0000-0000-0000-000000000003','steps-run-3',current_setting('test.other')::jsonb,20,true),false,'a follower late after the seal is refused');
@@ -46,6 +46,13 @@ reset role;
 select results_eq($$select run_id,steps,read_to,broken,seconds,sealed_at is not null from public.conversation_run_steps where conversation_id='d4200000-0000-0000-0000-000000000003' order by run_id$$,
  $$values ('steps-run-3',current_setting('test.steps')::jsonb,9,false,41,true),('steps-run-7',current_setting('test.steps')::jsonb,12,true,null::int,false)$$,
  'the sealed row is unchanged, the closed and foreign runs have none, and the earlier read changed nothing');
+-- A follower that read the Run's end keeps it with the Run's length; a later read that went less far forgets neither.
+set local role service_role;
+select is(public.note_run_steps('d4200000-0000-0000-0000-000000000003','steps-run-7',current_setting('test.steps')::jsonb,14,false,true,7),true,'the follower keeps the Run\'s end and length');
+select is(public.note_run_steps('d4200000-0000-0000-0000-000000000003','steps-run-7',current_setting('test.other')::jsonb,13,false),true,'a read that went less far is taken');
+select results_eq($$select read_to,broken,ended,seconds,sealed from public.run_steps_progress('d4200000-0000-0000-0000-000000000003','steps-run-7')$$,
+ $$values (14,true,true,7,false)$$,'the end, the length and the loss are kept');
+reset role;
 select throws_ok($$insert into public.conversation_run_steps(company_id,conversation_id,run_id,steps) values ('10000000-0000-0000-0000-000000000001','d4200000-0000-0000-0000-000000000001','steps-run-1x','[{"call":"c","tool":"t","preview":null,"state":"skipped"}]')$$,
  '23514',null,'a step in a state the Engine never reports is refused');
 
