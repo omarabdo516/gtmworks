@@ -6,7 +6,8 @@
 // The card is laid out in its title's direction, and every text on it follows the card, as the reference sets `dir` once
 // (a line that starts with a Latin name, "SEO سابه…", must not turn left to right); the reference's "Open the screen" and "Open the
 // merge request" variants are not drawn (#21, #36). Its id is the address "Waiting on you" opens the Conversation at
-// (#140), and a done card whose turn to the Agent could not start says so under its time.
+// (#140), and a done card whose turn to the Agent could not start tells a person who may write to tell it in a message,
+// until they write to it.
 import { useEffect, useRef, useState } from 'react';
 import { ShellIcon } from '@/components/shell-icon';
 import { AppTile } from '@/components/app-tile';
@@ -66,6 +67,6 @@ export function HandCard({card,fresh,done}:{card:Hand,fresh:boolean,done?:MarkHa
     <button type="button" className="btn btn--primary" disabled={!done||sending} onClick={()=>void press()}>{t('handDone')}</button>
    </div>}
   {error&&!at&&<p className="hand__error" role="alert">{t(error)}</p>}
-  {card.state==='done'&&card.failed&&<p className="hand__error" role="alert">{t('handPickupFailed')}</p>}
+  {card.state==='done'&&card.failed&&done&&<p className="hand__error" role="alert">{t('handPickupFailed')}</p>}
  </div>;
 }

@@ -58,8 +58,8 @@ export type RunSteps={list:RunStep[],seconds:number|null};
 export type RunStepsRow={run_id:string,steps:(RunStep&{call:string})[],seconds:number|null};
 export const runStepsColumns='run_id,steps,seconds';
 export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided'|'boarded'|'asked'|'answer',to?:string,failed?:boolean,cards?:LeadCard[],saved?:SavedRule[],decided?:Decision,steps?:RunSteps};
-type StoredMessage=ConversationMessage&{run_id:string,send_key?:string|null};
-export const messageColumns='id,author,author_name,body,run_id,send_key,created_at';
+type StoredMessage=ConversationMessage&{run_id:string,hand_card?:number|null};
+export const messageColumns='id,author,author_name,body,run_id,hand_card,created_at';
 export const conversationColumns='id,agent_id,agent_name,hermes_agents(connection_id,is_default)';
 // A card of a run as the record places it. A question (#138) also carries the answer its person gave, drawn as their
 // own message though none is stored, and the main Agent's question carries the plain words it is drawn as (`words`)
@@ -76,9 +76,9 @@ export function questionParts(row:ReplyCardRow,card:ReplyCard,lead:boolean):Pick
 const isQuestion=(row:PlacedCard)=>row.card.kind==='reply'&&row.card.card.kind==='question';
 // A person's message whose run Hermes no longer knew is marked lost (#243), from the run's usage record. A run's
 // questions follow its person's message, each with its answer, before the run's reply (#138). The reply carries its
-// Run's steps when the Engine reported any (#141). The message of a turn "Done it" started (#140, its send key in
-// `hidden`) was never written by the person: it draws no bubble, and what its run showed stays.
-export const shown=(messages:StoredMessage[],usage:{run_id:string,outcome:string}[]=[],leadCards:PlacedCard[]=[],agentName='',saved:{run_id:string,rule:SavedRule}[]=[],runSteps:RunStepsRow[]=[],hidden:ReadonlySet<string>=new Set()):ConversationMessage[]=>messages.flatMap(message=>{
+// Run's steps when the Engine reported any (#141). The message of a turn "Done it" started (#140, `handTurn`) was
+// never written by the person: it draws no bubble, and what its run showed stays.
+export const shown=(messages:StoredMessage[],usage:{run_id:string,outcome:string}[]=[],leadCards:PlacedCard[]=[],agentName='',saved:{run_id:string,rule:SavedRule}[]=[],runSteps:RunStepsRow[]=[]):ConversationMessage[]=>messages.flatMap(message=>{
  const plain={id:message.id,author:message.author,author_name:message.author_name,body:message.body,lost:message.author==='person'&&usage.some(run=>run.run_id===message.run_id&&run.outcome==='lost'),created_at:message.created_at};
  const replied=message.author==='agent'||messages.some(other=>other.author==='agent'&&other.run_id===message.run_id);
  const ofRun=leadCards.filter(row=>row.run_id===message.run_id&&!isQuestion(row)); const cards=ofRun.map(row=>row.card);
@@ -88,7 +88,7 @@ export const shown=(messages:StoredMessage[],usage:{run_id:string,outcome:string
   return [{id,author:'agent',author_name:agentName,body:row.words??'',created_at:row.at,kind:'asked',...(row.words===undefined?{cards:[row.card]}:{})},
    ...(row.answer?[{id,author:'person' as const,author_name:message.author_name,body:row.answer.body,created_at:row.answer.at,kind:'answer' as const,...(row.answer.delivered?{}:{failed:true})}]:[])];
  }):[];
-  const own=message.author==='person'&&!!message.send_key&&hidden.has(message.send_key)?[]:[plain];
+  const own=handTurn(message)?[]:[plain];
  const steps=message.author==='agent'?runSteps.find(row=>row.run_id===message.run_id):undefined;
  const reply={...plain,...(cards.length?{cards}:{}),...(steps?{steps:{list:steps.steps.map(({tool,preview,state})=>({tool,preview,state})),seconds:steps.seconds}}:{})};
  const turn:ConversationMessage[]=message.author==='agent'?[reply]
@@ -128,13 +128,15 @@ export type StoredNote={id:number,author_name:string,addressed_name:string,body:
 export type QueuedTurn={send_key:string,message:string,queued_at:string,started_at:string|null,failed_at:string|null,hand_card?:number|null};
 export const noteColumns='id,author_name,addressed_name,body,created_at';
 export const queuedColumns='send_key,message,queued_at,started_at,failed_at,hand_card';
-export const handKeys=(queued:QueuedTurn[])=>new Set(queued.flatMap(turn=>turn.hand_card!=null?[turn.send_key]:[]));
+// A turn "Done it" queued, and the person's message it became, name their hand card (#140): the one test every reader
+// of the record uses, waiting or started.
+export const handTurn=(row:{hand_card?:number|null})=>row.hand_card!=null;
 export const withTeamWork=(record:ConversationMessage[],notes:StoredNote[]=[],queued:QueuedTurn[]=[],sender=''):ConversationMessage[]=>{
  // The record keeps its own order (by id); each note goes before the first message written after it.
  const merged:ConversationMessage[]=[]; const left=[...notes].sort((a,b)=>a.id-b.id);
  for(const message of record) { while(left.length&&left[0].created_at<=message.created_at) merged.push(noteOf(left.shift()!)); merged.push(message); }
  return [...merged,...left.map(noteOf),
-  ...queued.filter(turn=>!turn.started_at&&turn.hand_card==null).map((turn,index)=>({id:index,author:'person' as const,author_name:sender,body:turn.message,created_at:turn.queued_at,kind:'queued' as const,...(turn.failed_at?{failed:true}:{})}))];
+  ...queued.filter(turn=>!turn.started_at&&!handTurn(turn)).map((turn,index)=>({id:index,author:'person' as const,author_name:sender,body:turn.message,created_at:turn.queued_at,kind:'queued' as const,...(turn.failed_at?{failed:true}:{})}))];
 };
 const noteOf=(note:StoredNote):ConversationMessage=>({id:note.id,author:'person',author_name:note.author_name,body:note.body,created_at:note.created_at,kind:'note',to:note.addressed_name});
 // Waiting turns keep the page asking until they have started and been answered.
