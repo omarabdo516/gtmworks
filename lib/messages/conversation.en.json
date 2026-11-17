@@ -13,5 +13,6 @@
   "requestAnsweredMade": "{0} said yes to your request, and {1} was made. You’ll find it in your agents: open it and give it its first job.",
   "requestAnsweredDeclined": "{0} said no to {1} for now. Reason: «{2}» If you want to change the request and send it again, tell me here.",
   "cardAddedToBoard": "This card was added to the board under “In progress”",
-  "onTheBoard": "On the board:"
+  "onTheBoard": "On the board:",
+  "chatLoading": "Loading the chat"
 }

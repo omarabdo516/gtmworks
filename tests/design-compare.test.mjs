@@ -26,6 +26,7 @@ test('a full set of arguments gives the options with per-screen defaults', () =>
 test('the main screen of the reference is named home and maps to the built Conversation with the main Agent', () => {
   assert.equal(screens.home.builtPath, '/c/rs-learning/chat');
   assert.deepEqual(screens.home.reference.steps, [], 'home is the state the prototype opens on');
+  assert.deepEqual(Object.entries(screens).filter(([, screen]) => screen.reference.hold).map(([name]) => name), ['chat-loading', 'numbers-loading'], 'only the loading placeholders hold the prototype on screen');
 });
 
 test('the optional compare fixture holds the reference agent grid, Lead as the main Agent and a populated Conversation', () => {
@@ -154,6 +155,8 @@ test('a screen with no built equivalent needs --built-path or --reference-only',
   const log = ['--screen', 'agent-chat', '--width', '1440', '--lang', 'en', '--theme', 'light'];
   assert.throws(() => parseArgs(log), error => error.exitCode === 2 && /Screen "agent-chat" has no built equivalent yet; pass --built-path PATH or --reference-only\./.test(error.message));
   assert.equal(parseArgs([...log, '--reference-only']).builtPath, null);
+  const held = ['--screen', 'numbers-loading', '--width', '1440', '--lang', 'en', '--theme', 'light'];
+  assert.equal(parseArgs(held).referenceOnly, true, 'a held loading state is the reference alone');
   assert.equal(parseArgs([...log, '--built-path', '/c/rs-learning/home']).builtPath, '/c/rs-learning/home');
 });
 

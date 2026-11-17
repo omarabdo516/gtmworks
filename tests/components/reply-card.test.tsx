@@ -1,16 +1,20 @@
 import { afterEach, expect, onTestFinished, test, vi } from 'vitest';
-import type { ComponentProps } from 'react';
+import { use, type ComponentProps } from 'react';
 import { render } from 'vitest-browser-react';
-import ConversationView from '@/app/c/[slug]/conversations/[id]/conversation';
+import ConversationView, { ConversationLoaded } from '@/app/c/[slug]/conversations/[id]/conversation';
 import { ReplyCard } from '@/app/reply-card';
 import { ShellIcon } from '@/components/shell-icon';
 import { LanguageProvider } from '@/lib/i18n-client';
 import type { ConversationRecord } from '@/lib/conversation-record';
 import type { ReplyCard as Card } from '@/lib/conversations';
+// The loaded chat once its record is read, as the page streams it.
+const Arrived = ({ record, team }: { record: Promise<ConversationRecord>, team: boolean }) => <ConversationLoaded initial={use(record)} team={team}/>;
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }) }));
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+// The record as the server hands it over once it is read: React's use() takes a promise it can see is settled at once.
+const arrived = (record: ConversationRecord) => Object.assign(Promise.resolve(record), { status: 'fulfilled', value: record });
 
 // #136: every word on a draft card is the Agent's, so the card is laid out in its title's direction and each text keeps
 // its own, whichever the interface's.
@@ -112,7 +116,7 @@ test('a card that arrives while the Conversation is open rises in once; the card
  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
  const asks = vi.fn(async () => Response.json(turns([outline, plan], false)));
  vi.stubGlobal('fetch', asks);
- const screen = await render(<LanguageProvider language="en"><div className="gw"><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={{ id: 'cv-1', agent_id: null, agent_name: 'Ads', face: 'c-1' }} initial={turns([outline], true)} writer={false} team={false}/></div></LanguageProvider>);
+ const screen = await render(<LanguageProvider language="en"><div className="gw"><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={{ id: 'cv-1', agent_id: null, agent_name: 'Ads', face: 'c-1' }} title="" writer={false}><Arrived record={arrived(turns([outline], true))} team={false}/></ConversationView></div></LanguageProvider>);
  const rising = (card: Card) => getComputedStyle(screen.getByRole('group', { name: card.title }).element()).animationName;
  await expect.element(screen.getByRole('group', { name: outline.title })).toBeVisible();
  expect(rising(outline)).toBe('none');

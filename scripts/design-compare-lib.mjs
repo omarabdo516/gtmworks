@@ -127,6 +127,12 @@ export const screens = {
   // Company has an Agent (the comparison fixture's Lead).
   'new-chat-key': { reference: { steps: [...board, { press: 'n' }, { waitFor: '#ta-main:focus' }] }, builtPath: '/c/rs-learning/work/board', builtSteps: [{ press: 'KeyN' }, { waitFor: '.composer__input:focus' }] },
   'team-channel': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-team"]' }, { waitFor: '.ch-intro' }] }, builtPath: null },
+  // #172. The placeholders the reference shows while a chat or the dashboard loads, held on screen (`hold`: the
+  // prototype's timers of 100ms or more never fire, so the content that replaces them never comes). The built
+  // placeholder shows only while the server is slow, which the capture cannot make: its pictures are the approved
+  // images of tests/visual-screens/chat-loading.json and numbers-loading.json.
+  'chat-loading': { reference: { hold: true, steps: [{ waitFor: '#chat-transcript [aria-busy="true"]' }] }, builtPath: null },
+  'numbers-loading': { reference: { hold: true, steps: [{ click: '#sb-nav [data-view="dashboard"]' }, { waitFor: '#view-dashboard [aria-busy="true"]' }] }, builtPath: null },
 };
 
 export const languages = ['ar', 'en'];
@@ -161,6 +167,8 @@ export function parseArgs(argv) {
   if (!languages.includes(raw.lang)) throw new UsageError('--lang must be ar or en.');
   if (!themes.includes(raw.theme)) throw new UsageError('--theme must be light or dark.');
   const builtPath = raw.builtPath ?? screens[raw.screen].builtPath;
+  // A held loading state (#172) is captured on the reference alone: the built one is its approved image.
+  if (builtPath === null && screens[raw.screen].reference.hold) referenceOnly = true;
   if (builtPath === null && !referenceOnly) throw new UsageError(`Screen "${raw.screen}" has no built equivalent yet; pass --built-path PATH or --reference-only.`);
   return {
     screen: raw.screen,
