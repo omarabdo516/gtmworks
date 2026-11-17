@@ -75,6 +75,17 @@ test('a person answered an Agent\'s question: the Agent is named, the question i
  assert.deepEqual([bare.act, bare.obj, bare.to], [['logActQuestionAnswered', { text: 'Ads' }], undefined, undefined]);
 });
 
+// #139: a handed step has one log row, its person's "Done it", with the step's title, from "Handed to you" to "Done it"
+// (design-reference: handDone's log line).
+test('a person did a step an Agent handed them, named by the step\'s title, in both languages', () => {
+ const done = describeEntry({ subject: 'agent', action: 'agent_hand_done', agent_id: lead, details: { hand: { title: 'انشر المقال' }, private: true } }, { agentName: () => 'SEO' });
+ assert.deepEqual([done.act, done.obj, done.from, done.to], [['logActHandDone'], 'انشر المقال', { key: 'logHandOpen' }, { key: 'logHandDone' }]);
+ assert.deepEqual(['en', 'ar'].map(language => { const { t } = i18n(language); return [t('logActHandDone'), t('logHandOpen'), t('logHandDone')]; }),
+  [['did it', 'Handed to you', 'Done it'], ['عملها', 'اتسلّمتلك', 'عملتها']]);
+ const bare = describeEntry({ subject: 'agent', action: 'agent_hand_done', agent_id: lead, details: { hand: { title: 7 } } });
+ assert.deepEqual([bare.act, bare.obj], [['logActHandDone'], undefined]);
+});
+
 test('an Agent called in a note replies in the log, with its reply as the note under the line (#22)', () => {
  const reply = describeEntry({ subject: 'card', action: 'note_reply', agent_id: lead, body: 'Here is the draft.', details: { reply_to: 12 } });
  assert.deepEqual([reply.act, reply.note, reply.from, reply.to], [['logActNoteReply'], 'Here is the draft.', undefined, undefined]);

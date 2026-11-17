@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { orderAgents, groupRecents, waitingLabel, themeChoices, companyAgents, matchChats, moreSections, isNewFor } from '../lib/sidebar.mjs';
 import { readFileSync } from 'node:fs';
+import { beforeMidnight, runnerZone, uuid } from './clock.mjs';
 
 test('the Inbox entry is named at zero too, so it stays reachable when nothing waits', () => {
  assert.deepEqual(waitingLabel(0), ['nothingWaitingOnYou']);
@@ -56,6 +57,18 @@ test('recent chats fall into Today, Yesterday and Earlier by the local day, newe
   ['yesterday', ['yesterday']],
   ['earlier', ['two-days', 'old']],
  ]);
+});
+
+// The day boundary in the runner's own zone, which the nightly time zones run repeats under Cairo and a west zone (#266).
+test('just before local midnight, today starts at the last local midnight and a second earlier is yesterday', () => {
+ const now = beforeMidnight('2026-11-17');
+ const midnight = beforeMidnight('2026-11-16', runnerZone, 0).getTime();
+ const groups = groupRecents([
+  { id: uuid(1), created_at: new Date(now.getTime() - 60000).toISOString() },
+  { id: uuid(2), created_at: new Date(midnight + 1000).toISOString() },
+  { id: uuid(3), created_at: new Date(midnight - 1000).toISOString() },
+ ], now);
+ assert.deepEqual(groups.map(group => [group.day, group.items.map(item => item.id)]), [['today', [uuid(1), uuid(2)]], ['yesterday', [uuid(3)]]]);
 });
 
 test('a day with no chats has no group', () => {

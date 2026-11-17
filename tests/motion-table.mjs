@@ -28,6 +28,12 @@ export const motionTable = [
   { ref: '.opt__key', built: '.gw .opt__key', file: 'app/shell.css', html: '<div class="gw"><div class="reply-card reply-card--question" role="group"><div class="qcard__opts"><button type="button" class="opt"><span class="opt__key">A</span></button></div></div></div>' },
   { ref: '.card.is-just', built: '.gw .reply-card.is-just', file: 'app/shell.css', html: '<div class="gw"><div class="reply-card reply-card--question is-resolved is-just" role="group"></div></div>' },
   { ref: '.card.is-just .opt__check path', built: '.gw .reply-card.is-just .opt__check path', file: 'app/shell.css', html: '<div class="gw"><div class="reply-card reply-card--question is-resolved is-just" role="group"><div class="qcard__opts"><div class="opt is-chosen"><svg class="gw-icon opt__check"><path></path></svg></div></div></div></div>' },
+  // A step handed to the person (#139): its buttons give under a press; once done on the open page, the card settles and
+  // the outcome's check draws.
+  { ref: '.btn', built: '.gw .btn', file: 'app/shell.css', html: '<div class="gw"><div class="chat"><div class="reply-card reply-card--hand" role="group"><div class="card__actions"><a class="btn btn--secondary" href="#">Open the draft</a></div></div></div></div>', held: 0.96 },
+  { ref: '.btn', built: '.gw .btn', file: 'app/shell.css', html: '<div class="gw"><div class="chat"><div class="reply-card reply-card--hand" role="group"><div class="card__actions"><button type="button" class="btn btn--primary">Done it</button></div></div></div></div>', held: 0.96 },
+  { ref: '.card.is-just', built: '.gw .reply-card.is-just', file: 'app/shell.css', html: '<div class="gw"><div class="reply-card reply-card--hand is-resolved is-just" role="group"></div></div>' },
+  { ref: '.card.is-just .card__outcome .od-icon path', built: '.gw .reply-card.is-just .card__outcome .gw-icon path', file: 'app/shell.css', html: '<div class="gw"><div class="reply-card reply-card--hand is-resolved is-just" role="group"><div class="card__outcome"><svg class="gw-icon"><path></path></svg></div></div></div>' },
   // The dialog (the ready-made gallery): its entrance, its leave and its search field.
   { ref: '.modal[open]', built: '.gw.modal', file: 'app/shell.css', html: '<div role="dialog" class="gw modal" data-state="open"></div>' },
   { ref: '.modal.is-closing', built: '.gw.modal[data-state="closed"]', file: 'app/shell.css', html: '<div role="dialog" class="gw modal" data-state="closed"></div>' },
