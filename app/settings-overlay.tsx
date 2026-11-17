@@ -87,9 +87,6 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
 
 const Head=({title,sub,extra}:{title:string,sub?:string,extra?:ReactNode})=><header className="sov-head"><div className="sov-head__t"><h3 className="sov-h" id="sov-h" tabIndex={-1}>{title}</h3>{sub&&<p className="sov-sub">{sub}</p>}</div>{extra}</header>;
 const Label=({id,children}:{id:string,children:ReactNode})=><h4 className="dp-label" id={id}><span>{children}</span></h4>;
-// A label with a link at its end (reference: "Back" beside "The job"): the link sits outside the heading, so the heading
-// and the section it names read as the title alone.
-const LabelRow=({id,children,extra}:{id:string,children:ReactNode,extra:ReactNode})=><div className="dp-label"><h4 className="dp-label__h" id={id}>{children}</h4>{extra}</div>;
 // A part of the reference whose feature is not built yet: drawn in its place, empty, and saying "Soon".
 const Soon=({t}:{t:T})=><div className="panel-card sov-soon" aria-disabled="true" title={t('soon')}><p className="panel-empty">{t('soon')}</p></div>;
 const SoonSec=({t,id,label}:{t:T,id:string,label:string})=><section className="dp-sec" aria-labelledby={id}><Label id={id}>{label}</Label><Soon t={t}/></section>;
@@ -180,7 +177,7 @@ function AgentPage({t,rtl,slug,company,userId,agent,status,main,rules,owner,canM
    <div className="dp-sections sov-rules"><AgentRules t={t} company={company} userId={userId} rules={rules} canManage={canManage}/></div>
    <div className="dp-sections">
     {!canManage&&<p className="ro-note"><SettingsIcon name="shield"/><span>{t('settingsAgentsRO')}</span></p>}
-    <section className="dp-sec" aria-labelledby="set-h-job"><LabelRow id="set-h-job" extra={<BackLink className="link-btn" slug={slug} agent={agent.id}>{t('settingsBack')}</BackLink>}>{t('settingsJob')}</LabelRow>
+    <section className="dp-sec" aria-labelledby="set-h-job"><Label id="set-h-job">{t('settingsJob')}</Label>
      {/* Renaming an Agent or changing its role is not built yet: the fields show them read only. */}
      <div className="panel-card set-card">
       <div className="set-field"><label className="set-label" htmlFor="set-name">{t('settingsName')}</label><input className="set-input" id="set-name" type="text" dir="auto" readOnly aria-disabled="true" title={t('soon')} defaultValue={agent.name}/></div>

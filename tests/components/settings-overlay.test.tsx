@@ -63,12 +63,11 @@ test('while the chosen language is being saved the other choice waits, so the ch
  await expect.element(screen.getByRole('alert')).not.toBeInTheDocument();
 });
 
-// An Agent's page as the server draws its focus targets: the Settings tab, "All agents" and "Back" beside The job.
+// An Agent's page as the server draws its focus targets: the Settings tab and "All agents".
 const agentPage = () => render(<LanguageProvider language="en"><OverlayFrame slug="rs-learning" initialFocus="sov-tab-settings">
  <CloseButton slug="rs-learning"/>
  <BackLink className="link-btn sov-back" id="sov-back" slug="rs-learning" agent="ag-2">All agents</BackLink>
  <div role="tablist"><button type="button" role="tab" id="sov-tab-settings" aria-selected="true">Settings</button></div>
- <div className="dp-label"><h4 className="dp-label__h" id="set-h-job">The job</h4><BackLink className="link-btn" slug="rs-learning" agent="ag-2">Back</BackLink></div>
 </OverlayFrame></LanguageProvider>);
 
 test('an Agent\'s page opens with the focus on its Settings tab', async () => {
@@ -118,9 +117,9 @@ test('an address stored before the focus was kept still closes to it, with no fo
  expect(sessionStorage.getItem('gw-return-focus')).toBeNull();
 });
 
-for (const name of ['Back', 'All agents']) test(`"${name}" goes to the Agents list, where that Agent's row takes the focus once`, async () => {
+test('"All agents" goes to the Agents list, where that Agent\'s row takes the focus once', async () => {
  const screen = await agentPage();
- const link = screen.getByRole('link', { name, exact: true });
+ const link = screen.getByRole('link', { name: 'All agents', exact: true });
  await expect.element(link).toHaveAttribute('href', '/c/rs-learning/settings?section=agents');
  link.element().addEventListener('click', event => event.preventDefault());
  await link.click();

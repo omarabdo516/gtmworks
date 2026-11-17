@@ -264,13 +264,10 @@ for(const [where,path] of [['a Conversation',`/c/rs-learning/conversations/${con
  }
 });
 
-test('"Back" beside The job and "All agents" return to the Agents list with the focus on that Agent\'s row',async({page})=>{
+test('"All agents" returns to the Agents list with the focus on that Agent\'s row',async({page})=>{
  await page.setViewportSize({width:1440,height:900});
  await signIn(page,'omar@example.com',`/c/rs-learning/settings?agent=${ads}`);
- const job=page.getByRole('region',{name:'The job',exact:true});
- await expect(job.getByRole('heading',{name:'The job',exact:true})).toBeVisible();
- const back=job.getByRole('link',{name:'Back',exact:true});
- await back.click();
+ await page.getByRole('link',{name:'All agents',exact:true}).click();
  await expect(page).toHaveURL(/\/c\/rs-learning\/settings\?section=agents$/);
  await expect(page.locator(`#sov-ag-${ads}`)).toBeFocused();
  await page.locator(`#sov-ag-${seo}`).click();

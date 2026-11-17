@@ -668,7 +668,6 @@
   "settingsTalkTipAgent": "The simplest way to change {0} is to tell it in its chat, like “من دلوقتي ما تبعتش حاجة للعميل من غير ما أشوفها”. It’s saved here and written in the log.",
   "settingsTalkTo": "Talk to {0}",
   "settingsAllAgents": "All agents",
-  "settingsBack": "Back",
   "settingsTabMemory": "Memory",
   "settingsRules": "Rules it was told",
   "settingsRulesEmpty": "Nobody has told it a rule yet. Write “من دلوقتي…” in its chat and it’s saved here.",
