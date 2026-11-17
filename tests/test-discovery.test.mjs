@@ -45,7 +45,7 @@ test('new unit discovery probe', () => assert.fail('discovered failing assertion
  assert.match(passing.stdout, /passing discovered unit/);
 });
 
-test('ci.sh check rejects an orphan test by name before starting other checks', t => {
+test('ci.sh check rejects an orphan test by name before any test runner starts', t => {
  const dir = ciSandbox(t);
  writeFileSync(join(dir, 'tests/orphan.spec.mjs'), 'throw new Error("must never execute the orphan");\n');
  writeFileSync(join(dir, 'tests/ignored.spec.ts'), 'throw new Error("must never execute the orphan");\n');

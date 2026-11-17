@@ -125,9 +125,9 @@ test('the fast layer is the static checks, the node tests and the component test
   assert.match(command('node'), /--test-reporter-destination="\$LEDGER\/node\.jsonl" 'tests\/\*\*\/\*\.test\.mjs'$/);
   assert.match(command('components'), /npm run test:components -- .*--outputFile\.json="\$LEDGER\/vitest\.json"/);
   assert.doesNotMatch(command('components'), /shard/i);
-  // The browser comes from the workflow in CI and from ci.sh's install_chromium elsewhere, never from the step itself.
-  assert.doesNotMatch(command('components'), /playwright install/);
-  assert.match(readFileSync('ci.sh', 'utf8'), /install_chromium/);
+  // In CI the workflow restores or installs the browser; elsewhere the step installs it, behind the discovery gate.
+  assert.match(command('components'), /^\{ \[ "\$\{CI:-\}" = true \] \|\| npx playwright install chromium; \} && npm run test:components /);
+  assert.doesNotMatch(readFileSync('ci.sh', 'utf8'), /install_chromium; fi\n  node scripts\/ci-fast/);
   // A restored npx folder is used with no registry request; a missing one is filled once.
   assert.match(command('openapi'), /^npx --prefer-offline --yes @redocly\/cli@[\d.]+ /);
   assert.deepEqual(steps.filter(step => step.gate).map(step => step.name), ['discovery']);

@@ -145,7 +145,7 @@ jobs:
       - name: browser version
         id: browser-version
         if: ${{ env.COMPONENTS != 'false' }}
-        # The browser comes with no system packages, so a new runner image misses and installs them (--with-deps).
+        # A new runner image downloads the browser again for itself.
         run: echo "version=$(node -p "require('playwright-core/package.json').version")-$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
       - name: restore the browser
         id: browser
@@ -156,7 +156,8 @@ jobs:
           key: ms-playwright-${{ runner.os }}-${{ steps.browser-version.outputs.version }}
       - name: install the browser
         if: ${{ env.COMPONENTS != 'false' && steps.browser.outputs.cache-hit != 'true' }}
-        run: npx playwright install --with-deps chromium
+        # The browser alone, as a hit restores it: the image's own system packages and fonts serve every run alike.
+        run: npx playwright install chromium
       - name: save the browser
         if: ${{ env.COMPONENTS != 'false' && steps.browser.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v4

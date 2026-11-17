@@ -142,13 +142,13 @@ test('the fast job restores its dependencies by lock-file hash and the browser b
   const [modules] = uses('save', 'node_modules');
   assert.deepEqual(modules.with.path.split('\n').map(line => line.trim()).filter(Boolean), ['node_modules', '!node_modules/.vite', '!node_modules/.cache']);
   assert.ok(!steps.some(step => step.with?.cache), 'no package-manager cache beside the restored dependencies');
-  // A restored browser brings no system packages, so its key also names the runner image: a new image misses the cache
-  // and installs the browser with its system packages and fonts (--with-deps).
+  // A miss installs exactly what a hit restores: the browser alone, on the image's own system packages and fonts, so a
+  // component test draws the same on every run (no --with-deps on one run and not the next).
   const version = steps.find(step => step.id === 'browser-version');
   assert.match(version.run, /\$ImageOS/);
   assert.match(version.run, /\$ImageVersion/);
-  assert.ok(!steps.some(step => /ldd|install-deps/.test(step.run ?? '')), 'no probe stands in for the install');
-  assert.equal(steps.find(step => /playwright install/.test(step.run ?? '')).run, 'npx playwright install --with-deps chromium');
+  assert.ok(!steps.some(step => /ldd|install-deps|with-deps/.test(step.run ?? '')), 'no system packages on one run only');
+  assert.equal(steps.find(step => /playwright install/.test(step.run ?? '')).run, 'npx playwright install chromium');
   // npx's own folder holds the pinned OpenAPI linter, so a cache hit lints with no registry request.
   const [npxRestore] = uses('restore', '_npx');
   const [npxSave] = uses('save', '_npx');

@@ -95,8 +95,6 @@ case "${1:-check}" in
    static) chosen=(--skip components);;
    components) chosen=(--only components);;
   esac
-  # CI restores or installs the browser before this step; elsewhere it is installed here when the component tests run.
-  if [[ ${CI:-} != true && ${chosen[*]-} != '--skip components' ]]; then install_chromium; fi
   node scripts/ci-fast.mjs "$dir" ${chosen[@]+"${chosen[@]}"}
   ;;
  database)

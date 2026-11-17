@@ -22,8 +22,9 @@ export const steps = [
   { name: 'node', command: 'node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=./scripts/ci-ledger-node.mjs --test-reporter-destination="$LEDGER/node.jsonl" \'tests/**/*.test.mjs\'', gated: true, yields: true },
   // Screens as components in headless Chromium (#81), in one run: the tests take seconds, so shards would only repeat
   // the install and the browser (spec #255 D2). Naming the reporters replaces Vitest's own choice, so the GitHub one that
-  // marks failures on the pull request is named too when it runs there.
-  { name: 'components', command: 'npm run test:components -- --reporter=default ${GITHUB_ACTIONS:+--reporter=github-actions} --reporter=json --outputFile.json="$LEDGER/vitest.json"', gated: true, yields: true },
+  // marks failures on the pull request is named too when it runs there. CI's workflow brings the browser; elsewhere the
+  // step installs it, after the discovery gate.
+  { name: 'components', command: '{ [ "${CI:-}" = true ] || npx playwright install chromium; } && npm run test:components -- --reporter=default ${GITHUB_ACTIONS:+--reporter=github-actions} --reporter=json --outputFile.json="$LEDGER/vitest.json"', gated: true, yields: true },
 ];
 
 const seconds = started => ((Date.now() - started) / 1000).toFixed(1);

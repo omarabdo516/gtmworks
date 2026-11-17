@@ -36,9 +36,10 @@ block of their own, and `scripts/ci-runner.mjs cleanup` removes what this reposi
   lock file's hash and Chromium by Playwright's version, each saved straight after a fresh install, so the bundler's
   own cache (`node_modules/.vite`) is never restored and the component tests always start it cold.
   Each step also writes its output as it runs to `ci-ledger/<job>/<step>.log`, uploaded with the ledger results, so a
-  step that hangs until the job's limit leaves its log; a red step's output is printed last, after the step list. The
-  browser's cache key also names the runner image, so a new image installs Chromium with its system packages and fonts
-  (`--with-deps`); npx's folder (`~/.npm/_npx`, the pinned OpenAPI linter) is restored too, so a hit lints offline.
+  step that hangs until the job's limit leaves its log; a red step's output is printed last, after the step list. A cache
+  miss installs the browser alone, as a hit restores it, so every run draws on the runner image's own system packages
+  and fonts; the key also names the image. Outside CI the component step installs the browser itself, after the
+  discovery gate. npx's folder (`~/.npm/_npx`, the pinned OpenAPI linter) is restored too, so a hit lints offline.
   Test discovery gates only the node and component tests; the test runners run at a lower CPU priority, so lint and
   types keep a core each. `tsconfig.json` leaves out `test-results/`, where the node tests write sandbox `.ts` files.
   `component-imports.test.mjs` fails there in seconds when a component test's imports reach `server-only` (#218).
