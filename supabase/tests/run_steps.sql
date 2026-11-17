@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(21);
+select plan(22);
 -- #141. RS Learning: Omar (1) is Owner, 2 Manager, 3 and 5 Contributors (5 is also in Aleem), 4 Viewer; an outsider is a
 -- Member of Aleem only. Each of the five has a Conversation with Ads and in it the message of one run; person 3 has a
 -- second, closed run and a third that the follower reads twice.
@@ -10,6 +10,8 @@ insert into public.members(company_id,person_id,role) values ('10000000-0000-000
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
  ('d4100000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9','steps-test','ciphertext','connected','0.23.0','{run_submission}');
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('d4100000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','d4100000-0000-0000-0000-000000000001','Ads','Ads');
+-- Every Member but the Owner chats only with an Agent they were given (#15); each of these was given Ads.
+insert into public.member_agent_access(company_id,person_id,agent_id) select '10000000-0000-0000-0000-000000000001',('20000000-0000-0000-0000-00000000000'||n)::uuid,'d4100000-0000-0000-0000-000000000002' from generate_series(2,5) n;
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name)
  select ('d4200000-0000-0000-0000-00000000000'||n)::uuid,'10000000-0000-0000-0000-000000000001',('20000000-0000-0000-0000-00000000000'||n)::uuid,'d4100000-0000-0000-0000-000000000002','Ads' from generate_series(1,5) n;
 insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id)
@@ -57,6 +59,11 @@ select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003'
 select is((select string_agg(run_id,',' order by run_id) from public.conversation_run_steps),'steps-run-3,steps-run-7','a Contributor reads their own');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
 select is((select string_agg(run_id,',' order by run_id) from public.conversation_run_steps),'steps-run-4','a Viewer reads their own');
+reset role;
+delete from public.member_agent_access where person_id='20000000-0000-0000-0000-000000000004' and agent_id='d4100000-0000-0000-0000-000000000002';
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
+select is((select count(*)::int from public.conversation_run_steps),0,'a Member no longer given the Agent reads its steps no more, as its messages');
 select set_config('request.jwt.claim.sub','d4100000-0000-0000-0000-0000000000a1',true);
 select is((select count(*)::int from public.conversation_run_steps),0,'a Member of another Company reads none');
 select throws_ok($$select public.note_run_steps('d4200000-0000-0000-0000-000000000005','steps-run-5','[]',1,false)$$,'42501',null,'a person cannot write steps');
