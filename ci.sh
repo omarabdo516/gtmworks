@@ -25,6 +25,18 @@ wait_lanes() {
     fi
   done
 }
+# The cached Supabase images load while the packages install, and the stage ends by saying how many images the registry
+# served (scripts/supabase-images.sh, #259).
+load_images() {
+  bash scripts/supabase-images.sh load &
+  images_pid=$!
+}
+images_loaded() {
+  wait "$images_pid" || echo 'supabase images: the cached archive did not load' >&2
+  images_before=$(mktemp)
+  bash scripts/supabase-images.sh list > "$images_before"
+  trap 'bash scripts/supabase-images.sh pulled "$images_before" || true; rm -f "$images_before"' EXIT
+}
 # Each stage writes its machine-readable test results under ci-ledger/ (Playwright empties test-results/ when it starts);
 # the ledger job reads them back (scripts/ci-ledger.mjs, #256). Prints the folder.
 ledger_dir() {
@@ -32,14 +44,6 @@ ledger_dir() {
   rm -rf "$dir" && mkdir -p "$dir"
   LAYER=$1 node -e 'const env = process.env; console.log(JSON.stringify({ layer: env.LAYER, shard: env.SHARD ?? "", runner: env.RUNNER_NAME ?? "local", environment: env.RUNNER_ENVIRONMENT ?? "local", root: process.cwd() }))' > "$dir/meta.json"
   echo "$dir"
-}
-# One database ledger line per check; a failed check still fails the stage, after its line is written.
-database_record() {
-  local file=$1 name=$2 started=$3 status=$4 outcome=passed
-  ((status == 0)) || outcome=failed
-  printf '{"suite":"database","file":"%s","name":"%s","duration_ms":%d,"outcome":"%s","retries":0}\n' \
-    "$file" "$name" $(( ($(date +%s%N) - started) / 1000000 )) "$outcome" >> "$dir/database.jsonl"
-  ((status == 0)) || exit "$status"
 }
 # The visual lane (#257) is drawn by one pinned browser in its container, through Playwright's own server (the checkout's
 # locked package, so nothing is downloaded); the tests, the app and lane 0's stack stay on this machine. The image pulls
@@ -142,24 +146,32 @@ PY
   ;;
  database)
   # Migrations replayed and verified, row-level security and grants, on lane 0's stack.
+  load_images
   if [[ "${CI:-}" == "true" ]]; then
     npm ci
   fi
+  images_loaded
   bash scripts/local-db.sh
   dir=$(ledger_dir database)
-  for file in supabase/migrations/*.verify.sql scripts/check-rls.sql; do
-    started=$(date +%s%N) status=0
-    npx --no-install supabase db query --read-only --file "$file" -o json --agent no | node scripts/verify-db.mjs "$file" || status=$?
-    database_record "$file" verify "$started" "$status"
-  done
+  # Every verify file in one psql session, each reported by name with its own ledger line (#259).
+  container=$(< supabase/.temp/lanes/0/db-container)
+  DB_LEDGER="$PWD/$dir/database.jsonl" node scripts/verify-db-session.mjs "$container" supabase/migrations/*.verify.sql scripts/check-rls.sql
+  # The session itself, on real psql: a file whose statement fails must fail with that statement's error.
+  if canary=$(node scripts/verify-db-session.mjs "$container" tests/verify-db-session-canary.sql 2>&1) \
+    || [[ $canary != *'tests/verify-db-session-canary.sql: division by zero'* ]]; then
+    echo "$canary" >&2; echo 'the verify session did not fail its canary with its error' >&2; exit 1
+  fi
+  echo 'verify session canary: a failed statement failed its file with its error, as it must'
   # tests/db.sh writes one line per step of its own.
   DB_LEDGER="$PWD/$dir/database.jsonl" npm run test:db
   ;;
  integration)
+  load_images
   if [[ "${CI:-}" == "true" ]]; then
     npm ci
     install_chromium
   fi
+  images_loaded
   dir=$(ledger_dir integration)
   start_lanes
   wait_lanes
@@ -177,13 +189,32 @@ PY
   # The compared screens and the measured budgets run on their own (`ci.sh visual`), on a GitHub-hosted runner.
   GTMWORKS_WEB_PREBUILT=true GTMWORKS_TEST_LANES=$lanes GTMWORKS_HOSTED_ELSEWHERE=true PLAYWRIGHT_JSON_OUTPUT_FILE="$dir/e2e.json" npm run test:e2e
   ;;
+ images)
+  # Every Supabase image the jobs use, pulled once and archived for the Actions cache (the supabase-images job, #259).
+  # The stack starts on an empty project with this configuration (no migrations, an empty seed), so a broken migration
+  # cannot stop the archive; one throwaway test pulls pgTAP's runner.
+  if [[ "${CI:-}" == "true" ]]; then
+    npm ci
+  fi
+  project=$(mktemp -d)
+  mkdir -p "$project/supabase"
+  cp supabase/config.toml "$project/supabase/"
+  : > "$project/supabase/seed.sql"
+  npx --no-install supabase start --workdir "$project"
+  printf '%s\n' 'begin;' 'create extension if not exists pgtap with schema extensions;' 'select plan(1);' \
+    "select pass('the pgTAP runner is here');" 'select * from finish();' 'rollback;' > "$project/images.sql"
+  npx --no-install supabase test db --workdir "$project" "$project/images.sql"
+  bash scripts/supabase-images.sh save
+  ;;
  visual)
   # The compared screens alone, on lane 0 as the seed builds it: no journeys, no proxy suite, no image (#213). Then the
   # navigation time budgets, which need a machine of their own (#224).
+  load_images
   if [[ "${CI:-}" == "true" ]]; then
     npm ci
     install_chromium
   fi
+  images_loaded
   bash scripts/local-db.sh
   dir=$(ledger_dir visual)
   GTMWORKS_TEST_LANES=1 PLAYWRIGHT_JSON_OUTPUT_FILE="$dir/screens.json" npm run test:visual
@@ -220,5 +251,5 @@ PY
     find tests/visual-lane -name '*.png' | sort | xargs -r sha256sum > "test-results/lane-proof/run-$run.sha256"
   done
   ;;
- *) echo 'usage: ./ci.sh check | static | components | database | integration | visual | visual-update | lane | lane-update | lane-proof' >&2; exit 2;;
+ *) echo 'usage: ./ci.sh check | static | components | database | images | integration | visual | visual-update | lane | lane-update | lane-proof' >&2; exit 2;;
 esac
