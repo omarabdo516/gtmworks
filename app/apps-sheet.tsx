@@ -26,7 +26,7 @@ const leaveMs=190;
 // The apps are read by the browser after the page is drawn (app/company-apps-read.ts), again each time the sheet opens,
 // and after an app is connected or disconnected; the last good read stays shown meanwhile.
 export function AppsSheetProvider({company,owner,rtl,children}:{company:string,owner:boolean,rtl:boolean,children:ReactNode}) {
- const {t,language}=useI18n(); const text:Record<string,string>=language==='ar'?ar:en;
+ const {language}=useI18n(); const text:Record<string,string>=language==='ar'?ar:en;
  const items=useCompanyApps(company,language);
  const [sheet,setSheet]=useState<Sheet>({phase:'closed'});
  const box=useRef<HTMLDialogElement>(null); const stopLeaving=useRef(()=>{});
@@ -62,7 +62,7 @@ export function AppsSheetProvider({company,owner,rtl,children}:{company:string,o
   {sheet.phase!=='closed'&&<dialog ref={box} className={`sheet apps-sheet${sheet.phase==='closing'?' is-closing':''}`} id="apps" aria-labelledby="apps-title"
    onCancel={event=>{ if(event.cancelable) { event.preventDefault(); close(); } }} onClose={closed} onClick={event=>{ if(event.target===event.currentTarget) close(); }}>
    <div className="apps-inner">{item
-    ?<AppDetail key={item.key} place={place} company={company} owner={owner} rtl={rtl} item={item} text={text} soon={t('soon')} failed={false}/>
+    ?<AppDetail key={item.key} place={place} company={company} owner={owner} rtl={rtl} item={item} text={text} failed={false}/>
     :<AppsList place={place} owner={owner} items={items} text={text}/>}</div>
   </dialog>}
  </AppsContext.Provider>;

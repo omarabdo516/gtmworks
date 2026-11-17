@@ -168,6 +168,16 @@ test('an app connected or disconnected names the app and its state before and af
  assert.deepEqual(['logActAppConnected', 'logActAppDisconnected', 'logAppOn', 'logAppOff'].map(key => i18n('ar').t(key)), ['وصّل', 'فصل', 'متوصل', 'مش متوصل']);
 });
 
+test('an app connected or disconnected for one Agent names the Agent as it was called then, in both languages', () => {
+ assert.deepEqual(describeEntry({ subject: 'company', action: 'app_connected', details: { app: 'klaviyo', agent_name: 'Writer' } }),
+  { act: ['logActAppConnectedFor', { text: 'Writer' }], obj: 'Klaviyo', from: { key: 'logAppOff' }, to: { key: 'logAppOn' }, note: undefined });
+ const disconnected = describeEntry({ subject: 'company', action: 'app_disconnected', details: { app: 'notion', agent_name: 'Writer' } });
+ assert.deepEqual([disconnected.act, disconnected.obj, disconnected.from, disconnected.to], [['logActAppDisconnectedFor', { text: 'Writer' }], 'Notion', { key: 'logAppOn' }, { key: 'logAppOff' }]);
+ assert.deepEqual(describeEntry({ subject: 'company', action: 'app_connected', details: { app: 'klaviyo', agent_name: '' } }).act, ['logActAppConnected']);
+ assert.deepEqual(['en', 'ar'].map(language => [i18n(language).t('logActAppConnectedFor', 'Writer'), i18n(language).t('logActAppDisconnectedFor', 'Writer')]),
+  [['let Writer use', 'stopped Writer using'], ['خلّى Writer يستخدم', 'منع Writer من استخدام']]);
+});
+
 test('a subscription connected or disconnected names ChatGPT or Claude and its state before and after', () => {
  assert.deepEqual(describeEntry({ subject: 'company', action: 'subscription_connected', details: { provider: 'openai-codex' } }),
   { act: ['logActAppConnected'], obj: 'ChatGPT', from: { key: 'logAppOff' }, to: { key: 'logAppOn' }, note: undefined });
