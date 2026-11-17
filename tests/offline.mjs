@@ -18,6 +18,10 @@ export const isLocalUrl = url => {
   return !['http:', 'https:', 'ws:', 'wss:'].includes(protocol) || isLocalHost(hostname);
 };
 
+// A proxy nothing answers, which every local name bypasses: a browser launched behind it fails every outside request,
+// WebSocket and redirect hop at the proxy, before any lookup.
+export const nowhere = { server: 'http://127.0.0.1:9', bypass: 'localhost,*.localhost,*.test,*.example,*.invalid,127.0.0.0/8,[::1],0.0.0.0' };
+
 // The URLs the browser guards stop to look at: every http and WebSocket address but the plainly local ones. A RegExp is
 // matched inside the browser's driver, so local requests are never paused; a function would send every request, each
 // of the app's own scripts included, to the test process first. It may take in a local address it cannot tell, which
@@ -27,7 +31,7 @@ export const maybeOutside = /^(?:https?|wss?):\/\/(?!(?:localhost|127(?:\.\d{1,3
 /**
  * A browser context (Playwright's, also under Vitest) reaches nothing outside: outside requests and WebSockets are
  * stopped, and `note` is told each host. A redirect from a local address to an outside one is followed by Chromium
- * without asking the route again, so that hop is only named.
+ * without asking the route again, so that hop is named here and stopped by `nowhere`.
  * @param {import('@playwright/test').BrowserContext} context @param {(host: string) => void} note
  */
 export function blockOutside(context, note) {

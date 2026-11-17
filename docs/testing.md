@@ -90,9 +90,10 @@ block of their own, and `scripts/ci-runner.mjs cleanup` removes what this reposi
   `proxy/production-shape.spec.ts`) launches Chromium behind a proxy nothing answers, which every local name bypasses,
   so every outside request, WebSocket and redirect fails in every context the worker's browser makes, a `beforeAll`'s
   too; the test fails naming each host, and a `beforeAll`'s host fails the next test. It routes nothing, since routing
-  turns off the browser's cache and changes the headers a test reads. `tests/components/offline-setup.ts` routes the
-  component tests' browser instead: outside requests are aborted and WebSockets closed, and a local address that
-  redirects outside is only named, since Chromium follows it without asking the route. Name lookups are not guarded.
+  turns off the browser's cache and changes the headers a test reads. The component tests' browser runs behind the same
+  proxy (`vitest.config.mts`), and `tests/components/offline-setup.ts` also routes it, so each test can read the hosts it
+  tried: outside requests are aborted, WebSockets closed, and a redirect's outside hop fails at the proxy and is named.
+  Name lookups are not guarded.
   `visual.spec.ts`, the small visual lane (#257, which aborts outside requests with guards of its own) and
   the install suite, which drives a real install on purpose, are not guarded, nor yet the containers' network.
   `provider-hosts.test.mjs` fails `static` when a tracked file under `tests/` or `scripts/`, or the seed, names a real model provider host

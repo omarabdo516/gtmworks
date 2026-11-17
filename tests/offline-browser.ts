@@ -1,5 +1,5 @@
 import { test as base, expect, type BrowserContext } from '@playwright/test';
-import { isLocalUrl } from './offline.mjs';
+import { isLocalUrl, nowhere } from './offline.mjs';
 
 export * from '@playwright/test';
 
@@ -8,7 +8,6 @@ export * from '@playwright/test';
 // off the browser's cache and change the headers a test reads. Every context the worker's browser makes reports each
 // outside address it tried: a test fails naming each host, what a `beforeAll` tried fails the next test, and what an
 // `afterAll` tried fails the worker.
-const nowhere = { server: 'http://127.0.0.1:9', bypass: 'localhost,*.localhost,*.test,*.example,*.invalid,127.0.0.0/8,[::1],0.0.0.0' };
 const betweenTests: string[] = [];
 let running = betweenTests;
 const watched = new WeakSet<BrowserContext>();

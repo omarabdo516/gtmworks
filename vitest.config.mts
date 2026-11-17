@@ -3,7 +3,7 @@ import { playwright } from '@vitest/browser-playwright';
 import { computedMotion, referenceComputed, type ComputedStyle } from './tests/motion-css.mjs';
 import { languages, widths } from './tests/visual-screens.mjs';
 // Offline by default (#266): the runner refuses outside connections and names the host; the browser's are aborted below.
-import { blockOutside } from './tests/offline.mjs';
+import { blockOutside, nowhere } from './tests/offline.mjs';
 
 // Outside requests each test browser session made (a session has its own context and runs its files one at a time), read
 // and emptied by tests/components/offline-setup.ts after each test.
@@ -23,7 +23,7 @@ export default defineConfig({
     provide: { languages, widths },
     setupFiles: ['tests/components/offline-setup.ts'],
     browser: {
-      enabled: true, headless: true, provider: playwright(), instances: [{ browser: 'chromium' }],
+      enabled: true, headless: true, provider: playwright({ launchOptions: { proxy: nowhere } }), instances: [{ browser: 'chromium' }],
       commands: {
         referenceComputed: (_, selector: string, width: number) => referenceComputed(selector, width),
         computedMotion: (_, style: ComputedStyle) => computedMotion(style),
