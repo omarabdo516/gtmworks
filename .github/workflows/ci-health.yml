@@ -1,6 +1,6 @@
 # The nightly CI health report (#256): a week of the `ledger` artifacts that ci.yml's ledger job writes, read into one
 # tracking issue that each night's report replaces (scripts/ci-health.mjs). A change to the report runs it on its own
-# pull request, since GitHub starts a manual or scheduled run only from the default branch.
+# pull request as a dry run, since GitHub starts a manual or scheduled run only from the default branch.
 name: CI health
 
 on:
@@ -34,4 +34,6 @@ jobs:
       - name: report the last 7 days
         env:
           GH_TOKEN: ${{ github.token }}
+          # A pull request's run prints the report and writes no issue: only the default branch writes it.
+          DRY_RUN: ${{ github.event_name == 'pull_request' }}
         run: node scripts/ci-health.mjs

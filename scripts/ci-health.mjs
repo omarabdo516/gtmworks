@@ -19,13 +19,14 @@ function percentile(values, p) {
 const minutes = value => (value == null ? '—' : `${(value / 60).toFixed(1)} min`);
 // A test takes seconds, so its duration reads in seconds; minutes would round most of them to 0.0.
 const testSeconds = ms => (ms == null ? '—' : `${(ms / 1000).toFixed(1)} s`);
-// A ledger is written by a pull request's own code, so its text is cut before it reaches the issue.
+// A ledger is written by CI code a pull request may change, so its text is cut and made inert before it reaches the
+// issue: no markup or hidden comment, no code span, no mention, no issue reference, no broken row.
 const width = 200;
 const cell = value => {
-  const text = String(value).replaceAll('\n', ' ');
-  // No markup and no mention: the text renders as written and notifies nobody.
-  return (text.length > width ? `${text.slice(0, width - 1)}…` : text).replaceAll('&', '&amp;').replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;').replaceAll('@', '@\u200b').replaceAll('|', '\\|');
+  const text = String(value).replace(/[\r\n]+/g, ' ');
+  return (text.length > width ? `${text.slice(0, width - 1)}…` : text).replaceAll('\\', '\\\\').replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('`', '\\`').replaceAll('@', '@\u200b')
+    .replaceAll('#', '#\u200b').replaceAll('|', '\\|');
 };
 const row = values => `| ${values.map(cell).join(' | ')} |`;
 // An issue body holds at most 65536 characters, so each list of tests stops at 20.
@@ -71,7 +72,10 @@ export function readLedger(ledger) {
   return { records, rejected };
 }
 
-export function report(records, { now, days, runs, unreadable = 0, left = 0, rejected = 0 }) {
+// GitHub refuses an issue body over 65536 characters.
+const bodyLimit = 65000;
+
+export function report(records, { now, days, runs, unreadable = 0, left = 0, rejected = 0, limit = bodyLimit }) {
   const jobs = records.filter(record => record.kind === 'job');
   const tests = records.filter(record => record.kind === 'test');
   const lines = [marker, `# ${title}`, '', `The ${days} days to ${new Date(now).toISOString().slice(0, 16).replace('T', ' ')} UTC: ${runs} runs.`];
@@ -133,7 +137,29 @@ export function report(records, { now, days, runs, unreadable = 0, left = 0, rej
       ? `${queues.length} jobs on the PC waited ${minutes(percentile(queues, 50))} at p50, ${minutes(percentile(queues, 90))} at p90 and ${minutes(Math.max(...queues))} at most.`
       : 'No job ran on the PC.',
     `${fellBack} integration jobs ran on a GitHub-hosted runner instead.`);
-  return lines.join('\n') + '\n';
+  const body = lines.join('\n') + '\n';
+  if (body.length <= limit) return body;
+  const note = `\nThe report was cut to stay under ${limit} characters.\n`;
+  const cut = body.slice(0, limit - note.length);
+  return cut.slice(0, cut.lastIndexOf('\n') + 1) + note;
+}
+
+// Which ledgers a report reads: those of this repository's own ci.yml runs (never a fork's pull request, whose ledger
+// its own code wrote), in the window, not expired and under the size cap, newest first and at most `cap` of them.
+export function selectLedgers(artifacts, runs, { since, cap, maxBytes }) {
+  const own = new Set(runs.filter(run => run.path === '.github/workflows/ci.yml' && run.repository?.id != null
+    && run.head_repository?.id === run.repository.id).map(run => run.id));
+  const recent = artifacts.filter(artifact => artifact.name === 'ledger' && !artifact.expired
+    && Date.parse(artifact.created_at) >= since && own.has(artifact.workflow_run?.id));
+  const fitting = recent.filter(artifact => artifact.size_in_bytes <= maxBytes)
+    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+  return { ledgers: fitting.slice(0, cap), left: Math.max(0, fitting.length - cap), tooLarge: recent.length - fitting.length };
+}
+
+// A pull request's run proves the report and writes nothing: the tracking issue is only written from the default branch.
+export async function publish(api, body, { dryRun }) {
+  if (dryRun) return { action: 'dry run', number: null };
+  return upsertIssue(api, title, body);
 }
 
 // `api(method, path, body)` takes a path inside the repository and returns the parsed JSON.
@@ -157,6 +183,8 @@ async function main() {
   const env = process.env;
   const days = 7;
   const cap = 400;
+  // A ledger zip is about 50 kB; anything far larger is not one of ours.
+  const maxBytes = 5 * 1024 * 1024;
   const now = Date.now();
   const repo = `${env.GITHUB_API_URL || 'https://api.github.com'}/repos/${env.GITHUB_REPOSITORY}`;
   const headers = { Authorization: `Bearer ${env.GH_TOKEN}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };
@@ -166,30 +194,37 @@ async function main() {
     return response.json();
   };
   const since = now - days * 86400000;
+  const runs = [];
+  const day = new Date(since).toISOString().slice(0, 10);
+  for (let page = 1; ; page++) {
+    const { workflow_runs: found } = await api('GET', `/actions/workflows/ci.yml/runs?created=%3E%3D${day}&per_page=100&page=${page}`);
+    runs.push(...found);
+    if (found.length < 100) break;
+  }
   const artifacts = [];
   for (let page = 1; ; page++) {
     const { artifacts: found } = await api('GET', `/actions/artifacts?name=ledger&per_page=100&page=${page}`);
-    const recent = found.filter(artifact => Date.parse(artifact.created_at) >= since);
-    artifacts.push(...recent.filter(artifact => !artifact.expired));
-    if (found.length < 100 || recent.length < found.length) break;
+    artifacts.push(...found);
+    if (found.length < 100 || found.some(artifact => Date.parse(artifact.created_at) < since)) break;
   }
+  const { ledgers, left, tooLarge } = selectLedgers(artifacts, runs, { since, cap, maxBytes });
   const folder = mkdtempSync(join(tmpdir(), 'ci-health-'));
   const records = [];
-  let unreadable = 0;
+  let unreadable = tooLarge;
   let rejected = 0;
-  let runs = 0;
+  let read = 0;
   try {
-    for (const artifact of artifacts.slice(0, cap)) {
+    for (const artifact of ledgers) {
       try {
         const response = await fetch(artifact.archive_download_url, { headers });
         if (!response.ok) throw new Error(String(response.status));
         const zip = join(folder, `${artifact.id}.zip`);
         writeFileSync(zip, Buffer.from(await response.arrayBuffer()));
-        const ledger = execFileSync('unzip', ['-p', zip, 'ledger.jsonl'], { encoding: 'utf8', maxBuffer: 512 * 1024 * 1024 });
+        const ledger = execFileSync('unzip', ['-p', zip, 'ledger.jsonl'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
         const found = readLedger(ledger);
         records.push(...found.records);
         rejected += found.rejected;
-        runs++;
+        read++;
       } catch {
         unreadable++;
       }
@@ -197,9 +232,9 @@ async function main() {
   } finally {
     rmSync(folder, { recursive: true, force: true });
   }
-  const body = report(records, { now, days, runs, unreadable, rejected, left: Math.max(0, artifacts.length - cap) });
-  const { action, number } = await upsertIssue(api, title, body);
-  process.stdout.write(`${body}\nThe report ${action} issue #${number}.\n`);
+  const body = report(records, { now, days, runs: read, unreadable, rejected, left });
+  const { action, number } = await publish(api, body, { dryRun: env.DRY_RUN === 'true' });
+  process.stdout.write(`${body}\n${action === 'dry run' ? 'Dry run: no issue was written.' : `The report ${action} issue #${number}.`}\n`);
   if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, body);
 }
 
