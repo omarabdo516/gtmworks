@@ -86,6 +86,9 @@ test('the component tests may be skipped only when the first job did not ask for
   assert.equal(verdict({ COMPONENTS_RUN: '', FAST_STEPS: skipped }), 1);
   assert.equal(verdict({ COMPONENTS_RUN: 'true', FAST_STEPS: fastSteps.replace(' components=success', '') }), 1);
   assert.equal(verdict({ COMPONENTS_RUN: 'false', FAST_STEPS: fastSteps.replace('components=success', 'components=failure') }), 1);
+  assert.equal(verdict({ COMPONENTS_RUN: 'false', FAST_STEPS: fastSteps.replace('components=success', 'components=cancelled') }), 1);
+  assert.equal(verdict({ COMPONENTS_RUN: undefined, FAST_STEPS: skipped }), 1);
+  assert.equal(verdict({ COMPONENTS_RUN: 'false', FAST_STEPS: fastSteps.replace('lint=success', 'lint=skipped') }), 1);
 });
 
 test('ci.yml decides the suites in its first job, gates each suite on it, and judges check with this verdict', async () => {
