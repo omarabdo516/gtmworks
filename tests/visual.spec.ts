@@ -472,9 +472,9 @@ async function appsEngine() {
 // without waiting for the network to go quiet.
 // The table is slowed only once Home is drawn: slowed from the start, Home's prefetch of every page that reads it holds
 // a database connection each, and the opened page's own frame then waits behind them.
-const openSlowly = (path: string, link: string, placeholder: string, table: string) => async (page: Page) => {
+const openSlowly = (path: string, link: string, placeholder: string, table: string, seconds: number) => async (page: Page) => {
   const held = await holdPages(page, url => url.pathname === path);
-  const slow = slowReads(table, 7);
+  const slow = slowReads(table, seconds);
   const undo = async () => { asAdmin(slow.unset); held.letGo(); await held.stop(); };
   try {
     await page.reload();
@@ -484,7 +484,10 @@ const openSlowly = (path: string, link: string, placeholder: string, table: stri
     await page.locator(link).click();
     held.letGo();
     // The page's own reads can wait on the slowed table too; the waiting part only starts reading after them.
-    await expect(page.locator(placeholder)).toBeVisible({ timeout: 15000 });
+    await expect(page.locator(placeholder)).toBeVisible({ timeout: 15000 }).catch(async error => {
+      console.log(`[172-visual] ${page.url()} ${JSON.stringify(await page.evaluate(() => ({ main: document.querySelector('main')?.className, busy: document.querySelectorAll('[aria-busy]').length, kpis: document.querySelectorAll('.kpis .kpi').length, segments: [...document.querySelectorAll('div[hidden][id^="S:"]')].length })))}`);
+      throw error;
+    });
     await expect(page.locator('.sidebar.is-open')).toHaveCount(0);
     const width = page.viewportSize()!.width;
     await page.setViewportSize({ width, height: 900 });
@@ -519,8 +522,8 @@ const screenActs: Record<string, (page: Page, language: Language) => Promise<() 
     await expect(page.locator('#inv-email')).toBeFocused();
     return async () => {};
   },
-  'open-chat-slowly': openSlowly(`/c/rs-learning/conversations/${loading(3)}`, `#sb-recent a[href="/c/rs-learning/conversations/${loading(3)}"]`, '.chat .transcript [aria-busy="true"]', 'conversation_usage'),
-  'open-numbers-slowly': openSlowly('/c/rs-learning/numbers', '.nav a[href="/c/rs-learning/numbers"]', '.numbers-page [aria-busy="true"]', 'company_log'),
+  'open-chat-slowly': openSlowly(`/c/rs-learning/conversations/${loading(3)}`, `#sb-recent a[href="/c/rs-learning/conversations/${loading(3)}"]`, '.chat .transcript [aria-busy="true"]', 'conversation_usage', 7),
+  'open-numbers-slowly': openSlowly('/c/rs-learning/numbers', '.nav a[href="/c/rs-learning/numbers"]', '.numbers-page [aria-busy="true"]', 'company_log', 3),
   // Another Member's chat opens its Card on Log (#145); the Chat tab, picked as a person picks it, shows the lock.
   'sheet-chat-tab': async page => {
     await page.locator('.sheet #sh-tab-chat').click();
