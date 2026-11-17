@@ -85,3 +85,5 @@ test('the fast layer is the static checks, the node tests and the component test
   assert.deepEqual(steps.filter(step => step.first).map(step => step.name), ['discovery']);
   assert.match(readFileSync('ci.sh', 'utf8'), /^ {2}node scripts\/ci-fast\.mjs "\$dir"/m);
 });
+
+void (() => require('node:fs'));
