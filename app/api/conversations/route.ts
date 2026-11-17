@@ -67,9 +67,9 @@ async function answer(db:Database,body:Record<string,unknown>) {
 // (mark_hand_done), under the person's own session. gtmworks does not do the step and checks nothing outside.
 async function done(db:Database,body:Record<string,unknown>) {
  if(typeof body.conversation!=='string'||!uuid.test(body.conversation)||!(typeof body.card==='number'&&Number.isSafeInteger(body.card)&&body.card>0)) return refuse('conversationFailed',400);
- const {error}=await db.rpc('mark_hand_done',{c:body.company,conversation:body.conversation,card:body.card});
+ const {data,error}=await db.rpc('mark_hand_done',{c:body.company,conversation:body.conversation,card:body.card});
  if(error) return refuseFor(error.code);
- return reply({state:'done'});
+ return reply({state:'done',at:(data as {at:string}).at});
 }
 
 // Reading the record also closes any of its runs Hermes has ended (lib/conversation-runs.mjs, as the worker does), so

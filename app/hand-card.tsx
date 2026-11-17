@@ -8,27 +8,20 @@
 // merge request" variants are not drawn (#21, #36).
 import { useEffect, useRef, useState } from 'react';
 import { ShellIcon } from '@/components/shell-icon';
-import { AppTile } from '@/components/app-tile';
+import { AppTile, knownApp } from '@/components/app-tile';
 import { useI18n } from '@/lib/i18n-client';
 import { localeFor } from '@/lib/i18n.mjs';
-import { apps as catalogue } from '@/lib/app-catalogue.mjs';
-import { roleApps } from '@/lib/role-templates.mjs';
 import { useZone } from '@/app/agent-made';
 import type { ReplyCard } from '@/lib/conversations';
 
 type Hand=Extract<ReplyCard,{kind:'hand'}>;
-// Marks the card done; null when it was recorded, else the refusal's message key.
-export type MarkHandDone=(card:number)=>Promise<string|null>;
+// Marks the card done: the time the database kept (the first press's, from any tab), else the refusal's message key.
+export type MarkHandDone=(card:number)=>Promise<{at:string}|{error:string}>;
 // design-reference: justCls. The done card settles only on the page where it was pressed, within this long.
 const settling=900;
 
-// The app is named by the Agent, so its tile is the known app of that key or name; an app gtmworks does not know draws
-// the reference's plain tile.
-const known=[...Object.entries(roleApps).map(([key,app])=>({key,...app})),...catalogue];
-function handApp(name:string) {
- const asked=name.trim().toLowerCase();
- return known.find(app=>app.key===asked||app.name.toLowerCase()===asked)??{key:'',mark:'·'};
-}
+// An app gtmworks does not know draws the reference's plain tile.
+const handApp=(name:string)=>knownApp(name)??{key:'',mark:'·'};
 // The direction of the title's first strong letter: the badge comes first on the card, so the frame cannot take it
 // from its own text.
 const rtl=(text:string)=>/^[^A-Za-zÀ-ɏͰ-ϿЀ-ӿ֐-ࣿיִ-﷿ﹰ-﻿]*[֐-ࣿיִ-﷿ﹰ-﻿]/.test(text);
@@ -47,8 +40,9 @@ export function HandCard({card,fresh,done}:{card:Hand,fresh:boolean,done?:MarkHa
  const press=async()=>{
   if(sending.current||!done) return;
   sending.current=true; setError(''); setPressed(new Date().toISOString()); setJust(true);
-  const failure=await done(card.id);
-  if(failure) { setPressed(null); setJust(false); setError(failure==='conversationFailed'?'handFailed':failure); }
+  const result=await done(card.id);
+  if('at' in result) setPressed(result.at);
+  else { setPressed(null); setJust(false); setError(result.error==='conversationFailed'?'handFailed':result.error); }
   sending.current=false;
  };
  const time=(value:string)=><time dateTime={value} data-utc={zone}>{new Date(value).toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit',timeZone:zone})}</time>;
@@ -59,7 +53,7 @@ export function HandCard({card,fresh,done}:{card:Hand,fresh:boolean,done?:MarkHa
   <div className="card__head"><AppTile app={handApp(card.app)} size="lg"/>
    <div className="card__titles"><span className="card__title">{card.title}</span><span className="card__sub">{card.line}</span></div></div>
   {card.rows.length>0&&<dl className="kv">{card.rows.map((row,index)=><div key={index} className="kv__row"><dt>{row.label}</dt><dd>{row.value}</dd></div>)}</dl>}
-  {at?<div className="card__outcome"><ShellIcon name="check"/><span>{before}{time(at)}{after}{card.note&&<> <span className="hand__note">{card.note}</span></>}</span></div>
+  {at?<div className="card__outcome"><ShellIcon name="check"/><span><bdi className="hand__at" dir={language==='ar'?'rtl':'ltr'}>{before}{time(at)}{after}</bdi>{card.note&&<> <span className="hand__note">{card.note}</span></>}</span></div>
    :<div className="card__actions">
     {card.url&&<a className="btn btn--secondary" href={card.url} target="_blank" rel="noopener noreferrer"><ShellIcon name="open"/><span>{t('handOpen')}</span></a>}
     <button type="button" className="btn btn--primary" disabled={!done} onClick={()=>void press()}>{t('handDone')}</button>

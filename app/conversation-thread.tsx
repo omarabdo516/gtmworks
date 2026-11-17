@@ -86,23 +86,7 @@ export function useConversationRecord({company,initial}:{company:string,initial:
   window.addEventListener('focus',again);
   return ()=>window.removeEventListener('focus',again);
  },[tied,company,id]);
- // A change that starts no Run (#139: "Done it") reads the record once, without showing the Agent working.
- const [reads,setReads]=useState(0);
- useEffect(()=>{
-  if(!reads) return;
-  let stopped=false;
-  void (async()=>{
-   try {
-    const response=await fetch(`/api/conversations?company=${company}&conversation=${id}`,{cache:'no-store'});
-    if(response.ok&&!stopped) setRecord(await response.json() as ConversationRecord);
-   } catch { /* The card keeps what it shows until the next read. */ }
-  })();
-  return ()=>{stopped=true;};
- },[reads,company,id]);
- const asked=(working=true)=>{
-  if(!working) { setReads(value=>value+1); return; }
-  setRecord(current=>({...current,pending:true})); setSent(value=>value+1);
- };
+ const asked=()=>{ setRecord(current=>({...current,pending:true})); setSent(value=>value+1); };
  return {record,asked};
 }
 
@@ -123,9 +107,8 @@ export function ChatPlaceholder() {
 // whom, or that the reply failed. While the Agent works, a message sent meanwhile waits as its sender's next turn
 // (marked as the reference marks a queued message).
 // A question the Agent waits on (#138) is answered from its card: a pick goes to the waiting Run, and the record is asked
-// for again at once. While it waits, the Agent is not shown working. "Done it" on a handed step (#139) starts no Run: the
-// record is read once.
-export function ConversationTurns({slug,company,record,asked}:{slug:string,company:string,record:ConversationRecord,asked:(working?:boolean)=>void}) {
+// for again at once. While it waits, the Agent is not shown working.
+export function ConversationTurns({slug,company,record,asked}:{slug:string,company:string,record:ConversationRecord,asked:()=>void}) {
  const {t,language}=useI18n(); const {c,cb}=useConversationText();
  const {conversation,messages,pending,failed,working}=record;
  const answer=async(card:number,choice:number,answerKey:string)=>{
@@ -133,11 +116,14 @@ export function ConversationTurns({slug,company,record,asked}:{slug:string,compa
   asked();
   return failure;
  };
- // "Done it" on a step the Agent handed over (#139): recorded once, then the record is read again.
+ // "Done it" on a step the Agent handed over (#139) starts no Run, so the record is not read again: the card shows the
+ // time the database kept, and a read can never replace a newer record (a message sent meanwhile).
  const done=async(card:number)=>{
-  const failure=await postMessage({company,conversation:conversation.id,intent:'done',card});
-  asked(false);
-  return failure;
+  try {
+   const response=await fetch('/api/conversations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company,conversation:conversation.id,intent:'done',card})});
+   const body=await response.json() as {at?:string,error?:string};
+   return response.ok&&body.at?{at:body.at}:{error:body.error||'conversationFailed'};
+  } catch { return {error:'conversationFailed'}; }
  };
  // A card an Agent shows while the chat is open rises in once (design-reference: card-in); those already there do not.
  const [drawnCards]=useState(()=>new Set(replyCardIds(messages)));

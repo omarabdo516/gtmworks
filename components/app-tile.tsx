@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react';
+import { apps as catalogue } from '@/lib/app-catalogue.mjs';
+import { roleApps } from '@/lib/role-templates.mjs';
 
 // The reference's app tile (design-reference/app.js `tile`, index.html .tool-tile): the brand mark where the reference
 // draws one (shapes from Simple Icons, CC0, in each brand's own colours), otherwise the app's letters. It never names the
@@ -15,4 +17,12 @@ const logos:Record<string,ReactNode>={
 export function AppTile({app,size='sm'}:{app:{key:string,mark:string},size?:'sm'|'lg'}) {
  const logo=logos[app.key];
  return <span className={size==='lg'?'tool-tile tool-tile--lg':'tool-tile'} aria-hidden="true">{logo?<svg className="tool-logo" viewBox="0 0 24 24" focusable="false">{logo}</svg>:app.mark}</span>;
+}
+
+// An app an Agent names in words (a request's apps #17, a handed step's app #139): the known app of that key or name,
+// in any case, or undefined.
+const known=[...Object.entries(roleApps).map(([key,app])=>({key,...app})),...catalogue];
+export function knownApp(name:string) {
+ const asked=name.trim().toLowerCase();
+ return known.find(app=>app.key===asked||app.name.toLowerCase()===asked);
 }

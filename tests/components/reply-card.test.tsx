@@ -3,6 +3,7 @@ import { use, type ComponentProps } from 'react';
 import { render } from 'vitest-browser-react';
 import ConversationView, { ConversationLoaded } from '@/app/c/[slug]/conversations/[id]/conversation';
 import { ReplyCard } from '@/app/reply-card';
+import type { MarkHandDone } from '@/app/hand-card';
 import { ShellIcon } from '@/components/shell-icon';
 import { LanguageProvider } from '@/lib/i18n-client';
 import { localeFor } from '@/lib/i18n.mjs';
@@ -137,14 +138,14 @@ const handWords = {
  en: { badge: 'Handed to you', open: 'Open the draft', done: 'Done it', label: (title: string) => `Handed to you: ${title}`, at: (time: string) => `Done · ${time}.` },
  ar: { badge: 'اتسلّمتلك', open: 'افتح المسودة', done: 'عملتها', label: (title: string) => `اتسلّمتلك: ${title}`, at: (time: string) => `عملتها · ${time}.` },
 };
-const handDrawn = (card: Card, language: 'en' | 'ar', done?: (card: number) => Promise<string | null>) =>
+const handDrawn = (card: Card, language: 'en' | 'ar', done?: MarkHandDone) =>
  render(<LanguageProvider language={language}><div dir={language === 'ar' ? 'rtl' : 'ltr'}><ReplyCard card={card} fresh={false} done={done}/>
   <div data-testid="icons"><ShellIcon name="hand"/><ShellIcon name="open"/><ShellIcon name="check"/></div></div></LanguageProvider>);
 const timeOf = (value: string, language: 'en' | 'ar') => new Date(value).toLocaleTimeString(localeFor(language), { hour: '2-digit', minute: '2-digit' });
 
 test.each(['en', 'ar'] as const)('in the %s interface, an open hand card shows the badge, the app\'s tile, the title, the line, the rows, a link to the draft in a new tab and Done it', async language => {
  const card = handed();
- const screen = await handDrawn(card, language, async () => null);
+ const screen = await handDrawn(card, language, async () => ({ at: '2026-06-10T09:41:00Z' }));
  const group = screen.getByRole('group', { name: handWords[language].label(card.title) });
  await expect.element(group).toBeVisible();
  const [hand, open] = [...screen.getByTestId('icons').element().querySelectorAll('svg')].map(icon => icon.innerHTML);
@@ -174,9 +175,16 @@ test('in the Arabic interface, the line, the rows and the note of a hand card fo
  expect(texts.map(text => text?.matches(':dir(rtl)'))).toEqual(texts.map(() => true));
 });
 
+test.each([['en', 'انشر المقال', 'ltr'], ['ar', 'Publish the article', 'rtl']] as const)('in the %s interface, "Done · time." keeps the interface\'s direction inside a card titled %s', async (language, title, direction) => {
+ const card = handed({ title, state: 'done', at: '2026-06-10T09:41:00Z' } as Partial<Hand>);
+ const screen = await handDrawn(card, language);
+ const sentence = screen.getByRole('group', { name: handWords[language].label(title) }).element().querySelector('.hand__at');
+ expect([sentence?.textContent, sentence?.matches(`:dir(${direction})`)]).toEqual([handWords[language].at(timeOf('2026-06-10T09:41:00Z', language)), true]);
+});
+
 test('a hand card with no address shows Done it alone, and an English one is laid out left to right', async () => {
  const card = handed({ title: 'Pay the December invoice', line: 'The invoice is ready in Stripe.', app: 'Stripe', url: null, rows: [] });
- const screen = await handDrawn(card, 'ar', async () => null);
+ const screen = await handDrawn(card, 'ar', async () => ({ at: '2026-06-10T09:41:00Z' }));
  const group = screen.getByRole('group', { name: handWords.ar.label(card.title) });
  await expect.element(group).toBeVisible();
  expect(group.getByRole('link').elements()).toEqual([]);
@@ -187,7 +195,7 @@ test('a hand card with no address shows Done it alone, and an English one is lai
 
 test.each([['an app gtmworks does not know', 'Stripe', '·', false], ['a known app by its key', 'wp', '', true], ['a known app by its name in any case', 'google search console', '', true], ['a catalogue app', 'Klaviyo', 'K', false]] as const)(
  'the tile of %s is drawn as the reference draws it', async (_, app, mark, logo) => {
-  const screen = await handDrawn(handed({ app }), 'en', async () => null);
+  const screen = await handDrawn(handed({ app }), 'en', async () => ({ at: '2026-06-10T09:41:00Z' }));
   const tile = screen.getByRole('group').element().querySelector('.card__head .tool-tile.tool-tile--lg');
   expect([tile?.textContent, !!tile?.querySelector('svg.tool-logo')]).toEqual([mark, logo]);
  });
@@ -208,10 +216,10 @@ test.each(['en', 'ar'] as const)('in the %s interface, a done hand card shows Do
  expect(bare.getByRole('group', { name: handWords[language].label('Publish') }).element().querySelector('.card__outcome')?.textContent).toBe(handWords[language].at(timeOf('2026-06-10T09:41:00Z', language)));
 });
 
-test.each(['en', 'ar'] as const)('in the %s interface, Done it calls done once with the card, reads done at once and settles only once; a second click sends nothing', async language => {
+test.each(['en', 'ar'] as const)('in the %s interface, Done it calls done once with the card, reads done at once, shows the time the database kept and settles only once; a second click sends nothing', async language => {
  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
- let settle: (value: string | null) => void = () => {};
- const done = vi.fn(() => new Promise<string | null>(resolve => { settle = resolve; }));
+ let settle: (value: Awaited<ReturnType<MarkHandDone>>) => void = () => {};
+ const done = vi.fn(() => new Promise<Awaited<ReturnType<MarkHandDone>>>(resolve => { settle = resolve; }));
  const card = handed();
  const screen = await handDrawn(card, language, done);
  const group = screen.getByRole('group', { name: handWords[language].label(card.title) });
@@ -222,14 +230,15 @@ test.each(['en', 'ar'] as const)('in the %s interface, Done it calls done once w
  expect(group.element().querySelectorAll('a, button')).toHaveLength(0);
  expect(group.element().querySelector('.card__outcome')?.textContent).toContain(card.note);
  expect(group.element().classList.contains('is-just'), 'it settles where it was pressed').toBe(true);
- settle(null);
+ settle({ at: '2026-06-10T09:42:00Z' });
+ await expect.poll(() => group.element().querySelector('time')?.getAttribute('datetime')).toBe('2026-06-10T09:42:00Z');
  await vi.advanceTimersByTimeAsync(900);
  await expect.element(group).not.toHaveClass('is-just');
  expect(done).toHaveBeenCalledTimes(1);
 });
 
 test('a Done it the server refuses gives the button back with the refusal, and a press then sends again', async () => {
- const done = vi.fn().mockResolvedValueOnce('conversationFailed').mockResolvedValueOnce(null);
+ const done = vi.fn().mockResolvedValueOnce({ error: 'conversationFailed' }).mockResolvedValueOnce({ at: '2026-06-10T09:41:00Z' });
  const card = handed();
  const screen = await handDrawn(card, 'en', done);
  await screen.getByRole('button', { name: 'Done it' }).click();
@@ -242,7 +251,7 @@ test('a Done it the server refuses gives the button back with the refusal, and a
  expect(screen.getByRole('alert').elements()).toEqual([]);
 });
 
-test('in the chat, Done it posts the done intent with the card, the record is read once, and the Agent is not shown working', async () => {
+test('in the chat, Done it posts the done intent with the card and shows the time it answers; the record is not read again, so a message sent meanwhile keeps its reply on its way, and the Agent is not shown working', async () => {
  const sheets = await Promise.all(['app/tokens.css', 'app/shell.css'].map(async file => (await import(/* @vite-ignore */ `/${file}?inline`)).default as string));
  const styles = sheets.map(css => Object.assign(document.createElement('style'), { textContent: css }));
  document.head.append(...styles);
@@ -250,7 +259,7 @@ test('in the chat, Done it posts the done intent with the card, the record is re
  const open = handed();
  const conversation = { id: '7d3f0b1e-1c2a-4b5d-8e6f-9a0b1c2d3e4f', agent_id: null, agent_name: 'SEO', face: 'c-1' };
  const record = (card: Hand): ConversationRecord => ({ ...turns([card], false), conversation });
- const calls = vi.fn(async (_url: string, init?: RequestInit) => init?.method === 'POST' ? Response.json({ state: 'done' })
+ const calls = vi.fn(async (_url: string, init?: RequestInit) => init?.method === 'POST' ? Response.json({ state: 'done', at: '2026-06-10T09:42:00Z' })
   : Response.json(record({ ...open, state: 'done', at: '2026-06-10T09:42:00Z' } as Hand)));
  vi.stubGlobal('fetch', calls);
  const screen = await render(<LanguageProvider language="en"><div className="gw"><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={conversation} title="" writer><Arrived record={arrived(record(open))} team={false}/></ConversationView></div></LanguageProvider>);
@@ -259,9 +268,9 @@ test('in the chat, Done it posts the done intent with the card, the record is re
  // Done on this page, the card settles and its check draws (design-reference: .card.is-just).
  const motion = (part: Element) => { const style = getComputedStyle(part); return [style.animationName, style.animationDuration, style.animationDelay]; };
  expect([group.element(), group.element().querySelector('.card__outcome svg path')!].map(motion)).toEqual([['gw-settle', '0.32s', '0s'], ['gw-draw-check', '0.38s', '0.14s']]);
- await expect.poll(() => calls.mock.calls.filter(([, init]) => init?.method !== 'POST').length).toBe(1);
+ await expect.poll(() => group.element().querySelector('time')?.getAttribute('datetime')).toBe('2026-06-10T09:42:00Z');
  const posted = calls.mock.calls.filter(([, init]) => init?.method === 'POST');
  expect(posted.map(([url, init]) => [url, JSON.parse(init!.body as string)])).toEqual([['/api/conversations', { company: 'co-1', conversation: conversation.id, intent: 'done', card: 7 }]]);
- await expect.poll(() => group.element().querySelector('time')?.getAttribute('datetime')).toBe('2026-06-10T09:42:00Z');
+ expect(calls.mock.calls.filter(([, init]) => init?.method !== 'POST'), 'no read can replace a newer record').toEqual([]);
  expect(document.querySelector('.convo-status'), 'no Run starts, so no one is shown working').toBeNull();
 });
