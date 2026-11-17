@@ -1,6 +1,7 @@
 // The conversation record as the page shows it: run ids stay on the server. A note is a person's message addressed to
 // another Member (`to`, no run); a queued message waits for the Agent to finish the current reply (`queued`), or was
-// not sent because the engine would not start it (`failed`).
+// not sent because the engine would not start it (`failed`). A person's answer to a question (`answer`, #138) is
+// `failed` when it never reached the Engine: the Run had ended or stopped waiting before it was delivered.
 // What Lead's turn of a run holds besides its words is a card: an Agent Lead made in it (#13), or a Member's request for
 // an Agent kept in it (#17), which shows the Owner's answer once there is one. The card is in Lead's reply of that run;
 // when Lead wrote nothing but the call, it is Lead's whole turn (`kind` made) after the message that asked. A card any
@@ -50,12 +51,12 @@ export const conversationColumns='id,agent_id,agent_name,hermes_agents(connectio
 // until #143 draws its own card.
 export type PlacedCard={run_id:string,card:LeadCard,at:string,answer?:{body:string,at:string,delivered:boolean},words?:string};
 // What a question adds to its place in the record (#138): the answer its person gave, at the time they gave it, and
-// whether it reached the Engine (a claim the Engine no longer waited for did not: its card closed), and for the main
-// Agent the plain words it is drawn as (the question, then each choice on its own line).
+// whether it reached the Engine (one claimed after the Engine stopped waiting, or as its Run ended, did not: its card
+// closed), and for the main Agent the plain words it is drawn as (the question, then each choice on its own line).
 export function questionParts(row:ReplyCardRow,card:ReplyCard,lead:boolean):Pick<PlacedCard,'answer'|'words'> {
  if(card.kind!=='question') return {};
  const {answer}=row.content as {answer?:string};
- return {...(answer!==undefined&&row.answered_at?{answer:{body:answer,at:row.answered_at,delivered:row.state!=='closed'}}:{}),...(lead?{words:[card.question,...card.choices.map(choice=>`- ${choice}`)].join('\n')}:{})};
+ return {...(answer!==undefined&&row.answered_at?{answer:{body:answer,at:row.answered_at,delivered:card.state!=='closed'}}:{}),...(lead?{words:[card.question,...card.choices.map(choice=>`- ${choice}`)].join('\n')}:{})};
 }
 const isQuestion=(row:PlacedCard)=>row.card.kind==='reply'&&row.card.card.kind==='question';
 // A person's message whose run Hermes no longer knew is marked lost (#243), from the run's usage record. A run's
