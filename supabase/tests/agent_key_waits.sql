@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(56);
+select plan(64);
 -- #299. Nothing in this transaction takes lead_create_agent's lock before the first key change begins.
 create temporary view held_agent_lock as select exists(select 1 from pg_locks where locktype='advisory' and pid=pg_backend_pid() and granted
  and ((classid::bigint<<32)|objid::bigint)=hashtextextended('hermes_agents',0)) as held;
@@ -164,6 +164,22 @@ select lives_ok($$select public.forget_agent_profile_leftovers('10000000-0000-00
 reset role;
 set local role authenticated;
 select is((select count(*)::int from public.company_key_profiles('10000000-0000-0000-0000-000000000001') where kind='removed'),0,'so the next removal need not reach it');
+reset role;
+set local role service_role;
+select is(public.finish_provider_key_change('10000000-0000-0000-0000-000000000002','anthropic',true,'{}'),'{}'::text[],'a set whose begin the database never took finishes all the same');
+reset role;
+select is(public.company_holds_provider_key('10000000-0000-0000-0000-000000000002'),true,'and its hold is recorded');
+set local role service_role;
+select lives_ok($$select public.begin_provider_key_change('10000000-0000-0000-0000-000000000001','openrouter')$$,'a change the Engine never answers is left changing');
+select lives_ok($$select public.settle_provider_key_holds('10000000-0000-0000-0000-000000000001','{}')$$,'the Owner''s read settles it to a space holding no key');
+reset role;
+select is(public.company_holds_provider_key('10000000-0000-0000-0000-000000000001'),false,'so no key is held and none is changing');
+set local role service_role;
+select lives_ok($$select public.settle_provider_key_holds('10000000-0000-0000-0000-000000000001','{deepseek}')$$,'a space holding a key the database never counted');
+reset role;
+select is(public.company_holds_provider_key('10000000-0000-0000-0000-000000000001'),true,'is held from that read on');
+set local role authenticated;
+select throws_ok($$select public.settle_provider_key_holds('10000000-0000-0000-0000-000000000001','{}')$$,'42501',null,'the Owner cannot settle the holds from the browser');
 reset role;
 select * from finish();
 rollback;

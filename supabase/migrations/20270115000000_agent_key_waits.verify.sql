@@ -34,7 +34,7 @@ select json_build_object(
   and pg_get_function_result('public.waiting_list(uuid)'::regprocedure)='TABLE(kind text, id bigint, title text, body text, asked_by text, card_id bigint, conversation_id uuid, created_at timestamp with time zone)',
  'server_changes_keys',(select bool_and(has_function_privilege('service_role',f,'execute') and not has_function_privilege('authenticated',f,'execute')
    and not has_function_privilege('anon',f,'execute') and prosecdef and proconfig @> array['search_path=""'])
-  from unnest(array['public.begin_provider_key_change(uuid,text)','public.finish_provider_key_change(uuid,text,boolean,text[])','public.forget_agent_profile_leftovers(uuid,text[])']::regprocedure[]) f
+  from unnest(array['public.begin_provider_key_change(uuid,text)','public.finish_provider_key_change(uuid,text,boolean,text[])','public.forget_agent_profile_leftovers(uuid,text[])','public.settle_provider_key_holds(uuid,text[])']::regprocedure[]) f
    join pg_proc p on p.oid=f::oid)
   and (select bool_and(position('hashtextextended(''hermes_agents''' in pg_get_functiondef(f))>0)
    from unnest(array['public.begin_provider_key_change(uuid,text)','public.finish_provider_key_change(uuid,text,boolean,text[])']::regprocedure[]) f)

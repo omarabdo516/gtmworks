@@ -22,7 +22,7 @@
 -- routes never begin or finish a change, so a set or removal it makes leaves company_key_holds as it was, ends no wait
 -- and forgets no leftover, and they read only the 'company' and 'agent' kinds. Its "Waiting on you" lists a wait as an
 -- item it cannot open. So while it runs, during an update or after a rollback, such an Agent waits until this version's
--- next set.
+-- next set, and the holds are right again from this version's next Owner read (settle_provider_key_holds).
 
 -- An Agent attached to its own profile after the Company's key was set, until a set gives that profile key and model.
 create table public.agent_key_waits (
@@ -96,8 +96,11 @@ create function public.finish_provider_key_change(c uuid, key_provider text, now
 language plpgsql security definer set search_path='' as $$
 declare kept boolean;
 begin
+ if coalesce(key_provider,'') !~ '^[a-z0-9][a-z0-9._-]{0,63}$' then raise exception 'keyInvalid' using errcode='22023'; end if;
  perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
- update public.company_key_holds h set held=coalesce(now_held,h.held),changing=false where h.company_id=c and h.provider=key_provider
+ -- A change whose begin the database did not take has no row yet: its finish records the hold all the same.
+ insert into public.company_key_holds as h(company_id,provider,held,changing) values(c,key_provider,coalesce(now_held,false),false)
+  on conflict (company_id,provider) do update set held=coalesce(now_held,h.held),changing=false
   returning h.held into kept;
  if not coalesce(kept,false) then return '{}'; end if;
  delete from public.agent_key_waits w using public.agent_profiles p
@@ -107,6 +110,23 @@ begin
 end $$;
 revoke all on function public.finish_provider_key_change(uuid,text,boolean,text[]) from public,anon,authenticated;
 grant execute on function public.finish_provider_key_change(uuid,text,boolean,text[]) to service_role;
+
+-- The Owner's read settles the holds to what the Company's space holds (lib/provider-keys.mjs, queued with the
+-- Company's key changes, so none is half done): every provider is held exactly when the space holds its key, and none
+-- is changing. A seed the log got wrong, a change the Engine never answered, or one the previous app version made, is
+-- right again from the next read.
+create function public.settle_provider_key_holds(c uuid, held text[]) returns void
+language plpgsql security definer set search_path='' as $$
+begin
+ if held is null or exists(select 1 from unnest(held) p where coalesce(p,'') !~ '^[a-z0-9][a-z0-9._-]{0,63}$') then
+  raise exception 'keyInvalid' using errcode='22023'; end if;
+ perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
+ update public.company_key_holds h set held=h.provider=any(settle_provider_key_holds.held),changing=false where h.company_id=c;
+ insert into public.company_key_holds(company_id,provider,held,changing) select c,p,true,false from unnest(settle_provider_key_holds.held) p
+  on conflict (company_id,provider) do nothing;
+end $$;
+revoke all on function public.settle_provider_key_holds(uuid,text[]) from public,anon,authenticated;
+grant execute on function public.settle_provider_key_holds(uuid,text[]) to service_role;
 
 -- 20261226000000's, replaced with one more argument: own_answers false when the Engine made the profile with the
 -- level's tools but it has no model to answer with. While the Company holds a key, or a change of one is under way, the
