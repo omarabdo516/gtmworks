@@ -1,7 +1,5 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { testDb } from './pgtap.mjs';
 
 const migration=readFileSync('supabase/migrations/20261126000000_first_run.sql','utf8');
 const sql=`begin;
@@ -30,9 +28,4 @@ select ok(not public.setup_is_open(),'deleting the new owner never reopens setup
 select * from finish();
 rollback;
 `;
-const dir=mkdtempSync(join(tmpdir(),'gtmworks-first-run-'));
-try {
- const file=join(dir,'migration.sql'); writeFileSync(file,sql);
- const result=spawnSync('npx',['--no-install','supabase','test','db',file],{stdio:'inherit'});
- process.exitCode=result.status ?? 1;
-} finally { rmSync(dir,{recursive:true,force:true}); }
+testDb(import.meta.url,sql);

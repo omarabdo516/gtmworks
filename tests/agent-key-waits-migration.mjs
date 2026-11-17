@@ -1,7 +1,5 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { testDb } from './pgtap.mjs';
 import { topLevelStatements } from './sql-statements.mjs';
 
 // An install updated to #299 holds each provider's key its log last says was set, and none its log says was removed,
@@ -32,9 +30,4 @@ select is(public.company_holds_provider_key('10000000-0000-0000-0000-00000000000
 select * from finish();
 rollback;
 `;
-const dir=mkdtempSync(join(tmpdir(),'gtmworks-agent-key-waits-'));
-try {
- const file=join(dir,'migration.sql'); writeFileSync(file,sql);
- const result=spawnSync('npx',['--no-install','supabase','test','db',file],{stdio:'inherit'});
- process.exitCode=result.status ?? 1;
-} finally { rmSync(dir,{recursive:true,force:true}); }
+testDb(import.meta.url,sql);

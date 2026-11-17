@@ -5,7 +5,7 @@ import { useI18n } from '@/lib/i18n-client';
 import { localeFor } from '@/lib/i18n.mjs';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { ShellIcon } from '@/components/shell-icon';
-import { MessageBox, newId, postMessage } from '@/app/conversation-composer';
+import { MessageBox, newId, postMessage, type MessageBoxHandle } from '@/app/conversation-composer';
 import { AgentEmptyChat, type EmptyChat } from '@/app/agent-empty-chat';
 import { PrivateLine } from '@/app/private-line';
 import { AgentDetails, HeadPill, useDetailsPanel, type DetailsAgent } from '@/app/agent-details';
@@ -27,27 +27,26 @@ const ReadyMade=lazy(()=>import('@/app/ready-made'));
 // (#25).
 export default function AgentChat({slug,company,agent,details,writer,team=false,empty={state:'known'},newAgent=false,askOf=null,isNew=false,gallery=null}:{slug:string,company:string,agent:DetailsAgent|null,details:AgentDetailsView|null,writer:boolean,team?:boolean,empty?:EmptyChat,newAgent?:boolean,askOf?:string[]|null,isNew?:boolean,gallery?:{company:string,alone:boolean,roles:ReadyRole[]}|null}) {
  const {t,language}=useI18n(); const router=useRouter(); const [conversation]=useState(newId); const panel=useDetailsPanel();
- const [draft,setDraft]=useState<{text:string,n:number}|null>(null);
  const composer=useRef<HTMLDivElement>(null); const picking=!!gallery; const wasPicking=useRef(picking);
- // A suggestion pressed while a message is on its way would replace the composer that is sending it.
- const sending=useRef(false);
+ const box=useRef<MessageBoxHandle>(null);
  useEffect(()=>{ if(wasPicking.current&&!picking) composer.current?.querySelector('textarea')?.focus(); wasPicking.current=picking; },[picking]);
  return <div className="convo">
   <div className="chat">
    <HeadPill panel={panel} agent={agent?.name} face={agent&&<span aria-hidden="true"><CompanyAgentFace agent={agent} size={24}/></span>} title={t('newChat')}/>
    <div className="transcript"><div className="transcript__col">
     {agent&&team&&<PrivateLine agent={agent.name}/>}
-    {agent?<AgentEmptyChat agent={agent} empty={empty} askOf={askOf} suggest={writer?text=>{if(!sending.current) setDraft(current=>({text,n:(current?.n||0)+1}));}:undefined}/>:<div className="empty-chat"><p role="note">{t('conversationNoAgent')}</p></div>}
+    {agent?<AgentEmptyChat agent={agent} empty={empty} askOf={askOf} suggest={writer?text=>box.current?.insert(text):undefined}/>:<div className="empty-chat"><p role="note">{t('conversationNoAgent')}</p></div>}
    </div></div>
-   <div className="composer-area" ref={composer}>{agent&&writer&&newAgent&&<div className="new-hint" role="note"><ShellIcon name="userPlus" className="new-hint__ic"/><p className="new-hint__t">{askOf?t('newAgentHintMember',agent.name,new Intl.ListFormat(localeFor(language),{type:'conjunction'}).format(askOf)):t('newAgentHint',agent.name)}</p>
+   <div className="composer-area" ref={composer}>{agent&&writer&&newAgent&&<div className="new-hint" role="note"><ShellIcon name="userPlus" className="new-hint__ic"/><p className="new-hint__t">{!askOf?t('newAgentHint',agent.name):askOf.length?t('newAgentHintMember',agent.name,new Intl.ListFormat(localeFor(language),{type:'conjunction'}).format(askOf)):t('newAgentHintMemberAnyOwner',agent.name)}</p>
     {!askOf&&<Link className="link-btn new-hint__alt" href={`/c/${slug}/chat?new=ready`}>{t('newAgentReadyMade')}</Link>}</div>}
     {agent&&gallery&&<Suspense fallback={null}><ReadyMade slug={slug} company={company} agent={agent.id} companyName={gallery.company} alone={gallery.alone} lead={agent.name} roles={gallery.roles}/></Suspense>}
-    {agent&&(writer?<MessageBox key={`${newAgent}${draft?.n||0}`} draft={draft?.text} focus={newAgent&&!gallery} placeholder={newAgent?t('newAgentExample'):t('writeTo',agent.name)} send={async(message,sendKey)=>{
-    sending.current=true;
+    {agent&&(writer?<MessageBox key={`${newAgent}`} ref={box} focus={newAgent&&!gallery} placeholder={newAgent?t('newAgentExample'):t('writeTo',agent.name)} send={async(message,sendKey)=>{
     const failure=await postMessage({company,conversation,agent:agent.id,message,sendKey});
-    sending.current=!failure;
-    if(!failure) router.push(`/c/${slug}/conversations/${conversation}`);
-    return failure;
+    if(failure) return failure;
+    // The page moves to the Conversation just started; until it has, the box stays busy, so neither a suggestion nor a
+    // second Enter can start another one.
+    router.push(`/c/${slug}/conversations/${conversation}`);
+    return new Promise<never>(()=>{});
    }}/>:<p className="ro-line" role="note"><ShellIcon name="eye"/><span>{agent.main?t('viewOnlyLead'):t('viewOnly')}</span></p>)}</div>
   </div>
   {agent&&details&&<AgentDetails panel={panel} agent={agent} details={details} settingsHref={`/c/${slug}/agents`}/>}
