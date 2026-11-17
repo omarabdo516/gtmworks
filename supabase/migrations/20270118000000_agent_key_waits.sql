@@ -19,8 +19,9 @@
 -- the browser.
 --
 -- Nothing existing is rewritten: the new tables start empty but company_key_holds, which is filled once from each
--- Company's last set or removal of each provider's key in its log; the trigger writes only on a later removal; and with
--- no key held, no wait and no leftover every replaced function answers as before. The previous app version runs against
+-- Company's last set or removal of each provider's key in its log, and agent_profile_leftovers, which is filled once with
+-- the Agents removed before this version in a Company that has set a key; the trigger writes only on a later removal;
+-- and with no key held, no wait and no leftover every replaced function answers as before. The previous app version runs against
 -- this. Its create calls name at most ten arguments and reach the new function with own_answers true, the path they took
 -- before, but while the Company holds a key a call with no own profile (its Engine failed or refused, or the profile had
 -- no model, which that version does not pass on) makes the Agent on an owner record with no tools, waiting, instead of
@@ -56,6 +57,17 @@ create table public.agent_profile_leftovers (
 );
 alter table public.agent_profile_leftovers enable row level security;
 revoke all on public.agent_profile_leftovers from anon,authenticated,service_role;
+-- An Agent removed before this version, in a Company that has set a key, may have left its own profile holding it: its
+-- name is kept as the trigger below would have, named as Lead was last asked to make it, so the next removal reaches it.
+-- A profile the Engine never made reads as missing and is forgotten at the next Owner's read or removal.
+insert into public.agent_profile_leftovers(profile,company_id,agent_id,agent_name)
+ select public.agent_engine_profile(r.agent_id),r.company_id,r.agent_id,
+  (select q.details->>'agent_name' from public.hermes_agent_audit q
+    where q.company_id=r.company_id and q.agent_id=r.agent_id and q.action='REQUEST_HERMES_AGENT' order by q.id desc limit 1)
+ from public.hermes_agent_audit r
+ where r.action='REMOVE_HERMES_AGENT' and not exists(select 1 from public.hermes_agents a where a.id=r.agent_id)
+  and exists(select 1 from public.company_audit k where k.company_id=r.company_id and k.action='provider_key_set')
+ on conflict (profile) do nothing;
 
 -- Whether the Company holds a provider's key, as the server last recorded the Engine's answer, and `changing` from the
 -- start of a set or removal until that answer is recorded. The Engine says whether a profile holds a key only when asked
