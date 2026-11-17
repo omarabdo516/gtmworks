@@ -31,7 +31,7 @@ const record = (steps?: RunSteps): ConversationRecord => ({
  usage: { input: 0, output: 0, unknown: 0 }, pending: false, failed: false, working: null, canStop: false,
 });
 const drawn = (language: 'en' | 'ar', steps?: RunSteps) => render(<LanguageProvider language={language}><div dir={language === 'ar' ? 'rtl' : 'ltr'}><div className="gw"><div className="chat">
- <ConversationTurns slug="rs-learning" company="co-1" record={record(steps)} asked={() => {}}/></div></div></div></LanguageProvider>);
+ <ConversationTurns slug="rs-learning" company="co-1" record={record(steps)} writer asked={() => {}}/></div></div></div></LanguageProvider>);
 const listOf = (button: Element) => document.getElementById(button.getAttribute('aria-controls') ?? '')!;
 const words = { en: { done: 'Done', skipped: 'Skipped' }, ar: { done: 'تم', skipped: 'اتخطى' } };
 
