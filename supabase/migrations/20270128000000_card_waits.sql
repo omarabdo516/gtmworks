@@ -30,16 +30,16 @@ revoke all on function public.reply_card_waits(public.reply_cards) from public,a
 grant execute on function public.reply_card_waits(public.reply_cards) to authenticated;
 
 -- What a Card's chat waits for, read with the Card: its newest waiting question or hand, whose person it waits on and
--- its line, or null. Only the Card's id and Company count from the row it is given, and it answers for a Card the caller
--- sees in their own Company only.
+-- its line, or null. Only the Card's id and Company count from the row it is given, a Card with no chat stops before
+-- any membership lookup, and it answers for a Card the caller sees in their own Company only.
 create function public.card_wait(card public.work_cards) returns jsonb
 language sql stable security definer set search_path='' as $$
  select jsonb_build_object('person',v.person_id,'kind',r.kind,'title',case r.kind when 'question' then r.content->>'question' else r.title end)
  from public.work_cards w
  join public.conversations v on v.id=w.conversation_id and v.company_id=w.company_id
  join public.reply_cards r on r.conversation_id=v.id and r.company_id=v.company_id and r.kind in ('question','hand') and r.state='open'
- where w.id=card.id and w.company_id=card.company_id and public.is_member(w.company_id) and public.can_see_card(w.company_id,w.id)
-  and public.reply_card_waits(r)
+ where w.conversation_id is not null and w.id=card.id and w.company_id=card.company_id and public.is_member(w.company_id)
+  and public.can_see_card(w.company_id,w.id) and public.reply_card_waits(r)
  order by r.created_at desc, r.id desc limit 1;
 $$;
 revoke all on function public.card_wait(public.work_cards) from public,anon,service_role;
