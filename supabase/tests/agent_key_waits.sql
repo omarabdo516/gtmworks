@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(102);
+select plan(106);
 -- #299. Nothing in this transaction takes lead_create_agent's lock before the first key change begins.
 create temporary view held_agent_lock as select exists(select 1 from pg_locks where locktype='advisory' and pid=pg_backend_pid() and granted
  and ((classid::bigint<<32)|objid::bigint)=hashtextextended('hermes_agents',0)) as held;
@@ -272,6 +272,15 @@ select lives_ok($$select public.finish_provider_key_change('10000000-0000-0000-0
 select lives_ok($$select public.finish_provider_key_change('10000000-0000-0000-0000-000000000002','openrouter',true,'{}')$$,'and a set it answered with a write');
 reset role;
 select is((select uncertain from public.company_key_holds where company_id='10000000-0000-0000-0000-000000000002' and provider='openrouter'),false,'which clears the mark');
+reset role;
+-- One provider's count runs ahead of the others: a read taken now saw the Company at 50.
+update public.company_key_holds set version=50 where company_id='10000000-0000-0000-0000-000000000002' and provider='anthropic';
+set local role service_role;
+select lives_ok($$select public.begin_provider_key_change('10000000-0000-0000-0000-000000000002','deepseek')$$,'after that read, another provider''s set begins');
+select lives_ok($$select public.finish_provider_key_change('10000000-0000-0000-0000-000000000002','deepseek',true,'{}')$$,'and the Engine answers it with a write');
+select lives_ok($$select public.settle_provider_key_holds('10000000-0000-0000-0000-000000000002','{}',50)$$,'the read taken before it, which found no key, is settled');
+reset role;
+select is((select held from public.company_key_holds where company_id='10000000-0000-0000-0000-000000000002' and provider='deepseek'),true,'and leaves that set''s hold alone, though its own count was lower');
 reset role;
 select * from finish();
 rollback;

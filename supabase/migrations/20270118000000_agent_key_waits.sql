@@ -83,8 +83,9 @@ create table public.company_key_holds (
  -- When the last change began, or a set was finished unanswered: the start of the window in which a change counts, and
  -- in which a read keeps an unanswered set held although the space does not show its key.
  changed_at timestamptz,
- -- Counts every begin and finish: a read of the space taken in another process applies only when no change began or
- -- ended since the version it saw (lead_key_settle, settle_provider_key_holds).
+ -- The Company's change count at this row's last begin or finish, taken under the lock both hold, so the highest of a
+ -- Company's rows is its count: a read of the space taken in another process applies only when no change of any
+ -- provider began or ended since the count it saw (lead_key_settle, settle_provider_key_holds).
  version bigint not null default 0,
  primary key (company_id,provider)
 );
@@ -113,8 +114,8 @@ language plpgsql security definer set search_path='' as $$
 begin
  if coalesce(key_provider,'') !~ '^[a-z0-9][a-z0-9._-]{0,63}$' then raise exception 'keyInvalid' using errcode='22023'; end if;
  perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
- insert into public.company_key_holds(company_id,provider,held,changing,changed_at,version) values(c,key_provider,false,true,now(),1)
-  on conflict (company_id,provider) do update set changing=true,changed_at=now(),version=public.company_key_holds.version+1;
+ insert into public.company_key_holds(company_id,provider,held,changing,changed_at,version) values(c,key_provider,false,true,now(),(select coalesce(max(k.version),0)+1 from public.company_key_holds k where k.company_id=c))
+  on conflict (company_id,provider) do update set changing=true,changed_at=now(),version=(select coalesce(max(k.version),0)+1 from public.company_key_holds k where k.company_id=c);
 end $$;
 revoke all on function public.begin_provider_key_change(uuid,text) from public,anon,authenticated;
 grant execute on function public.begin_provider_key_change(uuid,text) to service_role;
@@ -134,11 +135,11 @@ begin
  perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
  -- A change whose begin the database did not take has no row yet: its finish records the hold all the same.
  insert into public.company_key_holds as h(company_id,provider,held,changing,uncertain,changed_at,version)
-  values(c,key_provider,case when not answered then false else coalesce(now_held,false) end,false,coalesce(not answered,false),case when not answered then now() end,1)
+  values(c,key_provider,case when not answered then false else coalesce(now_held,false) end,false,coalesce(not answered,false),case when not answered then now() end,(select coalesce(max(k.version),0)+1 from public.company_key_holds k where k.company_id=c))
   -- An unanswered set keeps the hold the Company had: its mark holds the Company's Agents until the space settles it.
   on conflict (company_id,provider) do update set held=case when not answered then h.held else coalesce(now_held,h.held) end,changing=false,
    uncertain=case when not answered then true when answered and now_held then false else h.uncertain end,
-   changed_at=case when not answered then now() else h.changed_at end,version=h.version+1
+   changed_at=case when not answered then now() else h.changed_at end,version=(select coalesce(max(k.version),0)+1 from public.company_key_holds k where k.company_id=c)
   returning h.held into kept;
  if not public.company_holds_provider_key(c) then
   delete from public.agent_key_waits w where w.company_id=c;
@@ -165,7 +166,9 @@ language plpgsql security definer set search_path='' as $$
 declare since timestamptz:=now()-interval '10 minutes';
 begin
  if held is null then raise exception 'keyInvalid' using errcode='22023'; end if;
- -- A read taken before a change began or ended in another process says nothing about that change.
+ -- A read taken before a change began or ended in another process says nothing about that change. Checked and applied
+ -- under the lock begin and finish take, so no change ends between the check and the update.
+ if settle_provider_key_holds.seen is not null then perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0)); end if;
  if settle_provider_key_holds.seen is not null and exists(select 1 from public.company_key_holds k where k.company_id=c and k.version>settle_provider_key_holds.seen) then return; end if;
  -- Each row's new values are computed once, from the row as read; a row another change wrote meanwhile is a newer row
  -- (ctid), left as that change wrote it for the next read. A row left as it was is not written, and no lock is taken, so
