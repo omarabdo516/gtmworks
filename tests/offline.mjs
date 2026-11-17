@@ -1,8 +1,8 @@
-import { appendFileSync, mkdtempSync, readFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { dirname, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 // What a test may reach (#266): this machine, and the special-use names of RFC 6761, which are never delegated, so no
 // request to them can reach an outside server. Everything else is outside, example.com and private LAN ranges included.
@@ -24,6 +24,8 @@ export const isLocalUrl = url => {
 // WebSocket and redirect hop at the proxy, before any lookup, and keeps its cache and headers as they are, which a route
 // would not. A context's `page.request` takes the proxy too, and Playwright matches its bypass by name suffix only, so
 // each entry is in the form both read (`.test`, not `*.test`) and 127.0.0.1 is named beside the range Chromium reads.
+// Playwright's API client reads only names and single addresses here, so it reaches 127.0.0.1 but not the rest of
+// 127.0.0.0/8 directly; no test calls those through it.
 export const nowhere = { server: 'http://127.0.0.1:9', bypass: [...local.names, ...local.suffixes, ...local.addresses.map(address => (address.includes(':') ? `[${address}]` : address)), local.loopback].join(',') };
 
 /**
@@ -48,24 +50,44 @@ export function watchOutside(context, note) {
 }
 
 // This file, found from its own call site: it loads as ES module and, from a Playwright config, as CommonJS, which has no
-// import.meta.
+// import.meta. Vitest bundles its config with this file inside, into a file it then deletes (beside the config, or in
+// node_modules/.vite-temp), so a call site not named offline.mjs is that bundle, and the file is the first
+// tests/offline.mjs above it.
 const ownUrl = (() => {
   const prepare = Error.prepareStackTrace;
   Error.prepareStackTrace = (_, sites) => sites;
-  const file = new Error().stack[0].getFileName();
+  const site = new Error().stack[0].getFileName();
   Error.prepareStackTrace = prepare;
-  return file.startsWith('file:') ? file : pathToFileURL(file).href;
+  const file = site.startsWith('file:') ? fileURLToPath(site) : site;
+  if (file.endsWith('offline.mjs')) return pathToFileURL(file).href;
+  for (let folder = dirname(file); ; folder = dirname(folder)) {
+    if (existsSync(join(folder, 'tests', 'offline.mjs'))) return pathToFileURL(join(folder, 'tests', 'offline.mjs')).href;
+    if (dirname(folder) === folder) return undefined;
+  }
 })();
-const ownImport = new RegExp(`\\s*--import[= ]${ownUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'g');
 
-// What NODE_OPTIONS holds without the guard, for the one process that must reach outside: the app build fetches its
-// Google fonts (scripts/web.sh).
-export const nodeOptionsBefore = (process.env.NODE_OPTIONS ?? '').replace(ownImport, '').trim();
+// What NODE_OPTIONS holds without the guard (this checkout's or any other), for the one process that must reach
+// outside: the app build fetches its Google fonts (scripts/web.sh).
+export const nodeOptionsBefore = (process.env.NODE_OPTIONS ?? '').replace(/\s*--import[= ]\S*\/tests\/offline\.mjs/g, '').trim();
 
 // Every refusal of a run, by any process the run started (a server or worker that swallowed its error included), is
-// written to one file; the run's teardown fails naming each (below). A run without one makes its own.
-const logKey = 'GTMWORKS_OFFLINE_LOG';
-export const freshLog = () => { process.env[logKey] = join(mkdtempSync(join(tmpdir(), 'gtmworks-offline-')), 'refused.log'); };
+// written to one file, which the run reads at its end: a `node --test` file at exit (below), a Playwright run in its
+// global teardown. A process that inherits no log makes one, owns it, and removes it when it exits.
+const logKey = 'GTMWORKS_OFFLINE_LOG', ownerKey = 'GTMWORKS_OFFLINE_LOG_OWNER';
+export const ownsLog = () => process.env[ownerKey] === String(process.pid);
+export const freshLog = () => {
+  const folder = mkdtempSync(join(tmpdir(), 'gtmworks-offline-'));
+  process.env[logKey] = join(folder, 'refused.log');
+  process.env[ownerKey] = String(process.pid);
+  process.on('exit', () => {
+    // Under `node --test` each file owns its log (the runner itself loads no --import) and reads it last, so a process
+    // one of its tests started that swallowed a refusal fails the file.
+    if (process.env.NODE_TEST_CONTEXT || process.execArgv.includes('--test')) {
+      try { assertNothingRefused(); } catch (error) { process.exitCode = 1; process.stderr.write(`${error.message}\n`); }
+    }
+    rmSync(folder, { recursive: true, force: true });
+  });
+};
 export function assertNothingRefused(log = process.env[logKey]) {
   let lines = [];
   try { lines = readFileSync(log, 'utf8').split('\n').filter(Boolean); } catch { /* nothing was refused */ }
@@ -97,7 +119,8 @@ if (!net.Socket.prototype.connect[installed]) {
     process.nextTick(() => this.destroy(Object.assign(new Error(message), { code: 'ECONNREFUSED' })));
     return this;
   }, { [installed]: true });
-  process.env.NODE_OPTIONS = [nodeOptionsBefore, `--import=${ownUrl}`].filter(Boolean).join(' ');
+  if (ownUrl) process.env.NODE_OPTIONS = [nodeOptionsBefore, `--import=${ownUrl}`].filter(Boolean).join(' ');
+  else process.stderr.write('offline test run: tests/offline.mjs not found, so the processes this one starts are not guarded\n');
   if (process.env.NODE_TEST_CONTEXT) process.on('exit', () => {
     if (!refused.size) return;
     process.exitCode = 1;

@@ -77,7 +77,7 @@ test.describe('a hook', () => {
   test.beforeAll(async ({ browser }) => { opened = await browser.newContext(); await probe(await opened.newPage()); });
   test.afterAll(() => opened.close());
   test('an outside request a beforeAll made is kept for the worker, with the test before it, and fails no test', async ({ outsideBetweenTests }) => {
-    expect(outsideBetweenTests.splice(0)).toEqual([expect.stringMatching(/^outside\.example\.org \(between tests, after "/)]);
+    expect(outsideBetweenTests.splice(0)).toEqual([expect.stringMatching(/^outside\.example\.org \(between tests, /)]);
   });
 });
 

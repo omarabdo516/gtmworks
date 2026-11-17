@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { assertNothingRefused, isLocalHost, isLocalUrl, nowhere } from './offline.mjs';
 
@@ -66,7 +66,7 @@ test('a file that swallows a refused outside request fails, and the run names th
       "  assert.equal(error.message, 'offline test run: refused a connection to 8.8.8.8:443 (tests/offline.mjs)');",
       '});',
     ].join('\n'));
-    const env = { ...process.env, NODE_TEST_CONTEXT: undefined };
+    const env = { ...process.env, NODE_TEST_CONTEXT: undefined, GTMWORKS_OFFLINE_LOG: undefined, GTMWORKS_OFFLINE_LOG_OWNER: undefined };
     const run = spawnSync(process.execPath, ['--import', pathToFileURL(resolve('tests/offline.mjs')).href, '--test', '--test-reporter=spec', join(dir, 'swallow.test.mjs')], { encoding: 'utf8', env });
     const output = run.stdout + run.stderr;
     assert.notEqual(run.status, 0, output);
@@ -79,7 +79,8 @@ test('a file that swallows a refused outside request fails, and the run names th
 });
 
 const guard = pathToFileURL(resolve('tests/offline.mjs')).href;
-const node = (args, options = {}) => spawnSync(process.execPath, args, { encoding: 'utf8', ...options, env: { ...process.env, NODE_TEST_CONTEXT: undefined, ...options.env } });
+// Each run here starts its own log, so what it refuses on purpose stays out of this run's.
+const node = (args, options = {}) => spawnSync(process.execPath, args, { encoding: 'utf8', ...options, env: { ...process.env, NODE_TEST_CONTEXT: undefined, GTMWORKS_OFFLINE_LOG: undefined, GTMWORKS_OFFLINE_LOG_OWNER: undefined, ...options.env } });
 
 test('a server that swallows a refused outside request still fails the run\'s teardown, which names the host and the process', () => {
   const dir = mkdtempSync(join(tmpdir(), 'offline-log-')), log = join(dir, 'refused.log');
@@ -101,6 +102,41 @@ test('every node process a test starts carries the guard once, from any folder a
     const child = node(['--import', own, '-e', nested], { cwd: dir, env: { NODE_OPTIONS: '' } });
     assert.equal(child.status, 0, child.stderr);
     assert.equal(child.stdout.trim(), `--import=${own}`);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('a node test file fails when a process its test started swallowed a refusal, naming the host, and removes its log', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'offline-run-'));
+  try {
+    writeFileSync(join(dir, 'child.test.mjs'), [
+      "import { test } from 'node:test';",
+      "import { spawnSync } from 'node:child_process';",
+      "test('starts a server that swallows an outside request', () => {",
+      "  console.log('log at', process.env.GTMWORKS_OFFLINE_LOG);",
+      "  spawnSync(process.execPath, ['-e', \"fetch('https://child-server.example.org/').catch(() => {})\"], { env: { ...process.env, NODE_TEST_CONTEXT: undefined } });",
+      '});',
+    ].join('\n'));
+    const run = node(['--import', guard, '--test', '--test-reporter=spec', join(dir, 'child.test.mjs')]);
+    const output = run.stdout + run.stderr;
+    assert.match(output, /✔ starts a server that swallows an outside request/);
+    assert.notEqual(run.status, 0, output);
+    assert.match(output, /a process of this run tried to reach outside[\s\S]*child-server\.example\.org by /);
+    const log = output.match(/log at (\S+)/)[1];
+    assert.ok(!existsSync(dirname(log)), 'the run removed its log');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('under Vitest, whose bundled config holds the guard, every process it starts still gets the real guard file', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'offline-bundle-'));
+  try {
+    mkdirSync(join(dir, 'tests'));
+    copyFileSync('tests/offline.mjs', join(dir, 'tests', 'offline.mjs'));
+    mkdirSync(join(dir, 'node_modules', '.vite-temp'), { recursive: true });
+    copyFileSync('tests/offline.mjs', join(dir, 'node_modules', '.vite-temp', 'vitest.config.mts.timestamp-1-abc.mjs'));
+    const bundle = pathToFileURL(join(dir, 'node_modules', '.vite-temp', 'vitest.config.mts.timestamp-1-abc.mjs')).href;
+    const child = node(['--import', bundle, '-e', "console.log(process.env.NODE_OPTIONS)"], { env: { NODE_OPTIONS: '' } });
+    assert.equal(child.status, 0, child.stderr);
+    assert.equal(child.stdout.trim(), `--import=${pathToFileURL(join(dir, 'tests', 'offline.mjs')).href}`);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

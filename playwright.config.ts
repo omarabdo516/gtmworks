@@ -2,9 +2,10 @@ import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { defineConfig } from '@playwright/test';
 // Offline by default (#266): the runner, its workers and the servers below refuse outside connections and name the host.
-import { freshLog, nodeOptionsBefore } from './tests/offline.mjs';
+import { freshLog, nodeOptionsBefore, ownsLog } from './tests/offline.mjs';
 // One log of refusals per run, which every process the run starts writes to; the teardown fails the run naming each.
-if (!process.env.TEST_WORKER_INDEX) freshLog();
+// The runner owns its log, unless it inherited one from the process that started it.
+if (!process.env.TEST_WORKER_INDEX && !ownsLog()) freshLog();
 import { appOrigin, lanes, originOf, serverLogOf } from './tests/lane.mjs';
 // First run opens only with the install's setup code (issue #50). The web server and the test workers inherit this one.
 process.env.SETUP_CODE ||= randomBytes(32).toString('hex');
