@@ -99,7 +99,7 @@ test('failed first-run tests print only the last 40 matching server lines; passi
  const playwright=Object.assign(()=>{},{beforeEach:()=>{},afterAll:()=>{},afterEach:hook=>{afterEach=hook;}});
  const log=Array.from({length:45},(_,i)=>`complete_setup failure ${i}\r\nunrelated line`).join('\r\n');
  load('tests/first-run.spec.ts',{
-  '@playwright/test':{test:playwright},
+  './offline-browser':{test:playwright},
   'node:fs/promises':{readFile:async path=>{
    reads++;
    assert.equal(path,`${process.cwd()}/playwright-report/server.log`);
