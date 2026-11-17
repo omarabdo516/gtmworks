@@ -215,3 +215,18 @@ test('a line end split between two chunks of the stream stays one line end',()=>
  assert.equal(buffer,'id: 3\ndata: {"seq":3}\n\n');
  assert.equal(withChunk('','a\rb\r\nc'),'a\nb\nc','a lone \\r and a \\r\\n inside one chunk are line ends too');
 });
+
+// #142: the pinned Engine has no way to run one task as an Agent's profile chosen for it, so Lead hands no job on.
+// Should Lead's Run still carry the Engine's helper events (api_server_runs.py, _SUBAGENT_EVENT_KEYS), the reply is
+// Lead's alone and no helper becomes a step: there is nothing a "Handed to" row could be drawn from.
+test('a Lead Run whose events carry a helper\'s start and end reads as Lead\'s reply alone, with no helper among its steps',async()=>{
+ const fake=await fakeHermes();
+ try {
+  const {engine,run}=await begin(fake);
+  fake.settings.emit(run,{event:'subagent.start',goal:'Plan the Meta ads for the March intake',task_index:0,task_count:1,subagent_id:'sa-1',depth:1,model:'anthropic/claude-opus-4.6'});
+  fake.settings.emit(run,{event:'subagent.complete',goal:'Plan the Meta ads for the March intake',task_index:0,subagent_id:'sa-1',status:'completed',summary:'Three ad sets, 30 days, EGP 9,000.',duration_seconds:12.4,input_tokens:900,output_tokens:210});
+  await finish(engine,run);
+  assert.equal((await engine.read(run)).reply,'Reply to: Plan the ads');
+  assert.deepEqual(await all(engine.steps(run)),[{seq:0,step:null},{seq:1,step:null},{seq:2,step:null,endedAt:'number'},{end:'ended'}]);
+ } finally { await fake.close(); }
+});
