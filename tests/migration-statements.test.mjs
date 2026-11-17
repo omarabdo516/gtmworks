@@ -49,3 +49,12 @@ test('the statement reader nests block comments and opens a dollar quote only wh
  assert.match(codeOutsideQuotes(glued), /\\g/, 'result$tag$ is one name, not a dollar quote');
  assert.deepEqual(topLevelStatements('do $body$ begin perform 1; end $body$; select $$a;b$$'), ['do $body$ begin perform 1; end $body$', 'select $$a;b$$']);
 });
+
+test('a name ends where Postgres says: any character past ASCII belongs to it, as in its lexer (#259)', () => {
+ // Postgres's lexer (scan.l): ident_cont is [A-Za-z\200-\377_0-9\$], so every byte past ASCII continues a name.
+ for (const name of ['result́', 'result\u{1D400}', 'résumé']) {
+  const glued=`select json_build_object('ok', false) as ${name}$tag$\n\\g /dev/null\nselect json_build_object('ok', true);`;
+  assert.match(codeOutsideQuotes(glued), /\\g/, `${JSON.stringify(name)}$tag$ is one name`);
+ }
+ assert.deepEqual(topLevelStatements("select caféE'x\\'; select 1"), ["select caféE'x\\'", 'select 1'], 'an E that ends a longer name opens no escape string');
+});
