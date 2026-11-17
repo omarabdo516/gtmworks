@@ -422,11 +422,11 @@ test('integration: an Agent hands a step over once under its reply, shows none w
   expect((await manager.from('reply_cards').select('id').eq('conversation_id',conversation)).data).toEqual([]);
   const {data:first,error}=await person.rpc('mark_hand_done',{c:company,conversation,card});
   expect(error).toBeNull();
-  expect(first.state).toBe('done');
+  expect([first.state,first.first]).toEqual(['done',true]);
   const [kept]=cards();
   expect([kept.state,kept.done_by,typeof kept.done_at]).toEqual(['done',omar,'string']);
   // A second press, as from a second tab, changes nothing.
-  expect((await person.rpc('mark_hand_done',{c:company,conversation,card})).data).toEqual(first);
+  expect((await person.rpc('mark_hand_done',{c:company,conversation,card})).data).toEqual({...first,first:false});
   expect(cards()).toEqual([kept]);
   const [read]=await shown();
   expect(read).toMatchObject({id:card,state:'done',note:hand.note});

@@ -69,7 +69,8 @@ async function done(db:Database,body:Record<string,unknown>) {
  if(typeof body.conversation!=='string'||!uuid.test(body.conversation)||!(typeof body.card==='number'&&Number.isSafeInteger(body.card)&&body.card>0)) return refuse('conversationFailed',400);
  const {data,error}=await db.rpc('mark_hand_done',{c:body.company,conversation:body.conversation,card:body.card});
  if(error) return refuseFor(error.code);
- return reply({state:'done',at:(data as {at:string}).at});
+ const {at,first}=data as {at:string,first:boolean};
+ return reply({state:'done',at,first});
 }
 
 // Reading the record also closes any of its runs Hermes has ended (lib/conversation-runs.mjs, as the worker does), so

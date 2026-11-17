@@ -8,6 +8,7 @@ select json_build_object(
   and not public.reply_card_valid('hand','shown','{"app":"WordPress","line":"The draft is ready","rows":[]}')
   and not public.reply_card_valid('hand','open','{"app":"WordPress","line":"The draft is ready","rows":[],"url":"http://example.com"}')
   and not public.reply_card_valid('hand','open','{"app":"WordPress","line":"The draft is ready","rows":[],"url":"https://example.com/a b"}')
+  and public.reply_card_valid('hand','open','{"app":"WordPress","line":"The draft is ready","rows":[],"url":"HTTPS://example.com/a"}')
   and not public.reply_card_valid('hand','open','{"app":"WordPress","line":"The draft is ready","rows":[],"url":null}')
   and not public.reply_card_valid('hand','open','{"line":"The draft is ready","rows":[]}')
   and not public.reply_card_valid('hand','open','{"app":"WordPress","line":"The draft is ready","rows":[],"decision":"C"}'),

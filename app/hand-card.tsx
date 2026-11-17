@@ -8,15 +8,18 @@
 // merge request" variants are not drawn (#21, #36).
 import { useEffect, useRef, useState } from 'react';
 import { ShellIcon } from '@/components/shell-icon';
-import { AppTile, knownApp } from '@/components/app-tile';
+import { AppTile } from '@/components/app-tile';
+import { knownApp } from '@/lib/app-catalogue.mjs';
 import { useI18n } from '@/lib/i18n-client';
 import { localeFor } from '@/lib/i18n.mjs';
-import { useZone } from '@/app/agent-made';
+import { madeDay, useZone } from '@/app/agent-made';
+import { dayOf } from '@/lib/activity-log.mjs';
 import type { ReplyCard } from '@/lib/conversations';
 
 type Hand=Extract<ReplyCard,{kind:'hand'}>;
-// Marks the card done: the time the database kept (the first press's, from any tab), else the refusal's message key.
-export type MarkHandDone=(card:number)=>Promise<{at:string}|{error:string}>;
+// Marks the card done: the time the database kept (the first press's, from any tab) and whether this press was that
+// first one, else the refusal's message key.
+export type MarkHandDone=(card:number)=>Promise<{at:string,first:boolean}|{error:string}>;
 // design-reference: justCls. The done card settles only on the page where it was pressed, within this long.
 const settling=900;
 
@@ -29,23 +32,26 @@ const rtl=(text:string)=>/^[^A-Za-zÀ-ɏͰ-ϿЀ-ӿ֐-ࣿיִ-﷿ﹰ-﻿]*[֐-ࣿ�
 export function HandCard({card,fresh,done}:{card:Hand,fresh:boolean,done?:MarkHandDone}) {
  const {t,language}=useI18n(); const zone=useZone();
  const [pressed,setPressed]=useState<string|null>(null); const [error,setError]=useState(''); const [just,setJust]=useState(false);
- const sending=useRef(false);
+ const [sending,setSending]=useState(false); const busy=useRef(false);
  useEffect(()=>{
   if(!just) return;
   const timer=setTimeout(()=>setJust(false),settling);
   return ()=>clearTimeout(timer);
  },[just]);
- // A press reads as done at once; the record then confirms it with the time the database kept.
+ // The card reads done only once the database has kept the press, and settles only on the page whose press was first.
  const at=card.state==='done'?card.at:pressed;
  const press=async()=>{
-  if(sending.current||!done) return;
-  sending.current=true; setError(''); setPressed(new Date().toISOString()); setJust(true);
+  if(busy.current||!done) return;
+  busy.current=true; setSending(true); setError('');
   const result=await done(card.id);
-  if('at' in result) setPressed(result.at);
-  else { setPressed(null); setJust(false); setError(result.error==='conversationFailed'?'handFailed':result.error); }
-  sending.current=false;
+  if('at' in result) { setPressed(result.at); setJust(result.first); }
+  else setError(result.error==='conversationFailed'?'handFailed':result.error);
+  busy.current=false; setSending(false);
  };
- const time=(value:string)=><time dateTime={value} data-utc={zone}>{new Date(value).toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit',timeZone:zone})}</time>;
+ // Today its time, another day its day, as the made card says when an Agent was made.
+ const when=(value:string)=>dayOf(new Date().toISOString(),zone)===dayOf(value,zone)
+  ?new Date(value).toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit',timeZone:zone}):madeDay(value,language,zone);
+ const time=(value:string)=><time dateTime={value} data-utc={zone}>{when(value)}</time>;
  // The time is its own element inside the sentence, so the sentence is split where the time goes.
  const [before,after]=t('handDoneAt','{0}').split('{0}');
  return <div className={`reply-card reply-card--hand${at?' is-resolved':''}${just?' is-just':''}${fresh?' card-in':''}`} role="group" aria-label={t('handLabel',card.title)} dir={rtl(card.title)?'rtl':'ltr'}>
@@ -56,7 +62,7 @@ export function HandCard({card,fresh,done}:{card:Hand,fresh:boolean,done?:MarkHa
   {at?<div className="card__outcome"><ShellIcon name="check"/><span><bdi className="hand__at" dir={language==='ar'?'rtl':'ltr'}>{before}{time(at)}{after}</bdi>{card.note&&<> <span className="hand__note">{card.note}</span></>}</span></div>
    :<div className="card__actions">
     {card.url&&<a className="btn btn--secondary" href={card.url} target="_blank" rel="noopener noreferrer"><ShellIcon name="open"/><span>{t('handOpen')}</span></a>}
-    <button type="button" className="btn btn--primary" disabled={!done} onClick={()=>void press()}>{t('handDone')}</button>
+    <button type="button" className="btn btn--primary" disabled={!done||sending} onClick={()=>void press()}>{t('handDone')}</button>
    </div>}
   {error&&!at&&<p className="hand__error" role="alert">{t(error)}</p>}
  </div>;

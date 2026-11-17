@@ -11,7 +11,8 @@
 
 -- What each kind holds and which states it takes. Branches are only ever added: the table's check does not judge stored
 -- rows again when this is replaced, so a kind's branch must never get narrower. A hand card's address, when given, is an
--- https one with no spaces, so the link the person opens is never a script or another scheme.
+-- https one with no spaces (its scheme in any case, as schemes are), so the link the person opens is never a script or
+-- another scheme.
 create or replace function public.reply_card_valid(kind text, state text, content jsonb) returns boolean language sql immutable set search_path='' as $$
  select coalesce(case kind
   when 'draft' then state='shown' and case when jsonb_typeof(content)='object' then
@@ -53,7 +54,7 @@ create or replace function public.reply_card_valid(kind text, state text, conten
     and not exists(select 1 from jsonb_array_elements(content->'rows') r where not case when jsonb_typeof(r)='object' then
      (select array_agg(k order by k) from jsonb_object_keys(r) k)=array['label','value']
      and public.reply_card_text(r->'label',40) and public.reply_card_text(r->'value',240) else false end) else false end
-   and (not content ? 'url' or coalesce(jsonb_typeof(content->'url')='string' and content->>'url' ~ '^https://[^[:space:]]+$' and length(content->>'url')<=2000,false))
+   and (not content ? 'url' or coalesce(jsonb_typeof(content->'url')='string' and content->>'url' ~* '^https://[^[:space:]]+$' and length(content->>'url')<=2000,false))
    and (not content ? 'note' or public.reply_card_text(content->'note',240))
   else false end
  end,false);
@@ -103,6 +104,7 @@ end $$;
 
 -- The one "Done it", by the Conversation's own person (never a Viewer, who writes nothing): the first press records who
 -- and when and logs it once, privately; any later press, from any tab, answers that first record and changes nothing.
+-- `first` says which, so only the page whose press recorded it plays the settle.
 create function public.mark_hand_done(c uuid, conversation uuid, card bigint) returns jsonb
 language plpgsql security definer set search_path='' as $$
 declare talk public.conversations; handed public.reply_cards;
@@ -112,13 +114,13 @@ begin
  if not found or talk.person_id<>auth.uid() or not public.can_see_agent(c,talk.agent_id) then raise exception 'conversationNotFound' using errcode='P0002'; end if;
  select * into handed from public.reply_cards r where r.id=card and r.conversation_id=conversation and r.kind='hand' for update;
  if not found then raise exception 'conversationNotFound' using errcode='P0002'; end if;
- if handed.state='done' then return jsonb_build_object('state','done','at',handed.done_at); end if;
+ if handed.state='done' then return jsonb_build_object('state','done','at',handed.done_at,'first',false); end if;
  update public.reply_cards set state='done',done_by=auth.uid(),done_at=now() where id=handed.id returning * into handed;
  insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,agent_id,action,details,source,source_id,created_at)
   values(handed.company_id,auth.uid(),'person',(select name from public.people where id=auth.uid()),'agent',talk.agent_id,'agent_hand_done',
    jsonb_build_object('hand',jsonb_build_object('title',handed.title),'private',true,'teller',auth.uid()),'reply_card_answers',handed.id,handed.done_at)
   on conflict (source,source_id) do nothing;
- return jsonb_build_object('state','done','at',handed.done_at);
+ return jsonb_build_object('state','done','at',handed.done_at,'first',true);
 end $$;
 revoke all on function public.mark_hand_done(uuid,uuid,bigint) from public,anon,service_role;
 grant execute on function public.mark_hand_done(uuid,uuid,bigint) to authenticated;

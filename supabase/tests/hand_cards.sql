@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(18);
+select plan(19);
 -- #139. Writer in RS Learning, shown to the Manager (2), the Contributors (3, 5) and the Viewer (4); the Owner (1) sees
 -- every Agent. One Conversation with Writer each, and in it the message of one run.
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
@@ -41,6 +41,8 @@ select is(public.agent_show_card('f9000000-0000-0000-0000-000000000005','hand-ru
  'a hand card at every limit is shown');
 select is(public.agent_show_card('f9000000-0000-0000-0000-000000000005','hand-run-5','call-1','hand','Pay the invoice','{"app":"Stripe","line":"The invoice is ready","rows":[]}')->>'state','shown',
  'one with no address, no note and no rows is shown');
+select is(public.agent_show_card('f9000000-0000-0000-0000-000000000005','hand-run-5','call-20','hand','Publish','{"app":"WordPress","line":"Ready","rows":[],"url":"HTTPS://Example.com/Draft"}')->>'state','shown',
+ 'an https address with its scheme in capitals is shown, as schemes take any case');
 select results_eq($$select x.n,public.agent_show_card('f9000000-0000-0000-0000-000000000005','hand-run-5','call-'||(x.n+1),'hand',x.title,x.content::jsonb)->>'state' from (values
   (1,null,'{"app":"WordPress","line":"Ready","rows":[]}'),
   (2,'Publish','{"app":"WordPress","line":"Ready","rows":[],"url":"http://example.com/draft"}'),
@@ -60,7 +62,7 @@ select results_eq($$select x.n,public.agent_show_card('f9000000-0000-0000-0000-0
 reset role;
 select results_eq($$select run_id,state,title,content->>'app',jsonb_array_length(content->'rows'),content ? 'url',content ? 'note',done_by,done_at from public.reply_cards where kind='hand' order by run_id,call_id$$,
  $$values ('hand-run-1','open','انشر المقال','WordPress',2,true,true,null::uuid,null::timestamptz),('hand-run-2','open','انشر المقال','WordPress',2,true,true,null,null),
-  ('hand-run-3','open','انشر المقال','WordPress',2,true,true,null,null),('hand-run-5','open',repeat('t',100),repeat('a',40),8,true,true,null,null),('hand-run-5','open','Pay the invoice','Stripe',0,false,false,null,null)$$,
+  ('hand-run-3','open','انشر المقال','WordPress',2,true,true,null,null),('hand-run-5','open',repeat('t',100),repeat('a',40),8,true,true,null,null),('hand-run-5','open','Pay the invoice','Stripe',0,false,false,null,null),('hand-run-5','open','Publish','WordPress',0,true,false,null,null)$$,
  'each hand card shown is kept open, with its rows, address and note as given, and nobody has marked it done');
 select results_eq($$select actor_id,actor_kind,action,details->'card',details->>'private',details->>'teller' from public.company_log where agent_id='f7000000-0000-0000-0000-000000000002' and source='reply_cards' and details->>'teller'='20000000-0000-0000-0000-000000000003'$$,
  $$values ('f7000000-0000-0000-0000-000000000002'::uuid,'agent','agent_card_shown','{"kind":"hand","title":"انشر المقال"}'::jsonb,'true','20000000-0000-0000-0000-000000000003')$$,
@@ -85,14 +87,14 @@ select throws_ok($$select public.mark_hand_done('10000000-0000-0000-0000-0000000
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
 select throws_ok($$select public.mark_hand_done('10000000-0000-0000-0000-000000000001','f9000000-0000-0000-0000-000000000003',(select min(id) from public.reply_cards where conversation_id='f9000000-0000-0000-0000-000000000003')-1)$$,
  'P0002','conversationNotFound','a card that is not a hand card of the Conversation is not found');
-select is(public.mark_hand_done('10000000-0000-0000-0000-000000000001','f9000000-0000-0000-0000-000000000003',current_setting('test.card')::bigint)->>'state','done',
- 'the Contributor marks their hand card done');
+select is((select (r->>'state')||':'||(r->>'first') from public.mark_hand_done('10000000-0000-0000-0000-000000000001','f9000000-0000-0000-0000-000000000003',current_setting('test.card')::bigint) r),'done:true',
+ 'the Contributor marks their hand card done, and the answer says this press was the first');
 reset role;
 select set_config('test.done_at',(select done_at::text from public.reply_cards where id=current_setting('test.card')::bigint),true);
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
 select is(public.mark_hand_done('10000000-0000-0000-0000-000000000001','f9000000-0000-0000-0000-000000000003',current_setting('test.card')::bigint),
- jsonb_build_object('state','done','at',current_setting('test.done_at')::timestamptz),'a second press, as from a second tab, answers the first record');
+ jsonb_build_object('state','done','at',current_setting('test.done_at')::timestamptz,'first',false),'a second press, as from a second tab, answers the first record and is not the first');
 reset role;
 select results_eq($$select state,done_by,done_at from public.reply_cards where kind='hand' and (state='done' or done_at is not null)$$,
  $$values ('done','20000000-0000-0000-0000-000000000003'::uuid,current_setting('test.done_at')::timestamptz)$$,

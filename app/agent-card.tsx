@@ -7,7 +7,8 @@ import { useI18n } from '@/lib/i18n-client';
 import { localeFor } from '@/lib/i18n.mjs';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { ShellIcon } from '@/components/shell-icon';
-import { AppTile, knownApp } from '@/components/app-tile';
+import { AppTile } from '@/components/app-tile';
+import { knownApp } from '@/lib/app-catalogue.mjs';
 import { madeDay, useZone } from '@/app/agent-made';
 import type { AgentRequestView, MadeAgent } from '@/lib/conversations';
 
