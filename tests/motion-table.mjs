@@ -28,6 +28,12 @@ export const motionTable = [
   { ref: '.opt__key', built: '.gw .opt__key', file: 'app/shell.css', html: '<div class="gw"><div class="reply-card reply-card--question" role="group"><div class="qcard__opts"><button type="button" class="opt"><span class="opt__key">A</span></button></div></div></div>' },
   { ref: '.card.is-just', built: '.gw .reply-card.is-just', file: 'app/shell.css', html: '<div class="gw"><div class="reply-card reply-card--question is-resolved is-just" role="group"></div></div>' },
   { ref: '.card.is-just .opt__check path', built: '.gw .reply-card.is-just .opt__check path', file: 'app/shell.css', html: '<div class="gw"><div class="reply-card reply-card--question is-resolved is-just" role="group"><div class="qcard__opts"><div class="opt is-chosen"><svg class="gw-icon opt__check"><path></path></svg></div></div></div></div>' },
+  // A reply's steps (#141): the toggle gives under a press and its chevron turns; opened, the steps rise one after another
+  // and each check draws itself.
+  { ref: '.steps__toggle', built: '.gw .steps__toggle', file: 'app/shell.css', html: '<div class="gw"><div class="chat"><div class="steps"><button type="button" class="steps__toggle" aria-expanded="false">Used 4 tools</button></div></div></div>', held: 0.985 },
+  { ref: '.steps__toggle .chev', built: '.gw .steps__toggle .chev', file: 'app/shell.css', html: '<div class="gw"><div class="chat"><div class="steps"><button type="button" class="steps__toggle" aria-expanded="true"><svg class="gw-icon chev"></svg></button></div></div></div>' },
+  { ref: '.steps__list.is-just .step', built: '.gw .steps__list.is-just .step', file: 'app/shell.css', html: '<div class="gw"><div class="steps"><ol class="steps__list is-just"><li class="step step--done" style="--i:2"></li></ol></div></div>' },
+  { ref: '.steps__list.is-just .step__ck path', built: '.gw .steps__list.is-just .step__ck path', file: 'app/shell.css', html: '<div class="gw"><div class="steps"><ol class="steps__list is-just"><li class="step step--done" style="--i:2"><span class="step__state"><svg class="gw-icon step__ck"><path></path></svg></span></li></ol></div></div>' },
   // The dialog (the ready-made gallery): its entrance, its leave and its search field.
   { ref: '.modal[open]', built: '.gw.modal', file: 'app/shell.css', html: '<div role="dialog" class="gw modal" data-state="open"></div>' },
   { ref: '.modal.is-closing', built: '.gw.modal[data-state="closed"]', file: 'app/shell.css', html: '<div role="dialog" class="gw modal" data-state="closed"></div>' },

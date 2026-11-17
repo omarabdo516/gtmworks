@@ -1,5 +1,5 @@
 import type { supabase } from './supabase';
-import { faceOf, latestEnded, messageColumns, noteColumns, queuedColumns, queuedWaiting, replyCardColumns, replyCardOf, shown, totalOf, usageColumns, waiting, withBoardNote, withDecisions, withTeamWork, type AgentRequestView, type Decision, type LeadCard, type PlacedCard, type QueuedTurn, type ReplyCardRow, type SavedRule, type RunUsage, type StoredNote } from './conversations';
+import { faceOf, latestEnded, messageColumns, noteColumns, queuedColumns, queuedWaiting, replyCardColumns, replyCardOf, runStepsColumns, shown, totalOf, usageColumns, waiting, withBoardNote, withDecisions, withTeamWork, type AgentRequestView, type Decision, type LeadCard, type PlacedCard, type QueuedTurn, type ReplyCardRow, type RunStepsRow, type SavedRule, type RunUsage, type StoredNote } from './conversations';
 import { isNewFor } from './sidebar.mjs';
 import type { BoardColumn } from './board-columns.mjs';
 
@@ -12,12 +12,15 @@ type Database=Awaited<ReturnType<typeof supabase>>;
 // Agents its person asked Lead for and the Owner's answer (#17), the cards its Agent showed with its replies (#136), the
 // rules its Agent saved in it: a suggestion with who it was sent to, and how it was decided (RLS: only the person who
 // told it reads one that is not the team's), the Card it put on the board with that Card's column now (#144), and the
-// questions its Agent asked with their answers (#138); while one waits for its answer the record says so (`asking`).
+// questions its Agent asked with their answers (#138); while one waits for its answer the record says so (`asking`). Each
+// reply carries the tool calls of its Run (#141), sealed when the Run closed and read to its end.
 export async function conversationRecord(db:Database,person:string,company:string,found:{id:string,agent_id:string|null,agent_name:string,hermes_agents:unknown}) {
  const conversation=found.id;
  // Usage first: a run closed between the two reads then shows its reply too (both are written in one transaction).
  const usage=((await db.from('conversation_usage').select(usageColumns).eq('conversation_id',conversation)).data||[]) as RunUsage[];
  const messages=(await db.from('conversation_messages').select(messageColumns).eq('conversation_id',conversation).order('id')).data||[];
+ // After the messages: a Run's steps are sealed before its reply is stored, so a reply read above finds its steps here.
+ const runSteps=((await db.from('conversation_run_steps').select(runStepsColumns).eq('conversation_id',conversation).not('sealed_at','is',null).eq('broken',false)).data||[]) as RunStepsRow[];
  const notes=((await db.from('conversation_notes').select(noteColumns).eq('conversation_id',conversation).order('id')).data||[]) as StoredNote[];
  const queued=((await db.from('conversation_queued_turns').select(queuedColumns).eq('conversation_id',conversation).order('queued_at')).data||[]) as QueuedTurn[];
  // Requests first: an Owner's yes writes the request's state and the made Agent in one transaction, so a made request
@@ -61,7 +64,7 @@ export async function conversationRecord(db:Database,person:string,company:strin
  const firstReply=card&&first&&card.created_at>first.created_at?messages.find(message=>message.author==='agent'&&message.run_id===first.run_id)?.id:undefined;
  return {
   conversation:{id:found.id,agent_id:found.agent_id,agent_name:found.agent_name,face:faceOf(found)},
-  messages:withBoardNote(withTeamWork(withDecisions(shown(messages,usage,cards,found.agent_name,saved),decisions,found.agent_name),notes,queued,me?.name||''),firstReply),
+  messages:withBoardNote(withTeamWork(withDecisions(shown(messages,usage,cards,found.agent_name,saved,runSteps),decisions,found.agent_name),notes,queued,me?.name||''),firstReply),
   usage:totalOf(usage),
   pending:waiting(messages,usage).length>0||queuedWaiting(queued),
   ...(replyRows.some(row=>row.kind==='question'&&row.state==='open')?{asking:true as const}:{}),

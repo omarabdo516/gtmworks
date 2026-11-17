@@ -42,12 +42,12 @@
    A button the reference gives no transition swaps at once, rather than taking app/globals.css's 160ms fade. A row,
    item or text button gives only when it is a link or a button: a plain row opens nothing. */
 .gw :where(button:not([data-slot])) { transition: none; }
-.gw :is(.btn, .circle-btn, .chip, .agent-tile, .head-pill, .corner-pill, .composer__btn, .link-btn, .opt, .panel-row, .sb-item, .menu__item) {
+.gw :is(.btn, .circle-btn, .chip, .agent-tile, .head-pill, .corner-pill, .composer__btn, .link-btn, .steps__toggle, .opt, .panel-row, .sb-item, .menu__item) {
   transition: background-color var(--gw-dur-fast) var(--gw-ease-out), box-shadow var(--gw-dur-fast) var(--gw-ease-out),
     color var(--gw-dur-fast) var(--gw-ease-out), border-color var(--gw-dur-fast) var(--gw-ease-out), transform var(--gw-dur-fast) var(--gw-ease-out);
 }
 .gw :is(.btn, .circle-btn, .chip, .agent-tile, .head-pill, .corner-pill, .composer__btn):active:not(:disabled):not([aria-disabled="true"]) { transform: scale(0.96); }
-.gw :is(.opt, .panel-row, .sb-item, .menu__item, .link-btn):is(a, button):active:not(:disabled):not([aria-disabled="true"]) { transform: scale(0.985); }
+.gw :is(.opt, .panel-row, .sb-item, .menu__item, .link-btn, .steps__toggle):is(a, button):active:not(:disabled):not([aria-disabled="true"]) { transform: scale(0.985); }
 
 /* ---------- frame ---------- */
 .gw.app-layout { display: grid; grid-template-columns: var(--gw-sidebar-w) minmax(0, 1fr); height: 100vh; height: 100dvh; overflow: hidden; }
@@ -693,6 +693,31 @@
 .gw .reply-card.is-just { animation: gw-settle 320ms var(--gw-ease-out); }
 .gw .reply-card.is-just .opt.is-chosen .opt__key { animation: gw-ck-pop 320ms var(--gw-ease-spring); }
 .gw .reply-card.is-just .opt__check path { stroke-dasharray: 40; stroke-dashoffset: 40; animation: gw-draw-check 380ms var(--gw-ease-out) 140ms forwards; }
+/* A reply's steps (#141; design-reference: .steps, .step, the chevron turning, the steps rising and the check drawing): the
+   Engine's tool calls for the reply's Run, between the sender line and the bubble. A failed call is drawn as the
+   reference's skipped one, its dot hollow. */
+.gw .steps { display: flex; flex-direction: column; align-items: flex-start; }
+.gw .steps__toggle {
+  display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: var(--gw-r-full);
+  font-size: var(--gw-fs-xs); line-height: 18px; color: var(--gw-text-3);
+}
+.gw .steps__toggle .gw-icon { width: 14px; height: 14px; }
+@media (hover: hover) { .gw .steps__toggle:hover { background: var(--gw-bg-hover); color: var(--gw-text-2); } }
+.gw .steps__toggle .chev { transition: transform var(--gw-dur-fast) var(--gw-ease-out); }
+.gw .steps__toggle[aria-expanded="true"] .chev { transform: rotate(180deg); }
+.gw .steps__list {
+  list-style: none; margin: 6px 0 4px; margin-inline-start: 12px; padding: 0; padding-inline-start: 12px;
+  border-inline-start: 1px solid var(--gw-border-2); display: flex; flex-direction: column; gap: 6px;
+}
+.gw .steps__list[hidden] { display: none; }
+.gw .step { display: flex; align-items: center; gap: 8px; font-size: var(--gw-fs-sm); line-height: 1.5; color: var(--gw-text-1); }
+.gw .step__dot { width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--gw-text-1); margin-inline-start: -15.5px; box-shadow: 0 0 0 2px var(--gw-bg-chrome); }
+.gw .step--skipped .step__dot { background: var(--gw-bg-chrome); box-shadow: inset 0 0 0 1.5px var(--gw-text-3), 0 0 0 2px var(--gw-bg-chrome); }
+.gw .step__label { flex: 1 1 0; min-width: 0; overflow-wrap: anywhere; }
+.gw .step__state { display: inline-flex; align-items: center; gap: 3px; font-size: var(--gw-fs-xs); color: var(--gw-text-3); flex: none; }
+.gw .step__ck { width: 12px; height: 12px; }
+.gw .steps__list.is-just .step { animation: gw-rise 240ms var(--gw-ease-out) both; animation-delay: calc(var(--i, 0) * 45ms); }
+.gw .steps__list.is-just .step__ck path { stroke-dasharray: 40; stroke-dashoffset: 40; animation: gw-draw-check 320ms var(--gw-ease-out) forwards; animation-delay: calc(var(--i, 0) * 45ms + 160ms); }
 .gw .tool-tile--ink { background: var(--gw-primary); color: var(--gw-on-primary); box-shadow: none; }
 .gw .tool-tile--ink .gw-icon { width: 22px; height: 22px; }
 

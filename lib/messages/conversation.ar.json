@@ -14,5 +14,12 @@
   "requestAnsweredDeclined": "{0} قال لأ على {1} دلوقتي. السبب: «{2}» لو حابب نغيّر الطلب ونبعته تاني، قولّي هنا.",
   "cardAddedToBoard": "البطاقة دي اتضافت للوحة في «شغالين عليه»",
   "onTheBoard": "على اللوحة:",
-  "chatLoading": "بيحمّل المحادثة"
+  "chatLoading": "بيحمّل المحادثة",
+  "stepsUsedOne": "استخدم {0} أداة",
+  "stepsUsedMany": "استخدم {0} أدوات",
+  "stepsSeconds": "{0} ثانية",
+  "stepsMinutes": "{0} دقيقة",
+  "stepsMinutesSeconds": "{0} دقيقة و{1} ثانية",
+  "stepDone": "تم",
+  "stepSkipped": "اتخطى"
 }

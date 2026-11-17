@@ -11,6 +11,7 @@ const paths = {
  moon: <path d="M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10z"/>,
  monitor: <><rect x="3.5" y="4.5" width="17" height="11.5" rx="2"/><path d="M9 20h6M12 16v4"/></>,
  up: <path d="M7 14l5-5 5 5"/>,
+ chevronDown: <path d="M6 9l6 6 6-6"/>,
  plus: <path d="M12 5v14M5 12h14"/>,
  send: <><path d="M12 19V5"/><path d="M6 11l6-6 6 6"/></>,
  check: <path d="M5 12.5l4.5 4.5L19 7.5"/>,
