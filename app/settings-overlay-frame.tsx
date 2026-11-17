@@ -14,8 +14,12 @@ export function OverlayFrame({slug,initialFocus,children}:{slug:string,initialFo
  const router=useRouter();
  const box=useRef<HTMLDivElement>(null);
  // Opening moves focus into the overlay: to the element the page names (an Agent's page: its Settings tab, as the
- // reference's openSov does), else the dialog itself, so Tab starts at its close button and section list.
- useEffect(()=>{ if(!box.current?.contains(document.activeElement)) ((initialFocus&&document.getElementById(initialFocus))||box.current)?.focus({preventScroll:true}); },[]); // eslint-disable-line react-hooks/exhaustive-deps
+ // reference's openSov and sov-agent do, also when a row of the list opens it), else the dialog itself, so Tab starts at
+ // its close button and section list. Focus already inside (a list row taking it back) stays.
+ useEffect(()=>{
+  const named=initialFocus&&document.getElementById(initialFocus);
+  if(named) named.focus({preventScroll:true}); else if(!box.current?.contains(document.activeElement)) box.current?.focus({preventScroll:true});
+ },[initialFocus]);
  useEffect(()=>{
   const keys=(event:globalThis.KeyboardEvent)=>{ if(event.key==='Escape'&&!event.defaultPrevented) router.push(leaveOverlay(slug)); };
   document.addEventListener('keydown',keys);

@@ -75,6 +75,18 @@ test('an Agent\'s page opens with the focus on its Settings tab', async () => {
  await expect.element(screen.getByRole('tab', { name: 'Settings' })).toHaveFocus();
 });
 
+test('a row of the Agents list opens that Agent\'s page with the focus on its Settings tab, in the overlay already open', async () => {
+ const list = <a href="#ag-2" id="sov-ag-ag-2">SEO</a>;
+ const agent = <div role="tablist"><button type="button" role="tab" id="sov-tab-settings" aria-selected="true">Settings</button></div>;
+ const screen = await render(<LanguageProvider language="en"><OverlayFrame slug="rs-learning">{list}</OverlayFrame></LanguageProvider>);
+ const row = screen.getByRole('link', { name: 'SEO' });
+ row.element().addEventListener('click', event => event.preventDefault());
+ await row.click();
+ await expect.element(row).toHaveFocus();
+ await screen.rerender(<LanguageProvider language="en"><OverlayFrame slug="rs-learning" initialFocus="sov-tab-settings">{agent}</OverlayFrame></LanguageProvider>);
+ await expect.element(screen.getByRole('tab', { name: 'Settings' })).toHaveFocus();
+});
+
 test('closing goes back to where the gear was pressed and leaves the gear its focus there, by the button and by Escape', async () => {
  sessionStorage.setItem('gw-settings-from', JSON.stringify({ from: '/c/rs-learning/conversations/cv-1', focus: 'dp-settings' }));
  const screen = await agentPage();
