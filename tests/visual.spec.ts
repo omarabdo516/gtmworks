@@ -495,8 +495,10 @@ const openSlowly = (path: string, link: string, placeholder: string, table: stri
     await openNavigation(page);
     await page.locator(link).click();
     held.letGo();
-    // The page's own reads can wait on the slowed table too; the waiting part only starts reading after them.
-    await expect(page.locator(placeholder)).toBeVisible({ timeout: 15000 });
+    // The picture is of the placeholder's look: its first 400ms hidden (components/loading.test.tsx) is ended here.
+    await page.locator(placeholder).waitFor({ state: 'attached', timeout: 15000 });
+    await page.locator(placeholder).evaluate(element => element.getAnimations().forEach(animation => { if ((animation as CSSAnimation).animationName === 'gw-sk-hold') animation.finish(); }));
+    await expect(page.locator(placeholder)).toBeVisible();
     await expect(page.locator('.sidebar.is-open')).toHaveCount(0);
     const width = page.viewportSize()!.width;
     await page.setViewportSize({ width, height: 900 });
