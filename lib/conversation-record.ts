@@ -1,3 +1,4 @@
+import { ownerNames } from './company-owners.mjs';
 import type { supabase } from './supabase';
 import { faceOf, latestEnded, messageColumns, noteColumns, queuedColumns, queuedWaiting, replyCardColumns, replyCardOf, shown, totalOf, usageColumns, waiting, withBoardNote, withDecisions, withTeamWork, type AgentRequestView, type Decision, type LeadCard, type PlacedCard, type QueuedTurn, type ReplyCardRow, type SavedRule, type RunUsage, type StoredNote } from './conversations';
 import { isNewFor } from './sidebar.mjs';
@@ -28,8 +29,7 @@ export async function conversationRecord(db:Database,person:string,company:strin
  const madeRows=((await db.from('lead_made_agents').select('run_id,call_id,created_at,hermes_agents(id,connection_id,name,speciality,apps,is_default,requested_by,requester_opened_at)').eq('conversation_id',conversation).order('created_at')).data||[]) as unknown as MadeRow[];
  const replyRows=((await db.from('reply_cards').select(replyCardColumns).eq('conversation_id',conversation).order('id')).data||[]) as ReplyCardRow[];
  const lead=(found.hermes_agents as {is_default?:boolean}|null)?.is_default===true;
- const owners=requestRows.some(row=>row.state==='waiting')?((((await db.from('members').select('people(name)').eq('company_id',company).eq('role','owner').is('removed_at',null)).data||[]) as unknown as {people:{name:string}|null}[])
-  .flatMap(row=>row.people?[row.people.name]:[]).sort()):[];
+ const owners=requestRows.some(row=>row.state==='waiting')?await ownerNames(db,company):[];
  // The Agent made for a request shows in the request's own card, so one card holds the request and its outcome.
  const madeFor=(row:RequestRow)=>madeRows.find(made=>made.run_id===row.run_id&&made.call_id===row.call_id);
  const requestView=(row:RequestRow):AgentRequestView=>{

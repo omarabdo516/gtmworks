@@ -91,3 +91,13 @@ for (const [language, dir, body, own] of [['en', 'ltr', 'خطة إطلاق ال�
  expect(getComputedStyle(mine).direction).toBe(own);
  expect(getComputedStyle(screen.getByRole('heading').getByText(body).element()).direction).toBe(own);
 });
+
+test('Lead\'s sentence to try in a new workspace keeps the text already typed and follows it on the next line', async () => {
+ const empty: ConversationRecord = { ...waiting, messages: [] };
+ const screen = await render(<div className="gw"><LanguageProvider language="en"><ConversationView slug="rs-learning" agent={{ id: 'ag-1', connection_id: 'c-1', name: 'Lead', speciality: 'General', main: true }} details={null} company="co-1" conversation={empty.conversation} title="" writer><Arrived record={arrived(empty)} team={false}/></ConversationView></LanguageProvider></div>);
+ const field = screen.getByRole('textbox', { name: 'Message' });
+ await field.fill('First, the numbers');
+ await screen.getByRole('button', { name: 'I want someone to run our Meta and Google ads' }).click();
+ await expect.element(field).toHaveValue('First, the numbers\nI want someone to run our Meta and Google ads');
+ await expect.element(field).toHaveFocus();
+});
