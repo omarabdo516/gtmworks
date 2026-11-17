@@ -1,37 +1,37 @@
 import { test as base, expect, type BrowserContext } from '@playwright/test';
-import { isLocalUrl, nowhere } from './offline.mjs';
+import { nowhere, watchOutside } from './offline.mjs';
 
 export * from '@playwright/test';
 
-// The browser reaches nothing outside this machine (#266, tests/offline.mjs says what is local). It runs behind a proxy
-// that nothing answers, which every local name bypasses, so any other request fails; routing would do the same but turn
-// off the browser's cache and change the headers a test reads. Every context the worker's browser makes reports each
-// outside address it tried: a test fails naming each host, what a `beforeAll` tried fails the next test, and what an
-// `afterAll` tried fails the worker.
+// The browser reaches nothing outside this machine (#266, tests/offline.mjs says what is local): it runs behind a proxy
+// nothing answers, which every local name bypasses, and every context it makes names each outside address it tried.
+// A test fails naming each host it tried. One a hook tried is kept for the worker, with the test it came after, and
+// the worker fails naming it when it ends, so no other test or file takes the blame.
 const betweenTests: string[] = [];
-let running = betweenTests;
-const watched = new WeakSet<BrowserContext>();
-const note = (url: string) => { if (!isLocalUrl(url)) running.push(new URL(url).host); };
-const watch = (context: BrowserContext) => {
-  if (watched.has(context)) return;
-  watched.add(context);
-  context.on('request', request => note(request.url()));
-  context.on('page', page => page.on('websocket', socket => note(socket.url())));
-};
+let running: string[] | undefined;
+let after = 'before the first test';
+const note = (host: string) => { if (running) running.push(host); else betweenTests.push(`${host} (between tests, ${after})`); };
+const watch = (context: BrowserContext) => watchOutside(context, note);
 const message = 'outside requests the browser made (tests/offline-browser.ts)';
 
-export const test = base.extend<{ outsideRequests: string[] }, { offlineBrowser: void }>({
+export const test = base.extend<{ outsideRequests: string[] }, { outsideBetweenTests: string[] }>({
   launchOptions: [async ({ launchOptions }, use) => use({ ...launchOptions, proxy: nowhere }), { scope: 'worker' }],
-  offlineBrowser: [async ({ browser }, use) => {
-    browser.on('context', watch);
-    await use();
-    browser.off('context', watch);
+  outsideBetweenTests: [async ({}, use) => {
+    await use(betweenTests);
     expect(betweenTests, message).toEqual([]);
-  }, { scope: 'worker', auto: true }],
-  outsideRequests: [async ({}, use) => {
-    const hosts = running = betweenTests.splice(0);
+  }, { scope: 'worker' }],
+  // The browser stays lazy: a worker that opens no page starts none.
+  browser: [async ({ browser, outsideBetweenTests }, use) => {
+    void outsideBetweenTests; // set up first, so it checks once the browser is gone
+    browser.on('context', watch);
+    await use(browser);
+    browser.off('context', watch);
+  }, { scope: 'worker' }],
+  outsideRequests: [async ({}, use, testInfo) => {
+    const hosts: string[] = running = [];
     await use(hosts);
-    running = betweenTests;
+    running = undefined;
+    after = `after "${testInfo.titlePath.slice(1).join(' › ')}" in ${testInfo.file.split('/tests/').pop()}`;
     expect(hosts, message).toEqual([]);
   }, { auto: true }],
 });

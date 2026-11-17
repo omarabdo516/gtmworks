@@ -1,12 +1,16 @@
+import { join } from 'node:path';
 import { defineConfig } from '@playwright/test';
 // Offline by default (#266): the runner and its workers refuse outside connections and name the host.
-import './tests/offline.mjs';
+import { freshLog } from './tests/offline.mjs';
+if (!process.env.TEST_WORKER_INDEX) freshLog();
 const host = 'app.gtmworks.test';
 // The same pages as the main suite, reached the way people reach them on the server: https, a public-looking host
 // name, a reverse proxy in front of the production image (scripts/proxy-stack.sh).
 export default defineConfig({
   testDir: './tests/proxy',
   testMatch: '*.spec.ts',
+  // By its own address: tests/playwright-projects.test.mjs loads this config from a folder of its own.
+  globalTeardown: join(__dirname, 'tests/offline-teardown.ts'),
   timeout: 90000,
   workers: 1,
   // ci.sh asks for the JSON reporter for the CI ledger (#256).

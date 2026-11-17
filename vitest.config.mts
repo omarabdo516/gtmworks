@@ -2,8 +2,9 @@ import { defineConfig } from 'vitest/config';
 import { playwright } from '@vitest/browser-playwright';
 import { computedMotion, referenceComputed, type ComputedStyle } from './tests/motion-css.mjs';
 import { languages, widths } from './tests/visual-screens.mjs';
-// Offline by default (#266): the runner refuses outside connections and names the host; the browser's are aborted below.
-import { blockOutside, nowhere } from './tests/offline.mjs';
+// Offline by default (#266): the runner refuses outside connections and names the host; the browser runs behind a proxy
+// nothing answers (`nowhere`), and each outside address it tried is named.
+import { nowhere, watchOutside } from './tests/offline.mjs';
 
 // Outside requests each test browser session made (a session has its own context and runs its files one at a time), read
 // and emptied by tests/components/offline-setup.ts after each test.
@@ -27,11 +28,11 @@ export default defineConfig({
       commands: {
         referenceComputed: (_, selector: string, width: number) => referenceComputed(selector, width),
         computedMotion: (_, style: ComputedStyle) => computedMotion(style),
-        blockOutside: async ({ context }) => {
+        watchOutside: ({ context }) => {
           if (outside.has(context)) return;
           const hosts: string[] = [];
           outside.set(context, hosts);
-          await blockOutside(context, host => hosts.push(host));
+          watchOutside(context, host => hosts.push(host));
         },
         outsideRequests: ({ context }) => outside.get(context)?.splice(0) ?? [],
       },

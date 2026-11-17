@@ -1,7 +1,10 @@
+import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { defineConfig } from '@playwright/test';
 // Offline by default (#266): the runner, its workers and the servers below refuse outside connections and name the host.
-import { nodeOptionsBefore } from './tests/offline.mjs';
+import { freshLog, nodeOptionsBefore } from './tests/offline.mjs';
+// One log of refusals per run, which every process the run starts writes to; the teardown fails the run naming each.
+if (!process.env.TEST_WORKER_INDEX) freshLog();
 import { appOrigin, lanes, originOf, serverLogOf } from './tests/lane.mjs';
 // First run opens only with the install's setup code (issue #50). The web server and the test workers inherit this one.
 process.env.SETUP_CODE ||= randomBytes(32).toString('hex');
@@ -11,6 +14,8 @@ const hostedElsewhere = process.env.GTMWORKS_HOSTED_ELSEWHERE === 'true';
 export default defineConfig({
   testDir: './tests',
   testMatch: '*.spec.ts',
+  // By its own address: tests/playwright-projects.test.mjs loads this config from a folder of its own.
+  globalTeardown: join(__dirname, 'tests/offline-teardown.ts'),
   testIgnore: '**/proxy/**', // the production-shaped suite has its own config (playwright.proxy.config.ts)
   timeout: 60000,
   // One worker per lane, each on a whole stack of its own (tests/lane.mjs, #69): spec files run side by side and never

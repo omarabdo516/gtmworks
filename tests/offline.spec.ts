@@ -60,8 +60,8 @@ test.describe('a hook', () => {
   let opened: BrowserContext;
   test.beforeAll(async ({ browser }) => { opened = await browser.newContext(); await probe(await opened.newPage()); });
   test.afterAll(() => opened.close());
-  test('an outside request a beforeAll made fails the next test, naming the host', async ({ outsideRequests }) => {
-    expect(outsideRequests.splice(0)).toEqual(['outside.example.org']);
+  test('an outside request a beforeAll made is kept for the worker, with the test before it, and fails no test', async ({ outsideBetweenTests }) => {
+    expect(outsideBetweenTests.splice(0)).toEqual([expect.stringMatching(/^outside\.example\.org \(between tests, after "/)]);
   });
 });
 

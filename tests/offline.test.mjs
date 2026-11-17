@@ -1,12 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { globSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { isLocalHost, isLocalUrl, maybeOutside, nowhere } from './offline.mjs';
+import { assertNothingRefused, isLocalHost, isLocalUrl, nowhere } from './offline.mjs';
 
 // A test run reaches nothing outside this machine (#266): `npm test` loads tests/offline.mjs before every file, so a
 // connection to an outside host is refused and named, and a file that swallowed the refusal still fails.
@@ -22,16 +22,6 @@ test('this machine and the never-delegated special-use names are local; every ot
   assert.ok(isLocalUrl('http://127.0.0.1:3000/sign-in') && isLocalUrl('https://app.gtmworks.test/') && isLocalUrl('ws://localhost:5173/'));
   assert.ok(isLocalUrl('data:image/png;base64,AAAA') && isLocalUrl('blob:http://127.0.0.1/x') && isLocalUrl('about:blank'));
   assert.ok(!isLocalUrl('https://outside.example.org/probe.png') && !isLocalUrl(`wss://${provider}/`));
-});
-
-test('the browsers stop every outside address to look at it, and leave the lanes\' own addresses alone', () => {
-  const outside = ['https://outside.example.org/probe.png', 'http://example.com/', 'wss://socket.example.org/live', `https://${provider}/v1`,
-    'http://10.0.0.1:3000/', 'http://localhost.com/', 'http://app.test.evil.com/', 'http://localhost@outside.example.org/', 'HTTPS://OUTSIDE.EXAMPLE.ORG/'];
-  const local = ['http://127.0.0.1:3000/sign-in', 'http://localhost:5173/@vite/client', 'ws://localhost:5173/', 'https://app.gtmworks.test/',
-    'http://127.0.0.1:54621/rest/v1/cards?select=*', 'https://auth.provider.test/codex/device', 'http://[::1]:3000/'];
-  assert.deepEqual(outside.filter(url => !maybeOutside.test(url)), []);
-  assert.deepEqual(local.filter(url => maybeOutside.test(url)), []);
-  assert.deepEqual([...outside, ...local].filter(url => !isLocalUrl(url) && !maybeOutside.test(url)), [], 'every outside address is stopped');
 });
 
 // Playwright's own rule for a context's API requests (playwright-core's shouldBypassProxy): a name suffix match.
@@ -88,6 +78,39 @@ test('a file that swallows a refused outside request fails, and the run names th
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+const guard = pathToFileURL(resolve('tests/offline.mjs')).href;
+const node = (args, options = {}) => spawnSync(process.execPath, args, { encoding: 'utf8', ...options, env: { ...process.env, NODE_TEST_CONTEXT: undefined, ...options.env } });
+
+test('a server that swallows a refused outside request still fails the run\'s teardown, which names the host and the process', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'offline-log-')), log = join(dir, 'refused.log');
+  try {
+    const server = node(['--import', guard, '-e', "fetch('https://server.example.org/').catch(() => {})"], { env: { GTMWORKS_OFFLINE_LOG: log } });
+    assert.equal(server.status, 0, 'a server is not stopped for it');
+    assert.throws(() => assertNothingRefused(log), /tried to reach outside[\s\S]*server\.example\.org by /);
+    assert.doesNotThrow(() => assertNothingRefused(join(dir, 'none.log')), 'a run that refused nothing passes');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('every node process a test starts carries the guard once, from any folder and any checkout path', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'offline-path-')), spaced = join(dir, 'a checkout', 'tests');
+  try {
+    mkdirSync(spaced, { recursive: true });
+    copyFileSync('tests/offline.mjs', join(spaced, 'offline.mjs'));
+    const own = pathToFileURL(join(spaced, 'offline.mjs')).href;
+    const nested = "console.log(require('node:child_process').execFileSync(process.execPath, ['-e', 'console.log(process.env.NODE_OPTIONS)'], { encoding: 'utf8' }).trim())";
+    const child = node(['--import', own, '-e', nested], { cwd: dir, env: { NODE_OPTIONS: '' } });
+    assert.equal(child.status, 0, child.stderr);
+    assert.equal(child.stdout.trim(), `--import=${own}`);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('the app build gets NODE_OPTIONS without the guard, also when it was inherited', () => {
+  const read = node(['--input-type=module', '-e', `import { nodeOptionsBefore } from ${JSON.stringify(guard)}; console.log(JSON.stringify(nodeOptionsBefore));`],
+    { env: { NODE_OPTIONS: `--max-old-space-size=4096 --import=${guard}` } });
+  assert.equal(read.status, 0, read.stderr);
+  assert.equal(JSON.parse(read.stdout), '--max-old-space-size=4096');
+});
+
 // The proofs above load the guard themselves, so this pins that every runner still loads it.
 // The compared screens and the small visual lane (#257, playwright.lane.config.ts, its own outside-request guard) are #257's.
 test('every test runner loads the guard, and every browser spec but the compared screens uses the guarded test', () => {
@@ -96,6 +119,8 @@ test('every test runner loads the guard, and every browser spec but the compared
   assert.match(read('ci.sh'), /node --import \.\/tests\/offline\.mjs --test /);
   for (const config of ['playwright.config.ts', 'playwright.proxy.config.ts', 'vitest.config.mts']) assert.match(read(config), /from '\.\/tests\/offline\.mjs'|import '\.\/tests\/offline\.mjs'/, config);
   assert.match(read('vitest.config.mts'), /setupFiles: \['tests\/components\/offline-setup\.ts'\]/);
+  assert.match(read('vitest.config.mts'), /proxy: nowhere/);
+  for (const config of ['playwright.config.ts', 'playwright.proxy.config.ts']) assert.match(read(config), /globalTeardown: join\(__dirname, 'tests\/offline-teardown\.ts'\)/, config);
   assert.match(read('tests/fresh-seed.ts'), /from '\.\/offline-browser'/);
   const specs = globSync('tests/**/*.spec.ts').filter(path => path !== 'tests/visual.spec.ts' && !/^tests\/visual-lane[^/]*\.spec\.ts$/.test(path));
   assert.deepEqual(specs.filter(path => !/import \{[^}]*\btest\b[^}]*\} from '\.\.?\/(fresh-seed|offline-browser)'/.test(read(path))), []);
