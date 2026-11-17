@@ -493,12 +493,16 @@ const openSlowly = (path: string, link: string, placeholder: string, table: stri
     await expect(page.locator('.content').first()).toBeVisible();
     asAdmin(slow.set);
     await openNavigation(page);
+    // The opened page's sidebar asks for its recent cards once it is drawn; the picture waits for them, not the clock.
+    const recent = page.waitForResponse(response => new URL(response.url()).pathname === '/api/recent-cards');
     await page.locator(link).click();
     held.letGo();
     // The picture is of the placeholder's look: its first 400ms hidden (components/loading.test.tsx) is ended here.
     await page.locator(placeholder).waitFor({ state: 'attached' });
     await page.locator(placeholder).evaluate(element => element.getAnimations().forEach(animation => { if ((animation as CSSAnimation).animationName === 'gw-sk-hold') animation.finish(); }));
     await expect(page.locator(placeholder)).toBeVisible();
+    const { cards } = await (await recent).json() as { cards: unknown[] };
+    await expect(page.locator('.recent-cards a')).toHaveCount(cards.length);
     await expect(page.locator('.sidebar.is-open')).toHaveCount(0);
     const width = page.viewportSize()!.width;
     await page.setViewportSize({ width, height: 900 });
