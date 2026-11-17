@@ -81,6 +81,25 @@ test('a rate limit counts as recovered only when the same image then finished do
   assert.deepEqual(outcome(classify(elsewhere.join('\n'))), infrastructure('registry rate limit'), 'another image finished');
 });
 
+// On the PC, the runner's job-started hook is a step of its own ("Set up runner") and prints its own group, so it
+// stays in line (Codex on #285). The steps are job 133569580338's, from the API; the groups are that job's log lines.
+test('on the PC runner, the hook step keeps the API\'s steps and the log\'s groups in line', () => {
+  const steps = ['Set up job', 'Set up runner', 'Run actions/checkout@v4', "reserve the stack's ports", 'Run actions/setup-node@v4',
+    "clear an earlier run and move the stack's ports", 'choose the browser test lanes', 'Run docker/setup-buildx-action@v3',
+    'build image (layer cache)', 'integration', 'upload journey screenshots', 'remove what this run started',
+    'Post build image (layer cache)', 'Complete runner', 'Complete job']
+    .map(name => ({ name, conclusion: { integration: 'failure', "reserve the stack's ports": 'skipped', 'Run docker/setup-buildx-action@v3': 'skipped' }[name] ?? 'success' }));
+  const groups = [...log('integration-133569580338').split('\n').filter(line => line.includes('##[group]Run '))];
+  const integration = groups.findIndex(line => line.includes('Run ./ci.sh integration'));
+  assert.ok(groups[0].includes("Run '/usr/local/bin/ci-job-cleanup.sh'") && integration > 0, 'the excerpt keeps the hook and the step groups');
+  const text = [...groups.slice(0, integration + 1), '2026-11-16T19:56:00.0000000Z npm error code E429',
+    '2026-11-16T19:56:00.0000001Z npm error 429 Too Many Requests - GET https://registry.npmjs.org/next',
+    '2026-11-16T19:56:00.0400000Z ##[error]Process completed with exit code 1.', ...groups.slice(integration + 1)].join('\n');
+  assert.equal(failedStep(steps), integration);
+  assert.deepEqual(outcome(classify(text, { failedStep: failedStep(steps) })), infrastructure('registry rate limit'));
+  assert.deepEqual(outcome(classify(text, { failedStep: failedStep(steps) - 1 })), yourChange, 'one step off reads the build');
+});
+
 test('a rate limit the job recovered from, or a test that failed on its own, is your change', () => {
   for (const name of ['constructed-recovered-pull-then-verify', 'constructed-component-test-error']) {
     assert.deepEqual(outcome(classify(log(name))), yourChange, name);
