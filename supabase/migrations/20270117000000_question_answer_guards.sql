@@ -7,7 +7,8 @@
 -- settle_question lets a delivery the Engine took win over a closed card that holds the same answer. A typed send
 -- whose key is already a note stays that note.
 --
--- No row is rewritten: a question left open for an ended Run before this closes when someone answers it. The previous
+-- The migration itself changes no row. At run time, a question left for an ended Run before this (open, or claimed and
+-- never delivered) closes when the Conversation's next Run is read, or an open one when someone answers it. The previous
 -- app version runs against this: it already reads 'none' as "not an answer" and 'closed' as "can no longer be
 -- answered", and a closed card as closed.
 
@@ -29,9 +30,8 @@ begin
   -- already claimed as the answer stays that answer.
   if exists(select 1 from public.conversation_notes n where n.conversation_id=conversation and n.send_key=answer_question.answer_key) then return 'none'; end if;
   if exists(select 1 from public.reply_cards r where r.conversation_id=conversation and r.kind='question' and r.answer_key=answer_question.answer_key) then return 'claimed'; end if;
-  select * into asked from public.reply_cards r where r.conversation_id=conversation and r.kind='question'
-   and (r.state in ('open','sending') or r.answer_key=answer_question.answer_key)
-   order by r.answer_key is not distinct from answer_question.answer_key desc, r.id limit 1 for update;
+  select * into asked from public.reply_cards r where r.conversation_id=conversation and r.kind='question' and r.state in ('open','sending')
+   order by r.id limit 1 for update;
   if not found then return 'none'; end if;
   -- Only while a question waits: a note to a person ("@Sara …") stays a note, as reserve_conversation_turn makes it.
   if exists(select 1 from public.conversation_addressee(c,answer)) then return 'none'; end if;
@@ -68,9 +68,11 @@ begin
  select * into talk from public.conversations where id=conversation;
  if not found or not exists(select 1 from public.conversation_messages m where m.conversation_id=conversation and m.author='person' and m.run_id=run) then return '[]'::jsonb; end if;
  -- Closed first, so the next question is kept on the read that shows it (one open question per Conversation).
- update public.reply_cards r set state='closed' where r.conversation_id=conversation and r.kind='question' and r.state='open'
-  and (r.run_id=run and (ended or (r.call_id is distinct from asked and r.created_at<read_started_at))
-   or r.run_id<>run and exists(select 1 from public.conversation_usage u where u.conversation_id=conversation and u.run_id=r.run_id));
+ -- Another Run's question that outlived its end, open or claimed (left from before a Run's end closed its questions),
+ -- closes here too, its claimed answer kept, so it no longer holds the Conversation's one open question.
+ update public.reply_cards r set state='closed' where r.conversation_id=conversation and r.kind='question'
+  and (r.state='open' and r.run_id=run and (ended or (r.call_id is distinct from asked and r.created_at<read_started_at))
+   or r.state in ('open','sending') and r.run_id<>run and exists(select 1 from public.conversation_usage u where u.conversation_id=conversation and u.run_id=r.run_id));
  -- A read that saw the question before another closer ended the Run keeps nothing for it.
  if asked is not null and not ended and not exists(select 1 from public.conversation_usage u where u.conversation_id=conversation and u.run_id=run) then
   kept:=jsonb_build_object('question',asking->'text','choices',asking->'choices','multiple',asking->'multiple');
@@ -101,8 +103,9 @@ begin
  if verdict is null or verdict not in ('answered','closed') then raise exception 'questionVerdictInvalid' using errcode='22023'; end if;
  select * into asked from public.reply_cards where id=card and kind='question' for update;
  if not found then return null; end if;
- -- A delivery the Engine took wins over a "gone" another closer settled first, or over the Run's end closing the card
- -- before its closer settled it: the answer did reach the Engine, so the card reads answered and is logged once.
+ -- Not only the first verdict counts any more (20270112's rule): a delivery the Engine took wins over a "gone" another
+ -- closer settled first, or over the Run's end closing the card before its closer settled it. The answer did reach the
+ -- Engine, so the card reads answered and is logged once. A closed verdict never undoes an answered one.
  if not (asked.state='sending' or verdict='answered' and asked.state='closed' and asked.content ? 'answer') then return asked.state; end if;
  update public.reply_cards set state=verdict where id=asked.id;
  if verdict='answered' then

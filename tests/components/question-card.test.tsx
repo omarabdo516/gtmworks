@@ -194,7 +194,7 @@ test('in the chat, a pick another tab answered first is not shown as this one\'s
  await expect.poll(() => document.querySelector<HTMLElement>('.turns > li[data-kind="answer"]')?.textContent).toContain(angles[1]);
 });
 
-test.each([['en', 'Not delivered: the agent had stopped waiting for this answer.'], ['ar', 'موصلتش: الوكيل كان بطّل يستنى الإجابة دي.']] as const)('in the %s interface, an answer the Engine no longer waited for is the person\'s turn with a note that it was not delivered', async (language, note) => {
+test.each([['en', 'Not delivered: the agent had stopped waiting for this answer. Send it again as a new message.'], ['ar', 'موصلتش: الوكيل كان بطّل يستنى الإجابة دي. ابعتها تاني في رسالة جديدة.']] as const)('in the %s interface, an answer the Engine no longer waited for is the person\'s turn with a note that it was not delivered', async (language, note) => {
  const closed = asked(angles.slice(0, 3), { state: 'closed' });
  const base = record(closed, angles[0]);
  const failed = { ...base, messages: base.messages.map(message => message.kind === 'answer' ? { ...message, failed: true } : message) };
@@ -202,5 +202,6 @@ test.each([['en', 'Not delivered: the agent had stopped waiting for this answer.
  await render(<LanguageProvider language={language}><div className="gw"><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={conversation} title="" writer><Arrived record={arrived(failed)}/></ConversationView></div></LanguageProvider>);
  const answer = document.querySelector<HTMLElement>('.turns > li[data-kind="answer"]')!;
  expect(answer.textContent).toContain(angles[0]);
- expect(answer.querySelector('[role="alert"]')?.textContent).toBe(note);
+ expect(answer.querySelector('[role="status"]')?.textContent, 'announced only when it changes, not again on every load').toBe(note);
+ expect(answer.querySelector('[role="alert"]')).toBeNull();
 });
