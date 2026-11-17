@@ -6,6 +6,7 @@ import Link, { pageBeingOpened } from '@/lib/link';
 import { ShellIcon } from '@/components/shell-icon';
 import { moreSections, themeChoices } from '@/lib/sidebar.mjs';
 import { rememberOpener } from './settings-opener';
+import { AppsCount, useAppsSheet } from './apps-sheet';
 
 const themeIcons={light:'sun',dark:'moon',device:'monitor'} as const;
 
@@ -14,9 +15,10 @@ const languages=[{key:'en',name:'languageNameEnglish',description:'languageEngli
 
 // The account row at the bottom of the sidebar (reference: #btn-me and its menu): who you are, Settings, the
 // interface language and the theme. Both are saved to the account, so every device opens in them. The theme group
-// keeps "Device" (follow the system), which the sun/moon button alone cannot choose. Connect apps is not built yet
-// (#30). "More sections" reaches the company's existing sections that the reference has no place for. Settings opens
-// the full-window settings overlay (app/settings-overlay.tsx), which closes back to the page it was opened from.
+// keeps "Device" (follow the system), which the sun/moon button alone cannot choose. Connect apps closes the menu and
+// opens the apps sheet (app/apps-sheet.tsx), which gives the keyboard back to the account button. "More sections"
+// reaches the company's existing sections that the reference has no place for. Settings opens the full-window settings
+// overlay (app/settings-overlay.tsx), which closes back to the page it was opened from.
 // Every page draws its own shell, so a page landing (closing a card, a refresh after a save) draws a new account
 // menu. Whether it is open is kept here, outside the shell, for the page it was opened on: that page, or the page the
 // person had already set out to open through a link (lib/link pageBeingOpened; never a prefetch). A menu opened while
@@ -41,6 +43,7 @@ type Save=(state:string,form:FormData)=>Promise<string>;
 export default function AccountMenuView({slug,personName,role,theme,companyName,settingsHref,saveLanguage,saveTheme}:AccountMenuProps&{saveLanguage:Save,saveTheme:Save}) {
  const {t,language}=useI18n();
  const pathname=usePathname();
+ const openApps=useAppsSheet();
  const state=useSyncExternalStore(subscribeMenu,()=>menuState,()=>closedMenu);
  const open=state.open&&state.company===slug&&state.paths.includes(pathname);
  const toggle=()=>open?closeMenu():setMenuState({open:true,company:slug,paths:[pathname,...(pageBeingOpened()?[pageBeingOpened()!]:[])],focus:null,fresh:true});
@@ -98,7 +101,7 @@ export default function AccountMenuView({slug,personName,role,theme,companyName,
     <ShellIcon name={themeIcons[choice]}/><span className="menu__t">{t(choice)}</span>{choice===theme&&<ShellIcon name="check" className="menu__check"/>}
    </button>)}</div>
    {slug&&<><div className="menu__sep" role="separator"/>
-    <button type="button" className="menu__item" role="menuitem" aria-disabled="true" title={t('soon')}><ShellIcon name="plug"/><span className="menu__t">{t('shellConnectApps')}<span className="menu__d">{t('soon')}</span></span></button>
+    <button type="button" className="menu__item" role="menuitem" onClick={()=>{ closeMenu(); openApps?.(button.current); }}><ShellIcon name="plug"/><span className="menu__t">{t('shellConnectApps')}<AppsCount className="menu__d"/></span></button>
     <div className="menu__sep" role="separator"/>
     <div className="menu__label" id="me-more-lbl">{t('shellMoreSections')}</div>
     <div role="group" aria-labelledby="me-more-lbl">{moreSections.map(([path,label,icon])=><Link key={path} className="menu__item" role="menuitem" href={`/c/${slug}/${path}`} onClick={()=>closeMenu()}><ShellIcon name={icon}/><span className="menu__t">{t(label)}</span></Link>)}</div>
