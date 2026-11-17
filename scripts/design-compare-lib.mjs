@@ -1,7 +1,7 @@
 // Pure helpers for scripts/design-compare.mjs (#285): argument checks, the screen table, output names and a
 // static server over design-reference/ that never answers outside it.
 import { createServer } from 'node:http';
-import { createReadStream, readFileSync, statSync } from 'node:fs';
+import { createReadStream, statSync } from 'node:fs';
 import { extname, join, resolve, sep } from 'node:path';
 
 // A named screen says how to reach it in the reference and which built page it is compared with (null: none yet).

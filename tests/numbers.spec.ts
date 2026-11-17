@@ -64,7 +64,7 @@ test('while its figures are slow Numbers keeps its title and period switch over 
   const placeholder=page.locator('.numbers-page [aria-busy="true"]');
   const tiles=page.locator('.kpis .kpi');
   const switcher=page.getByRole('group',{name:tr('numbersPeriod')});
-  await whileSlow('company_log',2,async()=>{
+  await whileSlow('company_log',3,async()=>{
    await page.locator(`.nav a[href="${numbersPath}"]`).click(); week.letGo();
    await expect(placeholder).toBeVisible();
    await expect(placeholder).toHaveText(tr('numbersLoading'));
@@ -78,7 +78,7 @@ test('while its figures are slow Numbers keeps its title and period switch over 
    await expect(placeholder).toHaveCount(0);
    expect(await where(tiles.first()),'the first tile keeps its place').toEqual(tile);
   });
-  await whileSlow('company_log',2,async()=>{
+  await whileSlow('company_log',3,async()=>{
    const last30=switcher.getByRole('link',{name:tr('numbersLast30')});
    await last30.focus(); await page.keyboard.press('Enter'); month.letGo();
    await expect(placeholder).toBeVisible();

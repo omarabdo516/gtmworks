@@ -121,8 +121,7 @@ test('every screen says how to reach it in the reference and which built page it
     for (const step of steps) {
       assert.equal(Object.keys(step).length, 1, `${name}: one action per step`);
       const [[action, value]] = Object.entries(step);
-      assert.ok(['click', 'waitFor', 'waitGone', 'scrollTo', 'fill', 'press', 'sql', 'goto', 'finish'].includes(action), `${name}: known action ${action}`);
-      if (action === 'sql') { assert.ok(typeof value === 'string' && value.trim().length > 0, `${name}: sql`); continue; }
+      assert.ok(['click', 'waitFor', 'waitGone', 'scrollTo', 'fill', 'press', 'goto', 'finish'].includes(action), `${name}: known action ${action}`);
       if (action === 'goto') { assert.match(value, /^\/c\/rs-(learning|consultations)\/[a-z/]+(\/[0-9a-f-]{36})?$/, `${name}: a built page`); continue; }
       // A press names one key as Playwright does (a letter, or a name such as ArrowDown or KeyN), not a selector.
       if (action === 'press') { assert.match(value, /^([a-z]|[A-Z][A-Za-z]+)$/, `${name}: a key`); continue; }
@@ -167,8 +166,8 @@ test('every screen says how to reach it in the reference and which built page it
   assert.deepEqual(screens['account-menu-keys'].reference.steps.at(-1), { press: 'ArrowDown' });
   assert.deepEqual(screens['new-chat-key'].reference.steps, [...screens.board.reference.steps, { press: 'n' }, { waitFor: '#ta-main:focus' }]);
   assert.deepEqual(screens['new-chat-key'].builtSteps, [{ press: 'KeyN' }, { waitFor: '.composer__input:focus' }]);
-  // #172. The built placeholders: the page's rows added and its one waiting table slowed, the page opened, its hold
-  // ended; captured without waiting for the slowed read, which is taken back after.
+  // #172. The built placeholders: the workflow's setup file adds the page's rows and slows its one waiting table, then
+  // the page is opened, its hold ended, and it is captured without waiting for the slowed read.
   for (const [name, table, page, placeholder] of [
     ['chat-loading', 'conversation_usage', '/c/rs-learning/conversations/6f000000-0000-0000-0000-000000000003', '.chat .transcript[aria-busy="true"]'],
     ['numbers-loading', 'company_log', '/c/rs-learning/numbers', '.numbers-page [aria-busy="true"]'],

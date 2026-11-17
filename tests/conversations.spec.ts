@@ -321,7 +321,7 @@ test('a Conversation whose record is slow shows the placeholder in its transcrip
   await ownerSignIn(page);
   const link=page.locator(`#sb-recent a[href="${slowChatPath}"]`);
   await expect(link).toBeVisible();
-  await whileSlow('conversation_usage',2,async()=>{
+  await whileSlow('conversation_usage',3,async()=>{
    await link.click(); held.letGo();
    const placeholder=page.locator('.chat .transcript[aria-busy="true"]');
    await expect(placeholder).toBeVisible();

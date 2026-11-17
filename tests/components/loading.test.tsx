@@ -104,7 +104,9 @@ test('while the record is on its way the chat keeps its title and composer aroun
  const { record, arrive } = held();
  const screen = await opened(record);
  const placeholder = screen.getByText('Loading the chat', { exact: true });
- await expect.poll(() => visibility(placeholder.element()), { timeout: 1000 }).toBe('visible');
+ // Its 400ms hold is the hold test's; here it is ended on the placeholder's own clock.
+ busyRegion('Loading the chat').region.getAnimations().forEach(animation => animation.finish());
+ expect(visibility(placeholder.element())).toBe('visible');
  await expect.element(screen.getByRole('heading')).toHaveTextContent('Draft the long launch plan');
  const field = screen.getByRole('textbox', { name: 'Message' });
  await field.fill('And the budget');
