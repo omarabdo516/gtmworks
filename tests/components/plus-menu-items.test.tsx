@@ -3,6 +3,7 @@ import type { ComponentProps, MouseEvent } from 'react';
 import { render } from 'vitest-browser-react';
 import { userEvent } from 'vitest/browser';
 import { CallableAgentsProvider, ComposerPlaceProvider, MessageBox, type ComposerPlace } from '@/app/conversation-composer';
+import { AppsSheetProvider, AppsButton } from '@/app/apps-sheet';
 import { ToastHost } from '@/app/toast';
 import { LanguageProvider } from '@/lib/i18n-client';
 import type { Language } from '@/lib/i18n.mjs';
@@ -24,7 +25,8 @@ const role = (owner: boolean, manage: boolean, alone = false): ComposerPlace => 
 function engine(company: string) {
  const picks: unknown[] = [];
  vi.stubGlobal('fetch', vi.fn(async (input: string, init?: RequestInit) => {
-  if (input.startsWith(`/api/company-apps?company=${company}`)) return Response.json({ apps: [{ key: 'klaviyo', state: 'connected' }, { key: 'notion', state: 'off' }] });
+  if (input.startsWith(`/api/company-apps?company=${company}`)) return Response.json({ apps: [{ key: 'klaviyo', name: 'Klaviyo', mark: 'K', category: 'sales', state: 'connected', agents: [], use: '', can: '', words: 'Klaviyo' },
+   { key: 'notion', name: 'Notion', mark: 'N', category: 'content', state: 'off', agents: [], use: '', can: '', words: 'Notion' }] });
   if (input.includes('intent=models')) return Response.json({ state: 'found', current: { provider: 'anthropic', model: 'claude-opus-4-6' },
    models: [{ provider: 'anthropic', providerName: 'Anthropic', model: 'claude-opus-4-6' }, { provider: 'openrouter', providerName: 'OpenRouter', model: 'openai/gpt-5.5' }] });
   if (init?.method === 'POST') { picks.push(JSON.parse(String(init.body))); return Response.json({ model: null }); }
@@ -32,11 +34,12 @@ function engine(company: string) {
  }));
  return picks;
 }
-// Each test reads its own Company, as the apps are kept per Company once read.
+// Each test reads its own Company, as the apps are kept per Company once read. The Shell draws the apps sheet around
+// the page, with the sidebar's Connect apps button.
 const composer = (place: ComposerPlace, language: Language = 'en') => render(<div className="gw" style={{ paddingTop: 520 }}><div className="composer-area">
- <LanguageProvider language={language}><CallableAgentsProvider agents={[{ id: 'a1', connection_id: 'c1', name: 'Lead' }]}><ComposerPlaceProvider place={place}>
-  <MessageBox placeholder="Write" send={async () => null} model={{ company: place.company, conversation, agent: 'Lead' }}/><ToastHost/>
- </ComposerPlaceProvider></CallableAgentsProvider></LanguageProvider>
+ <LanguageProvider language={language}><AppsSheetProvider company={place.company} owner={place.owner} rtl={language === 'ar'}><CallableAgentsProvider agents={[{ id: 'a1', connection_id: 'c1', name: 'Lead' }]}><ComposerPlaceProvider place={place}>
+  <AppsButton/><MessageBox placeholder="Write" send={async () => null} model={{ company: place.company, conversation, agent: 'Lead' }}/><ToastHost/>
+ </ComposerPlaceProvider></CallableAgentsProvider></AppsSheetProvider></LanguageProvider>
 </div></div>);
 
 test('the Owner of a team Company gets New channel, Connect apps with its count and the Engine\'s models, the one in use checked', async () => {
@@ -44,7 +47,7 @@ test('the Owner of a team Company gets New channel, Connect apps with its count 
  const screen = await composer(place);
  await screen.getByRole('button', { name: 'More: call someone, new channel, commands, model' }).click();
  await expect.element(screen.getByRole('menuitem', { name: 'New channel For the team and agents in one conversation' })).toBeVisible();
- await expect.element(screen.getByRole('menuitem', { name: 'Connect apps Connect a new tool to an agent · 1 connected' })).toHaveAttribute('href', '/c/rs-learning/settings?section=apps');
+ await expect.element(screen.getByRole('menuitem', { name: 'Connect apps Connect a new tool to an agent · 1 connected' })).toBeVisible();
  await expect.element(screen.getByText('Model', { exact: true })).toBeVisible();
  await expect.element(screen.getByRole('menuitemradio', { name: 'claude-opus-4-6 Anthropic' })).toHaveAttribute('aria-checked', 'true');
  await expect.element(screen.getByRole('menuitemradio', { name: 'openai/gpt-5.5 OpenRouter' })).toHaveAttribute('aria-checked', 'false');
@@ -62,7 +65,7 @@ test('picking a model closes the menu, gives the field the focus, sends the choi
 });
 
 const roles = [
- { who: 'a Manager has New channel and the line for connecting a tool, and no Model', place: role(false, true), id: 'b1', label: 'More: call someone, new channel, commands', sub: 'Connect a new tool to an agent · 1 connected' },
+ { who: 'a Manager has New channel, only the count, and no Model', place: role(false, true), id: 'b1', label: 'More: call someone, new channel, commands', sub: '1 connected' },
  { who: 'a Contributor has no New channel, only the count, and no Model', place: role(false, false), id: 'b2', label: 'More: call someone, commands', sub: '1 connected' },
  { who: 'the Owner of a Company worked alone has no New channel', place: role(true, true, true), id: 'b3', label: 'More: call someone, commands, model', sub: 'Connect a new tool to an agent · 1 connected' },
 ];
@@ -83,4 +86,22 @@ test('in Arabic the lines speak the reference\'s words', async () => {
  await expect.element(screen.getByRole('menuitem', { name: 'قناة جديدة للفريق والوكلاء في محادثة واحدة' })).toBeVisible();
  await expect.element(screen.getByRole('menuitem', { name: 'ربط التطبيقات وصّل أداة جديدة لوكيل · 1 متوصل' })).toBeVisible();
  await expect.element(screen.getByText('الموديل', { exact: true })).toBeVisible();
+});
+
+// #202 (design-reference: the open-apps case and the apps sheet's close): Connect apps opens the sheet over the page,
+// with the same count as the sidebar's button, and closing it gives the keyboard back to "+".
+test('Connect apps closes the menu and opens the sheet with focus in its search, keeps the message, and closing gives the focus back to "+"', async () => {
+ const place = { ...role(false, false), company: '10000000-0000-0000-0000-0000000000a5' }; engine(place.company);
+ const screen = await composer(place);
+ await screen.getByRole('textbox', { name: 'Message' }).fill('Half a thought');
+ await expect.element(screen.getByRole('button', { name: 'Connect apps 1 connected' })).toBeVisible();
+ await screen.getByRole('button', { name: /^More:/ }).click();
+ await screen.getByRole('menuitem', { name: 'Connect apps 1 connected' }).click();
+ await expect.element(screen.getByRole('menu')).not.toBeInTheDocument();
+ await expect.element(screen.getByRole('dialog')).toBeVisible();
+ await expect.element(screen.getByRole('searchbox')).toHaveFocus();
+ await userEvent.keyboard('{Escape}');
+ await expect.poll(() => document.querySelector('dialog.apps-sheet')).toBeNull();
+ await expect.element(screen.getByRole('button', { name: /^More:/ })).toHaveFocus();
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('Half a thought');
 });

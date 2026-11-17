@@ -155,6 +155,9 @@ export const screens = {
   // own address (pass --built-path /c/rs-learning/conversations/<id>; its Model rows are the Agent's Engine's).
   'plus-menu-model': { reference: { steps: [{ click: '.composer [data-action="plus-menu"]:visible' }, { waitFor: '[data-plus-menu]:not([hidden])' }, { finish: '[data-plus-menu]:not([hidden])' }, { scrollTo: '[data-plus-menu]:not([hidden]) [data-action="pick-model"]:last-child' }] }, builtPath: null,
    builtSteps: [{ click: '.composer__btn[aria-haspopup="menu"]' }, { waitFor: '.composer .menu [role="menuitemradio"]' }, { finish: '.composer .menu' }, { scrollTo: '.composer .menu [role="menuitemradio"]:last-child' }] },
+  // #202. The composer's "+" menu, Connect apps: the apps sheet over the Conversation with Lead, the keyboard in its search.
+  'plus-apps': { reference: { steps: [{ click: '.composer [data-action="plus-menu"]:visible' }, { waitFor: '[data-plus-menu]:not([hidden])' }, { click: '[data-plus-menu]:not([hidden]) [data-action="open-apps"]' }, { waitFor: '#apps[open] #apps-q' }, { finish: '#apps[open]' }] }, builtPath: '/c/rs-learning/chat',
+   builtSteps: [{ click: '.composer__btn[aria-haspopup="menu"]' }, { waitFor: '.composer .menu' }, { click: '.composer .menu [aria-haspopup="dialog"]' }, { waitFor: 'dialog.apps-sheet[open] #apps-q' }, { finish: 'dialog.apps-sheet[open]' }] },
   // #24. New channel, from the "+" beside Channels; built, ?new=channel opens it over any page.
   'new-channel': { reference: { steps: [{ click: '#sb-threads [data-action="channel-new"]' }, { waitFor: '#modal[open] #tm-name' }] }, builtPath: `/c/rs-learning/channels/${fixture.channel}?new=channel` },
   // #24. The team channel حملة ديسمبر (th-team) with its members and Agents. Built: a team channel's own address (pass

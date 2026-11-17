@@ -9,7 +9,7 @@ import { appByKey, appConfig } from '../lib/app-catalogue.mjs';
 // #158, the "+" menu's New channel, Connect apps and Model. RS Learning, worked as a team, runs on its own profile in a
 // fake Engine whose model list and Runs answer as the pinned release's do; Lead, its main Agent, keeps that profile,
 // signed in to Anthropic with an OpenRouter key, and one app (Klaviyo) connected. New channel is for the Owner and
-// Managers of a team Company; Connect apps counts the connected apps and opens Settings, Apps; Model is the Owner's
+// Managers of a team Company; Connect apps counts the connected apps and opens the apps sheet over the page (#202); Model is the Owner's
 // alone, in a Conversation: a pick is kept on that Conversation and sent with each of its Runs, and nothing else changes.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const rows=(sql:string)=>{ const out=JSON.parse(query(sql)); return (Array.isArray(out)?out:out.rows) as Record<string,unknown>[]; };
@@ -63,7 +63,7 @@ async function conversationWith(page:Page,first:string) {
 }
 const runsOf=(conversation:string)=>fake.settings.runs.filter(run=>run.session===conversation).map(run=>{ const {provider,model}=JSON.parse(run.body!); return {input:run.input,provider,model}; });
 
-test('the Owner\'s menu: New channel opens the channel dialog and gives the focus back to "+", and Connect apps counts the connected app and opens Settings, Apps',async({page})=>{
+test('the Owner\'s menu: New channel opens the channel dialog and gives the focus back to "+", and Connect apps counts the connected app and opens the apps sheet',async({page})=>{
  await signIn(page,'omar@example.com',`/c/rs-learning/chat/${lead}`);
  await expect(plus(page)).toHaveAttribute('aria-label','More: call someone, new channel, commands');
  await plus(page).click();
@@ -79,15 +79,15 @@ test('the Owner\'s menu: New channel opens the channel dialog and gives the focu
  await expect(plus(page)).toBeFocused();
  await plus(page).click();
  await menu(page).getByRole('menuitem',{name:/^Connect apps/}).click();
- await page.waitForURL(/\/c\/rs-learning\/settings\?section=apps$/);
- await expect(page.locator('#sov-h')).toHaveText('Connect apps');
+ await expect(page.locator('dialog.apps-sheet')).toBeVisible();
+ await expect(page).toHaveURL(new RegExp(`/c/rs-learning/chat/${lead}$`));
 });
 
-test('a Manager has New channel and the line for connecting a tool, and no Model; a Contributor has neither, only the count',async({page})=>{
+test('a Manager has New channel, only the count, and no Model; a Contributor has no New channel, only the count',async({page})=>{
  await signIn(page,'manager@example.com',`/c/rs-learning/chat/${lead}`);
  await plus(page).click();
  await expect(menu(page).getByRole('menuitem',{name:/^New channel/})).toBeVisible();
- await expect(menu(page).getByRole('menuitem',{name:/^Connect apps/}).locator('.menu__d')).toHaveText('Connect a new tool to an agent · 1 connected');
+ await expect(menu(page).getByRole('menuitem',{name:/^Connect apps/}).locator('.menu__d')).toHaveText('1 connected');
  await page.keyboard.press('Escape');
  const conversation=await conversationWith(page,'Plan the week');
  await plus(page).click();
@@ -105,6 +105,33 @@ test('a Manager has New channel and the line for connecting a tool, and no Model
  await plus(page).click();
  await expect(menu(page).getByRole('menuitem',{name:/^New channel/})).toHaveCount(0);
  await expect(menu(page).getByRole('menuitem',{name:/^Connect apps/}).locator('.menu__d')).toHaveText('1 connected');
+});
+
+// #202 (design-reference: the open-apps case and the apps sheet's close): the sheet opens over the page with the
+// keyboard in its search; the address and the message being written stay, and closing it gives the focus back to the
+// "+" it was opened from, in a Conversation and in a channel.
+test('Connect apps opens the sheet over a Conversation and over a channel, keeps the message, and closing it gives the focus back to that "+"',async({page})=>{
+ await signIn(page,'omar@example.com','/c/rs-learning/home');
+ const conversation=await conversationWith(page,'Plan the launch');
+ const sheet=page.locator('dialog.apps-sheet');
+ const places=[{url:`/c/rs-learning/conversations/${conversation}`,box:field(page)},
+  {url:'/c/rs-learning/channels/69000000-0000-0000-0000-000000000001',box:page.getByRole('textbox',{name:'Write your message in the channel',exact:true})}];
+ for(const {url,box} of places) {
+  await page.goto(url);
+  await box.fill('Half a thought');
+  await expect(page.locator('#btn-apps .sb-apps__n')).toHaveText('1 connected');
+  await plus(page).click();
+  await expect(menu(page).getByRole('menuitem',{name:/^Connect apps/}).locator('.menu__d')).toHaveText('Connect a new tool to an agent · 1 connected');
+  await menu(page).getByRole('menuitem',{name:/^Connect apps/}).click();
+  await expect(menu(page)).toHaveCount(0);
+  await expect(sheet).toBeVisible();
+  await expect(page.locator('#apps-q')).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(sheet).toHaveCount(0);
+  await expect(plus(page)).toBeFocused();
+  await expect(box).toHaveValue('Half a thought');
+  expect(page.url()).toMatch(new RegExp(`${url}$`));
+ }
 });
 
 test('in a Company worked alone the Owner has no New channel',async({page})=>{
