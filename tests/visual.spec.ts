@@ -496,7 +496,7 @@ const openSlowly = (path: string, link: string, placeholder: string, table: stri
     await page.locator(link).click();
     held.letGo();
     // The picture is of the placeholder's look: its first 400ms hidden (components/loading.test.tsx) is ended here.
-    await page.locator(placeholder).waitFor({ state: 'attached', timeout: 15000 });
+    await page.locator(placeholder).waitFor({ state: 'attached' });
     await page.locator(placeholder).evaluate(element => element.getAnimations().forEach(animation => { if ((animation as CSSAnimation).animationName === 'gw-sk-hold') animation.finish(); }));
     await expect(page.locator(placeholder)).toBeVisible();
     await expect(page.locator('.sidebar.is-open')).toHaveCount(0);

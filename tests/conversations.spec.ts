@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { fakeHermes } from './fake-hermes.mjs';
 import { execFileSync } from 'node:child_process';
 import { signIn } from './sign-in';
-import { asAdmin, holdPages, watchPlaceholders, whileSlow } from './slow-reads';
+import { asAdmin, holdPages, watchPlaceholders, whileSlow, wholePages } from './slow-reads';
 
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 // Omar signs in as the Owner of RS Learning, who connects and attaches its agents.
@@ -45,6 +45,8 @@ test('The Owner starts a private conversation from the board and from Home, and 
  const fake=await fakeHermes(); fake.settings.key=`hermes-key-${randomUUID()}`; fake.settings.pendingReads=2;
  let agents={};
  const responses:Promise<string>[]=[];
+ const placeholders=await watchPlaceholders(page);
+ await wholePages(page,url=>url.pathname.startsWith('/c/rs-learning/conversations/'));
  try {
   await ownerSignIn(page); agents=await attachAgents(page,fake);
   const {Nour,Mona}=agents as Record<string,{profile:string}>;
@@ -75,6 +77,14 @@ test('The Owner starts a private conversation from the board and from Home, and 
   expect(await page.evaluate(()=>(window as unknown as {stayed?:boolean}).stayed)).toBe(true);
   const runs=fake.settings.requests.filter(request=>request.method==='POST'&&request.path?.endsWith('/v1/runs'));
   expect(runs.map(request=>[request.path,request.session])).toEqual([[`/p/${Nour.profile}/v1/runs`,conversation]]);
+  // A chat that arrives whole shows no placeholder (#172): opened, or reached from the sidebar.
+  await page.reload();
+  await expect(page.locator('.msg[data-author=agent]')).toContainText(`Reply to: ${text}`);
+  await page.locator('.nav a[href$="/work/board"]').click();
+  await expect(page.locator('.board')).toBeVisible();
+  await page.locator(`#sb-recent a[href="/c/rs-learning/conversations/${conversation}"]`).click();
+  await expect(page).toHaveURL(new RegExp(`/conversations/${conversation}$`));
+  await expect(page.locator('.msg[data-author=agent]')).toContainText(`Reply to: ${text}`);
 
   await page.goto('/c/rs-learning/home');
   await expect(page.locator('.sidebar #btn-apps')).toHaveAttribute('aria-disabled','true');
@@ -93,6 +103,8 @@ test('The Owner starts a private conversation from the board and from Home, and 
   const bodies=await Promise.all(responses);
   expect(bodies.length).toBeGreaterThan(5);
   expect(bodies.filter(body=>body.includes(fake.settings.key))).toEqual([]);
+  await expect.poll(placeholders.waiting).toBe(0);
+  expect(placeholders.seen()).toEqual([]);
  } finally { detach(agents); await fake.close(); }
 });
 
@@ -301,7 +313,6 @@ const slowChatRows={
 const where=async(page:Page,selector:string)=>{ const box=(await page.locator(selector).boundingBox())!; return {x:Math.round(box.x),y:Math.round(box.y),width:Math.round(box.width),height:Math.round(box.height)}; };
 
 test('a Conversation whose record is slow shows the placeholder in its transcript, under its title and over its composer, then its messages at the newest',async({page})=>{
- test.setTimeout(90000);
  const placeholders=await watchPlaceholders(page);
  // Only the record reads the usage (lib/conversation-record.ts); the page's frame and the sidebar never do.
  const held=await holdPages(page,url=>url.pathname===slowChatPath);
@@ -310,7 +321,7 @@ test('a Conversation whose record is slow shows the placeholder in its transcrip
   await ownerSignIn(page);
   const link=page.locator(`#sb-recent a[href="${slowChatPath}"]`);
   await expect(link).toBeVisible();
-  await whileSlow('conversation_usage',3,async()=>{
+  await whileSlow('conversation_usage',2,async()=>{
    await link.click(); held.letGo();
    const placeholder=page.locator('.chat .transcript [aria-busy="true"]');
    await expect(placeholder).toBeVisible();
@@ -322,7 +333,7 @@ test('a Conversation whose record is slow shows the placeholder in its transcrip
    await expect(page.locator('.chat .composer-area').getByLabel('Message',{exact:true})).toBeVisible();
    const frame=[await where(page,'.chat .transcript'),await where(page,'.chat .composer-area')];
    const messages=page.locator('.chat .turns > .msg');
-   await expect(messages).toHaveCount(12,{timeout:15000});
+   await expect(messages).toHaveCount(12);
    await expect(placeholder).toHaveCount(0);
    expect([await where(page,'.chat .transcript'),await where(page,'.chat .composer-area')],'the transcript and the composer keep their places').toEqual(frame);
    const transcript=page.locator('.chat .transcript');
@@ -330,24 +341,6 @@ test('a Conversation whose record is slow shows the placeholder in its transcrip
    await expect.poll(()=>transcript.evaluate(box=>box.scrollHeight-box.scrollTop-box.clientHeight)).toBeLessThan(2);
    await expect(messages.last()).toBeInViewport();
   });
-  expect(await placeholders.seen()).toEqual(['Loading the chat']);
+  expect(placeholders.seen()).toEqual(['Loading the chat']);
  } finally { held.letGo(); await held.stop(); asAdmin(slowChatRows.unset); }
-});
-
-test('a Conversation ready at once never shows its placeholder, opened or reached from the sidebar',async({page})=>{
- const placeholders=await watchPlaceholders(page);
- asAdmin(slowChatRows.unset); asAdmin(slowChatRows.set);
- try {
-  await ownerSignIn(page);
-  const messages=page.locator('.chat .turns > .msg');
-  await page.goto(slowChatPath);
-  await expect(messages).toHaveCount(12);
-  await page.locator('.nav a[href$="/work/board"]').click();
-  await expect(page.locator('.board')).toBeVisible();
-  await page.locator(`#sb-recent a[href="${slowChatPath}"]`).click();
-  await expect(page).toHaveURL(new RegExp(`${slowChatPath}$`));
-  await expect(messages).toHaveCount(12);
-  await expect.poll(placeholders.waiting).toBe(0);
-  expect(await placeholders.seen()).toEqual([]);
- } finally { asAdmin(slowChatRows.unset); }
 });

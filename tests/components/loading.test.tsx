@@ -60,9 +60,15 @@ for (const reduced of [false, true]) test(`the placeholder stays hidden for its 
  await reducedMotion(reduced);
  const screen = await chat('en');
  const column = screen.getByLabelText('Loading the chat').element();
- await new Promise(resolve => setTimeout(resolve, 250));
+ // The placeholder's own clock, stopped and moved by the test.
+ const [hold] = column.getAnimations();
+ hold.pause();
+ hold.currentTime = 0;
  expect(visibility(column)).toBe('hidden');
- await expect.poll(() => visibility(column), { timeout: 1000 }).toBe('visible');
+ hold.currentTime = 399;
+ expect(visibility(column)).toBe('hidden');
+ hold.currentTime = 400;
+ expect(visibility(column)).toBe('visible');
 });
 
 const at = '2026-06-10T09:41:00Z';
