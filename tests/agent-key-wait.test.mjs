@@ -325,6 +325,25 @@ test('a removed Agent\'s profile that holds the Company\'s live key is neither l
  } finally { await fake.close(); }
 });
 
+test('a set sends a removed Agent\'s profile nothing, so one left holding the old value of the key the Company holds reads as leftover by its name until a removal', async () => {
+ const fake=await fakeHermes();
+ try {
+  made(fake,space,main,writer,gone);
+  await change(sessions(fake,{extra:[{profile:gone,kind:'agent',agent:agentId(gone),name:'Old writer'}]}),fake,{intent:'set',value:known});
+  const owner=sessions(fake,{extra:[{profile:gone,kind:'removed',agent:agentId(gone),name:'Old writer'}]});
+  fake.settings.managementRequests.length=0;
+  assert.equal((await change(owner,fake,{intent:'set',value:`${known}-rotated`})).status,200);
+  assert.deepEqual(fake.settings.managementRequests.filter(request=>profileOf(request.path)===gone),[],'the set sends it no request');
+  assert.equal(envOf(fake,gone).OPENROUTER_API_KEY,known,'so it keeps the old value');
+  const after=await read(owner,fake);
+  assert.deepEqual([after.waiting,after.leftover],[[],[{agent:null,name:'Old writer'}]],'the Owner reads it as leftover, never waiting');
+  assert.deepEqual(owner.calls('forget_agent_profile_leftovers'),[],'it holds a key, so it is not forgotten');
+  await change(owner,fake,{intent:'remove'});
+  assert.equal(envOf(fake,gone).OPENROUTER_API_KEY,undefined,'the removal reaches it');
+  assert.deepEqual((await read(owner,fake)).leftover,[]);
+ } finally { await fake.close(); }
+});
+
 test('after a removal, a removed Agent\'s profile left holding no key is forgotten, and one still holding a key, unread or not reached is kept', async () => {
  const fake=await fakeHermes();
  try {
