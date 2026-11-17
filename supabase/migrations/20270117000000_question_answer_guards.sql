@@ -4,6 +4,9 @@
 -- and the Conversation's one open question is free again. track_run_question takes the same per-Run lock, so a slower
 -- closer's read never keeps a question after its Run has ended. answer_question's row lock orders a claim against it.
 --
+-- settle_question lets a delivery the Engine took win over a closed card that holds the same answer. A typed send
+-- whose key is already a note stays that note.
+--
 -- No row is rewritten: a question left open for an ended Run before this closes when someone answers it. The previous
 -- app version runs against this: it already reads 'none' as "not an answer" and 'closed' as "can no longer be
 -- answered", and a closed card as closed.
@@ -24,6 +27,7 @@ begin
   if exists(select 1 from public.conversation_queued_turns q where q.conversation_id=conversation and q.send_key=answer_question.answer_key) then return 'none'; end if;
   -- Keys before addressees, as reserve_conversation_turn: a send already claimed as the answer stays that answer, and
   -- otherwise a note to a person ("@Sara …") stays a note, as reserve_conversation_turn makes it, never the answer.
+  if exists(select 1 from public.conversation_notes n where n.conversation_id=conversation and n.send_key=answer_question.answer_key) then return 'none'; end if;
   if exists(select 1 from public.reply_cards r where r.conversation_id=conversation and r.kind='question' and r.answer_key=answer_question.answer_key) then return 'claimed'; end if;
   if exists(select 1 from public.conversation_addressee(c,answer)) then return 'none'; end if;
   select * into asked from public.reply_cards r where r.conversation_id=conversation and r.kind='question'
@@ -88,3 +92,25 @@ begin
 end $$;
 revoke all on function public.close_ended_run_questions() from public,anon,authenticated,service_role;
 create trigger conversation_usage_closes_questions after insert on public.conversation_usage for each row execute function public.close_ended_run_questions();
+
+create or replace function public.settle_question(card bigint, verdict text) returns text
+language plpgsql security definer set search_path='' as $$
+declare asked public.reply_cards;
+begin
+ if verdict is null or verdict not in ('answered','closed') then raise exception 'questionVerdictInvalid' using errcode='22023'; end if;
+ select * into asked from public.reply_cards where id=card and kind='question' for update;
+ if not found then return null; end if;
+ -- A delivery the Engine took wins over a "gone" another closer settled first, or over the Run's end closing the card
+ -- before its closer settled it: the answer did reach the Engine, so the card reads answered and is logged once.
+ if not (asked.state='sending' or verdict='answered' and asked.state='closed' and asked.content ? 'answer') then return asked.state; end if;
+ update public.reply_cards set state=verdict where id=asked.id;
+ if verdict='answered' then
+  insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,agent_id,action,details,source,source_id,created_at)
+   values(asked.company_id,asked.answered_by,'person',(select name from public.people where id=asked.answered_by),'agent',
+    (select v.agent_id from public.conversations v where v.id=asked.conversation_id),'agent_question_answered',
+    jsonb_build_object('question',jsonb_build_object('text',asked.content->'question','answer',asked.content->'answer'),'private',true,'teller',asked.answered_by),
+    'reply_card_answers',asked.id,asked.answered_at)
+   on conflict (source,source_id) do nothing;
+ end if;
+ return verdict;
+end $$;

@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(34);
+select plan(36);
 -- #138. Ads in RS Learning, shown to the Manager (2), the Contributors (3, 5) and the Viewer (4); the Owner (1) sees every
 -- Agent. One Conversation with Ads each, and in it the message of one run.
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
@@ -117,6 +117,14 @@ select throws_ok($$insert into public.reply_cards(company_id,conversation_id,run
  ('10000000-0000-0000-0000-000000000001','f2000000-0000-0000-0000-000000000002','q-run-2','p5@1','question','Which?','{"question":"Which?","choices":[],"multiple":false}','open')$$,'23505',null,
  'a Conversation waits on one question at a time');
 
+-- A send already kept as a note (its first try found no question) stays that note when retried once one is open.
+insert into public.conversation_notes(company_id,conversation_id,person_id,author_name,addressed_to,addressed_name,body,send_key)
+ values ('10000000-0000-0000-0000-000000000001','f2000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000002','مدير','20000000-0000-0000-0000-000000000003','مراجع','@مراجع the budget','f3000000-0000-0000-0000-00000000000e');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select results_eq($$values (public.answer_question('10000000-0000-0000-0000-000000000001','f2000000-0000-0000-0000-000000000002',null,null,'the budget','f3000000-0000-0000-0000-00000000000e'))$$,
+ $$values ('none')$$,'a send already kept as a note is not taken as the answer');
+reset role;
 -- A note to a person typed while a question waits stays a note: it is not taken as the answer.
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
@@ -159,16 +167,17 @@ reset role;
 select results_eq($$select * from seen order by n$$,$$values (1,1,0,1),(2,2,0,1),(3,1,0,1),(4,1,0,0),(5,2,0,0)$$,
  'each person reads the questions of their own Conversation and no other, the Owner included; the answer''s log row is read by its person, the Owner and the Manager, and not by another Contributor or the Viewer');
 
--- A slower closer may keep a question for a Run another closer has already ended: that question cannot be answered
--- any more, so a pick on it is refused and the card closes, freeing the Conversation for its next question.
+-- A question left open for a Run that had already ended, from before a Run's end closed its questions (recreated here by
+-- writing that Run's end with the trigger off): it cannot be answered any more, so a pick is refused and it closes.
 insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id)
  values ('10000000-0000-0000-0000-000000000001','f2000000-0000-0000-0000-000000000001','person','20000000-0000-0000-0000-000000000001','Someone','And the budget?',gen_random_uuid(),'q-run-1b');
 set local role service_role;
 select public.track_run_question('f2000000-0000-0000-0000-000000000001','q-run-1b','{"id":"p6@1","text":"Which budget?","choices":["Low","High"],"multiple":false}',false,'2026-06-10T10:30:00Z');
 reset role;
+alter table public.conversation_usage disable trigger conversation_usage_closes_questions;
 insert into public.conversation_usage(company_id,conversation_id,run_id,outcome) values ('10000000-0000-0000-0000-000000000001','f2000000-0000-0000-0000-000000000001','q-run-1b','completed');
-select set_config('test.ended_card',(select id::text from public.reply_cards where call_id='p6@1'),true);
-select is((select state from public.reply_cards where call_id='p6@1'),'closed','the question closes as its Run ends, before anyone answers it');
+alter table public.conversation_usage enable trigger conversation_usage_closes_questions;
+select set_config('test.ended_card',(select id::text from public.reply_cards where call_id='p6@1' and state='open'),true);
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select is(public.answer_question('10000000-0000-0000-0000-000000000001','f2000000-0000-0000-0000-000000000001',current_setting('test.ended_card')::bigint,1,null,'f3000000-0000-0000-0000-00000000000d'),'closed',
@@ -188,6 +197,14 @@ reset role;
 select results_eq($$select call_id,state,content->>'answer' from public.reply_cards where call_id in ('p4@1','p7@1') order by id$$,
  $$values ('p4@1','closed','Google'),('p7@1','open',null)$$,
  'a claimed answer whose Run ended closes with the answer kept, and the next question is kept again');
+-- A closer that reports the Engine took that answer after all wins over the Run's end: it reads answered, logged once.
+set local role service_role;
+select results_eq($$values (public.settle_question((select id from public.reply_cards where call_id='p4@1'),'answered'))$$,$$values ('answered')$$,
+ 'a delivery the Engine took wins over a closed card holding the same answer');
+reset role;
+-- And a Run's end closes its open question at once, before anyone answers it.
+insert into public.conversation_usage(company_id,conversation_id,run_id,outcome) values ('10000000-0000-0000-0000-000000000001','f2000000-0000-0000-0000-000000000002','q-run-2b','completed');
+select is((select state from public.reply_cards where call_id='p7@1'),'closed','the question closes as its Run ends, before anyone answers it');
 
 select * from finish();
 rollback;
