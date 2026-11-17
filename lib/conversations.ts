@@ -51,7 +51,13 @@ export type LeadCard={kind:'made',agent:MadeAgent}|{kind:'request',request:Agent
 export type SavedRule={id:string,agent:string|null,removed:boolean,said_at:string,sentTo?:string[]};
 type RuleDecision={approved:boolean,by:string,rule:string,at:string};
 export type Decision=({kind:'rule'}&RuleDecision)|({kind:'request',by:string,name:string,at:string}&({made:true}|{made:false,reason:string}));
-export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided'|'boarded'|'asked'|'answer',to?:string,failed?:boolean,cards?:LeadCard[],saved?:SavedRule[],decided?:Decision};
+// The tool calls the Engine reported for the Run of an Agent's reply (#141), in the Engine's order, and the Run's length
+// in seconds (null when the Engine's record gave none). A call that never reported its end is `started`.
+export type RunStep={tool:string,preview:string|null,state:'started'|'done'|'failed'};
+export type RunSteps={list:RunStep[],seconds:number|null};
+export type RunStepsRow={run_id:string,steps:(RunStep&{call:string})[],seconds:number|null};
+export const runStepsColumns='run_id,steps,seconds';
+export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided'|'boarded'|'asked'|'answer',to?:string,failed?:boolean,cards?:LeadCard[],saved?:SavedRule[],decided?:Decision,steps?:RunSteps};
 type StoredMessage=ConversationMessage&{run_id:string,send_key?:string|null};
 export const messageColumns='id,author,author_name,body,run_id,send_key,created_at';
 export const conversationColumns='id,agent_id,agent_name,hermes_agents(connection_id,is_default)';
@@ -69,10 +75,10 @@ export function questionParts(row:ReplyCardRow,card:ReplyCard,lead:boolean):Pick
 }
 const isQuestion=(row:PlacedCard)=>row.card.kind==='reply'&&row.card.card.kind==='question';
 // A person's message whose run Hermes no longer knew is marked lost (#243), from the run's usage record. A run's
-// questions follow its person's message, each with its answer, before the run's reply (#138). The message of a turn
-// "Done it" started (#140, its send key in `hidden`) was never written by the person: it draws no bubble, and what its run
-// showed stays.
-export const shown=(messages:StoredMessage[],usage:{run_id:string,outcome:string}[]=[],leadCards:PlacedCard[]=[],agentName='',saved:{run_id:string,rule:SavedRule}[]=[],hidden:ReadonlySet<string>=new Set()):ConversationMessage[]=>messages.flatMap(message=>{
+// questions follow its person's message, each with its answer, before the run's reply (#138). The reply carries its
+// Run's steps when the Engine reported any (#141). The message of a turn "Done it" started (#140, its send key in
+// `hidden`) was never written by the person: it draws no bubble, and what its run showed stays.
+export const shown=(messages:StoredMessage[],usage:{run_id:string,outcome:string}[]=[],leadCards:PlacedCard[]=[],agentName='',saved:{run_id:string,rule:SavedRule}[]=[],runSteps:RunStepsRow[]=[],hidden:ReadonlySet<string>=new Set()):ConversationMessage[]=>messages.flatMap(message=>{
  const plain={id:message.id,author:message.author,author_name:message.author_name,body:message.body,lost:message.author==='person'&&usage.some(run=>run.run_id===message.run_id&&run.outcome==='lost'),created_at:message.created_at};
  const replied=message.author==='agent'||messages.some(other=>other.author==='agent'&&other.run_id===message.run_id);
  const ofRun=leadCards.filter(row=>row.run_id===message.run_id&&!isQuestion(row)); const cards=ofRun.map(row=>row.card);
@@ -82,8 +88,10 @@ export const shown=(messages:StoredMessage[],usage:{run_id:string,outcome:string
   return [{id,author:'agent',author_name:agentName,body:row.words??'',created_at:row.at,kind:'asked',...(row.words===undefined?{cards:[row.card]}:{})},
    ...(row.answer?[{id,author:'person' as const,author_name:message.author_name,body:row.answer.body,created_at:row.answer.at,kind:'answer' as const,...(row.answer.delivered?{}:{failed:true})}]:[])];
  }):[];
- const own=message.author==='person'&&!!message.send_key&&hidden.has(message.send_key)?[]:[plain];
- const turn:ConversationMessage[]=message.author==='agent'?[cards.length?{...plain,cards}:plain]
+  const own=message.author==='person'&&!!message.send_key&&hidden.has(message.send_key)?[]:[plain];
+ const steps=message.author==='agent'?runSteps.find(row=>row.run_id===message.run_id):undefined;
+ const reply={...plain,...(cards.length?{cards}:{}),...(steps?{steps:{list:steps.steps.map(({tool,preview,state})=>({tool,preview,state})),seconds:steps.seconds}}:{})};
+ const turn:ConversationMessage[]=message.author==='agent'?[reply]
   :replied||!cards.length?[...own,...asked]:[...own,...asked,{id:message.id,author:'agent',author_name:agentName,body:'',created_at:ofRun[0].at,kind:'made',cards}];
  const last=message.author==='agent'||!replied;
  return last&&rules.length?[...turn,{id:message.id,author:'agent',author_name:agentName,body:'',created_at:rules[0].said_at,kind:'saved',saved:rules}]:turn;

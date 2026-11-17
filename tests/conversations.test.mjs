@@ -114,7 +114,7 @@ test('a hand card\'s turn draws no bubble of the person, keeps its run\'s cards 
  ];
  const cards=[{run_id:'r2',at:at(6),card:{kind:/** @type {const} */('reply'),card:/** @type {import('../lib/conversations.ts').ReplyCard} */(replyCardOf(row(7,'r2')))}},
   {run_id:'r2',at:at(7),card:{kind:/** @type {const} */('reply'),card:/** @type {import('../lib/conversations.ts').ReplyCard} */(replyCardOf(askedRow('open')))}}];
- const drawn=shown(record,[],cards,'Ads',[],handKeys([{...handTurn,started_at:at(5)},typed]));
+ const drawn=shown(record,[],cards,'Ads',[],[],handKeys([{...handTurn,started_at:at(5)},typed]));
  assert.deepEqual(order(drawn),[1,2,'asked','made'],'the started hand turn has no bubble; its question and card stay');
  assert.ok(!drawn.some(message=>message.body===told));
  assert.deepEqual(waiting(record,[]).map(message=>message.id),[3],'its run is still waited on');

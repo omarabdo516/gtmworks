@@ -37,7 +37,7 @@ function database(card: TiedCard | null) {
  const table = (name: string) => {
   const found = rows[name] ?? [];
   const query: Record<string, unknown> = { then: (resolve: (value: unknown) => unknown) => resolve({ data: found, error: null }), maybeSingle: async () => ({ data: found[0] ?? null, error: null }) };
-  for (const method of ['select', 'eq', 'is', 'in', 'order']) query[method] = () => query;
+  for (const method of ['select', 'eq', 'is', 'not', 'in', 'order']) query[method] = () => query;
   return query;
  };
  return { from: table, rpc: async () => ({ data: null, error: null }) } as unknown as Parameters<typeof conversationRecord>[0];

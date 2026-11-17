@@ -15,13 +15,13 @@ const now = Date.parse('2026-11-17T02:30:00Z');
 const section = (text, heading) => text.slice(text.indexOf(`## ${heading}`)).split('\n\n## ')[0];
 
 test('per layer p50 and p90 by nearest rank over finished jobs, with the jobs over budget', () => {
-  // Ten static jobs of 10..100 s: p50 is the 5th (50 s), p90 the 9th (90 s); one is over the 90 s budget.
-  const jobs = Array.from({ length: 10 }, (_, n) => job('static', (n + 1) * 10));
-  const notCounted = [job('static', 999, { conclusion: 'cancelled' }), job('static', 999, { conclusion: 'skipped' }), job('static', 999, { completed_at: null })];
+  // Ten fast jobs of 10..100 s: p50 is the 5th (50 s), p90 the 9th (90 s); one is over the 90 s budget.
+  const jobs = Array.from({ length: 10 }, (_, n) => job('fast', (n + 1) * 10));
+  const notCounted = [job('fast', 999, { conclusion: 'cancelled' }), job('fast', 999, { conclusion: 'skipped' }), job('fast', 999, { completed_at: null })];
   const text = report([...jobs, ...notCounted], { now, days: 7, runs: 10 });
   assert.ok(text.startsWith('<!-- ci-health -->\n'));
   assert.match(text, /The 7 days to 2026-11-17 02:30 UTC: 10 runs\./);
-  assert.match(section(text, 'Layers'), /^\| static \| 10 \| 0\.8 min \| 1\.5 min \| 1 \|$/m);
+  assert.match(section(text, 'Layers'), /^\| fast \| 10 \| 0\.8 min \| 1\.5 min \| 1 \|$/m);
 });
 
 test('the slowest tests are cut at twenty, by p50, with how often each ran', () => {
@@ -77,7 +77,7 @@ test('red jobs are counted by their label, infrastructure by cause', () => {
 test('the PC queue: p50, p90 and the longest wait on the self-hosted runner, and the integration jobs that fell back', () => {
   // Queues of 60..600 s on the PC: p50 is the 5th (300 s), p90 the 9th (540 s), max 600 s.
   const pc = Array.from({ length: 10 }, (_, n) => job('integration', 300, { environment: 'self-hosted', queue_s: (n + 1) * 60 }));
-  const hosted = [job('integration', 300, { queue_s: 9999 }), job('integration', 300, { queue_s: 9999 }), job('static', 30, { queue_s: 9999 })];
+  const hosted = [job('integration', 300, { queue_s: 9999 }), job('integration', 300, { queue_s: 9999 }), job('fast', 30, { queue_s: 9999 })];
   const text = section(report([...pc, ...hosted], { now, days: 7, runs: 12 }), 'PC queue');
   assert.match(text, /10 jobs on the PC waited 5\.0 min at p50, 9\.0 min at p90 and 10\.0 min at most\./);
   assert.match(text, /2 integration jobs ran on a GitHub-hosted runner instead\./);
@@ -118,7 +118,7 @@ test('a ledger with a wrong-shaped record and an oversized field still gives a r
   const good = testRecord('drags', 1500);
   const wrongShape = { ...testRecord('ghost', 1), name: { nested: true }, duration_ms: 'slow' };
   const oversized = { ...testRecord('x'.repeat(100000), 2500), file: 'tests/' + 'y'.repeat(100000) };
-  const text = [good, wrongShape, oversized, { kind: 'job', layer: 'static', duration_s: [] }, 'not json', '{"kind":"surprise"}']
+  const text = [good, wrongShape, oversized, { kind: 'job', layer: 'fast', duration_s: [] }, 'not json', '{"kind":"surprise"}']
     .map(line => (typeof line === 'string' ? line : JSON.stringify(line))).join('\n') + '\n';
   const { records, rejected } = readLedger(text);
   assert.equal(rejected, 4, 'the wrong-shaped test and job, the line that is not JSON and the unknown kind');

@@ -15,5 +15,16 @@
   "requestAnsweredDeclined": "{0} said no to {1} for now. Reason: «{2}» If you want to change the request and send it again, tell me here.",
   "cardAddedToBoard": "This card was added to the board under “In progress”",
   "onTheBoard": "On the board:",
-  "chatLoading": "Loading the chat"
+  "chatLoading": "Loading the chat",
+  "stepsUsedOne": "Used {0} tool",
+  "stepsUsedMany": "Used {0} tools",
+  "stepsSeconds": "{0} sec",
+  "stepsMinutes": "{0} min",
+  "stepsMinutesSeconds": "{0} {1}",
+  "stepDone": "Done",
+  "stepSkipped": "Skipped",
+  "stepsUsedTook": "{0} · {1}",
+  "stepLine": "{0} · {1}",
+  "stepsSecondsMany": "{0} sec",
+  "stepsMinutesMany": "{0} min"
 }
