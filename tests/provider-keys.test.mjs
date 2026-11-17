@@ -143,7 +143,8 @@ function sessions(fake,{owner,space=true,extra=[],logFails=false,unfinishedFails
   if(name==='record_provider_key_change') { logged.push(args); return logFails?{data:null,error:{code:'XX000',message:'the database is down'}}:{data:null,error:null}; }
   return {data:null,error:{message:'unexpected'}}; }};
  const key=encryptSecret('test-only-key',encryptionKey);
- const service={from:(...args)=>{ asked.push({name:'from',args}); return {select:()=>({eq:()=>({eq:()=>({maybeSingle:async()=>({data:{key_encrypted:key},error:null})})})})}; }};
+ const service={from:(...args)=>{ asked.push({name:'from',args}); return {select:()=>({eq:()=>({eq:()=>({maybeSingle:async()=>({data:{key_encrypted:key},error:null})})})})}; },
+  rpc:async(name,args)=>{ asked.push({name,args}); return {data:name==='finish_provider_key_change'?[]:null,error:null}; }};
  return {db,service,asked,logged};
 }
 // The fake's management listener is not on port 9119 of the run address, so the driver is pointed at it.

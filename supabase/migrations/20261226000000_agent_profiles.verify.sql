@@ -24,7 +24,7 @@ select json_build_object(
   and position('agent_profiles' in pg_get_functiondef('public.lead_create_agent'::regproc))>0
   and position('lead_agent_id' in pg_get_functiondef('public.lead_create_agent'::regproc))>0,
  'worker_only',(select bool_and(has_function_privilege('service_role',f,'execute') and not has_function_privilege('authenticated',f,'execute') and not has_function_privilege('anon',f,'execute'))
-  from unnest(array['public.lead_create_agent(uuid,text,text,text,text,text[],text,text,integer,integer)','public.lead_agent_profile(uuid,text,text,text)',
+  from unnest(array['public.lead_create_agent(uuid,text,text,text,text,text[],text,text,integer,integer,boolean)','public.lead_agent_profile(uuid,text,text,text)',
    'public.agent_profile_work()','public.begin_agent_tools(uuid)','public.record_agent_profile(uuid,text,integer,integer)']) f),
  'helpers_private',(select bool_and(not has_function_privilege(r,f,'execute')) from unnest(array['anon','authenticated','service_role']) r,
   unnest(array['public.lead_agent_id(uuid,text,text)','public.agent_engine_profile(uuid)','public.agent_profile_refusal(text,uuid,uuid)',
