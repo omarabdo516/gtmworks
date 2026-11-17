@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -32,7 +32,8 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const [folder, sha, runUrl, artifactUrl = ''] = process.argv.slice(2);
   const failed = [];
   const budgets = [];
-  for (const name of readdirSync(folder).filter(name => name.endsWith('.json') && name !== 'meta.json')) {
+  // A run that stopped before its tests (the renderer, the stack) wrote no report, and still gets its issue.
+  for (const name of (existsSync(folder) ? readdirSync(folder) : []).filter(name => name.endsWith('.json') && name !== 'meta.json')) {
     // ci.sh visual writes the navigation budgets to measured.json beside the screens' report.
     try { (name === 'measured.json' ? budgets : failed).push(...failedTests(JSON.parse(readFileSync(join(folder, name), 'utf8')))); } catch { /* an unreadable report names nothing */ }
   }

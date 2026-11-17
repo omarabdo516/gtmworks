@@ -57,3 +57,9 @@ test('a navigation budget that failed is named as a budget, not as a screen that
   assert.doesNotMatch(body, /differ from their approved images/);
 });
 
+
+test('a run that failed before writing any report still prints the issue', () => {
+  const body = execFileSync(process.execPath, [resolve('scripts/visual-regression.mjs'), join(tmpdir(), 'gtmworks-no-such-ledger'), 'abc', 'https://run', ''], { encoding: 'utf8' });
+  assert.match(body, /No screen comparison failed/);
+  assert.match(body, /https:\/\/run/);
+});
