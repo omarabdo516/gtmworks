@@ -50,6 +50,12 @@ test('a stack port held by another job is infrastructure, although a recovered r
   assert.match(result.evidence, /address already in use/);
 });
 
+test('a failed test whose own error is a 429, and a later step that hit a rate limit, are still your change', () => {
+  const text = log('constructed-test-failure-429');
+  assert.match(text, /429 Too Many Requests/);
+  assert.deepEqual(outcome(classify(text)), yourChange);
+});
+
 test('any other red is your change', () => {
   for (const job of ['database-133610408482', 'integration-133640016093', 'integration-133599861446']) {
     assert.deepEqual(outcome(classify(log(job))), yourChange, job);

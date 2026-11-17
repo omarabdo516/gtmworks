@@ -101,7 +101,10 @@ PY
   fi
   install_chromium
   dir=$(ledger_dir components)
-  npm run test:components -- ${SHARD:+--shard="$SHARD"} --reporter=default --reporter=json --outputFile.json="$dir/vitest.json"
+  # Naming the reporters replaces Vitest's own choice, so the GitHub one that marks failures on the pull request is named
+  # too when it runs there.
+  npm run test:components -- ${SHARD:+--shard="$SHARD"} --reporter=default ${GITHUB_ACTIONS:+--reporter=github-actions} \
+    --reporter=json --outputFile.json="$dir/vitest.json"
   ;;
  database)
   # Migrations replayed and verified, row-level security and grants, on lane 0's stack.
@@ -115,9 +118,8 @@ PY
     npx --no-install supabase db query --read-only --file "$file" -o json --agent no | node scripts/verify-db.mjs "$file" || status=$?
     database_record "$file" verify "$started" "$status"
   done
-  started=$(date +%s%N) status=0
-  npm run test:db || status=$?
-  database_record tests/db.sh test:db "$started" "$status"
+  # tests/db.sh writes one line per step of its own.
+  DB_LEDGER="$PWD/$dir/database.jsonl" npm run test:db
   ;;
  integration)
   if [[ "${CI:-}" == "true" ]]; then

@@ -1,31 +1,34 @@
 // Labels a red job (#256, spec #255 D12): infrastructure when the job ended on a known signature, else "your change".
-// A `fatal` cause counts only where the job ended: its `##[error]` lines and the lines before its exit. On 2026-11-16
-// every database job with `Rate exceeded` retried the pull, started and failed on pgTAP, so a whole-log search would
-// pass real failures off as infrastructure. A `job` cause counts anywhere: Chrome reports a network change only when the
-// host's network changes, which makes every failure in that job suspect (#241). A line of a printed JSON document is data
-// the job logged, not an event: a hosted job printed the pull request's body, which quoted the network change.
+// A `fatal` cause counts only where the job ended: the last lines the first failed step printed before its exit, leaving
+// out the failures a test reporter annotated there (a test may meet a 429 or a busy port on purpose) and every step after
+// it (an upload can hit its own rate limit). On 2026-11-16 every database job with `Rate exceeded` retried the pull,
+// started and failed on pgTAP, so a whole-log search would pass real failures off as infrastructure. A `job` cause counts
+// anywhere: Chrome reports a network change only when the host's network changes, which makes every failure in that job
+// suspect (#241), and only the runner prints its shutdown. A line of a printed JSON document is data the job logged, not
+// an event: a hosted job printed the pull request's body, which quoted the network change.
 const rules = [
-  { cause: 'registry rate limit', scope: 'fatal', pattern: /Rate exceeded|toomanyrequests|429 Too Many Requests/i },
+  { cause: 'registry rate limit', scope: 'fatal', pattern: /error from registry: Rate exceeded|toomanyrequests/i },
   { cause: 'network change', scope: 'job', pattern: /net::ERR_NETWORK_CHANGED/ },
-  { cause: 'runner shutdown', scope: 'fatal', pattern: /The runner has received a shutdown signal/ },
-  { cause: 'port in use', scope: 'fatal', pattern: /address already in use|port is already allocated|EADDRINUSE/ },
+  { cause: 'runner shutdown', scope: 'job', pattern: /##\[error\]The runner has received a shutdown signal/ },
+  { cause: 'port in use', scope: 'fatal', pattern: /address already in use|port is already allocated/ },
 ];
 const stamp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{7}Z /;
 const jsonField = /^\s*"[^"]+": "/;
-const before = 10;
+const before = 5;
 const width = 200;
 
 function fatalLines(lines) {
-  const keep = new Set();
-  lines.forEach((line, index) => {
-    if (line.includes('##[error]Process completed with exit code')) {
-      for (let n = Math.max(0, index - before); n < index; n++) keep.add(n);
-    }
+  const end = lines.findIndex(line => line.includes('##[error]Process completed with exit code'));
+  if (end < 0) return [];
+  const annotated = new Set();
+  lines.slice(0, end).forEach((line, index) => {
     if (!line.includes('##[error]')) return;
-    keep.add(index);
-    for (let n = index + 1; n < lines.length && !stamp.test(lines[n]); n++) keep.add(n);
+    annotated.add(index);
+    for (let n = index + 1; n < end && !stamp.test(lines[n]); n++) annotated.add(n);
   });
-  return [...keep].sort((a, b) => a - b).map(index => lines[index]);
+  const kept = [];
+  for (let n = end - 1; n >= 0 && kept.length < before; n--) if (!annotated.has(n)) kept.unshift(lines[n]);
+  return kept;
 }
 
 // A long line keeps the matched words: the cut starts shortly before them when they lie past the first 200 characters.
