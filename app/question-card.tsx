@@ -16,13 +16,13 @@ type Question=Extract<ReplyCard,{kind:'question'}>;
 // Sends a pick (its card, the choice's index and the card's one key on this page); null when it was taken, else the
 // refusal's message key.
 export type AnswerQuestion=(card:number,choice:number,answerKey:string)=>Promise<string|null>;
-const letters={ar:['أ','ب','ج','د'],en:['A','B','C','D']};
 // design-reference: justCls. The answered card settles only on the page where it was answered, within this long.
 const settling=900;
 
 export function QuestionCard({card,fresh,answer}:{card:Question,fresh:boolean,answer?:AnswerQuestion}) {
- const {t,language}=useI18n();
- const keys=language==='ar'?letters.ar:letters.en;
+ const {t}=useI18n();
+ // One letter per choice, in the interface's language (أ ب ج د, or A B C D).
+ const keys=Array.from(t('questionLetters'));
  const [answerKey]=useState(newId); const [picked,setPicked]=useState<number|null>(null); const [error,setError]=useState('');
  const lettered=card.choices.length>0&&!card.multiple;
  // A pick reads as answered at once; the record then confirms it, or shows the card closed.
