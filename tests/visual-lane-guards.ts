@@ -35,7 +35,19 @@ export async function expectDeterministic(page: Page) {
     const unquote = (family: string) => family.trim().replace(/^(["'])(.*)\1$/, '$2');
     const faces = [...document.fonts];
     const declared = new Set(faces.map(face => unquote(face.family)));
-    const found = new Set(faces.filter(face => face.status === 'error').map(face => `font "${unquote(face.family)}" ${face.weight} did not load`));
+    // A face whose every source is local() names a font the pinned image either has or lacks, the same on every run:
+    // next/font's metric-matched "<family> Fallback" faces point at Arial, which the image lacks.
+    const localOnly = new Set<string>();
+    for (const sheet of document.styleSheets) {
+      let rules: CSSRuleList;
+      try { rules = sheet.cssRules; } catch { continue; }
+      for (const rule of rules) {
+        if (!(rule instanceof CSSFontFaceRule)) continue;
+        const src = rule.style.getPropertyValue('src');
+        if (src && !/url\(/.test(src)) localOnly.add(unquote(rule.style.getPropertyValue('font-family')));
+      }
+    }
+    const found = new Set(faces.filter(face => face.status === 'error' && !localOnly.has(unquote(face.family))).map(face => `font "${unquote(face.family)}" ${face.weight} did not load`));
     // The generic families are the pinned image's own faces; any other family must be one the page declares.
     const generic = new Set(['serif', 'sans-serif', 'monospace', 'cursive', 'fantasy', 'system-ui', 'ui-serif', 'ui-sans-serif', 'ui-monospace', 'ui-rounded', 'math', 'emoji', 'fangsong']);
     const ranges = (face: FontFace) => face.unicodeRange.split(',').map(part => {
@@ -43,16 +55,18 @@ export async function expectDeterministic(page: Page) {
       return from.includes('?') ? [parseInt(from.replace(/\?/g, '0'), 16), parseInt(from.replace(/\?/g, 'F'), 16)] : [parseInt(from, 16), parseInt(to, 16)];
     });
     const covers = (face: FontFace, text: string) => [...text].some(char => !/\s/.test(char) && ranges(face).some(([from, to]) => char.codePointAt(0)! >= from && char.codePointAt(0)! <= to));
+    // A run of symbols alone (a close mark, an arrow) is drawn by the pinned image's own symbol face, the same every run.
+    const wordless = (text: string) => !/[\p{L}\p{N}]/u.test(text);
     for (const element of document.body.querySelectorAll('*')) {
       const text = [...element.childNodes].filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent).join('').trim();
-      if (!text || !element.checkVisibility()) continue;
+      if (!text || wordless(text) || !element.checkVisibility()) continue;
       const style = getComputedStyle(element);
       const family = unquote(style.fontFamily.split(',')[0]);
       if (generic.has(family)) continue;
       if (!declared.has(family)) found.add(`font "${family}" is not declared, so the text falls back to another face`);
       // check() also passes when every face of the family leaves the text out by its unicode-range.
       else if (!faces.some(face => unquote(face.family) === family && covers(face, text))) found.add(`font "${family}" covers none of "${text.slice(0, 40)}"`);
-      else if (!document.fonts.check(`${style.fontStyle} ${style.fontWeight} 16px "${family}"`, text)) found.add(`font "${family}" ${style.fontWeight} fell back`);
+      else if (!localOnly.has(family) && !document.fonts.check(`${style.fontStyle} ${style.fontWeight} 16px "${family}"`, text)) found.add(`font "${family}" ${style.fontWeight} fell back`);
     }
     return [...found];
   });

@@ -35,6 +35,16 @@ test('a request that leaves the machine is blocked and named', async ({ browser 
   await expect(expectDeterministic(page)).rejects.toThrow(/requests off the machine were blocked: https:\/\/fonts\.example\.com\/pixel\.png/);
 });
 
+test('a local-only face the machine lacks and a run of symbols alone are not named: the pinned image draws them alike', async ({ browser }) => {
+  const page = await pageOf(browser, `<style>
+    @font-face { font-family: "Body Fallback"; src: local("No Such Face Anywhere"); }
+    @font-face { font-family: "Latin Only"; src: local("DejaVu Sans"), local("Arial"); unicode-range: U+0000-00FF; }
+    p { font-family: "Body Fallback", sans-serif; } b { font-family: "Latin Only", sans-serif; }
+  </style><p>نص</p><b>✕</b>`);
+  await page.evaluate(() => document.fonts.load('16px "Body Fallback"', 'نص').catch(() => {}));
+  await expectDeterministic(page);
+});
+
 test('a font family no face declares is named', async ({ browser }) => {
   const page = await pageOf(browser, '<p style="font-family: \'Missing Face\', sans-serif">نص</p>');
   await expect(expectDeterministic(page)).rejects.toThrow(/font "Missing Face" is not declared/);
