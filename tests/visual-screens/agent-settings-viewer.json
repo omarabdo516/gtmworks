@@ -1,0 +1,8 @@
+{
+  "about": "An Agent's settings as the Viewer reads them (#175), opened from the gear beside a chat: Lead's page over Lead and Meta Ads as in made-agent, read only, with the line on who changes Agent settings and \"Back\" beside The job.",
+  "path": "/c/rs-learning/settings?agent=65000000-0000-0000-0000-000000000003",
+  "state": "lead-made",
+  "person": "viewer@example.com",
+  "dark": true,
+  "ready": "#sov-agent-panel .ro-note"
+}
