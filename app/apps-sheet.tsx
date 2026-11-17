@@ -58,13 +58,14 @@ export function AppsSheetProvider({company,owner,rtl,children}:{company:string,o
  const item=sheet.phase!=='closed'&&sheet.view?items?.find(entry=>entry.key===sheet.view):undefined;
  return <AppsContext.Provider value={{items,open}}>
   {children}
-  {/* Drawn only while open or leaving, so a page with the sheet closed holds no dialog. */}
-  {sheet.phase!=='closed'&&<dialog ref={box} className={`sheet apps-sheet${sheet.phase==='closing'?' is-closing':''}`} id="apps" aria-labelledby="apps-title"
+  {/* Drawn only while open or leaving, so a page with the sheet closed holds no dialog. It sits beside the frame, as the
+   reference's dialog#apps does, so it carries the shell's tokens (.gw) itself. */}
+  {sheet.phase!=='closed'&&<div className="gw" style={{display:'contents'}}><dialog ref={box} className={`sheet apps-sheet${sheet.phase==='closing'?' is-closing':''}`} id="apps" aria-labelledby="apps-title"
    onCancel={event=>{ if(event.cancelable) { event.preventDefault(); close(); } }} onClose={closed} onClick={event=>{ if(event.target===event.currentTarget) close(); }}>
    <div className="apps-inner">{item
     ?<AppDetail key={item.key} place={place} company={company} owner={owner} rtl={rtl} item={item} text={text} failed={false}/>
     :<AppsList place={place} owner={owner} items={items} text={text}/>}</div>
-  </dialog>}
+  </dialog></div>}
  </AppsContext.Provider>;
 }
 

@@ -125,6 +125,8 @@ test('Connect apps opens the sheet over a Conversation and over a channel, keeps
   await menu(page).getByRole('menuitem',{name:/^Connect apps/}).click();
   await expect(menu(page)).toHaveCount(0);
   await expect(sheet).toBeVisible();
+  // Docked at the inline end, as drawn from the sidebar: the sheet's own styles reach it beside the frame.
+  expect((await sheet.boundingBox())?.width).toBe(580);
   await expect(page.locator('#apps-q')).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(sheet).toHaveCount(0);
