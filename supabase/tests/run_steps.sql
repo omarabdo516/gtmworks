@@ -29,7 +29,7 @@ select results_eq($$select public.note_run_steps(('d4200000-0000-0000-0000-00000
 select results_eq($$select public.seal_run_steps(('d4200000-0000-0000-0000-00000000000'||n)::uuid,'steps-run-'||n,current_setting('test.steps')::jsonb,9,false,41) from generate_series(1,5) n$$,
  $$select true from generate_series(1,5)$$,'each Run''s steps are sealed when it closes');
 select results_eq($$select * from public.run_steps_progress('d4200000-0000-0000-0000-000000000003','steps-run-3')$$,
- $$select current_setting('test.steps')::jsonb,9,false,false,41,true$$,'the sealed steps are the ones read to the end, with the Run\'s length');
+ $$select current_setting('test.steps')::jsonb,9,false,false,41,true$$,'the sealed steps are the ones read to the end, with the Run''s length');
 
 -- A sealed row never changes again; a closed Run and a Run of another Conversation are refused.
 select is(public.note_run_steps('d4200000-0000-0000-0000-000000000003','steps-run-3',current_setting('test.other')::jsonb,20,true),false,'a follower late after the seal is refused');
@@ -48,7 +48,7 @@ select results_eq($$select run_id,steps,read_to,broken,seconds,sealed_at is not 
  'the sealed row is unchanged, the closed and foreign runs have none, and the earlier read changed nothing');
 -- A follower that read the Run's end keeps it with the Run's length; a later read that went less far forgets neither.
 set local role service_role;
-select is(public.note_run_steps('d4200000-0000-0000-0000-000000000003','steps-run-7',current_setting('test.steps')::jsonb,14,false,true,7),true,'the follower keeps the Run\'s end and length');
+select is(public.note_run_steps('d4200000-0000-0000-0000-000000000003','steps-run-7',current_setting('test.steps')::jsonb,14,false,true,7),true,'the follower keeps the Run''s end and length');
 select is(public.note_run_steps('d4200000-0000-0000-0000-000000000003','steps-run-7',current_setting('test.other')::jsonb,13,false),true,'a read that went less far is taken');
 select results_eq($$select read_to,broken,ended,seconds,sealed from public.run_steps_progress('d4200000-0000-0000-0000-000000000003','steps-run-7')$$,
  $$values (14,true,true,7,false)$$,'the end, the length and the loss are kept');
