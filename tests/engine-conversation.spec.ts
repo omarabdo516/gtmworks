@@ -554,6 +554,82 @@ test('integration: an Agent\'s question is answered once by its person, by a pic
  } finally { detach(); }
 });
 
+// #163: an Agent's Run stops to ask before an action; the fake engine scripts the request and gives its reply the choice.
+// The page's own reads find the Agent's Connection unreachable, so the fake engine's closer delivers what the card claimed.
+test('integration: a Contributor allows one request once and refuses another from the card, each delivered once and logged, the card keeps its outcome and time after a reload, and a Viewer sees the wait line',async({page})=>{
+ test.setTimeout(180000);
+ const fake=fakeEngine(); const {agent,detach}=attachAgent();
+ const asked:Record<string,string>={'Clean up the exports':'delete the old exports','Clean up the backups':'delete the old backups','Clean up the drafts':'delete the old drafts'};
+ fake.settings.permissions=input=>Object.hasOwn(asked,input)?[{description:asked[input],command:`rm -r /srv/${input.split(' ').at(-1)}`}]:[];
+ fake.settings.reply=(input,_answers,choices)=>`Reply to: ${input} (${choices.join(', ')})`;
+ const reviewer='20000000-0000-0000-0000-000000000003';
+ const role=(value:'contributor'|'viewer')=>query(`update public.members set role='${value}' where company_id='${company}' and person_id='${reviewer}'`);
+ try {
+  const {service,person}=await memberClient('reviewer@example.com');
+  const conversation=randomUUID();
+  const close=()=>closeOpenRuns(service,{encryptionKey,conversation,engineFor:fake.engineFor});
+  const send=async(message:string)=>{
+   expect(await sendMessage(person,service,{person:reviewer,company,conversation,sendKey:randomUUID(),agent,message,encryptionKey,engineFor:fake.engineFor})).toEqual({conversation});
+   expect(await close()).toBe(0);
+  };
+  const cards=()=>JSON.parse(query(`select title,content,state,decided_by,decided_at from public.reply_cards where conversation_id='${conversation}' and kind='permission' order by id`));
+  // The Run waits on its request: kept as an open card, and the Run stays open. The Agent is on a profile it shares, so
+  // the Engine's always is not kept.
+  await send('Clean up the exports');
+  expect(cards()).toEqual([{title:'delete the old exports',content:{description:'delete the old exports',command:'rm -r /srv/exports',choices:['once','deny']},state:'open',decided_by:null,decided_at:null}]);
+
+  await page.setViewportSize({width:1440,height:900});
+  await signIn(page,'reviewer@example.com',`/c/rs-learning/conversations/${conversation}`);
+  const exports=page.getByRole('group',{name:'Approval request: delete the old exports'});
+  await expect(exports.getByRole('button')).toHaveText(['Don’t allow','Allow once']);
+  await expect(exports.locator('.kv__row')).toHaveText('Commandrm -r /srv/exports');
+  await expect(page.locator('.convo-status')).toHaveText('Faye is working on a reply…');
+  await exports.getByRole('button',{name:'Allow once'}).click();
+  const outcome=exports.locator('.card__outcome');
+  await expect(outcome).toHaveText(/^Allowed once · \S/);
+  await expect(exports.getByRole('button')).toHaveCount(0);
+  const allowed=await outcome.textContent();
+  const [claimed]=cards();
+  expect([claimed.state,claimed.content.choice,claimed.decided_by]).toEqual(['sending','once',reviewer]);
+  expect(fake.permits).toEqual([]);
+
+  // The closer delivers the choice once to the same Run, which goes on to its reply under the card.
+  expect(await close()).toBe(0);
+  expect(await close()).toBe(1);
+  expect(fake.permits).toEqual([{run:fake.runs[0].id,permission:`${fake.runs[0].id}_p1`,choice:'once'}]);
+  expect(fake.runs).toHaveLength(1);
+  expect(agentRows(conversation)).toEqual([{body:'Reply to: Clean up the exports (once)'}]);
+  await page.reload();
+  await expect(outcome).toHaveText(allowed!);
+  expect(new Date((await outcome.locator('time').getAttribute('datetime'))!).getTime()).toBe(new Date(cards()[0].decided_at).getTime());
+  await expect(page.locator('.turns > li').last()).toContainText('Reply to: Clean up the exports (once)');
+
+  // The next request is refused from its card.
+  await send('Clean up the backups');
+  await page.reload();
+  const backups=page.getByRole('group',{name:'Approval request: delete the old backups'});
+  await backups.getByRole('button',{name:'Don’t allow'}).click();
+  await expect(backups.locator('.card__outcome')).toHaveText(/^Not allowed · \S/);
+  expect(await close()).toBe(0);
+  expect(await close()).toBe(1);
+  expect(agentRows(conversation).at(-1)).toEqual({body:'Reply to: Clean up the backups (deny)'});
+
+  // Each decision is logged once, as the person who decided, privately: from "Waiting for OK" to the outcome.
+  const logged=(await person.from('company_log').select('actor_id,actor_kind,subject,agent_id,action,details').eq('action','agent_permission_decided').eq('agent_id',agent).order('id')).data!;
+  expect(logged).toEqual([['delete the old exports','once'],['delete the old backups','deny']].map(([text,choice])=>({actor_id:reviewer,actor_kind:'person',subject:'agent',agent_id:agent,action:'agent_permission_decided',details:{permission:{text,choice},private:true,teller:reviewer}})));
+  const words=(row:Parameters<typeof describeEntry>[0])=>{ const line=describeEntry(row,{agentName:()=>'Faye'}); const {t}=i18n('en'); return [t(line.act[0],...line.act.slice(1).map(part=>typeof part==='object'&&part&&'text' in part?part.text:part)),line.obj,line.from,line.to].map(part=>typeof part==='object'&&part&&'key' in part?t(part.key):part); };
+  expect(logged.map(words)).toEqual([['approved Faye’s request','delete the old exports','Waiting for OK','Allowed once'],['refused Faye’s request','delete the old backups','Waiting for OK','Not allowed']]);
+
+  // A Viewer (a Member made one after asking) sees the wait line and no button.
+  await send('Clean up the drafts');
+  role('viewer');
+  await page.reload();
+  const drafts=page.getByRole('group',{name:'Approval request: delete the old drafts'});
+  await expect(drafts.locator('.card__outcome')).toHaveText('Waiting for someone on the team to approve');
+  await expect(drafts.getByRole('button')).toHaveCount(0);
+ } finally { role('contributor'); detach(); }
+});
+
 test('integration: Lead makes an Agent from each ready-made role, fitted with the Company\'s name, and runs to it carry the role',async()=>{
  test.setTimeout(120000);
  const {profile,lead}=bundledLead();
