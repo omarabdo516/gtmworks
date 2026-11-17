@@ -178,7 +178,7 @@ test('a pull request starts no compared-screen job, and check needs none of them
   const { load } = await import('js-yaml');
   const { readFileSync } = await import('node:fs');
   const { jobs } = load(readFileSync('.github/workflows/ci.yml', 'utf8'));
-  const screenJobs = ['visual', 'lane', 'lane-proof', 'lane-proof-compare'];
+  const screenJobs = ['visual', 'lane-proof', 'lane-proof-compare'];
   for (const name of screenJobs) {
     assert.ok(jobs[name], name);
     const condition = jobs[name].if ?? '';

@@ -1,7 +1,0 @@
-{
-  "about": "The account menu moved through with the keyboard (#173): opened on the chosen language, Arrow Down puts the focus on the next entry, which shows its focus ring.",
-  "path": "/c/rs-learning/chat",
-  "dark": true,
-  "ready": ".chat",
-  "act": "account-menu-keys"
-}

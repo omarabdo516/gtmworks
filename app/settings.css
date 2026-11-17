@@ -233,9 +233,6 @@
 .gw .sov .know-page__top .btn { --od-icon-size: 15px; }
 .gw .sov .know-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); }
 .gw .sov .know-meta .me__av { width: 20px; height: 20px; font-size: 10px; }
-.gw .sov .fstack { display: inline-flex; align-items: center; flex: none; }
-.gw .sov .fstack .agent-face { border-radius: 50%; box-shadow: 0 0 0 2px var(--gw-bg-pane); }
-.gw .sov .fstack .agent-face + .agent-face { margin-inline-start: -5px; }
 .gw .sov .know-body { display: grid; gap: var(--s2); padding-top: var(--s3); border-top: 0.5px solid var(--gw-border-2); font-size: var(--gw-fs-msg); line-height: 1.7; color: var(--gw-text-1); overflow-wrap: anywhere; }
 .gw .sov .know-ul { margin: 0; padding-inline-start: var(--s5); display: grid; gap: var(--s1); list-style: disc; }
 .gw .sov .know-empty { padding: var(--s3) 0 0; border-top: 0.5px solid var(--gw-border-2); }

@@ -174,6 +174,6 @@ test('every test runner loads the guard, and every browser spec but the compared
   assert.match(read('vitest.config.mts'), /proxy: nowhere/);
   for (const config of ['playwright.config.ts', 'playwright.proxy.config.ts']) assert.match(read(config), /globalTeardown: join\(__dirname, 'tests\/offline-teardown\.ts'\)/, config);
   assert.match(read('tests/fresh-seed.ts'), /from '\.\/offline-browser'/);
-  const specs = globSync('tests/**/*.spec.ts').filter(path => path !== 'tests/visual.spec.ts' && !/^tests\/visual-lane[^/]*\.spec\.ts$/.test(path));
+  const specs = globSync('tests/**/*.spec.ts').filter(path => !/^tests\/visual-lane[^/]*\.spec\.ts$/.test(path));
   assert.deepEqual(specs.filter(path => !/import \{[^}]*\btest\b[^}]*\} from '\.\.?\/(fresh-seed|offline-browser)'/.test(read(path))), []);
 });

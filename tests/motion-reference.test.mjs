@@ -2,8 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { cssOf, easing, milliseconds, keyframeFile, motionOf, productFiles, productStyles, readSheet, referenceFile, referenceStyles, tokenFile } from './motion-css.mjs';
-import { builtToken, motionTable, motionTokens, sharedKeyframes } from './motion-table.mjs';
-import { widths } from './visual-screens.mjs';
+import { builtToken, motionTable, motionTokens, sharedKeyframes, widths } from './motion-table.mjs';
 
 const reference = referenceStyles();
 const product = productStyles(tokenFile);

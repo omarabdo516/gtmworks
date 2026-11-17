@@ -89,15 +89,15 @@ test('a workflow a pull request starts reads no secret but GITHUB_TOKEN', () => 
  }
 });
 
-// The local Supabase stack starts through ci.sh (database, images, integration, visual, visual-update, lane, lane-update,
-// lane-proof) or scripts/local-db.sh.
-const startsSupabase = step => /\bci\.sh\b.*\b(database|images|integration|visual|visual-update|lane|lane-update|lane-proof)\b|\blocal-db\.sh\b/.test(step.run ?? '');
+// The local Supabase stack starts through ci.sh (database, images, integration, visual, visual-update, lane-proof) or
+// scripts/local-db.sh.
+const startsSupabase = step => /\bci\.sh\b.*\b(database|images|integration|visual|visual-update|lane-proof)\b|\blocal-db\.sh\b/.test(step.run ?? '');
 const condition = step => String(step.if ?? '').replace(/^\$\{\{\s*|\s*\}\}$/g, '');
 const supabaseJobs = jobs.filter(({ job }) => (job.steps ?? []).some(startsSupabase));
 const label = ({ path, name }) => `${path} ${name}`;
 
 test('the jobs that start the local Supabase stack are found', () => {
- for (const name of [`${dir}/ci.yml database`, `${dir}/ci.yml integration`, `${dir}/ci.yml lane`, `${dir}/ci.yml lane-proof`, `${dir}/visual-baselines.yml update`]) {
+ for (const name of [`${dir}/ci.yml database`, `${dir}/ci.yml integration`, `${dir}/ci.yml visual`, `${dir}/ci.yml lane-proof`, `${dir}/visual-baselines.yml update`]) {
   assert.ok(supabaseJobs.map(label).includes(name), name);
  }
 });
