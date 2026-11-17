@@ -120,11 +120,11 @@ test('a matrix job is read as its layer', () => {
 });
 
 const areaRule = 'no changed file is in its area (scripts/ci-areas.mjs)';
-const docsOnly = { components: 'false', database: 'false', integration: 'false', install: 'false', lane: 'false' };
+const docsOnly = { components: 'false', database: 'false', integration: 'false', install: 'false' };
 
 test('a documents-only pull request names the area rule for every long layer it skipped', () => {
   for (const layer of ['database', 'integration', 'install']) assert.equal(skipReason(layer, docsOnly, 'pull_request'), areaRule, layer);
-  for (const layer of ['visual', 'lane']) assert.equal(skipReason(layer, docsOnly, 'pull_request'), 'compared screens run on main and manual runs only (#257)', layer);
+  assert.equal(skipReason('visual', docsOnly, 'pull_request'), 'compared screens run on main and manual runs only (#257)');
 });
 
 test('screens alone, a push, a manual run and a cancelled run each give their own reason', () => {
@@ -147,7 +147,7 @@ test('the summary has a row per layer with its reason, marks a layer over budget
     job('changes', 'changes', 'success'),
     job('fast', 'fast', 'success', { duration_s: 114, budget_s: 90 }),
     job('database', 'database', 'failure', { budget_s: 180, classification: { label: 'infrastructure', cause: 'port in use', evidence: 'failed to bind host port 0.0.0.0:54322/tcp: address already in use' } }),
-    job('visual', 'visual', 'skipped', { skip_reason: areaRule, budget_s: 300 }),
+    job('visual', 'visual', 'skipped', { skip_reason: areaRule, budget_s: 540 }),
     job('integration', 'integration', 'failure', { budget_s: 720, classification: { label: 'your change', cause: null, evidence: null } }),
     job('check', 'check', 'success'),
   ];

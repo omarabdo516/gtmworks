@@ -1,8 +1,6 @@
-# Updates the approved screen images in the CI environment (#103). Run it from the Actions tab (or
-# `gh workflow run visual-baselines.yml --ref <branch>`), download the `visual-baselines` artifact and commit the
-# images it contains with the change that caused them. It runs the same command as `./ci.sh visual-update`. It also
-# refreshes the visual lane's images with `./ci.sh lane-update` (#257), for a fork or a machine without Docker: download
-# the `lane-baselines` artifact into tests/visual-lane/images/.
+# Refreshes the visual lane's approved images (#257) in CI, for a machine without Docker. Run it from the Actions tab (or
+# `gh workflow run visual-baselines.yml --ref <branch>`), download the `visual-baselines` artifact into
+# tests/visual-lane/images/ and commit the images with the change that caused them. It runs `./ci.sh visual-update`.
 name: Visual baselines
 on:
   workflow_dispatch:
@@ -25,16 +23,14 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - name: update the approved images
+      - name: update the lane's images
         run: ./ci.sh visual-update
-      - name: list what changed
-        if: always()
-        run: git status --short --untracked-files=all -- tests/visual.spec.ts-snapshots
       - name: collect the changed images
         if: always()
         run: |
           mkdir -p visual-baselines
-          git ls-files --modified --others --exclude-standard -z -- 'tests/visual.spec.ts-snapshots/*.png' |
+          git status --short --untracked-files=all -- tests/visual-lane/images
+          git ls-files --modified --others --exclude-standard -z -- 'tests/visual-lane/images/*.png' |
             while IFS= read -r -d '' image; do
               if [[ -f "$image" ]]; then cp -- "$image" visual-baselines/; fi
             done
@@ -46,40 +42,14 @@ jobs:
           path: visual-baselines/
           if-no-files-found: ignore
           retention-days: 14
-
-  # The visual lane's images, drawn by its pinned renderer (#257), beside the old screens' job.
-  lane:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - name: reserve the stack's ports
-        if: ${{ runner.environment == 'github-hosted' }}
-        run: |
-          sudo sysctl -w net.ipv4.ip_local_reserved_ports="$(node scripts/ci-runner.mjs reserved-ports)"
-          sysctl net.ipv4.ip_local_reserved_ports
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - name: update the lane's images
-        run: ./ci.sh lane-update
-      - name: collect the lane's changed images
-        if: always()
-        run: |
-          mkdir -p lane-baselines
-          git status --short --untracked-files=all -- tests/visual-lane/images
-          git ls-files --modified --others --exclude-standard -z -- 'tests/visual-lane/images/*.png' |
-            while IFS= read -r -d '' image; do
-              if [[ -f "$image" ]]; then cp -- "$image" lane-baselines/; fi
-            done
-      - name: upload the lane's changed images
-        if: always()
+      # A failed refresh keeps its pictures and the guards' reasons.
+      - name: upload the lane's results
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: lane-baselines
-          path: lane-baselines/
+          name: lane-results
+          path: |
+            test-results/lane/
+            playwright-report/lane-html/
           if-no-files-found: ignore
-          retention-days: 14
+          retention-days: 7

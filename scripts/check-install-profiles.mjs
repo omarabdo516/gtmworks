@@ -11,7 +11,8 @@
 //     Then a Contributor's suggestion the Owner approves lands in the first company's shared Skill "team-lessons"
 //     (#122): each of its Agent profiles reads only its company's shared folder and holds the Skill locked, the next run
 //     of each of its Agents carries the lesson and the second company's does not, and a run whose model tries to change
-//     the Skill is refused by the Engine and leaves it as it was. Then a fake key for a provider the Engine catalogues is
+//     the Skill is refused by the Engine and leaves it as it was; that Run's events show the call's start and end, and its
+//     one step is kept with the reply, failed, for the Conversation's person to read (#141). Then a fake key for a provider the Engine catalogues is
 //     set through the driver (#124): it is set in the first company's space and the moved Agent's profile, in none of
 //     the second company's, and removed from both again.
 // The companies and their Owners' sign-in are kept between the steps in a file of this container only.
@@ -178,9 +179,24 @@ if(step==='prepare') {
   assert.deepEqual(lessons,[true,true,false]);
 
   // A Run whose model rewrites the Skill with the Agent's own tool is refused by the Engine, and the Skill stays.
-  await ask(first,person,made.agent,own,trigger);
+  const refused=await ask(first,person,made.agent,own,trigger);
   assert.ok(toolResults.some(result=>result.includes('"success": false')&&result.includes('locked')),JSON.stringify(toolResults));
   assert.equal(await skill(spaceOf(first)),written,'team-lessons is unchanged');
+  // That Run's events, as the pinned Engine streams them with the profile's key (#141), trimmed to the tool events, and
+  // its one tool call kept with the reply and read by the Conversation's person: skill_manage, failed (drawn Skipped).
+  const [{run_id:refusedRun}]=await checked(person.from('conversation_messages').select('run_id').eq('conversation_id',refused.conversation).eq('author','person'));
+  const streamed=await fetch(`http://hermes:8642/p/${own}/v1/runs/${encodeURIComponent(refusedRun)}/events`,{headers:{Authorization:`Bearer ${key}`,Accept:'text/event-stream'},signal:AbortSignal.timeout(10000)});
+  assert.equal(streamed.status,200,'the Run\'s events are read with the profile\'s key');
+  const frames=(await streamed.text()).split('\n\n');
+  console.log(`GET /p/<profile>/v1/runs/<run>/events -> ${streamed.status} ${streamed.headers.get('content-type')}`);
+  for(const frame of frames) if(/"event": ?"(tool\.|run\.)/.test(frame)||frame.startsWith(':')) console.log(frame.replace(/"(run_id|tool_call_id)": ?"[^"]*"/g,'"$1": "…"'));
+  assert.ok(frames.some(frame=>frame.includes('tool.started')&&frame.includes('skill_manage')),'the Engine streams the call\'s start');
+  assert.ok(frames.some(frame=>frame.includes('tool.completed')&&frame.includes('skill_manage')),'the Engine streams the call\'s end');
+  const [kept]=await checked(person.from('conversation_run_steps').select('steps,seconds,sealed_at,broken').eq('conversation_id',refused.conversation));
+  assert.ok(kept?.sealed_at&&!kept.broken,JSON.stringify(kept));
+  assert.deepEqual(kept.steps.map(({tool,state})=>({tool,state})),[{tool:'skill_manage',state:'failed'}],JSON.stringify(kept.steps));
+  assert.ok(Number.isInteger(kept.seconds)&&kept.seconds>=0,`the Run's length is known: ${kept.seconds}`);
+  console.log(JSON.stringify({steps:kept.steps.map(({tool,preview,state})=>({tool,preview,state})),seconds:kept.seconds}));
 
   // The model the key brings is not checked: the Engine's model catalogue may be offline.
   const {readProviderKeys,setProviderKey,removeProviderKey}=await import(`${process.cwd()}/lib/hermes.mjs`);

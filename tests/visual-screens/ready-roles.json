@@ -1,7 +1,0 @@
-{
-  "about": "The ready-made gallery (#14) over new-agent's chat, where the link in its hint line leads.",
-  "path": "/c/rs-learning/chat?new=ready",
-  "state": "lead-made",
-  "dark": true,
-  "ready": ".modal .tpl"
-}

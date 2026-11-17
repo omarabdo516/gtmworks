@@ -5,8 +5,8 @@ import { join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 
 // The real playwright.config.ts runs in a sandbox with stand-in specs and no web server, so the order and the
-// skip rules of its two projects are observed through Playwright itself, as CI runs them (CI=true: one retry).
-function sandbox(t, { visual, functional, firstRun = true, measured }) {
+// skip rules of its projects (functional, then measured alone, then first run) are observed through Playwright itself, as CI runs them (CI=true: one retry).
+function sandbox(t, { functional, firstRun = true, measured }) {
  const output = resolve('test-results');
  mkdirSync(output, { recursive: true });
  const dir = mkdtempSync(join(output, 'projects-'));
@@ -24,7 +24,6 @@ export default { ...base, webServer: undefined, reporter: [['json', { outputFile
 test('${name} first', async () => { await new Promise(r => setTimeout(r, 30)); expect(${passes}).toBe(true); });
 test('${name} second', async () => { await new Promise(r => setTimeout(r, 30)); });
 `;
- writeFileSync(join(dir, 'tests/visual.spec.ts'), spec('screen', visual));
  writeFileSync(join(dir, 'tests/board.spec.ts'), spec('board', functional));
  writeFileSync(join(dir, 'tests/first-run.spec.ts'), spec('empty install', firstRun));
  if (measured !== undefined) writeFileSync(join(dir, 'tests/navigation.spec.ts'), spec('navigation budget', measured));
@@ -32,10 +31,10 @@ test('${name} second', async () => { await new Promise(r => setTimeout(r, 30)); 
 }
 
 // `npm` runs the package scripts itself: `npx npm` would download npm from the registry (#266).
-const run = async (dir, args) => {
+const run = async (dir, args, env = {}) => {
  // Playwright's own CLI straight from node, as scripts/check-test-discovery.mjs runs it; npm scripts through npm.
  const [command, ...rest] = args[0] === 'playwright' ? [process.execPath, resolve('node_modules/@playwright/test/cli.js'), ...args.slice(1)] : args;
- const child = spawn(command, rest, { cwd: dir, timeout: 60000, env: { ...process.env, CI: 'true', NODE_TEST_CONTEXT: undefined } });
+ const child = spawn(command, rest, { cwd: dir, timeout: 60000, env: { ...process.env, CI: 'true', NODE_TEST_CONTEXT: undefined, GTMWORKS_HOSTED_ELSEWHERE: undefined, ...env } });
  let output = '';
  child.stdout.on('data', chunk => { output += chunk; });
  child.stderr.on('data', chunk => { output += chunk; });
@@ -61,63 +60,57 @@ const run = async (dir, args) => {
 // Each case has a sandbox of its own, so three run at a time beside the other fast steps; each still reads the order
 // inside its own run.
 describe('the Playwright projects', { concurrency: 3 }, () => {
- test('a failed screen comparison does not skip the functional tests, and both failures are reported', async t => {
-  const dir = sandbox(t, { visual: false, functional: false });
-  const { status, results, output } = await run(dir, ['playwright', 'test']);
-  assert.notEqual(status, 0, output);
-  const failed = results.filter(r => r.status === 'failed').map(r => `${r.project} ${r.title}`);
-  assert.ok(failed.includes('visual screen first'), output);
-  assert.ok(failed.includes('functional board first'), output);
-  assert.ok(results.some(r => r.project === 'functional' && r.title === 'board second' && r.status === 'passed'), output);
- });
-
  const ends = (results, project) => Math.max(...results.filter(r => r.project === project).map(r => r.end));
  const starts = (results, project) => Math.min(...results.filter(r => r.project === project).map(r => r.start));
  const count = (results, project) => results.filter(r => r.project === project).length;
 
- test('every screen comparison, its retry included, ends before the first functional test starts', async t => {
-  const dir = sandbox(t, { visual: false, functional: true });
-  const { status, results, output } = await run(dir, ['playwright', 'test']);
+ test('a failed functional test skips nothing after it: measured and first run still run, and the run fails', async t => {
+  const { status, results, output } = await run(sandbox(t, { functional: false, measured: true }), ['playwright', 'test']);
   assert.notEqual(status, 0, output);
-  assert.equal(count(results, 'visual'), 3, output); // the failing comparison ran twice: CI retries once
-  assert.equal(count(results, 'functional'), 2, output);
-  assert.ok(ends(results, 'visual') <= starts(results, 'functional'), output);
+  assert.ok(results.some(r => r.project === 'functional' && r.title === 'board first' && r.status === 'failed'), output);
+  assert.ok(results.some(r => r.project === 'functional' && r.title === 'board second' && r.status === 'passed'), output);
+  assert.equal(count(results, 'measured'), 2, output);
+  assert.equal(count(results, 'first-run'), 2, output);
  });
 
  test('the empty-install tests run last, after every functional test and retry, also when one failed', async t => {
-  const dir = sandbox(t, { visual: true, functional: false });
+  const dir = sandbox(t, { functional: false });
   const { status, results, output } = await run(dir, ['playwright', 'test']);
   assert.notEqual(status, 0, output);
-  assert.equal(count(results, 'functional'), 3, output);
+  assert.equal(count(results, 'functional'), 3, output); // the failing test ran twice: CI retries once
   assert.equal(count(results, 'first-run'), 2, output);
-  assert.ok(ends(results, 'visual') <= starts(results, 'functional'), output);
   assert.ok(ends(results, 'functional') <= starts(results, 'first-run'), output);
  });
 
  test('the run passes only when every group passes', async t => {
-  const green = await run(sandbox(t, { visual: true, functional: true }), ['playwright', 'test']);
+  const green = await run(sandbox(t, { functional: true, measured: true }), ['playwright', 'test']);
   assert.equal(green.status, 0, green.output);
   assert.equal(green.results.length, 6, green.output);
-  assert.notEqual((await run(sandbox(t, { visual: true, functional: false }), ['playwright', 'test'])).status, 0);
-  assert.notEqual((await run(sandbox(t, { visual: true, functional: true, firstRun: false }), ['playwright', 'test'])).status, 0);
+  assert.notEqual((await run(sandbox(t, { functional: false }), ['playwright', 'test'])).status, 0);
+  assert.notEqual((await run(sandbox(t, { functional: true, firstRun: false }), ['playwright', 'test'])).status, 0);
  });
 
- test('the screen-only commands run only screens, and one project alone runs only itself', async t => {
-  const dir = sandbox(t, { visual: true, functional: true });
-  for (const script of ['test:visual', 'test:visual:update']) {
-   const { status, results, output } = await run(dir, ['npm', 'run', script]);
-   assert.equal(status, 0, output);
-   assert.deepEqual([...new Set(results.map(r => r.project))], ['visual'], `${script}: ${output}`);
-  }
+ test('one project alone runs only itself', async t => {
+  const dir = sandbox(t, { functional: true, measured: true });
   for (const project of ['functional', 'first-run']) {
    const { results, output } = await run(dir, ['playwright', 'test', `--project=${project}`]);
    assert.deepEqual([...new Set(results.map(r => r.project))], [project], output);
   }
+  const { results, output } = await run(dir, ['playwright', 'test', '--project=measured', '--no-deps']);
+  assert.deepEqual([...new Set(results.map(r => r.project))], ['measured'], output);
+ });
+
+ test('the measured budgets are left empty where they run elsewhere, and the other groups keep their order', async t => {
+  const dir = sandbox(t, { functional: true, measured: true });
+  const { status, results, output } = await run(dir, ['playwright', 'test'], { GTMWORKS_HOSTED_ELSEWHERE: 'true' });
+  assert.equal(status, 0, output);
+  assert.equal(count(results, 'measured'), 0, output);
+  assert.ok(ends(results, 'functional') <= starts(results, 'first-run'), output);
  });
 
  test('the navigation time budgets run alone after every functional test and before first run, and hide no failure', async t => {
   for (const [functional, measured] of [[true, true], [false, true], [true, false]]) {
-   const { status, results, output } = await run(sandbox(t, { visual: true, functional, measured }), ['playwright', 'test']);
+   const { status, results, output } = await run(sandbox(t, { functional, measured }), ['playwright', 'test']);
    assert.equal(status === 0, functional && measured, output);
    assert.equal(count(results, 'measured'), measured ? 2 : 3, output); // a failing budget ran twice: CI retries once
    assert.equal(count(results, 'first-run'), 2, output);

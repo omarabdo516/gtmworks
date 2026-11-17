@@ -1,8 +1,0 @@
-{
-  "about": "\"N\" pressed on the board (#173) opens the new chat with its composer focused. RS Learning has Agents here (state visibility), so the chat has a composer.",
-  "path": "/c/rs-learning/work/board",
-  "state": "visibility",
-  "dark": true,
-  "ready": ".board",
-  "act": "new-chat-key"
-}
