@@ -63,3 +63,46 @@ test('the Owner shows an Agent to a Member, who then sees it while a hidden one 
   await expect(member.locator('.sidebar .agent-tile:not(.agent-tile--new) .agent-tile__name')).toHaveText(['Lead']);
  } finally { await context.close(); }
 });
+
+// #190: the board's chips and Cards follow the same switches. Meta Ads is shown to the Contributor again, SEO to
+// nobody; SEO, then Meta Ads, wrote on the Meta Ads Card. The board's read itself is proven in supabase/tests/board_cards.sql.
+test('the board shows a Member chips and Cards of the Agents they see only, and a Viewer filters by them too',async({page,browser})=>{
+ query(`do $$ declare stage bigint; card bigint; begin
+  update public.people set language='en' where id='20000000-0000-0000-0000-000000000004';
+  insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','20000000-0000-0000-0000-000000000003','${ads}') on conflict do nothing;
+  select id into stage from public.work_stages where company_id='${company}' and board_column='ideas' order by position limit 1;
+  insert into public.work_cards(company_id,stage_id,title,channel,agent_id) values
+   ('${company}',stage,'Lead plans the month','Instagram','${lead}'),('${company}',stage,'SEO drafts the blog','Blog','${seo}');
+  insert into public.work_cards(company_id,stage_id,title,channel,agent_id) values ('${company}',stage,'Ads runs the launch','Meta','${ads}') returning id into card;
+  insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,card_id,agent_id,action,body,source,source_id,created_at) values
+   ('${company}','${seo}','agent','SEO','card',card,'${seo}','note_reply','Keywords','note_runs',9190101,now()-interval '2 hours'),
+   ('${company}','${ads}','agent','Meta Ads','card',card,'${ads}','note_reply','Audience','note_runs',9190102,now()-interval '1 hour');
+ end $$;`);
+ const chips=(on:typeof page)=>on.getByRole('group',{name:'Filter by agent'}).getByRole('button');
+ const card=(on:typeof page,title:string)=>on.locator('#board-cols .kcard').filter({hasText:title});
+
+ await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ await expect(chips(page)).toHaveText(['All','Lead','Meta Ads','SEO']);
+ await expect(card(page,'Ads runs the launch').locator('.kcard__crew-t')).toHaveText('Worked on it: SEO, Meta Ads');
+ await expect(page.getByRole('link',{name:'Ads runs the launch · Worked on it: SEO, Meta Ads',exact:true})).toBeVisible();
+ await expect(card(page,'Lead plans the month').locator('.kcard__crew')).toHaveCount(0);
+
+ for(const [email,seen] of [['reviewer@example.com',['All','Lead','Meta Ads']],['viewer@example.com',['All','Lead']]] as [string,string[]][]) {
+  const context=await browser.newContext(); const member=await context.newPage();
+  try {
+   await signIn(member,email,'/c/rs-learning/work/board');
+   await expect(chips(member)).toHaveText(seen);
+   await expect(card(member,'Lead plans the month')).toHaveCount(1);
+   await expect(card(member,'SEO drafts the blog')).toHaveCount(0);
+   await expect(card(member,'Ads runs the launch')).toHaveCount(seen.includes('Meta Ads')?1:0);
+   await expect(card(member,'Ads runs the launch').locator('.kcard__crew')).toHaveCount(0);
+   const leadChip=chips(member).filter({hasText:'Lead'});
+   await leadChip.click();
+   await expect(leadChip).toHaveAttribute('aria-pressed','true');
+   await expect(leadChip).toBeFocused();
+   await expect(member.locator('#board-cols .kcard')).toHaveText([/Lead plans the month/]);
+   await chips(member).filter({hasText:'All'}).click();
+   await expect(card(member,'Lead plans the month')).toHaveCount(1);
+  } finally { await context.close(); }
+ }
+});
