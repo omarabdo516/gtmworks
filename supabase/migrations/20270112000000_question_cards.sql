@@ -192,4 +192,55 @@ language sql stable set search_path='' as $$
 $$;
 
 -- Policy 3: clarify at every level (lib/agent-levels.mjs). The worker applies it to every profile on another policy.
+-- As 20261211000001_team_work_retries's, and a send key already claimed as a question's answer is that answer, under the
+-- lock answer_question takes, so whichever of the two comes second sees the first. The previous app version never
+-- claims an answer, so it never gets the new state.
+create or replace function public.reserve_conversation_turn(conversation uuid, c uuid, agent uuid, message_key uuid, message text) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare existing public.conversations; chosen public.hermes_agents; queued public.conversation_queued_turns; noted public.conversation_notes; addressee record; writer text; pinned uuid;
+begin
+ if not public.conversation_can_write(c) then raise exception 'conversationNotAllowed' using errcode='42501'; end if;
+ if message is null or length(message) not between 1 and 200000 or message_key is null then raise exception 'conversationNotFound' using errcode='22023'; end if;
+ -- Lock order: this Conversation's turns first, then the agents lock reserve_conversation_run takes.
+ perform pg_advisory_xact_lock(hashtextextended('conversation_turn:'||conversation::text,0));
+ select * into existing from public.conversations where id=conversation;
+ if found and (existing.person_id<>auth.uid() or existing.company_id<>c or existing.agent_id is distinct from agent) then raise exception 'conversationNotFound' using errcode='P0002'; end if;
+ select * into chosen from public.hermes_agents where id=agent and company_id=c;
+ if not found then raise exception 'conversationNotFound' using errcode='P0002'; end if;
+ -- A send key already answered keeps its answer, before anything is resolved again.
+ select * into noted from public.conversation_notes n where n.conversation_id=conversation and n.send_key=message_key;
+ if found then
+  if noted.person_id<>auth.uid() then raise exception 'conversationNotFound' using errcode='P0002'; end if;
+  return jsonb_build_object('state','note');
+ end if;
+ select * into queued from public.conversation_queued_turns q where q.conversation_id=conversation and q.send_key=message_key;
+ if found then
+  if queued.person_id<>auth.uid() then raise exception 'conversationNotFound' using errcode='P0002'; end if;
+  return jsonb_build_object('state',case when queued.failed_at is not null then 'failed' else 'queued' end);
+ end if;
+ -- A send key already claimed as a question's answer (#138: a send whose first try found no question, retried once one
+ -- had opened) is that answer: it neither queues nor starts a Run, so the message reaches the Agent once.
+ if exists(select 1 from public.reply_cards r where r.conversation_id=conversation and r.kind='question' and r.answer_key=message_key) then
+  return jsonb_build_object('state','answered');
+ end if;
+ select name into writer from public.people where id=auth.uid();
+ -- A key already reserved for a run is a retry of that run, never a note.
+ if not exists(select 1 from public.conversation_run_reservations r where r.conversation_id=conversation and r.send_key=message_key) then
+  select * into addressee from public.conversation_addressee(c,message);
+  if addressee.person is not null then
+   insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values(conversation,c,auth.uid(),agent,chosen.name) on conflict (id) do nothing;
+   insert into public.conversation_notes(company_id,conversation_id,person_id,author_name,addressed_to,addressed_name,body,send_key)
+    values(c,conversation,auth.uid(),coalesce(writer,''),addressee.person,addressee.name,message,message_key) on conflict (conversation_id,send_key) do nothing;
+   return jsonb_build_object('state','note');
+  end if;
+ end if;
+ if public.conversation_busy(conversation,message_key) then
+  insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values(conversation,c,auth.uid(),agent,chosen.name) on conflict (id) do nothing;
+  insert into public.conversation_queued_turns(conversation_id,send_key,company_id,person_id,agent_id,message) values(conversation,message_key,c,auth.uid(),agent,message);
+  return jsonb_build_object('state','queued');
+ end if;
+ pinned:=public.reserve_conversation_run(conversation,c,agent,message_key,message);
+ return jsonb_build_object('state','reserved','connection',pinned,'note',public.pinned_run_note(conversation,message_key,c,auth.uid()));
+end $$;
+
 create or replace function public.engine_tool_policy() returns integer language sql immutable set search_path='' as $$ select 3 $$;
