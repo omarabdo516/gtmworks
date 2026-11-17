@@ -1,7 +1,5 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { testDb } from './pgtap.mjs';
 
 const defaults=readFileSync('scripts/local-default-privileges.sql','utf8');
 // Observe freshly created objects, including direct function grants after PUBLIC is revoked.
@@ -44,10 +42,4 @@ from (values ('anon'), ('authenticated'), ('service_role')) roles(role_name);
 select * from finish();
 rollback;
 `;
-const dir=mkdtempSync(join(tmpdir(),'gtmworks-hosted-defaults-'));
-try {
- const file=join(dir,'defaults.sql');
- writeFileSync(file,sql);
- const result=spawnSync('npx',['--no-install','supabase','test','db',file],{stdio:'inherit'});
- process.exitCode=result.status ?? 1;
-} finally { rmSync(dir,{recursive:true,force:true}); }
+testDb(import.meta.url,sql);

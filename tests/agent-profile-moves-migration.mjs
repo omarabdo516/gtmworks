@@ -1,7 +1,5 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { testDb } from './pgtap.mjs';
 
 // An install updated to #121 runs the previous app version until the new one starts: on the migrated database its calls
 // to reserve, record and close a Run, its lead_create_agent and its move_company_profile answer as before, and an Agent it
@@ -69,9 +67,4 @@ select is((select string_agg(key||'='||value,',' order by key) from (${verify}) 
 select * from finish();
 rollback;
 `;
-const dir=mkdtempSync(join(tmpdir(),'gtmworks-agent-profile-moves-'));
-try {
- const file=join(dir,'migration.sql'); writeFileSync(file,sql);
- const result=spawnSync('npx',['--no-install','supabase','test','db',file],{stdio:'inherit'});
- process.exitCode=result.status ?? 1;
-} finally { rmSync(dir,{recursive:true,force:true}); }
+testDb(import.meta.url,sql);

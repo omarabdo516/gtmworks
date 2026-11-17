@@ -20,6 +20,7 @@
   "requestShowsFor": "Will show for",
   "requestShowsForWho": "{0} and the Owner",
   "requestWaiting": "Not made yet. When {0} says yes it shows in your agents, and I’ll tell you here.",
+  "requestWaitingAnyOwner": "Not made yet. When the Owner says yes it shows in your agents, and I’ll tell you here.",
   "requestMade": "{0} said yes · {1}. {2} now shows for {3}.",
   "requestDeclined": "{0} said no · {1}. Reason: «{2}»",
   "requestNo": "No",

@@ -7,7 +7,7 @@ import { uuid } from '@/lib/conversations';
 import { isNewFor } from '@/lib/sidebar.mjs';
 import { madeColumns, madeOf } from '@/lib/agent-made';
 import { readyRoles, roleStart } from '@/lib/ready-roles';
-import { worksWith } from '@/lib/agent-details.mjs';
+import { emptyChatFacts } from '@/lib/empty-chat.mjs';
 import { agentDetails } from '@/app/agent-details-server';
 import AgentChat from './agent-chat';
 import type { EmptyChat } from '@/app/agent-empty-chat';
@@ -33,22 +33,16 @@ export default async function AgentChatPage({params,searchParams}:{params:Promis
  const {items:waitingItems}=await approvalQueue(db,company.id,user.id,membership?.role||'');
  const owner=membership?.role==='owner';
  const newAgent=(mode==='agent'||(mode==='ready'&&owner))&&!!agent?.is_default&&!!writer;
- const askOf=(newAgent||(agents?.length===1&&!!agent?.is_default&&!!writer))&&!owner?((((await db.from('members').select('people(name)').eq('company_id',company.id).eq('role','owner').is('removed_at',null)).data||[]) as unknown as {people:{name:string}|null}[])
-  .flatMap(row=>row.people?[row.people.name]:[]).sort()):null;
  const alone=company.work_mode==='alone';
- // Which empty chat the Agent shows this reader (#170). An Agent other than the main one is new to a reader with no
- // Conversation with it (RLS shows only the reader's own). The active Members are read only when the wording needs them:
- // the Owners a Member asks, or whether an Owner is the only one who sees the Agent.
+ // Which empty chat the Agent shows this reader (#170; lib/empty-chat.mjs reads it): the active Owners are read once, for
+ // a Member asking for an Agent (#17) or reading the main Agent's empty chat, and a refused read fails the page.
  const main=!!agent?.is_default, fresh=main&&agents?.length===1;
- const [written,roster,access]=agent&&!fresh?await Promise.all([
-  main?0:db.from('conversations').select('id',{count:'exact',head:true}).eq('company_id',company.id).eq('agent_id',agent.id).eq('person_id',user.id).then(({count})=>count??1),
-  (main?!alone&&!owner:!alone&&owner)?db.from('members').select('person_id,role,people(name)').eq('company_id',company.id).is('removed_at',null)
-   .then(({data})=>(data||[]) as unknown as {person_id:string,role:string,people:{name:string}|null}[]):[],
-  !main&&!alone&&owner?db.from('member_agent_access').select('person_id').eq('company_id',company.id).eq('agent_id',agent.id).then(({data})=>(data||[]).map(row=>row.person_id)):[],
- ]):[0,[],[]];
- const empty:EmptyChat=!agent||!main&&written?{state:'known'}:fresh?{state:'fresh'}
-  :main?{state:'main',reader:alone?'alone':owner?'owner':'member',owners:roster.filter(member=>member.role==='owner').flatMap(member=>member.people?[member.people.name]:[]).sort()}
-  :{state:'new',works:worksWith({alone,me:user.id,members:roster,access}),...roleStart(language,alone,agent.template),made:madeOf(agent,user.id,slug)};
+ const asks=!owner&&(newAgent||(fresh&&!!writer));
+ const facts=agent?await emptyChatFacts(db,{company:company.id,agent:agent.id,me:user.id,main,fresh,alone,owner,asks}):null;
+ const askOf=asks?facts?.owners??[]:null;
+ const empty:EmptyChat=!agent||!facts||facts.state==='known'?{state:'known'}:facts.state==='fresh'?{state:'fresh'}
+  :facts.state==='main'?{state:'main',reader:facts.reader,owners:facts.owners}
+  :{state:'new',works:facts.works,...roleStart(language,alone,agent.template),made:madeOf(agent,user.id,slug)};
  const gallery=mode==='ready'&&newAgent?{company:company.name,alone,roles:readyRoles(language,alone)}:null;
  const details=agent?await agentDetails(db,{company:company.id,agent:agent.id,slug,me:user.id,role:membership?.role||'',tab}):null;
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
@@ -56,3 +50,4 @@ export default async function AgentChatPage({params,searchParams}:{params:Promis
   <main className="convo-page h-full"><AgentChat slug={slug} company={company.id} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={details} writer={!!writer} team={company.work_mode==='team'} empty={empty} newAgent={newAgent} askOf={askOf} gallery={gallery} isNew={!!agent&&isNewFor(agent,user.id)}/></main>
  </Shell>;
 }
+
