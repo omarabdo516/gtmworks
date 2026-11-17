@@ -23,13 +23,18 @@ profile out of the multiplexing gateway and `POST /api/gateway/start?profile=<na
 
 | Step | Answer |
 | --- | --- |
+| Make the profile, give it a Run key, point it at the slow fake model | 200 `ok: true` for each |
 | Start Run A on `ag-probe`. The fake model answers after 45 s. | 202, Run A `running` |
-| Park `ag-probe` while Run A is open | 409 `Refusing to stop the gateway: 2 live session(s) would be interrupted.` |
+| Read Run A 5 s later | 200 `running` |
+| Park `ag-probe` while Run A is open | 409 `Refusing to stop the gateway: 2 live session(s) would be interrupted.` Both are Run A: the answer lists its chat turn (`agent:ag-probe:api_server:dm:<Run A>`) and the API run that carries it. |
+| Read Run A 12 s after that refusal | 200 `running`. The refusal left Run A open. |
 | Start Run B after that refusal | 202. The profile still takes new Runs. |
 | Read Run A at its end | 200 `completed` |
+| Read Run B at its end | 200 `completed` |
 | Park `ag-probe` once Runs A and B are done | 200 |
 | Start Run C while parked | 404 `Unknown or unconfigured profile` |
 | Read Run A while parked | 404 `Unknown or unconfigured profile` |
+| List the profile's Routines while parked | 200 `[]` |
 | Unpark `ag-probe` | 200 |
 | Start Run D after unpark | 202 |
 
@@ -37,7 +42,8 @@ profile out of the multiplexing gateway and `POST /api/gateway/start?profile=<na
 
 A paused state on a profile, set and cleared on the management listener. While it is set, the profile refuses a new
 Run with an answer of its own (not the answer for a missing profile), and it keeps serving reads of Runs that are
-already open until they end. Until the Engine has it, the Pause row stays disabled and marked "Soon" for every Role.
+already open until they end. Until the Engine has it, no Role can pause an Agent. The Pause row stays disabled and
+marked "Soon" where it shows today, in the danger zone, which only the Owner sees.
 
 ## Running it again
 
@@ -80,6 +86,9 @@ def call(method,url,body=None,key=KEY,headers=None):
     except urllib.error.HTTPError as e: return e.code, e.read().decode()[:400]
     except Exception as e: return 0, type(e).__name__
 def log(step,res): print(f'{step}: {res[0]} {res[1]}', flush=True)
+def run_id(res):
+    try: return json.loads(res[1]).get('run_id')
+    except Exception: return None
 for _ in range(120):
     if call('GET','http://127.0.0.1:8642/health')[0]==200 and call('GET','http://127.0.0.1:9119/api/profiles')[0]==200: break
     time.sleep(2)
@@ -92,12 +101,12 @@ for _ in range(40):
     time.sleep(1)
 open('/tmp/delay','w').write('45')
 s=call('POST',R,{'input':'hello'},key=PK,headers={'X-Hermes-Session-Key':'probe-1','Idempotency-Key':'probe-1'}); log('start Run A (model answers after 45 s)',s)
-run=json.loads(s[1]).get('run_id'); time.sleep(5)
+run=run_id(s); time.sleep(5)
 log('Run A while open',call('GET',f'{R}/{run}',key=PK))
 log('park the profile (gateway stop, no interrupt)',call('POST',M9+f'/api/gateway/stop?profile={P}'))
 time.sleep(12)
 log('Run A after that stop',call('GET',f'{R}/{run}',key=PK))
-sb=call('POST',R,{'input':'again'},key=PK,headers={'X-Hermes-Session-Key':'probe-2','Idempotency-Key':'probe-2'}); log('start Run B after that stop',sb); runb=json.loads(sb[1]).get('run_id')
+sb=call('POST',R,{'input':'again'},key=PK,headers={'X-Hermes-Session-Key':'probe-2','Idempotency-Key':'probe-2'}); log('start Run B after that stop',sb); runb=run_id(sb)
 for _ in range(60):
     st=call('GET',f'{R}/{run}',key=PK)
     if '"status": "completed"' in st[1] or '"status":"completed"' in st[1] or st[0]!=200: break
@@ -111,7 +120,6 @@ log('Run B at its end',(sb[0],sb[1][:120]))
 open('/tmp/delay','w').write('0')
 log('park the profile with no Run open',call('POST',M9+f'/api/gateway/stop?profile={P}'))
 time.sleep(35)
-log('profile list entry',(0,[l for l in call('GET',M9+'/api/profiles')[1].split('},') if P in l][:1].__str__()))
 log('start Run C while parked',call('POST',R,{'input':'parked'},key=PK,headers={'X-Hermes-Session-Key':'probe-3','Idempotency-Key':'probe-3'}))
 log('read Run A while parked',call('GET',f'{R}/{run}',key=PK))
 log('cron jobs while parked',call('GET',M9+f'/api/cron/jobs?profile={P}'))

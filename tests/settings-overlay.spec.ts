@@ -225,11 +225,17 @@ for(const view of roleViews) test(`${view.role}: Settings shows only what the Ro
   await expect(overlay.locator('#set-name')).toHaveValue('Ads');
   await shows('agent',view.agent);
   // The pinned Engine has no paused state for a profile, so Pause stays "Soon" and opens nothing (#177); force, as Playwright waits on aria-disabled.
+  // Delete's confirm is drawn after the click on Pause, so a confirm Pause opened would be drawn by then too.
   if(view.agent.includes('#danger-pause')) {
    const pause=overlay.locator('#danger-pause');
    await expect(pause).toHaveAttribute('aria-disabled','true');
    await expect(pause).toHaveAttribute('title','Soon');
    await pause.click({force:true});
+   await overlay.locator('#danger-delete').click();
+   await expect(overlay.getByRole('group',{name:'Delete Ads'})).toBeVisible();
+   await expect(overlay.locator('.danger-confirm')).toHaveCount(1);
+   await expect(pause).not.toHaveAttribute('aria-expanded','true');
+   await overlay.locator('#danger-delete').click();
    await expect(overlay.locator('.danger-confirm')).toHaveCount(0);
   }
   // The same request from every Role: the server checks the Role again, whatever the page offered.
