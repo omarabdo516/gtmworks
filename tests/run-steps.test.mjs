@@ -155,3 +155,12 @@ test('the worker follows each open Run once, and stops the follower of a Run tha
  await followOpenRuns(db,{encryptionKey,following,engineFor:fake.engineFor});
  assert.equal(following.size,0);
 });
+
+test('a call past the most a list holds breaks the list rather than showing fewer calls than the Run made',()=>{
+ const started=/** @param {number} n */ n=>({seq:n,step:{call:`call_${n}`,tool:'web_search',preview:null,state:/** @type {const} */('started')}});
+ const full=Array.from({length:1000},(_,n)=>started(n)).reduce(withEvent,{steps:[],readTo:-1,broken:false});
+ assert.equal(full.steps.length,1000); assert.equal(full.broken,false);
+ const over=withEvent(full,started(1000));
+ assert.equal(over.steps.length,1000); assert.equal(over.broken,true,'the 1,001st call breaks the list');
+ assert.equal(withEvent(full,{seq:1000,step:{call:'call_3',tool:'web_search',preview:null,state:'done'}}).broken,false,'an end of a call already listed does not');
+});
