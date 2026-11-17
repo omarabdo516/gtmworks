@@ -182,7 +182,19 @@ test('a pull request run of CI health prints the report and writes no issue', as
   assert.deepEqual(await publish(api, body, { dryRun: true }), { action: 'dry run', number: null });
   assert.deepEqual(calls, []);
   assert.equal((await publish(api, body, { dryRun: false })).action, 'created');
-  const workflow = load(readFileSync('.github/workflows/ci-health.yml', 'utf8'));
-  const step = workflow.jobs.report.steps.find(step => /ci-health\.mjs/.test(step.run ?? ''));
-  assert.equal(step.env.DRY_RUN, "${{ github.event_name == 'pull_request' }}");
+});
+
+// The workflow, not the script a pull request may change, keeps a pull request's run from writing: only the job that
+// runs on main, never for a pull request, holds issues: write.
+test('only the main branch\'s scheduled or manual run may write the issue; a pull request\'s run has no write scope', () => {
+  const { jobs } = load(readFileSync('.github/workflows/ci-health.yml', 'utf8'));
+  const writers = Object.entries(jobs).filter(([, job]) => Object.values(job.permissions ?? {}).includes('write')).map(([name]) => name);
+  assert.deepEqual(writers, ['report']);
+  assert.deepEqual(jobs.report.permissions, { contents: 'read', actions: 'read', issues: 'write' });
+  assert.equal(jobs.report.if, "${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}");
+  const script = job => job.steps.find(step => /ci-health\.mjs/.test(step.run ?? ''));
+  assert.equal(script(jobs.report).env.DRY_RUN, undefined);
+  assert.deepEqual(jobs['dry-run'].permissions, { contents: 'read', actions: 'read', issues: 'read' });
+  assert.equal(jobs['dry-run'].if, "${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}");
+  assert.equal(script(jobs['dry-run']).env.DRY_RUN, 'true');
 });

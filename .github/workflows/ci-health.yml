@@ -1,6 +1,7 @@
 # The nightly CI health report (#256): a week of the `ledger` artifacts that ci.yml's ledger job writes, read into one
-# tracking issue that each night's report replaces (scripts/ci-health.mjs). A change to the report runs it on its own
-# pull request as a dry run, since GitHub starts a manual or scheduled run only from the default branch.
+# tracking issue that each night's report replaces (scripts/ci-health.mjs). Only `report` writes the issue, and only on
+# main: a manual run accepts any `--ref`, so the job checks the ref itself. A change to the report runs `dry-run` on its
+# own pull request: it prints the report and holds no write scope, so the script it runs cannot write the issue.
 name: CI health
 
 on:
@@ -14,12 +15,12 @@ on:
 
 # One writer of the tracking issue at a time.
 concurrency:
-  group: ci-health
+  group: ci-health-${{ github.event_name == 'pull_request' && github.ref || 'main' }}
   cancel-in-progress: false
 
 jobs:
   report:
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -34,6 +35,23 @@ jobs:
       - name: report the last 7 days
         env:
           GH_TOKEN: ${{ github.token }}
-          # A pull request's run prints the report and writes no issue: only the default branch writes it.
-          DRY_RUN: ${{ github.event_name == 'pull_request' }}
+        run: node scripts/ci-health.mjs
+
+  dry-run:
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+      issues: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: print the report of the last 7 days
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRY_RUN: 'true'
         run: node scripts/ci-health.mjs
