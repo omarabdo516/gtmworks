@@ -6,7 +6,7 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { isLocalHost, isLocalUrl, maybeOutside } from './offline.mjs';
+import { isLocalHost, isLocalUrl, maybeOutside, nowhere } from './offline.mjs';
 
 // A test run reaches nothing outside this machine (#266): `npm test` loads tests/offline.mjs before every file, so a
 // connection to an outside host is refused and named, and a file that swallowed the refusal still fails.
@@ -32,6 +32,15 @@ test('the browsers stop every outside address to look at it, and leave the lanes
   assert.deepEqual(outside.filter(url => !maybeOutside.test(url)), []);
   assert.deepEqual(local.filter(url => maybeOutside.test(url)), []);
   assert.deepEqual([...outside, ...local].filter(url => !isLocalUrl(url) && !maybeOutside.test(url)), [], 'every outside address is stopped');
+});
+
+// Playwright's own rule for a context's API requests (playwright-core's shouldBypassProxy): a name suffix match.
+const bypassed = url => nowhere.bypass.split(',').map(rule => (rule.startsWith('.') ? rule : `.${rule}`)).some(rule => `.${new URL(url).hostname}`.endsWith(rule));
+
+test('a test\'s API requests to the lanes skip the browser\'s dead proxy, and outside ones do not', () => {
+  const lanes = ['http://127.0.0.1:3001/api/hermes-connections', 'http://127.0.0.1:64024/api/v1/messages', 'http://localhost:3000/', 'https://app.gtmworks.test/c/rs-learning', 'http://[::1]:3000/'];
+  assert.deepEqual(lanes.filter(url => !bypassed(url)), []);
+  assert.deepEqual(['https://outside.example.org/', 'http://example.com/', `https://${provider}/`].filter(bypassed), []);
 });
 
 test('a server on 127.0.0.1 and on localhost still answers under the guard', async () => {

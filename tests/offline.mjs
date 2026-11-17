@@ -19,8 +19,10 @@ export const isLocalUrl = url => {
 };
 
 // A proxy nothing answers, which every local name bypasses: a browser launched behind it fails every outside request,
-// WebSocket and redirect hop at the proxy, before any lookup.
-export const nowhere = { server: 'http://127.0.0.1:9', bypass: 'localhost,*.localhost,*.test,*.example,*.invalid,127.0.0.0/8,[::1],0.0.0.0' };
+// WebSocket and redirect hop at the proxy, before any lookup. A context's `page.request` takes the proxy too, and
+// Playwright matches its bypass by name suffix only, so each entry is written in the form both read (`.test`, not
+// `*.test`) and 127.0.0.1 is named beside the range Chromium reads.
+export const nowhere = { server: 'http://127.0.0.1:9', bypass: 'localhost,.localhost,.test,.example,.invalid,127.0.0.1,127.0.0.0/8,[::1],0.0.0.0' };
 
 // The URLs the browser guards stop to look at: every http and WebSocket address but the plainly local ones. A RegExp is
 // matched inside the browser's driver, so local requests are never paused; a function would send every request, each

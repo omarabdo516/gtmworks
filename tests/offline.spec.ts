@@ -45,6 +45,17 @@ test('a local address that redirects to an outside one is stopped there and repo
   } finally { server.close(); }
 });
 
+test('a test\'s own requests to this machine still answer, from its page and its API requests', async ({ page }) => {
+  const server = createServer((_, response) => response.end('here'));
+  await new Promise<void>(done => server.listen(0, '127.0.0.1', done));
+  try {
+    const local = `http://127.0.0.1:${(server.address() as AddressInfo).port}/`;
+    expect(await (await page.request.get(local)).text()).toBe('here');
+    await page.goto(local);
+    await expect(page.locator('body')).toHaveText('here');
+  } finally { server.close(); }
+});
+
 test.describe('a hook', () => {
   let opened: BrowserContext;
   test.beforeAll(async ({ browser }) => { opened = await browser.newContext(); await probe(await opened.newPage()); });
