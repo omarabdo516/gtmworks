@@ -240,6 +240,38 @@ test('Waiting on you lists an Agent question and an item of a new kind, each ope
   await page.goto('/c/rs-learning/approvals');
   await expect(question).toHaveCount(0);
   await expect(waiting.locator('.col__count')).toHaveText(String(count-2));
+
+  // #138: the Agent asks with the Engine's own clarify tool. The question waits in the list and the sidebar's count
+  // while the Run waits. This Agent is the main one, whose question is drawn as its plain words until #143 (no card), so
+  // the person answers in words; the same Run replies, and the question leaves both.
+  fake.settings.questions=input=>input.includes(`angle ${stamp}`)?[{question:`Which angle first ${stamp}?`,choices:['Graduates','Excel and Odoo']}]:[];
+  fake.settings.reply=(input,answers=[])=>`Reply to: ${input}${answers.length?` (${answers.join(', ')})`:''}`;
+  const sidebar=page.locator('a[href="/c/rs-learning/approvals"]').first();
+  await page.goto(`/c/rs-learning/conversations/${conversation}`);
+  await expect(page.locator('.msg[data-author=agent]').filter({hasText:`The early price ${stamp}`})).toBeVisible();
+  await page.getByLabel('Message',{exact:true}).fill(`Plan the ads, which angle ${stamp}`);
+  await page.getByRole('button',{name:'Send',exact:true}).click();
+  // Sending waits for the engine to accept the run, as above.
+  await expect(page.locator('.msg[data-author=person]').filter({hasText:`which angle ${stamp}`})).toBeVisible({timeout:30000});
+  await expect(page.locator('.msg[data-author=agent]').filter({hasText:`Which angle first ${stamp}?`})).toContainText('Excel and Odoo');
+  await expect(page.getByRole('group',{name:`Which angle first ${stamp}?`,exact:true})).toHaveCount(0);
+  await page.goto('/c/rs-learning/approvals');
+  const asked=waiting.locator('.mcard').filter({hasText:`Which angle first ${stamp}?`});
+  await expect(asked).toContainText('Question from Lead');
+  await expect(waiting.locator('.col__count')).toHaveText(String(count-1));
+  await expect(sidebar).toContainText(String(count-1));
+  await asked.click();
+  await expect(page).toHaveURL(new RegExp(`/conversations/${conversation}$`));
+  await page.getByLabel('Message',{exact:true}).fill('Excel and Odoo');
+  await page.getByRole('button',{name:'Send',exact:true}).click();
+  await expect(page.locator('.msg[data-author=person][data-kind=answer]').filter({hasText:'Excel and Odoo'})).toBeVisible();
+  await expect(page.locator('.msg[data-author=agent]').filter({hasText:`which angle ${stamp} (Excel and Odoo)`})).toBeVisible();
+  expect(fake.settings.runs.filter(run=>run.input.includes(`angle ${stamp}`))).toHaveLength(1);
+  expect(fake.settings.answers.map(answer=>[answer.status,answer.body.answer])).toEqual([[200,'Excel and Odoo']]);
+  await page.goto('/c/rs-learning/approvals');
+  await expect(asked).toHaveCount(0);
+  await expect(waiting.locator('.col__count')).toHaveText(String(count-2));
+  await expect(sidebar).toContainText(String(count-2));
  } finally {
   query(`update public.waiting_items set resolved_at=now() where resolved_at is null and title like '%${stamp}%'`);
   if(attachedAgent.id) query(`delete from public.hermes_agents where id='${attachedAgent.id}'`);

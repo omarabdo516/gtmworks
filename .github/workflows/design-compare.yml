@@ -59,6 +59,14 @@ jobs:
         run: docker exec -i "supabase_db_$(sed -n 's/^project_id = "\([A-Za-z0-9_-]*\)"$/\1/p' supabase/config.toml)" psql -X -h /var/run/postgresql -U postgres -d postgres -v ON_ERROR_STOP=1 < scripts/design-compare-fixture.sql
         # psql runs the file's several commands (supabase db query sends one prepared statement and refuses them);
         # the file's own begin/commit makes it one transaction and ON_ERROR_STOP fails the step on the guard.
+      # #172. A loading screen slows the one table its waiting part reads, in this run's own fresh database only; the
+      # file refuses any other database, and the compare tool itself never writes.
+      - name: slow the loading screen's read
+        env:
+          SCREEN: ${{ inputs.screen }}
+        run: |
+          case "$SCREEN" in chat-loading|numbers-loading) ;; *) exit 0;; esac
+          docker exec -i "supabase_db_$(sed -n 's/^project_id = "\([A-Za-z0-9_-]*\)"$/\1/p' supabase/config.toml)" psql -X -h /var/run/postgresql -U postgres -d postgres -v ON_ERROR_STOP=1 < "scripts/design-compare-$SCREEN.sql"
       - name: start the production app
         run: |
           mkdir -p playwright-report
