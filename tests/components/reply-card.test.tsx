@@ -100,7 +100,7 @@ test.each(['en', 'ar'] as const)('in the %s interface, every text of an Arabic r
 
 const at = '2026-06-10T09:41:00Z';
 const turns = (cards: Card[], pending: boolean): ConversationRecord => ({
- conversation: { id: 'cv-1', agent_name: 'Ads', face: 'c-1' },
+ conversation: { id: 'cv-1', agent_id: null, agent_name: 'Ads', face: 'c-1' },
  messages: cards.flatMap((card, index) => [
   { id: index * 2 + 1, author: 'person' as const, author_name: 'Omar', body: 'Prepare the draft', created_at: at },
   { id: index * 2 + 2, author: 'agent' as const, author_name: 'Ads', body: 'Here it is.', created_at: at, cards: [{ kind: 'reply' as const, card }] },
@@ -116,7 +116,7 @@ test('a card that arrives while the Conversation is open rises in once; the card
  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
  const asks = vi.fn(async () => Response.json(turns([outline, plan], false)));
  vi.stubGlobal('fetch', asks);
- const screen = await render(<LanguageProvider language="en"><div className="gw"><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={{ id: 'cv-1', agent_name: 'Ads', face: 'c-1' }} title="" writer={false}><Arrived record={arrived(turns([outline], true))} team={false}/></ConversationView></div></LanguageProvider>);
+ const screen = await render(<LanguageProvider language="en"><div className="gw"><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={{ id: 'cv-1', agent_id: null, agent_name: 'Ads', face: 'c-1' }} title="" writer={false}><Arrived record={arrived(turns([outline], true))} team={false}/></ConversationView></div></LanguageProvider>);
  const rising = (card: Card) => getComputedStyle(screen.getByRole('group', { name: card.title }).element()).animationName;
  await expect.element(screen.getByRole('group', { name: outline.title })).toBeVisible();
  expect(rising(outline)).toBe('none');

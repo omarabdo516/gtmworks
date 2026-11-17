@@ -6,7 +6,8 @@ import AccountMenu, { ThemeToggle } from './account-menu';
 import Link from '@/lib/link';
 import { shellNav } from '@/lib/navigation';
 import { companyAgents, isNewFor, waitingLabel } from '@/lib/sidebar.mjs';
-import { CompanyAgentFace } from '@/components/company-agent-face';
+import { AgentFaceDot } from './agent-face-dot';
+import { agentStates, statusKeys } from '@/lib/agent-details.mjs';
 import { ShellIcon } from '@/components/shell-icon';
 import { agentIdentities } from '@/lib/agent-identities';
 import { AgentIdentitiesProvider } from '@/lib/agent-identities-client';
@@ -34,7 +35,8 @@ export default async function Shell({company,companies,section,title,crumbs,pers
  const slug=company?.slug;
  const chat=section==='chat'||section==='conversations'||section==='channels';
  const db=await supabase();
- const agents=company?.id?await companyAgents(db,company.id):[];
+ // Every Agent's state for this reader (#184), read in one call beside the Agents themselves; a failed read leaves them idle.
+ const [agents,stateOf]=company?.id?await Promise.all([companyAgents(db,company.id),db.rpc('agent_states',{c:company.id}).then(({data})=>agentStates(data))]):[[],agentStates(null)];
  const [waitingKey,...waitingValues]=waitingLabel(approvalCount); const waiting=t(waitingKey,...waitingValues);
  const conversations=company?.id?(await db.from('conversations').select('id,agent_name,created_at').eq('company_id',company.id).order('created_at',{ascending:false}).limit(20)).data||[]:[];
  // Each listed chat reads its own first message, so a long chat never crowds another out of the titles.
@@ -65,9 +67,9 @@ export default async function Shell({company,companies,section,title,crumbs,pers
    </div>)}</div>
    <section className="sb-sec" aria-labelledby="lbl-agents">
     <h2 className="sb-label" id="lbl-agents">{t('agents')}</h2>
-    <ul className="agent-grid">{agents.map(agent=>{const fresh=isNewFor(agent,personId); return <li key={agent.id}>
-     <Link className="agent-tile" href={`/c/${slug}/chat/${agent.id}`} aria-current={chat&&agentId===agent.id?'true':undefined} aria-label={agent.is_default?`${agent.name} · ${t('mainAgent')}`:fresh?`${agent.name} · ${t('agentNew')}`:agent.name} title={agent.speciality?`${agent.name} · ${agent.speciality}`:agent.name}>
-      <span aria-hidden="true"><CompanyAgentFace agent={agent} size={52}/></span><bdi className="agent-tile__name">{agent.name}</bdi>{agent.is_default&&<span className="agent-tile__main" aria-hidden="true">{t('mainAgent')}</span>}
+    <ul className="agent-grid">{agents.map(agent=>{const fresh=isNewFor(agent,personId); const status=stateOf(agent.id); return <li key={agent.id}>
+     <Link className="agent-tile" href={`/c/${slug}/chat/${agent.id}`} aria-current={chat&&agentId===agent.id?'true':undefined} aria-label={[agent.name,agent.is_default&&t('mainAgent'),fresh&&t('agentNew'),agent.speciality,t(statusKeys[status])].filter(Boolean).join(' · ')} title={agent.speciality?`${agent.name} · ${agent.speciality}`:agent.name}>
+      <AgentFaceDot live agent={{id:agent.id,connection_id:agent.connection_id,name:agent.name}} size={52} status={status}/><bdi className="agent-tile__name">{agent.name}</bdi>{agent.is_default&&<span className="agent-tile__main" aria-hidden="true">{t('mainAgent')}</span>}
       {fresh&&<span className="agent-tile__new" aria-hidden="true">{t('agentNew')}</span>}
      </Link>
     </li>;})}

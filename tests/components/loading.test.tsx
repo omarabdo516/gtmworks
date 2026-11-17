@@ -66,7 +66,7 @@ const at = '2026-06-10T09:41:00Z';
 const asked = { id: 1, author: 'person' as const, author_name: 'Omar', body: 'Draft the long launch plan', created_at: at };
 const reply = { id: 2, author: 'agent' as const, author_name: 'Mona', body: 'On it.', created_at: at };
 const talk = (messages: ConversationRecord['messages'], more: Partial<ConversationRecord> = {}): ConversationRecord => ({
- conversation: { id: 'cv-2', agent_name: 'Mona', face: 'c-2' }, messages, usage: { input: 0, output: 0, unknown: 0 }, pending: false, failed: false, working: null, canStop: false, ...more,
+ conversation: { id: 'cv-2', agent_id: null, agent_name: 'Mona', face: 'c-2' }, messages, usage: { input: 0, output: 0, unknown: 0 }, pending: false, failed: false, working: null, canStop: false, ...more,
 });
 function held() {
  let arrive!: (record: ConversationRecord) => void;
@@ -74,7 +74,7 @@ function held() {
  return { record, arrive };
 }
 const opened = (record: Promise<ConversationRecord>) => render(<LanguageProvider language="en"><div className="gw" style={{ height: 900 }}>
- <ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={{ id: 'cv-2', agent_name: 'Mona', face: 'c-2' }} title="Draft the long launch plan" writer><Arrived record={record} team={false}/></ConversationView>
+ <ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={{ id: 'cv-2', agent_id: null, agent_name: 'Mona', face: 'c-2' }} title="Draft the long launch plan" writer><Arrived record={record} team={false}/></ConversationView>
 </div></LanguageProvider>);
 const tops = () => ['.transcript__col', '.composer-area'].map(selector => Math.round(box(document.querySelector(selector)!).top));
 
@@ -101,7 +101,7 @@ test('while the record is on its way the chat keeps its title and composer aroun
 test('text typed while the chat loads stays in the box without taking the focus from where the person moved it', async () => {
  const { record, arrive } = held();
  const screen = await render(<LanguageProvider language="en"><button type="button">Elsewhere</button><div className="gw" style={{ height: 900 }}>
-  <ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={{ id: 'cv-2', agent_name: 'Mona', face: 'c-2' }} title="Draft the long launch plan" writer><Arrived record={record} team={false}/></ConversationView>
+  <ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={{ id: 'cv-2', agent_id: null, agent_name: 'Mona', face: 'c-2' }} title="Draft the long launch plan" writer><Arrived record={record} team={false}/></ConversationView>
  </div></LanguageProvider>);
  await screen.getByRole('textbox', { name: 'Message' }).fill('And the budget');
  const elsewhere = screen.getByRole('button', { name: 'Elsewhere' }).element() as HTMLElement;

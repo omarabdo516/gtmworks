@@ -20,7 +20,7 @@ const at = '2026-06-10T09:41:00Z';
 const reason = 'Ads follows WhatsApp leads now.';
 const asked = { id: 7, name: 'FollowUp', job: 'Follows up the WhatsApp leads.', apps: ['WhatsApp Business'], askedBy: 'Youssef', askedWith: 'The leads go cold' };
 const record = (request: AgentRequestView, decided: ConversationRecord['messages'] = []): ConversationRecord => ({
- conversation: { id: 'cv-1', agent_name: 'Lead', face: 'c-1' },
+ conversation: { id: 'cv-1', agent_id: null, agent_name: 'Lead', face: 'c-1' },
  messages: [
   { id: 1, author: 'person', author_name: 'Youssef', body: 'The leads go cold', created_at: at },
   { id: 2, author: 'agent', author_name: 'Lead', body: 'I prepared your request and sent it to the Owner.', created_at: at, cards: [{ kind: 'request', request }] },
@@ -55,7 +55,7 @@ test('a Member who keeps their Conversation open sees the Owner\'s answer arrive
 });
 
 const talk = (messages: ConversationRecord['messages'], more: Partial<ConversationRecord> = {}): ConversationRecord => ({
- conversation: { id: 'cv-2', agent_name: 'Mona', face: 'c-2' }, messages, usage: { input: 0, output: 0, unknown: 0 }, pending: false, failed: false, working: null, canStop: false, ...more,
+ conversation: { id: 'cv-2', agent_id: null, agent_name: 'Mona', face: 'c-2' }, messages, usage: { input: 0, output: 0, unknown: 0 }, pending: false, failed: false, working: null, canStop: false, ...more,
 });
 const view = (initial: ConversationRecord, language: 'en' | 'ar' = 'en') => <LanguageProvider language={language}><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={initial.conversation} title="" writer><Arrived record={arrived(initial)} team={false}/></ConversationView></LanguageProvider>;
 const sent = { id: 1, author: 'person' as const, author_name: 'Omar', body: 'Draft the long launch plan', created_at: at };

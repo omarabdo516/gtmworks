@@ -42,7 +42,7 @@ function database(card: TiedCard | null) {
  };
  return { from: table, rpc: async () => ({ data: null, error: null }) } as unknown as Parameters<typeof conversationRecord>[0];
 }
-const recordWith = (card: TiedCard | null) => conversationRecord(database(card), 'p-3', 'co-1', { id: 'cv-1', agent_name: 'Ads', hermes_agents: { connection_id: 'c-1' } });
+const recordWith = (card: TiedCard | null) => conversationRecord(database(card), 'p-3', 'co-1', { id: 'cv-1', agent_id: null, agent_name: 'Ads', hermes_agents: { connection_id: 'c-1' } });
 const view = (record: ConversationRecord, { language = 'en', writer = true }: { language?: 'en' | 'ar', writer?: boolean } = {}) => <LanguageProvider language={language}>
  <div className="gw"><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={record.conversation} title="" writer={writer}><Arrived record={arrived(record)} team={false}/></ConversationView></div>
 </LanguageProvider>;

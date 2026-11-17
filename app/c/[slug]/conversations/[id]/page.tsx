@@ -35,7 +35,7 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  const title=(first?.body as string|undefined)?.split('\n')[0]||conversation.agent_name;
  return <Shell company={company} companies={companies||[]} personId={user.id} section="conversations" title={title} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={waitingItems.length} agentId={conversation.agent_id||undefined} conversationId={id}>
-  <main className="convo-page h-full"><ConversationView slug={slug} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={details} company={company.id} conversation={{id:conversation.id,agent_name:conversation.agent_name,face:faceOf(conversation)}} title={title} writer={!!writer}><Loaded record={record} team={company.work_mode==='team'}/></ConversationView></main>
+  <main className="convo-page h-full"><ConversationView slug={slug} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={details} company={company.id} conversation={{id:conversation.id,agent_id:conversation.agent_id,agent_name:conversation.agent_name,face:faceOf(conversation)}} title={title} writer={!!writer}><Loaded record={record} team={company.work_mode==='team'}/></ConversationView></main>
  </Shell>;
 }
 
