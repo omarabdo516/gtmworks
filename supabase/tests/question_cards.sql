@@ -39,6 +39,7 @@ select is((select string_agg(conversation_id::text,',') from public.waiting_list
 -- Only the Conversation's own person answers, never a Viewer; one answer, however often or from however many tabs.
 reset role;
 select set_config('test.card',(select id::text from public.reply_cards where conversation_id='f2000000-0000-0000-0000-000000000003'),true);
+select set_config('test.owner_card',(select id::text from public.reply_cards where conversation_id='f2000000-0000-0000-0000-000000000001'),true);
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000005',true);
 select throws_ok($$select public.answer_question('10000000-0000-0000-0000-000000000001','f2000000-0000-0000-0000-000000000003',current_setting('test.card')::bigint,1,null,'f3000000-0000-0000-0000-000000000005')$$,
@@ -73,7 +74,7 @@ set local role service_role;
 select is(public.track_run_question('f2000000-0000-0000-0000-000000000003','q-run-3',current_setting('test.asking')::jsonb,false,'2026-06-10T10:16:00Z'),
  jsonb_build_array(jsonb_build_object('card',current_setting('test.card')::bigint,'question','p1@1','answer','Students')),'the next read hands over the claim to deliver');
 select results_eq($$values (public.settle_question(current_setting('test.card')::bigint,'answered')),(public.settle_question(current_setting('test.card')::bigint,'closed')),
-  (public.settle_question((select id from public.reply_cards where conversation_id='f2000000-0000-0000-0000-000000000001'),'closed'))$$,
+  (public.settle_question(current_setting('test.owner_card')::bigint,'closed'))$$,
  $$values ('answered'),('answered'),('closed')$$,'the Engine took one answer, and a later verdict does not change it; the other came too late and is closed');
 select is(public.track_run_question('f2000000-0000-0000-0000-000000000003','q-run-3',null,false,'2026-06-10T10:17:00Z'),'[]'::jsonb,'nothing is left to deliver once it is settled');
 reset role;
