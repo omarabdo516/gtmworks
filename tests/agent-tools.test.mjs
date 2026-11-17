@@ -194,6 +194,23 @@ test('show_review asks the database to show the review as the model wrote it, tr
  assert.deepEqual(fake.agentReads,[]);
 });
 
+// #139: as show_draft's, and an address or a note left out (or null) stays out of the card, while one given goes to the
+// database as read, so an address that is not https, or not a string, is refused there rather than dropped.
+test('hand_over asks the database to show the handed step as the model wrote it, trimmed, with an address or note only when given, and the Engine is not asked',async()=>{
+ const {fake,rpcs,call}=harness({},{state:'shown',card:44});
+ for(const args of /** @type {unknown[]} */([null,'Publish',{title:'Publish',line:'Ready',app:'WordPress',rows:'Title'}])) assert.deepEqual(await call('hand_over',args),{state:'ignored'},JSON.stringify(args));
+ assert.deepEqual(await call('hand_over',{title:' انشر المقال ',line:'المسودة جاهزة\n',app:' WordPress',rows:[{label:' العنوان',value:'إزاي تبدأ في المحاسبة '}],url:' https://rslearning.example/wp-admin/post.php?post=812 ',note:'هتابع ترتيبه. '}),{state:'shown',card:44});
+ await call('hand_over',{title:'Pay',line:'Ready',app:'Stripe',url:null,note:null});
+ await call('hand_over',{line:'Ready',app:'WordPress',url:'http://example.com/draft'});
+ await call('hand_over',{title:'Publish',line:'Ready',app:'WordPress',url:7,note:'Done\u0000'});
+ const sent=(/** @type {string|null} */ title,/** @type {object} */ content)=>['agent_show_card',{conversation:'conversation-1',run:'run-1',call:'call-0',kind:'hand',title,content}];
+ assert.deepEqual(rpcs,[sent('انشر المقال',{app:'WordPress',line:'المسودة جاهزة',rows:[{label:'العنوان',value:'إزاي تبدأ في المحاسبة'}],url:'https://rslearning.example/wp-admin/post.php?post=812',note:'هتابع ترتيبه.'}),
+  sent('Pay',{app:'Stripe',line:'Ready',rows:[]}),sent(null,{app:'WordPress',line:'Ready',rows:[],url:'http://example.com/draft'}),
+  sent('Publish',{app:'WordPress',line:'Ready',rows:[],url:null,note:null})]);
+ assert.deepEqual(fake.agentReads,[]);
+ assert.match(JSON.parse(toolSpecTexts().hand_over).description,/may not do yourself.*Done it.*approves, publishes and spends nothing/s);
+});
+
 test('an Engine is ready for a new Agent only when it has the Company\'s profile ready',async()=>{
  const {fake,engine}=harness();
  assert.equal(await engineReady(engine,profile),'engineNotReady');
@@ -214,4 +231,5 @@ test('the tool texts a run may already be pinned with stay byte for byte as they
  });
  assert.equal(sha(specs.show_draft),'14f3e489f8903145db328693857952e95f34678a9071a2b50a48f1180ff4754c','show_draft (#136)');
  assert.equal(sha(specs.show_review),'5370ac820042bd31ca7cb07dc9a1b7e7002a9e43427ed9ebb33fd6fd926dc9e1','show_review (#137)');
+ assert.equal(sha(specs.hand_over),'1d74c323574aed6cce78ccaf70f47ed7aafbacc74e7510a66a686d5a66dd6e4b','hand_over (#139)');
 });
