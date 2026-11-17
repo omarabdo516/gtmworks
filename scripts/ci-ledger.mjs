@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { classify } from './ci-classify.mjs';
+import { classify, failedStep } from './ci-classify.mjs';
 
 // The CI ledger (#256): one record for the run, one per job and one per test, and the job summary's table. It reports
 // and never decides: the verdict stays with `check` (scripts/ci-verdict.mjs).
@@ -103,7 +103,7 @@ function jobRecord(job, { run_id, attempt, event, decisions, log }) {
   const layer = layerOf(job.name);
   const environment = job.runner_name ? (job.runner_group_name === 'GitHub Actions' ? 'github-hosted' : 'self-hosted') : null;
   let classification = null;
-  if (job.conclusion === 'failure') classification = log == null ? { label: 'unknown', cause: null, evidence: null } : classify(log);
+  if (job.conclusion === 'failure') classification = log == null ? { label: 'unknown', cause: null, evidence: null } : classify(log, { failedStep: failedStep(job.steps) });
   return {
     kind: 'job', run_id, attempt, layer, name: job.name, conclusion: job.conclusion, created_at: job.created_at,
     started_at: job.started_at, completed_at: job.completed_at, duration_s: seconds(job.started_at, job.completed_at),

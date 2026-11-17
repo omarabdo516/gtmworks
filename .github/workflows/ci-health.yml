@@ -1,7 +1,8 @@
 # The nightly CI health report (#256): a week of the `ledger` artifacts that ci.yml's ledger job writes, read into one
 # tracking issue that each night's report replaces (scripts/ci-health.mjs). Only `report` writes the issue, and only on
 # main: a manual run accepts any `--ref`, so the job checks the ref itself. A change to the report runs `dry-run` on its
-# own pull request: it prints the report and holds no write scope, so the script it runs cannot write the issue.
+# own pull request, and so does a manual run on any other branch: it prints the report and holds no write scope, so the
+# script it runs cannot write the issue.
 name: CI health
 
 on:
@@ -13,9 +14,10 @@ on:
       - .github/workflows/ci-health.yml
       - scripts/ci-health.mjs
 
-# One writer of the tracking issue at a time.
+# One writer of the tracking issue at a time: main's scheduled and manual runs share a group. A pull request or another
+# branch has one of its own, so its dry run never queues behind, or replaces, a report waiting to write.
 concurrency:
-  group: ci-health-${{ github.event_name == 'pull_request' && github.ref || 'main' }}
+  group: ci-health-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -38,7 +40,7 @@ jobs:
         run: node scripts/ci-health.mjs
 
   dry-run:
-    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+    if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

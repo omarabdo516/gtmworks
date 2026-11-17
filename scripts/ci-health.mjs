@@ -64,9 +64,10 @@ const maxRecords = 20000;
 export function readLedger(ledger, { maxRecords: most = maxRecords } = {}) {
   const records = [];
   let rejected = 0;
+  let cut = 0;
   for (const line of ledger.split('\n').filter(line => line.trim())) {
     if (records.length >= most) {
-      rejected++;
+      cut++;
       continue;
     }
     let record;
@@ -79,21 +80,25 @@ export function readLedger(ledger, { maxRecords: most = maxRecords } = {}) {
     if (fits(record)) records.push(record);
     else rejected++;
   }
-  return { records, rejected };
+  return { records, rejected, cut };
 }
 
 // The ledgers read together stop at `totalRecords`; a ledger that would pass it is left out and counted.
-export function ledgerCollector({ maxRecords: most = maxRecords, totalRecords }) {
+// About 2,000 records a run; past this many in all, the rest are left out and counted rather than read.
+const totalRecords = 1000000;
+
+export function ledgerCollector({ maxRecords: most = maxRecords, totalRecords: total = totalRecords } = {}) {
   const collector = {
-    records: [], rejected: 0, read: 0, skipped: 0,
+    records: [], rejected: 0, cut: 0, read: 0, skipped: 0,
     add(ledger) {
       const found = readLedger(ledger, { maxRecords: most });
-      if (collector.records.length + found.records.length > totalRecords) {
+      if (collector.records.length + found.records.length > total) {
         collector.skipped++;
         return;
       }
       for (const record of found.records) collector.records.push(record);
       collector.rejected += found.rejected;
+      collector.cut += found.cut;
       collector.read++;
     },
   };
@@ -103,12 +108,14 @@ export function ledgerCollector({ maxRecords: most = maxRecords, totalRecords })
 // GitHub refuses an issue body over 65536 characters.
 const bodyLimit = 65000;
 
-export function report(records, { now, days, runs, unreadable = 0, left = 0, rejected = 0, foreign = 0, limit = bodyLimit }) {
+export function report(records, { now, days, runs, unreadable = 0, left = 0, rejected = 0, cut = 0, skipped = 0, foreign = 0, limit = bodyLimit }) {
   const jobs = records.filter(record => record.kind === 'job');
   const tests = records.filter(record => record.kind === 'test');
   const lines = [marker, `# ${title}`, '', `The ${days} days to ${new Date(now).toISOString().slice(0, 16).replace('T', ' ')} UTC: ${runs} runs.`];
   if (unreadable) lines.push('', `${unreadable} ledgers could not be read.`);
   if (rejected) lines.push('', `${rejected} records could not be read.`);
+  if (cut) lines.push('', `${cut} records past one ledger's cap of ${maxRecords} were not read.`);
+  if (skipped) lines.push('', `${skipped} ledgers past the total cap of ${totalRecords} records were not read.`);
   if (foreign) lines.push('', `${foreign} ledgers from a fork or another workflow were not counted.`);
   if (left) lines.push('', `Only the newest ledgers were read: ${left} older ones in the window are not counted.`);
 
@@ -169,8 +176,8 @@ export function report(records, { now, days, runs, unreadable = 0, left = 0, rej
   const body = lines.join('\n') + '\n';
   if (body.length <= limit) return body;
   const note = `\nThe report was cut to stay under ${limit} characters.\n`;
-  const cut = body.slice(0, limit - note.length);
-  return cut.slice(0, cut.lastIndexOf('\n') + 1) + note;
+  const shortened = body.slice(0, limit - note.length);
+  return shortened.slice(0, shortened.lastIndexOf('\n') + 1) + note;
 }
 
 // Which ledgers a report reads: those of this repository's own ci.yml runs (never a fork's pull request, whose ledger
@@ -257,8 +264,7 @@ async function main() {
   }
   const { ledgers, left, tooLarge, foreign } = selectLedgers(artifacts, runs, { since, cap, maxBytes });
   unreadable += tooLarge;
-  // About 2,000 records a run; past this many in all, the rest are left out and counted rather than read.
-  const collector = ledgerCollector({ totalRecords: 1000000 });
+  const collector = ledgerCollector();
   const folder = mkdtempSync(join(tmpdir(), 'ci-health-'));
   try {
     for (const artifact of ledgers) {
@@ -275,8 +281,8 @@ async function main() {
   } finally {
     rmSync(folder, { recursive: true, force: true });
   }
-  const { records, rejected, read, skipped } = collector;
-  const body = report(records, { now, days, runs: read, unreadable, rejected, foreign, left: left + skipped });
+  const { records, rejected, cut, read, skipped } = collector;
+  const body = report(records, { now, days, runs: read, unreadable, rejected, cut, skipped, foreign, left });
   const { action, number } = await publish(api, body, { dryRun: env.DRY_RUN === 'true' });
   process.stdout.write(`${body}\n${action === 'dry run' ? 'Dry run: no issue was written.' : `The report ${action} issue #${number}.`}\n`);
   if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, body);

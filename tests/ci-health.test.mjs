@@ -185,9 +185,10 @@ test('ledgers from a fork or another workflow are named in the report', () => {
 
 test('one ledger gives at most its cap of records, and the rest are counted', () => {
   const text = Array.from({ length: 30 }, (_, n) => JSON.stringify(testRecord(`case ${n}`, 1))).join('\n');
-  const { records, rejected } = readLedger(text, { maxRecords: 25 });
-  assert.equal(records.length, 25);
-  assert.equal(rejected, 5);
+  const { records, rejected, cut } = readLedger(text, { maxRecords: 25 });
+  assert.deepEqual({ kept: records.length, rejected, cut }, { kept: 25, rejected: 0, cut: 5 });
+  assert.match(report(records, { now, days: 7, runs: 1, cut }), /5 records past one ledger's cap of 20000 were not read\./);
+  assert.doesNotMatch(report(records, { now, days: 7, runs: 1, cut }), /could not be read/);
 });
 
 test('the ledgers together stop at a total cap, and the ones left out are counted', () => {
@@ -195,6 +196,9 @@ test('the ledgers together stop at a total cap, and the ones left out are counte
   const collector = ledgerCollector({ maxRecords: 100, totalRecords: 10 });
   for (const n of [4, 4, 4, 1]) collector.add(ledger(n));
   assert.deepEqual({ kept: collector.records.length, read: collector.read, skipped: collector.skipped }, { kept: 9, read: 3, skipped: 1 });
+  const text = report(collector.records, { now, days: 7, runs: 3, skipped: 1 });
+  assert.match(text, /1 ledgers past the total cap of 1000000 records were not read\./);
+  assert.doesNotMatch(text, /older ones/);
 });
 
 test('a report over 200,000 job records with queue times is still written', () => {
@@ -229,11 +233,15 @@ test('only the main branch\'s scheduled or manual run may write the issue; a pul
   const { jobs } = load(readFileSync('.github/workflows/ci-health.yml', 'utf8'));
   const writers = Object.entries(jobs).filter(([, job]) => Object.values(job.permissions ?? {}).includes('write')).map(([name]) => name);
   assert.deepEqual(writers, ['report']);
+  // Runs that share a group queue, and a newer one replaces a pending one: only main's runs, the writers, share one.
+  const workflow = load(readFileSync('.github/workflows/ci-health.yml', 'utf8'));
+  assert.deepEqual(workflow.concurrency, { group: 'ci-health-${{ github.ref }}', 'cancel-in-progress': false });
   assert.deepEqual(jobs.report.permissions, { contents: 'read', actions: 'read', issues: 'write' });
   assert.equal(jobs.report.if, "${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}");
   const script = job => job.steps.find(step => /ci-health\.mjs/.test(step.run ?? ''));
   assert.equal(script(jobs.report).env.DRY_RUN, undefined);
   assert.deepEqual(jobs['dry-run'].permissions, { contents: 'read', actions: 'read', issues: 'read' });
-  assert.equal(jobs['dry-run'].if, "${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}");
+  // A manual run on any other branch is a dry run too, so it still prints its report.
+  assert.equal(jobs['dry-run'].if, "${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main') }}");
   assert.equal(script(jobs['dry-run']).env.DRY_RUN, 'true');
 });
