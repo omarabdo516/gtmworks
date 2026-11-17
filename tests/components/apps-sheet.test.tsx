@@ -27,6 +27,7 @@ afterEach(async () => {
 const text: Record<string, string> = en;
 const states: Record<string, AppItem['state']> = { klaviyo: 'connected', notion: 'attention' };
 const items: AppItem[] = apps.map(app => ({ key: app.key, name: app.name, mark: app.mark, category: app.category, state: states[app.key] ?? 'off',
+ agents: [{ id: '3a000000-0000-0000-0000-000000000011', name: 'Lead', connection: 'f0000000-0000-0000-0000-000000000011', main: true, own: true, state: states[app.key] ?? 'off' }],
  use: text[`use.${app.key}`], can: text[`can.${app.key}`], words: app.name }));
 
 // The browser reads the apps from GET /api/company-apps: `read` is what the next read gets ('hang' never answers, 'fail'
@@ -192,7 +193,7 @@ test('closing the sheet while a sign-in is followed cancels it, closes the vendo
  await userEvent.keyboard('{Escape}');
  await expect.poll(() => document.querySelector('dialog.apps-sheet')).toBeNull();
  await expect.element(screen.getByText('The sign-in to Canva was cancelled.')).toBeVisible();
- expect(seen.steps.at(-1)).toEqual({ company: expect.any(String), app: 'canva', action: 'cancel', keepalive: true });
+ expect(seen.steps.at(-1)).toEqual({ company: expect.any(String), agent: '3a000000-0000-0000-0000-000000000011', app: 'canva', action: 'cancel', keepalive: true });
  expect(opened.close).toHaveBeenCalledTimes(1);
  await screen.getByRole('button', { name: /^Connect apps/ }).click();
  await expect.element(screen.getByRole('button', { name: 'Connect Canva' })).toBeVisible();
