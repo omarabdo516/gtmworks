@@ -1,7 +1,5 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { testDb } from './pgtap.mjs';
 
 // An install updated to per-Member Agent visibility (#15): every Member keeps the Agents they saw before the update.
 const migration=readFileSync('supabase/migrations/20261216150000_member_agent_visibility.sql','utf8');
@@ -33,9 +31,4 @@ select is((select string_agg(key||'='||value,',' order by key) from (${verify}) 
 select * from finish();
 rollback;
 `;
-const dir=mkdtempSync(join(tmpdir(),'gtmworks-member-agent-visibility-'));
-try {
- const file=join(dir,'migration.sql'); writeFileSync(file,sql);
- const result=spawnSync('npx',['--no-install','supabase','test','db',file],{stdio:'inherit'});
- process.exitCode=result.status ?? 1;
-} finally { rmSync(dir,{recursive:true,force:true}); }
+testDb(import.meta.url,sql);

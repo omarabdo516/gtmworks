@@ -89,9 +89,9 @@ test('a workflow a pull request starts reads no secret but GITHUB_TOKEN', () => 
  }
 });
 
-// The local Supabase stack starts through ci.sh (database, integration, visual, visual-update, lane-proof) or
+// The local Supabase stack starts through ci.sh (database, images, integration, visual, visual-update, lane-proof) or
 // scripts/local-db.sh.
-const startsSupabase = step => /\bci\.sh\b.*\b(database|integration|visual|visual-update|lane-proof)\b|\blocal-db\.sh\b/.test(step.run ?? '');
+const startsSupabase = step => /\bci\.sh\b.*\b(database|images|integration|visual|visual-update|lane-proof)\b|\blocal-db\.sh\b/.test(step.run ?? '');
 const condition = step => String(step.if ?? '').replace(/^\$\{\{\s*|\s*\}\}$/g, '');
 const supabaseJobs = jobs.filter(({ job }) => (job.steps ?? []).some(startsSupabase));
 const label = ({ path, name }) => `${path} ${name}`;

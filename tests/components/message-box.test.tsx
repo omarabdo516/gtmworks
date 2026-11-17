@@ -1,12 +1,12 @@
 import { afterEach, expect, test, vi } from 'vitest';
-import { act } from 'react';
+import { act, createRef, type Ref } from 'react';
 import { hydrateRoot } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 import { render } from 'vitest-browser-react';
 import { cdp, page, userEvent } from 'vitest/browser';
 // Gives cdp() Playwright's session type (its send), as the config's provider does at run time.
 import type {} from '@vitest/browser-playwright';
-import { MessageBox, postMessage } from '@/app/conversation-composer';
+import { MessageBox, postMessage, type MessageBoxHandle } from '@/app/conversation-composer';
 import { LanguageProvider } from '@/lib/i18n-client';
 import type { Language } from '@/lib/i18n.mjs';
 import '@/app/tokens.css';
@@ -14,7 +14,7 @@ import '@/app/shell.css';
 
 afterEach(() => { vi.unstubAllGlobals(); });
 type Send = (text: string, sendKey: string) => Promise<string | null>;
-const box = (props: { send: Send, stop?: { label: string, run: () => Promise<string | null> }, draft?: string }, language: Language = 'en') =>
+const box = (props: { send: Send, stop?: { label: string, run: () => Promise<string | null> }, ref?: Ref<MessageBoxHandle> }, language: Language = 'en') =>
  render(<LanguageProvider language={language}><MessageBox placeholder="Write" {...props}/></LanguageProvider>);
 
 test('Enter sends the typed text once and empties the box; Shift+Enter adds a line', async () => {
@@ -78,8 +78,10 @@ test('while the Agent works an empty box offers stop, and typed text still sends
  await expect.poll(() => send.mock.calls.length).toBe(1);
 });
 
-test('a draft starts in the box, focused; extras and dictation say Soon', async () => {
- const screen = await box({ send: async () => null, draft: 'Make an Agent' });
+test('a sentence put in the box shows there, focused; extras and dictation say Soon', async () => {
+ const handle = createRef<MessageBoxHandle>();
+ const screen = await box({ send: async () => null, ref: handle });
+ await act(() => handle.current?.insert('Make an Agent'));
  await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('Make an Agent');
  await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveFocus();
  await expect.element(screen.getByRole('button', { name: 'More · Soon' })).toHaveAttribute('aria-disabled', 'true');

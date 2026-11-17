@@ -93,7 +93,8 @@ enabled = true
 # max_header_length = 4096
 
 [studio]
-enabled = true
+# Off on every lane, lane 0 included: no app request or test uses it (#259).
+enabled = false
 # Port to use for Supabase Studio.
 port = 54323
 # External URL of the API server that frontend connects to.
@@ -377,7 +378,8 @@ authorization_url_path = "/oauth/consent"
 allow_dynamic_registration = false
 
 [edge_runtime]
-enabled = true
+# Off on every lane, lane 0 included: no app request or test uses it (#259).
+enabled = false
 # Supported request policies: `oneshot`, `per_worker`.
 # `per_worker` (default) — enables hot reload during local development.
 # `oneshot` — fallback mode if hot reload causes issues (e.g. in large repos or with symlinks).
@@ -391,7 +393,8 @@ deno_version = 2
 # secret_key = "env(SECRET_VALUE)"
 
 [analytics]
-enabled = true
+# Off on every lane, lane 0 included: no app request or test uses it (#259).
+enabled = false
 port = 54327
 # Configure one of the supported backends: `postgres`, `bigquery`.
 backend = "postgres"
