@@ -65,13 +65,14 @@ export function ConversationLoaded({initial,team}:{initial:ConversationRecord,te
  const box=useRef<HTMLDivElement>(null); const stick=useRef(true);
  // `asked` only sets this transcript's own state, so the one it was first given stays good.
  useLayoutEffect(()=>{ setLive({record,asked}); },[record]); // eslint-disable-line react-hooks/exhaustive-deps
- // Opened from "Waiting on you" at a handed step (#140, `#hand-<card>`): that card in view and focused, not the newest
+ // Opened from "Waiting on you" at a handed step (#140, `#hand-<card>`) or a permission request (#165,
+ // `#permission-<card>`): that card in view and focused, not the newest
  // message. It runs before the effect below, on the first draw only. The address is then the Conversation's again, so a
 // reload opens on the newest message, and the first message after the landing (the Agent's reply to "Done it") is
 // followed again.
  const landed=useRef<number|null>(null);
  useLayoutEffect(()=>{
-  const card=/^#hand-\d+$/.test(location.hash)?box.current?.querySelector<HTMLElement>(location.hash):null;
+  const card=/^#(hand|permission)-\d+$/.test(location.hash)?box.current?.querySelector<HTMLElement>(location.hash):null;
   if(!card) return;
   stick.current=false; landed.current=messages.length;
   card.scrollIntoView({block:'center'}); card.focus({preventScroll:true});

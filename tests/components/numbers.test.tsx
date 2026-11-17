@@ -92,3 +92,19 @@ for (const language of ['en', 'ar'] as const) test(`in ${language} an Agent wait
  await expect.element(row.getByText(t('waitingAgentKeyReason'), { exact: true })).toBeVisible();
  await expect.element(row.getByText(t('numbersWaitingOnYou'), { exact: true })).toBeVisible();
 });
+
+// #165: a permission request on Numbers opens its chat at the card, the channel's in its channel, named by what it asks
+// and its Agent.
+for (const language of ['en', 'ar'] as const) test(`in ${language} a permission request on Numbers opens its chat at the card`, async () => {
+ const { t } = i18n(language);
+ const asked = { kind: 'permission', id: 51, title: 'delete the old exports', body: '', asked_by: 'Ads', card_id: 9, conversation_id: 'c-7', created_at: '2026-06-10T09:41:00Z' };
+ const screen = await render(<LanguageProvider language={language}><div className="gw" dir={language === 'ar' ? 'rtl' : 'ltr'}><div className="panel-card">
+  <WaitingRow t={t} slug="rs-learning" writer item={asked} face={null}/>
+  <WaitingRow t={t} slug="rs-learning" writer item={{ ...asked, kind: 'channel_permission', id: 6, card_id: null, conversation_id: null, channel_id: 'ch-1' }} face={null}/>
+ </div></div></LanguageProvider>);
+ const [chat, channel] = screen.getByRole('link').elements();
+ expect(chat.getAttribute('href')).toBe('/c/rs-learning/conversations/c-7#permission-51');
+ expect(channel.getAttribute('href')).toBe('/c/rs-learning/channels/ch-1#permission-6');
+ await expect.element(screen.getByRole('link').first().getByText('delete the old exports', { exact: true })).toBeVisible();
+ await expect.element(screen.getByRole('link').first().getByText('Ads', { exact: true })).toBeVisible();
+});

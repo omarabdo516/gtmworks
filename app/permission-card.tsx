@@ -6,6 +6,7 @@
 // outcome and its time. Closed: the Engine stopped waiting before an answer reached it. The Engine names no app, so the
 // tile is the reference's plain one; its words keep their own direction, and the card follows the interface's, as the
 // reference's approval card does. The reference's line under the title has no source in the Engine and is not drawn.
+// `permission-<id>` is where "Waiting on you" opens it (#165).
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ShellIcon } from '@/components/shell-icon';
 import { AppTile } from '@/components/app-tile';
@@ -51,7 +52,7 @@ export function PermissionCard({card,fresh,offered,decide}:{card:PermissionReque
  const title=card.description.trim()||card.command.trim();
  const command=card.description.trim()?card.command.trim():'';
  const line=(icon:'check'|'x'|'clock',words:ReactNode)=><div className="card__outcome"><ShellIcon name={icon}/><span>{words}</span></div>;
- return <div className={`reply-card reply-card--permission${shown?' is-resolved':''}${just?' is-just':''}${fresh?' card-in':''}`} role="group" aria-label={t('permissionLabel',card.title)}>
+ return <div id={`permission-${card.id}`} tabIndex={-1} className={`reply-card reply-card--permission${shown?' is-resolved':''}${just?' is-just':''}${fresh?' card-in':''}`} role="group" aria-label={t('permissionLabel',card.title)}>
   <div className="card__head"><AppTile app={plainTile} size="lg"/>
    <div className="card__titles"><span className="card__title" dir="auto">{title}</span></div></div>
   {command&&<dl className="kv"><div className="kv__row"><dt>{t('permissionCommand')}</dt><dd><bdi dir="auto">{command}</bdi></dd></div></dl>}
