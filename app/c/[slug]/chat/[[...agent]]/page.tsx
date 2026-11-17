@@ -30,7 +30,7 @@ export default async function AgentChatPage({params,searchParams}:{params:Promis
  const {data:membership}=await db.from('members').select('role').eq('company_id',company.id).eq('person_id',user.id).is('removed_at',null).maybeSingle();
  // Any Member but a Viewer may write (#287); the database decides, as it does for every send.
  const {data:writer}=await db.rpc('conversation_can_write',{c:company.id});
- const {items:waitingItems}=await approvalQueue(db,company.id,user.id,membership?.role||'');
+ const {count:waitingCount}=await approvalQueue(db,company.id,user.id,membership?.role||'');
  const owner=membership?.role==='owner';
  const newAgent=(mode==='agent'||(mode==='ready'&&owner))&&!!agent?.is_default&&!!writer;
  const alone=company.work_mode==='alone';
@@ -46,7 +46,7 @@ export default async function AgentChatPage({params,searchParams}:{params:Promis
  const gallery=mode==='ready'&&newAgent?{company:company.name,alone,roles:readyRoles(language,alone)}:null;
  const details=agent?await agentDetails(db,{company:company.id,agent:agent.id,slug,me:user.id,role:membership?.role||'',tab}):null;
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
- return <Shell company={company} companies={companies||[]} personId={user.id} section="chat" title={t('chats')} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={waitingItems.length} agentId={agent?.id}>
+ return <Shell company={company} companies={companies||[]} personId={user.id} section="chat" title={t('chats')} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={waitingCount} agentId={agent?.id}>
   <main className="convo-page h-full"><AgentChat slug={slug} company={company.id} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={details} writer={!!writer} team={company.work_mode==='team'} empty={empty} newAgent={newAgent} askOf={askOf} gallery={gallery} isNew={!!agent&&isNewFor(agent,user.id)}/></main>
  </Shell>;
 }

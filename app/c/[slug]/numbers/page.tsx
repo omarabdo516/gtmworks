@@ -36,7 +36,7 @@ export default async function NumbersPage({params,searchParams}:{params:Promise<
  // Read beside the figures: the sidebar counts it once it arrives, and the figures list it.
  const queue=approvalQueue(db,company.id,user.id,membership?.role||'');
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
- return <Shell company={company} companies={companies||[]} personId={user.id} section="numbers" title={t('numbers')} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={queue.then(({items})=>items.length)}>
+ return <Shell company={company} companies={companies||[]} personId={user.id} section="numbers" title={t('numbers')} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={queue.then(({count})=>count)}>
   <main className="numbers-page">
    <div className="dash">
     <NumbersHead t={t} slug={slug} period={period}/>

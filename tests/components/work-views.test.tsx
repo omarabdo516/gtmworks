@@ -1,9 +1,12 @@
 import { expect, test, vi } from 'vitest';
 import type { ComponentProps } from 'react';
-import { userEvent } from 'vitest/browser';
-import { card, showWork, workProps } from './work-page';
+import { cdp, userEvent } from 'vitest/browser';
+import type {} from '@vitest/browser-playwright';
+import { card, sent, showWork, workProps, workView } from './work-page';
 
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/work/board' }));
+const { push, toast } = vi.hoisted(() => ({ push: vi.fn(), toast: vi.fn() }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push, refresh: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/work/board' }));
+vi.mock('@/app/toast', () => ({ toast }));
 vi.mock('@/lib/link', () => ({ default: ({ prefetch: _prefetch, scroll: _scroll, ...props }: ComponentProps<'a'> & { prefetch?: unknown, scroll?: unknown }) => <a {...props}/> }));
 vi.mock('@/app/c/[slug]/[[...section]]/skill-actions', () => ({ decideAgentRule: vi.fn(), answerAgentRequest: vi.fn() }));
 vi.mock('@/app/note-actions', () => ({ editNote: vi.fn() }));
@@ -89,4 +92,112 @@ test.each([['en', 'Handed to you'], ['ar', 'اتسلّمتلك']] as const)('in 
  expect(item.querySelector('.mcard__who')!.textContent).toBe('Writer');
  expect(wtag.getBoundingClientRect().width).toBeLessThan(item.querySelector('.mcard__q')!.getBoundingClientRect().width);
  expect(getComputedStyle(wtag).borderRadius).not.toBe('0px');
+});
+
+// #146: Card 9 is In progress (stage كتابة), tied to Omar's chat with Ads, whose handed step waits on him. Waiting on you
+// draws it once, with the badge and line for whoever reads it (design-reference: kcardHTML's waiting branch, waitTagHTML).
+const members = [{ person_id: 'p-1', people: { name: 'Omar Abdo' } }, { person_id: 'p-2', people: { name: 'Sara' } }];
+const handed = { kind: 'hand', id: 42, title: 'انشر المقال', body: '', asked_by: 'Ads', card_id: 9, conversation_id: 'c-9', created_at: '2026-06-10T09:00:00Z' };
+const chatCard = (kind: 'hand' | 'question' = 'hand') => card({ id: 9, title: 'مقال المحاسبة', stage_id: 3, wait: { person: 'p-1', kind, title: kind === 'hand' ? 'انشر المقال' : 'Which audience first?' } });
+const readers: ['en' | 'ar', string, string, { me: string, waiting?: (typeof handed)[], canCreate?: boolean }][] = [
+ ['en', 'the chat\'s person', 'Waiting on you', { me: 'p-1', waiting: [handed] }],
+ ['ar', 'the chat\'s person', 'مستنيك', { me: 'p-1', waiting: [handed] }],
+ ['en', 'another Contributor', 'Waiting on Omar', { me: 'p-2' }],
+ ['ar', 'another Contributor', 'مستني Omar', { me: 'p-2' }],
+ ['en', 'a Viewer', 'Waiting on the team', { me: 'p-4', canCreate: false }],
+ ['ar', 'a Viewer', 'مستني الفريق', { me: 'p-4', canCreate: false }],
+];
+test.each(readers)('in the %s interface, %s reads a Card whose chat waits under Waiting on you once, with its tag, "%s" and the step\'s title, its stage kept', async (language, _, badge, reader) => {
+ await showWork(workProps({ cards: [chatCard()], members, ...reader }), { language });
+ const drawn = document.querySelectorAll('#board-cols .kcard[data-card-id="9"]');
+ expect(drawn).toHaveLength(1);
+ const kcard = drawn[0];
+ expect(kcard.closest('.col')!.getAttribute('data-column')).toBe('waiting');
+ expect(kcard.getAttribute('data-stage-id')).toBe('3');
+ expect(document.querySelectorAll('a.mcard')).toHaveLength(0);
+ const waiting = document.querySelector('.col[data-column="waiting"]')!;
+ expect(waiting.querySelector('.col__count')!.textContent).toBe('1');
+ expect(document.querySelector('.col[data-column="progress"] .col__count')!.textContent).toBe('0');
+ const [tag, shown, line] = [...kcard.children].slice(1);
+ expect([tag.className, tag.textContent]).toEqual(['wtag wtag--hand', language === 'ar' ? 'اتسلّمتلك' : 'Handed to you']);
+ expect(tag.getBoundingClientRect().width).toBeLessThan(line.getBoundingClientRect().width);
+ const mine = reader.me === 'p-1';
+ expect(shown.className).toBe(mine ? 'badge badge--wait' : 'badge');
+ expect(shown.textContent).toBe(badge);
+ expect(!!shown.querySelector('.dot.dot--waiting')).toBe(mine);
+ expect(!!shown.querySelector('svg')).toBe(!mine);
+ expect([line.className, line.textContent]).toEqual(['kcard__t', 'انشر المقال']);
+});
+
+test('a question waiting in the chat reads as its question with no tag, and the Card is back In progress once nothing waits', async () => {
+ const screen = await showWork(workProps({ cards: [chatCard('question')], members, waiting: [{ ...handed, kind: 'question', id: 43, title: 'Which audience first?' }] }));
+ const kcard = () => document.querySelector('#board-cols .kcard[data-card-id="9"]')!;
+ expect(kcard().closest('.col')!.getAttribute('data-column')).toBe('waiting');
+ expect(kcard().querySelector('.wtag')).toBeNull();
+ expect(kcard().querySelector('.kcard__t')!.textContent).toBe('Which audience first?');
+ await screen.rerender(workView(workProps({ cards: [card({ id: 9, title: 'مقال المحاسبة', stage_id: 3, wait: null })], members })));
+ await expect.poll(() => kcard().closest('.col')!.getAttribute('data-column')).toBe('progress');
+ expect(kcard().getAttribute('data-stage-id')).toBe('3');
+ expect(kcard().querySelector('.badge')).toBeNull();
+});
+
+// The Card's chat and its approval count it once, in the column and in the board's own summary.
+test('a Card that both waits for the reader\'s approval and holds their chat\'s question and hand is counted once', async () => {
+ const rows = [{ ...handed, kind: 'approval', id: 9, conversation_id: null }, handed, { ...handed, kind: 'question', id: 43 }];
+ await showWork(workProps({ cards: [chatCard()], members, approvableIds: [9], waiting: rows }));
+ expect(document.querySelectorAll('#board-cols .kcard[data-card-id="9"]')).toHaveLength(1);
+ expect(document.querySelector('.col[data-column="waiting"] .col__count')!.textContent).toBe('1');
+ expect(document.querySelector('.board-tools__summary')!.textContent).toBe('1 things waiting on you');
+});
+
+// On the reader's own list (/approvals) the Card stands for its chat's rows too, and a chat with no Card keeps its item.
+test('the reader\'s own Waiting on you draws a Card whose chat waits once, in place of its question and hand, beside the item of a chat with no Card', async () => {
+ const rows = [handed, { ...handed, kind: 'question', id: 43 }, { ...handed, id: 44, card_id: null, conversation_id: 'c-10' }];
+ await showWork(workProps({ cards: [chatCard()], members, waiting: rows, focus: 'waiting' }));
+ const column = document.querySelector('.col[data-column="waiting"]')!;
+ expect(column.querySelectorAll('.kcard[data-card-id="9"]')).toHaveLength(1);
+ expect([...column.querySelectorAll('a.mcard')].map(item => item.getAttribute('href'))).toEqual(['/c/rs-learning/conversations/c-10#hand-44']);
+ expect(column.querySelector('.col__count')!.textContent).toBe('2');
+});
+
+// As a Card waiting on a decision: the drop and Shift+Arrow are refused, say so and open the Card; nothing is sent.
+test('a Card whose chat waits leaves Waiting on you by its answer: a mouse drop elsewhere and Shift+Arrow open it and move nothing', async () => {
+ push.mockClear(); toast.mockClear();
+ const props = workProps({ cards: [chatCard()], members, waiting: [handed] });
+ await showWork(props);
+ const from = document.querySelector('.kcard[data-card-id="9"]')!.getBoundingClientRect();
+ const to = document.querySelector('.col[data-column="ideas"]')!.getBoundingClientRect();
+ const mouse = (type: 'mousePressed' | 'mouseMoved' | 'mouseReleased', x: number, y: number) => cdp().send('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1 });
+ await mouse('mousePressed', from.left + from.width / 2, from.top + 20);
+ for (let step = 1; step <= 10; step++) await mouse('mouseMoved', from.left + from.width / 2 + (to.left + to.width / 2 - from.left - from.width / 2) * step / 10, from.top + 20 + (to.top + 40 - from.top - 20) * step / 10);
+ await mouse('mouseReleased', to.left + to.width / 2, to.top + 40);
+ await expect.poll(() => toast.mock.calls).toEqual([['This card is waiting for your decision. Decide in the chat first', { icon: 'hand' }]]);
+ expect(push.mock.calls).toEqual([['/c/rs-learning/work/board/9']]);
+ document.querySelector<HTMLElement>('.kcard[data-card-id="9"] a')!.focus();
+ await userEvent.keyboard('{Shift>}{ArrowRight}{/Shift}');
+ expect(toast).toHaveBeenCalledTimes(2);
+ expect(push.mock.calls).toEqual([['/c/rs-learning/work/board/9'], ['/c/rs-learning/work/board/9']]);
+ expect(sent(props)).toEqual([]);
+ expect(document.querySelector('.kcard[data-card-id="9"]')!.closest('.col')!.getAttribute('data-column')).toBe('waiting');
+});
+
+// design-reference: syncWaitMarks. The board's first read is the baseline; a Card that starts waiting on the reader after
+// it shakes its badge once, though it is drawn again in another column, and a later read does not shake it again.
+test('the badge of a Card that starts waiting on the reader shakes once, and not on the first read or the next', async () => {
+ vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+ try {
+  const before = workProps({ cards: [card({ id: 9, title: 'مقال المحاسبة', stage_id: 3 }), card({ id: 5, title: 'Review the reel', stage_id: 4 })], members, approvableIds: [5] });
+  const screen = await showWork(before);
+  const badge = (id: number) => document.querySelector(`.kcard[data-card-id="${id}"] .badge`)!;
+  expect(badge(5).className).toBe('badge badge--wait');
+  const after = { ...before, cards: [chatCard(), before.cards[1]], waiting: [handed] };
+  await screen.rerender(workView(after));
+  await expect.poll(() => badge(9)?.className).toBe('badge badge--wait is-new');
+  expect(getComputedStyle(badge(9)).animationName).toBe('gw-nudge');
+  expect(badge(5).className).toBe('badge badge--wait');
+  vi.advanceTimersByTime(1200);
+  await expect.poll(() => badge(9).className).toBe('badge badge--wait');
+  await screen.rerender(workView({ ...after, items: [] }));
+  expect(badge(9).className).toBe('badge badge--wait');
+ } finally { vi.useRealTimers(); }
 });

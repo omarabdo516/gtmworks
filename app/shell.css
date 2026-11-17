@@ -10,6 +10,8 @@
 /* An answered card settles (design-reference: settle; #138); its key pops and its check draws with the agent face's
    gw-ck-pop and gw-draw-check. */
 @keyframes gw-settle { from { opacity: .55; transform: scale(.985); } }
+/* A badge and a chat's pill that just started waiting on the reader shake once (design-reference: nudge; #146). */
+@keyframes gw-nudge { 0%, 100% { transform: none; } 20% { transform: translateX(-3px) rotate(-2deg); } 40% { transform: translateX(3px) rotate(2deg); } 60% { transform: translateX(-2px); } 80% { transform: translateX(1px); } }
 
 /* The product's global button look (app/globals.css: border, padding, 36px floor, half opacity when disabled) is not
    the reference's; the shell's buttons start bare, as the reference's do. The reset has no more weight than one class,

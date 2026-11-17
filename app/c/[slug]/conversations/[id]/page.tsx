@@ -36,12 +36,12 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  const {data:membership}=await db.from('members').select('role').eq('company_id',company.id).eq('person_id',user.id).is('removed_at',null).maybeSingle();
  // Any Member but a Viewer may write (#287); the database decides, as it does for every send.
  const {data:writer}=await db.rpc('conversation_can_write',{c:company.id});
- const {items:waitingItems}=await approvalQueue(db,company.id,user.id,membership?.role||'');
+ const {count:waitingCount}=await approvalQueue(db,company.id,user.id,membership?.role||'');
  const details=agent?await agentDetails(db,{company:company.id,agent:agent.id,slug,me:user.id,role:membership?.role||'',tab}):null;
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  const title=(first?.body as string|undefined)?.split('\n')[0]||conversation.agent_name;
  const tied=await tiedRead;
- return <Shell company={company} companies={companies||[]} personId={user.id} section="conversations" title={title} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={waitingItems.length} agentId={conversation.agent_id||undefined} conversationId={id}>
+ return <Shell company={company} companies={companies||[]} personId={user.id} section="conversations" title={title} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={waitingCount} agentId={conversation.agent_id||undefined} conversationId={id}>
   <main className="convo-page h-full"><ConversationView slug={slug} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={details} company={company.id} conversation={{id:conversation.id,agent_id:conversation.agent_id,agent_name:conversation.agent_name,face:faceOf(conversation)}} title={title} writer={!!writer} board={tied&&{card:tied.card,column:tied.column}}><Loaded record={record} team={company.work_mode==='team'}/></ConversationView></main>
  </Shell>;
 }

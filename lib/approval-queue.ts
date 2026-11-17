@@ -1,6 +1,7 @@
 import { cache } from 'react';
 import type { supabase } from './supabase';
 import type { Step, ApprovalCard } from '@/app/c/[slug]/[[...section]]/approvals';
+import { boardCardColumns, waitingCount } from './board-columns.mjs';
 // One item of "Waiting on you" (ADR 0013): an approval this person holds, or anything else addressed to them by kind.
 // A mention (#22) carries the note it opens.
 // A learning suggestion (#25, kind rule_suggestion: title the rule, body the Agent's name, asked_by who told it) also
@@ -11,7 +12,8 @@ type RuleSuggestion={rule:string,agent:{connection_id:string,name:string}|null};
 type AgentRequest={apps:string[],asked_with:string};
 export type WaitingItem={kind:string,id:number,title:string,body:string,asked_by:string,card_id:number|null,conversation_id:string|null,created_at:string,suggestion?:RuleSuggestion,request?:AgentRequest|null,note_id?:number|null};
 // "Waiting on you" is one list (#16), read once per request from waiting_list(company) as the signed-in person: the
-// approvals they hold (`cards`, for the card's decision and the counts) and every item, newest first (`items`).
+// approvals they hold (`cards`, for the card's decision and the counts), every item, newest first (`items`), and how many
+// things wait (`count`), a Card once with its approval and its chat's question or hand (#146).
 export const approvalQueue=cache(async(db:Awaited<ReturnType<typeof supabase>>,company:string,person:string,role:string)=>{
  void person; void role; // the database reads both from the session
  const [stepResult,listResult]=await Promise.all([
@@ -24,7 +26,7 @@ export const approvalQueue=cache(async(db:Awaited<ReturnType<typeof supabase>>,c
  const requestIds=listed.filter(item=>item.kind==='agent_request').map(item=>item.id);
  const mentionIds=listed.filter(item=>item.kind==='mention').map(item=>item.id);
  const [cardResult,ruleResult,requestResult,mentionResult]=await Promise.all([
-  ids.length?db.from('work_cards').select('*').eq('company_id',company).in('id',ids):{data:[],error:null},
+  ids.length?db.from('work_cards').select(boardCardColumns).eq('company_id',company).in('id',ids):{data:[],error:null},
   ruleIds.length?db.from('waiting_items').select('id,agent_rules(body,hermes_agents(connection_id,name))').in('id',ruleIds):{data:[],error:null},
   requestIds.length?db.from('lead_agent_requests').select('id,apps,asked_with').eq('company_id',company).in('id',requestIds):{data:[],error:null},
   mentionIds.length?db.from('waiting_items').select('id,note_id,work_comments(body)').in('id',mentionIds):{data:[],error:null},
@@ -43,5 +45,5 @@ export const approvalQueue=cache(async(db:Awaited<ReturnType<typeof supabase>>,c
   const mention=item.kind==='mention'?mentions.get(item.id):undefined;
   return mention?{...item,note_id:mention.note_id,body:mention.work_comments?.body??item.body}:item;
  });
- return {steps:(stepResult.data || []) as Step[],cards,items,available:!stepResult.error&&!listResult.error&&!cardResult.error&&!ruleResult.error&&!requestResult.error&&!mentionResult.error};
+ return {steps:(stepResult.data || []) as Step[],cards,items,count:waitingCount(listed),available:!stepResult.error&&!listResult.error&&!cardResult.error&&!ruleResult.error&&!requestResult.error&&!mentionResult.error};
 });

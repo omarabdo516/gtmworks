@@ -18,9 +18,9 @@ export default async function ChannelPage({params}:{params:Promise<{slug:string,
  if(!record) notFound();
  const {data:person}=await db.from('people').select('name').eq('id',user.id).single();
  const {data:membership}=await db.from('members').select('role').eq('company_id',company.id).eq('person_id',user.id).is('removed_at',null).maybeSingle();
- const {items:waitingItems}=await approvalQueue(db,company.id,user.id,membership?.role||'');
+ const {count:waitingCount}=await approvalQueue(db,company.id,user.id,membership?.role||'');
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
- return <Shell company={company} companies={companies||[]} personId={user.id} section="channels" title={channelTitle(t,record.channel)} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={waitingItems.length} channelId={id}>
+ return <Shell company={company} companies={companies||[]} personId={user.id} section="channels" title={channelTitle(t,record.channel)} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={waitingCount} channelId={id}>
   <main className="convo-page h-full"><ChannelView person={user.id} initial={record}/></main>
  </Shell>;
 }
