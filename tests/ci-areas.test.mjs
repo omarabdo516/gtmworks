@@ -29,8 +29,8 @@ const screens = {
   'app/globals.css': { components: 'true', database: 'false', integration: 'false', install: 'false' },
   'components/shell/sidebar.tsx': { components: 'true', database: 'false', integration: 'false', install: 'false' },
   'lib/messages/en.json': { components: 'true', database: 'false', integration: 'false', install: 'false' },
-  'tests/visual-screens/home.json': { components: 'false', database: 'false', integration: 'false', install: 'false' },
-  'tests/visual.spec.ts-snapshots/home-en-1440-linux.png': { components: 'false', database: 'false', integration: 'false', install: 'false' },
+  'tests/visual-lane/screens.json': { components: 'false', database: 'false', integration: 'false', install: 'false' },
+  'tests/visual-lane/images/home-ar-1440-light.png': { components: 'false', database: 'false', integration: 'false', install: 'false' },
   'tests/components/message-box.test.tsx': { components: 'true', database: 'false', integration: 'false', install: 'false' },
 };
 for (const [path, expected] of Object.entries(screens)) {
@@ -62,7 +62,7 @@ for (const [path, components] of [
 // and so do the compared widths and languages, the reference and the stylesheet build the motion test reads (#127).
 for (const path of [
   'app/conversation-composer.tsx', 'components/company-agent-face.tsx', 'lib/messages/en.json', 'tests/components/message-box.test.tsx', 'vitest.config.mts',
-  'tests/visual-screens.mjs', 'design-reference/index.html', 'postcss.config.mjs', 'tests/offline.mjs',
+  'design-reference/index.html', 'postcss.config.mjs', 'tests/offline.mjs',
 ]) {
   test(`${path} runs the component tests`, () => assert.equal(areas(path).components, 'true'));
 }
@@ -96,7 +96,7 @@ for (const path of [
 }
 
 for (const path of [
-  'tests/frame.spec.ts', 'tests/proxy/production-shape.spec.ts', 'tests/visual.spec.ts', 'tests/sign-in.ts', 'tests/visual-screens.mjs',
+  'tests/frame.spec.ts', 'tests/proxy/production-shape.spec.ts', 'tests/sign-in.ts',
   'tests/lane.mjs', 'tests/fake-hermes.mjs', 'tests/fake-engine.mjs', 'tests/offline.mjs', 'tests/offline-browser.ts',
   'playwright.config.ts', 'playwright.proxy.config.ts', 'scripts/web.sh', 'scripts/local-db.sh',
   'scripts/proxy-stack.sh', 'scripts/ci-image.sh', 'supabase/seed.sql',
@@ -159,11 +159,11 @@ test('an empty, malformed or unreadable list runs every suite', t => {
 
 // No path, however it is mixed, routes a pull request to the compared screens (#257).
 test('no change sends a pull request to the compared screens', () => {
-  for (const path of ['app/page.tsx', 'tests/visual-screens/home.json', 'tests/visual.spec.ts-snapshots/home-en-1440-linux.png', 'tests/visual-lane/renderer', 'docs/testing.md']) {
+  for (const path of ['app/page.tsx', 'tests/visual-lane/screens.json', 'tests/visual-lane/images/home-ar-1440-light.png', 'tests/visual-lane/renderer', 'docs/testing.md']) {
     assert.doesNotMatch(run([path]), /=visual$|^(lane|proof|visual)=/m, path);
   }
 });
-// The lane's own files need no journeys: they run in the lane job alone.
-for (const path of ['playwright.lane.config.ts', 'tests/visual-lane-guards.ts', 'tests/visual-lane-guards.spec.ts', 'tests/visual-lane.mjs']) {
+// The lane's own files need no journeys: they run in the visual job alone, on main.
+for (const path of ['playwright.lane.config.ts', 'tests/visual-lane.spec.ts', 'tests/visual-lane-guards.ts', 'tests/visual-lane-guards.spec.ts', 'tests/visual-lane.mjs']) {
   test(`${path} does not run the whole browser suite`, () => assert.equal(areas(path).integration, 'false'));
 }

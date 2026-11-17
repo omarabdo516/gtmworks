@@ -1,7 +1,0 @@
-{
-  "about": "A Conversation whose record is still on its way (#172): from Home, Omar opens his chat with Ads about the Meta campaign (th-meta) from the sidebar while its usage reads are slow; under its title and over its composer the transcript shows the reference's placeholder (skeletonHTML).",
-  "path": "/c/rs-learning/home",
-  "state": "chat-loading",
-  "act": "open-chat-slowly",
-  "dark": true
-}
