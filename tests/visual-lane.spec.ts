@@ -6,7 +6,7 @@ import { signIn, openNavigation } from './sign-in';
 import { idle } from './navigation-measure';
 import { appOrigin } from './lane.mjs';
 import { asAdmin } from './slow-reads';
-import { localQuery, resetFirstRun } from '../scripts/first-run-db.mjs';
+import { localStatement, resetFirstRun } from '../scripts/first-run-db.mjs';
 
 // The visual lane (#257): each key screen in tests/visual-lane/screens.json, in Arabic at 1440 and 390, light and dark,
 // against its approved image. Each screen starts from the seed as built and signs in again, so the screens pass in any
@@ -27,7 +27,7 @@ for (const name of Object.keys(quietText)) if (!screens.some(screen => screen.na
 // The seed schedules its cards relative to the moment the database was built. Pin them to fixed days in a past month so
 // the board and the card look the same on every run, through the same audit trigger the app uses.
 function fixPublishingDates(baseURL: string | undefined) {
-  localQuery(`do $$ begin
+  localStatement(`do $$ begin
     perform set_config('request.jwt.claim.sub','${seedAuthor}',true);
     update public.work_cards c set go_live=x.fixed
     from (select id,('2026-06-'||lpad((row_number() over (order by id)*4)::text,2,'0')||'T12:00:00Z')::timestamptz fixed
