@@ -28,7 +28,7 @@ const script = files.filter(file => !refused.has(file)).map(file => [
  '\\timing off',
  "select :'LAST_ERROR_SQLSTATE' <> '00000' as verify_failed \\gset",
  '\\if :verify_failed',
- `\\echo '@failed' :'LAST_ERROR_MESSAGE'`,
+ `\\echo '@failed' :LAST_ERROR_MESSAGE`,
  '\\endif',
 ].join('\n')).join('\n') + '\n';
 
