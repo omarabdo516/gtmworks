@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(26);
+select plan(27);
 -- #138. Ads in RS Learning, shown to the Manager (2), the Contributors (3, 5) and the Viewer (4); the Owner (1) sees every
 -- Agent. One Conversation with Ads each, and in it the message of one run.
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
@@ -113,6 +113,16 @@ select results_eq($$select call_id,state from public.reply_cards where conversat
 select throws_ok($$insert into public.reply_cards(company_id,conversation_id,run_id,call_id,kind,title,content,state) values
  ('10000000-0000-0000-0000-000000000001','f2000000-0000-0000-0000-000000000002','q-run-2','p5@1','question','Which?','{"question":"Which?","choices":[],"multiple":false}','open')$$,'23505',null,
  'a Conversation waits on one question at a time');
+
+-- A retried send whose first answer was lost may find a question opened since: a message already queued under its key
+-- starts after the Run, so it is not also taken as the answer.
+insert into public.conversation_queued_turns(conversation_id,send_key,company_id,person_id,agent_id,message)
+ values ('f2000000-0000-0000-0000-000000000002','f3000000-0000-0000-0000-000000000009','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','f1000000-0000-0000-0000-000000000002','Meta');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select results_eq($$values (public.answer_question('10000000-0000-0000-0000-000000000001','f2000000-0000-0000-0000-000000000002',null,null,'Meta','f3000000-0000-0000-0000-000000000009'))$$,
+ $$values ('none')$$,'typed words already queued under their key are not also the answer');
+reset role;
 
 -- Who reads them: each question card only its Conversation's person, the Owner included; the answer's log row its
 -- person, the Owner and the Manager.

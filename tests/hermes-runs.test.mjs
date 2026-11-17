@@ -195,6 +195,10 @@ test('an answer Hermes could not take, or one to an address no longer allowed, i
   fake.settings.status=200;
   assert.equal(await engineFor({...connection(fake),address:'http://203.0.113.9:8642'}).answer(run,id,'Students'),'unreachable');
   assert.equal(await engine.answer(run,'not-a-question','Students'),'gone');
+  const engineFetch=globalThis.fetch;
+  globalThis.fetch=async()=>new Response('<html>Not Found</html>',{status:404});
+  try { assert.equal(await engine.answer(run,id,'Students'),'unreachable','a 404 that is not Hermes forgetting the Run keeps the question open'); }
+  finally { globalThis.fetch=engineFetch; }
   assert.equal(await engine.answer(run,id,'Students'),'answered');
  } finally { await fake.close(); }
 });

@@ -103,6 +103,11 @@ begin
  if not found or talk.person_id<>auth.uid() or not public.can_see_agent(c,talk.agent_id) then raise exception 'conversationNotFound' using errcode='P0002'; end if;
  if answer_question.answer_key is null then raise exception 'questionAnswerInvalid' using errcode='22023'; end if;
  if card is null then
+  -- Typed words while a question is open are its answer, unless they are a message already queued under this key (a
+  -- retried send whose first answer was lost): that turn starts after the Run, so claiming it too would send it twice.
+  -- Under reserve_conversation_turn's lock, so the queue and the claim never both take one send.
+  perform pg_advisory_xact_lock(hashtextextended('conversation_turn:'||conversation::text,0));
+  if exists(select 1 from public.conversation_queued_turns q where q.conversation_id=conversation and q.send_key=answer_question.answer_key) then return 'none'; end if;
   select * into asked from public.reply_cards r where r.conversation_id=conversation and r.kind='question'
    and (r.state in ('open','sending') or r.answer_key=answer_question.answer_key)
    order by r.answer_key is not distinct from answer_question.answer_key desc, r.id limit 1 for update;
