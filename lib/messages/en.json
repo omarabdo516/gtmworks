@@ -564,6 +564,8 @@
   "boardSubtitle": "Everything the agents are working on, and what’s waiting for your OK",
   "boardDragHint": "Drag a card to another column, or use Shift with the arrow keys",
   "boardFilterByAgent": "Filter by agent",
+  "boardWorkedOn": "Worked on it:",
+  "boardWorkedOnCard": "{0} · Worked on it: {1}",
   "boardAll": "All",
   "boardCardType": "Card type",
   "boardMarketing": "Marketing",

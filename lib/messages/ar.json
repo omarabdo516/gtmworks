@@ -564,6 +564,8 @@
   "boardSubtitle": "كل اللي الوكلاء شغالين عليه، وإيه اللي مستني موافقتك",
   "boardDragHint": "اسحب البطاقة بالماوس لعمود تاني، أو استخدم Shift مع الأسهم",
   "boardFilterByAgent": "فلتر حسب الوكيل",
+  "boardWorkedOn": "اشتغل عليها:",
+  "boardWorkedOnCard": "{0} · اشتغل عليها {1}",
   "boardAll": "الكل",
   "boardCardType": "نوع البطاقات",
   "boardMarketing": "تسويق",
