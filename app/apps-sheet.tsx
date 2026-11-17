@@ -29,7 +29,7 @@ const leaveMs=190;
 // connect, another page) hands a new read; the last one read stays shown until it lands, so neither the count nor an
 // open sheet empties meanwhile.
 export function AppsSheetProvider({apps,company,owner,rtl,children}:{apps:Promise<AppItem[]|null>,company:string,owner:boolean,rtl:boolean,children:ReactNode}) {
- const {t,language}=useI18n(); const text:Record<string,string>=language==='ar'?ar:en;
+ const {language}=useI18n(); const text:Record<string,string>=language==='ar'?ar:en;
  const [items,setItems]=useState<AppItem[]|null|undefined>(()=>lastRead.get(company));
  useEffect(()=>{ let current=true; void apps.then(read=>{ lastRead.set(company,read); if(current) setItems(read); }); return ()=>{ current=false; }; },[apps,company]);
  const [sheet,setSheet]=useState<Sheet>({phase:'closed'});
@@ -65,7 +65,7 @@ export function AppsSheetProvider({apps,company,owner,rtl,children}:{apps:Promis
   <dialog ref={box} className={`sheet apps-sheet${sheet.phase==='closing'?' is-closing':''}`} id="apps" aria-labelledby="apps-title"
    onCancel={event=>{ if(event.cancelable) { event.preventDefault(); close(); } }} onClose={closed} onClick={event=>{ if(event.target===event.currentTarget) close(); }}>
    {sheet.phase!=='closed'&&<div className="apps-inner">{item
-    ?<AppDetail key={item.key} place={place} company={company} owner={owner} rtl={rtl} item={item} text={text} soon={t('soon')} failed={false}/>
+    ?<AppDetail key={item.key} place={place} company={company} owner={owner} rtl={rtl} item={item} text={text} failed={false}/>
     :<AppsList place={place} owner={owner} items={items} text={text}/>}</div>}
   </dialog>
  </AppsContext.Provider>;

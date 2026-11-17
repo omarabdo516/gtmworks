@@ -26,6 +26,7 @@ afterEach(async () => {
 const text: Record<string, string> = en;
 const states: Record<string, AppItem['state']> = { klaviyo: 'connected', notion: 'attention' };
 const items: AppItem[] = apps.map(app => ({ key: app.key, name: app.name, mark: app.mark, category: app.category, state: states[app.key] ?? 'off',
+ agents: [{ id: '3a000000-0000-0000-0000-000000000011', name: 'Lead', connection: 'f0000000-0000-0000-0000-000000000011', main: true, own: true, state: states[app.key] ?? 'off' }],
  use: text[`use.${app.key}`], can: text[`can.${app.key}`], words: app.name }));
 
 // Each test draws its own Company: the provider keeps each Company's last read across the pages it is drawn on.

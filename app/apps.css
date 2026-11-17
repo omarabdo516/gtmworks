@@ -31,6 +31,7 @@
 .gw :is(.sov-apps, .apps-sheet) .app__state { flex: 1 1 0; min-width: 0; display: inline-flex; align-items: center; gap: 6px; font-size: var(--gw-fs-xs); color: var(--gw-text-1); --od-icon-size: 14px; }
 .gw :is(.sov-apps, .apps-sheet) .app__state--off { color: var(--gw-text-3); }
 .gw :is(.sov-apps, .apps-sheet) .app__state--warn { color: var(--gw-wait-text); font-weight: 600; }
+.gw :is(.sov-apps, .apps-sheet) .app__state .fstack { margin-inline-start: 4px; }
 .gw :is(.sov-apps, .apps-sheet) .apps-detail { gap: var(--s5); }
 .gw :is(.sov-apps, .apps-sheet) .app-hero { display: flex; align-items: flex-start; gap: var(--s3); }
 .gw :is(.sov-apps, .apps-sheet) .app-hero p { margin: 0; flex: 1 1 0; min-width: 0; font-size: var(--gw-fs-msg); line-height: 1.7; color: var(--gw-text-1); }
@@ -41,6 +42,17 @@
 .gw :is(.sov-apps, .apps-sheet) .kv dd { margin: 0; color: var(--gw-text-1); overflow-wrap: anywhere; }
 .gw :is(.sov-apps, .apps-sheet) .app-off { display: grid; gap: var(--s2); padding: var(--s3); border-radius: var(--gw-r-md); background: var(--gw-bg-pane); box-shadow: var(--gw-border-1) 0 0 0 1px inset; }
 .gw :is(.sov-apps, .apps-sheet) .app-off p { margin: 0; font-size: var(--gw-fs-sm); line-height: 1.7; color: var(--gw-text-1); }
+.gw :is(.sov-apps, .apps-sheet) .panel-row > span[aria-hidden] { display: inline-flex; flex: none; }
+/* Who gets access (design-reference: .tm-pick, .tm-check). */
+.gw :is(.sov-apps, .apps-sheet) .tm-pick { cursor: pointer; }
+.gw :is(.sov-apps, .apps-sheet) .tm-pick[aria-disabled="true"] { cursor: default; }
+.gw :is(.sov-apps, .apps-sheet) .tm-check {
+  width: 18px; height: 18px; flex: none; border-radius: var(--gw-r-xs); display: inline-flex; align-items: center; justify-content: center;
+  box-shadow: var(--gw-border-1) 0 0 0 1px inset; color: var(--gw-on-primary); transition: background-color var(--gw-dur-fast) var(--gw-ease-out);
+}
+.gw :is(.sov-apps, .apps-sheet) .tm-check .gw-icon { width: 14px; height: 14px; }
+.gw :is(.sov-apps, .apps-sheet) .tm-pick[aria-checked="true"] .tm-check { background: var(--gw-primary); box-shadow: none; }
+.gw :is(.sov-apps, .apps-sheet) .tm-pick[aria-disabled="true"] .tm-check { background: var(--gw-primary-disabled); }
 .gw .sov-apps .modal__foot { background: transparent; padding-inline: 0; margin-top: var(--s4); }
 .gw :is(.sov-apps, .apps-sheet) .modal__foot--end { justify-content: flex-end; }
 .gw :is(.sov-apps, .apps-sheet) .modal__foot--end .btn { min-width: 96px; }
@@ -60,6 +72,24 @@
 .gw .apps-sheet .apps-body { overflow-y: auto; min-height: 0; overscroll-behavior: contain; padding: var(--s4) var(--s5) var(--s6); }
 .gw .apps-sheet .modal__foot { padding-inline: var(--s5); }
 /* The overlay's pieces the apps use (app/settings.css), as the reference draws them. */
+.gw .apps-sheet .panel-row { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 6px var(--s2); border-radius: var(--gw-r-sm); width: 100%; text-align: start; position: relative; color: var(--gw-text-1); }
+.gw .apps-sheet .panel-row + .panel-row::before { content: ""; position: absolute; top: 0; inset-inline: var(--s2); height: 0.5px; background: var(--gw-border-2); }
+.gw .apps-sheet .panel-row__text { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0; }
+.gw .apps-sheet .panel-row__t { font-size: var(--gw-fs-sm); line-height: 1.5; color: var(--gw-text-1); overflow-wrap: anywhere; text-align: start; }
+.gw .apps-sheet .panel-row__d { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); overflow-wrap: anywhere; }
+.gw .apps-sheet .fstack { display: inline-flex; align-items: center; flex: none; }
+.gw .apps-sheet .fstack .agent-face { border-radius: 50%; box-shadow: 0 0 0 2px var(--gw-bg-pane); }
+.gw .apps-sheet .fstack .agent-face + .agent-face { margin-inline-start: -5px; }
+.gw .apps-sheet .switch {
+  display: inline-flex; align-items: center; width: 32px; height: 20px; padding: 2px; flex: none; border-radius: var(--gw-r-full);
+  background: var(--gw-border-1); transition: background-color var(--gw-dur-fast) var(--gw-ease-out);
+}
+.gw .apps-sheet .switch::after { content: ""; width: 16px; height: 16px; border-radius: 50%; background: #FFFFFF; box-shadow: #1C1C1C1F 0 1px 3px; transition: transform 320ms var(--gw-ease-out); }
+.gw .apps-sheet .switch[aria-checked="true"] { background: var(--gw-primary); }
+.gw .apps-sheet .switch[aria-checked="true"]::after { transform: translateX(-12px); background: var(--gw-bg-pane); }
+[dir="ltr"] .gw .apps-sheet .switch[aria-checked="true"]::after { transform: translateX(12px); }
+:root[data-theme="dark"] .gw .apps-sheet .switch[aria-checked="true"]::after { background: #121212; }
+.gw .apps-sheet .switch[aria-disabled="true"] { opacity: .55; }
 .gw .apps-sheet .sov-icon { width: var(--od-icon-size, 18px); height: var(--od-icon-size, 18px); flex: none; display: inline-block; }
 .gw .apps-sheet .muted { color: var(--gw-text-3); }
 .gw .apps-sheet :is(p, .set-hint) { text-wrap: pretty; }
@@ -76,6 +106,7 @@
   .gw .apps-sheet .btn--primary:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--gw-primary-hover); }
   .gw .apps-sheet .btn--secondary:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--gw-btn2-hover); }
   .gw .apps-sheet .link-btn:hover { background: var(--gw-bg-hover); color: var(--gw-text-1); }
+  .gw .apps-sheet button.panel-row:hover:not([aria-disabled="true"]) { background: var(--gw-bg-hover); }
   .gw .apps-sheet .circle-btn:hover { background: var(--gw-bg-elevated-hover); }
 }
 .gw .apps-sheet .ro-note { display: flex; align-items: flex-start; gap: 6px; padding: 0; margin: 0; font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-2); --od-icon-size: 16px; }

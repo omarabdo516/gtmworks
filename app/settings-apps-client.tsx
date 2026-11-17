@@ -6,25 +6,32 @@ import { useI18n } from '@/lib/i18n-client';
 import { overlayHref } from '@/lib/settings-overlay.mjs';
 import { AppTile } from '@/components/app-tile';
 import { ShellIcon } from '@/components/shell-icon';
+import { CompanyAgentFace } from '@/components/company-agent-face';
 import { SettingsIcon } from './settings-icons';
-import type { AppCategory, CompanyApp } from '@/lib/app-catalogue.mjs';
+import { toast } from './toast';
+import type { AppAgent, AppCategory, CompanyApp } from '@/lib/app-catalogue.mjs';
 
-// Settings, Apps (#30; design-reference: appsHeadHTML, appsListHTML, appCardHTML, appDetailHTML). The server reads each
-// app's state from the Engine (lib/company-app-items.ts); here the list is searched and filtered, and the Owner connects,
-// follows and disconnects through /api/company-apps, which checks the Owner again. The same list and page are drawn in
+// Settings, Apps (#30; design-reference: appsHeadHTML, appsListHTML, appCardHTML, appDetailHTML, the app-agent and
+// app-pick cases). The server reads each Agent's state of each app from the Engine (lib/company-app-items.ts); here the
+// list is searched and filtered, and the Owner turns an app on or off for each Agent, follows its sign-in and
+// disconnects it through /api/company-apps, which checks the Owner again. The same list and page are drawn in
 // Settings, one address per view, and in the Connect apps sheet (app/apps-sheet.tsx, #201), where they change in place.
 export type AppItem=CompanyApp&{use:string,can:string,words:string};
 export type AppsPlace={kind:'address',slug:string}|{kind:'sheet',open:(key:string)=>void,back:(from:string)=>void,close:()=>void};
 type Text=Record<string,string>;
 // The reference's count of connected apps: every app in the Connected group, a sign-in needing attention included.
 export const connectedCount=(items:AppItem[])=>items.filter(item=>item.state!=='off').length;
-const sayer=(text:Text)=>(key:string,value?:string)=>value===undefined?text[key]??'':(text[key]??'').replace('{0}',()=>value);
+const sayer=(text:Text)=>(key:string,...values:string[])=>values.reduce((line,value,index)=>line.replace(`{${index}}`,()=>value),text[key]??'');
 // Search reads Arabic as the reference does (arNorm): the hamza forms of alef as alef, alef maksura as ya, ta marbuta as
 // ha, and no diacritics.
 const fold=(value:string)=>value.toLowerCase().normalize('NFKD').replace(/[ً-ٕ]/g,'').replace(/[ةى]/g,letter=>String.fromCharCode(letter.charCodeAt(0)===0x629?0x647:0x64A));
 const order:AppCategory[]=['content','communication','analytics','sales'];
-// A line naming the app keeps the name in its own direction.
-const named=(line:string,name:string)=>{ const [before,after='']=line.split('{0}'); return <>{before}<bdi>{name}</bdi>{after}</>; };
+// A line naming the app or an Agent keeps each name in its own direction.
+const named=(line:string,...names:string[])=>line.split(/(\{\d\})/).map((part,index)=>{ const at=/^\{(\d)\}$/.exec(part); return at?<bdi key={index}>{names[Number(at[1])]}</bdi>:part; });
+type Say=(key:string,...values:string[])=>string;
+// Faces stand for the Agents named beside them, so they are left to the eye (design-reference: faceStack, face).
+const faces=(agents:AppAgent[])=><span className="fstack" aria-hidden="true">{agents.map(agent=><CompanyAgentFace key={agent.id} agent={{connection_id:agent.connection,name:agent.name}} size={18}/>)}</span>;
+const face=(agent:AppAgent)=><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:agent.connection,name:agent.name}} size={28}/></span>;
 
 // One step between the list and an app's page: a link in Settings, a button in the sheet, with the same id, class and
 // label. `stay` keeps the person on the app's page while a sign-in is followed or a request is on its way.
@@ -40,8 +47,8 @@ function Close({place}:{place:AppsPlace}) {
 // The sheet's title names the dialog; Settings' is the overlay's page heading.
 const titled=(place:AppsPlace)=>place.kind==='sheet'?{className:'sheet__title',id:'apps-title'}:{className:'sheet__title sov-h',id:'sov-h'};
 
-function State({app,say}:{app:CompanyApp,say:(key:string,value?:string)=>string}) {
- if(app.state==='connected') return <span className="app__state"><SettingsIcon name="check"/><span>{say('stateConnected')}</span></span>;
+function State({app,say}:{app:CompanyApp,say:Say}) {
+ if(app.state==='connected') return <span className="app__state"><SettingsIcon name="check"/><span>{say('stateConnected')}</span>{faces(app.agents.filter(agent=>agent.state==='connected'))}</span>;
  return <span className={`app__state ${app.state==='attention'?'app__state--warn':'app__state--off'}`}>{say(app.state==='attention'?'stateAttention':'stateOff')}</span>;
 }
 
@@ -78,7 +85,7 @@ export function AppsList({place,owner,items:read,text}:{place:AppsPlace,owner:bo
  </>;
 }
 
-async function ask(body:Record<string,string>) {
+async function ask(body:Record<string,string|undefined>) {
  try {
   const response=await fetch('/api/company-apps',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   return {ok:response.ok,body:await response.json().catch(()=>({})) as Record<string,unknown>};
@@ -87,46 +94,95 @@ async function ask(body:Record<string,string>) {
 // A sign-in Hermes keeps for fifteen minutes is followed at most that long.
 const pollEvery=2000, pollFor=15*60*1000;
 
-export function AppDetail({place,company,owner,rtl,item,text,soon,failed}:{place:AppsPlace,company:string,owner:boolean,rtl:boolean,item:AppItem,text:Text,soon:string,failed:boolean}) {
+// The sign-ins the Owner asked for, one Agent at a time: the browser opens the vendor's window only at a click, so each
+// Agent after the first waits for its own click. `following` is the Agent whose window is open; `done` those connected.
+type Run={queue:string[],following:string|null,done:string[],one:boolean};
+const idle:Run={queue:[],following:null,done:[],one:false};
+
+export function AppDetail({place,company,owner,rtl,item,text,failed}:{place:AppsPlace,company:string,owner:boolean,rtl:boolean,item:AppItem,text:Text,failed:boolean}) {
  const say=sayer(text); const router=useRouter();
- const [waiting,setWaiting]=useState(false); const [asking,setAsking]=useState(false); const [error,setError]=useState(failed?'signInFailed':'');
+ const [run,setRun]=useState<Run>(idle); const [asking,setAsking]=useState(false); const [error,setError]=useState(failed?'signInFailed':'');
+ const own=item.agents.filter(agent=>agent.own);
+ const [picks,setPicks]=useState<string[]>(()=>own.filter(agent=>agent.main).map(agent=>agent.id)); const [pickError,setPickError]=useState(false);
  const [pending,startTransition]=useTransition();
- const state=item.state; const on=state!=='off';
+ const focusNext=useRef<string|null>(null);
+ const state=item.state; const on=state!=='off'; const waiting=run.following!==null;
+ const nameOf=(id:string)=>item.agents.find(agent=>agent.id===id)?.name??'';
+ const names=(ids:string[])=>ids.map(nameOf).join(say('namesSep'));
+ // After a refresh draws the page again, the keyboard goes where the step left it.
+ useEffect(()=>{ const id=focusNext.current; if(id&&document.getElementById(id)) { focusNext.current=null; document.getElementById(id)?.focus(); } });
  // While the vendor's window is open the sign-in is followed until it connects, fails, or the page closes.
  useEffect(()=>{
-  if(!waiting) return;
+  const agent=run.following;
+  if(!agent) return;
   let stopped=false, timer:ReturnType<typeof setTimeout>|undefined; const until=Date.now()+pollFor;
   const poll=async()=>{
-   const answer=await ask({company,app:item.key,action:'poll'});
+   const answer=await ask({company,agent,app:item.key,action:'poll'});
    if(stopped) return;
    const status=String(answer.body.status||'');
    if(answer.ok&&status==='waiting'&&Date.now()<until) { timer=setTimeout(poll,pollEvery); return; }
-   setWaiting(false);
-   if(answer.ok&&status==='connected') router.refresh();
-   else setError(answer.ok?'signInFailed':`error.${String(answer.body.error||'appsFailed')}`);
+   if(!(answer.ok&&status==='connected')) {
+    setError(answer.ok?'signInFailed':`error.${String(answer.body.error||'appsFailed')}`);
+    // Agents already connected in this run stay so; the rest wait for another click.
+    if(run.done.length) { setRun({...run,following:null}); router.refresh(); } else setRun(idle);
+    return;
+   }
+   const done=[...run.done,agent]; const queue=run.queue.filter(id=>id!==agent);
+   if(queue.length) { setRun({...run,queue,following:null,done}); focusNext.current='app-connect'; return; }
+   setRun(idle);
+   if(run.one) { toast(say('agentCanUse',nameOf(agent),item.name)); focusNext.current=`app-ag-${agent}`; }
+   else { toast(say('connectedNames',item.name,names(done))); focusNext.current='apps-done'; }
+   router.refresh();
   };
   timer=setTimeout(poll,pollEvery);
   return ()=>{ stopped=true; clearTimeout(timer); };
- },[waiting,company,item.key,router]);
+ // eslint-disable-next-line react-hooks/exhaustive-deps
+ },[run,company,item.key,router]);
  // The vendor's window is opened at the click, before the answer, so the browser lets it open; it is pointed at the
  // vendor once gtmworks has the sign-in page, and never knows this page.
- const connect=()=>startTransition(async()=>{
+ const connect=(queue:string[],one:boolean,done:string[]=[])=>startTransition(async()=>{
+  const agent=queue[0]; if(!agent) return;
   setError('');
   const opened=window.open('about:blank','_blank');
-  const answer=await ask({company,app:item.key,action:'connect'});
-  if(!answer.ok) { opened?.close(); setError(`error.${String(answer.body.error||'appsFailed')}`); return; }
-  if(opened) { opened.opener=null; opened.location.href=String(answer.body.url); setWaiting(true); }
+  const answer=await ask({company,agent,app:item.key,action:'connect'});
+  if(!answer.ok) { opened?.close(); setError(`error.${String(answer.body.error||'appsFailed')}`); setRun(done.length?{queue,following:null,done,one}:idle); return; }
+  if(opened) { opened.opener=null; opened.location.href=String(answer.body.url); setRun({queue,following:agent,done,one}); }
   else window.location.assign(String(answer.body.url));
  });
- const cancel=()=>startTransition(async()=>{ await ask({company,app:item.key,action:'cancel'}); setWaiting(false); });
+ const cancel=()=>startTransition(async()=>{
+  if(run.following) await ask({company,agent:run.following,app:item.key,action:'cancel'});
+  setRun(idle); if(run.done.length) router.refresh();
+ });
+ const turnOff=(agent:AppAgent)=>startTransition(async()=>{
+  setError('');
+  const answer=await ask({company,agent:agent.id,app:item.key,action:'disconnect'});
+  if(!answer.ok) { setError(`error.${String(answer.body.error||'appsFailed')}`); return; }
+  toast(say('agentCannotUse',agent.name,item.name),{icon:'x'});
+  focusNext.current=`app-ag-${agent.id}`;
+  router.refresh();
+ });
  const disconnect=()=>startTransition(async()=>{
   const answer=await ask({company,app:item.key,action:'disconnect'});
   if(!answer.ok) { setError(`error.${String(answer.body.error||'appsFailed')}`); return; }
+  toast(say('disconnected',item.name),{icon:'x'});
   if(place.kind==='address') router.replace(overlayHref(place.slug,'apps')); else place.back(item.key);
   router.refresh();
  });
  const busy=pending||waiting;
+ // Connect on an app that is off signs in for every picked Agent, in the list's order; none picked is said first.
+ const connectPicked=()=>{
+  const queue=own.filter(agent=>picks.includes(agent.id)).map(agent=>agent.id);
+  if(!queue.length) { setPickError(true); document.getElementById(`app-pick-${own[0]?.id}`)?.focus(); return; }
+  connect(queue,false);
+ };
+ const pick=(id:string)=>{ if(busy) return; const next=picks.includes(id)?picks.filter(other=>other!==id):[...picks,id]; setPicks(next); if(next.length) setPickError(false); };
+ // The Agents that lose it on Disconnect: with the app on, at least one.
+ const having=own.filter(agent=>agent.state==='connected'||agent.state==='attention');
+ const sharedWith=(agent:AppAgent)=>(item.agents.find(other=>other.own&&other.connection===agent.connection)??item.agents.find(other=>other.main))?.name??'';
+ const line=(agent:AppAgent)=>!agent.own?named(say('agentShares'),sharedWith(agent)):agent.state===null?say('agentUnread')
+  :say(agent.state==='connected'?'agentOn':agent.state==='attention'?'stateAttention':'agentOff');
  const back=<To place={place} step={{back:item.key}} stay={busy} className="btn btn--secondary" id="app-cancel">{say(owner&&state==='off'?'cancel':'done')}</To>;
+ const next=run.queue[0];
  return <>
   <header className="apps-head">
    <div className="sheet__top"><To place={place} step={{back:item.key}} stay={busy} className="circle-btn" id="apps-back" aria-label={say('back')}><SettingsIcon name="back" rtl={rtl}/></To>
@@ -143,20 +199,33 @@ export function AppDetail({place,company,owner,rtl,item,text,soon,failed}:{place
     <div className="kv__row"><dt>{say('cant')}</dt><dd>{say('cantAll')}</dd></div>
     <div className="kv__row"><dt>{say('signIn')}</dt><dd>{named(say('signInLine'),item.name)}</dd></div>
    </dl>
-   {/* Choosing which Agents use an app waits on the Engine (#30): drawn as the reference draws it, marked "Soon". */}
-   <section className="apps-sec" aria-labelledby="app-who-h"><h4 className="apps-sec__h" id="app-who-h">{say(on?'whoUses':'whoGets')}</h4>
-    <div className="panel-card sov-soon" aria-disabled="true" title={soon}><p className="panel-empty">{soon}</p></div>
-    {on&&<p className="set-hint">{say('everyAgent')}</p>}</section>
+   {on?<section className="apps-sec" aria-labelledby="app-who-h"><h4 className="apps-sec__h" id="app-who-h">{say('whoUses')}</h4>
+     <ul className="panel-card">{item.agents.map(agent=><li key={agent.id} className="panel-row">{face(agent)}
+      <span className="panel-row__text"><span className="panel-row__t" id={`app-ag-t-${agent.id}`}><bdi>{agent.name}</bdi></span><span className="panel-row__d">{line(agent)}</span></span>
+      {owner&&agent.own&&agent.state==='attention'&&<button type="button" className="btn btn--secondary btn--sm" id={`app-ag-re-${agent.id}`} aria-label={say('reconnectFor',agent.name)} aria-disabled={busy} onClick={()=>{ if(!busy) connect([agent.id],true); }}>{say('reconnect')}</button>}
+      {owner&&agent.own&&agent.state!==null&&<button type="button" className="switch" role="switch" id={`app-ag-${agent.id}`} aria-checked={agent.state!=='off'} aria-labelledby={`app-ag-t-${agent.id}`} aria-disabled={busy}
+       onClick={()=>{ if(busy) return; if(agent.state==='off') connect([agent.id],true); else turnOff(agent); }}/>}</li>)}</ul></section>
+    :owner&&<section className="apps-sec" aria-labelledby="app-pick-h"><h4 className="apps-sec__h" id="app-pick-h">{say('whoGets')} <span className="num muted">{picks.length}</span></h4>
+     <div className="panel-card" role="group" aria-labelledby="app-pick-h" aria-describedby="app-pick-err">{own.map(agent=>{ const picked=picks.includes(agent.id);
+      return <button key={agent.id} type="button" className="panel-row tm-pick" role="checkbox" id={`app-pick-${agent.id}`} aria-checked={picked} aria-disabled={busy||undefined} onClick={()=>pick(agent.id)}>
+       {face(agent)}<span className="panel-row__text"><span className="panel-row__t"><bdi>{agent.name}</bdi></span></span>
+       <span className="tm-check" aria-hidden="true">{picked&&<ShellIcon name="check"/>}</span></button>; })}</div>
+     <span className="set-err" id="app-pick-err" hidden={!pickError}>{say('pickOne')}</span></section>}
    {waiting&&<p className="set-hint" role="status">{named(say('waiting'),item.name)}</p>}
    {error&&<p className="set-err" role="alert">{say(error)}</p>}
-   {owner&&on&&(asking?<div className="app-off" role="group" aria-labelledby="app-off-t"><p id="app-off-t">{named(say('disconnectAsk'),item.name)}</p>
+   {owner&&on&&(asking?<div className="app-off" role="group" aria-labelledby="app-off-t"><p id="app-off-t">{named(say(having.length>1?'disconnectAskMany':'disconnectAsk'),item.name,names(having.map(agent=>agent.id)))}</p>
      <div className="panel-form__row panel-form__row--end"><button type="button" className="btn btn--secondary btn--sm" id="app-off-cancel" disabled={pending} onClick={()=>setAsking(false)}>{say('cancel')}</button>
       <button type="button" className="btn btn--primary btn--sm" id="app-off-go" disabled={pending} onClick={disconnect}>{say('disconnect')}</button></div></div>
     :<div><button type="button" className="link-btn" id="app-off" onClick={()=>setAsking(true)}>{say('disconnect')} <bdi>{item.name}</bdi></button></div>)}
   </div>
   <footer className="modal__foot modal__foot--end">
-   {owner&&state!=='connected'?<>{waiting?<button type="button" className="btn btn--secondary" id="app-wait-cancel" disabled={pending} onClick={cancel}>{say('cancel')}</button>:back}
-    <button type="button" className="btn btn--primary" id="app-connect" aria-disabled={busy} onClick={()=>{ if(!busy) connect(); }}>{busy?say('connecting'):say(state==='attention'?'reconnect':'connect')}</button></>
+   {owner&&(state!=='connected'||waiting||next)?<>{waiting?<button type="button" className="btn btn--secondary" id="app-wait-cancel" disabled={pending} onClick={cancel}>{say('cancel')}</button>:back}
+    <button type="button" className="btn btn--primary" id="app-connect" aria-disabled={busy} onClick={()=>{
+     if(busy) return;
+     if(next) connect(run.queue,run.one,run.done);
+     else if(state==='off') connectPicked();
+     else connect(own.filter(agent=>agent.state==='attention').map(agent=>agent.id),false);
+    }}>{busy?say('connecting'):next?named(say('connectFor'),nameOf(next)):say(state==='attention'?'reconnect':'connect')}</button></>
    :<To place={place} step={{back:item.key}} stay={busy} className="btn btn--primary" id="apps-done">{say('done')}</To>}
   </footer>
  </>;
