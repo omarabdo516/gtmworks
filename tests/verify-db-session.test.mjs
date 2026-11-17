@@ -89,3 +89,16 @@ test('a verify file of more or fewer than one statement fails by name and never 
  assert.deepEqual(run.records.map(record => [record.file, record.outcome]), [['a.verify.sql', 'failed'], ['b.verify.sql', 'passed'], ['c.verify.sql', 'failed']]);
  assert.ok(!run.input.includes('nobody_at_all') && !run.input.includes('@verify c.verify.sql'), 'neither file is sent to psql');
 });
+
+test('each file runs in a connection of its own, its trailing statement still runs, and an error from any of its statements fails it', t => {
+ const run = session(t, ['a.verify.sql', 'b.verify.sql'], '');
+ const blocks = run.input.split(/(?=^\\connect$)/m).filter(block => block.trim());
+ assert.equal(blocks.length, 2, 'one connection per file');
+ for (const [index, file] of ['a.verify.sql', 'b.verify.sql'].entries()) {
+  const block = blocks[index];
+  const order = ['\\connect', "\\set LAST_ERROR_SQLSTATE '00000'", `@verify ${file}`, `from', '${file}'`, '\n;\n', "<> '00000' as verify_failed \\gset", '\\if :verify_failed']
+   .map(text => block.indexOf(text));
+  assert.ok(order.every((at, i) => at >= 0 && (i === 0 || at > order[i - 1])), `${file}: ${order}`);
+  assert.ok(!/^\\r$/m.test(block), `${file}: nothing is dropped unrun`);
+ }
+});

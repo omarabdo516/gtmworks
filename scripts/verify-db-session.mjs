@@ -8,21 +8,26 @@ import { verifyResult } from './verify-db.mjs';
 // as rows. A marker names each file; a failed query does not end the session, so every file is reported by name.
 // Usage: node scripts/verify-db-session.mjs <database container> <file>... (DB_LEDGER adds one ledger line per file.)
 const [container, ...files] = process.argv.slice(2);
-// psql's error flag reports only a file's last statement, so a verify file is one statement, as it was for the CLI.
+// A verify file is one statement, as it was for the CLI's prepared statement.
 const sql = new Map(files.map(file => [file, readFileSync(file, 'utf8')]));
 const refused = new Map(files.flatMap(file => {
  const count = topLevelStatements(sql.get(file)).length;
  return count === 1 ? [] : [[file, `${file}: a verify file is one statement, this one has ${count}`]];
 }));
 
+// Each file gets a connection of its own, as it had a CLI process of its own, so nothing it sets reaches the next file.
+// A statement left without its semicolon still runs, as psql runs it at the end of a file, and an error from any of the
+// file's statements fails it: psql keeps the last error's code after a later statement succeeds.
 const script = files.filter(file => !refused.has(file)).map(file => [
+ '\\connect',
+ "\\set LAST_ERROR_SQLSTATE '00000'",
  `\\echo '@verify ${file}'`,
  '\\timing on',
  sql.get(file),
- // An unterminated statement is dropped here, so it cannot run as part of the next file.
- '\\r',
+ ';',
  '\\timing off',
- '\\if :ERROR',
+ "select :'LAST_ERROR_SQLSTATE' <> '00000' as verify_failed \\gset",
+ '\\if :verify_failed',
  `\\echo '@failed' :'LAST_ERROR_MESSAGE'`,
  '\\endif',
 ].join('\n')).join('\n') + '\n';
