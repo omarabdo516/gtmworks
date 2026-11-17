@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(36);
+select plan(38);
 -- #163. Ads in RS Learning on its own profile in the Engine (ADR 0016), shown to the Manager (2), the Contributors (3, 5)
 -- and the Viewer (4); the Owner (1) sees every Agent. One Conversation with Ads each, and in it the message of one Run.
 -- Copy sits on a profile it shares, in one Conversation of the Owner's (6). Karim is a Manager of Aleem only.
@@ -210,6 +210,22 @@ select public.track_run_permission('e2000000-0000-0000-0000-000000000004','p-run
 select public.track_run_permission('e2000000-0000-0000-0000-000000000004','p-run-4',null,false,'2026-06-10T11:02:00Z');
 reset role;
 select is((select state from public.reply_cards where call_id='a7'),'open','a read that began before the request was seen does not close it, though it began after the read that saw it');
+
+-- A read that finds the Run ended closes its claimed request with the choice kept, and hands over nothing to deliver.
+insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id)
+ values ('10000000-0000-0000-0000-000000000001','e2000000-0000-0000-0000-000000000005','person','20000000-0000-0000-0000-000000000005','Someone','And the logs?',gen_random_uuid(),'p-run-5e');
+set local role service_role;
+select public.track_run_permission('e2000000-0000-0000-0000-000000000005','p-run-5e','{"id":"a5","description":"delete the old logs","command":"rm -r logs","choices":["once","deny"]}',false,'2026-06-10T11:10:00Z');
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000005',true);
+select public.decide_permission('10000000-0000-0000-0000-000000000001','e2000000-0000-0000-0000-000000000005',(select id from public.reply_cards where call_id='a5'),'once');
+reset role;
+set local role service_role;
+select is(public.track_run_permission('e2000000-0000-0000-0000-000000000005','p-run-5e',null,true,'2026-06-10T11:12:00Z'),'[]'::jsonb,
+ 'a read that finds the Run ended hands over no claim to deliver');
+reset role;
+select is((select state||':'||(content->>'choice') from public.reply_cards where call_id='a5'),'closed:once','and closes the claimed request with its choice kept');
 
 select * from finish();
 rollback;

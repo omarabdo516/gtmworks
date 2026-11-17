@@ -23,7 +23,7 @@ function databases(/** @type {ReturnType<typeof fakeEngine>} */ fake) {
    if(name==='open_conversation_runs') return ok(fake.runs.filter(run=>!closed.has(run.id)).map((run,index)=>({message:index+1,conversation,run:run.id,person:'p',connection:'f9000000-0000-0000-0000-000000000001',address:'http://hermes:8642',profile:'writer',state:'connected'})));
    if(name==='track_run_question') return ok([]);
    if(name==='track_run_permission') {
-    for(const card of cards) if(card.run===args.run&&card.state==='open'&&(args.ended||card.permission!==args.asking?.id&&card.at<args.read_started_at)) card.state='closed';
+    for(const card of cards) if(card.run===args.run&&(args.ended&&['open','sending'].includes(card.state)||card.state==='open'&&card.permission!==args.asking?.id&&card.at<args.read_started_at)) card.state='closed';
     if(args.asking&&!args.ended&&!cards.some(card=>card.run===args.run&&card.permission===args.asking.id)) cards.push({id:cards.length+1,run:args.run,permission:args.asking.id,content:{description:args.asking.description,command:args.asking.command,choices:args.asking.choices},state:'open',at:args.read_started_at});
     return ok(cards.filter(card=>card.run===args.run&&card.state==='sending').map(card=>({card:card.id,permission:card.permission,choice:card.content.choice})));
    }
@@ -105,6 +105,20 @@ test('an unreachable engine holds the Run and the claim, and the next pass deliv
  assert.equal(closed.get(run).reply,'Reply to: Clean up (once)');
 });
 
+test('a Run that ended while its claim waited closes with the choice kept, and nothing is sent to it, also when the engine cannot be reached',async()=>{
+ const fake=asking(); const {service,person,cards,closed}=databases(fake);
+ const run=await start(fake); await close(service,fake);
+ fake.settings.unreachablePermits=1;
+ await decide(person,service,fake,'once');
+ assert.equal(cards[0].state,'sending');
+ assert.equal(await fake.engineFor({}).stop(run),true);
+ fake.settings.unreachablePermits=1;
+ assert.equal(await close(service,fake),1,'the ended Run closes');
+ assert.equal(closed.get(run).run_outcome,'stopped');
+ assert.deepEqual([cards[0].state,cards[0].content.choice],['closed','once']);
+ assert.equal(fake.permits.length,1,'only the press\'s own attempt, none after the Run ended');
+});
+
 test('a time limit: once the engine stops waiting the card closes, a press after it is told so and sends nothing, and the Run goes on to its reply',async()=>{
  const fake=asking(); const {service,person,cards,closed}=databases(fake);
  const run=await start(fake); await close(service,fake);
@@ -121,6 +135,8 @@ test('a time limit: once the engine stops waiting the card closes, a press after
 test('a choice the engine no longer takes when it arrives closes the card, and the press is told so',async()=>{
  const fake=asking(); const {service,person,cards}=databases(fake);
  const run=await start(fake); await close(service,fake);
+ // The Run still works after its request timed out, so the choice is sent and found no longer waited on.
+ fake.settings.pendingReads=1;
  fake.expire(run);
  assert.deepEqual(await decide(person,service,fake,'once'),{state:'closed',choice:null,at:null,first:true});
  assert.equal(cards[0].state,'closed');

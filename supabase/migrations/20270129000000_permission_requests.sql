@@ -102,9 +102,10 @@ grant execute on function public.permission_choices(uuid) to authenticated;
 -- {id,description,command,choices}, or null), whether it has ended, when the read began and when it ended. The request is kept
 -- once, as of the read's end (a read may begin before another and end after it, so its start may predate a later read that
 -- found nothing yet),
--- its title the description, or the command when that is blank. An open card of the Run closes when the Run has ended,
--- or when a read that began after the card was kept no longer shows it (a read that began earlier may predate it); an
--- open or claimed card of a Run the record has closed closes too. It answers the Run's claimed choices still to deliver.
+-- its title the description, or the command when that is blank. An open or claimed card of the Run closes when the Run
+-- has ended, a claimed one with its choice kept, since nothing can deliver to an ended Run; an open one also closes when
+-- a read that began after the card was kept no longer shows it (a read that began earlier may predate it); an open or
+-- claimed card of a Run the record has closed closes too. It answers the Run's claimed choices still to deliver.
 create function public.track_run_permission(conversation uuid, run text, asking jsonb, ended boolean, read_started_at timestamptz, read_ended_at timestamptz default null) returns jsonb
 language plpgsql security definer set search_path='' as $$
 declare talk public.conversations; asked text:=asking->>'id'; own boolean; kept jsonb; named text;
@@ -114,7 +115,7 @@ begin
  select * into talk from public.conversations where id=conversation;
  if not found or not exists(select 1 from public.conversation_messages m where m.conversation_id=conversation and m.author='person' and m.run_id=run) then return '[]'::jsonb; end if;
  update public.reply_cards r set state='closed' where r.conversation_id=conversation and r.kind='permission'
-  and (r.state='open' and r.run_id=run and (ended or (r.call_id is distinct from asked and r.created_at<read_started_at))
+  and (r.run_id=run and (ended and r.state in ('open','sending') or r.state='open' and r.call_id is distinct from asked and r.created_at<read_started_at)
    or r.state in ('open','sending') and r.run_id<>run and exists(select 1 from public.conversation_usage u where u.conversation_id=conversation and u.run_id=r.run_id));
  if asked is not null and not ended and not exists(select 1 from public.conversation_usage u where u.conversation_id=conversation and u.run_id=run) then
   own:=exists(select 1 from public.hermes_agents a join public.hermes_connections h on h.id=a.connection_id
