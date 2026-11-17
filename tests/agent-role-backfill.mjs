@@ -1,7 +1,5 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { testDb } from './pgtap.mjs';
 
 const migration=readFileSync('supabase/migrations/20261110000000_agent_roles.sql','utf8');
 // Replay the real migration against legacy members, then roll back the schema and data.
@@ -39,10 +37,4 @@ select ok(has_column_privilege('authenticated','public.members','agent_role','SE
 select * from finish();
 rollback;
 `;
-const dir=mkdtempSync(join(tmpdir(),'gtmworks-agent-roles-'));
-try {
- const file=join(dir,'backfill.sql');
- writeFileSync(file,sql);
- const result=spawnSync('npx',['--no-install','supabase','test','db',file],{stdio:'inherit'});
- process.exitCode=result.status ?? 1;
-} finally { rmSync(dir,{recursive:true,force:true}); }
+testDb(import.meta.url,sql);

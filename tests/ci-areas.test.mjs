@@ -89,6 +89,8 @@ for (const path of [
   'tests/agent-role-backfill.mjs', 'tests/sql-statements.mjs',
   // tests/bootstrap-db.mjs runs this file's SQL against the real constraints and triggers.
   'scripts/bootstrap-owner.mjs',
+  // The verify session, the migration replays' shared pgTAP runner and the stack's cached images (#259).
+  'scripts/verify-db-session.mjs', 'tests/pgtap.mjs', 'tests/verify-db-session-canary.sql', 'scripts/supabase-images.sh',
 ]) {
   test(`${path} runs the database tests`, () => assert.equal(areas('app/page.tsx', path).database, 'true'));
 }
@@ -103,6 +105,8 @@ for (const path of [
   'scripts/first-run-db.mjs', 'scripts/local-default-privileges.sql', 'supabase/migrations/20260101000000_x.sql', 'supabase/config.toml',
   // The integration job builds the image and the proxy suite runs inside it (scripts/proxy-stack.sh).
   'Dockerfile', '.dockerignore',
+  // Every lane's stack starts from the cached images (#259).
+  'scripts/supabase-images.sh',
   // The public-assets browser test reads every file under public/, Markdown included.
   'public/nested/README.md',
 ]) {

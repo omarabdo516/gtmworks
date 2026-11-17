@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
-import { topLevelStatements } from './sql-statements.mjs';
+import { codeOutsideQuotes, topLevelStatements } from './sql-statements.mjs';
 
 // Two runners apply the same migration files. The installer streams every pending file and its history row through one
 // `psql --single-transaction`; the Supabase CLI (local database, CI, design compare, visual baselines) sends a file's
@@ -34,4 +34,27 @@ test("#228's migration only replaces functions", () => {
  const statements=topLevelStatements(readFileSync('supabase/migrations/20270103000000_hidden_card_readers.sql','utf8'));
  assert.ok(statements.length>0,'the migration was read');
  assert.deepEqual(statements.filter(statement=>!/^create\s+or\s+replace\s+function\s+public\.\w+\s*\(/i.test(statement)).map(statement=>statement.slice(0,60)),[]);
+});
+
+test('the statement reader knows escape strings, where a backslash escapes the quote (#259)', () => {
+ assert.deepEqual(topLevelStatements("select E'it\\'s; fine', e'\\\\';\nselect 1/0"), ["select E'it\\'s; fine', e'\\\\'", 'select 1/0']);
+ assert.deepEqual(topLevelStatements("select E'it''s; fine';\nselect 'a\\';\nselect 2;"), ["select E'it''s; fine'", "select 'a\\'", 'select 2']);
+ assert.equal(topLevelStatements("select coalesce'x\\'; select 1").length, 2, 'an e that ends a word opens no escape string');
+});
+
+test('the statement reader nests block comments and opens a dollar quote only where a word ends (#259)', () => {
+ const nested="select json_build_object('ok', false) /* outer /* inner */ ' */\n\\g /dev/null\nselect json_build_object('ok', true);";
+ assert.match(codeOutsideQuotes(nested), /\\g/, 'the quote sits inside the outer comment, so the psql command after it is code');
+ const glued="select json_build_object('ok', false) as result$tag$\n\\g /dev/null\nselect json_build_object('ok', true);";
+ assert.match(codeOutsideQuotes(glued), /\\g/, 'result$tag$ is one name, not a dollar quote');
+ assert.deepEqual(topLevelStatements('do $body$ begin perform 1; end $body$; select $$a;b$$'), ['do $body$ begin perform 1; end $body$', 'select $$a;b$$']);
+});
+
+test('a name ends where Postgres says: any character past ASCII belongs to it, as in its lexer (#259)', () => {
+ // Postgres's lexer (scan.l): ident_cont is [A-Za-z\200-\377_0-9\$], so every byte past ASCII continues a name.
+ for (const name of ['result́', 'result\u{1D400}', 'résumé']) {
+  const glued=`select json_build_object('ok', false) as ${name}$tag$\n\\g /dev/null\nselect json_build_object('ok', true);`;
+  assert.match(codeOutsideQuotes(glued), /\\g/, `${JSON.stringify(name)}$tag$ is one name`);
+ }
+ assert.deepEqual(topLevelStatements("select caféE'x\\'; select 1"), ["select caféE'x\\'", 'select 1'], 'an E that ends a longer name opens no escape string');
 });
