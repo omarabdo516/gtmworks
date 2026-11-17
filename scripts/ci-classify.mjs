@@ -10,7 +10,7 @@
 // line quoted from another log (a failed classifier test prints its fixture). A step whose tests ran and failed ended on
 // them, whatever their messages name, and a rate limit is not why the step failed when the image it held up was then
 // downloaded (pulls run side by side, so another layer's or image's progress proves nothing).
-const rules = [
+export const rules = [
   {
     cause: 'registry rate limit', scope: 'fatal', pattern: /error from registry: Rate exceeded|toomanyrequests|^npm (?:error|ERR!) (?:code E429|429 Too Many Requests)/i,
     recovered: (lines, at) => {

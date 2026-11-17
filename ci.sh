@@ -82,68 +82,23 @@ case "${1:-check}" in
  check)
   # Every stage in order, for local use. CI runs them as parallel jobs, each only when its files change
   # (.github/workflows/ci.yml, scripts/ci-areas.mjs).
-  bash ci.sh static
-  bash ci.sh components
+  bash ci.sh fast
   bash ci.sh database
   bash ci.sh visual
   bash ci.sh lane
   bash ci.sh integration
   ;;
- static)
-  if [[ "${CI:-}" == "true" ]]; then
-    npm ci
-  fi
-  node scripts/check-test-discovery.mjs
-  python3 - <<'PY'
-import html.parser, pathlib, sys
-
-problems = []
-class P(html.parser.HTMLParser):
-    pass
-
-for path in sorted(pathlib.Path("design").rglob("*.html")) if pathlib.Path("design").is_dir() else []:
-    text = path.read_text(encoding="utf-8")
-    try:
-        P().feed(text)
-    except Exception as exc:  # html.parser is lenient; anything raised is a real break
-        problems.append(f"{path}: cannot be parsed ({exc})")
-    head = text[:2000].lower()
-    if 'dir="rtl"' not in head or 'lang="ar"' not in head:
-        problems.append(f"{path}: the <html> tag must carry lang=\"ar\" dir=\"rtl\"")
-
-for adr in sorted(pathlib.Path("docs/adr").glob("*.md")):
-    first = adr.read_text(encoding="utf-8").splitlines()[:3]
-    if not any(line.startswith("status:") for line in first):
-        problems.append(f"{adr}: an ADR starts with a status line")
-
-for p in problems:
-    print(p)
-print(f"ci.sh check: {len(problems)} problem(s)")
-sys.exit(1 if problems else 0)
-PY
-  node scripts/check-i18n.mjs
-  npx --yes @redocly/cli@2.76.0 lint docs/api/openapi.yaml --extends=spec
-  npm run lint
-  npm run typecheck
-  # Unused files, exports and dependencies (knip.json), as T3 Code checks them (#81).
-  npx --no-install knip --no-progress
-  dir=$(ledger_dir static)
-  # `npm test`'s files, offline as `npm test` runs them, with the ledger reporter beside the usual one; the flags must come
-  # before the glob.
-  node --import ./tests/offline.mjs --test --test-reporter=spec --test-reporter-destination=stdout \
-    --test-reporter=./scripts/ci-ledger-node.mjs --test-reporter-destination="$dir/node.jsonl" 'tests/**/*.test.mjs'
-  ;;
- components)
-  # Screens as components in headless Chromium (#81); SHARD (for example 1/2) runs one slice.
-  if [[ "${CI:-}" == "true" ]]; then
-    npm ci
-  fi
-  install_chromium
-  dir=$(ledger_dir components)
-  # Naming the reporters replaces Vitest's own choice, so the GitHub one that marks failures on the pull request is named
-  # too when it runs there.
-  npm run test:components -- ${SHARD:+--shard="$SHARD"} --reporter=default ${GITHUB_ACTIONS:+--reporter=github-actions} \
-    --reporter=json --outputFile.json="$dir/vitest.json"
+ fast | static | components)
+  # The fast layer's steps at the same time, each with its own result (scripts/ci-fast.mjs, #258): `static` leaves out
+  # the component tests and `components` runs only them. CI restores the dependencies and the browser before this
+  # (.github/workflows/ci.yml), and COMPONENTS=false, the first job's answer, skips the component tests.
+  dir=$(ledger_dir "$1")
+  case $1 in
+   fast) if [[ ${COMPONENTS:-} == false ]]; then chosen=(--skip components); else chosen=(); fi;;
+   static) chosen=(--skip components);;
+   components) chosen=(--only components);;
+  esac
+  node scripts/ci-fast.mjs "$dir" ${chosen[@]+"${chosen[@]}"}
   ;;
  database)
   # Migrations replayed and verified, row-level security and grants, on lane 0's stack.
@@ -252,5 +207,5 @@ PY
     find tests/visual-lane -name '*.png' | sort | xargs -r sha256sum > "test-results/lane-proof/run-$run.sha256"
   done
   ;;
- *) echo 'usage: ./ci.sh check | static | components | database | images | integration | visual | visual-update | lane | lane-update | lane-proof' >&2; exit 2;;
+ *) echo 'usage: ./ci.sh check | fast | static | components | database | images | integration | visual | visual-update | lane | lane-update | lane-proof' >&2; exit 2;;
 esac
