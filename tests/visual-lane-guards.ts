@@ -58,15 +58,17 @@ export async function expectDeterministic(page: Page) {
       return from.includes('?') ? [parseInt(from.replace(/\?/g, '0'), 16), parseInt(from.replace(/\?/g, 'F'), 16)] : [parseInt(from, 16), parseInt(to, 16)];
     });
     const covers = (face: FontFace, text: string) => [...text].some(char => !/\s/.test(char) && ranges(face).some(([from, to]) => char.codePointAt(0)! >= from && char.codePointAt(0)! <= to));
-    // A run of symbols alone (a close mark, an arrow) is drawn by the pinned image's own symbol face, the same every run.
+    // A run of symbols alone (a close mark, an arrow) may sit outside every face of its family and is then drawn by the
+    // pinned image's own symbol face, the same every run; a face of the family that is still loading is still named.
     const wordless = (text: string) => !/[\p{L}\p{N}]/u.test(text);
     for (const element of document.body.querySelectorAll('*')) {
       const text = [...element.childNodes].filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent).join('').trim();
-      if (!text || wordless(text) || !element.checkVisibility()) continue;
+      if (!text || !element.checkVisibility()) continue;
       const style = getComputedStyle(element);
       const family = unquote(style.fontFamily.split(',')[0]);
       if (generic.has(family)) continue;
-      if (!declared.has(family)) found.add(`font "${family}" is not declared, so the text falls back to another face`);
+      if (wordless(text)) { if (declared.has(family) && !localOnly.has(family) && !document.fonts.check(`${style.fontStyle} ${style.fontWeight} 16px "${family}"`, text)) found.add(`font "${family}" ${style.fontWeight} fell back`); }
+      else if (!declared.has(family)) found.add(`font "${family}" is not declared, so the text falls back to another face`);
       // check() also passes when every face of the family leaves the text out by its unicode-range.
       else if (!faces.some(face => unquote(face.family) === family && covers(face, text))) found.add(`font "${family}" covers none of "${text.slice(0, 40)}"`);
       else if (!localOnly.has(family) && !document.fonts.check(`${style.fontStyle} ${style.fontWeight} 16px "${family}"`, text)) found.add(`font "${family}" ${style.fontWeight} fell back`);
@@ -87,7 +89,7 @@ export async function expectDeterministic(page: Page) {
 export type QuietCheck = [kind: string, selector: string, pseudo?: string];
 export async function expectQuietContrast(page: Page, checks: QuietCheck[]) {
   for (const [kind, selector, pseudo] of checks) {
-    const found = await textContrast(page, selector, pseudo);
+    const found = await measureContrast(page, selector, pseudo);
     expect(found.length, `${kind}: nothing to measure`).toBeGreaterThan(0);
     for (const item of found) {
       expect(item.secondary, `${kind} "${item.text}"`).toBeGreaterThanOrEqual(4.5);
@@ -97,68 +99,58 @@ export async function expectQuietContrast(page: Page, checks: QuietCheck[]) {
 }
 
 // Contrast is computed from what the browser draws: the text color (with its own opacity and its parents' opacity) laid over
-// the background colors stacked behind it, so a faded copy of a darker color is measured as faded.
-async function textContrast(page: Page, selector: string, pseudo?: string) {
+// the background colors stacked behind it, so a faded copy of a darker color is measured as faded. One measure serves the
+// quiet labels (a selector) and the dark theme (every visible text run, input and select).
+type Measured = { text: string, secondary: number, body: number };
+function measureContrast(page: Page, selector: string | null, pseudo?: string): Promise<Measured[]> {
   return page.evaluate(({ selector, pseudo }) => {
-    const context = Object.assign(document.createElement('canvas'), { width: 1, height: 1 }).getContext('2d', { willReadFrequently: true })!;
-    const rgba = (css: string) => { context.clearRect(0, 0, 1, 1); context.fillStyle = '#000'; context.fillStyle = css; context.fillRect(0, 0, 1, 1); const d = context.getImageData(0, 0, 1, 1).data; return [d[0], d[1], d[2], d[3] / 255]; };
+    const canvas = Object.assign(document.createElement('canvas'), { width: 1, height: 1 }).getContext('2d', { willReadFrequently: true })!;
+    // fillStyle keeps its last value when given a colour it cannot read, so it is reset first.
+    const rgba = (css: string) => { canvas.clearRect(0, 0, 1, 1); canvas.fillStyle = '#000'; canvas.fillStyle = css; canvas.fillRect(0, 0, 1, 1); const d = canvas.getImageData(0, 0, 1, 1).data; return [d[0], d[1], d[2], d[3] / 255]; };
     const over = (top: number[], below: number[]) => [0, 1, 2].map(i => top[i] * top[3] + below[i] * (1 - top[3]));
     const light = (color: number[]) => { const [r, g, b] = color.slice(0, 3).map(v => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
     const ratio = (a: number[], b: number[]) => { const [x, y] = [light(a), light(b)].sort((m, n) => n - m); return (x + 0.05) / (y + 0.05); };
     const bodyColor = rgba(getComputedStyle(document.body).color);
-    return Array.from(document.querySelectorAll(selector)).filter(element => { const box = element.getBoundingClientRect(); return box.width > 0 && box.height > 0 && getComputedStyle(element).visibility !== 'hidden'; }).map(element => {
-      let background = [255, 255, 255];
-      const chain: Element[] = []; let opacity = 1;
-      for (let node: Element | null = element; node; node = node.parentElement) { chain.unshift(node); opacity *= Number(getComputedStyle(node).opacity); }
-      for (const node of chain) background = over(rgba(getComputedStyle(node).backgroundColor), background);
+    const targets: { element: Element, text: string, pseudo?: string }[] = [];
+    if (selector) {
+      for (const element of document.querySelectorAll(selector)) {
+        const box = element.getBoundingClientRect();
+        if (box.width > 0 && box.height > 0 && getComputedStyle(element).visibility !== 'hidden') targets.push({ element, text: (element.textContent || (element as HTMLTextAreaElement).placeholder || '').trim(), pseudo });
+      }
+    } else {
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      while (walker.nextNode()) { const text = walker.currentNode.textContent?.trim(); if (text) targets.push({ element: walker.currentNode.parentElement!, text }); }
+      for (const element of document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input:not([type=hidden]),textarea')) {
+        const text = element.value || element.placeholder;
+        if (text) targets.push({ element, text, pseudo: element.value ? undefined : '::placeholder' });
+      }
+      for (const element of document.querySelectorAll<HTMLSelectElement>('select')) targets.push({ element, text: element.selectedOptions[0]?.text || '' });
+    }
+    const measured = [];
+    for (const { element, text, pseudo } of targets) {
+      if (!selector) {
+        if (!element.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }) || element.closest('[aria-hidden=true],.sr-only')) continue;
+        const box = element.getBoundingClientRect();
+        if (!box.width || !box.height) continue;
+      }
+      let background = [255, 255, 255], opacity = 1;
+      const chain: Element[] = [];
+      for (let node: Element | null = element; node; node = node.parentElement) chain.unshift(node);
+      for (const node of chain) { const style = getComputedStyle(node); background = over(rgba(style.backgroundColor), background); opacity *= Number(style.opacity); }
       const style = getComputedStyle(element, pseudo);
       const color = rgba(style.color);
       const shown = over([color[0], color[1], color[2], color[3] * opacity * (pseudo ? Number(style.opacity) : 1)], background);
-      const body = over([bodyColor[0], bodyColor[1], bodyColor[2], bodyColor[3]], background);
-      return { text: (element.textContent || (element as HTMLTextAreaElement).placeholder || '').trim(), secondary: ratio(shown, background), body: ratio(body, background) };
-    });
+      measured.push({ text, secondary: ratio(shown, background), body: ratio(over(bodyColor, background), background) });
+    }
+    return measured;
   }, { selector, pseudo });
 }
 
 // Every visible text run in the dark theme keeps 4.5:1 on what is behind it.
 export async function expectDarkContrast(page: Page) {
-  const result = await page.evaluate(() => {
-    const canvas = Object.assign(document.createElement('canvas'), { width: 1, height: 1 }).getContext('2d', { willReadFrequently: true })!;
-    const rgba = (css: string) => { canvas.clearRect(0, 0, 1, 1); canvas.fillStyle = css; canvas.fillRect(0, 0, 1, 1); const bytes = canvas.getImageData(0, 0, 1, 1).data; return [bytes[0], bytes[1], bytes[2], bytes[3] / 255]; };
-    const over = (top: number[], below: number[]) => [0, 1, 2].map(index => top[index] * top[3] + below[index] * (1 - top[3]));
-    const luminance = (color: number[]) => color.map(value => value / 255).map(value => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4).reduce((sum, value, index) => sum + value * [0.2126, 0.7152, 0.0722][index], 0);
-    const targets: { element: Element, text: string, pseudo?: string }[] = [];
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-    while (walker.nextNode()) {
-      const text = walker.currentNode.textContent?.trim();
-      if (text) targets.push({ element: walker.currentNode.parentElement!, text });
-    }
-    for (const element of document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input:not([type=hidden]),textarea')) {
-      const text = element.value || element.placeholder;
-      if (text) targets.push({ element, text, pseudo: element.value ? undefined : '::placeholder' });
-    }
-    for (const element of document.querySelectorAll<HTMLSelectElement>('select')) targets.push({ element, text: element.selectedOptions[0]?.text || '' });
-    let checked = 0;
-    const failures = [];
-    for (const { element, text, pseudo } of targets) {
-      if (!element.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }) || element.closest('[aria-hidden=true],.sr-only')) continue;
-      const box = element.getBoundingClientRect();
-      if (!box.width || !box.height) continue;
-      let background = [255, 255, 255], opacity = 1;
-      const chain: Element[] = [];
-      for (let ancestor: Element | null = element; ancestor; ancestor = ancestor.parentElement) chain.unshift(ancestor);
-      for (const ancestor of chain) { const style = getComputedStyle(ancestor); background = over(rgba(style.backgroundColor), background); opacity *= Number(style.opacity); }
-      const style = getComputedStyle(element, pseudo);
-      const color = rgba(style.color);
-      const shown = over([color[0], color[1], color[2], color[3] * opacity * (pseudo ? Number(style.opacity) : 1)], background);
-      const values = [luminance(shown), luminance(background)].sort((first, second) => second - first);
-      const ratio = (values[0] + 0.05) / (values[1] + 0.05);
-      checked++;
-      if (ratio < 4.5) failures.push({ text, ratio });
-    }
-    return { checked, failures };
-  });
-  expect(result.checked, 'visible dark text was measured').toBeGreaterThan(0);
-  await test.info().attach('dark-contrast', { body: JSON.stringify(result), contentType: 'application/json' });
-  expect(result.failures, `${result.checked} dark text runs checked at 4.5:1`).toEqual([]);
+  const measured = await measureContrast(page, null);
+  const failures = measured.filter(item => item.secondary < 4.5).map(({ text, secondary: ratio }) => ({ text, ratio }));
+  expect(measured.length, 'visible dark text was measured').toBeGreaterThan(0);
+  await test.info().attach('dark-contrast', { body: JSON.stringify({ checked: measured.length, failures }), contentType: 'application/json' });
+  expect(failures, `${measured.length} dark text runs checked at 4.5:1`).toEqual([]);
 }

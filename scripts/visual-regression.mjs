@@ -18,10 +18,11 @@ export function failedTests(report) {
   return failed;
 }
 
-export function regressionIssue({ failed, sha, runUrl, artifactUrl }) {
-  const lines = [`The compared screens failed on main at ${sha} ([run](${runUrl})).`, ''];
+export function regressionIssue({ failed, budgets = [], sha, runUrl, artifactUrl }) {
+  const lines = [`The visual job failed on main at ${sha} ([run](${runUrl})).`, ''];
   if (failed.length) lines.push('These screens differ from their approved images:', ...failed.map(name => `- ${name}`));
-  else lines.push('No screen comparison failed: the run failed before or around them. Read the run.');
+  if (budgets.length) lines.push(...(failed.length ? [''] : []), 'These navigation budgets failed:', ...budgets.map(name => `- ${name}`));
+  if (!failed.length && !budgets.length) lines.push('No screen comparison failed: the run failed before or around them. Read the run.');
   lines.push('', artifactUrl ? `Expected, actual and difference images: ${artifactUrl}` : 'The run uploaded no difference images.');
   lines.push('', 'No pull request waits for this. When the change was intended, refresh the approved images in a pull request.');
   return { title: 'Compared screens differ on main', body: lines.join('\n') };
@@ -30,8 +31,10 @@ export function regressionIssue({ failed, sha, runUrl, artifactUrl }) {
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const [folder, sha, runUrl, artifactUrl = ''] = process.argv.slice(2);
   const failed = [];
+  const budgets = [];
   for (const name of readdirSync(folder).filter(name => name.endsWith('.json') && name !== 'meta.json')) {
-    try { failed.push(...failedTests(JSON.parse(readFileSync(join(folder, name), 'utf8')))); } catch { /* an unreadable report names no screen */ }
+    // ci.sh visual writes the navigation budgets to measured.json beside the screens' report.
+    try { (name === 'measured.json' ? budgets : failed).push(...failedTests(JSON.parse(readFileSync(join(folder, name), 'utf8')))); } catch { /* an unreadable report names nothing */ }
   }
-  console.log(regressionIssue({ failed, sha, runUrl, artifactUrl }).body);
+  console.log(regressionIssue({ failed, budgets, sha, runUrl, artifactUrl }).body);
 }

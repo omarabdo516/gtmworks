@@ -1,5 +1,5 @@
 import { test, expect, type Browser } from '@playwright/test';
-import { blockOutsideRequests, expectDeterministic, expectQuietContrast, fixClock } from './visual-lane-guards';
+import { blockOutsideRequests, expectDarkContrast, expectDeterministic, expectQuietContrast, fixClock } from './visual-lane-guards';
 
 // Each guard of the visual lane fails on the page it exists for and names why, and a quiet page passes them all. The
 // pages are written in place, so these tests need no app.
@@ -88,3 +88,11 @@ test('a quiet label below 4.5:1 is named, and one at 4.5:1 that stays weaker tha
   await expect(expectQuietContrast(page, [['quiet label', '.faint']])).rejects.toThrow(/quiet label "تفصيلة باهتة"/);
   await expect(expectQuietContrast(page, [['quiet label', '.missing']])).rejects.toThrow(/quiet label: nothing to measure/);
 });
+
+test('dark text below 4.5:1 is named, and text at 4.5:1 or more passes', async ({ browser }) => {
+  const faint = await pageOf(browser, '<body style="background:#111;color:#eee"><p>واضح</p><p style="color:#444">باهت</p></body>');
+  await expect(expectDarkContrast(faint)).rejects.toThrow(/باهت/);
+  const clear = await pageOf(browser, '<body style="background:#111;color:#eee"><p>واضح</p><p style="color:#999">هادي</p></body>');
+  await expectDarkContrast(clear);
+});
+

@@ -46,3 +46,14 @@ test('the command line reads every Playwright report in a folder and prints the 
   assert.match(body, /home ar 1440/);
   assert.match(body, /https:\/\/artifact/);
 });
+
+test('a navigation budget that failed is named as a budget, not as a screen that differs', t => {
+  const folder = mkdtempSync(join(tmpdir(), 'gtmworks-visual-regression-'));
+  t.after(() => rmSync(folder, { recursive: true, force: true }));
+  const budgets = { suites: [{ title: 'navigation.spec.ts', file: 'navigation.spec.ts', specs: [spec('board opens within its budget', false, 12)] }] };
+  writeFileSync(join(folder, 'measured.json'), JSON.stringify(budgets));
+  const body = execFileSync(process.execPath, [resolve('scripts/visual-regression.mjs'), folder, 'abc', 'https://run', 'https://artifact'], { encoding: 'utf8' });
+  assert.match(body, /navigation budgets failed:\n- board opens within its budget \(navigation\.spec\.ts:12\)/i);
+  assert.doesNotMatch(body, /differ from their approved images/);
+});
+

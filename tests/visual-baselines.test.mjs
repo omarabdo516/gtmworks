@@ -36,6 +36,8 @@ test('a screen that is not a screen is refused, naming it', () => {
   for (const [text, message] of [
     ['{"home": {"path": "/h", "redy": ".x"}}', /home: unknown field "redy"/],
     ['{"home": {"path": "/h", "toString": ".x"}}', /home: unknown field "toString"/],
+    // The lane runs no step on a page before its picture, so a screen cannot ask for one.
+    ['{"home": {"path": "/h", "act": "open-menu"}}', /home: unknown field "act"/],
     ['{"home": {"path": "/h", "anonymous": false}}', /home: "anonymous" has the wrong type/],
     ['{"home": {"path": 3}}', /home: "path" has the wrong type/],
     ['{"home": {"ready": ".x"}}', /home: "path" is required/],

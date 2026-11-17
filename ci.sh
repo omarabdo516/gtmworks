@@ -187,7 +187,8 @@ PY
     install_chromium
   fi
   # Its own output folder: Playwright empties the one it writes to, and test-results/lane/ holds the lane's differences.
-  GTMWORKS_TEST_LANES=1 PLAYWRIGHT_JSON_OUTPUT_FILE="$dir/measured.json" npx playwright test --project=measured --no-deps --output=test-results/measured || status=$?
+  # The lane's web server built the app; the budgets serve that build.
+  GTMWORKS_WEB_PREBUILT=true GTMWORKS_TEST_LANES=1 PLAYWRIGHT_JSON_OUTPUT_FILE="$dir/measured.json" npx playwright test --project=measured --no-deps --output=test-results/measured || status=$?
   exit "$status"
   ;;
  visual-update)
@@ -201,10 +202,14 @@ PY
   [[ "${CI:-}" == "true" ]] || { echo 'lane-proof rewrites the approved lane images; it runs in CI only' >&2; exit 2; }
   start_lane
   mkdir -p test-results/lane-proof
-  for run in 1 2 3; do
-    lane_test --update-snapshots=all
-    find tests/visual-lane -name '*.png' | sort | xargs -r sha256sum > "test-results/lane-proof/run-$run.sha256"
-  done
+  # The first run builds the app and the next two serve that build; the second declares the screens last to first, so
+  # the same bytes also prove that no screen depends on the ones drawn before it.
+  lane_test --update-snapshots=all
+  find tests/visual-lane -name '*.png' | sort | xargs -r sha256sum > test-results/lane-proof/run-1.sha256
+  GTMWORKS_WEB_PREBUILT=true GTMWORKS_LANE_REVERSE=true lane_test --update-snapshots=all
+  find tests/visual-lane -name '*.png' | sort | xargs -r sha256sum > test-results/lane-proof/run-2.sha256
+  GTMWORKS_WEB_PREBUILT=true lane_test --update-snapshots=all
+  find tests/visual-lane -name '*.png' | sort | xargs -r sha256sum > test-results/lane-proof/run-3.sha256
   ;;
  *) echo 'usage: ./ci.sh check | static | components | database | integration | visual | visual-update | lane-proof' >&2; exit 2;;
 esac

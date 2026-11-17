@@ -1,6 +1,6 @@
 import { test, expect, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
-import { laneImage, loadLaneScreens } from './visual-lane.mjs';
+import { laneImage, loadLaneScreens, themes, widths } from './visual-lane.mjs';
 import { blockOutsideRequests, expectDarkContrast, expectDeterministic, expectQuietContrast, fixClock, type QuietCheck } from './visual-lane-guards';
 import { freshSeed } from './fresh-seed';
 import { signIn, openNavigation } from './sign-in';
@@ -13,8 +13,6 @@ import { resetFirstRun } from '../scripts/first-run-db.mjs';
 // against its approved image. Each screen starts from the seed as built and signs in again, so the screens pass in any
 // order.
 const screens = loadLaneScreens();
-const widths = [1440, 390];
-const themes = ['light', 'dark'] as const;
 const rsLearning = '10000000-0000-0000-0000-000000000001';
 const seedAuthor = '30000000-0000-0000-0000-000000000001';
 const omar = '20000000-0000-0000-0000-000000000001';
@@ -134,7 +132,9 @@ async function laneContext(browser: Browser) {
   return context;
 }
 
-for (const screen of screens) {
+// GTMWORKS_LANE_REVERSE=true declares the screens last to first: the lane proof draws one run that way (ci.sh lane-proof).
+const ordered = process.env.GTMWORKS_LANE_REVERSE === 'true' ? [...screens].reverse() : screens;
+for (const screen of ordered) {
   test.describe(screen.name, () => {
     let context: BrowserContext;
     let page: Page;
@@ -154,7 +154,11 @@ for (const screen of screens) {
       await expect(page.locator('.modal')).toBeVisible();
       await idle(page);
     });
-    test.afterAll(async () => { await context?.close(); });
+    test.afterAll(async ({ baseURL }) => {
+      await context?.close();
+      // First run empties the installation; the seed goes back for whatever runs next, as the old screens did.
+      if (screen.name === 'first-run') resetFirstRun(baseURL, true);
+    });
 
     for (const width of widths) for (const theme of themes) {
       test(`${screen.name} ${width} ${theme}`, async () => {
