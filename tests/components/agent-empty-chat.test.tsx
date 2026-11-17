@@ -79,6 +79,18 @@ for (const reader of ['owner', 'member'] as const) test(`pressing each suggestio
  expect(push).not.toHaveBeenCalled();
 });
 
+test('with no Owner to name, asking for an Agent and the first-run line say the request goes to the Owner', async () => {
+ const hint = await page.viewport(1440, 900).then(() => render(<div className="gw"><LanguageProvider language="en">
+  <AgentChat slug="rs-learning" company="co-1" agent={lead} details={null} writer team empty={{ state: 'main', reader: 'member', owners: [] }} newAgent askOf={[]}/>
+ </LanguageProvider></div>));
+ await expect.element(hint.getByText('Tell Lead what you need an agent for, and it prepares the request for the Owner.', { exact: true })).toBeVisible();
+ hint.unmount();
+ const welcome = await page.viewport(1440, 900).then(() => render(<div className="gw"><LanguageProvider language="en">
+  <AgentChat slug="rs-learning" company="co-1" agent={lead} details={null} writer team empty={{ state: 'fresh' }} askOf={[]}/>
+ </LanguageProvider></div>));
+ await expect.element(welcome.getByText('I’m Lead and I run your marketing work with you. Need an agent for any job? Tell me in your own words and I’ll prepare the request for the Owner.', { exact: true })).toBeVisible();
+});
+
 test('a suggestion keeps the text already typed and adds its sentence on the next line, focused at its end', async () => {
  const screen = await chat({ empty: { state: 'main', reader: 'owner', owners: [] } });
  const field = screen.getByRole('textbox', { name: 'Message' });

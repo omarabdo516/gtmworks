@@ -37,7 +37,7 @@ export default function AgentChat({slug,company,agent,details,writer,team=false,
     {agent&&team&&<PrivateLine agent={agent.name}/>}
     {agent?<AgentEmptyChat agent={agent} empty={empty} askOf={askOf} suggest={writer?text=>box.current?.insert(text):undefined}/>:<div className="empty-chat"><p role="note">{t('conversationNoAgent')}</p></div>}
    </div></div>
-   <div className="composer-area" ref={composer}>{agent&&writer&&newAgent&&<div className="new-hint" role="note"><ShellIcon name="userPlus" className="new-hint__ic"/><p className="new-hint__t">{askOf?t('newAgentHintMember',agent.name,new Intl.ListFormat(localeFor(language),{type:'conjunction'}).format(askOf)):t('newAgentHint',agent.name)}</p>
+   <div className="composer-area" ref={composer}>{agent&&writer&&newAgent&&<div className="new-hint" role="note"><ShellIcon name="userPlus" className="new-hint__ic"/><p className="new-hint__t">{!askOf?t('newAgentHint',agent.name):askOf.length?t('newAgentHintMember',agent.name,new Intl.ListFormat(localeFor(language),{type:'conjunction'}).format(askOf)):t('newAgentHintMemberAnyOwner',agent.name)}</p>
     {!askOf&&<Link className="link-btn new-hint__alt" href={`/c/${slug}/chat?new=ready`}>{t('newAgentReadyMade')}</Link>}</div>}
     {agent&&gallery&&<Suspense fallback={null}><ReadyMade slug={slug} company={company} agent={agent.id} companyName={gallery.company} alone={gallery.alone} lead={agent.name} roles={gallery.roles}/></Suspense>}
     {agent&&(writer?<MessageBox key={`${newAgent}`} ref={box} focus={newAgent&&!gallery} placeholder={newAgent?t('newAgentExample'):t('writeTo',agent.name)} send={async(message,sendKey)=>{
