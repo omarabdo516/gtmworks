@@ -211,7 +211,7 @@ test('a cut cell never leaves half of a character', () => {
 });
 
 test('a cell makes no link: no address, issue address, GH reference, link or image', () => {
-  const name = 'see https://github.com/someone/else/issues/1 www.example.com GH-12 [text](https://x.test) ![](https://x.test/i.png)';
+  const name = 'see https://github.com/someone/else/issues/301 www.example.com GH-12 [text](https://x.test) ![](https://x.test/i.png)';
   const text = section(report([testRecord(name, 1)], { now, days: 7, runs: 1 }), 'Slowest tests');
   assert.doesNotMatch(text, /https?:\/\/|www\.e|GH-12|(?<!\\)\[|(?<!\\)\]/);
 });
