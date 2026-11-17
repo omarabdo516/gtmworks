@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { appendFileSync, readFileSync } from 'node:fs';
-import { codeOutsideQuotes, topLevelStatements } from '../tests/sql-statements.mjs';
+import { codeOutsideQuotes, leavesOpen, topLevelStatements } from '../tests/sql-statements.mjs';
 import { verifyResult } from './verify-db.mjs';
 
 // Every verify file in one psql session in the lane's database container (#259), where a CLI process per file cost
@@ -13,6 +13,8 @@ const [container, ...files] = process.argv.slice(2);
 // in one: a backslash outside quoted text would be one.
 const sql = files.map(file => readFileSync(file, 'utf8'));
 const refused = new Map(files.flatMap((file, index) => {
+ // Left open, the file would swallow the session's own lines after it.
+ if (leavesOpen(sql[index])) return [[index, `${file}: a verify file leaves no string, quoted name, dollar quote or comment open`]];
  const count = topLevelStatements(sql[index]).length;
  if (count !== 1) return [[index, `${file}: a verify file is one statement, this one has ${count}`]];
  if (codeOutsideQuotes(sql[index]).includes('\\')) return [[index, `${file}: a verify file holds no psql command (a backslash outside a string)`]];

@@ -133,3 +133,18 @@ test('a file name with a quote or a space is still reported by name', t => {
  assert.equal(run.status, 0, run.stderr);
  for (const file of named) assert.match(run.stdout, new RegExp(`^${escape(file)}: Database verification passed$`, 'm'));
 });
+
+test('a file that leaves a string, a quoted name, a dollar quote or a comment open is refused, so psql never swallows the next file', t => {
+ const named = ['a.verify.sql', 'b.verify.sql', 'c.verify.sql', 'd.verify.sql', 'e.verify.sql'];
+ const run = session(t, named, lines('@verify 4', '{"e" : true}', '@rows 1'), 0, {
+  'a.verify.sql': "select json_build_object('ok', 'open);\n",
+  'b.verify.sql': 'select json_build_object(\'ok\', true) as "open;\n',
+  'c.verify.sql': "select json_build_object('ok', $$open);\n",
+  'd.verify.sql': "select json_build_object('ok', true) /* open /* nested */ ;\n",
+ });
+ assert.equal(run.status, 1);
+ for (const file of ['a', 'b', 'c', 'd']) {
+  assert.match(run.stderr, new RegExp(`^${file}\\.verify\\.sql: a verify file leaves no string, quoted name, dollar quote or comment open$`, 'm'));
+ }
+ assert.equal(run.input.match(/@verify \d+'/g).join(), "@verify 4'", 'only the closed file is sent to psql');
+});
