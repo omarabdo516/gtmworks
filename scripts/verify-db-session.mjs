@@ -71,7 +71,8 @@ for (const [index, file] of files.entries()) {
  else {
   try {
    const output = block.lines.join('\n').trim();
-   verifyResult(output ? JSON.parse(`[${output}]`) : [], file);
+   // One JSON value, parsed on its own and only then made the file's one row.
+   verifyResult(output ? [JSON.parse(output)] : [], file);
   } catch (error) { message = error instanceof SyntaxError ? `${file}: Database verification did not return one JSON value (a verify file selects one json value in one row)` : error.message; }
  }
  if (message) { failed++; console.error(message); } else console.log(`${file}: Database verification passed`);

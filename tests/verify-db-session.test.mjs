@@ -81,9 +81,14 @@ test('a session psql could not open fails every file', t => {
 });
 
 test('a file that returns more or fewer than one row, or a row that is not one JSON value, fails by name', t => {
- const named = ['a.verify.sql', 'b.verify.sql', 'c.verify.sql'];
- // a: a true row and a NULL row, which psql prints as `null`; b: two columns; c: a single NULL row.
- const run = session(t, named, lines('@verify 0', '{"ok" : true}', 'null', '@rows 2', '@verify 1', 't|t', '@rows 1', '@verify 2', 'null', '@rows 1'));
+ const named = ['a.verify.sql', 'b.verify.sql', 'c.verify.sql', 'd.verify.sql'];
+ // a: a true row and a NULL row, which psql prints as `null`; b: two columns; c: a single NULL row; d: one text row
+ // holding two JSON values side by side.
+ const run = session(t, named, lines(
+  '@verify 0', '{"ok" : true}', 'null', '@rows 2', '@verify 1', 't|t', '@rows 1', '@verify 2', 'null', '@rows 1',
+  '@verify 3', '{"ok":true},{"other":true}', '@rows 1',
+ ));
+ assert.match(run.stderr, /^d\.verify\.sql: Database verification did not return one JSON value \(a verify file selects one json value in one row\)$/m);
  assert.equal(run.status, 1);
  assert.match(run.stderr, /^a\.verify\.sql: Database verification returned 2 rows \(a verify file selects one json value in one row\)$/m);
  assert.match(run.stderr, /^b\.verify\.sql: Database verification did not return one JSON value \(a verify file selects one json value in one row\)$/m);
