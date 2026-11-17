@@ -109,6 +109,8 @@ jobs:
         run: ./ci.sh static
       - name: upload ledger results
         if: always()
+        # The ledger only reports, so a failed upload leaves the job's result as its tests made it.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: ledger-${{ github.job }}
@@ -141,6 +143,8 @@ jobs:
         run: ./ci.sh components
       - name: upload ledger results
         if: always()
+        # The ledger only reports, so a failed upload leaves the job's result as its tests made it.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: ledger-${{ github.job }}-${{ strategy.job-index }}
@@ -172,6 +176,8 @@ jobs:
         run: ./ci.sh database
       - name: upload ledger results
         if: always()
+        # The ledger only reports, so a failed upload leaves the job's result as its tests made it.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: ledger-${{ github.job }}
@@ -221,6 +227,8 @@ jobs:
           retention-days: 30
       - name: upload ledger results
         if: always()
+        # The ledger only reports, so a failed upload leaves the job's result as its tests made it.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: ledger-${{ github.job }}
@@ -306,6 +314,8 @@ jobs:
           docker stats --no-stream --format '{{.Name}} {{.MemUsage}}' | grep -E '_repo(-lane-[0-9]+)? ' || true
       - name: upload ledger results
         if: always()
+        # The ledger only reports, so a failed upload leaves the job's result as its tests made it.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: ledger-${{ github.job }}
