@@ -21,7 +21,8 @@ const stage=(column:string)=>`(select id from public.work_stages where company_i
 test.describe.configure({mode:'serial'});
 test.use({timezoneId:'UTC'});
 test.beforeAll(({},testInfo)=>{
- freshSeed(testInfo.file);
+ // A retry of this serial file starts it again from the seed, so its rows are inserted once.
+ freshSeed(testInfo.file,testInfo.retry>0);
  query(`do $$ declare card bigint; begin
   insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values
    ('${leadConnection}','${company}','${omar}','http://127.0.0.1:9/p/lead','details-lead','no-key','unreachable'),
