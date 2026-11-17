@@ -71,6 +71,10 @@ declare talk public.conversations; asked text:=asking->>'id'; kept jsonb;
 begin
  select * into talk from public.conversations where id=conversation;
  if not found or not exists(select 1 from public.conversation_messages m where m.conversation_id=conversation and m.author='person' and m.run_id=run) then return '[]'::jsonb; end if;
+ -- Closed first, so the next question is kept on the read that shows it (one open question per Conversation).
+ update public.reply_cards r set state='closed' where r.conversation_id=conversation and r.kind='question' and r.state='open'
+  and (r.run_id=run and (ended or (r.call_id is distinct from asked and r.created_at<read_started_at))
+   or r.run_id<>run and exists(select 1 from public.conversation_usage u where u.conversation_id=conversation and u.run_id=r.run_id));
  if asked is not null and not ended then
   kept:=jsonb_build_object('question',asking->'text','choices',asking->'choices','multiple',asking->'multiple');
   if length(asked) between 1 and 200 and public.reply_card_valid('question','open',kept) then
@@ -80,9 +84,6 @@ begin
     on conflict do nothing;
   end if;
  end if;
- update public.reply_cards r set state='closed' where r.conversation_id=conversation and r.kind='question' and r.state='open'
-  and (r.run_id=run and (ended or (r.call_id is distinct from asked and r.created_at<read_started_at))
-   or r.run_id<>run and exists(select 1 from public.conversation_usage u where u.conversation_id=conversation and u.run_id=r.run_id));
  return coalesce((select jsonb_agg(jsonb_build_object('card',r.id,'question',r.call_id,'answer',r.content->'answer') order by r.id) from public.reply_cards r
   where r.conversation_id=conversation and r.run_id=run and r.kind='question' and r.state='sending'),'[]'::jsonb);
 end $$;
