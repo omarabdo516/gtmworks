@@ -27,7 +27,8 @@ step supabase/tests pgTAP npx supabase test db
 # The migration replays write their pgTAP files here and run in one session: a `supabase test db` each cost about two
 # seconds of start-up for milliseconds of SQL (#259). pg_prove runs the files in name order, not the order below; each
 # rolls back its own transaction, so no replay sees another's changes. Side by side their schema changes would lock each
-# other. Each replay gets a ledger line with its own outcome, read from pg_prove's line for its file.
+# other. Each replay gets a ledger line with its own outcome and time, read from pg_prove's line for its file: every
+# line of the session is stamped as it arrives, and a replay's time runs from the result before it to its own.
 replays=$(mktemp -d)
 session=$(mktemp)
 trap 'rm -rf "$replays" "$session"' EXIT
@@ -50,13 +51,23 @@ replay tests/remove-agency-migration.mjs
 replay tests/company-log-migration.mjs
 replay tests/member-agent-visibility-migration.mjs
 replay tests/agent-profile-moves-migration.mjs
+stamped() {
+  npx --no-install supabase test db "$replays" 2>&1 | while IFS= read -r line; do
+    printf '%s\n' "$line"
+    printf '%s %s\n' "$(date +%s%N)" "$line" >> "$session"
+  done
+}
 status=0
-step tests/db.sh 'migration replays' bash -c 'set -o pipefail; npx supabase test db "$1" 2>&1 | tee "$2"' _ "$replays" "$session" || status=$?
+started=$(date +%s%N)
+step tests/db.sh 'migration replays' stamped || status=$?
+# pg_prove's result lines in the order they came, each as "<file> <ms since the result before> <result>".
+results=$(awk -v t="$started" '$2 ~ /\.sql$/ && $3 ~ /^\.+$/ { printf "%s %d %s\n", $2, ($1 - t) / 1000000, $4; t = $1 }' "$session")
 for script in "${written[@]}"; do
-  if grep -qE "/$(basename "$script" .mjs)\.sql \.+ ok$" "$session"; then
-    record "$script" migration 0 passed
+  read -r _ ms outcome <<< "$(grep -F "$replays/$(basename "$script" .mjs).sql " <<< "$results" || true)"
+  if [[ $outcome == ok ]]; then
+    record "$script" migration "$ms" passed
   else
-    record "$script" migration 0 failed
+    record "$script" migration "${ms:-0}" failed
     echo "migration replay failed: $script" >&2
     status=1
   fi

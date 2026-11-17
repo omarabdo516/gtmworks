@@ -154,7 +154,7 @@ PY
   bash scripts/local-db.sh
   dir=$(ledger_dir database)
   # Every verify file in one psql session, each reported by name with its own ledger line (#259).
-  container="supabase_db_$(sed -n 's/^project_id = "\(.*\)"$/\1/p' supabase/config.toml)"
+  container=$(< supabase/.temp/lanes/0/db-container)
   DB_LEDGER="$PWD/$dir/database.jsonl" node scripts/verify-db-session.mjs "$container" supabase/migrations/*.verify.sql scripts/check-rls.sql
   # The session itself, on real psql: a file whose statement fails must fail with that statement's error.
   if canary=$(node scripts/verify-db-session.mjs "$container" tests/verify-db-session-canary.sql 2>&1) \
@@ -190,16 +190,20 @@ PY
   GTMWORKS_WEB_PREBUILT=true GTMWORKS_TEST_LANES=$lanes GTMWORKS_HOSTED_ELSEWHERE=true PLAYWRIGHT_JSON_OUTPUT_FILE="$dir/e2e.json" npm run test:e2e
   ;;
  images)
-  # Every Supabase image the jobs use, pulled once and archived for the Actions cache (the supabase-images job, #259):
-  # lane 0's stack, and pgTAP's runner through one throwaway test.
+  # Every Supabase image the jobs use, pulled once and archived for the Actions cache (the supabase-images job, #259).
+  # The stack starts on an empty project with this configuration (no migrations, an empty seed), so a broken migration
+  # cannot stop the archive; one throwaway test pulls pgTAP's runner.
   if [[ "${CI:-}" == "true" ]]; then
     npm ci
   fi
-  bash scripts/local-db.sh
-  probe=$(mktemp -d)
-  printf '%s\n' 'begin;' 'select plan(1);' "select pass('the pgTAP runner is here');" 'select * from finish();' 'rollback;' > "$probe/images.sql"
-  npx --no-install supabase test db "$probe/images.sql"
-  rm -rf "$probe"
+  project=$(mktemp -d)
+  mkdir -p "$project/supabase"
+  cp supabase/config.toml "$project/supabase/"
+  : > "$project/supabase/seed.sql"
+  npx --no-install supabase start --workdir "$project"
+  printf '%s\n' 'begin;' 'create extension if not exists pgtap with schema extensions;' 'select plan(1);' \
+    "select pass('the pgTAP runner is here');" 'select * from finish();' 'rollback;' > "$project/images.sql"
+  npx --no-install supabase test db --workdir "$project" "$project/images.sql"
   bash scripts/supabase-images.sh save
   ;;
  visual)

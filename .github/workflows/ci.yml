@@ -159,9 +159,10 @@ jobs:
           include-hidden-files: false
 
   # The stack's images, one archive in the Actions cache keyed by the Supabase CLI's version and the configuration lines
-  # that choose images (scripts/supabase-images.sh, #259). The jobs that start a stack wait for this one, so after a key
-  # change only this job pulls from the registry, once, and the others restore what it saved. With the key already
-  # cached it only looks the key up. It never fails a run: a job that finds no archive pulls for itself.
+  # that choose images (scripts/supabase-images.sh, #259). With the key cached it only looks the key up; after a key
+  # change it pulls the images on an empty project and saves them. `database` and `integration` do not wait for it
+  # (their own time comes first): each restores the archive when there is one and otherwise pulls for itself, from its
+  # own runner. `visual`, on main only, waits for it. It never fails a run.
   supabase-images:
     needs: [changes]
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.database != 'false' || needs.changes.outputs.integration != 'false') }}
@@ -206,7 +207,7 @@ jobs:
 
   # Migrations replayed and verified, row-level security and grants, on one local stack (tests/db.sh).
   database:
-    needs: [changes, supabase-images]
+    needs: [changes]
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.database != 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -223,7 +224,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      # The stack's images from the cache the supabase-images job keeps (#259).
+      # The stack's images from the cache the supabase-images job keeps, when it has them (#259).
       - name: Supabase images cache key
         id: images
         run: echo "key=$(bash scripts/supabase-images.sh key)" >> "$GITHUB_OUTPUT"
@@ -271,7 +272,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      # The stack's images from the cache the supabase-images job keeps (#259).
+      # The stack's images from the cache the supabase-images job keeps, when it has them (#259).
       - name: Supabase images cache key
         id: images
         run: echo "key=$(bash scripts/supabase-images.sh key)" >> "$GITHUB_OUTPUT"
@@ -464,7 +465,7 @@ jobs:
 
   # The rest of the whole-app browser suite: the production-shaped proxy suite in the image and the journeys.
   integration:
-    needs: [changes, supabase-images]
+    needs: [changes]
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.integration != 'false') }}
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.CI_RUNNER || 'ubuntu-latest' }}
     # main's browser suite already took 24 of 25 minutes (run 43398274074); the board, settings, log and numbers specs

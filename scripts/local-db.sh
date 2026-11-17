@@ -45,6 +45,8 @@ if [[ $existing == true ]]; then npx --no-install supabase db reset --workdir "$
 # file sees what an earlier one left. Migration records and the realtime service's own tables are not data and stay.
 snapshot="$PWD/supabase/.temp/lanes/$lane/seed-data.sql"
 mkdir -p "$(dirname "$snapshot")"
+# The database container this lane started, for scripts that reach it (ci.sh database).
+echo "supabase_db_$project" > "$PWD/supabase/.temp/lanes/$lane/db-container"
 {
   cat <<'SQL'
 set session_replication_role = replica;

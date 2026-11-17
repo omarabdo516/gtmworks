@@ -59,11 +59,10 @@ test('ci.yml decides the suites in its first job, gates each suite on it, and ju
   assert.match(classify.run, /node scripts\/ci-areas\.mjs \$main < "\$RUNNER_TEMP\/changed-files"/);
   for (const [job, output] of [['components', 'components'], ['database', 'database'], ['integration', 'integration'], ['install', 'install']]) {
     assert.equal(jobs.changes.outputs[output], `\${{ steps.classify.outputs.${output} }}`, output);
-    // The suites that start a stack also wait for the Supabase images (#259); every suite is gated on `changes`.
-    assert.deepEqual(jobs[job].needs, ['database', 'integration'].includes(job) ? ['changes', 'supabase-images'] : ['changes'], job);
+    assert.deepEqual(jobs[job].needs, ['changes'], job);
     assert.equal(jobs[job].if, `\${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.${output} != 'false') }}`, job);
   }
-  // The images job only warms a cache: it cannot fail a run, and check does not wait for it.
+  // The images job only warms a cache: it cannot fail a run, and check, database and integration do not wait for it (#259).
   assert.equal(jobs['supabase-images']['continue-on-error'], true);
   assert.deepEqual(jobs['supabase-images'].needs, ['changes']);
   const step = jobs.check.steps.at(-1);

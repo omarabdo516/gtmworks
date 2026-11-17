@@ -43,11 +43,12 @@ block of their own, and `scripts/ci-runner.mjs cleanup` removes what this reposi
   (`scripts/local-db.sh`) included: Studio, analytics (the log services) and the edge runtime are off, as nothing uses
   them. To open Studio on your own machine, set its `enabled` back to `true` locally; do not commit it.
 - The stacks' Supabase images come from one archive in the Actions cache, keyed by the Supabase CLI's version and the
-  lines of `supabase/config.toml` that choose images (`scripts/supabase-images.sh`). The `supabase-images` job runs
-  first: with the key cached it only looks it up, and after a key change it alone pulls the images, once, and saves
-  them. `database`, `visual` and a GitHub-hosted `integration` wait for it and restore the archive, so a warm cache makes
-  no registry call; it never fails a run, and a job that finds no archive pulls for itself. Each job log ends with how
-  many images the registry served.
+  lines of `supabase/config.toml` that choose images (`scripts/supabase-images.sh`). The `supabase-images` job keeps
+  it: with the key cached it only looks the key up, and after a key change it pulls the images on an empty project (no
+  migrations, so a broken one cannot stop it) and saves them. `database` and a GitHub-hosted `integration` restore the
+  archive when it is there and otherwise pull for themselves, without waiting; `visual`, on main only, waits for it. A
+  warm cache makes no registry call, the job never fails a run, and each job log ends with how many images the registry
+  served.
 - `integration` is the whole-app browser suite: the production-shaped proxy suite, then the screens, the functional
   journeys, the measured navigation and first run. All of it runs when the journeys' own area changes: a browser spec or
   its helpers, the fake engines, the Playwright configs, the stacks it runs on (migrations, stack configuration, local
