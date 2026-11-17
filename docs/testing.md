@@ -23,13 +23,18 @@ block of their own, and `scripts/ci-runner.mjs cleanup` removes what this reposi
   A change to the CI definition itself (`ci.yml`, `ci.sh`, the area, verdict and runner scripts) or to `package.json`
   and its lock runs every suite; an empty, malformed or unreadable change list runs every suite; a push to `main` runs
   every suite unless every changed file is a document.
-- `static` runs on every change: the `node --test` files, lint, types, the unused-code check (`knip`, `knip.json`, as T3
-  Code runs it, #81), the catalogue and OpenAPI checks.
+- `fast` runs on every change, as one job (#258): the `node --test` files, lint, types, the unused-code check (`knip`,
+  `knip.json`, as T3 Code runs it, #81), the catalogue and OpenAPI checks, and the screens as components in headless
+  Chromium (Vitest browser mode, `vitest.config.mts`, `tests/components/`, in one run, no shards). `./ci.sh fast`
+  starts them all at once (`scripts/ci-fast.mjs`), prints each one's output whole when it ends and lists each one's
+  result; `check` lists them again, so a red lint shows beside the green rest. `./ci.sh static` is the same without
+  the component tests and `./ci.sh components` is the component tests alone. The job restores `node_modules` by the
+  lock file's hash and Chromium by Playwright's version, each saved straight after a fresh install, so the bundler's
+  own cache (`node_modules/.vite`) is never restored and the component tests always start it cold.
   `component-imports.test.mjs` fails there in seconds when a component test's imports reach `server-only` (#218).
-- `components` tests screens as components in headless Chromium (Vitest browser mode, `vitest.config.mts`,
-  `tests/components/`), in two shards, as T3 Code does (#81). It runs when `app/`, `components/`, `lib/` or the
-  component tests change, and when a file the motion test reads changes: the motion table and its reader, the compared
-  widths and languages (`tests/visual-screens.mjs`), the reference and `postcss.config.mjs` (#127).
+  The component tests run when `app/`, `components/`, `lib/` or the component tests change, and when a file the motion
+  test reads changes: the motion table and its reader, the compared widths and languages (`tests/visual-screens.mjs`),
+  the reference and `postcss.config.mjs` (#127); otherwise their step is listed as skipped.
 - `database` runs the migration verifications, `check-rls.sql` and `tests/db.sh` (RLS, grants, migrations replayed on
   legacy data) on one local stack, when `supabase/` or a database test file changes.
 - `integration` is the whole-app browser suite: the production-shaped proxy suite, then the screens, the functional
@@ -52,10 +57,11 @@ block of their own, and `scripts/ci-runner.mjs cleanup` removes what this reposi
   build inputs, the install and release files, the migrations it applies or its own checks change, and when `lib/`
   outside the catalogues, `worker/`, `next.config.mjs` or `server.js` change: only the install drives that code against
   the real bundled Hermes.
-- A manual run (`gh workflow run ci.yml --ref <branch>`) runs static and the database; the browser suite and the install
+- A manual run (`gh workflow run ci.yml --ref <branch>`) runs the fast job and the database; the browser suite and the install
   run only with `-f e2e=true` and `-f install=true`, both off by default (like Hermes `e2e` and `e2e_upgrade`).
 - `check` is the one required check (like Hermes `all-checks-pass`): a suite `changes` did not ask for passes only when
-  it was skipped; one it asked for must succeed; a failed or cancelled stage is red (`scripts/ci-verdict.mjs`).
+  it was skipped; one it asked for must succeed; a failed or cancelled stage is red; it lists each step of the fast job
+  and every step must succeed (`scripts/ci-verdict.mjs`).
 - `ledger` runs after every stage, also when one failed, and decides nothing (`check` does not need it): it reads the
   results each stage wrote under `ci-ledger/` and the run's jobs from the API, writes `ledger.jsonl` (one record for
   the run, each job and each test, kept 90 days) and puts the layer table in the job summary: result, duration and
@@ -65,7 +71,7 @@ block of their own, and `scripts/ci-runner.mjs cleanup` removes what this reposi
   replaces the body of one tracking issue, `CI health report`: each layer's p50 and p90, the slowest tests, flaky and
   failed tests, red jobs by label and the PC queue. A change to it runs it on its own pull request.
 
-A pull request that changes only screens runs static, the component tests and the compared screens (#213). A failed
+A pull request that changes only screens runs the fast job with its component tests, and the compared screens (#213). A failed
 comparison still uploads its expected, actual and difference images in `route-screenshots`. A change to the journeys'
 area runs the whole browser suite, and `lib/` outside the catalogues and `worker/` also run the install. Screens alone
 get their journeys and install proof on `main`, where every push runs every suite unless every file is a document.
@@ -424,7 +430,8 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `choose-language.ts` | browser helper: choose the language in Settings | — | — | helper, kept |
 | `ci-runners.test.mjs` | Every job runs on `ubuntu-latest` except `integration`, which runs where `CI_RUNNER` says and on `ubuntu-latest` for a fork's PR, read no secret and write nothing; the release workflows stay on `ubuntu-latest`; a PR reads no secret. A job that starts Supabase reserves its ports first, on GitHub-hosted runners only, and every lane's port lies in that range (#225); on the PC it clears an earlier run and moves the ports first and cleans up last. `scripts/ci-runner.mjs`: the moved port block, the lane count, and a cleanup that removes only this repository's Docker objects and checkout processes (#224). | 4.3 s | — | keep, extended |
 | `ci-areas.test.mjs` | Each suite runs only when its own files change; screens alone run only the compared screens from the browser suite (#213); main runs all unless the change is documents only; an unknown list runs all. (new, #76; replaces docs-only and install-related) | 3.1 s | — | new |
-| `ci-verdict.test.mjs` | `check` counts a suite as passed only when it was skipped because nobody asked for it, is red on any failed or cancelled stage, and the browser and install inputs default to off. (#69, #76) | 3 s | — | keep, extended |
+| `ci-fast.test.mjs` | `./ci.sh fast` runs its steps at the same time; a failing step is red while the others finish green, its output is shown whole and stays open on GitHub with an error on the run; a skipped step does not run; each step writes its records to the ledger folder; the steps are the static checks, the node tests and the component tests in one run. (#258) | 1 s | — | new (#258) |
+| `ci-verdict.test.mjs` | `check` counts a suite as passed only when it was skipped because nobody asked for it, is red on any failed or cancelled stage, lists each fast step and is red when one fails (a red lint beside the green rest), passes skipped component tests only when nobody asked for them, and the browser and install inputs default to off; the fast job restores its dependencies by the lock file's hash and the browser by version, saved before any test runs and never with `node_modules/.vite`. (#69, #76, #258) | 3 s | — | keep, extended |
 | `ci-classify.test.mjs` | A red job is labelled infrastructure only by the known signature that ended it (a registry rate limit, a runner shutdown or a port in use where the job failed; a browser network change anywhere in the job), and every other red is "your change", over real failed job logs of 2026-11-16 in `ci-logs/`. (#256) | 0.1 s | — | new (#256) |
 | `ci-ledger.test.mjs` | The CI ledger keeps one record per test each layer ran (Playwright with a flaky test's retry and lane, Vitest per assertion, the node reporter run for real, each database check), names an unreadable results file, says why each skipped layer was skipped, and its job summary has a row per layer that marks one over budget and labels a red job. (#256) | 0.3 s | — | new (#256) |
 | `ci-health.test.mjs` | The nightly CI health report: per layer p50 and p90 by nearest rank and the jobs over budget, the slowest 20 tests, flaky and failed tests, red jobs by label, the PC queue and the integration jobs that fell back; it updates the one open tracking issue with its marker and otherwise creates exactly one. (#256) | 0.1 s | — | new (#256) |

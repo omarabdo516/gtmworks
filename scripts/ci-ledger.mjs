@@ -8,10 +8,10 @@ import { classify, failedStep } from './ci-classify.mjs';
 
 // Seconds, reported only (spec #255 D16). `changes` has no budget.
 export const budgets = {
-  layers: { static: 90, components: 90, database: 180, visual: 300, integration: { 'self-hosted': 480, 'github-hosted': 720 }, install: 720 },
+  layers: { fast: 90, database: 180, visual: 300, integration: { 'self-hosted': 480, 'github-hosted': 720 }, install: 720 },
   run: { pull_request: 600, otherwise: 840 },
 };
-export const layers = ['changes', 'static', 'components', 'database', 'visual', 'integration', 'install'];
+export const layers = ['changes', 'fast', 'database', 'visual', 'integration', 'install'];
 
 function budgetOf(layer, environment) {
   const budget = budgets.layers[layer];
@@ -23,7 +23,7 @@ export const layerOf = jobName => jobName.replace(/ \(.*\)$/, '');
 const shardOf = jobName => jobName.match(/ \((\d+\/\d+)\)$/)?.[1] ?? '';
 
 // Which `changes` output each layer follows; the compared screens follow the browser suite's.
-const decisionOf = { components: 'components', database: 'database', visual: 'integration', integration: 'integration', install: 'install' };
+const decisionOf = { database: 'database', visual: 'integration', integration: 'integration', install: 'install' };
 const e2eOff = 'manual run: the e2e input is off';
 // [decision, event, layer, reason]; `*` matches any. The first matching row wins.
 const skipReasons = [

@@ -123,7 +123,7 @@ const areaRule = 'no changed file is in its area (scripts/ci-areas.mjs)';
 const docsOnly = { components: 'false', database: 'false', integration: 'false', install: 'false' };
 
 test('a documents-only pull request names the area rule for every long layer it skipped', () => {
-  for (const layer of ['components', 'database', 'visual', 'integration', 'install']) assert.equal(skipReason(layer, docsOnly, 'pull_request'), areaRule, layer);
+  for (const layer of ['database', 'visual', 'integration', 'install']) assert.equal(skipReason(layer, docsOnly, 'pull_request'), areaRule, layer);
 });
 
 test('screens alone, a push, a manual run and a cancelled run each give their own reason', () => {
@@ -144,28 +144,23 @@ test('the summary has a row per layer with its reason, marks a layer over budget
   const jobs = [
     job('install', 'install', 'skipped', { skip_reason: areaRule, budget_s: 720 }),
     job('changes', 'changes', 'success'),
-    job('static', 'static', 'success', { duration_s: 114, budget_s: 90 }),
-    job('components (2/2)', 'components', 'success', { budget_s: 90 }),
-    job('components (1/2)', 'components', 'success', { budget_s: 90 }),
+    job('fast', 'fast', 'success', { duration_s: 114, budget_s: 90 }),
     job('database', 'database', 'failure', { budget_s: 180, classification: { label: 'infrastructure', cause: 'port in use', evidence: 'failed to bind host port 0.0.0.0:54322/tcp: address already in use' } }),
     job('visual', 'visual', 'skipped', { skip_reason: areaRule, budget_s: 300 }),
     job('integration', 'integration', 'failure', { budget_s: 720, classification: { label: 'your change', cause: null, evidence: null } }),
     job('check', 'check', 'success'),
   ];
   const tests = [
-    ...Array.from({ length: 3 }, () => ({ layer: 'static', shard: '', suite: 'node', outcome: 'passed' })),
-    { layer: 'static', shard: '', suite: 'node', outcome: 'skipped' },
-    { layer: 'components', shard: '1/2', suite: 'vitest', outcome: 'passed' },
+    ...Array.from({ length: 3 }, () => ({ layer: 'fast', shard: '', suite: 'node', outcome: 'passed' })),
+    { layer: 'fast', shard: '', suite: 'node', outcome: 'skipped' },
+    { layer: 'fast', shard: '', suite: 'vitest', outcome: 'passed' },
   ];
   const text = summary({ run: { wall_s: 660, budget_s: 600 }, jobs, tests, unreadable: ['ledger-visual/visual/screens.json'] });
   const rows = text.split('\n').filter(line => line.startsWith('| ') && !line.startsWith('| Layer'));
-  assert.deepEqual(rows.map(row => row.split(' | ')[0].slice(2)), ['changes', 'static', 'components (1/2)', 'components (2/2)', 'database', 'visual', 'integration', 'install']);
+  assert.deepEqual(rows.map(row => row.split(' | ')[0].slice(2)), ['changes', 'fast', 'database', 'visual', 'integration', 'install']);
   const row = name => rows.find(line => line.startsWith(`| ${name} |`));
-  assert.match(row('static'), /\| 1\.9 min \(over\) \| 1\.5 min \|/);
-  assert.match(row('static'), /\| 3 passed, 1 skipped \|/);
-  assert.match(row('components (1/2)'), /\| 1 passed \|/);
-  assert.doesNotMatch(row('components (2/2)'), /passed/);
-  assert.doesNotMatch(row('components (1/2)'), /over/);
+  assert.match(row('fast'), /\| 1\.9 min \(over\) \| 1\.5 min \|/);
+  assert.match(row('fast'), /\| 4 passed, 1 skipped \|/);
   assert.ok(row('visual').endsWith(`| ${areaRule} |`));
   assert.ok(row('install').endsWith(`| ${areaRule} |`));
   assert.match(row('database'), /\| infrastructure: port in use: `failed to bind host port 0\.0\.0\.0:54322\/tcp: address already in use` \|$/);
