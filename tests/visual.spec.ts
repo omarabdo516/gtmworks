@@ -414,12 +414,16 @@ const screenStates: Record<string, { set: string, unset: string, admin?: true }>
 // The Agent details' Files tab (#21): Meta Ads with a file on its June brief Card and one in Omar's own Conversation with
 // it, as the agent-details state holds them, written with triggers off and taken away after.
 // Numbers' figures read this week's agent rows of the log; a filter is only weighed on rows the read finds, so the
-// slowed log needs one for the figures to wait (#172).
+// slowed log needs one, of an Agent the reader sees, for the figures to wait (#172).
 screenStates['numbers-loading'] = {
   admin: true,
-  set: `insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,agent_id,action,details,source,source_id,created_at) values
-    ('${rsLearning}','6f000000-0000-0000-0000-000000000001','agent','Ads','agent','6f000000-0000-0000-0000-000000000001','agent_changed','{"agent_name":"Ads"}','hermes_agent_audit',691172,now()-interval '1 hour');`,
-  unset: `delete from public.company_log where source='hermes_agent_audit' and source_id=691172;`,
+  set: `insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('${loading(5)}','${rsLearning}','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9/p/visual-numbers','visual-numbers','visual-no-key','unreachable');
+    insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('${loading(6)}','${rsLearning}','${loading(5)}','Ads','Runs the Meta and Google ads.');
+    insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,agent_id,action,details,source,source_id,created_at) values
+     ('${rsLearning}','${loading(6)}','agent','Ads','agent','${loading(6)}','agent_changed','{"agent_name":"Ads"}','hermes_agent_audit',691172,now()-interval '1 hour');`,
+  unset: `delete from public.company_log where source='hermes_agent_audit' and source_id=691172;
+    delete from public.hermes_agents where id='${loading(6)}';
+    delete from public.hermes_connections where id='${loading(5)}';`,
 };
 screenStates['agent-files'] = {
   admin: true,
