@@ -26,8 +26,9 @@ const covered = new Set([
  ...globSync('tests/components/**/*.test.tsx'),
  ...globSync('supabase/migrations/*.verify.sql'),
  'tests/db.sh',
- // tests/db.sh runs each migration replay (`replay tests/<file>.mjs`) in one pgTAP session (#259).
- ...[...database.matchAll(/^replay (tests\/[^\s]+\.mjs)$/gm)].map(match => match[1]),
+ // tests/db.sh writes each migration replay (`replay tests/<file>.mjs`) and runs them in one pgTAP session (#259).
+ ...(/^step tests\/db\.sh 'migration replays' npx supabase test db "\$replays"$/m.test(database)
+  ? [...database.matchAll(/^replay (tests\/[^\s]+\.mjs)$/gm)].map(match => match[1]) : []),
 ]);
 if (/^step supabase\/tests pgTAP npx supabase test db$/m.test(database)) {
  // Supabase's pg_prove invocation searches recursively for both extensions.

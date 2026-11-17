@@ -35,7 +35,7 @@ images_loaded() {
   wait "$images_pid" || echo 'supabase images: the cached archive did not load' >&2
   images_before=$(mktemp)
   bash scripts/supabase-images.sh list > "$images_before"
-  trap 'bash scripts/supabase-images.sh pulled "$images_before"' EXIT
+  trap 'bash scripts/supabase-images.sh pulled "$images_before" || true; rm -f "$images_before"' EXIT
 }
 # Each stage writes its machine-readable test results under ci-ledger/ (Playwright empties test-results/ when it starts);
 # the ledger job reads them back (scripts/ci-ledger.mjs, #256). Prints the folder.

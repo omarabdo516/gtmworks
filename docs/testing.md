@@ -34,7 +34,7 @@ block of their own, and `scripts/ci-runner.mjs cleanup` removes what this reposi
   legacy data) on one local stack, when `supabase/` or a database test file changes. The verifications run in one psql
   session, each reported by name (`scripts/verify-db-session.mjs`), and the migration replays in one pgTAP session
   (#259). Its stack starts the same services as every browser lane. The stack's images come from the Actions cache,
-  keyed by the Supabase CLI's version and `supabase/config.toml`; this job saves them after a green run that missed the
+  keyed by the Supabase CLI's version and the lines of `supabase/config.toml` that choose images; this job saves them after a green run that missed the
   cache, and `visual` and a GitHub-hosted `integration` restore them, so a warm cache makes no registry call. The job
   log ends with how many images the registry served (`scripts/supabase-images.sh`).
 - `integration` is the whole-app browser suite: the production-shaped proxy suite, then the screens, the functional
@@ -583,7 +583,7 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `unit.test.mjs` | Glossary terms, Role-only access and other small rules across lib/; `public/` holds no font file, by its name or its first bytes (moved from app.spec.ts, #218). | 2 s | — | keep, extended (#218) |
 | `unknown-starts.test.mjs` | A start whose outcome was unknown stays unknown until Hermes names the run; a run to an Agent with its own instructions carries them before its sender's note, sent now or queued; a retry of a Lead start sends its first attempt's tools, though the tools offered changed since, also when the previous app version made that attempt during an update. | 0.3 s | team-work.spec.ts | keep |
 | `usage.spec.ts` | Replies store their tokens and show a running total; stopped and lost runs keep what was reported; an Owner sees each company's tokens. | 23.8 s | hermes-usage.test.mjs (the parsing) | keep (#218, case by case above) |
-| `verify-db-session.test.mjs` | The verify session reports every verify file by name with its own ledger line; a false check, a failed query, an empty result, a file the session never reached and a session that never opened each fail it, while the files around a broken one still pass. (#259) | 0.2 s | the `database` job (the real session on the stack) | new (#259) |
+| `verify-db-session.test.mjs` | The verify session reports every verify file by name with its own ledger line; a false check, a failed query, an empty result, a file the session never reached, a session that never opened and a file of more or fewer than one statement each fail it, while the files around a broken one still pass. (#259) | 0.2 s | the `database` job (the real session on the stack) | new (#259) |
 | `visual-baselines.test.mjs` | Every listed screen has its approved images and no image lacks a screen; a screen file that is not a screen is refused; two branches that each add a screen merge without a conflict. | 0.4 s | visual.spec.ts | keep |
 | `visual-screens.mjs` | helper: reads the compared screens from `visual-screens/` | — | — | helper, kept |
 | `visual-screens/` | The compared screens, one file each: its address, its set-up, a step taken on the page before its picture, what shows it has loaded and whether it is also compared dark. | — | — | data, kept |

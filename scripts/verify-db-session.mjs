@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { appendFileSync, readFileSync } from 'node:fs';
+import { topLevelStatements } from '../tests/sql-statements.mjs';
 import { verifyResult } from './verify-db.mjs';
 
 // Every verify file in one read-only psql session in the lane's database container (#259), where a CLI process per file
@@ -7,11 +8,17 @@ import { verifyResult } from './verify-db.mjs';
 // as rows. A marker names each file; a failed query does not end the session, so every file is reported by name.
 // Usage: node scripts/verify-db-session.mjs <database container> <file>... (DB_LEDGER adds one ledger line per file.)
 const [container, ...files] = process.argv.slice(2);
+// psql's error flag reports only a file's last statement, so a verify file is one statement, as it was for the CLI.
+const sql = new Map(files.map(file => [file, readFileSync(file, 'utf8')]));
+const refused = new Map(files.flatMap(file => {
+ const count = topLevelStatements(sql.get(file)).length;
+ return count === 1 ? [] : [[file, `${file}: a verify file is one statement, this one has ${count}`]];
+}));
 
-const script = files.map(file => [
+const script = files.filter(file => !refused.has(file)).map(file => [
  `\\echo '@verify ${file}'`,
  '\\timing on',
- readFileSync(file, 'utf8'),
+ sql.get(file),
  // An unterminated statement is dropped here, so it cannot run as part of the next file.
  '\\r',
  '\\timing off',
@@ -41,7 +48,8 @@ let failed = 0;
 for (const file of files) {
  const block = blocks.get(file);
  let message = null;
- if (!block) message = `${file}: the session ended before this file ran`;
+ if (refused.has(file)) message = refused.get(file);
+ else if (!block) message = `${file}: the session ended before this file ran`;
  else if (block.error !== null) message = `${file}: ${block.error}`;
  else {
   try {

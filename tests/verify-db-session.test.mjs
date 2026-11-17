@@ -7,10 +7,10 @@ import test from 'node:test';
 
 // scripts/verify-db-session.mjs runs every verify file in one psql session inside the lane's database container (#259).
 // Here `docker` is a stand-in that prints what psql would print for the session, so the test needs no stack.
-function session(t, files, psqlOutput, psqlStatus = 0) {
+function session(t, files, psqlOutput, psqlStatus = 0, sql = {}) {
  const dir = mkdtempSync(join(tmpdir(), 'gtmworks-verify-session-'));
  t.after(() => rmSync(dir, { recursive: true, force: true }));
- for (const file of files) writeFileSync(join(dir, file), `select json_build_object('from', '${file}');\n`);
+ for (const file of files) writeFileSync(join(dir, file), sql[file] ?? `select json_build_object('from', '${file}');\n`);
  writeFileSync(join(dir, 'psql.out'), psqlOutput);
  writeFileSync(join(dir, 'docker'), `#!/bin/sh\ncat > "${dir}/psql.in"\ncat "${dir}/psql.out"\nexit ${psqlStatus}\n`);
  chmodSync(join(dir, 'docker'), 0o755);
@@ -74,4 +74,18 @@ test('a session psql could not open fails every file', t => {
  const run = session(t, ['a.verify.sql'], '', 2);
  assert.equal(run.status, 1);
  assert.match(run.stderr, /^a\.verify\.sql: the session ended before this file ran$/m);
+});
+
+test('a verify file of more or fewer than one statement fails by name and never reaches psql', t => {
+ const output = ['@verify b.verify.sql', '{"b" : true}', 'Time: 1.000 ms'].join('\n') + '\n';
+ const run = session(t, ['a.verify.sql', 'b.verify.sql', 'c.verify.sql'], output, 0, {
+  // The first statement's error would not be the last one psql reports, so the file could pass on its select alone.
+  'a.verify.sql': "set role nobody_at_all;\nselect json_build_object('ok', true);\n",
+  'c.verify.sql': '-- nothing to run\n',
+ });
+ assert.equal(run.status, 1);
+ assert.match(run.stderr, /^a\.verify\.sql: a verify file is one statement, this one has 2$/m);
+ assert.match(run.stderr, /^c\.verify\.sql: a verify file is one statement, this one has 0$/m);
+ assert.deepEqual(run.records.map(record => [record.file, record.outcome]), [['a.verify.sql', 'failed'], ['b.verify.sql', 'passed'], ['c.verify.sql', 'failed']]);
+ assert.ok(!run.input.includes('nobody_at_all') && !run.input.includes('@verify c.verify.sql'), 'neither file is sent to psql');
 });
