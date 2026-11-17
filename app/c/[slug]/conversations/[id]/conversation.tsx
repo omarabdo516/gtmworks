@@ -62,6 +62,14 @@ export function ConversationLoaded({initial,team}:{initial:ConversationRecord,te
  const box=useRef<HTMLDivElement>(null); const stick=useRef(true);
  // `asked` only sets this transcript's own state, so the one it was first given stays good.
  useLayoutEffect(()=>{ setLive({record,asked}); },[record]); // eslint-disable-line react-hooks/exhaustive-deps
+ // Opened from "Waiting on you" at a handed step (#140, `#hand-<card>`): that card in view and focused, not the newest
+ // message. It runs before the effect below, on the first draw only.
+ useLayoutEffect(()=>{
+  const card=/^#hand-\d+$/.test(location.hash)?box.current?.querySelector<HTMLElement>(location.hash):null;
+  if(!card) return;
+  stick.current=false;
+  card.scrollIntoView({block:'center'}); card.focus({preventScroll:true});
+ },[]);
  // Kept on the newest message while the reader is there (design-reference: renderTranscript).
  useLayoutEffect(()=>{ if(stick.current&&box.current) box.current.scrollTop=box.current.scrollHeight; },[messages.length,record.pending]);
  const answered=useRef(0);

@@ -5,7 +5,8 @@
 // did the step. Done: the time and the Agent's closing note. gtmworks does not do the step and checks nothing outside.
 // The card is laid out in its title's direction, and every text on it follows the card, as the reference sets `dir` once
 // (a line that starts with a Latin name, "SEO سابه…", must not turn left to right); the reference's "Open the screen" and "Open the
-// merge request" variants are not drawn (#21, #36).
+// merge request" variants are not drawn (#21, #36). Its id is the address "Waiting on you" opens the Conversation at
+// (#140), and a done card whose turn to the Agent could not start says so under its time.
 import { useEffect, useRef, useState } from 'react';
 import { ShellIcon } from '@/components/shell-icon';
 import { AppTile } from '@/components/app-tile';
@@ -54,7 +55,7 @@ export function HandCard({card,fresh,done}:{card:Hand,fresh:boolean,done?:MarkHa
  const time=(value:string)=><time dateTime={value} data-utc={zone}>{when(value)}</time>;
  // The time is its own element inside the sentence, so the sentence is split where the time goes.
  const [before,after]=t('handDoneAt','{0}').split('{0}');
- return <div className={`reply-card reply-card--hand${at?' is-resolved':''}${just?' is-just':''}${fresh?' card-in':''}`} role="group" aria-label={t('handLabel',card.title)} dir={rtl(card.title)?'rtl':'ltr'}>
+ return <div id={`hand-${card.id}`} tabIndex={-1} className={`reply-card reply-card--hand${at?' is-resolved':''}${just?' is-just':''}${fresh?' card-in':''}`} role="group" aria-label={t('handLabel',card.title)} dir={rtl(card.title)?'rtl':'ltr'}>
   <div className="hcard__top"><span className="badge ck-badge"><ShellIcon name="hand"/>{t('handBadge')}</span></div>
   <div className="card__head"><AppTile app={handApp(card.app)} size="lg"/>
    <div className="card__titles"><span className="card__title">{card.title}</span><span className="card__sub">{card.line}</span></div></div>
@@ -65,5 +66,6 @@ export function HandCard({card,fresh,done}:{card:Hand,fresh:boolean,done?:MarkHa
     <button type="button" className="btn btn--primary" disabled={!done||sending} onClick={()=>void press()}>{t('handDone')}</button>
    </div>}
   {error&&!at&&<p className="hand__error" role="alert">{t(error)}</p>}
+  {card.state==='done'&&card.failed&&<p className="hand__error" role="alert">{t('handPickupFailed')}</p>}
  </div>;
 }

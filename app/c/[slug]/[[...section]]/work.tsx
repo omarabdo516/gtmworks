@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 import { BoardPager, KanbanBoard, KanbanCard, KanbanColumn } from '@/components/paperclip/KanbanBoard';
 import { TaskList, TaskListRow } from '@/components/paperclip/TaskList';
 import { BoardIcon } from '@/components/board-icon';
+import { ShellIcon } from '@/components/shell-icon';
 import { AgentFace } from '@/components/agent-face';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { CardDialog } from '@/app/card-dialog';
@@ -121,9 +122,12 @@ export default function Work(p:WorkProps) { const {workAction}=p; const {t,local
   agent_request:item=><OwnerRequestCard key={`${item.kind}:${item.id}`} slug={p.slug} company={p.company} lead={lead} item={item}/>,
  };
  const answeredHere=(item:WaitingItem)=>Object.hasOwn(decidedHere,item.kind);
- // A mention (#22) names who wrote the note and on which Card, shows the note and opens it on its Card.
- const itemView=(item:WaitingItem)=>answeredHere(item)?decidedHere[item.kind](item):<Link key={`${item.kind}:${item.id}`} className="mcard" data-kind={item.kind} href={item.conversation_id?`/c/${p.slug}/conversations/${item.conversation_id}`:`${base}/board/${item.card_id}${item.note_id?`#note-${item.note_id}`:''}`}>
+ // A mention (#22) names who wrote the note and on which Card, shows the note and opens it on its Card. A step an Agent
+ // handed over (#140; design-reference: waitTagHTML, kcardHTML's waiting branch) is tagged before its title and opens the
+ // Conversation at its card.
+ const itemView=(item:WaitingItem)=>answeredHere(item)?decidedHere[item.kind](item):<Link key={`${item.kind}:${item.id}`} className="mcard" data-kind={item.kind} href={item.conversation_id?`/c/${p.slug}/conversations/${item.conversation_id}${item.kind==='hand'?`#hand-${item.id}`:''}`:`${base}/board/${item.card_id}${item.note_id?`#note-${item.note_id}`:''}`}>
   <span className="mcard__top"><span className="od-fill mcard__who">{item.kind==='question'?<b>{item.asked_by?t('waitingQuestionFrom',item.asked_by):t('waitingQuestion')}</b>:item.kind==='mention'?<><b dir="auto">{item.asked_by}</b> {named('waitingMentionIn',item.title)}</>:<b dir="auto">{item.asked_by}</b>}</span><span className="mcard__time num">{date(item.created_at,language,{month:'short'})}</span></span>
+  {item.kind==='hand'&&<span className="wtag wtag--hand"><ShellIcon name="hand"/>{t('handBadge')}</span>}
   <span className="mcard__q od-clamp-3" dir="auto">{item.kind==='mention'?item.body:<>{item.title}{item.body&&<> {item.body}</>}</>}</span>
  </Link>;
  // A Card's conversation: each message with its current text; under a Member's note, the reply of the Agent it called,

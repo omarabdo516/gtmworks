@@ -907,6 +907,7 @@
   "handDone": "Done it",
   "handDoneAt": "Done · {0}.",
   "handFailed": "Could not mark it done. Try again.",
+  "handPickupFailed": "“Done it” didn’t reach the agent: the agent engine wouldn’t start it. Tell it in a message.",
   "logActHandDone": "did it",
   "logHandOpen": "Handed to you",
   "logHandDone": "Done it",

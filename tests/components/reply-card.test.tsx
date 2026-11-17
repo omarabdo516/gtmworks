@@ -278,16 +278,24 @@ test('a Done it the server refuses gives the button back with the refusal, and a
  expect(screen.getByRole('alert').elements()).toEqual([]);
 });
 
-test('in the chat, Done it posts the done intent with the card and shows the time it answers; the record is not read again, so a message sent meanwhile keeps its reply on its way, and the Agent is not shown working', async () => {
+// #140: the press starts the Agent's turn, so the record is read again as after an answer: the Agent is shown working
+// at once, and its reply comes under the card with no message of the person's for the press.
+const chatStyles = async () => {
  const sheets = await Promise.all(['app/tokens.css', 'app/shell.css'].map(async file => (await import(/* @vite-ignore */ `/${file}?inline`)).default as string));
  const styles = sheets.map(css => Object.assign(document.createElement('style'), { textContent: css }));
  document.head.append(...styles);
  onTestFinished(() => styles.forEach(style => style.remove()));
+};
+test('in the chat, Done it posts the done intent with the card and shows the time it answers; the Agent is shown working and its reply comes under the card, with no message of the person\'s', async () => {
+ await chatStyles();
  const open = handed();
  const conversation = { id: '7d3f0b1e-1c2a-4b5d-8e6f-9a0b1c2d3e4f', agent_id: null, agent_name: 'SEO', face: 'c-1' };
  const record = (card: Hand): ConversationRecord => ({ ...turns([card], false), conversation });
+ const done = { ...open, state: 'done', at: '2026-06-10T09:42:00Z' } as Hand;
+ const replied: ConversationRecord = { ...record(done), messages: [...record(done).messages, { id: 5, author: 'agent', author_name: 'SEO', body: 'I saw it on the site.', created_at: '2026-06-10T09:43:00Z' }] };
+ let answer: (value: Response) => void = () => {};
  const calls = vi.fn(async (_url: string, init?: RequestInit) => init?.method === 'POST' ? Response.json({ state: 'done', at: '2026-06-10T09:42:00Z', first: true })
-  : Response.json(record({ ...open, state: 'done', at: '2026-06-10T09:42:00Z' } as Hand)));
+  : new Promise<Response>(resolve => { answer = resolve; }));
  vi.stubGlobal('fetch', calls);
  const screen = await render(<LanguageProvider language="en"><div className="gw"><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={conversation} title="" writer><Arrived record={arrived(record(open))} team={false}/></ConversationView></div></LanguageProvider>);
  const group = screen.getByRole('group', { name: handWords.en.label(open.title) });
@@ -298,6 +306,39 @@ test('in the chat, Done it posts the done intent with the card and shows the tim
  expect([group.element(), group.element().querySelector('.card__outcome svg path')!].map(motion)).toEqual([['gw-settle', '0.32s', '0s'], ['gw-draw-check', '0.38s', '0.14s']]);
  const posted = calls.mock.calls.filter(([, init]) => init?.method === 'POST');
  expect(posted.map(([url, init]) => [url, JSON.parse(init!.body as string)])).toEqual([['/api/conversations', { company: 'co-1', conversation: conversation.id, intent: 'done', card: 7 }]]);
- expect(calls.mock.calls.filter(([, init]) => init?.method !== 'POST'), 'no read can replace a newer record').toEqual([]);
- expect(document.querySelector('.convo-status'), 'no Run starts, so no one is shown working').toBeNull();
+ await expect.element(screen.getByText('SEO is working on a reply…')).toBeVisible();
+ await expect.poll(() => calls.mock.calls.filter(([, init]) => init?.method !== 'POST').length).toBe(1);
+ answer(Response.json(replied));
+ const reply = screen.getByText('I saw it on the site.');
+ await expect.element(reply).toBeVisible();
+ expect(group.element().compareDocumentPosition(reply.element()) & Node.DOCUMENT_POSITION_FOLLOWING, 'the reply comes after the card').toBeTruthy();
+ expect([...document.querySelectorAll('[data-author="person"]')].map(turn => turn.textContent), 'the press adds no message of the person\'s').toEqual([expect.stringContaining('Prepare the draft')]);
+ await expect.poll(() => document.querySelector('.convo-status')).toBeNull();
+});
+
+// #140: "Waiting on you" opens the Conversation at `#hand-<card>`: that card is in view and focused, not the newest message.
+test('opened at a handed step\'s address, the chat shows that card in view and focused, not the newest message', async () => {
+ await chatStyles();
+ const before = location.href;
+ history.replaceState(null, '', '#hand-7');
+ onTestFinished(() => history.replaceState(null, '', before));
+ const many = turns([handed(), ...[11, 12, 13, 14, 15, 16].map(id => ({ ...plan, id }))], false);
+ const screen = await render(<LanguageProvider language="en"><div className="gw" style={{ height: '600px' }}><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={many.conversation} title="" writer><Arrived record={arrived(many)} team={false}/></ConversationView></div></LanguageProvider>);
+ const card = screen.getByRole('group', { name: handWords.en.label(handed().title) });
+ await expect.element(card).toBeVisible();
+ const box = document.querySelector<HTMLElement>('.transcript')!;
+ expect(box.scrollHeight, 'the chat is taller than its window').toBeGreaterThan(box.clientHeight + 200);
+ expect(card.element().id).toBe('hand-7');
+ expect(document.activeElement).toBe(card.element());
+ const [shown, view] = [card.element().getBoundingClientRect(), box.getBoundingClientRect()];
+ expect(shown.top >= view.top && shown.bottom <= view.bottom, 'the card is in view').toBe(true);
+ expect(box.scrollTop + box.clientHeight, 'the chat is not at its newest message').toBeLessThan(box.scrollHeight - 50);
+});
+
+test.each([['en', '“Done it” didn’t reach the agent: the agent engine wouldn’t start it. Tell it in a message.'], ['ar', '«عملتها» موصلتش للوكيل: محرك الوكلاء مرضيش يبدأها. قولّه في رسالة.']] as const)('in the %s interface, a done card whose turn to the Agent could not start says so under its time', async (language, words) => {
+ const screen = await handDrawn(handed({ state: 'done', at: doneToday, failed: true } as Partial<Hand>), language);
+ await expect.element(screen.getByRole('alert')).toBeVisible();
+ expect(screen.getByRole('alert').element().textContent).toBe(words);
+ const fine = await handDrawn(handed({ id: 8, state: 'done', at: doneToday } as Partial<Hand>), language);
+ expect(fine.container.querySelector('[role="alert"]')).toBeNull();
 });

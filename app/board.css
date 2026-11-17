@@ -180,6 +180,9 @@
 .gw .board-view .mcard__who b { color: var(--gw-text-1); font-weight: 600; }
 .gw .board-view .mcard__time { flex: none; color: var(--gw-text-3); }
 .gw .board-view .mcard__q { font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-1); }
+/* A step handed to you (#140; design-reference: .wtag, .wtag--hand) */
+.gw .board-view .wtag { display: inline-flex; align-items: center; gap: 4px; justify-self: start; height: 22px; padding: 0 var(--s2); border-radius: var(--gw-r-full); font-size: var(--gw-fs-xs); font-weight: 600; white-space: nowrap; --b-icon: 13px; }
+.gw .board-view .wtag--hand { background: var(--gw-bg-tertiary); color: var(--gw-text-1); }
 /* A learning suggestion, decided where it waits (#25; design-reference: .ln-row, .ln-meta, .ln-acts) */
 .gw .board-view .mcard--rule .mcard__q { overflow-wrap: anywhere; }
 .gw .board-view .ln-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: var(--gw-fs-xs); line-height: 1.6; color: var(--gw-text-3); }
