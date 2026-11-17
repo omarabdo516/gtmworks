@@ -62,9 +62,11 @@ create table public.company_key_holds (
 );
 alter table public.company_key_holds enable row level security;
 revoke all on public.company_key_holds from anon,authenticated,service_role;
--- Before this version, only the log knew: a provider's last set or removal there is whether the Company holds its key.
-insert into public.company_key_holds(company_id,provider,held)
- select distinct on (a.company_id,a.provider) a.company_id,a.provider,a.action='provider_key_set' from public.company_audit a
+-- Before this version, only the log knew, and a set whose log write failed is missing from it: a provider's last set or
+-- removal there is its hold, left changing until this version settles it (a finished change, or the Owner's read), so
+-- an Agent made before then waits rather than run on Lead's profile.
+insert into public.company_key_holds(company_id,provider,held,changing)
+ select distinct on (a.company_id,a.provider) a.company_id,a.provider,a.action='provider_key_set',true from public.company_audit a
   where a.action in ('provider_key_set','provider_key_removed') order by a.company_id,a.provider,a.created_at desc,a.id desc;
 
 -- Some provider's key is held, or a change of one is under way: an Agent made now waits for the Owner's next set.
