@@ -87,6 +87,18 @@ test('a draft card is under the Agent\'s reply of its run, or is the Agent\'s wh
  assert.deepEqual(record[3],{id:3,author:'agent',author_name:'Ads',body:'',created_at:at(11),kind:'made',cards:[{kind:'reply',card:draft(2)}]});
 });
 
+// #139: a step handed to the person, read from its row: open until its person marks it done, then done at the time the
+// database kept; an address or a note left out reads as none.
+test('a hand card is read from its row: open with its app, rows, address and note, and done at the time it was marked',()=>{
+ const content={app:'WordPress',line:'المقال جاهز مسودة على WordPress',rows:[{label:'الطول',value:'1,600 كلمة'}],url:'https://rslearning.example/wp-admin/post.php?post=812',note:'هتابع ترتيبه.'};
+ const stored=(/** @type {string} */ state,/** @type {object} */ more={})=>({id:6,run_id:'r1',kind:'hand',title:'انشر المقال',content:{...content,...more},state,answered_at:null,done_at:state==='done'?at(4):null,created_at:at(2)});
+ const hand={id:6,kind:'hand',title:'انشر المقال',line:content.line,app:'WordPress',rows:content.rows,url:content.url,note:content.note};
+ assert.deepEqual(replyCardOf(stored('open')),{...hand,state:'open'});
+ assert.deepEqual(replyCardOf(stored('done')),{...hand,state:'done',at:at(4)});
+ const bare=stored('open'); bare.content={app:'Stripe',line:'Ready',rows:[]};
+ assert.deepEqual(replyCardOf(bare),{id:6,kind:'hand',title:'انشر المقال',line:'Ready',app:'Stripe',rows:[],url:null,note:null,state:'open'});
+});
+
 // #138: an Agent's question, read from its row in each state; a claimed answer still on its way to the Engine is drawn
 // answered. A Run's questions follow its person's message, each with its answer as that person's turn, before its reply.
 const angles=['من خريج لمحاسب شغال','Excel وOdoo في كورس واحد'];
