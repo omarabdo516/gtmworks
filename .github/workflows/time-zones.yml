@@ -1,0 +1,62 @@
+# The fast layers again under a second time zone, near its midnight (#266): the runner's clock and zone must not decide
+# a test. 02:50 UTC is 23:50 in America/Sao_Paulo (UTC-3 all year), while Cairo and UTC are already on the next day.
+name: Time zones
+
+on:
+  schedule:
+    - cron: '50 2 * * *'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/time-zones.yml
+      - tests/clock.mjs
+      - tests/time-zones.test.mjs
+
+permissions:
+  contents: read
+
+concurrency:
+  group: time-zones-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fast-layers:
+    name: static and components (${{ matrix.zone }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        zone: [Africa/Cairo, America/Sao_Paulo]
+    env:
+      TZ: ${{ matrix.zone }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: local start time
+        id: start
+        run: echo "at=$(date '+%Y-%m-%d %H:%M:%S %Z')" >> "$GITHUB_OUTPUT"
+      - name: static
+        id: static
+        run: ./ci.sh static
+      - name: components
+        id: components
+        if: ${{ !cancelled() }}
+        run: ./ci.sh components
+      - name: summary
+        if: always()
+        env:
+          STARTED: ${{ steps.start.outputs.at }}
+          STATIC: ${{ steps.static.outcome }}
+          COMPONENTS: ${{ steps.components.outcome }}
+        run: |
+          ended=$(date '+%Y-%m-%d %H:%M:%S %Z')
+          crossed=no; [ "${STARTED%% *}" = "${ended%% *}" ] || crossed=yes
+          {
+            echo '| zone | local start | local end | crossed local midnight | static | components |'
+            echo '| --- | --- | --- | --- | --- | --- |'
+            echo "| $TZ | $STARTED | $ended | $crossed | $STATIC | $COMPONENTS |"
+          } >> "$GITHUB_STEP_SUMMARY"
