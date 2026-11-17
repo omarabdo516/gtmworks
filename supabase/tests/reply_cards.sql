@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(26);
+select plan(29);
 -- #136. Ads in RS Learning, shown to the Manager (2), the Contributors (3, 5) and the Viewer (4); the Owner (1) sees every
 -- Agent. One Conversation with Ads each, and in it the message of one run.
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
@@ -90,34 +90,47 @@ select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003'
 select is((select count(*)::int from public.reply_cards),0,'a Contributor who no longer sees the Agent reads no card of it');
 reset role;
 
--- #227: a reply that is only a card closes as done, once, with no reply stored; a draft card, an Agent Lead made and a
--- request Lead filed each count, and a question card does not. A run whose calls were all malformed (card-run-5) or
--- refused (card-run-4) stored nothing and still closes failed.
+-- #227: a reply that is only a card closes as done, once, with no reply stored, when its closer read the Run completed
+-- and carried out its calls (read_completed): a draft card, an Agent Lead made, a request Lead filed and a saved rule
+-- each count, and a question card does not. A run whose calls were all malformed (card-run-5) or refused (card-run-4)
+-- stored nothing and still closes failed. A run with a draft card closed by a closer that did not read it completed
+-- (partial-run: the engine was lost after the first call, then the Agent was detached), or by the previous app version
+-- (old-app-run), closes failed.
 insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id) values
  ('10000000-0000-0000-0000-000000000001','e9000000-0000-0000-0000-000000000001','person','20000000-0000-0000-0000-000000000001','Someone','Make me an Ads Agent',gen_random_uuid(),'made-run'),
+ ('10000000-0000-0000-0000-000000000001','e9000000-0000-0000-0000-000000000001','person','20000000-0000-0000-0000-000000000001','Someone','Plan it again',gen_random_uuid(),'partial-run'),
+ ('10000000-0000-0000-0000-000000000001','e9000000-0000-0000-0000-000000000001','person','20000000-0000-0000-0000-000000000001','Someone','And once more',gen_random_uuid(),'old-app-run'),
  ('10000000-0000-0000-0000-000000000001','e9000000-0000-0000-0000-000000000002','person','20000000-0000-0000-0000-000000000002','Someone','Ask for an Ads Agent',gen_random_uuid(),'asked-run'),
- ('10000000-0000-0000-0000-000000000001','e9000000-0000-0000-0000-000000000002','person','20000000-0000-0000-0000-000000000002','Someone','Which audience?',gen_random_uuid(),'question-run');
+ ('10000000-0000-0000-0000-000000000001','e9000000-0000-0000-0000-000000000002','person','20000000-0000-0000-0000-000000000002','Someone','Which audience?',gen_random_uuid(),'question-run'),
+ ('10000000-0000-0000-0000-000000000001','e9000000-0000-0000-0000-000000000002','person','20000000-0000-0000-0000-000000000002','Someone','From now on: answer within the day',gen_random_uuid(),'rule-run');
 insert into public.lead_made_agents(conversation_id,run_id,call_id,company_id,agent_id) values
  ('e9000000-0000-0000-0000-000000000001','made-run','call-0','10000000-0000-0000-0000-000000000001','e8000000-0000-0000-0000-000000000002');
 insert into public.lead_agent_requests(company_id,conversation_id,run_id,call_id,asked_by,asked_with,agent_name,job,apps) values
  ('10000000-0000-0000-0000-000000000001','e9000000-0000-0000-0000-000000000002','asked-run','call-0','20000000-0000-0000-0000-000000000002','Ask for an Ads Agent','WhatsApp Leads','Follows up the WhatsApp leads.','{}');
+insert into public.agent_rules(company_id,agent_id,body,said_by,conversation_id,run_id,call_id) values
+ ('10000000-0000-0000-0000-000000000001','e8000000-0000-0000-0000-000000000002','Answer every comment within the day','20000000-0000-0000-0000-000000000002','e9000000-0000-0000-0000-000000000002','rule-run','call-0');
 insert into public.reply_cards(company_id,conversation_id,run_id,call_id,kind,title,content,state) values
- ('10000000-0000-0000-0000-000000000001','e9000000-0000-0000-0000-000000000002','question-run','q@1','question','Which?','{"question":"Which audience first?","choices":["Parents","Students"],"multiple":false}','open');
+ ('10000000-0000-0000-0000-000000000001','e9000000-0000-0000-0000-000000000002','question-run','q@1','question','Which?','{"question":"Which audience first?","choices":["Parents","Students"],"multiple":false}','open'),
+ ('10000000-0000-0000-0000-000000000001','e9000000-0000-0000-0000-000000000001','partial-run','call-0','draft','Campaign plan',current_setting('test.draft')::jsonb,'shown'),
+ ('10000000-0000-0000-0000-000000000001','e9000000-0000-0000-0000-000000000001','old-app-run','call-0','draft','Campaign plan',current_setting('test.draft')::jsonb,'shown');
 set local role service_role;
-select is(public.close_conversation_run('e9000000-0000-0000-0000-000000000003','card-run-3','failed',null,'session-3',10,0),true,'a run whose reply is only a draft card is closed');
-select is(public.close_conversation_run('e9000000-0000-0000-0000-000000000003','card-run-3','failed',null,'session-other',10,0),false,'and closing it again stores nothing');
-select is(public.close_conversation_run('e9000000-0000-0000-0000-000000000001','made-run','failed','',null,null,null),true,'so is one whose reply is only the Agent Lead made');
-select is(public.close_conversation_run('e9000000-0000-0000-0000-000000000001','made-run','failed',null,null,null,null),false,'once');
-select is(public.close_conversation_run('e9000000-0000-0000-0000-000000000002','asked-run','failed',' ',null,null,null),true,'and one whose reply is only a request Lead filed');
-select is(public.close_conversation_run('e9000000-0000-0000-0000-000000000002','asked-run','failed',null,null,null,null),false,'once');
-select is(public.close_conversation_run('e9000000-0000-0000-0000-000000000002','question-run','failed',null,'session-2',null,null),true,'a run with only a question card is closed');
-select is(public.close_conversation_run('e9000000-0000-0000-0000-000000000005','card-run-5','failed',null,'session-5',null,null),true,'and one whose card calls were all malformed');
-select is(public.close_conversation_run('e9000000-0000-0000-0000-000000000004','card-run-4','failed',null,null,null,null),true,'and one that stored no card');
+select is(public.close_conversation_run('e9000000-0000-0000-0000-000000000003','card-run-3','failed',null,'session-3',10,0,true),true,'a run whose reply is only a draft card is closed');
+select is(public.close_conversation_run('e9000000-0000-0000-0000-000000000003','card-run-3','failed',null,'session-other',10,0,true),false,'and closing it again stores nothing');
+select is(public.close_conversation_run('e9000000-0000-0000-0000-000000000001','made-run','failed',null,null,null,null,true),true,'so is one whose reply is only the Agent Lead made');
+select is(public.close_conversation_run('e9000000-0000-0000-0000-000000000001','made-run','failed',null,null,null,null,true),false,'once');
+select is(public.close_conversation_run('e9000000-0000-0000-0000-000000000002','asked-run','failed',null,null,null,null,true),true,'and one whose reply is only a request Lead filed');
+select is(public.close_conversation_run('e9000000-0000-0000-0000-000000000002','asked-run','failed',null,null,null,null,true),false,'once');
+select is(public.close_conversation_run('e9000000-0000-0000-0000-000000000002','rule-run','failed',null,null,null,null,true),true,'and one whose reply is only a saved rule');
+select is(public.close_conversation_run('e9000000-0000-0000-0000-000000000002','question-run','failed',null,'session-2',null,null,true),true,'a run with only a question card is closed');
+select is(public.close_conversation_run('e9000000-0000-0000-0000-000000000005','card-run-5','failed',null,'session-5',null,null,true),true,'and one whose card calls were all malformed');
+select is(public.close_conversation_run('e9000000-0000-0000-0000-000000000004','card-run-4','failed',null,null,null,null,true),true,'and one that stored no card');
+select is(public.close_conversation_run('e9000000-0000-0000-0000-000000000001','partial-run','failed',null,null,null,null,false),true,'and one with a draft card whose closer did not read it completed');
+select is(public.close_conversation_run('e9000000-0000-0000-0000-000000000001','old-app-run','failed',null,null,null,null),true,'and one with a draft card closed by the previous app version');
 reset role;
-select results_eq($$select run_id,outcome,input_tokens from public.conversation_usage where run_id in ('card-run-3','made-run','asked-run','question-run','card-run-4','card-run-5') order by run_id$$,
- $$values ('asked-run','completed',null::bigint),('card-run-3','completed',10::bigint),('card-run-4','failed',null),('card-run-5','failed',null),('made-run','completed',null),('question-run','failed',null)$$,
- 'a reply that is only a draft card, a made Agent or a request is recorded as done, once; one with only a question card, malformed calls or no card as failed');
-select is((select count(*)::int from public.conversation_messages where author='agent'),0,'no reply is stored for any of them');
+select results_eq($$select run_id,outcome,input_tokens from public.conversation_usage where run_id in ('card-run-3','made-run','asked-run','rule-run','question-run','card-run-4','card-run-5','partial-run','old-app-run') order by run_id$$,
+ $$values ('asked-run','completed',null::bigint),('card-run-3','completed',10::bigint),('card-run-4','failed',null),('card-run-5','failed',null),('made-run','completed',null),('old-app-run','failed',null),('partial-run','failed',null),('question-run','failed',null),('rule-run','completed',null)$$,
+ 'a reply read completed that is only a draft card, a made Agent, a request or a saved rule is recorded as done, once; one with only a question card, malformed calls or no card, or not read completed, as failed');
+select is((select count(*)::int from public.conversation_messages where author='agent' and run_id in ('card-run-3','made-run','asked-run','rule-run','question-run','card-run-4','card-run-5','partial-run','old-app-run')),0,'no reply is stored for any of them');
 select results_eq($$select id,hermes_session_id from public.conversations where id in ('e9000000-0000-0000-0000-000000000002','e9000000-0000-0000-0000-000000000003','e9000000-0000-0000-0000-000000000005') order by id$$,
  $$values ('e9000000-0000-0000-0000-000000000002'::uuid,null::text),('e9000000-0000-0000-0000-000000000003'::uuid,'session-3'),('e9000000-0000-0000-0000-000000000005'::uuid,null)$$,
  'the Hermes session of a card-only reply is kept, as for a reply in words, and a failed run''s is not');

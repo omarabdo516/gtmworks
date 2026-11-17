@@ -340,7 +340,7 @@ test('integration: an Agent shows a draft once under its reply, also when two cl
 
 // #227: a reply that is only a card is a complete reply. The engine reports no words as failed; a Run that stored a card
 // closes done, and one whose only call did not hold still closes failed.
-test('integration: an Agent\'s reply that is only a draft closes done once, also when two closers race, with no reply stored; with a call that does not hold it closes failed',async()=>{
+test('integration: an Agent\'s reply that is only a draft closes done once, also when two closers race, with no reply stored; with a call that does not hold, or read failed after its draft was shown, it closes failed',async()=>{
  test.setTimeout(120000);
  const fake=fakeEngine(); const {agent,detach}=attachAgent();
  const plan={title:'Campaign plan',line:'Draft · Meta Ads',rows:[{label:'Goal',value:'WhatsApp leads'}]};
@@ -370,6 +370,16 @@ test('integration: an Agent\'s reply that is only a draft closes done once, also
   expect(JSON.parse(query(`select count(*)::int as n from public.reply_cards where conversation_id='${conversation}'`))[0].n).toBe(1);
   expect(JSON.parse(query(`select outcome from public.conversation_usage where conversation_id='${conversation}' and run_id='${fake.runs[1].id}'`))).toEqual([{outcome:'failed'}]);
   expect(agentRows(conversation)).toEqual([]);
+  expect(await failed()).toBe(true);
+
+  // A closer showed the draft, then lost the engine before the rest; the next read finds the run failed (its Agent was
+  // detached): the draft alone does not make it done.
+  expect(await send('Plan it again')).toEqual({conversation});
+  const run=fake.runs[2].id;
+  expect((await runToolCall({db:service,engine:fake.engineFor({}),profile:'',conversation,run},{id:'call-0',name:'show_draft',arguments:plan})).state).toBe('shown');
+  const gone=(connection:object)=>({...fake.engineFor(connection),read:async()=>({state:'failed' as const,reply:null,session:null,usage:null,toolCalls:[]})});
+  expect(await closeOpenRuns(service,{encryptionKey,conversation,engineFor:gone})).toBe(1);
+  expect(JSON.parse(query(`select outcome from public.conversation_usage where conversation_id='${conversation}' and run_id='${run}'`))).toEqual([{outcome:'failed'}]);
   expect(await failed()).toBe(true);
  } finally { detach(); }
 });
