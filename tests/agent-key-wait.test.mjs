@@ -30,7 +30,7 @@ function sessions(fake,{owner=true,extra=[],endFails=false}={}) {
   if(name==='company_engine_target') return {data:[{connection:'f0000000-0000-0000-0000-000000000002',address:fake.address,profile:main,one_company:false,profiles:[]}],error:null};
   if(name==='company_key_profiles') return {data:rowsOf(extra),error:null};
   if(name==='record_provider_key_change') return {data:null,error:null};
-  if(name==='record_unfinished_provider_key') { args.missed.length?unfinished.set(args.key_provider,args.missed):unfinished.delete(args.key_provider); return {data:null,error:null}; }
+  if(name==='record_unfinished_provider_key') { if(args.missed.length) unfinished.set(args.key_provider,args.missed); else unfinished.delete(args.key_provider); return {data:null,error:null}; }
   if(name==='company_key_unfinished_profiles') return {data:owner?[...unfinished].map(([provider,profiles])=>({provider,profiles})):[],error:null};
   if(name==='end_agent_key_waits') { ended.push(args); return endFails?{data:null,error:{code:'XX000',message:'the database is down'}}:{data:null,error:null}; }
   return {data:null,error:{message:'unexpected'}}; }};
