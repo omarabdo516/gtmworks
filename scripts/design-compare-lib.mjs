@@ -115,7 +115,7 @@ export const screens = {
   'question-card': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-meta"]' }, { waitFor: '.qcard' }, { scrollTo: '.qcard' }] }, builtPath: null },
   // #141. The Meta campaign chat (th-meta): Ads's reply with "Used 4 tools · 41 sec" pressed, its four steps open, one
   // skipped. Built: the fixture's stepsConversation (pass --built-path), its steps pressed open the same way.
-  'run-steps': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-meta"]' }, { click: '.steps__toggle' }, { waitFor: '.steps__list:not([hidden])' }, { scrollTo: '.steps' }] },
+  'run-steps': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-meta"]' }, { click: '[data-action="toggle-steps"][data-msg="m3"]' }, { waitFor: '#st-th-meta-m3:not([hidden])' }, { scrollTo: '#st-th-meta-m3' }] },
    builtPath: null, builtSteps: [{ click: '.steps__toggle' }, { waitFor: '.steps__list:not([hidden])' }, { scrollTo: '.steps' }] },
   // #18. The Conversation in which Omar told Ads a lasting rule, with the saved line under Ads's reply. Built: the
   // fixture's ruleConversation (pass --built-path).
