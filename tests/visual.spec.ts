@@ -517,6 +517,20 @@ const openSlowly = (path: string, link: string, placeholder: string, table: stri
 
 // What a person does on a shown page to bring up something that does not stay, taken before its picture. Each returns
 // what puts the page back.
+const openApps = (app?: string) => async (page: Page) => {
+  await openNavigation(page);
+  await expect(page.locator('#btn-apps .sb-apps__n')).toBeVisible();
+  await page.locator('#btn-apps').click();
+  const sheet = page.locator('.apps-sheet[open]');
+  await expect(sheet.locator('.app-card').first()).toBeVisible();
+  if (app) {
+    await sheet.locator(`#app-btn-${app}`).click();
+    await expect(sheet.locator('.app-hero')).toBeVisible();
+  }
+  await expect.poll(() => sheet.evaluate(node => node.getAnimations().length)).toBe(0);
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  return async () => {};
+};
 const screenActs: Record<string, (page: Page, language: Language) => Promise<() => Promise<void>>> = {
   // The board's toast for a drop on "Waiting on you" (#157), raised from the keyboard on the first Idea, focused where it
   // is so a narrow board does not scroll to it. The page's clock stands still from before the toast until after the
@@ -556,6 +570,11 @@ const screenActs: Record<string, (page: Page, language: Language) => Promise<() 
     await expect(page.locator('#me-menu .menu__item:focus-visible')).toHaveCount(1);
     return async () => { await page.keyboard.press('Escape'); };
   },
+  // Connect apps opened from the sidebar (#201) once its count is read, pictured after its slide in; on a phone the button
+  // is inside the drawer. The keyboard leaves the search field, so no focus ring is pictured.
+  'open-apps': openApps(),
+  // Klaviyo's page inside the sheet, opened from its Manage button.
+  'open-apps-klaviyo': openApps('klaviyo'),
   // "N" on the board (#173) opens the new chat with its composer focused, kept for the picture.
   'new-chat-key': async page => {
     await page.keyboard.press('KeyN');

@@ -1,0 +1,8 @@
+{
+  "about": "Klaviyo's page inside the Connect apps sheet over Home (#201), opened from its Manage button: connected, read only, with back and close.",
+  "path": "/c/rs-learning/home",
+  "state": "apps",
+  "dark": true,
+  "ready": ".home-dashboard",
+  "act": "open-apps-klaviyo"
+}
