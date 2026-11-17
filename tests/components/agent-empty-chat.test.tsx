@@ -38,8 +38,9 @@ const paragraphs: [EmptyChat, string][] = [
  [{ state: 'main', reader: 'alone', owners: [] }, 'Your main point of contact. Need a new agent? Tell it in your own words and it makes it.'],
  [{ state: 'main', reader: 'owner', owners: [] }, 'The team’s main point of contact. Need a new agent? Tell it in your own words and it makes it.'],
  [{ state: 'main', reader: 'member', owners: ['Omar'] }, 'The team’s main point of contact. Need a new agent? Tell it and it prepares the request for Omar.'],
+ [{ state: 'main', reader: 'member', owners: [] }, 'The team’s main point of contact. Need a new agent? Tell it and it prepares the request for the Owner.'],
 ];
-for (const [empty, paragraph] of paragraphs) test(`the main Agent's empty chat speaks to its reader (${empty.state === 'main' && empty.reader}), with three suggestions in two columns, one on a phone`, async () => {
+for (const [empty, paragraph] of paragraphs) test(`the main Agent's empty chat speaks to its reader (${empty.state === 'main' && `${empty.reader}${empty.owners.length ? ' of ' + empty.owners.join(', ') : ''}`}), with three suggestions in two columns, one on a phone`, async () => {
   const wide = await chat({ empty });
   await expect.element(wide.getByRole('heading', { level: 2 })).toHaveTextContent('LeadMain');
   await expect.element(wide.getByText(paragraph, { exact: true })).toBeVisible();
@@ -59,7 +60,7 @@ for (const [empty, paragraph] of paragraphs) test(`the main Agent's empty chat s
   expect(new Set(tops).size).toBe(3);
 });
 
-for (const reader of ['owner', 'member'] as const) test(`pressing each suggestion as ${reader === 'owner' ? 'the Owner' : 'a Contributor'} puts its sentence in the composer, focused, and sends nothing`, async () => {
+for (const reader of ['owner', 'member'] as const) test(`pressing each suggestion as ${reader === 'owner' ? 'the Owner' : 'a Contributor'} puts its sentence in the composer, each on its own line after the last, focused, and sends nothing`, async () => {
  const screen = await chat({ empty: { state: 'main', reader, owners: ['Omar'] } });
  const field = screen.getByRole('textbox', { name: 'Message' });
  const sentences = {
@@ -67,16 +68,57 @@ for (const reader of ['owner', 'member'] as const) test(`pressing each suggestio
   [reader === 'owner' ? 'Make a new agent' : 'Ask for a new agent']: 'I want someone to handle our social media: posts and reels for our page',
   'Who is waiting on what?': 'Who is waiting on what today, and is anything stuck?',
  };
+ const pressed: string[] = [];
  for (const [title, sentence] of Object.entries(sentences)) {
   await screen.getByRole('button', { name: title, exact: false }).click();
-  await expect.element(field).toHaveValue(sentence);
+  pressed.push(sentence);
+  await expect.element(field).toHaveValue(pressed.join('\n'));
   await expect.element(field).toHaveFocus();
  }
  expect(fetches).not.toHaveBeenCalled();
  expect(push).not.toHaveBeenCalled();
 });
 
-test('a suggestion pressed while a message is on its way leaves the composer that is sending it, and works again once the send fails', async () => {
+test('with no Owner to name, asking for an Agent and the first-run line say the request goes to the Owner', async () => {
+ const hint = await page.viewport(1440, 900).then(() => render(<div className="gw"><LanguageProvider language="en">
+  <AgentChat slug="rs-learning" company="co-1" agent={lead} details={null} writer team empty={{ state: 'main', reader: 'member', owners: [] }} newAgent askOf={[]}/>
+ </LanguageProvider></div>));
+ await expect.element(hint.getByText('Tell Lead what you need an agent for, and it prepares the request for the Owner.', { exact: true })).toBeVisible();
+ hint.unmount();
+ const welcome = await page.viewport(1440, 900).then(() => render(<div className="gw"><LanguageProvider language="en">
+  <AgentChat slug="rs-learning" company="co-1" agent={lead} details={null} writer team empty={{ state: 'fresh' }} askOf={[]}/>
+ </LanguageProvider></div>));
+ await expect.element(welcome.getByText('I’m Lead and I run your marketing work with you. Need an agent for any job? Tell me in your own words and I’ll prepare the request for the Owner.', { exact: true })).toBeVisible();
+});
+
+test('once a message is sent, the box takes no second message or suggestion while the page moves to its Conversation', async () => {
+ fetches.mockImplementation(async () => new Response('{}', { status: 200 }));
+ const screen = await chat({ empty: { state: 'main', reader: 'owner', owners: [] } });
+ const field = screen.getByRole('textbox', { name: 'Message' });
+ await field.fill('Plan next week');
+ await userEvent.keyboard('{Enter}');
+ await expect.poll(() => push.mock.calls.length).toBe(1);
+ await screen.getByRole('button', { name: 'Who is waiting on what?', exact: false }).click();
+ await expect.element(field).toHaveValue('Plan next week');
+ await userEvent.click(field);
+ await userEvent.keyboard('{Enter}');
+ await new Promise(resolve => setTimeout(resolve, 100));
+ expect(fetches).toHaveBeenCalledTimes(1);
+});
+
+test('a suggestion keeps the text already typed and adds its sentence on the next line, focused at its end', async () => {
+ const screen = await chat({ empty: { state: 'main', reader: 'owner', owners: [] } });
+ const field = screen.getByRole('textbox', { name: 'Message' });
+ await field.fill('First, the numbers');
+ await screen.getByRole('button', { name: 'Who is waiting on what?', exact: false }).click();
+ const both = 'First, the numbers\nWho is waiting on what today, and is anything stuck?';
+ await expect.element(field).toHaveValue(both);
+ await expect.element(field).toHaveFocus();
+ expect((field.element() as HTMLTextAreaElement).selectionStart).toBe(both.length);
+ expect(fetches).not.toHaveBeenCalled();
+});
+
+test('a suggestion pressed while a message is on its way leaves the composer that is sending it, and once the send fails it follows the unsent text', async () => {
  let answer: (response: Response) => void = () => {};
  fetches.mockImplementation(() => new Promise<Response>(resolve => { answer = resolve; }));
  const screen = await chat({ empty: { state: 'main', reader: 'owner', owners: [] } });
@@ -89,7 +131,7 @@ test('a suggestion pressed while a message is on its way leaves the composer tha
  answer(new Response(JSON.stringify({ error: 'conversationFailed' }), { status: 500 }));
  await expect.poll(() => screen.container.querySelector('textarea')?.readOnly).toBe(false);
  await screen.getByRole('button', { name: 'A new SEO article', exact: false }).click();
- await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('I need an SEO article on something our customers search for, linking to the right page on our site');
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('Plan next week\nI need an SEO article on something our customers search for, linking to the right page on our site');
  expect(push).not.toHaveBeenCalled();
 });
 

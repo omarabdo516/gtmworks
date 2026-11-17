@@ -4,13 +4,13 @@
 // (page weight, #55).
 import conversationEn from '@/lib/messages/conversation.en.json';
 import conversationAr from '@/lib/messages/conversation.ar.json';
-import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode, type Ref } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from '@/lib/link';
 import { useI18n } from '@/lib/i18n-client';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { ShellIcon } from '@/components/shell-icon';
-import { MessageBox, postMessage } from '@/app/conversation-composer';
+import { MessageBox, postMessage, type MessageBoxHandle } from '@/app/conversation-composer';
 import type { Decision, SavedRule } from '@/lib/conversations';
 import { MadeCard, RequestCard } from '@/app/agent-card';
 import { ReplyCard } from '@/app/reply-card';
@@ -153,13 +153,13 @@ export function ConversationTurns({slug,company,record,writer,asked}:{slug:strin
 // square stops the open run for the person who started it, or a Manager or Owner; the view-only line for a Viewer. The
 // Conversation's own page adds its usage line; a Card's sheet draws none. While the record is still on its way (#172) it
 // already takes a message, with no stop square, and keeps the usage line's place.
-export function ConversationComposer({company,conversation,record,writer,asked,draft,usage}:{company:string,conversation:ThreadConversation,record:ConversationRecord|null,writer:boolean,asked:()=>void,draft?:{text:string,n:number}|null,usage:boolean}) {
+export function ConversationComposer({company,conversation,record,writer,asked,box,usage}:{company:string,conversation:ThreadConversation,record:ConversationRecord|null,writer:boolean,asked:()=>void,box?:Ref<MessageBoxHandle>,usage:boolean}) {
  const {t,language}=useI18n(); const {c}=useConversationText();
  // A Run waiting on its person's answer is not working (#138): the box keeps its send arrow, as the reference's does.
  const working=record?.asking?null:record?.working; const canStop=record?.canStop;
  const count=(value:number)=>new Intl.NumberFormat(localeFor(language)).format(value);
  return <>
-  {writer?<MessageBox key={draft?.n||0} draft={draft?.text} placeholder={t('writeTo',conversation.agent_name)} stop={working&&canStop?{label:c('conversationStop',conversation.agent_name),run:async()=>{
+  {writer?<MessageBox ref={box} placeholder={t('writeTo',conversation.agent_name)} stop={working&&canStop?{label:c('conversationStop',conversation.agent_name),run:async()=>{
    const failure=await postMessage({company,conversation:conversation.id,intent:'stop'});
    if(!failure) asked();
    return failure;

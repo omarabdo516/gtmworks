@@ -71,6 +71,6 @@ export function RequestCard({slug,request,owner=false,unread=false,answer}:{slug
   {request.state==='made'?<div className="card__outcome"><ShellIcon name="check"/><span>{cb('requestMade',request.by,when(request.at),made?.name??request.name,request.askedBy)}</span>
     {made&&<Link className="link-btn" href={`/c/${slug}/chat/${made.id}`}>{c('madeAgentOpen',made.name)}</Link>}</div>
    :request.state==='declined'?<div className="card__outcome pp-out"><ShellIcon name="x"/><span>{cb('requestDeclined',request.by,when(request.at),request.reason)}</span></div>
-   :owner?answer:<div className="card__outcome"><ShellIcon name="clock"/><span>{cb('requestWaiting',owners)}</span></div>}
+   :owner?answer:<div className="card__outcome"><ShellIcon name="clock"/><span>{request.state==='waiting'&&!request.owners.length?cb('requestWaitingAnyOwner'):cb('requestWaiting',owners)}</span></div>}
  </div>;
 }

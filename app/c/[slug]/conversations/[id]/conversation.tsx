@@ -10,9 +10,9 @@ import { PrivateLine } from '@/app/private-line';
 import { titleOf } from '@/lib/conversations';
 import type { ConversationRecord } from '@/lib/conversation-record';
 import { columnLabel } from '@/lib/board-columns.mjs';
+import type { MessageBoxHandle } from '@/app/conversation-composer';
 import { ChatPlaceholder, ConversationComposer, ConversationTurns, useConversationRecord, useConversationText, type ThreadConversation } from '@/app/conversation-thread';
 
-type Draft={text:string,n:number}|null;
 // The record as the loaded transcript keeps it current, and how it asks for the reply after a send.
 type Live={record:ConversationRecord,asked:()=>void};
 
@@ -27,16 +27,16 @@ type Live={record:ConversationRecord,asked:()=>void};
 // says where the Card is now.
 export default function ConversationView({slug,agent,details,company,conversation,title,writer,board,children}:{slug:string,agent:DetailsAgent|null,details:AgentDetailsView|null,company:string,conversation:ThreadConversation,title:string,writer:boolean,board?:ConversationRecord['board'],children:ReactNode}) {
  const {c}=useConversationText(); const panel=useDetailsPanel();
- const [draft,setDraft]=useState<Draft>(null); const [early,setEarly]=useState(0); const [live,setLive]=useState<Live|null>(null);
+ const composer=useRef<MessageBoxHandle>(null); const [early,setEarly]=useState(0); const [live,setLive]=useState<Live|null>(null);
  const record=live?.record; const corner=record?record.board:board;
  // The same object while what it holds is the same: a new one reaching the transcript while it still streams in would
  // make React draw it again in the browser and leave the streamed copy hidden in the page (#172), as a render of this
  // frame during hydration does (the details panel's media query).
- const view=useMemo(()=>({slug,agent,company,conversation,writer,setDraft,early,setLive}),[slug,agent,company,conversation,writer,early]);
+ const view=useMemo(()=>({slug,agent,company,conversation,writer,suggest:(text:string)=>composer.current?.insert(text),early,setLive}),[slug,agent,company,conversation,writer,early]);
  return <ChatView value={view}><div className="convo"><div className="chat">
   <HeadPill panel={panel} agent={agent?.name} face={<span aria-hidden="true"><CompanyAgentFace agent={{connection_id:conversation.face,name:conversation.agent_name}} size={24}/></span>} title={record?titleOf(record.messages,conversation.agent_name):title} titleDir="auto" corner={corner&&<CornerPill slug={slug} board={corner} writer={writer} c={c}/>}/>
   <Transcript>{children}</Transcript>
-  <div className="composer-area"><ConversationComposer company={company} conversation={conversation} record={record??null} writer={writer} asked={live?.asked??(()=>setEarly(count=>count+1))} draft={draft} usage/></div>
+  <div className="composer-area"><ConversationComposer company={company} conversation={conversation} record={record??null} writer={writer} asked={live?.asked??(()=>setEarly(count=>count+1))} box={composer} usage/></div>
  </div>{agent&&details&&<AgentDetails panel={panel} agent={agent} details={details} settingsHref={`/c/${slug}/agents`}/>}</div></ChatView>;
 }
 
@@ -49,14 +49,14 @@ const Transcript=memo(function Transcript({children}:{children:ReactNode}) {
  return <Suspense fallback={loadingTranscript}>{children}</Suspense>;
 });
 
-type View={slug:string,agent:DetailsAgent|null,company:string,conversation:ThreadConversation,writer:boolean,setDraft:(next:(current:Draft)=>Draft)=>void,early:number,setLive:(live:Live)=>void};
+type View={slug:string,agent:DetailsAgent|null,company:string,conversation:ThreadConversation,writer:boolean,suggest:(text:string)=>void,early:number,setLive:(live:Live)=>void};
 // The chat around the transcript: what the transcript tells the title and the composer.
 const ChatView=createContext<View|null>(null);
 const useView=()=>use(ChatView)!;
 
 // The transcript once its record is read, in place of the placeholder.
 export function ConversationLoaded({initial,team}:{initial:ConversationRecord,team:boolean}) {
- const {slug,agent,company,conversation,writer,setDraft,early,setLive}=useView();
+ const {slug,agent,company,conversation,writer,suggest,early,setLive}=useView();
  const {record,asked}=useConversationRecord({company,initial});
  const {messages}=record;
  const box=useRef<HTMLDivElement>(null); const stick=useRef(true);
@@ -70,7 +70,7 @@ export function ConversationLoaded({initial,team}:{initial:ConversationRecord,te
  const welcome=!messages.length&&agent?.main;
  return <div className="transcript" ref={box} onScroll={event=>{ const view=event.currentTarget; stick.current=view.scrollHeight-view.scrollTop-view.clientHeight<80; }}><div className="transcript__col">
   {team&&<PrivateLine agent={conversation.agent_name}/>}
-  {welcome&&agent&&<LeadWelcome agent={agent} suggest={writer?text=>setDraft(current=>({text,n:(current?.n||0)+1})):undefined}/>}
+  {welcome&&agent&&<LeadWelcome agent={agent} suggest={writer?suggest:undefined}/>}
   <ConversationTurns slug={slug} company={company} record={record} writer={writer} asked={asked}/>
  </div></div>;
 }

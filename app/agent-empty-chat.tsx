@@ -10,7 +10,9 @@ import type { Made } from '@/lib/agent-made';
 // Which empty chat an Agent shows its reader (design-reference: emptyChatHTML), decided once on the server (#170).
 // `fresh`: the main Agent alone in a new workspace (#9). `main`: the main Agent once there are others, worded for a
 // Company worked alone, its Owner, or another Member, who is told which Owners make the Agent. `new`: an Agent this reader
-// has not written to yet, with its ready-made role's words or the general ones. `known`: any other.
+// has not written to yet, with its ready-made role's words or the general ones. `known`: any other Agent but the main
+// one, which is always `fresh` or `main`. A Viewer reads the Member's wording, as the reference does (it words by isOwner
+// alone); with no Owner's name to give, the request goes to "the Owner".
 export type EmptyChat=
  | {state:'fresh'}
  | {state:'main',reader:'alone'|'owner'|'member',owners:string[]}
@@ -28,7 +30,7 @@ export function AgentEmptyChat({agent,empty,askOf=null,suggest}:{agent:Agent,emp
  // design-reference: mainEmptyHTML. Its daily check-in, its handing work to another Agent and the suggestion that
  // promises it wait for those parts (gap rows 7 and 4).
  if(empty.state==='main') {
-  const line=empty.reader==='alone'?t('mainLineAlone'):empty.reader==='owner'?t('mainLineOwner'):t('mainLineMember',new Intl.ListFormat(localeFor(language),{type:'disjunction'}).format(empty.owners));
+  const line=empty.reader==='alone'?t('mainLineAlone'):empty.reader==='owner'?t('mainLineOwner'):empty.owners.length?t('mainLineMember',new Intl.ListFormat(localeFor(language),{type:'disjunction'}).format(empty.owners)):t('mainLineMemberAnyOwner');
   const suggestions=[[t('suggestArticle'),t('suggestArticleD'),t('suggestArticleText')],
    [empty.reader==='member'?t('suggestAgentMember'):t('suggestAgentOwner'),t('suggestAgentD'),t('suggestAgentText')],
    [t('suggestWaiting'),t('suggestWaitingD'),t('suggestWaitingText')]];
@@ -53,7 +55,7 @@ export function AgentEmptyChat({agent,empty,askOf=null,suggest}:{agent:Agent,emp
  </div>;
  return <div className="empty-chat empty-chat--agent">
   {face}
-  <h2 className="main-h"><bdi>{agent.name}</bdi>{agent.main&&<span className="badge main-badge">{t('mainAgent')}</span>}</h2>
+  <h2><bdi>{agent.name}</bdi></h2>
   {agent.speciality&&<p className="empty-chat__role" dir="auto">{agent.speciality}</p>}
   <p>{t('agentEmptyChat')}</p>
  </div>;
