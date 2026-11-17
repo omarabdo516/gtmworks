@@ -40,7 +40,8 @@ export async function holdPages(page: Page, matches: (url: URL) => boolean) {
 export async function wholePages(page: Page, matches: (url: URL) => boolean) {
   const whole = async (route: Route) => {
     // A request the page gave up on (a prefetch it no longer needs) has no response to deliver.
-    const response = await route.fetch().catch(() => null);
+    // A redirect (to sign-in) goes to the browser as it is, so the browser follows it.
+    const response = await route.fetch({ maxRedirects: 0 }).catch(() => null);
     await (response ? route.fulfill({ response }) : route.abort()).catch(() => {});
   };
   await page.route(matches, whole);
