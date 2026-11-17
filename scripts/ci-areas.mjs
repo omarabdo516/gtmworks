@@ -3,8 +3,8 @@ import { readFileSync } from 'node:fs';
 // Which long suites a change needs (#76), as Hermes `detect` and T3 Code `Changes` decide it: each suite runs only when
 // the files it covers changed. Static (lint, types, catalogues, the node unit tests) runs on every change and needs no
 // entry here. Prints components=, database=, integration= and install= lines for $GITHUB_OUTPUT. Each suite prints the
-// first of its levels whose files changed, or false: `true` runs the whole suite, and the browser suite's `visual` runs
-// only its compared screens (#213). With --main (a push to main) every suite runs unless every file is a document.
+// first of its levels whose files changed, or false. The compared screens are not here: they run on main only, never on
+// a pull request (#257). With --main (a push to main) every suite runs unless every file is a document.
 // Accepts path arguments or git diff --name-only -z on stdin; an empty, malformed or unreadable list runs every suite.
 const everything = [/^\.github\/workflows\/ci\.yml$/, /^ci\.sh$/, /^scripts\/ci-(areas|verdict|runner)\.mjs$/, /^package(-lock)?\.json$/];
 const suites = {
@@ -34,15 +34,12 @@ const suites = {
     // and the root files the build and server read.
     true: [
       /^app\/.+\.ts$/, /^lib\/(?!messages\/)/, /^worker\//, /^(middleware|instrumentation)\.ts$/, /^(next|postcss)\.config\.mjs$/,
-      /^server\.js$/, /^tests\/(.+\/)?[^/]+\.spec\.ts$/, /^tests\/[^/]+\.ts$/,
+      /^server\.js$/, /^tests\/(?!visual-lane)(.+\/)?[^/]+\.spec\.ts$/, /^tests\/(?!visual-lane)[^/]+\.ts$/,
       /^tests\/(visual-screens|lane|fake-hermes|fake-engine)\.mjs$/,
       /^playwright(\.proxy)?\.config\.ts$/, /^Dockerfile$/, /^\.dockerignore$/,
       /^scripts\/(web\.sh|local-db\.sh|proxy-stack\.sh|ci-image\.sh|first-run-db\.mjs|local-default-privileges\.sql|supabase-images\.sh)$/,
       /^supabase\/(migrations\/|config\.toml$|seed\.sql$)/, /^public\//,
     ],
-    // Screens alone: the component tests prove how they behave, and the compared screens (the `visual` Playwright
-    // project) catch an unintended change to an approved screen before merge.
-    visual: [/^(app|components)\//, /^lib\/messages\//, /^tests\/visual-screens\//, /^tests\/visual\.spec\.ts-snapshots\//],
   },
   // The Docker install, update, backup and release: the image and its build inputs, the install and release files, the
   // migrations it applies and the checks it runs, and the code those checks drive against the real bundled Hermes (lib/

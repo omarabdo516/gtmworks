@@ -22,7 +22,10 @@ const ci = workflows.find(file => file.path === `${dir}/ci.yml`).yaml;
 
 const heavyRunner = "${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.CI_RUNNER || 'ubuntu-latest' }}";
 const heavyJobs = ['integration'];
-const isHeavy = ({ path, name }) => path === `${dir}/ci.yml` && heavyJobs.includes(name);
+// The visual lane's proof draws on both runners, as a matrix (#257).
+const bothJobs = ['lane-proof'];
+const runnersOf = job => (job['runs-on'] === '${{ matrix.runner }}' ? job.strategy.matrix.runner : [job['runs-on']]);
+const isHeavy = ({ path, name }) => path === `${dir}/ci.yml` && [...heavyJobs, ...bothJobs].includes(name);
 
 function triggers(yaml) {
  // js-yaml reads `on` as a string key; a YAML 1.1 parser would read it as true.
@@ -44,6 +47,7 @@ test('no workflow names the paid runner', () => {
 
 test('the heavy jobs run on the CI_RUNNER runner, and on ubuntu-latest for a pull request from a fork (#224)', () => {
  for (const name of heavyJobs) assert.equal(ci.jobs[name]['runs-on'], heavyRunner, name);
+ for (const name of bothJobs) assert.deepEqual(runnersOf(ci.jobs[name]), ['ubuntu-latest', heavyRunner], name);
 });
 
 test('every other job runs on a GitHub-hosted ubuntu-latest runner', () => {
@@ -58,8 +62,8 @@ test('the release and publish workflows run on ubuntu-latest', () => {
 });
 
 test('a job that may run on the self-hosted runner reads no secret and writes nothing', () => {
- const mayRunThere = jobs.filter(({ job }) => job['runs-on'] === heavyRunner);
- assert.deepEqual(mayRunThere.map(({ name }) => name), heavyJobs);
+ const mayRunThere = jobs.filter(({ job }) => runnersOf(job).includes(heavyRunner));
+ assert.deepEqual(mayRunThere.map(({ name }) => name).sort(), [...heavyJobs, ...bothJobs].sort());
  for (const { name, job, yaml } of mayRunThere) {
   assert.equal(JSON.stringify(job).includes('secrets.'), false, name);
   const permissions = job.permissions ?? yaml.permissions;
@@ -85,14 +89,15 @@ test('a workflow a pull request starts reads no secret but GITHUB_TOKEN', () => 
  }
 });
 
-// The local Supabase stack starts through ci.sh (database, integration, visual, visual-update) or scripts/local-db.sh.
-const startsSupabase = step => /\bci\.sh\b.*\b(database|integration|visual|visual-update)\b|\blocal-db\.sh\b/.test(step.run ?? '');
+// The local Supabase stack starts through ci.sh (database, integration, visual, visual-update, lane, lane-update,
+// lane-proof) or scripts/local-db.sh.
+const startsSupabase = step => /\bci\.sh\b.*\b(database|integration|visual|visual-update|lane|lane-update|lane-proof)\b|\blocal-db\.sh\b/.test(step.run ?? '');
 const condition = step => String(step.if ?? '').replace(/^\$\{\{\s*|\s*\}\}$/g, '');
 const supabaseJobs = jobs.filter(({ job }) => (job.steps ?? []).some(startsSupabase));
 const label = ({ path, name }) => `${path} ${name}`;
 
 test('the jobs that start the local Supabase stack are found', () => {
- for (const name of [`${dir}/ci.yml database`, `${dir}/ci.yml integration`, `${dir}/visual-baselines.yml update`]) {
+ for (const name of [`${dir}/ci.yml database`, `${dir}/ci.yml integration`, `${dir}/ci.yml lane`, `${dir}/ci.yml lane-proof`, `${dir}/visual-baselines.yml update`]) {
   assert.ok(supabaseJobs.map(label).includes(name), name);
  }
 });
@@ -132,8 +137,8 @@ test('the scripts accept exactly the lanes tests/lane.mjs reserves ports for', (
 
 test('on the self-hosted runner a job clears an earlier run and moves the ports before the stack starts, and cleans up last (#224)', () => {
  const config = readFileSync('supabase/config.toml', 'utf8');
- const checked = supabaseJobs.filter(({ job }) => job['runs-on'] === heavyRunner);
- for (const name of heavyJobs) assert.ok(checked.some(job => job.name === name), name);
+ const checked = supabaseJobs.filter(({ job }) => runnersOf(job).includes(heavyRunner));
+ for (const name of [...heavyJobs, ...bothJobs]) assert.ok(checked.some(job => job.name === name), name);
  for (const job of checked) {
   const steps = job.job.steps;
   const prepare = steps.findIndex(step => /ci-runner\.mjs move-ports \d+/.test(step.run ?? ''));
@@ -246,7 +251,8 @@ test('cleanup removes only what this repository\'s runs start on a shared Docker
  const fake = docker(t, root, {
   container: [
    { name: 'supabase_db_repo', project: 'repo' }, { name: `supabase_kong_repo-lane-${maxLanes - 1}`, project: `repo-lane-${maxLanes - 1}` },
-   { name: 'gtmworks-ci' }, { name: 'gtmworks-worker-ci' }, { name: 'gtmworks-proxy-app' }, { name: 'gtmworks-proxy-caddy' }, ...others.container,
+   { name: 'gtmworks-ci' }, { name: 'gtmworks-worker-ci' }, { name: 'gtmworks-proxy-app' }, { name: 'gtmworks-proxy-caddy' }, { name: 'gtmworks-lane-renderer' },
+   ...others.container,
   ],
   volume: [{ name: 'supabase_db_repo', project: 'repo' }, { name: 'gtmworks-proxy-caddy-data' }, ...others.volume],
   network: [{ name: 'supabase_network_repo' }, { name: 'supabase_network_repo-lane-3' }, ...others.network],

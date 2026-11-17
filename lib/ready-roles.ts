@@ -25,3 +25,12 @@ export function readyRoles(language:Language,alone:boolean):ReadyRole[] {
    search:[...words,name,...apps.map(app=>app.name)].filter(Boolean).join(' ').toLowerCase()};
  });
 }
+
+// What a new Agent's empty chat says it does and hands back, and its sentence to try (#170; design-reference:
+// newAgentEmptyHTML), in the reader's language. An Agent made without a ready-made role has no line or hand-back of its
+// own and is tried with the general sentence.
+export function roleStart(language:Language,alone:boolean,template:string|null|undefined):{line:string|null,handoff:string|null,example:string} {
+ const text=catalogues[language];
+ if(!template||!Object.hasOwn(roleTemplates,template)) return {line:null,handoff:null,example:text.exampleGeneral};
+ return {line:text[`line.${template}`],handoff:(alone&&text[`handAlone.${template}`])||text[`hand.${template}`]||null,example:text[`example.${template}`]};
+}
