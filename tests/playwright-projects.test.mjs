@@ -32,7 +32,9 @@ test('${name} second', async () => { await new Promise(r => setTimeout(r, 30)); 
 }
 
 const run = async (dir, args) => {
- const child = spawn('npx', args, { cwd: dir, timeout: 60000, env: { ...process.env, CI: 'true', NODE_TEST_CONTEXT: undefined } });
+ // Playwright's own CLI straight from node, as scripts/check-test-discovery.mjs runs it; npm scripts through npm.
+ const [command, ...rest] = args[0] === 'playwright' ? [process.execPath, resolve('node_modules/@playwright/test/cli.js'), ...args.slice(1)] : args;
+ const child = spawn(command, rest, { cwd: dir, timeout: 60000, env: { ...process.env, CI: 'true', NODE_TEST_CONTEXT: undefined } });
  let output = '';
  child.stdout.on('data', chunk => { output += chunk; });
  child.stderr.on('data', chunk => { output += chunk; });

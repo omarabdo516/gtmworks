@@ -46,17 +46,24 @@ test('on GitHub a green step folds into a group and a red one stays open with an
   assert.match(text, /^::error title=fast lint::lint failed \(exit 2\); its output is in the log above$/m);
 });
 
-test('a gate step runs first, and when it fails no other step starts', async t => {
+test('a step that runs tests waits for the gate, and does not start when it fails; the others run beside the gate', async t => {
   const dir = mkdtempSync(join(tmpdir(), 'ci-fast-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const { write } = quiet();
-  const list = [{ name: 'discovery', command: `[ ! -e ${dir}/lint ] && exit 3`, first: true }, { name: 'lint', command: `touch ${dir}/lint` }];
+  // The gate finishes only once lint has started, so lint must start beside it; node must not have started yet.
+  const gate = code => `for i in $(seq 100); do [ -e ${dir}/lint ] && break; sleep 0.05; done; [ -e ${dir}/lint ] && [ ! -e ${dir}/node ] && exit ${code}; exit 9`;
+  const list = [
+    { name: 'discovery', command: gate(3), gate: true },
+    { name: 'lint', command: `touch ${dir}/lint` },
+    { name: 'node', command: `touch ${dir}/node`, gated: true },
+  ];
   const red = await run(list, { write, env: {} });
-  assert.deepEqual(red.map(({ name, result }) => [name, result]), [['discovery', 'failure'], ['lint', 'skipped']]);
-  assert.throws(() => readFileSync(join(dir, 'lint')));
-  list[0].command = `[ ! -e ${dir}/lint ]`;
+  assert.deepEqual(red.map(({ name, result }) => [name, result]), [['discovery', 'failure'], ['lint', 'success'], ['node', 'skipped']]);
+  assert.throws(() => readFileSync(join(dir, 'node')));
+  rmSync(join(dir, 'lint'));
+  list[0].command = gate(0);
   const green = await run(list, { write, env: {} });
-  assert.deepEqual(green.map(({ name, result }) => [name, result]), [['discovery', 'success'], ['lint', 'success']]);
+  assert.deepEqual(green.map(({ name, result }) => [name, result]), [['discovery', 'success'], ['lint', 'success'], ['node', 'success']]);
 });
 
 test('a skipped step does not run and is listed as skipped', async t => {
@@ -82,6 +89,7 @@ test('the fast layer is the static checks, the node tests and the component test
   assert.match(command('node'), /--test-reporter-destination="\$LEDGER\/node\.jsonl" 'tests\/\*\*\/\*\.test\.mjs'$/);
   assert.match(command('components'), /npm run test:components -- .*--outputFile\.json="\$LEDGER\/vitest\.json"/);
   assert.doesNotMatch(command('components'), /shard/i);
-  assert.deepEqual(steps.filter(step => step.first).map(step => step.name), ['discovery']);
+  assert.deepEqual(steps.filter(step => step.gate).map(step => step.name), ['discovery']);
+  assert.deepEqual(steps.filter(step => step.gated).map(step => step.name), ['node', 'components']);
   assert.match(readFileSync('ci.sh', 'utf8'), /^ {2}node scripts\/ci-fast\.mjs "\$dir"/m);
 });

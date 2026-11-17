@@ -7,8 +7,8 @@ import { parseArgs } from 'node:util';
 // as one command that CI, an agent and a person run alike. Each step keeps its own output and result, so a red step is
 // shown whole and the others stay green. Each command may write its test records to $LEDGER (scripts/ci-ledger.mjs).
 export const steps = [
-  // First and alone: a test file no runner discovers is named before any other check starts.
-  { name: 'discovery', command: 'node scripts/check-test-discovery.mjs', first: true },
+  // The gate: a test file no runner discovers is named before any step that runs tests starts.
+  { name: 'discovery', command: 'node scripts/check-test-discovery.mjs', gate: true },
   { name: 'docs', command: 'python3 scripts/check-design-adr.py' },
   { name: 'i18n', command: 'node scripts/check-i18n.mjs' },
   { name: 'openapi', command: 'npx --yes @redocly/cli@2.76.0 lint docs/api/openapi.yaml --extends=spec' },
@@ -17,18 +17,18 @@ export const steps = [
   // Unused files, exports and dependencies (knip.json), as T3 Code checks them (#81).
   { name: 'knip', command: 'npx --no-install knip --no-progress' },
   // `npm test`'s files, with the ledger reporter beside the usual one; the flags must come before the glob.
-  { name: 'node', command: 'node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=./scripts/ci-ledger-node.mjs --test-reporter-destination="$LEDGER/node.jsonl" \'tests/**/*.test.mjs\'' },
+  { name: 'node', command: 'node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=./scripts/ci-ledger-node.mjs --test-reporter-destination="$LEDGER/node.jsonl" \'tests/**/*.test.mjs\'', gated: true },
   // Screens as components in headless Chromium (#81), in one run: the tests take seconds, so shards would only repeat
   // the install and the browser (spec #255 D2). Naming the reporters replaces Vitest's own choice, so the GitHub one that
   // marks failures on the pull request is named too when it runs there.
-  { name: 'components', command: 'npx playwright install chromium && npm run test:components -- --reporter=default ${GITHUB_ACTIONS:+--reporter=github-actions} --reporter=json --outputFile.json="$LEDGER/vitest.json"' },
+  { name: 'components', command: 'npx playwright install chromium && npm run test:components -- --reporter=default ${GITHUB_ACTIONS:+--reporter=github-actions} --reporter=json --outputFile.json="$LEDGER/vitest.json"', gated: true },
 ];
 
 const seconds = started => ((Date.now() - started) / 1000).toFixed(1);
 
 /**
- * Runs the `first` steps, then, when they passed, every other step at once, and prints each one's output when it ends.
- * Resolves to [{ name, result }] in step order.
+ * Runs every step at once, except that a `gated` step starts only once the `gate` steps passed, and is skipped when one
+ * failed. Prints each step's output when it ends. Resolves to [{ name, result }] in step order.
  */
 export async function run(list, { skip = [], env = process.env, write = text => process.stdout.write(text) } = {}) {
   const github = env.GITHUB_ACTIONS === 'true';
@@ -59,10 +59,10 @@ export async function run(list, { skip = [], env = process.env, write = text => 
       resolve({ name, result });
     }));
   };
-  const gate = await Promise.all(list.filter(step => step.first).map(start));
-  const open = gate.every(({ result }) => result === 'success' || result === 'skipped');
-  const rest = await Promise.all(list.filter(step => !step.first).map(step => (open ? start(step) : { name: step.name, result: 'skipped' })));
-  const results = list.map(step => [...gate, ...rest].find(({ name }) => name === step.name));
+  const gates = new Map(list.filter(step => step.gate).map(step => [step.name, start(step)]));
+  const open = Promise.all(gates.values()).then(done => done.every(({ result }) => result === 'success' || result === 'skipped'));
+  const results = await Promise.all(list.map(step => gates.get(step.name)
+    ?? (step.gated ? open.then(passed => (passed ? start(step) : { name: step.name, result: 'skipped' })) : start(step))));
   process.off('SIGINT', stop).off('SIGTERM', stop);
   write(results.map(({ name, result }) => `fast ${name}: ${result}\n`).join(''));
   return results;
