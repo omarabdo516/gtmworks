@@ -2,8 +2,8 @@
 -- write, a removed Agent's profile and whether a key is held are kept for no client, the one lead_create_agent still
 -- answers the previous app version's call, reads the hold under its lock and records the wait, every Run entry holds a
 -- waiting Agent, the Owner's list shows it, only the server begins, finishes and settles a key change (finish and settle
--- the only ends of a wait, under the same lock) and forgets a leftover, a change or an unanswered set counts only within
--- its window (changed_at), and a removed Agent's profile is listed for the next key removal.
+-- the only ends of a wait, under the same lock), forgets a leftover and asks which Company Lead's create settles, a change
+-- counts only within its window (changed_at), and a removed Agent's profile is listed for the next key removal.
 select json_build_object(
  'waits_owner_read_only',(select relrowsecurity from pg_class where oid='public.agent_key_waits'::regclass)
   and has_table_privilege('authenticated','public.agent_key_waits','select')
@@ -39,7 +39,7 @@ select json_build_object(
   and pg_get_function_result('public.waiting_list(uuid)'::regprocedure)='TABLE(kind text, id bigint, title text, body text, asked_by text, card_id bigint, conversation_id uuid, created_at timestamp with time zone)',
  'server_changes_keys',(select bool_and(has_function_privilege('service_role',f,'execute') and not has_function_privilege('authenticated',f,'execute')
    and not has_function_privilege('anon',f,'execute') and prosecdef and proconfig @> array['search_path=""'])
-  from unnest(array['public.begin_provider_key_change(uuid,text)','public.finish_provider_key_change(uuid,text,boolean,text[],boolean)','public.forget_agent_profile_leftovers(uuid,text[])','public.settle_provider_key_holds(uuid,text[])']::regprocedure[]) f
+  from unnest(array['public.begin_provider_key_change(uuid,text)','public.finish_provider_key_change(uuid,text,boolean,text[],boolean)','public.forget_agent_profile_leftovers(uuid,text[])','public.settle_provider_key_holds(uuid,text[])','public.lead_key_settle(uuid)']::regprocedure[]) f
    join pg_proc p on p.oid=f::oid)
   and (select bool_and(position('hashtextextended(''hermes_agents''' in pg_get_functiondef(f))>0)
    from unnest(array['public.begin_provider_key_change(uuid,text)','public.finish_provider_key_change(uuid,text,boolean,text[],boolean)','public.settle_provider_key_holds(uuid,text[])']::regprocedure[]) f)

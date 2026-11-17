@@ -8,10 +8,10 @@ import { toolPolicy } from '../lib/agent-levels.mjs';
 
 const profile='co-10000000000000000000000000000001';
 // `plan` is what the database names for a create_agent call (lead_agent_profile): the Agent a call already made, or
-// none for a call that will be refused.
-function harness(/** @type {object} */ engineOverride={},/** @type {object} */ answer={state:'created',agent:'agent-1'},/** @type {object|null} */ plan=null) {
+// none for a call that will be refused. `answers` are the database's answers to other calls by name.
+function harness(/** @type {object} */ engineOverride={},/** @type {object} */ answer={state:'created',agent:'agent-1'},/** @type {object|null} */ plan=null,/** @type {Record<string,unknown>} */ answers={}) {
  const fake=fakeEngine(); const engine={...fake.engineFor({}),...engineOverride}; const rpcs=/** @type {[string,object][]} */([]);
- const db={rpc:async(/** @type {string} */ name,/** @type {object} */ args)=>{ rpcs.push([name,args]); return {data:name==='lead_agent_profile'?plan:answer,error:null}; }};
+ const db={rpc:async(/** @type {string} */ name,/** @type {object} */ args)=>{ rpcs.push([name,args]); return {data:name==='lead_agent_profile'?plan:Object.hasOwn(answers,name)?answers[name]:answer,error:null}; }};
  const call=(/** @type {string} */ name,/** @type {unknown} */ args)=>runToolCall({db,engine,profile,conversation:'conversation-1',run:'run-1'},{id:'call-0',name,arguments:args});
  return {fake,engine,rpcs,call};
 }
@@ -120,6 +120,32 @@ test('a call that the database will refuse asks the Engine to make nothing',asyn
  assert.deepEqual(await call('create_agent',asked),{state:'refused'});
  assert.deepEqual([fake.provided,fake.removed],[[],[]]);
  assert.deepEqual(rpcs.map(([name])=>name),['lead_agent_profile','lead_create_agent']);
+});
+
+// A set the Engine never answered, past its window, that the database still counts as a held key (lead_key_settle, #299).
+const unsettled={company:'10000000-0000-0000-0000-000000000001',space:'cs-10000000000000000000000000000001'};
+const metaCall=['lead_create_agent',{conversation:'conversation-1',run:'run-1',call:'call-0',agent_name:'Meta Ads',job:'Runs the Meta ads.',apps:['Meta Ads Manager','Canva']}];
+
+test('a set the Engine never answered is settled from the space before the Agent is made, naming only the providers held whose name reads',async()=>{
+ const spaces=/** @type {string[]} */([]);
+ const readKeys=async(/** @type {string} */ space)=>{ spaces.push(space); return {state:'found',keys:[{provider:'openrouter',label:'OpenRouter',set:true},{provider:'deepseek',label:'DeepSeek',set:false},{provider:'Not a provider',label:'Odd',set:true}]}; };
+ const {engine,rpcs,call}=harness({readKeys},{state:'created',agent:'agent-1'},null,{lead_key_settle:unsettled});
+ await leadReady(engine);
+ assert.deepEqual(await call('create_agent',asked),{state:'created',agent:'agent-1'});
+ assert.deepEqual(spaces,[unsettled.space],'the Engine is asked for the space the database named');
+ assert.deepEqual(rpcs.slice(1),[['lead_key_settle',{conversation:'conversation-1'}],['settle_provider_key_holds',{c:unsettled.company,held:['openrouter']}],metaCall]);
+});
+
+test('a space the Engine could not read, or nothing to settle, settles nothing, and the Agent is still asked for, so the database keeps it waiting',async()=>{
+ let reads=0;
+ for(const [label,readKeys,settle] of /** @type {[string,()=>Promise<unknown>,unknown][]} */([['unreachable',async()=>({state:'unreachable',keys:null}),unsettled],
+  ['thrown',async()=>{ throw new Error('down'); },unsettled],['nothing to settle',async()=>{ reads++; return {state:'found',keys:[]}; },null],['an odd answer',async()=>{ reads++; return {state:'found',keys:[]}; },{company:7,space:unsettled.space}]])) {
+  const {engine,rpcs,call}=harness({readKeys},{state:'created',agent:'agent-1'},null,{lead_key_settle:settle});
+  await leadReady(engine);
+  assert.deepEqual(await call('create_agent',asked),{state:'created',agent:'agent-1'},label);
+  assert.deepEqual(rpcs.slice(1),[['lead_key_settle',{conversation:'conversation-1'}],metaCall],label);
+ }
+ assert.equal(reads,0,'the Engine is asked only for a space the database named');
 });
 
 test('an Agent asked for in words, with no role, gets the Company profile\'s soul',async()=>{

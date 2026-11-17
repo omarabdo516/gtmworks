@@ -55,10 +55,12 @@ const change=(person,fake,request)=>changeCompanyKey(person.db,person.service,{c
 const read=(person,fake)=>readCompanyKeys(person.db,person.service,{company,encryptionKey,driver:pointedAt(fake)});
 const engineOn=(fake,profile)=>hermesEngine({address:fake.address,managementAddress:fake.managementAddress,profile,key:'test-only-key'});
 
-// Lead's create_agent call on Lead's profile, with the database's answers for a Company whose level is 1.
-async function leadMakes(fake) {
+// Lead's create_agent call on Lead's profile, with the database's answers for a Company whose level is 1, and `answers`
+// to other calls by name.
+async function leadMakes(fake,answers={}) {
  const calls=[];
  const db={rpc:async(name,args)=>{ calls.push([name,args]);
+  if(Object.hasOwn(answers,name)) return {data:answers[name],error:null};
   if(name==='lead_agent_profile') return {data:{profile:later,soul:'You write for RS Learning.',level:1},error:null};
   if(name==='lead_create_agent') return {data:{state:'created',agent:agentId(later)},error:null};
   return {data:null,error:{message:'unexpected'}}; }};
@@ -84,6 +86,19 @@ test('an Agent Lead makes after the key was set is made on a fresh profile of it
   assert.equal(calls.at(-1)[0],'lead_create_agent');
   assert.deepEqual([calls.at(-1)[1].own_level,calls.at(-1)[1].own_answers],[1,false],'the database is asked to make it on its own profile, waiting for the key');
   assert.deepEqual(runsOn(fake),[],'no Run starts, on Lead\'s profile or any other');
+ } finally { await fake.close(); }
+});
+
+test('a set the Engine never answered is settled from what the space holds, read through the driver, before Lead makes an Agent', async () => {
+ const fake=await fakeHermes();
+ try {
+  made(fake,space,main,writer);
+  fake.settings.profiles.get(space).env={OPENROUTER_API_KEY:known};
+  const {outcome,calls}=await leadMakes(fake,{lead_key_settle:{company,space},settle_provider_key_holds:null});
+  assert.equal(outcome.state,'created');
+  assert.deepEqual(calls.map(([name])=>name),['lead_agent_profile','lead_key_settle','settle_provider_key_holds','lead_create_agent']);
+  assert.deepEqual(calls[2][1],{c:company,held:['openrouter']});
+  assert.ok(!JSON.stringify(calls).includes(known),'no key reaches the database');
  } finally { await fake.close(); }
 });
 

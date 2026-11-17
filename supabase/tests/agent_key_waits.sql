@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(96);
+select plan(100);
 -- #299. Nothing in this transaction takes lead_create_agent's lock before the first key change begins.
 create temporary view held_agent_lock as select exists(select 1 from pg_locks where locktype='advisory' and pid=pg_backend_pid() and granted
  and ((classid::bigint<<32)|objid::bigint)=hashtextextended('hermes_agents',0)) as held;
@@ -208,7 +208,11 @@ select is((select ctid::text from public.company_key_holds where company_id='100
 set local role authenticated;
 select throws_ok($$select public.settle_provider_key_holds('10000000-0000-0000-0000-000000000001','{}')$$,'42501',null,'the Owner cannot settle the holds from the browser');
 reset role;
--- R&S Consultations' Anthropic hold is set aside, so its OpenRouter hold alone says whether it holds a key.
+-- R&S Consultations' Anthropic hold is set aside, so its OpenRouter hold alone says whether it holds a key. It has a
+-- shared space, and Omar's Conversation with its Lead.
+insert into public.company_shared_spaces(company_id,folder) values ('10000000-0000-0000-0000-000000000002','/opt/data/profiles/cs-10000000000000000000000000000002/skills');
+insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values
+ ('e2991000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000001','e2990000-0000-0000-0000-000000000012','Lead two');
 update public.company_key_holds set held=false where company_id='10000000-0000-0000-0000-000000000002' and provider='anthropic';
 update public.company_key_holds set changed_at=now()-interval '1 day' where company_id='10000000-0000-0000-0000-000000000002' and provider='openrouter';
 set local role service_role;
@@ -230,8 +234,15 @@ reset role;
 select is((select held from public.company_key_holds where company_id='10000000-0000-0000-0000-000000000002' and provider='openrouter'),false,'lets it go');
 select is((select uncertain from public.company_key_holds where company_id='10000000-0000-0000-0000-000000000002' and provider='openrouter'),true,'but leaves the earlier set marked, since it may land after the removal');
 select is(public.company_holds_provider_key('10000000-0000-0000-0000-000000000002'),true,'so within ten minutes of that set the Company still counts as holding a key');
+set local role service_role;
+select is(public.lead_key_settle('e2991000-0000-0000-0000-000000000003'),null::jsonb,'and Lead''s next create is asked to settle nothing yet');
+reset role;
 update public.company_key_holds set changed_at=now()-interval '11 minutes' where company_id='10000000-0000-0000-0000-000000000002' and provider='openrouter';
-select is(public.company_holds_provider_key('10000000-0000-0000-0000-000000000002'),false,'and after them no longer');
+select is(public.company_holds_provider_key('10000000-0000-0000-0000-000000000002'),true,'after them it still counts, until the space settles it');
+set local role service_role;
+select is(public.lead_key_settle('e2991000-0000-0000-0000-000000000003'),
+ jsonb_build_object('company','10000000-0000-0000-0000-000000000002','space','cs-10000000000000000000000000000002'),'so Lead''s next create is asked to settle it from the Company''s space');
+reset role;
 set local role service_role;
 select lives_ok($$select public.finish_provider_key_change('10000000-0000-0000-0000-000000000002','openrouter',true,'{}',false)$$,'another set the Engine never answered');
 reset role;
@@ -240,6 +251,10 @@ set local role service_role;
 select lives_ok($$select public.settle_provider_key_holds('10000000-0000-0000-0000-000000000002','{}')$$,'the Owner''s read finds no key ten minutes after it');
 reset role;
 select results_eq($$select held,uncertain from public.company_key_holds where company_id='10000000-0000-0000-0000-000000000002' and provider='openrouter'$$,$$values (false,false)$$,'so the hold drops');
+select is(public.company_holds_provider_key('10000000-0000-0000-0000-000000000002'),false,'and the Company holds no key');
+set local role service_role;
+select is(public.lead_key_settle('e2991000-0000-0000-0000-000000000003'),null::jsonb,'nor is Lead''s next create asked to settle it again');
+reset role;
 set local role service_role;
 select lives_ok($$select public.finish_provider_key_change('10000000-0000-0000-0000-000000000002','openrouter',true,'{}',false)$$,'a third set the Engine never answered');
 select lives_ok($$select public.settle_provider_key_holds('10000000-0000-0000-0000-000000000002','{openrouter}')$$,'and a read that finds its key in the space');

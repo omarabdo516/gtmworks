@@ -11,9 +11,12 @@
 -- Whether the Company holds a key is company_key_holds, written only by the server through the service role:
 -- begin_provider_key_change before the Engine is asked anything, under the lock lead_create_agent takes, so an Agent made
 -- while a change is under way waits; finish_provider_key_change with the Engine's answer, under that lock too; and
--- settle_provider_key_holds with what the Owner's read found. A change or a set the Engine never answered counts for ten
--- minutes from its begin or its finish, so a process that died mid-change, or a set that never reached the space, holds
--- no Company for good. finish and settle are the only ends of a wait, so no Owner ends one from the browser.
+-- settle_provider_key_holds with what the Company's space holds, read by the Owner's read or, once a set the Engine
+-- never answered is ten minutes old, by Lead's next create (lead_key_settle). A change counts for ten minutes from its
+-- begin, so a process that died mid-change holds no Company for good. A set the Engine never answered may have landed,
+-- so it counts until the space settles it: an Agent made meanwhile waits on its own profile, never on Lead's, and an
+-- Engine that cannot say leaves it counted. finish and settle are the only ends of a wait, so no Owner ends one from
+-- the browser.
 --
 -- Nothing existing is rewritten: the new tables start empty but company_key_holds, which is filled once from each
 -- Company's last set or removal of each provider's key in its log; the trigger writes only on a later removal; and with
@@ -62,10 +65,11 @@ create table public.company_key_holds (
  provider text not null check (provider ~ '^[a-z0-9][a-z0-9._-]{0,63}$'),
  held boolean not null,
  changing boolean not null default false,
- -- A set the Engine never answered may still land: the Owner's read keeps its hold for the window below, unless a set
- -- the Engine answered with a write, or a read that finds the key in the space, settles it first.
+ -- A set the Engine never answered may have landed: it counts as held until a set the Engine answered with a write, or
+ -- a read of the space, settles it. A read keeps it within the window below even when the space does not show the key.
  uncertain boolean not null default false,
- -- When the last change began, or a set was finished unanswered: the start of the window in which either still counts.
+ -- When the last change began, or a set was finished unanswered: the start of the window in which a change counts, and
+ -- in which a read keeps an unanswered set held although the space does not show its key.
  changed_at timestamptz,
  primary key (company_id,provider)
 );
@@ -78,11 +82,11 @@ insert into public.company_key_holds(company_id,provider,held,changing)
  select distinct on (a.company_id,a.provider) a.company_id,a.provider,a.action='provider_key_set',false from public.company_audit a
   where a.action in ('provider_key_set','provider_key_removed') order by a.company_id,a.provider,a.created_at desc,a.id desc;
 
--- Some provider's key is held, or within ten minutes a change of one began or a set of one went unanswered: an Agent made
--- now waits for the Owner's next set.
+-- Some provider's key is held, a change of one began within ten minutes, or a set of one went unanswered and the space has
+-- not settled it yet: an Agent made now waits for the Owner's next set.
 create function public.company_holds_provider_key(c uuid) returns boolean language sql stable security definer set search_path='' as $$
  select exists(select 1 from public.company_key_holds h where h.company_id=c
-  and (h.held or ((h.changing or h.uncertain) and h.changed_at>now()-interval '10 minutes')));
+  and (h.held or (h.changing and h.changed_at>now()-interval '10 minutes') or h.uncertain));
 $$;
 revoke all on function public.company_holds_provider_key(uuid) from public,anon,authenticated,service_role;
 
@@ -116,8 +120,7 @@ begin
  -- A change whose begin the database did not take has no row yet: its finish records the hold all the same.
  insert into public.company_key_holds as h(company_id,provider,held,changing,uncertain,changed_at)
   values(c,key_provider,case when not answered then false else coalesce(now_held,false) end,false,coalesce(not answered,false),case when not answered then now() end)
-  -- An unanswered set keeps the hold the Company had: the ten-minute window holds its Agents meanwhile, and ends on its
-  -- own, so a set that never landed holds nobody for good.
+  -- An unanswered set keeps the hold the Company had: its mark holds the Company's Agents until the space settles it.
   on conflict (company_id,provider) do update set held=case when not answered then h.held else coalesce(now_held,h.held) end,changing=false,
    uncertain=case when not answered then true when answered and now_held then false else h.uncertain end,
    changed_at=case when not answered then now() else h.changed_at end
@@ -169,6 +172,19 @@ begin
 end $$;
 revoke all on function public.settle_provider_key_holds(uuid,text[]) from public,anon,authenticated;
 grant execute on function public.settle_provider_key_holds(uuid,text[]) to service_role;
+
+-- Lead's next create settles a set the Engine never answered once its window has passed (lib/agent-tools.mjs), so an
+-- Owner who never opens the key page does not leave the Company's Agents waiting for good: the Conversation's Company and
+-- its shared space, whose keys the server reads from the Engine. Null when no such set waits or the Company has no space.
+create function public.lead_key_settle(conversation uuid) returns jsonb
+language sql stable security definer set search_path='' as $$
+ select jsonb_build_object('company',v.company_id,'space',s.profile) from public.conversations v
+  join public.company_shared_spaces s on s.company_id=v.company_id
+  where v.id=conversation and exists(select 1 from public.company_key_holds h where h.company_id=v.company_id and h.uncertain
+   and not coalesce(h.changed_at>now()-interval '10 minutes',false));
+$$;
+revoke all on function public.lead_key_settle(uuid) from public,anon,authenticated;
+grant execute on function public.lead_key_settle(uuid) to service_role;
 
 -- 20261226000000's, replaced with one more argument: own_answers false when the Engine made the profile with the
 -- level's tools but it has no model to answer with. While the Company holds a key, or a change of one is under way, the
