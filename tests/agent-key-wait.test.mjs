@@ -128,7 +128,7 @@ test('a change is begun in the database before the Engine is asked anything, and
  } finally { await fake.close(); }
 });
 
-test('a change ends in one finish as the Engine answered: a set holds the key, a removal lets it go, a refusal leaves it as it was, an unknown set waits marked unanswered, and an unknown removal leaves the hold as it was', async () => {
+test('a change ends in one finish as the Engine answered: a set holds the key, a removal lets it go, a refusal leaves it as it was, an unknown set waits marked unanswered, and an unknown removal or a set that threw before its write leaves the hold as it was', async () => {
  const fake=await fakeHermes();
  const printed=[]; const kept=console.error; console.error=(...args)=>{ printed.push(args.map(String).join(' ')); };
  try {
@@ -151,7 +151,7 @@ test('a change ends in one finish as the Engine answered: a set holds the key, a
   assert.deepEqual(await finished({intent:'set',value:known},spaceless()),[409,1,ended(null,[],null)],'and so did a set with no space to write to');
   assert.deepEqual(await finished({intent:'remove',driver:silent}),[503,1,ended(null,[],null)],'a removal it did not answer never marks the hold unanswered, and leaves it as it was');
   const broken=()=>{ const person=sessions(fake); const rpc=person.db.rpc; person.db.rpc=async(name,args)=>{ if(name==='company_key_profiles') throw new Error('down'); return rpc(name,args); }; return person; };
-  assert.deepEqual(await finished({intent:'set',value:known},broken()),['threw',1,ended(true,[],false)],'a set that threw after its begin is finished as held, unanswered');
+  assert.deepEqual(await finished({intent:'set',value:known},broken()),['threw',1,ended(null,[],null)],'a set that threw before it asked the Engine to write leaves the hold as it was');
   assert.deepEqual(await finished({intent:'remove'},broken()),['threw',1,ended(null,[],null)],'a removal that threw leaves the hold as it was');
   assert.deepEqual(printed,[]);
  } finally { console.error=kept; await fake.close(); }
