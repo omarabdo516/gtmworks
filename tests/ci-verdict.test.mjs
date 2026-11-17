@@ -142,13 +142,21 @@ test('the fast job restores its dependencies by lock-file hash and the browser b
   const [modules] = uses('save', 'node_modules');
   assert.deepEqual(modules.with.path.split('\n').map(line => line.trim()).filter(Boolean), ['node_modules', '!node_modules/.vite', '!node_modules/.cache']);
   assert.ok(!steps.some(step => step.with?.cache), 'no package-manager cache beside the restored dependencies');
-  // A restored browser brings no system packages: on a hit, any library it cannot load is installed before the tests.
-  const browser = steps.find(step => step.id === 'browser');
-  const libraries = steps.find(step => /install-deps chromium/.test(step.run ?? ''));
-  assert.ok(libraries, 'a step installs the browser\'s system libraries');
-  assert.match(libraries.if, new RegExp(`steps\\.${browser.id}\\.outputs\\.cache-hit == 'true'`));
-  assert.match(libraries.run, /ldd .*chrome-headless-shell/);
-  assert.ok(index(browser) < index(libraries) && index(libraries) < fast);
+  // A restored browser brings no system packages, so its key also names the runner image: a new image misses the cache
+  // and installs the browser with its system packages and fonts (--with-deps).
+  const version = steps.find(step => step.id === 'browser-version');
+  assert.match(version.run, /\$ImageOS/);
+  assert.match(version.run, /\$ImageVersion/);
+  assert.ok(!steps.some(step => /ldd|install-deps/.test(step.run ?? '')), 'no probe stands in for the install');
+  assert.equal(steps.find(step => /playwright install/.test(step.run ?? '')).run, 'npx playwright install --with-deps chromium');
+  // npx's own folder holds the pinned OpenAPI linter, so a cache hit lints with no registry request.
+  const [npxRestore] = uses('restore', '_npx');
+  const [npxSave] = uses('save', '_npx');
+  assert.ok(npxRestore && npxSave, '~/.npm/_npx is restored and saved');
+  assert.match(npxRestore.with.key, /hashFiles\('scripts\/ci-fast\.mjs'\)/);
+  assert.equal(npxSave.with.key, npxRestore.with.key);
+  assert.ok(index(npxRestore) < fast && fast < index(npxSave), 'saved after the fast step has filled it');
+  assert.match(npxSave.if, new RegExp(`steps\\.${npxRestore.id}\\.outputs\\.cache-hit != 'true'`));
   // The browser key names the one Playwright in the lock file, which Vitest's provider and the browser suite both load.
   const lock = JSON.parse(readFileSync('package-lock.json', 'utf8'));
   const versions = new Set(Object.entries(lock.packages).filter(([path]) => /(^|\/)node_modules\/playwright-core$/.test(path)).map(([, entry]) => entry.version));

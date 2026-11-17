@@ -183,7 +183,7 @@ async function main([input, output]) {
     listed.push(...(await response.json()).jobs);
     url = response.headers.get('link')?.match(/<([^>]+)>;\s*rel="next"/)?.[1];
   }
-  const decisions = Object.fromEntries(['components', 'database', 'integration', 'install'].map(name => [name, env[`DECISIONS_${name.toUpperCase()}`] ?? '']));
+  const decisions = Object.fromEntries(['database', 'integration', 'install'].map(name => [name, env[`DECISIONS_${name.toUpperCase()}`] ?? '']));
   const jobs = [];
   for (const job of listed.filter(job => job.name !== env.GITHUB_JOB && job.name !== 'check')) {
     let log;

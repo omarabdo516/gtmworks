@@ -95,6 +95,13 @@ test('a failed step\'s output comes last, after the summary, so the job ends whe
   assert.ok(lines.indexOf('fast lint: success') < lines.indexOf('npm error code E429'));
 });
 
+test('a ledger folder that cannot be written loses the logs, not the run', async () => {
+  const { written, write } = quiet();
+  const results = await run([{ name: 'lint', command: 'echo linted' }], { write, env: { LEDGER: join(tmpdir(), `ci-fast-missing-${process.pid}`, 'deeper') } });
+  assert.deepEqual(results, [{ name: 'lint', result: 'success' }]);
+  assert.match(written.join(''), /linted/);
+});
+
 test('a skipped step does not run and is listed as skipped', async t => {
   const dir = mkdtempSync(join(tmpdir(), 'ci-fast-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
@@ -118,6 +125,11 @@ test('the fast layer is the static checks, the node tests and the component test
   assert.match(command('node'), /--test-reporter-destination="\$LEDGER\/node\.jsonl" 'tests\/\*\*\/\*\.test\.mjs'$/);
   assert.match(command('components'), /npm run test:components -- .*--outputFile\.json="\$LEDGER\/vitest\.json"/);
   assert.doesNotMatch(command('components'), /shard/i);
+  // The browser comes from the workflow in CI and from ci.sh's install_chromium elsewhere, never from the step itself.
+  assert.doesNotMatch(command('components'), /playwright install/);
+  assert.match(readFileSync('ci.sh', 'utf8'), /install_chromium/);
+  // A restored npx folder is used with no registry request; a missing one is filled once.
+  assert.match(command('openapi'), /^npx --prefer-offline --yes @redocly\/cli@[\d.]+ /);
   assert.deepEqual(steps.filter(step => step.gate).map(step => step.name), ['discovery']);
   assert.deepEqual(steps.filter(step => step.gated).map(step => step.name), ['node', 'components']);
   // The one-thread checks keep their priority; the test runners, which use every core, take what is left.

@@ -145,7 +145,8 @@ jobs:
       - name: browser version
         id: browser-version
         if: ${{ env.COMPONENTS != 'false' }}
-        run: echo "version=$(node -p "require('playwright-core/package.json').version")" >> "$GITHUB_OUTPUT"
+        # The browser comes with no system packages, so a new runner image misses and installs them (--with-deps).
+        run: echo "version=$(node -p "require('playwright-core/package.json').version")-$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
       - name: restore the browser
         id: browser
         if: ${{ env.COMPONENTS != 'false' }}
@@ -156,22 +157,28 @@ jobs:
       - name: install the browser
         if: ${{ env.COMPONENTS != 'false' && steps.browser.outputs.cache-hit != 'true' }}
         run: npx playwright install --with-deps chromium
-      # The cache holds the browser, not the system packages it loads: on a hit, a library the runner image no longer has
-      # is installed before the tests, and nothing is installed when every library is there.
-      - name: the browser's system libraries
-        if: ${{ env.COMPONENTS != 'false' && steps.browser.outputs.cache-hit == 'true' }}
-        run: |
-          missing=$(ldd ~/.cache/ms-playwright/chromium_headless_shell-*/chrome-headless-shell-linux64/chrome-headless-shell | grep 'not found' || true)
-          [[ -z $missing ]] || { echo "$missing"; npx playwright install-deps chromium; }
       - name: save the browser
         if: ${{ env.COMPONENTS != 'false' && steps.browser.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v4
         with:
           path: ~/.cache/ms-playwright
           key: ms-playwright-${{ runner.os }}-${{ steps.browser-version.outputs.version }}
+      # npx's own folder, where the fast step's pinned OpenAPI linter lives, so a hit lints with no registry request.
+      - name: restore npx packages
+        id: npx
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.npm/_npx
+          key: npx-${{ runner.os }}-node-${{ steps.node.outputs.node-version }}-${{ hashFiles('scripts/ci-fast.mjs') }}
       - name: fast
         id: fast
         run: ./ci.sh fast
+      - name: save npx packages
+        if: ${{ steps.npx.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.npm/_npx
+          key: npx-${{ runner.os }}-node-${{ steps.node.outputs.node-version }}-${{ hashFiles('scripts/ci-fast.mjs') }}
       - name: upload ledger results
         if: always()
         # The ledger only reports, so a failed upload leaves the job's result as its tests made it.
@@ -919,7 +926,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           EVENT_NAME: ${{ github.event_name }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          DECISIONS_COMPONENTS: ${{ needs.changes.outputs.components }}
           DECISIONS_DATABASE: ${{ needs.changes.outputs.database }}
           DECISIONS_INTEGRATION: ${{ needs.changes.outputs.integration }}
           DECISIONS_INSTALL: ${{ needs.changes.outputs.install }}

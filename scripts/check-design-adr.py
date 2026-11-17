@@ -21,5 +21,5 @@ for adr in sorted(pathlib.Path("docs/adr").glob("*.md")):
 
 for p in problems:
     print(p)
-print(f"ci.sh check: {len(problems)} problem(s)")
+print(f"check-design-adr: {len(problems)} problem(s)")
 sys.exit(1 if problems else 0)

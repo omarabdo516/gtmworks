@@ -1,6 +1,6 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 
@@ -39,6 +39,8 @@ const run = async (dir, args) => {
  child.stdout.on('data', chunk => { output += chunk; });
  child.stderr.on('data', chunk => { output += chunk; });
  const status = await new Promise(done => child.on('close', code => done(code)));
+ // A run killed by its time limit writes no report: say so, with what it printed, rather than fail on the missing file.
+ assert.ok(existsSync(join(dir, 'report.json')), `playwright ${args.join(' ')} ended (${status ?? 'killed'}) with no report:\n${output}`);
  const report = JSON.parse(readFileSync(join(dir, 'report.json'), 'utf8'));
  rmSync(join(dir, 'report.json'));
  const results = [];
@@ -55,8 +57,9 @@ const run = async (dir, args) => {
  return { status, output, results };
 };
 
-// Each case has a sandbox of its own, so they run at the same time; each still reads the order inside its own run.
-describe('the Playwright projects', { concurrency: true }, () => {
+// Each case has a sandbox of its own, so three run at a time beside the other fast steps; each still reads the order
+// inside its own run.
+describe('the Playwright projects', { concurrency: 3 }, () => {
  test('a failed screen comparison does not skip the functional tests, and both failures are reported', async t => {
   const dir = sandbox(t, { visual: false, functional: false });
   const { status, results, output } = await run(dir, ['playwright', 'test']);

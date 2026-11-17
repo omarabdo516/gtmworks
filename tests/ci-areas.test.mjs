@@ -124,7 +124,7 @@ test('the install browser check is not a browser suite file, and a browser spec 
 });
 
 test('the CI definition itself and the dependencies run every suite', () => {
-  for (const path of ['.github/workflows/ci.yml', 'ci.sh', 'scripts/ci-areas.mjs', 'scripts/ci-verdict.mjs', 'scripts/ci-runner.mjs', 'package.json', 'package-lock.json']) {
+  for (const path of ['.github/workflows/ci.yml', 'ci.sh', 'scripts/ci-areas.mjs', 'scripts/ci-verdict.mjs', 'scripts/ci-runner.mjs', 'scripts/ci-fast.mjs', 'package.json', 'package-lock.json']) {
     assert.deepEqual(areas(path), all, path);
   }
 });
