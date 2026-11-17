@@ -4,14 +4,14 @@
 // (page weight, #55).
 import conversationEn from '@/lib/messages/conversation.en.json';
 import conversationAr from '@/lib/messages/conversation.ar.json';
-import { Fragment, useEffect, useRef, useState, type ReactNode, type Ref } from 'react';
+import { Fragment, useEffect, useId, useRef, useState, type CSSProperties, type ReactNode, type Ref } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from '@/lib/link';
 import { useI18n } from '@/lib/i18n-client';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { ShellIcon } from '@/components/shell-icon';
 import { MessageBox, postMessage, type MessageBoxHandle } from '@/app/conversation-composer';
-import type { Decision, SavedRule } from '@/lib/conversations';
+import type { Decision, RunSteps, SavedRule } from '@/lib/conversations';
 import { MadeCard, RequestCard } from '@/app/agent-card';
 import { ReplyCard } from '@/app/reply-card';
 import { overlayHref } from '@/lib/settings-overlay.mjs';
@@ -141,6 +141,7 @@ export function ConversationTurns({slug,company,record,writer,asked}:{slug:strin
    {message.lost&&<p className="note" data-outcome="lost">{t('conversationRunLost')}</p>}
   </li>:<li key={`${message.kind||'m'}${message.id}`} className="turn turn--agent msg" data-author="agent" data-kind={message.kind}>
    <div className="sender">{face(20)}<bdi>{message.author_name}</bdi><time className="sender__time" dateTime={message.created_at}>{time(message.created_at)}</time></div>
+   {!!message.steps?.list.length&&<StepsList steps={message.steps} c={c} cb={cb}/>}
    {message.body&&<div className="bubble bubble--agent" dir="auto">{message.body}</div>}
    {message.cards?.map(card=>card.kind==='made'?<MadeCard key={card.agent.id} slug={slug} agent={card.agent}/>:card.kind==='request'?<RequestCard key={`request${card.request.id}`} slug={slug} request={card.request}/>
     :<ReplyCard key={`reply${card.card.id}`} card={card.card} fresh={!drawnCards.has(card.card.id)} answer={answer} done={writer?done:undefined}/>)}
@@ -172,6 +173,34 @@ export function ConversationComposer({company,conversation,record,writer,asked,b
   {usage&&(record?<p className="chat-usage" data-usage>{t('conversationUsage',count(record.usage.input+record.usage.output),count(record.usage.input),count(record.usage.output))}{record.usage.unknown>0&&<> · {t('usageUnknownRuns',count(record.usage.unknown))}</>}</p>
    :<p className="chat-usage" aria-hidden="true">{'\u00a0'}</p>)}
  </>;
+}
+
+// The tool calls the Engine reported for the reply's Run (#141; design-reference: stepsHTML, toggle-steps): how many and
+// how long, on a button that opens and closes their list, one line per call with the tool's name, the Engine's preview
+// of it and whether it ended ("Done") or failed ("Skipped", the reference's other state). Opened, the lines rise one
+// after another and each check draws itself, only for a moment after opening (`is-just`).
+const justFor=700; const arabicPlural=new Intl.PluralRules('ar');
+function StepsList({steps,c,cb}:{steps:RunSteps,c:Text,cb:BidiText}) {
+ const {language}=useI18n(); const list=useId();
+ const [open,setOpen]=useState(false); const [openedAt,setOpenedAt]=useState<number|null>(null);
+ useEffect(()=>{ if(openedAt===null) return; const timer=setTimeout(()=>setOpenedAt(null),justFor); return ()=>clearTimeout(timer); },[openedAt]);
+ const count=steps.list.length;
+ // Egyptian Arabic takes the plural for three to ten (أدوات, دقايق, ثواني) and the singular otherwise, as the reference
+ // does up to ten; English, from two.
+ const plural=(value:number)=>language==='ar'?arabicPlural.select(value)==='few':value!==1;
+ const used=c(plural(count)?'stepsUsedMany':'stepsUsedOne',count);
+ const minutes=Math.floor((steps.seconds??0)/60); const seconds=(steps.seconds??0)%60;
+ const secondsText=c(plural(seconds)?'stepsSecondsMany':'stepsSeconds',seconds); const minutesText=c(plural(minutes)?'stepsMinutesMany':'stepsMinutes',minutes);
+ const took=steps.seconds===null?null:!minutes?secondsText:seconds?c('stepsMinutesSeconds',minutesText,secondsText):minutesText;
+ return <div className="steps">
+  <button type="button" className="steps__toggle" aria-expanded={open} aria-controls={list} onClick={()=>{ setOpen(!open); setOpenedAt(open?null:Date.now()); }}>
+   <span>{took?c('stepsUsedTook',used,took):used}</span><ShellIcon name="chevronDown" className="chev"/>
+  </button>
+  <ol className={`steps__list${open&&openedAt!==null?' is-just':''}`} id={list} hidden={!open}>{steps.list.map((step,index)=>
+   <li key={index} className={`step step--${step.state==='failed'?'skipped':step.state}`} style={{'--i':index} as CSSProperties}><span className="step__dot" aria-hidden="true"/>
+    <span className="step__label">{step.preview?cb('stepLine',step.tool,step.preview):<bdi>{step.tool}</bdi>}</span>
+    {step.state!=='started'&&<span className="step__state">{step.state==='done'?<><ShellIcon name="check" className="step__ck"/>{c('stepDone')}</>:c('stepSkipped')}</span>}</li>)}</ol>
+ </div>;
 }
 
 // The line under the Agent's reply when it saved a lasting rule it was told (#18; design-reference: ruleTurn, the

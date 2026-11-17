@@ -1,6 +1,6 @@
 import { checkSettings } from '../lib/settings.mjs';
 import { createWorkerClient, deliverBatch } from './webhooks.mjs';
-import { closeOpenRuns, startQueuedTurns } from '../lib/conversation-runs.mjs';
+import { closeOpenRuns, followOpenRuns, startQueuedTurns } from '../lib/conversation-runs.mjs';
 import { driveChannelRuns, driveNoteRuns } from '../lib/channel-runs.mjs';
 import { bundledHermes } from '../lib/bundled-hermes.mjs';
 import { keepCompanyProfiles, keepAgentProfiles, moveAgentProfiles, checkAgentTools, abandonConversationReservations } from '../lib/company-profiles.mjs';
@@ -25,10 +25,13 @@ const loop=async(name,work,every=1000)=>{ while(!stopping) { try { await work();
 // Connection's tools are read for the Owner's warning.
 const hermes=bundledHermes();
 const waiting=new Map(); const moving=new Map();
-await Promise.all([loop('Webhook',()=>deliverBatch(db,options)),loop('Conversation runs',()=>closeOpenRuns(db,options)),loop('Queued turns',()=>startQueuedTurns(db,options)),
+// Each open run's events are followed while it works (#141), one follower per run, all stopped with the worker.
+const following=new Map(); const resting=new Map();
+await Promise.all([loop('Webhook',()=>deliverBatch(db,options)),loop('Conversation runs',()=>closeOpenRuns(db,options)),loop('Run steps',()=>followOpenRuns(db,{encryptionKey:options.encryptionKey,following,resting}),2000),loop('Queued turns',()=>startQueuedTurns(db,options)),
  loop('Channel runs',()=>driveChannelRuns(db,options)),
  loop('Note runs',()=>driveNoteRuns(db,options)),
  hermes&&loop('Hermes',()=>keepCompanyProfiles(db,{hermes,encryptionKey:options.encryptionKey,waiting}),2000),
  hermes&&loop('Agent profiles',async()=>{ await keepAgentProfiles(db,{hermes}); await keepSharedSkills(db,{hermes}); await moveAgentProfiles(db,{hermes,waiting:moving,driver:engineFor(hermes)}); },2000),
  loop('Agent tools',()=>checkAgentTools(db,{encryptionKey:options.encryptionKey}),300000),
  loop('Reserved runs',()=>abandonConversationReservations(db),60000)]);
+for(const follower of following.values()) follower.abort();
