@@ -213,7 +213,7 @@ test('a set that gives no profile a model ends no wait, and a change the databas
  } finally { await fake.close(); }
 });
 
-test('a written set is finished even when its first finish fails or a later step throws, naming the profiles the Engine wrote', async () => {
+test('a written set is finished even when its first finish fails or a late round throws, naming the profiles the Engine wrote', async () => {
  const fake=await fakeHermes();
  const printed=[]; const kept=console.error; console.error=(...args)=>{ printed.push(args.map(String).join(' ')); };
  try {
@@ -229,9 +229,10 @@ test('a written set is finished even when its first finish fails or a later step
   made(fake,late);
   const throwing={...pointedAt(fake),set:async(target,key)=>{ if(key.profilesOnly) throw new Error('down'); return pointedAt(fake).set(target,key); }};
   const thrown=sessions(fake,{extra,waits:[later,late]});
-  await assert.rejects(change(thrown,fake,{intent:'set',value:known,driver:throwing}));
-  assert.deepEqual(thrown.calls('finish_provider_key_change'),[ended],'a late round that threw leaves the change finished, with the profiles written before it');
+  assert.equal((await change(thrown,fake,{intent:'set',value:known,driver:throwing})).status,200,'a late round that threw is a failed round of a set that took');
+  assert.deepEqual(thrown.calls('finish_provider_key_change'),[ended],'it leaves the change finished, with the profiles written before it');
   assert.deepEqual([...thrown.waiting],[late]);
+  assert.deepEqual(thrown.calls('record_unfinished_provider_key'),[{c:company,key_provider:'openrouter',missed:[late]}],'and the late profile is kept as unfinished');
  } finally { console.error=kept; await fake.close(); }
 });
 
