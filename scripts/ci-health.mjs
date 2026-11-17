@@ -7,10 +7,10 @@ import { layers } from './ci-ledger.mjs';
 
 // The nightly CI health report (#256): the last days of ledgers (scripts/ci-ledger.mjs) read together, kept in one
 // tracking issue that each night's report replaces.
-export const marker = '<!-- ci-health -->';
-export const title = 'CI health report';
+const marker = '<!-- ci-health -->';
+const title = 'CI health report';
 
-export function percentile(values, p) {
+function percentile(values, p) {
   if (!values.length) return null;
   const sorted = [...values].sort((a, b) => a - b);
   return sorted[Math.max(0, Math.ceil((p / 100) * sorted.length) - 1)];

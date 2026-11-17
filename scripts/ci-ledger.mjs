@@ -13,7 +13,7 @@ export const budgets = {
 };
 export const layers = ['changes', 'static', 'components', 'database', 'visual', 'integration', 'install'];
 
-export function budgetOf(layer, environment) {
+function budgetOf(layer, environment) {
   const budget = budgets.layers[layer];
   if (typeof budget === 'object') return environment === 'self-hosted' ? budget['self-hosted'] : budget['github-hosted'];
   return budget ?? null;
@@ -99,7 +99,7 @@ export function testRecords(folder) {
 
 const seconds = (from, to) => (from && to ? Math.max(0, (Date.parse(to) - Date.parse(from)) / 1000) : null);
 
-export function jobRecord(job, { run_id, attempt, event, decisions, log }) {
+function jobRecord(job, { run_id, attempt, event, decisions, log }) {
   const layer = layerOf(job.name);
   const environment = job.runner_name ? (job.runner_group_name === 'GitHub Actions' ? 'github-hosted' : 'self-hosted') : null;
   let classification = null;
