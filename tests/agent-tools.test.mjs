@@ -80,13 +80,21 @@ test('create_agent makes the Agent its own profile, and the database attaches it
 });
 
 test('a profile the Engine made but could not provide leaves the Agent on Lead\'s profile, and stays in the Engine',async()=>{
- for(const state of /** @type {const} */(['noModel','forbidden','failed','refused'])) {
+ for(const state of /** @type {const} */(['forbidden','failed','refused'])) {
   const {fake,engine,rpcs,call}=harness({},{state:'created',agent:'agent-1'},own);
   await leadReady(engine); fake.settings.agentProfile=state;
   assert.deepEqual(await call('create_agent',{template:'writer'}),{state:'created',agent:'agent-1'},state);
   assert.deepEqual(rpcs.at(-1),['lead_create_agent',writerCall],state);
   assert.deepEqual(fake.removed,[],state);
  }
+});
+
+test('a profile made with no model to answer with asks the database to make the Agent there and wait for its key, and stays in the Engine',async()=>{
+ const {fake,engine,rpcs,call}=harness({},{state:'created',agent:'agent-1'},own);
+ await leadReady(engine); fake.settings.agentProfile='noModel';
+ assert.deepEqual(await call('create_agent',{template:'writer'}),{state:'created',agent:'agent-1'});
+ assert.deepEqual(rpcs.at(-1),['lead_create_agent',{...writerCall,own_level:3,own_policy:toolPolicy,own_answers:false}]);
+ assert.deepEqual(fake.removed,[]);
 });
 
 test('a profile made for a call the database then refuses is removed again, and only then',async()=>{
