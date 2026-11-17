@@ -33,10 +33,14 @@ for (const [language, accountMenu, chosen, other, saved] of [['en', 'Account men
  await expect.element(screen.getByRole('menu')).not.toBeInTheDocument();
 });
 
-test('Connect apps is drawn but not built yet, and "More sections" reaches the sections the reference has no place for, closing the menu', async () => {
+// Connect apps opens the apps sheet (components/apps-sheet.test.tsx); drawn here with no sheet around it, it still closes the menu.
+test('Connect apps can be chosen and closes the menu, and "More sections" reaches the sections the reference has no place for, closing the menu', async () => {
  const screen = await menu('en');
  await screen.getByRole('button', { name: 'Account menu' }).click();
- await expect.element(screen.getByRole('menuitem', { name: /^Connect apps/ })).toHaveAttribute('aria-disabled', 'true');
+ await expect.element(screen.getByRole('menuitem', { name: /^Connect apps/ })).not.toHaveAttribute('aria-disabled');
+ await screen.getByRole('menuitem', { name: /^Connect apps/ }).click();
+ await expect.element(screen.getByRole('menu')).not.toBeInTheDocument();
+ await screen.getByRole('button', { name: 'Account menu' }).click();
  const more = screen.getByRole('group', { name: 'More sections' }).getByRole('menuitem');
  expect(more.elements().map(link => [link.textContent, link.getAttribute('href')])).toEqual([
   ['Home', 'home'], ['Projects', 'projects'], ['Skills', 'skills'], ['Approvals', 'approvals'], ['Usage', 'usage'],

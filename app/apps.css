@@ -1,50 +1,65 @@
-/* Settings, Apps (#30), ported from the approved reference (design-reference/index.html: «ربط التطبيقات» sheet,
-   .sheet__*, .kv, .app-off, and "the apps catalogue, placed as it is" in the settings overlay). The search, the chips,
-   the empty state, the footer and the tiles are the shell's (app/shell.css); the buttons, rows and notes the overlay's
-   (app/settings.css). "Needs attention" has no approved look: it takes the reference's state text in the waiting colour. */
-.gw .sov-apps .apps-head { display: grid; gap: var(--s3); padding: 0 0 var(--s4); border-bottom: 0.5px solid var(--gw-border-3); }
-.gw .sov-apps .sheet__top { display: flex; align-items: center; gap: var(--s3); }
-.gw .sov-apps .sheet__title { flex: 1 1 0; min-width: 0; }
-.gw .sov-apps .sheet__meta { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; font-size: var(--gw-fs-sm); color: var(--gw-text-2); }
-.gw .sov-apps .apps-count { align-self: center; --od-icon-size: 12px; color: var(--gw-text-2); }
-.gw .sov-apps .badge--warn { background: var(--gw-wait-bg); color: var(--gw-wait-text); font-weight: 600; }
-.gw .sov-apps .apps-sub { margin: 0; font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-2); max-width: 72ch; }
-.gw .sov-apps .apps-body { display: flex; flex-direction: column; gap: var(--s5); padding: var(--s4) 0 0; }
-.gw .sov-apps .apps-sec { display: grid; gap: 10px; }
-.gw .sov-apps .apps-sec__h { margin: 0; padding-inline: 2px; font-size: var(--gw-fs-sm); font-weight: 400; line-height: 1.5; color: var(--gw-text-2); }
-.gw .sov-apps .apps-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s3); }
-.gw .sov-apps .app-card {
+/* Settings, Apps (#30) and the Connect apps sheet (#201), ported from the approved reference (design-reference/index.html:
+   «ربط التطبيقات» sheet, .sheet__*, .kv, .app-off, and "the apps catalogue, placed as it is" in the settings overlay).
+   The search, the chips, the empty state, the footer and the tiles are the shell's (app/shell.css); the buttons, rows
+   and notes are the overlay's (app/settings.css), in Settings and in the sheet. "Needs attention" has no approved look: it takes the reference's state text in the waiting colour. */
+.gw :is(.sov-apps, .apps-sheet) .apps-head { display: grid; gap: var(--s3); border-bottom: 0.5px solid var(--gw-border-3); }
+.gw .sov-apps .apps-head { padding: 0 0 var(--s4); }
+.gw :is(.sov-apps, .apps-sheet) .sheet__top { display: flex; align-items: center; gap: var(--s3); }
+.gw :is(.sov-apps, .apps-sheet) .sheet__title { flex: 1 1 0; min-width: 0; }
+.gw :is(.sov-apps, .apps-sheet) .sheet__meta { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; font-size: var(--gw-fs-sm); color: var(--gw-text-2); }
+.gw :is(.sov-apps, .apps-sheet) .badge.apps-count { align-self: center; --od-icon-size: 12px; color: var(--gw-text-2); }
+.gw :is(.sov-apps, .apps-sheet) .badge--warn { background: var(--gw-wait-bg); color: var(--gw-wait-text); font-weight: 600; }
+.gw :is(.sov-apps, .apps-sheet) .apps-sub { margin: 0; font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-2); }
+.gw .sov-apps .apps-sub { max-width: 72ch; }
+.gw :is(.sov-apps, .apps-sheet) .apps-body { display: flex; flex-direction: column; gap: var(--s5); }
+.gw .sov-apps .apps-body { padding: var(--s4) 0 0; }
+.gw :is(.sov-apps, .apps-sheet) .apps-sec { display: grid; gap: 10px; }
+.gw :is(.sov-apps, .apps-sheet) .apps-sec__h { margin: 0; padding-inline: 2px; font-size: var(--gw-fs-sm); font-weight: 400; line-height: 1.5; color: var(--gw-text-2); }
+.gw :is(.sov-apps, .apps-sheet) .apps-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s3); }
+.gw :is(.sov-apps, .apps-sheet) .app-card {
   display: flex; flex-direction: column; gap: 10px; padding: var(--s4); border-radius: var(--gw-r-md); min-width: 0;
   background: var(--gw-bg-pane); box-shadow: var(--gw-border-3) 0 0 0 0.5px inset, var(--gw-border-3) 0 0 0 0.5px;
 }
-.gw .sov-apps .app__top { display: flex; align-items: center; gap: var(--s3); min-width: 0; }
-.gw .sov-apps .app__titles { display: grid; min-width: 0; }
-.gw .sov-apps .app__name { margin: 0; font-size: var(--gw-fs-base); font-weight: 600; line-height: 1.5; }
-.gw .sov-apps .app__cat { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); }
-.gw .sov-apps .app__use { margin: 0; font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-2); }
-.gw .sov-apps .od-clamp-2 { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
-.gw .sov-apps .app__foot { display: flex; align-items: center; gap: var(--s2); margin-top: auto; padding-top: 2px; }
-.gw .sov-apps .app__state { flex: 1 1 0; min-width: 0; display: inline-flex; align-items: center; gap: 6px; font-size: var(--gw-fs-xs); color: var(--gw-text-1); --od-icon-size: 14px; }
-.gw .sov-apps .app__state--off { color: var(--gw-text-3); }
-.gw .sov-apps .app__state--warn { color: var(--gw-wait-text); font-weight: 600; }
-.gw .sov-apps .apps-detail { gap: var(--s5); }
-.gw .sov-apps .app-hero { display: flex; align-items: flex-start; gap: var(--s3); }
-.gw .sov-apps .app-hero p { margin: 0; flex: 1 1 0; min-width: 0; font-size: var(--gw-fs-msg); line-height: 1.7; color: var(--gw-text-1); }
-.gw .sov-apps .kv { margin: 0; padding: 2px 0; border-top: 1px solid var(--gw-border-3); border-bottom: 1px solid var(--gw-border-3); }
-.gw .sov-apps .kv__row { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: var(--s3); padding: var(--s2) 0; font-size: var(--gw-fs-sm); line-height: 1.6; }
-.gw .sov-apps .kv__row + .kv__row { border-top: 1px solid var(--gw-border-3); }
-.gw .sov-apps .kv dt { color: var(--gw-text-2); }
-.gw .sov-apps .kv dd { margin: 0; color: var(--gw-text-1); overflow-wrap: anywhere; }
-.gw .sov-apps .app-off { display: grid; gap: var(--s2); padding: var(--s3); border-radius: var(--gw-r-md); background: var(--gw-bg-pane); box-shadow: var(--gw-border-1) 0 0 0 1px inset; }
-.gw .sov-apps .app-off p { margin: 0; font-size: var(--gw-fs-sm); line-height: 1.7; color: var(--gw-text-1); }
+.gw :is(.sov-apps, .apps-sheet) .app__top { display: flex; align-items: center; gap: var(--s3); min-width: 0; }
+.gw :is(.sov-apps, .apps-sheet) .app__titles { display: grid; min-width: 0; }
+.gw :is(.sov-apps, .apps-sheet) .app__name { margin: 0; font-size: var(--gw-fs-base); font-weight: 600; line-height: 1.5; }
+.gw :is(.sov-apps, .apps-sheet) .app__cat { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); }
+.gw :is(.sov-apps, .apps-sheet) .app__use { margin: 0; font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-2); }
+.gw :is(.sov-apps, .apps-sheet) .od-clamp-2 { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.gw :is(.sov-apps, .apps-sheet) .app__foot { display: flex; align-items: center; gap: var(--s2); margin-top: auto; padding-top: 2px; }
+.gw :is(.sov-apps, .apps-sheet) .app__state { flex: 1 1 0; min-width: 0; display: inline-flex; align-items: center; gap: 6px; font-size: var(--gw-fs-xs); color: var(--gw-text-1); --od-icon-size: 14px; }
+.gw :is(.sov-apps, .apps-sheet) .app__state--off { color: var(--gw-text-3); }
+.gw :is(.sov-apps, .apps-sheet) .app__state--warn { color: var(--gw-wait-text); font-weight: 600; }
+.gw :is(.sov-apps, .apps-sheet) .apps-detail { gap: var(--s5); }
+.gw :is(.sov-apps, .apps-sheet) .app-hero { display: flex; align-items: flex-start; gap: var(--s3); }
+.gw :is(.sov-apps, .apps-sheet) .app-hero p { margin: 0; flex: 1 1 0; min-width: 0; font-size: var(--gw-fs-msg); line-height: 1.7; color: var(--gw-text-1); }
+.gw :is(.sov-apps, .apps-sheet) .kv { margin: 0; padding: 2px 0; border-top: 1px solid var(--gw-border-3); border-bottom: 1px solid var(--gw-border-3); }
+.gw :is(.sov-apps, .apps-sheet) .kv__row { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: var(--s3); padding: var(--s2) 0; font-size: var(--gw-fs-sm); line-height: 1.6; }
+.gw :is(.sov-apps, .apps-sheet) .kv__row + .kv__row { border-top: 1px solid var(--gw-border-3); }
+.gw :is(.sov-apps, .apps-sheet) .kv dt { color: var(--gw-text-2); }
+.gw :is(.sov-apps, .apps-sheet) .kv dd { margin: 0; color: var(--gw-text-1); overflow-wrap: anywhere; }
+.gw :is(.sov-apps, .apps-sheet) .app-off { display: grid; gap: var(--s2); padding: var(--s3); border-radius: var(--gw-r-md); background: var(--gw-bg-pane); box-shadow: var(--gw-border-1) 0 0 0 1px inset; }
+.gw :is(.sov-apps, .apps-sheet) .app-off p { margin: 0; font-size: var(--gw-fs-sm); line-height: 1.7; color: var(--gw-text-1); }
 .gw .sov-apps .modal__foot { background: transparent; padding-inline: 0; margin-top: var(--s4); }
-.gw .sov-apps .modal__foot--end { justify-content: flex-end; }
-.gw .sov-apps .modal__foot--end .btn { min-width: 96px; }
+.gw :is(.sov-apps, .apps-sheet) .modal__foot--end { justify-content: flex-end; }
+.gw :is(.sov-apps, .apps-sheet) .modal__foot--end .btn { min-width: 96px; }
 @media (max-width: 599px) {
-  .gw .sov-apps .apps-grid { grid-template-columns: minmax(0, 1fr); }
+  .gw :is(.sov-apps, .apps-sheet) .apps-grid { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 767px) {
   /* The footer's 36px buttons get the overlay's invisible ring (app/settings.css), so each taps at 44px. */
-  .gw .sov-apps .modal__foot .btn:not(.btn--sm) { position: relative; }
-  .gw .sov-apps .modal__foot .btn:not(.btn--sm)::before { content: ""; position: absolute; inset: -4px 0; }
+  .gw :is(.sov-apps, .apps-sheet) .modal__foot .btn:not(.btn--sm) { position: relative; }
+  .gw :is(.sov-apps, .apps-sheet) .modal__foot .btn:not(.btn--sm)::before { content: ""; position: absolute; inset: -4px 0; }
 }
+
+/* The sheet (design-reference: .apps-inner, .apps-head, .apps-body, .apps-sheet .modal__foot): the head stays and the
+   list scrolls under it; an app's page keeps its footer at the bottom. */
+.gw .apps-sheet .apps-inner { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 100%; min-height: 0; }
+.gw .apps-sheet .apps-head { padding: var(--s4) var(--s5) var(--s3); background: var(--gw-bg-chrome); }
+.gw .apps-sheet .apps-body { overflow-y: auto; min-height: 0; overscroll-behavior: contain; padding: var(--s4) var(--s5) var(--s6); }
+.gw .apps-sheet .modal__foot { padding-inline: var(--s5); }
+/* The overlay's buttons, notes and hints are shared with the sheet in app/settings.css; their second-button colours are
+   the shell's here, where the overlay's root is not. */
+.gw .apps-sheet { --sov-btn2-bg: var(--gw-btn2-bg); --sov-btn2-ring: var(--gw-btn2-ring); --sov-btn2-hover: var(--gw-btn2-hover); }
+.gw .apps-sheet :where(p) { margin: 0; }
+.gw .apps-sheet :is(p, .set-hint) { text-wrap: pretty; }

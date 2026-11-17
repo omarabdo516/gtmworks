@@ -41,6 +41,8 @@ export function Frame({sidebar,title,breadcrumb,chat=false,children}:{sidebar:Re
   const targets=()=>Array.from(drawer.current?.querySelectorAll<HTMLElement>('a[href],button:not([disabled]),input:not([disabled]),textarea:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])')||[]).filter(node=>node.getClientRects().length>0);
   targets()[0]?.focus();
   const keys=(event:KeyboardEvent)=>{
+   // An open modal dialog (the apps sheet opened from the drawer, or any other) holds the keyboard: its Escape closes it alone.
+   if(document.querySelector('dialog:modal')) return;
    if(event.key==='Escape') { setOpen(false); return; }
    // Tab wraps only while the drawer covers the page; beside a wide page the sidebar lets the keyboard walk on.
    if(event.key!=='Tab'||!window.matchMedia(narrowQuery).matches) return;
