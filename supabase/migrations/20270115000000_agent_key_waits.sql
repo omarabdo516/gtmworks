@@ -105,8 +105,10 @@ begin
  if coalesce(key_provider,'') !~ '^[a-z0-9][a-z0-9._-]{0,63}$' then raise exception 'keyInvalid' using errcode='22023'; end if;
  perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
  -- A change whose begin the database did not take has no row yet: its finish records the hold all the same.
- insert into public.company_key_holds as h(company_id,provider,held,changing,uncertain) values(c,key_provider,coalesce(now_held,false),false,not coalesce(answered,true))
-  on conflict (company_id,provider) do update set held=coalesce(now_held,h.held),changing=false,uncertain=not coalesce(answered,true)
+ insert into public.company_key_holds as h(company_id,provider,held,changing,uncertain) values(c,key_provider,coalesce(now_held,false),false,coalesce(not answered,false))
+  on conflict (company_id,provider) do update set held=coalesce(now_held,h.held),changing=false,
+   -- null: this change wrote nothing to the Engine, so an earlier unanswered set stays as uncertain as it was.
+   uncertain=case when answered is null then h.uncertain else not answered end
   returning h.held into kept;
  if not public.company_holds_provider_key(c) then
   delete from public.agent_key_waits w where w.company_id=c;

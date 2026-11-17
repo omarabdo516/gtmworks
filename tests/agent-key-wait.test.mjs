@@ -138,7 +138,8 @@ test('a change ends in one finish as the Engine answered: a set holds the key, a
   fake.settings.envFail.clear();
   assert.deepEqual(await finished({intent:'remove'}),[200,1,ended(false)],'a removal lets the key go');
   assert.deepEqual(await finished({intent:'remove'}),[200,1,ended(false)],'and so does one that found nothing to remove');
-  assert.deepEqual(await finished({intent:'set',value:known,provider:'nosuch'}),[400,1,[{c:company,key_provider:'nosuch',now_held:null,reached:[],answered:true}]],'a refused set leaves it as it was');
+  assert.deepEqual(await finished({intent:'set',value:known,provider:'nosuch'}),[400,1,[{c:company,key_provider:'nosuch',now_held:null,reached:[],answered:null}]],'a refused set leaves it as it was, an earlier unanswered set as uncertain as it was');
+  assert.deepEqual(await finished({intent:'set',value:'short'}),[400,1,ended(null,[],null)],'so does a value the driver refuses before any Engine write');
   const silent={...pointedAt(fake),set:async()=>({state:'unreachable',model:null,profiles:null}),remove:async()=>({state:'unreachable',profiles:null})};
   assert.deepEqual(await finished({intent:'set',value:known,driver:silent}),[503,1,ended(true,[],false)],'a set the Engine did not answer may be in the space, so later Agents wait, and its hold is marked unanswered');
   assert.deepEqual(await finished({intent:'remove',driver:silent}),[503,1,ended(null,[],false)],'a removal it did not answer keeps the hold it had');
