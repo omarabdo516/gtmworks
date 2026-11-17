@@ -8,7 +8,8 @@ import { followRun, sealRunSteps } from '../lib/run-steps.mjs';
 // _handle_run_events): what the driver reads of a Run's event stream and of its length.
 const connection=(/** @type {Awaited<ReturnType<typeof fakeHermes>>} */ fake)=>({address:fake.address,profile:'writer',key:'test-only-key'});
 /** @param {AsyncIterable<import('../lib/engine.mjs').RunEvent>} events */
-const all=async events=>{ const read=[]; for await(const event of events) read.push(event); return read; };
+// The Run's own end carries the time the Engine stamped on it; a test reads whether it is a number.
+const all=async events=>{ const read=[]; for await(const event of events) read.push('endedAt' in event?{...event,endedAt:typeof event.endedAt}:event); return read; };
 const started=(/** @type {string} */ tool,/** @type {string} */ preview,/** @type {string=} */ id)=>({event:'tool.started',tool,preview,...(id?{tool_call_id:id}:{})});
 const completed=(/** @type {string} */ tool,/** @type {boolean} */ error,/** @type {string=} */ id)=>({event:'tool.completed',tool,duration:1.2,error,preview:'/home/hermes/out.txt',...(id?{tool_call_id:id}:{})});
 const begin=async(/** @type {Awaited<ReturnType<typeof fakeHermes>>} */ fake)=>{
@@ -34,7 +35,7 @@ test('an ended Run\'s events are read to their end: each numbered event in order
    {seq:2,step:{call:'call_1',tool:'web_search',preview:null,state:'done'}},
    {seq:3,step:{call:'call_2',tool:'read_file',preview:'campaigns.csv',state:'started'}},
    {seq:4,step:{call:'call_2',tool:'read_file',preview:null,state:'failed'}},
-   {seq:5,step:null},
+   {seq:5,step:null,endedAt:'number'},
    {end:'ended'}]);
   const asked=fake.settings.requests.filter(request=>request.path?.endsWith('/events'));
   assert.deepEqual(asked.map(request=>[request.method,request.path,request.authorization]),[['GET',`/p/writer/v1/runs/${run}/events`,'Bearer test-only-key']]);
@@ -52,7 +53,7 @@ test('a Run still working is followed as its events arrive, and the read ends wi
   assert.deepEqual((await events.next()).value,{seq:1,step:{call:'call_1',tool:'web_search',preview:null,state:'done'}});
   assert.equal((await engine.read(run)).state,'running');
   await finish(engine,run);
-  assert.deepEqual((await events.next()).value,{seq:2,step:null},'the Run\'s own end');
+  const end=(await events.next()).value; assert.deepEqual({...end,endedAt:typeof end.endedAt},{seq:2,step:null,endedAt:'number'},'the Run\'s own end, with the time the Engine stamped on it');
   assert.deepEqual((await events.next()).value,{end:'ended'});
   assert.equal((await events.next()).done,true);
  } finally { await fake.close(); }
@@ -67,7 +68,7 @@ test('a read from a number gets only the events after it, and one the Engine no 
   fake.settings.emit(run,started('read_file','campaigns.csv','call_2'));
   fake.settings.emit(run,completed('read_file',false,'call_2'));
   await finish(engine,run);
-  assert.deepEqual(await all(engine.steps(run,{after:2})),[{seq:3,step:{call:'call_2',tool:'read_file',preview:null,state:'done'}},{seq:4,step:null},{end:'ended'}]);
+  assert.deepEqual(await all(engine.steps(run,{after:2})),[{seq:3,step:{call:'call_2',tool:'read_file',preview:null,state:'done'}},{seq:4,step:null,endedAt:'number'},{end:'ended'}]);
   assert.ok(fake.settings.requests.some(request=>request.path===`/p/writer/v1/runs/${run}/events?last_seq=2`),'the number read to is sent');
   fake.settings.forget(run,2);
   assert.deepEqual((await all(engine.steps(run,{after:1}))).at(0),{seq:2,step:{call:'call_2',tool:'read_file',preview:'campaigns.csv',state:'started'}},'nothing after the number read was lost');
@@ -101,16 +102,19 @@ test('a follower that read the Run to its end, then the closer, seal its steps w
   // One row as the steps functions keep it (supabase/tests/run_steps.sql proves the real ones).
   /** @type {any} */ let row=null; const writes=/** @type {string[]} */([]);
   const db={rpc:async(/** @type {string} */ name,/** @type {any} */ args)=>{
-   if(name==='run_steps_progress') return {data:row?[{steps:row.steps,read_to:row.readTo,broken:row.broken,sealed:row.sealed}]:[],error:null};
+   if(name==='run_steps_progress') return {data:row?[{steps:row.steps,read_to:row.readTo,broken:row.broken,ended:row.ended,seconds:row.seconds,sealed:row.sealed}]:[],error:null};
    writes.push(name);
    if(row?.sealed) return {data:false,error:null};
-   row={steps:args.noted,readTo:args.upto,broken:!!row?.broken||args.lost,sealed:name==='seal_run_steps'};
+   row={steps:args.noted,readTo:args.upto,broken:!!row?.broken||args.lost,ended:!!row?.ended||!!args.done,seconds:args.took??row?.seconds??null,sealed:name==='seal_run_steps'};
    return {data:true,error:null};
   }};
   const open={conversation:'conversation-1',run};
-  await followRun(db,engine,open,AbortSignal.timeout(5000));
-  assert.ok(row&&!row.broken&&!row.sealed,'the follower kept what it read up to the end');
+  assert.equal(await followRun(db,engine,open,AbortSignal.timeout(5000)),'ended');
+  assert.ok(row&&!row.broken&&!row.sealed&&row.ended,'the follower kept what it read up to the Run\'s end');
+  assert.equal(row.seconds,Math.round(fake.settings.runSeconds),'and the Run\'s length');
+  const asked=fake.settings.requests.length;
   await sealRunSteps(db,engine,open);
+  assert.equal(fake.settings.requests.length,asked,'the closer seals what the follower kept without asking the Engine');
   assert.deepEqual(writes.filter(name=>name==='seal_run_steps'),['seal_run_steps']); assert.equal(writes.at(-1),'seal_run_steps','sealed once, last');
   assert.equal(row.broken,false,'the closer\'s read after the end finds the end, so the steps are whole');
   assert.deepEqual(row.steps,[{call:'call_1',tool:'web_search',preview:'audiences',state:'done'}]);
@@ -162,7 +166,32 @@ test('a Run\'s length is from its record\'s creation to the time the Engine stam
   const {engine,run}=await begin(fake);
   assert.equal(await engine.length(run),null,'a Run still working has no length');
   await finish(engine,run);
-  assert.equal(await engine.length(run),41);
-  assert.equal(await engine.length('run_unknown'),null);
+  const ended=(await all(engine.steps(run))).find(event=>'endedAt' in event);
+  assert.ok(ended,'the read of its events gives the end');
+  const endedAt=fake.settings.runs[0].created+fake.settings.runSeconds;
+  assert.equal(await engine.length(run,{endedAt}),41,'from the record\'s creation to the end the events gave');
+  assert.equal(await engine.length(run),null,'the record alone has no end time on the pinned release');
+  assert.equal(await engine.length('run_unknown',{endedAt}),null);
+ } finally { await fake.close(); }
+});
+
+test('a preview holding a character Postgres cannot store keeps the rest of its words, and the step is kept',async()=>{
+ const fake=await fakeHermes();
+ try {
+  const {engine,run}=await begin(fake);
+  fake.settings.emit(run,started('web_search','best\u0000 audiences\u0007 \ud800for ads','call_1'));
+  await finish(engine,run);
+  const [first]=await all(engine.steps(run));
+  assert.deepEqual(first,{seq:0,step:{call:'call_1',tool:'web_search',preview:'best audiences for ads',state:'started'}});
+  assert.equal(/[\u0000-\u001f]|[\ud800-\udfff]/.test(JSON.stringify(first)),false,'no NUL, control character or lone surrogate reaches the database');
+ } finally { await fake.close(); }
+});
+
+test('a Hermes that takes the events request and never answers it leaves the read unreachable within the usual time',async()=>{
+ const fake=await fakeHermes(); fake.settings.stallEvents=true;
+ try {
+  const {engine,run}=await begin(fake);
+  const read=await all(engine.steps(run,{signal:new AbortController().signal}));
+  assert.deepEqual(read,[{end:'unreachable'}]);
  } finally { await fake.close(); }
 });

@@ -20,7 +20,7 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
  // stream closes.
  const endEvents=(/** @type {string} */ id,/** @type {string} */ name)=>{ if(streams.get(id)?.ended===false) { const run=settings.runs.find(each=>each.id===id); push(id,{event:name,...(run?{timestamp:run.created+settings.runSeconds}:{})}); push(id,null); } };
  // runs: one entry per run Hermes created; the same Idempotency-Key replays the same run.
- const settings={version:'0.23.0',status:200,key:'test-only-key',features:{run_submission:true,run_events_sse:true},requests:/** @type {{method?:string,path?:string,authorization?:string,session?:string,idempotency?:string}[]} */([]),runs:/** @type {{id:string,key?:string,session?:string,input:string,instructions?:string,history?:{role:string,content:string}[],body?:string,reads:number,stopped?:boolean,asked:{prompt_id:string,question:string,choices:string[],multi_select:boolean,answer?:string,settled:'answered'|'expired'|null}[]}[]} */([]),pendingReads:0,loseStarts:0,reply:input=>`Reply to: ${input}`,
+ const settings={version:'0.23.0',status:200,key:'test-only-key',features:{run_submission:true,run_events_sse:true},requests:/** @type {{method?:string,path?:string,authorization?:string,session?:string,idempotency?:string}[]} */([]),runs:/** @type {{id:string,key?:string,session?:string,input:string,instructions?:string,history?:{role:string,content:string}[],body?:string,reads:number,stopped?:boolean,asked:{prompt_id:string,question:string,choices:string[],multi_select:boolean,answer?:string,settled:'answered'|'expired'|null}[]}[]} */([]),pendingReads:0,loseStarts:0,stallEvents:false,reply:input=>`Reply to: ${input}`,
   // How a finished run ends and the usage it reports; a run cleared from runs is one Hermes lost (404).
   // A run first asks the questions `questions` gives for its input (clarify, #138), one at a time, as the pinned release
   // does: it stays running with the question in pending_controls until it is answered on the run's clarify route,
@@ -68,7 +68,8 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
   modelNeedsKey:false,defaultEnv:/** @type {Record<string,string>} */({}),modelOptionsFail:false,envFail:/** @type {Set<string>} */(new Set()),envReadFail:/** @type {Set<string>} */(new Set()),envDropped:/** @type {Set<string>} */(new Set()),envHang:/** @type {Set<string>} */(new Set()),
   // A run's events (#141): `emit` adds one (tool.started, tool.completed, message.delta and the like) to its stream,
   // `forget` drops its oldest ones as the 1,000-event backlog does, `sweep` drops its whole stream as Hermes does five
-  // minutes after the start when nobody reads it. A run reports `runSeconds` from its start to its end.
+  // minutes after the start when nobody reads it. A run reports `runSeconds` from its start to its end. `stallEvents`
+  // makes the events route take a request and never answer it, as a stalled Hermes or proxy does.
   emit(/** @type {string} */ run,/** @type {any} */ event) { push(run,event); },
   forget(/** @type {string} */ run,/** @type {number} */ count) { streams.get(run)?.backlog.splice(0,count); },
   sweep(/** @type {string} */ run) { const stream=streams.get(run); streams.delete(run); for(const reader of stream?.readers||[]) reader.end(); },
@@ -118,8 +119,8 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
     if(!run) return send(response,404,{error:{message:`Run not found: ${runPath[1]}`,code:'run_not_found'}});
     // As measured on the pinned release (#141, the install check): a Run's record has when it was made and nothing of when
     // it ended; its end is in its events.
-    const times=(/** @type {boolean} */ _ended)=>({created_at:run.created});
-    if(run.stopped) { endEvents(run.id,'run.cancelled'); return send(response,200,{object:'hermes.run',run_id:run.id,status:'cancelled',session_id:run.session,pending_controls:[],...times(true)}); }
+    const times={created_at:run.created};
+    if(run.stopped) { endEvents(run.id,'run.cancelled'); return send(response,200,{object:'hermes.run',run_id:run.id,status:'cancelled',session_id:run.session,pending_controls:[],...times}); }
     // As measured on the pinned release: the skip hint is appended to the question, and the first of two or more
     // choices is marked recommended.
     const waiting=run.asked?.find(asked=>!asked.settled);
@@ -127,7 +128,7 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
      question:`${waiting.question}\nReply "skip" to skip this question.`,choices:waiting.choices.map((choice,index)=>index===0&&waiting.choices.length>=2?`${choice} (Recommended)`:choice),multi_select:waiting.multi_select}]});
     const done=run.reads++>=settings.pendingReads;
     if(done) endEvents(run.id,settings.ending==='completed'?'run.completed':'run.failed');
-    return send(response,200,{object:'hermes.run',run_id:run.id,status:done?settings.ending:'running',session_id:run.session,...times(done),...(done&&settings.ending==='completed'?{output:settings.reply(run.input,(run.asked||[]).map(asked=>asked.answer??null))}:{}),...(done&&settings.usage?{usage:settings.usage}:{}),pending_controls:[]});
+    return send(response,200,{object:'hermes.run',run_id:run.id,status:done?settings.ending:'running',session_id:run.session,...times,...(done&&settings.ending==='completed'?{output:settings.reply(run.input,(run.asked||[]).map(asked=>asked.answer??null))}:{}),...(done&&settings.usage?{usage:settings.usage}:{}),pending_controls:[]});
    }
    // The run's own routes (api_server_runs.py): stop, and the answer to the question it waits for, which takes exactly
    // request_id, execution_generation and answer.
@@ -153,6 +154,7 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
    // events it had are gone, replays the rest and follows the run until it ends.
    const eventsPath=request.url.match(/^\/p\/[^/]+\/v1\/runs\/([^/?]+)\/events(?:\?(.*))?$/);
    if(eventsPath&&request.method==='GET') {
+    if(settings.stallEvents) return;
     const stream=streams.get(decodeURIComponent(eventsPath[1]));
     if(!stream) return send(response,404,{error:{message:`Run not found: ${eventsPath[1]}`,code:'run_not_found'}});
     const raw=request.headers['last-event-id']??new URLSearchParams(eventsPath[2]||'').get('last_seq');
