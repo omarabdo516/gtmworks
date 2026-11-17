@@ -14,8 +14,10 @@ profile out of the multiplexing gateway and `POST /api/gateway/start?profile=<na
   (`hermes_cli/web_routers/ops.py`, `stop_gateway`, and `hermes_cli/gateway_lifecycle_guards.py`).
 - A parked profile answers every Run request, a read of an earlier Run included, with
   404 `Unknown or unconfigured profile` (`gateway/platforms/api_server_profile_prefix.py`, `resolve_request_profile`).
-  gtmworks reads that answer as a profile that no longer exists, then forgets it and makes it again, empty
-  (`lib/company-profiles.mjs`, the `missing` branch).
+  gtmworks cannot tell that answer from a profile that no longer exists. A read of an open Run gets no status, so
+  the Run stays open with no end (`lib/hermes.mjs`, `readRun`). The tool-health check reads the profile's toolsets,
+  takes the same 404 as `missing` (`lib/hermes.mjs`, `readToolsets`), then forgets the profile, and the profile loop
+  makes it again, empty (`lib/company-profiles.mjs`, `checkAgentTools`).
 
 ## What the Engine answered
 
