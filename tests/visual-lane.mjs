@@ -5,19 +5,18 @@ import { readFileSync } from 'node:fs';
 export const screenList = 'tests/visual-lane/screens.json';
 export const imageFolder = 'tests/visual-lane/images';
 const cap = 15;
-const widths = [1440, 390];
-const themes = ['light', 'dark'];
+export const widths = [1440, 390];
+export const themes = /** @type {const} */ (['light', 'dark']);
 
 // A screen is the view of the seeded Owner unless it is `anonymous`.
 const fields = {
   path: value => typeof value === 'string', // the address it opens
   ready: value => typeof value === 'string', // the element that shows the page has loaded
   state: value => typeof value === 'string', // a set-up the seed does not hold
-  act: value => typeof value === 'string', // a step taken on the shown page before its picture
   anonymous: value => value === true, // shown to a visitor who has not signed in
 };
 
-/** @typedef {{ name: string, path: string, ready?: string, state?: string, act?: string, anonymous?: true }} LaneScreen */
+/** @typedef {{ name: string, path: string, ready?: string, state?: string, anonymous?: true }} LaneScreen */
 
 /** @returns {LaneScreen[]} */
 export function parseLaneScreens(text) {

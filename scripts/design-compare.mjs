@@ -75,7 +75,7 @@ async function signIn(page, options) {
   await settle(page);
 }
 
-// Language is a saved account setting, chosen in the settings overlay's "Your account" as tests/visual.spec.ts does.
+// Language is a saved account setting, chosen in the settings overlay's "Your account".
 async function chooseLanguage(page, options) {
   const company = options.builtPath.match(/^\/c\/[^/]+/)?.[0] ?? '/c/rs-learning';
   await page.goto(`${options.builtUrl}${company}/settings?section=account`);

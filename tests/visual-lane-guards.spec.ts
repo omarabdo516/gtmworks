@@ -1,5 +1,5 @@
 import { test, expect, type Browser } from '@playwright/test';
-import { blockOutsideRequests, expectDeterministic, fixClock } from './visual-lane-guards';
+import { blockOutsideRequests, expectDarkContrast, expectDeterministic, expectQuietContrast, fixClock, forgetBlocked } from './visual-lane-guards';
 
 // Each guard of the visual lane fails on the page it exists for and names why, and a quiet page passes them all. The
 // pages are written in place, so these tests need no app.
@@ -35,6 +35,25 @@ test('a request that leaves the machine is blocked and named', async ({ browser 
   await expect(expectDeterministic(page)).rejects.toThrow(/requests off the machine were blocked: https:\/\/fonts\.example\.com\/pixel\.png/);
 });
 
+test('a local-only face the machine lacks and a run of symbols alone are not named: the pinned image draws them alike', async ({ browser }) => {
+  const page = await pageOf(browser, `<style>
+    @font-face { font-family: "Body Fallback"; src: local("No Such Face Anywhere"); }
+    @font-face { font-family: "Latin Only"; src: local("DejaVu Sans"), local("Arial"); unicode-range: U+0000-00FF; }
+    p { font-family: "Body Fallback", sans-serif; } b { font-family: "Latin Only", sans-serif; }
+  </style><p>نص</p><b>✕</b>`);
+  await page.evaluate(() => document.fonts.load('16px "Body Fallback"', 'نص').catch(() => {}));
+  await expectDeterministic(page);
+});
+
+test('a family with one url() face is checked whole, even beside a local-only face', async ({ browser }) => {
+  const page = await pageOf(browser, `<style>
+    @font-face { font-family: "Mixed Face"; src: local("No Such Face Anywhere"); font-weight: 400; }
+    @font-face { font-family: "Mixed Face"; src: url(data:font/woff2;base64,AAAA) format("woff2"); font-weight: 600; }
+    p { font-family: "Mixed Face", sans-serif; font-weight: 600; }
+  </style><p>نص</p>`);
+  await expect(expectDeterministic(page)).rejects.toThrow(/font "Mixed Face" 600 did not load/);
+});
+
 test('a font family no face declares is named', async ({ browser }) => {
   const page = await pageOf(browser, '<p style="font-family: \'Missing Face\', sans-serif">نص</p>');
   await expect(expectDeterministic(page)).rejects.toThrow(/font "Missing Face" is not declared/);
@@ -61,3 +80,48 @@ test('a WebSocket off the machine is named', async ({ browser }) => {
   const page = await pageOf(browser, '<script>new WebSocket("wss://socket.example/live")</script>');
   await expect(expectDeterministic(page)).rejects.toThrow(/wss:\/\/socket\.example\/live/);
 });
+
+test('a quiet label below 4.5:1 is named, and one at 4.5:1 that stays weaker than the body text passes', async ({ browser }) => {
+  const page = await pageOf(browser, `<body style="color: #111; background: #fff">
+    <span class="faint" style="color: #bbb">تفصيلة باهتة</span><span class="quiet" style="color: #666">تفصيلة هادية</span></body>`);
+  await expectQuietContrast(page, [['quiet label', '.quiet']]);
+  await expect(expectQuietContrast(page, [['quiet label', '.faint']])).rejects.toThrow(/quiet label "تفصيلة باهتة"/);
+  await expect(expectQuietContrast(page, [['quiet label', '.missing']])).rejects.toThrow(/quiet label: nothing to measure/);
+});
+
+test('dark text below 4.5:1 is named, and text at 4.5:1 or more passes', async ({ browser }) => {
+  const faint = await pageOf(browser, '<body style="background:#111;color:#eee"><p>واضح</p><p style="color:#444">باهت</p></body>');
+  await expect(expectDarkContrast(faint)).rejects.toThrow(/باهت/);
+  const clear = await pageOf(browser, '<body style="background:#111;color:#eee"><p>واضح</p><p style="color:#999">هادي</p></body>');
+  await expectDarkContrast(clear);
+});
+
+test('a run of symbols alone in a family no face declares is named', async ({ browser }) => {
+  const page = await pageOf(browser, '<p style="font-family: sans-serif">نص</p><b style="font-family: \'Gone Icons\', sans-serif">✕</b>');
+  await expect(expectDeterministic(page)).rejects.toThrow(/font "Gone Icons" is not declared/);
+});
+
+test('a local-only face is passed only when next/font made it as a fallback; any other local-only face is checked', async ({ browser }) => {
+  const page = await pageOf(browser, `<style>
+    @font-face { font-family: "Shop Face"; src: local("No Such Face Anywhere"); }
+    p { font-family: "Shop Face", sans-serif; }
+  </style><p>نص</p>`);
+  await page.evaluate(() => document.fonts.load('16px "Shop Face"', 'نص').catch(() => {}));
+  await expect(expectDeterministic(page)).rejects.toThrow(/font "Shop Face"/);
+});
+
+test('dark text is measured on the canvas the dark scheme draws when no element sets a background', async ({ browser }) => {
+  const page = await pageOf(browser, '<html style="color-scheme: dark"><body style="color:#ddd"><p>واضح</p></body></html>');
+  await expectDarkContrast(page);
+  const faint = await pageOf(browser, '<html style="color-scheme: dark"><body style="color:#333"><p>باهت</p></body></html>');
+  await expect(expectDarkContrast(faint)).rejects.toThrow(/باهت/);
+});
+
+test('a request blocked for one picture is forgotten before the next', async ({ browser }) => {
+  const page = await pageOf(browser, '<p style="font-family: sans-serif">نص</p><img src="https://elsewhere.example/pixel.png">');
+  await expect(expectDeterministic(page)).rejects.toThrow(/elsewhere\.example/);
+  forgetBlocked(page.context());
+  await page.setContent('<p style="font-family: sans-serif">نص</p>');
+  await expectDeterministic(page);
+});
+
