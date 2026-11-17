@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { request } from 'node:http';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { parseArgs, screens, outputPaths, resolveStaticPath, startStaticServer, anonymousCaptureUrl, fixture, localDatabase, seededOnly } from '../scripts/design-compare-lib.mjs';
+import { parseArgs, screens, outputPaths, resolveStaticPath, startStaticServer, anonymousCaptureUrl, fixture } from '../scripts/design-compare-lib.mjs';
 
 const valid = ['--screen', 'home', '--width', '1440', '--lang', 'ar', '--theme', 'dark'];
 
@@ -36,8 +36,7 @@ test('the optional compare fixture holds the reference agent grid, Lead as the m
   assert.ok(guard > 0, 'the fixture has its guard');
   assert.ok(guard < sql.indexOf('insert into'), 'the guard runs before the first insert');
   assert.ok(sql.trimStart().startsWith('--') && sql.includes('begin;') && sql.trimEnd().endsWith('commit;'), 'one transaction');
-  assert.doesNotMatch(readFileSync('scripts/design-compare.mjs', 'utf8'), /design-compare-fixture/, 'the compare tool never loads the fixture');
-  assert.ok(sql.includes(seededOnly.condition), 'the fixture refuses the databases the tool\'s own writes refuse');
+  assert.doesNotMatch(readFileSync('scripts/design-compare.mjs', 'utf8'), /design-compare-fixture|supabase|execFile/, 'the compare tool never writes to a database');
   // Only an explicit manual run of the comparison workflow loads it, into that run's own fresh database.
   const workflow = readFileSync('.github/workflows/design-compare.yml', 'utf8');
   assert.match(workflow, /fixture:\n\s+description: [^\n]+\n\s+type: boolean\n\s+default: false/);
@@ -78,18 +77,19 @@ test('the fixture step streams the file unchanged to psql in the local database 
   assert.equal(stdin, readFileSync(fixture.file, 'utf8'));
 });
 
-test('a screen\'s own rows go to the same local database as the fixture, in one transaction that first refuses any database but the seeded one', () => {
-  const { args } = runFixtureStep(0);
-  const write = localDatabase('insert into public.example values (1);');
-  assert.deepEqual([write.file, write.args], ['docker', args], 'the fixture step\'s docker exec and psql');
-  const { input } = write;
-  assert.ok(input.startsWith('begin;\n'), 'one transaction');
-  assert.ok(input.trimEnd().endsWith('commit;'), 'one transaction');
-  assert.ok(input.indexOf(seededOnly.check) < input.indexOf('insert into public.example'), 'refused before it writes');
-  assert.match(seededOnly.check, /raise exception/);
-  // Triggers off, so rows added to an append-only table (the log) can be taken away again.
-  assert.ok(input.indexOf('set local session_replication_role = replica;') < input.indexOf('insert into public.example'));
-  assert.throws(() => localDatabase('select 1;', 'project_id = ""\n'), /project_id/);
+test('a loading screen\'s own setup goes to the same local database as the fixture, refusing any other, only for that screen', () => {
+  const workflow = readFileSync('.github/workflows/design-compare.yml', 'utf8');
+  const step = workflow.match(/- name: slow the loading screen's read\n\s+env:\n\s+SCREEN: [^\n]+\n\s+run: \|\n((?:\s{10}[^\n]+\n)+)/)[1];
+  const fixtureStep = workflow.match(/- name: load the comparison fixture\n\s+if: [^\n]+\n\s+run: ([^\n]+)\n/)[1];
+  assert.ok(step.includes(fixtureStep.slice(0, fixtureStep.indexOf(' < '))), 'the fixture step\'s docker exec and psql');
+  for (const screen of ['chat-loading', 'numbers-loading']) {
+    const sql = readFileSync(`scripts/design-compare-${screen}.sql`, 'utf8');
+    const guard = sql.indexOf('raise exception');
+    assert.ok(guard > 0 && guard < sql.indexOf('insert into') && guard < sql.indexOf('create policy'), `${screen}: refused before it writes`);
+    assert.ok(sql.includes('begin;') && sql.trimEnd().endsWith('commit;'), `${screen}: one transaction`);
+    assert.ok(Object.hasOwn(screens, screen), `${screen} is a screen`);
+  }
+  assert.match(step, /chat-loading\|numbers-loading\)/, 'only the loading screens');
 });
 
 test('a refused or failed fixture fails the step, so no capture runs on a half-loaded database', () => {
@@ -105,10 +105,7 @@ test('every screen says how to reach it in the reference and which built page it
   }
   for (const [name, screen] of Object.entries(screens)) {
     assert.match(name, /^[a-z]+(-[a-z]+)*$/, name);
-    assert.deepEqual(Object.keys(screen).filter(key => !['builtSteps', 'builtUndo', 'builtSettle'].includes(key)).sort(), ['builtPath', 'reference'], name);
-    // Only the reference's own steps never write: it has no database.
-    assert.ok(!screen.reference.steps.some(step => 'sql' in step), `${name}: no sql on the reference`);
-    if (screen.builtUndo !== undefined) assert.ok(screen.builtSteps.some(step => 'sql' in step) && typeof screen.builtUndo === 'string', `${name}: an undo takes back the built steps' rows`);
+    assert.deepEqual(Object.keys(screen).filter(key => !['builtSteps', 'builtSettle'].includes(key)).sort(), ['builtPath', 'reference'], name);
     if (screen.builtSettle !== undefined) assert.equal(screen.builtSettle, false, `${name}: builtSettle is only ever false`);
     assert.ok(screen.builtPath === null || /^\/c\/rs-(learning|consultations)\/[a-z/]+(\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|\/[1-9][0-9]*)?(\?[a-z]+=[a-z0-9-]+)?$/.test(screen.builtPath), `${name} built path`);
     assert.ok(Array.isArray(screen.reference.steps), `${name} steps`);
@@ -178,10 +175,9 @@ test('every screen says how to reach it in the reference and which built page it
   ]) {
     const screen = screens[name];
     assert.equal(screen.builtPath, '/c/rs-learning/home', name);
-    const [rows, ...rest] = screen.builtSteps;
-    assert.match(rows.sql, new RegExp(`create policy test_slow_read on public\\.${table} as restrictive for select to authenticated using \\(\\(select pg_sleep\\([1-7]\\)\\) is not null\\);`), `${name}: slows ${table} under the 8s statement timeout`);
-    assert.deepEqual(rest, [{ goto: page }, { finish: placeholder }, { waitFor: placeholder }], name);
-    assert.match(screen.builtUndo, new RegExp(`drop policy if exists test_slow_read on public\\.${table};`), `${name}: the slowed read is taken back`);
+    const sql = readFileSync(`scripts/design-compare-${name}.sql`, 'utf8');
+    assert.match(sql, new RegExp(`create policy test_slow_read on public\\.${table} as restrictive for select to authenticated using \\(\\(select pg_sleep\\([1-7]\\)\\) is not null\\);`), `${name}: slows ${table} under the 8s statement timeout`);
+    assert.deepEqual(screen.builtSteps, [{ goto: page }, { finish: placeholder }, { waitFor: placeholder }], name);
     assert.equal(screen.builtSettle, false, name);
   }
 });

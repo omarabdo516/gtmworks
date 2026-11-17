@@ -1,10 +1,9 @@
 // Captures a named screen of the approved design reference and the same built screen at one width, language and
 // theme, and writes them side by side (#285). Usage and flags: design/COMPARE.md.
-import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { chromium } from '@playwright/test';
-import { anonymousCaptureUrl, defaultSignIn, localDatabase, outputPaths, parseArgs, referenceRoot, screens, startStaticServer } from './design-compare-lib.mjs';
+import { anonymousCaptureUrl, defaultSignIn, outputPaths, parseArgs, referenceRoot, screens, startStaticServer } from './design-compare-lib.mjs';
 
 const height = 900;
 
@@ -18,7 +17,6 @@ async function settle(page, network = true) {
 // 768 px, behind button.mobile-menu), so a hidden target inside it opens the menu first.
 async function runStep(page, step) {
   const [[action, value]] = Object.entries(step);
-  if (action === 'sql') return runSql(value);
   if (action === 'goto') return page.goto(new URL(value, page.url()).toString(), { waitUntil: 'commit' });
   const [selector, text] = Array.isArray(value) ? value : [value];
   const target = page.locator(selector).first();
@@ -37,12 +35,6 @@ async function runStep(page, step) {
   const menu = page.locator('#mobile-menu, button.mobile-menu').first();
   if (!await target.isVisible() && await menu.isVisible()) await menu.click();
   await target.click();
-}
-
-function runSql(sql) {
-  const { file, args, input } = localDatabase(sql);
-  try { execFileSync(file, args, { input, stdio: ['pipe', 'ignore', 'pipe'], encoding: 'utf8' }); }
-  catch (error) { throw new Error(`The local database refused a built step: ${error.stderr || error.message}`); }
 }
 
 async function captureReference(browser, options) {
@@ -121,7 +113,6 @@ async function captureBuilt(browser, options) {
     return await page.screenshot({ fullPage: true, animations: 'disabled', caret: 'hide' });
   } finally {
     await context.close();
-    if (screens[options.screen].builtUndo) runSql(screens[options.screen].builtUndo);
   }
 }
 

@@ -9,10 +9,9 @@ import { extname, join, resolve, sep } from 'node:path';
 // account menu opens the settings overlay (`#sov`) with its sections. Each step is one `click`, `waitFor`, `waitGone`, `fill` ([selector, text]) or
 // `scrollTo` with a CSS selector, or one `press` with a key as Playwright names it (`{ press: 'ArrowDown' }`), pressed
 // where the focus is; a click on a sidebar item hidden behind the narrow-screen menu opens the menu first. A screen's `builtSteps` run the same way on the built page after it opens.
-// The built steps also take `sql` (statements run in the run's own local database, localDatabase below), `goto` (a
-// built page opened as a document, captured while it still streams) and `finish` (a selector whose own animations are
-// ended at once). `builtUndo` is SQL run after the capture, also when it failed, and `builtSettle: false` captures right
-// after the steps, without waiting for the network to go quiet.
+// The built steps also take `goto` (a built page opened as a document, captured while it still streams) and `finish` (a
+// selector whose own animations are ended at once); `builtSettle: false` captures right after the steps, without waiting
+// for the network to go quiet.
 // Every screen starts from the prototype's default state. Only the alone screens and a Member's request screens touch
 // the "viewing as" switcher: the alone ones show the workspace of an Owner working alone (#10); built, that is seeded
 // R&S Consultations, its one Member Omar, with work_mode set to 'alone' (tests/visual.spec.ts, state `alone`). The
@@ -45,41 +44,12 @@ export const fixture = {
   // the rule waits on Omar and the Manager as a learning suggestion.
   suggestionConversation: '62000000-0000-0000-0000-000000000004',
 };
-// #172. The chat and Numbers while their waiting part is still on its way, built as tests/visual.spec.ts's states
-// chat-loading and numbers-loading build them: the page's rows, and a restrictive policy that slows the one table that
-// part reads, under the signed-in role's 8s statement timeout. Then the page is opened as a document, which streams its
-// frame and placeholder first; a click would show the page its sidebar link had already prefetched whole.
+// #172. The chat and Numbers while their waiting part is still on its way. The workflow first applies the screen's own
+// scripts/design-compare-<screen>.sql, which slows the one table that part reads; the tool itself never writes. The page
+// is then opened as a document, which streams its frame and placeholder first (a sidebar link would show the page it
+// had already prefetched whole), its 400ms hidden start is ended, and it is captured at once.
 const loading = n => `6f000000-0000-0000-0000-00000000000${n}`;
-const rsLearning = '10000000-0000-0000-0000-000000000001';
-const omar = '20000000-0000-0000-0000-000000000001';
-const slowRead = table => `drop policy if exists test_slow_read on public.${table};
-create policy test_slow_read on public.${table} as restrictive for select to authenticated using ((select pg_sleep(7)) is not null);`;
-// Omar's chat with Ads about the Meta campaign (the reference's th-meta), with its usage, which only the record reads.
-const chatRows = `insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('${loading(1)}','${rsLearning}','${omar}','http://127.0.0.1:9/p/visual-loading','visual-loading','visual-no-key','unreachable') on conflict do nothing;
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('${loading(2)}','${rsLearning}','${loading(1)}','Ads','Runs the Meta and Google ads.') on conflict do nothing;
-insert into public.conversations(id,company_id,person_id,agent_id,agent_name,created_at) values ('${loading(3)}','${rsLearning}','${omar}','${loading(2)}','Ads','2026-06-10T10:00:00Z') on conflict do nothing;
-insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at) values
- ('${rsLearning}','${loading(3)}','person','${omar}',null,'Omar','خطة إعلانات Meta لكورس المحاسب الشامل','${loading(4)}','visual-loading','2026-06-10T10:00:00Z'),
- ('${rsLearning}','${loading(3)}','agent',null,'${loading(2)}','Ads','تمام، هبدأ بالجمهور وبعدها أكتب 3 إعلانات وأبعتهملك تشوفهم.',null,'visual-loading','2026-06-10T10:01:00Z') on conflict do nothing;
-insert into public.conversation_usage(company_id,conversation_id,run_id,outcome,input_tokens,output_tokens,recorded_at) values ('${rsLearning}','${loading(3)}','visual-loading','completed',1200,300,'2026-06-10T10:01:00Z') on conflict do nothing;`;
-const chatUndo = `drop policy if exists test_slow_read on public.conversation_usage;
-delete from public.conversation_usage where conversation_id='${loading(3)}';
-delete from public.conversation_messages where conversation_id='${loading(3)}';
-delete from public.conversations where id='${loading(3)}';
-delete from public.hermes_agents where id='${loading(2)}';
-delete from public.hermes_connections where id='${loading(1)}';`;
-// Numbers' figures read the Agents' rows of the last 7 days in the log, and a filter is only weighed on rows a read
-// finds: one row, of an Agent the reader sees.
-const numbersRows = `insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('${loading(5)}','${rsLearning}','${omar}','http://127.0.0.1:9/p/visual-numbers','visual-numbers','visual-no-key','unreachable') on conflict do nothing;
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('${loading(6)}','${rsLearning}','${loading(5)}','Ads','Runs the Meta and Google ads.') on conflict do nothing;
-insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,agent_id,action,details,source,source_id,created_at)
- select '${rsLearning}','${loading(6)}','agent','Ads','agent','${loading(6)}','agent_changed','{"agent_name":"Ads"}','hermes_agent_audit',691172,now()-interval '1 hour'
- where not exists(select 1 from public.company_log where source='hermes_agent_audit' and source_id=691172);`;
-const numbersUndo = `drop policy if exists test_slow_read on public.company_log;
-delete from public.company_log where source='hermes_agent_audit' and source_id=691172;
-delete from public.hermes_agents where id='${loading(6)}';
-delete from public.hermes_connections where id='${loading(5)}';`;
-const openSlowly = (rows, table, page, placeholder) => [{ sql: `${rows}\n${slowRead(table)}` }, { goto: page }, { finish: placeholder }, { waitFor: placeholder }];
+const openSlowly = (page, placeholder) => [{ goto: page }, { finish: placeholder }, { waitFor: placeholder }];
 
 export const screens = {
   // The prototype's main screen: the Conversation with the main Agent, Lead, which it opens on.
@@ -171,33 +141,10 @@ export const screens = {
   // prototype's timers of 100ms or more never fire, so the content that replaces them never comes). Built: the same
   // page while the one table its waiting part reads is slow (above).
   'chat-loading': { reference: { hold: true, steps: [{ waitFor: '#chat-transcript [aria-busy="true"]' }] }, builtPath: '/c/rs-learning/home',
-   builtSteps: openSlowly(chatRows, 'conversation_usage', `/c/rs-learning/conversations/${loading(3)}`, '.chat .transcript[aria-busy="true"]'), builtUndo: chatUndo, builtSettle: false },
+   builtSteps: openSlowly(`/c/rs-learning/conversations/${loading(3)}`, '.chat .transcript[aria-busy="true"]'), builtSettle: false },
   'numbers-loading': { reference: { hold: true, steps: [{ click: '#sb-nav [data-view="dashboard"]' }, { waitFor: '#view-dashboard [aria-busy="true"]' }] }, builtPath: '/c/rs-learning/home',
-   builtSteps: openSlowly(numbersRows, 'company_log', '/c/rs-learning/numbers', '.numbers-page [aria-busy="true"]'), builtUndo: numbersUndo, builtSettle: false },
+   builtSteps: openSlowly('/c/rs-learning/numbers', '.numbers-page [aria-busy="true"]'), builtSettle: false },
 };
-
-// What a built step's SQL may touch: only the seeded local database, which holds the seed's Omar and its public
-// test-only agent key, as scripts/design-compare-fixture.sql checks before it writes. No real installation has them.
-const condition = `not exists(select 1 from auth.users where id='20000000-0000-0000-0000-000000000001' and email='omar@example.com')
-  or not exists(select 1 from public.agent_keys where key_hash='f0358ec2fdc223a1ac2213a6e4b2cec6efe6d175ec823cb2a574e15ecdcf8226')`;
-export const seededOnly = { condition, check: `do $$ begin
- if ${condition} then
-  raise exception 'design-compare: only for the seeded local database (supabase/seed.sql)';
- end if;
-end $$;` };
-
-// The run's own local database as the Design compare workflow's fixture step reaches it, and what to send it: `sql` in
-// one transaction that first refuses any other database, with triggers off so rows added to an append-only table (the
-// log) can be taken away again.
-export function localDatabase(sql, config = readFileSync(join(import.meta.dirname, '..', 'supabase', 'config.toml'), 'utf8')) {
-  const project = config.match(/^project_id = "([A-Za-z0-9_-]+)"$/m)?.[1];
-  if (!project) throw new Error('supabase/config.toml names no project_id, so the local database cannot be found.');
-  return {
-    file: 'docker',
-    args: ['exec', '-i', `supabase_db_${project}`, 'psql', '-X', '-h', '/var/run/postgresql', '-U', 'postgres', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1'],
-    input: `begin;\n${seededOnly.check}\nset local session_replication_role = replica;\n${sql}\ncommit;\n`,
-  };
-}
 
 export const languages = ['ar', 'en'];
 export const themes = ['light', 'dark'];
