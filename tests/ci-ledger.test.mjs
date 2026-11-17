@@ -120,10 +120,10 @@ test('a matrix job is read as its layer', () => {
 });
 
 const areaRule = 'no changed file is in its area (scripts/ci-areas.mjs)';
-const docsOnly = { components: 'false', database: 'false', integration: 'false', install: 'false' };
+const docsOnly = { components: 'false', database: 'false', integration: 'false', install: 'false', lane: 'false' };
 
 test('a documents-only pull request names the area rule for every long layer it skipped', () => {
-  for (const layer of ['components', 'database', 'visual', 'integration', 'install']) assert.equal(skipReason(layer, docsOnly, 'pull_request'), areaRule, layer);
+  for (const layer of ['components', 'database', 'visual', 'integration', 'install', 'lane']) assert.equal(skipReason(layer, docsOnly, 'pull_request'), areaRule, layer);
 });
 
 test('screens alone, a push, a manual run and a cancelled run each give their own reason', () => {
@@ -131,6 +131,7 @@ test('screens alone, a push, a manual run and a cancelled run each give their ow
   assert.equal(skipReason('integration', screens, 'pull_request'), 'screens alone: only the compared screens run (visual job)');
   assert.equal(skipReason('database', docsOnly, 'push'), 'every changed file is a document');
   assert.equal(skipReason('visual', docsOnly, 'workflow_dispatch'), 'manual run: the e2e input is off');
+  assert.equal(skipReason('lane', docsOnly, 'workflow_dispatch'), 'manual run: the e2e input is off');
   assert.equal(skipReason('install', docsOnly, 'workflow_dispatch'), 'manual run: the install input is off');
   const all = { components: 'true', database: 'true', integration: 'true', install: 'true' };
   assert.equal(skipReason('install', all, 'pull_request'), 'not started: the run was cancelled or a job it needs did not succeed');

@@ -8,10 +8,10 @@ import { classify, failedStep } from './ci-classify.mjs';
 
 // Seconds, reported only (spec #255 D16). `changes` has no budget.
 export const budgets = {
-  layers: { static: 90, components: 90, database: 180, visual: 300, integration: { 'self-hosted': 480, 'github-hosted': 720 }, install: 720 },
+  layers: { static: 90, components: 90, database: 180, visual: 300, integration: { 'self-hosted': 480, 'github-hosted': 720 }, install: 720, lane: 420 },
   run: { pull_request: 600, otherwise: 840 },
 };
-export const layers = ['changes', 'static', 'components', 'database', 'visual', 'integration', 'install'];
+export const layers = ['changes', 'static', 'components', 'database', 'visual', 'integration', 'install', 'lane'];
 
 function budgetOf(layer, environment) {
   const budget = budgets.layers[layer];
@@ -23,7 +23,7 @@ export const layerOf = jobName => jobName.replace(/ \(.*\)$/, '');
 const shardOf = jobName => jobName.match(/ \((\d+\/\d+)\)$/)?.[1] ?? '';
 
 // Which `changes` output each layer follows; the compared screens follow the browser suite's.
-const decisionOf = { components: 'components', database: 'database', visual: 'integration', integration: 'integration', install: 'install' };
+const decisionOf = { components: 'components', database: 'database', visual: 'integration', integration: 'integration', install: 'install', lane: 'lane' };
 const e2eOff = 'manual run: the e2e input is off';
 // [decision, event, layer, reason]; `*` matches any. The first matching row wins.
 const skipReasons = [
@@ -31,6 +31,7 @@ const skipReasons = [
   ['false', 'push', '*', 'every changed file is a document'],
   ['false', 'workflow_dispatch', 'visual', e2eOff],
   ['false', 'workflow_dispatch', 'integration', e2eOff],
+  ['false', 'workflow_dispatch', 'lane', e2eOff],
   ['false', 'workflow_dispatch', 'install', 'manual run: the install input is off'],
   ['visual', '*', 'integration', 'screens alone: only the compared screens run (visual job)'],
 ];
@@ -182,7 +183,7 @@ async function main([input, output]) {
     listed.push(...(await response.json()).jobs);
     url = response.headers.get('link')?.match(/<([^>]+)>;\s*rel="next"/)?.[1];
   }
-  const decisions = Object.fromEntries(['components', 'database', 'integration', 'install'].map(name => [name, env[`DECISIONS_${name.toUpperCase()}`] ?? '']));
+  const decisions = Object.fromEntries(['components', 'database', 'integration', 'install', 'lane'].map(name => [name, env[`DECISIONS_${name.toUpperCase()}`] ?? '']));
   const jobs = [];
   for (const job of listed.filter(job => job.name !== env.GITHUB_JOB && job.name !== 'check')) {
     let log;

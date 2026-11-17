@@ -18,6 +18,10 @@
 # repositories' CI: there the stack's ports move to a block of their own above that range, the job removes what this
 # repository's runs start before and after it (scripts/ci-runner.mjs), and ~/.npm, the browsers and the image layers
 # stay on the machine.
+# The visual lane (`lane`, #257) compares a few key screens in Arabic, light and dark, drawn by one browser pinned by
+# digest (tests/visual-lane/renderer) so every runner makes the same bytes; it runs when what a screen is drawn from
+# changes. `lane-proof` draws the lane three times on ubuntu-latest and on the CI_RUNNER runner when the renderer, the
+# lane's config or its guards change, and on main; `lane-proof-compare` fails unless all six sets of hashes match.
 name: CI
 
 on:
@@ -51,6 +55,8 @@ jobs:
       database: ${{ steps.classify.outputs.database }}
       integration: ${{ steps.classify.outputs.integration }}
       install: ${{ steps.classify.outputs.install }}
+      lane: ${{ steps.classify.outputs.lane }}
+      proof: ${{ steps.classify.outputs.proof }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -68,13 +74,13 @@ jobs:
           E2E: ${{ inputs.e2e }}
           INSTALL: ${{ inputs.install }}
         run: |
-          areas=$'components=true\ndatabase=true\nintegration=true\ninstall=true'
+          areas=$'components=true\ndatabase=true\nintegration=true\ninstall=true\nlane=true\nproof=true'
           main=
           if [[ "$EVENT_NAME" == workflow_dispatch ]]; then
             # A manual run: static, the components and the database always; the browser and install suites only when asked.
             [[ $E2E == true ]] || E2E=false
             [[ $INSTALL == true ]] || INSTALL=false
-            printf '%s\n' components=true database=true "integration=$E2E" "install=$INSTALL" | tee -a "$GITHUB_OUTPUT"
+            printf '%s\n' components=true database=true "integration=$E2E" "install=$INSTALL" "lane=$E2E" proof=false | tee -a "$GITHUB_OUTPUT"
             exit 0
           fi
           if [[ "$EVENT_NAME" == push ]]; then
@@ -89,7 +95,7 @@ jobs:
             fi
             # No rename detection: a move must check both its old and new paths.
             if git diff --no-ext-diff --no-renames --name-only -z "$range" -- > "$RUNNER_TEMP/changed-files"; then
-              areas=$(node scripts/ci-areas.mjs $main < "$RUNNER_TEMP/changed-files") || areas=$'components=true\ndatabase=true\nintegration=true\ninstall=true'
+              areas=$(node scripts/ci-areas.mjs $main < "$RUNNER_TEMP/changed-files") || areas=$'components=true\ndatabase=true\nintegration=true\ninstall=true\nlane=true\nproof=true'
             fi
           fi
           echo "$areas" | tee -a "$GITHUB_OUTPUT"
@@ -236,6 +242,136 @@ jobs:
           if-no-files-found: ignore
           retention-days: 3
           include-hidden-files: false
+
+  # The visual lane (#257): its screens against their approved images, drawn in the pinned renderer, and its guard tests.
+  lane:
+    needs: [changes]
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.lane != 'false') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: reserve the stack's ports
+        if: ${{ runner.environment == 'github-hosted' }}
+        run: |
+          sudo sysctl -w net.ipv4.ip_local_reserved_ports="$(node scripts/ci-runner.mjs reserved-ports)"
+          sysctl net.ipv4.ip_local_reserved_ports
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: lane
+        run: ./ci.sh lane
+      - name: say which screens differ and how to refresh them
+        if: failure()
+        run: |
+          screens=$(find test-results/lane -name '*-diff.png' -printf '%f\n' 2> /dev/null | sed 's/-diff\.png$//' | sort -u || true)
+          {
+            echo '### The visual lane failed'
+            echo
+            if [[ -n $screens ]]; then
+              echo 'These pictures differ from their approved images:'
+              printf -- '- `%s`\n' $screens
+            else
+              echo 'No picture differs from its approved image: the log says what failed.'
+            fi
+            echo
+            echo 'The expected, actual and difference images are in the `lane-screenshots` artifact of this run.'
+            echo 'When the change is intended, refresh the images with `./ci.sh lane-update` and commit them.'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: upload the lane's screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lane-screenshots
+          path: test-results/lane/
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-lane
+          path: playwright-report/lane-html/
+          if-no-files-found: ignore
+          retention-days: 30
+      - name: upload ledger results
+        if: always()
+        # The ledger only reports, so a failed upload leaves the job's result as its tests made it.
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: ledger-${{ github.job }}
+          path: ci-ledger/
+          if-no-files-found: ignore
+          retention-days: 3
+          include-hidden-files: false
+
+  # The renderer draws the same bytes everywhere (#257): GitHub's runner and the CI_RUNNER runner each draw every lane
+  # image three times. It decides nothing for `check`; lane-proof-compare is its verdict.
+  lane-proof:
+    needs: [changes]
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.proof != 'false') }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, "${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.CI_RUNNER || 'ubuntu-latest' }}"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: reserve the stack's ports
+        if: ${{ runner.environment == 'github-hosted' }}
+        run: |
+          sudo sysctl -w net.ipv4.ip_local_reserved_ports="$(node scripts/ci-runner.mjs reserved-ports)"
+          sysctl net.ipv4.ip_local_reserved_ports
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
+      - name: clear an earlier run and move the stack's ports
+        if: ${{ runner.environment != 'github-hosted' }}
+        # The PC's Docker daemon sees the checkout but not this job's /tmp (see `integration`).
+        run: |
+          node scripts/ci-runner.mjs cleanup
+          node scripts/ci-runner.mjs move-ports 640
+          mkdir -p "$GITHUB_WORKSPACE/.ci-tmp"
+          echo "TMPDIR=$GITHUB_WORKSPACE/.ci-tmp" >> "$GITHUB_ENV"
+      - name: draw the lane three times
+        run: ./ci.sh lane-proof
+      - name: upload the hashes
+        uses: actions/upload-artifact@v4
+        with:
+          name: lane-proof-${{ strategy.job-index }}
+          path: test-results/lane-proof/
+          retention-days: 14
+      - name: remove what this run started
+        if: ${{ always() }}
+        run: node scripts/ci-runner.mjs cleanup
+
+  lane-proof-compare:
+    needs: [lane-proof]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: lane-proof-*
+          path: lane-proof/
+      - name: every run on every runner drew the same bytes
+        run: |
+          lists=(lane-proof/*/run-*.sha256)
+          for list in "${lists[@]}"; do echo "$list: $(wc -l < "$list") images, $(sha256sum < "$list" | cut -c1-16)"; done
+          if (( ${#lists[@]} != 6 )); then echo "::error::6 lists of hashes expected, ${#lists[@]} found"; exit 1; fi
+          for list in "${lists[@]:1}"; do
+            diff "${lists[0]}" "$list" || { echo "::error::$list differs from ${lists[0]}"; exit 1; }
+          done
 
   # The rest of the whole-app browser suite: the production-shaped proxy suite in the image and the journeys.
   integration:
@@ -716,7 +852,7 @@ jobs:
   # label on each red job (scripts/ci-ledger.mjs). It reports only: the verdict stays with `check`, which does not
   # need it.
   ledger:
-    needs: [changes, static, components, database, visual, integration, install]
+    needs: [changes, static, components, database, visual, integration, install, lane]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -741,6 +877,7 @@ jobs:
           DECISIONS_DATABASE: ${{ needs.changes.outputs.database }}
           DECISIONS_INTEGRATION: ${{ needs.changes.outputs.integration }}
           DECISIONS_INSTALL: ${{ needs.changes.outputs.install }}
+          DECISIONS_LANE: ${{ needs.changes.outputs.lane }}
         run: |
           mkdir -p ci-ledger-in
           set -o pipefail
@@ -755,7 +892,7 @@ jobs:
           retention-days: 90
 
   check:
-    needs: [changes, static, components, database, visual, integration, install]
+    needs: [changes, static, components, database, visual, integration, install, lane]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     permissions:
@@ -777,4 +914,6 @@ jobs:
           INTEGRATION_RESULT: ${{ needs.integration.result }}
           INSTALL_RUN: ${{ needs.changes.outputs.install }}
           INSTALL_RESULT: ${{ needs.install.result }}
+          LANE_RUN: ${{ needs.changes.outputs.lane }}
+          LANE_RESULT: ${{ needs.lane.result }}
         run: node scripts/ci-verdict.mjs
