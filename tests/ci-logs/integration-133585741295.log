@@ -1,11 +1,25 @@
-﻿2026-11-16T20:21:14.9526301Z Current runner version: '2.338.0'
+2026-11-16T20:21:14.9526301Z Current runner version: '2.338.0'
 2026-11-16T20:21:14.9530623Z Runner name: 'omar-pc-ci_gtmworks'
 2026-11-16T20:21:14.9531077Z Runner group name: 'Default'
+[excerpt: lines omitted]
+2026-11-16T20:21:24.9186838Z ##[group]Run '/usr/local/bin/ci-job-cleanup.sh'
+[excerpt: lines omitted]
+2026-11-16T20:21:26.0592757Z ##[group]Run actions/checkout@v4
+[excerpt: lines omitted]
+2026-11-16T20:21:27.2459890Z ##[group]Run actions/setup-node@v4
+[excerpt: lines omitted]
+2026-11-16T20:21:27.3851186Z ##[group]Run node scripts/ci-runner.mjs cleanup
+[excerpt: lines omitted]
+2026-11-16T20:21:27.6505744Z ##[group]Run node scripts/ci-runner.mjs lanes "$RUNNER_ENVIRONMENT" >> "$GITHUB_ENV"
+[excerpt: lines omitted]
+2026-11-16T20:21:27.6788834Z ##[group]Run docker/build-push-action@v6
+[excerpt: lines omitted]
+2026-11-16T20:22:27.8599719Z ##[group]Run ./ci.sh integration
 [excerpt: lines omitted]
 2026-11-16T20:23:57.1974264Z [WebServer]  ✓ Ready in 127ms
 2026-11-16T20:23:57.9856843Z [evidence] request failed: GET https://app.gtmworks.test/sign-in net::ERR_NETWORK_CHANGED
 2026-11-16T20:23:59.1287153Z   ✘  1 tests/proxy/production-shape.spec.ts:20:5 › the page is served over https from the public host name through the proxy (1.2s)
-[excerpt: lines omitted]
+2026-11-16T20:23:59.1288631Z 
 2026-11-16T20:23:59.1339189Z ##[error]  1) tests/proxy/production-shape.spec.ts:20:5 › the page is served over https from the public host name through the proxy 
     Error: page.goto: net::ERR_NETWORK_CHANGED at https://app.gtmworks.test/sign-in
     Call log:
@@ -20,10 +34,31 @@
       24 |   expect(new URL(page.url()).protocol).toBe('https:');
       25 |   expect(new URL(page.url()).hostname).toBe('app.gtmworks.test');
 [excerpt: lines omitted]
+2026-11-16T20:24:06.6431914Z [evidence] POST http://127.0.0.1:64021/auth/v1/token?grant_type=password -> 200
+2026-11-16T20:24:06.8294791Z [evidence] POST https://app.gtmworks.test/api/recent-cards -> 200
+2026-11-16T20:24:07.0870314Z [evidence] request failed: POST https://app.gtmworks.test/c/rs-learning/settings/members net::ERR_FAILED
+2026-11-16T20:24:07.0873220Z [evidence] console error: Failed to load resource: net::ERR_FAILED
+2026-11-16T20:24:07.0938721Z [WebServer] {"event":"client_error","at":"2026-11-16T20:24:07.092Z","source":"server-action","path":"/c/rs-learning/settings/members","stage":null,"status":null,"code":null,"digest":null,"message":"Failed to fetch","stack":"TypeError: Failed to fetch\n    at window.fetch (https://app.gtmworks.test/_next/static/chunks/app/not-found-d74da498dc514ef5.js:1:516)\n    at win
+2026-11-16T20:24:07.1059106Z [evidence] POST https://app.gtmworks.test/api/client-errors -> 204
+2026-11-16T20:24:07.1225077Z [evidence] console error: TypeError: Failed to fetch
+2026-11-16T20:24:07.1226215Z     at window.fetch (https://app.gtmworks.test/_next/static/chunks/app/not-found-d74da498dc514ef5.js:1:516)
+2026-11-16T20:24:07.1227359Z     at window.fetch (https://app.gtmworks.test/_next/static/chunks/app/layout-e563acf0ea6e2d48.js:1:11975)
+2026-11-16T20:24:07.1228348Z     at M (https://app.gtmworks.test/_next/static/chunks/1255-3935578cb14f2052.js:1:29880)
+2026-11-16T20:24:07.1284411Z [WebServer] {"event":"client_error","at":"2026-11-16T20:24:07.127Z","source":"error-page","path":"/c/rs-learning/settings/members","stage":null,"status":null,"code":null,"digest":null,"message":"Failed to fetch","stack":"TypeError: Failed to fetch\n    at window.fetch (https://app.gtmworks.test/_next/static/chunks/app/not-found-d74da498dc514ef5.js:1:516)\n    at window
+2026-11-16T20:24:07.1341502Z   ✓  6 tests/proxy/production-shape.spec.ts:87:5 › a server action whose request fails shows an error and reports it (723ms)
+2026-11-16T20:24:07.2588973Z [WebServer] {"event":"client_error","at":"2026-11-16T20:24:07.257Z","source":"promise","path":"/sign-in","stage":null,"status":null,"code":null,"digest":null,"message":"forced failure","stack":"Error: forced failure\n    at eval (eval at evaluate (:370:30), <anonymous>:2:25)\n    at UtilityScript.evaluate (<anonymous>:372:16)\n    at UtilityScript.<anonymous> (<anonymo
+2026-11-16T20:24:07.2660795Z   ✓  7 tests/proxy/production-shape.spec.ts:99:5 › a rejection nobody handled is shown on the page (125ms)
+2026-11-16T20:24:08.7518697Z 
+2026-11-16T20:24:08.7520605Z 
+2026-11-16T20:24:08.7524675Z   1) tests/proxy/production-shape.spec.ts:20:5 › the page is served over https from the public host name through the proxy 
 2026-11-16T20:24:08.7525028Z 
 2026-11-16T20:24:08.7525409Z     Error: page.goto: net::ERR_NETWORK_CHANGED at https://app.gtmworks.test/sign-in
 2026-11-16T20:24:08.7526149Z     Call log:
-[excerpt: lines omitted]
+2026-11-16T20:24:08.7526785Z       - navigating to "https://app.gtmworks.test/sign-in", waiting until "load"
+2026-11-16T20:24:08.7527246Z 
+2026-11-16T20:24:08.7527251Z 
+2026-11-16T20:24:08.7527963Z       20 | test('the page is served over https from the public host name through the proxy', async ({ page }) => {
+2026-11-16T20:24:08.7528423Z       21 |   watch(page);
 2026-11-16T20:24:08.7528719Z     > 22 |   const response = await page.goto('/sign-in');
 2026-11-16T20:24:08.7529354Z          |                               ^
 2026-11-16T20:24:08.7529745Z       23 |   expect(response?.headers()['via']).toContain('Caddy');
@@ -40,3 +75,12 @@
     tests/proxy/production-shape.spec.ts:20:5 › the page is served over https from the public host name through the proxy 
   6 passed (14.3s)
 2026-11-16T20:24:08.7664465Z ##[error]Process completed with exit code 1.
+2026-11-16T20:24:08.7773999Z ##[group]Run actions/upload-artifact@v4
+[excerpt: lines omitted]
+2026-11-16T20:24:08.9260463Z ##[group]Run actions/upload-artifact@v4
+[excerpt: lines omitted]
+2026-11-16T20:24:09.0439082Z ##[group]Run echo "the runner's memory group, peak since it started: $(( $(cat "/sys/fs/cgroup$(sed -n 's/^0:://p' /proc/self/cgroup)/memory.peak" 2> /dev/null || echo 0) / 1048576 )) MiB"
+[excerpt: lines omitted]
+2026-11-16T20:24:11.3248022Z ##[group]Run node scripts/ci-runner.mjs cleanup
+[excerpt: lines omitted]
+2026-11-16T20:24:18.9029632Z ##[group]Run '/usr/local/bin/ci-job-cleanup.sh'

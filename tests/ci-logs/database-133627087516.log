@@ -1,17 +1,54 @@
-﻿2026-11-16T21:30:15.6373667Z Current runner version: '2.338.2'
+2026-11-16T21:30:15.6373667Z Current runner version: '2.338.2'
 2026-11-16T21:30:15.6400181Z ##[group]Runner Image Provisioner
 2026-11-16T21:30:15.6400779Z Hosted Compute Agent
+[excerpt: lines omitted]
+2026-11-16T21:30:16.2530320Z ##[group]Run actions/checkout@v4
+[excerpt: lines omitted]
+2026-11-16T21:30:19.1561710Z ##[group]Run sudo sysctl -w net.ipv4.ip_local_reserved_ports="$(node scripts/ci-runner.mjs reserved-ports)"
+[excerpt: lines omitted]
+2026-11-16T21:30:19.4011789Z ##[group]Run actions/setup-node@v4
+[excerpt: lines omitted]
+2026-11-16T21:30:23.3592794Z ##[group]Run ./ci.sh database
 [excerpt: lines omitted]
 2026-11-16T21:31:05.4098415Z 44136fa355b3: Already exists
 2026-11-16T21:31:05.6783425Z error from registry: Rate exceeded
 2026-11-16T21:31:05.6816536Z Retrying after 4s: public.ecr.aws/supabase/postgres:17.11.0.011
 2026-11-16T21:31:05.6852977Z f2ba4e98874d: Download complete
+2026-11-16T21:31:05.7100579Z e5d190db8191: Download complete
+2026-11-16T21:31:05.7173099Z 7b69c108b62c: Download complete
 [excerpt: lines omitted]
 2026-11-16T21:31:23.5590262Z d22c69a95cf4: Pull complete
 2026-11-16T21:31:23.6771045Z error from registry: Rate exceeded
 2026-11-16T21:31:23.6810605Z Retrying after 4s: public.ecr.aws/supabase/realtime:v2.151.3
 2026-11-16T21:31:23.8457626Z 2cfab517365c: Pull complete
+2026-11-16T21:31:23.8609897Z d22dd8aef508: Pull complete
+2026-11-16T21:31:23.9324261Z a8de9fa05220: Pull complete
 [excerpt: lines omitted]
+2026-11-16T21:33:53.7901660Z psql:/tmp/gtmworks-first-run-bYADr4/migration.sql:47: NOTICE:  truncate cascades to table "invitation_agent_access"
+2026-11-16T21:33:53.7902085Z psql:/tmp/gtmworks-first-run-bYADr4/migration.sql:47: NOTICE:  truncate cascades to table "work_checklist"
+2026-11-16T21:33:53.7902501Z psql:/tmp/gtmworks-first-run-bYADr4/migration.sql:47: NOTICE:  truncate cascades to table "work_card_labels"
+2026-11-16T21:33:53.7902922Z psql:/tmp/gtmworks-first-run-bYADr4/migration.sql:47: NOTICE:  truncate cascades to table "work_creatives"
+2026-11-16T21:33:53.7903331Z psql:/tmp/gtmworks-first-run-bYADr4/migration.sql:47: NOTICE:  truncate cascades to table "work_versions"
+2026-11-16T21:33:53.7903748Z psql:/tmp/gtmworks-first-run-bYADr4/migration.sql:47: NOTICE:  truncate cascades to table "agent_rate_limits"
+2026-11-16T21:33:53.7904166Z psql:/tmp/gtmworks-first-run-bYADr4/migration.sql:47: NOTICE:  truncate cascades to table "agent_refusals"
+2026-11-16T21:33:53.7904591Z psql:/tmp/gtmworks-first-run-bYADr4/migration.sql:47: NOTICE:  truncate cascades to table "webhook_deliveries"
+2026-11-16T21:33:53.9238019Z /tmp/gtmworks-first-run-bYADr4/migration.sql .. ok
+2026-11-16T21:33:53.9248384Z All tests successful.
+2026-11-16T21:33:53.9248781Z Files=1, Tests=10,  0 wallclock secs ( 0.02 usr +  0.00 sys =  0.02 CPU)
+2026-11-16T21:33:53.9249096Z Result: PASS
+2026-11-16T21:33:54.4641605Z A new version of Supabase CLI is available: v3.2.0 (currently installed v3.0.0)
+2026-11-16T21:33:54.4642319Z We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli
+2026-11-16T21:33:55.1337565Z Target: local stack (127.0.0.1:54322)
+2026-11-16T21:33:55.5326936Z psql:/tmp/gtmworks-lead-agent-82iKIp/migration.sql:2: NOTICE:  extension "pgtap" already exists, skipping
+2026-11-16T21:33:55.5580789Z /tmp/gtmworks-lead-agent-82iKIp/migration.sql .. ok
+2026-11-16T21:33:55.5590794Z All tests successful.
+2026-11-16T21:33:55.5592544Z Files=1, Tests=8,  0 wallclock secs ( 0.01 usr +  0.01 sys =  0.02 CPU)
+2026-11-16T21:33:55.5593177Z Result: PASS
+2026-11-16T21:33:56.1158571Z A new version of Supabase CLI is available: v3.2.0 (currently installed v3.0.0)
+2026-11-16T21:33:56.1159392Z We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli
+2026-11-16T21:33:56.7810650Z Target: local stack (127.0.0.1:54322)
+2026-11-16T21:33:57.1887708Z psql:/tmp/gtmworks-remove-agency-ivIasv/migration.sql:2: NOTICE:  extension "pgtap" already exists, skipping
+2026-11-16T21:33:57.2110907Z psql:/tmp/gtmworks-remove-agency-ivIasv/migration.sql:19: ERROR:  cannot drop type member_role_current because other objects depend on it
 2026-11-16T21:33:57.2112024Z DETAIL:  function invite_member(uuid,text,member_role_current,boolean) depends on type member_role_current
 2026-11-16T21:33:57.2112710Z HINT:  Use DROP ... CASCADE to drop the dependent objects too.
 2026-11-16T21:33:57.2156667Z /tmp/gtmworks-remove-agency-ivIasv/migration.sql .. 

@@ -20,13 +20,16 @@ const minutes = value => (value == null ? '—' : `${(value / 60).toFixed(1)} mi
 // A test takes seconds, so its duration reads in seconds; minutes would round most of them to 0.0.
 const testSeconds = ms => (ms == null ? '—' : `${(ms / 1000).toFixed(1)} s`);
 // A ledger is written by CI code a pull request may change, so its text is cut and made inert before it reaches the
-// issue: no markup or hidden comment, no code span, no mention, no issue reference, no broken row.
+// issue: no markup or hidden comment, no code span, no mention, no issue reference or address, no link or image, no
+// broken row. It is cut by character, so no half of one is left.
 const width = 200;
 const cell = value => {
-  const text = String(value).replace(/[\r\n]+/g, ' ');
-  return (text.length > width ? `${text.slice(0, width - 1)}…` : text).replaceAll('\\', '\\\\').replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('`', '\\`').replaceAll('@', '@\u200b')
-    .replaceAll('#', '#\u200b').replaceAll('|', '\\|');
+  const characters = [...String(value).replace(/[\r\n]+/g, ' ')];
+  const text = characters.length > width ? `${characters.slice(0, width - 1).join('')}…` : characters.join('');
+  return text.replaceAll('\\', '\\\\').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+    .replaceAll('`', '\\`').replaceAll('[', '\\[').replaceAll(']', '\\]').replaceAll('@', '@\u200b').replaceAll('#', '#\u200b')
+    .replaceAll('://', ':\u200b//').replace(/www\./gi, match => `${match.slice(0, 3)}\u200b.`).replace(/GH-/gi, match => `${match.slice(0, 2)}\u200b-`)
+    .replaceAll('|', '\\|');
 };
 const row = values => `| ${values.map(cell).join(' | ')} |`;
 // An issue body holds at most 65536 characters, so each list of tests stops at 20.
@@ -55,10 +58,17 @@ const fits = record => {
   return Boolean(shape) && Object.entries(shape).every(([field, check]) => check(record[field] ?? null));
 };
 
-export function readLedger(ledger) {
+// A run's ledger holds about 2,000 records; one far longer is not read past this.
+const maxRecords = 20000;
+
+export function readLedger(ledger, { maxRecords: most = maxRecords } = {}) {
   const records = [];
   let rejected = 0;
   for (const line of ledger.split('\n').filter(line => line.trim())) {
+    if (records.length >= most) {
+      rejected++;
+      continue;
+    }
     let record;
     try {
       record = JSON.parse(line);
@@ -72,15 +82,34 @@ export function readLedger(ledger) {
   return { records, rejected };
 }
 
+// The ledgers read together stop at `totalRecords`; a ledger that would pass it is left out and counted.
+export function ledgerCollector({ maxRecords: most = maxRecords, totalRecords }) {
+  const collector = {
+    records: [], rejected: 0, read: 0, skipped: 0,
+    add(ledger) {
+      const found = readLedger(ledger, { maxRecords: most });
+      if (collector.records.length + found.records.length > totalRecords) {
+        collector.skipped++;
+        return;
+      }
+      for (const record of found.records) collector.records.push(record);
+      collector.rejected += found.rejected;
+      collector.read++;
+    },
+  };
+  return collector;
+}
+
 // GitHub refuses an issue body over 65536 characters.
 const bodyLimit = 65000;
 
-export function report(records, { now, days, runs, unreadable = 0, left = 0, rejected = 0, limit = bodyLimit }) {
+export function report(records, { now, days, runs, unreadable = 0, left = 0, rejected = 0, foreign = 0, limit = bodyLimit }) {
   const jobs = records.filter(record => record.kind === 'job');
   const tests = records.filter(record => record.kind === 'test');
   const lines = [marker, `# ${title}`, '', `The ${days} days to ${new Date(now).toISOString().slice(0, 16).replace('T', ' ')} UTC: ${runs} runs.`];
   if (unreadable) lines.push('', `${unreadable} ledgers could not be read.`);
   if (rejected) lines.push('', `${rejected} records could not be read.`);
+  if (foreign) lines.push('', `${foreign} ledgers from a fork or another workflow were not counted.`);
   if (left) lines.push('', `Only the newest ledgers were read: ${left} older ones in the window are not counted.`);
 
   const measured = jobs.filter(job => job.completed_at && ['success', 'failure'].includes(job.conclusion) && job.duration_s != null);
@@ -134,7 +163,7 @@ export function report(records, { now, days, runs, unreadable = 0, left = 0, rej
   const fellBack = jobs.filter(job => job.layer === 'integration' && job.environment === 'github-hosted').length;
   lines.push('', '## PC queue', '',
     queues.length
-      ? `${queues.length} jobs on the PC waited ${minutes(percentile(queues, 50))} at p50, ${minutes(percentile(queues, 90))} at p90 and ${minutes(Math.max(...queues))} at most.`
+      ? `${queues.length} jobs on the PC waited ${minutes(percentile(queues, 50))} at p50, ${minutes(percentile(queues, 90))} at p90 and ${minutes(queues.reduce((most, queue) => Math.max(most, queue), 0))} at most.`
       : 'No job ran on the PC.',
     `${fellBack} integration jobs ran on a GitHub-hosted runner instead.`);
   const body = lines.join('\n') + '\n';
@@ -146,14 +175,21 @@ export function report(records, { now, days, runs, unreadable = 0, left = 0, rej
 
 // Which ledgers a report reads: those of this repository's own ci.yml runs (never a fork's pull request, whose ledger
 // its own code wrote), in the window, not expired and under the size cap, newest first and at most `cap` of them.
+// A ledger whose run the listing did not return (a rerun of an older run, or past the listing's end) is named in
+// `missing`, so the caller looks its run up on its own; none is dropped without a count.
 export function selectLedgers(artifacts, runs, { since, cap, maxBytes }) {
-  const own = new Set(runs.filter(run => run.path === '.github/workflows/ci.yml' && run.repository?.id != null
-    && run.head_repository?.id === run.repository.id).map(run => run.id));
-  const recent = artifacts.filter(artifact => artifact.name === 'ledger' && !artifact.expired
-    && Date.parse(artifact.created_at) >= since && own.has(artifact.workflow_run?.id));
-  const fitting = recent.filter(artifact => artifact.size_in_bytes <= maxBytes)
+  const byId = new Map(runs.map(run => [run.id, run]));
+  const isOwn = run => run.path === '.github/workflows/ci.yml' && run.repository?.id != null && run.head_repository?.id === run.repository.id;
+  const recent = artifacts.filter(artifact => artifact.name === 'ledger' && !artifact.expired && Date.parse(artifact.created_at) >= since);
+  const missing = [...new Set(recent.map(artifact => artifact.workflow_run?.id).filter(id => !byId.has(id)))];
+  const known = recent.filter(artifact => byId.has(artifact.workflow_run?.id));
+  const own = known.filter(artifact => isOwn(byId.get(artifact.workflow_run.id)));
+  const fitting = own.filter(artifact => artifact.size_in_bytes <= maxBytes)
     .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
-  return { ledgers: fitting.slice(0, cap), left: Math.max(0, fitting.length - cap), tooLarge: recent.length - fitting.length };
+  return {
+    ledgers: fitting.slice(0, cap), left: Math.max(0, fitting.length - cap), tooLarge: own.length - fitting.length,
+    foreign: known.length - own.length, missing,
+  };
 }
 
 // A pull request's run proves the report and writes nothing: the tracking issue is only written from the default branch.
@@ -194,12 +230,13 @@ async function main() {
     return response.json();
   };
   const since = now - days * 86400000;
+  // Newest first and unfiltered: GitHub returns at most 1,000 runs for a filtered list. A ledger whose run is not among
+  // these (a rerun of an older run) gets its run looked up on its own below.
   const runs = [];
-  const day = new Date(since).toISOString().slice(0, 10);
   for (let page = 1; ; page++) {
-    const { workflow_runs: found } = await api('GET', `/actions/workflows/ci.yml/runs?created=%3E%3D${day}&per_page=100&page=${page}`);
+    const { workflow_runs: found } = await api('GET', `/actions/workflows/ci.yml/runs?per_page=100&page=${page}`);
     runs.push(...found);
-    if (found.length < 100) break;
+    if (found.length < 100 || found.some(run => Date.parse(run.created_at) < since)) break;
   }
   const artifacts = [];
   for (let page = 1; ; page++) {
@@ -207,12 +244,22 @@ async function main() {
     artifacts.push(...found);
     if (found.length < 100 || found.some(artifact => Date.parse(artifact.created_at) < since)) break;
   }
-  const { ledgers, left, tooLarge } = selectLedgers(artifacts, runs, { since, cap, maxBytes });
+  let unreadable = 0;
+  const missing = selectLedgers(artifacts, runs, { since, cap, maxBytes }).missing;
+  // Each lookup is one request of the token's hourly allowance; past 100, a ledger's run is not looked up and is counted.
+  for (const id of missing.slice(100)) unreadable += artifacts.filter(artifact => artifact.workflow_run?.id === id).length;
+  for (const id of missing.slice(0, 100)) {
+    try {
+      runs.push(await api('GET', `/actions/runs/${Number(id)}`));
+    } catch {
+      unreadable += artifacts.filter(artifact => artifact.workflow_run?.id === id).length;
+    }
+  }
+  const { ledgers, left, tooLarge, foreign } = selectLedgers(artifacts, runs, { since, cap, maxBytes });
+  unreadable += tooLarge;
+  // About 2,000 records a run; past this many in all, the rest are left out and counted rather than read.
+  const collector = ledgerCollector({ totalRecords: 1000000 });
   const folder = mkdtempSync(join(tmpdir(), 'ci-health-'));
-  const records = [];
-  let unreadable = tooLarge;
-  let rejected = 0;
-  let read = 0;
   try {
     for (const artifact of ledgers) {
       try {
@@ -220,11 +267,7 @@ async function main() {
         if (!response.ok) throw new Error(String(response.status));
         const zip = join(folder, `${artifact.id}.zip`);
         writeFileSync(zip, Buffer.from(await response.arrayBuffer()));
-        const ledger = execFileSync('unzip', ['-p', zip, 'ledger.jsonl'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-        const found = readLedger(ledger);
-        records.push(...found.records);
-        rejected += found.rejected;
-        read++;
+        collector.add(execFileSync('unzip', ['-p', zip, 'ledger.jsonl'], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 }));
       } catch {
         unreadable++;
       }
@@ -232,7 +275,8 @@ async function main() {
   } finally {
     rmSync(folder, { recursive: true, force: true });
   }
-  const body = report(records, { now, days, runs: read, unreadable, rejected, left });
+  const { records, rejected, read, skipped } = collector;
+  const body = report(records, { now, days, runs: read, unreadable, rejected, foreign, left: left + skipped });
   const { action, number } = await publish(api, body, { dryRun: env.DRY_RUN === 'true' });
   process.stdout.write(`${body}\n${action === 'dry run' ? 'Dry run: no issue was written.' : `The report ${action} issue #${number}.`}\n`);
   if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, body);

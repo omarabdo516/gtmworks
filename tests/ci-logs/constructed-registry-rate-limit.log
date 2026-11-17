@@ -1,6 +1,9 @@
-﻿2026-11-16T20:33:14.7402261Z Current runner version: '2.338.2'
+2026-11-16T20:33:14.7402261Z Current runner version: '2.338.2'
 2026-11-16T20:33:14.7451825Z ##[group]Runner Image Provisioner
 2026-11-16T20:33:14.7452761Z Hosted Compute Agent
+[excerpt: lines omitted]
+2026-11-16T20:33:23.6394198Z ##[group]Run ./ci.sh database
+2026-11-16T20:33:23.6394732Z [36;1m./ci.sh database[0m
 [excerpt: lines omitted]
 2026-11-16T20:34:04.7996363Z 0a0b1cce89bf: Pulling fs layer
 2026-11-16T20:34:04.7997150Z 814dd06d26c7: Pulling fs layer
@@ -10,5 +13,12 @@
 2026-11-16T20:34:04.8198563Z 80862ff61dbf: Download complete
 2026-11-16T20:34:04.8301210Z 55afa1ecc21d: Pull complete
 2026-11-16T20:34:05.1055865Z error from registry: Rate exceeded
-2026-11-16T20:36:35.4478636Z Try rerunning the command with --debug to troubleshoot the error.
-2026-11-16T20:36:35.4760171Z ##[error]Process completed with exit code 1.
+2026-11-16T20:34:05.1079439Z failed to pull docker image: Error response from daemon: error from registry: Rate exceeded
+2026-11-16T20:34:05.1080000Z Stopping containers...
+2026-11-16T20:34:05.2000000Z Pruned containers: [supabase_db_repo supabase_kong_repo]
+2026-11-16T20:34:05.3000000Z Pruned volumes: [supabase_db_repo supabase_config_repo]
+2026-11-16T20:34:05.4000000Z Pruned network: [supabase_network_repo]
+2026-11-16T20:34:05.5000000Z supabase start failed after 3 attempts
+2026-11-16T20:34:05.6000000Z Logs of the stack are in supabase/.temp/
+2026-11-16T20:34:05.7000000Z Try rerunning the command with --debug to troubleshoot the error.
+2026-11-16T20:34:05.7600000Z ##[error]Process completed with exit code 1.

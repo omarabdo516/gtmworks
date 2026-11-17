@@ -1,6 +1,20 @@
-﻿2026-11-16T21:52:28.9873506Z Current runner version: '2.338.0'
+2026-11-16T21:52:28.9873506Z Current runner version: '2.338.0'
 2026-11-16T21:52:28.9886426Z Runner name: 'omar-pc-ci_gtmworks'
 2026-11-16T21:52:28.9887558Z Runner group name: 'Default'
+[excerpt: lines omitted]
+2026-11-16T21:52:41.7346800Z ##[group]Run '/usr/local/bin/ci-job-cleanup.sh'
+[excerpt: lines omitted]
+2026-11-16T21:52:45.9558365Z ##[group]Run actions/checkout@v4
+[excerpt: lines omitted]
+2026-11-16T21:52:47.9402389Z ##[group]Run actions/setup-node@v4
+[excerpt: lines omitted]
+2026-11-16T21:52:48.9708002Z ##[group]Run node scripts/ci-runner.mjs cleanup
+[excerpt: lines omitted]
+2026-11-16T21:52:49.7831829Z ##[group]Run node scripts/ci-runner.mjs lanes "$RUNNER_ENVIRONMENT" >> "$GITHUB_ENV"
+[excerpt: lines omitted]
+2026-11-16T21:52:49.8357059Z ##[group]Run docker/build-push-action@v6
+[excerpt: lines omitted]
+2026-11-16T21:54:32.0722252Z ##[group]Run ./ci.sh integration
 [excerpt: lines omitted]
 2026-11-16T21:56:30.9004744Z ##[error]  1) tests/proxy/production-shape.spec.ts:20:5 › the page is served over https from the public host name through the proxy 
     Error: browserType.launch: Target page, context or browser has been closed
@@ -72,6 +86,31 @@
     Call log:
       - <launching> /srv/ci/_work/gtmworks/gtmworks/gtmworks/scripts/browser-netns.mjs --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no
 [excerpt: lines omitted]
+2026-11-16T21:56:33.5488874Z 
+2026-11-16T21:56:33.5491152Z   7) tests/proxy/production-shape.spec.ts:99:5 › a rejection nobody handled is shown on the page ───
+2026-11-16T21:56:33.5495965Z 
+2026-11-16T21:56:33.5497516Z     Error: browserType.launch: Target page, context or browser has been closed
+2026-11-16T21:56:33.5502696Z     Browser logs:
+2026-11-16T21:56:33.5505393Z 
+2026-11-16T21:56:33.5511913Z     <launching> /srv/ci/_work/gtmworks/gtmworks/gtmworks/scripts/browser-netns.mjs --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disa
+2026-11-16T21:56:33.5518285Z     <launched> pid=263213
+2026-11-16T21:56:33.5519247Z     [pid=263213][err] unshare: unshare failed: Operation not permitted
+2026-11-16T21:56:33.5520245Z     Call log:
+2026-11-16T21:56:33.5526584Z       - <launching> /srv/ci/_work/gtmworks/gtmworks/gtmworks/scripts/browser-netns.mjs --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --
+2026-11-16T21:56:33.5536680Z       - <launched> pid=263213
+2026-11-16T21:56:33.5537803Z       - [pid=263213][err] unshare: unshare failed: Operation not permitted
+2026-11-16T21:56:33.5571455Z       - [pid=263213] <gracefully close start>
+2026-11-16T21:56:33.5574775Z       - [pid=263213] <kill>
+2026-11-16T21:56:33.5575944Z       - [pid=263213] <will force kill>
+2026-11-16T21:56:33.5578760Z       - [pid=263213] <process did exit: exitCode=1, signal=null>
+2026-11-16T21:56:33.5579753Z       - [pid=263213] starting temporary directories cleanup
+2026-11-16T21:56:33.5580752Z       - [pid=263213] finished temporary directories cleanup
+2026-11-16T21:56:33.5581942Z       - [pid=263213] <gracefully close end>
+2026-11-16T21:56:33.5582318Z 
+2026-11-16T21:56:33.5582323Z 
+2026-11-16T21:56:33.5583084Z     Error Context: test-results/production-shape-a-rejecti-12c7a-andled-is-shown-on-the-page/error-context.md
+2026-11-16T21:56:33.5588277Z 
+2026-11-16T21:56:33.5589201Z   7 failed
 2026-11-16T21:56:33.5593431Z     tests/proxy/production-shape.spec.ts:20:5 › the page is served over https from the public host name through the proxy 
 2026-11-16T21:56:33.5597331Z     tests/proxy/production-shape.spec.ts:28:5 › Send invitation shows its confirmation, the address gets the link and the link signs the member in 
 2026-11-16T21:56:33.5599546Z     tests/proxy/production-shape.spec.ts:53:5 › inviting someone who already has an account sends them a sign-in link 
@@ -88,3 +127,12 @@
     tests/proxy/production-shape.spec.ts:87:5 › a server action whose request fails shows an error and reports it 
     tests/proxy/production-shape.spec.ts:99:5 › a rejection nobody handled is shown on the page ────
 2026-11-16T21:56:33.5663499Z ##[error]Process completed with exit code 1.
+2026-11-16T21:56:33.6253587Z ##[group]Run actions/upload-artifact@v4
+[excerpt: lines omitted]
+2026-11-16T21:56:34.2558560Z ##[group]Run actions/upload-artifact@v4
+[excerpt: lines omitted]
+2026-11-16T21:56:34.6285337Z ##[group]Run echo "the runner's memory group, peak since it started: $(( $(cat "/sys/fs/cgroup$(sed -n 's/^0:://p' /proc/self/cgroup)/memory.peak" 2> /dev/null || echo 0) / 1048576 )) MiB"
+[excerpt: lines omitted]
+2026-11-16T21:56:37.3124311Z ##[group]Run node scripts/ci-runner.mjs cleanup
+[excerpt: lines omitted]
+2026-11-16T21:56:44.3471231Z ##[group]Run '/usr/local/bin/ci-job-cleanup.sh'

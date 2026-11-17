@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { load } from 'js-yaml';
-import { publish, readLedger, report, selectLedgers, upsertIssue } from '../scripts/ci-health.mjs';
+import { ledgerCollector, publish, readLedger, report, selectLedgers, upsertIssue } from '../scripts/ci-health.mjs';
 
 // The nightly CI health report (#256): a week of ledgers read together into one tracking issue, which each night's
 // report replaces. Percentiles are nearest-rank: the p-th of n sorted values is the ceil(p/100 * n)-th.
@@ -175,6 +175,45 @@ test('the report reads only recent ledgers of this repository\'s own ci.yml runs
   assert.deepEqual(chosen.ledgers.map(a => a.id), [2], 'the newest of the two that count');
   assert.equal(chosen.left, 1);
   assert.equal(chosen.tooLarge, 1);
+  assert.equal(chosen.foreign, 2, 'a fork\'s run and another workflow\'s run are counted, not read');
+  assert.deepEqual(chosen.missing, [99], 'a run the listing did not return is named, to be looked up on its own');
+});
+
+test('ledgers from a fork or another workflow are named in the report', () => {
+  assert.match(report([], { now, days: 7, runs: 1, foreign: 3 }), /3 ledgers from a fork or another workflow were not counted\./);
+});
+
+test('one ledger gives at most its cap of records, and the rest are counted', () => {
+  const text = Array.from({ length: 30 }, (_, n) => JSON.stringify(testRecord(`case ${n}`, 1))).join('\n');
+  const { records, rejected } = readLedger(text, { maxRecords: 25 });
+  assert.equal(records.length, 25);
+  assert.equal(rejected, 5);
+});
+
+test('the ledgers together stop at a total cap, and the ones left out are counted', () => {
+  const ledger = n => Array.from({ length: n }, (_, i) => JSON.stringify(testRecord(`case ${i}`, 1))).join('\n');
+  const collector = ledgerCollector({ maxRecords: 100, totalRecords: 10 });
+  for (const n of [4, 4, 4, 1]) collector.add(ledger(n));
+  assert.deepEqual({ kept: collector.records.length, read: collector.read, skipped: collector.skipped }, { kept: 9, read: 3, skipped: 1 });
+});
+
+test('a report over 200,000 job records with queue times is still written', () => {
+  const jobs = Array.from({ length: 200000 }, (_, n) => job('integration', 60, { environment: 'self-hosted', queue_s: n % 600 }));
+  assert.match(report(jobs, { now, days: 7, runs: 1 }), /at most\./);
+});
+
+test('a cut cell never leaves half of a character', () => {
+  // The cell is `file › name`: 22 characters of file, then the name, cut after its 199th character.
+  const name = `${'a'.repeat(176)}${'😀'.repeat(10)}`;
+  const text = section(report([testRecord(name, 1)], { now, days: 7, runs: 1 }), 'Slowest tests');
+  assert.doesNotMatch(text, /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/);
+  assert.match(text, /😀…/);
+});
+
+test('a cell makes no link: no address, issue address, GH reference, link or image', () => {
+  const name = 'see https://github.com/someone/else/issues/301 www.example.com GH-12 [text](https://x.test) ![](https://x.test/i.png)';
+  const text = section(report([testRecord(name, 1)], { now, days: 7, runs: 1 }), 'Slowest tests');
+  assert.doesNotMatch(text, /https?:\/\/|www\.e|GH-12|(?<!\\)\[|(?<!\\)\]/);
 });
 
 test('a pull request run of CI health prints the report and writes no issue', async () => {
@@ -182,7 +221,19 @@ test('a pull request run of CI health prints the report and writes no issue', as
   assert.deepEqual(await publish(api, body, { dryRun: true }), { action: 'dry run', number: null });
   assert.deepEqual(calls, []);
   assert.equal((await publish(api, body, { dryRun: false })).action, 'created');
-  const workflow = load(readFileSync('.github/workflows/ci-health.yml', 'utf8'));
-  const step = workflow.jobs.report.steps.find(step => /ci-health\.mjs/.test(step.run ?? ''));
-  assert.equal(step.env.DRY_RUN, "${{ github.event_name == 'pull_request' }}");
+});
+
+// The workflow, not the script a pull request may change, keeps a pull request's run from writing: only the job that
+// runs on main, never for a pull request, holds issues: write.
+test('only the main branch\'s scheduled or manual run may write the issue; a pull request\'s run has no write scope', () => {
+  const { jobs } = load(readFileSync('.github/workflows/ci-health.yml', 'utf8'));
+  const writers = Object.entries(jobs).filter(([, job]) => Object.values(job.permissions ?? {}).includes('write')).map(([name]) => name);
+  assert.deepEqual(writers, ['report']);
+  assert.deepEqual(jobs.report.permissions, { contents: 'read', actions: 'read', issues: 'write' });
+  assert.equal(jobs.report.if, "${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}");
+  const script = job => job.steps.find(step => /ci-health\.mjs/.test(step.run ?? ''));
+  assert.equal(script(jobs.report).env.DRY_RUN, undefined);
+  assert.deepEqual(jobs['dry-run'].permissions, { contents: 'read', actions: 'read', issues: 'read' });
+  assert.equal(jobs['dry-run'].if, "${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}");
+  assert.equal(script(jobs['dry-run']).env.DRY_RUN, 'true');
 });

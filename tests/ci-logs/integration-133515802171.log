@@ -1,6 +1,20 @@
-﻿2026-11-16T18:29:10.4506739Z Current runner version: '2.338.2'
+2026-11-16T18:29:10.4506739Z Current runner version: '2.338.2'
 2026-11-16T18:29:10.4513290Z Runner name: 'omar-pc-ci_gtmworks'
 2026-11-16T18:29:10.4513760Z Runner group name: 'Default'
+[excerpt: lines omitted]
+2026-11-16T18:29:20.1713092Z ##[group]Run '/usr/local/bin/ci-job-cleanup.sh'
+[excerpt: lines omitted]
+2026-11-16T18:29:21.3481243Z ##[group]Run actions/checkout@v4
+[excerpt: lines omitted]
+2026-11-16T18:29:22.9209900Z ##[group]Run actions/setup-node@v4
+[excerpt: lines omitted]
+2026-11-16T18:29:23.1339749Z ##[group]Run node scripts/ci-runner.mjs cleanup
+[excerpt: lines omitted]
+2026-11-16T18:29:23.4345322Z ##[group]Run node scripts/ci-runner.mjs lanes "$RUNNER_ENVIRONMENT" >> "$GITHUB_ENV"
+[excerpt: lines omitted]
+2026-11-16T18:29:23.4630692Z ##[group]Run docker/build-push-action@v6
+[excerpt: lines omitted]
+2026-11-16T18:30:22.4609347Z ##[group]Run ./ci.sh integration
 [excerpt: lines omitted]
 2026-11-16T18:33:59.0346711Z ##[error]  1) [functional] › tests/agent-attachments.spec.ts:34:5 › a file attached in the composer and in a reply shows as a thumbnail, in both languages 
     Error: expect(locator).toHaveAttribute(expected) failed
@@ -89,7 +103,34 @@
 2026-11-16T18:41:02.1370072Z 
 2026-11-16T18:41:02.1370461Z     Error: page.goto: net::ERR_NETWORK_CHANGED at http://127.0.0.1:3001/c/rs-learning/settings
 2026-11-16T18:41:02.1370816Z     Call log:
+2026-11-16T18:41:02.1371087Z       - navigating to "http://127.0.0.1:3001/c/rs-learning/settings", waiting until "load"
+2026-11-16T18:41:02.1371275Z 
 [excerpt: lines omitted]
+2026-11-16T18:41:02.1379077Z        insert into public.company_profiles(company_id,profile,tools_level,tools_policy) select id,'co-10000000000000000000000000000001',agent_level,public.engine_tool_policy() from public.companies where id='10000000-0000-0000-0000-000000000001'
+2026-11-16T18:41:02.1379828Z         on conflict (company_id) do update set profile=excluded.profile,tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false;
+2026-11-16T18:41:02.1380199Z       end $$; -o json --agent no
+2026-11-16T18:41:02.1380375Z     Target: local stack (127.0.0.1:64022)
+2026-11-16T18:41:02.1380655Z     failed to execute query: error: duplicate key value violates unique constraint "hermes_one_default"
+2026-11-16T18:41:02.1381012Z     Try rerunning the command with --debug to troubleshoot the error.
+2026-11-16T18:41:02.1381169Z 
+2026-11-16T18:41:02.1381173Z 
+2026-11-16T18:41:02.1381407Z       11 | // vendor's window, which returns through gtmworks, and disconnects it; both are in the Activity log. A Manager reads the
+2026-11-16T18:41:02.1381821Z       12 | // states only, and the server refuses them. No screen names the Engine or shows a file path.
+2026-11-16T18:41:02.1382258Z     > 13 | const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
+2026-11-16T18:41:02.1382591Z          |                                       ^
+2026-11-16T18:41:02.1382924Z       14 | const company='10000000-0000-0000-0000-000000000001';
+2026-11-16T18:41:02.1383154Z       15 | const omar='20000000-0000-0000-0000-000000000001';
+2026-11-16T18:41:02.1383385Z       16 | const profile=`co-${company.replaceAll('-','')}`;
+2026-11-16T18:41:02.1383669Z         at query (/srv/ci/_work/gtmworks/gtmworks/gtmworks/tests/settings-apps.spec.ts:13:39)
+2026-11-16T18:41:02.1383993Z         at /srv/ci/_work/gtmworks/gtmworks/gtmworks/tests/settings-apps.spec.ts:38:3
+2026-11-16T18:41:02.1384152Z 
+2026-11-16T18:41:02.1384418Z     Error Context: test-results/settings-apps-the-apps-and-5e09f--not-connected-then-all-off-functional-retry1/error-context.md
+2026-11-16T18:41:02.1384700Z 
+2026-11-16T18:41:02.1384958Z     Error Context: test-results/settings-apps-the-apps-and-5e09f--not-connected-then-all-off-functional-retry1/error-context.md
+2026-11-16T18:41:02.1385239Z 
+2026-11-16T18:41:02.1385317Z   2 failed
+2026-11-16T18:41:02.1385738Z     [functional] › tests/settings-apps.spec.ts:91:5 › the Owner connects an app through the vendor's window and disconnects it; both are in the Activity log 
+2026-11-16T18:41:02.1386388Z     [functional] › tests/skills.spec.ts:18:5 › a team member installs and enables a skill for the Writer, a bad skill is refused, and the agent reads exactly its enabled skills 
 2026-11-16T18:41:02.1386932Z   3 flaky
 2026-11-16T18:41:02.1387353Z     [functional] › tests/agent-attachments.spec.ts:34:5 › a file attached in the composer and in a reply shows as a thumbnail, in both languages 
 2026-11-16T18:41:02.1387838Z     [functional] › tests/app.spec.ts:8:5 › Paperclip Inter and Arabic-only Vazirmatn load locally ──
@@ -106,3 +147,12 @@
   1 did not run
   191 passed (7.9m)
 2026-11-16T18:41:02.7824736Z ##[error]Process completed with exit code 1.
+2026-11-16T18:41:02.8437788Z ##[group]Run actions/upload-artifact@v4
+[excerpt: lines omitted]
+2026-11-16T18:41:09.7354712Z ##[group]Run actions/upload-artifact@v4
+[excerpt: lines omitted]
+2026-11-16T18:41:14.6396816Z ##[group]Run echo "the runner's memory group, peak since it started: $(( $(cat "/sys/fs/cgroup$(sed -n 's/^0:://p' /proc/self/cgroup)/memory.peak" 2> /dev/null || echo 0) / 1048576 )) MiB"
+[excerpt: lines omitted]
+2026-11-16T18:41:17.1264287Z ##[group]Run node scripts/ci-runner.mjs cleanup
+[excerpt: lines omitted]
+2026-11-16T18:41:24.1009338Z ##[group]Run '/usr/local/bin/ci-job-cleanup.sh'
