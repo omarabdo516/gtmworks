@@ -77,6 +77,11 @@ language sql stable set search_path='' as $$
    from public.reply_cards h
    join public.conversations v on v.id=h.conversation_id and v.company_id=h.company_id
    where h.company_id=c and h.kind='hand' and v.person_id=auth.uid() and public.reply_card_waits(h)
+  union all
+  select 'agent_key'::text, k.id, g.name, ''::text, ''::text, null::bigint, null::uuid, k.created_at
+   from public.agent_key_waits k
+   join public.hermes_agents g on g.company_id=k.company_id and g.id=k.agent_id
+   where k.company_id=c and public.agent_key_waits_shown(c)
  ) x(kind,id,title,body,asked_by,card_id,conversation_id,created_at)
  order by created_at desc, id desc;
 $$;
