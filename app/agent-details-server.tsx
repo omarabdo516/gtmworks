@@ -14,7 +14,7 @@ import { FeedText, LogEntry, logColumns, logPeople } from '@/app/c/[slug]/log/en
 import { detailsTabs } from '@/app/agent-details-tabs';
 
 type Db=Awaited<ReturnType<typeof supabase>>;
-export type AgentDetailsView={status:AgentStatus,actions:boolean,tab:DetailsTab,tabs:Record<DetailsTab,ReactNode>};
+export type AgentDetailsView={status:AgentStatus,tab:DetailsTab,tabs:Record<DetailsTab,ReactNode>};
 const logShown=50;
 
 export async function agentDetails(db:Db,{company,agent,slug,me,role,tab}:{company:string,agent:string,slug:string,me:string,role:string,tab?:string}):Promise<AgentDetailsView> {
@@ -36,7 +36,7 @@ export async function agentDetails(db:Db,{company,agent,slug,me,role,tab}:{compa
  const [{data:stages},{data:checklist},{data:ask},people,{data:cardFileRows,count:cardFileCount},firsts]=await Promise.all([
   ids.length?db.from('work_stages').select('id,name,board_column').eq('company_id',company):Promise.resolve({data:[]}),
   ids.length?db.from('work_checklist').select('card_id,title,done').eq('company_id',company).in('card_id',ids).order('id'):Promise.resolve({data:[]}),
-  run?.my_conversation?db.from('conversation_messages').select('body').eq('conversation_id',run.my_conversation).eq('author','person').eq('created_at',run.started_at).order('id',{ascending:false}).limit(1).maybeSingle():Promise.resolve({data:null}),
+  run?.my_conversation?db.from('conversation_messages').select('body,reply_cards(title)').eq('conversation_id',run.my_conversation).eq('author','person').eq('created_at',run.started_at).order('id',{ascending:false}).limit(1).maybeSingle():Promise.resolve({data:null}),
   logPeople(db,company,rows.flatMap(row=>row.card_id!=null?[row.card_id]:[])),
   ids.length?db.from('work_attachments').select('id,name,size,created_at,card_id',{count:'exact'}).eq('company_id',company).in('card_id',ids).order('created_at',{ascending:false}).order('id',{ascending:false}):Promise.resolve({data:[],count:0}),
   // A Conversation is named as the sidebar names it: the first line of its person's first message.
@@ -44,7 +44,9 @@ export async function agentDetails(db:Db,{company,agent,slug,me,role,tab}:{compa
  ]);
  const tasks=agentTasks(cards,stages||[],checklist||[],waiting);
  const recent=latestActivity(rows,feedSince());
- const asked=(ask as {body:string}|null)?.body.split('\n')[0].slice(0,200);
+ // A Run "Done it" started (#140) is on the step the person did, named by its card, not the sentence the Agent was told.
+ const asking=ask as {body:string,reply_cards:{title:string}|null}|null;
+ const asked=(asking?.reply_cards?.title??asking?.body)?.split('\n')[0].slice(0,200);
 
  const activity=run||recent.length?<ul className="panel-card">
    {run&&<li className="panel-row dp-now"><span className="panel-row__text">
@@ -73,6 +75,6 @@ export async function agentDetails(db:Db,{company,agent,slug,me,role,tab}:{compa
 
  const log=rows.length?<div className="lg-wrap"><LogDays items={rows.map(row=>({id:row.id,at:row.created_at,node:<LogEntry row={row} people={people} me={me} slug={slug} company={company} canWrite={writer} drawnAt={drawn} t={t} language={language} faceSize={24}/>}))}/></div>:undefined;
 
- return {status:agentStatus({waitingMine:waiting.some(item=>item.card_id!=null&&ids.includes(item.card_id)),running:!!run}),actions:writer,tab:pickTab(tab),
+ return {status:agentStatus({waitingMine:waiting.some(item=>item.card_id!=null&&ids.includes(item.card_id)),running:!!run}),tab:pickTab(tab),
   tabs:detailsTabs({t,slug,agent,activity,tasks:tasksTab,files:filesList,fileCount:(cardFileCount??0)+(talkFileCount??0),log,logCount:count??rows.length})};
 }

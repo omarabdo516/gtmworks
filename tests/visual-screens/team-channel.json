@@ -1,8 +1,0 @@
-{
-  "about": "A team channel (#24) as the first Contributor sees it: SEO, hidden from them elsewhere, marked as shown in this channel only, the general channel's unread count in the sidebar, and who adds and removes members.",
-  "path": "/c/rs-learning/channels/6c000000-0000-0000-0000-000000000007",
-  "person": "reviewer@example.com",
-  "state": "team-channel",
-  "dark": true,
-  "ready": ".ch-intro__only"
-}

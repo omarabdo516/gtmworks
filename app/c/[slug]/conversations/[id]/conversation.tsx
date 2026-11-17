@@ -40,7 +40,7 @@ export default function ConversationView({slug,agent,details,company,conversatio
   <HeadPill panel={panel} agent={agent?.name} face={<span aria-hidden="true"><CompanyAgentFace agent={{connection_id:conversation.face,name:conversation.agent_name}} size={24}/></span>} title={record?titleOf(record.messages,conversation.agent_name):title} titleDir="auto" corner={corner&&<CornerPill slug={slug} board={corner} writer={writer} fresh={fresh.has(corner.card)} c={c}/>}/>
   <Transcript>{children}</Transcript>
   <div className="composer-area"><ConversationComposer company={company} conversation={conversation} record={record??null} writer={writer} asked={live?.asked??(()=>setEarly(count=>count+1))} box={composer} usage/></div>
- </div>{agent&&details&&<AgentDetails panel={panel} agent={agent} details={details} settingsHref={`/c/${slug}/agents`}/>}</div></ChatView>;
+ </div>{agent&&details&&<AgentDetails panel={panel} agent={agent} details={details} slug={slug}/>}</div></ChatView>;
 }
 
 // The transcript's boundary renders only when the transcript itself changes. This frame renders again while it
@@ -66,15 +66,22 @@ export function ConversationLoaded({initial,team}:{initial:ConversationRecord,te
  // `asked` only sets this transcript's own state, so the one it was first given stays good.
  useLayoutEffect(()=>{ setLive({record,asked}); },[record]); // eslint-disable-line react-hooks/exhaustive-deps
  // Opened from "Waiting on you" at a handed step (#140, `#hand-<card>`): that card in view and focused, not the newest
- // message. It runs before the effect below, on the first draw only.
+ // message. It runs before the effect below, on the first draw only. The address is then the Conversation's again, so a
+// reload opens on the newest message, and the first message after the landing (the Agent's reply to "Done it") is
+// followed again.
+ const landed=useRef<number|null>(null);
  useLayoutEffect(()=>{
   const card=/^#hand-\d+$/.test(location.hash)?box.current?.querySelector<HTMLElement>(location.hash):null;
   if(!card) return;
-  stick.current=false;
+  stick.current=false; landed.current=messages.length;
   card.scrollIntoView({block:'center'}); card.focus({preventScroll:true});
- },[]);
+  history.replaceState(history.state,'',location.pathname+location.search);
+ },[]); // eslint-disable-line react-hooks/exhaustive-deps
  // Kept on the newest message while the reader is there (design-reference: renderTranscript).
- useLayoutEffect(()=>{ if(stick.current&&box.current) box.current.scrollTop=box.current.scrollHeight; },[messages.length,record.pending]);
+ useLayoutEffect(()=>{
+  if(landed.current!==null&&messages.length>landed.current) { landed.current=null; stick.current=true; }
+  if(stick.current&&box.current) box.current.scrollTop=box.current.scrollHeight;
+ },[messages.length,record.pending]);
  const answered=useRef(0);
  useEffect(()=>{ if(early>answered.current) { answered.current=early; asked(); } });
  // A new workspace opens on the Owner's Conversation with Lead before anything is said in it (#9): Lead's first words.

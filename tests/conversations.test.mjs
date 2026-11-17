@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { handKeys, latestEnded, queuedWaiting, questionParts, replyCardOf, shown, waiting, withDecisions, withTeamWork } from '../lib/conversations.ts';
+import { handTurn, latestEnded, queuedWaiting, questionParts, replyCardOf, shown, waiting, withDecisions, withTeamWork } from '../lib/conversations.ts';
 
 // A Contributor's Conversation in a team (#25): the line under the Agent's reply says who their rule was sent to as a
 // suggestion, and the Owner's or a Manager's decision on it shows where it happened among the messages.
@@ -104,21 +104,22 @@ test('a hand card is read from its row: open with its app, rows, address and not
 test('a hand card\'s turn draws no bubble of the person, keeps its run\'s cards and question, and still keeps the page waiting',()=>{
  const told='Omar did the step you handed over, "انشر المقال" in WordPress, and pressed "Done it" at 2026-06-10 18:04 UTC. Pick up from there.';
  const typed={send_key:'k-typed',message:'And the next one?',queued_at:at(6),started_at:null,failed_at:null,hand_card:null};
- const handTurn={send_key:'k-hand',message:told,queued_at:at(4),started_at:null,failed_at:null,hand_card:6};
- assert.deepEqual(withTeamWork([],[],[handTurn,typed],'Omar').map(message=>message.body),['And the next one?'],'a waiting hand turn is not drawn; a typed one is');
- assert.equal(queuedWaiting([handTurn]),true,'the page still waits for the Agent');
+ const hand={send_key:'k-hand',message:told,queued_at:at(4),started_at:null,failed_at:null,hand_card:6};
+ assert.deepEqual(withTeamWork([],[],[hand,typed],'Omar').map(message=>message.body),['And the next one?'],'a waiting hand turn is not drawn; a typed one is');
+ assert.equal(queuedWaiting([hand]),true,'the page still waits for the Agent');
  const record=[
-  {id:1,author:/** @type {const} */('person'),author_name:'Omar',body:'Get the article out',run_id:'r1',send_key:'k1',created_at:at(1)},
+  {id:1,author:/** @type {const} */('person'),author_name:'Omar',body:'Get the article out',run_id:'r1',hand_card:null,created_at:at(1)},
   {id:2,author:/** @type {const} */('agent'),author_name:'Ads',body:'Your turn to publish it.',run_id:'r1',created_at:at(2)},
-  {id:3,author:/** @type {const} */('person'),author_name:'Omar',body:told,run_id:'r2',send_key:'k-hand',created_at:at(5)},
+  {id:3,author:/** @type {const} */('person'),author_name:'Omar',body:told,run_id:'r2',hand_card:6,created_at:at(5)},
  ];
  const cards=[{run_id:'r2',at:at(6),card:{kind:/** @type {const} */('reply'),card:/** @type {import('../lib/conversations.ts').ReplyCard} */(replyCardOf(row(7,'r2')))}},
   {run_id:'r2',at:at(7),card:{kind:/** @type {const} */('reply'),card:/** @type {import('../lib/conversations.ts').ReplyCard} */(replyCardOf(askedRow('open')))}}];
- const drawn=shown(record,[],cards,'Ads',[],[],handKeys([{...handTurn,started_at:at(5)},typed]));
+ const drawn=shown(record,[],cards,'Ads');
+ assert.deepEqual([...record,hand,typed].map(handTurn),[false,false,true,true,false],'one test tells a hand turn, stored or waiting');
  assert.deepEqual(order(drawn),[1,2,'asked','made'],'the started hand turn has no bubble; its question and card stay');
  assert.ok(!drawn.some(message=>message.body===told));
  assert.deepEqual(waiting(record,[]).map(message=>message.id),[3],'its run is still waited on');
- assert.deepEqual(order(shown(record,[],cards,'Ads')),[1,2,3,'asked','made'],'without the hidden key it is an ordinary message');
+ assert.deepEqual(order(shown(record.map(({hand_card,...message})=>message),[],cards,'Ads')),[1,2,3,'asked','made'],'a message that names no card is an ordinary one');
 });
 
 // #138: an Agent's question, read from its row in each state; a claimed answer still on its way to the Engine is drawn

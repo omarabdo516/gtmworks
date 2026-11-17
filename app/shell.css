@@ -818,4 +818,8 @@
   .gw .empty-chat h2 { font-size: var(--gw-fs-lg); }
   .gw .bubble { max-width: 100%; }
 }
+/* A row of overlapping Agent faces: a Card's crew on the board, a page's Agents in the settings overlay (both on the pane). */
+.gw .fstack { display: inline-flex; align-items: center; flex: none; }
+.gw .fstack .agent-face { border-radius: 50%; box-shadow: 0 0 0 2px var(--gw-bg-pane); }
+.gw .fstack .agent-face + .agent-face { margin-inline-start: -5px; }
 @media (prefers-reduced-motion: reduce) { .gw .sidebar, .gw .details { transition: none; } .gw.modal { animation: none; } }

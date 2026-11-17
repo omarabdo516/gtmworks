@@ -10,6 +10,10 @@
  * @typedef {{ ref: string, built: string, file: string, html: string, held?: 0.96 | 0.985 | 0.94 | 1 }} MotionRow
  */
 
+// The widths and languages each part's motion is compared at, in the reference and in the product.
+export const languages = ['en', 'ar'];
+export const widths = [1440, 390];
+
 /** @type {MotionRow[]} */
 export const motionTable = [
   // The Conversation: message times show on hover; the drawer and the details panel slide.

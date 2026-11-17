@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(19);
+select plan(22);
 -- #140. Writer in RS Learning, shown to the Manager (2), the Contributors (3, 5) and the Viewer (4); the Owner (1) sees
 -- every Agent. One Conversation with Writer each, the message of one run in it, and in each but the Viewer's a step
 -- Writer handed over in that run.
@@ -88,6 +88,13 @@ select results_eq($$select send_key,retry from public.claim_conversation_turn('f
  $$values (current_setting('test.key')::uuid,true)$$,'the same turn is claimed again, as a retry with the same send key');
 select is(public.record_conversation_turn('fc000000-0000-0000-0000-000000000003',current_setting('test.key')::uuid,'turn-run-3c','fb000000-0000-0000-0000-000000000001'),true,'its run is recorded');
 reset role;
+select is((select hand_card from public.conversation_messages where conversation_id='fc000000-0000-0000-0000-000000000003' and send_key=current_setting('test.key')::uuid),
+ current_setting('test.card')::bigint,'the person''s message it became names its card, so every reader of the messages tells it apart');
+select is((select count(*)::int from public.conversation_messages where conversation_id='fc000000-0000-0000-0000-000000000003' and author='person' and hand_card is null),2,
+ 'the messages the person typed name no card');
+select throws_ok($$insert into public.conversation_queued_turns(conversation_id,send_key,company_id,person_id,agent_id,message,hand_card)
+  values ('fc000000-0000-0000-0000-000000000002',gen_random_uuid(),'10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','fb000000-0000-0000-0000-000000000002','Elsewhere',(select id from public.reply_cards where conversation_id='fc000000-0000-0000-0000-000000000001'))$$,
+ '23503',null,'a turn names only a card of its own Conversation');
 
 -- Only its person, an Owner or a Manager stops that run.
 create temporary table stops(n int, run text, refused text);

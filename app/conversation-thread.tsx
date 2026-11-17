@@ -118,13 +118,15 @@ export function ConversationTurns({slug,company,record,writer,asked}:{slug:strin
   return failure;
  };
  // "Done it" on a step the Agent handed over (#139): the card shows the time the database kept, and the press starts the
- // Agent's turn (#140), so the record is read again, as after an answer, until its reply is in.
+ // Agent's turn (#140), so the record is read again, as after an answer, until its reply is in. A press another tab made
+// first started nothing here, so the record is not read again: a read could replace a newer one (a message sent
+// meanwhile).
  const done=async(card:number)=>{
   try {
    const response=await fetch('/api/conversations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company,conversation:conversation.id,intent:'done',card})});
    const body=await response.json() as {at?:string,first?:boolean,error?:string};
    if(!response.ok||!body.at) return {error:body.error||'conversationFailed'};
-   asked();
+   if(body.first===true) asked();
    return {at:body.at,first:body.first===true};
   } catch { return {error:'conversationFailed'}; }
  };

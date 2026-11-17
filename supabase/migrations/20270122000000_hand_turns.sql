@@ -6,14 +6,29 @@
 -- An open hand card also waits in its person's "Waiting on you", derived from the card, so a typed message never clears
 -- it and "Done it" alone does.
 --
--- Nothing existing is rewritten: the new column is empty on every queued turn there, and waiting_list keeps every branch
+-- Nothing existing is rewritten: the new columns are empty on every queued turn and message there, and waiting_list keeps every branch
 -- it had. The previous app version runs against this: it selects its columns by name, its "Done it" now also queues the
 -- turn its queue starts (drawn there as the person's message, a plain sentence), and it draws the new waiting item as a
 -- plain one, its title and Agent, opening the Conversation.
 
--- The one link between a turn and the hand card it picks up from: at most one turn per card.
-alter table public.conversation_queued_turns add column hand_card bigint references public.reply_cards(id);
+-- The one link between a turn and the hand card it picks up from: at most one turn per card, a card of the turn's own
+-- Conversation. The person's message the turn becomes names the card too, set as it is stored, so every reader of the
+-- messages tells that turn by its own row. A card that is ever removed leaves the turn and its message as plain ones.
+create unique index reply_cards_conversation_key on public.reply_cards(id,conversation_id);
+alter table public.conversation_queued_turns add column hand_card bigint,
+ add foreign key (hand_card,conversation_id) references public.reply_cards(id,conversation_id) on delete set null (hand_card);
 create unique index conversation_queued_turns_one_per_hand on public.conversation_queued_turns(hand_card) where hand_card is not null;
+alter table public.conversation_messages add column hand_card bigint,
+ add foreign key (hand_card,conversation_id) references public.reply_cards(id,conversation_id) on delete set null (hand_card);
+
+create function public.conversation_message_hand_card() returns trigger language plpgsql security definer set search_path='' as $$
+begin
+ new.hand_card:=(select q.hand_card from public.conversation_queued_turns q where q.conversation_id=new.conversation_id and q.send_key=new.send_key);
+ return new;
+end $$;
+revoke all on function public.conversation_message_hand_card() from public,anon,authenticated,service_role;
+create trigger conversation_message_hand_card before insert on public.conversation_messages for each row when (new.author='person' and new.send_key is not null)
+ execute function public.conversation_message_hand_card();
 
 -- What the Agent is told: who did the step, which one, in which app and when (UTC, as the Engine reads times).
 create function public.hand_turn_message(writer text, title text, app text, at timestamptz) returns text language sql immutable set search_path='' as $$

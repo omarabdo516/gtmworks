@@ -499,7 +499,13 @@ test('integration: an Agent hands a step over once under its reply, shows none w
   const line=describeEntry(logged[0]);
   expect([i18n('en').t(line.act[0]),line.obj,line.from,line.to].map(part=>typeof part==='object'&&part&&'key' in part?i18n('en').t(part.key):part)).toEqual(['did it',hand.title,'Handed to you','Done it']);
   expect(work()).toEqual(before);
- } finally { detach(); }
+ } finally {
+  // The turn Done it queued (#140) is reserved on this Connection, which never answers (127.0.0.1:9), and an active
+  // reservation keeps its Connection: the turn goes with the test's Agent.
+  query(`delete from public.conversation_run_reservations where agent_id='${agent}'`);
+  query(`delete from public.conversation_queued_turns where agent_id='${agent}'`);
+  detach();
+ }
 });
 
 // #140: the whole app around a handed step, on a fake Hermes the server and the worker reach as well (the fake engine
@@ -559,9 +565,10 @@ test('a handed step waits in Waiting on you until Done it, which starts one Run 
   // It opens the Conversation with the card in view, in English and in Arabic.
   const handCard=page.locator(`#hand-${card}`);
   await item.click();
-  await expect(page).toHaveURL(new RegExp(`/conversations/${conversation}#hand-${card}$`));
   await expect(handCard).toBeInViewport();
   await expect(handCard).toBeFocused();
+  // Landed, the address is the Conversation's again, so a reload opens on its newest message.
+  await expect(page).toHaveURL(new RegExp(`/conversations/${conversation}$`));
   speaks('ar');
   await page.goto('/c/rs-learning/approvals');
   await expect(item.locator('.wtag--hand')).toHaveText('اتسلّمتلك');

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { boardColumns, chatWait, columnOf, keyboardTarget, blockReason, cardAgent, inEdgeBand, onCard, waitingCount } from '../lib/board-columns.mjs';
+import { boardColumns, chatWait, columnOf, keyboardTarget, blockReason, cardAgent, inEdgeBand, onCard, visibleApprovals, waitingCount } from '../lib/board-columns.mjs';
 
 test('the six columns keep the approved order, Waiting on you first', () => {
  assert.deepEqual(boardColumns, ['waiting', 'ideas', 'planned', 'progress', 'live', 'done']);
@@ -81,4 +81,12 @@ test('a drag scrolls a box by itself only while the finger is in the box\'s own 
  assert.equal(inEdgeBand(board, { x: 330, y: 450 }, { x: true, y: false }), true);
  assert.equal(inEdgeBand(board, { x: 20, y: 650 }, { x: false, y: true }), false);
  assert.equal(inEdgeBand(board, { x: 20, y: 850 }, { x: false, y: true }), true);
+});
+
+test('an approval on a Card of an Agent hidden from the reader is not counted, nor its waiting item', () => {
+ const cards = [{ id: 1, agent_id: null }, { id: 2, agent_id: 'seen' }, { id: 3, agent_id: 'hidden' }];
+ const items = [{ kind: 'approval', id: 1 }, { kind: 'approval', id: 2 }, { kind: 'approval', id: 3 }, { kind: 'mention', id: 3 }];
+ const shown = visibleApprovals(cards, items, new Set(['seen']));
+ assert.deepEqual(shown.cards.map(card => card.id), [1, 2]);
+ assert.deepEqual(shown.items, [{ kind: 'approval', id: 1 }, { kind: 'approval', id: 2 }, { kind: 'mention', id: 3 }]);
 });
