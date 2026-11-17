@@ -23,6 +23,8 @@ function databases(/** @type {ReturnType<typeof fakeEngine>} */ fake) {
    if(name==='open_conversation_runs') return ok(fake.runs.filter(run=>!closed.has(run.id)).map((run,index)=>({message:index+1,conversation,run:run.id,person:'p',connection:'f9000000-0000-0000-0000-000000000001',address:'http://hermes:8642',profile:'writer',state:'connected'})));
    if(name==='track_run_question') return ok([]);
    if(name==='track_run_permission') {
+    // What Postgres's jsonb refuses: a NUL, or half of a surrogate pair.
+    if([args.asking?.description,args.asking?.command].some(words=>typeof words==='string'&&(words.includes('\u0000')||!words.isWellFormed()))) return {data:null,error:{code:'22P05',message:'unsupported Unicode escape sequence'}};
     for(const card of cards) if(card.run===args.run&&(args.ended&&['open','sending'].includes(card.state)||card.state==='open'&&card.permission!==args.asking?.id&&card.at<args.read_started_at)) card.state='closed';
     if(args.asking&&!args.ended&&!cards.some(card=>card.run===args.run&&card.permission===args.asking.id)) cards.push({id:cards.length+1,run:args.run,permission:args.asking.id,content:{description:args.asking.description,command:args.asking.command,choices:args.asking.choices},state:'open',at:args.read_started_at});
     return ok(cards.filter(card=>card.run===args.run&&card.state==='sending').map(card=>({card:card.id,permission:card.permission,choice:card.content.choice})));
@@ -165,6 +167,15 @@ test('a request longer than the card keeps is shortened between characters, neve
  const fake=asking([{description:long,command:'rm'}]); const {service,cards}=databases(fake);
  await start(fake); await close(service,fake);
  assert.equal(cards[0].content.description,`${'a'.repeat(3998)}😀…`);
+});
+
+test('a request whose words carry a NUL or half of a surrogate pair is kept without them, and its choice is delivered',async()=>{
+ const fake=asking([{description:'delete the\u0000 old exports \uD800',command:'rm -r exports\u0000'}]); const {service,person,cards}=databases(fake);
+ const run=await start(fake); await close(service,fake);
+ assert.deepEqual(cards.map(({content,state})=>({content,state})),[{content:{description:'delete the old exports \uFFFD',command:'rm -r exports',choices:['once','always','deny']},state:'open'}]);
+ assert.deepEqual(await decide(person,service,fake,'once'),{state:'decided',choice:'once',at:'2026-06-10T10:20:00.000Z',first:true});
+ assert.deepEqual(fake.permits,[{run,permission:`${run}_p1`,choice:'once'}]);
+ assert.equal(cards[0].state,'decided');
 });
 
 // Nobody can answer a channel's or a note's Run: its request is not allowed, at once, as its question is answered with
