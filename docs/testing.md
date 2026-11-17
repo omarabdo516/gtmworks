@@ -48,6 +48,18 @@ block of their own, and `scripts/ci-runner.mjs cleanup` removes what this reposi
   Each functional spec file starts from the seed (`tests/fresh-seed.ts`); tests inside one file still run in order.
   The screens run first, on the seed as built; the navigation time budgets (project `measured`) run after every
   functional test with the machine to themselves, and first run last.
+- `lane` is the small visual lane (#257): the key screens in `tests/visual-lane/screens.json` (at most 15), each in
+  Arabic at 1440 and 390 in the light and dark themes, compared byte for byte with `tests/visual-lane/images/`. One
+  browser pinned by digest (`tests/visual-lane/renderer`) draws them in its container through Playwright's own server,
+  so every machine makes the same bytes; the tests, the app and lane 0's stack stay on the runner
+  (`playwright.lane.config.ts`). Before each comparison the guards (`tests/visual-lane-guards.ts`) refuse a font that
+  did not load, a clock that is not fixed and a request off the machine. It runs when what a screen is drawn from
+  changes: pages and styles under `app/`, `components/`, `.tsx` and `.css` under `lib/`, the catalogues, the stylesheet
+  build and the lane's own files; server code, documents and unit tests do not start it. When a picture changes on
+  purpose, one command refreshes the images: `./ci.sh lane-update` (Docker needed; without it, `Visual baselines`
+  uploads them as `lane-baselines`). `lane-proof` draws the lane three times on `ubuntu-latest` and on the `CI_RUNNER`
+  runner when the renderer, the lane's config, its guards or the CI definition change, and on `main`;
+  `lane-proof-compare` fails unless all six sets of hashes match.
 - `install` is the Docker install, update, backup, restore, release and one-line install. It runs when the image, its
   build inputs, the install and release files, the migrations it applies or its own checks change, and when `lib/`
   outside the catalogues, `worker/`, `next.config.mjs` or `server.js` change: only the install drives that code against
@@ -99,7 +111,7 @@ the parts are timed from run 43642299138.
 | image health (scripts/ci-image.sh) | whole-app | the built image serves health and runs its worker | inside `integration` | inside `integration`, not for screens alone (#213) | gated with it |
 | install | install end-to-end | install, repeat, backup, restore, release update, one-line install, rollback | 15.2 min, PRs touching install files, `lib/`, `worker/` or the app build, every `main` push | its own files and `lib/` outside the catalogues, `worker/`, `next.config.mjs`, `server.js` (the code it drives against the real Hermes); every `main` push; or `install` input | gated as before on a PR; `app/` and `components/` alone still skip it |
 | compare-failures, flaky-tests | our own CI tooling | names failures inherited from main; files an issue per flaky test | 0.1 to 0.2 min after `integration` | none | removed (#81): Playwright's HTML report (uploaded by `integration`) and GitHub reporter show each failure and mark each flaky test |
-| check | summary | the one required check | 0.1 min | 0.1 min | keep; judges five stages |
+| check | summary | the one required check | 0.1 min | 0.1 min | keep; judges six stages (the lane, #257) |
 | design-compare.yml | design tool | a screen against the design reference | its own paths, or by hand | unchanged | keep |
 | visual-baselines.yml | tool | refreshes approved images | by hand | unchanged | keep |
 | release.yml install test | release | the release installs and updates from its two files | per release | unchanged | keep |
