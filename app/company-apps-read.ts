@@ -29,9 +29,11 @@ export function appsChanged(company:string,language:string) {
 }
 
 const subscribe=(listener:()=>void)=>{ listeners.add(listener); return ()=>{ listeners.delete(listener); }; };
+// The apps as last read, without asking for a read: for a part of the page whose sheet or menu reads them itself.
+export const useHeldApps=(company:string,language:string):AppItem[]|null|undefined=>useSyncExternalStore(subscribe,()=>held.get(keyOf(company,language))?.apps,()=>undefined);
 export function useCompanyApps(company:string,language:string):AppItem[]|null|undefined {
  const key=keyOf(company,language);
- const apps=useSyncExternalStore(subscribe,()=>held.get(key)?.apps,()=>undefined);
+ const apps=useHeldApps(company,language);
  useEffect(()=>{ const last=held.get(key); if(!last||Date.now()-last.at>freshFor) void readApps(company,language); },[key,company,language]);
  return apps;
 }
