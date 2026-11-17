@@ -201,7 +201,7 @@ test.each(['en', 'ar'] as const)('in the %s interface, a done hand card shows Do
 
 test.each(['en', 'ar'] as const)('in the %s interface, Done it calls done once with the card, reads done at once and settles only once; a second click sends nothing', async language => {
  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
- let settle = (_: string | null) => {};
+ let settle: (value: string | null) => void = () => {};
  const done = vi.fn(() => new Promise<string | null>(resolve => { settle = resolve; }));
  const card = handed();
  const screen = await handDrawn(card, language, done);

@@ -24,7 +24,7 @@ const settling=900;
 // The app is named by the Agent, so its tile is the known app of that key or name; an app gtmworks does not know draws
 // the reference's plain tile.
 const known=[...Object.entries(roleApps).map(([key,app])=>({key,...app})),...catalogue];
-export function handApp(name:string) {
+function handApp(name:string) {
  const asked=name.trim().toLowerCase();
  return known.find(app=>app.key===asked||app.name.toLowerCase()===asked)??{key:'',mark:'·'};
 }
