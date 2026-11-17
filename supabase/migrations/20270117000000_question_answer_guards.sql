@@ -25,15 +25,16 @@ begin
   -- Under reserve_conversation_turn's lock, so the queue and the claim never both take one send.
   perform pg_advisory_xact_lock(hashtextextended('conversation_turn:'||conversation::text,0));
   if exists(select 1 from public.conversation_queued_turns q where q.conversation_id=conversation and q.send_key=answer_question.answer_key) then return 'none'; end if;
-  -- Keys before addressees, as reserve_conversation_turn: a send already claimed as the answer stays that answer, and
-  -- otherwise a note to a person ("@Sara …") stays a note, as reserve_conversation_turn makes it, never the answer.
+  -- Keys before addressees, as reserve_conversation_turn: a send already kept as a note stays that note, and one
+  -- already claimed as the answer stays that answer.
   if exists(select 1 from public.conversation_notes n where n.conversation_id=conversation and n.send_key=answer_question.answer_key) then return 'none'; end if;
   if exists(select 1 from public.reply_cards r where r.conversation_id=conversation and r.kind='question' and r.answer_key=answer_question.answer_key) then return 'claimed'; end if;
-  if exists(select 1 from public.conversation_addressee(c,answer)) then return 'none'; end if;
   select * into asked from public.reply_cards r where r.conversation_id=conversation and r.kind='question'
    and (r.state in ('open','sending') or r.answer_key=answer_question.answer_key)
    order by r.answer_key is not distinct from answer_question.answer_key desc, r.id limit 1 for update;
   if not found then return 'none'; end if;
+  -- Only while a question waits: a note to a person ("@Sara …") stays a note, as reserve_conversation_turn makes it.
+  if exists(select 1 from public.conversation_addressee(c,answer)) then return 'none'; end if;
  else
   select * into asked from public.reply_cards r where r.id=card and r.conversation_id=conversation and r.kind='question' for update;
   if not found then raise exception 'conversationNotFound' using errcode='P0002'; end if;
