@@ -212,6 +212,24 @@ test('the reader\'s own Waiting on you draws a Card whose chat waits once, in pl
  expect(column.querySelector('.col__count')!.textContent).toBe('2');
 });
 
+// A filter that leaves the Card out leaves its chat's step drawn on its own, as before #146, and counted once.
+test('a hand whose Card a filter leaves off the board is drawn as its own row, and every count names what is drawn once', async () => {
+ const screen = await showWork(workProps({ cards: [chatCard()], members, waiting: [handed] }));
+ const column = () => document.querySelector('.col[data-column="waiting"]')!;
+ const rows = () => [...column().querySelectorAll('a.mcard')].map(item => item.getAttribute('href'));
+ const counts = () => [column().querySelector('.col__count')!.textContent, document.querySelector('.board-tools__summary')!.textContent];
+ expect(column().querySelectorAll('.kcard[data-card-id="9"]')).toHaveLength(1);
+ expect([rows(), counts()]).toEqual([[], ['1', '1 things waiting on you']]);
+ await userEvent.fill(screen.getByLabelText('Month'), '2000-01');
+ await expect.poll(rows).toEqual(['/c/rs-learning/conversations/c-9#hand-42']);
+ expect(document.querySelectorAll('#board-cols .kcard[data-card-id="9"]')).toHaveLength(0);
+ expect(counts()).toEqual(['1', '1 things waiting on you']);
+ await userEvent.fill(screen.getByLabelText('Month'), '');
+ await expect.poll(rows).toEqual([]);
+ expect(column().querySelectorAll('.kcard[data-card-id="9"]')).toHaveLength(1);
+ expect(counts()).toEqual(['1', '1 things waiting on you']);
+});
+
 // As a Card waiting on a decision: the drop and Shift+Arrow are refused, say so and open the Card; nothing is sent.
 test('a Card whose chat waits leaves Waiting on you by its answer: a mouse drop elsewhere and Shift+Arrow open it and move nothing', async () => {
  push.mockClear(); toast.mockClear();
@@ -223,7 +241,7 @@ test('a Card whose chat waits leaves Waiting on you by its answer: a mouse drop 
  await mouse('mousePressed', from.left + from.width / 2, from.top + 20);
  for (let step = 1; step <= 10; step++) await mouse('mouseMoved', from.left + from.width / 2 + (to.left + to.width / 2 - from.left - from.width / 2) * step / 10, from.top + 20 + (to.top + 40 - from.top - 20) * step / 10);
  await mouse('mouseReleased', to.left + to.width / 2, to.top + 40);
- await expect.poll(() => toast.mock.calls).toEqual([['This card is waiting for your decision. Decide in the chat first', { icon: 'hand' }]]);
+ await expect.poll(() => toast.mock.calls).toEqual([['This card is waiting on its chat. Once it’s answered or done there, the card moves back on its own', { icon: 'hand' }]]);
  expect(push.mock.calls).toEqual([['/c/rs-learning/work/board/9']]);
  document.querySelector<HTMLElement>('.kcard[data-card-id="9"] a')!.focus();
  await userEvent.keyboard('{Shift>}{ArrowRight}{/Shift}');
@@ -251,5 +269,32 @@ test('the badge of a Card that starts waiting on the reader shakes once, and not
   await expect.poll(() => badge(9).className).toBe('badge badge--wait');
   await screen.rerender(workView({ ...after, items: [] }));
   expect(badge(9).className).toBe('badge badge--wait');
+  await userEvent.fill(screen.getByLabelText('Month'), '2000-01');
+  await expect.poll(() => document.querySelector('.kcard[data-card-id="9"]')).toBeNull();
+  await userEvent.fill(screen.getByLabelText('Month'), '');
+  await expect.poll(() => badge(9)?.className).toBe('badge badge--wait');
+ } finally { vi.useRealTimers(); }
+});
+
+// A Card that leaves waiting and waits again keeps its mark the full 1200ms from its second start.
+test('a Card that waits again soon after its first nudge keeps its second one for its full time', async () => {
+ vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+ try {
+  const idle = workProps({ cards: [card({ id: 9, title: 'مقال المحاسبة', stage_id: 3 })], members });
+  const waits = { ...idle, cards: [chatCard()], waiting: [handed] };
+  const screen = await showWork(idle);
+  const badge = () => document.querySelector('.kcard[data-card-id="9"] .badge');
+  await screen.rerender(workView(waits));
+  await expect.poll(() => badge()?.className).toBe('badge badge--wait is-new');
+  vi.advanceTimersByTime(600);
+  await screen.rerender(workView(idle));
+  await expect.poll(badge).toBeNull();
+  await screen.rerender(workView(waits));
+  await expect.poll(() => badge()?.className).toBe('badge badge--wait is-new');
+  vi.advanceTimersByTime(600);
+  await new Promise(resolve => requestAnimationFrame(resolve));
+  expect(badge()!.className).toBe('badge badge--wait is-new');
+  vi.advanceTimersByTime(600);
+  await expect.poll(() => badge()!.className).toBe('badge badge--wait');
  } finally { vi.useRealTimers(); }
 });

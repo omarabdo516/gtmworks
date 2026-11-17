@@ -60,6 +60,13 @@ test('Waiting on you is left by deciding and fills by itself', () => {
  assert.equal(blockReason('ideas', 'planned'), '');
 });
 
+test('a card its chat holds in Waiting on you is left by the chat, not by a decision (#146)', () => {
+ assert.equal(blockReason('waiting', 'ideas', true), 'chat');
+ assert.equal(blockReason('waiting', 'live', true), 'chat');
+ assert.equal(blockReason('waiting', 'waiting', true), 'same');
+ assert.equal(blockReason('ideas', 'waiting', true), 'waiting');
+});
+
 test('a card belongs to its first assigned Agent, else to its next actor when that is an Agent', () => {
  const agents = new Set(['writer', 'lead']);
  assert.equal(cardAgent({ id: 1, next_actor: 'lead' }, [{ card_id: 1, person_id: 'person' }, { card_id: 1, person_id: 'writer' }], agents), 'writer');

@@ -970,5 +970,6 @@
   "agentFilesEmpty": "No files yet. Files from its cards and from your chats with it show here.",
   "agentScreen": "Agent’s screen",
   "agentScreenOff": "Nothing is running on the screen right now.",
-  "boardWaitingForDecision": "This card is waiting for your decision. Decide in the chat first"
+  "boardWaitingForDecision": "This card is waiting for your decision. Decide in the chat first",
+  "boardWaitingOnChat": "This card is waiting on its chat. Once it’s answered or done there, the card moves back on its own"
 }

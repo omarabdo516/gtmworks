@@ -26,7 +26,7 @@ import { ActivityRow, Avatar, isMessage, MessageRow, NoteReplyRow, type WorkActi
 import { NoteText, type EditableNote } from '@/app/note-edit';
 import { workDate as date } from '@/lib/work-date.mjs';
 import { sortWorkCards } from '@/lib/work-sort.mjs';
-import { boardColumns, blockReason, cardAgent, chatWait, columnLabel, columnOf, keyboardTarget, onCard, progressOf, waitingCount, type CardWait } from '@/lib/board-columns.mjs';
+import { boardColumns, blockReason, cardAgent, chatWait, columnLabel, columnOf, keyboardTarget, onCard, progressOf, type CardWait } from '@/lib/board-columns.mjs';
 import { useNewlyWaiting } from '@/lib/newly-waiting';
 import type { WaitingItem } from '@/lib/approval-queue';
 import '@/app/board.css';
@@ -67,15 +67,18 @@ export default function Work(p:WorkProps) { const {workAction}=p; const {t,local
  useShowCard(p.show,{hides:!!asked&&filter!=='all'&&asked.agent_id!==filter,showAll:()=>setAgentFilter('all'),board:`${base}/board`});
  // The board keeps the month filter of the dated views: a card dated in another month is hidden, an undated one stays.
  const boardCards=visible.filter(c=>filter==='all'||c.agent_id===filter);
- // A question or a hand of a chat with a Card is drawn as that Card (#146), as an approval is.
- const items=(p.waiting||[]).filter(item=>!onCard(item));
+ // A question or a hand of a chat with a Card is drawn as that Card (#146), as an approval is, while the board draws the
+ // Card under Waiting on you; a filter or a hidden Agent that leaves the Card out leaves the row drawn on its own.
+ const waitingHere=new Set(boardCards.filter(c=>columnOfCard(c)==='waiting').map(c=>c.id));
+ const asCard=(item:WaitingItem)=>onCard(item)&&(item.kind==='approval'||waitingHere.has(item.card_id!));
+ const items=(p.waiting||[]).filter(item=>!asCard(item));
  // On "Waiting on you" (/approvals) the column is the reader's own list, exactly as waiting_list returns it (the same
  // source as the count): their approvals and their items, newest first. A card in review that waits on someone else is
  // not theirs, so it is not shown there; the board's own column still shows every card in review.
  const ownList=p.focus==='waiting';
- const ownEntries=(p.waiting||[]).flatMap((item,n,all):{item:WaitingItem,card?:Card}[]=>{ if(!onCard(item)) return [{item}]; if(all.findIndex(other=>onCard(other)&&other.card_id===item.card_id)<n) return []; const c=boardCards.find(x=>x.id===item.card_id); return c?[{item,card:c}]:[]; });
+ const ownEntries=(p.waiting||[]).flatMap((item,n,all):{item:WaitingItem,card?:Card}[]=>{ if(!asCard(item)) return [{item}]; if(all.findIndex(other=>asCard(other)&&other.card_id===item.card_id)<n) return []; const c=boardCards.find(x=>x.id===item.card_id); return c?[{item,card:c}]:[]; });
  const drawnCards=ownList?boardCards.filter(c=>columnOfCard(c)!=='waiting'||ownEntries.some(entry=>entry.card?.id===c.id)):boardCards;
- const waitingTotal=waitingCount(p.waiting||[]);
+ const waitingTotal=new Set((p.waiting||[]).filter(item=>asCard(item)&&waitingHere.has(item.card_id!)).map(item=>item.card_id)).size+items.length;
  const stagesIn=(column:string)=>p.stages.filter(s=>(s.board_column||'ideas')===column);
  const stageName=(c:Card)=>p.stages.find(s=>s.id===c.stage_id)?.name||'';
  // After a move the card is drawn again in its new column; the keyboard stays on it.
@@ -87,9 +90,10 @@ export default function Work(p:WorkProps) { const {workAction}=p; const {t,local
  useEffect(()=>{ if(p.focus==='waiting') document.querySelector('#board-cols > [data-column="waiting"]')?.scrollIntoView({block:'nearest',inline:'nearest'}); },[p.focus]);
  const move=(id:number,to:string)=>{
   const c=p.cards.find(x=>x.id===id); if(!c||!p.canCreate) return;
-  const why=blockReason(columnOfCard(c),to);
+  const why=blockReason(columnOfCard(c),to,!!c.wait&&columnOf({...c,wait:null},p.stages)!=='waiting');
   if(why==='same') return;
   if(why==='waiting') { toast(t('boardWaitingFillsItself'),{icon:'clock'}); return; }
+  if(why==='chat') { toast(t('boardWaitingOnChat'),{icon:'hand'}); router.push(`${base}/board/${c.id}`); return; }
   if(why==='decide') { toast(t(to==='live'||to==='done'?'boardDecideFirst':'boardWaitingForDecision'),{icon:'hand'}); router.push(`${base}/board/${c.id}`); return; }
   const form=new FormData(); form.set('op','move-column'); form.set('company',p.company); form.set('slug',p.slug); form.set('card',String(id)); form.set('column',to);
   focusCard.current={id,column:to}; setMoving(true);
@@ -103,7 +107,8 @@ export default function Work(p:WorkProps) { const {workAction}=p; const {t,local
  const chatBadge=(chat:NonNullable<ReturnType<typeof chatOf>>)=>chat.team?t('boardWaitingTeam'):chat.mine?t('boardWaitingYou'):waitingOn(chat.person);
  // A Card that waits on the reader: its badge shakes once when it starts to (design-reference: syncWaitMarks).
  const yours=(c:Card)=>chatOf(c)?.mine??p.approvableIds.includes(c.id);
- const fresh=useNewlyWaiting(drawnCards.filter(c=>columnOfCard(c)==='waiting'&&yours(c)).map(c=>c.id));
+ // Read from every Card, not the drawn ones, so a filter that brings a waiting Card back does not shake it again.
+ const fresh=useNewlyWaiting(p.cards.filter(c=>columnOfCard(c)==='waiting'&&yours(c)).map(c=>c.id));
  const cardView=(c:Card,isOverlay=false)=>{ const column=columnOfCard(c); const agent=agentOfCard(c); const own=cardAgentOf(c); const crew=(c.crew||[]).flatMap(id=>agentById.get(id)??[]); const names=crew.map(a=>a.name); const job=c.channel||own?.speciality||''; const mine=p.approvableIds.includes(c.id); const chat=chatOf(c); const step=(p.waiting||[]).find(item=>item.kind==='approval'&&item.id===c.id)?.body; const progress=column==='progress'?progressOf(c,p.items):null;
   const brief=stagesIn(column).length>1?stageName(c):[c.hook,c.offering,c.goal].find(Boolean)||'';
   return <KanbanCard id={c.id} column={column} isOverlay={isOverlay} key={c.id} disabled={!p.canCreate} className={mine?'approval-card':''} data-mine={mine||undefined} data-stage-id={c.stage_id} data-stage-name={stageName(c)}>
