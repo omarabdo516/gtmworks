@@ -101,7 +101,10 @@ PY
   fi
   install_chromium
   dir=$(ledger_dir components)
-  npm run test:components -- ${SHARD:+--shard="$SHARD"} --reporter=default --reporter=json --outputFile.json="$dir/vitest.json"
+  # Naming the reporters replaces Vitest's own choice, so the GitHub one that marks failures on the pull request is named
+  # too when it runs there.
+  npm run test:components -- ${SHARD:+--shard="$SHARD"} --reporter=default ${GITHUB_ACTIONS:+--reporter=github-actions} \
+    --reporter=json --outputFile.json="$dir/vitest.json"
   ;;
  database)
   # Migrations replayed and verified, row-level security and grants, on lane 0's stack.
