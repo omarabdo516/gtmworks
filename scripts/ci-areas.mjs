@@ -2,9 +2,9 @@ import { readFileSync } from 'node:fs';
 
 // Which long suites a change needs (#76), as Hermes `detect` and T3 Code `Changes` decide it: each suite runs only when
 // the files it covers changed. Static (lint, types, catalogues, the node unit tests) runs on every change and needs no
-// entry here. Prints components=, database=, integration=, install=, lane= and proof= lines for $GITHUB_OUTPUT. Each suite prints the
-// first of its levels whose files changed, or false: `true` runs the whole suite, and the browser suite's `visual` runs
-// only its compared screens (#213). With --main (a push to main) every suite runs unless every file is a document.
+// entry here. Prints components=, database=, integration= and install= lines for $GITHUB_OUTPUT. Each suite prints the
+// first of its levels whose files changed, or false. The compared screens are not here: they run on main only, never on
+// a pull request (#257). With --main (a push to main) every suite runs unless every file is a document.
 // Accepts path arguments or git diff --name-only -z on stdin; an empty, malformed or unreadable list runs every suite.
 const everything = [/^\.github\/workflows\/ci\.yml$/, /^ci\.sh$/, /^scripts\/ci-(areas|verdict|runner)\.mjs$/, /^package(-lock)?\.json$/];
 const suites = {
@@ -39,9 +39,6 @@ const suites = {
       /^scripts\/(web\.sh|local-db\.sh|proxy-stack\.sh|ci-image\.sh|first-run-db\.mjs|local-default-privileges\.sql)$/,
       /^supabase\/(migrations\/|config\.toml$|seed\.sql$)/, /^public\//,
     ],
-    // Screens alone: the component tests prove how they behave, and the compared screens (the `visual` Playwright
-    // project) catch an unintended change to an approved screen before merge.
-    visual: [/^(app|components)\//, /^lib\/messages\//, /^tests\/visual-screens\//, /^tests\/visual\.spec\.ts-snapshots\//],
   },
   // The Docker install, update, backup and release: the image and its build inputs, the install and release files, the
   // migrations it applies and the checks it runs, and the code those checks drive against the real bundled Hermes (lib/
@@ -55,17 +52,6 @@ const suites = {
       /^supabase\//, /^playwright\.install\.config\.ts$/, /^tests\/install\//, /^\.github\/workflows\/release[^/]*\.ya?ml$/,
     ],
   },
-  // The visual lane (#257): what a picture is drawn from (the app's pages and styles, the components and their fonts,
-  // the catalogues, the stylesheet build) and the lane's own files. Its specs run in the lane job only, so they are
-  // left out of the browser suite's area above. Server code under app/ and lib/ draws nothing the lane's seed does not.
-  lane: {
-    true: [
-      /^app\/.+\.(tsx|css)$/, /^components\//, /^lib\/.+\.(tsx|css)$/, /^lib\/messages\//, /^postcss\.config\.mjs$/,
-      /^tests\/visual-lane(\/|\.mjs$|-guards\.ts$|[^/]*\.spec\.ts$)/, /^playwright\.lane\.config\.ts$/,
-    ],
-  },
-  // The lane's proof that every runner draws the same bytes: the renderer, the lane's config and its guards.
-  proof: { true: [/^tests\/visual-lane\/renderer$/, /^playwright\.lane\.config\.ts$/, /^tests\/visual-lane-guards\.ts$/] },
 };
 const isDocument = path => !path.startsWith('public/') && (path.startsWith('design/') || path.startsWith('docs/') || path.endsWith('.md'));
 const main = process.argv[2] === '--main';

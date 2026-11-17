@@ -15,7 +15,11 @@ a pull request from a fork runs it on `ubuntu-latest`, where every other job run
 time, and `database` and `install` take as long or longer there, so they stay on `ubuntu-latest` instead of queueing
 `integration` behind them. The compared screens run in their own `visual` job on `ubuntu-latest`, where their approved
 images are made, followed by the measured navigation budgets, which need a machine no other job shares (the PC also
-runs other repositories' CI); `ci.sh integration` leaves both projects empty (`GTMWORKS_HOSTED_ELSEWHERE`). A job that
+runs other repositories' CI); `ci.sh integration` leaves both projects empty (`GTMWORKS_HOSTED_ELSEWHERE`). The compared
+screens, the measured budgets and the visual lane run on a push to `main` and on a manual run only, never on a pull
+request, and `check` does not wait for them (Omar, 2026-11-17, #257). When they fail on `main`, the `visual` job opens
+or updates one issue labelled `visual-regression` that names each failed screen and links the difference images
+(`scripts/visual-regression.mjs`); no pull request is blocked by it. A job that
 starts the local Supabase stack first reserves its ports on a GitHub-hosted runner (#225). On the PC the ports move to a
 block of their own, and `scripts/ci-runner.mjs cleanup` removes what this repository's runs start, before and after.
 
@@ -39,9 +43,7 @@ block of their own, and `scripts/ci-runner.mjs cleanup` removes what this reposi
   the journeys drive that no component test covers. That code is the server code under `app/` (its `.ts` route handlers
   and server actions, where the server checks permissions), `lib/` outside the catalogues, `worker/` and the root files
   the build and server read. Screens alone (the rest of `app/`, `components/`, the catalogues in `lib/messages/`, the compared
-  screens in `tests/visual-screens/` and their approved images) run only the compared screens. For them `changes`
-  prints `integration=visual`, and the job runs `./ci.sh visual` (`npm run test:visual`, Playwright's `visual` project
-  on lane 0 as the seed builds it) with no image, no proxy suite and no journeys (#213). Its suite runs on `GTMWORKS_TEST_LANES`
+  screens in `tests/visual-screens/` and their approved images) start no browser job on a pull request (#257). Its suite runs on `GTMWORKS_TEST_LANES`
   lanes (four on a GitHub-hosted runner, as many as its CPUs and memory carry on the PC), one per Playwright worker:
   each lane is a whole local Supabase stack and an app server of its own (`tests/lane.mjs`, `scripts/local-db.sh`,
   `scripts/web.sh`), so spec files run side by side and never share data.
@@ -53,13 +55,14 @@ block of their own, and `scripts/ci-runner.mjs cleanup` removes what this reposi
   browser pinned by digest (`tests/visual-lane/renderer`) draws them in its container through Playwright's own server,
   so every machine makes the same bytes; the tests, the app and lane 0's stack stay on the runner
   (`playwright.lane.config.ts`). Before each comparison the guards (`tests/visual-lane-guards.ts`) refuse a font that
-  did not load, a clock that is not fixed and a request off the machine. It runs when what a screen is drawn from
-  changes: pages and styles under `app/`, `components/`, `.tsx` and `.css` under `lib/`, the catalogues, the stylesheet
-  build and the lane's own files; server code, documents and unit tests do not start it. When a picture changes on
-  purpose, one command refreshes the images: `./ci.sh lane-update` (Docker needed; without it, `Visual baselines`
-  uploads them as `lane-baselines`). On a pull request that changes the renderer, the lane's config, its guards or the
-  CI definition, `lane-proof` draws the lane three times on `ubuntu-latest` and on the `CI_RUNNER` runner;
-  `lane-proof-compare` fails unless all six sets of hashes match.
+  did not load, a clock that is not fixed and a request off the machine. It runs on `main` and on a manual run, like
+  `visual`. When a picture changes on purpose, one command refreshes the images: `./ci.sh lane-update` (Docker needed;
+  without it, `Visual baselines` uploads them as `lane-baselines`). On a manual run, `lane-proof` draws the lane three
+  times on `ubuntu-latest` and on the `CI_RUNNER` runner; `lane-proof-compare` fails unless all six sets of hashes match.
+- Design parity is checked once, at delivery, outside CI (Omar, 2026-11-17, #257). The worker that delivers a screen
+  compares it with its design in `design/` in T3's preview, motions included, at the widths and in the languages the
+  design shows, and attaches the evidence (side-by-side images, and a recording for each motion) to the pull request
+  that delivers it. No CI job compares a screen with `design/`, and no animation frame is sampled in CI.
 - `install` is the Docker install, update, backup, restore, release and one-line install. It runs when the image, its
   build inputs, the install and release files, the migrations it applies or its own checks change, and when `lib/`
   outside the catalogues, `worker/`, `next.config.mjs` or `server.js` change: only the install drives that code against
@@ -594,6 +597,7 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `visual-lane.mjs` | helper: reads the visual lane's screens from `visual-lane/screens.json` and names each screen's four images | — | — | helper, new (#257) |
 | `visual-lane.test.mjs` | The visual lane holds at most 15 screens; each owns exactly its four images (Arabic, 1440 and 390, light and dark), and a missing or stray image is named; a screen with an unknown field or a wrong type is refused, naming it. (#257) | 0.1 s | — | new |
 | `visual-lane/` | The visual lane's data: its screen list (`screens.json`), its approved images (`images/`) and the pinned renderer image it draws them in (`renderer`). | — | — | data, new (#257) |
+| `visual-regression.test.mjs` | When the compared screens fail on main, the visual-regression issue names each failed screen with its block and line, the commit, the run and the difference images; a failure with no failed screen still opens it and says to read the run. (#257) | 0.1 s | — | new |
 | `visual-screens.mjs` | helper: reads the compared screens from `visual-screens/` | — | — | helper, kept |
 | `visual-screens/` | The compared screens, one file each: its address, its set-up, a step taken on the page before its picture, what shows it has loaded and whether it is also compared dark. | — | — | data, kept |
 | `visual.spec.ts` | Every screen in `visual-screens/` matches its approved images (English and Arabic, 390 and 1440, and dark when the screen asks for it) on the seed as built; the light Home, board and Card keep their secondary text at 4.5:1 and weaker than the body text (moved from app.spec.ts, #218). (visual project, first) | 83.6 s | visual-baselines.test.mjs (every screen has its images) | keep, extended (#218) |

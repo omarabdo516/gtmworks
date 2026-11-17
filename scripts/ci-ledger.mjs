@@ -23,23 +23,23 @@ export const layerOf = jobName => jobName.replace(/ \(.*\)$/, '');
 const shardOf = jobName => jobName.match(/ \((\d+\/\d+)\)$/)?.[1] ?? '';
 
 // Which `changes` output each layer follows; the compared screens follow the browser suite's.
-const decisionOf = { components: 'components', database: 'database', visual: 'integration', integration: 'integration', install: 'install', lane: 'lane' };
+const decisionOf = { components: 'components', database: 'database', visual: 'integration', integration: 'integration', install: 'install', lane: 'integration' };
 const e2eOff = 'manual run: the e2e input is off';
+const mainOnly = 'compared screens run on main and manual runs only (#257)';
 // [decision, event, layer, reason]; `*` matches any. The first matching row wins.
 const skipReasons = [
+  ['*', 'pull_request', 'visual', mainOnly],
+  ['*', 'pull_request', 'lane', mainOnly],
   ['false', 'pull_request', '*', 'no changed file is in its area (scripts/ci-areas.mjs)'],
   ['false', 'push', '*', 'every changed file is a document'],
-  ['false', 'workflow_dispatch', 'visual', e2eOff],
   ['false', 'workflow_dispatch', 'integration', e2eOff],
-  ['false', 'workflow_dispatch', 'lane', e2eOff],
   ['false', 'workflow_dispatch', 'install', 'manual run: the install input is off'],
-  ['visual', '*', 'integration', 'screens alone: only the compared screens run (visual job)'],
 ];
 const notStarted = 'not started: the run was cancelled or a job it needs did not succeed';
 
 export function skipReason(layer, decisions, event) {
   const decision = decisions[decisionOf[layer]];
-  const row = skipReasons.find(([d, e, l]) => d === decision && (e === '*' || e === event) && (l === '*' || l === layer));
+  const row = skipReasons.find(([d, e, l]) => (d === '*' || d === decision) && (e === '*' || e === event) && (l === '*' || l === layer));
   return row?.[3] ?? notStarted;
 }
 
@@ -183,7 +183,7 @@ async function main([input, output]) {
     listed.push(...(await response.json()).jobs);
     url = response.headers.get('link')?.match(/<([^>]+)>;\s*rel="next"/)?.[1];
   }
-  const decisions = Object.fromEntries(['components', 'database', 'integration', 'install', 'lane'].map(name => [name, env[`DECISIONS_${name.toUpperCase()}`] ?? '']));
+  const decisions = Object.fromEntries(['components', 'database', 'integration', 'install'].map(name => [name, env[`DECISIONS_${name.toUpperCase()}`] ?? '']));
   const jobs = [];
   for (const job of listed.filter(job => job.name !== env.GITHUB_JOB && job.name !== 'check')) {
     let log;

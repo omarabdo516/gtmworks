@@ -9,8 +9,8 @@ import { resolve } from 'node:path';
 const script = resolve('scripts/ci-areas.mjs');
 const run = (args, input = '') => execFileSync(process.execPath, [script, ...args], { encoding: 'utf8', input });
 const areas = (...paths) => Object.fromEntries(run(paths).trim().split('\n').map(line => line.split('=')));
-const none = { components: 'false', database: 'false', integration: 'false', install: 'false', lane: 'false', proof: 'false' };
-const all = { components: 'true', database: 'true', integration: 'true', install: 'true', lane: 'true', proof: 'true' };
+const none = { components: 'false', database: 'false', integration: 'false', install: 'false' };
+const all = { components: 'true', database: 'true', integration: 'true', install: 'true' };
 
 test('design, docs and Markdown run no suite', () => {
   assert.deepEqual(areas('design/conversation.html', 'docs/testing.md', 'docs/api/openapi.yaml', 'README.md', 'AGENTS.md'), none);
@@ -21,24 +21,24 @@ test('unit test and brand file changes run no long suite: static covers them on 
   assert.deepEqual(areas('tests/unit.test.mjs', 'tests/hermes.test.mjs', 'brand/wordmark.png', 'brand/README.md'), none);
 });
 
-// Screens alone (#213): the component tests prove how they behave, and from the whole-app browser suite only the
-// compared screens run (integration=visual), so an unintended change to an approved screen is still caught before
-// merge. A component test alone runs only the component tests. None of them runs the database or the install.
+// Screens alone: the component tests prove how they behave. The compared screens run on main only (Omar, 2026-11-17,
+// #257), so no level sends a pull request to them: screens alone start no browser job. None of them runs the database
+// or the install.
 const screens = {
-  'app/page.tsx': { components: 'true', database: 'false', integration: 'visual', install: 'false', lane: 'true', proof: 'false' },
-  'app/globals.css': { components: 'true', database: 'false', integration: 'visual', install: 'false', lane: 'true', proof: 'false' },
-  'components/shell/sidebar.tsx': { components: 'true', database: 'false', integration: 'visual', install: 'false', lane: 'true', proof: 'false' },
-  'lib/messages/en.json': { components: 'true', database: 'false', integration: 'visual', install: 'false', lane: 'true', proof: 'false' },
-  'tests/visual-screens/home.json': { components: 'false', database: 'false', integration: 'visual', install: 'false', lane: 'false', proof: 'false' },
-  'tests/visual.spec.ts-snapshots/home-en-1440-linux.png': { components: 'false', database: 'false', integration: 'visual', install: 'false', lane: 'false', proof: 'false' },
-  'tests/components/message-box.test.tsx': { components: 'true', database: 'false', integration: 'false', install: 'false', lane: 'false', proof: 'false' },
+  'app/page.tsx': { components: 'true', database: 'false', integration: 'false', install: 'false' },
+  'app/globals.css': { components: 'true', database: 'false', integration: 'false', install: 'false' },
+  'components/shell/sidebar.tsx': { components: 'true', database: 'false', integration: 'false', install: 'false' },
+  'lib/messages/en.json': { components: 'true', database: 'false', integration: 'false', install: 'false' },
+  'tests/visual-screens/home.json': { components: 'false', database: 'false', integration: 'false', install: 'false' },
+  'tests/visual.spec.ts-snapshots/home-en-1440-linux.png': { components: 'false', database: 'false', integration: 'false', install: 'false' },
+  'tests/components/message-box.test.tsx': { components: 'true', database: 'false', integration: 'false', install: 'false' },
 };
 for (const [path, expected] of Object.entries(screens)) {
   test(`${path} alone runs no journey, database or install`, () => assert.deepEqual(areas(path), expected));
 }
 
-test('screens together run the component tests and the compared screens only', () => {
-  assert.deepEqual(areas(...Object.keys(screens)), { components: 'true', database: 'false', integration: 'visual', install: 'false', lane: 'true', proof: 'false' });
+test('screens together run the component tests only', () => {
+  assert.deepEqual(areas(...Object.keys(screens)), { components: 'true', database: 'false', integration: 'false', install: 'false' });
 });
 
 test('a screen together with a file of the journeys\' area runs the whole browser suite', () => {
@@ -54,7 +54,7 @@ for (const [path, components] of [
   ['app/api/health/route.ts', 'true'], ['app/sign-in/actions.ts', 'true'],
 ]) {
   test(`${path} runs the whole browser suite and neither the database nor the install`, () => {
-    assert.deepEqual(areas(path), { components, database: 'false', integration: 'true', install: 'false', lane: path === 'postcss.config.mjs' ? 'true' : 'false', proof: 'false' });
+    assert.deepEqual(areas(path), { components, database: 'false', integration: 'true', install: 'false' });
   });
 }
 
@@ -78,7 +78,7 @@ for (const path of ['worker/index.mjs', 'supabase/seed.sql', 'tests/frame.spec.t
 // against the real bundled Hermes (conversation, Agent, company profiles); the browser suite uses fake engines.
 for (const path of ['lib/engine.mjs', 'lib/i18n/messages.en.json', 'worker/index.mjs', 'next.config.mjs', 'server.js']) {
   test(`${path} runs the browser suite and the install`, () => {
-    assert.deepEqual(areas(path), { components: /^lib\//.test(path) ? 'true' : 'false', database: 'false', integration: 'true', install: 'true', lane: 'false', proof: 'false' });
+    assert.deepEqual(areas(path), { components: /^lib\//.test(path) ? 'true' : 'false', database: 'false', integration: 'true', install: 'true' });
   });
 }
 
@@ -136,45 +136,28 @@ test('on main every suite runs unless every file is a document', () => {
 });
 
 test('stdin accepts NUL-separated git paths without splitting spaces or newlines', () => {
-  assert.equal(run([], 'docs/a page.md\0docs/a\npage.md\0'), 'components=false\ndatabase=false\nintegration=false\ninstall=false\nlane=false\nproof=false\n');
-  assert.equal(run([], 'docs/a page.md\0docker-compose.install.yml\0'), 'components=false\ndatabase=false\nintegration=false\ninstall=true\nlane=false\nproof=false\n');
-  assert.equal(run(['--main'], 'app/a page.tsx\0'), 'components=true\ndatabase=true\nintegration=true\ninstall=true\nlane=true\nproof=true\n');
+  assert.equal(run([], 'docs/a page.md\0docs/a\npage.md\0'), 'components=false\ndatabase=false\nintegration=false\ninstall=false\n');
+  assert.equal(run([], 'docs/a page.md\0docker-compose.install.yml\0'), 'components=false\ndatabase=false\nintegration=false\ninstall=true\n');
+  assert.equal(run(['--main'], 'app/a page.tsx\0'), 'components=true\ndatabase=true\nintegration=true\ninstall=true\n');
 });
 
 test('an empty, malformed or unreadable list runs every suite', t => {
   for (const paths of [[], [''], ['docs/../app/page.tsx'], ['/docs/guide.md'], ['docs//guide.md']]) {
     assert.deepEqual(areas(...paths), all, JSON.stringify(paths));
   }
-  assert.equal(run([], 'docs/guide.md\0\0'), 'components=true\ndatabase=true\nintegration=true\ninstall=true\nlane=true\nproof=true\n');
+  assert.equal(run([], 'docs/guide.md\0\0'), 'components=true\ndatabase=true\nintegration=true\ninstall=true\n');
   const directory = openSync('.', 'r');
   t.after(() => closeSync(directory));
   const unreadable = spawnSync(process.execPath, [script], { encoding: 'utf8', stdio: [directory, 'pipe', 'pipe'] });
   assert.equal(unreadable.status, 0);
-  assert.equal(unreadable.stdout, 'components=true\ndatabase=true\nintegration=true\ninstall=true\nlane=true\nproof=true\n');
+  assert.equal(unreadable.stdout, 'components=true\ndatabase=true\nintegration=true\ninstall=true\n');
 });
 
-// The visual lane (#257) is drawn from what a screen looks like: the app's pages and styles, the components, the
-// catalogues, the lane's own files and the stylesheet build. Server code, documents and unit tests do not change a
-// picture. Its proof, the same bytes on every runner three times over, runs when the renderer, the lane's config, the
-// guards or the CI definition change, and on main.
-for (const path of [
-  'app/page.tsx', 'app/c/[company]/home/page.tsx', 'app/globals.css', 'components/shell/sidebar.tsx', 'components/paperclip/fonts/InterVariable.woff2',
-  'lib/i18n-client.tsx', 'lib/messages/ar.json', 'postcss.config.mjs', 'tests/visual-lane/screens.json', 'tests/visual-lane/images/home-ar-390-dark.png',
-  'tests/visual-lane.mjs', 'tests/visual-lane-guards.spec.ts', 'tests/visual-lane-screens.spec.ts', 'tests/visual-lane-390.spec.ts',
-]) {
-  test(`${path} runs the visual lane`, () => assert.equal(areas('docs/testing.md', path).lane, 'true'));
-}
-for (const path of [
-  'app/api/health/route.ts', 'app/sign-in/actions.ts', 'lib/engine.mjs', 'worker/index.mjs', 'supabase/seed.sql', 'docs/testing.md', 'README.md',
-  'tests/unit.test.mjs', 'tests/visual-lane.test.mjs', 'tests/frame.spec.ts', 'tests/visual-screens/home.json',
-]) {
-  test(`${path} does not run the visual lane`, () => assert.equal(areas(path).lane, 'false'));
-}
-for (const path of ['tests/visual-lane/renderer', 'playwright.lane.config.ts', 'tests/visual-lane-guards.ts', 'ci.sh']) {
-  test(`${path} runs the visual lane and its proof`, () => assert.deepEqual([areas(path).lane, areas(path).proof], ['true', 'true']));
-}
-test('a screen or the lane\'s list alone does not run the proof', () => {
-  assert.equal(areas('app/page.tsx', 'components/shell/sidebar.tsx', 'tests/visual-lane/screens.json').proof, 'false');
+// No path, however it is mixed, routes a pull request to the compared screens (#257).
+test('no change sends a pull request to the compared screens', () => {
+  for (const path of ['app/page.tsx', 'tests/visual-screens/home.json', 'tests/visual.spec.ts-snapshots/home-en-1440-linux.png', 'tests/visual-lane/renderer', 'docs/testing.md']) {
+    assert.doesNotMatch(run([path]), /=visual$|^(lane|proof|visual)=/m, path);
+  }
 });
 // The lane's own files need no journeys: they run in the lane job alone.
 for (const path of ['playwright.lane.config.ts', 'tests/visual-lane-guards.ts', 'tests/visual-lane-guards.spec.ts', 'tests/visual-lane.mjs']) {

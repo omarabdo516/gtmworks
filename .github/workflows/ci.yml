@@ -1,9 +1,10 @@
 # As Hermes and T3 Code run CI (#76): the first job (`changes`, scripts/ci-areas.mjs) decides which suites a change
 # needs. Static (lint, types, catalogues, unit tests) runs on every change; the screen component tests (`components`)
 # run when the app, its components or its library change. The database tests, the whole-app browser
-# suite (`integration`) and the Docker install run on a pull request only when their own files change; screens alone
-# (the app's screens, components, catalogues, compared screens and approved images) run only the compared screens from
-# the browser suite (integration=visual, #213). A push to main runs every suite unless every file is a document; a manual
+# suite (`integration`) and the Docker install run on a pull request only when their own files change. The compared
+# screens and the measured navigation budgets (`visual`) and the visual lane (`lane`) run on a push to main and on a
+# manual run only, never on a pull request, and `check` does not wait for them (Omar, 2026-11-17, #257): a failure on main
+# opens or updates one issue labelled visual-regression. A push to main runs every suite unless every file is a document; a manual
 # run starts the browser and install suites only through inputs that default to off. Required `check`
 # (scripts/ci-verdict.mjs) counts a suite nobody asked for as passed when it was skipped, and is red on any failed or
 # cancelled stage. The `ledger` job records each run's timings, runners and test results and labels a red job
@@ -19,10 +20,9 @@
 # repository's runs start before and after it (scripts/ci-runner.mjs), and ~/.npm, the browsers and the image layers
 # stay on the machine.
 # The visual lane (`lane`, #257) compares a few key screens in Arabic, light and dark, drawn by one browser pinned by
-# digest (tests/visual-lane/renderer) so every runner makes the same bytes; it runs when what a screen is drawn from
-# changes. On a pull request that changes the renderer, the lane's config or its guards (or a file that runs every
-# suite), `lane-proof` draws the lane three times on ubuntu-latest and on the CI_RUNNER runner, and
-# `lane-proof-compare` fails unless all six sets of hashes match.
+# digest (tests/visual-lane/renderer) so every runner makes the same bytes. On a manual run, `lane-proof` draws the lane
+# three times on ubuntu-latest and on the CI_RUNNER runner, and `lane-proof-compare` fails unless all six sets of hashes
+# match.
 name: CI
 
 on:
@@ -56,8 +56,6 @@ jobs:
       database: ${{ steps.classify.outputs.database }}
       integration: ${{ steps.classify.outputs.integration }}
       install: ${{ steps.classify.outputs.install }}
-      lane: ${{ steps.classify.outputs.lane }}
-      proof: ${{ steps.classify.outputs.proof }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -75,13 +73,13 @@ jobs:
           E2E: ${{ inputs.e2e }}
           INSTALL: ${{ inputs.install }}
         run: |
-          areas=$'components=true\ndatabase=true\nintegration=true\ninstall=true\nlane=true\nproof=true'
+          areas=$'components=true\ndatabase=true\nintegration=true\ninstall=true'
           main=
           if [[ "$EVENT_NAME" == workflow_dispatch ]]; then
             # A manual run: static, the components and the database always; the browser and install suites only when asked.
             [[ $E2E == true ]] || E2E=false
             [[ $INSTALL == true ]] || INSTALL=false
-            printf '%s\n' components=true database=true "integration=$E2E" "install=$INSTALL" "lane=$E2E" proof=false | tee -a "$GITHUB_OUTPUT"
+            printf '%s\n' components=true database=true "integration=$E2E" "install=$INSTALL" | tee -a "$GITHUB_OUTPUT"
             exit 0
           fi
           if [[ "$EVENT_NAME" == push ]]; then
@@ -96,7 +94,7 @@ jobs:
             fi
             # No rename detection: a move must check both its old and new paths.
             if git diff --no-ext-diff --no-renames --name-only -z "$range" -- > "$RUNNER_TEMP/changed-files"; then
-              areas=$(node scripts/ci-areas.mjs $main < "$RUNNER_TEMP/changed-files") || areas=$'components=true\ndatabase=true\nintegration=true\ninstall=true\nlane=true\nproof=true'
+              areas=$(node scripts/ci-areas.mjs $main < "$RUNNER_TEMP/changed-files") || areas=$'components=true\ndatabase=true\nintegration=true\ninstall=true'
             fi
           fi
           echo "$areas" | tee -a "$GITHUB_OUTPUT"
@@ -197,11 +195,13 @@ jobs:
   # images are made on, then the measured navigation budgets. When `changes` says `visual` (screens alone, #213), this is all of the browser suite that runs.
   visual:
     needs: [changes]
-    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.integration != 'false') }}
+    if: ${{ !cancelled() && ((github.event_name == 'push' && needs.changes.outputs.integration != 'false') || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
       contents: read
+      # A failure on main opens or updates the visual-regression issue.
+      issues: write
     steps:
       - uses: actions/checkout@v4
       - name: reserve the stack's ports
@@ -217,6 +217,7 @@ jobs:
         run: ./ci.sh visual
       # A failing comparison writes its expected, actual and difference images here.
       - name: upload route screenshots
+        id: screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -232,6 +233,22 @@ jobs:
           path: playwright-report/html/
           if-no-files-found: ignore
           retention-days: 30
+      # One open issue holds the latest failure on main: a new failure comments on it, or opens it when none is open.
+      - name: open or update the visual-regression issue
+        if: ${{ failure() && github.event_name == 'push' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ARTIFACT_URL: ${{ steps.screenshots.outputs.artifact-url }}
+        run: |
+          body=$(node scripts/visual-regression.mjs ci-ledger/visual "$GITHUB_SHA" "$RUN_URL" "$ARTIFACT_URL")
+          gh label create visual-regression -R "$GITHUB_REPOSITORY" --color B60205 --description 'Compared screens failed on main' 2> /dev/null || true
+          issue=$(gh issue list -R "$GITHUB_REPOSITORY" --label visual-regression --state open --limit 1 --json number -q '.[0].number')
+          if [[ -n $issue ]]; then
+            gh issue comment "$issue" -R "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create -R "$GITHUB_REPOSITORY" --label visual-regression --title 'Compared screens differ on main' --body "$body"
+          fi
       - name: upload ledger results
         if: always()
         # The ledger only reports, so a failed upload leaves the job's result as its tests made it.
@@ -247,7 +264,7 @@ jobs:
   # The visual lane (#257): its screens against their approved images, drawn in the pinned renderer, and its guard tests.
   lane:
     needs: [changes]
-    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.lane != 'false') }}
+    if: ${{ !cancelled() && ((github.event_name == 'push' && needs.changes.outputs.integration != 'false') || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -314,7 +331,7 @@ jobs:
   # image three times. It decides nothing for `check`; lane-proof-compare is its verdict.
   lane-proof:
     needs: [changes]
-    if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.changes.result == 'success' && needs.changes.outputs.proof == 'true' }}
+    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     permissions:
@@ -356,6 +373,7 @@ jobs:
 
   lane-proof-compare:
     needs: [lane-proof]
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -378,7 +396,7 @@ jobs:
   # The rest of the whole-app browser suite: the production-shaped proxy suite in the image and the journeys.
   integration:
     needs: [changes]
-    if: ${{ !cancelled() && (needs.changes.result != 'success' || (needs.changes.outputs.integration != 'false' && needs.changes.outputs.integration != 'visual')) }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.integration != 'false') }}
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.CI_RUNNER || 'ubuntu-latest' }}
     # main's browser suite already took 24 of 25 minutes (run 43398274074); the board, settings, log and numbers specs
     # add to it.
@@ -879,7 +897,6 @@ jobs:
           DECISIONS_DATABASE: ${{ needs.changes.outputs.database }}
           DECISIONS_INTEGRATION: ${{ needs.changes.outputs.integration }}
           DECISIONS_INSTALL: ${{ needs.changes.outputs.install }}
-          DECISIONS_LANE: ${{ needs.changes.outputs.lane }}
         run: |
           mkdir -p ci-ledger-in
           set -o pipefail
@@ -894,7 +911,7 @@ jobs:
           retention-days: 90
 
   check:
-    needs: [changes, static, components, database, visual, integration, install, lane]
+    needs: [changes, static, components, database, integration, install]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     permissions:
@@ -909,13 +926,8 @@ jobs:
           COMPONENTS_RESULT: ${{ needs.components.result }}
           DATABASE_RUN: ${{ needs.changes.outputs.database }}
           DATABASE_RESULT: ${{ needs.database.result }}
-          VISUAL_RUN: ${{ needs.changes.outputs.integration }}
-          VISUAL_RESULT: ${{ needs.visual.result }}
-          # Screens alone (integration=visual) ask for the compared screens only.
-          INTEGRATION_RUN: ${{ needs.changes.outputs.integration == 'visual' && 'false' || needs.changes.outputs.integration }}
+          INTEGRATION_RUN: ${{ needs.changes.outputs.integration }}
           INTEGRATION_RESULT: ${{ needs.integration.result }}
           INSTALL_RUN: ${{ needs.changes.outputs.install }}
           INSTALL_RESULT: ${{ needs.install.result }}
-          LANE_RUN: ${{ needs.changes.outputs.lane }}
-          LANE_RESULT: ${{ needs.lane.result }}
         run: node scripts/ci-verdict.mjs

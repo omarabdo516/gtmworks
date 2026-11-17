@@ -62,7 +62,7 @@ test('the public tree deploys nothing of ours', () => {
  const ci = load(texts.get('.github/workflows/ci.yml'));
  for (const job of ['changes', 'static', 'components', 'database', 'visual', 'integration', 'install', 'lane', 'check']) assert.ok(ci.jobs[job], job);
  for (const job of ['deploy', 'deploy-db']) assert.equal(ci.jobs[job], undefined, job);
- assert.deepEqual(ci.jobs.check.needs, ['changes', 'static', 'components', 'database', 'visual', 'integration', 'install', 'lane']);
+ assert.deepEqual(ci.jobs.check.needs, ['changes', 'static', 'components', 'database', 'integration', 'install']);
 });
 
 // Playwright's own reporters and retries replace our CI tooling around it (#81).
