@@ -48,7 +48,7 @@ test('the Owner signs the company in to ChatGPT and out again; a member only see
   await expect(chatgpt.getByText('Not connected')).toBeVisible();
   await chatgpt.getByRole('button',{name:'Connect ChatGPT'}).click();
   await expect(chatgpt.getByText('ABCD-1234')).toBeVisible();
-  await expect(chatgpt.getByRole('link',{name:'Open the sign-in page'})).toHaveAttribute('href','https://auth.openai.com/codex/device');
+  await expect(chatgpt.getByRole('link',{name:'Open the sign-in page'})).toHaveAttribute('href','https://auth.provider.test/codex/device');
   const [session]=[...fake.settings.signInSessions.keys()];
   expect(fake.settings.signInSessions.get(session)?.profile).toBe(profile);
   fake.settings.approve(session);

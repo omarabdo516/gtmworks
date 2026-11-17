@@ -227,7 +227,7 @@ test('the sign-in driver passes on states, a code and an https link, never a cre
   const started=await startSignIn(target,'openai-codex');
   assert.equal(started.state,'started');
   assert.equal(started.code,'ABCD-1234');
-  assert.equal(started.link,'https://auth.openai.com/codex/device');
+  assert.equal(started.link,'https://auth.provider.test/codex/device');
   assert.deepEqual(await pollSignIn(target,'openai-codex',started.session),{state:'pending'});
   // Another company's profile cannot follow this sign-in.
   await provideProfile(install(fake),{name:companyProfile(three),soul:'',config:levelConfig(1),forbidden:alwaysOff});

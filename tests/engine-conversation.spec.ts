@@ -14,6 +14,8 @@ import { engineFor as driverFor } from '../lib/engine.mjs';
 import { runToolCall, toolSpecTexts } from '../lib/agent-tools.mjs';
 import { levelConfig, toolPolicy } from '../lib/agent-levels.mjs';
 import { signIn } from './sign-in';
+import { describeEntry } from '../lib/activity-log.mjs';
+import { i18n } from '../lib/i18n.mjs';
 import { moveAgentProfiles } from '../lib/company-profiles.mjs';
 import { keepSharedSkills } from '../lib/shared-skills.mjs';
 
@@ -161,7 +163,7 @@ test('integration: Lead makes the Agent the Owner asks for, and nothing for a Ma
  expect(made()).toEqual([]);
  const closed=await Promise.all([close(),close()]);
  expect(closed[0]+closed[1]).toBe(1);
- expect(fake.runs.map(run=>run.tools.map(tool=>tool.name))).toEqual([['create_agent','save_rule','show_draft','show_review'],['create_agent','save_rule','show_draft','show_review']]);
+ expect(fake.runs.map(run=>run.tools.map(tool=>tool.name))).toEqual([['create_agent','save_rule','show_draft','show_review','hand_over'],['create_agent','save_rule','show_draft','show_review','hand_over']]);
  expect(fake.agentReads).toContain(profile);
  const [agent]=made();
  expect(made()).toEqual([{id:agent.id,name:'Meta Ads',speciality:'Runs the Meta ads.',apps:'Meta Ads Manager|Canva',requested_by:omar,dated:true,is_default:false,profile}]);
@@ -184,7 +186,7 @@ test('integration: Lead makes the Agent the Owner asks for, and nothing for a Ma
  const manager=(await memberClient('manager@example.com')).person;
  const theirs=randomUUID();
  expect(await sendMessage(manager,service,{person:'20000000-0000-0000-0000-000000000002',company,conversation:theirs,sendKey:randomUUID(),agent:lead,message:'I want someone to handle Meta ads',encryptionKey,engineFor:fake.engineFor})).toEqual({conversation:theirs});
- expect(fake.runs[3].tools.map(tool=>tool.name)).toEqual(['request_agent','save_rule','show_draft','show_review']);
+ expect(fake.runs[3].tools.map(tool=>tool.name)).toEqual(['request_agent','save_rule','show_draft','show_review','hand_over']);
  expect(await closeOpenRuns(service,{encryptionKey,conversation:theirs,engineFor:fake.engineFor})).toBe(1);
  expect(made()).toHaveLength(2);
 });
@@ -211,7 +213,7 @@ test('integration: Lead keeps a Manager\'s and a Contributor\'s request for an A
   const closed=await Promise.all([close(),close()]);
   expect(closed[0]+closed[1]).toBe(1);
  }
- expect(fake.runs.map(run=>run.tools.map(tool=>tool.name))).toEqual([['request_agent','save_rule','show_draft','show_review'],['request_agent','suggest_rule','show_draft','show_review']]);
+ expect(fake.runs.map(run=>run.tools.map(tool=>tool.name))).toEqual([['request_agent','save_rule','show_draft','show_review','hand_over'],['request_agent','suggest_rule','show_draft','show_review','hand_over']]);
  expect(fake.agentReads).toEqual([]);
  expect(agents()).toBe(before);
  const listed=`('${conversations.join("','")}')`;
@@ -238,7 +240,7 @@ test('integration: an Agent saves the rule the Owner tells it, with its log row,
   const send=(message:string)=>sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message,encryptionKey,engineFor:fake.engineFor});
   const close=()=>closeOpenRuns(service,{encryptionKey,conversation,engineFor:fake.engineFor});
   expect(await send(rule)).toEqual({conversation});
-  expect(fake.runs[0].tools.map(tool=>tool.name)).toEqual(['save_rule','show_draft','show_review']);
+  expect(fake.runs[0].tools.map(tool=>tool.name)).toEqual(['save_rule','show_draft','show_review','hand_over']);
   expect(fake.runs[0].instructions).toBe(knowledge());
   // A reader and the worker close the run at once: the rule is saved once, before the reply is stored.
   const closed=await Promise.all([close(),close()]);
@@ -259,7 +261,7 @@ test('integration: an Agent saves the rule the Owner tells it, with its log row,
   const tell=(message:string)=>sendMessage(member,service,{person:contributor,company,conversation:theirs,sendKey:randomUUID(),agent,message,encryptionKey,engineFor:fake.engineFor});
   const closeTheirs=()=>closeOpenRuns(service,{encryptionKey,conversation:theirs,owner:contributor,engineFor:fake.engineFor});
   expect(await tell('Draft the teaser')).toEqual({conversation:theirs});
-  expect(fake.runs[2].tools.map(tool=>tool.name)).toEqual(['suggest_rule','show_draft','show_review']);
+  expect(fake.runs[2].tools.map(tool=>tool.name)).toEqual(['suggest_rule','show_draft','show_review','hand_over']);
   expect(fake.runs[2].instructions).toContain(`- ${rule}`);
   expect(await closeTheirs()).toBe(1);
 
@@ -310,7 +312,7 @@ test('integration: an Agent shows a draft once under its reply, also when two cl
   const close=()=>closeOpenRuns(service,{encryptionKey,conversation,owner:contributor,engineFor:fake.engineFor});
   for(const [index,message] of Object.keys(calls).entries()) {
    expect(await sendMessage(person,service,{person:contributor,company,conversation,sendKey:randomUUID(),agent,message,encryptionKey,engineFor:fake.engineFor})).toEqual({conversation});
-   expect(fake.runs[index].tools.map(tool=>tool.name)).toEqual(['suggest_rule','show_draft','show_review']);
+   expect(fake.runs[index].tools.map(tool=>tool.name)).toEqual(['suggest_rule','show_draft','show_review','hand_over']);
    // A reader and the worker close the run at once: the card is kept once, before the reply is stored.
    const closed=await Promise.all([close(),close()]);
    expect(closed[0]+closed[1]).toBe(1);
@@ -394,7 +396,7 @@ test('integration: an Agent shows a review once under its reply, shows none for 
   const conversation=randomUUID();
   const send=async(message:string)=>{
    expect(await sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message,encryptionKey,engineFor:fake.engineFor})).toEqual({conversation});
-   expect(fake.runs.at(-1)?.tools.map(tool=>tool.name)).toEqual(['save_rule','show_draft','show_review']);
+   expect(fake.runs.at(-1)?.tools.map(tool=>tool.name)).toEqual(['save_rule','show_draft','show_review','hand_over']);
    expect(await closeOpenRuns(service,{encryptionKey,conversation,engineFor:fake.engineFor})).toBe(1);
   };
   // The Conversation's first Run puts its Card on the board (#144), so the review's runs are measured after it.
@@ -409,6 +411,73 @@ test('integration: an Agent shows a review once under its reply, shows none for 
   expect((await person.from('reply_cards').select('kind,title').eq('conversation_id',conversation)).data).toEqual([{kind:'review',title:review.title}]);
   expect((await person.from('company_log').select('actor_id,actor_kind,action,details').eq('agent_id',agent).eq('action','agent_card_shown')).data)
    .toEqual([{actor_id:agent,actor_kind:'agent',action:'agent_card_shown',details:{card:{kind:'review',title:review.title,fine:2,edits:1},private:true,teller:omar}}]);
+ } finally { detach(); }
+});
+
+// #139: an Agent hands the Owner a step no Agent may do; the fake engine scripts its hand_over calls (the reference's th-team
+// t10). "Done it" is the person's word, recorded once with who and when; it approves, publishes and spends nothing.
+test('integration: an Agent hands a step over once under its reply, shows none with no title or an address that is not https, still closes each run, and its person marks it done once, logged as theirs with nothing approved',async()=>{
+ test.setTimeout(120000);
+ const fake=fakeEngine(); const {agent,detach}=attachAgent();
+ const hand={title:'انشر مقال «كورس محاسب شامل اونلاين»',line:'SEO سابه مسودة على WordPress، وانت اللي تدوس نشر.',app:'WordPress',
+  rows:[{label:'الطول',value:'1,600 كلمة · 5 عناوين فرعية'},{label:'الروابط',value:'3 روابط لصفحة المحاسب الشامل'},{label:'المراجعة',value:'Critic: مقبول بعد تعديل واحد'}],
+  url:'https://rslearning.example/wp-admin/post.php?post=812&action=edit',note:'هتابع ترتيبه في Search Console.'};
+ const calls:Record<string,unknown>={
+  'Get the article out':{...hand,title:` ${hand.title} `},
+  'No title':{line:hand.line,app:hand.app,rows:hand.rows,url:hand.url},
+  'Plain address':{...hand,url:'http://rslearning.example/wp-admin/post.php?post=812'},
+ };
+ fake.settings.toolCalls=input=>Object.hasOwn(calls,input)?[{id:'call-0',name:'hand_over',arguments:calls[input]}]:[];
+ const work=()=>JSON.parse(query(`select (select count(*) from public.work_activity where action like 'approval%')::int as approvals,(select count(*) from public.work_activity)::int as activity,
+  (select count(*) from public.work_versions)::int as versions,(select string_agg(id||':'||stage_id||':'||coalesce(approval_step_id::text,'-'),',' order by id) from public.work_cards) as cards`))[0];
+ try {
+  const {service,person}=await clients();
+  const conversation=randomUUID();
+  const send=async(message:string)=>{
+   expect(await sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message,encryptionKey,engineFor:fake.engineFor})).toEqual({conversation});
+   expect(fake.runs.at(-1)?.tools.map(tool=>tool.name)).toEqual(['save_rule','show_draft','show_review','hand_over']);
+   expect(await closeOpenRuns(service,{encryptionKey,conversation,engineFor:fake.engineFor})).toBe(1);
+  };
+  // The Conversation's first Run puts its Card on the board (#144), so the hand's runs are measured after it.
+  await send('Draft the article');
+  const before=work();
+  for(const message of Object.keys(calls)) await send(message);
+  expect(agentRows(conversation)).toEqual(['Draft the article',...Object.keys(calls)].map(message=>({body:`Reply to: ${message}`})));
+  const cards=()=>JSON.parse(query(`select run_id,call_id,kind,title,content,state,done_by,done_at from public.reply_cards where conversation_id='${conversation}' order by id`));
+  expect(cards()).toEqual([{run_id:fake.runs[1].id,call_id:'call-0',kind:'hand',title:hand.title,content:{app:hand.app,line:hand.line,rows:hand.rows,url:hand.url,note:hand.note},state:'open',done_by:null,done_at:null}]);
+  const [{id}]=JSON.parse(query(`select id from public.reply_cards where conversation_id='${conversation}'`));
+  const card=Number(id);
+
+  // The record, as the page reads it after a reload.
+  const shown=async()=>{
+   const {data:found}=await person.from('conversations').select(conversationColumns).eq('id',conversation).single();
+   const record=await conversationRecord(person as unknown as Parameters<typeof conversationRecord>[0],omar,company,found!);
+   return record.messages.flatMap(message=>message.cards??[]).flatMap(shownCard=>shownCard.kind==='reply'&&shownCard.card.kind==='hand'?[shownCard.card]:[]);
+  };
+  expect(await shown()).toEqual([{id:card,kind:'hand',title:hand.title,line:hand.line,app:hand.app,rows:hand.rows,url:hand.url,note:hand.note,state:'open'}]);
+
+  // Another Member of the Company is refused and reads no card; the Conversation's person marks it done once.
+  const {person:manager}=await memberClient('manager@example.com');
+  expect((await manager.rpc('mark_hand_done',{c:company,conversation,card})).error?.code).toBe('P0002');
+  expect((await manager.from('reply_cards').select('id').eq('conversation_id',conversation)).data).toEqual([]);
+  const {data:first,error}=await person.rpc('mark_hand_done',{c:company,conversation,card});
+  expect(error).toBeNull();
+  expect([first.state,first.first]).toEqual(['done',true]);
+  const [kept]=cards();
+  expect([kept.state,kept.done_by,typeof kept.done_at]).toEqual(['done',omar,'string']);
+  // A second press, as from a second tab, changes nothing.
+  expect((await person.rpc('mark_hand_done',{c:company,conversation,card})).data).toEqual({...first,first:false});
+  expect(cards()).toEqual([kept]);
+  const [read]=await shown();
+  expect(read).toMatchObject({id:card,state:'done',note:hand.note});
+  expect(new Date((read as {at:string}).at).getTime()).toBe(new Date(first.at).getTime());
+
+  // One log row: the person did it, the step's title, from "Handed to you" to "Done it". Nothing is approved.
+  const logged=(await person.from('company_log').select('actor_id,actor_kind,subject,action,details').eq('agent_id',agent).eq('action','agent_hand_done')).data!;
+  expect(logged).toEqual([{actor_id:omar,actor_kind:'person',subject:'agent',action:'agent_hand_done',details:{hand:{title:hand.title},private:true,teller:omar}}]);
+  const line=describeEntry(logged[0]);
+  expect([i18n('en').t(line.act[0]),line.obj,line.from,line.to].map(part=>typeof part==='object'&&part&&'key' in part?i18n('en').t(part.key):part)).toEqual(['did it',hand.title,'Handed to you','Done it']);
+  expect(work()).toEqual(before);
  } finally { detach(); }
 });
 

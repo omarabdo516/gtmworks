@@ -10,12 +10,15 @@ function sandbox(t) {
  const dir = mkdtempSync(join(output, 'discovery-'));
  t.after(() => rmSync(dir, { recursive: true, force: true }));
  copyFileSync('package.json', join(dir, 'package.json'));
+ // `npm test` loads the offline guard first (#266).
+ mkdirSync(join(dir, 'tests'));
+ copyFileSync('tests/offline.mjs', join(dir, 'tests/offline.mjs'));
  return dir;
 }
 
 function ciSandbox(t) {
  const dir = sandbox(t);
- for (const path of ['tests', 'scripts']) mkdirSync(join(dir, path));
+ mkdirSync(join(dir, 'scripts'));
  for (const path of ['ci.sh', 'tests/db.sh', 'scripts/check-test-discovery.mjs']) copyFileSync(path, join(dir, path));
  symlinkSync(resolve('node_modules'), join(dir, 'node_modules'), 'dir');
  writeFileSync(join(dir, 'playwright.config.mjs'), "export default { testDir: './tests', testMatch: '*.spec.ts', testIgnore: '**/ignored.spec.ts' };\n");

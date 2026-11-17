@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './offline-browser';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { localQuery, resetFirstRun } from '../scripts/first-run-db.mjs';
