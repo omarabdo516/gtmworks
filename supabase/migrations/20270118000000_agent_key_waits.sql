@@ -162,17 +162,14 @@ language plpgsql security definer set search_path='' as $$
 declare since timestamptz:=now()-interval '10 minutes';
 begin
  if held is null then raise exception 'keyInvalid' using errcode='22023'; end if;
- -- Each row's own values, so a change finished meanwhile is settled from what it wrote; a row left as it was is not
- -- written, and no lock is taken, so a page read queues behind no other Company's Agents or key changes.
- update public.company_key_holds h
-  set held=coalesce(h.provider=any(settle_provider_key_holds.held),false),
-   changing=false,
-   uncertain=h.uncertain and coalesce(h.changed_at>since,false) and not coalesce(h.provider=any(settle_provider_key_holds.held),false)
-  where h.company_id=c and not (h.changing and coalesce(h.changed_at>since,false))
-   and (h.held,h.changing,h.uncertain) is distinct from (
-    coalesce(h.provider=any(settle_provider_key_holds.held),false),
-    false,
-    h.uncertain and coalesce(h.changed_at>since,false) and not coalesce(h.provider=any(settle_provider_key_holds.held),false));
+ -- Each row's new values are computed once, from the row as read; a row another change wrote meanwhile is a newer row
+ -- (ctid), left as that change wrote it for the next read. A row left as it was is not written, and no lock is taken, so
+ -- a page read queues behind no other Company's Agents or key changes.
+ update public.company_key_holds h set held=n.held,changing=false,uncertain=n.uncertain
+  from (select k.ctid as seen,coalesce(k.provider=any(settle_provider_key_holds.held),false) as held,
+    k.uncertain and coalesce(k.changed_at>since,false) and not coalesce(k.provider=any(settle_provider_key_holds.held),false) as uncertain
+   from public.company_key_holds k where k.company_id=c and not (k.changing and coalesce(k.changed_at>since,false))) n
+  where h.ctid=n.seen and (h.held,h.changing,h.uncertain) is distinct from (n.held,false,n.uncertain);
  insert into public.company_key_holds(company_id,provider,held,changing)
   select c,p,true,false from unnest(settle_provider_key_holds.held) p where p ~ '^[a-z0-9][a-z0-9._-]{0,63}$'
   on conflict (company_id,provider) do nothing;
