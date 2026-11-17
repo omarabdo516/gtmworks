@@ -59,7 +59,7 @@ const dialog = () => document.querySelector<HTMLDialogElement>('dialog.apps-shee
 const appsButton = () => document.querySelector<HTMLButtonElement>('#btn-apps')!;
 const closedBack = async (opener: HTMLElement) => {
  expect(dialog().classList.contains('is-closing'), 'the leave is drawn first').toBe(true);
- await expect.poll(() => document.querySelector('dialog.apps-sheet'), 'a closed sheet leaves no dialog on the page').toBeNull();
+ await expect.poll(() => document.querySelector('dialog.apps-sheet')).toBeNull();
  await expect.element(opener).toHaveFocus();
 };
 
@@ -125,7 +125,7 @@ test('an Engine that cannot be read leaves the count out of the button and the m
  await expect.element(screen.getByText(text.unreadable)).toBeVisible();
  expect(dialog().querySelectorAll('.tpl-empty')).toHaveLength(0);
  await userEvent.keyboard('{Escape}');
- await expect.poll(() => document.querySelector('dialog.apps-sheet'), 'a closed sheet leaves no dialog on the page').toBeNull();
+ await expect.poll(() => document.querySelector('dialog.apps-sheet')).toBeNull();
  expect(appsButton().textContent).toBe('Connect apps');
  await screen.getByRole('button', { name: 'Account menu' }).click();
  await expect.element(screen.getByRole('menuitem', { name: /^Connect apps/ })).toBeInTheDocument();
@@ -190,7 +190,7 @@ test('closing the sheet while a sign-in is followed cancels it, closes the vendo
  await screen.getByRole('button', { name: 'Connect', exact: true }).click();
  await expect.element(screen.getByText('Finish signing in to Canva in its window.')).toBeVisible();
  await userEvent.keyboard('{Escape}');
- await expect.poll(() => document.querySelector('dialog.apps-sheet'), 'a closed sheet leaves no dialog on the page').toBeNull();
+ await expect.poll(() => document.querySelector('dialog.apps-sheet')).toBeNull();
  await expect.element(screen.getByText('The sign-in to Canva was cancelled.')).toBeVisible();
  expect(seen.steps.at(-1)).toEqual({ company: expect.any(String), app: 'canva', action: 'cancel', keepalive: true });
  expect(opened.close).toHaveBeenCalledTimes(1);
@@ -245,7 +245,7 @@ test('on a phone the sheet opened from the drawer holds Tab, and Escape closes t
  expect(stayed.slice(0, 11)).toEqual(Array(11).fill('in the sheet'));
  expect(new Set(stayed)).toEqual(new Set(['in the sheet', 'left the document']));
  await userEvent.keyboard('{Escape}');
- await expect.poll(() => document.querySelector('dialog.apps-sheet'), 'a closed sheet leaves no dialog on the page').toBeNull();
+ await expect.poll(() => document.querySelector('dialog.apps-sheet')).toBeNull();
  await expect.element(appsButton()).toHaveFocus();
  expect(document.querySelector('.sidebar')!.classList.contains('is-open'), 'the drawer stays open').toBe(true);
 });
