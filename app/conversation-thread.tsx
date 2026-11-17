@@ -174,10 +174,13 @@ function StepsList({steps,c,cb}:{steps:RunSteps,c:Text,cb:BidiText}) {
  const [open,setOpen]=useState(false); const [openedAt,setOpenedAt]=useState<number|null>(null);
  useEffect(()=>{ if(openedAt===null) return; const timer=setTimeout(()=>setOpenedAt(null),justFor); return ()=>clearTimeout(timer); },[openedAt]);
  const count=steps.list.length;
- // The reference's plural: English from two, Arabic from three (أداة for one and two, أدوات after).
- const used=c((language==='ar'?count>2:count!==1)?'stepsUsedMany':'stepsUsedOne',count);
- const took=steps.seconds===null?null:steps.seconds<60?c('stepsSeconds',steps.seconds)
-  :steps.seconds%60?c('stepsMinutesSeconds',Math.floor(steps.seconds/60),steps.seconds%60):c('stepsMinutes',steps.seconds/60);
+ // Egyptian Arabic takes the plural for three to ten (أدوات, دقايق, ثواني) and the singular otherwise, as the reference
+ // does up to ten; English, from two.
+ const plural=(value:number)=>language==='ar'?new Intl.PluralRules('ar').select(value)==='few':value!==1;
+ const used=c(plural(count)?'stepsUsedMany':'stepsUsedOne',count);
+ const minutes=Math.floor((steps.seconds??0)/60); const seconds=(steps.seconds??0)%60;
+ const secondsText=c(plural(seconds)?'stepsSecondsMany':'stepsSeconds',seconds); const minutesText=c(plural(minutes)?'stepsMinutesMany':'stepsMinutes',minutes);
+ const took=steps.seconds===null?null:!minutes?secondsText:seconds?c('stepsMinutesSeconds',minutesText,secondsText):minutesText;
  return <div className="steps">
   <button type="button" className="steps__toggle" aria-expanded={open} aria-controls={list} onClick={()=>{ setOpen(!open); setOpenedAt(open?null:Date.now()); }}>
    <span>{took?c('stepsUsedTook',used,took):used}</span><ShellIcon name="chevronDown" className="chev"/>

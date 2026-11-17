@@ -102,8 +102,18 @@ test.each<[string, RunSteps | undefined]>([['no steps', undefined], ['a Run that
 test.each([
  ['en', 59, 'Used 4 tools · 59 sec'], ['en', 60, 'Used 4 tools · 1 min'], ['en', 135, 'Used 4 tools · 2 min 15 sec'], ['en', null, 'Used 4 tools'],
  ['ar', 59, 'استخدم 4 أدوات · 59 ثانية'], ['ar', 120, 'استخدم 4 أدوات · 2 دقيقة'], ['ar', 135, 'استخدم 4 أدوات · 2 دقيقة و15 ثانية'], ['ar', null, 'استخدم 4 أدوات'],
+ ['ar', 5, 'استخدم 4 أدوات · 5 ثواني'], ['ar', 240, 'استخدم 4 أدوات · 4 دقايق'], ['ar', 663, 'استخدم 4 أدوات · 11 دقيقة و3 ثواني'],
 ] as const)('in the %s interface, a Run of %s seconds reads "%s"', async (language, seconds, line) => {
  const screen = await drawn(language, { list: four, seconds });
+ await expect.element(screen.getByRole('button', { name: line, exact: true })).toBeVisible();
+});
+
+// Egyptian Arabic: the plural for three to ten, the singular from eleven on, as for one and two.
+test.each([
+ [3, 'استخدم 3 أدوات'], [10, 'استخدم 10 أدوات'], [11, 'استخدم 11 أداة'], [25, 'استخدم 25 أداة'], [100, 'استخدم 100 أداة'],
+] as const)('in Arabic, a reply with %i steps reads "%s"', async (count, line) => {
+ const list = Array.from({ length: count }, (_, index) => ({ tool: `tool_${index}`, preview: null, state: 'done' as const }));
+ const screen = await drawn('ar', { list, seconds: null });
  await expect.element(screen.getByRole('button', { name: line, exact: true })).toBeVisible();
 });
 
