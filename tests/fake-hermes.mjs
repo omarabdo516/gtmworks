@@ -11,13 +11,14 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
  const frame=(/** @type {{seq:number,event:any}} */ {seq,event})=>`id: ${seq}\ndata: ${JSON.stringify({...event,seq})}\n\n`;
  const push=(/** @type {string} */ id,/** @type {any} */ event)=>{
   const stream=streams.get(id); if(!stream||stream.ended) return;
-  const item={seq:stream.next++,event:event&&{...event,run_id:id,timestamp:Date.now()/1000}};
+  const item={seq:stream.next++,event:event&&{...event,run_id:id,timestamp:event.timestamp??Date.now()/1000}};
   stream.backlog.push(item); while(stream.backlog.length>settings.backlogLimit) stream.backlog.shift();
   if(!event) stream.ended=true;
   for(const reader of stream.readers) if(event) reader.write(frame(item)); else reader.end(': stream closed\n\n');
  };
- // A run that ended sends its own end, then the stream closes.
- const endEvents=(/** @type {string} */ id,/** @type {string} */ name)=>{ if(streams.get(id)?.ended===false) { push(id,{event:name}); push(id,null); } };
+ // A run that ended sends its own end, stamped with the Engine's clock `runSeconds` after the run was made, then the
+ // stream closes.
+ const endEvents=(/** @type {string} */ id,/** @type {string} */ name)=>{ if(streams.get(id)?.ended===false) { const run=settings.runs.find(each=>each.id===id); push(id,{event:name,...(run?{timestamp:run.created+settings.runSeconds}:{})}); push(id,null); } };
  // runs: one entry per run Hermes created; the same Idempotency-Key replays the same run.
  const settings={version:'0.23.0',status:200,key:'test-only-key',features:{run_submission:true,run_events_sse:true},requests:/** @type {{method?:string,path?:string,authorization?:string,session?:string,idempotency?:string}[]} */([]),runs:/** @type {{id:string,key?:string,session?:string,input:string,instructions?:string,history?:{role:string,content:string}[],body?:string,reads:number,stopped?:boolean,asked:{prompt_id:string,question:string,choices:string[],multi_select:boolean,answer?:string,settled:'answered'|'expired'|null}[]}[]} */([]),pendingReads:0,loseStarts:0,reply:input=>`Reply to: ${input}`,
   // How a finished run ends and the usage it reports; a run cleared from runs is one Hermes lost (404).
@@ -115,7 +116,9 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
    if(runPath&&request.method==='GET') {
     const run=settings.runs.find(run=>run.id===runPath[1]);
     if(!run) return send(response,404,{error:{message:`Run not found: ${runPath[1]}`,code:'run_not_found'}});
-    const times=(/** @type {boolean} */ ended)=>({created_at:run.created,updated_at:ended?run.created+settings.runSeconds:run.created});
+    // As measured on the pinned release (#141, the install check): a Run's record has when it was made and nothing of when
+    // it ended; its end is in its events.
+    const times=(/** @type {boolean} */ _ended)=>({created_at:run.created});
     if(run.stopped) { endEvents(run.id,'run.cancelled'); return send(response,200,{object:'hermes.run',run_id:run.id,status:'cancelled',session_id:run.session,pending_controls:[],...times(true)}); }
     // As measured on the pinned release: the skip hint is appended to the question, and the first of two or more
     // choices is marked recommended.

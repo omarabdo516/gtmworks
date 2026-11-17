@@ -156,7 +156,7 @@ test('a Run whose events the Engine no longer keeps is gone; one that cannot be 
  } finally { await fake.close(); }
 });
 
-test('a Run\'s length is its own record\'s, in whole seconds, once it has ended',async()=>{
+test('a Run\'s length is from its record\'s creation to the time the Engine stamped on its end, in whole seconds, once it has ended',async()=>{
  const fake=await fakeHermes(); fake.settings.pendingReads=1; fake.settings.runSeconds=40.6;
  try {
   const {engine,run}=await begin(fake);

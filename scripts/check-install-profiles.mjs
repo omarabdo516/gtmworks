@@ -195,6 +195,7 @@ if(step==='prepare') {
   const [kept]=await checked(person.from('conversation_run_steps').select('steps,seconds,sealed_at,broken').eq('conversation_id',refused.conversation));
   assert.ok(kept?.sealed_at&&!kept.broken,JSON.stringify(kept));
   assert.deepEqual(kept.steps.map(({tool,state})=>({tool,state})),[{tool:'skill_manage',state:'failed'}],JSON.stringify(kept.steps));
+  assert.ok(Number.isInteger(kept.seconds)&&kept.seconds>=0,`the Run's length is known: ${kept.seconds}`);
   console.log(JSON.stringify({steps:kept.steps.map(({tool,preview,state})=>({tool,preview,state})),seconds:kept.seconds}));
 
   // The model the key brings is not checked: the Engine's model catalogue may be offline.
