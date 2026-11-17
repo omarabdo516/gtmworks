@@ -402,3 +402,33 @@ test('an open account menu closes when the keyboard opens another page of the sa
   await expect(page.locator('.sidebar #btn-me')).toHaveAttribute('aria-expanded','false');
  } finally { release(); await page.unroute(numbers,hold); }
 });
+
+test('"N" opens a new chat with its composer focused from the board, Numbers, the Activity log and a Conversation, and a Viewer\'s does nothing',async({page})=>{
+ // RS Learning gets a main Agent, so the new chat has a composer, and a Conversation with it to press "N" in.
+ const rs='10000000-0000-0000-0000-000000000001', omar='20000000-0000-0000-0000-000000000001', connection=randomUUID(), agent=randomUUID(), conversation=randomUUID();
+ const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
+ query(`insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('${connection}','${rs}','${omar}','http://127.0.0.1:9/p/new-chat-key','new-chat-key','no-key','unreachable')`);
+ query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('${agent}','${rs}','${connection}','Lead','General',true)`);
+ query(`insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${conversation}','${rs}','${omar}','${agent}','Lead')`);
+ try {
+  await page.setViewportSize({width:1440,height:900});
+  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+  for(const path of ['/c/rs-learning/work/board','/c/rs-learning/numbers','/c/rs-learning/log',`/c/rs-learning/conversations/${conversation}`]) {
+   await page.goto(path);
+   await idle(page);
+   await page.keyboard.press('KeyN');
+   await expect(page,path).toHaveURL(/\/c\/rs-learning\/chat$/);
+   await expect(page.getByRole('textbox',{name:'Message',exact:true}),path).toBeFocused();
+  }
+  await page.context().clearCookies();
+  await signIn(page,'viewer@example.com','/c/rs-learning/work/board');
+  await idle(page);
+  await page.keyboard.press('KeyN');
+  await idle(page);
+  await expect(page).toHaveURL(/\/c\/rs-learning\/work\/board$/);
+ } finally {
+  query(`delete from public.conversations where id='${conversation}'`);
+  query(`delete from public.hermes_agents where id='${agent}'`);
+  query(`delete from public.hermes_connections where id='${connection}'`);
+ }
+});

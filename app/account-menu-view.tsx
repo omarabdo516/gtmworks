@@ -22,13 +22,16 @@ const languages=[{key:'en',name:'languageNameEnglish',description:'languageEngli
 // person had already set out to open through a link (lib/link pageBeingOpened; never a prefetch). A menu opened while
 // that page was still arriving stays open when it lands instead of closing under the pointer, with focus on the item
 // that had it. Any other page, another company or Back and Forward close it, as do choosing an item, Escape and a
-// press outside it.
+// press outside it. Inside it, as in the reference, Arrow Down and Up move through the items and wrap (the same in
+// Arabic), Home and End go to the ends, and Tab closes it and lets the focus move on.
 type MenuState={open:boolean,company?:string,paths:string[],focus:number|null,fresh:boolean};
 const closedMenu:MenuState={open:false,paths:[],focus:null,fresh:false};
 let menuState=closedMenu;
 const menuListeners=new Set<()=>void>();
 const setMenuState=(next:MenuState)=>{ menuState=next; menuListeners.forEach(listener=>listener()); };
 const closeMenu=()=>{ if(menuState.open) setMenuState(closedMenu); };
+// Where each arrow key, Home and End move the focus, from item `index` of `count`.
+const moves:Record<string,(index:number,count:number)=>number>={ArrowDown:(i,n)=>(i+1)%n,ArrowUp:(i,n)=>(i-1+n)%n,Home:()=>0,End:(_,n)=>n-1};
 const subscribeMenu=(listener:()=>void)=>{ menuListeners.add(listener); return ()=>{ menuListeners.delete(listener); }; };
 
 export type AccountMenuProps={slug?:string,personName:string,role:string,theme:string,companyName?:string,settingsHref?:string};
@@ -56,7 +59,7 @@ export default function AccountMenuView({slug,personName,role,theme,companyName,
   // Opening focuses the chosen or first item; a menu drawn again for its page puts focus back on the item that had it.
   // `fresh` and `focus` are read only here, so changing them in place redraws nothing.
   const items=[...(box.current?.querySelectorAll<HTMLElement>('[role^="menuitem"]')||[])];
-  if(menuState.fresh) { box.current?.querySelector<HTMLElement>('[aria-checked="true"],[role^="menuitem"]')?.focus(); menuState.fresh=false; }
+  if(menuState.fresh) { (box.current?.querySelector<HTMLElement>('[aria-checked="true"]')??items[0])?.focus(); menuState.fresh=false; }
   else if(menuState.focus!=null) items[menuState.focus]?.focus();
   return ()=>{document.removeEventListener('pointerdown',outside);document.removeEventListener('keydown',escape,true);};
  },[open]);
@@ -74,7 +77,13 @@ export default function AccountMenuView({slug,personName,role,theme,companyName,
  });
  const initial=personName.trim().slice(0,1).toUpperCase();
  return <div ref={box} className="contents">
-  {open&&<div className="menu me-menu" id="me-menu" role="menu" aria-labelledby="btn-me" onFocus={event=>{ const index=[...event.currentTarget.querySelectorAll('[role^="menuitem"]')].indexOf(event.target); if(index>=0) menuState.focus=index; }}>
+  {open&&<div className="menu me-menu" id="me-menu" role="menu" aria-labelledby="btn-me" onFocus={event=>{ const index=[...event.currentTarget.querySelectorAll('[role^="menuitem"]')].indexOf(event.target); if(index>=0) menuState.focus=index; }} onKeyDown={event=>{
+   if(event.key==='Tab') { closeMenu(); return; }
+   const move=moves[event.key]; if(!move) return;
+   event.preventDefault();
+   const items=[...event.currentTarget.querySelectorAll<HTMLElement>('[role^="menuitem"]:not(:disabled)')];
+   items[move(items.indexOf(event.target as HTMLElement),items.length)]?.focus();
+  }}>
    <div className="me-menu__head"><span className="me__av" aria-hidden="true">{initial}</span><span className="me__text"><span className="me__name"><bdi>{personName}</bdi></span><span className="me__role">{role}{companyName&&<> · <bdi>{companyName}</bdi></>}</span></span></div>
    {settingsHref&&<><div className="menu__sep" role="separator"/>
     <Link className="menu__item" role="menuitem" href={settingsHref} onClick={()=>{rememberOpener();closeMenu();}}><ShellIcon name="gear"/><span className="menu__t">{t('settings')}<span className="menu__d">{t('settingsMenuDescription')}</span></span></Link></>}

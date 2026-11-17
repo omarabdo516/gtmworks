@@ -104,9 +104,11 @@ test('every screen says how to reach it in the reference and which built page it
     for (const step of steps) {
       assert.equal(Object.keys(step).length, 1, `${name}: one action per step`);
       const [[action, value]] = Object.entries(step);
+      assert.ok(['click', 'waitFor', 'waitGone', 'scrollTo', 'fill', 'press'].includes(action), `${name}: known action ${action}`);
+      // A press names one key as Playwright does (a letter, or a name such as ArrowDown or KeyN), not a selector.
+      if (action === 'press') { assert.match(value, /^([a-z]|[A-Z][A-Za-z]+)$/, `${name}: a key`); continue; }
       const selector = action === 'fill' ? value[0] : value;
       if (action === 'fill') assert.ok(typeof value[1] === 'string' && value[1].length > 0, `${name}: fill text`);
-      assert.ok(['click', 'waitFor', 'waitGone', 'scrollTo', 'fill'].includes(action), `${name}: known action ${action}`);
       assert.ok(typeof selector === 'string' && selector.length > 0, `${name}: selector`);
       assert.doesNotMatch(selector, /viewing|world|persona|view-as/i, `${name}: the demo-world switcher is never touched`);
     }
@@ -141,6 +143,11 @@ test('every screen says how to reach it in the reference and which built page it
   assert.equal(screens['made-agent'].builtPath, `/c/rs-learning/settings?agent=${fixture.agent}`);
   // A lasting rule told to Ads (#18): the saved line in the Conversation; Ads's page above lists the rule.
   assert.equal(screens['rule-saved'].builtPath, null, 'the Conversation has a uuid path: pass the fixture\'s ruleConversation');
+  // The keyboard (#173): Arrow Down in the open account menu, and "N" on the board, pressed where the focus is.
+  assert.deepEqual(screens['account-menu-keys'].builtSteps.at(-1), { press: 'ArrowDown' });
+  assert.deepEqual(screens['account-menu-keys'].reference.steps.at(-1), { press: 'ArrowDown' });
+  assert.deepEqual(screens['new-chat-key'].reference.steps, [...screens.board.reference.steps, { press: 'n' }, { waitFor: '#ta-main:focus' }]);
+  assert.deepEqual(screens['new-chat-key'].builtSteps, [{ press: 'KeyN' }, { waitFor: '.composer__input:focus' }]);
 });
 
 test('a screen with no built equivalent needs --built-path or --reference-only', () => {

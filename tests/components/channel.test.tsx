@@ -7,7 +7,7 @@ import { LanguageProvider } from '@/lib/i18n-client';
 import type { ChannelMessage, ChannelRecord } from '@/lib/channels';
 import { changeChannel, channelChoices } from '@/app/channel-actions';
 
-vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }) }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/chat', useSearchParams: () => new URLSearchParams() }));
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 vi.mock('@/app/channel-actions', () => ({ changeChannel: vi.fn(), channelChoices: vi.fn() }));
 afterEach(() => { vi.unstubAllGlobals(); });
