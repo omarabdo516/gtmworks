@@ -1,9 +1,9 @@
 import { randomBytes } from 'node:crypto';
 import { defineConfig } from '@playwright/test';
-import { appOrigin, serverLogOf } from './tests/lane.mjs';
+import { appOrigin } from './tests/lane.mjs';
 
-// The small visual lane (#257): a few key screens in Arabic, light and dark, at 1440 and 390, drawn by one pinned
-// browser (tests/visual-lane/renderer) so every machine makes the same bytes. `./ci.sh lane` starts that browser in its
+// The visual lane (#257): twelve key screens in Arabic, light and dark, at 1440 and 390, drawn by one pinned
+// browser (tests/visual-lane/renderer) so every machine makes the same bytes. `./ci.sh visual` starts that browser in its
 // container and names its address here; the tests stay on this machine, and the browser reaches the app on loopback
 // through them. Without an address the local Chromium draws, which is enough for the guard tests, never for images.
 process.env.SETUP_CODE ||= randomBytes(32).toString('hex');
@@ -31,5 +31,6 @@ export default defineConfig({
     launchOptions: { args: ['--disable-gpu', '--disable-skia-runtime-opts', '--font-render-hinting=none', '--force-color-profile=srgb'] },
     connectOptions: renderer ? { wsEndpoint: renderer, exposeNetwork: '<loopback>' } : undefined,
   },
-  webServer: guardsOnly ? undefined : { command: `mkdir -p playwright-report && LANE=0 bash scripts/web.sh production > ${serverLogOf(0)} 2>&1`, url: `${appOrigin}/sign-in`, reuseExistingServer: false, timeout: 240000 },
+  // Its own log: the measured budgets that follow in ./ci.sh visual write lane 0's usual one.
+  webServer: guardsOnly ? undefined : { command: `mkdir -p playwright-report && LANE=0 bash scripts/web.sh production > playwright-report/server-lane.log 2>&1`, url: `${appOrigin}/sign-in`, reuseExistingServer: false, timeout: 240000 },
 });

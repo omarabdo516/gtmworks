@@ -31,27 +31,20 @@ export default defineConfig({
   // the run, and ci.sh asks for the JSON one for the CI ledger (#256). The report keeps a folder of its own, since the
   // servers write their logs to playwright-report/.
   reporter: [['list'], ['html', { outputFolder: 'playwright-report/html', open: 'never' }], ...(process.env.CI ? [['github'] as const] : []), ...(process.env.PLAYWRIGHT_JSON_OUTPUT_FILE ? [['json'] as const] : [])],
-  // A picture must match its approved image exactly. Animations and the caret are stopped, and Playwright waits until
-  // two captures in a row are identical before it compares.
-  expect: { toHaveScreenshot: { animations: 'disabled', caret: 'hide', scale: 'css', maxDiffPixels: 0 } },
   projects: [
-    // The comparisons run first, on the database exactly as the seed builds it: the other tests create and change cards.
-    // A failing comparison writes its expected, actual and difference images next to the screenshots CI already uploads.
     // Playwright starts a teardown project only after its setup and everything depending on it have finished, retries
-    // included, and starts it even when they failed; a dependent project is skipped instead. So `functional` is the
-    // teardown of `visual` and `first-run` the teardown of the empty `seeded` anchor that `visual` depends on: the
-    // order is visual, functional, first-run, and a failed screen no longer hides the functional failures (#257).
-    // The screen-only scripts pass --no-deps so they do not pull the later projects in.
+    // included, and starts it even when they failed; a dependent project is skipped instead. So each group is the
+    // teardown of an empty anchor: `functional` of `functional-anchor`, `measured` of `measured-anchor` and `first-run`
+    // of `seeded`. The order is functional, measured, first run, and a failure in one group hides none of the next.
+    // The compared screens are the visual lane, with a config of its own (playwright.lane.config.ts, #257).
     { name: 'seeded', testMatch: /^$/, teardown: 'first-run' },
-    // The navigation time budgets are measured with the machine to themselves (#69): `measured` is the teardown of an
-    // empty anchor that `visual` depends on, so it runs alone after every functional test, and before first run.
+    // The navigation time budgets are measured with the machine to themselves (#69): `measured` runs alone after every
+    // functional test, and before first run.
     { name: 'measured-anchor', testMatch: /^$/, dependencies: ['seeded'], teardown: 'measured' },
-    // CI runs the compared screens and the measured budgets in a job of their own on ubuntu-latest (`./ci.sh visual`):
-    // the screens' images are made there, and the budgets need a machine no other job shares. `ci.sh integration` then
-    // leaves both projects empty, so they still order the projects around them.
-    { name: 'visual', testMatch: hostedElsewhere ? /^$/ : 'visual.spec.ts', outputDir: 'test-results/screenshots/visual', dependencies: ['measured-anchor'], teardown: 'functional' },
-    // The visual lane has a config of its own (playwright.lane.config.ts).
-    { name: 'functional', testIgnore: ['visual.spec.ts', 'first-run.spec.ts', 'navigation.spec.ts', '**/proxy/**', 'visual-lane*.spec.ts'] },
+    { name: 'functional-anchor', testMatch: /^$/, dependencies: ['measured-anchor'], teardown: 'functional' },
+    { name: 'functional', testIgnore: ['first-run.spec.ts', 'navigation.spec.ts', '**/proxy/**', 'visual-lane*.spec.ts'] },
+    // CI measures the budgets in a job of their own on ubuntu-latest (`./ci.sh visual`), on a machine no other job
+    // shares; `ci.sh integration` leaves this project empty, so it still orders the projects around it.
     { name: 'measured', testMatch: hostedElsewhere ? /^$/ : 'navigation.spec.ts', workers: 1 },
     // Empty-install scenarios mutate the whole local database and run only after seeded functional tests finish.
     { name: 'first-run', testMatch: 'first-run.spec.ts' },
