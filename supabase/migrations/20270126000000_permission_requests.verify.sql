@@ -28,12 +28,12 @@ select json_build_object(
  'decided_columns',(select count(*) from information_schema.columns where table_schema='public' and table_name='reply_cards' and column_name in ('decided_by','decided_at'))=2
   and exists(select 1 from pg_constraint where conname='reply_cards_decided' and conrelid='public.reply_cards'::regclass),
  'run_end_closes_permissions',exists(select 1 from pg_trigger where tgname='conversation_usage_closes_permissions' and tgrelid='public.conversation_usage'::regclass),
- 'always_on_the_agents_own_profile',position('agent_engine_profile' in pg_get_functiondef('public.track_run_permission(uuid,text,jsonb,boolean,timestamptz)'::regprocedure))>0,
+ 'always_on_the_agents_own_profile',position('agent_engine_profile' in pg_get_functiondef('public.track_run_permission(uuid,text,jsonb,boolean,timestamptz,timestamptz)'::regprocedure))>0,
  'logged_from_the_answers',position('''agent_permission_decided''' in pg_get_functiondef('public.settle_permission(bigint,text)'::regprocedure))>0
   and position('''reply_card_answers''' in pg_get_functiondef('public.settle_permission(bigint,text)'::regprocedure))>0,
  'person_decides',(select bool_and(has_function_privilege('authenticated',f,'execute') and not has_function_privilege('anon',f,'execute') and not has_function_privilege('service_role',f,'execute'))
   from unnest(array['public.decide_permission(uuid,uuid,bigint,text)','public.permission_choices(uuid)']) f),
  'closers_track_and_settle',(select bool_and(has_function_privilege('service_role',f,'execute') and not has_function_privilege('authenticated',f,'execute') and not has_function_privilege('anon',f,'execute'))
-  from unnest(array['public.track_run_permission(uuid,text,jsonb,boolean,timestamptz)','public.settle_permission(bigint,text)']) f),
+  from unnest(array['public.track_run_permission(uuid,text,jsonb,boolean,timestamptz,timestamptz)','public.settle_permission(bigint,text)']) f),
  'trigger_private',(select bool_and(not has_function_privilege(r,'public.close_ended_run_permissions()','execute')) from unnest(array['anon','authenticated','service_role']) r)
 );

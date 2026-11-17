@@ -99,11 +99,13 @@ revoke all on function public.permission_choices(uuid) from public,anon,service_
 grant execute on function public.permission_choices(uuid) to authenticated;
 
 -- Whoever closes a Run tells the database what each read of it showed: the request it waits on (`asking`,
--- {id,description,command,choices}, or null), whether it has ended, and when the read began. The request is kept once,
+-- {id,description,command,choices}, or null), whether it has ended, when the read began and when it ended. The request is kept
+-- once, as of the read's end (a read may begin before another and end after it, so its start may predate a later read that
+-- found nothing yet),
 -- its title the description, or the command when that is blank. An open card of the Run closes when the Run has ended,
 -- or when a read that began after the card was kept no longer shows it (a read that began earlier may predate it); an
 -- open or claimed card of a Run the record has closed closes too. It answers the Run's claimed choices still to deliver.
-create function public.track_run_permission(conversation uuid, run text, asking jsonb, ended boolean, read_started_at timestamptz) returns jsonb
+create function public.track_run_permission(conversation uuid, run text, asking jsonb, ended boolean, read_started_at timestamptz, read_ended_at timestamptz default null) returns jsonb
 language plpgsql security definer set search_path='' as $$
 declare talk public.conversations; asked text:=asking->>'id'; own boolean; kept jsonb; named text;
 begin
@@ -124,15 +126,15 @@ begin
    named:=btrim(case when btrim(kept->>'description',E' \t\r\n')<>'' then kept->>'description' else kept->>'command' end,E' \t\r\n');
    insert into public.reply_cards(company_id,conversation_id,run_id,call_id,kind,title,content,state,created_at)
     values(talk.company_id,conversation,run,asked,'permission',
-     case when length(named)<=100 then named else rtrim(left(named,99),E' \t\r\n')||'…' end,kept,'open',read_started_at)
+     case when length(named)<=100 then named else rtrim(left(named,99),E' \t\r\n')||'…' end,kept,'open',greatest(read_started_at,coalesce(read_ended_at,read_started_at)))
     on conflict do nothing;
   end if;
  end if;
  return coalesce((select jsonb_agg(jsonb_build_object('card',r.id,'permission',r.call_id,'choice',r.content->'choice') order by r.id) from public.reply_cards r
   where r.conversation_id=conversation and r.run_id=run and r.kind='permission' and r.state='sending'),'[]'::jsonb);
 end $$;
-revoke all on function public.track_run_permission(uuid,text,jsonb,boolean,timestamptz) from public,anon,authenticated;
-grant execute on function public.track_run_permission(uuid,text,jsonb,boolean,timestamptz) to service_role;
+revoke all on function public.track_run_permission(uuid,text,jsonb,boolean,timestamptz,timestamptz) from public,anon,authenticated;
+grant execute on function public.track_run_permission(uuid,text,jsonb,boolean,timestamptz,timestamptz) to service_role;
 
 -- The one claim, by the Conversation's own person (never a Viewer, who writes nothing), of a choice their role may send
 -- and the Engine offered. The first press is kept; every later one, from any tab, and one for a request the Engine no

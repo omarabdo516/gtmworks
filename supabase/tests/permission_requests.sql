@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(35);
+select plan(36);
 -- #163. Ads in RS Learning on its own profile in the Engine (ADR 0016), shown to the Manager (2), the Contributors (3, 5)
 -- and the Viewer (4); the Owner (1) sees every Agent. One Conversation with Ads each, and in it the message of one Run.
 -- Copy sits on a profile it shares, in one Conversation of the Owner's (6). Karim is a Manager of Aleem only.
@@ -198,10 +198,18 @@ select results_eq($$select * from seen order by n$$,$$values (1,2),(2,2),(3,1),(
  'each decision''s row is read by its person, the Owner and the Manager, and not by another Contributor or the Viewer');
 select ok(not has_function_privilege('anon','public.decide_permission(uuid,uuid,bigint,text)','execute')
   and not has_function_privilege('service_role','public.decide_permission(uuid,uuid,bigint,text)','execute')
-  and not has_function_privilege('authenticated','public.track_run_permission(uuid,text,jsonb,boolean,timestamptz)','execute')
+  and not has_function_privilege('authenticated','public.track_run_permission(uuid,text,jsonb,boolean,timestamptz,timestamptz)','execute')
   and not has_function_privilege('authenticated','public.settle_permission(bigint,text)','execute')
   and not has_table_privilege('authenticated','public.reply_cards','insert') and not has_table_privilege('authenticated','public.reply_cards','update'),
  'only a signed-in person decides, only the closer tracks and settles, and no one writes a card directly');
+
+-- Two reads overlap: one began first but saw the request only after a later one found nothing yet. The card is kept as of
+-- the end of the read that saw it, so the later read, which began before that, does not close it.
+set local role service_role;
+select public.track_run_permission('e2000000-0000-0000-0000-000000000004','p-run-4','{"id":"a7","description":"archive the exports","command":"tar -cf exports.tar exports","choices":["once","deny"]}',false,'2026-06-10T11:00:00Z','2026-06-10T11:05:00Z');
+select public.track_run_permission('e2000000-0000-0000-0000-000000000004','p-run-4',null,false,'2026-06-10T11:02:00Z');
+reset role;
+select is((select state from public.reply_cards where call_id='a7'),'open','a read that began before the request was seen does not close it, though it began after the read that saw it');
 
 select * from finish();
 rollback;
