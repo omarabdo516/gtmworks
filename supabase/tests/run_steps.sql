@@ -4,6 +4,7 @@ select plan(21);
 -- #141. RS Learning: Omar (1) is Owner, 2 Manager, 3 and 5 Contributors (5 is also in Aleem), 4 Viewer; an outsider is a
 -- Member of Aleem only. Each of the five has a Conversation with Ads and in it the message of one run; person 3 has a
 -- second, closed run and a third that the follower reads twice.
+insert into auth.users(id,email) values ('d4100000-0000-0000-0000-0000000000a1','steps-outsider@example.test');
 insert into public.people(id,name) values ('d4100000-0000-0000-0000-0000000000a1','Outsider');
 insert into public.members(company_id,person_id,role) values ('10000000-0000-0000-0000-000000000003','d4100000-0000-0000-0000-0000000000a1','contributor');
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
