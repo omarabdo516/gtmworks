@@ -9,6 +9,7 @@ select json_build_object(
   and has_table_privilege('authenticated','public.agent_key_waits','select')
   and not has_table_privilege('authenticated','public.agent_key_waits','insert,update,delete')
   and not has_table_privilege('anon','public.agent_key_waits','select,insert,update,delete')
+  and has_function_privilege('authenticated','public.agent_key_waits_shown(uuid)','execute') and not has_function_privilege('anon','public.agent_key_waits_shown(uuid)','execute')
   and not has_table_privilege('service_role','public.agent_key_waits','select,insert,update,delete')
   and exists(select 1 from pg_policy where polrelid='public.agent_key_waits'::regclass and polcmd='r' and position('is_company_owner' in pg_get_expr(polqual,polrelid))>0),
  'waits_go_with_agent',exists(select 1 from pg_constraint where conrelid='public.agent_key_waits'::regclass and conname='agent_key_waits_agent'

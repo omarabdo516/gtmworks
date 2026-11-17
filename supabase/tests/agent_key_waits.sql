@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(94);
+select plan(96);
 -- #299. Nothing in this transaction takes lead_create_agent's lock before the first key change begins.
 create temporary view held_agent_lock as select exists(select 1 from pg_locks where locktype='advisory' and pid=pg_backend_pid() and granted
  and ((classid::bigint<<32)|objid::bigint)=hashtextextended('hermes_agents',0)) as held;
@@ -182,6 +182,12 @@ select is(public.company_holds_provider_key('10000000-0000-0000-0000-00000000000
 select is((select count(*)::int from public.agent_key_waits where company_id='10000000-0000-0000-0000-000000000001'),1,'and its Agent still waits');
 update public.company_key_holds set changed_at=now()-interval '11 minutes' where company_id='10000000-0000-0000-0000-000000000001' and provider='openrouter';
 select is(public.company_holds_provider_key('10000000-0000-0000-0000-000000000001'),false,'ten minutes after its begin the change no longer counts');
+select is(public.agent_profile_refusal((select p.profile from public.agent_key_waits w join public.agent_profiles p on p.agent_id=w.agent_id where w.company_id='10000000-0000-0000-0000-000000000001'),'10000000-0000-0000-0000-000000000001',
+  (select w.agent_id from public.agent_key_waits w where w.company_id='10000000-0000-0000-0000-000000000001')),null,'so the wait left behind holds no Run');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select is((select count(*)::int from public.waiting_list('10000000-0000-0000-0000-000000000001') where kind='agent_key'),0,'nor shows in "Waiting on you"');
+reset role;
 set local role service_role;
 select lives_ok($$select public.settle_provider_key_holds('10000000-0000-0000-0000-000000000001','{}')$$,'the Owner''s read settles it to a space holding no key');
 reset role;
@@ -203,13 +209,13 @@ reset role;
 update public.company_key_holds set held=false where company_id='10000000-0000-0000-0000-000000000002' and provider='anthropic';
 update public.company_key_holds set changed_at=now()-interval '1 day' where company_id='10000000-0000-0000-0000-000000000002' and provider='openrouter';
 set local role service_role;
-select lives_ok($$select public.finish_provider_key_change('10000000-0000-0000-0000-000000000002','openrouter',true,'{}',false)$$,'a set the Engine never answered is finished as held, unanswered');
+select lives_ok($$select public.finish_provider_key_change('10000000-0000-0000-0000-000000000002','openrouter',true,'{}',false)$$,'a set the Engine never answered is finished unanswered');
 reset role;
-select results_eq($$select held,uncertain,changed_at=now() from public.company_key_holds where company_id='10000000-0000-0000-0000-000000000002' and provider='openrouter'$$,$$values (true,true,true)$$,'and marked so from now');
+select results_eq($$select uncertain,changed_at=now(),public.company_holds_provider_key('10000000-0000-0000-0000-000000000002') from public.company_key_holds where company_id='10000000-0000-0000-0000-000000000002' and provider='openrouter'$$,$$values (true,true,true)$$,'is marked so from now, and the Company counts as holding a key');
 set local role service_role;
 select lives_ok($$select public.settle_provider_key_holds('10000000-0000-0000-0000-000000000002','{}')$$,'the Owner''s read finds no key in the space yet');
 reset role;
-select is((select held from public.company_key_holds where company_id='10000000-0000-0000-0000-000000000002' and provider='openrouter'),true,'so the hold is kept, since the write may still land');
+select is(public.company_holds_provider_key('10000000-0000-0000-0000-000000000002'),true,'so the Company still counts as holding a key, since the write may still land');
 set local role service_role;
 select lives_ok($$select public.finish_provider_key_change('10000000-0000-0000-0000-000000000002','openrouter',null,'{}')$$,'a later set the Engine refused');
 select lives_ok($$select public.finish_provider_key_change('10000000-0000-0000-0000-000000000002','openrouter',null,'{}',null)$$,'and one that wrote nothing');

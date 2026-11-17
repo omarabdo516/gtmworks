@@ -115,8 +115,10 @@ begin
  perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
  -- A change whose begin the database did not take has no row yet: its finish records the hold all the same.
  insert into public.company_key_holds as h(company_id,provider,held,changing,uncertain,changed_at)
-  values(c,key_provider,coalesce(now_held,false),false,coalesce(not answered,false),case when not answered then now() end)
-  on conflict (company_id,provider) do update set held=coalesce(now_held,h.held),changing=false,
+  values(c,key_provider,case when not answered then false else coalesce(now_held,false) end,false,coalesce(not answered,false),case when not answered then now() end)
+  -- An unanswered set keeps the hold the Company had: the ten-minute window holds its Agents meanwhile, and ends on its
+  -- own, so a set that never landed holds nobody for good.
+  on conflict (company_id,provider) do update set held=case when not answered then h.held else coalesce(now_held,h.held) end,changing=false,
    uncertain=case when not answered then true when answered and now_held then false else h.uncertain end,
    changed_at=case when not answered then now() else h.changed_at end
   returning h.held into kept;
@@ -148,12 +150,12 @@ begin
  -- Each row's own values, so a change finished meanwhile is settled from what it wrote; a row left as it was is not
  -- written, and no lock is taken, so a page read queues behind no other Company's Agents or key changes.
  update public.company_key_holds h
-  set held=coalesce(h.provider=any(settle_provider_key_holds.held),false) or (h.held and h.uncertain and coalesce(h.changed_at>since,false)),
+  set held=coalesce(h.provider=any(settle_provider_key_holds.held),false),
    changing=false,
    uncertain=h.uncertain and coalesce(h.changed_at>since,false) and not coalesce(h.provider=any(settle_provider_key_holds.held),false)
   where h.company_id=c and not (h.changing and coalesce(h.changed_at>since,false))
    and (h.held,h.changing,h.uncertain) is distinct from (
-    coalesce(h.provider=any(settle_provider_key_holds.held),false) or (h.held and h.uncertain and coalesce(h.changed_at>since,false)),
+    coalesce(h.provider=any(settle_provider_key_holds.held),false),
     false,
     h.uncertain and coalesce(h.changed_at>since,false) and not coalesce(h.provider=any(settle_provider_key_holds.held),false));
  insert into public.company_key_holds(company_id,provider,held,changing)
@@ -232,11 +234,19 @@ language sql stable security definer set search_path='' as $$
   when coalesce(engine_profile,'') ~ '^cs-[0-9a-f]{32}$' then 'hermesProfileNotShared'
   when coalesce(engine_profile,'') !~ '^ag-[0-9a-f]{32}$' then null
   when not exists(select 1 from public.agent_profiles p where p.profile=engine_profile and p.agent_id=agent and p.company_id=c) then 'hermesProfileNotShared'
-  when exists(select 1 from public.agent_key_waits w where w.agent_id=agent and w.company_id=c) then 'agentLevelPending'
+  when exists(select 1 from public.agent_key_waits w where w.agent_id=agent and w.company_id=c) and public.company_holds_provider_key(c) then 'agentLevelPending'
   when not exists(select 1 from public.agent_profiles p join public.companies co on co.id=p.company_id
    where p.agent_id=agent and p.tools_level=co.agent_level and p.tools_policy=public.engine_tool_policy() and not p.tools_pending and (p.skills_shared or not public.shared_skills_active(c))) then 'agentLevelPending'
  end;
 $$;
+
+-- Whether the reader is an active Owner of a Company whose Agents wait for its key now: a wait counts only while the
+-- Company holds one, so one left past a change that never landed neither holds Runs nor fills "Waiting on you".
+create function public.agent_key_waits_shown(c uuid) returns boolean language sql stable security definer set search_path='' as $$
+ select public.is_company_owner(c) and public.company_holds_provider_key(c);
+$$;
+revoke all on function public.agent_key_waits_shown(uuid) from public,anon,service_role;
+grant execute on function public.agent_key_waits_shown(uuid) to authenticated;
 
 -- 20270112000000's list, and for an active Owner each Agent waiting for the key, by its name.
 create or replace function public.waiting_list(c uuid)
@@ -267,7 +277,7 @@ language sql stable set search_path='' as $$
   select 'agent_key'::text, k.id, g.name, ''::text, ''::text, null::bigint, null::uuid, k.created_at
    from public.agent_key_waits k
    join public.hermes_agents g on g.company_id=k.company_id and g.id=k.agent_id
-   where k.company_id=c and public.is_company_owner(c)
+   where k.company_id=c and public.agent_key_waits_shown(c)
  ) x(kind,id,title,body,asked_by,card_id,conversation_id,created_at)
  order by created_at desc, id desc;
 $$;
