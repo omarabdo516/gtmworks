@@ -44,6 +44,8 @@
  "attentionNote": "The sign-in stopped working, so the agents can’t reach it. Connect it again.",
  "waiting": "Finish signing in to {0} in its window.",
  "signInFailed": "The sign-in didn’t finish. Connect again to try once more.",
+ "signInCancelled": "The sign-in to {0} was cancelled.",
+ "popupBlocked": "Your browser blocked the sign-in window. Allow pop-ups for this site and try again.",
  "unreadable": "The apps can’t be read right now. Try again in a minute.",
  "noneOffered": "The engine offers no apps yet.",
  "error.appsFailed": "The engine didn’t answer. Try again in a minute.",
