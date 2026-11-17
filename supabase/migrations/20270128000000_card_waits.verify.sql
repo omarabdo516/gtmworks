@@ -13,7 +13,7 @@ select json_build_object(
   and has_function_privilege('authenticated','public.reply_card_waits(public.reply_cards)','execute')
   and not has_function_privilege('anon','public.reply_card_waits(public.reply_cards)','execute')
   and not has_function_privilege('service_role','public.reply_card_waits(public.reply_cards)','execute'),
- 'list_names_the_card',position('work_cards w where w.company_id=c and w.conversation_id=h.conversation_id' in pg_get_functiondef('public.waiting_list(uuid)'::regprocedure))>0
+ 'list_names_the_card',position('work_cards w where w.company_id=c and w.conversation_id=r.conversation_id' in pg_get_functiondef('public.waiting_list(uuid)'::regprocedure))>0
   and position('''hand''' in pg_get_functiondef('public.waiting_list(uuid)'::regprocedure))>0
   and position('''question''' in pg_get_functiondef('public.waiting_list(uuid)'::regprocedure))>0
   and position('agent_request' in pg_get_functiondef('public.waiting_list(uuid)'::regprocedure))>0
