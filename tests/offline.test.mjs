@@ -70,6 +70,7 @@ test('a file that swallows a refused outside request fails, and the run names th
 });
 
 // The proofs above load the guard themselves, so this pins that every runner still loads it.
+// The compared screens and the small visual lane (#257, playwright.lane.config.ts, its own outside-request guard) are #257's.
 test('every test runner loads the guard, and every browser spec but the compared screens uses the guarded test', () => {
   const read = path => readFileSync(path, 'utf8');
   assert.match(JSON.parse(read('package.json')).scripts.test, /^node --import \.\/tests\/offline\.mjs --test /);
@@ -77,6 +78,6 @@ test('every test runner loads the guard, and every browser spec but the compared
   for (const config of ['playwright.config.ts', 'playwright.proxy.config.ts', 'vitest.config.mts']) assert.match(read(config), /from '\.\/tests\/offline\.mjs'|import '\.\/tests\/offline\.mjs'/, config);
   assert.match(read('vitest.config.mts'), /setupFiles: \['tests\/components\/offline-setup\.ts'\]/);
   assert.match(read('tests/fresh-seed.ts'), /from '\.\/offline-browser'/);
-  const specs = globSync('tests/**/*.spec.ts').filter(path => path !== 'tests/visual.spec.ts');
+  const specs = globSync('tests/**/*.spec.ts').filter(path => path !== 'tests/visual.spec.ts' && !/^tests\/visual-lane[^/]*\.spec\.ts$/.test(path));
   assert.deepEqual(specs.filter(path => !/import \{[^}]*\btest\b[^}]*\} from '\.\.?\/(fresh-seed|offline-browser)'/.test(read(path))), []);
 });

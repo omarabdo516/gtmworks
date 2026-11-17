@@ -71,7 +71,7 @@ const dockerObjects = [
  {
   kind: 'container', list: ['container', 'ls', '--all', '--format', `{{.Names}}\t${project}\t{{.Status}}`],
   remove: ['container', 'rm', '--force', '--volumes'],
-  names: new Set(['gtmworks-ci', 'gtmworks-worker-ci', 'gtmworks-proxy-app', 'gtmworks-proxy-caddy']),
+  names: new Set(['gtmworks-ci', 'gtmworks-worker-ci', 'gtmworks-proxy-app', 'gtmworks-proxy-caddy', 'gtmworks-lane-renderer']),
  },
  { kind: 'volume', list: ['volume', 'ls', '--format', `{{.Name}}\t${project}`], remove: ['volume', 'rm', '--force'], names: new Set(['gtmworks-proxy-caddy-data']) },
  { kind: 'network', list: ['network', 'ls', '--format', `{{.Name}}\t${project}`], remove: ['network', 'rm'], names: new Set([...projects].map(id => `supabase_network_${id}`)) },

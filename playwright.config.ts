@@ -44,7 +44,8 @@ export default defineConfig({
     // the screens' images are made there, and the budgets need a machine no other job shares. `ci.sh integration` then
     // leaves both projects empty, so they still order the projects around them.
     { name: 'visual', testMatch: hostedElsewhere ? /^$/ : 'visual.spec.ts', outputDir: 'test-results/screenshots/visual', dependencies: ['measured-anchor'], teardown: 'functional' },
-    { name: 'functional', testIgnore: ['visual.spec.ts', 'first-run.spec.ts', 'navigation.spec.ts', '**/proxy/**'] },
+    // The visual lane has a config of its own (playwright.lane.config.ts).
+    { name: 'functional', testIgnore: ['visual.spec.ts', 'first-run.spec.ts', 'navigation.spec.ts', '**/proxy/**', 'visual-lane*.spec.ts'] },
     { name: 'measured', testMatch: hostedElsewhere ? /^$/ : 'navigation.spec.ts', workers: 1 },
     // Empty-install scenarios mutate the whole local database and run only after seeded functional tests finish.
     { name: 'first-run', testMatch: 'first-run.spec.ts' },

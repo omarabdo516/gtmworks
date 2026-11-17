@@ -21,24 +21,24 @@ test('unit test and brand file changes run no long suite: static covers them on 
   assert.deepEqual(areas('tests/unit.test.mjs', 'tests/hermes.test.mjs', 'brand/wordmark.png', 'brand/README.md'), none);
 });
 
-// Screens alone (#213): the component tests prove how they behave, and from the whole-app browser suite only the
-// compared screens run (integration=visual), so an unintended change to an approved screen is still caught before
-// merge. A component test alone runs only the component tests. None of them runs the database or the install.
+// Screens alone: the component tests prove how they behave. The compared screens run on main only (Omar, 2026-11-17,
+// #257), so no level sends a pull request to them: screens alone start no browser job. None of them runs the database
+// or the install.
 const screens = {
-  'app/page.tsx': { components: 'true', database: 'false', integration: 'visual', install: 'false' },
-  'app/globals.css': { components: 'true', database: 'false', integration: 'visual', install: 'false' },
-  'components/shell/sidebar.tsx': { components: 'true', database: 'false', integration: 'visual', install: 'false' },
-  'lib/messages/en.json': { components: 'true', database: 'false', integration: 'visual', install: 'false' },
-  'tests/visual-screens/home.json': { components: 'false', database: 'false', integration: 'visual', install: 'false' },
-  'tests/visual.spec.ts-snapshots/home-en-1440-linux.png': { components: 'false', database: 'false', integration: 'visual', install: 'false' },
+  'app/page.tsx': { components: 'true', database: 'false', integration: 'false', install: 'false' },
+  'app/globals.css': { components: 'true', database: 'false', integration: 'false', install: 'false' },
+  'components/shell/sidebar.tsx': { components: 'true', database: 'false', integration: 'false', install: 'false' },
+  'lib/messages/en.json': { components: 'true', database: 'false', integration: 'false', install: 'false' },
+  'tests/visual-screens/home.json': { components: 'false', database: 'false', integration: 'false', install: 'false' },
+  'tests/visual.spec.ts-snapshots/home-en-1440-linux.png': { components: 'false', database: 'false', integration: 'false', install: 'false' },
   'tests/components/message-box.test.tsx': { components: 'true', database: 'false', integration: 'false', install: 'false' },
 };
 for (const [path, expected] of Object.entries(screens)) {
   test(`${path} alone runs no journey, database or install`, () => assert.deepEqual(areas(path), expected));
 }
 
-test('screens together run the component tests and the compared screens only', () => {
-  assert.deepEqual(areas(...Object.keys(screens)), { components: 'true', database: 'false', integration: 'visual', install: 'false' });
+test('screens together run the component tests only', () => {
+  assert.deepEqual(areas(...Object.keys(screens)), { components: 'true', database: 'false', integration: 'false', install: 'false' });
 });
 
 test('a screen together with a file of the journeys\' area runs the whole browser suite', () => {
@@ -152,3 +152,14 @@ test('an empty, malformed or unreadable list runs every suite', t => {
   assert.equal(unreadable.status, 0);
   assert.equal(unreadable.stdout, 'components=true\ndatabase=true\nintegration=true\ninstall=true\n');
 });
+
+// No path, however it is mixed, routes a pull request to the compared screens (#257).
+test('no change sends a pull request to the compared screens', () => {
+  for (const path of ['app/page.tsx', 'tests/visual-screens/home.json', 'tests/visual.spec.ts-snapshots/home-en-1440-linux.png', 'tests/visual-lane/renderer', 'docs/testing.md']) {
+    assert.doesNotMatch(run([path]), /=visual$|^(lane|proof|visual)=/m, path);
+  }
+});
+// The lane's own files need no journeys: they run in the lane job alone.
+for (const path of ['playwright.lane.config.ts', 'tests/visual-lane-guards.ts', 'tests/visual-lane-guards.spec.ts', 'tests/visual-lane.mjs']) {
+  test(`${path} does not run the whole browser suite`, () => assert.equal(areas(path).integration, 'false'));
+}
