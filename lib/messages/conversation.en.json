@@ -21,5 +21,7 @@
   "stepsMinutes": "{0} min",
   "stepsMinutesSeconds": "{0} min {1} sec",
   "stepDone": "Done",
-  "stepSkipped": "Skipped"
+  "stepSkipped": "Skipped",
+  "stepsUsedTook": "{0} · {1}",
+  "stepLine": "{0} · {1}"
 }

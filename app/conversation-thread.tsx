@@ -130,7 +130,7 @@ export function ConversationTurns({slug,company,record,asked}:{slug:string,compa
    {message.lost&&<p className="note" data-outcome="lost">{t('conversationRunLost')}</p>}
   </li>:<li key={`${message.kind||'m'}${message.id}`} className="turn turn--agent msg" data-author="agent" data-kind={message.kind}>
    <div className="sender">{face(20)}<bdi>{message.author_name}</bdi><time className="sender__time" dateTime={message.created_at}>{time(message.created_at)}</time></div>
-   {!!message.steps?.list.length&&<StepsList steps={message.steps} c={c}/>}
+   {!!message.steps?.list.length&&<StepsList steps={message.steps} c={c} cb={cb}/>}
    {message.body&&<div className="bubble bubble--agent" dir="auto">{message.body}</div>}
    {message.cards?.map(card=>card.kind==='made'?<MadeCard key={card.agent.id} slug={slug} agent={card.agent}/>:card.kind==='request'?<RequestCard key={`request${card.request.id}`} slug={slug} request={card.request}/>
     :<ReplyCard key={`reply${card.card.id}`} card={card.card} fresh={!drawnCards.has(card.card.id)} answer={answer}/>)}
@@ -169,7 +169,7 @@ export function ConversationComposer({company,conversation,record,writer,asked,d
 // of it and whether it ended ("Done") or failed ("Skipped", the reference's other state). Opened, the lines rise one
 // after another and each check draws itself, only for a moment after opening (`is-just`).
 const justFor=700;
-function StepsList({steps,c}:{steps:RunSteps,c:Text}) {
+function StepsList({steps,c,cb}:{steps:RunSteps,c:Text,cb:BidiText}) {
  const {language}=useI18n(); const list=useId();
  const [open,setOpen]=useState(false); const [openedAt,setOpenedAt]=useState<number|null>(null);
  useEffect(()=>{ if(openedAt===null) return; const timer=setTimeout(()=>setOpenedAt(null),justFor); return ()=>clearTimeout(timer); },[openedAt]);
@@ -180,11 +180,11 @@ function StepsList({steps,c}:{steps:RunSteps,c:Text}) {
   :steps.seconds%60?c('stepsMinutesSeconds',Math.floor(steps.seconds/60),steps.seconds%60):c('stepsMinutes',steps.seconds/60);
  return <div className="steps">
   <button type="button" className="steps__toggle" aria-expanded={open} aria-controls={list} onClick={()=>{ setOpen(!open); setOpenedAt(open?null:Date.now()); }}>
-   <span>{used}{took&&` · ${took}`}</span><ShellIcon name="chevronDown" className="chev"/>
+   <span>{took?c('stepsUsedTook',used,took):used}</span><ShellIcon name="chevronDown" className="chev"/>
   </button>
   <ol className={`steps__list${open&&openedAt!==null?' is-just':''}`} id={list} hidden={!open}>{steps.list.map((step,index)=>
    <li key={index} className={`step step--${step.state==='failed'?'skipped':step.state}`} style={{'--i':index} as CSSProperties}><span className="step__dot" aria-hidden="true"/>
-    <span className="step__label"><bdi>{step.tool}</bdi>{step.preview&&<> · <bdi>{step.preview}</bdi></>}</span>
+    <span className="step__label">{step.preview?cb('stepLine',step.tool,step.preview):<bdi>{step.tool}</bdi>}</span>
     {step.state!=='started'&&<span className="step__state">{step.state==='done'?<><ShellIcon name="check" className="step__ck"/>{c('stepDone')}</>:c('stepSkipped')}</span>}</li>)}</ol>
  </div>;
 }
