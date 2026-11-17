@@ -202,14 +202,18 @@ PY
   [[ "${CI:-}" == "true" ]] || { echo 'lane-proof rewrites the approved lane images; it runs in CI only' >&2; exit 2; }
   start_lane
   mkdir -p test-results/lane-proof
-  # The first run builds the app and the next two serve that build; the second declares the screens last to first, so
+  # Each run's images are kept beside its hashes, so a difference can be looked at. The first run builds the app and the
+  # next two serve that build; the second declares the screens last to first, so
   # the same bytes also prove that no screen depends on the ones drawn before it.
   lane_test --update-snapshots=all
   find tests/visual-lane -name '*.png' | sort | xargs -r sha256sum > test-results/lane-proof/run-1.sha256
+  cp -r tests/visual-lane/images test-results/lane-proof/run-1-images
   GTMWORKS_WEB_PREBUILT=true GTMWORKS_LANE_REVERSE=true lane_test --update-snapshots=all
   find tests/visual-lane -name '*.png' | sort | xargs -r sha256sum > test-results/lane-proof/run-2.sha256
+  cp -r tests/visual-lane/images test-results/lane-proof/run-2-images
   GTMWORKS_WEB_PREBUILT=true lane_test --update-snapshots=all
   find tests/visual-lane -name '*.png' | sort | xargs -r sha256sum > test-results/lane-proof/run-3.sha256
+  cp -r tests/visual-lane/images test-results/lane-proof/run-3-images
   ;;
  *) echo 'usage: ./ci.sh check | static | components | database | integration | visual | visual-update | lane-proof' >&2; exit 2;;
 esac
