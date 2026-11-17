@@ -176,4 +176,27 @@ from (values (640006,'إعلانات Meta: مراجعة قبل العميل','62
 cross join lateral (select id from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' and board_column='progress' and kind='before_review' order by position,id limit 1) s
 on conflict do nothing;
 
+-- Omar's Conversation with Ads whose reply shows the tool calls its Run made (#141; the reference's th-meta, message m3,
+-- its four steps and their 41 seconds): his message, Ads's reply, and the Run's steps as the closer seals them. The
+-- reference's lines are its own sentences; a built line is the tool's name and the Engine's preview of the call.
+insert into public.conversations(id,company_id,person_id,agent_id,agent_name,created_at)
+values ('62000000-0000-0000-0000-000000000006','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','61000000-0000-0000-0000-000000000002','Ads','2026-11-16T10:12:00Z')
+on conflict (id) do nothing;
+insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at)
+select '10000000-0000-0000-0000-000000000001','62000000-0000-0000-0000-000000000006',x.author,x.person_id,x.agent_id,x.author_name,x.body,x.send_key,'design-compare-fixture-steps',x.at
+from (values
+ (1,'person','20000000-0000-0000-0000-000000000001'::uuid,null::uuid,'عمر','@Ads محتاجين حملة Meta لكورس «المحاسب الشامل». الدفعة الجديدة بتبدأ 1 ديسمبر، والميزانية 15,000 ج للشهر. الهدف ليدز على واتساب.','63000000-0000-0000-0000-000000000007'::uuid,'2026-11-16T10:12:00Z'::timestamptz),
+ (2,'agent',null,'61000000-0000-0000-0000-000000000002','Ads','قريت نتايج آخر 3 حملات للكورس (من أغسطس لأكتوبر):
+• 412 ليد بمتوسط 34 ج لليد
+• أحسن جمهور: خريجين تجارة من 22 لـ 30 سنة في القاهرة والجيزة والإسكندرية، تكلفة الليد عندهم 27 ج
+• الفيديو القصير جاب ليدز أرخص بـ 22% من الصور',null,'2026-11-16T10:14:00Z')
+) x(n,author,person_id,agent_id,author_name,body,send_key,at)
+where not exists(select 1 from public.conversation_messages where conversation_id='62000000-0000-0000-0000-000000000006')
+order by x.n;
+insert into public.conversation_run_steps(company_id,conversation_id,run_id,steps,read_to,broken,seconds,sealed_at)
+values ('10000000-0000-0000-0000-000000000001','62000000-0000-0000-0000-000000000006','design-compare-fixture-steps',
+ '[{"call":"call-1","tool":"meta_ads","preview":"قرا نتايج آخر 3 حملات للكورس","state":"done"},{"call":"call-2","tool":"meta_ads","preview":"راجع 6 جماهير محفوظة","state":"done"},{"call":"call-3","tool":"ga4","preview":"المبيعات","state":"failed"},{"call":"call-4","tool":"sheets","preview":"توزيع الميزانية على 30 يوم","state":"done"}]',
+ 40,false,41,'2026-11-16T10:14:00Z')
+on conflict do nothing;
+
 commit;

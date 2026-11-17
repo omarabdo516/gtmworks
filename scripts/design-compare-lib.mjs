@@ -47,6 +47,8 @@ export const fixture = {
   suggestionConversation: '62000000-0000-0000-0000-000000000004',
   // Omar's Conversation in which Ads waits on his answer to its question (#138), as the reference's th-meta (message m3).
   questionConversation: '62000000-0000-0000-0000-000000000005',
+  // Omar's Conversation in which Ads's reply shows its Run's four tool calls (#141), as the reference's th-meta (m3).
+  stepsConversation: '62000000-0000-0000-0000-000000000006',
 };
 // #172. The chat and Numbers while their waiting part is still on its way. The workflow first applies the screen's own
 // scripts/design-compare-<screen>.sql, which slows the one table that part reads; the tool itself never writes. The page
@@ -111,6 +113,10 @@ export const screens = {
   // #138. The Meta campaign chat (th-meta): Ads's question card, the angle to take, before it is answered. Built: the
   // fixture's questionConversation (pass --built-path).
   'question-card': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-meta"]' }, { waitFor: '.qcard' }, { scrollTo: '.qcard' }] }, builtPath: null },
+  // #141. The Meta campaign chat (th-meta): Ads's reply with "Used 4 tools · 41 sec" pressed, its four steps open, one
+  // skipped. Built: the fixture's stepsConversation (pass --built-path), its steps pressed open the same way.
+  'run-steps': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-meta"]' }, { click: '.steps__toggle' }, { waitFor: '.steps__list:not([hidden])' }, { scrollTo: '.steps' }] },
+   builtPath: null, builtSteps: [{ click: '.steps__toggle' }, { waitFor: '.steps__list:not([hidden])' }, { scrollTo: '.steps' }] },
   // #18. The Conversation in which Omar told Ads a lasting rule, with the saved line under Ads's reply. Built: the
   // fixture's ruleConversation (pass --built-path).
   'rule-saved': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-rule-ads"]' }, { waitFor: '.note--saved' }] }, builtPath: null },
