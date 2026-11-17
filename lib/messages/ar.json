@@ -945,6 +945,8 @@
   "agentTryStarting": "جرّب تبدأ بالجملة دي",
   "logActAppConnected": "وصّل",
   "logActAppDisconnected": "فصل",
+  "logActAppConnectedFor": "خلّى {0} يستخدم",
+  "logActAppDisconnectedFor": "منع {0} من استخدام",
   "logActProviderKeySet": "حط مفتاح API بتاع",
   "logActProviderKeyRemoved": "شال مفتاح API بتاع",
   "logAppOn": "متوصل",
