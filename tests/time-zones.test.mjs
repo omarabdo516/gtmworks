@@ -29,12 +29,14 @@ test('the node and component tests run under the matrix zone, Cairo and a west-o
   assert.equal(steps['node-tests'].run, 'npm test');
   assert.ok(job.steps.findIndex(step => step.run === 'npm ci') < job.steps.findIndex(step => step.id === 'node-tests'), 'installed first');
   assert.equal(steps.components.run, './ci.sh components');
+  assert.deepEqual(steps.components.env, { CI: '' }, 'installed once');
   assert.equal(steps.components.if, '${{ !cancelled() }}');
   assert.equal(job.steps.at(-1).if, 'always()');
   assert.match(job.steps.at(-1).run, /GITHUB_STEP_SUMMARY/);
 });
 
-test('the nightly run starts within 30 minutes before midnight in the west zone', () => {
+// What it starts on: the fixed instants carry the day boundary; this only keeps real-clock reads on a date unlike UTC's.
+test('the nightly run is set for the last 30 minutes before midnight in the west zone', () => {
   const [minute, hour] = workflow.on.schedule[0].cron.split(' ').map(Number);
   for (const day of ['2026-01-15', '2026-07-15', '2026-11-17']) {
     const [year, month, date] = day.split('-').map(Number);

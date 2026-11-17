@@ -10,9 +10,9 @@ import { findProviderHosts } from '../scripts/provider-hosts.mjs';
 const host = (...parts) => parts.join('.');
 
 test('no test or helper names a real model provider host', () => {
-  const files = execFileSync('git', ['ls-files', 'tests'], { encoding: 'utf8' }).split('\n').filter(Boolean)
-    .map(path => ({ path, bytes: readFileSync(path) })).filter(({ bytes }) => !bytes.includes(0))
-    .map(({ path, bytes }) => ({ path, text: bytes.toString('utf8') }));
+  // git lists the tracked text files itself, so the approved images are never read.
+  const files = execFileSync('git', ['grep', '-I', '--name-only', '-e', '', '--', 'tests'], { encoding: 'utf8' }).split('\n').filter(Boolean)
+    .map(path => ({ path, text: readFileSync(path, 'utf8') }));
   assert.ok(files.some(file => file.path === 'tests/fake-hermes.mjs'), 'the scan reads the helpers');
   assert.deepEqual(findProviderHosts(files), []);
 });

@@ -1,7 +1,8 @@
-# The tests that read the clock again under a second time zone, near its midnight (#266): the runner's clock and zone
-# must not decide a test. The node tests and the component tests run, and nothing whose answer the zone cannot change
-# (lint, types, unused code), so the tests start soon after 02:35 UTC, which is 23:35 in America/Sao_Paulo (UTC-3 all
-# year), while Cairo and UTC are already on the next day. It reads the code only and is given no secret.
+# The node and component tests again under a second time zone (#266): the runner's zone must not decide a test. The day
+# boundary itself is checked with fixed instants in the runner's zone (tests/clock.mjs, sidebar.test.mjs), whatever the
+# hour; the run is set for 02:35 UTC, 23:35 in America/Sao_Paulo (UTC-3 all year) while Cairo and UTC are on the next
+# day, so code that reads the real clock also meets a date that differs from UTC's. It reads the code only and is given
+# no secret.
 name: Time zones
 
 on:
@@ -49,6 +50,9 @@ jobs:
       - name: components
         id: components
         if: ${{ !cancelled() }}
+        # Installed above: without CI, ci.sh does not install again.
+        env:
+          CI: ''
         run: ./ci.sh components
       - name: summary
         if: always()
