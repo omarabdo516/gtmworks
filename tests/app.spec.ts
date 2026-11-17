@@ -3,8 +3,8 @@ import { chooseLanguageInSettings } from './choose-language';
 import { createHmac } from 'node:crypto';
 import { signIn, chooseCompany } from './sign-in';
 import { appOrigin, inbox, mail } from './lane.mjs';
-// Every page here is read in both languages at both widths: the visual lane draws Arabic only, so this is where the
-// English faces are checked at 390 (#257).
+// Every page here is read in both languages at 1440, and the List and the Agents page also at 390. At 390 the visual
+// lane checks the Arabic faces on its screens; the English ones are read by the next case (#257).
 test('Paperclip Inter and Arabic-only Vazirmatn load locally',async({page,context})=>{
  const fontRequests:string[]=[];
  const externalFonts:string[]=[];
@@ -18,7 +18,7 @@ test('Paperclip Inter and Arabic-only Vazirmatn load locally',async({page,contex
  for(const language of ['en','ar']) {
   await chooseLanguageInSettings(page,language);
   await expect(page.locator('html')).toHaveAttribute('lang',language);
-  for(const [path,width] of ['home','work/board','work/board/1','work/calendar','work/list','approvals','agents','settings'].flatMap(path=>[[path,1440],[path,390]] as const)) {
+  for(const [path,width] of [...['home','work/board','work/board/1','work/calendar','work/list','approvals','agents','settings'].map(path=>[path,1440] as const),['work/list',390] as const,['agents',390] as const]) {
    await page.setViewportSize({width,height:900});
    await page.goto(`/c/rs-learning/${path}`);
    await page.evaluate(()=>document.fonts.ready);
@@ -57,6 +57,23 @@ test('Paperclip Inter and Arabic-only Vazirmatn load locally',async({page,contex
   expect(url.pathname).toMatch(/^\/_next\/static\/media\/[^/]+$/);
  }
  expect(externalFonts).toEqual([]);
+});
+
+// The visual lane draws Arabic only (#257): each page in English at 390 keeps Inter, has loaded every face it draws text
+// in, and does not scroll sideways.
+test('every page in English at 390 draws in faces that loaded, Inter for its own text',async({page})=>{
+ await page.setViewportSize({width:390,height:900});
+ await signIn(page,'manager@example.com','/c/rs-learning/home');
+ await chooseLanguageInSettings(page,'en');
+ await expect(page.locator('html')).toHaveAttribute('lang','en');
+ for(const path of ['home','work/board','work/board/1','work/calendar','work/list','approvals','agents','settings']) {
+  await page.goto(`/c/rs-learning/${path}`);
+  await page.evaluate(()=>document.fonts.ready);
+  expect(await page.locator('body').evaluate(el=>getComputedStyle(el).fontFamily.split(',')[0].trim().replaceAll(/["']/g,'')),path).toBe('InterVariable');
+  const unloaded=await page.evaluate(()=>[...new Set([...document.querySelectorAll('body *')].filter(el=>el.getClientRects().length&&[...el.childNodes].some(node=>node.nodeType===Node.TEXT_NODE&&node.textContent!.trim())).map(el=>getComputedStyle(el).fontFamily.split(',')[0].trim().replaceAll(/["']/g,'')))].filter(font=>!Array.from(document.fonts).some(face=>face.family.replaceAll(/["']/g,'')===font&&face.status==='loaded')));
+  expect(unloaded,`${path}: every face that draws text has loaded`).toEqual([]);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth),path).toBe(390);
+ }
 });
 
 test('sign-in returns to requested page, company switch preserves section, and access is isolated',async({page})=>{
