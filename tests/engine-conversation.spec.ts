@@ -708,7 +708,13 @@ test('a Card whose chat hands its person a step waits under Waiting on you for e
   await expect(reviewer.locator('.sheet .lg-wrap')).toContainText(handTitle);
   await viewer.goto(`/c/rs-learning/log?card=${card}`);
   await expect(viewer.locator('main')).toContainText('did it');
- } finally { language('en'); for(const context of opened) await context.close(); detach(); await fake.close(); }
+ } finally {
+  language('en'); for(const context of opened) await context.close();
+  // Done it's turn may still hold its reservation, which keeps the Connection detach() removes.
+  query(`delete from public.conversation_run_reservations where conversation_id='${conversation}'`);
+  query(`delete from public.conversation_queued_turns where conversation_id='${conversation}'`);
+  try { detach(); } finally { await fake.close(); }
+ }
 });
 
 // #138: an Agent asks its person with the Engine's own clarify tool; the fake engine scripts the question (the reference's
