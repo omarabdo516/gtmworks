@@ -127,6 +127,7 @@ PY
     || [[ $canary != *'tests/verify-db-session-canary.sql: division by zero'* ]]; then
     echo "$canary" >&2; echo 'the verify session did not fail its canary for the failed first statement' >&2; exit 1
   fi
+  echo 'verify session canary: a failed first statement failed its file, as it must'
   # tests/db.sh writes one line per step of its own.
   DB_LEDGER="$PWD/$dir/database.jsonl" npm run test:db
   ;;
