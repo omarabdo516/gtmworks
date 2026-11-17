@@ -246,7 +246,8 @@ test('cleanup removes only what this repository\'s runs start on a shared Docker
  const fake = docker(t, root, {
   container: [
    { name: 'supabase_db_repo', project: 'repo' }, { name: `supabase_kong_repo-lane-${maxLanes - 1}`, project: `repo-lane-${maxLanes - 1}` },
-   { name: 'gtmworks-ci' }, { name: 'gtmworks-worker-ci' }, { name: 'gtmworks-proxy-app' }, { name: 'gtmworks-proxy-caddy' }, ...others.container,
+   { name: 'gtmworks-ci' }, { name: 'gtmworks-worker-ci' }, { name: 'gtmworks-proxy-app' }, { name: 'gtmworks-proxy-caddy' }, { name: 'gtmworks-lane-renderer' },
+   ...others.container,
   ],
   volume: [{ name: 'supabase_db_repo', project: 'repo' }, { name: 'gtmworks-proxy-caddy-data' }, ...others.volume],
   network: [{ name: 'supabase_network_repo' }, { name: 'supabase_network_repo-lane-3' }, ...others.network],
