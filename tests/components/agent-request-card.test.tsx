@@ -25,7 +25,7 @@ test('the Member who asked sees the request wait for the Owners, then the answer
   expect(request.element().textContent).toContain(text);
  expect(request.element().classList.contains('ac-card--req')).toBe(true);
  expect(request.element().querySelectorAll('button, a')).toHaveLength(0);
- waiting.unmount();
+ await waiting.unmount();
 
  const made = await card({ ...asked, state: 'made', by: 'Omar', at: '2026-06-10T10:05:00Z', agent: { id: 'agent-1', connection_id: 'connection-1', name: 'FollowUp' } });
  const madeCard = made.getByRole('group', { name: 'Agent request: FollowUp' });
@@ -33,7 +33,7 @@ test('the Member who asked sees the request wait for the Owners, then the answer
  expect(madeCard.element().textContent).toContain('now shows for Youssef.');
  await expect.element(madeCard.getByRole('link', { name: 'Open FollowUp' })).toHaveAttribute('href', '/c/rs-learning/chat/agent-1');
  expect(madeCard.element().classList.contains('ac-card--req')).toBe(false);
- made.unmount();
+ await made.unmount();
 
  const declined = await card({ ...asked, state: 'declined', by: 'عمر', at: '2026-06-10T10:05:00Z', reason: 'Ads follows WhatsApp leads now.' }, 'ar');
  const declinedCard = declined.getByRole('group', { name: 'طلب وكيل: FollowUp' });
