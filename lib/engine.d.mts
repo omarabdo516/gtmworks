@@ -5,8 +5,11 @@ export type ToolSpec={name:string,description:string,parameters:JsonSchemaObject
 export type ToolCall={id:string,name:string,arguments:unknown};
 export type HistoryEntry={role:'user'|'assistant',content:string};
 export type RunQuestion={id:string,text:string,choices:string[],multiple:boolean};
-export type RunState={state:'running'|'completed'|'failed'|'stopped'|'lost'|'unreachable',reply:string|null,session:string|null,usage:RunUsage|null,toolCalls:ToolCall[],question?:RunQuestion|null};
+export type PermissionChoice='once'|'always'|'deny';
+export type RunPermission={id:string,description:string,command:string,choices:PermissionChoice[]};
+export type RunState={state:'running'|'completed'|'failed'|'stopped'|'lost'|'unreachable',reply:string|null,session:string|null,usage:RunUsage|null,toolCalls:ToolCall[],question?:RunQuestion|null,permission?:RunPermission|null};
 export type AnsweredQuestion='answered'|'gone'|'unreachable';
+export type AnsweredPermission='answered'|'gone'|'unreachable';
 export type RunStep={call:string,tool:string,preview:string|null,state:'started'|'done'|'failed'};
 export type RunStepEvent={seq:number,step:(Omit<RunStep,'call'>&{call:string|null})|null,endedAt?:number|null};
 export type RunEvent=RunStepEvent|{lost:true}|{end:'ended'|'closed'|'gone'|'unreachable'};
@@ -24,6 +27,7 @@ export type Engine={
  read(run:string):Promise<RunState>,
  stop(run:string):Promise<boolean>,
  answer(run:string,question:string,text:string):Promise<AnsweredQuestion>,
+ permit(run:string,permission:string,choice:PermissionChoice):Promise<AnsweredPermission>,
  steps(run:string,read?:{after?:number,signal?:AbortSignal}):AsyncIterable<RunEvent>,
  length(run:string,read?:{endedAt?:number|null,signal?:AbortSignal}):Promise<number|null>,
  createAgent(agent:AgentRequest):Promise<CreatedAgent>,

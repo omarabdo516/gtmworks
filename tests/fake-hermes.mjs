@@ -20,7 +20,7 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
  // stream closes.
  const endEvents=(/** @type {string} */ id,/** @type {string} */ name)=>{ if(streams.get(id)?.ended===false) { const run=settings.runs.find(each=>each.id===id); push(id,{event:name,...(run?{timestamp:run.created+settings.runSeconds}:{})}); push(id,null); } };
  // runs: one entry per run Hermes created; the same Idempotency-Key replays the same run.
- const settings={version:'0.23.0',status:200,key:'test-only-key',features:{run_submission:true,run_events_sse:true},requests:/** @type {{method?:string,path?:string,authorization?:string,session?:string,idempotency?:string}[]} */([]),runs:/** @type {{id:string,key?:string,session?:string,input:string,instructions?:string,history?:{role:string,content:string}[],body?:string,reads:number,stopped?:boolean,asked:{prompt_id:string,question:string,choices:string[],multi_select:boolean,answer?:string,settled:'answered'|'expired'|null}[]}[]} */([]),pendingReads:0,loseStarts:0,stallEvents:false,reply:input=>`Reply to: ${input}`,
+ const settings={version:'0.23.0',status:200,key:'test-only-key',features:{run_submission:true,run_events_sse:true},requests:/** @type {{method?:string,path?:string,authorization?:string,session?:string,idempotency?:string}[]} */([]),runs:/** @type {{id:string,key?:string,session?:string,input:string,instructions?:string,history?:{role:string,content:string}[],body?:string,reads:number,stopped?:boolean,asked:{prompt_id:string,question:string,choices:string[],multi_select:boolean,answer?:string,settled:'answered'|'expired'|null}[],approvals:{request_id:string,description:string,command:string,choices:string[],choice?:string,settled:'answered'|'expired'|null}[]}[]} */([]),pendingReads:0,loseStarts:0,stallEvents:false,reply:input=>`Reply to: ${input}`,
   // How a finished run ends and the usage it reports; a run cleared from runs is one Hermes lost (404).
   // A run first asks the questions `questions` gives for its input (clarify, #138), one at a time, as the pinned release
   // does: it stays running with the question in pending_controls until it is answered on the run's clarify route,
@@ -29,6 +29,14 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
   questions:/** @type {(input:string)=>{question:string,choices?:string[],multi_select?:boolean}[]} */(()=>[]),
   answers:/** @type {{run:string,status:number,body:any}[]} */([]),
   expire(run) { const waiting=settings.runs.find(found=>found.id===run)?.asked.find(asked=>!asked.settled); if(waiting) waiting.settled='expired'; return !!waiting; },
+  // After its questions a run stops to ask before each action `approvals` gives for its input (#163), one at a time, as
+  // the pinned release does (api_server_runs.py _make_approval_notify): its status is waiting_for_approval with the
+  // request in `approval` until it is answered on the run's approval route, times out (expireApproval(run), the
+  // profile's approvals.timeout) or the run is stopped. The reply is given each request's choice, null for one that timed
+  // out. `permits` keeps every approval request's status and body.
+  approvals:/** @type {(input:string)=>{description:string,command:string,choices?:string[]}[]} */(()=>[]),
+  permits:/** @type {{run:string,status:number,body:any}[]} */([]),
+  expireApproval(run) { const waiting=settings.runs.find(found=>found.id===run)?.approvals.find(asking=>!asking.settled); if(waiting) waiting.settled='expired'; return !!waiting; },
   ending:'completed',usage:/** @type {object|undefined} */({input_tokens:14000,output_tokens:12}),
   // The management listener (Hermes's dashboard, a second port): its profiles, and the status it answers with when
   // not 200. A profile made through it has its own Run API key, none until /api/env sets it, as in the pinned release.
@@ -107,7 +115,8 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
     if(!run) {
      const sent=JSON.parse(raw);
      const asked=settings.questions(sent.input).map(each=>({prompt_id:randomUUID().replaceAll('-','').slice(0,10),question:each.question,choices:each.choices??[],multi_select:each.multi_select===true,settled:null}));
-     run={id:`run_${instance}_${settings.runs.length+1}`,key,session:request.headers['x-hermes-session-key'],input:sent.input,instructions:sent.instructions,history:sent.conversation_history,body:raw,reads:0,asked,created:Date.now()/1000}; settings.runs.push(run);
+     const approvals=settings.approvals(sent.input).map(each=>({request_id:randomUUID().replaceAll('-',''),description:each.description,command:each.command,choices:each.choices??['once','session','always','deny'],settled:null}));
+     run={id:`run_${instance}_${settings.runs.length+1}`,key,session:request.headers['x-hermes-session-key'],input:sent.input,instructions:sent.instructions,history:sent.conversation_history,body:raw,reads:0,asked,approvals,created:Date.now()/1000}; settings.runs.push(run);
      streams.set(run.id,{backlog:[],next:0,ended:false,readers:new Set()});
     }
     // A start whose answer is lost: the run exists, but the connection closes before any answer (loseStarts of them).
@@ -126,13 +135,19 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
     const waiting=run.asked?.find(asked=>!asked.settled);
     if(waiting) return send(response,200,{object:'hermes.run',run_id:run.id,status:'running',session_id:run.session,pending_controls:[{kind:'clarify',prompt_id:waiting.prompt_id,execution_generation:1,
      question:`${waiting.question}\nReply "skip" to skip this question.`,choices:waiting.choices.map((choice,index)=>index===0&&waiting.choices.length>=2?`${choice} (Recommended)`:choice),multi_select:waiting.multi_select}]});
+    // The request as the pinned release sends it (api_server.py _approval_request_event): its words, the envelope, the
+    // choices it takes back.
+    const asking=run.approvals?.find(each=>!each.settled);
+    if(asking) return send(response,200,{object:'hermes.run',run_id:run.id,status:'waiting_for_approval',session_id:run.session,last_event:'approval.request',...times,pending_controls:[],
+     approval:{command:asking.command,description:asking.description,pattern_key:'recursive delete',pattern_keys:['recursive delete'],request_id:asking.request_id,timeout_s:300,
+      event:'approval.request',run_id:run.id,timestamp:Date.now()/1000,choices:asking.choices}});
     const done=run.reads++>=settings.pendingReads;
     if(done) endEvents(run.id,settings.ending==='completed'?'run.completed':'run.failed');
-    return send(response,200,{object:'hermes.run',run_id:run.id,status:done?settings.ending:'running',session_id:run.session,...times,...(done&&settings.ending==='completed'?{output:settings.reply(run.input,(run.asked||[]).map(asked=>asked.answer??null))}:{}),...(done&&settings.usage?{usage:settings.usage}:{}),pending_controls:[]});
+    return send(response,200,{object:'hermes.run',run_id:run.id,status:done?settings.ending:'running',session_id:run.session,...times,...(done&&settings.ending==='completed'?{output:settings.reply(run.input,(run.asked||[]).map(asked=>asked.answer??null),(run.approvals||[]).map(asking=>asking.choice??null))}:{}),...(done&&settings.usage?{usage:settings.usage}:{}),pending_controls:[]});
    }
-   // The run's own routes (api_server_runs.py): stop, and the answer to the question it waits for, which takes exactly
-   // request_id, execution_generation and answer.
-   const runAction=request.url.match(/^\/p\/[^/]+\/v1\/runs\/([^/]+)\/(stop|clarify)$/);
+   // The run's own routes (api_server_runs.py): stop, the answer to the question it waits for, which takes exactly
+   // request_id, execution_generation and answer, and the choice for the request it waits on (_handle_run_approval).
+   const runAction=request.url.match(/^\/p\/[^/]+\/v1\/runs\/([^/]+)\/(stop|clarify|approval)$/);
    if(runAction&&request.method==='POST') {
     const run=settings.runs.find(run=>run.id===runAction[1]);
     if(runAction[2]==='stop') {
@@ -140,6 +155,20 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
      run.stopped=true; return send(response,200,{run_id:run.id,status:'stopping'});
     }
     let body=null; try { body=JSON.parse(raw); } catch { body=null; }
+    if(runAction[2]==='approval') {
+     const permitted=(status,result)=>{ settings.permits.push({run:runAction[1],status,body}); return send(response,status,result); };
+     if(!run) return permitted(404,{error:{message:`Run not found: ${runAction[1]}`,code:'run_not_found'}});
+     if(!body||typeof body!=='object') return permitted(400,{error:{message:'Invalid JSON'}});
+     const choice=String(body.choice??'').trim().toLowerCase(); const id=typeof body.request_id==='string'?body.request_id.trim():'';
+     if(body.request_id!==undefined&&(!id||id.length>256)) return permitted(400,{error:{message:'Approval request_id is invalid.',code:'invalid_approval_request'}});
+     if(!['once','session','always','deny'].includes(choice)) return permitted(400,{error:{message:'Invalid approval choice',code:'invalid_approval_choice'}});
+     const ended=run.stopped||!run.asked.some(each=>!each.settled)&&!run.approvals.some(each=>!each.settled)&&run.reads>settings.pendingReads;
+     if(ended) return permitted(409,{error:{message:`Run has no active approval session: ${run.id}`,code:'approval_not_active'}});
+     const asking=run.approvals.find(each=>!each.settled&&(!id||each.request_id===id));
+     if(!asking) return permitted(409,{error:{message:`Run has no pending approval: ${run.id}`,code:'approval_not_pending'}});
+     Object.assign(asking,{settled:'answered',choice});
+     return permitted(200,{object:'hermes.run.approval_response',run_id:run.id,choice,...(id?{request_id:id}:{}),resolved:1});
+    }
     const answered=(status,result)=>{ settings.answers.push({run:runAction[1],status,body}); return send(response,status,result); };
     if(!body||typeof body!=='object'||Object.keys(body).sort().join()!=='answer,execution_generation,request_id'||typeof body.answer!=='string') return answered(400,{error:{message:'Invalid parameters',code:'invalid_params'}});
     if(!run) return answered(404,{error:{message:`Run not found: ${runAction[1]}`,code:'run_not_found'}});
