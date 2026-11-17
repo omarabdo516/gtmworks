@@ -1,4 +1,4 @@
-import { afterEach, expect } from 'vitest';
+import { afterAll, afterEach, expect } from 'vitest';
 import { commands } from 'vitest/browser';
 import type {} from '@vitest/browser-playwright';
 
@@ -13,4 +13,7 @@ declare module 'vitest/browser' {
 // a test that tried an outside address fails naming each host.
 // Awaited here, before the test file itself loads, so a request the file makes while it loads is named too.
 await commands.watchOutside();
-afterEach(async () => { expect(await commands.outsideRequests(), 'outside requests the browser made (tests/components/offline-setup.ts)').toEqual([]); });
+const message = 'outside requests the browser made (tests/components/offline-setup.ts)';
+afterEach(async () => { expect(await commands.outsideRequests(), message).toEqual([]); });
+// Vitest runs a file's `afterAll` hooks last-registered first, so this one runs after the file's own: what they tried fails here.
+afterAll(async () => { expect(await commands.outsideRequests(), message).toEqual([]); });

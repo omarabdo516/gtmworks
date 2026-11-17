@@ -45,6 +45,11 @@ test('a local address that redirects to an outside one is stopped there and repo
   } finally { server.close(); }
 });
 
+test('an outside call of the page\'s API client fails and is reported, also when the test catches it', async ({ page, outsideRequests }) => {
+  await expect(page.request.get('https://api-call.example.org/v1')).rejects.toThrow(/ECONNREFUSED/);
+  expect(outsideRequests.splice(0)).toEqual(['api-call.example.org']);
+});
+
 test('a test\'s own requests to this machine still answer, from its page and its API requests', async ({ page }) => {
   const server = createServer((_, response) => response.end('here'));
   await new Promise<void>(done => server.listen(0, '127.0.0.1', done));

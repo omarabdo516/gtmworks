@@ -34,7 +34,9 @@ export default defineConfig({
           outside.set(context, hosts);
           watchOutside(context, host => hosts.push(host));
         },
-        outsideRequests: ({ context }) => outside.get(context)?.splice(0) ?? [],
+        // One round trip to the page first: Playwright delivers a page's events in order, so each request it had started
+        // by then has been named.
+        outsideRequests: async ({ context, page }) => { await page.evaluate(() => 0); return outside.get(context)?.splice(0) ?? []; },
       },
     },
   },

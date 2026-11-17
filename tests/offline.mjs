@@ -27,7 +27,9 @@ export const isLocalUrl = url => {
 export const nowhere = { server: 'http://127.0.0.1:9', bypass: [...local.names, ...local.suffixes, ...local.addresses.map(address => (address.includes(':') ? `[${address}]` : address)), local.loopback].join(',') };
 
 /**
- * Names each outside address a browser context behind `nowhere` tried, a WebSocket or a redirect hop included.
+ * Names each outside address a browser context behind `nowhere` tried, a WebSocket, a redirect hop and a call of its
+ * `page.request` included: that API client emits no request event, and reaches the proxy on this machine, so its calls
+ * are named by the address they were given.
  * @param {import('@playwright/test').BrowserContext} context @param {(host: string) => void} note
  */
 export function watchOutside(context, note) {
@@ -36,6 +38,9 @@ export function watchOutside(context, note) {
   context.on('request', request => seen(request.url()));
   context.on('page', watchPage);
   context.pages().forEach(watchPage);
+  // `get`, `post` and the others go through `fetch`.
+  const api = context.request, call = api.fetch.bind(api);
+  api.fetch = (target, ...rest) => { seen(new URL(typeof target === 'string' ? target : target.url(), 'http://localhost/').href); return call(target, ...rest); };
 }
 
 // This file, found from its own call site: it loads as ES module and, from a Playwright config, as CommonJS, which has no

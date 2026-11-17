@@ -1,11 +1,16 @@
-import { expect, test } from 'vitest';
+import { afterAll, expect, test } from 'vitest';
 import { commands } from 'vitest/browser';
 
 // The component tests' browser reaches nothing outside this machine (#266, tests/components/offline-setup.ts): a request
 // to an outside host is aborted, and a test that made one fails naming the host.
-// The browser's report of a request reaches Node beside the test's own calls, so it is gathered until it is there.
-const reported = (host: string) => { const seen: string[] = []; return expect.poll(async () => (seen.push(...await commands.outsideRequests()), seen)).toEqual([host]); };
+const reported = async (host: string) => expect(await commands.outsideRequests()).toEqual([host]);
 const whileLoading = fetch('https://loading.example.org/probe.json').then(() => 'reached', () => 'refused');
+
+// A file's own `afterAll` is watched too; the setup file's last check runs after it (tests/components/offline-setup.ts).
+afterAll(async () => {
+  await fetch('https://teardown.example.org/probe.json').catch(() => undefined);
+  await reported('teardown.example.org');
+});
 
 test('a request the file makes while it loads is refused and reported too', async () => {
   expect(await whileLoading).toBe('refused');
