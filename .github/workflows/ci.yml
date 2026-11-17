@@ -414,6 +414,16 @@ jobs:
           path: playwright-report/html/
           if-no-files-found: ignore
           retention-days: 30
+      # Each lane's app server and stack write their output to files, not the job log: a server that never answers its
+      # web-server check (Playwright's 240 s) says why only there. The stacks run on local test credentials only.
+      - name: upload the lanes' server logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lane-server-logs
+          path: playwright-report/*.log
+          if-no-files-found: ignore
+          retention-days: 14
       # What the lanes used, so the lane count rests on a measurement: the job's own memory (app servers, workers,
       # Chromium) and each lane's Supabase stack, which runs under the Docker daemon outside the job's memory limit.
       - name: memory the lanes used
