@@ -960,5 +960,19 @@
   "agentFilesEmpty": "مفيش ملفات لسه. ملفات بطاقاته ومحادثاتك معاه بتظهر هنا.",
   "agentScreen": "شاشة الوكيل",
   "agentScreenOff": "مفيش حاجة شغالة على الشاشة دلوقتي.",
-  "boardWaitingForDecision": "البطاقة دي مستنية قرارك. قرّر من المحادثة الأول"
+  "boardWaitingForDecision": "البطاقة دي مستنية قرارك. قرّر من المحادثة الأول",
+  "permissionLabel": "طلب موافقة: {0}",
+  "permissionCommand": "الأمر",
+  "permissionDeny": "متسمحش",
+  "permissionAlways": "اسمح دايماً",
+  "permissionOnce": "اسمح مرة",
+  "permissionAllowedOnce": "سمحت مرة واحدة",
+  "permissionAlwaysAllowed": "سمحت دايماً",
+  "permissionNotAllowed": "مسمحتش",
+  "permissionWaitTeam": "مستني موافقة حد من الفريق",
+  "permissionClosed": "اتقفل من غير رد",
+  "permissionFailed": "معرفناش نبعتها. جرّب تاني.",
+  "logActPermissionAllowed": "وافق على طلب {0}",
+  "logActPermissionRefused": "رفض طلب {0}",
+  "logPermissionWaiting": "مستني موافقة"
 }

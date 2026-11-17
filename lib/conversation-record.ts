@@ -1,5 +1,6 @@
 import { ownerNames } from './company-owners.mjs';
 import type { supabase } from './supabase';
+import type { PermissionChoice } from './engine.mjs';
 import { faceOf, latestEnded, messageColumns, noteColumns, queuedColumns, queuedWaiting, questionParts, replyCardColumns, replyCardOf, runStepsColumns, shown, totalOf, usageColumns, waiting, withBoardNote, withDecisions, withTeamWork, type AgentRequestView, type Decision, type LeadCard, type PlacedCard, type QueuedTurn, type ReplyCardRow, type RunStepsRow, type SavedRule, type RunUsage, type StoredNote } from './conversations';
 import { isNewFor } from './sidebar.mjs';
 import type { BoardColumn } from './board-columns.mjs';
@@ -14,7 +15,8 @@ type Database=Awaited<ReturnType<typeof supabase>>;
 // rules its Agent saved in it: a suggestion with who it was sent to, and how it was decided (RLS: only the person who
 // told it reads one that is not the team's), the Card it put on the board with that Card's column now (#144), and the
 // questions its Agent asked with their answers (#138); while one waits for its answer the record says so (`asking`). Each
-// reply carries the tool calls of its Run (#141), sealed when the Run closed and read to its end.
+// reply carries the tool calls of its Run (#141), sealed when the Run closed and read to its end. While a request to
+// allow an action waits (#163), the record says which choices this person may send (`permit`); the Run is still working.
 export async function conversationRecord(db:Database,person:string,company:string,found:{id:string,agent_id:string|null,agent_name:string,hermes_agents:unknown}) {
  const conversation=found.id;
  // Usage first: a run closed between the two reads then shows its reply too (both are written in one transaction).
@@ -53,6 +55,7 @@ export async function conversationRecord(db:Database,person:string,company:strin
  const saved=rows.map(row=>({run_id:row.run_id,rule:{id:row.id,agent:row.agent_id,removed:row.removed_at!==null,said_at:row.said_at,...(row.suggestion?{sentTo:sentTo.get(row.id)||[]}:{})} satisfies SavedRule}));
  const decisions=[...rows.flatMap(row=>row.decided_at?[{kind:'rule',approved:row.suggestion==='approved',by:row.decider?.name||'',rule:row.body,at:row.decided_at} satisfies Decision]:[]),
   ...requestRows.flatMap(row=>row.state!=='waiting'&&row.answered_at?[{kind:'request',by:row.answerer?.name||'',name:row.agent_name,at:row.answered_at,...(row.state==='made'?{made:true as const}:{made:false as const,reason:row.reason||''})} satisfies Decision]:[])];
+ const {data:permit}=replyRows.some(row=>row.kind==='permission'&&row.state==='open')?await db.rpc('permission_choices',{c:company}):{data:null};
  const {data:working}=await db.rpc('conversation_working_for',{conversation});
  const runner=(working as {person:string,name:string}[]|null)?.[0];
  const {data:manages}=runner&&runner.person!==person?await db.rpc('can_manage_company',{target:company}):{data:false};
@@ -68,6 +71,7 @@ export async function conversationRecord(db:Database,person:string,company:strin
   usage:totalOf(usage),
   pending:waiting(messages,usage).length>0||queuedWaiting(queued),
   ...(replyRows.some(row=>row.kind==='question'&&row.state==='open')?{asking:true as const}:{}),
+  ...(permit?{permit:permit as PermissionChoice[]}:{}),
   failed:latestEnded(messages,usage),
   working:runner?.name??null,
   canStop:!!runner&&(runner.person===person||manages===true),

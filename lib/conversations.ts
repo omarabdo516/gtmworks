@@ -1,3 +1,5 @@
+import type { PermissionChoice } from './engine.mjs';
+export type { PermissionChoice };
 // The conversation record as the page shows it: run ids stay on the server. A note is a person's message addressed to
 // another Member (`to`, no run); a queued message waits for the Agent to finish the current reply (`queued`), or was
 // not sent because the engine would not start it (`failed`). A person's answer to a question (`answer`, #138) is
@@ -21,15 +23,19 @@ export type AgentRequestView=RequestBase&({state:'waiting',owners:string[]}|{sta
 // A question (#138) is the Engine's own: open until its person answers it, then answered with that answer (a claimed
 // answer still on its way to the Engine is drawn answered), or closed once the Engine no longer waits for it.
 // A hand card (#139) is open until its person marks the step done, then done at that time.
+// A permission request (#163) is the Engine's own: open until its person decides it, then decided with the choice and
+// when it was made (a choice still on its way to the Engine is drawn decided), or closed once the Engine no longer waits.
+type Permission={id:number,kind:'permission',title:string,description:string,command:string,choices:PermissionChoice[]};
 type ReviewItem={text:string,fine:boolean,note:string};
 type Question={id:number,kind:'question',title:string,question:string,choices:string[],multiple:boolean};
 export type ReplyCard={id:number,kind:'draft',title:string,line:string,rows:{label:string,value:string}[]}
  |{id:number,kind:'review',title:string,line:string,items:ReviewItem[],decision:string}
  |(Question&({state:'open'}|{state:'answered',answer:string}|{state:'closed'}))
- |(Hand&({state:'open'}|{state:'done',at:string}));
+ |(Hand&({state:'open'}|{state:'done',at:string}))
+ |(Permission&({state:'open'}|{state:'decided',choice:PermissionChoice,at:string}|{state:'closed'}));
 type Hand={id:number,kind:'hand',title:string,line:string,app:string,rows:{label:string,value:string}[],url:string|null,note:string|null};
-export const replyCardColumns='id,run_id,kind,title,content,state,answered_at,done_at,created_at';
-export type ReplyCardRow={id:number,run_id:string,kind:string,title:string,content:unknown,state:string,answered_at:string|null,done_at:string|null,created_at:string};
+export const replyCardColumns='id,run_id,kind,title,content,state,answered_at,done_at,decided_at,created_at';
+export type ReplyCardRow={id:number,run_id:string,kind:string,title:string,content:unknown,state:string,answered_at:string|null,done_at:string|null,decided_at:string|null,created_at:string};
 // The database keeps only rows each kind's reader can read (reply_card_valid); a kind with no reader fails the build.
 const replyReaders:{[K in ReplyCard['kind']]:(row:ReplyCardRow)=>Extract<ReplyCard,{kind:K}>}={
  draft:({id,title,content})=>{ const {line,rows}=content as {line:string,rows:{label:string,value:string}[]}; return {id,kind:'draft',title,line,rows}; },
@@ -44,7 +50,16 @@ const replyReaders:{[K in ReplyCard['kind']]:(row:ReplyCardRow)=>Extract<ReplyCa
   const handed:Hand={id,kind:'hand',title,line,app,rows,url:url??null,note:note??null};
   return state==='done'&&done_at?{...handed,state:'done',at:done_at}:{...handed,state:'open'};
  },
+ permission:({id,title,content,state,decided_at})=>{
+  const {description,command,choices,choice}=content as {description:string,command:string,choices:PermissionChoice[],choice?:PermissionChoice};
+  const asked:Permission={id,kind:'permission',title,description,command,choices};
+  return state==='open'?{...asked,state:'open'}:(state==='sending'||state==='decided')&&choice&&decided_at?{...asked,state:'decided',choice,at:decided_at}:{...asked,state:'closed'};
+ },
 };
+// The buttons one person sees on an open request: the choices their role may send (`may`, permission_choices) that the
+// Engine offered, in the reference's order.
+export const offeredChoices=(card:Extract<ReplyCard,{kind:'permission'}>,may:readonly PermissionChoice[]):PermissionChoice[]=>
+ (['deny','always','once'] as const).filter(choice=>card.choices.includes(choice)&&may.includes(choice));
 export const replyCardOf=(row:ReplyCardRow):ReplyCard|null=>Object.hasOwn(replyReaders,row.kind)?replyReaders[row.kind as ReplyCard['kind']](row):null;
 export type LeadCard={kind:'made',agent:MadeAgent}|{kind:'request',request:AgentRequestView}|{kind:'reply',card:ReplyCard};
 export type SavedRule={id:string,agent:string|null,removed:boolean,said_at:string,sentTo?:string[]};
@@ -72,16 +87,18 @@ export function questionParts(row:ReplyCardRow,card:ReplyCard,lead:boolean):Pick
  const {answer}=row.content as {answer?:string};
  return {...(answer!==undefined&&row.answered_at?{answer:{body:answer,at:row.answered_at,delivered:card.state!=='closed'}}:{}),...(lead?{words:[card.question,...card.choices.map(choice=>`- ${choice}`)].join('\n')}:{})};
 }
-const isQuestion=(row:PlacedCard)=>row.card.kind==='reply'&&row.card.card.kind==='question';
+// What the Engine stops a Run for, a question (#138) or a request to allow an action (#163), is the Agent's own turn
+// after the message of that Run, before its reply.
+const isAsked=(row:PlacedCard)=>row.card.kind==='reply'&&(row.card.card.kind==='question'||row.card.card.kind==='permission');
 // A person's message whose run Hermes no longer knew is marked lost (#243), from the run's usage record. A run's
-// questions follow its person's message, each with its answer, before the run's reply (#138). The reply carries its
+// questions follow its person's message, each with its answer, before the run's reply (#138), as its requests do (#163). The reply carries its
 // Run's steps when the Engine reported any (#141).
 export const shown=(messages:StoredMessage[],usage:{run_id:string,outcome:string}[]=[],leadCards:PlacedCard[]=[],agentName='',saved:{run_id:string,rule:SavedRule}[]=[],runSteps:RunStepsRow[]=[]):ConversationMessage[]=>messages.flatMap(message=>{
  const plain={id:message.id,author:message.author,author_name:message.author_name,body:message.body,lost:message.author==='person'&&usage.some(run=>run.run_id===message.run_id&&run.outcome==='lost'),created_at:message.created_at};
  const replied=message.author==='agent'||messages.some(other=>other.author==='agent'&&other.run_id===message.run_id);
- const ofRun=leadCards.filter(row=>row.run_id===message.run_id&&!isQuestion(row)); const cards=ofRun.map(row=>row.card);
+ const ofRun=leadCards.filter(row=>row.run_id===message.run_id&&!isAsked(row)); const cards=ofRun.map(row=>row.card);
  const rules=saved.filter(row=>row.run_id===message.run_id).map(row=>row.rule);
- const asked=message.author==='person'?leadCards.filter(row=>row.run_id===message.run_id&&isQuestion(row)).flatMap((row):ConversationMessage[]=>{
+ const asked=message.author==='person'?leadCards.filter(row=>row.run_id===message.run_id&&isAsked(row)).flatMap((row):ConversationMessage[]=>{
   const id=row.card.kind==='reply'?row.card.card.id:0;
   return [{id,author:'agent',author_name:agentName,body:row.words??'',created_at:row.at,kind:'asked',...(row.words===undefined?{cards:[row.card]}:{})},
    ...(row.answer?[{id,author:'person' as const,author_name:message.author_name,body:row.answer.body,created_at:row.answer.at,kind:'answer' as const,...(row.answer.delivered?{}:{failed:true})}]:[])];

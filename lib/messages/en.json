@@ -960,5 +960,19 @@
   "agentFilesEmpty": "No files yet. Files from its cards and from your chats with it show here.",
   "agentScreen": "Agent’s screen",
   "agentScreenOff": "Nothing is running on the screen right now.",
-  "boardWaitingForDecision": "This card is waiting for your decision. Decide in the chat first"
+  "boardWaitingForDecision": "This card is waiting for your decision. Decide in the chat first",
+  "permissionLabel": "Approval request: {0}",
+  "permissionCommand": "Command",
+  "permissionDeny": "Don’t allow",
+  "permissionAlways": "Always allow",
+  "permissionOnce": "Allow once",
+  "permissionAllowedOnce": "Allowed once",
+  "permissionAlwaysAllowed": "Always allowed",
+  "permissionNotAllowed": "Not allowed",
+  "permissionWaitTeam": "Waiting for someone on the team to approve",
+  "permissionClosed": "Closed with no answer",
+  "permissionFailed": "Could not send it. Try again.",
+  "logActPermissionAllowed": "approved {0}’s request",
+  "logActPermissionRefused": "refused {0}’s request",
+  "logPermissionWaiting": "Waiting for OK"
 }

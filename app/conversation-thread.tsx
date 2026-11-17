@@ -14,6 +14,7 @@ import { MessageBox, postMessage, type MessageBoxHandle } from '@/app/conversati
 import type { Decision, RunSteps, SavedRule } from '@/lib/conversations';
 import { MadeCard, RequestCard } from '@/app/agent-card';
 import { ReplyCard } from '@/app/reply-card';
+import type { DecidePermission, PermissionOutcome } from '@/app/permission-card';
 import { overlayHref } from '@/lib/settings-overlay.mjs';
 import type { ConversationRecord } from '@/lib/conversation-record';
 import { localeFor } from '@/lib/i18n.mjs';
@@ -109,6 +110,9 @@ export function ChatPlaceholder() {
 // A question the Agent waits on (#138) is answered from its card: a pick goes to the waiting Run, and the record is asked
 // for again at once. While it waits, the Agent is not shown working.
 // A person who may not write (a Viewer) sees a handed step's "Done it" but cannot press it.
+// A request the Agent's Run waits on to allow an action (#163) is decided from its card with the choices this person may
+// send, and the record is asked for again at once; while it waits, the Agent is still working. A Viewer sees the wait
+// line.
 export function ConversationTurns({slug,company,record,writer,asked}:{slug:string,company:string,record:ConversationRecord,writer:boolean,asked:()=>void}) {
  const {t,language}=useI18n(); const {c,cb}=useConversationText();
  const {conversation,messages,pending,failed,working}=record;
@@ -124,6 +128,15 @@ export function ConversationTurns({slug,company,record,writer,asked}:{slug:strin
    const response=await fetch('/api/conversations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company,conversation:conversation.id,intent:'done',card})});
    const body=await response.json() as {at?:string,first?:boolean,error?:string};
    return response.ok&&body.at?{at:body.at,first:body.first===true}:{error:body.error||'conversationFailed'};
+  } catch { return {error:'conversationFailed'}; }
+ };
+ const permit:DecidePermission=async(card,choice)=>{
+  try {
+   const response=await fetch('/api/conversations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company,conversation:conversation.id,intent:'permit',card,choice})});
+   const body=await response.json() as {state?:PermissionOutcome['state'],choice?:typeof choice,at?:string,first?:boolean,error?:string};
+   if(!response.ok||!body.state) return {error:body.error||'conversationFailed'};
+   asked();
+   return body.state==='decided'&&body.choice&&body.at?{state:'decided',choice:body.choice,at:body.at,first:body.first===true}:{state:'closed',first:body.first===true};
   } catch { return {error:'conversationFailed'}; }
  };
  // A card an Agent shows while the chat is open rises in once (design-reference: card-in); those already there do not.
@@ -144,7 +157,7 @@ export function ConversationTurns({slug,company,record,writer,asked}:{slug:strin
    {!!message.steps?.list.length&&<StepsList steps={message.steps} c={c} cb={cb}/>}
    {message.body&&<div className="bubble bubble--agent" dir="auto">{message.body}</div>}
    {message.cards?.map(card=>card.kind==='made'?<MadeCard key={card.agent.id} slug={slug} agent={card.agent}/>:card.kind==='request'?<RequestCard key={`request${card.request.id}`} slug={slug} request={card.request}/>
-    :<ReplyCard key={`reply${card.card.id}`} card={card.card} fresh={!drawnCards.has(card.card.id)} answer={answer} done={writer?done:undefined}/>)}
+    :<ReplyCard key={`reply${card.card.id}`} card={card.card} fresh={!drawnCards.has(card.card.id)} answer={answer} done={writer?done:undefined} decide={writer?permit:undefined} may={record.permit}/>)}
   </li>)}</ol>
   {pending&&!record.asking&&<p className="thinking convo-status" role="status">{working?c('conversationWorkingFor',conversation.agent_name,working):t('conversationWorking',conversation.agent_name)}</p>}
   {failed&&<p className="note convo-status" role="alert">{t('conversationReplyFailed')}</p>}
