@@ -21,7 +21,8 @@ const stage=(column:string)=>`(select id from public.work_stages where company_i
 test.describe.configure({mode:'serial'});
 test.use({timezoneId:'UTC'});
 test.beforeAll(({},testInfo)=>{
- freshSeed(testInfo.file);
+ // A retry of this serial file starts it again from the seed, so its rows are inserted once.
+ freshSeed(testInfo.file,testInfo.retry>0);
  query(`do $$ declare card bigint; begin
   insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values
    ('${leadConnection}','${company}','${omar}','http://127.0.0.1:9/p/lead','details-lead','no-key','unreachable'),
@@ -171,10 +172,11 @@ test('a Contributor sees the Card file and their own Conversation file, never an
  expect((await page.request.get(`/c/rs-learning/files/conversation/${fileId('audiences.csv')}`)).status()).toBe(404);
 });
 
-test('a Viewer reads the same panel with no action in it and without another person\'s request',async({page})=>{
+test('a Viewer\'s panel has only the gear and Close as actions, and no other person\'s request',async({page})=>{
  const details=await openDetails(page,'viewer@example.com',ads,'Meta Ads');
  await expect(details.locator('.dp-id__role')).toHaveText('Runs the Meta ads. · Working');
- await expect(details.getByRole('link',{name:'Settings for Meta Ads',exact:true})).toHaveCount(0);
+ await expect(details.locator('.dp-top a')).toHaveCount(1);
+ await expect(details.getByRole('link',{name:'Settings for Meta Ads',exact:true})).toHaveAttribute('href',`/c/rs-learning/settings?agent=${ads}`);
  await expect(details.locator('button:not([role=tab])')).toHaveCount(1);
  await expect(details.getByRole('button',{name:'Close details',exact:true})).toBeVisible();
  const panel=details.getByRole('tabpanel');
@@ -234,4 +236,54 @@ test('Settings shows the same dot on each Agent, with its state as text in the l
  await signIn(page,'reviewer@example.com',`/c/rs-learning/settings?agent=${copy}`);
  await expect(page.locator('.sov-agent-id .face-wrap--lg > .dot')).toHaveClass('dot dot--idle');
  await expect(page.locator('.sov-agent-id .dp-id__role')).toHaveText('Writes the copy. · Idle');
+});
+
+// The gear (#175): every Role has it; it opens the Agent's page in the settings overlay, read only for a Contributor and
+// a Viewer, and closing gives the focus back to it.
+const agentPage=(agent:string)=>new RegExp(`/c/rs-learning/settings\\?agent=${agent}$`);
+for(const [who,email,reads] of [['the Owner','omar@example.com',false],['a Manager','manager@example.com',false],['a Contributor','reviewer@example.com',true],['a Viewer','viewer@example.com',true]] as const) test(`the gear opens the Agent's settings for ${who}${reads?', read only':''}`,async({page})=>{
+ const details=await openDetails(page,email,lead,'Lead');
+ await details.getByRole('link',{name:'Settings for Lead',exact:true}).click();
+ await expect(page).toHaveURL(agentPage(lead));
+ await expect(page.locator('#sov-tab-settings')).toBeFocused();
+ await expect(page.locator('.sov-agent-id .dp-id__name')).toHaveText('LeadMain');
+ await expect(page.locator('#sov-agent-panel .ro-note')).toHaveText(reads?['Agent settings are changed by the Owner only.']:[]);
+});
+
+for(const [where,path] of [['a Conversation',`/c/rs-learning/conversations/${conversation}`],['the Agent\'s empty chat',`/c/rs-learning/chat/${ads}`]] as const) test(`closing the Agent's settings opened from ${where} returns there with the focus on the gear, by the button and by Escape`,async({page})=>{
+ await page.setViewportSize({width:1440,height:900});
+ await signIn(page,'omar@example.com',path);
+ const gear=page.getByRole('complementary',{name:'Details: Meta Ads',exact:true}).getByRole('link',{name:'Settings for Meta Ads',exact:true});
+ for(const close of ['button','Escape']) {
+  await gear.click();
+  await expect(page).toHaveURL(agentPage(ads));
+  await expect(page.locator('#sov-tab-settings')).toBeFocused();
+  if(close==='button') await page.getByRole('button',{name:'Close settings and go back',exact:true}).click();
+  else await page.keyboard.press('Escape');
+  await expect(page).toHaveURL(new RegExp(`${path}$`));
+  await expect(page.locator('#dp-settings')).toBeFocused();
+ }
+});
+
+test('"All agents" returns to the Agents list with the focus on that Agent\'s row',async({page})=>{
+ await page.setViewportSize({width:1440,height:900});
+ await signIn(page,'omar@example.com',`/c/rs-learning/settings?agent=${ads}`);
+ await page.getByRole('link',{name:'All agents',exact:true}).click();
+ await expect(page).toHaveURL(/\/c\/rs-learning\/settings\?section=agents$/);
+ await expect(page.locator(`#sov-ag-${ads}`)).toBeFocused();
+ await page.locator(`#sov-ag-${seo}`).click();
+ await expect(page).toHaveURL(agentPage(seo));
+ await expect(page.locator('#sov-tab-settings')).toBeFocused();
+ await page.getByRole('link',{name:'All agents',exact:true}).click();
+ await expect(page).toHaveURL(/\/c\/rs-learning\/settings\?section=agents$/);
+ await expect(page.locator(`#sov-ag-${seo}`)).toBeFocused();
+});
+
+test('a Contributor cannot open the page of an Agent hidden from them: the address shows the Agents list without it',async({page})=>{
+ await page.setViewportSize({width:1440,height:900});
+ await signIn(page,'reviewer@example.com',`/c/rs-learning/settings?agent=${seo}`);
+ await expect(page.locator('.sov-ag .panel-row__t bdi')).toHaveText(['Lead','Copy','Meta Ads']);
+ await expect(page.locator(`#sov-ag-${seo}`)).toHaveCount(0);
+ await expect(page.locator('.sov-agent-id')).toHaveCount(0);
+ await expect(page.getByText('SEO',{exact:true})).toHaveCount(0);
 });
