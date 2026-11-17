@@ -241,13 +241,15 @@ select is(public.lead_key_settle('e2991000-0000-0000-0000-000000000003'),null::j
 reset role;
 update public.company_key_holds set changed_at=now()-interval '11 minutes' where company_id='10000000-0000-0000-0000-000000000002' and provider='openrouter';
 select is(public.company_holds_provider_key('10000000-0000-0000-0000-000000000002'),true,'after them it still counts, until the space settles it');
+-- The Company's change count, read here: the service role has no select on the holds.
+select set_config('test.seen',(select max(version)::text from public.company_key_holds where company_id='10000000-0000-0000-0000-000000000002'),true);
 set local role service_role;
 select is(public.lead_key_settle('e2991000-0000-0000-0000-000000000003'),
  jsonb_build_object('company','10000000-0000-0000-0000-000000000002','space','cs-10000000000000000000000000000002',
-  'seen',(select max(version) from public.company_key_holds where company_id='10000000-0000-0000-0000-000000000002')),
+  'seen',current_setting('test.seen')::bigint),
  'so Lead''s next create is asked to settle it from the Company''s space, with the version it read');
 select lives_ok($$select public.settle_provider_key_holds('10000000-0000-0000-0000-000000000002','{}',
-  (select max(version)-1 from public.company_key_holds where company_id='10000000-0000-0000-0000-000000000002'))$$,'a read taken before the last change began or ended');
+  current_setting('test.seen')::bigint-1)$$,'a read taken before the last change began or ended');
 reset role;
 select is(public.company_holds_provider_key('10000000-0000-0000-0000-000000000002'),true,'settles nothing');
 set local role service_role;
