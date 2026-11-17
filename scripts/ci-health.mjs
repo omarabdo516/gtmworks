@@ -21,6 +21,8 @@ const minutes = value => (value == null ? '—' : `${(value / 60).toFixed(1)} mi
 const testSeconds = ms => (ms == null ? '—' : `${(ms / 1000).toFixed(1)} s`);
 const cell = text => String(text).replaceAll('|', '\\|').replaceAll('\n', ' ');
 const row = values => `| ${values.map(cell).join(' | ')} |`;
+// An issue body holds at most 65536 characters, so each list of tests stops at 20.
+const shown = 20;
 const tally = items => [...items.reduce((map, key) => map.set(key, (map.get(key) ?? 0) + 1), new Map())];
 
 export function report(records, { now, days, runs, unreadable = 0 }) {
@@ -50,7 +52,7 @@ export function report(records, { now, days, runs, unreadable = 0 }) {
   }
   const named = group => `${group.file} › ${group.name}`;
   const slowest = [...groups.values()].map(group => ({ ...group, p50: percentile(group.durations, 50) }))
-    .sort((a, b) => b.p50 - a.p50 || named(a).localeCompare(named(b))).slice(0, 20);
+    .sort((a, b) => b.p50 - a.p50 || named(a).localeCompare(named(b))).slice(0, shown);
   lines.push('', '## Slowest tests', '', row(['Layer', 'Suite', 'Test', 'p50', 'Runs']), '|---|---|---|---|---|');
   for (const group of slowest) lines.push(row([group.layer, group.suite, named(group), testSeconds(group.p50), group.durations.length]));
 
@@ -59,7 +61,8 @@ export function report(records, { now, days, runs, unreadable = 0 }) {
   lines.push('', '## Flaky and failed tests', '');
   if (unsteady.length) {
     lines.push(row(['Layer', 'Test', 'Flaky', 'Failed']), '|---|---|---|---|');
-    for (const group of unsteady) lines.push(row([group.layer, named(group), group.flaky, group.failed]));
+    for (const group of unsteady.slice(0, shown)) lines.push(row([group.layer, named(group), group.flaky, group.failed]));
+    if (unsteady.length > shown) lines.push('', `${unsteady.length - shown} more not shown.`);
   } else lines.push('None.');
 
   const red = jobs.filter(job => job.conclusion === 'failure');

@@ -41,6 +41,13 @@ test('flaky and failed tests are counted', () => {
   assert.doesNotMatch(text, /steady/);
 });
 
+test('the flaky and failed list stops at twenty and says how many more there are, so the issue body stays in its limit', () => {
+  const tests = Array.from({ length: 23 }, (_, n) => testRecord(`breaks ${n}`, 1, 'failed'));
+  const text = section(report(tests, { now, days: 7, runs: 1 }), 'Flaky and failed tests');
+  assert.equal(text.split('\n').filter(line => line.startsWith('| integration')).length, 20);
+  assert.match(text, /^3 more not shown\.$/m);
+});
+
 test('red jobs are counted by their label, infrastructure by cause', () => {
   const red = (classification) => job('integration', 60, { conclusion: 'failure', classification });
   const infrastructure = cause => ({ label: 'infrastructure', cause, evidence: 'x' });
