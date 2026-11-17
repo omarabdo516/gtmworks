@@ -167,7 +167,8 @@ test('the app build gets NODE_OPTIONS without the guard, also when it was inheri
 test('every test runner loads the guard, and every browser spec but the compared screens uses the guarded test', () => {
   const read = path => readFileSync(path, 'utf8');
   assert.match(JSON.parse(read('package.json')).scripts.test, /^node --import \.\/tests\/offline\.mjs --test /);
-  assert.match(read('ci.sh'), /node --import \.\/tests\/offline\.mjs --test /);
+  // CI and `./ci.sh fast` run the node tests through the fast runner (#258).
+  assert.match(read('scripts/ci-fast.mjs'), /node --import \.\/tests\/offline\.mjs --test /);
   for (const config of ['playwright.config.ts', 'playwright.proxy.config.ts', 'vitest.config.mts']) assert.match(read(config), /from '\.\/tests\/offline\.mjs'|import '\.\/tests\/offline\.mjs'/, config);
   assert.match(read('vitest.config.mts'), /setupFiles: \['tests\/components\/offline-setup\.ts'\]/);
   assert.match(read('vitest.config.mts'), /proxy: nowhere/);
