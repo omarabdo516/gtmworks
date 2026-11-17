@@ -7,6 +7,9 @@ export type HistoryEntry={role:'user'|'assistant',content:string};
 export type RunQuestion={id:string,text:string,choices:string[],multiple:boolean};
 export type RunState={state:'running'|'completed'|'failed'|'stopped'|'lost'|'unreachable',reply:string|null,session:string|null,usage:RunUsage|null,toolCalls:ToolCall[],question?:RunQuestion|null};
 export type AnsweredQuestion='answered'|'gone'|'unreachable';
+export type RunStep={call:string,tool:string,preview:string|null,state:'started'|'done'|'failed'};
+export type RunStepEvent={seq:number,step:(Omit<RunStep,'call'>&{call:string|null})|null};
+export type RunEvent=RunStepEvent|{lost:true}|{end:'ended'|'closed'|'gone'|'unreachable'};
 export type Agent={name:string,instructions:string,model:string|null,ready:boolean};
 export type AgentRequest={name:string,instructions:string,model?:string|null};
 export type CreatedAgent={state:'created',agent:Agent}|{state:'exists'|'refused'|'unreachable'|'failed',agent:null};
@@ -21,6 +24,8 @@ export type Engine={
  read(run:string):Promise<RunState>,
  stop(run:string):Promise<boolean>,
  answer(run:string,question:string,text:string):Promise<AnsweredQuestion>,
+ steps(run:string,read?:{after?:number,signal?:AbortSignal}):AsyncIterable<RunEvent>,
+ length(run:string):Promise<number|null>,
  createAgent(agent:AgentRequest):Promise<CreatedAgent>,
  readAgent(name:string):Promise<FoundAgent>,
  provideAgent(agent:{name:string,instructions:string,level:AgentLevel}):Promise<ProvidedAgent>,
