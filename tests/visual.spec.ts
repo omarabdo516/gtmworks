@@ -483,7 +483,8 @@ const openSlowly = (path: string, link: string, placeholder: string, table: stri
     await openNavigation(page);
     await page.locator(link).click();
     held.letGo();
-    await expect(page.locator(placeholder)).toBeVisible();
+    // The page's own reads can wait on the slowed table too; the waiting part only starts reading after them.
+    await expect(page.locator(placeholder)).toBeVisible({ timeout: 15000 });
     await expect(page.locator('.sidebar.is-open')).toHaveCount(0);
     const width = page.viewportSize()!.width;
     await page.setViewportSize({ width, height: 900 });
