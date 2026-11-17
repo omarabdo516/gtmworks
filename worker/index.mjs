@@ -26,8 +26,8 @@ const loop=async(name,work,every=1000)=>{ while(!stopping) { try { await work();
 const hermes=bundledHermes();
 const waiting=new Map(); const moving=new Map();
 // Each open run's events are followed while it works (#141), one follower per run, all stopped with the worker.
-const following=new Map();
-await Promise.all([loop('Webhook',()=>deliverBatch(db,options)),loop('Conversation runs',()=>closeOpenRuns(db,options)),loop('Run steps',()=>followOpenRuns(db,{encryptionKey:options.encryptionKey,following}),2000),loop('Queued turns',()=>startQueuedTurns(db,options)),
+const following=new Map(); const resting=new Map();
+await Promise.all([loop('Webhook',()=>deliverBatch(db,options)),loop('Conversation runs',()=>closeOpenRuns(db,options)),loop('Run steps',()=>followOpenRuns(db,{encryptionKey:options.encryptionKey,following,resting}),2000),loop('Queued turns',()=>startQueuedTurns(db,options)),
  loop('Channel runs',()=>driveChannelRuns(db,options)),
  loop('Note runs',()=>driveNoteRuns(db,options)),
  hermes&&loop('Hermes',()=>keepCompanyProfiles(db,{hermes,encryptionKey:options.encryptionKey,waiting}),2000),

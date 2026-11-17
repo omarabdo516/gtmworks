@@ -145,7 +145,7 @@ test('a call the Engine gives no id is known by the number of its start, and its
   fake.settings.emit(run,started('web_search','audiences'));
   fake.settings.emit(run,completed('web_search',false));
   await finish(engine,run);
-  assert.deepEqual((await all(engine.steps(run))).slice(0,2),[{seq:0,step:{call:'seq:0',tool:'web_search',preview:'audiences',state:'started'}},{seq:1,step:{call:null,tool:'web_search',preview:null,state:'done'}}]);
+  assert.deepEqual((await all(engine.steps(run))).slice(0,2),[{seq:0,step:{call:'#0',tool:'web_search',preview:'audiences',state:'started'}},{seq:1,step:{call:null,tool:'web_search',preview:null,state:'done'}}]);
  } finally { await fake.close(); }
 });
 

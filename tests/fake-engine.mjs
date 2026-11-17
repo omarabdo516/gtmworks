@@ -33,7 +33,7 @@ export function fakeEngine() {
  const sweep=(/** @type {string} */ id)=>{ const run=runs.find(run=>run.id===id); if(run) run.swept=true; };
  const eventsOf=(/** @type {FakeStep[]} */ steps)=>steps.flatMap((step,index)=>{
   const call=step.call===undefined?`call_${index+1}`:step.call; const seq=2*index;
-  return [{seq,step:{call:call??`seq:${seq}`,tool:step.tool,preview:step.preview??null,state:/** @type {const} */('started')}},
+  return [{seq,step:{call:call??`#${seq}`,tool:step.tool,preview:step.preview??null,state:/** @type {const} */('started')}},
    ...(step.open?[]:[{seq:seq+1,step:{call,tool:step.tool,preview:null,state:step.failed?/** @type {const} */('failed'):/** @type {const} */('done')}}])];
  });
  const agents=/** @type {Map<string,import('../lib/engine.mjs').Agent>} */(new Map());
