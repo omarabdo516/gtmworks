@@ -20,7 +20,7 @@ grant select on named to authenticated;
 grant all on named to service_role;
 set local role service_role;
 insert into named(name,agent) select 'writer',(public.lead_create_agent(conversation=>'c5100000-0000-0000-0000-000000000001',run=>'run-1',call=>'call-0',agent_name=>'Writer',job=>'Writes the blog.',apps=>'{}',
- own_level=>1,own_policy=>2)->>'agent')::uuid;
+ own_level=>1,own_policy=>public.engine_tool_policy())->>'agent')::uuid;
 reset role;
 insert into named values ('lead','c5000000-0000-0000-0000-000000000002');
 update named n set profile=h.profile,connection=h.id from public.hermes_agents a join public.hermes_connections h on h.id=a.connection_id where a.id=n.agent;

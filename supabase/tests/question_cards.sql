@@ -37,7 +37,9 @@ select is((select string_agg(conversation_id::text,',') from public.waiting_list
  'the Owner reads only the question of their own Conversation');
 
 -- Only the Conversation's own person answers, never a Viewer; one answer, however often or from however many tabs.
+reset role;
 select set_config('test.card',(select id::text from public.reply_cards where conversation_id='f2000000-0000-0000-0000-000000000003'),true);
+set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000005',true);
 select throws_ok($$select public.answer_question('10000000-0000-0000-0000-000000000001','f2000000-0000-0000-0000-000000000003',current_setting('test.card')::bigint,1,null,'f3000000-0000-0000-0000-000000000005')$$,
  'P0002','conversationNotFound','another Member cannot answer the question');
