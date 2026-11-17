@@ -272,7 +272,7 @@ test('a late round writes only the late profiles, never the space again, one it 
  } finally { await fake.close(); }
 });
 
-test('the Owner\'s read forgets a removed Agent\'s profile left holding no key, once no key change is under way, and keeps one holding a key or unread', async () => {
+test('the Owner\'s read during a key change answers at once and settles nothing, and once none is under way it forgets a removed Agent\'s profile left holding no key and keeps one holding a key or unread', async () => {
  const fake=await fakeHermes();
  try {
   const other=`ag-f${tail}`; const missing=`ag-b${tail}`; const unread=`ag-9${tail}`;
@@ -284,12 +284,14 @@ test('the Owner\'s read forgets a removed Agent\'s profile left holding no key, 
   let open; const gate=new Promise(resolve=>{ open=resolve; });
   const gated={...pointedAt(fake),set:async(target,key)=>{ await gate; return pointedAt(fake).set(target,key); }};
   const changing=changeCompanyKey(owner.db,owner.service,{company,provider:'openrouter',intent:'set',value:known,encryptionKey,driver:gated});
-  const reading=read(owner,fake);
-  await new Promise(resolve=>setTimeout(resolve,50));
-  assert.deepEqual([owner.calls('settle_provider_key_holds'),owner.calls('forget_agent_profile_leftovers')],[[],[]],'the read waits for the change under way');
+  let timer; const late=new Promise(resolve=>{ timer=setTimeout(()=>resolve('waited'),1000); });
+  const during=await Promise.race([read(owner,fake),late]); clearTimeout(timer);
+  assert.notEqual(during,'waited','the read never waits on the change under way');
+  assert.deepEqual([owner.calls('settle_provider_key_holds'),owner.calls('forget_agent_profile_leftovers')],[[],[]],'and settles and forgets nothing while it is under way');
   open();
   await changing;
-  const after=await reading;
+  const after=await read(owner,fake);
+  assert.equal(owner.calls('settle_provider_key_holds').length,1,'a read once it ended settles');
   assert.deepEqual(owner.calls('forget_agent_profile_leftovers'),[{c:company,profiles:[gone,missing]}],'the one holding no key and the one the Engine does not serve');
   assert.deepEqual([after.leftover,after.unknown],[[{agent:null,name:'Old ads'}],[{agent:null,name:'Old design'}]]);
   const member=sessions(fake,{owner:false,extra:[removedRow(gone,'Old writer')]});
