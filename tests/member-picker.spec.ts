@@ -1,20 +1,10 @@
 import { test, expect } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
-import { MemberPicker } from '../lib/work-activity';
 import { signIn } from './sign-in';
 
 const company='10000000-0000-0000-0000-000000000001';
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
-
-for(const empty of ['Not specified',undefined]) test(`a removed MemberPicker default ${empty?'leaves the hidden input empty':'selects the first member'}`,()=>{
- const markup=renderToStaticMarkup(createElement(MemberPicker,{
-  members:[{person_id:'first',people:{name:'First member'}}],name:'person',label:'Next actor',defaultValue:'removed',empty,
- }));
- expect(markup).toContain(`name="person" value="${empty?'':'first'}"`);
-});
 
 test('saving a card unchanged clears a next actor who was removed from the company',async({page})=>{
  const person=randomUUID(); let card:number|undefined;

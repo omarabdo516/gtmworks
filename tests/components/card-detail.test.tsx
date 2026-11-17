@@ -2,9 +2,11 @@ import { expect, test, vi } from 'vitest';
 import { act, type ComponentProps } from 'react';
 import { hydrateRoot } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
+import { render } from 'vitest-browser-react';
 import { page, userEvent } from 'vitest/browser';
 import Work from '@/app/c/[slug]/[[...section]]/work';
 import { LanguageProvider } from '@/lib/i18n-client';
+import { MemberPicker } from '@/lib/work-activity';
 import { card, sent, showWork, workProps } from './work-page';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/work/board/1' }));
@@ -91,4 +93,16 @@ test('the stage list stays disabled until the page hydrates, then a choice moves
   await userEvent.selectOptions(stage(), 'مراجعة');
   await expect.poll(() => sent(props)).toEqual([{ op: 'move', slug: 'rs-learning', company: 'co-1', card: '1', view: 'card', stage: '4' }]);
  } finally { act(() => root.unmount()); host.remove(); }
+});
+
+// A picker whose saved person was removed from the Company (moved from member-picker.spec.ts, #218): with an empty
+// choice it sends nothing, so a save clears them; without one it sends the first member.
+for (const empty of ['Not specified', undefined]) test(`a removed MemberPicker default ${empty ? 'leaves the hidden input empty' : 'selects the first member'}`, async () => {
+ const screen = await render(<LanguageProvider language="en"><form>
+  <MemberPicker members={[{ person_id: 'first', people: { name: 'First member' } }]} name="person" label="Next actor" defaultValue="removed" empty={empty}/>
+ </form></LanguageProvider>);
+ const shown = screen.getByRole('button', { name: 'Next actor' });
+ await expect.element(shown).toBeVisible();
+ expect(shown.element().querySelector(':scope > bdi')!.textContent).toBe(empty ?? 'First member');
+ expect(new FormData(document.querySelector('form')!).get('person')).toBe(empty ? '' : 'first');
 });
