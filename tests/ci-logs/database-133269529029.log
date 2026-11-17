@@ -1,0 +1,58 @@
+2026-11-16T11:32:48.7452246Z Current runner version: '2.338.2'
+2026-11-16T11:32:48.7475904Z ##[group]Runner Image Provisioner
+2026-11-16T11:32:48.7476919Z Hosted Compute Agent
+[excerpt: lines omitted]
+2026-11-16T11:32:49.4310935Z ##[group]Run actions/checkout@v4
+[excerpt: lines omitted]
+2026-11-16T11:32:51.7959280Z ##[group]Run actions/setup-node@v4
+[excerpt: lines omitted]
+2026-11-16T11:32:55.6056892Z ##[group]Run ./ci.sh database
+[excerpt: lines omitted]
+2026-11-16T11:33:10.8065396Z 7c115bed1203: Pulling fs layer
+2026-11-16T11:33:10.8073430Z error from registry: Rate exceeded
+2026-11-16T11:33:10.8096068Z Retrying after 4s: public.ecr.aws/supabase/postgrest:v16.5
+2026-11-16T11:33:10.8793428Z 4f4fb700ef54: Already exists
+2026-11-16T11:33:10.8823683Z 55afa1ecc21d: Download complete
+2026-11-16T11:33:10.8829798Z 44136fa355b3: Already exists
+[excerpt: lines omitted]
+2026-11-16T11:33:43.1789671Z 11b39a85f74d: Pull complete
+2026-11-16T11:33:43.4702229Z 9189885b3a15: Pull complete
+2026-11-16T11:33:43.4744162Z d8e253ef67b9: Pull complete
+2026-11-16T11:33:43.5232359Z a40889badcca: Pull complete
+2026-11-16T11:33:43.5233414Z Digest: sha256:6b850a2ccf0bf50ecac9accff8098095cd191c389c2a53c59b857aa0f53a8343
+2026-11-16T11:33:43.5234580Z Status: Downloaded newer image for public.ecr.aws/supabase/edge-runtime:v1.77.9
+2026-11-16T11:33:43.5365469Z public.ecr.aws/supabase/edge-runtime:v1.77.9
+2026-11-16T11:33:43.5580486Z 8c8f0158fedc: Pull complete
+2026-11-16T11:33:43.5726670Z 99a3a923cf1a: Pull complete
+2026-11-16T11:33:43.6395227Z ca4701135fb7: Pull complete
+2026-11-16T11:33:43.6566760Z b84a28ae748f: Pull complete
+2026-11-16T11:33:43.6596942Z 6dd5cd681040: Pull complete
+2026-11-16T11:33:43.7391454Z 6e93e2db5404: Pull complete
+2026-11-16T11:33:43.7657562Z 28977ec79506: Pull complete
+2026-11-16T11:33:43.7660520Z cd31fa8d2cb6: Pull complete
+2026-11-16T11:33:43.7678479Z b85f1557bd38: Pull complete
+2026-11-16T11:33:43.7691738Z 75b6b2138ef1: Pull complete
+2026-11-16T11:33:43.8550471Z bd456b109cb5: Pull complete
+2026-11-16T11:33:43.8629599Z 23d6765d9b5d: Pull complete
+2026-11-16T11:33:43.9551309Z d647725a4a5e: Pull complete
+2026-11-16T11:33:43.9980008Z e759012dbcb6: Pull complete
+2026-11-16T11:33:43.9981252Z Digest: sha256:7bd84e6a1d5322c7b864b9751873a0ac50f48df3f20a776e88114eadb2948fc0
+2026-11-16T11:33:43.9982530Z Status: Downloaded newer image for public.ecr.aws/supabase/postgres:17.11.0.011
+2026-11-16T11:33:44.0044338Z public.ecr.aws/supabase/postgres:17.11.0.011
+2026-11-16T11:33:50.2355965Z c062ef972402: Pull complete
+2026-11-16T11:33:50.2364797Z Digest: sha256:727a7f37b15f4c76c44e0d765e6be231d8d71c67f2933b2df8c6cbcc9b04c5d0
+2026-11-16T11:33:50.2370836Z Status: Downloaded newer image for public.ecr.aws/supabase/studio:2026.11.02-sha-a05e7ec
+2026-11-16T11:33:50.2386636Z public.ecr.aws/supabase/studio:2026.11.02-sha-a05e7ec
+2026-11-16T11:33:52.9304298Z e912fb529733: Pull complete
+2026-11-16T11:33:53.0244259Z 0a80a606a88a: Pull complete
+2026-11-16T11:33:53.0276002Z 1753b60eceec: Pull complete
+2026-11-16T11:33:53.0638213Z 9acba1e45411: Pull complete
+2026-11-16T11:33:53.0639505Z Digest: sha256:dd4a100612635a8eb0d64387ddc38769fb30eb3ddd9b411d0fe3121e1cb223b3
+2026-11-16T11:33:53.0651011Z Status: Downloaded newer image for public.ecr.aws/supabase/storage-api:v1.88.0
+2026-11-16T11:33:53.0652139Z public.ecr.aws/supabase/storage-api:v1.88.0
+2026-11-16T11:33:53.0896371Z Starting database...
+2026-11-16T11:34:07.0447660Z Stopping containers...
+2026-11-16T11:34:07.6242312Z failed to start docker container "supabase_db_repo": Error response from daemon: failed to set up container networking: driver failed programming external connectivity on endpoint supabase_db_repo (0495b401ade8a60c0c93e4d8495a6c02d500e6ef1b8ad93dd60287fc13a20005): failed to bind host port 0.0.0.0:54322/tcp: address already in use
+2026-11-16T11:34:07.6244860Z failed to start containers: dda7af2954d9c3d71e7814b2b5eddb04043588fab094282ce0a124b7f29eeee9
+2026-11-16T11:34:07.6246171Z Try rerunning the command with --debug to troubleshoot the error.
+2026-11-16T11:34:07.6555368Z ##[error]Process completed with exit code 1.

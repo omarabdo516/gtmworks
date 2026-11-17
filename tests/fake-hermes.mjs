@@ -39,6 +39,19 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
   appFlows:/** @type {Map<string,{server:string,profile:string,status:string,state:string,redirect:string}>} */(new Map()),appCallbacks:/** @type {string[]} */([]),
   // Each profile's own Skills by name (their SKILL.md text), and the Skills each profile locked, as `profile:name`.
   skills:/** @type {Map<string,Map<string,string>>} */(new Map()),skillLocks:/** @type {Set<string>} */(new Set()),
+  // The provider keys a profile's .env takes (hermes_cli/web_routers/config_env.py 264-330): each provider's primary
+  // password row, and rows that are not one (an alias, a URL, a tool's key). Each profile keeps its own values in `env`;
+  // the root's are defaultEnv. A provider listed in providerModels offers those models once its key is set. A profile in
+  // envFail answers a key write or removal with a 500, and one in envDropped closes the connection, as an Engine that
+  // went away; envHang never answers a key write for that profile.
+  envRows:[{env:'OPENROUTER_API_KEY',provider:'openrouter',label:'OpenRouter',primary:true,password:true,category:'provider'},
+   {env:'ANTHROPIC_API_KEY',provider:'anthropic',label:'Anthropic',primary:true,password:true,category:'provider'},
+   {env:'ANTHROPIC_TOKEN',provider:'anthropic',label:'Anthropic',primary:false,password:true,category:'provider'},
+   {env:'DEEPSEEK_API_KEY',provider:'deepseek',label:'DeepSeek',primary:true,password:true,category:'provider'},
+   {env:'OPENROUTER_BASE_URL',provider:'openrouter',label:'OpenRouter',primary:false,password:false,category:'provider'},
+   {env:'FIRECRAWL_API_KEY',provider:'',label:'',primary:false,password:true,category:'tool'}],
+  providerModels:/** @type {Record<string,string[]>} */({openrouter:['anthropic/claude-opus-4.6','openai/gpt-5.5'],anthropic:['claude-opus-4-6']}),
+  modelNeedsKey:false,defaultEnv:/** @type {Record<string,string>} */({}),modelOptionsFail:false,envFail:/** @type {Set<string>} */(new Set()),envReadFail:/** @type {Set<string>} */(new Set()),envDropped:/** @type {Set<string>} */(new Set()),envHang:/** @type {Set<string>} */(new Set()),
   approve(session) { const found=settings.signInSessions.get(session); if(!found) return; found.status='approved'; credentialsOf(found.profile)[found.provider]=`codex-token-${randomUUID()}`; }};
  const profileOf=name=>name==='default'?{config:settings.defaultConfig,credentials:settings.defaultCredentials}:settings.profiles.get(name);
  const credentialsOf=name=>profileOf(name)?.credentials||{};
@@ -155,14 +168,43 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
    if(profilePath?.[2]==='soul'&&request.method==='GET') return send(response,200,{content:profile.soul,exists:true});
    if(profilePath?.[2]==='model'&&request.method==='PUT') {
     if(settings.failStep==='model') return send(response,500,{detail:'Internal Server Error'});
+    // _write_profile_model checks a pick against the profile's own keys (profiles.py 124-150); modelNeedsKey turns it on.
+    const keyed=settings.envRows.find(row=>row.primary&&row.provider===body?.provider);
+    if(settings.modelNeedsKey&&keyed&&!profile.env?.[keyed.env]) return send(response,400,{detail:`No credentials for ${body.provider} in this profile`});
     Object.assign(profile,{provider:body.provider,model:body.model});
     return send(response,200,{ok:true,provider:body.provider,model:body.model});
    }
-   if(url.pathname==='/api/env'&&request.method==='PUT') {
-    const target=settings.profiles.get(url.searchParams.get('profile'));
-    if(settings.failStep==='env'||!target) return send(response,500,{detail:'Internal Server Error'});
-    if(body?.key==='API_SERVER_KEY') target.key=body.value;
-    return send(response,200,{ok:true,key:body?.key});
+   if(url.pathname==='/api/env') {
+    const named=url.searchParams.get('profile')||'default';
+    const target=settings.profiles.get(named);
+    const envOf=()=>named==='default'?settings.defaultEnv:(target.env||={});
+    if(request.method==='GET') {
+     if(settings.envReadFail.has(named)) return send(response,500,{detail:'Internal Server Error'});
+     if(named!=='default'&&!target) return send(response,404,{detail:`Profile '${named}' does not exist.`});
+     const env=envOf();
+     // The Engine's own preview of a set value, which gtmworks must never pass on.
+     const preview=value=>value?`${value.slice(0,4)}...${value.slice(-4)}`:null;
+     const rows=Object.fromEntries(settings.envRows.map(row=>[row.env,{is_set:Boolean(env[row.env]),redacted_value:preview(env[row.env]),description:'',url:null,category:row.category,is_password:row.password,tools:[],advanced:false,channel_managed:false,provider:row.provider,provider_label:row.label,provider_profiles:[],provider_primary:row.primary,custom:false}]));
+     for(const [name,value] of Object.entries(env)) if(!rows[name]) rows[name]={is_set:true,redacted_value:preview(value),description:'',url:null,category:'custom',is_password:true,tools:[],advanced:false,channel_managed:false,provider:'',provider_label:'',provider_profiles:[],provider_primary:false,custom:true};
+     return send(response,200,rows);
+    }
+    if(settings.envDropped.has(named)) { request.socket.destroy(); return; }
+    if(request.method==='PUT') {
+     if(settings.envHang.has(named)) return;
+     if(settings.failStep==='env'||settings.envFail.has(named)||!target) return send(response,500,{detail:'Internal Server Error'});
+     if(typeof body?.value==='string'&&(body.value.includes('...')||body.value.includes('***'))) return send(response,400,{detail:'Refusing to save a redacted credential preview'});
+     if(body?.key==='API_SERVER_KEY') target.key=body.value;
+     else envOf()[body?.key]=body?.value;
+     return send(response,200,{ok:true,key:body?.key,config_updates:[]});
+    }
+    if(request.method==='DELETE') {
+     if(settings.envFail.has(named)) return send(response,500,{detail:'Internal Server Error'});
+     if(!target) return send(response,404,{detail:`Profile '${named}' does not exist.`});
+     const env=envOf();
+     if(!env[body?.key]) return send(response,404,{detail:`${body?.key} not found in .env`});
+     delete env[body.key];
+     return send(response,200,{ok:true,key:body.key,removed:true,pool_pruned:0,providers:[],config_scrubbed:[],found:true});
+    }
    }
    const scoped=url.searchParams.get('profile')||'default';
    const home=profileOf(scoped);
@@ -200,10 +242,14 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
    // The model providers a profile is signed in to (hermes_cli/web_routers/models.py, get_model_options): a profile with
    // no credential of its own uses the root profile's, and its current provider without one is listed unauthenticated.
    if(url.pathname==='/api/model/options'&&request.method==='GET') {
+    if(settings.modelOptionsFail) return send(response,503,{detail:'busy'});
     if(!home) return send(response,404,{detail:`Profile '${scoped}' does not exist.`});
     const own=settings.profiles.get(scoped)||{provider:'auto',model:''};
     const signedIn=['openai-codex','anthropic'].filter(id=>home.credentials[id]||settings.defaultCredentials[id]);
     const providers=signedIn.map(slug=>({slug,name:slug,is_current:slug===own.provider,models:own.provider===slug&&own.model?[own.model]:[],source:'authenticated'}));
+    const env=(scoped==='default'?settings.defaultEnv:settings.profiles.get(scoped).env)||{};
+    for(const row of settings.envRows.filter(row=>row.primary&&env[row.env]&&!signedIn.includes(row.provider)))
+     providers.push({slug:row.provider,name:row.label,is_current:row.provider===own.provider,models:settings.providerModels[row.provider]||[],source:'env'});
     if(own.provider!=='auto'&&!signedIn.includes(own.provider)) providers.push({slug:own.provider,name:own.provider,is_current:true,authenticated:false,models:own.model?[own.model]:[],source:'configured-current'});
     return send(response,200,{providers,model:own.model,provider:own.provider});
    }

@@ -13,8 +13,8 @@ async function settle(page) {
   await page.waitForTimeout(300);
 }
 
-// One step of the screen table. Below 1024 px the prototype's sidebar sits behind #mobile-menu, so a hidden target
-// inside it opens the menu first.
+// One step of the screen table. Below 1024 px the prototype's sidebar sits behind #mobile-menu (the built app's below
+// 768 px, behind button.mobile-menu), so a hidden target inside it opens the menu first.
 async function runStep(page, step) {
   const [[action, value]] = Object.entries(step);
   const [selector, text] = Array.isArray(value) ? value : [value];
@@ -23,10 +23,12 @@ async function runStep(page, step) {
   if (action === 'fill') return target.fill(text);
   if (action === 'waitGone') return page.locator(selector).waitFor({ state: 'hidden' });
   if (action === 'scrollTo') return target.scrollIntoViewIfNeeded();
+  if (action === 'press') return page.keyboard.press(value);
   // A narrow sidebar still sliding shut (after the "viewing as" switch) reads as visible until its transition ends;
   // an endless one (a pulse, a spinner) never ends and is not waited for.
   await page.waitForFunction(() => document.getAnimations().every(animation => animation.playState !== 'running' || animation.effect?.getComputedTiming().endTime === Infinity));
-  if (!await target.isVisible() && await page.locator('#mobile-menu').isVisible()) await page.locator('#mobile-menu').click();
+  const menu = page.locator('#mobile-menu, button.mobile-menu').first();
+  if (!await target.isVisible() && await menu.isVisible()) await menu.click();
   await target.click();
 }
 
@@ -37,6 +39,11 @@ async function captureReference(browser, options) {
     const page = await context.newPage();
     // The prototype keeps its theme under this key and reads it before it draws.
     await page.addInitScript(theme => { localStorage.setItem('gtm-theme-v2', theme); }, options.theme);
+    // A loading state the prototype shows for a moment (#172): it stays, since what replaces it waits on a timer.
+    if (screens[options.screen].reference.hold) await page.addInitScript(() => {
+      const start = window.setTimeout.bind(window);
+      window.setTimeout = ((run, ms, ...rest) => (ms ?? 0) >= 100 ? 0 : start(run, ms, ...rest));
+    });
     const fontFailures = [];
     page.on('requestfailed', request => { if (/fonts\.(googleapis|gstatic)\.com/.test(request.url())) fontFailures.push(request.url()); });
     const { port } = server.address();

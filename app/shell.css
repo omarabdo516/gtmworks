@@ -134,6 +134,40 @@
 .gw .agent-tile__new { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; margin-top: -2px; border-radius: var(--gw-r-full); background: var(--gw-primary); color: var(--gw-on-primary); font-size: var(--gw-fs-xs); line-height: 1; font-weight: 600; white-space: nowrap; }
 .gw .agent-tile--new { border: 1px dashed var(--gw-border-1); padding-block: 7px 5px; }
 .gw .agent-tile--new .agent-tile__name { color: var(--gw-text-2); }
+/* The state dot on a tile's face, its ring the sidebar's colour (design-reference: .dot, .face-wrap .dot, .agent-tile) */
+.gw .agent-tile .dot { position: absolute; bottom: 1px; inset-inline-end: 1px; width: 8px; height: 8px; border-radius: 50%; background: var(--gw-idle-dot); box-shadow: 0 0 0 2.5px var(--gw-bg-sidebar); }
+.gw .agent-tile .dot--working { background: var(--gw-accent); }
+.gw .agent-tile .dot--waiting { background: var(--gw-wait); }
+.gw .agent-tile[aria-current="true"] .face-wrap .dot { box-shadow: 0 0 0 2.5px var(--gw-bg-active-solid); }
+/* An Agent at work: eyes scan, three dots think, the dot pulses; when it ends, a check (design-reference: applyLive) */
+.gw .face-wrap.is-thinking .face__f { animation: gw-face-scan 2.4s ease-in-out infinite; }
+@keyframes gw-face-scan { 0%, 100% { transform: translate(-1.4px, 0); } 45%, 55% { transform: translate(1.4px, -0.4px); } }
+.gw .face-wrap .think {
+  position: absolute; top: -6px; inset-inline-start: -6px; display: inline-flex; align-items: center; gap: 2px;
+  height: 14px; padding: 0 4px; border-radius: var(--gw-r-full); background: var(--gw-bg-pane);
+  box-shadow: var(--gw-border-2) 0 0 0 0.5px inset, var(--gw-shadow-pill); animation: gw-think-in var(--gw-dur) var(--gw-ease-out);
+}
+.gw .face-wrap .think i { width: 3px; height: 3px; border-radius: 50%; background: var(--gw-text-2); animation: gw-think-dot 1.2s ease-in-out infinite; }
+.gw .face-wrap .think i:nth-child(2) { animation-delay: 150ms; }
+.gw .face-wrap .think i:nth-child(3) { animation-delay: 300ms; }
+@keyframes gw-think-dot { 0%, 60%, 100% { transform: translateY(0); opacity: .45; } 30% { transform: translateY(-2px); opacity: 1; } }
+@keyframes gw-think-in { from { opacity: 0; transform: translateY(3px) scale(.8); } }
+.gw .face-wrap.is-thinking > .dot { background: var(--gw-accent); }
+.gw .face-wrap.is-thinking > .dot::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: var(--gw-accent); animation: gw-dot-ping 1.6s var(--gw-ease-out) infinite; }
+@keyframes gw-dot-ping { 0% { transform: scale(1); opacity: .55; } 80%, 100% { transform: scale(2.4); opacity: 0; } }
+.gw .face-wrap .done-ck {
+  position: absolute; bottom: -2px; inset-inline-end: -2px; width: 16px; height: 16px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center; background: var(--gw-primary); color: var(--gw-on-primary);
+  box-shadow: 0 0 0 2px var(--gw-bg-sidebar); animation: gw-ck-pop 320ms var(--gw-ease-spring);
+}
+.gw .face-wrap .done-ck .gw-icon { width: 11px; height: 11px; }
+.gw .face-wrap .done-ck .gw-icon path { stroke-width: 2.6; stroke-dasharray: 40; stroke-dashoffset: 40; animation: gw-draw-check 360ms var(--gw-ease-out) 140ms forwards; }
+@keyframes gw-ck-pop { from { transform: scale(.4); opacity: 0; } }
+@keyframes gw-draw-check { to { stroke-dashoffset: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .gw .face-wrap .face__f { transform: none !important; }
+  .gw .face-wrap.is-thinking .face__f, .gw .face-wrap .think i, .gw .face-wrap.is-thinking > .dot::after { animation: none !important; }
+}
 .gw .agent-tile__plus {
   width: 52px; height: 52px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
   background: var(--gw-bg-pane); box-shadow: var(--gw-border-3) 0 0 0 0.5px inset; color: var(--gw-text-2);
@@ -202,6 +236,7 @@
 @media (hover: hover) {
   .gw .circle-btn:hover { background: var(--gw-bg-elevated-hover); }
   .gw .sb-item:hover, .gw .agent-tile:hover, .gw .me:hover, .gw .menu__item:hover { background: var(--gw-bg-hover); }
+  .gw .agent-tile:hover .face-wrap .dot { box-shadow: 0 0 0 2.5px var(--gw-bg-active-solid); }
   .gw .sb-add:not([aria-disabled="true"]):hover { background: var(--gw-bg-hover); color: var(--gw-text-1); }
 }
 
@@ -240,6 +275,20 @@
 }
 .gw .transcript__col { max-width: var(--gw-chat-col); margin: 0 auto; display: flex; flex-direction: column; gap: 24px; min-height: 100%; justify-content: flex-end; }
 .gw .transcript__col > * { max-width: 100%; }
+/* The placeholder of a Conversation or Numbers still loading (#172; design-reference: .sk, .sk-line, .sk-msg). It shows
+   only after 400ms: React keeps a placeholder it has drawn for at least 300ms, so a page that arrives at once never
+   shows one. */
+.gw .sk { background: var(--gw-bg-tertiary); border-radius: var(--gw-r-sm); position: relative; overflow: hidden; }
+.gw .sk::after {
+  content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, var(--gw-bg-subtle), transparent);
+  animation: gw-shimmer 1.2s infinite; transform: translateX(-100%);
+}
+@keyframes gw-shimmer { to { transform: translateX(100%); } }
+.gw .sk-line { height: 14px; }
+.gw .sk-msg { display: grid; gap: 8px; }
+.gw .sk-hold { animation: gw-sk-hold 0s 400ms both; }
+@keyframes gw-sk-hold { from { visibility: hidden; } }
+@media (prefers-reduced-motion: reduce) { .gw .sk::after { animation: none; } }
 .gw .turns { display: flex; flex-direction: column; gap: 24px; margin: 0; padding: 0; list-style: none; }
 .gw .turn { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; width: 100%; }
 .gw .turn--user { align-items: flex-end; }

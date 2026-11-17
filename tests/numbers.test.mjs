@@ -42,7 +42,8 @@ test('the page reads its figures through the app source, and only the asked peri
  assert.deepEqual(await connectedApps({ company: 'c1', period: '7' }), []);
  assert.equal((await readNumbers({ company: 'c1', period: '7' })).connected, false);
  const page = readFileSync('app/c/[slug]/numbers/page.tsx', 'utf8');
- assert.match(page, /await readNumbers\(\{company:company\.id,period\}\)/);
+ assert.match(page, /readNumbers\(\{company,period\}\)/);
+ assert.match(page, /<Figures db=\{db\} company=\{company\.id\} slug=\{slug\} period=\{period\}/);
  assert.doesNotMatch(page, /numbersTiles\(/);
 });
 

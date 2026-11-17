@@ -1,0 +1,64 @@
+2026-11-16T19:15:13.7791886Z Current runner version: '2.338.2'
+2026-11-16T19:15:13.7796415Z Runner name: 'omar-pc-ci_gtmworks'
+2026-11-16T19:15:13.7797129Z Runner group name: 'Default'
+[excerpt: lines omitted]
+2026-11-16T19:15:24.1057428Z ##[group]Run '/usr/local/bin/ci-job-cleanup.sh'
+[excerpt: lines omitted]
+2026-11-16T19:15:25.7608785Z ##[group]Run actions/checkout@v4
+[excerpt: lines omitted]
+2026-11-16T19:15:27.4604472Z ##[group]Run actions/setup-node@v4
+[excerpt: lines omitted]
+2026-11-16T19:15:27.8616802Z ##[group]Run node scripts/ci-runner.mjs cleanup
+[excerpt: lines omitted]
+2026-11-16T19:15:28.2571544Z ##[group]Run node scripts/ci-runner.mjs lanes "$RUNNER_ENVIRONMENT" >> "$GITHUB_ENV"
+[excerpt: lines omitted]
+2026-11-16T19:15:28.2867260Z ##[group]Run docker/build-push-action@v6
+[excerpt: lines omitted]
+2026-11-16T19:16:36.3335290Z   "buildx.build.ref": "default/default/wqt3wrhxs3g7m5ug1xs4fi6u5",
+2026-11-16T19:16:36.3335520Z   "containerimage.descriptor": {
+2026-11-16T19:16:36.3335731Z     "mediaType": "application/vnd.oci.image.index.v1+json",
+2026-11-16T19:16:36.3336026Z     "digest": "sha256:fa40b7942529be6b600c13c72991f2be0d95122d9ce39b519d9a7142cd90abf5",
+2026-11-16T19:16:36.3336256Z     "size": 856
+2026-11-16T19:16:36.3336379Z   },
+2026-11-16T19:16:36.3336630Z   "containerimage.digest": "sha256:fa40b7942529be6b600c13c72991f2be0d95122d9ce39b519d9a7142cd90abf5",
+2026-11-16T19:16:36.3336922Z   "image.name": "docker.io/library/gtmworks:ci"
+2026-11-16T19:16:36.3337198Z }
+2026-11-16T19:16:36.3337456Z ##[endgroup]
+2026-11-16T19:16:36.3339221Z ##[group]Reference
+2026-11-16T19:16:36.3339463Z default/default/wqt3wrhxs3g7m5ug1xs4fi6u5
+2026-11-16T19:16:36.3339806Z ##[endgroup]
+2026-11-16T19:16:36.3340032Z ##[group]Check build summary support
+2026-11-16T19:16:36.3340306Z Build summary supported!
+2026-11-16T19:16:36.3340520Z ##[endgroup]
+2026-11-16T19:16:36.3430952Z ##[group]Run ./ci.sh integration
+2026-11-16T19:16:36.3431221Z [36;1m./ci.sh integration[0m
+2026-11-16T19:16:36.3437373Z shell: /usr/bin/bash -e {0}
+2026-11-16T19:16:36.3437549Z env:
+2026-11-16T19:16:36.3437712Z   TMPDIR: /srv/ci/_work/gtmworks/gtmworks/gtmworks/.ci-tmp
+2026-11-16T19:16:36.3437907Z   GTMWORKS_TEST_LANES: 3
+2026-11-16T19:16:36.3438050Z   CI_IMAGE_PREBUILT: true
+2026-11-16T19:16:36.3438186Z ##[endgroup]
+2026-11-16T19:16:43.6857770Z npm warn deprecated eslint@9.39.5: This version is no longer supported. Please see https://eslint.org/version-support for other options.
+2026-11-16T19:16:52.7021471Z 
+2026-11-16T19:16:52.7021960Z added 537 packages, and audited 538 packages in 16s
+2026-11-16T19:16:52.7022146Z 
+2026-11-16T19:16:52.7022236Z 179 packages are looking for funding
+2026-11-16T19:16:52.7022416Z   run `npm fund` for details
+2026-11-16T19:16:52.8011643Z 
+2026-11-16T19:16:52.8011983Z 11 vulnerabilities (10 moderate, 1 high)
+2026-11-16T19:16:52.8012133Z 
+2026-11-16T19:16:52.8012338Z To address issues that do not require attention, run:
+2026-11-16T19:16:52.8012538Z   npm audit fix
+2026-11-16T19:16:52.8012615Z 
+2026-11-16T19:16:52.8012744Z To address all issues (including breaking changes), run:
+2026-11-16T19:16:52.8013198Z   npm audit fix --force
+2026-11-16T19:16:52.8013307Z 
+2026-11-16T19:16:52.8013384Z Run `npm audit` for details.
+2026-11-16T19:17:17.1588681Z ##[error]Process completed with exit code 130.
+2026-11-16T19:17:17.1800132Z ##[group]Run actions/upload-artifact@v4
+[excerpt: lines omitted]
+2026-11-16T19:17:17.1806309Z ##[endgroup]
+2026-11-16T19:17:17.7661696Z ##[error]The runner has received a shutdown signal. This can happen when the runner service is stopped, or a manually started runner is canceled.
+2026-11-16T19:17:17.8190990Z ##[error]The operation was canceled.
+2026-11-16T19:17:17.9791208Z Cleaning up orphan processes
+2026-11-16T19:17:17.9932879Z Terminate orphan process: pid (428554) (bash)

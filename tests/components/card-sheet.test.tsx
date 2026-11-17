@@ -10,7 +10,7 @@ import '@/app/shell.css';
 
 const push = vi.fn<(href: string, options?: { scroll?: boolean }) => void>();
 const refresh = vi.fn();
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push, refresh, replace: vi.fn(), prefetch: vi.fn() }) }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push, refresh, replace: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/chat', useSearchParams: () => new URLSearchParams() }));
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 const sent = vi.fn<(form: FormData) => Promise<unknown>>();
 afterEach(() => { vi.useRealTimers(); push.mockReset(); refresh.mockReset(); sent.mockReset(); vi.unstubAllGlobals(); });
@@ -95,7 +95,7 @@ test('a Viewer reads the log with no note field', async () => {
 const at = '2026-06-10T10:00:00Z';
 const ads = { id: 'a-1', name: 'Ads', connection_id: 'c-1' };
 const own = (more: Partial<ConversationRecord> = {}): ConversationRecord => ({
- conversation: { id: 'c0ffee00-0000-0000-0000-000000000001', agent_name: 'Ads', face: 'c-1' },
+ conversation: { id: 'c0ffee00-0000-0000-0000-000000000001', agent_id: null, agent_name: 'Ads', face: 'c-1' },
  messages: [
   { id: 1, author: 'person', author_name: 'Omar', body: 'Plan three ads for the course', created_at: at },
   { id: 2, author: 'agent', author_name: 'Ads', body: 'On it: the audience first, then three ads.', created_at: at },

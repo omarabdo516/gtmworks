@@ -1,0 +1,60 @@
+2026-11-16T21:35:33.8965064Z Current runner version: '2.338.2'
+2026-11-16T21:35:33.8993306Z ##[group]Runner Image Provisioner
+2026-11-16T21:35:33.8994402Z Hosted Compute Agent
+[excerpt: lines omitted]
+2026-11-16T21:35:34.4436235Z ##[group]Run actions/checkout@v4
+[excerpt: lines omitted]
+2026-11-16T21:35:36.9809915Z ##[group]Run sudo sysctl -w net.ipv4.ip_local_reserved_ports="$(node scripts/ci-runner.mjs reserved-ports)"
+[excerpt: lines omitted]
+2026-11-16T21:35:37.1764168Z ##[group]Run actions/setup-node@v4
+[excerpt: lines omitted]
+2026-11-16T21:35:39.7566895Z ##[group]Run ./ci.sh database
+[excerpt: lines omitted]
+2026-11-16T21:36:56.0211786Z e759012dbcb6: Pull complete
+2026-11-16T21:36:56.0301209Z error from registry: Rate exceeded
+2026-11-16T21:36:56.0321695Z Retrying after 4s: public.ecr.aws/supabase/postgres:17.11.0.011
+2026-11-16T21:37:00.7212410Z 17.11.0.011: Pulling from supabase/postgres
+2026-11-16T21:37:01.3601116Z 44136fa355b3: Already exists
+2026-11-16T21:37:01.3805110Z e759012dbcb6: Pulling fs layer
+[excerpt: lines omitted]
+2026-11-16T21:39:14.3692524Z psql:/tmp/gtmworks-first-run-6SRXhR/migration.sql:47: NOTICE:  truncate cascades to table "invitation_agent_access"
+2026-11-16T21:39:14.3693776Z psql:/tmp/gtmworks-first-run-6SRXhR/migration.sql:47: NOTICE:  truncate cascades to table "work_checklist"
+2026-11-16T21:39:14.3694576Z psql:/tmp/gtmworks-first-run-6SRXhR/migration.sql:47: NOTICE:  truncate cascades to table "work_card_labels"
+2026-11-16T21:39:14.3695831Z psql:/tmp/gtmworks-first-run-6SRXhR/migration.sql:47: NOTICE:  truncate cascades to table "work_creatives"
+2026-11-16T21:39:14.3696817Z psql:/tmp/gtmworks-first-run-6SRXhR/migration.sql:47: NOTICE:  truncate cascades to table "work_versions"
+2026-11-16T21:39:14.3697819Z psql:/tmp/gtmworks-first-run-6SRXhR/migration.sql:47: NOTICE:  truncate cascades to table "agent_rate_limits"
+2026-11-16T21:39:14.3698640Z psql:/tmp/gtmworks-first-run-6SRXhR/migration.sql:47: NOTICE:  truncate cascades to table "agent_refusals"
+2026-11-16T21:39:14.3699763Z psql:/tmp/gtmworks-first-run-6SRXhR/migration.sql:47: NOTICE:  truncate cascades to table "webhook_deliveries"
+2026-11-16T21:39:14.4511017Z /tmp/gtmworks-first-run-6SRXhR/migration.sql .. ok
+2026-11-16T21:39:14.4534361Z All tests successful.
+2026-11-16T21:39:14.4535327Z Files=1, Tests=10,  0 wallclock secs ( 0.01 usr +  0.00 sys =  0.01 CPU)
+2026-11-16T21:39:14.4536145Z Result: PASS
+2026-11-16T21:39:14.9064470Z A new version of Supabase CLI is available: v3.2.0 (currently installed v3.0.0)
+2026-11-16T21:39:14.9065953Z We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli
+2026-11-16T21:39:15.5659255Z Target: local stack (127.0.0.1:54322)
+2026-11-16T21:39:15.9571904Z psql:/tmp/gtmworks-lead-agent-uLpm8L/migration.sql:2: NOTICE:  extension "pgtap" already exists, skipping
+2026-11-16T21:39:15.9787251Z /tmp/gtmworks-lead-agent-uLpm8L/migration.sql .. ok
+2026-11-16T21:39:15.9787748Z All tests successful.
+2026-11-16T21:39:15.9788254Z Files=1, Tests=8,  0 wallclock secs ( 0.01 usr +  0.00 sys =  0.01 CPU)
+2026-11-16T21:39:15.9788736Z Result: PASS
+2026-11-16T21:39:16.4612831Z A new version of Supabase CLI is available: v3.2.0 (currently installed v3.0.0)
+2026-11-16T21:39:16.4613665Z We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli
+2026-11-16T21:39:17.1135807Z Target: local stack (127.0.0.1:54322)
+2026-11-16T21:39:17.4963983Z psql:/tmp/gtmworks-remove-agency-hvd08G/migration.sql:2: NOTICE:  extension "pgtap" already exists, skipping
+2026-11-16T21:39:17.5133562Z psql:/tmp/gtmworks-remove-agency-hvd08G/migration.sql:19: ERROR:  cannot drop type member_role_current because other objects depend on it
+2026-11-16T21:39:17.5134804Z DETAIL:  function invite_member(uuid,text,member_role_current,boolean) depends on type member_role_current
+2026-11-16T21:39:17.5166739Z HINT:  Use DROP ... CASCADE to drop the dependent objects too.
+2026-11-16T21:39:17.5167386Z /tmp/gtmworks-remove-agency-hvd08G/migration.sql .. 
+2026-11-16T21:39:17.5175662Z Dubious, test returned 3 (wstat 768, 0x300)
+2026-11-16T21:39:17.5176091Z Failed 19/19 subtests 
+2026-11-16T21:39:17.5176274Z 
+2026-11-16T21:39:17.5176415Z Test Summary Report
+2026-11-16T21:39:17.5176707Z -------------------
+2026-11-16T21:39:17.5177726Z /tmp/gtmworks-remove-agency-hvd08G/migration.sql (Wstat: 768 (exited 3) Tests: 0 Failed: 0)
+2026-11-16T21:39:17.5178328Z   Non-zero exit status: 3
+2026-11-16T21:39:17.5178764Z   Parse errors: Bad plan.  You planned 19 tests but ran 0.
+2026-11-16T21:39:17.5179395Z Files=1, Tests=0,  0 wallclock secs ( 0.01 usr +  0.00 sys =  0.01 CPU)
+2026-11-16T21:39:17.5179839Z Result: FAIL
+2026-11-16T21:39:17.9685528Z error running container: exit 1
+2026-11-16T21:39:17.9686495Z Try rerunning the command with --debug to troubleshoot the error.
+2026-11-16T21:39:18.0069296Z ##[error]Process completed with exit code 1.

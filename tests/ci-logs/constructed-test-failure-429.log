@@ -1,0 +1,16 @@
+﻿2026-11-16T21:52:28.9873506Z Current runner version: '2.338.0'
+2026-11-16T21:52:28.9886426Z Runner name: 'omar-pc-ci_gtmworks'
+2026-11-16T21:52:28.9887558Z Runner group name: 'Default'
+[excerpt: lines omitted]
+2026-11-16T21:50:00.0000000Z ##[group]Run ./ci.sh integration
+2026-11-16T21:56:30.9004744Z ##[error]  1) [functional] › tests/sign-in.spec.ts:40:5 › five wrong passwords lock the address 
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 429 Too Many Requests
+2026-11-16T21:56:33.1000000Z   1 failed
+2026-11-16T21:56:33.1000001Z     [functional] › tests/sign-in.spec.ts:40:5 › five wrong passwords lock the address 
+2026-11-16T21:56:33.1000002Z   195 passed (4.7m)
+2026-11-16T21:56:33.5663499Z ##[error]Process completed with exit code 1.
+2026-11-16T21:56:33.6000000Z ##[group]Run actions/upload-artifact@v4
+2026-11-16T21:56:34.0000000Z ##[error]Failed to CreateArtifact: Received non-retryable error: Failed request: (429) Too Many Requests: rate limited

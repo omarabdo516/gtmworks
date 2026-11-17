@@ -11,7 +11,9 @@
 //     Then a Contributor's suggestion the Owner approves lands in the first company's shared Skill "team-lessons"
 //     (#122): each of its Agent profiles reads only its company's shared folder and holds the Skill locked, the next run
 //     of each of its Agents carries the lesson and the second company's does not, and a run whose model tries to change
-//     the Skill is refused by the Engine and leaves it as it was.
+//     the Skill is refused by the Engine and leaves it as it was. Then a fake key for a provider the Engine catalogues is
+//     set through the driver (#124): it is set in the first company's space and the moved Agent's profile, in none of
+//     the second company's, and removed from both again.
 // The companies and their Owners' sign-in are kept between the steps in a file of this container only.
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -106,7 +108,10 @@ if(step==='prepare') {
   const ask=async(entry,person,agent,label,message='مرحباً، اكتب عنواناً قصيراً.')=>{
    const before=asked.length;
    const conversation=randomUUID();
-   const sent=await sendMessage(person,service,{person:entry.person,company:entry.company,conversation,sendKey:randomUUID(),agent,message,encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY});
+   // A profile the worker has not yet confirmed (its tools, its shared Skills folder) refuses the send as pending and
+   // stores nothing, so the same send is made again until it is ready (#282).
+   const send={person:entry.person,company:entry.company,conversation,sendKey:randomUUID(),agent,message,encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY};
+   const sent=await until(`${label} ready for a run`,async()=>{ const result=await sendMessage(person,service,send); return result.error==='conversationAgentLevelPending'?null:result; },120);
    assert.deepEqual(sent,{conversation});
    const answer=await until(`reply on ${label}`,async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),180);
    assert.ok(answer.body.includes(reply),answer.body);
@@ -176,6 +181,22 @@ if(step==='prepare') {
   await ask(first,person,made.agent,own,trigger);
   assert.ok(toolResults.some(result=>result.includes('"success": false')&&result.includes('locked')),JSON.stringify(toolResults));
   assert.equal(await skill(spaceOf(first)),written,'team-lessons is unchanged');
-  console.log(JSON.stringify({profiles:companies.map(entry=>entry.profile),memory:seen,moved:own,afterMove:after,lessons}));
+
+  // The model the key brings is not checked: the Engine's model catalogue may be offline.
+  const {readProviderKeys,setProviderKey,removeProviderKey}=await import(`${process.cwd()}/lib/hermes.mjs`);
+  const engine={address:'http://hermes:8642',managementAddress:'http://hermes:9119',profile:first.profile,key};
+  const keyed={space:spaceOf(first),profiles:[own]};
+  const offered=await readProviderKeys(engine,{...keyed,profiles:[]});
+  assert.equal(offered.state,'found');
+  const provider=(offered.keys.find(found=>found.provider==='openrouter')||offered.keys[0])?.provider;
+  assert.ok(provider,'the Engine takes a key for a provider');
+  const holds=async profile=>Object.values(await (await manage(`/api/env?profile=${profile}`)).json()).some(row=>row?.provider===provider&&row.provider_primary===true&&row.is_set===true);
+  const providerKeys=async()=>Promise.all([spaceOf(first),own,spaceOf(companies[1]),companies[1].profile].map(holds));
+  assert.equal((await setProviderKey(engine,{...keyed,provider,value:`install-check-${randomUUID().replaceAll('-','')}`})).state,'written');
+  assert.deepEqual(await providerKeys(),[true,true,false,false],'the key is in the first company\'s space and Agent profile only');
+  assert.deepEqual((await readProviderKeys(engine,keyed)).lacking,[]);
+  assert.equal((await removeProviderKey(engine,{...keyed,provider})).state,'removed');
+  assert.deepEqual(await providerKeys(),[false,false,false,false],'the key is removed again');
+  console.log(JSON.stringify({profiles:companies.map(entry=>entry.profile),memory:seen,moved:own,afterMove:after,lessons,keyProvider:provider}));
  } finally { model.close(); model.closeAllConnections(); }
 } else throw new Error('usage: prepare | verify <marker>');

@@ -1,0 +1,11 @@
+2026-11-16T20:33:14.7402261Z Current runner version: '2.338.2'
+2026-11-16T20:33:14.7451825Z ##[group]Runner Image Provisioner
+2026-11-16T20:33:14.7452761Z Hosted Compute Agent
+[excerpt: lines omitted]
+2026-11-16T20:33:15.4231250Z ##[group]Run actions/checkout@v4
+2026-11-16T20:33:16.0000000Z Syncing repository: omarabdo516/gtmworks
+2026-11-16T20:33:17.0000000Z ##[group]Run actions/cache/restore@v4
+2026-11-16T20:33:18.0000000Z ##[error]Failed to restore: Cache service responded with 429 toomanyrequests
+2026-11-16T20:33:23.6394198Z ##[group]Run ./ci.sh database
+2026-11-16T20:34:41.0000000Z supabase/migrations/20261116000000_card_readers.verify.sql: expected the guard on 8 functions, found 7
+2026-11-16T20:34:41.0400000Z ##[error]Process completed with exit code 1.

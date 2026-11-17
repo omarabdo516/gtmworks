@@ -26,6 +26,7 @@ test('a full set of arguments gives the options with per-screen defaults', () =>
 test('the main screen of the reference is named home and maps to the built Conversation with the main Agent', () => {
   assert.equal(screens.home.builtPath, '/c/rs-learning/chat');
   assert.deepEqual(screens.home.reference.steps, [], 'home is the state the prototype opens on');
+  assert.deepEqual(Object.entries(screens).filter(([, screen]) => screen.reference.hold).map(([name]) => name), ['chat-loading', 'numbers-loading'], 'only the loading placeholders hold the prototype on screen');
 });
 
 test('the optional compare fixture holds the reference agent grid, Lead as the main Agent and a populated Conversation', () => {
@@ -104,9 +105,11 @@ test('every screen says how to reach it in the reference and which built page it
     for (const step of steps) {
       assert.equal(Object.keys(step).length, 1, `${name}: one action per step`);
       const [[action, value]] = Object.entries(step);
+      assert.ok(['click', 'waitFor', 'waitGone', 'scrollTo', 'fill', 'press'].includes(action), `${name}: known action ${action}`);
+      // A press names one key as Playwright does (a letter, or a name such as ArrowDown or KeyN), not a selector.
+      if (action === 'press') { assert.match(value, /^([a-z]|[A-Z][A-Za-z]+)$/, `${name}: a key`); continue; }
       const selector = action === 'fill' ? value[0] : value;
       if (action === 'fill') assert.ok(typeof value[1] === 'string' && value[1].length > 0, `${name}: fill text`);
-      assert.ok(['click', 'waitFor', 'waitGone', 'scrollTo', 'fill'].includes(action), `${name}: known action ${action}`);
       assert.ok(typeof selector === 'string' && selector.length > 0, `${name}: selector`);
       assert.doesNotMatch(selector, /viewing|world|persona|view-as/i, `${name}: the demo-world switcher is never touched`);
     }
@@ -141,12 +144,19 @@ test('every screen says how to reach it in the reference and which built page it
   assert.equal(screens['made-agent'].builtPath, `/c/rs-learning/settings?agent=${fixture.agent}`);
   // A lasting rule told to Ads (#18): the saved line in the Conversation; Ads's page above lists the rule.
   assert.equal(screens['rule-saved'].builtPath, null, 'the Conversation has a uuid path: pass the fixture\'s ruleConversation');
+  // The keyboard (#173): Arrow Down in the open account menu, and "N" on the board, pressed where the focus is.
+  assert.deepEqual(screens['account-menu-keys'].builtSteps.at(-1), { press: 'ArrowDown' });
+  assert.deepEqual(screens['account-menu-keys'].reference.steps.at(-1), { press: 'ArrowDown' });
+  assert.deepEqual(screens['new-chat-key'].reference.steps, [...screens.board.reference.steps, { press: 'n' }, { waitFor: '#ta-main:focus' }]);
+  assert.deepEqual(screens['new-chat-key'].builtSteps, [{ press: 'KeyN' }, { waitFor: '.composer__input:focus' }]);
 });
 
 test('a screen with no built equivalent needs --built-path or --reference-only', () => {
   const log = ['--screen', 'agent-chat', '--width', '1440', '--lang', 'en', '--theme', 'light'];
   assert.throws(() => parseArgs(log), error => error.exitCode === 2 && /Screen "agent-chat" has no built equivalent yet; pass --built-path PATH or --reference-only\./.test(error.message));
   assert.equal(parseArgs([...log, '--reference-only']).builtPath, null);
+  const held = ['--screen', 'numbers-loading', '--width', '1440', '--lang', 'en', '--theme', 'light'];
+  assert.equal(parseArgs(held).referenceOnly, true, 'a held loading state is the reference alone');
   assert.equal(parseArgs([...log, '--built-path', '/c/rs-learning/home']).builtPath, '/c/rs-learning/home');
 });
 

@@ -16,3 +16,4 @@ export function groupByDay<T extends { id: number, created_at: string }>(rows: T
 export const noteEditWindow: number;
 export function currentNoteText<T extends { action: string, details: Record<string, unknown> }>(rows: T[], comments: { id: number, body: string }[]): T[];
 export function drawnAt(): number;
+export function logEmptyNote(rows: { companyRows: number | null }): 'noMatch' | 'empty';

@@ -1,0 +1,53 @@
+2026-11-16T21:02:33.0308625Z Current runner version: '2.338.2'
+2026-11-16T21:02:33.0324782Z ##[group]Runner Image Provisioner
+2026-11-16T21:02:33.0325452Z Hosted Compute Agent
+[excerpt: lines omitted]
+2026-11-16T21:02:38.6918036Z ##[group]Run actions/checkout@v4
+[excerpt: lines omitted]
+2026-11-16T21:02:47.3419955Z ##[group]Run sudo sysctl -w net.ipv4.ip_local_reserved_ports="$(node scripts/ci-runner.mjs reserved-ports)"
+[excerpt: lines omitted]
+2026-11-16T21:02:53.1425662Z ##[group]Run actions/setup-node@v4
+[excerpt: lines omitted]
+2026-11-16T21:03:07.5902582Z ##[group]Run ./ci.sh database
+[excerpt: lines omitted]
+2026-11-16T21:06:08.8561255Z /home/runner/work/gtmworks/gtmworks/supabase/tests/reply_cards.sql .................. ok
+2026-11-16T21:06:08.8694597Z psql:/home/runner/work/gtmworks/gtmworks/supabase/tests/rule_suggestions.sql:2: NOTICE:  extension "pgtap" already exists, skipping
+2026-11-16T21:06:08.9535586Z /home/runner/work/gtmworks/gtmworks/supabase/tests/rule_suggestions.sql ............. ok
+2026-11-16T21:06:08.9677698Z psql:/home/runner/work/gtmworks/gtmworks/supabase/tests/run_keys.sql:2: NOTICE:  extension "pgtap" already exists, skipping
+2026-11-16T21:06:09.0048763Z /home/runner/work/gtmworks/gtmworks/supabase/tests/run_keys.sql ..................... ok
+2026-11-16T21:06:09.0187393Z psql:/home/runner/work/gtmworks/gtmworks/supabase/tests/shared_engine.sql:2: NOTICE:  extension "pgtap" already exists, skipping
+2026-11-16T21:06:09.0365605Z /home/runner/work/gtmworks/gtmworks/supabase/tests/shared_engine.sql ................ ok
+2026-11-16T21:06:09.0494005Z psql:/home/runner/work/gtmworks/gtmworks/supabase/tests/shared_skills.sql:2: NOTICE:  extension "pgtap" already exists, skipping
+2026-11-16T21:06:09.1152593Z /home/runner/work/gtmworks/gtmworks/supabase/tests/shared_skills.sql ................ ok
+2026-11-16T21:06:09.1292039Z psql:/home/runner/work/gtmworks/gtmworks/supabase/tests/skill_lessons.sql:2: NOTICE:  extension "pgtap" already exists, skipping
+2026-11-16T21:06:09.1812278Z /home/runner/work/gtmworks/gtmworks/supabase/tests/skill_lessons.sql ................ ok
+2026-11-16T21:06:09.1948994Z psql:/home/runner/work/gtmworks/gtmworks/supabase/tests/skills.sql:2: NOTICE:  extension "pgtap" already exists, skipping
+2026-11-16T21:06:09.2327437Z /home/runner/work/gtmworks/gtmworks/supabase/tests/skills.sql ....................... ok
+2026-11-16T21:06:09.2461510Z psql:/home/runner/work/gtmworks/gtmworks/supabase/tests/team.sql:2: NOTICE:  extension "pgtap" already exists, skipping
+2026-11-16T21:06:09.2734921Z /home/runner/work/gtmworks/gtmworks/supabase/tests/team.sql ......................... ok
+2026-11-16T21:06:09.2865894Z psql:/home/runner/work/gtmworks/gtmworks/supabase/tests/team_channels.sql:2: NOTICE:  extension "pgtap" already exists, skipping
+2026-11-16T21:06:09.4052384Z /home/runner/work/gtmworks/gtmworks/supabase/tests/team_channels.sql ................ ok
+2026-11-16T21:06:09.4191674Z psql:/home/runner/work/gtmworks/gtmworks/supabase/tests/team_work.sql:2: NOTICE:  extension "pgtap" already exists, skipping
+2026-11-16T21:06:09.4647262Z /home/runner/work/gtmworks/gtmworks/supabase/tests/team_work.sql .................... ok
+2026-11-16T21:06:09.4775533Z psql:/home/runner/work/gtmworks/gtmworks/supabase/tests/team_work_retries.sql:2: NOTICE:  extension "pgtap" already exists, skipping
+2026-11-16T21:06:09.5072034Z /home/runner/work/gtmworks/gtmworks/supabase/tests/team_work_retries.sql ............ ok
+2026-11-16T21:06:09.5207223Z psql:/home/runner/work/gtmworks/gtmworks/supabase/tests/unknown_starts.sql:2: NOTICE:  extension "pgtap" already exists, skipping
+2026-11-16T21:06:09.5781007Z /home/runner/work/gtmworks/gtmworks/supabase/tests/unknown_starts.sql ............... ok
+2026-11-16T21:06:09.5916084Z psql:/home/runner/work/gtmworks/gtmworks/supabase/tests/waiting_list.sql:2: NOTICE:  extension "pgtap" already exists, skipping
+2026-11-16T21:06:09.6284839Z /home/runner/work/gtmworks/gtmworks/supabase/tests/waiting_list.sql ................. ok
+2026-11-16T21:06:09.6419789Z psql:/home/runner/work/gtmworks/gtmworks/supabase/tests/work.sql:2: NOTICE:  extension "pgtap" already exists, skipping
+2026-11-16T21:06:09.7020357Z /home/runner/work/gtmworks/gtmworks/supabase/tests/work.sql ......................... ok
+2026-11-16T21:06:09.7157178Z psql:/home/runner/work/gtmworks/gtmworks/supabase/tests/work_mode.sql:2: NOTICE:  extension "pgtap" already exists, skipping
+2026-11-16T21:06:09.7374411Z /home/runner/work/gtmworks/gtmworks/supabase/tests/work_mode.sql .................... ok
+2026-11-16T21:06:09.7381677Z 
+2026-11-16T21:06:09.7382228Z Test Summary Report
+2026-11-16T21:06:09.7383720Z -------------------
+2026-11-16T21:06:09.7384500Z /home/runner/work/gtmworks/gtmworks/supabase/tests/card_readers_guard.sql         (Wstat: 0 Tests: 8 Failed: 2)
+2026-11-16T21:06:09.7385126Z   Failed tests:  3, 5
+2026-11-16T21:06:09.7385756Z /home/runner/work/gtmworks/gtmworks/supabase/tests/member_invites.sql             (Wstat: 0 Tests: 24 Failed: 4)
+2026-11-16T21:06:09.7386328Z   Failed tests:  13-14, 23-24
+2026-11-16T21:06:09.7386994Z Files=65, Tests=1767,  4 wallclock secs ( 0.19 usr  0.07 sys +  0.43 cusr  0.19 csys =  0.88 CPU)
+2026-11-16T21:06:09.7387599Z Result: FAIL
+2026-11-16T21:06:10.3015910Z error running container: exit 1
+2026-11-16T21:06:10.3017286Z Try rerunning the command with --debug to troubleshoot the error.
+2026-11-16T21:06:10.3247826Z ##[error]Process completed with exit code 1.

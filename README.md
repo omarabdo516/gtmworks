@@ -99,7 +99,9 @@ profile is shared by every company on the install, and a company that wants its
 own uses its own API key (#124). So on such an install, do not sign in to a
 subscription on Hermes's own `default` (root) profile: each company signs in on its
 own profile from Settings, and its Claude command adds `-p <profile>` after
-`hermes hermes hermes`. An install updated
+`hermes hermes hermes`. A company's API key lives in the agent engine only:
+gtmworks passes it to that company's profiles in the bundled Hermes, never to the
+root profile or another company's, and never keeps, logs or shows it. An install updated
 from before ADR 0014 keeps its companies running on the shared `default` profile
 until a company's own profile holds a sign-in; the worker then moves it there.
 Memory already written on `default` stays there and is not split between companies,

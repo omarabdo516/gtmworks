@@ -25,6 +25,22 @@ wait_lanes() {
     fi
   done
 }
+# Each stage writes its machine-readable test results under ci-ledger/ (Playwright empties test-results/ when it starts);
+# the ledger job reads them back (scripts/ci-ledger.mjs, #256). Prints the folder.
+ledger_dir() {
+  local dir="ci-ledger/${GITHUB_JOB:-$1}${SHARD:+-${SHARD%%/*}}"
+  rm -rf "$dir" && mkdir -p "$dir"
+  LAYER=$1 node -e 'const env = process.env; console.log(JSON.stringify({ layer: env.LAYER, shard: env.SHARD ?? "", runner: env.RUNNER_NAME ?? "local", environment: env.RUNNER_ENVIRONMENT ?? "local", root: process.cwd() }))' > "$dir/meta.json"
+  echo "$dir"
+}
+# One database ledger line per check; a failed check still fails the stage, after its line is written.
+database_record() {
+  local file=$1 name=$2 started=$3 status=$4 outcome=passed
+  ((status == 0)) || outcome=failed
+  printf '{"suite":"database","file":"%s","name":"%s","duration_ms":%d,"outcome":"%s","retries":0}\n' \
+    "$file" "$name" $(( ($(date +%s%N) - started) / 1000000 )) "$outcome" >> "$dir/database.jsonl"
+  ((status == 0)) || exit "$status"
+}
 case "${1:-check}" in
  check)
   # Every stage in order, for local use. CI runs them as parallel jobs, each only when its files change
@@ -73,7 +89,10 @@ PY
   npm run typecheck
   # Unused files, exports and dependencies (knip.json), as T3 Code checks them (#81).
   npx --no-install knip --no-progress
-  npm test
+  dir=$(ledger_dir static)
+  # `npm test`'s files, with the ledger reporter beside the usual one; the flags must come before the glob.
+  node --test --test-reporter=spec --test-reporter-destination=stdout \
+    --test-reporter=./scripts/ci-ledger-node.mjs --test-reporter-destination="$dir/node.jsonl" 'tests/**/*.test.mjs'
   ;;
  components)
   # Screens as components in headless Chromium (#81); SHARD (for example 1/2) runs one slice.
@@ -81,7 +100,11 @@ PY
     npm ci
   fi
   install_chromium
-  npm run test:components -- ${SHARD:+--shard="$SHARD"}
+  dir=$(ledger_dir components)
+  # Naming the reporters replaces Vitest's own choice, so the GitHub one that marks failures on the pull request is named
+  # too when it runs there.
+  npm run test:components -- ${SHARD:+--shard="$SHARD"} --reporter=default ${GITHUB_ACTIONS:+--reporter=github-actions} \
+    --reporter=json --outputFile.json="$dir/vitest.json"
   ;;
  database)
   # Migrations replayed and verified, row-level security and grants, on lane 0's stack.
@@ -89,16 +112,21 @@ PY
     npm ci
   fi
   bash scripts/local-db.sh
+  dir=$(ledger_dir database)
   for file in supabase/migrations/*.verify.sql scripts/check-rls.sql; do
-    npx --no-install supabase db query --read-only --file "$file" -o json --agent no | node scripts/verify-db.mjs "$file"
+    started=$(date +%s%N) status=0
+    npx --no-install supabase db query --read-only --file "$file" -o json --agent no | node scripts/verify-db.mjs "$file" || status=$?
+    database_record "$file" verify "$started" "$status"
   done
-  npm run test:db
+  # tests/db.sh writes one line per step of its own.
+  DB_LEDGER="$PWD/$dir/database.jsonl" npm run test:db
   ;;
  integration)
   if [[ "${CI:-}" == "true" ]]; then
     npm ci
     install_chromium
   fi
+  dir=$(ledger_dir integration)
   start_lanes
   wait_lanes
   if [[ "${CI:-}" == "true" ]]; then
@@ -109,11 +137,11 @@ PY
   build_pid=$!
   # The production-shaped stack (proxy, https, public-looking host) runs on the database exactly as the seed builds it and
   # changes it (an enrolled authenticator, an invited member), so the seed is rebuilt before the main browser suite.
-  npm run test:e2e:proxy
+  PLAYWRIGHT_JSON_OUTPUT_FILE="$dir/proxy.json" npm run test:e2e:proxy
   bash scripts/local-db.sh
   wait "$build_pid" || { cat playwright-report/build.log >&2; echo 'the browser suite build failed' >&2; exit 1; }
   # The compared screens and the measured budgets run on their own (`ci.sh visual`), on a GitHub-hosted runner.
-  GTMWORKS_WEB_PREBUILT=true GTMWORKS_TEST_LANES=$lanes GTMWORKS_HOSTED_ELSEWHERE=true npm run test:e2e
+  GTMWORKS_WEB_PREBUILT=true GTMWORKS_TEST_LANES=$lanes GTMWORKS_HOSTED_ELSEWHERE=true PLAYWRIGHT_JSON_OUTPUT_FILE="$dir/e2e.json" npm run test:e2e
   ;;
  visual)
   # The compared screens alone, on lane 0 as the seed builds it: no journeys, no proxy suite, no image (#213). Then the
@@ -123,8 +151,9 @@ PY
     install_chromium
   fi
   bash scripts/local-db.sh
-  GTMWORKS_TEST_LANES=1 npm run test:visual
-  GTMWORKS_TEST_LANES=1 npx playwright test --project=measured --no-deps
+  dir=$(ledger_dir visual)
+  GTMWORKS_TEST_LANES=1 PLAYWRIGHT_JSON_OUTPUT_FILE="$dir/screens.json" npm run test:visual
+  GTMWORKS_TEST_LANES=1 PLAYWRIGHT_JSON_OUTPUT_FILE="$dir/measured.json" npx playwright test --project=measured --no-deps
   ;;
  visual-update)
   # Rewrites only the approved screen images that changed. Run it where CI runs: the images are made for that system.

@@ -7,7 +7,7 @@ import { LanguageProvider } from '@/lib/i18n-client';
 import type { ChannelMessage, ChannelRecord } from '@/lib/channels';
 import { changeChannel, channelChoices } from '@/app/channel-actions';
 
-vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }) }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/chat', useSearchParams: () => new URLSearchParams() }));
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 vi.mock('@/app/channel-actions', () => ({ changeChannel: vi.fn(), channelChoices: vi.fn() }));
 afterEach(() => { vi.unstubAllGlobals(); });
@@ -37,6 +37,13 @@ test('another member writes on the start side with their first name and role, th
  await expect.element(screen.getByRole('status')).not.toBeInTheDocument();
  const box = screen.getByRole('textbox', { name: 'Write your message in the channel' });
  await expect.element(box).toHaveAttribute('placeholder', 'Write in #general… an agent replies only when called by name');
+});
+
+test('in Arabic the composer gives the same hint, with the general channel named عام', async () => {
+ vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
+ const screen = await render(<LanguageProvider language="ar"><ChannelView person="p-1" initial={record([peer])}/></LanguageProvider>);
+ const box = screen.getByRole('textbox', { name: 'اكتب رسالتك في القناة', exact: true });
+ await expect.element(box).toHaveAttribute('placeholder', 'اكتب في #عام… والوكيل بيرد بس لو ناديته باسمه');
 });
 
 test('while the called Agent replies the page says so and asks again, and a reply that never came says it could not', async () => {
