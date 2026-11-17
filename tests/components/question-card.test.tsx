@@ -45,6 +45,31 @@ test.each([['en', 2], ['en', 4], ['ar', 2], ['ar', 4]] as const)('in the %s inte
  expect(group.element().querySelector('.opt__check'), 'no check while it is open').toBeNull();
 });
 
+// design-reference: cardHTML sets dir="rtl" on its Arabic card, so in the English interface too the question, the hint
+// and each choice keep the card's right edge, and each letter stands to the right of its choice.
+test.each(['en', 'ar'] as const)('in the %s interface, an Arabic question is laid out right to left, its question and its choices against the right edge', async language => {
+ const sheets = await Promise.all(['app/tokens.css', 'app/shell.css'].map(async file => (await import(/* @vite-ignore */ `/${file}?inline`)).default as string));
+ const styles = sheets.map(css => Object.assign(document.createElement('style'), { textContent: css }));
+ document.head.append(...styles);
+ onTestFinished(() => styles.forEach(style => style.remove()));
+ const screen = await render(<LanguageProvider language={language}><div dir={language === 'ar' ? 'rtl' : 'ltr'}><div className="gw" style={{ width: 640 }}>
+  <ReplyCard card={asked(angles.slice(0, 3))} fresh={false} answer={async () => null}/></div></div></LanguageProvider>);
+ const group = screen.getByRole('group', { name: 'اختار زاوية الإعلان' }).element();
+ expect(getComputedStyle(group).direction).toBe('rtl');
+ const right = group.getBoundingClientRect().right;
+ const question = group.querySelector('.qcard__q')!; const hint = group.querySelector('.qcard__hint')!;
+ for (const text of [question, hint]) {
+  const range = document.createRange(); range.selectNodeContents(text);
+  expect(right - range.getBoundingClientRect().right, `${text.className} keeps the right edge`).toBeLessThan(24);
+ }
+ for (const row of group.querySelectorAll('.opt')) {
+  const key = row.querySelector('.opt__key')!.getBoundingClientRect(); const text = row.querySelector('.opt__t')!;
+  const range = document.createRange(); range.selectNodeContents(text); const words = range.getBoundingClientRect();
+  expect(key.left, 'the letter stands to the right of its choice').toBeGreaterThan(words.right);
+  expect(key.left - words.right, 'the choice sits right beside its letter').toBeLessThan(24);
+ }
+});
+
 test.each(['en', 'ar'] as const)('in the %s interface, a pick sends its card, the choice\'s index and the card\'s key once, reads answered at once and settles only once', async language => {
  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
  const card = asked(angles.slice(0, 3));
