@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(64);
+select plan(67);
 -- #299. Nothing in this transaction takes lead_create_agent's lock before the first key change begins.
 create temporary view held_agent_lock as select exists(select 1 from pg_locks where locktype='advisory' and pid=pg_backend_pid() and granted
  and ((classid::bigint<<32)|objid::bigint)=hashtextextended('hermes_agents',0)) as held;
@@ -129,11 +129,14 @@ select is(public.finish_provider_key_change('10000000-0000-0000-0000-00000000000
 reset role;
 select is(public.company_holds_provider_key('10000000-0000-0000-0000-000000000001'),true,'which leaves the key held');
 
+insert into public.agent_key_waits(agent_id,company_id) select agent,'10000000-0000-0000-0000-000000000001' from made where name='bare';
 set local role service_role;
 select lives_ok($$select public.begin_provider_key_change('10000000-0000-0000-0000-000000000001','openrouter')$$,'the server begins a removal');
 select is(public.finish_provider_key_change('10000000-0000-0000-0000-000000000001','openrouter',false,'{}'),'{}'::text[],'and finishes it as not held');
 reset role;
 select is(public.company_holds_provider_key('10000000-0000-0000-0000-000000000001'),false,'so the Company holds no key');
+select is((select count(*)::int from public.agent_key_waits where company_id='10000000-0000-0000-0000-000000000001'),0,
+ 'and no Agent waits for one: each runs on its own profile without it, never on Lead''s');
 set local role service_role;
 select is(public.lead_create_agent(conversation=>'e2991000-0000-0000-0000-000000000001',run=>'run-1',call=>'call-1',agent_name=>'SEO',job=>'Writes for search.',apps=>'{}',
   own_level=>1,own_policy=>public.engine_tool_policy(),own_answers=>false)->>'agent',(select agent::text from made where name='lead'),'with no key held, a profile with no model makes the Agent');
@@ -169,15 +172,20 @@ set local role service_role;
 select is(public.finish_provider_key_change('10000000-0000-0000-0000-000000000002','anthropic',true,'{}'),'{}'::text[],'a set whose begin the database never took finishes all the same');
 reset role;
 select is(public.company_holds_provider_key('10000000-0000-0000-0000-000000000002'),true,'and its hold is recorded');
+insert into public.agent_key_waits(agent_id,company_id) select agent,'10000000-0000-0000-0000-000000000001' from made where name='bare';
 set local role service_role;
 select lives_ok($$select public.begin_provider_key_change('10000000-0000-0000-0000-000000000001','openrouter')$$,'a change the Engine never answers is left changing');
 select lives_ok($$select public.settle_provider_key_holds('10000000-0000-0000-0000-000000000001','{}')$$,'the Owner''s read settles it to a space holding no key');
 reset role;
 select is(public.company_holds_provider_key('10000000-0000-0000-0000-000000000001'),false,'so no key is held and none is changing');
+select is((select count(*)::int from public.agent_key_waits where company_id='10000000-0000-0000-0000-000000000001'),0,'and no Agent waits for one');
 set local role service_role;
-select lives_ok($$select public.settle_provider_key_holds('10000000-0000-0000-0000-000000000001','{deepseek}')$$,'a space holding a key the database never counted');
+select lives_ok($$select public.settle_provider_key_holds('10000000-0000-0000-0000-000000000001','{deepseek,"Not a provider",NULL}')$$,
+ 'a space holding a key the database never counted, beside names that are no provider');
 reset role;
 select is(public.company_holds_provider_key('10000000-0000-0000-0000-000000000001'),true,'is held from that read on');
+select results_eq($$select provider from public.company_key_holds where company_id='10000000-0000-0000-0000-000000000001' order by provider$$,
+ $$values ('deepseek'::text),('openrouter')$$,'and the names that are no provider are skipped');
 set local role authenticated;
 select throws_ok($$select public.settle_provider_key_holds('10000000-0000-0000-0000-000000000001','{}')$$,'42501',null,'the Owner cannot settle the holds from the browser');
 reset role;

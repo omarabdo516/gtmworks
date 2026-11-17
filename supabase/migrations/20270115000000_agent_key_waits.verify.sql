@@ -1,8 +1,9 @@
 -- A later Agent waits for the key on its own profile (#299): the waits are the Owner's to read and the database's to
 -- write, a removed Agent's profile and whether a key is held are kept for no client, the one lead_create_agent still
 -- answers the previous app version's call, reads the hold under its lock and records the wait, every Run entry holds a
--- waiting Agent, the Owner's list shows it, only the server begins and finishes a key change (the one end of a wait) and
--- forgets a leftover, under the same lock, and a removed Agent's profile is listed for the next key removal.
+-- waiting Agent, the Owner's list shows it, only the server begins, finishes and settles a key change (finish and settle
+-- the only ends of a wait) and forgets a leftover, under the same lock, and a removed Agent's profile is listed for the
+-- next key removal.
 select json_build_object(
  'waits_owner_read_only',(select relrowsecurity from pg_class where oid='public.agent_key_waits'::regclass)
   and has_table_privilege('authenticated','public.agent_key_waits','select')
@@ -38,6 +39,8 @@ select json_build_object(
    join pg_proc p on p.oid=f::oid)
   and (select bool_and(position('hashtextextended(''hermes_agents''' in pg_get_functiondef(f))>0)
    from unnest(array['public.begin_provider_key_change(uuid,text)','public.finish_provider_key_change(uuid,text,boolean,text[])']::regprocedure[]) f)
+  and (select bool_and(position('agent_key_waits' in pg_get_functiondef(f))>0)
+   from unnest(array['public.finish_provider_key_change(uuid,text,boolean,text[])','public.settle_provider_key_holds(uuid,text[])']::regprocedure[]) f)
   and to_regprocedure('public.end_agent_key_waits(uuid,text[])') is null,
  'helpers_private',(select bool_and(not has_function_privilege(r,f,'execute')) from unnest(array['anon','authenticated','service_role']) r,
   unnest(array['public.company_holds_provider_key(uuid)','public.keep_agent_profile_leftover()']) f),

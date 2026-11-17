@@ -3,14 +3,15 @@
 -- would copy the shared space's Skills, #124), or, when the Engine could not provide one or none was asked for («Make
 -- it»), an owner record with no tools, which the worker makes as it makes a lost one. Unless the Engine made it able to
 -- answer, the Agent is held (agent_key_waits): every Run entry refuses it as agentLevelPending, and the Owner sees it in
--- "Waiting on you" until a key set gives its profile key and model. A removed Agent's profile stays in the Engine, so
--- its name is kept (agent_profile_leftovers) and company_key_profiles lists it for the next key removal, until a removal
--- leaves it holding no key.
+-- "Waiting on you" until a key set gives its profile key and model, or the Company is found to hold no key at all. Then
+-- it runs on its own profile without one, answering only where that profile can, and never on Lead's. A removed Agent's
+-- profile stays in the Engine, so its name is kept (agent_profile_leftovers) and company_key_profiles lists it for the
+-- next key removal, until a removal or the Owner's read finds it holding no key.
 --
 -- Whether the Company holds a key is company_key_holds, written only by the server through the service role and under
 -- the lock lead_create_agent takes: begin_provider_key_change before the Engine is asked anything, so an Agent made while
--- a change is under way waits, and finish_provider_key_change with the Engine's answer. finish is the only end of a wait,
--- so no Owner ends one from the browser.
+-- a change is under way waits, finish_provider_key_change with the Engine's answer, and settle_provider_key_holds with
+-- what the Owner's read found. finish and settle are the only ends of a wait, so no Owner ends one from the browser.
 --
 -- Nothing existing is rewritten: the new tables start empty but company_key_holds, which is filled once from each
 -- Company's last set or removal of each provider's key in its log; the trigger writes only on a later removal; and with
@@ -20,9 +21,10 @@
 -- no model, which that version does not pass on) makes the Agent on an owner record with no tools, waiting, instead of
 -- on Lead's profile; its worker makes that profile as it makes a lost one, and its «Make it» does the same. Its key
 -- routes never begin or finish a change, so a set or removal it makes leaves company_key_holds as it was, ends no wait
--- and forgets no leftover, and they read only the 'company' and 'agent' kinds. Its "Waiting on you" lists a wait as an
--- item it cannot open. So while it runs, during an update or after a rollback, such an Agent waits until this version's
--- next set, and the holds are right again from this version's next Owner read (settle_provider_key_holds).
+-- and forgets no leftover, and they read only the 'company' and 'agent' kinds. Its "Waiting on you" draws a wait as a row
+-- whose link opens a missing card, and renders without error. So while it runs, during an update or after a rollback,
+-- such an Agent waits until this version's next set, and the holds are right again from this version's next Owner read
+-- (settle_provider_key_holds).
 
 -- An Agent attached to its own profile after the Company's key was set, until a set gives that profile key and model.
 create table public.agent_key_waits (
@@ -62,11 +64,11 @@ create table public.company_key_holds (
 );
 alter table public.company_key_holds enable row level security;
 revoke all on public.company_key_holds from anon,authenticated,service_role;
--- Before this version, only the log knew, and a set whose log write failed is missing from it: a provider's last set or
--- removal there is its hold, left changing until this version settles it (a finished change, or the Owner's read), so
--- an Agent made before then waits rather than run on Lead's profile.
+-- Before this version, only the log knew: a provider's last set or removal there is its hold, with no change under way,
+-- so after the update an Agent waits only in a Company whose log says it holds a key. A set whose log write failed is
+-- missing from it; the Owner's next read settles that hold to what the space holds.
 insert into public.company_key_holds(company_id,provider,held,changing)
- select distinct on (a.company_id,a.provider) a.company_id,a.provider,a.action='provider_key_set',true from public.company_audit a
+ select distinct on (a.company_id,a.provider) a.company_id,a.provider,a.action='provider_key_set',false from public.company_audit a
   where a.action in ('provider_key_set','provider_key_removed') order by a.company_id,a.provider,a.created_at desc,a.id desc;
 
 -- Some provider's key is held, or a change of one is under way: an Agent made now waits for the Owner's next set.
@@ -90,10 +92,10 @@ revoke all on function public.begin_provider_key_change(uuid,text) from public,a
 grant execute on function public.begin_provider_key_change(uuid,text) to service_role;
 
 -- How the Engine answered the change: now_held true for a set it took, false for a removal, null for any other answer
--- (the key is as it was). While the key is held, the waits of the Agents whose profile the set gave key and model
--- (reached) end, and the answer is the Company's Agent profiles still waiting, which an Agent made during the set waits
--- on: the server gives those the key and finishes again. A change the Engine did not answer is not finished, so it
--- stays changing until the next one.
+-- (the key is as it was). The server finishes every change it began, as held when it cannot tell how a set ended. While
+-- the key is held, the waits of the Agents whose profile the set gave key and model (reached) end, and the answer is the
+-- Company's Agent profiles still waiting, which an Agent made during the set waits on: the server gives those the key and
+-- finishes again. Once the Company holds no key of any provider, nothing is left to wait for, and every wait ends.
 create function public.finish_provider_key_change(c uuid, key_provider text, now_held boolean, reached text[]) returns text[]
 language plpgsql security definer set search_path='' as $$
 declare kept boolean;
@@ -104,6 +106,10 @@ begin
  insert into public.company_key_holds as h(company_id,provider,held,changing) values(c,key_provider,coalesce(now_held,false),false)
   on conflict (company_id,provider) do update set held=coalesce(now_held,h.held),changing=false
   returning h.held into kept;
+ if not public.company_holds_provider_key(c) then
+  delete from public.agent_key_waits w where w.company_id=c;
+  return '{}';
+ end if;
  if not coalesce(kept,false) then return '{}'; end if;
  delete from public.agent_key_waits w using public.agent_profiles p
   where w.company_id=c and p.agent_id=w.agent_id and p.company_id=c and p.profile=any(coalesce(reached,'{}'));
@@ -115,17 +121,19 @@ grant execute on function public.finish_provider_key_change(uuid,text,boolean,te
 
 -- The Owner's read settles the holds to what the Company's space holds (lib/provider-keys.mjs, queued with the
 -- Company's key changes, so none is half done): every provider is held exactly when the space holds its key, and none
--- is changing. A seed the log got wrong, a change the Engine never answered, or one the previous app version made, is
--- right again from the next read.
+-- is changing. A seed the log got wrong, or a change the previous app version made, is right again from the next read.
+-- A name that is no provider's is skipped, so one odd name the Engine lists never keeps a Company unsettled. A space
+-- holding no key ends every wait, as a removal does.
 create function public.settle_provider_key_holds(c uuid, held text[]) returns void
 language plpgsql security definer set search_path='' as $$
 begin
- if held is null or exists(select 1 from unnest(held) p where coalesce(p,'') !~ '^[a-z0-9][a-z0-9._-]{0,63}$') then
-  raise exception 'keyInvalid' using errcode='22023'; end if;
+ if held is null then raise exception 'keyInvalid' using errcode='22023'; end if;
  perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
- update public.company_key_holds h set held=h.provider=any(settle_provider_key_holds.held),changing=false where h.company_id=c;
- insert into public.company_key_holds(company_id,provider,held,changing) select c,p,true,false from unnest(settle_provider_key_holds.held) p
+ update public.company_key_holds h set held=coalesce(h.provider=any(settle_provider_key_holds.held),false),changing=false where h.company_id=c;
+ insert into public.company_key_holds(company_id,provider,held,changing)
+  select c,p,true,false from unnest(settle_provider_key_holds.held) p where p ~ '^[a-z0-9][a-z0-9._-]{0,63}$'
   on conflict (company_id,provider) do nothing;
+ if not public.company_holds_provider_key(c) then delete from public.agent_key_waits w where w.company_id=c; end if;
 end $$;
 revoke all on function public.settle_provider_key_holds(uuid,text[]) from public,anon,authenticated;
 grant execute on function public.settle_provider_key_holds(uuid,text[]) to service_role;
