@@ -1,0 +1,8 @@
+{
+  "about": "The same board as the Viewer reads it (#146): the Card under Waiting on you with the clock, \"Waiting on the team\" and the step's title.",
+  "path": "/c/rs-learning/work/board",
+  "state": "card-waiting",
+  "person": "viewer@example.com",
+  "dark": false,
+  "ready": ".board"
+}

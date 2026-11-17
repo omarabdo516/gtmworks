@@ -413,6 +413,17 @@ const screenStates: Record<string, { set: string, unset: string, admin?: true }>
 };
 // The Agent details' Files tab (#21): Meta Ads with a file on its June brief Card and one in Omar's own Conversation with
 // it, as the agent-details state holds them, written with triggers off and taken away after.
+// The Card Omar's chat with Ads put In progress, while Ads's handed step waits on him (#146): the Card under Waiting on
+// you for Omar, the Manager and the Viewer, who also sees Ads here, and the chat's pill waiting.
+screenStates['card-waiting'] = {
+  admin: true,
+  set: `${screenStates['card-on-board'].set}
+    insert into public.member_agent_access(company_id,person_id,agent_id) values ('${rsLearning}','20000000-0000-0000-0000-000000000004','${onBoard(2)}');
+    insert into public.reply_cards(company_id,conversation_id,run_id,call_id,kind,title,content,state,created_at) values
+     ('${rsLearning}','${onBoard(3)}','visual-on-board','call-0','hand','انشر إعلانات Meta','{"app":"Meta Ads Manager","line":"الحملة جاهزة كمسودة، وانت اللي تدوس نشر.","rows":[]}','open','2026-06-10T10:01:00Z');`,
+  unset: `delete from public.reply_cards where conversation_id='${onBoard(3)}';
+    ${screenStates['card-on-board'].unset}`,
+};
 // Numbers' figures read this week's agent rows of the log; a filter is only weighed on rows the read finds, so the
 // slowed log needs one, of an Agent the reader sees, for the figures to wait (#172).
 screenStates['numbers-loading'] = {
