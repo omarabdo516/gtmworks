@@ -25,11 +25,12 @@ const row = values => `| ${values.map(cell).join(' | ')} |`;
 const shown = 20;
 const tally = items => [...items.reduce((map, key) => map.set(key, (map.get(key) ?? 0) + 1), new Map())];
 
-export function report(records, { now, days, runs, unreadable = 0 }) {
+export function report(records, { now, days, runs, unreadable = 0, left = 0 }) {
   const jobs = records.filter(record => record.kind === 'job');
   const tests = records.filter(record => record.kind === 'test');
   const lines = [marker, `# ${title}`, '', `The ${days} days to ${new Date(now).toISOString().slice(0, 16).replace('T', ' ')} UTC: ${runs} runs.`];
   if (unreadable) lines.push('', `${unreadable} ledgers could not be read.`);
+  if (left) lines.push('', `Only the newest ledgers were read: ${left} older ones in the window are not counted.`);
 
   const measured = jobs.filter(job => job.completed_at && ['success', 'failure'].includes(job.conclusion) && job.duration_s != null);
   lines.push('', '## Layers', '', row(['Layer', 'Jobs', 'p50', 'p90', 'Over budget']), '|---|---|---|---|---|');
@@ -46,12 +47,13 @@ export function report(records, { now, days, runs, unreadable = 0 }) {
     const key = JSON.stringify([test.layer, test.suite, test.file, test.name]);
     if (!groups.has(key)) groups.set(key, { layer: test.layer, suite: test.suite, file: test.file, name: test.name, durations: [], flaky: 0, failed: 0 });
     const group = groups.get(key);
-    group.durations.push(test.duration_ms);
+    // A skipped test did not run, so it adds no duration and no run.
+    if (test.outcome !== 'skipped') group.durations.push(test.duration_ms);
     if (test.outcome === 'flaky') group.flaky++;
     if (test.outcome === 'failed') group.failed++;
   }
   const named = group => `${group.file} › ${group.name}`;
-  const slowest = [...groups.values()].map(group => ({ ...group, p50: percentile(group.durations, 50) }))
+  const slowest = [...groups.values()].filter(group => group.durations.length).map(group => ({ ...group, p50: percentile(group.durations, 50) }))
     .sort((a, b) => b.p50 - a.p50 || named(a).localeCompare(named(b))).slice(0, shown);
   lines.push('', '## Slowest tests', '', row(['Layer', 'Suite', 'Test', 'p50', 'Runs']), '|---|---|---|---|---|');
   for (const group of slowest) lines.push(row([group.layer, group.suite, named(group), testSeconds(group.p50), group.durations.length]));
@@ -118,7 +120,7 @@ async function main() {
   };
   const since = now - days * 86400000;
   const artifacts = [];
-  for (let page = 1; artifacts.length < cap; page++) {
+  for (let page = 1; ; page++) {
     const { artifacts: found } = await api('GET', `/actions/artifacts?name=ledger&per_page=100&page=${page}`);
     const recent = found.filter(artifact => Date.parse(artifact.created_at) >= since);
     artifacts.push(...recent.filter(artifact => !artifact.expired));
@@ -145,7 +147,7 @@ async function main() {
   } finally {
     rmSync(folder, { recursive: true, force: true });
   }
-  const body = report(records, { now, days, runs, unreadable });
+  const body = report(records, { now, days, runs, unreadable, left: Math.max(0, artifacts.length - cap) });
   const { action, number } = await upsertIssue(api, title, body);
   process.stdout.write(`${body}\nThe report ${action} issue #${number}.\n`);
   if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, body);
