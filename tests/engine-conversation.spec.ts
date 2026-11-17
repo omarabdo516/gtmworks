@@ -3,14 +3,16 @@ import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { createClient } from '@supabase/supabase-js';
 import { encryptSecret } from '../lib/agent-crypto.mjs';
-import { closeOpenRuns, noteInstructions, sendMessage } from '../lib/conversation-runs.mjs';
+import { answerQuestion, closeOpenRuns, noteInstructions, sendMessage } from '../lib/conversation-runs.mjs';
+import { conversationRecord } from '../lib/conversation-record';
+import { conversationColumns } from '../lib/conversations';
 import { instructionsOf, roleAppNames, roleTemplates } from '../lib/role-templates.mjs';
 import { knowledgeInstructions } from '../lib/company-knowledge.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 import { engineFor as driverFor } from '../lib/engine.mjs';
 import { runToolCall, toolSpecTexts } from '../lib/agent-tools.mjs';
-import { levelConfig } from '../lib/agent-levels.mjs';
+import { levelConfig, toolPolicy } from '../lib/agent-levels.mjs';
 import { signIn } from './sign-in';
 import { moveAgentProfiles } from '../lib/company-profiles.mjs';
 import { keepSharedSkills } from '../lib/shared-skills.mjs';
@@ -370,6 +372,69 @@ test('integration: an Agent shows a review once under its reply, shows none for 
  } finally { detach(); }
 });
 
+// #138: an Agent asks its person with the Engine's own clarify tool; the fake engine scripts the question (the reference's
+// th-meta m3) and gives its reply the answer.
+test('integration: an Agent\'s question is answered once by its person, by a pick or typed words, the same Run goes on to its reply, the record reads the answer as the person\'s, and the log row is the person\'s',async()=>{
+ test.setTimeout(120000);
+ const fake=fakeEngine(); const {agent,detach}=attachAgent();
+ const angles=['من خريج لمحاسب شغال','Excel وOdoo في كورس واحد','شهادة معتمدة وتدريب عملي'];
+ fake.settings.questions=input=>input.startsWith('Plan')?[{text:'اختار زاوية الإعلان',choices:angles}]:[];
+ fake.settings.reply=(input,answers)=>`Reply to: ${input} (${answers.join(', ')})`;
+ try {
+  const {service,person}=await clients();
+  const conversation=randomUUID();
+  const close=()=>closeOpenRuns(service,{encryptionKey,conversation,engineFor:fake.engineFor});
+  const read=async()=>{
+   const {data:found}=await person.from('conversations').select(conversationColumns).eq('id',conversation).single();
+   const record=await conversationRecord(person as unknown as Parameters<typeof conversationRecord>[0],omar,company,found!);
+   // The Card the first Run put on the board (#144) has its own case.
+   return {pending:record.pending,asking:record.asking??false,turns:record.messages.filter(message=>message.kind!=='boarded').map(message=>({author:message.author,kind:message.kind??null,body:message.body,
+    cards:message.cards?.map(card=>card.kind==='reply'&&card.card.kind==='question'?{state:card.card.state,answer:card.card.state==='answered'?card.card.answer:null}:card.kind)??null}))};
+  };
+  const waiting=async()=>((await person.rpc('waiting_list',{c:company})).data as {kind:string,title:string,asked_by:string,conversation_id:string}[]).filter(item=>item.kind==='question');
+  expect(await sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message:'Plan the Meta campaign',encryptionKey,engineFor:fake.engineFor})).toEqual({conversation});
+  // The Run waits on its question: it is kept as an open card, waits in Omar's list, and the Run stays open.
+  expect(await close()).toBe(0);
+  expect(await close()).toBe(0);
+  const cards=()=>JSON.parse(query(`select run_id,kind,title,content,state from public.reply_cards where conversation_id='${conversation}' order by id`));
+  expect(cards()).toEqual([{run_id:fake.runs[0].id,kind:'question',title:'اختار زاوية الإعلان',content:{question:'اختار زاوية الإعلان',choices:angles,multiple:false},state:'open'}]);
+  expect(await waiting()).toEqual([expect.objectContaining({title:'اختار زاوية الإعلان',asked_by:'Faye',conversation_id:conversation})]);
+  expect(await read()).toEqual({pending:true,asking:true,turns:[{author:'person',kind:null,body:'Plan the Meta campaign',cards:null},{author:'agent',kind:'asked',body:'',cards:[{state:'open',answer:null}]}]});
+
+  // A pick: the claim, then the answer delivered once to the same Run, which goes on to its reply.
+  const [{id:card}]=JSON.parse(query(`select id from public.reply_cards where conversation_id='${conversation}'`));
+  const pick={company,conversation,card:Number(card),choice:1,answerKey:randomUUID(),encryptionKey,engineFor:fake.engineFor};
+  expect(await answerQuestion(person,service,pick)).toEqual({state:'claimed'});
+  expect(fake.answers).toEqual([{run:fake.runs[0].id,question:`${fake.runs[0].id}_q1`,text:angles[1]}]);
+  // The same click again, and a click in a second tab, send nothing.
+  expect(await answerQuestion(person,service,pick)).toEqual({state:'claimed'});
+  expect(await answerQuestion(person,service,{...pick,choice:0,answerKey:randomUUID()})).toEqual({state:'taken'});
+  expect(fake.answers).toHaveLength(1);
+  expect(fake.runs).toHaveLength(1);
+  expect(agentRows(conversation)).toEqual([{body:`Reply to: Plan the Meta campaign (${angles[1]})`}]);
+  expect(await waiting()).toEqual([]);
+  expect(await read()).toEqual({pending:false,asking:false,turns:[{author:'person',kind:null,body:'Plan the Meta campaign',cards:null},{author:'agent',kind:'asked',body:'',cards:[{state:'answered',answer:angles[1]}]},
+   {author:'person',kind:'answer',body:angles[1],cards:null},{author:'agent',kind:null,body:`Reply to: Plan the Meta campaign (${angles[1]})`,cards:null}]});
+
+  // Typed words while the next question is open are its answer: no Run starts and nothing is queued.
+  expect(await sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message:'Plan the Google campaign',encryptionKey,engineFor:fake.engineFor})).toEqual({conversation});
+  expect(await close()).toBe(0);
+  const typed={person:omar,company,conversation,sendKey:randomUUID(),agent,message:'الاتنين مع بعض',encryptionKey,engineFor:fake.engineFor};
+  expect(await sendMessage(person,service,typed)).toEqual({conversation,answered:true});
+  expect(await sendMessage(person,service,typed)).toEqual({conversation,answered:true});
+  expect(fake.runs).toHaveLength(2);
+  expect(fake.answers.map(answer=>answer.text)).toEqual([angles[1],'الاتنين مع بعض']);
+  expect(JSON.parse(query(`select count(*)::int as n from public.conversation_queued_turns where conversation_id='${conversation}'`))[0].n).toBe(0);
+  expect(cards().map((row:{state:string,content:{answer?:string}})=>[row.state,row.content.answer])).toEqual([['answered',angles[1]],['answered','الاتنين مع بعض']]);
+  expect(agentRows(conversation).at(-1)).toEqual({body:'Reply to: Plan the Google campaign (الاتنين مع بعض)'});
+
+  // Each answer is logged once, as the person who answered, privately.
+  expect((await person.from('company_log').select('actor_id,actor_kind,agent_id,action,details').eq('action','agent_question_answered').eq('agent_id',agent).order('id')).data)
+   .toEqual([angles[1],'الاتنين مع بعض'].map(answer=>({actor_id:omar,actor_kind:'person',agent_id:agent,action:'agent_question_answered',details:{question:{text:'اختار زاوية الإعلان',answer},private:true,teller:omar}})));
+  expect((await (await memberClient('reviewer@example.com')).person.from('company_log').select('id').eq('action','agent_question_answered').eq('agent_id',agent)).data).toEqual([]);
+ } finally { detach(); }
+});
+
 test('integration: Lead makes an Agent from each ready-made role, fitted with the Company\'s name, and runs to it carry the role',async()=>{
  test.setTimeout(120000);
  const {profile,lead}=bundledLead();
@@ -442,7 +507,7 @@ test('integration: Lead\'s call makes the Agent one profile of its own, also whe
   expect(made).toHaveLength(1);
   const [agent]=made;
   const own=`ag-${agent.id.replaceAll('-','')}`;
-  expect(agent).toEqual({id:agent.id,instructions:instructionsOf('writer').replaceAll('{company}','RS Learning'),profile:own,lead_key:true,derived:true,tools_level:1,tools_policy:2,tools_pending:false});
+  expect(agent).toEqual({id:agent.id,instructions:instructionsOf('writer').replaceAll('{company}','RS Learning'),profile:own,lead_key:true,derived:true,tools_level:1,tools_policy:toolPolicy,tools_pending:false});
   expect([...hermes.settings.profiles.keys()].filter(name=>name.startsWith('ag-'))).toEqual([own]);
   const kept=hermes.settings.profiles.get(own)!;
   expect([kept.soul,kept.key,kept.config]).toEqual([agent.instructions,'fake-engine-key',levelConfig(1)]);

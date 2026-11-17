@@ -57,7 +57,7 @@ export function ConversationLoaded({initial,team}:{initial:ConversationRecord,te
  return <div className="transcript" ref={box} onScroll={event=>{ const view=event.currentTarget; stick.current=view.scrollHeight-view.scrollTop-view.clientHeight<80; }}><div className="transcript__col">
   {team&&<PrivateLine agent={conversation.agent_name}/>}
   {welcome&&agent&&<LeadWelcome agent={agent} suggest={writer?text=>setDraft(current=>({text,n:(current?.n||0)+1})):undefined}/>}
-  <ConversationTurns slug={slug} record={record}/>
+  <ConversationTurns slug={slug} company={company} record={record} asked={asked}/>
  </div></div>;
 }
 
