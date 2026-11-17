@@ -52,10 +52,9 @@ const agentWeek={
 };
 const where=async(locator:Locator)=>{ const box=(await locator.boundingBox())!; return {x:Math.round(box.x),y:Math.round(box.y),width:Math.round(box.width)}; };
 
-test('while its approvals queue and then its figures are slow Numbers keeps its title and period switch over the placeholder, also after a period change, with the focus on the chosen period',async({page})=>{
+test('while its figures are slow Numbers keeps its title and period switch over the placeholder, also after a period change, with the focus on the chosen period',async({page})=>{
  const placeholders=await watchPlaceholders(page);
- // Only the figures wait for the approvals queue and read the log (Figures in app/c/[slug]/numbers/page.tsx); the page's
- // frame and the sidebar's count, drawn once the queue is read, do not.
+ // Only the figures read the log (Figures in app/c/[slug]/numbers/page.tsx); the page's frame and the sidebar do not.
  const week=await holdPages(page,url=>url.pathname===numbersPath&&!url.searchParams.has('period'));
  const month=await holdPages(page,url=>url.pathname===numbersPath&&url.searchParams.get('period')==='30');
  asAdmin(agentWeek.unset); asAdmin(agentWeek.set);
@@ -65,7 +64,7 @@ test('while its approvals queue and then its figures are slow Numbers keeps its 
   const placeholder=page.locator('.numbers-page [aria-busy="true"]');
   const tiles=page.locator('.kpis .kpi');
   const switcher=page.getByRole('group',{name:tr('numbersPeriod')});
-  await whileSlow('approval_steps',2,async()=>{
+  await whileSlow('company_log',2,async()=>{
    await page.locator(`.nav a[href="${numbersPath}"]`).click(); week.letGo();
    await expect(placeholder).toBeVisible();
    await expect(placeholder).toHaveText(tr('numbersLoading'));
