@@ -165,6 +165,15 @@ test.each(['en', 'ar'] as const)('in the %s interface, an open hand card shows t
  expect(group.element().textContent, 'the closing note waits for Done it').not.toContain(card.note);
 });
 
+test('in the Arabic interface, the line, the rows and the note of a hand card follow the card, also when they start with a Latin name', async () => {
+ const language = 'ar';
+ const card = handed({ state: 'done', at: '2026-06-10T09:41:00Z' } as Partial<Hand>);
+ const screen = await handDrawn(card, language);
+ const group = screen.getByRole('group', { name: handWords[language].label(card.title) }).element();
+ const texts = [group.querySelector('.card__sub'), ...group.querySelectorAll('dt, dd'), group.querySelector('.hand__note')];
+ expect(texts.map(text => text?.matches(':dir(rtl)'))).toEqual(texts.map(() => true));
+});
+
 test('a hand card with no address shows Done it alone, and an English one is laid out left to right', async () => {
  const card = handed({ title: 'Pay the December invoice', line: 'The invoice is ready in Stripe.', app: 'Stripe', url: null, rows: [] });
  const screen = await handDrawn(card, 'ar', async () => null);

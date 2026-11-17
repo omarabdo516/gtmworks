@@ -3,7 +3,8 @@
 // the badge, the tile of the app the step is done in, the title, the line and the rows. Open: "Open the draft" opens the
 // address the Agent gave in a new tab that gets no handle on this page, and "Done it" records, once, that this person
 // did the step. Done: the time and the Agent's closing note. gtmworks does not do the step and checks nothing outside.
-// The card is laid out in its title's direction, as the draft card is; the reference's "Open the screen" and "Open the
+// The card is laid out in its title's direction, and every text on it follows the card, as the reference sets `dir` once
+// (a line that starts with a Latin name, "SEO سابه…", must not turn left to right); the reference's "Open the screen" and "Open the
 // merge request" variants are not drawn (#21, #36).
 import { useEffect, useRef, useState } from 'react';
 import { ShellIcon } from '@/components/shell-icon';
@@ -56,9 +57,9 @@ export function HandCard({card,fresh,done}:{card:Hand,fresh:boolean,done?:MarkHa
  return <div className={`reply-card reply-card--hand${at?' is-resolved':''}${just?' is-just':''}${fresh?' card-in':''}`} role="group" aria-label={t('handLabel',card.title)} dir={rtl(card.title)?'rtl':'ltr'}>
   <div className="hcard__top"><span className="badge ck-badge"><ShellIcon name="hand"/>{t('handBadge')}</span></div>
   <div className="card__head"><AppTile app={handApp(card.app)} size="lg"/>
-   <div className="card__titles"><span className="card__title">{card.title}</span><span className="card__sub" dir="auto">{card.line}</span></div></div>
-  {card.rows.length>0&&<dl className="kv">{card.rows.map((row,index)=><div key={index} className="kv__row"><dt dir="auto">{row.label}</dt><dd dir="auto">{row.value}</dd></div>)}</dl>}
-  {at?<div className="card__outcome"><ShellIcon name="check"/><span>{before}{time(at)}{after}{card.note&&<> <bdi>{card.note}</bdi></>}</span></div>
+   <div className="card__titles"><span className="card__title">{card.title}</span><span className="card__sub">{card.line}</span></div></div>
+  {card.rows.length>0&&<dl className="kv">{card.rows.map((row,index)=><div key={index} className="kv__row"><dt>{row.label}</dt><dd>{row.value}</dd></div>)}</dl>}
+  {at?<div className="card__outcome"><ShellIcon name="check"/><span>{before}{time(at)}{after}{card.note&&<> <span className="hand__note">{card.note}</span></>}</span></div>
    :<div className="card__actions">
     {card.url&&<a className="btn btn--secondary" href={card.url} target="_blank" rel="noopener noreferrer"><ShellIcon name="open"/><span>{t('handOpen')}</span></a>}
     <button type="button" className="btn btn--primary" disabled={!done} onClick={()=>void press()}>{t('handDone')}</button>
