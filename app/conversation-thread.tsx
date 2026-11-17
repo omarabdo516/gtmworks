@@ -113,7 +113,7 @@ export function ConversationTurns({slug,company,record,asked}:{slug:string,compa
  const {conversation,messages,pending,failed,working}=record;
  const answer=async(card:number,choice:number,answerKey:string)=>{
   const failure=await postMessage({company,conversation:conversation.id,intent:'answer',card,choice,answerKey});
-  if(!failure) asked();
+  asked();
   return failure;
  };
  // A card an Agent shows while the chat is open rises in once (design-reference: card-in); those already there do not.

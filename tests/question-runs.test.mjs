@@ -110,3 +110,13 @@ test('a stop: the stopped Run closes its question and ends stopped; an answer cl
  assert.equal(closed.get(run).run_outcome,'stopped');
  assert.deepEqual(fake.answers.map(answer=>answer.text),['Teachers','Teachers'],'the same answer again');
 });
+
+test('a question longer than the card keeps is shortened between characters, never inside one',async()=>{
+ const fake=fakeEngine(); const long=`${'a'.repeat(3998)}😀😀b`;
+ fake.settings.questions=()=>[{text:long,choices:['Yes','No']}];
+ const {service,cards}=databases(fake);
+ await start(fake); await close(service,fake);
+ const kept=cards[0].content.question;
+ assert.equal(kept,`${'a'.repeat(3998)}😀…`);
+ assert.ok(kept.isWellFormed(),'no half of a surrogate pair is left');
+});

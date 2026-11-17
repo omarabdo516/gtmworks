@@ -178,3 +178,17 @@ test('in the chat, a pick posts the answer, the record is read again, and the pi
  expect(order).toEqual(['message', 'asked', 'answer']);
  await expect.element(screen.getByRole('group', { name: `${open.question}: Answered` })).toBeVisible();
 });
+
+test('in the chat, a pick another tab answered first is not shown as this one\'s: the card says so and the record is read again', async () => {
+ vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+ const open = asked(angles.slice(0, 3));
+ const calls = vi.fn(async (_url: string, init?: RequestInit) => init?.method === 'POST' ? Response.json({ error: 'questionTaken' }, { status: 409 })
+  : Response.json(record({ ...open, state: 'answered', answer: angles[1] } as Question, angles[1])));
+ vi.stubGlobal('fetch', calls);
+ const screen = await render(<LanguageProvider language="en"><div className="gw"><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={conversation} title="" writer><Arrived record={arrived(record(open))}/></ConversationView></div></LanguageProvider>);
+ await screen.getByRole('button', { name: angles[0] }).click();
+ await expect.element(screen.getByRole('alert')).toHaveTextContent('This question was already answered');
+ await vi.advanceTimersByTimeAsync(500);
+ expect(calls.mock.calls.filter(([, init]) => init?.method !== 'POST'), 'the record is read again').toHaveLength(1);
+ await expect.poll(() => document.querySelector<HTMLElement>('.turns > li[data-kind="answer"]')?.textContent).toContain(angles[1]);
+});

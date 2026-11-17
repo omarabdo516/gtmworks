@@ -899,6 +899,7 @@
   "questionHintWords": "Write your answer in the message",
   "questionAnswered": "Answered",
   "questionClosed": "This question can no longer be answered",
+  "questionTaken": "This question was already answered",
   "logActQuestionAnswered": "answered {0}’s question",
   "logAgentRequestWaiting": "Waiting for the Owner’s answer",
   "logActAgentRequestMade": "made an agent {0} asked for",

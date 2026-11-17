@@ -58,6 +58,8 @@ async function answer(db:Database,body:Record<string,unknown>) {
  if(!(typeof body.card==='number'&&Number.isSafeInteger(body.card)&&body.card>0)||!(typeof body.choice==='number'&&Number.isSafeInteger(body.choice)&&body.choice>=0&&body.choice<4)) return refuse('conversationFailed',400);
  const answered=await answerQuestion(db,service(),{company:body.company as string,conversation:body.conversation as string,card:body.card,choice:body.choice,answerKey:body.answerKey as string,encryptionKey:encryptionKey()});
  if('code' in answered) return answered.code==='22023'?refuse('conversationFailed',400):refuseFor(answered.code);
+ // Another tab or the Engine was first: the pick is not recorded, so the card says so and reads the record again.
+ if(answered.state==='taken'||answered.state==='closed') return refuse(answered.state==='taken'?'questionTaken':'questionClosed',409);
  return reply({state:answered.state});
 }
 

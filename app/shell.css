@@ -659,7 +659,7 @@
   background: var(--gw-bg-tertiary); box-shadow: var(--gw-border-3) 0 0 0 0.5px inset; font-size: var(--gw-fs-xs); color: var(--gw-text-2);
   transition: background-color var(--gw-dur-fast) var(--gw-ease-out), color var(--gw-dur-fast) var(--gw-ease-out);
 }
-.gw .opt__t { font-size: var(--gw-fs-base); line-height: 1.5; color: var(--gw-text-1); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gw .opt__t { font-size: var(--gw-fs-base); line-height: 1.5; color: var(--gw-text-1); min-width: 0; overflow-wrap: anywhere; }
 @media (hover: hover) {
   .gw .opt:hover:not(:disabled) { background: var(--gw-bg-hover); }
   .gw .opt:hover:not(:disabled) .opt__key { background: var(--gw-primary); color: var(--gw-on-primary); box-shadow: none; }

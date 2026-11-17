@@ -75,7 +75,8 @@ begin
  update public.reply_cards r set state='closed' where r.conversation_id=conversation and r.kind='question' and r.state='open'
   and (r.run_id=run and (ended or (r.call_id is distinct from asked and r.created_at<read_started_at))
    or r.run_id<>run and exists(select 1 from public.conversation_usage u where u.conversation_id=conversation and u.run_id=r.run_id));
- if asked is not null and not ended then
+ -- A read that saw the question before another closer ended the Run keeps nothing for it.
+ if asked is not null and not ended and not exists(select 1 from public.conversation_usage u where u.conversation_id=conversation and u.run_id=run) then
   kept:=jsonb_build_object('question',asking->'text','choices',asking->'choices','multiple',asking->'multiple');
   if length(asked) between 1 and 200 and public.reply_card_valid('question','open',kept) then
    insert into public.reply_cards(company_id,conversation_id,run_id,call_id,kind,title,content,state,created_at)
@@ -185,6 +186,7 @@ language sql stable set search_path='' as $$
    from public.reply_cards q
    join public.conversations v on v.id=q.conversation_id and v.company_id=q.company_id
    where q.company_id=c and q.kind='question' and q.state='open' and v.person_id=auth.uid()
+    and not exists(select 1 from public.conversation_usage u where u.conversation_id=q.conversation_id and u.run_id=q.run_id)
  ) x(kind,id,title,body,asked_by,card_id,conversation_id,created_at)
  order by created_at desc, id desc;
 $$;

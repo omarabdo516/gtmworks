@@ -899,6 +899,7 @@
   "questionHintWords": "اكتب ردك في الرسالة",
   "questionAnswered": "اتجاوب",
   "questionClosed": "السؤال ده مبقاش ينفع يتجاوب",
+  "questionTaken": "السؤال ده اتجاوب خلاص",
   "logActQuestionAnswered": "جاوب سؤال {0}",
   "logAgentRequestWaiting": "مستني رد المالك",
   "logActAgentRequestMade": "عمل وكيل طلبه {0}",
