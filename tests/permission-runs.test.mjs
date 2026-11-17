@@ -72,6 +72,12 @@ test('a waiting request is kept once with the engine\'s words and choices, and i
  assert.deepEqual(fake.permits,[],'nothing is sent before the person decides');
 });
 
+test('the closer tells the database the profile it read the Run on, where the engine would keep an always',async()=>{
+ const fake=asking(); const {service,calls}=databases(fake);
+ await start(fake); await close(service,fake);
+ assert.deepEqual(calls.filter(([name])=>name==='track_run_permission').map(([,args])=>args.run_profile),['writer']);
+});
+
 for(const choice of /** @type {const} */(['once','always','deny'])) test(`${choice}: the choice is delivered once, settled decided, and the same Run then goes on to its reply`,async()=>{
  const fake=asking(); const {service,person,cards,calls,closed}=databases(fake);
  const run=await start(fake); await close(service,fake);

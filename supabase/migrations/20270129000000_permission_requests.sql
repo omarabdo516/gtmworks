@@ -99,14 +99,17 @@ revoke all on function public.permission_choices(uuid) from public,anon,service_
 grant execute on function public.permission_choices(uuid) to authenticated;
 
 -- Whoever closes a Run tells the database what each read of it showed: the request it waits on (`asking`,
--- {id,description,command,choices}, or null), whether it has ended, when the read began and when it ended. The request is kept
+-- {id,description,command,choices}, or null), whether it has ended, when the read began and when it ended, and the Engine
+-- profile it read the Run on (`run_profile`). Always is kept only when that profile is the Agent's own, and never when
+-- none is named. The Agent's Connection is not asked: an Agent moved to its own profile while its Run on the shared one
+-- waits would keep always, and the Engine would widen every Agent there. The request is kept
 -- once, as of the read's end (a read may begin before another and end after it, so its start may predate a later read that
 -- found nothing yet),
 -- its title the description, or the command when that is blank. An open or claimed card of the Run closes when the Run
 -- has ended, a claimed one with its choice kept, since nothing can deliver to an ended Run; an open one also closes when
 -- a read that began after the card was kept no longer shows it (a read that began earlier may predate it); an open or
 -- claimed card of a Run the record has closed closes too. It answers the Run's claimed choices still to deliver.
-create function public.track_run_permission(conversation uuid, run text, asking jsonb, ended boolean, read_started_at timestamptz, read_ended_at timestamptz default null) returns jsonb
+create function public.track_run_permission(conversation uuid, run text, asking jsonb, ended boolean, read_started_at timestamptz, read_ended_at timestamptz default null, run_profile text default null) returns jsonb
 language plpgsql security definer set search_path='' as $$
 declare talk public.conversations; asked text:=asking->>'id'; own boolean; kept jsonb; named text;
 begin
@@ -118,8 +121,7 @@ begin
   and (r.run_id=run and (ended and r.state in ('open','sending') or r.state='open' and r.call_id is distinct from asked and r.created_at<read_started_at)
    or r.state in ('open','sending') and r.run_id<>run and exists(select 1 from public.conversation_usage u where u.conversation_id=conversation and u.run_id=r.run_id));
  if asked is not null and not ended and not exists(select 1 from public.conversation_usage u where u.conversation_id=conversation and u.run_id=run) then
-  own:=exists(select 1 from public.hermes_agents a join public.hermes_connections h on h.id=a.connection_id
-   where a.id=talk.agent_id and a.company_id=talk.company_id and h.profile=public.agent_engine_profile(a.id));
+  own:=coalesce(run_profile=public.agent_engine_profile(talk.agent_id),false);
   kept:=jsonb_build_object('description',asking->'description','command',asking->'command','choices',
    case when jsonb_typeof(asking->'choices')='array' then coalesce((select jsonb_agg(o order by n) from jsonb_array_elements(asking->'choices') with ordinality x(o,n)
     where own or o<>'"always"'::jsonb),'[]'::jsonb) else asking->'choices' end);
@@ -134,8 +136,8 @@ begin
  return coalesce((select jsonb_agg(jsonb_build_object('card',r.id,'permission',r.call_id,'choice',r.content->'choice') order by r.id) from public.reply_cards r
   where r.conversation_id=conversation and r.run_id=run and r.kind='permission' and r.state='sending'),'[]'::jsonb);
 end $$;
-revoke all on function public.track_run_permission(uuid,text,jsonb,boolean,timestamptz,timestamptz) from public,anon,authenticated;
-grant execute on function public.track_run_permission(uuid,text,jsonb,boolean,timestamptz,timestamptz) to service_role;
+revoke all on function public.track_run_permission(uuid,text,jsonb,boolean,timestamptz,timestamptz,text) from public,anon,authenticated;
+grant execute on function public.track_run_permission(uuid,text,jsonb,boolean,timestamptz,timestamptz,text) to service_role;
 
 -- The one claim, by the Conversation's own person (never a Viewer, who writes nothing), of a choice their role may send
 -- and the Engine offered. The first press is kept; every later one, from any tab, and one for a request the Engine no

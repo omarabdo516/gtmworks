@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(38);
+select plan(39);
 -- #163. Ads in RS Learning on its own profile in the Engine (ADR 0016), shown to the Manager (2), the Contributors (3, 5)
 -- and the Viewer (4); the Owner (1) sees every Agent. One Conversation with Ads each, and in it the message of one Run.
 -- Copy sits on a profile it shares, in one Conversation of the Owner's (6). Karim is a Manager of Aleem only.
@@ -25,7 +25,8 @@ select set_config('test.asking','{"id":"a1","description":"delete the old export
 
 -- The closer keeps the request its read shows, once, in the Conversation of the Run that waits on it.
 set local role service_role;
-select results_eq($$select public.track_run_permission(('e2000000-0000-0000-0000-00000000000'||n)::uuid,'p-run-'||n,current_setting('test.asking')::jsonb,false,'2026-06-10T10:14:00Z') from generate_series(1,6) n$$,
+select results_eq($$select public.track_run_permission(('e2000000-0000-0000-0000-00000000000'||n)::uuid,'p-run-'||n,current_setting('test.asking')::jsonb,false,'2026-06-10T10:14:00Z',
+  run_profile=>case when n<6 then 'ag-e1000000000000000000000000000002' else 'permissions-test' end) from generate_series(1,6) n$$,
  $$select '[]'::jsonb from generate_series(1,6)$$,'a request each Run waits on is kept, with nothing yet to deliver');
 select results_eq($$values (public.track_run_permission('e2000000-0000-0000-0000-000000000003','p-run-3',current_setting('test.asking')::jsonb,false,'2026-06-10T10:15:00Z')),
   (public.track_run_permission('e2000000-0000-0000-0000-000000000003','p-run-9',current_setting('test.asking')::jsonb,false,'2026-06-10T10:15:00Z')),
@@ -198,7 +199,7 @@ select results_eq($$select * from seen order by n$$,$$values (1,2),(2,2),(3,1),(
  'each decision''s row is read by its person, the Owner and the Manager, and not by another Contributor or the Viewer');
 select ok(not has_function_privilege('anon','public.decide_permission(uuid,uuid,bigint,text)','execute')
   and not has_function_privilege('service_role','public.decide_permission(uuid,uuid,bigint,text)','execute')
-  and not has_function_privilege('authenticated','public.track_run_permission(uuid,text,jsonb,boolean,timestamptz,timestamptz)','execute')
+  and not has_function_privilege('authenticated','public.track_run_permission(uuid,text,jsonb,boolean,timestamptz,timestamptz,text)','execute')
   and not has_function_privilege('authenticated','public.settle_permission(bigint,text)','execute')
   and not has_table_privilege('authenticated','public.reply_cards','insert') and not has_table_privilege('authenticated','public.reply_cards','update'),
  'only a signed-in person decides, only the closer tracks and settles, and no one writes a card directly');
@@ -226,6 +227,20 @@ select is(public.track_run_permission('e2000000-0000-0000-0000-000000000005','p-
  'a read that finds the Run ended hands over no claim to deliver');
 reset role;
 select is((select state||':'||(content->>'choice') from public.reply_cards where call_id='a5'),'closed:once','and closes the claimed request with its choice kept');
+
+-- Always is kept by the profile the Run is read on, not the one its Agent is attached to now: Ads is on its own profile,
+-- but a Run still on the shared one, or read on no named profile, is not offered always.
+insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id)
+ select '10000000-0000-0000-0000-000000000001','e2000000-0000-0000-0000-000000000002','person','20000000-0000-0000-0000-000000000002','Someone','And the '||r,gen_random_uuid(),'p-run-2'||r
+ from unnest(array['s','o','n']) r;
+set local role service_role;
+select public.track_run_permission('e2000000-0000-0000-0000-000000000002','p-run-2'||r,jsonb_build_object('id','a6'||r,'description','delete the '||r,'command','rm -r '||r,'choices',array['once','always','deny']),false,'2026-06-10T11:20:00Z',
+  run_profile=>case r when 's' then 'permissions-test' when 'o' then 'ag-e1000000000000000000000000000002' end)
+ from unnest(array['s','o','n']) r;
+reset role;
+select results_eq($$select run_id,content->'choices' from public.reply_cards where run_id in ('p-run-2s','p-run-2o','p-run-2n') order by run_id$$,
+ $$values ('p-run-2n','["once","deny"]'::jsonb),('p-run-2o','["once","always","deny"]'::jsonb),('p-run-2s','["once","deny"]'::jsonb)$$,
+ 'a Run on the Agent''s own profile keeps always, one on the shared profile or on none named does not');
 
 select * from finish();
 rollback;
