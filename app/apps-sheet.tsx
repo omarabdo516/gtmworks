@@ -18,6 +18,10 @@ type Sheet={phase:'closed'}|{phase:'open'|'closing',view:string|null,opener:HTML
 type Apps={items:AppItem[]|null|undefined,open:(opener:HTMLElement|null)=>void};
 const AppsContext=createContext<Apps|null>(null);
 
+// Every page draws its own Shell, so the provider is drawn anew on each page: the last read of each Company is kept here,
+// outside it, so the count stays in place while the new page's read is on its way.
+const lastRead=new Map<string,AppItem[]|null>();
+
 // sheetOut in sheet.css.
 const leaveMs=190;
 
@@ -26,8 +30,8 @@ const leaveMs=190;
 // open sheet empties meanwhile.
 export function AppsSheetProvider({apps,company,owner,rtl,children}:{apps:Promise<AppItem[]|null>,company:string,owner:boolean,rtl:boolean,children:ReactNode}) {
  const {t,language}=useI18n(); const text:Record<string,string>=language==='ar'?ar:en;
- const [items,setItems]=useState<AppItem[]|null|undefined>(undefined);
- useEffect(()=>{ let current=true; void apps.then(read=>{ if(current) setItems(read); }); return ()=>{ current=false; }; },[apps]);
+ const [items,setItems]=useState<AppItem[]|null|undefined>(()=>lastRead.get(company));
+ useEffect(()=>{ let current=true; void apps.then(read=>{ lastRead.set(company,read); if(current) setItems(read); }); return ()=>{ current=false; }; },[apps,company]);
  const [sheet,setSheet]=useState<Sheet>({phase:'closed'});
  const box=useRef<HTMLDialogElement>(null); const stopLeaving=useRef(()=>{});
  // Where the keyboard goes once the sheet has drawn the view it moved to; after back, the app's button keeps it.

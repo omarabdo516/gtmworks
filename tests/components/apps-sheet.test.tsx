@@ -28,8 +28,10 @@ const states: Record<string, AppItem['state']> = { klaviyo: 'connected', notion:
 const items: AppItem[] = apps.map(app => ({ key: app.key, name: app.name, mark: app.mark, category: app.category, state: states[app.key] ?? 'off',
  use: text[`use.${app.key}`], can: text[`can.${app.key}`], words: app.name }));
 
-const shell = (read: Promise<AppItem[] | null>, owner = true) => <div className="gw"><LanguageProvider language="en">
- <AppsSheetProvider apps={read} company="c-1" owner={owner} rtl={false}>
+// Each test draws its own Company: the provider keeps each Company's last read across the pages it is drawn on.
+let companies = 0;
+const shell = (read: Promise<AppItem[] | null>, owner = true, company = `c-${++companies}`) => <div className="gw"><LanguageProvider language="en">
+ <AppsSheetProvider apps={read} company={company} owner={owner} rtl={false}>
   <AppsButton/>
   <AccountMenuView saveLanguage={async () => ''} saveTheme={async () => ''} slug="rs-learning" personName="Omar" role="Owner" theme="light" companyName="RS Learning"/>
  </AppsSheetProvider>
@@ -172,4 +174,12 @@ test('on a phone the sheet opened from the drawer holds Tab, and Escape closes t
  await expect.poll(() => dialog().open).toBe(false);
  await expect.element(appsButton()).toHaveFocus();
  expect(document.querySelector('.sidebar')!.classList.contains('is-open'), 'the drawer stays open').toBe(true);
+});
+
+test('the next page keeps the count in place while its own read of the apps is on its way', async () => {
+ const first = await render(shell(Promise.resolve(items), true, 'c-kept'));
+ await expect.element(first.getByRole('button', { name: 'Connect apps 2 connected' })).toBeVisible();
+ await first.unmount();
+ const next = await render(shell(new Promise(() => {}), true, 'c-kept'));
+ await expect.element(next.getByRole('button', { name: 'Connect apps 2 connected' })).toBeVisible();
 });

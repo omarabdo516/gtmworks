@@ -53,7 +53,6 @@ export default async function Shell({company,companies,section,title,crumbs,pers
  // Who can write a chat: "N" opens a new one for them (app/new-chat-key), and a Member asks Lead for an Agent.
  const writer=!!company?.id&&(owner||(await db.rpc('conversation_can_write',{c:company.id})).data===true);
  const asksForAgents=writer&&!owner;
- // The apps sheet's read is not awaited: the page is drawn at once and the sidebar's count lands when the Engine answers.
  const account=<><AccountMenu slug={slug} personName={personName} role={role} theme={theme} companyName={company?.name} settingsHref={slug?`/c/${slug}/settings`:undefined}/><ThemeToggle theme={theme}/></>;
  const active=(path:string)=>path==='chat'?chat:path==='work/board'?section.startsWith('work/'):section===path;
  const sidebar=<SidebarSearchProvider>
@@ -90,6 +89,7 @@ export default async function Shell({company,companies,section,title,crumbs,pers
     {company?.id&&<RecentCards key={company.id} slug={slug}/>}
    </section>
   </>}</nav>
+  {/* The apps sheet's read is not awaited: the page is drawn at once and the sidebar's count lands when the Engine answers. */}
   <div className="sb-foot sidebar-bottom">{company?<AppsSheetProvider apps={companyAppItems(company.id,language)} company={company.id} owner={owner} rtl={language==='ar'}><AppsButton/>{account}</AppsSheetProvider>:account}</div>
  </SidebarSearchProvider>;
  // Paperclip BreadcrumbBar: a trail of two or more crumbs replaces the single page title. Rendered on the server so it adds no route JavaScript.
