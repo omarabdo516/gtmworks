@@ -66,6 +66,13 @@ test('a step that runs tests waits for the gate, and does not start when it fail
   assert.deepEqual(green.map(({ name, result }) => [name, result]), [['discovery', 'success'], ['lint', 'success'], ['node', 'success']]);
 });
 
+test('a step that yields runs at a lower CPU priority than the rest', async () => {
+  const { written, write } = quiet();
+  await run([{ name: 'lint', command: 'echo "lint nice=$(ps -o ni= -p $$ | tr -d " ")"' }, { name: 'node', command: 'echo "node nice=$(ps -o ni= -p $$ | tr -d " ")"', yields: true }], { write, env: {} });
+  const nice = name => Number(written.join('').match(new RegExp(`${name} nice=(\\d+)`))[1]);
+  assert.ok(nice('node') > nice('lint'), written.join(''));
+});
+
 test('a skipped step does not run and is listed as skipped', async t => {
   const dir = mkdtempSync(join(tmpdir(), 'ci-fast-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
@@ -91,5 +98,7 @@ test('the fast layer is the static checks, the node tests and the component test
   assert.doesNotMatch(command('components'), /shard/i);
   assert.deepEqual(steps.filter(step => step.gate).map(step => step.name), ['discovery']);
   assert.deepEqual(steps.filter(step => step.gated).map(step => step.name), ['node', 'components']);
+  // The one-thread checks keep their priority; the test runners, which use every core, take what is left.
+  assert.deepEqual(steps.filter(step => step.yields).map(step => step.name), ['node', 'components']);
   assert.match(readFileSync('ci.sh', 'utf8'), /^ {2}node scripts\/ci-fast\.mjs "\$dir"/m);
 });

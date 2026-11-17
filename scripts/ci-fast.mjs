@@ -6,6 +6,8 @@ import { parseArgs } from 'node:util';
 // The fast layer (#258, spec #255 D1): the static checks, the node tests and the component tests, run at the same time
 // as one command that CI, an agent and a person run alike. Each step keeps its own output and result, so a red step is
 // shown whole and the others stay green. Each command may write its test records to $LEDGER (scripts/ci-ledger.mjs).
+// The steps share the runner's four cores: one that `yields` runs at a lower CPU priority, so the one-thread checks
+// (lint, types) keep a core each and the test runners, which spread over every core, fill what is left.
 export const steps = [
   // The gate: a test file no runner discovers is named before any step that runs tests starts.
   { name: 'discovery', command: 'node scripts/check-test-discovery.mjs', gate: true },
@@ -17,11 +19,11 @@ export const steps = [
   // Unused files, exports and dependencies (knip.json), as T3 Code checks them (#81).
   { name: 'knip', command: 'npx --no-install knip --no-progress' },
   // `npm test`'s files, with the ledger reporter beside the usual one; the flags must come before the glob.
-  { name: 'node', command: 'node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=./scripts/ci-ledger-node.mjs --test-reporter-destination="$LEDGER/node.jsonl" \'tests/**/*.test.mjs\'', gated: true },
+  { name: 'node', command: 'node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=./scripts/ci-ledger-node.mjs --test-reporter-destination="$LEDGER/node.jsonl" \'tests/**/*.test.mjs\'', gated: true, yields: true },
   // Screens as components in headless Chromium (#81), in one run: the tests take seconds, so shards would only repeat
   // the install and the browser (spec #255 D2). Naming the reporters replaces Vitest's own choice, so the GitHub one that
   // marks failures on the pull request is named too when it runs there.
-  { name: 'components', command: 'npx playwright install chromium && npm run test:components -- --reporter=default ${GITHUB_ACTIONS:+--reporter=github-actions} --reporter=json --outputFile.json="$LEDGER/vitest.json"', gated: true },
+  { name: 'components', command: 'npx playwright install chromium && npm run test:components -- --reporter=default ${GITHUB_ACTIONS:+--reporter=github-actions} --reporter=json --outputFile.json="$LEDGER/vitest.json"', gated: true, yields: true },
 ];
 
 const seconds = started => ((Date.now() - started) / 1000).toFixed(1);
@@ -42,13 +44,13 @@ export async function run(list, { skip = [], env = process.env, write = text => 
   };
   const stop = () => { for (const child of running) try { process.kill(-child.pid, 'SIGTERM'); } catch {} };
   process.once('SIGINT', stop).once('SIGTERM', stop);
-  const start = ({ name, command }) => {
+  const start = ({ name, command, yields }) => {
     if (skip.includes(name)) return { name, result: 'skipped' };
     write(`fast ${name}: started\n`);
     const started = Date.now();
     const chunks = [];
     // A group of its own, so a stop reaches what npm and npx start under it.
-    const child = spawn('bash', ['-c', command], { env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+    const child = spawn(yields ? 'nice' : 'bash', [...(yields ? ['-n', '10', 'bash'] : []), '-c', command], { env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
     running.add(child);
     child.stdout.on('data', chunk => chunks.push(chunk));
     child.stderr.on('data', chunk => chunks.push(chunk));
