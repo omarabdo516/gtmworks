@@ -202,3 +202,110 @@ test('an answer Hermes could not take, or one to an address no longer allowed, i
   assert.equal(await engine.answer(run,id,'Students'),'answered');
  } finally { await fake.close(); }
 });
+
+// #163, as the pinned release does it (api_server_runs.py _make_approval_notify, _handle_run_approval): a Run that stops
+// to ask before an action reports waiting_for_approval with the request in `approval`; the driver reads it as running
+// with the request, and the choice goes on the Run's own route with exactly {choice, request_id}.
+const permits=(/** @type {any} */ fake,/** @type {{description:string,command:string,choices?:string[]}[]} */ approvals)=>{ fake.settings.approvals=()=>approvals; fake.settings.reply=(/** @type {string} */ input,/** @type {unknown[]} */ _answers,/** @type {(string|null)[]} */ choices)=>`Reply to: ${input} (${choices.map(choice=>choice??'not allowed').join(', ')})`; };
+const sentPermits=(/** @type {any} */ fake)=>fake.settings.permits.map((/** @type {{status:number,body:any}} */ {status,body})=>[status,body]);
+const deletes={description:'recursive delete',command:'rm -rf /tmp/exports'};
+
+test('a waiting Run reads as running with the request: its id, its words and its choices, never the session choice',async()=>{
+ const fake=await fakeHermes(); permits(fake,[deletes,{description:'',command:'curl -X POST https://example.com',choices:['once','session','deny']}]);
+ try {
+  const engine=engineFor(connection(fake)); const run=/** @type {string} */(await engine.start({conversation:'s',input:'Clean up',idempotencyKey:'k'}));
+  const [first,second]=fake.settings.runs[0].approvals;
+  assert.deepEqual(await engine.read(run),{state:'running',reply:null,session:'s',usage:null,toolCalls:[],
+   permission:{id:first.request_id,description:'recursive delete',command:'rm -rf /tmp/exports',choices:['once','always','deny']}});
+  assert.equal(await engine.permit(run,first.request_id,'once'),'answered');
+  assert.deepEqual((await engine.read(run)).permission,{id:second.request_id,description:'',command:'curl -X POST https://example.com',choices:['once','deny']},
+   'a request Hermes will not keep for later offers once and deny only');
+ } finally { await fake.close(); }
+});
+
+test('Allow once, Always allow and Don\'t allow each post exactly the choice and the request\'s id, once, and the same Run goes on',async()=>{
+ const fake=await fakeHermes(); permits(fake,[deletes,deletes,deletes]);
+ try {
+  const engine=engineFor(connection(fake)); const run=/** @type {string} */(await engine.start({conversation:'s',input:'Clean up',idempotencyKey:'k'}));
+  for(const choice of /** @type {const} */(['once','always','deny'])) {
+   const {permission}=await engine.read(run);
+   assert.equal(await engine.permit(run,/** @type {string} */(permission?.id),choice),'answered');
+  }
+  const ids=fake.settings.runs[0].approvals.map((/** @type {{request_id:string}} */ asking)=>asking.request_id);
+  assert.deepEqual(sentPermits(fake),[[200,{choice:'once',request_id:ids[0]}],[200,{choice:'always',request_id:ids[1]}],[200,{choice:'deny',request_id:ids[2]}]]);
+  assert.ok(fake.settings.requests.some(request=>request.method==='POST'&&request.path===`/p/writer/v1/runs/${run}/approval`&&request.authorization==='Bearer test-only-key'));
+  assert.deepEqual(await engine.read(run),{state:'completed',reply:'Reply to: Clean up (once, always, deny)',session:'s',usage:{input:14000,output:12},toolCalls:[]});
+  assert.equal(fake.settings.runs.length,1,'no second Run');
+ } finally { await fake.close(); }
+});
+
+test('a choice for a request Hermes no longer waits on is gone: answered already, timed out, stopped, ended or unknown',async()=>{
+ const fake=await fakeHermes(); permits(fake,[deletes,deletes]);
+ try {
+  const engine=engineFor(connection(fake)); const run=/** @type {string} */(await engine.start({conversation:'s',input:'Clean up',idempotencyKey:'k'}));
+  const first=/** @type {string} */((await engine.read(run)).permission?.id);
+  assert.equal(await engine.permit(run,first,'once'),'answered');
+  assert.equal(await engine.permit(run,first,'deny'),'gone','a second choice for the same request');
+  const second=/** @type {string} */((await engine.read(run)).permission?.id);
+  assert.ok(fake.settings.expireApproval(run));
+  assert.equal(await engine.permit(run,second,'once'),'gone','a request Hermes timed out');
+  assert.deepEqual(await engine.read(run),{state:'completed',reply:'Reply to: Clean up (once, not allowed)',session:'s',usage:{input:14000,output:12},toolCalls:[]},
+   'the Run reads with no request and goes on to its reply');
+  assert.equal(await engine.permit(run,second,'once'),'gone','an ended Run waits on nothing');
+  assert.equal(await engine.permit('run_unknown',second,'once'),'gone','a Run Hermes does not know');
+  assert.deepEqual(sentPermits(fake).map(([status,body])=>[status,body.choice]),[[200,'once'],[409,'deny'],[409,'once'],[409,'once'],[404,'once']]);
+ } finally { await fake.close(); }
+});
+
+test('a refusal whose code is at the top of the body reads the same: a request Hermes no longer waits on is gone',async()=>{
+ const fake=await fakeHermes(); permits(fake,[deletes,deletes]);
+ fake.settings.flatPermitErrors=true;
+ try {
+  const engine=engineFor(connection(fake)); const run=/** @type {string} */(await engine.start({conversation:'s',input:'Clean up',idempotencyKey:'k'}));
+  const first=/** @type {string} */((await engine.read(run)).permission?.id);
+  assert.equal(await engine.permit(run,first,'once'),'answered');
+  assert.equal(await engine.permit(run,first,'deny'),'gone','approval_not_pending');
+  await engine.read(run);
+  assert.equal(await engine.permit('run_unknown',first,'once'),'gone','run_not_found');
+  const second=/** @type {string} */((await engine.read(run)).permission?.id);
+  assert.equal(await engine.permit(run,second,'once'),'answered');
+  await engine.read(run);
+  assert.equal(await engine.permit(run,second,'once'),'gone','approval_not_active');
+  assert.deepEqual(sentPermits(fake).map(([status,body])=>[status,body.choice]),[[200,'once'],[409,'deny'],[404,'once'],[200,'once'],[409,'once']]);
+ } finally { await fake.close(); }
+});
+
+test('a stop: the waiting Run is stopped with no request left, and a choice for it is gone',async()=>{
+ const fake=await fakeHermes(); permits(fake,[deletes]);
+ try {
+  const engine=engineFor(connection(fake)); const run=/** @type {string} */(await engine.start({conversation:'s',input:'Clean up',idempotencyKey:'k'}));
+  const {permission}=await engine.read(run);
+  assert.equal(await engine.stop(run),true);
+  assert.deepEqual(await engine.read(run),{state:'stopped',reply:null,session:'s',usage:null,toolCalls:[]});
+  assert.equal(await engine.permit(run,/** @type {string} */(permission?.id),'once'),'gone');
+  assert.deepEqual(sentPermits(fake).map(([status])=>status),[409]);
+ } finally { await fake.close(); }
+});
+
+test('a choice Hermes could not take, or one to an address no longer allowed, is sent again; a malformed id or choice sends nothing',async()=>{
+ const fake=await fakeHermes(); permits(fake,[deletes]);
+ try {
+  const engine=engineFor(connection(fake)); const run=/** @type {string} */(await engine.start({conversation:'s',input:'Clean up',idempotencyKey:'k'}));
+  const id=/** @type {string} */((await engine.read(run)).permission?.id);
+  fake.settings.status=500;
+  assert.equal(await engine.permit(run,id,'once'),'unreachable');
+  fake.settings.status=200;
+  assert.equal(await engineFor({...connection(fake),address:'http://203.0.113.9:8642'}).permit(run,id,'once'),'unreachable');
+  const engineFetch=globalThis.fetch;
+  globalThis.fetch=async()=>new Response('<html>Not Found</html>',{status:404});
+  try { assert.equal(await engine.permit(run,id,'once'),'unreachable','a 404 that is not Hermes forgetting the Run keeps the request open'); }
+  finally { globalThis.fetch=engineFetch; }
+  globalThis.fetch=async()=>{ throw new TypeError('fetch failed'); };
+  try { assert.equal(await engine.permit(run,id,'once'),'unreachable','nothing answered'); }
+  finally { globalThis.fetch=engineFetch; }
+  assert.equal(await engine.permit(run,'not a request id','once'),'gone');
+  assert.equal(await engine.permit(run,id,/** @type {any} */('session')),'gone');
+  assert.deepEqual(sentPermits(fake),[],'neither reached Hermes');
+  assert.equal(await engine.permit(run,id,'once'),'answered');
+ } finally { await fake.close(); }
+});

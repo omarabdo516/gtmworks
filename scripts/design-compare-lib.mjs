@@ -51,6 +51,8 @@ export const fixture = {
   handConversation: '62000000-0000-0000-0000-000000000006',
   // Omar's Conversation in which Ads's reply shows its Run's four tool calls (#141), as the reference's th-meta (m3).
   stepsConversation: '62000000-0000-0000-0000-000000000007',
+  // Omar's Conversation in which Ads's Run waits on his OK to publish the article (#163), as the reference's th-seo.
+  permissionConversation: '62000000-0000-0000-0000-000000000008',
 };
 // #172. The chat and Numbers while their waiting part is still on its way. The workflow first applies the screen's own
 // scripts/design-compare-<screen>.sql, which slows the one table that part reads; the tool itself never writes. The page
@@ -118,6 +120,9 @@ export const screens = {
   // #139. The team chat (th-team): the hand card under SEO's reply, the article to publish on WordPress, open. Built: the
   // fixture's handConversation (pass --built-path).
   'hand-card': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-team"]' }, { waitFor: '.hcard' }, { scrollTo: '.hcard' }] }, builtPath: null },
+  // #163. The SEO article chat (th-seo): the approval card to publish the article, waiting. Built: the fixture's
+  // permissionConversation (pass --built-path).
+  'permission-card': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-seo"]' }, { waitFor: '[data-action="approve"]' }, { scrollTo: '.card__actions' }] }, builtPath: null },
   // #141. The Meta campaign chat (th-meta): Ads's reply with "Used 4 tools · 41 sec" pressed, its four steps open, one
   // skipped. Built: the fixture's stepsConversation (pass --built-path), its steps pressed open the same way.
   'run-steps': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-meta"]' }, { click: '[data-action="toggle-steps"][data-msg="m3"]' }, { waitFor: '#st-th-meta-m3:not([hidden])' }, { scrollTo: '#st-th-meta-m3' }] },

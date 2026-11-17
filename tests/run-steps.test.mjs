@@ -29,6 +29,7 @@ function database(/** @type {ReturnType<typeof fakeEngine>} */ fake,{stale=false
   rpc:async(/** @type {string} */ name,/** @type {any} */ args)=>{
    if(name==='open_conversation_runs') return ok(fake.runs.filter(run=>stale||!closed.has(run.id)).map((run,index)=>({message:index+1,conversation,run:run.id,person:'p',connection:'f9000000-0000-0000-0000-000000000001',address:'http://hermes:8642',profile:'writer',state:'connected'})));
    if(name==='track_run_question') return ok([]);
+   if(name==='track_run_permission') return ok([]);
    if(name==='run_steps_progress') { const row=rows.get(args.run); return ok(row?[{steps:row.steps,read_to:row.readTo,broken:row.broken,ended:row.ended,ended_at:row.endedAt,seconds:row.seconds,sealed:row.sealed!==null}]:[]); }
    if(name==='note_run_steps') return ok(keep(args,false));
    if(name==='seal_run_steps') { seals.push(args); return ok(keep(args,true)); }

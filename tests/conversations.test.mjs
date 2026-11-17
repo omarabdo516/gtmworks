@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { handTurn, latestEnded, queuedWaiting, questionParts, replyCardOf, shown, waiting, withDecisions, withTeamWork } from '../lib/conversations.ts';
+import { handTurn, latestEnded, offeredChoices, queuedWaiting, questionParts, replyCardOf, shown, waiting, withDecisions, withTeamWork } from '../lib/conversations.ts';
 
 // A Contributor's Conversation in a team (#25): the line under the Agent's reply says who their rule was sent to as a
 // suggestion, and the Owner's or a Manager's decision on it shows where it happened among the messages.
@@ -165,6 +165,41 @@ test('an answer claimed after the Engine stopped waiting is the person\'s turn m
  const card={kind:/** @type {const} */('reply'),card:/** @type {import('../lib/conversations.ts').ReplyCard} */(replyCardOf(closed))};
  const record=shown(sent,[{run_id:'r1',outcome:'completed'}],[{run_id:'r1',at:at(2),card,...parts('closed')}],'Ads');
  assert.deepEqual(record[2],{id:5,author:'person',author_name:'Omar',body:angles[1],created_at:at(3),kind:'answer',failed:true});
+});
+
+// #163: a request the Agent's Run waits on to allow an action, read from its row in each state; a choice still on its way
+// to the Engine is drawn decided. It is the Agent's turn after its person's message, before the Run's reply.
+const permissionRow=(/** @type {string} */ state,/** @type {string|undefined} */ choice)=>({id:8,run_id:'r1',kind:'permission',title:'delete the old exports',
+ content:{description:'delete the old exports',command:'rm -r exports',choices:['once','always','deny'],...(choice===undefined?{}:{choice})},state,answered_at:null,done_at:null,decided_at:choice===undefined?null:at(3),created_at:at(2)});
+const permission={id:8,kind:'permission',title:'delete the old exports',description:'delete the old exports',command:'rm -r exports',choices:['once','always','deny']};
+
+test('a permission request is read from its row: open, decided with its choice and time also while it is on its way, and closed with or without one',()=>{
+ assert.deepEqual(replyCardOf(permissionRow('open')),{...permission,state:'open'});
+ assert.deepEqual(replyCardOf(permissionRow('sending','always')),{...permission,state:'decided',choice:'always',at:at(3)});
+ assert.deepEqual(replyCardOf(permissionRow('decided','deny')),{...permission,state:'decided',choice:'deny',at:at(3)});
+ assert.deepEqual(replyCardOf(permissionRow('closed','once')),{...permission,state:'closed'});
+ assert.deepEqual(replyCardOf(permissionRow('closed')),{...permission,state:'closed'});
+});
+
+test('a Run\'s request follows its person\'s message as the Agent\'s turn with its card, also the main Agent\'s, the Run still waits, and its reply comes after',()=>{
+ const sent=[{id:1,author:/** @type {const} */('person'),author_name:'Omar',body:'نضّف الملفات القديمة',run_id:'r1',created_at:at(1)}];
+ const placed=(/** @type {string} */ state,/** @type {string|undefined} */ choice)=>{
+  const row=permissionRow(state,choice); const card=/** @type {import('../lib/conversations.ts').ReplyCard} */(replyCardOf(row));
+  return [{run_id:'r1',at:at(2),card:{kind:/** @type {const} */('reply'),card},...questionParts(row,card,true)}];
+ };
+ for(const agent of ['Ads','Lead']) assert.deepEqual(shown(sent,[],placed('open'),agent),[{id:1,author:'person',author_name:'Omar',body:'نضّف الملفات القديمة',lost:false,created_at:at(1)},
+  {id:8,author:'agent',author_name:agent,body:'',created_at:at(2),kind:'asked',cards:[placed('open')[0].card]}],agent);
+ assert.deepEqual(waiting(sent,[]).map(message=>message.id),[1],'the Run still works while its request waits');
+ const replied=[...sent,{id:2,author:/** @type {const} */('agent'),author_name:'Ads',body:'تمام، مسحتها.',run_id:'r1',created_at:at(4)}];
+ assert.deepEqual(order(shown(replied,[{run_id:'r1',outcome:'completed'}],placed('decided','once'),'Ads')),[1,'asked',2],'no turn of the person\'s own, and the reply under it');
+});
+
+test('the buttons are the choices the person\'s role may send that the Engine offered, in the reference\'s order',()=>{
+ const card=/** @type {Extract<import('../lib/conversations.ts').ReplyCard,{kind:'permission'}>} */(replyCardOf(permissionRow('open')));
+ assert.deepEqual(offeredChoices(card,['once','always','deny']),['deny','always','once'],'an Owner or a Manager');
+ assert.deepEqual(offeredChoices(card,['once','deny']),['deny','once'],'a Contributor');
+ assert.deepEqual(offeredChoices(card,[]),[],'a Viewer');
+ assert.deepEqual(offeredChoices({...card,choices:['once','deny']},['once','always','deny']),['deny','once'],'a request the Engine will not keep for later');
 });
 
 test('a message whose run Hermes no longer knew is marked lost and waits no more, and the next message waits for its own reply', () => {

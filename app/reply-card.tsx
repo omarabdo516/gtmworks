@@ -3,17 +3,20 @@
 // the reference lays out its Arabic card right to left in either language, and every other text keeps its own. `fresh`:
 // it arrived after the page was drawn, so it rises in once (design-reference: card-in). A question (#138) is answered
 // in the card itself (`answer`), so it draws its own frame (app/question-card.tsx), as a step handed to the person does
-// (#139, `done`; app/hand-card.tsx).
+// (#139, `done`; app/hand-card.tsx), and a request to allow an action (#163, `decide`, with the choices this person may
+// send, `may`; app/permission-card.tsx).
 import { ShellIcon } from '@/components/shell-icon';
 import { useI18n } from '@/lib/i18n-client';
 import { QuestionCard, type AnswerQuestion } from '@/app/question-card';
 import { HandCard, type MarkHandDone } from '@/app/hand-card';
-import type { ReplyCard as Card } from '@/lib/conversations';
+import { PermissionCard, type DecidePermission } from '@/app/permission-card';
+import { offeredChoices, type PermissionChoice, type ReplyCard as Card } from '@/lib/conversations';
 
-export function ReplyCard({card,fresh,answer,done}:{card:Card,fresh:boolean,answer?:AnswerQuestion,done?:MarkHandDone}) {
+export function ReplyCard({card,fresh,answer,done,decide,may=[]}:{card:Card,fresh:boolean,answer?:AnswerQuestion,done?:MarkHandDone,decide?:DecidePermission,may?:PermissionChoice[]}) {
  switch(card.kind) {
   case 'question': return <QuestionCard card={card} fresh={fresh} answer={answer}/>;
   case 'hand': return <HandCard card={card} fresh={fresh} done={done}/>;
+  case 'permission': return <PermissionCard card={card} fresh={fresh} offered={offeredChoices(card,may)} decide={decide}/>;
   case 'draft': case 'review': return <Shown card={card} fresh={fresh}/>;
   default: { const unknown:never=card; return unknown; }
  }

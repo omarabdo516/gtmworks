@@ -121,6 +121,9 @@ One saved revision of a card's output. Editing creates a new version; approving 
 **Approval / موافقة**:
 A permitted person's decision on one exact version, recorded with who approved it. An agent cannot approve its own or another agent's work.
 
+**Permission request / طلب موافقة**:
+The engine's own stop inside a run before an action: the agent waits until the conversation's person answers "Allow once", "Always allow" or "Don't allow", or the engine stops waiting, which counts as not allowed. It is not an approval of a version. "Always allow" stays with Owners and Managers, and only on an agent's own engine profile.
+
 **Handed to you / اتسلّمت لك**:
 A step no agent may do, such as publishing where there is no API or paying an invoice. The agent prepares it; a person does it and marks "I did it" against the approved version. The record shows who did it; approval alone does not record that the step was done.
 

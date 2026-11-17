@@ -2,11 +2,12 @@ import { after, NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { supabaseConfig } from '@/lib/supabase-config';
-import { answerQuestion, closeOpenRuns, sendMessage, startQueuedTurns, stopConversationRun } from '@/lib/conversation-runs.mjs';
+import { answerQuestion, closeOpenRuns, decidePermission, sendMessage, startQueuedTurns, stopConversationRun } from '@/lib/conversation-runs.mjs';
 import { logActionFailure } from '@/lib/diagnostics.mjs';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
 import { routeAllowed } from '@/lib/route-permissions.mjs';
 import { conversationColumns, uuid } from '@/lib/conversations';
+import type { PermissionChoice } from '@/lib/engine.mjs';
 import { conversationRecord } from '@/lib/conversation-record';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
@@ -16,6 +17,7 @@ const refuse=(error:string,status:number)=>reply({error},status);
 const service=()=>createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}});
 const refuseFor=(code:string|undefined)=>refuse(...(refusals[code||'']||['conversationFailed',500]));
 const encryptionKey=()=>process.env.WEBHOOK_ENCRYPTION_KEY;
+const permissionChoices:readonly unknown[]=['once','always','deny'] satisfies PermissionChoice[];
 
 // A message is checked, sent to the agent's engine and stored by lib/conversation-runs.mjs (through the engine
 // contract, lib/engine.mjs); this route only checks the request's shape and turns refusals into answers. Who wrote it
@@ -85,6 +87,19 @@ async function done(db:Database,body:Record<string,unknown>) {
  return reply({state:'done',at,first});
 }
 
+// A choice on the request the Agent's Run waits on (#163): one of three fixed words, never text. Only the Conversation's
+// person decides, with a choice their role may send and the Engine offered (decide_permission). The press is answered
+// once the choice is kept, as "Done it" is, and the choice then goes to the waiting Run after the answer. A second
+// press, another tab, or a request the Engine no longer waits on answers what the card shows now. Nothing of the
+// request is logged.
+async function permit(db:Database,body:Record<string,unknown>) {
+ if(typeof body.conversation!=='string'||!uuid.test(body.conversation)||!(typeof body.card==='number'&&Number.isSafeInteger(body.card)&&body.card>0)) return refuse('conversationFailed',400);
+ if(!permissionChoices.includes(body.choice)) return refuse('conversationFailed',400);
+ const decided=await decidePermission(db,service(),{company:body.company as string,conversation:body.conversation,card:body.card,choice:body.choice as PermissionChoice,encryptionKey:encryptionKey(),later:after});
+ if('code' in decided) return decided.code==='22023'?refuse('conversationFailed',400):refuseFor(decided.code);
+ return reply(decided);
+}
+
 // Reading the record also closes any of its runs Hermes has ended (lib/conversation-runs.mjs, as the worker does), so
 // the page shows the reply, and the usage of every ended run, without a reload; then a turn that waited for that run
 // starts. The person's session must see the conversation first; only their own runs of it are closed.
@@ -110,7 +125,7 @@ async function respond(request:NextRequest) {
   // The route's permission (lib/route-permissions.mjs), with the role read now: a Viewer's send is refused here, and
   // the database refuses it again (conversation_can_write) before the engine is called.
   if(!await routeAllowed(db,'app/api/conversations/route.ts',request.method,body.company,user.id)) return refuse('conversationNotAllowed',403);
-  if(writing) return body.intent==='stop'?await stop(db,body):body.intent==='answer'?await answer(db,body):body.intent==='done'?await done(db,body):await send(db,body);
+  if(writing) return body.intent==='stop'?await stop(db,body):body.intent==='answer'?await answer(db,body):body.intent==='done'?await done(db,body):body.intent==='permit'?await permit(db,body):await send(db,body);
   if(body.conversation===undefined) {
    // What the composer needs: whether this person may chat (any Member but a Viewer, #287), and the company's agents.
    const {data:writer}=await db.rpc('conversation_can_write',{c:body.company});

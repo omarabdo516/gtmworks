@@ -6,7 +6,8 @@
 -- Conversation with Ads in which they told it a rule for the team, waiting on Omar and the Manager as a learning
 -- suggestion (#25; the reference's th-yo-ads), Omar's Conversation with Ads waiting on his answer to its question (#138;
 -- the reference's th-meta), Omar's Conversation with Ads in which it hands him the article to publish (#139; the
--- reference's th-team t10), and the files Ads works from (#21; the reference's ads.files): two on
+-- reference's th-team t10), Omar's Conversation in which Ads's Run waits on his OK to publish the article (#163; the
+-- reference's th-seo), and the files Ads works from (#21; the reference's ads.files): two on
 -- its Card and one in Omar's Conversation with it. Two Cards are tied to those two chats with Ads (#145). Nothing applies it automatically; load it by hand into a throwaway
 -- local database only. The files are named only: their bytes are not in storage, so opening one finds nothing.
 -- Fixed ids (scripts/design-compare-lib.mjs, fixture); running it again adds nothing. The connections point nowhere
@@ -217,6 +218,21 @@ insert into public.conversation_run_steps(company_id,conversation_id,run_id,step
 values ('10000000-0000-0000-0000-000000000001','62000000-0000-0000-0000-000000000007','design-compare-fixture-steps',
  '[{"call":"call-1","tool":"meta_ads","preview":"قرا نتايج آخر 3 حملات للكورس","state":"done"},{"call":"call-2","tool":"meta_ads","preview":"راجع 6 جماهير محفوظة","state":"done"},{"call":"call-3","tool":"ga4","preview":"المبيعات","state":"failed"},{"call":"call-4","tool":"sheets","preview":"توزيع الميزانية على 30 يوم","state":"done"}]',
  40,false,41,'2026-11-16T10:14:00Z')
+on conflict do nothing;
+
+-- Omar's Conversation with Ads in which its Run stops to ask before it publishes the article (#163; the reference's
+-- th-seo, its pending approval card, worded as there): his message, and the open request its Run waits on, in the
+-- Engine's words. The Run stays open, as its Connection is never called.
+insert into public.conversations(id,company_id,person_id,agent_id,agent_name,created_at)
+values ('62000000-0000-0000-0000-000000000008','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','61000000-0000-0000-0000-000000000002','Ads','2026-11-16T13:30:00Z')
+on conflict (id) do nothing;
+insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at)
+select '10000000-0000-0000-0000-000000000001','62000000-0000-0000-0000-000000000008','person','20000000-0000-0000-0000-000000000001',null,'عمر',
+ 'المقال بتاع «كورس محاسبة اونلاين» خلص؟ لو تمام انشره.','63000000-0000-0000-0000-000000000016','design-compare-fixture-permission','2026-11-16T13:30:00Z'
+where not exists(select 1 from public.conversation_messages where conversation_id='62000000-0000-0000-0000-000000000008');
+insert into public.reply_cards(company_id,conversation_id,run_id,call_id,kind,title,content,state,created_at)
+values ('10000000-0000-0000-0000-000000000001','62000000-0000-0000-0000-000000000008','design-compare-fixture-permission','design-compare-approval-1','permission','نشر المقال على موقع الأكاديمية',
+ '{"description":"نشر المقال على موقع الأكاديمية","command":"wp post edit 812 --post_status=publish","choices":["once","always","deny"]}','open','2026-11-16T13:36:00Z')
 on conflict do nothing;
 
 commit;

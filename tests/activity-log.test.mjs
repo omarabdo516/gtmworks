@@ -86,6 +86,22 @@ test('a person did a step an Agent handed them, named by the step\'s title, in b
  assert.deepEqual([bare.act, bare.obj], [['logActHandDone'], undefined]);
 });
 
+// #163: the person who decided is the row's actor; what the Agent's Run asked is the object, from "Waiting for OK" to the
+// outcome (design-reference: decide's log line).
+test('a person decided what an Agent asked to do: allowed or refused, what was asked, from Waiting for OK to the outcome, in both languages', () => {
+ const lines = ['once', 'always', 'deny'].map(choice => describeEntry({ subject: 'agent', action: 'agent_permission_decided', agent_id: lead, details: { permission: { text: 'delete the old exports', choice }, private: true } }, { agentName: () => 'Ads' }));
+ assert.deepEqual(lines.map(line => [line.act, line.obj, line.from, line.to]), [
+  [['logActPermissionAllowed', { text: 'Ads' }], 'delete the old exports', { key: 'logPermissionWaiting' }, { key: 'permissionAllowedOnce' }],
+  [['logActPermissionAllowed', { text: 'Ads' }], 'delete the old exports', { key: 'logPermissionWaiting' }, { key: 'permissionAlwaysAllowed' }],
+  [['logActPermissionRefused', { text: 'Ads' }], 'delete the old exports', { key: 'logPermissionWaiting' }, { key: 'permissionNotAllowed' }]]);
+ assert.deepEqual(['en', 'ar'].map(language => { const { t } = i18n(language); return [t('logActPermissionAllowed', 'Ads'), t('logActPermissionRefused', 'Ads'), t('logPermissionWaiting'), t('permissionAllowedOnce'), t('permissionAlwaysAllowed'), t('permissionNotAllowed')]; }),
+  [['approved Ads’s request', 'refused Ads’s request', 'Waiting for OK', 'Allowed once', 'Always allowed', 'Not allowed'], ['وافق على طلب Ads', 'رفض طلب Ads', 'مستني موافقة', 'سمحت مرة واحدة', 'سمحت دايماً', 'مسمحتش']]);
+ const bare = describeEntry({ subject: 'agent', action: 'agent_permission_decided', agent_id: lead, details: { permission: { text: 7, choice: 'deny' } } }, { agentName: () => 'Ads' });
+ assert.deepEqual([bare.act, bare.obj], [['logActPermissionRefused', { text: 'Ads' }], undefined]);
+ const unknown = describeEntry({ subject: 'agent', action: 'agent_permission_decided', agent_id: lead, details: { permission: { text: 'delete', choice: 'session' } } }, { agentName: () => 'Ads' });
+ assert.deepEqual([unknown.act, unknown.obj, unknown.to], [['logActAgentChanged'], 'Ads', undefined], 'a choice with no words is never read as allowed');
+});
+
 // #146: a chat with a Card writes these rows on the Card, with no teller; each reads as its row on the Agent does.
 test('a draft, a review, an answer and a Done it written on the chat\'s Card read as they do on its Agent', () => {
  const names = { agentName: () => 'Ads' };
