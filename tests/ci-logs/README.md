@@ -17,3 +17,5 @@ own lines in their order: the first three lines, every line that names a known s
 
 `constructed-registry-rate-limit.log` is not one job's log. No job that day ended on the rate limit, so it joins real
 lines of `database-133592988053`: its pull up to `Rate exceeded`, then that job's own last two lines.
+
+The ledger job summary of a run on a documents-only change shows every long layer skipped with its reason (#256).
