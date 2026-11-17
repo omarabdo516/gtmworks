@@ -156,6 +156,13 @@ jobs:
       - name: install the browser
         if: ${{ env.COMPONENTS != 'false' && steps.browser.outputs.cache-hit != 'true' }}
         run: npx playwright install --with-deps chromium
+      # The cache holds the browser, not the system packages it loads: on a hit, a library the runner image no longer has
+      # is installed before the tests, and nothing is installed when every library is there.
+      - name: the browser's system libraries
+        if: ${{ env.COMPONENTS != 'false' && steps.browser.outputs.cache-hit == 'true' }}
+        run: |
+          missing=$(ldd ~/.cache/ms-playwright/chromium_headless_shell-*/chrome-headless-shell-linux64/chrome-headless-shell | grep 'not found' || true)
+          [[ -z $missing ]] || { echo "$missing"; npx playwright install-deps chromium; }
       - name: save the browser
         if: ${{ env.COMPONENTS != 'false' && steps.browser.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v4

@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, createWriteStream } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 
@@ -35,12 +35,13 @@ const seconds = started => ((Date.now() - started) / 1000).toFixed(1);
 export async function run(list, { skip = [], env = process.env, write = text => process.stdout.write(text) } = {}) {
   const github = env.GITHUB_ACTIONS === 'true';
   const running = new Set();
+  const failed = [];
   const show = (name, result, output, started, code) => {
     const header = `fast ${name}: ${result} (${seconds(started)} s)`;
     const text = output.endsWith('\n') || !output ? output : `${output}\n`;
-    if (github && result === 'success') write(`::group::${header}\n${text}::endgroup::\n`);
-    else write(`${header}\n${text}`);
-    if (github && result !== 'success') write(`::error title=fast ${name}::${name} failed (exit ${code}); its output is in the log above\n`);
+    if (result === 'success') write(github ? `::group::${header}\n${text}::endgroup::\n` : `${header}\n${text}`);
+    // A red step's output waits for the end, so the job's last lines are the failure (scripts/ci-classify.mjs reads them).
+    else failed.push((github ? `::error title=fast ${name}::${name} failed (exit ${code}); its output is in the log below\n` : '') + `${header}\n${text}`);
   };
   const stop = () => { for (const child of running) try { process.kill(-child.pid, 'SIGTERM'); } catch {} };
   process.once('SIGINT', stop).once('SIGTERM', stop);
@@ -49,13 +50,17 @@ export async function run(list, { skip = [], env = process.env, write = text => 
     write(`fast ${name}: started\n`);
     const started = Date.now();
     const chunks = [];
+    // Written as it arrives: a step that hangs until the job's time limit still leaves its log for the ledger upload.
+    const log = env.LEDGER ? createWriteStream(`${env.LEDGER}/${name}.log`) : null;
     // A group of its own, so a stop reaches what npm and npx start under it.
     const child = spawn(yields ? 'nice' : 'bash', [...(yields ? ['-n', '10', 'bash'] : []), '-c', command], { env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
     running.add(child);
-    child.stdout.on('data', chunk => chunks.push(chunk));
-    child.stderr.on('data', chunk => chunks.push(chunk));
+    const keep = chunk => { chunks.push(chunk); log?.write(chunk); };
+    child.stdout.on('data', keep);
+    child.stderr.on('data', keep);
     return new Promise(resolve => child.on('close', (code, signal) => {
       running.delete(child);
+      log?.end();
       const result = code === 0 ? 'success' : signal ? 'cancelled' : 'failure';
       show(name, result, Buffer.concat(chunks).toString(), started, code ?? signal);
       resolve({ name, result });
@@ -67,6 +72,7 @@ export async function run(list, { skip = [], env = process.env, write = text => 
     ?? (step.gated ? open.then(passed => (passed ? start(step) : { name: step.name, result: 'skipped' })) : start(step))));
   process.off('SIGINT', stop).off('SIGTERM', stop);
   write(results.map(({ name, result }) => `fast ${name}: ${result}\n`).join(''));
+  for (const text of failed) write(text);
   return results;
 }
 

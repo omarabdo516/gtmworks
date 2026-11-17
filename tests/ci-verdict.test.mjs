@@ -142,6 +142,17 @@ test('the fast job restores its dependencies by lock-file hash and the browser b
   const [modules] = uses('save', 'node_modules');
   assert.deepEqual(modules.with.path.split('\n').map(line => line.trim()).filter(Boolean), ['node_modules', '!node_modules/.vite', '!node_modules/.cache']);
   assert.ok(!steps.some(step => step.with?.cache), 'no package-manager cache beside the restored dependencies');
+  // A restored browser brings no system packages: on a hit, any library it cannot load is installed before the tests.
+  const browser = steps.find(step => step.id === 'browser');
+  const libraries = steps.find(step => /install-deps chromium/.test(step.run ?? ''));
+  assert.ok(libraries, 'a step installs the browser\'s system libraries');
+  assert.match(libraries.if, new RegExp(`steps\\.${browser.id}\\.outputs\\.cache-hit == 'true'`));
+  assert.match(libraries.run, /ldd .*chrome-headless-shell/);
+  assert.ok(index(browser) < index(libraries) && index(libraries) < fast);
+  // The browser key names the one Playwright in the lock file, which Vitest's provider and the browser suite both load.
+  const lock = JSON.parse(readFileSync('package-lock.json', 'utf8'));
+  const versions = new Set(Object.entries(lock.packages).filter(([path]) => /(^|\/)node_modules\/playwright-core$/.test(path)).map(([, entry]) => entry.version));
+  assert.equal(versions.size, 1, [...versions].join(', '));
 });
 
 // Omar, 2026-11-17: the compared screens (and the navigation budgets with them) run on a push to main and on a manual
