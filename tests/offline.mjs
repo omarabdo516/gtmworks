@@ -18,6 +18,12 @@ export const isLocalUrl = url => {
   return !['http:', 'https:', 'ws:', 'wss:'].includes(protocol) || isLocalHost(hostname);
 };
 
+// The URLs the browser guards stop to look at: every http and WebSocket address but the plainly local ones. A RegExp is
+// matched inside the browser's driver, so local requests are never paused; a function would send every request, each
+// of the app's own scripts included, to the test process first. It may take in a local address it cannot tell, which
+// the handler then lets through; it never leaves out an outside one.
+export const maybeOutside = /^(?:https?|wss?):\/\/(?!(?:localhost|127(?:\.\d{1,3}){3}|\[::1\]|0\.0\.0\.0|[^/?#:@]*\.(?:localhost|test|example|invalid))(?::\d+)?(?:[/?#]|$))/i;
+
 /**
  * A browser context (Playwright's, also under Vitest) reaches nothing outside: outside requests and WebSockets are
  * stopped, and `note` is told each host. A redirect from a local address to an outside one is followed by Chromium
@@ -28,8 +34,16 @@ export function blockOutside(context, note) {
   const named = url => note(new URL(url).host);
   context.on('request', request => { if (request.redirectedFrom() && !isLocalUrl(request.url())) named(request.url()); });
   return Promise.all([
-    context.route(url => !isLocalUrl(url), route => { named(route.request().url()); return route.abort('blockedbyclient'); }),
-    context.routeWebSocket(url => !isLocalUrl(url), socket => { named(socket.url()); return socket.close(); }),
+    context.route(maybeOutside, route => {
+      if (isLocalUrl(route.request().url())) return route.fallback();
+      named(route.request().url());
+      return route.abort('blockedbyclient');
+    }),
+    context.routeWebSocket(maybeOutside, socket => {
+      if (isLocalUrl(socket.url())) return void socket.connectToServer();
+      named(socket.url());
+      return socket.close();
+    }),
   ]);
 }
 

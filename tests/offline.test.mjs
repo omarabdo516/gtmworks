@@ -6,7 +6,7 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { isLocalHost, isLocalUrl } from './offline.mjs';
+import { isLocalHost, isLocalUrl, maybeOutside } from './offline.mjs';
 
 // A test run reaches nothing outside this machine (#266): `npm test` loads tests/offline.mjs before every file, so a
 // connection to an outside host is refused and named, and a file that swallowed the refusal still fails.
@@ -22,6 +22,16 @@ test('this machine and the never-delegated special-use names are local; every ot
   assert.ok(isLocalUrl('http://127.0.0.1:3000/sign-in') && isLocalUrl('https://app.gtmworks.test/') && isLocalUrl('ws://localhost:5173/'));
   assert.ok(isLocalUrl('data:image/png;base64,AAAA') && isLocalUrl('blob:http://127.0.0.1/x') && isLocalUrl('about:blank'));
   assert.ok(!isLocalUrl('https://outside.example.org/probe.png') && !isLocalUrl(`wss://${provider}/`));
+});
+
+test('the browsers stop every outside address to look at it, and leave the lanes\' own addresses alone', () => {
+  const outside = ['https://outside.example.org/probe.png', 'http://example.com/', 'wss://socket.example.org/live', `https://${provider}/v1`,
+    'http://10.0.0.1:3000/', 'http://localhost.com/', 'http://app.test.evil.com/', 'http://localhost@outside.example.org/', 'HTTPS://OUTSIDE.EXAMPLE.ORG/'];
+  const local = ['http://127.0.0.1:3000/sign-in', 'http://localhost:5173/@vite/client', 'ws://localhost:5173/', 'https://app.gtmworks.test/',
+    'http://127.0.0.1:54621/rest/v1/cards?select=*', 'https://auth.provider.test/codex/device', 'http://[::1]:3000/'];
+  assert.deepEqual(outside.filter(url => !maybeOutside.test(url)), []);
+  assert.deepEqual(local.filter(url => maybeOutside.test(url)), []);
+  assert.deepEqual([...outside, ...local].filter(url => !isLocalUrl(url) && !maybeOutside.test(url)), [], 'every outside address is stopped');
 });
 
 test('a server on 127.0.0.1 and on localhost still answers under the guard', async () => {
