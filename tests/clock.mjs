@@ -11,13 +11,13 @@ const offsetAt = (instant, timeZone) => {
 const localDay = (instant, timeZone) => new Intl.DateTimeFormat('en-CA', { timeZone }).format(instant);
 
 // The instant `seconds` before the local day `day` (YYYY-MM-DD) ends in `timeZone`. The day ends when the next one
-// starts: at its midnight, or, where the clocks jump past midnight, at the jump. Both offsets around the wall-clock
-// midnight are tried, and the first that lands on the next day wins.
+// starts: at its midnight, the first of two where the clocks go back across it, or, where they jump past it, at the
+// jump. The offsets a day before and a day after are tried, and the earliest that lands on the next day wins.
 export function beforeMidnight(day, timeZone = runnerZone, seconds = 30) {
   const [year, month, date] = day.split('-').map(Number);
   const wall = Date.UTC(year, month - 1, date + 1), next = new Date(wall).toISOString().slice(0, 10);
-  const first = wall - offsetAt(wall, timeZone);
-  const ends = [...new Set([first, wall - offsetAt(first, timeZone)])].sort((one, other) => one - other);
+  const day1 = 86400000;
+  const ends = [...new Set([wall - offsetAt(wall - day1, timeZone), wall - offsetAt(wall + day1, timeZone)])].sort((one, other) => one - other);
   return new Date(ends.find(end => localDay(end, timeZone) === next) - seconds * 1000);
 }
 
