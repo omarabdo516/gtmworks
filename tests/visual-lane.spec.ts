@@ -1,13 +1,12 @@
 import { test, expect, type Browser, type BrowserContext, type Page } from '@playwright/test';
-import { execFileSync } from 'node:child_process';
 import { laneImage, loadLaneScreens, themes, widths } from './visual-lane.mjs';
-import { blockOutsideRequests, expectDarkContrast, expectDeterministic, expectQuietContrast, fixClock, type QuietCheck } from './visual-lane-guards';
+import { blockOutsideRequests, forgetBlocked, expectDarkContrast, expectDeterministic, expectQuietContrast, fixClock, type QuietCheck } from './visual-lane-guards';
 import { freshSeed } from './fresh-seed';
 import { signIn, openNavigation } from './sign-in';
 import { idle } from './navigation-measure';
 import { appOrigin } from './lane.mjs';
 import { asAdmin } from './slow-reads';
-import { resetFirstRun } from '../scripts/first-run-db.mjs';
+import { localQuery, resetFirstRun } from '../scripts/first-run-db.mjs';
 
 // The visual lane (#257): each key screen in tests/visual-lane/screens.json, in Arabic at 1440 and 390, light and dark,
 // against its approved image. Each screen starts from the seed as built and signs in again, so the screens pass in any
@@ -16,8 +15,6 @@ const screens = loadLaneScreens();
 const rsLearning = '10000000-0000-0000-0000-000000000001';
 const seedAuthor = '30000000-0000-0000-0000-000000000001';
 const omar = '20000000-0000-0000-0000-000000000001';
-// Supabase CLI targets the local test database by default; never pass --remote.
-const query = (sql: string) => execFileSync('npx', ['--no-install', 'supabase', 'db', 'query', sql, '-o', 'json', '--agent', 'no'], { encoding: 'utf8' });
 
 // Secondary text measured after the light picture; on a phone the sidebar's labels are read with the drawer open.
 const quietText: Record<string, QuietCheck[]> = {
@@ -29,14 +26,14 @@ for (const name of Object.keys(quietText)) if (!screens.some(screen => screen.na
 
 // The seed schedules its cards relative to the moment the database was built. Pin them to fixed days in a past month so
 // the board and the card look the same on every run, through the same audit trigger the app uses.
-function fixPublishingDates() {
-  query(`do $$ begin
+function fixPublishingDates(baseURL: string | undefined) {
+  localQuery(`do $$ begin
     perform set_config('request.jwt.claim.sub','${seedAuthor}',true);
     update public.work_cards c set go_live=x.fixed
     from (select id,('2026-06-'||lpad((row_number() over (order by id)*4)::text,2,'0')||'T12:00:00Z')::timestamptz fixed
           from public.work_cards where company_id='${rsLearning}') x
     where c.id=x.id and c.go_live is distinct from x.fixed;
-  end $$;`);
+  end $$;`, baseURL);
 }
 
 // The states the seed does not hold, written as the database's administrator with triggers off (their rows are
@@ -144,7 +141,7 @@ for (const screen of ordered) {
       if (screen.name === 'first-run') resetFirstRun(baseURL);
       if (!screen.anonymous) {
         freshSeed(test.info().file, true);
-        fixPublishingDates();
+        fixPublishingDates(baseURL);
         asAdmin(`update public.people set language='ar' where id='${omar}'`);
       }
       context = await laneContext(browser);
@@ -165,6 +162,7 @@ for (const screen of ordered) {
 
     for (const width of widths) for (const theme of themes) {
       test(`${screen.name} ${width} ${theme}`, async () => {
+        forgetBlocked(context);
         const state = screen.state ? screenStates[screen.state] : undefined;
         if (state) { asAdmin(state.unset); asAdmin(state.set); }
         try {

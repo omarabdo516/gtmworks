@@ -241,6 +241,15 @@ jobs:
           path: test-results/lane/
           if-no-files-found: ignore
           retention-days: 14
+      # The lane's and the budgets' app servers write their output to files, not the job log.
+      - name: upload the server logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-server-logs
+          path: playwright-report/*.log
+          if-no-files-found: ignore
+          retention-days: 14
       - name: upload Playwright reports
         if: always()
         uses: actions/upload-artifact@v4

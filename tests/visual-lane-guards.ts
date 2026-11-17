@@ -23,6 +23,11 @@ export async function blockOutsideRequests(context: BrowserContext) {
   await context.routeWebSocket(url => offMachine(url.href), socket => { blocked.push(socket.url()); return socket.close(); });
 }
 
+/** Each picture is judged by its own requests: the list a context keeps is emptied before the next one. */
+export function forgetBlocked(context: BrowserContext) {
+  outside.get(context)?.splice(0);
+}
+
 /** Date.now() and new Date() read FIXED in every page; timers still run. */
 export async function fixClock(context: BrowserContext) {
   await context.clock.setFixedTime(FIXED);
@@ -46,7 +51,9 @@ export async function expectDeterministic(page: Page) {
       for (const rule of rules) {
         if (!(rule instanceof CSSFontFaceRule)) continue;
         const src = rule.style.getPropertyValue('src');
-        (src && !/url\(/.test(src) ? localOnly : fetched).add(unquote(rule.style.getPropertyValue('font-family')));
+        const family = unquote(rule.style.getPropertyValue('font-family'));
+        // Only next/font's metric-matched "<family> Fallback" faces: any other local() face is checked like the rest.
+        (src && !/url\(/.test(src) && /fallback/i.test(family) ? localOnly : fetched).add(family);
       }
     }
     for (const family of fetched) localOnly.delete(family);
@@ -67,8 +74,8 @@ export async function expectDeterministic(page: Page) {
       const style = getComputedStyle(element);
       const family = unquote(style.fontFamily.split(',')[0]);
       if (generic.has(family)) continue;
-      if (wordless(text)) { if (declared.has(family) && !localOnly.has(family) && !document.fonts.check(`${style.fontStyle} ${style.fontWeight} 16px "${family}"`, text)) found.add(`font "${family}" ${style.fontWeight} fell back`); }
-      else if (!declared.has(family)) found.add(`font "${family}" is not declared, so the text falls back to another face`);
+      if (!declared.has(family)) found.add(`font "${family}" is not declared, so the text falls back to another face`);
+      else if (wordless(text)) { if (!localOnly.has(family) && !document.fonts.check(`${style.fontStyle} ${style.fontWeight} 16px "${family}"`, text)) found.add(`font "${family}" ${style.fontWeight} fell back`); }
       // check() also passes when every face of the family leaves the text out by its unicode-range.
       else if (!faces.some(face => unquote(face.family) === family && covers(face, text))) found.add(`font "${family}" covers none of "${text.slice(0, 40)}"`);
       else if (!localOnly.has(family) && !document.fonts.check(`${style.fontStyle} ${style.fontWeight} 16px "${family}"`, text)) found.add(`font "${family}" ${style.fontWeight} fell back`);
@@ -111,6 +118,10 @@ function measureContrast(page: Page, selector: string | null, pseudo?: string): 
     const light = (color: number[]) => { const [r, g, b] = color.slice(0, 3).map(v => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
     const ratio = (a: number[], b: number[]) => { const [x, y] = [light(a), light(b)].sort((m, n) => n - m); return (x + 0.05) / (y + 0.05); };
     const bodyColor = rgba(getComputedStyle(document.body).color);
+    // Behind every element is the page's canvas, white or the dark scheme's own, read from a probe painted with it.
+    const probe = document.body.appendChild(Object.assign(document.createElement('div'), { style: 'background: Canvas; position: absolute; width: 0; height: 0' }));
+    const canvasColor = rgba(getComputedStyle(probe).backgroundColor).slice(0, 3);
+    probe.remove();
     const targets: { element: Element, text: string, pseudo?: string }[] = [];
     if (selector) {
       for (const element of document.querySelectorAll(selector)) {
@@ -133,7 +144,7 @@ function measureContrast(page: Page, selector: string | null, pseudo?: string): 
         const box = element.getBoundingClientRect();
         if (!box.width || !box.height) continue;
       }
-      let background = [255, 255, 255], opacity = 1;
+      let background = canvasColor, opacity = 1;
       const chain: Element[] = [];
       for (let node: Element | null = element; node; node = node.parentElement) chain.unshift(node);
       for (const node of chain) { const style = getComputedStyle(node); background = over(rgba(style.backgroundColor), background); opacity *= Number(style.opacity); }
