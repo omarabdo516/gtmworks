@@ -3,13 +3,16 @@ import type { AddressInfo } from 'node:net';
 import { test, expect, type BrowserContext, type Page } from './offline-browser';
 
 // The browser reaches nothing outside this machine (#266): every request to an outside host fails, and a test that
-// made one fails naming the host. A page of its own, so these need no app page.
+// made one fails naming the host. A page of its own, so these need no app page. The failure is the proxy's own, not a
+// name that does not resolve, so each request was stopped by the guard before it could reach its address.
+const stopped = /^net::ERR_PROXY_CONNECTION_FAILED/;
 const probe = (page: Page) => page.setContent('<img src="https://outside.example.org/probe.png">').then(() => page.waitForLoadState('load'));
 
 test('a page\'s outside request is aborted and its host is reported', async ({ page, outsideRequests }) => {
   const failed = page.waitForEvent('requestfailed');
   await probe(page);
   expect((await failed).url()).toBe('https://outside.example.org/probe.png');
+  expect((await failed).failure()?.errorText).toMatch(stopped);
   expect(outsideRequests.splice(0)).toEqual(['outside.example.org']);
 });
 
@@ -20,6 +23,7 @@ test('a context the test opens itself is guarded the same way', async ({ browser
     const failed = page.waitForEvent('requestfailed');
     await probe(page);
     expect((await failed).url()).toBe('https://outside.example.org/probe.png');
+    expect((await failed).failure()?.errorText).toMatch(stopped);
     expect(outsideRequests.splice(0)).toEqual(['outside.example.org']);
   } finally { await context.close(); }
 });
@@ -34,7 +38,9 @@ test('a local address that redirects to an outside one is stopped there and repo
   const server = createServer((_, response) => response.writeHead(302, { location: 'https://redirected.example.org/probe.png' }).end());
   await new Promise<void>(done => server.listen(0, '127.0.0.1', done));
   try {
+    const failed = page.waitForEvent('requestfailed', request => request.url() === 'https://redirected.example.org/probe.png');
     await page.goto(`http://127.0.0.1:${(server.address() as AddressInfo).port}/`).catch(() => undefined);
+    expect((await failed).failure()?.errorText).toMatch(stopped);
     expect(outsideRequests.splice(0)).toEqual(['redirected.example.org']);
   } finally { server.close(); }
 });
