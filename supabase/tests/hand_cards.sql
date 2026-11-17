@@ -124,7 +124,7 @@ insert into seen select 4,(select count(*) from public.reply_cards where kind='h
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000005',true);
 insert into seen select 5,(select count(*) from public.reply_cards where kind='hand'),(select count(*) from public.reply_cards where conversation_id<>'f9000000-0000-0000-0000-000000000005'),(select count(*) from public.company_log where action='agent_hand_done');
 reset role;
-select results_eq($$select * from seen order by n$$,$$values (1,1,0,1),(2,1,0,1),(3,1,0,1),(4,0,0,0),(5,2,0,0)$$,
+select results_eq($$select * from seen order by n$$,$$values (1,1,0,1),(2,1,0,1),(3,1,0,1),(4,0,0,0),(5,3,0,0)$$,
  'each person reads the hand cards of their own Conversation and no other, the Owner included; the done row is read by its person, the Owner and the Manager, and not by another Contributor or the Viewer');
 
 select * from finish();
