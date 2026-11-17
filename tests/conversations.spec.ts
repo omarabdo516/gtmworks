@@ -87,7 +87,8 @@ test('The Owner starts a private conversation from the board and from Home, and 
   await expect(page.locator('.msg[data-author=agent]')).toContainText(`Reply to: ${text}`);
 
   await page.goto('/c/rs-learning/home');
-  await expect(page.locator('.sidebar #btn-apps')).toHaveAttribute('aria-disabled','true');
+  await expect(page.locator('.sidebar #btn-apps')).toHaveAttribute('aria-haspopup','dialog');
+  await expect(page.locator('.sidebar #btn-apps'),'Connect apps opens its sheet (#201)').not.toHaveAttribute('aria-disabled');
   // New chat opens the main Agent (Mona is this company's default).
   await page.locator('.sidebar').getByRole('link',{name:'New chat',exact:true}).click();
   await expect(page.locator('.chat .empty-chat h2')).toContainText('Mona');

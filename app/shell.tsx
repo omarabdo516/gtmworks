@@ -21,6 +21,8 @@ import FirstRunChoice from './first-run-choice';
 import NewChatKey from './new-chat-key';
 import { SidebarSearchProvider, SearchToggle, SearchBox } from './sidebar-search';
 import { Frame } from './frame';
+import { AppsSheetProvider, AppsButton } from './apps-sheet';
+import { companyAppItems } from '@/lib/company-app-items';
 import type { ReactNode } from 'react';
 import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbPage, BreadcrumbSeparator } from '@/components/paperclip/ui/breadcrumb';
 import { Fragment } from 'react';
@@ -29,12 +31,12 @@ type Company = {id:string,slug:string,name:string};
 
 // The frame every screen sits in (design-reference: #sidebar). From the top: the Company, search and a new chat with
 // Lead; the four entries; the Agents with Lead first; the channels this person is in with their unread counts (#23,
-// #24; none in a Company worked alone), this person's recent chats and cards; Connect apps (not built yet), the account
-// and theme.
+// #24; none in a Company worked alone), this person's recent chats and cards; Connect apps, which opens the apps as a
+// sheet over the page (#201), the account and theme.
 // `agentId` and `conversationId` mark the open Conversation in the sidebar, `channelId` the open channel; `personId` is
 // the signed-in person, for whom an Agent Lead made at their request is marked new until they open it (#13).
 // `approvalCount` may still be on its way (app/approvals-count.tsx).
-export default async function Shell({company,companies,section,title,crumbs,personId,personName,role,owner=false,children,approvalCount=0,cardId,agentId,conversationId,channelId}:{company?:Company,companies:Company[],section:string,title:string,crumbs?:Crumb[],personId:string,personName:string,role:string,owner?:boolean,children:ReactNode,approvalCount?:number|Promise<number>,cardId?:number,agentId?:string,conversationId?:string,channelId?:string}) { const {t,theme}=await getI18n();
+export default async function Shell({company,companies,section,title,crumbs,personId,personName,role,owner=false,children,approvalCount=0,cardId,agentId,conversationId,channelId}:{company?:Company,companies:Company[],section:string,title:string,crumbs?:Crumb[],personId:string,personName:string,role:string,owner?:boolean,children:ReactNode,approvalCount?:number|Promise<number>,cardId?:number,agentId?:string,conversationId?:string,channelId?:string}) { const {t,theme,language}=await getI18n();
  const slug=company?.slug;
  const chat=section==='chat'||section==='conversations'||section==='channels';
  const db=await supabase();
@@ -51,6 +53,8 @@ export default async function Shell({company,companies,section,title,crumbs,pers
  // Who can write a chat: "N" opens a new one for them (app/new-chat-key), and a Member asks Lead for an Agent.
  const writer=!!company?.id&&(owner||(await db.rpc('conversation_can_write',{c:company.id})).data===true);
  const asksForAgents=writer&&!owner;
+ // The apps sheet's read is not awaited: the page is drawn at once and the sidebar's count lands when the Engine answers.
+ const account=<><AccountMenu slug={slug} personName={personName} role={role} theme={theme} companyName={company?.name} settingsHref={slug?`/c/${slug}/settings`:undefined}/><ThemeToggle theme={theme}/></>;
  const active=(path:string)=>path==='chat'?chat:path==='work/board'?section.startsWith('work/'):section===path;
  const sidebar=<SidebarSearchProvider>
   <div className="sb-top">
@@ -86,12 +90,7 @@ export default async function Shell({company,companies,section,title,crumbs,pers
     {company?.id&&<RecentCards key={company.id} slug={slug}/>}
    </section>
   </>}</nav>
-  <div className="sb-foot sidebar-bottom">
-   {/* Connect apps (#30): no app can be connected yet, so it shows "Soon" where the reference counts connected apps. */}
-   {slug&&<button type="button" className="sb-item sb-apps" id="btn-apps" aria-disabled="true" title={t('soon')}><ShellIcon name="plug"/><span className="od-fill">{t('shellConnectApps')}</span><span className="sb-apps__n">{t('soon')}</span></button>}
-   <AccountMenu slug={slug} personName={personName} role={role} theme={theme} companyName={company?.name} settingsHref={slug?`/c/${slug}/settings`:undefined}/>
-   <ThemeToggle theme={theme}/>
-  </div>
+  <div className="sb-foot sidebar-bottom">{company?<AppsSheetProvider apps={companyAppItems(company.id,language)} company={company.id} owner={owner} rtl={language==='ar'}><AppsButton/>{account}</AppsSheetProvider>:account}</div>
  </SidebarSearchProvider>;
  // Paperclip BreadcrumbBar: a trail of two or more crumbs replaces the single page title. Rendered on the server so it adds no route JavaScript.
  const breadcrumb=crumbs&&crumbs.length>1?<div className="heading m-0 min-w-0 flex-1 overflow-hidden"><Breadcrumb aria-label={t('breadcrumb')} className="min-w-0 overflow-hidden"><BreadcrumbList className="flex-nowrap">{crumbs.map((crumb,index)=>{const last=index===crumbs.length-1;return <Fragment key={index}>{index>0&&<BreadcrumbSeparator/>}<BreadcrumbItem className={last?'min-w-0':'shrink-0'}>{last||!crumb.href?<BreadcrumbPage className="truncate"><bdi>{crumb.label}</bdi></BreadcrumbPage>:<Link className="hover:text-foreground transition-colors" href={crumb.href}><bdi>{crumb.label}</bdi></Link>}</BreadcrumbItem></Fragment>;})}</BreadcrumbList></Breadcrumb></div>:undefined;
