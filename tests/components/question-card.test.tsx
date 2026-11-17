@@ -137,6 +137,11 @@ test('in the chat, a pick posts the answer, the record is read again, and the pi
  expect(screen.getByRole('status').elements().filter(line => line.matches('.convo-status')), 'the Agent waits on the person, not working').toEqual([]);
 
  await screen.getByRole('button', { name: angles[0] }).click();
+ // Answered on this page, the card settles, its letter pops and its check draws (design-reference: .card.is-just).
+ const settled = screen.getByRole('group', { name: `${open.question}: Answered` }).element();
+ const motion = (part: Element) => { const style = getComputedStyle(part); return [style.animationName, style.animationDuration, style.animationDelay]; };
+ expect([settled, settled.querySelector('.opt__key')!, settled.querySelector('.opt__check path')!].map(motion))
+  .toEqual([['gw-settle', '0.32s', '0s'], ['gw-ck-pop', '0.32s', '0s'], ['gw-draw-check', '0.38s', '0.14s']]);
  const posted = calls.mock.calls.filter(([, init]) => init?.method === 'POST');
  expect(posted).toHaveLength(1);
  expect(JSON.parse(posted[0][1]!.body as string)).toEqual({ company: 'co-1', conversation: conversation.id, intent: 'answer', card: 42, choice: 0, answerKey: expect.any(String) });

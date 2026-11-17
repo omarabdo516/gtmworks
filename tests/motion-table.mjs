@@ -21,11 +21,11 @@ export const motionTable = [
   // A card an Agent's reply carries rises in when it arrives while the Conversation is open (#136).
   { ref: '.card-in', built: '.gw .reply-card.card-in', file: 'app/shell.css', html: '<div class="gw"><div class="reply-card card-in" role="group"></div></div>' },
   // A question's choice gives under a press and its letter lights up under the pointer; once answered on the open page,
-  // the card settles, the chosen letter pops and the check draws (#138).
+  // the card settles and the check draws (#138). The chosen letter's pop also carries the letter's own colour change, so
+  // tests/components/question-card.test.tsx reads it on the answered card.
   { ref: '.opt', built: '.gw .opt', file: 'app/shell.css', html: '<div class="gw"><div class="reply-card reply-card--question" role="group"><div class="qcard__opts"><button type="button" class="opt">Students</button></div></div></div>', held: 0.985 },
   { ref: '.opt__key', built: '.gw .opt__key', file: 'app/shell.css', html: '<div class="gw"><div class="reply-card reply-card--question" role="group"><div class="qcard__opts"><button type="button" class="opt"><span class="opt__key">A</span></button></div></div></div>' },
   { ref: '.card.is-just', built: '.gw .reply-card.is-just', file: 'app/shell.css', html: '<div class="gw"><div class="reply-card reply-card--question is-resolved is-just" role="group"></div></div>' },
-  { ref: '.card.is-just .opt.is-chosen .opt__key', built: '.gw .reply-card.is-just .opt.is-chosen .opt__key', file: 'app/shell.css', html: '<div class="gw"><div class="reply-card reply-card--question is-resolved is-just" role="group"><div class="qcard__opts"><div class="opt is-chosen"><span class="opt__key">A</span></div></div></div></div>' },
   { ref: '.card.is-just .opt__check path', built: '.gw .reply-card.is-just .opt__check path', file: 'app/shell.css', html: '<div class="gw"><div class="reply-card reply-card--question is-resolved is-just" role="group"><div class="qcard__opts"><div class="opt is-chosen"><svg class="gw-icon opt__check"><path></path></svg></div></div></div></div>' },
   // The dialog (the ready-made gallery): its entrance, its leave and its search field.
   { ref: '.modal[open]', built: '.gw.modal', file: 'app/shell.css', html: '<div role="dialog" class="gw modal" data-state="open"></div>' },
