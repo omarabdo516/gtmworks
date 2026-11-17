@@ -2,7 +2,6 @@ import '../../../log.css';
 import '../../../numbers.css';
 import { Suspense } from 'react';
 import { notFound, redirect } from 'next/navigation';
-import Link from '@/lib/link';
 import { getI18n } from '@/lib/i18n-server';
 import { supabase } from '@/lib/supabase';
 import Shell from '@/app/shell';
@@ -13,7 +12,7 @@ import type { LogRow } from '@/lib/activity-log.mjs';
 import { FeedWhen } from '../log/log-client';
 import { FeedText, WhoFace, logColumns, logPeople, whoOf } from '../log/entries';
 import { SystemMark } from '../log/icons';
-import { NoApp, NumbersFigures, NumbersHead } from './parts';
+import { NoApp, NumbersFigures, NumbersHead, WaitingRow } from './parts';
 import { NumbersPlaceholder } from './numbers-client';
 
 // The Numbers page (#35, design-reference: renderDashboard). The four figures, the leads chart and the channel table
@@ -73,12 +72,7 @@ async function Figures({db,company,slug,period,writer,queue,t,language}:{db:Db,c
    <section className="panel" aria-labelledby="h-chart"><div className="panel__h"><h2 id="h-chart">{t('numbersLeadsPerDay')}</h2></div>
     <div className="chart-empty">{noApp}</div></section>
    <section className="panel panel--wait" aria-labelledby="h-wait"><div className="panel__h"><h2 id="h-wait">{t(writer?'numbersWaitingYou':'numbersWaitingTeam')}</h2><span className="muted num">{items.length}</span></div>
-    {items.length?<div className="panel-card">{items.map(item=>{
-     const href=item.card_id!=null?`/c/${slug}/work/board/${item.card_id}`:item.conversation_id?`/c/${slug}/conversations/${item.conversation_id}`:`/c/${slug}/approvals`;
-     return <Link className="panel-row" key={`${item.kind}:${item.id}`} href={href}>{waitFace(item)}
-      <span className="panel-row__text"><bdi className="panel-row__t">{item.title}</bdi><span className="panel-row__d">{item.kind==='approval'?t('numbersWaitingStep',item.body):<bdi>{item.body||item.asked_by}</bdi>}</span></span>
-      <span className="panel-row__meta panel-row__meta--wait"><span className="dot dot--waiting" aria-hidden="true"/>{t(writer?'numbersWaitingOnYou':'numbersWaiting')}</span></Link>;
-    })}</div>
+    {items.length?<div className="panel-card">{items.map(item=><WaitingRow key={`${item.kind}:${item.id}`} t={t} slug={slug} writer={writer} item={item} face={waitFace(item)}/>)}</div>
     :<div className="wait-empty"><b>{t('numbersNothingWaiting')}</b><span>{t('numbersNothingWaitingNote')}</span></div>}
    </section>
   </div>
