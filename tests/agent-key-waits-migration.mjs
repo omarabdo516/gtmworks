@@ -5,8 +5,9 @@ import { spawnSync } from 'node:child_process';
 import { topLevelStatements } from './sql-statements.mjs';
 
 // An install updated to #299 holds each provider's key its log last says was set, and none its log says was removed,
-// with no change under way, so an Agent made right after the update waits only when the Company's log says it holds a
-// key. The migration's one insert is replayed on rows of the log; the database this runs on has the migration.
+// with no change under way and no set unanswered, so an Agent made right after the update waits only when the Company's
+// log says it holds a key. The migration's one insert is replayed on rows of the log; the database this runs on has the
+// migration.
 const seed=topLevelStatements(readFileSync('supabase/migrations/20270115000000_agent_key_waits.sql','utf8')).filter(statement=>/^insert\s+into\s+public\.company_key_holds\b/i.test(statement));
 if(seed.length!==1) throw new Error(`expected one insert into company_key_holds, found ${seed.length}`);
 const sql=`begin;
@@ -22,9 +23,9 @@ insert into public.company_audit(company_id,actor_id,action,provider,created_at)
  ('10000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000001','provider_key_set','deepseek',now()-interval '1 day');
 delete from public.company_key_holds;
 ${seed[0]};
-select results_eq($$select company_id,provider,held,changing from public.company_key_holds order by company_id,provider$$,
- $$values ('10000000-0000-0000-0000-000000000001'::uuid,'anthropic'::text,true,false),('10000000-0000-0000-0000-000000000001','openrouter',false,false),
-  ('10000000-0000-0000-0000-000000000002','deepseek',false,false)$$,'each Company and provider holds what its log last says, by date and then by order, with no change under way');
+select results_eq($$select company_id,provider,held,changing,uncertain,changed_at from public.company_key_holds order by company_id,provider$$,
+ $$values ('10000000-0000-0000-0000-000000000001'::uuid,'anthropic'::text,true,false,false,null::timestamptz),('10000000-0000-0000-0000-000000000001','openrouter',false,false,false,null),
+  ('10000000-0000-0000-0000-000000000002','deepseek',false,false,false,null)$$,'each Company and provider holds what its log last says, by date and then by order, with no change under way and none unanswered');
 select is(public.company_holds_provider_key('10000000-0000-0000-0000-000000000001'),true,'RS Learning holds a key');
 select is(public.company_holds_provider_key('10000000-0000-0000-0000-000000000002'),false,'R&S Consultations, whose log last says removed, holds none');
 select is(public.company_holds_provider_key('10000000-0000-0000-0000-000000000003'),false,'nor does a Company that never gave one');

@@ -2,8 +2,8 @@
 -- write, a removed Agent's profile and whether a key is held are kept for no client, the one lead_create_agent still
 -- answers the previous app version's call, reads the hold under its lock and records the wait, every Run entry holds a
 -- waiting Agent, the Owner's list shows it, only the server begins, finishes and settles a key change (finish and settle
--- the only ends of a wait) and forgets a leftover, under the same lock, and a removed Agent's profile is listed for the
--- next key removal.
+-- the only ends of a wait, under the same lock) and forgets a leftover, a change or an unanswered set counts only within
+-- its window (changed_at), and a removed Agent's profile is listed for the next key removal.
 select json_build_object(
  'waits_owner_read_only',(select relrowsecurity from pg_class where oid='public.agent_key_waits'::regclass)
   and has_table_privilege('authenticated','public.agent_key_waits','select')
@@ -21,6 +21,9 @@ select json_build_object(
   and not exists(select 1 from information_schema.columns where table_schema='public' and table_name='company_key_holds' and column_name ~ '(key|secret|value)'),
  'holds_read',position('company_key_holds' in pg_get_functiondef('public.company_holds_provider_key(uuid)'::regprocedure))>0
   and position('changing' in pg_get_functiondef('public.company_holds_provider_key(uuid)'::regprocedure))>0
+  and position('changed_at' in pg_get_functiondef('public.company_holds_provider_key(uuid)'::regprocedure))>0
+  and exists(select 1 from information_schema.columns where table_schema='public' and table_name='company_key_holds' and column_name='changed_at'
+   and data_type='timestamp with time zone' and is_nullable='YES' and column_default is null)
   and position('company_audit' in pg_get_functiondef('public.company_holds_provider_key(uuid)'::regprocedure))=0,
  'one_create',(select pronargs=11 and pronargs-pronargdefaults=6 from pg_proc where oid='public.lead_create_agent'::regproc)
   and position('agent_key_waits' in pg_get_functiondef('public.lead_create_agent'::regproc))>0
@@ -38,7 +41,7 @@ select json_build_object(
   from unnest(array['public.begin_provider_key_change(uuid,text)','public.finish_provider_key_change(uuid,text,boolean,text[],boolean)','public.forget_agent_profile_leftovers(uuid,text[])','public.settle_provider_key_holds(uuid,text[])']::regprocedure[]) f
    join pg_proc p on p.oid=f::oid)
   and (select bool_and(position('hashtextextended(''hermes_agents''' in pg_get_functiondef(f))>0)
-   from unnest(array['public.begin_provider_key_change(uuid,text)','public.finish_provider_key_change(uuid,text,boolean,text[],boolean)']::regprocedure[]) f)
+   from unnest(array['public.begin_provider_key_change(uuid,text)','public.finish_provider_key_change(uuid,text,boolean,text[],boolean)','public.settle_provider_key_holds(uuid,text[])']::regprocedure[]) f)
   and (select bool_and(position('agent_key_waits' in pg_get_functiondef(f))>0)
    from unnest(array['public.finish_provider_key_change(uuid,text,boolean,text[],boolean)','public.settle_provider_key_holds(uuid,text[])']::regprocedure[]) f)
   and to_regprocedure('public.end_agent_key_waits(uuid,text[])') is null,
