@@ -175,8 +175,8 @@ case "${1:-check}" in
     install_chromium
   fi
   # Its own output folder: Playwright empties the one it writes to, and test-results/lane/ holds the lane's differences.
-  # The lane's web server built the app; the budgets serve that build.
-  GTMWORKS_WEB_PREBUILT=true GTMWORKS_TEST_LANES=1 PLAYWRIGHT_JSON_OUTPUT_FILE="$dir/measured.json" npx playwright test --project=measured --no-deps --output=test-results/measured || status=$?
+  # The budgets serve the build the lane's web server made; with none (the lane stopped before it), they build their own.
+  GTMWORKS_WEB_PREBUILT=$([[ -f .next/BUILD_ID ]] && echo true || echo false) GTMWORKS_TEST_LANES=1 PLAYWRIGHT_JSON_OUTPUT_FILE="$dir/measured.json" npx playwright test --project=measured --no-deps --output=test-results/measured || status=$?
   exit "$status"
   ;;
  visual-update)

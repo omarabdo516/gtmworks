@@ -7,14 +7,15 @@ import { pathToFileURL } from 'node:url';
 // measure) and each navigation budget that failed, the commit, the run and the difference images.
 // Usage: node scripts/visual-regression.mjs [--title] <ledger folder> <sha> <run url> <artifact url>
 
-/** Every failed test of a Playwright JSON report: its name, and whether it failed on a picture. */
+/** Every failed test of a Playwright JSON report: its name, and whether it failed on a picture (one that differs or has no
+ * approved image yet). */
 export function failures(report) {
   const failed = [];
   const walk = (suite, path) => {
     const here = suite.title && !suite.title.endsWith('.ts') ? [...path, suite.title] : path;
     for (const spec of suite.specs ?? []) if (!spec.ok) {
       const messages = (spec.tests ?? []).flatMap(test => (test.results ?? []).map(result => result.error?.message ?? ''));
-      failed.push({ name: `${[...here, spec.title].join(' › ')} (${suite.file}:${spec.line})`, screen: messages.some(message => message.includes('toHaveScreenshot')) });
+      failed.push({ name: `${[...here, spec.title].join(' › ')} (${suite.file}:${spec.line})`, screen: messages.some(message => message.includes('toHaveScreenshot') || message.includes("snapshot doesn't exist")) });
     }
     for (const child of suite.suites ?? []) walk(child, here);
   };

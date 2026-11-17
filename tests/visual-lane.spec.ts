@@ -153,6 +153,9 @@ for (const screen of ordered) {
       await page.goto('/c/rs-learning/work/board/1');
       await expect(page.locator('.modal')).toBeVisible();
       await idle(page);
+      // The open is recorded once Home lists it, before any picture's sidebar asks for the list (as the old spec waited).
+      await page.goto('/c/rs-learning/home');
+      await expect(page.locator('.recent-cards a')).toHaveCount(1);
     });
     test.afterAll(async ({ baseURL }) => {
       await context?.close();

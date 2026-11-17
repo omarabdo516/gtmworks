@@ -33,6 +33,8 @@ test('a failed picture is a screen that differs, any other failed lane test is a
     { name: 'card › card 1440 light (visual-lane.spec.ts:164)', screen: false },
   ]);
   assert.deepEqual(failures({ suites: [] }), []);
+  const missing = { suites: [{ title: 'visual-lane.spec.ts', file: 'visual-lane.spec.ts', specs: [spec('reports 1440 light', false, 164, "Error: A snapshot doesn't exist at tests/visual-lane/images/reports-ar-1440-light.png, writing actual.")] }] };
+  assert.deepEqual(failures(missing), [{ name: 'reports 1440 light (visual-lane.spec.ts:164)', screen: true }]);
 });
 
 test('the issue names the screens and the checks under their own headings, with the commit, the run and the images', () => {
