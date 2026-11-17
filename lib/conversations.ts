@@ -45,8 +45,8 @@ export type Decision=({kind:'rule'}&RuleDecision)|({kind:'request',by:string,nam
 // in seconds (null when the Engine's record gave none). A call that never reported its end is `started`.
 export type RunStep={tool:string,preview:string|null,state:'started'|'done'|'failed'};
 export type RunSteps={list:RunStep[],seconds:number|null};
-export type RunStepsRow={run_id:string,steps:(RunStep&{call:string})[],seconds:number|null};
-export const runStepsColumns='run_id,steps,seconds';
+export type RunStepsRow={run_id:string,steps:(RunStep&{call:string})[],seconds:number|null,sealed_at:string|null};
+export const runStepsColumns='run_id,steps,seconds,sealed_at';
 export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided'|'boarded'|'asked'|'answer',to?:string,failed?:boolean,cards?:LeadCard[],saved?:SavedRule[],decided?:Decision,steps?:RunSteps};
 type StoredMessage=ConversationMessage&{run_id:string};
 export const messageColumns='id,author,author_name,body,run_id,created_at';

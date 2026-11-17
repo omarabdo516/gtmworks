@@ -20,7 +20,7 @@ export async function conversationRecord(db:Database,person:string,company:strin
  const usage=((await db.from('conversation_usage').select(usageColumns).eq('conversation_id',conversation)).data||[]) as RunUsage[];
  const messages=(await db.from('conversation_messages').select(messageColumns).eq('conversation_id',conversation).order('id')).data||[];
  // After the messages: a Run's steps are sealed before its reply is stored, so a reply read above finds its steps here.
- const runSteps=((await db.from('conversation_run_steps').select(runStepsColumns).eq('conversation_id',conversation).not('sealed_at','is',null).eq('broken',false)).data||[]) as RunStepsRow[];
+ const runSteps=(((await db.from('conversation_run_steps').select(runStepsColumns).eq('conversation_id',conversation).eq('broken',false)).data||[]) as RunStepsRow[]).filter(row=>row.sealed_at!==null);
  const notes=((await db.from('conversation_notes').select(noteColumns).eq('conversation_id',conversation).order('id')).data||[]) as StoredNote[];
  const queued=((await db.from('conversation_queued_turns').select(queuedColumns).eq('conversation_id',conversation).order('queued_at')).data||[]) as QueuedTurn[];
  // Requests first: an Owner's yes writes the request's state and the made Agent in one transaction, so a made request
