@@ -182,6 +182,9 @@ select is(public.company_holds_provider_key('10000000-0000-0000-0000-00000000000
 select is((select count(*)::int from public.agent_key_waits where company_id='10000000-0000-0000-0000-000000000001'),1,'and its Agent still waits');
 update public.company_key_holds set changed_at=now()-interval '11 minutes' where company_id='10000000-0000-0000-0000-000000000001' and provider='openrouter';
 select is(public.company_holds_provider_key('10000000-0000-0000-0000-000000000001'),false,'ten minutes after its begin the change no longer counts');
+-- The Agent left waiting has its tools recorded, as the worker would, so only its wait could hold its Runs.
+update public.agent_profiles p set tools_level=co.agent_level,tools_policy=public.engine_tool_policy(),tools_pending=false,skills_shared=true
+ from public.companies co,public.agent_key_waits w where co.id=p.company_id and w.agent_id=p.agent_id and w.company_id='10000000-0000-0000-0000-000000000001';
 select is(public.agent_profile_refusal((select p.profile from public.agent_key_waits w join public.agent_profiles p on p.agent_id=w.agent_id where w.company_id='10000000-0000-0000-0000-000000000001'),'10000000-0000-0000-0000-000000000001',
   (select w.agent_id from public.agent_key_waits w where w.company_id='10000000-0000-0000-0000-000000000001')),null,'so the wait left behind holds no Run');
 set local role authenticated;
