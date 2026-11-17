@@ -32,7 +32,9 @@ node worker/index.mjs &
 worker_pid=$!
 trap 'kill "$worker_pid" 2>/dev/null || true' EXIT INT TERM
 if [[ "${1:-dev}" == "production" ]]; then
- if [[ $lane == 0 && "${GTMWORKS_WEB_PREBUILT:-}" != true ]]; then npm run build; fi
+ # The build fetches the Google fonts (app/layout.tsx), so a browser test run builds without its offline guard, which
+ # then covers the worker and the server (playwright.config.ts).
+ if [[ $lane == 0 && "${GTMWORKS_WEB_PREBUILT:-}" != true ]]; then NODE_OPTIONS=${GTMWORKS_BUILD_NODE_OPTIONS-${NODE_OPTIONS:-}} npm run build; fi
  npx next start -p "$port"
 else
  npx next dev -p "$port"

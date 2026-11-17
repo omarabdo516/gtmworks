@@ -30,8 +30,9 @@ test('${name} second', async () => { await new Promise(r => setTimeout(r, 30)); 
  return dir;
 }
 
+// `npm` runs the package scripts itself: `npx npm` would download npm from the registry (#266).
 const run = (dir, args, env = {}) => {
- const result = spawnSync('npx', args, {
+ const result = spawnSync(args[0] === 'npm' ? 'npm' : 'npx', args[0] === 'npm' ? args.slice(1) : args, {
   cwd: dir, encoding: 'utf8', timeout: 60000,
   env: { ...process.env, CI: 'true', NODE_TEST_CONTEXT: undefined, GTMWORKS_HOSTED_ELSEWHERE: undefined, ...env },
  });
