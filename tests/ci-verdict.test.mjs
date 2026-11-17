@@ -62,6 +62,9 @@ test('ci.yml decides the suites in its first job, gates each suite on it, and ju
     assert.deepEqual(jobs[job].needs, ['changes'], job);
     assert.equal(jobs[job].if, `\${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.${output} != 'false') }}`, job);
   }
+  // The images job only warms a cache: it cannot fail a run, and check, database and integration do not wait for it (#259).
+  assert.equal(jobs['supabase-images']['continue-on-error'], true);
+  assert.deepEqual(jobs['supabase-images'].needs, ['changes']);
   const step = jobs.check.steps.at(-1);
   assert.equal(step.run, 'node scripts/ci-verdict.mjs');
   assert.equal(jobs.check.if, '${{ always() }}');

@@ -28,9 +28,9 @@ export function readyRoles(language:Language,alone:boolean):ReadyRole[] {
 
 // What a new Agent's empty chat says it does and hands back, and its sentence to try (#170; design-reference:
 // newAgentEmptyHTML), in the reader's language. An Agent made without a ready-made role has no line or hand-back of its
-// own and is tried with the general sentence.
+// own and is tried with the general sentence, as is a role whose sentence is missing from the reader's catalogue.
 export function roleStart(language:Language,alone:boolean,template:string|null|undefined):{line:string|null,handoff:string|null,example:string} {
  const text=catalogues[language];
  if(!template||!Object.hasOwn(roleTemplates,template)) return {line:null,handoff:null,example:text.exampleGeneral};
- return {line:text[`line.${template}`],handoff:(alone&&text[`handAlone.${template}`])||text[`hand.${template}`]||null,example:text[`example.${template}`]};
+ return {line:text[`line.${template}`]||null,handoff:(alone&&text[`handAlone.${template}`])||text[`hand.${template}`]||null,example:text[`example.${template}`]||text.exampleGeneral};
 }

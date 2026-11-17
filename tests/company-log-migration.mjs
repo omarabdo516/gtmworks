@@ -1,7 +1,5 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { testDb } from './pgtap.mjs';
 
 // One log for the Company (#11): the earlier Card comments and Card activity land in the log with their original
 // author and time. Inside one rolled-back transaction the log is taken away again, a Card comment and a Card change
@@ -36,9 +34,4 @@ select is((select string_agg(key||'='||value,',' order by key) from (${verify}) 
 select * from finish();
 rollback;
 `;
-const dir=mkdtempSync(join(tmpdir(),'gtmworks-company-log-'));
-try {
- const file=join(dir,'migration.sql'); writeFileSync(file,sql);
- const result=spawnSync('npx',['--no-install','supabase','test','db',file],{stdio:'inherit'});
- process.exitCode=result.status ?? 1;
-} finally { rmSync(dir,{recursive:true,force:true}); }
+testDb(import.meta.url,sql);

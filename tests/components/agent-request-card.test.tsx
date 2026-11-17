@@ -1,4 +1,4 @@
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, expect, onTestFinished, test, vi } from 'vitest';
 import type { ComponentProps } from 'react';
 import { render } from 'vitest-browser-react';
 import { RequestCard } from '@/app/agent-card';
@@ -39,6 +39,14 @@ test('the Member who asked sees the request wait for the Owners, then the answer
  const declinedCard = declined.getByRole('group', { name: 'طلب وكيل: FollowUp' });
  await expect.element(declinedCard.getByText('عمر قال لأ')).toBeVisible();
  expect(declinedCard.element().textContent).toContain('السبب: «Ads follows WhatsApp leads now.»');
+});
+
+test('with no Owner to name, a waiting request says it waits for the Owner', async () => {
+ const waiting = await card({ ...asked, state: 'waiting', owners: [] });
+ onTestFinished(() => waiting.unmount());
+ const request = waiting.getByRole('group', { name: 'Agent request: FollowUp' });
+ await expect.element(request.getByText('Request · not made yet')).toBeVisible();
+ expect(request.element().textContent).toContain('Not made yet. When the Owner says yes it shows in your agents, and I’ll tell you here.');
 });
 
 // Both of the Owner's answers in one render: after a form action has run, this browser window draws no new root.
