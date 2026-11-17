@@ -5,7 +5,8 @@ import { supabase } from '@/lib/supabase';
 import AccountMenu, { ThemeToggle } from './account-menu';
 import Link from '@/lib/link';
 import { shellNav } from '@/lib/navigation';
-import { companyAgents, isNewFor, waitingLabel } from '@/lib/sidebar.mjs';
+import { companyAgents, isNewFor } from '@/lib/sidebar.mjs';
+import ApprovalsCount from './approvals-count';
 import { AgentFaceDot } from './agent-face-dot';
 import { agentStates, statusKeys } from '@/lib/agent-details.mjs';
 import { ShellIcon } from '@/components/shell-icon';
@@ -32,13 +33,13 @@ type Company = {id:string,slug:string,name:string};
 // and theme.
 // `agentId` and `conversationId` mark the open Conversation in the sidebar, `channelId` the open channel; `personId` is
 // the signed-in person, for whom an Agent Lead made at their request is marked new until they open it (#13).
-export default async function Shell({company,companies,section,title,crumbs,personId,personName,role,owner=false,children,approvalCount=0,cardId,agentId,conversationId,channelId}:{company?:Company,companies:Company[],section:string,title:string,crumbs?:Crumb[],personId:string,personName:string,role:string,owner?:boolean,children:ReactNode,approvalCount?:number,cardId?:number,agentId?:string,conversationId?:string,channelId?:string}) { const {t,theme}=await getI18n();
+// `approvalCount` may still be on its way (app/approvals-count.tsx).
+export default async function Shell({company,companies,section,title,crumbs,personId,personName,role,owner=false,children,approvalCount=0,cardId,agentId,conversationId,channelId}:{company?:Company,companies:Company[],section:string,title:string,crumbs?:Crumb[],personId:string,personName:string,role:string,owner?:boolean,children:ReactNode,approvalCount?:number|Promise<number>,cardId?:number,agentId?:string,conversationId?:string,channelId?:string}) { const {t,theme}=await getI18n();
  const slug=company?.slug;
  const chat=section==='chat'||section==='conversations'||section==='channels';
  const db=await supabase();
  // Every Agent's state for this reader (#184), read in one call beside the Agents themselves; a failed read leaves them idle.
  const [agents,stateOf]=company?.id?await Promise.all([companyAgents(db,company.id),db.rpc('agent_states',{c:company.id}).then(({data})=>agentStates(data))]):[[],agentStates(null)];
- const [waitingKey,...waitingValues]=waitingLabel(approvalCount); const waiting=t(waitingKey,...waitingValues);
  const conversations=company?.id?(await db.from('conversations').select('id,agent_name,created_at').eq('company_id',company.id).order('created_at',{ascending:false}).limit(20)).data||[]:[];
  // Each listed chat reads its own first message, so a long chat never crowds another out of the titles.
  const firsts=await Promise.all(conversations.map(async c=>(await db.from('conversation_messages').select('body').eq('conversation_id',c.id).eq('author','person').order('id').limit(1).maybeSingle()).data?.body as string|undefined));
@@ -67,7 +68,7 @@ export default async function Shell({company,companies,section,title,crumbs,pers
   <nav className="sb-scroll nav" aria-label={t('navigation')}>{slug&&<>
    <div className="sb-nav">{shellNav.map(([path,label,icon])=><div key={path} className="sb-row">
     <Link className="sb-item" href={`/c/${slug}/${path}`} aria-current={active(path)?'page':undefined}><ShellIcon name={icon}/><span className="od-fill">{t(label)}</span></Link>
-    {path==='work/board'&&<Link className={`sb-count${approvalCount?'':' sb-count--none'}`} href={`/c/${slug}/approvals`} aria-current={section==='approvals'?'page':undefined} aria-label={waiting}><span className="sb-count__n">{approvalCount}</span></Link>}
+    {path==='work/board'&&<ApprovalsCount slug={slug} current={section==='approvals'} count={approvalCount} t={t}/>}
    </div>)}</div>
    <section className="sb-sec" aria-labelledby="lbl-agents">
     <h2 className="sb-label" id="lbl-agents">{t('agents')}</h2>

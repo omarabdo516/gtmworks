@@ -7,8 +7,8 @@ import { anonymousCaptureUrl, defaultSignIn, outputPaths, parseArgs, referenceRo
 
 const height = 900;
 
-async function settle(page) {
-  await page.waitForLoadState('networkidle').catch(() => {});
+async function settle(page, network = true) {
+  if (network) await page.waitForLoadState('networkidle').catch(() => {});
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(300);
 }
@@ -17,6 +17,7 @@ async function settle(page) {
 // 768 px, behind button.mobile-menu), so a hidden target inside it opens the menu first.
 async function runStep(page, step) {
   const [[action, value]] = Object.entries(step);
+  if (action === 'goto') return page.goto(new URL(value, page.url()).toString(), { waitUntil: 'commit' });
   const [selector, text] = Array.isArray(value) ? value : [value];
   const target = page.locator(selector).first();
   if (action === 'waitFor') return target.waitFor({ state: 'visible' });
@@ -24,6 +25,10 @@ async function runStep(page, step) {
   if (action === 'waitGone') return page.locator(selector).waitFor({ state: 'hidden' });
   if (action === 'scrollTo') return target.scrollIntoViewIfNeeded();
   if (action === 'press') return page.keyboard.press(value);
+  if (action === 'finish') {
+    await target.waitFor({ state: 'attached' });
+    return target.evaluate(element => element.getAnimations().forEach(animation => animation.finish()));
+  }
   // A narrow sidebar still sliding shut (after the "viewing as" switch) reads as visible until its transition ends;
   // an endless one (a pulse, a spinner) never ends and is not waited for.
   await page.waitForFunction(() => document.getAnimations().every(animation => animation.playState !== 'running' || animation.effect?.getComputedTiming().endTime === Infinity));
@@ -96,8 +101,9 @@ async function captureBuilt(browser, options) {
       if (capture !== page.url()) await page.goto(capture);
     }
     await settle(page);
-    for (const step of screens[options.screen].builtSteps ?? []) await runStep(page, step);
-    if (screens[options.screen].builtSteps) await settle(page);
+    const screen = screens[options.screen];
+    for (const step of screen.builtSteps ?? []) await runStep(page, step);
+    if (screen.builtSteps) await settle(page, screen.builtSettle !== false);
     const shown = await page.evaluate(() => document.documentElement.lang);
     if (shown !== options.lang) console.warn(`Warning: the built page shows ${shown}, not ${options.lang}; its caption still says ${options.lang}.`);
     const landed = new URL(page.url()).pathname;

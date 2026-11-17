@@ -24,10 +24,10 @@ select is(public.lead_agent_profile('a7100000-0000-0000-0000-000000000001','run-
  'the call names the profile of the Agent it would make, its soul fitted to the Company and the Company''s level');
 select is(public.lead_agent_profile('a7100000-0000-0000-0000-000000000002','run-1','call-0','You write for {company}.'),null,'a Manager''s call names none, so the Engine is not asked');
 select is(public.lead_create_agent(conversation=>'a7100000-0000-0000-0000-000000000001',run=>'run-1',call=>'call-0',agent_name=>'Writer',job=>'Writes the blog.',apps=>'{WordPress}',
-  template=>'writer',instructions=>'You write for {company}.',own_level=>1,own_policy=>2),jsonb_build_object('state','created','agent',(select agent from made where name='own')),
+  template=>'writer',instructions=>'You write for {company}.',own_level=>1,own_policy=>public.engine_tool_policy()),jsonb_build_object('state','created','agent',(select agent from made where name='own')),
  'the Agent made on its own profile has the id derived from the Conversation, run and call');
 select is(public.lead_create_agent(conversation=>'a7100000-0000-0000-0000-000000000001',run=>'run-1',call=>'call-0',agent_name=>'Other',job=>'Other.',apps=>'{}',
-  own_level=>1,own_policy=>2),jsonb_build_object('state','created','agent',(select agent from made where name='own')),'the same call again answers the same Agent');
+  own_level=>1,own_policy=>public.engine_tool_policy()),jsonb_build_object('state','created','agent',(select agent from made where name='own')),'the same call again answers the same Agent');
 select is(public.lead_agent_profile('a7100000-0000-0000-0000-000000000001','run-1','call-0','You write for {company}.'),
  jsonb_build_object('state','created','agent',(select agent from made where name='own')),'and a repeated call answers the Agent it made, with no profile to make');
 reset role;
@@ -35,7 +35,7 @@ select is((select tools_pending from public.agent_profiles where agent_id=(selec
  'a racing closer that wrote the recorded tools leaves them confirmed');
 set local role service_role;
 select is(public.lead_create_agent(conversation=>'a7100000-0000-0000-0000-000000000001',run=>'run-1',call=>'call-0',agent_name=>'Writer',job=>'Writes the blog.',apps=>'{WordPress}',
-  own_level=>3,own_policy=>2),jsonb_build_object('state','created','agent',(select agent from made where name='own')),'a closer that raced a level change answers the same Agent');
+  own_level=>3,own_policy=>public.engine_tool_policy()),jsonb_build_object('state','created','agent',(select agent from made where name='own')),'a closer that raced a level change answers the same Agent');
 reset role;
 select is((select tools_pending from public.agent_profiles where agent_id=(select agent from made where name='own')),true,
  'and the other level''s tools it wrote send the profile back to the worker, so no Run starts on it until its read-back is recorded');
@@ -46,7 +46,7 @@ select ok(exists(select 1 from public.hermes_agents a join public.hermes_connect
    and a.instructions='You write for RS Learning.' and a.name='Writer'),
  'its Connection names its own profile, with Lead''s address and encrypted key, and its instructions are the soul the profile was given');
 select results_eq($$select p.profile,p.company_id,p.tools_level::int,p.tools_policy,p.tools_pending from public.agent_profiles p$$,
- $$select profile,'10000000-0000-0000-0000-000000000001'::uuid,1,2,false from made where name='own'$$,'one owner record, with the level and policy its tools were read back under');
+ $$select profile,'10000000-0000-0000-0000-000000000001'::uuid,1,public.engine_tool_policy(),false from made where name='own'$$,'one owner record, with the level and policy its tools were read back under');
 select is((select count(*)::int from public.hermes_connections where profile like 'ag-%'),1,'and one Connection naming the profile');
 select lives_ok($$set constraints all immediate$$,'the record written before its Agent belongs to it');
 select results_eq($$select actor_id,action,details->>'agent_name',details->>'job' from public.company_log where agent_id=(select agent from made where name='own')$$,
@@ -56,7 +56,7 @@ set local role service_role;
 select is(public.lead_create_agent('a7100000-0000-0000-0000-000000000001','run-1','call-1','SEO','Writes the blog.','{}')->>'agent',(select agent::text from made where name='lead'),
  'the previous app version''s call makes it on Lead''s profile, under the derived id');
 select is(public.lead_create_agent(conversation=>'a7100000-0000-0000-0000-000000000001',run=>'run-1',call=>'call-2',agent_name=>'SEO',job=>'Writes.',apps=>'{}',own_level=>1)->>'state','invalid','a level without its policy makes nothing');
-select is(public.lead_create_agent(conversation=>'a7100000-0000-0000-0000-000000000001',run=>'run-1',call=>'call-2',agent_name=>'SEO',job=>'Writes.',apps=>'{}',own_level=>4,own_policy=>2)->>'state','invalid','nor a level that does not exist');
+select is(public.lead_create_agent(conversation=>'a7100000-0000-0000-0000-000000000001',run=>'run-1',call=>'call-2',agent_name=>'SEO',job=>'Writes.',apps=>'{}',own_level=>4,own_policy=>public.engine_tool_policy())->>'state','invalid','nor a level that does not exist');
 reset role;
 select ok(exists(select 1 from public.hermes_agents a join public.hermes_connections h on h.id=a.connection_id join made m on m.agent=a.id and m.name='lead' where h.profile='co-10000000000000000000000000000001'),
  'the Agent on Lead''s profile has a Connection to the Company''s profile');

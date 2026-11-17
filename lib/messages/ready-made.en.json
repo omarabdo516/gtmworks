@@ -34,5 +34,11 @@
   "line.coder": "Builds a written change request on the website, runs the tests, opens a pull request and stops.",
   "hand.writer": "It leaves the article as a draft, and you publish it.",
   "hand.coder": "It opens the pull request and stops; someone on the team reviews and merges.",
-  "handAlone.coder": "It opens the pull request and stops; you review and merge."
+  "handAlone.coder": "It opens the pull request and stops; you review and merge.",
+  "example.meta": "Plan a Meta campaign for our next offer, with a budget you suggest",
+  "example.hook": "Rate the ads running on Meta now and rank them from strongest to weakest",
+  "example.writer": "Write a 1,500-word article on a question our customers often ask",
+  "example.numbers": "Compare cost per lead across our channels over the last 30 days",
+  "example.coder": "Read our website’s code and tell me what you would fix first",
+  "exampleGeneral": "Tell me how you’ll help me, and which tools you need"
 }

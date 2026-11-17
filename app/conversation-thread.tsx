@@ -42,8 +42,9 @@ export function useConversationRecord({company,initial}:{company:string,initial:
  const id=initial.conversation.id;
  const [record,setRecord]=useState(initial); const [sent,setSent]=useState(0);
  const {messages,pending}=record;
- // The open Run moves its Agent's tile in the sidebar, from the page and from a Card's sheet alike (#184).
- useReportRun(record.conversation.agent_id??undefined,pending);
+ // The open Run moves its Agent's tile in the sidebar, from the page and from a Card's sheet alike (#184). A Run waiting
+ // on its person's answer (#138) is not working, as the reference's Run has ended when its question card is drawn.
+ useReportRun(record.conversation.agent_id??undefined,pending&&!record.asking);
  // The sidebar's Agents and the board come from the server render: an Agent Lead makes while the record is asked for
  // again, or a Card's new column, is only on the page once the server parts are drawn again, so they show without a
  // reload.
@@ -94,20 +95,27 @@ export function useConversationRecord({company,initial}:{company:string,initial:
 export function ChatPlaceholder() {
  const {c}=useConversationText();
  const line=(width:number)=><div className="sk sk-line" style={{width:`${width}%`}}/>;
- return <div className="transcript__col sk-hold" aria-busy="true" aria-label={c('chatLoading')}>
+ return <div className="transcript sk-hold" aria-busy="true"><span className="sr-only">{c('chatLoading')}</span><div className="transcript__col" aria-hidden="true">
   <div className="sk-msg" style={{alignSelf:'flex-end',width:'55%'}}>{line(100)}{line(70)}</div>
   <div className="sk-msg" style={{width:'80%'}}><div className="sk" style={{width:20,height:20,borderRadius:'50%'}}/>{line(90)}{line(95)}{line(60)}</div>
   <div className="sk-msg" style={{width:'90%'}}>{line(100)}{line(80)}<div className="sk" style={{height:180,borderRadius:'var(--gw-r-card)',width:'100%'}}/></div>
- </div>;
+ </div></div>;
 }
 
 // The messages as the reference draws them (design-reference: msgHTML): the Agent's turns on the start side, the
 // person's on the end side, with every card and line the Conversation has; then whether the Agent is working, and for
 // whom, or that the reply failed. While the Agent works, a message sent meanwhile waits as its sender's next turn
 // (marked as the reference marks a queued message).
-export function ConversationTurns({slug,record}:{slug:string,record:ConversationRecord}) {
+// A question the Agent waits on (#138) is answered from its card: a pick goes to the waiting Run, and the record is asked
+// for again at once. While it waits, the Agent is not shown working.
+export function ConversationTurns({slug,company,record,asked}:{slug:string,company:string,record:ConversationRecord,asked:()=>void}) {
  const {t,language}=useI18n(); const {c,cb}=useConversationText();
  const {conversation,messages,pending,failed,working}=record;
+ const answer=async(card:number,choice:number,answerKey:string)=>{
+  const failure=await postMessage({company,conversation:conversation.id,intent:'answer',card,choice,answerKey});
+  asked();
+  return failure;
+ };
  // A card an Agent shows while the chat is open rises in once (design-reference: card-in); those already there do not.
  const [drawnCards]=useState(()=>new Set(replyCardIds(messages)));
  const time=(value:string)=>new Date(value).toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit'});
@@ -124,9 +132,9 @@ export function ConversationTurns({slug,record}:{slug:string,record:Conversation
    <div className="sender">{face(20)}<bdi>{message.author_name}</bdi><time className="sender__time" dateTime={message.created_at}>{time(message.created_at)}</time></div>
    {message.body&&<div className="bubble bubble--agent" dir="auto">{message.body}</div>}
    {message.cards?.map(card=>card.kind==='made'?<MadeCard key={card.agent.id} slug={slug} agent={card.agent}/>:card.kind==='request'?<RequestCard key={`request${card.request.id}`} slug={slug} request={card.request}/>
-    :<ReplyCard key={`reply${card.card.id}`} card={card.card} fresh={!drawnCards.has(card.card.id)}/>)}
+    :<ReplyCard key={`reply${card.card.id}`} card={card.card} fresh={!drawnCards.has(card.card.id)} answer={answer}/>)}
   </li>)}</ol>
-  {pending&&<p className="thinking convo-status" role="status">{working?c('conversationWorkingFor',conversation.agent_name,working):t('conversationWorking',conversation.agent_name)}</p>}
+  {pending&&!record.asking&&<p className="thinking convo-status" role="status">{working?c('conversationWorkingFor',conversation.agent_name,working):t('conversationWorking',conversation.agent_name)}</p>}
   {failed&&<p className="note convo-status" role="alert">{t('conversationReplyFailed')}</p>}
  </>;
 }
@@ -137,7 +145,8 @@ export function ConversationTurns({slug,record}:{slug:string,record:Conversation
 // already takes a message, with no stop square, and keeps the usage line's place.
 export function ConversationComposer({company,conversation,record,writer,asked,draft,usage}:{company:string,conversation:ThreadConversation,record:ConversationRecord|null,writer:boolean,asked:()=>void,draft?:{text:string,n:number}|null,usage:boolean}) {
  const {t,language}=useI18n(); const {c}=useConversationText();
- const working=record?.working; const canStop=record?.canStop;
+ // A Run waiting on its person's answer is not working (#138): the box keeps its send arrow, as the reference's does.
+ const working=record?.asking?null:record?.working; const canStop=record?.canStop;
  const count=(value:number)=>new Intl.NumberFormat(localeFor(language)).format(value);
  return <>
   {writer?<MessageBox key={draft?.n||0} draft={draft?.text} placeholder={t('writeTo',conversation.agent_name)} stop={working&&canStop?{label:c('conversationStop',conversation.agent_name),run:async()=>{

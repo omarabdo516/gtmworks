@@ -77,6 +77,21 @@ test('the fixture step streams the file unchanged to psql in the local database 
   assert.equal(stdin, readFileSync(fixture.file, 'utf8'));
 });
 
+test('a loading screen\'s own setup goes to the same local database as the fixture, refusing any other, only for that screen', () => {
+  const workflow = readFileSync('.github/workflows/design-compare.yml', 'utf8');
+  const step = workflow.match(/- name: slow the loading screen's read\n\s+env:\n\s+SCREEN: [^\n]+\n\s+run: \|\n((?:\s{10}[^\n]+\n)+)/)[1];
+  const fixtureStep = workflow.match(/- name: load the comparison fixture\n\s+if: [^\n]+\n\s+run: ([^\n]+)\n/)[1];
+  assert.ok(step.includes(fixtureStep.slice(0, fixtureStep.indexOf(' < '))), 'the fixture step\'s docker exec and psql');
+  for (const screen of ['chat-loading', 'numbers-loading']) {
+    const sql = readFileSync(`scripts/design-compare-${screen}.sql`, 'utf8');
+    const guard = sql.indexOf('raise exception');
+    assert.ok(guard > 0 && guard < sql.indexOf('insert into') && guard < sql.indexOf('create policy'), `${screen}: refused before it writes`);
+    assert.ok(sql.includes('begin;') && sql.trimEnd().endsWith('commit;'), `${screen}: one transaction`);
+    assert.ok(Object.hasOwn(screens, screen), `${screen} is a screen`);
+  }
+  assert.match(step, /chat-loading\|numbers-loading\)/, 'only the loading screens');
+});
+
 test('a refused or failed fixture fails the step, so no capture runs on a half-loaded database', () => {
   const { status, stdin } = runFixtureStep(3);
   assert.notEqual(status, 0);
@@ -90,7 +105,8 @@ test('every screen says how to reach it in the reference and which built page it
   }
   for (const [name, screen] of Object.entries(screens)) {
     assert.match(name, /^[a-z]+(-[a-z]+)*$/, name);
-    assert.deepEqual(Object.keys(screen).filter(key => key !== 'builtSteps').sort(), ['builtPath', 'reference'], name);
+    assert.deepEqual(Object.keys(screen).filter(key => !['builtSteps', 'builtSettle'].includes(key)).sort(), ['builtPath', 'reference'], name);
+    if (screen.builtSettle !== undefined) assert.equal(screen.builtSettle, false, `${name}: builtSettle is only ever false`);
     assert.ok(screen.builtPath === null || /^\/c\/rs-(learning|consultations)\/[a-z/]+(\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|\/[1-9][0-9]*)?(\?[a-z]+=[a-z0-9-]+)?$/.test(screen.builtPath), `${name} built path`);
     assert.ok(Array.isArray(screen.reference.steps), `${name} steps`);
     // The alone screens (#10) start by viewing the prototype as Omar working alone, and a Member's request screens (#17)
@@ -105,7 +121,8 @@ test('every screen says how to reach it in the reference and which built page it
     for (const step of steps) {
       assert.equal(Object.keys(step).length, 1, `${name}: one action per step`);
       const [[action, value]] = Object.entries(step);
-      assert.ok(['click', 'waitFor', 'waitGone', 'scrollTo', 'fill', 'press'].includes(action), `${name}: known action ${action}`);
+      assert.ok(['click', 'waitFor', 'waitGone', 'scrollTo', 'fill', 'press', 'goto', 'finish'].includes(action), `${name}: known action ${action}`);
+      if (action === 'goto') { assert.match(value, /^\/c\/rs-(learning|consultations)\/[a-z/]+(\/[0-9a-f-]{36})?$/, `${name}: a built page`); continue; }
       // A press names one key as Playwright does (a letter, or a name such as ArrowDown or KeyN), not a selector.
       if (action === 'press') { assert.match(value, /^([a-z]|[A-Z][A-Za-z]+)$/, `${name}: a key`); continue; }
       const selector = action === 'fill' ? value[0] : value;
@@ -141,6 +158,10 @@ test('every screen says how to reach it in the reference and which built page it
   assert.equal(screens['draft-card'].builtPath, null, 'the Conversation has a uuid path: pass the draft-shown state\'s');
   // An Agent's reply carries a review card (#137): the reference shows it in the team chat.
   assert.equal(screens['review-card'].builtPath, null, 'the Conversation has a uuid path: pass the review-shown state\'s');
+  // An Agent's question (#138): the reference shows it open in the Meta campaign chat.
+  assert.equal(screens['question-card'].builtPath, null, 'the Conversation has a uuid path: pass the fixture\'s questionConversation');
+  assert.equal(fixture.questionConversation, '62000000-0000-0000-0000-000000000005');
+  assert.ok(readFileSync(fixture.file, 'utf8').includes(`'${fixture.questionConversation}','design-compare-fixture-question','design-compare-prompt@1','question'`), 'its open question');
   assert.equal(screens['made-agent'].builtPath, `/c/rs-learning/settings?agent=${fixture.agent}`);
   // A lasting rule told to Ads (#18): the saved line in the Conversation; Ads's page above lists the rule.
   assert.equal(screens['rule-saved'].builtPath, null, 'the Conversation has a uuid path: pass the fixture\'s ruleConversation');
@@ -149,6 +170,19 @@ test('every screen says how to reach it in the reference and which built page it
   assert.deepEqual(screens['account-menu-keys'].reference.steps.at(-1), { press: 'ArrowDown' });
   assert.deepEqual(screens['new-chat-key'].reference.steps, [...screens.board.reference.steps, { press: 'n' }, { waitFor: '#ta-main:focus' }]);
   assert.deepEqual(screens['new-chat-key'].builtSteps, [{ press: 'KeyN' }, { waitFor: '.composer__input:focus' }]);
+  // #172. The built placeholders: the workflow's setup file adds the page's rows and slows its one waiting table, then
+  // the page is opened, its hold ended, and it is captured without waiting for the slowed read.
+  for (const [name, table, page, placeholder] of [
+    ['chat-loading', 'conversation_usage', '/c/rs-learning/conversations/6f000000-0000-0000-0000-000000000003', '.chat .transcript[aria-busy="true"]'],
+    ['numbers-loading', 'company_log', '/c/rs-learning/numbers', '.numbers-page [aria-busy="true"]'],
+  ]) {
+    const screen = screens[name];
+    assert.equal(screen.builtPath, '/c/rs-learning/home', name);
+    const sql = readFileSync(`scripts/design-compare-${name}.sql`, 'utf8');
+    assert.match(sql, new RegExp(`create policy test_slow_read on public\\.${table} as restrictive for select to authenticated using \\(\\(select pg_sleep\\([1-7]\\)\\) is not null\\);`), `${name}: slows ${table} under the 8s statement timeout`);
+    assert.deepEqual(screen.builtSteps, [{ goto: page }, { finish: placeholder }, { waitFor: placeholder }], name);
+    assert.equal(screen.builtSettle, false, name);
+  }
 });
 
 test('a screen with no built equivalent needs --built-path or --reference-only', () => {
@@ -156,7 +190,7 @@ test('a screen with no built equivalent needs --built-path or --reference-only',
   assert.throws(() => parseArgs(log), error => error.exitCode === 2 && /Screen "agent-chat" has no built equivalent yet; pass --built-path PATH or --reference-only\./.test(error.message));
   assert.equal(parseArgs([...log, '--reference-only']).builtPath, null);
   const held = ['--screen', 'numbers-loading', '--width', '1440', '--lang', 'en', '--theme', 'light'];
-  assert.equal(parseArgs(held).referenceOnly, true, 'a held loading state is the reference alone');
+  assert.deepEqual([parseArgs(held).referenceOnly, parseArgs(held).builtPath], [false, '/c/rs-learning/home'], 'a held loading state is captured on both sides');
   assert.equal(parseArgs([...log, '--built-path', '/c/rs-learning/home']).builtPath, '/c/rs-learning/home');
 });
 

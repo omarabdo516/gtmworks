@@ -4,7 +4,8 @@
 -- Ads already opened as in the reference, the Conversation in which Omar told Ads a lasting rule on November 14, with
 -- the rule Ads keeps (#18; the reference's th-rule-ads), talk in the general channel (#23), and the first Contributor's
 -- Conversation with Ads in which they told it a rule for the team, waiting on Omar and the Manager as a learning
--- suggestion (#25; the reference's th-yo-ads), and the files Ads works from (#21; the reference's ads.files): two on
+-- suggestion (#25; the reference's th-yo-ads), Omar's Conversation with Ads waiting on his answer to its question (#138;
+-- the reference's th-meta), and the files Ads works from (#21; the reference's ads.files): two on
 -- its Card and one in Omar's Conversation with it. Two Cards are tied to those two chats with Ads (#145). Nothing applies it automatically; load it by hand into a throwaway
 -- local database only. The files are named only: their bytes are not in storage, so opening one finds nothing.
 -- Fixed ids (scripts/design-compare-lib.mjs, fixture); running it again adds nothing. The connections point nowhere
@@ -26,13 +27,14 @@ select ('60000000-0000-0000-0000-00000000000'||n)::uuid,'10000000-0000-0000-0000
 from generate_series(1,5) n
 on conflict (id) do nothing;
 
--- Lead is the main Agent unless the company already has one. Lead made Ads for Omar.
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,created_at,requested_by,apps,requester_opened_at)
+-- Lead is the main Agent unless the company already has one. Lead made Ads for Omar. SEO & Content is made from the
+-- ready-made SEO content writer (#170).
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,created_at,requested_by,apps,requester_opened_at,template)
 select ('61000000-0000-0000-0000-00000000000'||x.n)::uuid,'10000000-0000-0000-0000-000000000001',('60000000-0000-0000-0000-00000000000'||x.n)::uuid,
  x.name,x.speciality,x.n=1 and not exists(select 1 from public.hermes_agents where company_id='10000000-0000-0000-0000-000000000001' and is_default),
- x.made,case when x.made is not null then '20000000-0000-0000-0000-000000000001'::uuid end,x.apps,x.made+interval '2 minutes'
-from (values (1,'Lead','Marketing lead',null::timestamptz,null::text[]),(2,'Ads','Ads agent','2026-10-10T11:03:00Z',array['Meta Ads','Google Ads','GA4']),
- (3,'SEO & Content','Content & SEO agent',null,null),(4,'Analyst','Analyst',null,null),(5,'Critic','Critic',null,null)) x(n,name,speciality,made,apps)
+ x.made,case when x.made is not null then '20000000-0000-0000-0000-000000000001'::uuid end,x.apps,x.made+interval '2 minutes',x.template
+from (values (1,'Lead','Marketing lead',null::timestamptz,null::text[],null::text),(2,'Ads','Ads agent','2026-10-10T11:03:00Z',array['Meta Ads','Google Ads','GA4'],null),
+ (3,'SEO & Content','Content & SEO agent',null,null,'writer'),(4,'Analyst','Analyst',null,null,null),(5,'Critic','Critic',null,null,null)) x(n,name,speciality,made,apps,template)
 on conflict (id) do nothing;
 
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name)
@@ -147,6 +149,22 @@ insert into public.work_attachments(id,company_id,card_id,comment_id,name,conten
 on conflict do nothing;
 insert into public.conversation_attachments(id,company_id,conversation_id,name,content_type,size,path,created_at) overriding system value
 values (640005,'10000000-0000-0000-0000-000000000001','62000000-0000-0000-0000-000000000003','audiences-oct.csv','text/csv',18432,'10000000-0000-0000-0000-000000000001/conversations/62000000-0000-0000-0000-000000000003/audiences-oct.csv','2026-11-14T16:40:00Z')
+on conflict do nothing;
+
+-- Omar's Conversation with Ads in which Ads asks him, with the Engine's own clarify tool, which angle the Meta campaign
+-- takes (#138; the reference's th-meta, message m3): his message, and the open question its Run waits on. The Run stays
+-- open, as its Connection is never called.
+insert into public.conversations(id,company_id,person_id,agent_id,agent_name,created_at)
+values ('62000000-0000-0000-0000-000000000005','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','61000000-0000-0000-0000-000000000002','Ads','2026-11-16T10:12:00Z')
+on conflict (id) do nothing;
+insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at)
+select '10000000-0000-0000-0000-000000000001','62000000-0000-0000-0000-000000000005','person','20000000-0000-0000-0000-000000000001',null,'عمر',
+ '@Ads محتاجين حملة Meta لكورس «المحاسب الشامل». الدفعة الجديدة بتبدأ 1 ديسمبر، والميزانية 15,000 ج للشهر. الهدف ليدز على واتساب.',
+ '63000000-0000-0000-0000-000000000006','design-compare-fixture-question','2026-11-16T10:12:00Z'
+where not exists(select 1 from public.conversation_messages where conversation_id='62000000-0000-0000-0000-000000000005');
+insert into public.reply_cards(company_id,conversation_id,run_id,call_id,kind,title,content,state,created_at)
+values ('10000000-0000-0000-0000-000000000001','62000000-0000-0000-0000-000000000005','design-compare-fixture-question','design-compare-prompt@1','question','اختار زاوية الإعلان',
+ '{"question":"اختار زاوية الإعلان","choices":["من خريج لمحاسب شغال","Excel وOdoo في كورس واحد","شهادة معتمدة وتدريب عملي"],"multiple":false}','open','2026-11-16T10:14:00Z')
 on conflict do nothing;
 
 -- The Card sheet's Chat tab (#145): the Card of Omar's chat with Ads above (his own: its chat in the sheet), and the

@@ -43,6 +43,8 @@ test('the level table: three levels, each adding to the one below, none ever off
  assert.deepEqual(levelConfig(2),levelConfig(1));
  for(const level of agentLevels) assert.ok(!levelToolsets[level].includes('connections')&&levelConfig(level).agent.disabled_toolsets.includes('connections'));
  assert.ok(levelToolsets[3].includes('cronjob'));
+ // The Engine's question tool (#138) at every level: a Run may ask its person and wait.
+ for(const level of agentLevels) assert.ok(levelToolsets[level].includes('clarify')&&!levelConfig(level).agent.disabled_toolsets.includes('clarify'),`clarify at level ${level}`);
  for(const level of agentLevels.slice(1)) assert.ok(levelToolsets[level-1].every(name=>levelToolsets[level].includes(name)));
  // Disabling these composites would strip web search too (Hermes removes every tool of a disabled composite).
  for(const composite of ['debugging','safe']) assert.ok(!levelConfig(1).agent.disabled_toolsets.includes(composite));
@@ -526,7 +528,7 @@ test('a run never starts on another company\'s profile, nor while the profile\'s
 
 test('the level table is versioned: any change to it needs a new policy, in the code and in the database', () => {
  // The fingerprint of each policy's table. Changing the table without a new toolPolicy (and its migration) fails here.
- const fingerprints={2:'863aa8ac90a8fce674cf7880e0e63444c107d9051d7b95f9e861a58ac437da4d'};
+ const fingerprints={2:'863aa8ac90a8fce674cf7880e0e63444c107d9051d7b95f9e861a58ac437da4d',3:'06888790e0994ba07a8ad5c2c6a2bd8000f2842362ab1e553be595e77da53354'};
  const table=JSON.stringify(agentLevels.map(level=>levelConfig(level)));
  assert.equal(createHash('sha256').update(table).digest('hex'),fingerprints[toolPolicy]);
  const latest=readdirSync('supabase/migrations').filter(file=>file.endsWith('.sql')&&!file.endsWith('.verify.sql')).sort()
