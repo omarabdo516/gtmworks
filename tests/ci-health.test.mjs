@@ -83,15 +83,15 @@ function fakeApi(issues) {
 const body = '<!-- ci-health -->\n# CI health report\n';
 
 test('the report updates the open tracking issue and creates none', async () => {
-  const { api, calls } = fakeApi([{ number: 7, title: 'CI health report', body: '<!-- ci-health -->\nold' }]);
-  assert.deepEqual(await upsertIssue(api, 'CI health report', body), { action: 'updated', number: 7 });
-  assert.deepEqual(calls.filter(call => call.method !== 'GET'), [{ method: 'PATCH', path: '/issues/7', body: { body } }]);
+  const { api, calls } = fakeApi([{ number: 307, title: 'CI health report', body: '<!-- ci-health -->\nold' }]);
+  assert.deepEqual(await upsertIssue(api, 'CI health report', body), { action: 'updated', number: 307 });
+  assert.deepEqual(calls.filter(call => call.method !== 'GET'), [{ method: 'PATCH', path: '/issues/307', body: { body } }]);
 });
 
 test('the report creates exactly one issue when none is open, ignoring a same-titled issue without the marker and a pull request', async () => {
   const { api, calls } = fakeApi([
-    { number: 5, title: 'CI health report', body: 'written by a person' },
-    { number: 6, title: 'CI health report', body: '<!-- ci-health -->\n', pull_request: { url: 'x' } },
+    { number: 305, title: 'CI health report', body: 'written by a person' },
+    { number: 306, title: 'CI health report', body: '<!-- ci-health -->\n', pull_request: { url: 'x' } },
   ]);
   assert.deepEqual(await upsertIssue(api, 'CI health report', body), { action: 'created', number: 900 });
   assert.deepEqual(calls.filter(call => call.method !== 'GET'), [{ method: 'POST', path: '/issues', body: { title: 'CI health report', body } }]);
