@@ -11,7 +11,7 @@ import '@/app/shell.css';
 // An Agent's empty chat (#170): the main Agent's paragraph for its reader and its suggestions, a new Agent's state with
 // its sentence to try, and neither for a Viewer. A suggestion only fills the composer: nothing is sent.
 const push = vi.fn();
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push, refresh: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }) }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push, refresh: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/chat', useSearchParams: () => new URLSearchParams() }));
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 
 const fetches = vi.fn();
