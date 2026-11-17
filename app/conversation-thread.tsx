@@ -145,7 +145,8 @@ export function ConversationTurns({slug,company,record,asked}:{slug:string,compa
 // already takes a message, with no stop square, and keeps the usage line's place.
 export function ConversationComposer({company,conversation,record,writer,asked,draft,usage}:{company:string,conversation:ThreadConversation,record:ConversationRecord|null,writer:boolean,asked:()=>void,draft?:{text:string,n:number}|null,usage:boolean}) {
  const {t,language}=useI18n(); const {c}=useConversationText();
- const working=record?.working; const canStop=record?.canStop;
+ // A Run waiting on its person's answer is not working (#138): the box keeps its send arrow, as the reference's does.
+ const working=record?.asking?null:record?.working; const canStop=record?.canStop;
  const count=(value:number)=>new Intl.NumberFormat(localeFor(language)).format(value);
  return <>
   {writer?<MessageBox key={draft?.n||0} draft={draft?.text} placeholder={t('writeTo',conversation.agent_name)} stop={working&&canStop?{label:c('conversationStop',conversation.agent_name),run:async()=>{
