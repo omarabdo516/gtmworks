@@ -29,15 +29,27 @@ beforeAll(async () => {
 
 const box = (element: Element) => element.getBoundingClientRect();
 const chat = (language: 'en' | 'ar') => render(<LanguageProvider language={language}><div className="gw" dir={language === 'ar' ? 'rtl' : 'ltr'}>
- <div className="chat" style={{ height: 900 }}><div className="transcript"><ChatPlaceholder/></div></div>
+ <div className="chat" style={{ height: 900 }}><ChatPlaceholder/></div>
 </div></LanguageProvider>);
 const visibility = (element: Element) => getComputedStyle(element).visibility;
+// The placeholder as assistive technology reads it: a busy region whose one line of text, kept off the screen, says
+// what is loading, and whose grey blocks it skips.
+const busyRegion = (label: string) => {
+ const text = page.getByText(label, { exact: true }).element();
+ const region = text.parentElement!;
+ expect([region.getAttribute('aria-busy'), region.getAttribute('role'), region.getAttribute('aria-label')]).toEqual(['true', null, null]);
+ expect(region.textContent).toBe(label);
+ expect([box(text).width, box(text).height]).toEqual([1, 1]);
+ const blocks = [...region.children].filter(child => child !== text);
+ expect(blocks.map(block => block.getAttribute('aria-hidden'))).toEqual(blocks.map(() => 'true'));
+ return { region, blocks };
+};
 
-for (const [language, label, end] of [['en', 'Loading the chat', 'right'], ['ar', 'بيحمّل المحادثة', 'left']] as const) test(`in ${language} the chat's placeholder is busy, labelled "${label}", and draws the person's message on the end side, a reply with its face and a reply with a card`, async () => {
+for (const [language, label, end] of [['en', 'Loading the chat', 'right'], ['ar', 'بيحمّل المحادثة', 'left']] as const) test(`in ${language} the chat's placeholder is a busy region that reads "${label}" and skips its grey blocks, and draws the person's message on the end side, a reply with its face and a reply with a card`, async () => {
  await page.viewport(1440, 900);
- const screen = await chat(language);
- const column = screen.getByLabelText(label).element();
- expect(column.getAttribute('aria-busy')).toBe('true');
+ await chat(language);
+ const { region, blocks: [column] } = busyRegion(label);
+ expect(region.classList.contains('transcript')).toBe(true);
  const blocks = [...column.children]; const width = box(column).width;
  expect(blocks.map(block => Math.round(box(block).width / width * 100))).toEqual([55, 80, 90]);
  expect(Math.round(box(blocks[0])[end])).toBe(Math.round(box(column)[end]));
@@ -58,8 +70,8 @@ test('each grey block shimmers as the reference\'s .sk does, once every 1.2s wit
 
 for (const reduced of [false, true]) test(`the placeholder stays hidden for its first 400ms, so a page that arrives at once never shows it${reduced ? ', with reduced motion too' : ''}`, async () => {
  await reducedMotion(reduced);
- const screen = await chat('en');
- const column = screen.getByLabelText('Loading the chat').element();
+ await chat('en');
+ const { region: column } = busyRegion('Loading the chat');
  // The placeholder's own clock, stopped and moved by the test.
  const [hold] = column.getAnimations();
  hold.pause();
@@ -91,7 +103,7 @@ test('while the record is on its way the chat keeps its title and composer aroun
  await page.viewport(1440, 900);
  const { record, arrive } = held();
  const screen = await opened(record);
- const placeholder = screen.getByLabelText('Loading the chat');
+ const placeholder = screen.getByText('Loading the chat', { exact: true });
  await expect.poll(() => visibility(placeholder.element()), { timeout: 1000 }).toBe('visible');
  await expect.element(screen.getByRole('heading')).toHaveTextContent('Draft the long launch plan');
  const field = screen.getByRole('textbox', { name: 'Message' });
@@ -105,6 +117,21 @@ test('while the record is on its way the chat keeps its title and composer aroun
  await expect.element(field).toHaveValue('And the budget');
  const loaded = field.element() as HTMLTextAreaElement;
  expect([document.activeElement === loaded, loaded.selectionStart, loaded.selectionEnd]).toEqual([true, 4, 7]);
+});
+
+test('a chat on the board shows its corner pill while its record is on its way, then the column its record reads', async () => {
+ const { record, arrive } = held();
+ const screen = await render(<LanguageProvider language="en"><div className="gw" style={{ height: 900 }}>
+  <ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={{ id: 'cv-2', agent_id: null, agent_name: 'Mona', face: 'c-2' }} title="Draft the long launch plan" writer board={{ card: 7, column: 'progress' }}><Arrived record={record} team={false}/></ConversationView>
+ </div></LanguageProvider>);
+ await expect.element(screen.getByText('Loading the chat', { exact: true })).toBeInTheDocument();
+ const pill = screen.getByRole('link', { name: 'On the board: In progress' });
+ await expect.element(pill).toBeVisible();
+ await expect.element(pill).toHaveAttribute('href', '/c/rs-learning/work/board?show=7');
+ arrive(talk([asked, reply], { board: { card: 7, column: 'waiting' } }));
+ await expect.element(screen.getByText('On it.')).toBeVisible();
+ await expect.element(screen.getByRole('link', { name: 'On the board: Waiting on you' })).toBeVisible();
+ await expect.element(pill).not.toBeInTheDocument();
 });
 
 test('text typed while the chat loads stays in the box without taking the focus from where the person moved it', async () => {
@@ -154,7 +181,7 @@ test('a message sent while the chat loads whose answer is lost after it loaded c
  await screen.getByRole('button', { name: 'Send' }).click();
  await expect.poll(() => keys.length).toBe(1);
  arrive(talk([asked]));
- await expect.element(screen.getByLabelText('Loading the chat')).not.toBeInTheDocument();
+ await expect.element(screen.getByText('Loading the chat', { exact: true })).not.toBeInTheDocument();
  lose();
  const field = screen.getByRole('textbox', { name: 'Message' });
  await expect.element(field).toHaveValue('And the budget');
@@ -185,12 +212,11 @@ const numbers = (language: 'en' | 'ar') => render(<LanguageProvider language={la
  <main className="numbers-page"><div className="dash"><NumbersPlaceholder/></div></main>
 </div></LanguageProvider>);
 
-for (const [language, label] of [['en', 'Loading the numbers'], ['ar', 'بيحمّل الأرقام']] as const) test(`in ${language} the Numbers placeholder is busy, labelled "${label}", with four 118px tiles in a row, then panels of 340 and 220, and 280 and 280`, async () => {
+for (const [language, label] of [['en', 'Loading the numbers'], ['ar', 'بيحمّل الأرقام']] as const) test(`in ${language} the Numbers placeholder is a busy region that reads "${label}" and skips its grey blocks, with four 118px tiles in a row, then panels of 340 and 220, and 280 and 280`, async () => {
  await page.viewport(1440, 900);
- const screen = await numbers(language);
- const inner = screen.getByLabelText(label).element();
- expect(inner.getAttribute('aria-busy')).toBe('true');
- const [tiles, ...rows] = [...inner.children];
+ await numbers(language);
+ const { region: inner, blocks: [tiles, ...rows] } = busyRegion(label);
+ expect(inner.classList.contains('dash__inner')).toBe(true);
  expect([...tiles.children].map(tile => [Math.round(box(tile).height), Math.round(box(tile).top), getComputedStyle(tile).borderRadius])).toEqual(Array(4).fill([118, Math.round(box(tiles).top), '16px']));
  expect(rows.map(row => [...row.children].map(panel => Math.round(box(panel).height)))).toEqual([[340, 220], [280, 280]]);
 });
@@ -205,4 +231,15 @@ test('after a period change the focus stays on the period chosen; a switch drawn
  (document.activeElement as HTMLElement).blur();
  await screen.rerender(<LanguageProvider language="en"><PeriodSwitch key="30 again" slug="rs-learning" period="30"/></LanguageProvider>);
  expect(document.activeElement).toBe(document.body);
+});
+
+test('a period chosen while the person moves the focus elsewhere leaves the focus where they moved it', async () => {
+ const drawn = (period: '7' | '30') => <LanguageProvider language="en"><button type="button">Elsewhere</button><PeriodSwitch key={period} slug="rs-learning" period={period}/></LanguageProvider>;
+ const screen = await render(drawn('7'));
+ await screen.getByRole('link', { name: 'Last 30 days' }).click();
+ const elsewhere = screen.getByRole('button', { name: 'Elsewhere' }).element() as HTMLElement;
+ elsewhere.focus();
+ await screen.rerender(drawn('30'));
+ await expect.element(screen.getByRole('link', { name: 'Last 30 days' })).toHaveAttribute('aria-current', 'true');
+ expect(document.activeElement).toBe(elsewhere);
 });

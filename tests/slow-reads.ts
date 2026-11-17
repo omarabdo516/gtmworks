@@ -47,7 +47,7 @@ export async function wholePages(page: Page, matches: (url: URL) => boolean) {
   return () => page.unroute(matches, whole);
 }
 
-// Records the label of every loading placeholder still on the page and visible once its 400ms hold has ended
+// Records the text of every loading placeholder still on the page and visible once its 400ms hold has ended
 // (app/shell.css, .sk-hold): one a person saw, on every document the page opens, the first one after sign-in
 // included. `waiting` counts the open document's placeholders whose hold has not ended yet; one whose document went
 // away before then was never seen.
@@ -62,7 +62,7 @@ export async function watchPlaceholders(page: Page) {
       const hold = element.getAnimations().find(animation => (animation as CSSAnimation).animationName === 'gw-sk-hold');
       // A placeholder taken away before its hold ends cancels the hold, which rejects `finished`.
       const ended: Promise<unknown> = hold ? hold.finished : new Promise(resolve => setTimeout(resolve, 400));
-      ended.then(() => element.isConnected && element.checkVisibility({ checkVisibilityCSS: true }) ? watched.placeholderSeen(element.getAttribute('aria-label') ?? '') : undefined, () => {})
+      ended.then(() => element.isConnected && element.checkVisibility({ checkVisibilityCSS: true }) ? watched.placeholderSeen(element.textContent ?? '') : undefined, () => {})
         .finally(() => { watched.placeholdersWaiting--; });
     };
     new MutationObserver(records => {

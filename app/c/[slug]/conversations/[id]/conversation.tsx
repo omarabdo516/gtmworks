@@ -23,14 +23,15 @@ type Live={record:ConversationRecord,asked:()=>void};
 // the sidebar gives the chat. The title and the composer stay outside the part that loads, so the same box takes a
 // message from the start, keeping what was typed, its caret and its focus; a message sent before the record arrives
 // has its reply asked for once it is there. `children` is the transcript (ConversationLoaded), drawn by the server once
-// the record is read.
-export default function ConversationView({slug,agent,details,company,conversation,title,writer,children}:{slug:string,agent:DetailsAgent|null,details:AgentDetailsView|null,company:string,conversation:ThreadConversation,title:string,writer:boolean,children:ReactNode}) {
+// the record is read. `board` is the chat's Card on the board as the page read it, shown in the corner until the record
+// says where the Card is now.
+export default function ConversationView({slug,agent,details,company,conversation,title,writer,board,children}:{slug:string,agent:DetailsAgent|null,details:AgentDetailsView|null,company:string,conversation:ThreadConversation,title:string,writer:boolean,board?:ConversationRecord['board'],children:ReactNode}) {
  const {c}=useConversationText(); const panel=useDetailsPanel();
  const [draft,setDraft]=useState<Draft>(null); const [early,setEarly]=useState(0); const [live,setLive]=useState<Live|null>(null);
- const record=live?.record;
+ const record=live?.record; const corner=record?record.board:board;
  return <ChatView value={{slug,agent,company,conversation,writer,setDraft,early,setLive}}><div className="convo"><div className="chat">
-  <HeadPill panel={panel} agent={agent?.name} face={<span aria-hidden="true"><CompanyAgentFace agent={{connection_id:conversation.face,name:conversation.agent_name}} size={24}/></span>} title={record?titleOf(record.messages,conversation.agent_name):title} titleDir="auto" corner={record?.board&&<CornerPill slug={slug} board={record.board} writer={writer} c={c}/>}/>
-  <Suspense fallback={<div className="transcript"><ChatPlaceholder/></div>}>{children}</Suspense>
+  <HeadPill panel={panel} agent={agent?.name} face={<span aria-hidden="true"><CompanyAgentFace agent={{connection_id:conversation.face,name:conversation.agent_name}} size={24}/></span>} title={record?titleOf(record.messages,conversation.agent_name):title} titleDir="auto" corner={corner&&<CornerPill slug={slug} board={corner} writer={writer} c={c}/>}/>
+  <Suspense fallback={<ChatPlaceholder/>}>{children}</Suspense>
   <div className="composer-area"><ConversationComposer company={company} conversation={conversation} record={record??null} writer={writer} asked={live?.asked??(()=>setEarly(count=>count+1))} draft={draft} usage/></div>
  </div>{agent&&details&&<AgentDetails panel={panel} agent={agent} details={details} settingsHref={`/c/${slug}/agents`}/>}</div></ChatView>;
 }

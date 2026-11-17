@@ -533,7 +533,7 @@ const screenActs: Record<string, (page: Page, language: Language) => Promise<() 
     await expect(page.locator('#inv-email')).toBeFocused();
     return async () => {};
   },
-  'open-chat-slowly': openSlowly(`/c/rs-learning/conversations/${loading(3)}`, `#sb-recent a[href="/c/rs-learning/conversations/${loading(3)}"]`, '.chat .transcript [aria-busy="true"]', 'conversation_usage', 7),
+  'open-chat-slowly': openSlowly(`/c/rs-learning/conversations/${loading(3)}`, `#sb-recent a[href="/c/rs-learning/conversations/${loading(3)}"]`, '.chat .transcript[aria-busy="true"]', 'conversation_usage', 7),
   'open-numbers-slowly': openSlowly('/c/rs-learning/numbers', '.nav a[href="/c/rs-learning/numbers"]', '.numbers-page [aria-busy="true"]', 'company_log', 7),
   // Another Member's chat opens its Card on Log (#145); the Chat tab, picked as a person picks it, shows the lock.
   'sheet-chat-tab': async page => {
