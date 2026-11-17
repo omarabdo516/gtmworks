@@ -6,6 +6,7 @@ import AgentChat from '@/app/c/[slug]/chat/[[...agent]]/agent-chat';
 import type { EmptyChat } from '@/app/agent-empty-chat';
 import type { Language } from '@/lib/i18n.mjs';
 import { LanguageProvider } from '@/lib/i18n-client';
+import '@/app/globals.css';
 import '@/app/shell.css';
 
 // An Agent's empty chat (#170): the main Agent's paragraph for its reader and its suggestions, a new Agent's state with
@@ -46,6 +47,7 @@ for (const [empty, paragraph] of paragraphs) test(`the main Agent's empty chat s
   expect(suggestions(wide).map(button => button.textContent)).toEqual(['A new SEO articleOn what your customers search for',
    `${empty.state === 'main' && empty.reader === 'member' ? 'Ask for a new agent' : 'Make a new agent'}In your words: one for social`, 'Who is waiting on what?What is stuck today']);
   expect(box(first).top).toBe(box(second).top);
+  for (const button of suggestions(wide)) for (const line of button.querySelectorAll('b, span')) expect(box(line).left - box(button).left, 'each line starts at the button\'s start padding').toBe(16);
   expect(box(second).left).toBeGreaterThan(box(first).left);
   expect(box(third).left).toBe(box(first).left);
   expect(box(third).top).toBeGreaterThan(box(first).top);
