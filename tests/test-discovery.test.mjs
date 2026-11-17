@@ -16,7 +16,7 @@ function sandbox(t) {
 function ciSandbox(t) {
  const dir = sandbox(t);
  for (const path of ['tests', 'scripts']) mkdirSync(join(dir, path));
- for (const path of ['ci.sh', 'tests/db.sh', 'scripts/check-test-discovery.mjs', 'scripts/ci-fast.mjs']) copyFileSync(path, join(dir, path));
+ for (const path of ['ci.sh', 'tests/db.sh', 'scripts/check-test-discovery.mjs', 'scripts/ci-fast.mjs', 'scripts/ci-classify.mjs']) copyFileSync(path, join(dir, path));
  symlinkSync(resolve('node_modules'), join(dir, 'node_modules'), 'dir');
  writeFileSync(join(dir, 'playwright.config.mjs'), "export default { testDir: './tests', testMatch: '*.spec.ts', testIgnore: '**/ignored.spec.ts' };\n");
  return dir;

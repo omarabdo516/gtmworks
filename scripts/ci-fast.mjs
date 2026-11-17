@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { appendFileSync, createWriteStream, mkdirSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
+import { rules } from './ci-classify.mjs';
 
 // The fast layer (#258, spec #255 D1): the static checks, the node tests and the component tests, run at the same time
 // as one command that CI, an agent and a person run alike. Each step keeps its own output and result, so a red step is
@@ -13,7 +14,7 @@ export const steps = [
   { name: 'discovery', command: 'node scripts/check-test-discovery.mjs', gate: true },
   { name: 'docs', command: 'python3 scripts/check-design-adr.py' },
   { name: 'i18n', command: 'node scripts/check-i18n.mjs' },
-  { name: 'openapi', command: 'npx --prefer-offline --yes @redocly/cli@2.76.0 lint docs/api/openapi.yaml --extends=spec' },
+  { name: 'openapi', command: 'npm_config_cache="${NPX_CACHE:-$HOME/.npm}" npx --prefer-offline --yes @redocly/cli@2.76.0 lint docs/api/openapi.yaml --extends=spec' },
   { name: 'lint', command: 'npm run lint' },
   { name: 'typecheck', command: 'npm run typecheck' },
   // Unused files, exports and dependencies (knip.json), as T3 Code checks them (#81).
@@ -27,6 +28,8 @@ export const steps = [
   { name: 'components', command: '{ [ "${CI:-}" = true ] || npx playwright install chromium; } && npm run test:components -- --reporter=default ${GITHUB_ACTIONS:+--reporter=github-actions} --reporter=json --outputFile.json="$LEDGER/vitest.json"', gated: true, yields: true },
 ];
 
+const fatal = rules.filter(rule => rule.scope === 'fatal');
+const infrastructure = output => output.split('\n').some(line => fatal.some(rule => rule.pattern.test(line)));
 const seconds = started => ((Date.now() - started) / 1000).toFixed(1);
 
 /**
@@ -42,7 +45,7 @@ export async function run(list, { skip = [], env = process.env, write = text => 
     const text = output.endsWith('\n') || !output ? output : `${output}\n`;
     if (result === 'success') write(github ? `::group::${header}\n${text}::endgroup::\n` : `${header}\n${text}`);
     // A red step's output waits for the end, so the job's last lines are the failure (scripts/ci-classify.mjs reads them).
-    else failed.push((github ? `::error title=fast ${name}::${name} failed (exit ${code}); its output is in the log below\n` : '') + `${header}\n${text}`);
+    else failed.push((infrastructure(output) ? '0' : '1') + (github ? `::error title=fast ${name}::${name} failed (exit ${code}); its output is in the log below\n` : '') + `${header}\n${text}`);
   };
   const stop = () => { for (const child of running) try { process.kill(-child.pid, 'SIGTERM'); } catch {} };
   process.once('SIGINT', stop).once('SIGTERM', stop);
@@ -57,6 +60,8 @@ export async function run(list, { skip = [], env = process.env, write = text => 
     // A group of its own, so a stop reaches what npm and npx start under it.
     const child = spawn(yields ? 'nice' : 'bash', [...(yields ? ['-n', '10', 'bash'] : []), '-c', command], { env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
     running.add(child);
+    // A step that cannot be started (no shell, no processes left) is red with the reason, like one that failed.
+    child.on('error', error => chunks.push(Buffer.from(`${error.message}\n`)));
     const keep = chunk => { chunks.push(chunk); log?.write(chunk); };
     child.stdout.on('data', keep);
     child.stderr.on('data', keep);
@@ -74,7 +79,8 @@ export async function run(list, { skip = [], env = process.env, write = text => 
     ?? (step.gated ? open.then(passed => (passed ? start(step) : { name: step.name, result: 'skipped' })) : start(step))));
   process.off('SIGINT', stop).off('SIGTERM', stop);
   write(results.map(({ name, result }) => `fast ${name}: ${result}\n`).join(''));
-  for (const text of failed) write(text);
+  // Infrastructure-looking failures first, so a real one, if any, is what the job ends on.
+  for (const text of failed.sort((a, b) => a[0].localeCompare(b[0]))) write(text.slice(1));
   return results;
 }
 

@@ -164,22 +164,25 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: ms-playwright-${{ runner.os }}-${{ steps.browser-version.outputs.version }}
-      # npx's own folder, where the fast step's pinned OpenAPI linter lives, so a hit lints with no registry request.
+      # The OpenAPI linter's own npm cache (its manifest and its npx install, keyed by its pinned version in
+      # scripts/ci-fast.mjs), so a hit lints with no registry request.
       - name: restore npx packages
         id: npx
         uses: actions/cache/restore@v4
         with:
-          path: ~/.npm/_npx
-          key: npx-${{ runner.os }}-node-${{ steps.node.outputs.node-version }}-${{ hashFiles('scripts/ci-fast.mjs') }}
+          path: ${{ runner.temp }}/npx-cache
+          key: npx-${{ runner.os }}-node-${{ steps.node.outputs.node-version }}-redocly-2.76.0
       - name: fast
         id: fast
+        env:
+          NPX_CACHE: ${{ runner.temp }}/npx-cache
         run: ./ci.sh fast
       - name: save npx packages
         if: ${{ steps.npx.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v4
         with:
-          path: ~/.npm/_npx
-          key: npx-${{ runner.os }}-node-${{ steps.node.outputs.node-version }}-${{ hashFiles('scripts/ci-fast.mjs') }}
+          path: ${{ runner.temp }}/npx-cache
+          key: npx-${{ runner.os }}-node-${{ steps.node.outputs.node-version }}-redocly-2.76.0
       - name: upload ledger results
         if: always()
         # The ledger only reports, so a failed upload leaves the job's result as its tests made it.

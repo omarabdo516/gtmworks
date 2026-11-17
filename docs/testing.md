@@ -39,7 +39,7 @@ block of their own, and `scripts/ci-runner.mjs cleanup` removes what this reposi
   step that hangs until the job's limit leaves its log; a red step's output is printed last, after the step list. A cache
   miss installs the browser alone, as a hit restores it, so every run draws on the runner image's own system packages
   and fonts; the key also names the image. Outside CI the component step installs the browser itself, after the
-  discovery gate. npx's folder (`~/.npm/_npx`, the pinned OpenAPI linter) is restored too, so a hit lints offline.
+  discovery gate. the pinned OpenAPI linter keeps an npm cache of its own (`NPX_CACHE`), restored by its version, so a hit lints offline.
   Test discovery gates only the node and component tests; the test runners run at a lower CPU priority, so lint and
   types keep a core each. `tsconfig.json` leaves out `test-results/`, where the node tests write sandbox `.ts` files.
   `component-imports.test.mjs` fails there in seconds when a component test's imports reach `server-only` (#218).

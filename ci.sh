@@ -5,10 +5,9 @@ cd "$(dirname "$0")"
 # every other check uses. Each lane starts in the background and leaves its exit status beside its log.
 lanes=${GTMWORKS_TEST_LANES:-1}
 [[ $lanes =~ ^[1-7]$ ]] || { echo 'GTMWORKS_TEST_LANES must be 1 to 7' >&2; exit 2; }
-# Only a GitHub-hosted runner installs the system packages (it has sudo and starts empty); the self-hosted runner and a
-# person's machine keep theirs, and their browsers, between runs.
+# The self-hosted runner has no sudo for the system packages and keeps its browsers between runs.
 install_chromium() {
-  if [[ "${RUNNER_ENVIRONMENT:-}" == github-hosted ]]; then npx playwright install --with-deps chromium; else npx playwright install chromium; fi
+  if [[ "${RUNNER_ENVIRONMENT:-}" == self-hosted ]]; then npx playwright install chromium; else npx playwright install --with-deps chromium; fi
 }
 start_lanes() {
   mkdir -p playwright-report

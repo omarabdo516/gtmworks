@@ -102,6 +102,22 @@ test('a ledger folder that cannot be written loses the logs, not the run', async
   assert.match(written.join(''), /linted/);
 });
 
+test('a step that cannot be started is red with the reason, and the others still run', async () => {
+  const { written, write } = quiet();
+  const results = await run([{ name: 'lint', command: 'true' }], { write, env: { PATH: '/nonexistent' } });
+  assert.deepEqual(results, [{ name: 'lint', result: 'failure' }]);
+  assert.match(written.join(''), /ENOENT/);
+});
+
+test('with several red steps, one that looks like infrastructure prints first, so a real failure ends the log', async () => {
+  const { written, write } = quiet();
+  await run([
+    { name: 'lint', command: 'echo "app/page.tsx: 1 error"; exit 1' },
+    { name: 'openapi', command: 'sleep 0.2; echo "npm error code E429"; exit 1' },
+  ], { write, env: {} });
+  assert.equal(written.join('').trimEnd().split('\n').at(-1), 'app/page.tsx: 1 error');
+});
+
 test('a skipped step does not run and is listed as skipped', async t => {
   const dir = mkdtempSync(join(tmpdir(), 'ci-fast-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
@@ -127,9 +143,11 @@ test('the fast layer is the static checks, the node tests and the component test
   assert.doesNotMatch(command('components'), /shard/i);
   // In CI the workflow restores or installs the browser; elsewhere the step installs it, behind the discovery gate.
   assert.match(command('components'), /^\{ \[ "\$\{CI:-\}" = true \] \|\| npx playwright install chromium; \} && npm run test:components /);
-  assert.doesNotMatch(readFileSync('ci.sh', 'utf8'), /install_chromium; fi\n  node scripts\/ci-fast/);
+  const fastCase = readFileSync('ci.sh', 'utf8').match(/^ fast \| static \| components\)\n([\s\S]*?)\n  ;;$/m)[1];
+  assert.match(fastCase, /node scripts\/ci-fast\.mjs/);
+  assert.doesNotMatch(fastCase, /install_chromium|playwright install/);
   // A restored npx folder is used with no registry request; a missing one is filled once.
-  assert.match(command('openapi'), /^npx --prefer-offline --yes @redocly\/cli@[\d.]+ /);
+  assert.match(command('openapi'), /^npm_config_cache="\$\{NPX_CACHE:-\$HOME\/\.npm\}" npx --prefer-offline --yes @redocly\/cli@[\d.]+ /);
   assert.deepEqual(steps.filter(step => step.gate).map(step => step.name), ['discovery']);
   assert.deepEqual(steps.filter(step => step.gated).map(step => step.name), ['node', 'components']);
   // The one-thread checks keep their priority; the test runners, which use every core, take what is left.

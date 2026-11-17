@@ -149,12 +149,16 @@ test('the fast job restores its dependencies by lock-file hash and the browser b
   assert.match(version.run, /\$ImageVersion/);
   assert.ok(!steps.some(step => /ldd|install-deps|with-deps/.test(step.run ?? '')), 'no system packages on one run only');
   assert.equal(steps.find(step => /playwright install/.test(step.run ?? '')).run, 'npx playwright install chromium');
-  // npx's own folder holds the pinned OpenAPI linter, so a cache hit lints with no registry request.
-  const [npxRestore] = uses('restore', '_npx');
-  const [npxSave] = uses('save', '_npx');
-  assert.ok(npxRestore && npxSave, '~/.npm/_npx is restored and saved');
-  assert.match(npxRestore.with.key, /hashFiles\('scripts\/ci-fast\.mjs'\)/);
+  // The OpenAPI linter has an npm cache of its own (its manifest and its npx install), keyed by its pinned version, so a
+  // hit lints with no registry request.
+  const linter = (await import('../scripts/ci-fast.mjs')).steps.find(step => step.name === 'openapi').command.match(/@redocly\/cli@([\d.]+)/)[1];
+  const [npxRestore] = uses('restore', 'npx-cache');
+  const [npxSave] = uses('save', 'npx-cache');
+  assert.ok(npxRestore && npxSave, 'the linter cache is restored and saved');
+  assert.ok(npxRestore.with.key.endsWith(`-redocly-${linter}`), npxRestore.with.key);
   assert.equal(npxSave.with.key, npxRestore.with.key);
+  assert.equal(npxSave.with.path, npxRestore.with.path);
+  assert.equal(steps.find(step => step.id === 'fast').env.NPX_CACHE, npxRestore.with.path);
   assert.ok(index(npxRestore) < fast && fast < index(npxSave), 'saved after the fast step has filled it');
   assert.match(npxSave.if, new RegExp(`steps\\.${npxRestore.id}\\.outputs\\.cache-hit != 'true'`));
   // The browser key names the one Playwright in the lock file, which Vitest's provider and the browser suite both load.
