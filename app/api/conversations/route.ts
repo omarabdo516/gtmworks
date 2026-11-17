@@ -64,12 +64,16 @@ async function answer(db:Database,body:Record<string,unknown>) {
 }
 
 // "Done it" on a step an Agent handed over (#139): the person's own word, recorded once by the database with who and when
-// (mark_hand_done), under the person's own session. gtmworks does not do the step and checks nothing outside.
+// (mark_hand_done), under the person's own session. gtmworks does not do the step and checks nothing outside. The first
+// press also queues the person's turn that tells the Agent (#140), which starts here when the Agent is free; a start
+// that fails here is left to the worker and to the page's next read, which start waiting turns too.
 async function done(db:Database,body:Record<string,unknown>) {
  if(typeof body.conversation!=='string'||!uuid.test(body.conversation)||!(typeof body.card==='number'&&Number.isSafeInteger(body.card)&&body.card>0)) return refuse('conversationFailed',400);
  const {data,error}=await db.rpc('mark_hand_done',{c:body.company,conversation:body.conversation,card:body.card});
  if(error) return refuseFor(error.code);
  const {at,first}=data as {at:string,first:boolean};
+ try { await startQueuedTurns(service(),{encryptionKey:encryptionKey(),conversation:body.conversation}); }
+ catch { logActionFailure('conversation',new Error('Handed step turn not started')); }
  return reply({state:'done',at,first});
 }
 

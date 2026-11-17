@@ -1,6 +1,6 @@
 import { ownerNames } from './company-owners.mjs';
 import type { supabase } from './supabase';
-import { faceOf, latestEnded, messageColumns, noteColumns, queuedColumns, queuedWaiting, questionParts, replyCardColumns, replyCardOf, shown, totalOf, usageColumns, waiting, withBoardNote, withDecisions, withTeamWork, type AgentRequestView, type Decision, type LeadCard, type PlacedCard, type QueuedTurn, type ReplyCardRow, type SavedRule, type RunUsage, type StoredNote } from './conversations';
+import { faceOf, handKeys, latestEnded, messageColumns, noteColumns, queuedColumns, queuedWaiting, questionParts, replyCardColumns, replyCardOf, shown, totalOf, usageColumns, waiting, withBoardNote, withDecisions, withTeamWork, type AgentRequestView, type Decision, type LeadCard, type PlacedCard, type QueuedTurn, type ReplyCard, type ReplyCardRow, type SavedRule, type RunUsage, type StoredNote } from './conversations';
 import { isNewFor } from './sidebar.mjs';
 import type { BoardColumn } from './board-columns.mjs';
 
@@ -13,7 +13,8 @@ type Database=Awaited<ReturnType<typeof supabase>>;
 // Agents its person asked Lead for and the Owner's answer (#17), the cards its Agent showed with its replies (#136), the
 // rules its Agent saved in it: a suggestion with who it was sent to, and how it was decided (RLS: only the person who
 // told it reads one that is not the team's), the Card it put on the board with that Card's column now (#144), and the
-// questions its Agent asked with their answers (#138); while one waits for its answer the record says so (`asking`).
+// questions its Agent asked with their answers (#138); while one waits for its answer the record says so (`asking`). The
+// turn a hand card's "Done it" started (#140) is drawn by that card alone, which says when that turn could not start.
 export async function conversationRecord(db:Database,person:string,company:string,found:{id:string,agent_id:string|null,agent_name:string,hermes_agents:unknown}) {
  const conversation=found.id;
  // Usage first: a run closed between the two reads then shows its reply too (both are written in one transaction).
@@ -43,7 +44,7 @@ export async function conversationRecord(db:Database,person:string,company:strin
  const requested=new Set(requestRows.map(row=>`${row.run_id}:${row.call_id}`));
  const cards=[...madeRows.flatMap(({run_id,call_id,created_at,hermes_agents:agent})=>agent&&!requested.has(`${run_id}:${call_id}`)?[{run_id,at:created_at,card:{kind:'made',agent:{id:agent.id,connection_id:agent.connection_id,name:agent.name,job:agent.speciality,apps:agent.apps||[],fresh:isNewFor(agent,person),created_at}}} satisfies {run_id:string,at:string,card:LeadCard}]:[]),
   ...requestRows.map(row=>({run_id:row.run_id,at:row.created_at,card:{kind:'request',request:requestView(row)}} satisfies {run_id:string,at:string,card:LeadCard})),
-  ...replyRows.flatMap(row=>{ const card=replyCardOf(row); return card?[{run_id:row.run_id,at:row.created_at,card:{kind:'reply',card},...questionParts(row,card,lead)} satisfies PlacedCard]:[]; })];
+  ...replyRows.flatMap(row=>{ const card=handPickup(replyCardOf(row),queued); return card?[{run_id:row.run_id,at:row.created_at,card:{kind:'reply',card},...questionParts(row,card,lead)} satisfies PlacedCard]:[]; })];
  type SavedRow={id:string,run_id:string,agent_id:string|null,removed_at:string|null,said_at:string,body:string,suggestion:'pending'|'approved'|'rejected'|null,decided_at:string|null,decider:{name:string}|null};
  const rows=((await db.from('agent_rules').select('id,run_id,agent_id,removed_at,said_at,body,suggestion,decided_at,decider:people!decided_by(name)').eq('conversation_id',conversation).order('said_at')).data||[]) as unknown as SavedRow[];
  const sentTo=rows.some(row=>row.suggestion)?new Map((((await db.rpc('rule_suggestions_sent_to',{conversation})).data||[]) as {rule:string,sent_to:string[]}[]).map(row=>[row.rule,row.sent_to])):new Map<string,string[]>();
@@ -61,7 +62,7 @@ export async function conversationRecord(db:Database,person:string,company:strin
  const firstReply=card&&first&&card.created_at>first.created_at?messages.find(message=>message.author==='agent'&&message.run_id===first.run_id)?.id:undefined;
  return {
   conversation:{id:found.id,agent_id:found.agent_id,agent_name:found.agent_name,face:faceOf(found)},
-  messages:withBoardNote(withTeamWork(withDecisions(shown(messages,usage,cards,found.agent_name,saved),decisions,found.agent_name),notes,queued,me?.name||''),firstReply),
+  messages:withBoardNote(withTeamWork(withDecisions(shown(messages,usage,cards,found.agent_name,saved,handKeys(queued)),decisions,found.agent_name),notes,queued,me?.name||''),firstReply),
   usage:totalOf(usage),
   pending:waiting(messages,usage).length>0||queuedWaiting(queued),
   ...(replyRows.some(row=>row.kind==='question'&&row.state==='open')?{asking:true as const}:{}),
@@ -72,6 +73,8 @@ export async function conversationRecord(db:Database,person:string,company:strin
  };
 }
 export type ConversationRecord=Awaited<ReturnType<typeof conversationRecord>>;
+
+const handPickup=(card:ReplyCard|null,queued:QueuedTurn[]):ReplyCard|null=>card?.kind==='hand'&&card.state==='done'&&queued.some(turn=>turn.hand_card===card.id&&turn.failed_at)?{...card,failed:true}:card;
 
 // The chat's Card on the board (#144), the one it put there or was started from (#145), with its column now.
 export async function tiedCard(db:Database,company:string,conversation:string) {
