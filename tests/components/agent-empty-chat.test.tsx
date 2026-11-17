@@ -91,6 +91,21 @@ test('with no Owner to name, asking for an Agent and the first-run line say the 
  await expect.element(welcome.getByText('I’m Lead and I run your marketing work with you. Need an agent for any job? Tell me in your own words and I’ll prepare the request for the Owner.', { exact: true })).toBeVisible();
 });
 
+test('once a message is sent, the box takes no second message or suggestion while the page moves to its Conversation', async () => {
+ fetches.mockImplementation(async () => new Response('{}', { status: 200 }));
+ const screen = await chat({ empty: { state: 'main', reader: 'owner', owners: [] } });
+ const field = screen.getByRole('textbox', { name: 'Message' });
+ await field.fill('Plan next week');
+ await userEvent.keyboard('{Enter}');
+ await expect.poll(() => push.mock.calls.length).toBe(1);
+ await screen.getByRole('button', { name: 'Who is waiting on what?', exact: false }).click();
+ await expect.element(field).toHaveValue('Plan next week');
+ await userEvent.click(field);
+ await userEvent.keyboard('{Enter}');
+ await new Promise(resolve => setTimeout(resolve, 100));
+ expect(fetches).toHaveBeenCalledTimes(1);
+});
+
 test('a suggestion keeps the text already typed and adds its sentence on the next line, focused at its end', async () => {
  const screen = await chat({ empty: { state: 'main', reader: 'owner', owners: [] } });
  const field = screen.getByRole('textbox', { name: 'Message' });

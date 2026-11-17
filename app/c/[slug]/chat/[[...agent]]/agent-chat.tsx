@@ -42,8 +42,11 @@ export default function AgentChat({slug,company,agent,details,writer,team=false,
     {agent&&gallery&&<Suspense fallback={null}><ReadyMade slug={slug} company={company} agent={agent.id} companyName={gallery.company} alone={gallery.alone} lead={agent.name} roles={gallery.roles}/></Suspense>}
     {agent&&(writer?<MessageBox key={`${newAgent}`} ref={box} focus={newAgent&&!gallery} placeholder={newAgent?t('newAgentExample'):t('writeTo',agent.name)} send={async(message,sendKey)=>{
     const failure=await postMessage({company,conversation,agent:agent.id,message,sendKey});
-    if(!failure) router.push(`/c/${slug}/conversations/${conversation}`);
-    return failure;
+    if(failure) return failure;
+    // The page moves to the Conversation just started; until it has, the box stays busy, so neither a suggestion nor a
+    // second Enter can start another one.
+    router.push(`/c/${slug}/conversations/${conversation}`);
+    return new Promise<never>(()=>{});
    }}/>:<p className="ro-line" role="note"><ShellIcon name="eye"/><span>{agent.main?t('viewOnlyLead'):t('viewOnly')}</span></p>)}</div>
   </div>
   {agent&&details&&<AgentDetails panel={panel} agent={agent} details={details} settingsHref={`/c/${slug}/agents`}/>}

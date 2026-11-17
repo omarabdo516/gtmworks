@@ -7,7 +7,7 @@ import { uuid } from '@/lib/conversations';
 import { isNewFor } from '@/lib/sidebar.mjs';
 import { madeColumns, madeOf } from '@/lib/agent-made';
 import { readyRoles, roleStart } from '@/lib/ready-roles';
-import { worksWith } from '@/lib/agent-details.mjs';
+import { emptyChatFacts } from '@/lib/empty-chat.mjs';
 import { agentDetails } from '@/app/agent-details-server';
 import AgentChat from './agent-chat';
 import type { EmptyChat } from '@/app/agent-empty-chat';
@@ -34,24 +34,15 @@ export default async function AgentChatPage({params,searchParams}:{params:Promis
  const owner=membership?.role==='owner';
  const newAgent=(mode==='agent'||(mode==='ready'&&owner))&&!!agent?.is_default&&!!writer;
  const alone=company.work_mode==='alone';
- // Which empty chat the Agent shows this reader (#170). An Agent other than the main one is new to a reader with no
- // Conversation with it (RLS shows only the reader's own). The active Owners are read once, and only for a reader who is
- // told whom a request goes to: asking for an Agent (#17), or the main Agent's empty chat in a team. Whether an Owner is
- // the only one who sees an Agent needs the active Members and the Agent's access rows. A failed read fails the page
- // rather than leave a sentence without its names.
+ // Which empty chat the Agent shows this reader (#170; lib/empty-chat.mjs reads it): the active Owners are read once, for
+ // a Member asking for an Agent (#17) or reading the main Agent's empty chat, and a refused read fails the page.
  const main=!!agent?.is_default, fresh=main&&agents?.length===1;
  const asks=!owner&&(newAgent||(fresh&&!!writer));
- const owners=!owner&&(asks||(main&&!fresh&&!alone))?await ownerNames(db,company.id):[];
- const askOf=asks?owners:null;
- const sole=!!agent&&!main&&!alone&&owner;
- const [written,members,access]=agent&&!main?await Promise.all([
-  db.from('conversations').select('id',{count:'exact',head:true}).eq('company_id',company.id).eq('agent_id',agent.id).eq('person_id',user.id).then(({count})=>count??1),
-  sole?db.from('members').select('person_id,role').eq('company_id',company.id).is('removed_at',null).then(({data,error})=>{ if(error) throw error; return data||[]; }):[],
-  sole?db.from('member_agent_access').select('person_id').eq('company_id',company.id).eq('agent_id',agent.id).then(({data,error})=>{ if(error) throw error; return (data||[]).map(row=>row.person_id); }):[],
- ]):[0,[],[]];
- const empty:EmptyChat=!agent||!main&&written?{state:'known'}:fresh?{state:'fresh'}
-  :main?{state:'main',reader:alone?'alone':owner?'owner':'member',owners}
-  :{state:'new',works:worksWith({alone,me:user.id,members,access}),...roleStart(language,alone,agent.template),made:madeOf(agent,user.id,slug)};
+ const facts=agent?await emptyChatFacts(db,{company:company.id,agent:agent.id,me:user.id,main,fresh,alone,owner,asks}):null;
+ const askOf=asks?facts?.owners??[]:null;
+ const empty:EmptyChat=!agent||!facts||facts.state==='known'?{state:'known'}:facts.state==='fresh'?{state:'fresh'}
+  :facts.state==='main'?{state:'main',reader:facts.reader,owners:facts.owners}
+  :{state:'new',works:facts.works,...roleStart(language,alone,agent.template),made:madeOf(agent,user.id,slug)};
  const gallery=mode==='ready'&&newAgent?{company:company.name,alone,roles:readyRoles(language,alone)}:null;
  const details=agent?await agentDetails(db,{company:company.id,agent:agent.id,slug,me:user.id,role:membership?.role||'',tab}):null;
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
@@ -60,9 +51,3 @@ export default async function AgentChatPage({params,searchParams}:{params:Promis
  </Shell>;
 }
 
-// The names of a Company's active Owners, in order. A read the database refuses is an error, never an empty list.
-async function ownerNames(db:Awaited<ReturnType<typeof supabase>>,company:string) {
- const {data,error}=await db.from('members').select('people(name)').eq('company_id',company).eq('role','owner').is('removed_at',null);
- if(error) throw error;
- return ((data||[]) as unknown as {people:{name:string}|null}[]).flatMap(row=>row.people?[row.people.name]:[]).sort();
-}
