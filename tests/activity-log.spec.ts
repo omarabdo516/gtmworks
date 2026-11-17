@@ -49,6 +49,13 @@ test('the Activity log filters by who and by Card, and opens a Card',async({page
  // A row's Card link opens that Card.
  await page.locator('.lgp-body .lg-row .lg-card').first().click();
  await expect(page).toHaveURL(new RegExp(`/c/rs-learning/work/board/${card}$`));
+
+ // A filter no row matches, on a log that has rows: the page reads the Company's whole log, so it says nothing
+ // matches and its own link offers everything back (review of #279: the page, not the component, picks the note).
+ await page.goto('/c/rs-learning/log?who=a:ffffffff-ffff-ffff-ffff-ffffffffffff');
+ const empty=page.locator('.lgp-body .lgp-empty');
+ await expect(empty).toContainText(tr('logNoMatch'));
+ await expect(empty.getByRole('link',{name:tr('logShowAll')})).toHaveAttribute('href','/c/rs-learning/log');
 });
 
 test('the Activity log filters by a person, and an opened Card shows only its own rows',async({page})=>{
