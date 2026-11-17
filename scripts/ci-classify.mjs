@@ -8,11 +8,16 @@
 // changes, which makes every failure in that job suspect (#241), and only the runner prints its shutdown. No scope reads a
 // line of a printed JSON document (a hosted job printed the pull request's body, which quoted the network change) or a
 // line quoted from another log (a failed classifier test prints its fixture). A step whose tests ran and failed ended on
-// them, whatever their messages name, and a rate limit the pull then got past is not why the step failed.
+// them, whatever their messages name, and a rate limit is not why the step failed when the image it held up was then
+// downloaded (pulls run side by side, so another layer's or image's progress proves nothing).
 const rules = [
   {
     cause: 'registry rate limit', scope: 'fatal', pattern: /error from registry: Rate exceeded|toomanyrequests|^npm (?:error|ERR!) (?:code E429|429 Too Many Requests)/i,
-    recovered: /^Retrying after|: Pull complete$|^Status: Downloaded/,
+    recovered: (lines, at) => {
+      // The retry names the image it pulls again; only that image finishing proves this pull got past the limit.
+      const image = lines.slice(at + 1, at + 4).map(line => line.match(/^Retrying after \S+: (\S+)$/)?.[1]).find(Boolean);
+      return image != null && lines.slice(at + 1).some(line => [`Status: Downloaded newer image for ${image}`, `Status: Image is up to date for ${image}`].includes(line.trim()));
+    },
   },
   { cause: 'network change', scope: 'job', pattern: /net::ERR_NETWORK_CHANGED/ },
   { cause: 'runner shutdown', scope: 'job', pattern: /^##\[error\]The runner has received a shutdown signal/ },
@@ -74,7 +79,7 @@ function fatalLines(lines, index) {
   return kept.slice(-window);
 }
 
-const recoveredAt = (lines, at, pattern) => pattern != null && lines.slice(at + 1).some(line => pattern.test(line));
+const recoveredAt = (lines, at, recovered) => recovered != null && recovered(lines, at);
 
 // A long line keeps the matched words: the cut starts shortly before them when they lie past the first 200 characters.
 function excerpt(line, pattern) {

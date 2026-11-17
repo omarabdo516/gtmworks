@@ -70,6 +70,17 @@ test('what an earlier step printed, or a failed test prints, is not where the jo
   }
 });
 
+// Pulls run side by side, so another layer's line says nothing of the pull that hit the limit (Codex on #285).
+test('a rate limit counts as recovered only when the same image then finished downloading', () => {
+  const text = log('constructed-registry-rate-limit');
+  const lines = text.split('\n');
+  const at = lines.findIndex(line => line.includes('failed to pull docker image'));
+  const another = [...lines.slice(0, at + 1), '2026-11-16T20:34:05.1079440Z 921bfecda4c1: Pull complete', '2026-11-16T20:34:05.1079441Z Retrying after 4s: public.ecr.aws/supabase/postgres:17.11.0.011', ...lines.slice(at + 1)];
+  assert.deepEqual(outcome(classify(another.join('\n'))), infrastructure('registry rate limit'));
+  const elsewhere = [...lines.slice(0, at + 1), '2026-11-16T20:34:05.1079440Z Status: Downloaded newer image for public.ecr.aws/supabase/kong:2.8.1', ...lines.slice(at + 1)];
+  assert.deepEqual(outcome(classify(elsewhere.join('\n'))), infrastructure('registry rate limit'), 'another image finished');
+});
+
 test('a rate limit the job recovered from, or a test that failed on its own, is your change', () => {
   for (const name of ['constructed-recovered-pull-then-verify', 'constructed-component-test-error']) {
     assert.deepEqual(outcome(classify(log(name))), yourChange, name);
