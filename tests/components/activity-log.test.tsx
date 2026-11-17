@@ -1,10 +1,12 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
+import { page } from 'vitest/browser';
 import type { ComponentProps } from 'react';
 import { LogFilters } from '@/app/c/[slug]/log/log-client';
 import { LogEmpty } from '@/app/c/[slug]/log/parts';
 import { LanguageProvider } from '@/lib/i18n-client';
 import { i18n } from '@/lib/i18n.mjs';
+import { logEmptyNote } from '@/lib/activity-log.mjs';
 
 // The Activity log's filters and its empty note, as the page draws them (moved from activity-log.spec.ts, #218). A
 // choice reloads the page with the filter in its address, so the router's push is what a choice does.
@@ -19,7 +21,7 @@ const agents = [{ value: 'a:30000000-0000-0000-0000-000000000001', label: 'وك�
 const cards = [{ value: '1', label: 'Launch post' }];
 const log = (who: string, card: string, total: number) => <LanguageProvider language="en">
  <LogFilters slug="rs-learning" who={who} card={card} people={people} agents={agents} cards={cards} count={0}/>
- <div className="lgp-body"><LogEmpty t={i18n('en').t} slug="rs-learning" total={total}/></div>
+ <div className="lgp-body"><LogEmpty t={i18n('en').t} slug="rs-learning" note={logEmptyNote({ companyRows: total })}/></div>
 </LanguageProvider>;
 // A frame for the filters' first effect to run, as a page that has finished loading has.
 const loaded = () => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done)));
@@ -27,7 +29,8 @@ const loaded = () => new Promise(done => requestAnimationFrame(() => requestAnim
 test('a filter that matches nothing says so, still holds once the page has loaded, and offers everything back', async () => {
  const screen = await render(log(gone, 'all', 12));
  await expect.element(screen.getByText('No entries match these filters. Try “Everyone”, or another card.')).toBeVisible();
- await expect.element(screen.getByRole('link', { name: 'Show everything' }).last()).toHaveAttribute('href', '/c/rs-learning/log');
+ // The filters draw their own Show everything link; the note's is the one inside the note.
+ await expect.element(page.elementLocator(document.querySelector('.lgp-empty')!).getByRole('link', { name: 'Show everything' })).toHaveAttribute('href', '/c/rs-learning/log');
  await loaded();
  expect(push).not.toHaveBeenCalled();
  await expect.element(screen.getByLabelText('Who')).toHaveValue(gone);
