@@ -7,7 +7,7 @@ import { topLevelStatements } from './sql-statements.mjs';
 // log says it holds a key. Each Agent removed before the update, in a Company that ever set a key, is kept by its own
 // profile's name for the next key removal. The migration's two inserts are replayed on rows of the logs; the database
 // this runs on has the migration.
-const statements=topLevelStatements(readFileSync('supabase/migrations/20270120000000_agent_key_waits.sql','utf8'));
+const statements=topLevelStatements(readFileSync('supabase/migrations/20270121000000_agent_key_waits.sql','utf8'));
 const insertsInto=table=>{
  const found=statements.filter(statement=>new RegExp(`^insert\\s+into\\s+public\\.${table}\\b`,'i').test(statement));
  if(found.length!==1) throw new Error(`expected one insert into ${table}, found ${found.length}`);
