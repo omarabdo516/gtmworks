@@ -107,4 +107,7 @@ for (const name of ['Back', 'All agents']) test(`"${name}" goes to the Agents li
  const list = await render(<div><a href="#1" id="sov-ag-ag-1">Lead</a><a href="#2" id="sov-ag-ag-2">SEO</a><FocusReturn ids={['sov-ag-ag-1', 'sov-ag-ag-2']}/></div>);
  await expect.element(list.getByRole('link', { name: 'SEO' })).toHaveFocus();
  expect(sessionStorage.getItem('gw-return-focus')).toBeNull();
+ (document.activeElement as HTMLElement).blur();
+ await list.rerender(<div><a href="#1" id="sov-ag-ag-1">Lead</a><a href="#2" id="sov-ag-ag-2">SEO</a><FocusReturn key="again" ids={['sov-ag-ag-1', 'sov-ag-ag-2']}/></div>);
+ await expect.element(list.getByRole('link', { name: 'SEO' })).not.toHaveFocus();
 });
