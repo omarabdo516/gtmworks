@@ -39,3 +39,14 @@ export const test = base.extend<{ seededFile: void }>({
     await use();
   }, { auto: true }],
 });
+
+// TEMPORARY (#172): where each copy of a doubled element sits when a test fails, to find what leaves the second copy.
+test.afterEach(async ({ page }, testInfo) => {
+  if (testInfo.status === testInfo.expectedStatus) return;
+  const report = await page.evaluate(() => {
+    const chain = (node: Element | null) => { const parts: string[] = []; for (let at = node; at && at !== document.documentElement; at = at.parentElement) parts.push(`${at.tagName.toLowerCase()}${at.id ? '#' + at.id : ''}${at.hasAttribute('hidden') ? '[hidden]' : ''}${at.getAttribute('style') ? `[style=${at.getAttribute('style')}]` : ''}${at.className && typeof at.className === 'string' ? '.' + at.className.split(' ').slice(0, 2).join('.') : ''}`); return parts.join(' < '); };
+    const comments = [...document.body.childNodes].filter(node => node.nodeType === 8).map(node => node.textContent);
+    return { copies: ['.turns', '.priv-line', '.panel--wait', '.corner-pill', '.dash__inner'].flatMap(selector => [...document.querySelectorAll(selector)].map(element => `${selector}: ${chain(element)}`)), bodyComments: comments, hiddenDivs: [...document.querySelectorAll('div[hidden]')].map(element => `${element.id}:${element.childElementCount}`), react: document.documentElement.outerHTML.match(/\$R[A-Z]/g)?.slice(0, 20) };
+  }).catch(error => ({ error: String(error) }));
+  console.log(`[172-diagnosis] ${testInfo.title}: ${JSON.stringify(report)}`);
+});
