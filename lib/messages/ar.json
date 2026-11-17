@@ -986,10 +986,19 @@
   "logActPermissionRefused": "رفض طلب {0}",
   "logPermissionWaiting": "مستني موافقة",
   "boardWaitingOnChat": "البطاقة دي مستنية محادثتها. أول ما تترد أو تخلص هناك، هترجع مكانها لوحدها",
-  "plusLabelCall": "إضافات: نادي حد، الأوامر",
-  "plusLabel": "إضافات: الأوامر",
   "plusCallPerson": "نادي حد من القناة",
   "plusCallAgent": "نادي وكيل",
   "plusCommands": "الأوامر",
-  "plusCommandAgent": "اطلب وكيل جديد"
+  "plusCommandAgent": "اطلب وكيل جديد",
+  "plusPartCall": "نادي حد",
+  "plusPartChannel": "قناة جديدة",
+  "plusPartCommands": "الأوامر",
+  "plusPartModel": "الموديل",
+  "plusPartsJoin": "، ",
+  "plusNewChannelSub": "للفريق والوكلاء في محادثة واحدة",
+  "plusConnectTool": "وصّل أداة جديدة لوكيل",
+  "plusConnected": "{0} متوصل",
+  "plusModel": "الموديل",
+  "plusModelPicked": "{0} هيفكر بـ {1}",
+  "conversationModelRefused": "محرك الوكلاء ماقبلش الموديل ده، فالمحادثة فضلت على الموديل اللي كانت عليه. رسالتك لسه في المربع."
 }

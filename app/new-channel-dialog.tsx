@@ -17,7 +17,9 @@ type NameError=''|'channelNameMissing'|'channelNameTaken'|'channelCreateFailed';
 const bare=(name:string)=>name.trim().replace(/^#+/,'').trim();
 
 // design-reference: teamCreateHTML. One request key for the dialog's life, so a retried Create makes one channel.
-export default function NewChannelDialog({slug,company,person,close}:{slug:string,company:string,person:string,close:()=>void}) {
+// `opener` gets the focus back when the dialog closes (the composer's "+", #158); without one Radix gives it back to what
+// was focused when it opened.
+export default function NewChannelDialog({slug,company,person,close,opener}:{slug:string,company:string,person:string,close:()=>void,opener?:()=>HTMLElement|null}) {
  const {t,language}=useI18n(); const own:Record<string,string>=language==='ar'?channelAr:channelEn;
  const c=(key:string,...values:unknown[])=>own[key].replace(/\{(\d+)\}/g,(_,index)=>String(values[Number(index)] ?? ''));
  const router=useRouter(); const field=useRef<HTMLInputElement>(null); const key=useRef(newId());
@@ -45,7 +47,8 @@ export default function NewChannelDialog({slug,company,person,close}:{slug:strin
  const pool=choices?.agents||[];
  const [before,after]=own.channelCreateTip.split('@{0}');
  return <Dialog open onOpenChange={next=>{if(!next) close();}}>
-  <DialogContent showCloseButton={false} className="gw modal modal--sm" onOpenAutoFocus={event=>{event.preventDefault();field.current?.focus();}}>
+  <DialogContent showCloseButton={false} className="gw modal modal--sm" onOpenAutoFocus={event=>{event.preventDefault();field.current?.focus();}}
+   onCloseAutoFocus={event=>{ const back=opener?.(); if(back) { event.preventDefault(); back.focus(); } }}>
    <div className="modal__inner">
     <header className="modal__head">
      <div className="modal__titles"><DialogTitle className="modal__title">{t('shellNewChannel')}</DialogTitle>

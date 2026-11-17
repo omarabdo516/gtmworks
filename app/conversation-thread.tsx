@@ -178,7 +178,7 @@ export function ConversationComposer({company,conversation,record,writer,asked,b
  const working=record?.asking?null:record?.working; const canStop=record?.canStop;
  const count=(value:number)=>new Intl.NumberFormat(localeFor(language)).format(value);
  return <>
-  {writer?<MessageBox ref={box} placeholder={t('writeTo',conversation.agent_name)} stop={working&&canStop?{label:c('conversationStop',conversation.agent_name),run:async()=>{
+  {writer?<MessageBox ref={box} placeholder={t('writeTo',conversation.agent_name)} model={{company,conversation:conversation.id,agent:conversation.agent_name}} stop={working&&canStop?{label:c('conversationStop',conversation.agent_name),run:async()=>{
    const failure=await postMessage({company,conversation:conversation.id,intent:'stop'});
    if(!failure) asked();
    return failure;

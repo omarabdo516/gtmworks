@@ -12,7 +12,7 @@ import { agentStates, statusKeys } from '@/lib/agent-details.mjs';
 import { ShellIcon } from '@/components/shell-icon';
 import { agentIdentities } from '@/lib/agent-identities';
 import { AgentIdentitiesProvider } from '@/lib/agent-identities-client';
-import { CallableAgentsProvider } from '@/app/conversation-composer';
+import { CallableAgentsProvider, ComposerPlaceProvider } from '@/app/conversation-composer';
 import Switcher from '@/app/c/[slug]/[[...section]]/switcher';
 import RecentCards, { RecentCardsProvider } from './recent-cards';
 import RecentChats from './recent-chats';
@@ -104,5 +104,7 @@ export default async function Shell({company,companies,section,title,crumbs,pers
  const shown=question?<><div style={{display:'contents'}} inert>{frame}</div>{question}</>:frame;
  // The composer's "+" menu calls the Agents this Member sees, as the sidebar lists them (#153).
  const callable=agents.map(({id,connection_id,name})=>({id,connection_id,name}));
- return <AgentIdentitiesProvider agents={await agentIdentities()}><CallableAgentsProvider agents={callable}>{company?.id?<RecentCardsProvider key={company.id} company={company.id} cardId={cardId}>{shown}</RecentCardsProvider>:shown}</CallableAgentsProvider></AgentIdentitiesProvider>;
+ // Its New channel, Connect apps and Model (#158) read the Company and this reader's role.
+ const place=company?.id?{slug:company.slug,company:company.id,person:personId,owner,manage,alone:workMode==='alone'}:null;
+ return <AgentIdentitiesProvider agents={await agentIdentities()}><CallableAgentsProvider agents={callable}><ComposerPlaceProvider place={place}>{company?.id?<RecentCardsProvider key={company.id} company={company.id} cardId={cardId}>{shown}</RecentCardsProvider>:shown}</ComposerPlaceProvider></CallableAgentsProvider></AgentIdentitiesProvider>;
 }

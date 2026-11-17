@@ -151,6 +151,10 @@ export const screens = {
    builtSteps: [{ click: '.composer__btn[aria-haspopup="menu"]' }, { waitFor: '.composer .menu' }, { finish: '.composer .menu' }] },
   'plus-menu-channel': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="ch-general"]' }, { waitFor: '.ch-intro' }, { click: '.composer [data-action="plus-menu"]:visible' }, { waitFor: '[data-plus-menu]:not([hidden])' }, { finish: '[data-plus-menu]:not([hidden])' }] },
    builtPath: `/c/rs-learning/channels/${fixture.channel}`, builtSteps: [{ click: '.composer__btn[aria-haspopup="menu"]' }, { waitFor: '.composer .menu' }, { finish: '.composer .menu' }] },
+  // #158. The same menu in a Conversation, scrolled to its end: Connect apps and the Owner's Model. Built: a Conversation's
+  // own address (pass --built-path /c/rs-learning/conversations/<id>; its Model rows are the Agent's Engine's).
+  'plus-menu-model': { reference: { steps: [{ click: '.composer [data-action="plus-menu"]:visible' }, { waitFor: '[data-plus-menu]:not([hidden])' }, { finish: '[data-plus-menu]:not([hidden])' }, { scrollTo: '[data-plus-menu]:not([hidden]) [data-action="pick-model"]:last-child' }] }, builtPath: null,
+   builtSteps: [{ click: '.composer__btn[aria-haspopup="menu"]' }, { waitFor: '.composer .menu [role="menuitemradio"]' }, { finish: '.composer .menu' }, { scrollTo: '.composer .menu [role="menuitemradio"]:last-child' }] },
   // #24. New channel, from the "+" beside Channels; built, ?new=channel opens it over any page.
   'new-channel': { reference: { steps: [{ click: '#sb-threads [data-action="channel-new"]' }, { waitFor: '#modal[open] #tm-name' }] }, builtPath: `/c/rs-learning/channels/${fixture.channel}?new=channel` },
   // #24. The team channel حملة ديسمبر (th-team) with its members and Agents. Built: a team channel's own address (pass

@@ -986,10 +986,19 @@
   "logActPermissionRefused": "refused {0}’s request",
   "logPermissionWaiting": "Waiting for OK",
   "boardWaitingOnChat": "This card is waiting on its chat. Once it’s answered or done there, the card moves back on its own",
-  "plusLabelCall": "More: call someone, commands",
-  "plusLabel": "More: commands",
   "plusCallPerson": "Call someone in the channel",
   "plusCallAgent": "Call an agent",
   "plusCommands": "Commands",
-  "plusCommandAgent": "Ask for a new agent"
+  "plusCommandAgent": "Ask for a new agent",
+  "plusPartCall": "call someone",
+  "plusPartChannel": "new channel",
+  "plusPartCommands": "commands",
+  "plusPartModel": "model",
+  "plusPartsJoin": ", ",
+  "plusNewChannelSub": "For the team and agents in one conversation",
+  "plusConnectTool": "Connect a new tool to an agent",
+  "plusConnected": "{0} connected",
+  "plusModel": "Model",
+  "plusModelPicked": "{0} will think with {1}",
+  "conversationModelRefused": "The agent engine did not take that model, so this chat stays on the model it had. Your message is still in the box."
 }
