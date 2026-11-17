@@ -89,8 +89,8 @@ test('the board shows a Member chips and Cards of the Agents they see only, and 
 
  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
  await expect(chips(page)).toHaveText(['All','Lead','Meta Ads','SEO']);
- await expect(card(page,'Ads runs the launch').locator('.kcard__crew-t')).toHaveText('Worked on it: SEO and Meta Ads');
- await expect(page.getByRole('link',{name:'Ads runs the launch · Worked on it: SEO and Meta Ads',exact:true})).toBeVisible();
+ await expect(card(page,'Ads runs the launch').locator('.kcard__crew-t')).toHaveText('Worked on it: SEO, Meta Ads');
+ await expect(page.getByRole('link',{name:'Ads runs the launch · Worked on it: SEO, Meta Ads',exact:true})).toBeVisible();
  await expect(card(page,'Lead plans the month').locator('.kcard__crew')).toHaveCount(0);
  await expect(card(page,'SEO waits for the Manager')).toHaveCount(1);
 
