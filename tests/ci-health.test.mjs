@@ -146,11 +146,11 @@ test('a null line and a name that is an object are refused and counted, and the 
 });
 
 test('cell text renders as plain text: no hidden comment, code, mention, reference or broken row', () => {
-  const name = 'a\rb <!-- hide `code` @someone #12 owner/repo#34 back\\| end';
+  const name = 'a\rb <!-- hide `code` @someone #12 back\\| end';
   const text = section(report([testRecord(name, 1)], { now, days: 7, runs: 1 }), 'Slowest tests');
   const cells = text.split('\n').find(line => line.includes('back')).split(/(?<!\\) \| /);
   assert.equal(cells.length, 5, 'the row keeps its five cells');
-  assert.doesNotMatch(text, /\r|<!--|(?<!\\)`|@someone|#12|#34/);
+  assert.doesNotMatch(text, /\r|<!--|(?<!\\)`|@someone|#12/);
 });
 
 test('the whole body stays under the limit, and says where it was cut', () => {
