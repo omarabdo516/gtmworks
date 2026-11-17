@@ -45,6 +45,15 @@ test('a local-only face the machine lacks and a run of symbols alone are not nam
   await expectDeterministic(page);
 });
 
+test('a family with one url() face is checked whole, even beside a local-only face', async ({ browser }) => {
+  const page = await pageOf(browser, `<style>
+    @font-face { font-family: "Mixed Face"; src: local("No Such Face Anywhere"); font-weight: 400; }
+    @font-face { font-family: "Mixed Face"; src: url(data:font/woff2;base64,AAAA) format("woff2"); font-weight: 600; }
+    p { font-family: "Mixed Face", sans-serif; font-weight: 600; }
+  </style><p>نص</p>`);
+  await expect(expectDeterministic(page)).rejects.toThrow(/font "Mixed Face" 600 did not load/);
+});
+
 test('a font family no face declares is named', async ({ browser }) => {
   const page = await pageOf(browser, '<p style="font-family: \'Missing Face\', sans-serif">نص</p>');
   await expect(expectDeterministic(page)).rejects.toThrow(/font "Missing Face" is not declared/);

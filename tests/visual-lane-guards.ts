@@ -37,16 +37,19 @@ export async function expectDeterministic(page: Page) {
     const declared = new Set(faces.map(face => unquote(face.family)));
     // A face whose every source is local() names a font the pinned image either has or lacks, the same on every run:
     // next/font's metric-matched "<family> Fallback" faces point at Arial, which the image lacks.
+    // A family is exempt only when every face it declares is local(): one url() face keeps the whole family checked.
     const localOnly = new Set<string>();
+    const fetched = new Set<string>();
     for (const sheet of document.styleSheets) {
       let rules: CSSRuleList;
       try { rules = sheet.cssRules; } catch { continue; }
       for (const rule of rules) {
         if (!(rule instanceof CSSFontFaceRule)) continue;
         const src = rule.style.getPropertyValue('src');
-        if (src && !/url\(/.test(src)) localOnly.add(unquote(rule.style.getPropertyValue('font-family')));
+        (src && !/url\(/.test(src) ? localOnly : fetched).add(unquote(rule.style.getPropertyValue('font-family')));
       }
     }
+    for (const family of fetched) localOnly.delete(family);
     const found = new Set(faces.filter(face => face.status === 'error' && !localOnly.has(unquote(face.family))).map(face => `font "${unquote(face.family)}" ${face.weight} did not load`));
     // The generic families are the pinned image's own faces; any other family must be one the page declares.
     const generic = new Set(['serif', 'sans-serif', 'monospace', 'cursive', 'fantasy', 'system-ui', 'ui-serif', 'ui-sans-serif', 'ui-monospace', 'ui-rounded', 'math', 'emoji', 'fangsong']);

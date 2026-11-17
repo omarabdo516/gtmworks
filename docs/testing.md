@@ -84,8 +84,9 @@ block of their own, and `scripts/ci-runner.mjs cleanup` removes what this reposi
   replaces the body of one tracking issue, `CI health report`: each layer's p50 and p90, the slowest tests, flaky and
   failed tests, red jobs by label and the PC queue. A change to it runs it on its own pull request.
 
-A pull request that changes only screens runs static, the component tests and the compared screens (#213). A failed
-comparison still uploads its expected, actual and difference images in `route-screenshots`. A change to the journeys'
+A pull request that changes only screens runs static and the component tests; the compared screens run on `main` and
+on a manual run only (#257), where a failed comparison uploads its expected, actual and difference images in
+`lane-screenshots` and the `visual-regression` issue links them. A change to the journeys'
 area runs the whole browser suite, and `lib/` outside the catalogues and `worker/` also run the install. Screens alone
 get their journeys and install proof on `main`, where every push runs every suite unless every file is a document.
 
