@@ -7,8 +7,9 @@
 --
 -- Nothing existing is rewritten: both tables start empty, the trigger writes only on a later removal, and with no wait
 -- and no leftover every replaced function answers as before. The previous app version runs against this: its create
--- calls name at most ten arguments, which reach the new function with own_answers true, the path they took before; its
--- key routes read only the 'company' and 'agent' kinds and never call end_agent_key_waits. A wait exists only once this
+-- calls name at most ten arguments, which reach the new function with own_answers true, the path they took before, except
+-- that while the Company holds a key a call with no own profile makes no Agent (engineNotReady) instead of one on Lead's
+-- profile, and the previous app removes the profile it asked for, as for any call that made none; its key routes read only the 'company' and 'agent' kinds and never call end_agent_key_waits. A wait exists only once this
 -- version made one, so after a rollback the previous app lists it as an item it cannot open, and the Agent stays held
 -- until this version's next set.
 
@@ -48,7 +49,8 @@ revoke all on function public.company_holds_provider_key(uuid) from public,anon,
 
 -- 20261226000000's, replaced with one more argument: own_answers false when the Engine made the profile with the
 -- level's tools but it has no model to answer with. A Company that holds a key gets the Agent there, held until the
--- Owner's next set; one that holds none gets it on Lead's profile, as before.
+-- Owner's next set; one that holds none gets it on Lead's profile, as before. A call with no own profile at all makes no
+-- Agent while the Company holds a key (engineNotReady), so no Agent made after the key ever runs on Lead's profile.
 drop function public.lead_create_agent(uuid,text,text,text,text,text[],text,text,integer,integer);
 create function public.lead_create_agent(conversation uuid, run text, call text, agent_name text, job text, apps text[], template text default null, instructions text default null,
  own_level integer default null, own_policy integer default null, own_answers boolean default true) returns jsonb
@@ -75,6 +77,10 @@ begin
   return jsonb_build_object('state','invalid'); end if;
  if own_level is not null and not own_answers then
   if public.company_holds_provider_key(talk.company_id) then waits:=true; else own_level:=null; own_policy:=null; end if;
+ elsif own_level is null and public.company_holds_provider_key(talk.company_id) then
+  -- No own profile was made (the Engine failed, refused it or left a tool on): with a key held, Lead's profile is no
+  -- place for it, so nothing is made and the caller removes the profile it asked for.
+  return jsonb_build_object('state','engineNotReady');
  end if;
  select h.* into linked from public.hermes_agents a join public.hermes_connections h on h.id=a.connection_id where a.id=talk.agent_id;
  -- The owner record comes first: the Connection naming the profile and the Agent on it are checked against it. Its tool

@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(27);
+select plan(29);
 -- #299. RS Learning (1): Lead on the Company's own profile, and the Owner's (Omar's) Conversation with Lead. R&S
 -- Consultations (2), where Omar is Owner too, has its own Lead. The Manager (2) is a member of RS Learning only, and
 -- an Outsider of neither.
@@ -44,6 +44,11 @@ update made set connection=(select connection_id from public.hermes_agents where
 select is((select h.profile from public.hermes_agents a join public.hermes_connections h on h.id=a.connection_id where a.id=(select agent from made where name='waiting')),
  (select profile from made where name='waiting'),'it is attached to its own profile, never Lead''s');
 select is((select count(*)::int from public.agent_key_waits where agent_id=(select agent from made where name='waiting') and company_id='10000000-0000-0000-0000-000000000001'),1,'and waits for the key');
+set local role service_role;
+select is(public.lead_create_agent(conversation=>'e2991000-0000-0000-0000-000000000001',run=>'run-1',call=>'call-2',agent_name=>'Designer',job=>'Designs the ads.',apps=>'{}'),
+ jsonb_build_object('state','engineNotReady'),'with a key held, a call whose own profile the Engine could not make makes no Agent');
+reset role;
+select is((select count(*)::int from public.lead_made_agents where conversation_id='e2991000-0000-0000-0000-000000000001' and call_id='call-2'),0,'so nothing lands on Lead''s profile');
 select is(public.agent_profile_refusal((select profile from made where name='waiting'),'10000000-0000-0000-0000-000000000001',(select agent from made where name='waiting')),'agentLevelPending',
  'every Run entry holds it');
 

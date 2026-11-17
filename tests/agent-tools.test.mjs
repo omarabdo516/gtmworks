@@ -97,6 +97,16 @@ test('a profile made with no model to answer with asks the database to make the 
  assert.deepEqual(fake.removed,[]);
 });
 
+test('a profile the Engine could not provide, for a Company whose key keeps the Agent off Lead\'s profile, makes no Agent and is removed again',async()=>{
+ for(const state of /** @type {const} */(['forbidden','failed','refused'])) {
+  const {fake,engine,rpcs,call}=harness({},{state:'engineNotReady'},own);
+  await leadReady(engine); fake.settings.agentProfile=state;
+  assert.deepEqual(await call('create_agent',{template:'writer'}),{state:'engineNotReady'},state);
+  assert.deepEqual(rpcs.at(-1),['lead_create_agent',writerCall],state);
+  assert.deepEqual(fake.removed,[own.profile],state);
+ }
+});
+
 test('a profile made for a call the database then refuses is removed again, and only then',async()=>{
  for(const answer of [{state:'refused'},{state:'invalid'}]) for(const state of /** @type {const} */(['provided','noModel'])) {
   const {fake,engine,call}=harness({},answer,own);
