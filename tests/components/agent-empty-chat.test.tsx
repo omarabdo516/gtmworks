@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
-import { page } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
 import type { ComponentProps } from 'react';
 import AgentChat from '@/app/c/[slug]/chat/[[...agent]]/agent-chat';
 import type { EmptyChat } from '@/app/agent-empty-chat';
@@ -71,6 +71,23 @@ for (const reader of ['owner', 'member'] as const) test(`pressing each suggestio
   await expect.element(field).toHaveFocus();
  }
  expect(fetches).not.toHaveBeenCalled();
+ expect(push).not.toHaveBeenCalled();
+});
+
+test('a suggestion pressed while a message is on its way leaves the composer that is sending it, and works again once the send fails', async () => {
+ let answer: (response: Response) => void = () => {};
+ fetches.mockImplementation(() => new Promise<Response>(resolve => { answer = resolve; }));
+ const screen = await chat({ empty: { state: 'main', reader: 'owner', owners: [] } });
+ const field = screen.getByRole('textbox', { name: 'Message' });
+ await field.fill('Plan next week');
+ await userEvent.keyboard('{Enter}');
+ await expect.poll(() => fetches.mock.calls.length).toBe(1);
+ await screen.getByRole('button', { name: 'A new SEO article', exact: false }).click();
+ await expect.element(field).toHaveValue('Plan next week');
+ answer(new Response(JSON.stringify({ error: 'conversationFailed' }), { status: 500 }));
+ await expect.poll(() => screen.container.querySelector('textarea')?.readOnly).toBe(false);
+ await screen.getByRole('button', { name: 'A new SEO article', exact: false }).click();
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('I need an SEO article on something our customers search for, linking to the right page on our site');
  expect(push).not.toHaveBeenCalled();
 });
 
