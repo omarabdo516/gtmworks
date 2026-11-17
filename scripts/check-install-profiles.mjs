@@ -108,7 +108,10 @@ if(step==='prepare') {
   const ask=async(entry,person,agent,label,message='مرحباً، اكتب عنواناً قصيراً.')=>{
    const before=asked.length;
    const conversation=randomUUID();
-   const sent=await sendMessage(person,service,{person:entry.person,company:entry.company,conversation,sendKey:randomUUID(),agent,message,encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY});
+   // A profile the worker has not yet confirmed (its tools, its shared Skills folder) refuses the send as pending and
+   // stores nothing, so the same send is made again until it is ready (#282).
+   const send={person:entry.person,company:entry.company,conversation,sendKey:randomUUID(),agent,message,encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY};
+   const sent=await until(`${label} ready for a run`,async()=>{ const result=await sendMessage(person,service,send); return result.error==='conversationAgentLevelPending'?null:result; },120);
    assert.deepEqual(sent,{conversation});
    const answer=await until(`reply on ${label}`,async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),180);
    assert.ok(answer.body.includes(reply),answer.body);
