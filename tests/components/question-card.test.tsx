@@ -193,3 +193,14 @@ test('in the chat, a pick another tab answered first is not shown as this one\'s
  expect(calls.mock.calls.filter(([, init]) => init?.method !== 'POST'), 'the record is read again').toHaveLength(1);
  await expect.poll(() => document.querySelector<HTMLElement>('.turns > li[data-kind="answer"]')?.textContent).toContain(angles[1]);
 });
+
+test.each([['en', 'Not delivered: the agent had stopped waiting for this answer.'], ['ar', 'موصلتش: الوكيل كان بطّل يستنى الإجابة دي.']] as const)('in the %s interface, an answer the Engine no longer waited for is the person\'s turn with a note that it was not delivered', async (language, note) => {
+ const closed = asked(angles.slice(0, 3), { state: 'closed' });
+ const base = record(closed, angles[0]);
+ const failed = { ...base, messages: base.messages.map(message => message.kind === 'answer' ? { ...message, failed: true } : message) };
+ vi.stubGlobal('fetch', vi.fn(async () => Response.json(failed)));
+ await render(<LanguageProvider language={language}><div className="gw"><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={conversation} title="" writer><Arrived record={arrived(failed)}/></ConversationView></div></LanguageProvider>);
+ const answer = document.querySelector<HTMLElement>('.turns > li[data-kind="answer"]')!;
+ expect(answer.textContent).toContain(angles[0]);
+ expect(answer.querySelector('[role="alert"]')?.textContent).toBe(note);
+});

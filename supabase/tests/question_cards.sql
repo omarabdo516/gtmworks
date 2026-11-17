@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(28);
+select plan(32);
 -- #138. Ads in RS Learning, shown to the Manager (2), the Contributors (3, 5) and the Viewer (4); the Owner (1) sees every
 -- Agent. One Conversation with Ads each, and in it the message of one run.
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
@@ -44,6 +44,8 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000005',true);
 select throws_ok($$select public.answer_question('10000000-0000-0000-0000-000000000001','f2000000-0000-0000-0000-000000000003',current_setting('test.card')::bigint,1,null,'f3000000-0000-0000-0000-000000000005')$$,
  'P0002','conversationNotFound','another Member cannot answer the question');
+select throws_ok($$select public.answer_question('10000000-0000-0000-0000-000000000003','f2000000-0000-0000-0000-000000000003',current_setting('test.card')::bigint,1,null,'f3000000-0000-0000-0000-00000000000b')$$,
+ 'P0002','conversationNotFound','a Member of another Company, naming that Company, cannot answer this Company''s question');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
 select throws_ok($$select public.answer_question('10000000-0000-0000-0000-000000000001','f2000000-0000-0000-0000-000000000004',(select id from public.reply_cards where conversation_id='f2000000-0000-0000-0000-000000000004'),1,null,'f3000000-0000-0000-0000-000000000004')$$,
  '42501','conversationNotAllowed','a Viewer cannot answer, even a question of their own Conversation');
@@ -115,6 +117,13 @@ select throws_ok($$insert into public.reply_cards(company_id,conversation_id,run
  ('10000000-0000-0000-0000-000000000001','f2000000-0000-0000-0000-000000000002','q-run-2','p5@1','question','Which?','{"question":"Which?","choices":[],"multiple":false}','open')$$,'23505',null,
  'a Conversation waits on one question at a time');
 
+-- A note to a person typed while a question waits stays a note: it is not taken as the answer.
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select results_eq($$values (public.answer_question('10000000-0000-0000-0000-000000000001','f2000000-0000-0000-0000-000000000002',null,null,'@مراجع please check the budget','f3000000-0000-0000-0000-00000000000c')),
+  ((select state from public.reply_cards where call_id='p4@1'))$$,
+ $$values ('none'),('open')$$,'a note to a person typed while a question waits is not its answer, and the question still waits');
+reset role;
 -- A retried send whose first answer was lost may find a question opened since: a message already queued under its key
 -- starts after the Run, so it is not also taken as the answer.
 insert into public.conversation_queued_turns(conversation_id,send_key,company_id,person_id,agent_id,message)
@@ -149,6 +158,23 @@ insert into seen select 5,(select count(*) from public.reply_cards),(select coun
 reset role;
 select results_eq($$select * from seen order by n$$,$$values (1,1,0,1),(2,2,0,1),(3,1,0,1),(4,1,0,0),(5,2,0,0)$$,
  'each person reads the questions of their own Conversation and no other, the Owner included; the answer''s log row is read by its person, the Owner and the Manager, and not by another Contributor or the Viewer');
+
+-- A slower closer may keep a question for a Run another closer has already ended: that question cannot be answered
+-- any more, so a pick on it is refused and the card closes, freeing the Conversation for its next question.
+insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id)
+ values ('10000000-0000-0000-0000-000000000001','f2000000-0000-0000-0000-000000000001','person','20000000-0000-0000-0000-000000000001','Someone','And the budget?',gen_random_uuid(),'q-run-1b');
+set local role service_role;
+select public.track_run_question('f2000000-0000-0000-0000-000000000001','q-run-1b','{"id":"p6@1","text":"Which budget?","choices":["Low","High"],"multiple":false}',false,'2026-06-10T10:30:00Z');
+reset role;
+insert into public.conversation_usage(company_id,conversation_id,run_id,outcome) values ('10000000-0000-0000-0000-000000000001','f2000000-0000-0000-0000-000000000001','q-run-1b','completed');
+select set_config('test.ended_card',(select id::text from public.reply_cards where call_id='p6@1'),true);
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select is(public.answer_question('10000000-0000-0000-0000-000000000001','f2000000-0000-0000-0000-000000000001',current_setting('test.ended_card')::bigint,1,null,'f3000000-0000-0000-0000-00000000000d'),'closed',
+ 'a question whose Run has already ended cannot be answered');
+reset role;
+select results_eq($$select state,content ? 'answer' from public.reply_cards where call_id='p6@1'$$,$$values ('closed',false)$$,
+ 'it closes, holding no answer, so the Conversation can wait on its next question');
 
 select * from finish();
 rollback;
