@@ -20,6 +20,13 @@ export const motionTable = [
   { ref: '.try-one__btn', built: '.gw .try-one__btn', file: 'app/shell.css', html: '<div class="gw"><button type="button" class="try-one__btn"></button></div>' },
   // A card an Agent's reply carries rises in when it arrives while the Conversation is open (#136).
   { ref: '.card-in', built: '.gw .reply-card.card-in', file: 'app/shell.css', html: '<div class="gw"><div class="reply-card card-in" role="group"></div></div>' },
+  // A question's choice gives under a press and its letter lights up under the pointer; once answered on the open page,
+  // the card settles, the chosen letter pops and the check draws (#138).
+  { ref: '.opt', built: '.gw .opt', file: 'app/shell.css', html: '<div class="gw"><div class="reply-card reply-card--question" role="group"><div class="qcard__opts"><button type="button" class="opt">Students</button></div></div></div>', held: 0.985 },
+  { ref: '.opt__key', built: '.gw .opt__key', file: 'app/shell.css', html: '<div class="gw"><div class="reply-card reply-card--question" role="group"><div class="qcard__opts"><button type="button" class="opt"><span class="opt__key">A</span></button></div></div></div>' },
+  { ref: '.card.is-just', built: '.gw .reply-card.is-just', file: 'app/shell.css', html: '<div class="gw"><div class="reply-card reply-card--question is-resolved is-just" role="group"></div></div>' },
+  { ref: '.card.is-just .opt.is-chosen .opt__key', built: '.gw .reply-card.is-just .opt.is-chosen .opt__key', file: 'app/shell.css', html: '<div class="gw"><div class="reply-card reply-card--question is-resolved is-just" role="group"><div class="qcard__opts"><div class="opt is-chosen"><span class="opt__key">A</span></div></div></div></div>' },
+  { ref: '.card.is-just .opt__check path', built: '.gw .reply-card.is-just .opt__check path', file: 'app/shell.css', html: '<div class="gw"><div class="reply-card reply-card--question is-resolved is-just" role="group"><div class="qcard__opts"><div class="opt is-chosen"><svg class="gw-icon opt__check"><path></path></svg></div></div></div></div>' },
   // The dialog (the ready-made gallery): its entrance, its leave and its search field.
   { ref: '.modal[open]', built: '.gw.modal', file: 'app/shell.css', html: '<div role="dialog" class="gw modal" data-state="open"></div>' },
   { ref: '.modal.is-closing', built: '.gw.modal[data-state="closed"]', file: 'app/shell.css', html: '<div role="dialog" class="gw modal" data-state="closed"></div>' },
@@ -111,7 +118,7 @@ export const motionTable = [
 export const motionTokens = ['--dur-fast', '--dur', '--dur-slow', '--ease-out', '--ease-in', '--ease-spring'];
 
 // The reference's keyframes the product shares, each written once in app/shell.css under its gw- name.
-export const sharedKeyframes = { fadeIn: 'gw-fade-in', rise: 'gw-rise', breathe: 'gw-breathe', modalOut: 'gw-modal-out' };
+export const sharedKeyframes = { fadeIn: 'gw-fade-in', rise: 'gw-rise', breathe: 'gw-breathe', modalOut: 'gw-modal-out', settle: 'gw-settle', ckPop: 'gw-ck-pop', drawCheck: 'gw-draw-check' };
 
 /** @param {string} token */
 export const builtToken = token => `--gw-${token.slice(2)}`;

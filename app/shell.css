@@ -7,10 +7,9 @@
 @keyframes gw-rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 @keyframes gw-breathe { 0%, 100% { opacity: .9; } 50% { opacity: .3; } }
 @keyframes gw-modal-out { to { opacity: 0; transform: translateY(4px); } }
-/* An answered card settles and its check draws (design-reference: settle, ckPop, drawCheck; #138). */
+/* An answered card settles (design-reference: settle; #138); its key pops and its check draws with the agent face's
+   gw-ck-pop and gw-draw-check. */
 @keyframes gw-settle { from { opacity: .55; transform: scale(.985); } }
-@keyframes gw-ck-pop { from { transform: scale(.4); opacity: 0; } }
-@keyframes gw-draw-check { to { stroke-dashoffset: 0; } }
 
 /* The product's global button look (app/globals.css: border, padding, 36px floor, half opacity when disabled) is not
    the reference's; the shell's buttons start bare, as the reference's do. The reset has no more weight than one class,
