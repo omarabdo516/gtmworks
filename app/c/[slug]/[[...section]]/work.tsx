@@ -26,7 +26,7 @@ import { ActivityRow, Avatar, isMessage, MessageRow, NoteReplyRow, type WorkActi
 import { NoteText, type EditableNote } from '@/app/note-edit';
 import { workDate as date } from '@/lib/work-date.mjs';
 import { sortWorkCards } from '@/lib/work-sort.mjs';
-import { boardColumns, blockReason, cardAgent, chatWait, columnLabel, columnOf, keyboardTarget, onCard, progressOf, type CardWait } from '@/lib/board-columns.mjs';
+import { boardColumns, blockReason, cardAgent, chatPlace, chatWait, columnLabel, columnOf, keyboardTarget, onCard, progressOf, type CardWait } from '@/lib/board-columns.mjs';
 import { useNewlyWaiting } from '@/lib/newly-waiting';
 import type { WaitingItem } from '@/lib/approval-queue';
 import '@/app/board.css';
@@ -148,9 +148,10 @@ export default function Work(p:WorkProps) { const {workAction}=p; const {t,local
  const answeredHere=(item:WaitingItem)=>Object.hasOwn(decidedHere,item.kind);
  // A mention (#22) names who wrote the note and on which Card, shows the note and opens it on its Card. A step an Agent
  // handed over (#140; design-reference: waitTagHTML, kcardHTML's waiting branch) is tagged before its title and opens the
- // Conversation at its card.
- const itemView=(item:WaitingItem)=>answeredHere(item)?decidedHere[item.kind](item):<Link key={`${item.kind}:${item.id}`} className="mcard" data-kind={item.kind} href={item.conversation_id?`/c/${p.slug}/conversations/${item.conversation_id}${item.kind==='hand'?`#hand-${item.id}`:''}`:`${base}/board/${item.card_id}${item.note_id?`#note-${item.note_id}`:''}`}>
-  <span className="mcard__top"><span className="od-fill mcard__who">{item.kind==='question'?<b>{item.asked_by?t('waitingQuestionFrom',item.asked_by):t('waitingQuestion')}</b>:item.kind==='mention'?<><b dir="auto">{item.asked_by}</b> {named('waitingMentionIn',item.title)}</>:<b dir="auto">{item.asked_by}</b>}</span><span className="mcard__time num">{date(item.created_at,language,{month:'short'})}</span></span>
+ // Conversation at its card. A permission request (#165) names its Agent with its face and opens the Conversation, or
+// the channel, at its card.
+ const itemView=(item:WaitingItem)=>answeredHere(item)?decidedHere[item.kind](item):<Link key={`${item.kind}:${item.id}`} className="mcard" data-kind={item.kind} href={chatPlace(p.slug,item)??`${base}/board/${item.card_id}${item.note_id?`#note-${item.note_id}`:''}`}>
+  <span className="mcard__top"><span className="od-fill mcard__who">{item.kind==='question'?<b>{item.asked_by?t('waitingQuestionFrom',item.asked_by):t('waitingQuestion')}</b>:item.kind==='mention'?<><b dir="auto">{item.asked_by}</b> {named('waitingMentionIn',item.title)}</>:item.agent?<span className="ln-who"><span aria-hidden="true"><CompanyAgentFace agent={item.agent} size={16}/></span><b dir="auto">{item.asked_by}</b></span>:<b dir="auto">{item.asked_by}</b>}</span><span className="mcard__time num">{date(item.created_at,language,{month:'short'})}</span></span>
   {item.kind==='hand'&&<span className="wtag wtag--hand"><ShellIcon name="hand"/>{t('handBadge')}</span>}
   <span className="mcard__q od-clamp-3" dir="auto">{item.kind==='mention'?item.body:<>{item.title}{item.body&&<> {item.body}</>}</>}</span>
  </Link>;

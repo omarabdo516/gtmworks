@@ -1,10 +1,14 @@
 import type { supabase } from './supabase';
+import { replyCardOf, type PermissionChoice, type ReplyCard } from './conversations';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
 type MemberRole='owner'|'manager'|'contributor'|'viewer';
 type MentionState='open'|'answered'|'unanswered';
+type ChannelPermission=Extract<ReplyCard,{kind:'permission'}>;
+// A message that calls an Agent carries what its Run asked to be allowed (#165), drawn as the Agent's turn under it;
+// `face` is the Agent's, for that turn.
 export type ChannelMessage=
- | {id:number,author:'person',mine:boolean,name:string,role:MemberRole|null,body:string,at:string,mention:{agent:string,state:MentionState}|null}
+ | {id:number,author:'person',mine:boolean,name:string,role:MemberRole|null,body:string,at:string,mention:{agent:string,face:string,state:MentionState,permissions:ChannelPermission[]}|null}
  | {id:number,author:'agent',name:string,face:string,body:string,at:string};
 export type ChannelName={kind:'general'}|{kind:'team',name:string};
 export type ChannelSummary=ChannelName&{id:string,unread:number};
@@ -21,9 +25,12 @@ export type ChannelRecord={
  managers:{name:string,role:'owner'|'manager'}[],
  messages:ChannelMessage[],
  open:boolean,
+ // The choices the reader's role may send on a request of their own (permission_choices, #163).
+ may:PermissionChoice[],
 };
 type StoredMessage={id:number,author:'person'|'agent',person_id:string|null,agent_id:string|null,author_name:string,body:string,created_at:string};
-type StoredRun={message_id:number,agent_name:string,outcome:string|null};
+type StoredRun={message_id:number,agent_id:string|null,agent_name:string,outcome:string|null};
+type StoredPermission={id:number,message_id:number,title:string,content:unknown,state:string,decided_at:string|null,created_at:string};
 type StoredAgent={id:string,connection_id:string,name:string,speciality:string,main:boolean,here_only:boolean};
 const shownMessages=200;
 
@@ -44,7 +51,7 @@ export async function channelRecord(db:Database,person:string,company:string,cha
  const name=nameOf(found);
  // Runs first: a Run closed between the two reads then shows its reply too (both are written in one transaction). Each
  // Run has its own message, so the latest Runs by message cover every Run of the messages shown.
- const runs=((await db.from('channel_runs').select('message_id,agent_name,outcome').eq('channel_id',channel).order('message_id',{ascending:false}).limit(shownMessages)).data||[]) as StoredRun[];
+ const runs=((await db.from('channel_runs').select('message_id,agent_id,agent_name,outcome').eq('channel_id',channel).order('message_id',{ascending:false}).limit(shownMessages)).data||[]) as StoredRun[];
  const {count:waiting}=await db.from('channel_runs').select('message_id',{count:'exact',head:true}).eq('channel_id',channel).is('outcome',null);
  const latest=((await db.from('channel_messages').select('id,author,person_id,agent_id,author_name,body,created_at').eq('channel_id',channel).order('id',{ascending:false}).limit(shownMessages)).data||[]) as StoredMessage[];
  const {data:members}=await db.rpc('channel_members',{ch:channel});
@@ -52,6 +59,8 @@ export async function channelRecord(db:Database,person:string,company:string,cha
  const {data:agents}=await db.rpc('channel_agent_list',{ch:channel});
  const {data:writer}=await db.rpc('conversation_can_write',{c:company});
  const {data:manager}=await db.rpc('can_manage_company',{target:company});
+ const {data:may}=await db.rpc('permission_choices',{c:company});
+ const asked=runs.length?((await db.from('channel_permissions').select('id,message_id,title,content,state,decided_at,created_at').eq('channel_id',channel).gte('message_id',runs.at(-1)!.message_id).order('id')).data||[]) as StoredPermission[]:[];
  const people=(members||[]) as {person:string,name:string,role:MemberRole}[];
  const seen=(agents||[]) as StoredAgent[];
  // Only who is in a team channel can change it (set_channel_person, set_channel_agent), so only they are named: the
@@ -62,7 +71,9 @@ export async function channelRecord(db:Database,person:string,company:string,cha
  const messages=latest.reverse().map((message):ChannelMessage=>{
   if(message.author==='agent') return {id:message.id,author:'agent',name:message.author_name,face:seen.find(agent=>agent.id===message.agent_id)?.connection_id||message.agent_id||message.author_name,body:message.body,at:message.created_at};
   const run=runOf.get(message.id);
-  return {id:message.id,author:'person',mine:message.person_id===person,name:message.author_name,role:people.find(member=>member.person===message.person_id)?.role??null,body:message.body,at:message.created_at,mention:run?{agent:run.agent_name,state:stateOf(run.outcome)}:null};
+  const permissions=asked.filter(row=>row.message_id===message.id).flatMap(row=>replyCardOf({...row,run_id:'',kind:'permission',answered_at:null,done_at:null})??[]) as ChannelPermission[];
+  return {id:message.id,author:'person',mine:message.person_id===person,name:message.author_name,role:people.find(member=>member.person===message.person_id)?.role??null,body:message.body,at:message.created_at,
+   mention:run?{agent:run.agent_name,face:seen.find(agent=>agent.id===run.agent_id)?.connection_id||run.agent_id||run.agent_name,state:stateOf(run.outcome),permissions}:null};
  });
  if(read&&newest!==undefined) await db.rpc('read_channel',{ch:channel,through:newest});
  return {
@@ -74,6 +85,7 @@ export async function channelRecord(db:Database,person:string,company:string,cha
   managers,
   messages,
   open:(waiting??0)>0,
+  may:(may||[]) as PermissionChoice[],
  };
 }
 

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { boardColumns, chatWait, columnOf, keyboardTarget, blockReason, cardAgent, inEdgeBand, onCard, visibleApprovals, waitingCount } from '../lib/board-columns.mjs';
+import { boardColumns, chatWait, columnOf, keyboardTarget, blockReason, cardAgent, inEdgeBand, onCard, visibleApprovals, waitingCount, chatPlace } from '../lib/board-columns.mjs';
 
 test('the six columns keep the approved order, Waiting on you first', () => {
  assert.deepEqual(boardColumns, ['waiting', 'ideas', 'planned', 'progress', 'live', 'done']);
@@ -43,6 +43,24 @@ test('Waiting on you counts each Card once: its approval and its chat\'s questio
  assert.equal(onCard(row('mention', 5, 'c-1')), false);
  assert.equal(waitingCount([row('approval', 5), row('hand', 5, 'c-1'), row('question', 5, 'c-1'), row('hand', 6, 'c-3'), row('question', 6, 'c-3'), row('hand', null, 'c-2'), row('question', 5), row('mention', 5)]), 5);
  assert.equal(waitingCount([]), 0);
+});
+
+// #165: a permission request is one more thing waiting on its person: with its chat's Card when the chat has one, else
+// alone, and a channel's alone.
+test('Waiting on you counts a permission request with its chat\'s Card, and alone otherwise', () => {
+ const row = (kind, card_id, conversation_id = null) => ({ kind, card_id, conversation_id });
+ assert.equal(onCard(row('permission', 5, 'c-1')), true);
+ assert.equal(onCard(row('permission', null, 'c-2')), false);
+ assert.equal(onCard(row('channel_permission', null)), false);
+ assert.equal(waitingCount([row('permission', 5, 'c-1'), row('question', 5, 'c-1'), row('permission', null, 'c-2'), row('channel_permission', null), row('channel_permission', null)]), 4);
+});
+
+test('a waiting row opens its chat at its card: a handed step and a permission request by their anchor, a channel\'s request in its channel', () => {
+ assert.equal(chatPlace('rs', { kind: 'permission', id: 9, conversation_id: 'c-1' }), '/c/rs/conversations/c-1#permission-9');
+ assert.equal(chatPlace('rs', { kind: 'hand', id: 4, conversation_id: 'c-1' }), '/c/rs/conversations/c-1#hand-4');
+ assert.equal(chatPlace('rs', { kind: 'question', id: 3, conversation_id: 'c-1' }), '/c/rs/conversations/c-1');
+ assert.equal(chatPlace('rs', { kind: 'channel_permission', id: 7, conversation_id: null, channel_id: 'ch-1' }), '/c/rs/channels/ch-1#permission-7');
+ assert.equal(chatPlace('rs', { kind: 'approval', id: 2, conversation_id: null }), null);
 });
 
 test('Shift with an arrow moves to the next column in the reading direction', () => {
