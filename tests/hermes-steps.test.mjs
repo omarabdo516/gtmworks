@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fakeHermes } from './fake-hermes.mjs';
 import { engineFor } from '../lib/engine.mjs';
+import { followRun, sealRunSteps } from '../lib/run-steps.mjs';
 
 // #141 on the fake Engine server, which streams a run's events as the pinned release does (api_server_runs.py
 // _handle_run_events): what the driver reads of a Run's event stream and of its length.
@@ -87,6 +88,32 @@ test('a follower that read up to the Run\'s end leaves the closer a read that fi
   assert.deepEqual(followed.at(-1),{end:'ended'});
   const last=/** @type {{seq:number}} */(followed.at(-2)).seq;
   assert.deepEqual(await all(engine.steps(run,{after:last})),[{end:'ended'}],'after the last event, the close alone says the Run ended');
+ } finally { await fake.close(); }
+});
+
+test('a follower that read the Run to its end, then the closer, seal its steps whole on the Engine\'s own stream',async()=>{
+ const fake=await fakeHermes();
+ try {
+  const {engine,run}=await begin(fake);
+  fake.settings.emit(run,started('web_search','audiences','call_1'));
+  fake.settings.emit(run,completed('web_search',false,'call_1'));
+  await finish(engine,run);
+  // One row as the steps functions keep it (supabase/tests/run_steps.sql proves the real ones).
+  /** @type {any} */ let row=null; const writes=/** @type {string[]} */([]);
+  const db={rpc:async(/** @type {string} */ name,/** @type {any} */ args)=>{
+   if(name==='run_steps_progress') return {data:row?[{steps:row.steps,read_to:row.readTo,broken:row.broken,sealed:row.sealed}]:[],error:null};
+   writes.push(name);
+   if(row?.sealed) return {data:false,error:null};
+   row={steps:args.noted,readTo:args.upto,broken:!!row?.broken||args.lost,sealed:name==='seal_run_steps'};
+   return {data:true,error:null};
+  }};
+  const open={conversation:'conversation-1',run};
+  await followRun(db,engine,open,AbortSignal.timeout(5000));
+  assert.ok(row&&!row.broken&&!row.sealed,'the follower kept what it read up to the end');
+  await sealRunSteps(db,engine,open);
+  assert.deepEqual(writes.filter(name=>name==='seal_run_steps'),['seal_run_steps']); assert.equal(writes.at(-1),'seal_run_steps','sealed once, last');
+  assert.equal(row.broken,false,'the closer\'s read after the end finds the end, so the steps are whole');
+  assert.deepEqual(row.steps,[{call:'call_1',tool:'web_search',preview:'audiences',state:'done'}]);
  } finally { await fake.close(); }
 });
 
