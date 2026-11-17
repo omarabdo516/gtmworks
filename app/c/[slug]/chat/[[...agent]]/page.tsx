@@ -33,26 +33,36 @@ export default async function AgentChatPage({params,searchParams}:{params:Promis
  const {items:waitingItems}=await approvalQueue(db,company.id,user.id,membership?.role||'');
  const owner=membership?.role==='owner';
  const newAgent=(mode==='agent'||(mode==='ready'&&owner))&&!!agent?.is_default&&!!writer;
- const askOf=(newAgent||(agents?.length===1&&!!agent?.is_default&&!!writer))&&!owner?((((await db.from('members').select('people(name)').eq('company_id',company.id).eq('role','owner').is('removed_at',null)).data||[]) as unknown as {people:{name:string}|null}[])
-  .flatMap(row=>row.people?[row.people.name]:[]).sort()):null;
  const alone=company.work_mode==='alone';
  // Which empty chat the Agent shows this reader (#170). An Agent other than the main one is new to a reader with no
- // Conversation with it (RLS shows only the reader's own). The active Members are read only when the wording needs them:
- // the Owners a Member asks, or whether an Owner is the only one who sees the Agent.
+ // Conversation with it (RLS shows only the reader's own). The active Owners are read once, and only for a reader who is
+ // told whom a request goes to: asking for an Agent (#17), or the main Agent's empty chat in a team. Whether an Owner is
+ // the only one who sees an Agent needs the active Members and the Agent's access rows. A failed read fails the page
+ // rather than leave a sentence without its names.
  const main=!!agent?.is_default, fresh=main&&agents?.length===1;
- const [written,roster,access]=agent&&!fresh?await Promise.all([
-  main?0:db.from('conversations').select('id',{count:'exact',head:true}).eq('company_id',company.id).eq('agent_id',agent.id).eq('person_id',user.id).then(({count})=>count??1),
-  (main?!alone&&!owner:!alone&&owner)?db.from('members').select('person_id,role,people(name)').eq('company_id',company.id).is('removed_at',null)
-   .then(({data})=>(data||[]) as unknown as {person_id:string,role:string,people:{name:string}|null}[]):[],
-  !main&&!alone&&owner?db.from('member_agent_access').select('person_id').eq('company_id',company.id).eq('agent_id',agent.id).then(({data})=>(data||[]).map(row=>row.person_id)):[],
+ const asks=!owner&&(newAgent||(fresh&&!!writer));
+ const owners=!owner&&(asks||(main&&!fresh&&!alone))?await ownerNames(db,company.id):[];
+ const askOf=asks?owners:null;
+ const sole=!!agent&&!main&&!alone&&owner;
+ const [written,members,access]=agent&&!main?await Promise.all([
+  db.from('conversations').select('id',{count:'exact',head:true}).eq('company_id',company.id).eq('agent_id',agent.id).eq('person_id',user.id).then(({count})=>count??1),
+  sole?db.from('members').select('person_id,role').eq('company_id',company.id).is('removed_at',null).then(({data,error})=>{ if(error) throw error; return data||[]; }):[],
+  sole?db.from('member_agent_access').select('person_id').eq('company_id',company.id).eq('agent_id',agent.id).then(({data,error})=>{ if(error) throw error; return (data||[]).map(row=>row.person_id); }):[],
  ]):[0,[],[]];
  const empty:EmptyChat=!agent||!main&&written?{state:'known'}:fresh?{state:'fresh'}
-  :main?{state:'main',reader:alone?'alone':owner?'owner':'member',owners:roster.filter(member=>member.role==='owner').flatMap(member=>member.people?[member.people.name]:[]).sort()}
-  :{state:'new',works:worksWith({alone,me:user.id,members:roster,access}),...roleStart(language,alone,agent.template),made:madeOf(agent,user.id,slug)};
+  :main?{state:'main',reader:alone?'alone':owner?'owner':'member',owners}
+  :{state:'new',works:worksWith({alone,me:user.id,members,access}),...roleStart(language,alone,agent.template),made:madeOf(agent,user.id,slug)};
  const gallery=mode==='ready'&&newAgent?{company:company.name,alone,roles:readyRoles(language,alone)}:null;
  const details=agent?await agentDetails(db,{company:company.id,agent:agent.id,slug,me:user.id,role:membership?.role||'',tab}):null;
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  return <Shell company={company} companies={companies||[]} personId={user.id} section="chat" title={t('chats')} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={waitingItems.length} agentId={agent?.id}>
   <main className="convo-page h-full"><AgentChat slug={slug} company={company.id} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={details} writer={!!writer} team={company.work_mode==='team'} empty={empty} newAgent={newAgent} askOf={askOf} gallery={gallery} isNew={!!agent&&isNewFor(agent,user.id)}/></main>
  </Shell>;
+}
+
+// The names of a Company's active Owners, in order. A read the database refuses is an error, never an empty list.
+async function ownerNames(db:Awaited<ReturnType<typeof supabase>>,company:string) {
+ const {data,error}=await db.from('members').select('people(name)').eq('company_id',company).eq('role','owner').is('removed_at',null);
+ if(error) throw error;
+ return ((data||[]) as unknown as {people:{name:string}|null}[]).flatMap(row=>row.people?[row.people.name]:[]).sort();
 }

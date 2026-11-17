@@ -910,6 +910,7 @@
   "mainLineAlone": "Your main point of contact. Need a new agent? Tell it in your own words and it makes it.",
   "mainLineOwner": "The team’s main point of contact. Need a new agent? Tell it in your own words and it makes it.",
   "mainLineMember": "The team’s main point of contact. Need a new agent? Tell it and it prepares the request for {0}.",
+  "mainLineMemberAnyOwner": "The team’s main point of contact. Need a new agent? Tell it and it prepares the request for the Owner.",
   "suggestArticle": "A new SEO article",
   "suggestArticleD": "On what your customers search for",
   "suggestArticleText": "I need an SEO article on something our customers search for, linking to the right page on our site",

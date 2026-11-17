@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { onComposerFocus, takeComposerFocus } from '@/lib/composer-focus';
 import { useI18n } from '@/lib/i18n-client';
@@ -17,11 +17,21 @@ export const newId=()=>{const b=crypto.getRandomValues(new Uint8Array(16));b[6]=
 // `draft` starts the box with a sentence to try (remount with a new key to put another one in); it is focused for editing,
 // as it is with `focus` ("New agent" opens Lead's chat ready to type, #13). A new chat opened with "N" (app/new-chat-key)
 // focuses the box once its page has landed.
-export function MessageBox({placeholder,label,send,stop,draft,focus=false}:{placeholder:string,label?:string,send:(text:string,sendKey:string)=>Promise<string|null>,stop?:{label:string,run:()=>Promise<string|null>},draft?:string,focus?:boolean}) {
+// `ref` takes a sentence pressed in an empty chat (`insert`): it follows any text already typed, on its own line, and the
+// box is focused at its end. While a message is on its way the box keeps that message and takes no sentence.
+export type MessageBoxHandle={insert:(sentence:string)=>void};
+export function MessageBox({placeholder,label,send,stop,draft,focus=false,ref}:{placeholder:string,label?:string,send:(text:string,sendKey:string)=>Promise<string|null>,stop?:{label:string,run:()=>Promise<string|null>},draft?:string,focus?:boolean,ref?:Ref<MessageBoxHandle>}) {
  const {t}=useI18n(); const [text,setText]=useState(draft??''); const [key,setKey]=useState(newId); const [busy,setBusy]=useState(false); const [error,setError]=useState('');
  // Text typed into the server-drawn box before this code arrived is the person's own: it is kept, and Send sends it.
  const field=useRef<HTMLTextAreaElement>(null);
  useEffect(()=>{ const typed=field.current?.value; if(typed) setText(current=>current||typed); },[]);
+ const caret=useRef<number|null>(null);
+ useImperativeHandle(ref,()=>({insert(sentence) {
+  if(busy) return;
+  const next=text.trim()?`${text.trimEnd()}\n${sentence}`:sentence;
+  caret.current=next.length; setText(next); setKey(newId());
+ }}),[busy,text]);
+ useEffect(()=>{ const box=field.current; if(caret.current===null||!box) return; box.focus(); box.setSelectionRange(caret.current,caret.current); caret.current=null; },[text]);
  const pathname=usePathname()??''; const search=useSearchParams()?.toString()??'';
  // An inert box (behind the phone drawer) leaves the request to the frame, which focuses it once the drawer has closed.
  useEffect(()=>{ const take=()=>{ if(field.current&&!field.current.closest('[inert]')&&takeComposerFocus(search?`${pathname}?${search}`:pathname)) field.current.focus(); }; take(); return onComposerFocus(take); },[pathname,search]);
