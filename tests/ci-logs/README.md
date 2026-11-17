@@ -17,3 +17,7 @@ own lines in their order: the first three lines, every line that names a known s
 
 `constructed-registry-rate-limit.log` is not one job's log. No job that day ended on the rate limit, so it joins real
 lines of `database-133592988053`: its pull up to `Rate exceeded`, then that job's own last two lines.
+
+`constructed-test-failure-429.log` is not one job's log either. It is the first lines of `integration-133640016093`,
+then a failed browser test whose own error is a 429 answer from the app, the job's end, and an upload step after it that
+failed on a rate limit. Its label must stay "your change".
