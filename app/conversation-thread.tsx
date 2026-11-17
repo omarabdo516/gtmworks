@@ -42,8 +42,9 @@ export function useConversationRecord({company,initial}:{company:string,initial:
  const id=initial.conversation.id;
  const [record,setRecord]=useState(initial); const [sent,setSent]=useState(0);
  const {messages,pending}=record;
- // The open Run moves its Agent's tile in the sidebar, from the page and from a Card's sheet alike (#184).
- useReportRun(record.conversation.agent_id??undefined,pending);
+ // The open Run moves its Agent's tile in the sidebar, from the page and from a Card's sheet alike (#184). A Run waiting
+ // on its person's answer (#138) is not working, as the reference's Run has ended when its question card is drawn.
+ useReportRun(record.conversation.agent_id??undefined,pending&&!record.asking);
  // The sidebar's Agents and the board come from the server render: an Agent Lead makes while the record is asked for
  // again, or a Card's new column, is only on the page once the server parts are drawn again, so they show without a
  // reload.

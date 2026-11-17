@@ -87,6 +87,9 @@ export const screens = {
   // #137. The team chat (th-team): Critic's reply with the review card of the December ad texts under it. Built: the
   // review-shown visual state's Conversation (pass --built-path).
   'review-card': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-team"]' }, { waitFor: '.rvcard' }, { scrollTo: '.rvcard' }] }, builtPath: null },
+  // #138. The Meta campaign chat (th-meta): Ads's question card, the angle to take, before it is answered. Built: the
+  // question-asked visual state's Conversation (pass --built-path).
+  'question-card': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-meta"]' }, { waitFor: '.qcard' }, { scrollTo: '.qcard' }] }, builtPath: null },
   // #18. The Conversation in which Omar told Ads a lasting rule, with the saved line under Ads's reply. Built: the
   // fixture's ruleConversation (pass --built-path).
   'rule-saved': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-rule-ads"]' }, { waitFor: '.note--saved' }] }, builtPath: null },
