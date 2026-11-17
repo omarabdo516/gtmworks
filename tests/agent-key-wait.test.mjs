@@ -22,9 +22,11 @@ const runsOn=fake=>fake.settings.requests.filter(request=>/^\/p\/[^/]+\/v1\/runs
 // The Company's profiles as company_key_profiles names them: the space, Lead's own, the Writer's, and `extra` rows.
 const rowsOf=extra=>[{profile:space,kind:'space',agent:null,name:null},{profile:main,kind:'company',agent:agentId(main),name:'Lead'},
  {profile:writer,kind:'agent',agent:agentId(writer),name:'Writer'},...extra];
-// The person's own session and the service role, as the route hands them over; every call is recorded.
-function sessions(fake,{owner=true,extra=[],endFails=false}={}) {
- const asked=[]; const ended=[]; const unfinished=new Map();
+// The person's own session and the service role, as the route hands them over; every call of either is recorded.
+// `waits` are the Agent profiles the database holds for the key: finish_provider_key_change ends those a set reached
+// and answers the rest while the key is held. `failing` names the service-role calls that answer an error.
+function sessions(fake,{owner=true,extra=[],waits=[],failing=[]}={}) {
+ const asked=[]; const unfinished=new Map(); const waiting=new Set(waits);
  const db={rpc:async(name,args)=>{ asked.push({name,args});
   if(name==='is_company_owner') return {data:owner,error:null};
   if(name==='company_engine_target') return {data:[{connection:'f0000000-0000-0000-0000-000000000002',address:fake.address,profile:main,one_company:false,profiles:[]}],error:null};
@@ -32,11 +34,16 @@ function sessions(fake,{owner=true,extra=[],endFails=false}={}) {
   if(name==='record_provider_key_change') return {data:null,error:null};
   if(name==='record_unfinished_provider_key') { if(args.missed.length) unfinished.set(args.key_provider,args.missed); else unfinished.delete(args.key_provider); return {data:null,error:null}; }
   if(name==='company_key_unfinished_profiles') return {data:owner?[...unfinished].map(([provider,profiles])=>({provider,profiles})):[],error:null};
-  if(name==='end_agent_key_waits') { ended.push(args); return endFails?{data:null,error:{code:'XX000',message:'the database is down'}}:{data:null,error:null}; }
   return {data:null,error:{message:'unexpected'}}; }};
  const key=encryptSecret('test-only-key',encryptionKey);
- const service={from:(...args)=>{ asked.push({name:'from',args}); return {select:()=>({eq:()=>({eq:()=>({maybeSingle:async()=>({data:{key_encrypted:key},error:null})})})})}; }};
- return {db,service,asked,ended};
+ const service={from:(...args)=>{ asked.push({name:'from',args}); return {select:()=>({eq:()=>({eq:()=>({maybeSingle:async()=>({data:{key_encrypted:key},error:null})})})})}; },
+  rpc:async(name,args)=>{ asked.push({name,args,engineAsked:fake.settings.managementRequests.length});
+   if(failing.includes(name)) return {data:null,error:{code:'XX000',message:'the database is down'}};
+   if(name==='begin_provider_key_change'||name==='forget_agent_profile_leftovers') return {data:null,error:null};
+   if(name==='finish_provider_key_change') { if(args.now_held!==true) return {data:[],error:null}; for(const profile of args.reached) waiting.delete(profile); return {data:[...waiting],error:null}; }
+   return {data:null,error:{message:'unexpected'}}; }};
+ const calls=name=>asked.filter(call=>call.name===name).map(call=>call.args);
+ return {db,service,asked,calls};
 }
 // The fake's management listener is not on port 9119 of the run address, so the driver is pointed at it.
 const pointedAt=fake=>{ const at=target=>({...target,managementAddress:fake.managementAddress});
@@ -84,13 +91,13 @@ test('the waiting Agent is listed for the Owner until the next set gives its own
   made(fake,space,main,writer);
   await change(sessions(fake),fake,{intent:'set',value:known});
   await leadMakes(fake);
-  const owner=sessions(fake,{extra:[{profile:later,kind:'agent',agent:agentId(later),name:'Writer later'}]});
+  const owner=sessions(fake,{waits:[later],extra:[{profile:later,kind:'agent',agent:agentId(later),name:'Writer later'}]});
   assert.deepEqual((await read(owner,fake)).waiting,[{agent:agentId(later),name:'Writer later'}],'the Owner sees it waiting');
   const set=await change(owner,fake,{intent:'set',value:known});
   assert.deepEqual(set.body.agents.at(-1),{agent:agentId(later),name:'Writer later',written:true});
   assert.equal(envOf(fake,later).OPENROUTER_API_KEY,known);
   assert.deepEqual([fake.settings.profiles.get(later).provider,fake.settings.profiles.get(later).model],['openrouter','anthropic/claude-opus-4.6'],'its own profile has the model');
-  assert.deepEqual(owner.ended,[{c:company,reached:[main,writer,later]}],'the set ends the waits of the profiles it gave key and model');
+  assert.deepEqual(owner.calls('finish_provider_key_change'),[{c:company,key_provider:'openrouter',now_held:true,reached:[main,writer,later]}],'the set ends the waits of the profiles it gave key and model');
   assert.deepEqual((await read(owner,fake)).waiting,[]);
   const engine=engineOn(fake,later);
   const run=await engine.start({conversation:'conversation-2',input:'Write the June article',idempotencyKey:'send-1'});
@@ -99,22 +106,83 @@ test('the waiting Agent is listed for the Owner until the next set gives its own
  } finally { await fake.close(); }
 });
 
-test('a set that gives no profile a model ends no wait, and a wait the database could not end changes nothing in the answer', async () => {
+test('a change is begun in the database before the Engine is asked anything, and a person who is not the Owner begins none', async () => {
+ const fake=await fakeHermes();
+ try {
+  made(fake,space,main,writer);
+  for(const request of [{intent:'set',value:known},{intent:'remove'}]) {
+   fake.settings.managementRequests.length=0;
+   const owner=sessions(fake);
+   assert.equal((await change(owner,fake,request)).status,200,request.intent);
+   const begun=owner.asked.filter(call=>call.name==='begin_provider_key_change');
+   assert.deepEqual(begun.map(call=>[call.args,call.engineAsked]),[[{c:company,key_provider:'openrouter'},0]],`${request.intent}: begun once, before any Engine request`);
+   assert.ok(owner.asked.indexOf(begun[0])<owner.asked.findIndex(call=>call.name==='company_key_profiles'),`${request.intent}: before the profiles to write are read`);
+   assert.ok(fake.settings.managementRequests.length>0,`${request.intent}: the Engine is asked after`);
+  }
+  fake.settings.managementRequests.length=0;
+  const member=sessions(fake,{owner:false});
+  assert.equal((await change(member,fake,{intent:'set',value:known})).status,403);
+  assert.deepEqual([member.calls('begin_provider_key_change'),member.calls('finish_provider_key_change'),fake.settings.managementRequests],[[],[],[]]);
+ } finally { await fake.close(); }
+});
+
+test('a change ends as the Engine answered: a set holds the key, a removal lets it go, another failure leaves it as it was, and one the Engine did not answer stays changing', async () => {
+ const fake=await fakeHermes();
+ const printed=[]; const kept=console.error; console.error=(...args)=>{ printed.push(args.map(String).join(' ')); };
+ try {
+  made(fake,space,main,writer);
+  const finished=async request=>{ const person=sessions(fake); const answer=await change(person,fake,request); return [answer.status,person.calls('begin_provider_key_change').length,person.calls('finish_provider_key_change')]; };
+  const ended=(now_held,reached=[])=>[{c:company,key_provider:'openrouter',now_held,reached}];
+  fake.settings.envFail.add(writer);
+  assert.deepEqual(await finished({intent:'set',value:known}),[200,1,ended(true,[main])],'a set names only the profiles it gave key and model');
+  fake.settings.envFail.clear();
+  assert.deepEqual(await finished({intent:'remove'}),[200,1,ended(false)],'a removal lets the key go');
+  assert.deepEqual(await finished({intent:'remove'}),[200,1,ended(false)],'and so does one that found nothing to remove');
+  assert.deepEqual(await finished({intent:'set',value:known,provider:'nosuch'}),[400,1,[{c:company,key_provider:'nosuch',now_held:null,reached:[]}]],'a refused set leaves it as it was');
+  const silent={...pointedAt(fake),set:async()=>({state:'unreachable',model:null,profiles:null}),remove:async()=>({state:'unreachable',profiles:null})};
+  assert.deepEqual(await finished({intent:'set',value:known,driver:silent}),[503,1,[]],'a set the Engine did not answer is not finished');
+  assert.deepEqual(await finished({intent:'remove',driver:silent}),[503,1,[]],'nor is such a removal');
+  assert.deepEqual(printed,[]);
+  const unbegun=sessions(fake,{failing:['begin_provider_key_change']});
+  assert.equal((await change(unbegun,fake,{intent:'set',value:known})).status,200,'a change the database could not begin goes on');
+  assert.equal(envOf(fake,main).OPENROUTER_API_KEY,known);
+  assert.deepEqual([unbegun.calls('finish_provider_key_change'),printed],[[],['Provider key change not begun XX000']],'unfinished, and logged by its code only');
+ } finally { console.error=kept; await fake.close(); }
+});
+
+test('a set that gives no profile a model ends no wait, and a change the database could not finish changes nothing in the answer', async () => {
  const fake=await fakeHermes();
  try {
   made(fake,space,main,writer,later);
   const extra=[{profile:later,kind:'agent',agent:agentId(later),name:'Writer later'}];
   fake.settings.modelOptionsFail=true;
-  const unsettled=sessions(fake,{extra});
+  const unsettled=sessions(fake,{extra,waits:[later]});
   await change(unsettled,fake,{intent:'set',value:known});
-  assert.deepEqual(unsettled.ended,[],'no profile got its model, so every Agent still waits');
+  assert.deepEqual(unsettled.calls('finish_provider_key_change'),[{c:company,key_provider:'openrouter',now_held:true,reached:[]}],'no profile got its model, so every Agent still waits');
   fake.settings.modelOptionsFail=false;
-  const failing=sessions(fake,{extra,endFails:true});
+  const failing=sessions(fake,{extra,failing:['finish_provider_key_change']});
   const printed=[]; const kept=console.error; console.error=(...args)=>{ printed.push(args.map(String).join(' ')); };
   let set;
   try { set=await change(failing,fake,{intent:'set',value:known}); } finally { console.error=kept; }
   assert.deepEqual(Object.keys(set.body).sort(),['agents','model','provider']);
-  assert.deepEqual(printed,['Agent key waits not ended XX000']);
+  assert.deepEqual(printed,['Provider key change not finished XX000']);
+ } finally { await fake.close(); }
+});
+
+test('an Agent made while a set was writing waits on a profile the set did not name, so the set gives it the key too, for at most three more rounds', async () => {
+ const fake=await fakeHermes();
+ try {
+  const late=`ag-e${tail}`;
+  made(fake,space,main,writer,late);
+  const owner=sessions(fake,{waits:[late]});
+  assert.equal((await change(owner,fake,{intent:'set',value:known})).status,200);
+  assert.equal(envOf(fake,late).OPENROUTER_API_KEY,known,'the late profile gets the key');
+  assert.deepEqual([fake.settings.profiles.get(late).provider,fake.settings.profiles.get(late).model],['openrouter','anthropic/claude-opus-4.6'],'and the model');
+  assert.deepEqual(owner.calls('finish_provider_key_change').map(call=>call.reached),[[main,writer],[late]],'and a second finish ends its wait');
+  const endless=sessions(fake); const finish=endless.service.rpc; let fresh=0;
+  endless.service.rpc=async(name,args)=>{ const answer=await finish(name,args); return name==='finish_provider_key_change'?{data:[`ag-${(++fresh).toString(16).padStart(32,'0')}`],error:null}:answer; };
+  await change(endless,fake,{intent:'set',value:known});
+  assert.equal(endless.calls('finish_provider_key_change').length,4,'the first finish and three more rounds');
  } finally { await fake.close(); }
 });
 
@@ -126,7 +194,7 @@ test('a removed Agent\'s profile that holds the key reads as leftover by its nam
   assert.equal(envOf(fake,gone).OPENROUTER_API_KEY,known);
   const owner=sessions(fake,{extra:[{profile:gone,kind:'removed',agent:agentId(gone),name:'Old writer'}]});
   const after=await read(owner,fake);
-  assert.deepEqual([after.waiting,after.leftover,after.unknown],[[],[{agent:agentId(gone),name:'Old writer'}],[]],'still holding the key, it is leftover and never waiting');
+  assert.deepEqual([after.waiting,after.leftover,after.unknown],[[],[{agent:null,name:'Old writer'}],[]],'still holding the key, it is leftover by its name only and never waiting');
   fake.settings.managementRequests.length=0;
   await change(owner,fake,{intent:'set',value:`${known}-rotated`});
   assert.ok(fake.settings.managementRequests.every(request=>profileOf(request.path)!==gone||request.method==='GET'),'a set writes nothing to it');
@@ -138,9 +206,34 @@ test('a removed Agent\'s profile that holds the key reads as leftover by its nam
   const removed=await change(owner,fake,{intent:'remove'});
   assert.ok(fake.settings.managementRequests.some(request=>request.method==='DELETE'&&profileOf(request.path)===gone),'the removal reaches it');
   assert.equal(envOf(fake,gone).OPENROUTER_API_KEY,undefined);
-  assert.deepEqual(removed.body.agents,[{agent:agentId(main),name:'Lead',removed:true},{agent:agentId(writer),name:'Writer',removed:true},{agent:agentId(gone),name:'Old writer',removed:true}]);
+  assert.deepEqual(removed.body.agents,[{agent:agentId(main),name:'Lead',removed:true},{agent:agentId(writer),name:'Writer',removed:true},{agent:null,name:'Old writer',removed:true}]);
   assert.deepEqual((await read(owner,fake)).leftover,[]);
   assert.ok(fake.settings.profiles.has(gone),'the profile itself is kept');
+ } finally { await fake.close(); }
+});
+
+test('after a removal, a removed Agent\'s profile left holding no key is forgotten, and one still holding a key, unread or not reached is kept', async () => {
+ const fake=await fakeHermes();
+ try {
+  const other=`ag-f${tail}`; const missing=`ag-b${tail}`; const unread=`ag-9${tail}`; const stuck=`ag-8${tail}`;
+  made(fake,space,main,writer,gone,other,unread,stuck);
+  for(const name of [space,gone,other,unread,stuck]) fake.settings.profiles.get(name).env={OPENROUTER_API_KEY:known};
+  fake.settings.profiles.get(other).env.DEEPSEEK_API_KEY='sk-deepseek-test-only-0123456789';
+  fake.settings.envReadFail.add(unread); fake.settings.envFail.add(stuck);
+  const removedRow=(profile,name)=>({profile,kind:'removed',agent:agentId(profile),name});
+  const extra=[removedRow(gone,'Old writer'),removedRow(other,'Old ads'),removedRow(missing,'Old SEO'),removedRow(unread,'Old design'),removedRow(stuck,'Old video')];
+  const owner=sessions(fake,{extra});
+  const removed=await change(owner,fake,{intent:'remove'});
+  assert.deepEqual(removed.body.agents.slice(2),[{agent:null,name:'Old writer',removed:true},{agent:null,name:'Old ads',removed:true},{agent:null,name:'Old SEO',removed:true},
+   {agent:null,name:'Old design',removed:true},{agent:null,name:'Old video',removed:false}],'a removed Agent is named, never by its id');
+  assert.deepEqual(owner.calls('forget_agent_profile_leftovers'),[{c:company,profiles:[gone,missing]}],'the one emptied and the one the Engine does not serve');
+  assert.ok(fake.settings.profiles.has(gone),'the Engine keeps the profile');
+  const failing=sessions(fake,{extra,failing:['forget_agent_profile_leftovers']});
+  const printed=[]; const kept=console.error; console.error=(...args)=>{ printed.push(args.map(String).join(' ')); };
+  let again;
+  try { again=await change(failing,fake,{intent:'remove'}); } finally { console.error=kept; }
+  assert.equal(again.status,200);
+  assert.deepEqual(printed,['Agent profile leftovers not forgotten XX000']);
  } finally { await fake.close(); }
 });
 
@@ -158,7 +251,7 @@ test('a removed Agent\'s profile a set missed is never waiting, and one the Engi
   const after=await read(owner,fake);
   assert.deepEqual([after.waiting,after.leftover,after.unknown],[[],[],[]],'once its Agent is removed it waits for no key, and holds none');
   fake.settings.envReadFail.add(gone);
-  assert.deepEqual((await read(owner,fake)).unknown,[{agent:agentId(gone),name:'Old writer'}]);
+  assert.deepEqual((await read(owner,fake)).unknown,[{agent:null,name:'Old writer'}]);
  } finally { await fake.close(); }
 });
 
@@ -167,12 +260,17 @@ test('no key reaches an answer, a log line or a database call while a later Agen
  const printed=[]; const kept={};
  for(const level of ['log','info','warn','error','debug']) { kept[level]=console[level]; console[level]=(...args)=>{ printed.push(args.map(String).join(' ')); }; }
  try {
-  made(fake,space,main,writer,gone);
+  const late=`ag-e${tail}`;
+  made(fake,space,main,writer,gone,late);
   const answers=[await change(sessions(fake,{extra:[{profile:gone,kind:'agent',agent:agentId(gone),name:'Old writer'}]}),fake,{intent:'set',value:known})];
   const made_=await leadMakes(fake);
-  const owner=sessions(fake,{endFails:true,extra:[{profile:later,kind:'agent',agent:agentId(later),name:'Writer later'},{profile:gone,kind:'removed',agent:agentId(gone),name:'Old writer'}]});
-  answers.push(made_.outcome,await read(owner,fake),await change(owner,fake,{intent:'set',value:known}),await read(owner,fake),await change(owner,fake,{intent:'remove'}),await read(owner,fake));
-  assert.ok(printed.some(line=>line.includes('Agent key waits not ended')),'the failed end is reported');
+  const owner=sessions(fake,{waits:[later,late],failing:['forget_agent_profile_leftovers'],extra:[{profile:later,kind:'agent',agent:agentId(later),name:'Writer later'},{profile:gone,kind:'removed',agent:agentId(gone),name:'Old writer'}]});
+  answers.push(made_.outcome,await read(owner,fake),await change(owner,fake,{intent:'set',value:known}));
+  assert.equal(envOf(fake,late).OPENROUTER_API_KEY,known,'the late profile got the key');
+  answers.push(await read(owner,fake),await change(owner,fake,{intent:'remove'}),await read(owner,fake));
+  for(const name of ['begin_provider_key_change','finish_provider_key_change','forget_agent_profile_leftovers']) assert.ok(owner.calls(name).length>0,`${name} was called`);
+  assert.ok(owner.calls('finish_provider_key_change').some(call=>call.reached.includes(late)),'the late round was taken');
+  assert.ok(printed.some(line=>line.includes('Agent profile leftovers not forgotten')),'the failed forget is reported');
   const seen=JSON.stringify([answers,printed,owner.asked,made_.calls]);
   for(const secret of [known,known.slice(-4),`${known.slice(0,4)}...`,'OPENROUTER_API_KEY']) assert.ok(!seen.includes(secret),secret);
  } finally {
