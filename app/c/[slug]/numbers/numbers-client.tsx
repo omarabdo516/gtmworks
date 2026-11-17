@@ -4,7 +4,8 @@ import Link from '@/lib/link';
 import { useI18n } from '@/lib/i18n-client';
 
 type Period='7'|'30';
-// The period a person just picked. The page is drawn again for it, switch included, so its new switch takes the focus.
+// The period a person just picked. The page is drawn again for it, switch included, so its new switch takes the focus
+// the old one had when it went away, unless the person has moved the focus elsewhere meanwhile.
 let chosen:Period|null=null;
 
 // The Numbers page's "Last 7 days / Last 30 days" (design-reference: renderDashboard's segmented). After a change the
@@ -14,6 +15,8 @@ export function PeriodSwitch({slug,period}:{slug:string,period:Period}) {
  useLayoutEffect(()=>{
   if(chosen!==period) return;
   chosen=null;
+  const focused=document.activeElement;
+  if(focused&&focused!==document.body&&!group.current?.contains(focused)) return;
   group.current?.querySelector<HTMLElement>('[aria-current="true"]')?.focus();
  },[period]);
  return <div className="segmented" role="group" aria-label={t('numbersPeriod')} ref={group}>
@@ -27,9 +30,9 @@ export function PeriodSwitch({slug,period}:{slug:string,period:Period}) {
 export function NumbersPlaceholder() {
  const {t}=useI18n();
  const block=(height:number,key?:number)=><div key={key} className="sk" style={{height,borderRadius:'var(--gw-r-lg)'}}/>;
- return <div className="dash__inner sk-hold" aria-busy="true" aria-label={t('numbersLoading')}>
-  <div className="kpis">{[0,1,2,3].map(index=>block(118,index))}</div>
-  <div className="dash-row">{block(340)}{block(220)}</div>
-  <div className="dash-row">{block(280)}{block(280)}</div>
+ return <div className="dash__inner sk-hold" aria-busy="true"><span className="sr-only">{t('numbersLoading')}</span>
+  <div className="kpis" aria-hidden="true">{[0,1,2,3].map(index=>block(118,index))}</div>
+  <div className="dash-row" aria-hidden="true">{block(340)}{block(220)}</div>
+  <div className="dash-row" aria-hidden="true">{block(280)}{block(280)}</div>
  </div>;
 }

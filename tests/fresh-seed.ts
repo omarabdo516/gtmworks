@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { dbContainerOf, seedSnapshotOf } from './lane.mjs';
+import { noSlowReads } from './slow-reads';
 
 export * from './offline-browser';
 
@@ -22,7 +23,7 @@ export function freshSeed(file: string, again = false) {
   for (let attempt = 1; ; attempt++) {
     try {
       execFileSync('docker', ['exec', '-i', dbContainerOf(), 'psql', '-U', 'supabase_admin', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-q', '--single-transaction'],
-        { input: readFileSync(snapshot), stdio: ['pipe', 'ignore', 'pipe'], encoding: 'utf8' });
+        { input: `${noSlowReads}\n${readFileSync(snapshot, 'utf8')}`, stdio: ['pipe', 'ignore', 'pipe'], encoding: 'utf8' });
       break;
     } catch (error) {
       const stderr = String((error as { stderr?: string }).stderr ?? '');

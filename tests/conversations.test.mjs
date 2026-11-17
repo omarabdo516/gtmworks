@@ -67,7 +67,7 @@ const draft=(/** @type {number} */ id)=>({id,kind:'draft',title:'خطة الحم
 
 test('a draft card is read from its row, and a row of a kind this version does not know is left out',()=>{
  assert.deepEqual(replyCardOf(row(1,'r1')),draft(1));
- assert.equal(replyCardOf(row(9,'r1','question')),null);
+ assert.equal(replyCardOf(row(9,'r1','poll')),null);
  assert.equal(replyCardOf(row(9,'r1','toString')),null);
 });
 
@@ -85,6 +85,39 @@ test('a draft card is under the Agent\'s reply of its run, or is the Agent\'s wh
  assert.deepEqual(record[1].cards,[{kind:'reply',card:draft(1)}]);
  assert.equal(record[1].body,'تمام، دي خطة الحملة.');
  assert.deepEqual(record[3],{id:3,author:'agent',author_name:'Ads',body:'',created_at:at(11),kind:'made',cards:[{kind:'reply',card:draft(2)}]});
+});
+
+// #138: an Agent's question, read from its row in each state; a claimed answer still on its way to the Engine is drawn
+// answered. A Run's questions follow its person's message, each with its answer as that person's turn, before its reply.
+const angles=['من خريج لمحاسب شغال','Excel وOdoo في كورس واحد'];
+const askedRow=(/** @type {string} */ state,/** @type {string|undefined} */ answer)=>({id:5,run_id:'r1',kind:'question',title:'اختار زاوية الإعلان',
+ content:{question:'اختار زاوية الإعلان',choices:angles,multiple:false,...(answer===undefined?{}:{answer})},state,answered_at:answer===undefined?null:at(3),created_at:at(2)});
+const question={id:5,kind:'question',title:'اختار زاوية الإعلان',question:'اختار زاوية الإعلان',choices:angles,multiple:false};
+
+test('a question is read from its row: open with no answer, answered with its answer also while it is on its way, and closed with or without one',()=>{
+ assert.deepEqual(replyCardOf(askedRow('open')),{...question,state:'open'});
+ assert.deepEqual(replyCardOf(askedRow('sending',angles[1])),{...question,state:'answered',answer:angles[1]});
+ assert.deepEqual(replyCardOf(askedRow('answered',angles[1])),{...question,state:'answered',answer:angles[1]});
+ assert.deepEqual(replyCardOf(askedRow('closed',angles[1])),{...question,state:'closed'});
+ assert.deepEqual(replyCardOf(askedRow('closed')),{...question,state:'closed'});
+});
+
+test('a Run\'s question follows its person\'s message, its answer is that person\'s turn, and the Run\'s reply comes after; the main Agent\'s is its plain words',()=>{
+ const sent=[{id:1,author:/** @type {const} */('person'),author_name:'Omar',body:'محتاجين حملة Meta',run_id:'r1',created_at:at(1)}];
+ const placed=(/** @type {string} */ state,/** @type {string|undefined} */ answer,/** @type {string|undefined} */ words)=>{
+  const card={kind:/** @type {const} */('reply'),card:/** @type {import('../lib/conversations.ts').ReplyCard} */(replyCardOf(askedRow(state,answer)))};
+  return [{run_id:'r1',at:at(2),card,...(answer===undefined?{}:{answer:{body:answer,at:at(3)}}),...(words===undefined?{}:{words})}];
+ };
+ const open=shown(sent,[],placed('open'),'Ads');
+ assert.deepEqual(open,[{id:1,author:'person',author_name:'Omar',body:'محتاجين حملة Meta',lost:false,created_at:at(1)},
+  {id:5,author:'agent',author_name:'Ads',body:'',created_at:at(2),kind:'asked',cards:[placed('open')[0].card]}]);
+ assert.deepEqual(waiting(sent,[]).map(message=>message.id),[1],'the Run still waits while its question does');
+ const replied=[...sent,{id:2,author:/** @type {const} */('agent'),author_name:'Ads',body:'تمام، هنمشي بزاوية Excel.',run_id:'r1',created_at:at(4)}];
+ const answered=shown(replied,[{run_id:'r1',outcome:'completed'}],placed('answered',angles[1]),'Ads');
+ assert.deepEqual(order(answered),[1,'asked','answer',2]);
+ assert.deepEqual(answered[2],{id:5,author:'person',author_name:'Omar',body:angles[1],created_at:at(3),kind:'answer'});
+ const lead=shown(sent,[],placed('open',undefined,`اختار زاوية الإعلان\n- ${angles[0]}\n- ${angles[1]}`),'Lead');
+ assert.deepEqual(lead[1],{id:5,author:'agent',author_name:'Lead',body:`اختار زاوية الإعلان\n- ${angles[0]}\n- ${angles[1]}`,created_at:at(2),kind:'asked'});
 });
 
 test('a message whose run Hermes no longer knew is marked lost and waits no more, and the next message waits for its own reply', () => {

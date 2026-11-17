@@ -4,7 +4,9 @@ export type JsonSchemaObject={type:'object',properties:Record<string,unknown>,re
 export type ToolSpec={name:string,description:string,parameters:JsonSchemaObject};
 export type ToolCall={id:string,name:string,arguments:unknown};
 export type HistoryEntry={role:'user'|'assistant',content:string};
-export type RunState={state:'running'|'completed'|'failed'|'stopped'|'lost'|'unreachable',reply:string|null,session:string|null,usage:RunUsage|null,toolCalls:ToolCall[]};
+export type RunQuestion={id:string,text:string,choices:string[],multiple:boolean};
+export type RunState={state:'running'|'completed'|'failed'|'stopped'|'lost'|'unreachable',reply:string|null,session:string|null,usage:RunUsage|null,toolCalls:ToolCall[],question?:RunQuestion|null};
+export type AnsweredQuestion='answered'|'gone'|'unreachable';
 export type Agent={name:string,instructions:string,model:string|null,ready:boolean};
 export type AgentRequest={name:string,instructions:string,model?:string|null};
 export type CreatedAgent={state:'created',agent:Agent}|{state:'exists'|'refused'|'unreachable'|'failed',agent:null};
@@ -18,6 +20,7 @@ export type Engine={
  start(run:{conversation:string,input:string,idempotencyKey:string,instructions?:string,tools?:ToolSpec[],history?:HistoryEntry[],retry?:boolean}):Promise<string|null|StartUnknown>,
  read(run:string):Promise<RunState>,
  stop(run:string):Promise<boolean>,
+ answer(run:string,question:string,text:string):Promise<AnsweredQuestion>,
  createAgent(agent:AgentRequest):Promise<CreatedAgent>,
  readAgent(name:string):Promise<FoundAgent>,
  provideAgent(agent:{name:string,instructions:string,level:AgentLevel}):Promise<ProvidedAgent>,

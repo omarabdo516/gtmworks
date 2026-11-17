@@ -17,33 +17,53 @@ type RequestBase={id:number,name:string,job:string,apps:string[],askedBy:string,
 export type AgentRequestView=RequestBase&({state:'waiting',owners:string[]}|{state:'made',by:string,at:string,agent:Pick<MadeAgent,'id'|'connection_id'|'name'>|null}|{state:'declined',by:string,at:string,reason:string});
 // A card any Agent's reply carries (#136), one variant per kind, every word on it the Agent's. A row of a kind this app
 // version does not know (the database may be newer) is left out.
+// A question (#138) is the Engine's own: open until its person answers it, then answered with that answer (a claimed
+// answer still on its way to the Engine is drawn answered), or closed once the Engine no longer waits for it.
 type ReviewItem={text:string,fine:boolean,note:string};
+type Question={id:number,kind:'question',title:string,question:string,choices:string[],multiple:boolean};
 export type ReplyCard={id:number,kind:'draft',title:string,line:string,rows:{label:string,value:string}[]}
- |{id:number,kind:'review',title:string,line:string,items:ReviewItem[],decision:string};
-export const replyCardColumns='id,run_id,kind,title,content,created_at';
-export type ReplyCardRow={id:number,run_id:string,kind:string,title:string,content:unknown,created_at:string};
+ |{id:number,kind:'review',title:string,line:string,items:ReviewItem[],decision:string}
+ |(Question&({state:'open'}|{state:'answered',answer:string}|{state:'closed'}));
+export const replyCardColumns='id,run_id,kind,title,content,state,answered_at,created_at';
+export type ReplyCardRow={id:number,run_id:string,kind:string,title:string,content:unknown,state:string,answered_at:string|null,created_at:string};
 // The database keeps only rows each kind's reader can read (reply_card_valid); a kind with no reader fails the build.
 const replyReaders:{[K in ReplyCard['kind']]:(row:ReplyCardRow)=>Extract<ReplyCard,{kind:K}>}={
  draft:({id,title,content})=>{ const {line,rows}=content as {line:string,rows:{label:string,value:string}[]}; return {id,kind:'draft',title,line,rows}; },
  review:({id,title,content})=>{ const {line,items,decision}=content as {line:string,items:ReviewItem[],decision:string}; return {id,kind:'review',title,line,items,decision}; },
+ question:({id,title,content,state})=>{
+  const {question,choices,multiple,answer}=content as {question:string,choices:string[],multiple:boolean,answer?:string};
+  const asked:Question={id,kind:'question',title,question,choices,multiple};
+  return state==='open'?{...asked,state:'open'}:state==='closed'||answer===undefined?{...asked,state:'closed'}:{...asked,state:'answered',answer};
+ },
 };
 export const replyCardOf=(row:ReplyCardRow):ReplyCard|null=>Object.hasOwn(replyReaders,row.kind)?replyReaders[row.kind as ReplyCard['kind']](row):null;
 export type LeadCard={kind:'made',agent:MadeAgent}|{kind:'request',request:AgentRequestView}|{kind:'reply',card:ReplyCard};
 export type SavedRule={id:string,agent:string|null,removed:boolean,said_at:string,sentTo?:string[]};
 type RuleDecision={approved:boolean,by:string,rule:string,at:string};
 export type Decision=({kind:'rule'}&RuleDecision)|({kind:'request',by:string,name:string,at:string}&({made:true}|{made:false,reason:string}));
-export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided'|'boarded',to?:string,failed?:boolean,cards?:LeadCard[],saved?:SavedRule[],decided?:Decision};
+export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided'|'boarded'|'asked'|'answer',to?:string,failed?:boolean,cards?:LeadCard[],saved?:SavedRule[],decided?:Decision};
 type StoredMessage=ConversationMessage&{run_id:string};
 export const messageColumns='id,author,author_name,body,run_id,created_at';
-export const conversationColumns='id,agent_id,agent_name,hermes_agents(connection_id)';
-// A person's message whose run Hermes no longer knew is marked lost (#243), from the run's usage record.
-export const shown=(messages:StoredMessage[],usage:{run_id:string,outcome:string}[]=[],leadCards:{run_id:string,card:LeadCard,at:string}[]=[],agentName='',saved:{run_id:string,rule:SavedRule}[]=[]):ConversationMessage[]=>messages.flatMap(message=>{
+export const conversationColumns='id,agent_id,agent_name,hermes_agents(connection_id,is_default)';
+// A card of a run as the record places it. A question (#138) also carries the answer its person gave, drawn as their
+// own message though none is stored, and the main Agent's question carries the plain words it is drawn as (`words`)
+// until #143 draws its own card.
+export type PlacedCard={run_id:string,card:LeadCard,at:string,answer?:{body:string,at:string},words?:string};
+const isQuestion=(row:PlacedCard)=>row.card.kind==='reply'&&row.card.card.kind==='question';
+// A person's message whose run Hermes no longer knew is marked lost (#243), from the run's usage record. A run's
+// questions follow its person's message, each with its answer, before the run's reply (#138).
+export const shown=(messages:StoredMessage[],usage:{run_id:string,outcome:string}[]=[],leadCards:PlacedCard[]=[],agentName='',saved:{run_id:string,rule:SavedRule}[]=[]):ConversationMessage[]=>messages.flatMap(message=>{
  const plain={id:message.id,author:message.author,author_name:message.author_name,body:message.body,lost:message.author==='person'&&usage.some(run=>run.run_id===message.run_id&&run.outcome==='lost'),created_at:message.created_at};
  const replied=message.author==='agent'||messages.some(other=>other.author==='agent'&&other.run_id===message.run_id);
- const ofRun=leadCards.filter(row=>row.run_id===message.run_id); const cards=ofRun.map(row=>row.card);
+ const ofRun=leadCards.filter(row=>row.run_id===message.run_id&&!isQuestion(row)); const cards=ofRun.map(row=>row.card);
  const rules=saved.filter(row=>row.run_id===message.run_id).map(row=>row.rule);
+ const asked=message.author==='person'?leadCards.filter(row=>row.run_id===message.run_id&&isQuestion(row)).flatMap((row):ConversationMessage[]=>{
+  const id=row.card.kind==='reply'?row.card.card.id:0;
+  return [{id,author:'agent',author_name:agentName,body:row.words??'',created_at:row.at,kind:'asked',...(row.words===undefined?{cards:[row.card]}:{})},
+   ...(row.answer?[{id,author:'person' as const,author_name:message.author_name,body:row.answer.body,created_at:row.answer.at,kind:'answer' as const}]:[])];
+ }):[];
  const turn:ConversationMessage[]=message.author==='agent'?[cards.length?{...plain,cards}:plain]
-  :replied||!cards.length?[plain]:[plain,{id:message.id,author:'agent',author_name:agentName,body:'',created_at:ofRun[0].at,kind:'made',cards}];
+  :replied||!cards.length?[plain,...asked]:[plain,...asked,{id:message.id,author:'agent',author_name:agentName,body:'',created_at:ofRun[0].at,kind:'made',cards}];
  const last=message.author==='agent'||!replied;
  return last&&rules.length?[...turn,{id:message.id,author:'agent',author_name:agentName,body:'',created_at:rules[0].said_at,kind:'saved',saved:rules}]:turn;
 });
