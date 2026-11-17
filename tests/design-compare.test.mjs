@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { request } from 'node:http';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { parseArgs, screens, outputPaths, resolveStaticPath, startStaticServer, anonymousCaptureUrl, fixture } from '../scripts/design-compare-lib.mjs';
+import { parseArgs, screens, outputPaths, resolveStaticPath, startStaticServer, anonymousCaptureUrl, fixture, localDatabase, seededOnly } from '../scripts/design-compare-lib.mjs';
 
 const valid = ['--screen', 'home', '--width', '1440', '--lang', 'ar', '--theme', 'dark'];
 
@@ -36,7 +36,8 @@ test('the optional compare fixture holds the reference agent grid, Lead as the m
   assert.ok(guard > 0, 'the fixture has its guard');
   assert.ok(guard < sql.indexOf('insert into'), 'the guard runs before the first insert');
   assert.ok(sql.trimStart().startsWith('--') && sql.includes('begin;') && sql.trimEnd().endsWith('commit;'), 'one transaction');
-  assert.doesNotMatch(readFileSync('scripts/design-compare.mjs', 'utf8'), /design-compare-fixture|supabase|execFile/, 'the compare tool never writes to a database');
+  assert.doesNotMatch(readFileSync('scripts/design-compare.mjs', 'utf8'), /design-compare-fixture/, 'the compare tool never loads the fixture');
+  assert.ok(sql.includes(seededOnly.condition), 'the fixture refuses the databases the tool\'s own writes refuse');
   // Only an explicit manual run of the comparison workflow loads it, into that run's own fresh database.
   const workflow = readFileSync('.github/workflows/design-compare.yml', 'utf8');
   assert.match(workflow, /fixture:\n\s+description: [^\n]+\n\s+type: boolean\n\s+default: false/);
@@ -77,6 +78,20 @@ test('the fixture step streams the file unchanged to psql in the local database 
   assert.equal(stdin, readFileSync(fixture.file, 'utf8'));
 });
 
+test('a screen\'s own rows go to the same local database as the fixture, in one transaction that first refuses any database but the seeded one', () => {
+  const { args } = runFixtureStep(0);
+  const write = localDatabase('insert into public.example values (1);');
+  assert.deepEqual([write.file, write.args], ['docker', args], 'the fixture step\'s docker exec and psql');
+  const { input } = write;
+  assert.ok(input.startsWith('begin;\n'), 'one transaction');
+  assert.ok(input.trimEnd().endsWith('commit;'), 'one transaction');
+  assert.ok(input.indexOf(seededOnly.check) < input.indexOf('insert into public.example'), 'refused before it writes');
+  assert.match(seededOnly.check, /raise exception/);
+  // Triggers off, so rows added to an append-only table (the log) can be taken away again.
+  assert.ok(input.indexOf('set local session_replication_role = replica;') < input.indexOf('insert into public.example'));
+  assert.throws(() => localDatabase('select 1;', 'project_id = ""\n'), /project_id/);
+});
+
 test('a refused or failed fixture fails the step, so no capture runs on a half-loaded database', () => {
   const { status, stdin } = runFixtureStep(3);
   assert.notEqual(status, 0);
@@ -90,7 +105,11 @@ test('every screen says how to reach it in the reference and which built page it
   }
   for (const [name, screen] of Object.entries(screens)) {
     assert.match(name, /^[a-z]+(-[a-z]+)*$/, name);
-    assert.deepEqual(Object.keys(screen).filter(key => key !== 'builtSteps').sort(), ['builtPath', 'reference'], name);
+    assert.deepEqual(Object.keys(screen).filter(key => !['builtSteps', 'builtUndo', 'builtSettle'].includes(key)).sort(), ['builtPath', 'reference'], name);
+    // Only the reference's own steps never write: it has no database.
+    assert.ok(!screen.reference.steps.some(step => 'sql' in step), `${name}: no sql on the reference`);
+    if (screen.builtUndo !== undefined) assert.ok(screen.builtSteps.some(step => 'sql' in step) && typeof screen.builtUndo === 'string', `${name}: an undo takes back the built steps' rows`);
+    if (screen.builtSettle !== undefined) assert.equal(screen.builtSettle, false, `${name}: builtSettle is only ever false`);
     assert.ok(screen.builtPath === null || /^\/c\/rs-(learning|consultations)\/[a-z/]+(\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|\/[1-9][0-9]*)?(\?[a-z]+=[a-z0-9-]+)?$/.test(screen.builtPath), `${name} built path`);
     assert.ok(Array.isArray(screen.reference.steps), `${name} steps`);
     // The alone screens (#10) start by viewing the prototype as Omar working alone, and a Member's request screens (#17)
@@ -105,7 +124,9 @@ test('every screen says how to reach it in the reference and which built page it
     for (const step of steps) {
       assert.equal(Object.keys(step).length, 1, `${name}: one action per step`);
       const [[action, value]] = Object.entries(step);
-      assert.ok(['click', 'waitFor', 'waitGone', 'scrollTo', 'fill', 'press'].includes(action), `${name}: known action ${action}`);
+      assert.ok(['click', 'waitFor', 'waitGone', 'scrollTo', 'fill', 'press', 'sql', 'goto', 'finish'].includes(action), `${name}: known action ${action}`);
+      if (action === 'sql') { assert.ok(typeof value === 'string' && value.trim().length > 0, `${name}: sql`); continue; }
+      if (action === 'goto') { assert.match(value, /^\/c\/rs-(learning|consultations)\/[a-z/]+(\/[0-9a-f-]{36})?$/, `${name}: a built page`); continue; }
       // A press names one key as Playwright does (a letter, or a name such as ArrowDown or KeyN), not a selector.
       if (action === 'press') { assert.match(value, /^([a-z]|[A-Z][A-Za-z]+)$/, `${name}: a key`); continue; }
       const selector = action === 'fill' ? value[0] : value;
@@ -149,6 +170,20 @@ test('every screen says how to reach it in the reference and which built page it
   assert.deepEqual(screens['account-menu-keys'].reference.steps.at(-1), { press: 'ArrowDown' });
   assert.deepEqual(screens['new-chat-key'].reference.steps, [...screens.board.reference.steps, { press: 'n' }, { waitFor: '#ta-main:focus' }]);
   assert.deepEqual(screens['new-chat-key'].builtSteps, [{ press: 'KeyN' }, { waitFor: '.composer__input:focus' }]);
+  // #172. The built placeholders: the page's rows added and its one waiting table slowed, the page opened, its hold
+  // ended; captured without waiting for the slowed read, which is taken back after.
+  for (const [name, table, page, placeholder] of [
+    ['chat-loading', 'conversation_usage', '/c/rs-learning/conversations/6f000000-0000-0000-0000-000000000003', '.chat .transcript[aria-busy="true"]'],
+    ['numbers-loading', 'company_log', '/c/rs-learning/numbers', '.numbers-page [aria-busy="true"]'],
+  ]) {
+    const screen = screens[name];
+    assert.equal(screen.builtPath, '/c/rs-learning/home', name);
+    const [rows, ...rest] = screen.builtSteps;
+    assert.match(rows.sql, new RegExp(`create policy test_slow_read on public\\.${table} as restrictive for select to authenticated using \\(\\(select pg_sleep\\([1-7]\\)\\) is not null\\);`), `${name}: slows ${table} under the 8s statement timeout`);
+    assert.deepEqual(rest, [{ goto: page }, { finish: placeholder }, { waitFor: placeholder }], name);
+    assert.match(screen.builtUndo, new RegExp(`drop policy if exists test_slow_read on public\\.${table};`), `${name}: the slowed read is taken back`);
+    assert.equal(screen.builtSettle, false, name);
+  }
 });
 
 test('a screen with no built equivalent needs --built-path or --reference-only', () => {
@@ -156,7 +191,7 @@ test('a screen with no built equivalent needs --built-path or --reference-only',
   assert.throws(() => parseArgs(log), error => error.exitCode === 2 && /Screen "agent-chat" has no built equivalent yet; pass --built-path PATH or --reference-only\./.test(error.message));
   assert.equal(parseArgs([...log, '--reference-only']).builtPath, null);
   const held = ['--screen', 'numbers-loading', '--width', '1440', '--lang', 'en', '--theme', 'light'];
-  assert.equal(parseArgs(held).referenceOnly, true, 'a held loading state is the reference alone');
+  assert.deepEqual([parseArgs(held).referenceOnly, parseArgs(held).builtPath], [false, '/c/rs-learning/home'], 'a held loading state is captured on both sides');
   assert.equal(parseArgs([...log, '--built-path', '/c/rs-learning/home']).builtPath, '/c/rs-learning/home');
 });
 
