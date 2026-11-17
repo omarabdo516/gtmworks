@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { latestEnded, replyCardOf, shown, waiting, withDecisions, withTeamWork } from '../lib/conversations.ts';
+import { latestEnded, questionParts, replyCardOf, shown, waiting, withDecisions, withTeamWork } from '../lib/conversations.ts';
 
 // A Contributor's Conversation in a team (#25): the line under the Agent's reply says who their rule was sent to as a
 // suggestion, and the Owner's or a Manager's decision on it shows where it happened among the messages.
@@ -87,6 +87,18 @@ test('a draft card is under the Agent\'s reply of its run, or is the Agent\'s wh
  assert.deepEqual(record[3],{id:3,author:'agent',author_name:'Ads',body:'',created_at:at(11),kind:'made',cards:[{kind:'reply',card:draft(2)}]});
 });
 
+// #139: a step handed to the person, read from its row: open until its person marks it done, then done at the time the
+// database kept; an address or a note left out reads as none.
+test('a hand card is read from its row: open with its app, rows, address and note, and done at the time it was marked',()=>{
+ const content={app:'WordPress',line:'المقال جاهز مسودة على WordPress',rows:[{label:'الطول',value:'1,600 كلمة'}],url:'https://rslearning.example/wp-admin/post.php?post=812',note:'هتابع ترتيبه.'};
+ const stored=(/** @type {string} */ state,/** @type {object} */ more={})=>({id:6,run_id:'r1',kind:'hand',title:'انشر المقال',content:{...content,...more},state,answered_at:null,done_at:state==='done'?at(4):null,created_at:at(2)});
+ const hand={id:6,kind:'hand',title:'انشر المقال',line:content.line,app:'WordPress',rows:content.rows,url:content.url,note:content.note};
+ assert.deepEqual(replyCardOf(stored('open')),{...hand,state:'open'});
+ assert.deepEqual(replyCardOf(stored('done')),{...hand,state:'done',at:at(4)});
+ const bare=stored('open'); bare.content={app:'Stripe',line:'Ready',rows:[]};
+ assert.deepEqual(replyCardOf(bare),{id:6,kind:'hand',title:'انشر المقال',line:'Ready',app:'Stripe',rows:[],url:null,note:null,state:'open'});
+});
+
 // #138: an Agent's question, read from its row in each state; a claimed answer still on its way to the Engine is drawn
 // answered. A Run's questions follow its person's message, each with its answer as that person's turn, before its reply.
 const angles=['من خريج لمحاسب شغال','Excel وOdoo في كورس واحد'];
@@ -106,7 +118,7 @@ test('a Run\'s question follows its person\'s message, its answer is that person
  const sent=[{id:1,author:/** @type {const} */('person'),author_name:'Omar',body:'محتاجين حملة Meta',run_id:'r1',created_at:at(1)}];
  const placed=(/** @type {string} */ state,/** @type {string|undefined} */ answer,/** @type {string|undefined} */ words)=>{
   const card={kind:/** @type {const} */('reply'),card:/** @type {import('../lib/conversations.ts').ReplyCard} */(replyCardOf(askedRow(state,answer)))};
-  return [{run_id:'r1',at:at(2),card,...(answer===undefined?{}:{answer:{body:answer,at:at(3)}}),...(words===undefined?{}:{words})}];
+  return [{run_id:'r1',at:at(2),card,...(answer===undefined?{}:{answer:{body:answer,at:at(3),delivered:true}}),...(words===undefined?{}:{words})}];
  };
  const open=shown(sent,[],placed('open'),'Ads');
  assert.deepEqual(open,[{id:1,author:'person',author_name:'Omar',body:'محتاجين حملة Meta',lost:false,created_at:at(1)},
@@ -118,6 +130,18 @@ test('a Run\'s question follows its person\'s message, its answer is that person
  assert.deepEqual(answered[2],{id:5,author:'person',author_name:'Omar',body:angles[1],created_at:at(3),kind:'answer'});
  const lead=shown(sent,[],placed('open',undefined,`اختار زاوية الإعلان\n- ${angles[0]}\n- ${angles[1]}`),'Lead');
  assert.deepEqual(lead[1],{id:5,author:'agent',author_name:'Lead',body:`اختار زاوية الإعلان\n- ${angles[0]}\n- ${angles[1]}`,created_at:at(2),kind:'asked'});
+});
+
+test('an answer claimed after the Engine stopped waiting is the person\'s turn marked not delivered; one the Engine took is not marked',()=>{
+ const parts=(/** @type {string} */ state)=>{ const row=askedRow(state,angles[1]); return questionParts(row,/** @type {import('../lib/conversations.ts').ReplyCard} */(replyCardOf(row)),false); };
+ assert.deepEqual(parts('closed'),{answer:{body:angles[1],at:at(3),delivered:false}});
+ assert.deepEqual(parts('answered'),{answer:{body:angles[1],at:at(3),delivered:true}});
+ assert.deepEqual(parts('sending'),{answer:{body:angles[1],at:at(3),delivered:true}},'one still on its way is drawn as sent');
+ const sent=[{id:1,author:/** @type {const} */('person'),author_name:'Omar',body:'محتاجين حملة Meta',run_id:'r1',created_at:at(1)}];
+ const closed=askedRow('closed',angles[1]);
+ const card={kind:/** @type {const} */('reply'),card:/** @type {import('../lib/conversations.ts').ReplyCard} */(replyCardOf(closed))};
+ const record=shown(sent,[{run_id:'r1',outcome:'completed'}],[{run_id:'r1',at:at(2),card,...parts('closed')}],'Ads');
+ assert.deepEqual(record[2],{id:5,author:'person',author_name:'Omar',body:angles[1],created_at:at(3),kind:'answer',failed:true});
 });
 
 test('a message whose run Hermes no longer knew is marked lost and waits no more, and the next message waits for its own reply', () => {

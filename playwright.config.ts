@@ -1,5 +1,11 @@
+import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { defineConfig } from '@playwright/test';
+// Offline by default (#266): the runner, its workers and the servers below refuse outside connections and name the host.
+import { freshLog, nodeOptionsBefore, ownsLog } from './tests/offline.mjs';
+// One log of refusals per run, which every process the run starts writes to; the teardown fails the run naming each.
+// The runner owns its log, unless it inherited one from the process that started it.
+if (!process.env.TEST_WORKER_INDEX && !ownsLog()) freshLog();
 import { appOrigin, lanes, originOf, serverLogOf } from './tests/lane.mjs';
 // First run opens only with the install's setup code (issue #50). The web server and the test workers inherit this one.
 process.env.SETUP_CODE ||= randomBytes(32).toString('hex');
@@ -9,6 +15,8 @@ const hostedElsewhere = process.env.GTMWORKS_HOSTED_ELSEWHERE === 'true';
 export default defineConfig({
   testDir: './tests',
   testMatch: '*.spec.ts',
+  // By its own address: tests/playwright-projects.test.mjs loads this config from a folder of its own.
+  globalTeardown: join(__dirname, 'tests/offline-teardown.ts'),
   testIgnore: '**/proxy/**', // the production-shaped suite has its own config (playwright.proxy.config.ts)
   timeout: 60000,
   // One worker per lane, each on a whole stack of its own (tests/lane.mjs, #69): spec files run side by side and never
@@ -18,7 +26,7 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   use: { baseURL: appOrigin },
   // Lane 0 builds the app and serves it; every other lane serves that build on its own port (scripts/web.sh).
-  webServer: Array.from({ length: lanes }, (_, n) => ({ command: `mkdir -p playwright-report && LANE=${n} bash scripts/web.sh production > ${serverLogOf(n)} 2>&1`, url: `${originOf(n)}/sign-in`, reuseExistingServer: false, timeout: 240000 })),
+  webServer: Array.from({ length: lanes }, (_, n) => ({ command: `mkdir -p playwright-report && LANE=${n} bash scripts/web.sh production > ${serverLogOf(n)} 2>&1`, url: `${originOf(n)}/sign-in`, reuseExistingServer: false, timeout: 240000, env: { GTMWORKS_BUILD_NODE_OPTIONS: nodeOptionsBefore } })),
   // Playwright's own reporters only: CI uploads the HTML report, the GitHub reporter marks failures and flaky tests on
   // the run, and ci.sh asks for the JSON one for the CI ledger (#256). The report keeps a folder of its own, since the
   // servers write their logs to playwright-report/.

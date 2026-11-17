@@ -31,6 +31,7 @@ test('${name} second', async () => { await new Promise(r => setTimeout(r, 30)); 
  return dir;
 }
 
+// `npm` runs the package scripts itself: `npx npm` would download npm from the registry (#266).
 const run = async (dir, args) => {
  // Playwright's own CLI straight from node, as scripts/check-test-discovery.mjs runs it; npm scripts through npm.
  const [command, ...rest] = args[0] === 'playwright' ? [process.execPath, resolve('node_modules/@playwright/test/cli.js'), ...args.slice(1)] : args;

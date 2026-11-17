@@ -62,7 +62,7 @@ for (const [path, components] of [
 // and so do the compared widths and languages, the reference and the stylesheet build the motion test reads (#127).
 for (const path of [
   'app/conversation-composer.tsx', 'components/company-agent-face.tsx', 'lib/messages/en.json', 'tests/components/message-box.test.tsx', 'vitest.config.mts',
-  'tests/visual-screens.mjs', 'design-reference/index.html', 'postcss.config.mjs',
+  'tests/visual-screens.mjs', 'design-reference/index.html', 'postcss.config.mjs', 'tests/offline.mjs',
 ]) {
   test(`${path} runs the component tests`, () => assert.equal(areas(path).components, 'true'));
 }
@@ -97,7 +97,7 @@ for (const path of [
 
 for (const path of [
   'tests/frame.spec.ts', 'tests/proxy/production-shape.spec.ts', 'tests/visual.spec.ts', 'tests/sign-in.ts', 'tests/visual-screens.mjs',
-  'tests/lane.mjs', 'tests/fake-hermes.mjs', 'tests/fake-engine.mjs',
+  'tests/lane.mjs', 'tests/fake-hermes.mjs', 'tests/fake-engine.mjs', 'tests/offline.mjs', 'tests/offline-browser.ts',
   'playwright.config.ts', 'playwright.proxy.config.ts', 'scripts/web.sh', 'scripts/local-db.sh',
   'scripts/proxy-stack.sh', 'scripts/ci-image.sh', 'supabase/seed.sql',
   // The first-run and screen specs import its reset helpers; every browser lane is built from the migrations, the

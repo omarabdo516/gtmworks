@@ -552,11 +552,11 @@
   display: inline-flex; align-items: center; justify-content: center; height: 36px; padding: 0 16px; border-radius: var(--gw-r-full);
   font-size: var(--gw-fs-base); font-weight: 600; white-space: nowrap;
 }
-.gw.modal .btn--secondary { background: var(--gw-btn2-bg); color: var(--gw-text-1); box-shadow: var(--gw-btn2-ring) 0 0 0 1px inset; }
+:is(.gw.modal, .gw .reply-card) .btn--secondary { background: var(--gw-btn2-bg); color: var(--gw-text-1); box-shadow: var(--gw-btn2-ring) 0 0 0 1px inset; }
 .gw.modal .btn--sm { height: 30px; padding: 0 12px; font-size: var(--gw-fs-sm); }
 @media (hover: hover) {
   .gw .tpl-cats .chip:hover:not([aria-pressed="true"]) { background: var(--gw-bg-elevated-hover); }
-  .gw.modal .btn--secondary:hover:not(:disabled) { background: var(--gw-btn2-hover); }
+  :is(.gw.modal, .gw .reply-card) .btn--secondary:hover:not(:disabled) { background: var(--gw-btn2-hover); }
 }
 @media (max-width: 1023px) { .gw .tpl-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 599px) {
@@ -584,10 +584,11 @@
 .gw .ac-never li { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border-radius: var(--gw-r-full); background: var(--gw-bg-tertiary); font-size: var(--gw-fs-xs); color: var(--gw-text-1); }
 .gw .ac-never .gw-icon { width: 13px; height: 13px; color: var(--gw-text-2); }
 .gw .ac-actions { display: flex; gap: 8px; padding: 14px 16px 16px; }
-.gw .ac-actions .btn {
-  display: inline-flex; align-items: center; justify-content: center; height: 36px; padding: 0 20px; border-radius: var(--gw-r-full); font-size: var(--gw-fs-base); font-weight: 600;
-  white-space: nowrap; background: var(--gw-primary); color: var(--gw-on-primary);
+.gw :is(.ac-actions, .reply-card .card__actions) .btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; border-radius: var(--gw-r-full); font-size: var(--gw-fs-base); font-weight: 600;
+  white-space: nowrap;
 }
+.gw .ac-actions .btn { padding: 0 20px; background: var(--gw-primary); color: var(--gw-on-primary); }
 @media (hover: hover) { .gw .ac-actions .btn:hover { background: var(--gw-primary-hover); } }
 .gw .ac-tip { display: flex; align-items: center; gap: 6px; margin: -6px 0 0; padding: 0 16px 16px; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); }
 .gw .ac-tip .gw-icon { width: 13px; height: 13px; flex: none; color: var(--gw-text-3); }
@@ -601,14 +602,14 @@
 @container (max-width: 420px) { .gw .ac-card--req .kv__row { grid-template-columns: minmax(0, 1fr); gap: 2px; } }
 .gw .ac-card--req .card__head > :first-child { opacity: .72; }
 .gw .ac-card--req.is-resolved .card__head > :first-child { opacity: 1; }
-.gw .ac-card.is-resolved .kv { opacity: .72; }
+.gw :is(.ac-card, .reply-card).is-resolved .kv { opacity: .72; }
 .gw .ac-card .pp-sub { display: block; margin-top: 2px; color: var(--gw-text-2); }
-.gw .ac-card .card__outcome { display: flex; align-items: center; gap: 6px; padding: 12px 16px 16px; font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-3); }
-.gw .ac-card .card__outcome > .gw-icon { width: 14px; height: 14px; flex: none; }
-.gw .ac-card .card__outcome > span { overflow-wrap: anywhere; }
+.gw :is(.ac-card, .reply-card) .card__outcome { display: flex; align-items: center; gap: 6px; padding: 12px 16px 16px; font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-3); }
+.gw :is(.ac-card, .reply-card) .card__outcome > .gw-icon { width: 14px; height: 14px; flex: none; }
+.gw :is(.ac-card, .reply-card) .card__outcome > span { overflow-wrap: anywhere; }
 .gw .ac-card .card__outcome .link-btn { flex: none; margin-inline-start: auto; padding: 2px 6px; border-radius: var(--gw-r-xs); font-size: var(--gw-fs-sm); font-weight: 600; color: var(--gw-text-1); }
-.gw .ac-card .card__actions { display: flex; gap: 8px; padding: 14px 16px 16px; }
-.gw .ac-card .card__actions .btn { flex: 1 1 0; padding: 0 10px; }
+.gw :is(.ac-card, .reply-card) .card__actions { display: flex; gap: 8px; padding: 14px 16px 16px; }
+.gw :is(.ac-card, .reply-card) .card__actions .btn { flex: 1 1 0; padding: 0 10px; }
 .gw .ac-card .pp-form { display: grid; gap: 16px; padding: 12px 16px 0; }
 .gw .ac-card .set-field { display: grid; gap: 6px; }
 .gw .ac-card .set-label { font-size: var(--gw-fs-xs); color: var(--gw-text-2); }
@@ -693,6 +694,22 @@
 .gw .reply-card.is-just { animation: gw-settle 320ms var(--gw-ease-out); }
 .gw .reply-card.is-just .opt.is-chosen .opt__key { animation: gw-ck-pop 320ms var(--gw-ease-spring); }
 .gw .reply-card.is-just .opt__check path { stroke-dasharray: 40; stroke-dashoffset: 40; animation: gw-draw-check 380ms var(--gw-ease-out) 140ms forwards; }
+/* A step handed to the person (#139; design-reference: .hcard, .ck-badge, .card__actions, .card__outcome, .card.is-resolved,
+   .card.is-just): the badge, the app's tile, the title, its rows, then "Open the draft" and "Done it"; once done, the
+   outcome line with its check, which draws on the page where it was pressed. */
+.gw .reply-card .ck-badge { align-self: flex-start; }
+.gw .reply-card .ck-badge .gw-icon { width: 13px; height: 13px; }
+.gw .reply-card--hand .card__head { padding-top: 8px; }
+.gw .reply-card.is-resolved .card__head { padding-bottom: 0; }
+.gw .reply-card.is-resolved .kv { margin-bottom: 0; }
+.gw .reply-card .card__actions .btn .gw-icon { width: 16px; height: 16px; }
+.gw .reply-card .btn--primary { background: var(--gw-primary); color: var(--gw-on-primary); }
+.gw .reply-card .btn--primary:disabled { background: var(--gw-primary-disabled); color: var(--gw-text-4); }
+@media (hover: hover) {
+  .gw .reply-card .btn--primary:hover:not(:disabled) { background: var(--gw-primary-hover); }
+}
+.gw .reply-card .hand__error { margin: -6px 0 0; padding: 0 16px 16px; font-size: var(--gw-fs-sm); color: var(--gw-danger-text); }
+.gw .reply-card.is-just .card__outcome .gw-icon path { stroke-dasharray: 40; stroke-dashoffset: 40; animation: gw-draw-check 380ms var(--gw-ease-out) 140ms forwards; }
 .gw .tool-tile--ink { background: var(--gw-primary); color: var(--gw-on-primary); box-shadow: none; }
 .gw .tool-tile--ink .gw-icon { width: 22px; height: 22px; }
 
@@ -747,9 +764,10 @@
      inside the composer's own margin and gap so it covers no text. */
   .gw .composer__send { position: relative; }
   .gw .composer__send::before { content: ""; position: absolute; inset: -8px; }
-  /* The made card's Open button keeps the reference's 36px; an invisible band above and below makes it 44px. */
-  .gw .ac-actions .btn { position: relative; }
-  .gw .ac-actions .btn::before { content: ""; position: absolute; inset: -4px 0; }
+  /* The made card's Open button and the hand card's buttons keep the reference's 36px; an invisible band above and below
+     makes them 44px. */
+  .gw :is(.ac-actions, .reply-card .card__actions) .btn { position: relative; }
+  .gw :is(.ac-actions, .reply-card .card__actions) .btn::before { content: ""; position: absolute; inset: -4px 0; }
   .gw .born__link { position: relative; }
   .gw .born__link::before { content: ""; position: absolute; inset: -11px 0; }
   .gw .note__link { position: relative; }

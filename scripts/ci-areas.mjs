@@ -11,10 +11,10 @@ const suites = {
   // Screens as components in headless Chromium (vitest.config.mts, #81): the app's screens and components, the library
   // they import (catalogues included), and the component tests and their config. The motion test (#127) also reads the
   // reference and the motion table through the motion reader, at the compared screens' widths and languages, with the
-  // stylesheets built through PostCSS.
+  // stylesheets built through PostCSS. The offline guard (tests/offline.mjs, #266) is loaded by both test configs.
   components: { true: [
     /^(app|components|lib)\//, /^tests\/components\//, /^vitest\.config\.mts$/,
-    /^tests\/(motion-table|motion-css|visual-screens)\.mjs$/, /^design-reference\/index\.html$/, /^postcss\.config\.mjs$/,
+    /^tests\/(motion-table|motion-css|visual-screens|offline)\.mjs$/, /^design-reference\/index\.html$/, /^postcss\.config\.mjs$/,
   ] },
   // The database tests: migrations replayed and verified, RLS and grants (tests/db.sh, *.verify.sql, check-rls.sql).
   database: {
@@ -35,7 +35,7 @@ const suites = {
     true: [
       /^app\/.+\.ts$/, /^lib\/(?!messages\/)/, /^worker\//, /^(middleware|instrumentation)\.ts$/, /^(next|postcss)\.config\.mjs$/,
       /^server\.js$/, /^tests\/(?!visual-lane)(.+\/)?[^/]+\.spec\.ts$/, /^tests\/(?!visual-lane)[^/]+\.ts$/,
-      /^tests\/(visual-screens|lane|fake-hermes|fake-engine)\.mjs$/,
+      /^tests\/(visual-screens|lane|fake-hermes|fake-engine|offline)\.mjs$/,
       /^playwright(\.proxy)?\.config\.ts$/, /^Dockerfile$/, /^\.dockerignore$/,
       /^scripts\/(web\.sh|local-db\.sh|proxy-stack\.sh|ci-image\.sh|first-run-db\.mjs|local-default-privileges\.sql|supabase-images\.sh)$/,
       /^supabase\/(migrations\/|config\.toml$|seed\.sql$)/, /^public\//,

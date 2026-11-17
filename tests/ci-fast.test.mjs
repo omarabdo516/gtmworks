@@ -46,21 +46,20 @@ test('on GitHub a green step folds into a group and a red one stays open with an
   assert.match(text, /^::error title=fast lint::lint failed \(exit 2\); its output is in the log below$/m);
 });
 
-test('a step that runs tests waits for the gate, and does not start when it fails; the others run beside the gate', async t => {
+test('every step waits for the gate and none starts when it fails', async t => {
   const dir = mkdtempSync(join(tmpdir(), 'ci-fast-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const { write } = quiet();
-  // The gate finishes only once lint has started, so lint must start beside it; node must not have started yet.
-  const gate = code => `for i in $(seq 100); do [ -e ${dir}/lint ] && break; sleep 0.05; done; [ -e ${dir}/lint ] && [ ! -e ${dir}/node ] && exit ${code}; exit 9`;
+  // The gate passes only if no other step has started while it ran.
+  const gate = code => `sleep 0.2; [ ! -e ${dir}/lint ] && [ ! -e ${dir}/node ] && exit ${code}; exit 9`;
   const list = [
     { name: 'discovery', command: gate(3), gate: true },
     { name: 'lint', command: `touch ${dir}/lint` },
-    { name: 'node', command: `touch ${dir}/node`, gated: true },
+    { name: 'node', command: `touch ${dir}/node` },
   ];
   const red = await run(list, { write, env: {} });
-  assert.deepEqual(red.map(({ name, result }) => [name, result]), [['discovery', 'failure'], ['lint', 'success'], ['node', 'skipped']]);
-  assert.throws(() => readFileSync(join(dir, 'node')));
-  rmSync(join(dir, 'lint'));
+  assert.deepEqual(red.map(({ name, result }) => [name, result]), [['discovery', 'failure'], ['lint', 'skipped'], ['node', 'skipped']]);
+  assert.throws(() => readFileSync(join(dir, 'lint')));
   list[0].command = gate(0);
   const green = await run(list, { write, env: {} });
   assert.deepEqual(green.map(({ name, result }) => [name, result]), [['discovery', 'success'], ['lint', 'success'], ['node', 'success']]);
@@ -139,6 +138,8 @@ test('the fast layer is the static checks, the node tests and the component test
   assert.deepEqual(steps.map(step => step.name), ['discovery', 'docs', 'i18n', 'openapi', 'lint', 'typecheck', 'knip', 'node', 'components']);
   const command = name => steps.find(step => step.name === name).command;
   assert.match(command('node'), /--test-reporter-destination="\$LEDGER\/node\.jsonl" 'tests\/\*\*\/\*\.test\.mjs'$/);
+  // Offline, as `npm test` runs them (#266).
+  assert.match(command('node'), /^node --import \.\/tests\/offline\.mjs --test /);
   assert.match(command('components'), /npm run test:components -- .*--outputFile\.json="\$LEDGER\/vitest\.json"/);
   assert.doesNotMatch(command('components'), /shard/i);
   // In CI the workflow restores or installs the browser; elsewhere the step installs it, behind the discovery gate.
@@ -149,7 +150,6 @@ test('the fast layer is the static checks, the node tests and the component test
   // A restored npx folder is used with no registry request; a missing one is filled once.
   assert.match(command('openapi'), /^npm_config_cache="\$\{NPX_CACHE:-\$HOME\/\.npm\}" npx --prefer-offline --yes @redocly\/cli@[\d.]+ /);
   assert.deepEqual(steps.filter(step => step.gate).map(step => step.name), ['discovery']);
-  assert.deepEqual(steps.filter(step => step.gated).map(step => step.name), ['node', 'components']);
   // The one-thread checks keep their priority; the test runners, which use every core, take what is left.
   assert.deepEqual(steps.filter(step => step.yields).map(step => step.name), ['node', 'components']);
   assert.match(readFileSync('ci.sh', 'utf8'), /^ {2}node scripts\/ci-fast\.mjs "\$dir"/m);
@@ -169,10 +169,10 @@ test('typecheck reads no file that the tests running beside it write and delete'
   for (const probe of probes) assert.ok(!files.includes(`./${probe}`), probe);
 });
 
-test('a chosen step that runs tests keeps the discovery gate; a choice of checks alone does not add it', () => {
+test('a chosen step keeps the discovery gate before it', () => {
   const names = only => choose(steps, only).map(step => step.name);
   assert.deepEqual(names(['components']), ['discovery', 'components']);
   assert.deepEqual(names(['node', 'lint']), ['discovery', 'lint', 'node']);
-  assert.deepEqual(names(['lint']), ['lint']);
+  assert.deepEqual(names(['lint']), ['discovery', 'lint']);
   assert.deepEqual(names(undefined), steps.map(step => step.name));
 });
