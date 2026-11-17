@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fakeHermes } from './fake-hermes.mjs';
 import { engineFor } from '../lib/engine.mjs';
+import { withChunk } from '../lib/hermes.mjs';
 import { followRun, sealRunSteps } from '../lib/run-steps.mjs';
 
 // #141 on the fake Engine server, which streams a run's events as the pinned release does (api_server_runs.py
@@ -194,4 +195,23 @@ test('a Hermes that takes the events request and never answers it leaves the rea
   const read=await all(engine.steps(run,{signal:new AbortController().signal}));
   assert.deepEqual(read,[{end:'unreachable'}]);
  } finally { await fake.close(); }
+});
+
+test('a preview keeps an address, a date and a split, and drops a file path and the Engine\'s name',async()=>{
+ const fake=await fakeHermes();
+ try {
+  const {engine,run}=await begin(fake);
+  const previews=['https://rslearning.com/courses/accounting','budget for 1/12','a 50/50 split','15,000 ج/شهر','Hermès scarves','/srv/app/plan.md','~/notes.txt','./draft.md','src/lib/plan.js','C:\\Users\\team\\plan.docx','ask hermes about it'];
+  previews.forEach((preview,index)=>fake.settings.emit(run,started('web_search',preview,`call_${index}`)));
+  await finish(engine,run);
+  const shown=(await all(engine.steps(run))).flatMap(event=>'step' in event&&event.step?[event.step.preview]:[]);
+  assert.deepEqual(shown,[...previews.slice(0,5),null,null,null,null,null,null]);
+ } finally { await fake.close(); }
+});
+
+test('a line end split between two chunks of the stream stays one line end',()=>{
+ let buffer=withChunk('','id: 3\r');
+ buffer=withChunk(buffer,'\ndata: {"seq":3}\r\n\r\n');
+ assert.equal(buffer,'id: 3\ndata: {"seq":3}\n\n');
+ assert.equal(withChunk('','a\rb\r\nc'),'a\nb\nc','a lone \\r and a \\r\\n inside one chunk are line ends too');
 });

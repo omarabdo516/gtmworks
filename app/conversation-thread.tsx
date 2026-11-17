@@ -179,7 +179,7 @@ export function ConversationComposer({company,conversation,record,writer,asked,b
 // how long, on a button that opens and closes their list, one line per call with the tool's name, the Engine's preview
 // of it and whether it ended ("Done") or failed ("Skipped", the reference's other state). Opened, the lines rise one
 // after another and each check draws itself, only for a moment after opening (`is-just`).
-const justFor=700;
+const justFor=700; const arabicPlural=new Intl.PluralRules('ar');
 function StepsList({steps,c,cb}:{steps:RunSteps,c:Text,cb:BidiText}) {
  const {language}=useI18n(); const list=useId();
  const [open,setOpen]=useState(false); const [openedAt,setOpenedAt]=useState<number|null>(null);
@@ -187,7 +187,7 @@ function StepsList({steps,c,cb}:{steps:RunSteps,c:Text,cb:BidiText}) {
  const count=steps.list.length;
  // Egyptian Arabic takes the plural for three to ten (أدوات, دقايق, ثواني) and the singular otherwise, as the reference
  // does up to ten; English, from two.
- const plural=(value:number)=>language==='ar'?new Intl.PluralRules('ar').select(value)==='few':value!==1;
+ const plural=(value:number)=>language==='ar'?arabicPlural.select(value)==='few':value!==1;
  const used=c(plural(count)?'stepsUsedMany':'stepsUsedOne',count);
  const minutes=Math.floor((steps.seconds??0)/60); const seconds=(steps.seconds??0)%60;
  const secondsText=c(plural(seconds)?'stepsSecondsMany':'stepsSeconds',seconds); const minutesText=c(plural(minutes)?'stepsMinutesMany':'stepsMinutes',minutes);

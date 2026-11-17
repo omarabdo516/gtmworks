@@ -86,7 +86,7 @@ export const shown=(messages:StoredMessage[],usage:{run_id:string,outcome:string
   return [{id,author:'agent',author_name:agentName,body:row.words??'',created_at:row.at,kind:'asked',...(row.words===undefined?{cards:[row.card]}:{})},
    ...(row.answer?[{id,author:'person' as const,author_name:message.author_name,body:row.answer.body,created_at:row.answer.at,kind:'answer' as const,...(row.answer.delivered?{}:{failed:true})}]:[])];
  }):[];
- const steps=message.author==='agent'?runSteps.find(row=>row.run_id===message.run_id&&row.steps.length):undefined;
+ const steps=message.author==='agent'?runSteps.find(row=>row.run_id===message.run_id):undefined;
  const reply={...plain,...(cards.length?{cards}:{}),...(steps?{steps:{list:steps.steps.map(({tool,preview,state})=>({tool,preview,state})),seconds:steps.seconds}}:{})};
  const turn:ConversationMessage[]=message.author==='agent'?[reply]
   :replied||!cards.length?[plain,...asked]:[plain,...asked,{id:message.id,author:'agent',author_name:agentName,body:'',created_at:ofRun[0].at,kind:'made',cards}];

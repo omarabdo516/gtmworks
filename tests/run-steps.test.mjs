@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { encryptSecret } from '../lib/agent-crypto.mjs';
 import { closeOpenRuns, followOpenRuns } from '../lib/conversation-runs.mjs';
-import { followRun, withEvent } from '../lib/run-steps.mjs';
+import { followRun, sealRunSteps, withEvent } from '../lib/run-steps.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 
 // #141 on the fake engine: what the worker's follower and the closer keep of a Run's tool calls. The database is a small
@@ -265,4 +265,25 @@ test('a call id that looks like the number of a start is never taken for a call 
  const steps=[{seq:0,step:{call:'seq:1',tool:'web_search',preview:'kept id',state:/** @type {const} */('started')}},{seq:1,step:{call:'#1',tool:'web_search',preview:'no id',state:/** @type {const} */('started')}},
   {seq:2,step:{call:null,tool:'web_search',preview:null,state:/** @type {const} */('done')}}].reduce(withEvent,{steps:[],readTo:-1,broken:false,endedAt:null}).steps;
  assert.deepEqual(steps.map(({preview,state})=>[preview,state]),[['kept id','started'],['no id','done']]);
+});
+
+test('the closer stops reading at the Run\'s own end, so the Run\'s length still has its wait',async()=>{
+ const fake=fakeEngine();
+ const {db,rows}=database(fake);
+ const run=await start(fake);
+ /** @type {AbortSignal|undefined} */ let lengthSignal;
+ const engine=/** @type {any} */({
+  async *steps() { yield {seq:0,step:{call:'call_1',tool:'web_search',preview:null,state:'started'}}; yield {seq:1,step:{call:'call_1',tool:'web_search',preview:null,state:'done'}}; yield {seq:2,step:null,endedAt:1794926940}; await new Promise(()=>{}); },
+  async length(/** @type {string} */ _run,/** @type {{signal?:AbortSignal}} */ {signal}={}) { lengthSignal=signal; return 41; }});
+ await sealRunSteps(db,engine,{conversation,run},{wait:60000});
+ assert.equal(lengthSignal?.aborted,false,'the length was asked inside the wait');
+ assert.deepEqual(rows.get(run)&&{broken:rows.get(run)?.broken,seconds:rows.get(run)?.seconds,sealed:rows.get(run)?.sealed!==null},{broken:false,seconds:41,sealed:true});
+});
+
+test('a stream that ends with nothing new on it rests like one that could not be read',async()=>{
+ const fake=fakeEngine();
+ const {db}=database(fake);
+ const run=await start(fake);
+ const engine=/** @type {any} */({async *steps() { yield {end:'closed'}; },async length() { return null; }});
+ assert.equal(await followRun(db,engine,{conversation,run},new AbortController().signal),'unreachable');
 });
