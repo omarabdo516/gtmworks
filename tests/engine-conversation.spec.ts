@@ -166,7 +166,7 @@ test('integration: Lead makes the Agent the Owner asks for, and nothing for a Ma
  expect(made()).toEqual([]);
  const closed=await Promise.all([close(),close()]);
  expect(closed[0]+closed[1]).toBe(1);
- expect(fake.runs.map(run=>run.tools.map(tool=>tool.name))).toEqual([['create_agent','save_rule','show_draft','show_review','hand_over'],['create_agent','save_rule','show_draft','show_review','hand_over']]);
+ expect(fake.runs.map(run=>run.tools.map(tool=>tool.name))).toEqual([['create_agent','save_rule','show_draft','show_review','hand_over','ask_for_app'],['create_agent','save_rule','show_draft','show_review','hand_over','ask_for_app']]);
  expect(fake.agentReads).toContain(profile);
  const [agent]=made();
  expect(made()).toEqual([{id:agent.id,name:'Meta Ads',speciality:'Runs the Meta ads.',apps:'Meta Ads Manager|Canva',requested_by:omar,dated:true,is_default:false,profile}]);
@@ -189,7 +189,7 @@ test('integration: Lead makes the Agent the Owner asks for, and nothing for a Ma
  const manager=(await memberClient('manager@example.com')).person;
  const theirs=randomUUID();
  expect(await sendMessage(manager,service,{person:'20000000-0000-0000-0000-000000000002',company,conversation:theirs,sendKey:randomUUID(),agent:lead,message:'I want someone to handle Meta ads',encryptionKey,engineFor:fake.engineFor})).toEqual({conversation:theirs});
- expect(fake.runs[3].tools.map(tool=>tool.name)).toEqual(['request_agent','save_rule','show_draft','show_review','hand_over']);
+ expect(fake.runs[3].tools.map(tool=>tool.name)).toEqual(['request_agent','save_rule','show_draft','show_review','hand_over','ask_for_app']);
  expect(await closeOpenRuns(service,{encryptionKey,conversation:theirs,engineFor:fake.engineFor})).toBe(1);
  expect(made()).toHaveLength(2);
 });
@@ -216,7 +216,7 @@ test('integration: Lead keeps a Manager\'s and a Contributor\'s request for an A
   const closed=await Promise.all([close(),close()]);
   expect(closed[0]+closed[1]).toBe(1);
  }
- expect(fake.runs.map(run=>run.tools.map(tool=>tool.name))).toEqual([['request_agent','save_rule','show_draft','show_review','hand_over'],['request_agent','suggest_rule','show_draft','show_review','hand_over']]);
+ expect(fake.runs.map(run=>run.tools.map(tool=>tool.name))).toEqual([['request_agent','save_rule','show_draft','show_review','hand_over','ask_for_app'],['request_agent','suggest_rule','show_draft','show_review','hand_over','ask_for_app']]);
  expect(fake.agentReads).toEqual([]);
  expect(agents()).toBe(before);
  const listed=`('${conversations.join("','")}')`;
@@ -243,7 +243,7 @@ test('integration: an Agent saves the rule the Owner tells it, with its log row,
   const send=(message:string)=>sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message,encryptionKey,engineFor:fake.engineFor});
   const close=()=>closeOpenRuns(service,{encryptionKey,conversation,engineFor:fake.engineFor});
   expect(await send(rule)).toEqual({conversation});
-  expect(fake.runs[0].tools.map(tool=>tool.name)).toEqual(['save_rule','show_draft','show_review','hand_over']);
+  expect(fake.runs[0].tools.map(tool=>tool.name)).toEqual(['save_rule','show_draft','show_review','hand_over','ask_for_app']);
   expect(fake.runs[0].instructions).toBe(knowledge());
   // A reader and the worker close the run at once: the rule is saved once, before the reply is stored.
   const closed=await Promise.all([close(),close()]);
@@ -264,7 +264,7 @@ test('integration: an Agent saves the rule the Owner tells it, with its log row,
   const tell=(message:string)=>sendMessage(member,service,{person:contributor,company,conversation:theirs,sendKey:randomUUID(),agent,message,encryptionKey,engineFor:fake.engineFor});
   const closeTheirs=()=>closeOpenRuns(service,{encryptionKey,conversation:theirs,owner:contributor,engineFor:fake.engineFor});
   expect(await tell('Draft the teaser')).toEqual({conversation:theirs});
-  expect(fake.runs[2].tools.map(tool=>tool.name)).toEqual(['suggest_rule','show_draft','show_review','hand_over']);
+  expect(fake.runs[2].tools.map(tool=>tool.name)).toEqual(['suggest_rule','show_draft','show_review','hand_over','ask_for_app']);
   expect(fake.runs[2].instructions).toContain(`- ${rule}`);
   expect(await closeTheirs()).toBe(1);
 
@@ -315,7 +315,7 @@ test('integration: an Agent shows a draft once under its reply, also when two cl
   const close=()=>closeOpenRuns(service,{encryptionKey,conversation,owner:contributor,engineFor:fake.engineFor});
   for(const [index,message] of Object.keys(calls).entries()) {
    expect(await sendMessage(person,service,{person:contributor,company,conversation,sendKey:randomUUID(),agent,message,encryptionKey,engineFor:fake.engineFor})).toEqual({conversation});
-   expect(fake.runs[index].tools.map(tool=>tool.name)).toEqual(['suggest_rule','show_draft','show_review','hand_over']);
+   expect(fake.runs[index].tools.map(tool=>tool.name)).toEqual(['suggest_rule','show_draft','show_review','hand_over','ask_for_app']);
    // A reader and the worker close the run at once: the card is kept once, before the reply is stored.
    const closed=await Promise.all([close(),close()]);
    expect(closed[0]+closed[1]).toBe(1);
@@ -411,7 +411,7 @@ test('integration: an Agent shows a review once under its reply, shows none for 
   const conversation=randomUUID();
   const send=async(message:string)=>{
    expect(await sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message,encryptionKey,engineFor:fake.engineFor})).toEqual({conversation});
-   expect(fake.runs.at(-1)?.tools.map(tool=>tool.name)).toEqual(['save_rule','show_draft','show_review','hand_over']);
+   expect(fake.runs.at(-1)?.tools.map(tool=>tool.name)).toEqual(['save_rule','show_draft','show_review','hand_over','ask_for_app']);
    expect(await closeOpenRuns(service,{encryptionKey,conversation,engineFor:fake.engineFor})).toBe(1);
   };
   // The Conversation's first Run puts its Card on the board (#144), so the review's runs are measured after it. The Card
@@ -452,7 +452,7 @@ test('integration: an Agent hands a step over once under its reply, shows none w
   const conversation=randomUUID();
   const send=async(message:string)=>{
    expect(await sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message,encryptionKey,engineFor:fake.engineFor})).toEqual({conversation});
-   expect(fake.runs.at(-1)?.tools.map(tool=>tool.name)).toEqual(['save_rule','show_draft','show_review','hand_over']);
+   expect(fake.runs.at(-1)?.tools.map(tool=>tool.name)).toEqual(['save_rule','show_draft','show_review','hand_over','ask_for_app']);
    expect(await closeOpenRuns(service,{encryptionKey,conversation,engineFor:fake.engineFor})).toBe(1);
   };
   // The Conversation's first Run puts its Card on the board (#144), so the hand's runs are measured after it. The Card

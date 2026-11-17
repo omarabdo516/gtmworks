@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { provideProfile, readApps, startAppSignIn, pollAppSignIn, cancelAppSignIn, finishAppSignIn, disconnectApp } from '../lib/hermes.mjs';
 import { levelConfig, alwaysOff, companyProfile } from '../lib/agent-levels.mjs';
-import { changeCompanyApp, readCompanyApps, finishCompanyAppSignIn } from '../lib/company-apps.mjs';
+import { changeCompanyApp, readCompanyApps, finishCompanyAppSignIn, readAgentApps } from '../lib/company-apps.mjs';
 import { appByKey, appConfig, mergedState } from '../lib/app-catalogue.mjs';
 import { encryptSecret } from '../lib/agent-crypto.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
@@ -128,6 +128,27 @@ test('each Agent\'s state is read from its own profile: connected, needing atten
   assert.doesNotMatch(JSON.stringify(apps),/profile|co-|ag-|hermes|opt\//i);
   const catalogueReads=fake.settings.managementRequests.slice(read).filter(request=>request.path?.startsWith('/api/mcp/catalog'));
   assert.deepEqual(catalogueReads.map(request=>profileOf(request.path)).sort(),[companyProfile(company),agentProfile(analyst),agentProfile(writer),missing.profile].sort(),'each profile is read once, the shared one too');
+ } finally { await fake.close(); }
+});
+
+// #203: a Conversation's connect card shows the app's state in its Agent's profile now, read from that profile alone.
+test('one Agent\'s apps are read from its own profile alone, by key; an Agent the person does not see, or an Engine that cannot be read, gives none', async () => {
+ const fake=await fakeHermes();
+ try {
+  const driver=driverAt(fake);
+  for(const name of [companyProfile(company),agentProfile(writer)]) makeProfile(fake,name);
+  fake.settings.profiles.get(companyProfile(company)).config.mcp_servers={amplitude:installed('amplitude')};
+  fake.settings.appTokens.add(`${companyProfile(company)}:amplitude`);
+  fake.settings.profiles.get(agentProfile(writer)).config.mcp_servers={klaviyo:installed('klaviyo')};
+  const someone=sessions(fake,{person:member,isOwner:false,signIns:[],agents:[leadRow,writerRow]});
+  const read=fake.settings.managementRequests.length;
+  const apps=await readAgentApps(someone.db,someone.service,{company,agent:writer,encryptionKey,driver});
+  assert.equal(apps?.klaviyo,'attention');
+  assert.equal(apps?.amplitude,'off','connected for Lead is not connected for Writer');
+  assert.deepEqual(fake.settings.managementRequests.slice(read).filter(request=>request.path?.startsWith('/api/mcp/catalog')).map(request=>profileOf(request.path)),[agentProfile(writer)]);
+  assert.equal((await readAgentApps(someone.db,someone.service,{company,agent:lead,encryptionKey,driver}))?.amplitude,'connected');
+  assert.equal(await readAgentApps(someone.db,someone.service,{company,agent:analyst,encryptionKey,driver}),null,'an Agent not listed for the person');
+  assert.equal(await readAgentApps(someone.db,someone.service,{company,agent:writer,encryptionKey,driver:{read:async()=>({state:'unreachable',apps:null})}}),null);
  } finally { await fake.close(); }
 });
 

@@ -1000,5 +1000,16 @@
   "plusConnected": "{0} connected",
   "plusModel": "Model",
   "plusModelPicked": "{0} will think with {1}",
-  "conversationModelRefused": "The agent engine did not take that model, so this chat stays on the model it had. Your message is still in the box."
+  "conversationModelRefused": "The agent engine did not take that model, so this chat stays on the model it had. Your message is still in the box.",
+  "connectTitle": "Connect {0}",
+  "connectLater": "Later",
+  "connectDo": "Connect",
+  "connectConnecting": "Connecting…",
+  "connectConnected": "{0} connected",
+  "connectPostponedLabel": "{0} postponed",
+  "connectPostponed": "Postponed · you can connect it from the details any time",
+  "connectBy": "Apps are connected by {0}",
+  "connectByOwner": "Apps are connected by the Owner",
+  "connectFailed": "The sign-in didn’t finish. Try again.",
+  "connectBlocked": "Your browser blocked the sign-in window. Allow pop-ups for this site and try again."
 }

@@ -99,6 +99,27 @@ test('a hand card is read from its row: open with its app, rows, address and not
  assert.deepEqual(replyCardOf(bare),{id:6,kind:'hand',title:'انشر المقال',line:'Ready',app:'Stripe',rows:[],url:null,note:null,state:'open'});
 });
 
+// #203: a connect card, read from its row with the app's state in the Agent's profile now: open while the Engine says it
+// is not connected or cannot be read, connected once it is, and postponed for good once the Owner said Later.
+test('a connect card is read from its row with the app\'s state now: open, connected when the Agent has it, and postponed whatever the Agent has',()=>{
+ const stored=(/** @type {string} */ state)=>({id:8,run_id:'r1',kind:'connect',title:'Amplitude',content:{app:'amplitude',reason:'مش متوصل، فمقدرتش أعرف مين من الليدز اشترى فعلاً.'},state,answered_at:null,done_at:null,decided_at:null,created_at:at(2)});
+ const card={id:8,kind:'connect',title:'Amplitude',app:'amplitude',reason:'مش متوصل، فمقدرتش أعرف مين من الليدز اشترى فعلاً.'};
+ assert.deepEqual(replyCardOf(stored('open')),{...card,state:'open'},'the Engine was not read');
+ assert.deepEqual(replyCardOf(stored('open'),{amplitude:'off'}),{...card,state:'open'});
+ assert.deepEqual(replyCardOf(stored('open'),{amplitude:'attention'}),{...card,state:'open'},'a sign-in that stopped working is asked for again');
+ assert.deepEqual(replyCardOf(stored('open'),{amplitude:'connected'}),{...card,state:'connected'});
+ assert.deepEqual(replyCardOf(stored('open'),{notion:'connected'}),{...card,state:'open'});
+ assert.deepEqual(replyCardOf(stored('postponed'),{amplitude:'connected'}),{...card,state:'postponed'});
+ assert.deepEqual(replyCardOf(stored('postponed')),{...card,state:'postponed'});
+});
+
+test('a connect card sits right under the reply\'s text, before any other card of its run',()=>{
+ const connect={id:9,run_id:'r1',kind:'connect',title:'Amplitude',content:{app:'amplitude',reason:'For sales'},state:'open',answered_at:null,done_at:null,decided_at:null,created_at:at(2)};
+ const cards=[row(1,'r1'),connect].map(stored=>({run_id:stored.run_id,at:stored.created_at,card:{kind:/** @type {const} */('reply'),card:/** @type {import('../lib/conversations.ts').ReplyCard} */(replyCardOf(/** @type {any} */(stored)))}}));
+ const record=shown(planning,[],cards,'Ads');
+ assert.deepEqual(record[1].cards?.map(card=>card.kind==='reply'&&card.card.kind),['connect','draft']);
+});
+
 // #140: "Done it" starts the Agent's turn with a message the person never wrote: it draws no bubble, waiting or started,
 // while what its run shows stays and the Agent is still shown working on it.
 test('a hand card\'s turn draws no bubble of the person, keeps its run\'s cards and question, and still keeps the page waiting',()=>{

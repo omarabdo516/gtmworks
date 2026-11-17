@@ -53,6 +53,9 @@ export const fixture = {
   stepsConversation: '62000000-0000-0000-0000-000000000007',
   // Omar's Conversation in which Ads's Run waits on his OK to publish the article (#163), as the reference's th-seo.
   permissionConversation: '62000000-0000-0000-0000-000000000008',
+  // Omar's Conversation in which Analyst asks him to connect an app for the weekly report (#203), as the reference's
+  // th-report (message r1).
+  connectConversation: '62000000-0000-0000-0000-000000000009',
 };
 // #172. The chat and Numbers while their waiting part is still on its way. The workflow first applies the screen's own
 // scripts/design-compare-<screen>.sql, which slows the one table that part reads; the tool itself never writes. The page
@@ -123,6 +126,9 @@ export const screens = {
   // #163. The SEO article chat (th-seo): the approval card to publish the article, waiting. Built: the fixture's
   // permissionConversation (pass --built-path).
   'permission-card': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-seo"]' }, { waitFor: '[data-action="approve"]' }, { scrollTo: '.card__actions' }] }, builtPath: null },
+  // #203. The weekly report chat (th-report): Analyst's reply with the card asking to connect an app, open. Built: the
+  // fixture's connectConversation (pass --built-path).
+  'connect-card': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-report"]' }, { waitFor: '[data-action="connect"]' }, { scrollTo: '.card__actions' }] }, builtPath: null },
   // #141. The Meta campaign chat (th-meta): Ads's reply with "Used 4 tools · 41 sec" pressed, its four steps open, one
   // skipped. Built: the fixture's stepsConversation (pass --built-path), its steps pressed open the same way.
   'run-steps': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-meta"]' }, { click: '[data-action="toggle-steps"][data-msg="m3"]' }, { waitFor: '#st-th-meta-m3:not([hidden])' }, { scrollTo: '#st-th-meta-m3' }] },

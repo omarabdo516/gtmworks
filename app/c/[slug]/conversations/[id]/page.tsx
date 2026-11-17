@@ -6,6 +6,7 @@ import { approvalQueue } from '@/lib/approval-queue';
 import ConversationView, { ConversationLoaded } from './conversation';
 import { conversationColumns, faceOf, uuid } from '@/lib/conversations';
 import { conversationRecord, tiedCard } from '@/lib/conversation-record';
+import { agentAppStates } from '@/lib/company-app-items';
 import { madeColumns, madeOf } from '@/lib/agent-made';
 import { agentDetails } from '@/app/agent-details-server';
 
@@ -21,7 +22,7 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  if(!conversation) notFound();
  // Messages, notes to a person and waiting turns, with who the Agent is working for (lib/conversation-record.ts). The
  // page is drawn without waiting for it; the chat shows its placeholder until it arrives (#172).
- const record=conversationRecord(db,user.id,company.id,conversation);
+ const record=conversationRecord(db,user.id,company.id,conversation,agent=>agentAppStates(company.id,agent));
  // Awaited only by the transcript: a read of the frame that fails first must not leave its failure unhandled.
  record.catch(()=>{});
  // Its Card on the board, in the corner from the start (design-reference: renderChat's corner pill): read beside the

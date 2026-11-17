@@ -1000,5 +1000,16 @@
   "plusConnected": "{0} متوصل",
   "plusModel": "الموديل",
   "plusModelPicked": "{0} هيفكر بـ {1}",
-  "conversationModelRefused": "محرك الوكلاء ماقبلش الموديل ده، فالمحادثة فضلت على الموديل اللي كانت عليه. رسالتك لسه في المربع."
+  "conversationModelRefused": "محرك الوكلاء ماقبلش الموديل ده، فالمحادثة فضلت على الموديل اللي كانت عليه. رسالتك لسه في المربع.",
+  "connectTitle": "وصّل {0}",
+  "connectLater": "بعدين",
+  "connectDo": "وصّل",
+  "connectConnecting": "بيتوصل…",
+  "connectConnected": "{0} اتوصل",
+  "connectPostponedLabel": "{0} اتأجل",
+  "connectPostponed": "اتأجل · تقدر توصّله من التفاصيل في أي وقت",
+  "connectBy": "ربط التطبيقات بيعمله {0}",
+  "connectByOwner": "ربط التطبيقات بيعمله المالك",
+  "connectFailed": "الدخول مكملش. جرّب تاني.",
+  "connectBlocked": "المتصفح منع نافذة الدخول. اسمح بالنوافذ المنبثقة للموقع ده وجرّب تاني."
 }

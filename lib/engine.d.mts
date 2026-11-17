@@ -23,6 +23,8 @@ export type ModelChoice={provider:string,model:string};
 export type AgentModels={state:'found'|'refused'|'unreachable',current:ModelChoice|null,models:(ModelChoice&{providerName:string})[]};
 export type ProvidedAgent={state:'provided'|'noModel'|'forbidden'|'failed'|'refused'|'unreachable'};
 export type RemovedAgent={state:'removed'|'missing'|'refused'|'unreachable'};
+// The apps of the profile an Engine is bound to (#203): each listed app the Engine offers it, with its state there.
+export type ProfileApps={state:'found',apps:{key:string,state:import('./app-catalogue.mjs').AppState}[]}|{state:'refused'|'unreachable'|'failed',apps:null};
 export type ProviderKeys={state:'found',keys:import('./hermes.mjs').ProviderKey[]}|{state:'refused'|'unreachable'|'failed',keys:null};
 export type StartUnknown={readonly state:'unknown'};
 export function startOutcomeUnknown(result:unknown):result is StartUnknown;
@@ -40,6 +42,7 @@ export type Engine={
  removeAgent(name:string):Promise<RemovedAgent>,
  readKeys?(space:string):Promise<ProviderKeys>,
  models?():Promise<AgentModels>,
+ apps?():Promise<ProfileApps>,
 };
 export function engineFor(connection:EngineConnection):Engine;
 export function outcomeOf(run:Pick<RunState,'state'|'reply'>):'completed'|'failed'|'stopped'|'lost'|null;
