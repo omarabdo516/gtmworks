@@ -30,55 +30,23 @@ Impeccable (the design skill) is this repo's design workflow, used in full: ever
 
 ## Checks
 
-`./ci.sh check` runs `./ci.sh static`, `./ci.sh components`, `./ci.sh database`, `./ci.sh visual`, `./ci.sh lane` then `./ci.sh integration`; CI also checks the Docker install. In CI `integration` runs on the runner the repo variable `CI_RUNNER` names (Omar's PC or `ubuntu-latest`, #224); the compared screens and the measured navigation budgets run in their own `visual` job on `ubuntu-latest`, where the images are made and no other job shares the machine. They and the visual lane run on a push to `main` and on a manual run only, never on a pull request, and `check` does not wait for them; a failure on `main` opens or updates the `visual-regression` issue (Omar, 2026-11-17, #257). Design parity is checked once at delivery, outside CI (`docs/testing.md`).
-In CI the first job decides what runs (`scripts/ci-areas.mjs`, as Hermes and T3 Code do, #76): static runs on every change; the screen component tests (`components`, Vitest in headless Chromium, two shards) run when `app/`, `components/`, `lib/` or their tests change; the database tests, the whole-app browser suite (`integration`) and the install run on a pull request only when their own files change (`docs/testing.md` lists them); a change to the CI definition or `package.json` runs all; unknown or empty diffs run all. Screens alone run static and the component tests (#257). Screens are `app/` outside its `.ts` server code, `components/`, the catalogues in `lib/messages/`, `tests/visual-screens/` and the approved images. A component test alone runs only the component tests. The journeys, the measured navigation, first run, the proxy suite and the image run when the journeys' own area changes: a browser spec or its helpers, the fake engines, the Playwright configs, server code under `app/` (its `.ts` route handlers and server actions), `lib/` outside the catalogues, `worker/`, the server and build files, the migrations, the seed, the image or `public/`. A push to `main` runs every suite unless every changed file is under `design/`, under `docs/`, or ends in `.md` (files under `public/` excepted), judged against the last commit a successful main CI run tested. A manual run starts the browser suite and the install only with `-f e2e=true` / `-f install=true`, off by default. `check` passes a suite nobody asked for only when it was skipped.
+`./ci.sh check` runs `./ci.sh static`, `./ci.sh components`, `./ci.sh database`, `./ci.sh visual` then `./ci.sh integration`; CI also checks the Docker install. In CI `integration` runs on the runner the repo variable `CI_RUNNER` names (Omar's PC or `ubuntu-latest`, #224); the visual lane and the measured navigation budgets run in their own `visual` job on `ubuntu-latest`, where no other job shares the machine. They run on a push to `main` and on a manual run only, never on a pull request, and `check` does not wait for them; a failure on `main` opens or updates the `visual-regression` issue (Omar, 2026-11-17, #257). Design parity is checked once at delivery, outside CI (`docs/testing.md`).
+In CI the first job decides what runs (`scripts/ci-areas.mjs`, as Hermes and T3 Code do, #76): static runs on every change; the screen component tests (`components`, Vitest in headless Chromium, two shards) run when `app/`, `components/`, `lib/` or their tests change; the database tests, the whole-app browser suite (`integration`) and the install run on a pull request only when their own files change (`docs/testing.md` lists them); a change to the CI definition or `package.json` runs all; unknown or empty diffs run all. Screens alone run static and the component tests (#257). Screens are `app/` outside its `.ts` server code, `components/`, the catalogues in `lib/messages/` and the visual lane's screens and images. A component test alone runs only the component tests. The journeys, the measured navigation, first run, the proxy suite and the image run when the journeys' own area changes: a browser spec or its helpers, the fake engines, the Playwright configs, server code under `app/` (its `.ts` route handlers and server actions), `lib/` outside the catalogues, `worker/`, the server and build files, the migrations, the seed, the image or `public/`. A push to `main` runs every suite unless every changed file is under `design/`, under `docs/`, or ends in `.md` (files under `public/` excepted), judged against the last commit a successful main CI run tested. A manual run starts the browser suite and the install only with `-f e2e=true` / `-f install=true`, off by default. `check` passes a suite nobody asked for only when it was skipped.
 
 CI deploys nothing. An install picks up a merge when its owner runs `sh scripts/install.sh update` (README), which applies new migrations before the new app version starts; a failed migration rolls back and the previous app keeps serving. A later version does not undo an applied migration; recovery needs a new forward migration. A forward migration cannot bring back deleted data; restore it from a backup.
 
 ## Visual comparison
 
-The small visual lane (#257) is growing beside the comparison below: a few key screens in Arabic, light and dark, drawn
-by one pinned browser so every machine makes the same bytes (`docs/testing.md`, `lane`). `./ci.sh lane-update`
-refreshes its images; `Visual baselines` also uploads them as `lane-baselines` for a machine without Docker.
+The visual lane (#257) compares 12 key screens, listed in `tests/visual-lane/screens.json` (capped at 15), each in
+Arabic at 1440 and 390, light and dark, byte for byte with its images in `tests/visual-lane/images/`
+(`<screen>-ar-<width>-<light|dark>.png`, no platform suffix). One browser pinned by digest draws them, so every machine
+makes the same bytes. It runs on `main` only (`./ci.sh visual`); a failure there opens the `visual-regression` issue,
+with the difference images in the `lane-screenshots` artifact. `tests/visual-baselines.test.mjs` fails when a screen
+lacks an image or an image has no screen.
 
-`tests/visual.spec.ts` compares every screen in `tests/visual-screens/` with its approved
-images (`tests/visual.spec.ts-snapshots/`), each in Arabic and English at 390 and 1440 wide.
-To add a screen, add one JSON file there, named for the screen; `tests/visual-screens.mjs`
-says what its fields mean. `"dark": true` also compares it in the dark theme. Then approve
-its images with `Visual baselines` (below). `tests/visual-baselines.test.mjs` fails when a
-screen lacks an image or an image has no screen.
-
-- The `visual` project runs first in `npm run test:e2e`, on the database exactly as
-  the seed builds it, then the `functional` project runs, also when a screen failed,
-  then `measured` (the navigation time budgets, alone on the machine), and the
-  `first-run` project last (each is a Playwright teardown project, so it
-  waits for the earlier ones without being skipped by their failures). One CI round
-  reports every group and `check` is red when any fails. Run one file with
-  `npx playwright test --project=functional tests/frame.spec.ts`; screens alone
-  with `npm run test:visual` (`--no-deps` keeps the functional tests out).
-- The page is stable by construction: reduced motion, animations and caret off,
-  Playwright waits for two identical captures, the window grows until nothing
-  scrolls, the seeded cards are pinned to fixed days in June 2026, the calendar
-  opens on that month, and times and the 14 day chart labels are replaced by fixed
-  text (their layout, font and colour are still compared).
-- A failing comparison writes the expected, actual and difference images to
-  `test-results/screenshots/visual/`, which CI uploads in the `route-screenshots`
-  artifact.
-- When a change intentionally alters a screen, refresh its approved images with
-  `Visual baselines`. It runs `./ci.sh visual-update` on the same GitHub-hosted runner
-  (`ubuntu-latest`) and Node version as CI, with a fresh database, and uploads only changed or new images.
-  Start it on the PR branch, then download the artifact from that run:
-
-  ```sh
-  gh workflow run visual-baselines.yml --ref <branch>
-  gh run download <run-id> -n visual-baselines -D tests/visual.spec.ts-snapshots/
-  git add tests/visual.spec.ts-snapshots/ && git commit -m "Refresh approved screen images"
-  ```
-
-  If nothing changed, the list step prints nothing and no artifact is uploaded.
-  Review the downloaded images and commit them in the same PR as the change that
-  caused them. Images are named for Linux (`-linux`); never commit ones made on
-  another system.
+When a change intentionally alters one of those screens, one command refreshes its images: `./ci.sh visual-update`
+(Docker needed). Without Docker, run the `Visual baselines` workflow on the branch and download its `visual-baselines`
+artifact into `tests/visual-lane/images/`. Commit the images with the change that caused them.
 
 ## Code Review Rules
 

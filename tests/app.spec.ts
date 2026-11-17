@@ -3,8 +3,8 @@ import { chooseLanguageInSettings } from './choose-language';
 import { createHmac } from 'node:crypto';
 import { signIn, chooseCompany } from './sign-in';
 import { appOrigin, inbox, mail } from './lane.mjs';
-// The compared screens (tests/visual-screens/) draw every other page here in both languages at both widths; the List
-// and the Agents page are drawn by none, so they are also read at 390.
+// Every other page here is drawn in both languages at both widths by the journeys; the List and the Agents page are
+// drawn by none, so they are also read at 390.
 test('Paperclip Inter and Arabic-only Vazirmatn load locally',async({page,context})=>{
  const fontRequests:string[]=[];
  const externalFonts:string[]=[];

@@ -8,10 +8,10 @@ import { classify, failedStep } from './ci-classify.mjs';
 
 // Seconds, reported only (spec #255 D16). `changes` has no budget.
 export const budgets = {
-  layers: { static: 90, components: 90, database: 180, visual: 300, integration: { 'self-hosted': 480, 'github-hosted': 720 }, install: 720, lane: 420 },
+  layers: { static: 90, components: 90, database: 180, visual: 600, integration: { 'self-hosted': 480, 'github-hosted': 720 }, install: 720 },
   run: { pull_request: 600, otherwise: 840 },
 };
-export const layers = ['changes', 'static', 'components', 'database', 'visual', 'integration', 'install', 'lane'];
+export const layers = ['changes', 'static', 'components', 'database', 'visual', 'integration', 'install'];
 
 function budgetOf(layer, environment) {
   const budget = budgets.layers[layer];
@@ -22,14 +22,13 @@ function budgetOf(layer, environment) {
 export const layerOf = jobName => jobName.replace(/ \(.*\)$/, '');
 const shardOf = jobName => jobName.match(/ \((\d+\/\d+)\)$/)?.[1] ?? '';
 
-// Which `changes` output each layer follows; the compared screens follow the browser suite's.
-const decisionOf = { components: 'components', database: 'database', visual: 'integration', integration: 'integration', install: 'install', lane: 'integration' };
+// Which `changes` output each layer follows; the visual lane follows the browser suite's.
+const decisionOf = { components: 'components', database: 'database', visual: 'integration', integration: 'integration', install: 'install' };
 const e2eOff = 'manual run: the e2e input is off';
 const mainOnly = 'compared screens run on main and manual runs only (#257)';
 // [decision, event, layer, reason]; `*` matches any. The first matching row wins.
 const skipReasons = [
   ['*', 'pull_request', 'visual', mainOnly],
-  ['*', 'pull_request', 'lane', mainOnly],
   ['false', 'pull_request', '*', 'no changed file is in its area (scripts/ci-areas.mjs)'],
   ['false', 'push', '*', 'every changed file is a document'],
   ['false', 'workflow_dispatch', 'integration', e2eOff],

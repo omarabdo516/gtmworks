@@ -10,11 +10,11 @@ const everything = [/^\.github\/workflows\/ci\.yml$/, /^ci\.sh$/, /^scripts\/ci-
 const suites = {
   // Screens as components in headless Chromium (vitest.config.mts, #81): the app's screens and components, the library
   // they import (catalogues included), and the component tests and their config. The motion test (#127) also reads the
-  // reference and the motion table through the motion reader, at the compared screens' widths and languages, with the
+  // reference and the motion table through the motion reader, at the motion table's widths and languages, with the
   // stylesheets built through PostCSS.
   components: { true: [
     /^(app|components|lib)\//, /^tests\/components\//, /^vitest\.config\.mts$/,
-    /^tests\/(motion-table|motion-css|visual-screens)\.mjs$/, /^design-reference\/index\.html$/, /^postcss\.config\.mjs$/,
+    /^tests\/(motion-table|motion-css)\.mjs$/, /^design-reference\/index\.html$/, /^postcss\.config\.mjs$/,
   ] },
   // The database tests: migrations replayed and verified, RLS and grants (tests/db.sh, *.verify.sql, check-rls.sql).
   database: {
@@ -24,7 +24,7 @@ const suites = {
     ],
   },
   integration: {
-    // The whole-app browser suite: the proxy suite, the image, the compared screens and the journeys (functional,
+    // The whole-app browser suite: the proxy suite, the image and the journeys (functional,
     // measured, first run). Its own area: the specs and their helpers, the Playwright configs, the stacks they run on
     // (every lane is built from the migrations, the stack configuration and the local default privileges), the first-run
     // reset helpers the specs import, the image the job builds and the proxy suite runs in, the seed, public/ (the app
@@ -34,7 +34,7 @@ const suites = {
     true: [
       /^app\/.+\.ts$/, /^lib\/(?!messages\/)/, /^worker\//, /^(middleware|instrumentation)\.ts$/, /^(next|postcss)\.config\.mjs$/,
       /^server\.js$/, /^tests\/(?!visual-lane)(.+\/)?[^/]+\.spec\.ts$/, /^tests\/(?!visual-lane)[^/]+\.ts$/,
-      /^tests\/(visual-screens|lane|fake-hermes|fake-engine)\.mjs$/,
+      /^tests\/(lane|fake-hermes|fake-engine)\.mjs$/,
       /^playwright(\.proxy)?\.config\.ts$/, /^Dockerfile$/, /^\.dockerignore$/,
       /^scripts\/(web\.sh|local-db\.sh|proxy-stack\.sh|ci-image\.sh|first-run-db\.mjs|local-default-privileges\.sql)$/,
       /^supabase\/(migrations\/|config\.toml$|seed\.sql$)/, /^public\//,

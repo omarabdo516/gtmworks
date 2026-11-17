@@ -10,21 +10,21 @@ import { failedTests, regressionIssue } from '../scripts/visual-regression.mjs';
 // run's difference images (#257). No pull request waits for it.
 const spec = (title, ok, line = 1) => ({ title, ok, line, tests: [{ results: [{ status: ok ? 'passed' : 'failed' }] }] });
 const report = {
-  suites: [{ title: 'visual.spec.ts', file: 'visual.spec.ts', specs: [], suites: [
-    { title: 'signed-in screens', file: 'visual.spec.ts', specs: [spec('home ar 1440', false, 659), spec('board ar 1440', true, 659)], suites: [] },
-    { title: 'anonymous screens', file: 'visual.spec.ts', specs: [spec('sign-in en 390', false, 598)] },
+  suites: [{ title: 'visual-lane.spec.ts', file: 'visual-lane.spec.ts', specs: [], suites: [
+    { title: 'signed-in screens', file: 'visual-lane.spec.ts', specs: [spec('home ar 1440', false, 659), spec('board ar 1440', true, 659)], suites: [] },
+    { title: 'anonymous screens', file: 'visual-lane.spec.ts', specs: [spec('sign-in en 390', false, 598)] },
   ] }],
 };
 
 test('every failed screen is named with its describe block and line, and passed ones are not', () => {
-  assert.deepEqual(failedTests(report), ['signed-in screens › home ar 1440 (visual.spec.ts:659)', 'anonymous screens › sign-in en 390 (visual.spec.ts:598)']);
+  assert.deepEqual(failedTests(report), ['signed-in screens › home ar 1440 (visual-lane.spec.ts:659)', 'anonymous screens › sign-in en 390 (visual-lane.spec.ts:598)']);
   assert.deepEqual(failedTests({ suites: [] }), []);
 });
 
 test('the issue names the screens, the commit, the run and the difference images', () => {
   const issue = regressionIssue({ failed: failedTests(report), sha: 'abc1234def', runUrl: 'https://github.com/o/r/actions/runs/1', artifactUrl: 'https://github.com/o/r/actions/runs/1/artifacts/9' });
   assert.equal(issue.title, 'Compared screens differ on main');
-  assert.match(issue.body, /- signed-in screens › home ar 1440 \(visual\.spec\.ts:659\)/);
+  assert.match(issue.body, /- signed-in screens › home ar 1440 \(visual-lane\.spec\.ts:659\)/);
   assert.match(issue.body, /- anonymous screens › sign-in en 390/);
   assert.match(issue.body, /abc1234def/);
   assert.match(issue.body, /https:\/\/github\.com\/o\/r\/actions\/runs\/1\/artifacts\/9/);

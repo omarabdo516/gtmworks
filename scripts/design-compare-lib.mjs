@@ -11,7 +11,7 @@ import { extname, join, resolve, sep } from 'node:path';
 // where the focus is; a click on a sidebar item hidden behind the narrow-screen menu opens the menu first. A screen's `builtSteps` run the same way on the built page after it opens.
 // Every screen starts from the prototype's default state. Only the alone screens and a Member's request screens touch
 // the "viewing as" switcher: the alone ones show the workspace of an Owner working alone (#10); built, that is seeded
-// R&S Consultations, its one Member Omar, with work_mode set to 'alone' (tests/visual.spec.ts, state `alone`). The
+// R&S Consultations, its one Member Omar, with work_mode set to 'alone'. The
 // request ones show Youssef, a Contributor in the team (#17); built, that is the first Contributor, signed in with
 // --sign-in reviewer@example.com, over the visual state `agent-request` (or `-made`).
 const settings = [{ click: '#btn-me' }, { click: '[data-action="sov-open"]' }, { waitFor: '#sov[open] #sov-nav-company' }];
@@ -129,8 +129,7 @@ export const screens = {
   'team-channel': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-team"]' }, { waitFor: '.ch-intro' }] }, builtPath: null },
   // #172. The placeholders the reference shows while a chat or the dashboard loads, held on screen (`hold`: the
   // prototype's timers of 100ms or more never fire, so the content that replaces them never comes). The built
-  // placeholder shows only while the server is slow, which the capture cannot make: its pictures are the approved
-  // images of tests/visual-screens/chat-loading.json and numbers-loading.json.
+  // placeholder shows only while the server is slow, which the capture cannot make.
   'chat-loading': { reference: { hold: true, steps: [{ waitFor: '#chat-transcript [aria-busy="true"]' }] }, builtPath: null },
   'numbers-loading': { reference: { hold: true, steps: [{ click: '#sb-nav [data-view="dashboard"]' }, { waitFor: '#view-dashboard [aria-busy="true"]' }] }, builtPath: null },
 };
@@ -138,7 +137,7 @@ export const screens = {
 export const languages = ['ar', 'en'];
 export const themes = ['light', 'dark'];
 export const defaultBuiltUrl = 'http://127.0.0.1:3000';
-// The seeded Owner of every company, the person tests/visual.spec.ts signs in as.
+// The seeded Owner of every company, the person the visual lane signs in as.
 export const defaultSignIn = 'omar@example.com';
 
 export class UsageError extends Error {

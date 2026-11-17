@@ -82,7 +82,6 @@ case "${1:-check}" in
   bash ci.sh components
   bash ci.sh database
   bash ci.sh visual
-  bash ci.sh lane
   bash ci.sh integration
   ;;
  static)
@@ -174,37 +173,24 @@ PY
   PLAYWRIGHT_JSON_OUTPUT_FILE="$dir/proxy.json" npm run test:e2e:proxy
   bash scripts/local-db.sh
   wait "$build_pid" || { cat playwright-report/build.log >&2; echo 'the browser suite build failed' >&2; exit 1; }
-  # The compared screens and the measured budgets run on their own (`ci.sh visual`), on a GitHub-hosted runner.
+  # The measured budgets run on their own (`ci.sh visual`), on a GitHub-hosted runner.
   GTMWORKS_WEB_PREBUILT=true GTMWORKS_TEST_LANES=$lanes GTMWORKS_HOSTED_ELSEWHERE=true PLAYWRIGHT_JSON_OUTPUT_FILE="$dir/e2e.json" npm run test:e2e
   ;;
  visual)
-  # The compared screens alone, on lane 0 as the seed builds it: no journeys, no proxy suite, no image (#213). Then the
-  # navigation time budgets, which need a machine of their own (#224).
+  # The visual lane's key screens on the pinned renderer, and its guard tests (#257). Then the navigation time budgets,
+  # which need a machine of their own (#224).
+  start_lane
+  dir=$(ledger_dir visual)
+  status=0
+  PLAYWRIGHT_JSON_OUTPUT_FILE="$dir/lane.json" lane_test || status=$?
   if [[ "${CI:-}" == "true" ]]; then
-    npm ci
     install_chromium
   fi
-  bash scripts/local-db.sh
-  dir=$(ledger_dir visual)
-  GTMWORKS_TEST_LANES=1 PLAYWRIGHT_JSON_OUTPUT_FILE="$dir/screens.json" npm run test:visual
-  GTMWORKS_TEST_LANES=1 PLAYWRIGHT_JSON_OUTPUT_FILE="$dir/measured.json" npx playwright test --project=measured --no-deps
+  # Its own output folder: Playwright empties the one it writes to, and test-results/lane/ holds the lane's differences.
+  GTMWORKS_TEST_LANES=1 PLAYWRIGHT_JSON_OUTPUT_FILE="$dir/measured.json" npx playwright test --project=measured --no-deps --output=test-results/measured || status=$?
+  exit "$status"
   ;;
  visual-update)
-  # Rewrites only the approved screen images that changed. Run it where CI runs: the images are made for that system.
-  if [[ "${CI:-}" == "true" ]]; then
-    npm ci
-    install_chromium
-  fi
-  bash scripts/local-db.sh
-  npm run test:visual:update
-  ;;
- lane)
-  # The lane's screens against their approved images, and its guard tests.
-  start_lane
-  dir=$(ledger_dir lane)
-  PLAYWRIGHT_JSON_OUTPUT_FILE="$dir/lane.json" lane_test
-  ;;
- lane-update)
   # Rewrites only the lane's images that changed; the pinned renderer draws them the same on every machine.
   start_lane
   lane_test --update-snapshots=changed
@@ -220,5 +206,5 @@ PY
     find tests/visual-lane -name '*.png' | sort | xargs -r sha256sum > "test-results/lane-proof/run-$run.sha256"
   done
   ;;
- *) echo 'usage: ./ci.sh check | static | components | database | integration | visual | visual-update | lane | lane-update | lane-proof' >&2; exit 2;;
+ *) echo 'usage: ./ci.sh check | static | components | database | integration | visual | visual-update | lane-proof' >&2; exit 2;;
 esac

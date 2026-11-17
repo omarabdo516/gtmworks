@@ -4,10 +4,10 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 
 // docs/testing.md keeps one row per file under tests/ (#69): what it guards, its runtime and the decision.
-// The approved images, the compared screens, the failed job logs and the visual lane's data are data folders with one
-// row each, so adding a screen, an image or a log needs no row.
+// The failed job logs and the visual lane's data (its screens and approved images) are data folders with one row each,
+// so adding a screen, an image or a log needs no row.
 test('docs/testing.md has exactly one row per file under tests/', () => {
-  const folders = ['visual.spec.ts-snapshots/', 'visual-screens/', 'ci-logs/', 'visual-lane/'];
+  const folders = ['ci-logs/', 'visual-lane/'];
   const tracked = execFileSync('git', ['ls-files', 'tests'], { encoding: 'utf8' }).split('\n').filter(Boolean)
     .map(path => path.slice('tests/'.length))
     .map(path => (/\.(test|spec)\.[^/]+$/.test(path) ? undefined : folders.find(folder => path.startsWith(folder))) ?? path);
@@ -119,6 +119,6 @@ test('cases in any form are listed by Playwright and each needs its own row', ()
 test('every case of the functional project has its decision, and only kept cases are still in their file', () => {
   const listed = listCases('playwright.config.ts', 'functional');
   assert.ok(new Set(listed.cases.map(item => item.file)).size > 30, 'Playwright lists the functional project\'s spec files');
-  for (const file of ['visual.spec.ts', 'first-run.spec.ts', 'navigation.spec.ts', 'proxy/production-shape.spec.ts']) assert.ok(!listed.cases.some(item => item.file === file), `${file} is not in the functional project`);
+  for (const file of ['visual-lane.spec.ts', 'first-run.spec.ts', 'navigation.spec.ts', 'proxy/production-shape.spec.ts']) assert.ok(!listed.cases.some(item => item.file === file), `${file} is not in the functional project`);
   assert.deepEqual(decisionProblems(readFileSync('docs/testing.md', 'utf8'), listed), []);
 });

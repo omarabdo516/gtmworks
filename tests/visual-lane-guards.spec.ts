@@ -1,5 +1,5 @@
 import { test, expect, type Browser } from '@playwright/test';
-import { blockOutsideRequests, expectDeterministic, fixClock } from './visual-lane-guards';
+import { blockOutsideRequests, expectDeterministic, expectQuietContrast, fixClock } from './visual-lane-guards';
 
 // Each guard of the visual lane fails on the page it exists for and names why, and a quiet page passes them all. The
 // pages are written in place, so these tests need no app.
@@ -60,4 +60,12 @@ test('a redirect off the machine is named', async ({ browser }) => {
 test('a WebSocket off the machine is named', async ({ browser }) => {
   const page = await pageOf(browser, '<script>new WebSocket("wss://socket.example/live")</script>');
   await expect(expectDeterministic(page)).rejects.toThrow(/wss:\/\/socket\.example\/live/);
+});
+
+test('a quiet label below 4.5:1 is named, and one at 4.5:1 that stays weaker than the body text passes', async ({ browser }) => {
+  const page = await pageOf(browser, `<body style="color: #111; background: #fff">
+    <span class="faint" style="color: #bbb">تفصيلة باهتة</span><span class="quiet" style="color: #666">تفصيلة هادية</span></body>`);
+  await expectQuietContrast(page, [['quiet label', '.quiet']]);
+  await expect(expectQuietContrast(page, [['quiet label', '.faint']])).rejects.toThrow(/quiet label "تفصيلة باهتة"/);
+  await expect(expectQuietContrast(page, [['quiet label', '.missing']])).rejects.toThrow(/quiet label: nothing to measure/);
 });
