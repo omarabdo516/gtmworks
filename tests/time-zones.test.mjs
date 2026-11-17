@@ -52,6 +52,7 @@ test('beforeMidnight is the instant before a local day ends, a clock change incl
   assert.equal(beforeMidnight('2026-11-17', 'UTC', 1).toISOString(), '2026-11-17T23:59:59.000Z');
   // Clocks that jump forward at midnight: the day still ends at 23:59:59 on its own clock, an hour before the jump's UTC.
   assert.equal(beforeMidnight('2026-03-07', 'America/Havana', 1).toISOString(), '2026-03-08T04:59:59.000Z');
+  assert.equal(beforeMidnight('2026-03-07', 'America/Havana', 0).toISOString(), '2026-03-08T05:00:00.000Z', 'the day ends at the jump');
   assert.equal(beforeMidnight('2026-04-23', 'Africa/Cairo').toISOString(), '2026-04-23T21:59:30.000Z');
 });
 

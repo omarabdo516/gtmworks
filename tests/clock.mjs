@@ -8,13 +8,17 @@ const offsetAt = (instant, timeZone) => {
   return Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second) - Math.floor(instant / 1000) * 1000;
 };
 
-// The instant `seconds` before the local day `day` (YYYY-MM-DD) ends in `timeZone`, read on its wall clock (23:59:30 by
-// default). The offset is taken at a first guess and again at the result, so a day whose clocks change, even at
-// midnight, still ends right.
+const localDay = (instant, timeZone) => new Intl.DateTimeFormat('en-CA', { timeZone }).format(instant);
+
+// The instant `seconds` before the local day `day` (YYYY-MM-DD) ends in `timeZone`. The day ends when the next one
+// starts: at its midnight, or, where the clocks jump past midnight, at the jump. Both offsets around the wall-clock
+// midnight are tried, and the first that lands on the next day wins.
 export function beforeMidnight(day, timeZone = runnerZone, seconds = 30) {
   const [year, month, date] = day.split('-').map(Number);
-  const wall = Date.UTC(year, month - 1, date + 1) - seconds * 1000;
-  return new Date(wall - offsetAt(wall - offsetAt(wall, timeZone), timeZone));
+  const wall = Date.UTC(year, month - 1, date + 1), next = new Date(wall).toISOString().slice(0, 10);
+  const first = wall - offsetAt(wall, timeZone);
+  const ends = [...new Set([first, wall - offsetAt(first, timeZone)])].sort((one, other) => one - other);
+  return new Date(ends.find(end => localDay(end, timeZone) === next) - seconds * 1000);
 }
 
 // The n-th fixed id, shaped as a version 4 UUID.
