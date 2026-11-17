@@ -370,6 +370,7 @@ jobs:
           lists=(lane-proof/*/run-*.sha256)
           for list in "${lists[@]}"; do echo "$list: $(wc -l < "$list") images, $(sha256sum < "$list" | cut -c1-16)"; done
           if (( ${#lists[@]} != 6 )); then echo "::error::6 lists of hashes expected, ${#lists[@]} found"; exit 1; fi
+          for list in "${lists[@]}"; do [[ -s $list ]] || { echo "::error::$list holds no image: nothing was compared"; exit 1; }; done
           for list in "${lists[@]:1}"; do
             diff "${lists[0]}" "$list" || { echo "::error::$list differs from ${lists[0]}"; exit 1; }
           done

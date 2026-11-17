@@ -160,7 +160,7 @@ test('an empty, malformed or unreadable list runs every suite', t => {
 for (const path of [
   'app/page.tsx', 'app/c/[company]/home/page.tsx', 'app/globals.css', 'components/shell/sidebar.tsx', 'components/paperclip/fonts/InterVariable.woff2',
   'lib/i18n-client.tsx', 'lib/messages/ar.json', 'postcss.config.mjs', 'tests/visual-lane/screens.json', 'tests/visual-lane/images/home-ar-390-dark.png',
-  'tests/visual-lane.mjs', 'tests/visual-lane-guards.spec.ts', 'tests/visual-lane-screens.spec.ts',
+  'tests/visual-lane.mjs', 'tests/visual-lane-guards.spec.ts', 'tests/visual-lane-screens.spec.ts', 'tests/visual-lane-390.spec.ts',
 ]) {
   test(`${path} runs the visual lane`, () => assert.equal(areas('docs/testing.md', path).lane, 'true'));
 }

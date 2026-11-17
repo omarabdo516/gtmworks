@@ -61,7 +61,7 @@ const suites = {
   lane: {
     true: [
       /^app\/.+\.(tsx|css)$/, /^components\//, /^lib\/.+\.(tsx|css)$/, /^lib\/messages\//, /^postcss\.config\.mjs$/,
-      /^tests\/visual-lane(\/|\.mjs$|-guards\.ts$|(-[a-z-]+)?\.spec\.ts$)/, /^playwright\.lane\.config\.ts$/,
+      /^tests\/visual-lane(\/|\.mjs$|-guards\.ts$|[^/]*\.spec\.ts$)/, /^playwright\.lane\.config\.ts$/,
     ],
   },
   // The lane's proof that every runner draws the same bytes: the renderer, the lane's config and its guards.

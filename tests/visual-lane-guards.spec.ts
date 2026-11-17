@@ -13,7 +13,7 @@ async function pageOf(browser: Browser, html: string, { clock = true } = {}) {
 }
 
 test('a quiet page with a fixed clock and only loopback requests passes', async ({ browser }) => {
-  const page = await pageOf(browser, '<p>هدوء</p><img src="http://127.0.0.1:9/nothing.png">');
+  const page = await pageOf(browser, '<p style="font-family: sans-serif">هدوء</p><img src="http://127.0.0.1:9/nothing.png">');
   await expectDeterministic(page);
 });
 
@@ -33,4 +33,31 @@ test('a page whose clock is not fixed is refused', async ({ browser }) => {
 test('a request that leaves the machine is blocked and named', async ({ browser }) => {
   const page = await pageOf(browser, '<img src="https://fonts.example.com/pixel.png">');
   await expect(expectDeterministic(page)).rejects.toThrow(/requests off the machine were blocked: https:\/\/fonts\.example\.com\/pixel\.png/);
+});
+
+test('a font family no face declares is named', async ({ browser }) => {
+  const page = await pageOf(browser, '<p style="font-family: \'Missing Face\', sans-serif">نص</p>');
+  await expect(expectDeterministic(page)).rejects.toThrow(/font "Missing Face" is not declared/);
+});
+
+test('a declared face that covers none of the text is named', async ({ browser }) => {
+  const page = await pageOf(browser, `<style>
+    @font-face { font-family: "Latin Only"; src: local("DejaVu Sans"), local("Arial"); unicode-range: U+0000-00FF; }
+    p { font-family: "Latin Only", sans-serif; }
+  </style><p>نص عربي</p>`);
+  await expect(expectDeterministic(page)).rejects.toThrow(/font "Latin Only" covers none of "نص عربي"/);
+});
+
+test('a redirect off the machine is named', async ({ browser }) => {
+  const page = await pageOf(browser, '');
+  await page.route('http://127.0.0.1:9/hop.png', route => route.fulfill({ status: 302, headers: { location: 'https://elsewhere.example/pixel.png' } }));
+  const hop = page.waitForEvent('request', request => request.url().startsWith('https://elsewhere.example/'));
+  await page.setContent('<img src="http://127.0.0.1:9/hop.png">', { waitUntil: 'commit' });
+  await hop;
+  await expect(expectDeterministic(page)).rejects.toThrow(/https:\/\/elsewhere\.example\/pixel\.png/);
+});
+
+test('a WebSocket off the machine is named', async ({ browser }) => {
+  const page = await pageOf(browser, '<script>new WebSocket("wss://socket.example/live")</script>');
+  await expect(expectDeterministic(page)).rejects.toThrow(/wss:\/\/socket\.example\/live/);
 });
