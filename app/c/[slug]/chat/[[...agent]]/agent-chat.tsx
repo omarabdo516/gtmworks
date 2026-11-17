@@ -49,7 +49,7 @@ export default function AgentChat({slug,company,agent,details,writer,team=false,
     return new Promise<never>(()=>{});
    }}/>:<p className="ro-line" role="note"><ShellIcon name="eye"/><span>{agent.main?t('viewOnlyLead'):t('viewOnly')}</span></p>)}</div>
   </div>
-  {agent&&details&&<AgentDetails panel={panel} agent={agent} details={details} settingsHref={`/c/${slug}/agents`}/>}
+  {agent&&details&&<AgentDetails panel={panel} agent={agent} details={details} slug={slug}/>}
   {agent&&isNew&&<OpenedMark company={company} agent={agent.id}/>}
  </div>;
 }
