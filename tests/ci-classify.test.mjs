@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { classify } from '../scripts/ci-classify.mjs';
+import { classify, failedStep } from '../scripts/ci-classify.mjs';
 
 // A red job carries one label (#256, spec #255 D12): an infrastructure cause when the job ended on a known signature, and
 // otherwise "your change". The logs are excerpts of real failed jobs from 2026-11-16 (tests/ci-logs/README.md).
@@ -68,6 +68,29 @@ test('what an earlier step printed, or a failed test prints, is not where the jo
   for (const name of ['constructed-short-failed-step', 'constructed-node-test-port', 'constructed-quoted-shutdown']) {
     assert.deepEqual(outcome(classify(log(name))), yourChange, name);
   }
+});
+
+test('a rate limit the job recovered from, or a test that failed on its own, is your change', () => {
+  for (const name of ['constructed-recovered-pull-then-verify', 'constructed-component-test-error']) {
+    assert.deepEqual(outcome(classify(log(name))), yourChange, name);
+  }
+});
+
+// The job's steps from the API (job 133610408482) name the one that failed; a step allowed to fail is not it.
+test('the failed step is the one the API marks failed, counted among the steps that ran, as the log prints them', () => {
+  const steps = [
+    { name: 'Set up job', conclusion: 'success' }, { name: 'Run actions/checkout@v4', conclusion: 'success' },
+    { name: "reserve the stack's ports", conclusion: 'success' }, { name: 'Run actions/setup-node@v4', conclusion: 'success' },
+    { name: 'database', conclusion: 'failure' }, { name: 'upload ledger results', conclusion: 'skipped' },
+    { name: 'Post Run actions/setup-node@v4', conclusion: 'skipped' }, { name: 'Post Run actions/checkout@v4', conclusion: 'success' },
+    { name: 'Complete job', conclusion: 'success' },
+  ];
+  assert.equal(failedStep(steps), 3);
+  assert.equal(failedStep(steps.map(step => ({ ...step, conclusion: 'success' }))), null);
+  const text = log('constructed-continue-on-error');
+  assert.deepEqual(outcome(classify(text)), infrastructure('registry rate limit'), 'without the API, the action that printed an error looks like the failed step');
+  assert.deepEqual(outcome(classify(text, { failedStep: 2 })), yourChange);
+  assert.equal(classify(log('database-133610408482'), { failedStep: 3 }).label, 'your change');
 });
 
 test('any other red is your change', () => {

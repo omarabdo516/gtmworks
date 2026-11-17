@@ -1,0 +1,12 @@
+2026-11-16T20:33:14.7402261Z Current runner version: '2.338.2'
+2026-11-16T20:33:14.7451825Z ##[group]Runner Image Provisioner
+2026-11-16T20:33:14.7452761Z Hosted Compute Agent
+[excerpt: lines omitted]
+2026-11-16T20:33:23.6394198Z ##[group]Run ./ci.sh database
+2026-11-16T20:34:05.1055865Z error from registry: Rate exceeded
+2026-11-16T20:34:05.1079439Z Retrying after 4s: public.ecr.aws/supabase/postgres:17.11.0.011
+2026-11-16T20:34:09.3211667Z 921bfecda4c1: Pull complete
+2026-11-16T20:34:09.4000000Z Status: Downloaded newer image for public.ecr.aws/supabase/postgres:17.11.0.011
+2026-11-16T20:34:40.0000000Z Started supabase local development setup.
+2026-11-16T20:34:41.0000000Z supabase/migrations/20261116000000_card_readers.verify.sql: expected the guard on 8 functions, found 7
+2026-11-16T20:34:41.0400000Z ##[error]Process completed with exit code 1.

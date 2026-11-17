@@ -27,3 +27,6 @@ lines of a real log and its step lines) with the output a tool prints in that ca
 | `constructed-short-failed-step` | a cleanup step reports a busy port it freed; the next step fails in two lines | your change |
 | `constructed-node-test-port` | a failed node test prints a Docker port message it was given | your change |
 | `constructed-quoted-shutdown` | a failed classifier test prints its shutdown and network-change fixture | your change |
+| `constructed-recovered-pull-then-verify` | a pull retried after a rate limit, then a migration check fails within 30 lines | your change |
+| `constructed-component-test-error` | a component test whose own error names `toomanyrequests`; Vitest's summary says 1 failed | your change |
+| `constructed-continue-on-error` | a cache restore allowed to fail hits a rate limit; the database step after it fails | your change |
