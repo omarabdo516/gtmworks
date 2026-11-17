@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { report, upsertIssue } from '../scripts/ci-health.mjs';
+import { readLedger, report, upsertIssue } from '../scripts/ci-health.mjs';
 
 // The nightly CI health report (#256): a week of ledgers read together into one tracking issue, which each night's
 // report replaces. Percentiles are nearest-rank: the p-th of n sorted values is the ceil(p/100 * n)-th.
@@ -108,4 +108,30 @@ test('the report creates exactly one issue when none is open, ignoring a same-ti
   assert.deepEqual(await upsertIssue(api, 'CI health report', body), { action: 'created', number: 900 });
   assert.deepEqual(calls.filter(call => call.method !== 'GET'), [{ method: 'POST', path: '/issues', body: { title: 'CI health report', body } }]);
   assert.match(calls[0].path, /state=open&creator=github-actions%5Bbot%5D&per_page=100/);
+});
+
+// A pull request's own code writes its ledger, so the nightly report reads each one as untrusted input: a record of the
+// wrong shape is skipped and counted, and no cell grows past a fixed length, so one ledger cannot stop the shared update.
+test('a ledger with a wrong-shaped record and an oversized field still gives a report, with the record counted as unreadable', async () => {
+  const good = testRecord('drags', 1500);
+  const wrongShape = { ...testRecord('ghost', 1), name: { nested: true }, duration_ms: 'slow' };
+  const oversized = { ...testRecord('x'.repeat(100000), 2500), file: 'tests/' + 'y'.repeat(100000) };
+  const text = [good, wrongShape, oversized, { kind: 'job', layer: 'static', duration_s: [] }, 'not json', '{"kind":"surprise"}']
+    .map(line => (typeof line === 'string' ? line : JSON.stringify(line))).join('\n') + '\n';
+  const { records, rejected } = readLedger(text);
+  assert.equal(rejected, 4, 'the wrong-shaped test and job, the line that is not JSON and the unknown kind');
+  assert.deepEqual(records.map(record => record.name.slice(0, 6)), ['drags', 'xxxxxx'], 'the oversized record is kept; only its rendering is cut');
+  const body = report(records, { now, days: 7, runs: 1, rejected });
+  assert.match(body, /records could not be read/);
+  for (const line of body.split('\n').filter(line => line.startsWith('| '))) {
+    for (const part of line.slice(2, -2).split(' | ')) assert.ok(part.length <= 200, `a cell of ${part.length} characters`);
+  }
+  assert.match(body, /\| tests\/y+… \|/, 'the oversized test is shown, cut');
+  assert.ok(body.length < 65536);
+  const loud = report([testRecord('<!-- ci-health --> <img src=x> @someone', 1)], { now, days: 7, runs: 1 });
+  assert.equal(loud.split('<!-- ci-health -->').length, 2, 'only the report\'s own marker');
+  assert.doesNotMatch(loud, /<img|@someone/);
+  const { api, calls } = fakeApi([]);
+  assert.equal((await upsertIssue(api, 'CI health report', body)).action, 'created');
+  assert.equal(calls.filter(call => call.method === 'POST').length, 1);
 });

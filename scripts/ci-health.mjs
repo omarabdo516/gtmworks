@@ -19,17 +19,64 @@ function percentile(values, p) {
 const minutes = value => (value == null ? '—' : `${(value / 60).toFixed(1)} min`);
 // A test takes seconds, so its duration reads in seconds; minutes would round most of them to 0.0.
 const testSeconds = ms => (ms == null ? '—' : `${(ms / 1000).toFixed(1)} s`);
-const cell = text => String(text).replaceAll('|', '\\|').replaceAll('\n', ' ');
+// A ledger is written by a pull request's own code, so its text is cut before it reaches the issue.
+const width = 200;
+const cell = value => {
+  const text = String(value).replaceAll('\n', ' ');
+  // No markup and no mention: the text renders as written and notifies nobody.
+  return (text.length > width ? `${text.slice(0, width - 1)}…` : text).replaceAll('&', '&amp;').replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;').replaceAll('@', '@\u200b').replaceAll('|', '\\|');
+};
 const row = values => `| ${values.map(cell).join(' | ')} |`;
 // An issue body holds at most 65536 characters, so each list of tests stops at 20.
 const shown = 20;
 const tally = items => [...items.reduce((map, key) => map.set(key, (map.get(key) ?? 0) + 1), new Map())];
 
-export function report(records, { now, days, runs, unreadable = 0, left = 0 }) {
+// What the report reads of each record; a record of another shape is refused and counted, never half read.
+const text = value => typeof value === 'string';
+const textOrNull = value => value === null || text(value);
+const count = value => typeof value === 'number' && Number.isFinite(value) && value >= 0;
+const countOrNull = value => value === null || count(value);
+const shapes = {
+  run: { run_id: count },
+  job: {
+    layer: text, conclusion: textOrNull, completed_at: textOrNull, duration_s: countOrNull, queue_s: countOrNull,
+    budget_s: countOrNull, environment: textOrNull,
+    classification: value => value === null || (typeof value === 'object' && text(value.label) && textOrNull(value.cause ?? null)),
+  },
+  test: {
+    layer: text, suite: text, file: textOrNull, name: text, duration_ms: count,
+    outcome: value => ['passed', 'failed', 'skipped', 'flaky'].includes(value),
+  },
+};
+const fits = record => {
+  const shape = record && typeof record === 'object' && Object.hasOwn(shapes, record.kind) ? shapes[record.kind] : null;
+  return Boolean(shape) && Object.entries(shape).every(([field, check]) => check(record[field] ?? null));
+};
+
+export function readLedger(ledger) {
+  const records = [];
+  let rejected = 0;
+  for (const line of ledger.split('\n').filter(line => line.trim())) {
+    let record;
+    try {
+      record = JSON.parse(line);
+    } catch {
+      rejected++;
+      continue;
+    }
+    if (fits(record)) records.push(record);
+    else rejected++;
+  }
+  return { records, rejected };
+}
+
+export function report(records, { now, days, runs, unreadable = 0, left = 0, rejected = 0 }) {
   const jobs = records.filter(record => record.kind === 'job');
   const tests = records.filter(record => record.kind === 'test');
   const lines = [marker, `# ${title}`, '', `The ${days} days to ${new Date(now).toISOString().slice(0, 16).replace('T', ' ')} UTC: ${runs} runs.`];
   if (unreadable) lines.push('', `${unreadable} ledgers could not be read.`);
+  if (rejected) lines.push('', `${rejected} records could not be read.`);
   if (left) lines.push('', `Only the newest ledgers were read: ${left} older ones in the window are not counted.`);
 
   const measured = jobs.filter(job => job.completed_at && ['success', 'failure'].includes(job.conclusion) && job.duration_s != null);
@@ -129,6 +176,7 @@ async function main() {
   const folder = mkdtempSync(join(tmpdir(), 'ci-health-'));
   const records = [];
   let unreadable = 0;
+  let rejected = 0;
   let runs = 0;
   try {
     for (const artifact of artifacts.slice(0, cap)) {
@@ -137,8 +185,10 @@ async function main() {
         if (!response.ok) throw new Error(String(response.status));
         const zip = join(folder, `${artifact.id}.zip`);
         writeFileSync(zip, Buffer.from(await response.arrayBuffer()));
-        const text = execFileSync('unzip', ['-p', zip, 'ledger.jsonl'], { encoding: 'utf8', maxBuffer: 512 * 1024 * 1024 });
-        records.push(...text.split('\n').filter(line => line.trim()).map(line => JSON.parse(line)));
+        const ledger = execFileSync('unzip', ['-p', zip, 'ledger.jsonl'], { encoding: 'utf8', maxBuffer: 512 * 1024 * 1024 });
+        const found = readLedger(ledger);
+        records.push(...found.records);
+        rejected += found.rejected;
         runs++;
       } catch {
         unreadable++;
@@ -147,7 +197,7 @@ async function main() {
   } finally {
     rmSync(folder, { recursive: true, force: true });
   }
-  const body = report(records, { now, days, runs, unreadable, left: Math.max(0, artifacts.length - cap) });
+  const body = report(records, { now, days, runs, unreadable, rejected, left: Math.max(0, artifacts.length - cap) });
   const { action, number } = await upsertIssue(api, title, body);
   process.stdout.write(`${body}\nThe report ${action} issue #${number}.\n`);
   if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, body);
