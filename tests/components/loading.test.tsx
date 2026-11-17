@@ -1,6 +1,9 @@
 import { afterEach, beforeAll, expect, test, vi } from 'vitest';
 import { use, type ComponentProps } from 'react';
 import { render } from 'vitest-browser-react';
+import { act } from 'react';
+import { hydrateRoot } from 'react-dom/client';
+import { renderToString } from 'react-dom/server';
 import { cdp, page } from 'vitest/browser';
 import type {} from '@vitest/browser-playwright';
 import ConversationView, { ConversationLoaded } from '@/app/c/[slug]/conversations/[id]/conversation';
@@ -154,25 +157,22 @@ test('a message sent while the chat loads whose answer is lost after it loaded c
  expect(keys[1]).toBe(keys[0]);
 });
 
-test('a lost answer to a message sent while the chat loaded leaves alone what the person has typed since', async () => {
+test('text typed into the server-drawn composer before the page is ready stays in the box once the chat is loaded', async () => {
  const { record, arrive } = held();
- let lose!: () => void;
- vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => {
-  if (init?.method !== 'POST') return Response.json(talk([asked]));
-  await new Promise<void>(resolve => { lose = resolve; });
-  throw new TypeError('Failed to fetch');
- }));
- const screen = await opened(record);
- await screen.getByRole('textbox', { name: 'Message' }).fill('And the budget');
- await screen.getByRole('button', { name: 'Send' }).click();
- await expect.poll(() => typeof lose).toBe('function');
- arrive(talk([asked]));
- await expect.element(screen.getByLabelText('Loading the chat')).not.toBeInTheDocument();
- const field = screen.getByRole('textbox', { name: 'Message' });
- await field.fill('And the dates');
- lose();
- await new Promise(resolve => setTimeout(resolve, 100));
- await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('And the dates');
+ const chat = <LanguageProvider language="en"><div className="gw" style={{ height: 900 }}>
+  <ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={{ id: 'cv-2', agent_id: null, agent_name: 'Mona', face: 'c-2' }} title="Draft the long launch plan" writer><Arrived record={record} team={false}/></ConversationView>
+ </div></LanguageProvider>;
+ const container = document.createElement('div'); document.body.append(container);
+ container.innerHTML = renderToString(chat);
+ const typed = container.querySelector('textarea')!;
+ typed.value = 'Typed before the page was ready';
+ const root = await act(async () => hydrateRoot(container, chat, { onRecoverableError: () => {} }));
+ try {
+  await act(async () => { arrive(talk([asked, reply])); });
+  await expect.poll(() => container.textContent).toContain('On it.');
+  expect(container.querySelector('textarea')).toBe(typed);
+  expect(typed.value).toBe('Typed before the page was ready');
+ } finally { act(() => root.unmount()); container.remove(); }
 });
 
 const numbers = (language: 'en' | 'ar') => render(<LanguageProvider language={language}><div className="gw" dir={language === 'ar' ? 'rtl' : 'ltr'}>

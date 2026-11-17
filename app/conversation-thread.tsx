@@ -133,13 +133,14 @@ export function ConversationTurns({slug,record}:{slug:string,record:Conversation
 
 // What goes under the messages (design-reference: composerHTML): the composer for a person who may write, whose stop
 // square stops the open run for the person who started it, or a Manager or Owner; the view-only line for a Viewer. The
-// Conversation's own page adds its usage line; a Card's sheet draws none.
-export function ConversationComposer({company,record,writer,asked,draft,usage}:{company:string,record:ConversationRecord,writer:boolean,asked:()=>void,draft?:{text:string,n:number,key?:string}|null,usage:boolean}) {
+// Conversation's own page adds its usage line; a Card's sheet draws none. While the record is still on its way (#172) it
+// already takes a message, with no stop square, and keeps the usage line's place.
+export function ConversationComposer({company,conversation,record,writer,asked,draft,usage}:{company:string,conversation:ThreadConversation,record:ConversationRecord|null,writer:boolean,asked:()=>void,draft?:{text:string,n:number}|null,usage:boolean}) {
  const {t,language}=useI18n(); const {c}=useConversationText();
- const {conversation,working,canStop}=record;
+ const working=record?.working; const canStop=record?.canStop;
  const count=(value:number)=>new Intl.NumberFormat(localeFor(language)).format(value);
  return <>
-  {writer?<MessageBox key={draft?.n||0} draft={draft?.text} draftKey={draft?.key} placeholder={t('writeTo',conversation.agent_name)} stop={working&&canStop?{label:c('conversationStop',conversation.agent_name),run:async()=>{
+  {writer?<MessageBox key={draft?.n||0} draft={draft?.text} placeholder={t('writeTo',conversation.agent_name)} stop={working&&canStop?{label:c('conversationStop',conversation.agent_name),run:async()=>{
    const failure=await postMessage({company,conversation:conversation.id,intent:'stop'});
    if(!failure) asked();
    return failure;
@@ -148,7 +149,8 @@ export function ConversationComposer({company,record,writer,asked,draft,usage}:{
    if(!failure) asked();
    return failure;
   }}/>:<p className="ro-line" role="note"><ShellIcon name="eye"/><span>{t('viewOnly')}</span></p>}
-  {usage&&<p className="chat-usage" data-usage>{t('conversationUsage',count(record.usage.input+record.usage.output),count(record.usage.input),count(record.usage.output))}{record.usage.unknown>0&&<> · {t('usageUnknownRuns',count(record.usage.unknown))}</>}</p>}
+  {usage&&(record?<p className="chat-usage" data-usage>{t('conversationUsage',count(record.usage.input+record.usage.output),count(record.usage.input),count(record.usage.output))}{record.usage.unknown>0&&<> · {t('usageUnknownRuns',count(record.usage.unknown))}</>}</p>
+   :<p className="chat-usage" aria-hidden="true">{'\u00a0'}</p>)}
  </>;
 }
 

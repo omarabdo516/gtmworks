@@ -12,11 +12,10 @@ export const newId=()=>{const b=crypto.getRandomValues(new Uint8Array(16));b[6]=
 // One send key per typed message, so a double click or a retry runs once; a new text gets a new key.
 // While the Agent works (design-reference: syncComposer), an empty box turns the send arrow into a stop square for a
 // person allowed to stop the run (`stop`); typed text is still sent, and waits for the current reply.
-// `draftKey` is the send key of a draft that is a send whose answer never came, so sending it again is the same send.
 // `draft` starts the box with a sentence to try (remount with a new key to put another one in); it is focused for editing,
 // as it is with `focus` ("New agent" opens Lead's chat ready to type, #13).
-export function MessageBox({placeholder,label,send,stop,draft,draftKey,focus=false}:{placeholder:string,label?:string,send:(text:string,sendKey:string)=>Promise<string|null>,stop?:{label:string,run:()=>Promise<string|null>},draft?:string,draftKey?:string,focus?:boolean}) {
- const {t}=useI18n(); const [text,setText]=useState(draft??''); const [key,setKey]=useState(()=>draftKey??newId()); const [busy,setBusy]=useState(false); const [error,setError]=useState('');
+export function MessageBox({placeholder,label,send,stop,draft,focus=false}:{placeholder:string,label?:string,send:(text:string,sendKey:string)=>Promise<string|null>,stop?:{label:string,run:()=>Promise<string|null>},draft?:string,focus?:boolean}) {
+ const {t}=useI18n(); const [text,setText]=useState(draft??''); const [key,setKey]=useState(newId); const [busy,setBusy]=useState(false); const [error,setError]=useState('');
  // Text typed into the server-drawn box before this code arrived is the person's own: it is kept, and Send sends it.
  const field=useRef<HTMLTextAreaElement>(null);
  useEffect(()=>{ const typed=field.current?.value; if(typed) setText(current=>current||typed); },[]);
