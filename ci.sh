@@ -41,6 +41,39 @@ database_record() {
     "$file" "$name" $(( ($(date +%s%N) - started) / 1000000 )) "$outcome" >> "$dir/database.jsonl"
   ((status == 0)) || exit "$status"
 }
+# The visual lane (#257) is drawn by one pinned browser in its container, through Playwright's own server (the checkout's
+# locked package, so nothing is downloaded); the tests, the app and lane 0's stack stay on this machine. The image pulls
+# while the dependencies install and the stack starts.
+renderer=gtmworks-lane-renderer
+renderer_port=3900
+start_lane() {
+  local lanes=1 image pull
+  image=$(< tests/visual-lane/renderer)
+  mkdir -p playwright-report
+  docker pull --quiet "$image" > playwright-report/renderer.log 2>&1 &
+  pull=$!
+  if [[ "${CI:-}" == "true" ]]; then
+    npm ci
+  fi
+  start_lanes
+  wait_lanes
+  wait "$pull" || { cat playwright-report/renderer.log >&2; echo 'the renderer image did not pull' >&2; exit 1; }
+  docker rm --force "$renderer" > /dev/null 2>&1 || true
+  trap 'docker rm --force "$renderer" > /dev/null 2>&1 || true' EXIT
+  # -i: the server stops when its standard input closes. --unsafe: it takes the launch flags the lane's config sends.
+  docker run --detach --interactive --name "$renderer" --init --ipc=host -p "127.0.0.1:$renderer_port:$renderer_port" \
+    -v "$PWD:/work:ro" -w /work "$image" \
+    node node_modules/playwright/cli.js run-server --port "$renderer_port" --host 0.0.0.0 --unsafe > /dev/null
+  # Docker opens the port before the server inside listens, so the server's own line says it is ready.
+  second=0
+  until docker logs "$renderer" 2>&1 | grep -q '^Listening on'; do
+    if ((second++ >= 60)); then docker logs "$renderer" >&2; echo 'the renderer did not start' >&2; exit 1; fi
+    sleep 1
+  done
+}
+lane_test() {
+  GTMWORKS_TEST_LANES=1 GTMWORKS_LANE_RENDERER="ws://127.0.0.1:$renderer_port/" npx playwright test -c playwright.lane.config.ts "$@"
+}
 case "${1:-check}" in
  check)
   # Every stage in order, for local use. CI runs them as parallel jobs, each only when its files change
@@ -49,6 +82,7 @@ case "${1:-check}" in
   bash ci.sh components
   bash ci.sh database
   bash ci.sh visual
+  bash ci.sh lane
   bash ci.sh integration
   ;;
  static)
@@ -164,5 +198,27 @@ PY
   bash scripts/local-db.sh
   npm run test:visual:update
   ;;
- *) echo 'usage: ./ci.sh check | static | components | database | integration | visual | visual-update' >&2; exit 2;;
+ lane)
+  # The lane's screens against their approved images, and its guard tests.
+  start_lane
+  dir=$(ledger_dir lane)
+  PLAYWRIGHT_JSON_OUTPUT_FILE="$dir/lane.json" lane_test
+  ;;
+ lane-update)
+  # Rewrites only the lane's images that changed; the pinned renderer draws them the same on every machine.
+  start_lane
+  lane_test --update-snapshots=changed
+  ;;
+ lane-proof)
+  # Draws every lane image three times and keeps each run's hashes: CI compares them across runners. It rewrites the
+  # approved images in the checkout, so it runs in CI only.
+  [[ "${CI:-}" == "true" ]] || { echo 'lane-proof rewrites the approved lane images; it runs in CI only' >&2; exit 2; }
+  start_lane
+  mkdir -p test-results/lane-proof
+  for run in 1 2 3; do
+    lane_test --update-snapshots=all
+    find tests/visual-lane -name '*.png' | sort | xargs -r sha256sum > "test-results/lane-proof/run-$run.sha256"
+  done
+  ;;
+ *) echo 'usage: ./ci.sh check | static | components | database | integration | visual | visual-update | lane | lane-update | lane-proof' >&2; exit 2;;
 esac

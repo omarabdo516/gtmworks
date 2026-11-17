@@ -158,6 +158,10 @@ test('every screen says how to reach it in the reference and which built page it
   assert.equal(screens['draft-card'].builtPath, null, 'the Conversation has a uuid path: pass the draft-shown state\'s');
   // An Agent's reply carries a review card (#137): the reference shows it in the team chat.
   assert.equal(screens['review-card'].builtPath, null, 'the Conversation has a uuid path: pass the review-shown state\'s');
+  // An Agent's question (#138): the reference shows it open in the Meta campaign chat.
+  assert.equal(screens['question-card'].builtPath, null, 'the Conversation has a uuid path: pass the fixture\'s questionConversation');
+  assert.equal(fixture.questionConversation, '62000000-0000-0000-0000-000000000005');
+  assert.ok(readFileSync(fixture.file, 'utf8').includes(`'${fixture.questionConversation}','design-compare-fixture-question','design-compare-prompt@1','question'`), 'its open question');
   assert.equal(screens['made-agent'].builtPath, `/c/rs-learning/settings?agent=${fixture.agent}`);
   // A lasting rule told to Ads (#18): the saved line in the Conversation; Ads's page above lists the rule.
   assert.equal(screens['rule-saved'].builtPath, null, 'the Conversation has a uuid path: pass the fixture\'s ruleConversation');

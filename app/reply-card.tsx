@@ -1,23 +1,25 @@
 // A card an Agent's reply carries (#136; design-reference: cardHTML, kvHTML): one frame for every kind, named by its
 // title, around the kind's own body. Every word on it is the Agent's: the card is laid out in its title's direction, as
 // the reference lays out its Arabic card right to left in either language, and every other text keeps its own. `fresh`:
-// it arrived after the page was drawn, so it rises in once (design-reference: card-in).
+// it arrived after the page was drawn, so it rises in once (design-reference: card-in). A question (#138) is answered
+// in the card itself (`answer`), so it draws its own frame (app/question-card.tsx).
 import { ShellIcon } from '@/components/shell-icon';
 import { useI18n } from '@/lib/i18n-client';
+import { QuestionCard, type AnswerQuestion } from '@/app/question-card';
 import type { ReplyCard as Card } from '@/lib/conversations';
 
-export function ReplyCard({card,fresh}:{card:Card,fresh:boolean}) {
- const {t}=useI18n();
- const label=card.kind==='review'?t('replyReviewLabel',card.title):card.title;
- return <div className={`reply-card reply-card--${card.kind}${fresh?' card-in':''}`} role="group" aria-label={label} dir="auto"><Body card={card}/></div>;
-}
-
-function Body({card}:{card:Card}) {
+export function ReplyCard({card,fresh,answer}:{card:Card,fresh:boolean,answer?:AnswerQuestion}) {
  switch(card.kind) {
-  case 'draft': return <DraftBody card={card}/>;
-  case 'review': return <ReviewBody card={card}/>;
+  case 'question': return <QuestionCard card={card} fresh={fresh} answer={answer}/>;
+  case 'draft': case 'review': return <Shown card={card} fresh={fresh}/>;
   default: { const unknown:never=card; return unknown; }
  }
+}
+
+function Shown({card,fresh}:{card:Extract<Card,{kind:'draft'|'review'}>,fresh:boolean}) {
+ const {t}=useI18n();
+ const label=card.kind==='review'?t('replyReviewLabel',card.title):card.title;
+ return <div className={`reply-card reply-card--${card.kind}${fresh?' card-in':''}`} role="group" aria-label={label} dir="auto">{card.kind==='draft'?<DraftBody card={card}/>:<ReviewBody card={card}/>}</div>;
 }
 
 // A draft (design-reference: the plan card): the ink tile with the file icon, the title, the line under it and its rows.

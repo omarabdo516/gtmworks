@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fakeHermes } from './fake-hermes.mjs';
 import { startRun, readRun, startUnknown } from '../lib/hermes.mjs';
+import { engineFor } from '../lib/engine.mjs';
 
 const connection=fake=>({address:fake.address,profile:'writer',key:'test-only-key'});
 
@@ -119,4 +120,85 @@ test('a Hermes answer larger than the limit is not read to its end, and its run 
   assert.deepEqual(await readRun({address:'http://127.0.0.1:9',profile:'writer',key:'k',run:'run_1'}),{status:'failed',output:null,session:null,usage:null});
   assert.ok(pulled<=4*16+2,`read ${pulled} chunks`);
  } finally { globalThis.fetch=real; }
+});
+
+// #138, as measured on the pinned release: a Run asking with clarify stays running with the question in
+// pending_controls; the driver reads it without Hermes's skip hint and recommended label, and answers on the Run's own
+// route with exactly the body Hermes takes.
+const asks=(/** @type {any} */ fake,/** @type {{question:string,choices?:string[],multi_select?:boolean}[]} */ questions)=>{ fake.settings.questions=()=>questions; fake.settings.reply=(/** @type {string} */ input,/** @type {(string|null)[]} */ answers)=>`Reply to: ${input} (${answers.map(answer=>answer??'unanswered').join(', ')})`; };
+const sentAnswers=(/** @type {any} */ fake)=>fake.settings.answers.map((/** @type {{status:number,body:any}} */ {status,body})=>[status,body]);
+
+test('a pick: the waiting Run reads as running with its question, the choice\'s text is sent back, and the same Run replies with it',async()=>{
+ const fake=await fakeHermes(); asks(fake,[{question:'Which audience first?',choices:['Parents','Students','Teachers']}]);
+ try {
+  const engine=engineFor(connection(fake)); const run=/** @type {string} */(await engine.start({conversation:'s',input:'Plan the ads',idempotencyKey:'k'}));
+  const waiting=await engine.read(run);
+  assert.deepEqual(waiting,{state:'running',reply:null,session:'s',usage:null,toolCalls:[],question:{id:`${fake.settings.runs[0].asked[0].prompt_id}@1`,text:'Which audience first?',choices:['Parents','Students','Teachers'],multiple:false}});
+  assert.equal(await engine.read(run).then(read=>read.question?.id),waiting.question?.id,'the same question until it is answered');
+  assert.equal(await engine.answer(run,/** @type {string} */(waiting.question?.id),'Students'),'answered');
+  assert.deepEqual(sentAnswers(fake),[[200,{request_id:fake.settings.runs[0].asked[0].prompt_id,execution_generation:1,answer:'Students'}]]);
+  assert.ok(fake.settings.requests.some(request=>request.method==='POST'&&request.path===`/p/writer/v1/runs/${run}/clarify`&&request.authorization==='Bearer test-only-key'));
+  // A second answer while the Run goes on is the one already taken.
+  assert.equal(await engine.answer(run,/** @type {string} */(waiting.question?.id),'Parents'),'answered');
+  assert.deepEqual(await engine.read(run),{state:'completed',reply:'Reply to: Plan the ads (Students)',session:'s',usage:{input:14000,output:12},toolCalls:[]});
+  assert.equal(fake.settings.runs.length,1,'no second Run');
+  assert.equal(await engine.answer(run,/** @type {string} */(waiting.question?.id),'Parents'),'gone','an ended Run waits for nothing');
+ } finally { await fake.close(); }
+});
+
+test('a free answer: an open-ended or several-pick question is answered with the typed words as written, one question at a time',async()=>{
+ const fake=await fakeHermes(); asks(fake,[{question:'What tone should the ads take?'},{question:'Which channels?',choices:['Meta','TikTok'],multi_select:true}]);
+ try {
+  const engine=engineFor(connection(fake)); const run=/** @type {string} */(await engine.start({conversation:'s',input:'Plan the ads',idempotencyKey:'k'}));
+  const first=(await engine.read(run)).question;
+  assert.deepEqual(first&&{text:first.text,choices:first.choices,multiple:first.multiple},{text:'What tone should the ads take?',choices:[],multiple:false});
+  assert.equal(await engine.answer(run,/** @type {string} */(first?.id),'  Warm, and short.\n'),'answered');
+  const second=(await engine.read(run)).question;
+  assert.deepEqual(second&&{text:second.text,choices:second.choices,multiple:second.multiple},{text:'Which channels?',choices:['Meta','TikTok'],multiple:true},'one recommended label is Hermes\'s, not the Agent\'s');
+  assert.notEqual(second?.id,first?.id);
+  assert.equal(await engine.answer(run,/** @type {string} */(second?.id),'Meta and TikTok'),'answered');
+  assert.deepEqual(sentAnswers(fake).map(([status,body])=>[status,body.answer]),[[200,'  Warm, and short.\n'],[200,'Meta and TikTok']]);
+  assert.equal((await engine.read(run)).reply,'Reply to: Plan the ads (  Warm, and short.\n, Meta and TikTok)');
+ } finally { await fake.close(); }
+});
+
+test('a time limit: once Hermes stops waiting the Run reads with no question and goes on to its reply, and a late answer is gone',async()=>{
+ const fake=await fakeHermes(); asks(fake,[{question:'Which audience first?',choices:['Parents','Students']}]);
+ try {
+  const engine=engineFor(connection(fake)); const run=/** @type {string} */(await engine.start({conversation:'s',input:'Plan the ads',idempotencyKey:'k'}));
+  const {question}=await engine.read(run);
+  assert.ok(fake.settings.expire(run));
+  assert.equal(await engine.answer(run,/** @type {string} */(question?.id),'Students'),'gone');
+  assert.deepEqual(await engine.read(run),{state:'completed',reply:'Reply to: Plan the ads (unanswered)',session:'s',usage:{input:14000,output:12},toolCalls:[]});
+ } finally { await fake.close(); }
+});
+
+test('a stop: the waiting Run is stopped with no question left, and an answer to it is gone',async()=>{
+ const fake=await fakeHermes(); asks(fake,[{question:'Which audience first?',choices:['Parents','Students']}]);
+ try {
+  const engine=engineFor(connection(fake)); const run=/** @type {string} */(await engine.start({conversation:'s',input:'Plan the ads',idempotencyKey:'k'}));
+  const {question}=await engine.read(run);
+  assert.equal(await engine.stop(run),true);
+  assert.deepEqual(await engine.read(run),{state:'stopped',reply:null,session:'s',usage:null,toolCalls:[]});
+  assert.equal(await engine.answer(run,/** @type {string} */(question?.id),'Students'),'gone');
+  assert.deepEqual(sentAnswers(fake).map(([status])=>status),[409]);
+ } finally { await fake.close(); }
+});
+
+test('an answer Hermes could not take, or one to an address no longer allowed, is asked again; a question id that is not the driver\'s is gone',async()=>{
+ const fake=await fakeHermes(); asks(fake,[{question:'Which audience first?',choices:['Parents','Students']}]);
+ try {
+  const engine=engineFor(connection(fake)); const run=/** @type {string} */(await engine.start({conversation:'s',input:'Plan the ads',idempotencyKey:'k'}));
+  const id=/** @type {string} */((await engine.read(run)).question?.id);
+  fake.settings.status=500;
+  assert.equal(await engine.answer(run,id,'Students'),'unreachable');
+  fake.settings.status=200;
+  assert.equal(await engineFor({...connection(fake),address:'http://203.0.113.9:8642'}).answer(run,id,'Students'),'unreachable');
+  assert.equal(await engine.answer(run,'not-a-question','Students'),'gone');
+  const engineFetch=globalThis.fetch;
+  globalThis.fetch=async()=>new Response('<html>Not Found</html>',{status:404});
+  try { assert.equal(await engine.answer(run,id,'Students'),'unreachable','a 404 that is not Hermes forgetting the Run keeps the question open'); }
+  finally { globalThis.fetch=engineFetch; }
+  assert.equal(await engine.answer(run,id,'Students'),'answered');
+ } finally { await fake.close(); }
 });

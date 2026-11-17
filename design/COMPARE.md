@@ -72,9 +72,12 @@ The prototype has no URL routes. Its sidebar switches between four views (`data-
 | `knowledge` | Settings, Company knowledge, on its first part, Brand voice (#27) | `/c/rs-learning/settings?section=knowledge` |
 | `new-agent` | Sidebar, New agent: Lead's chat with the hint line (#13) | `/c/rs-learning/chat?new=agent` |
 | `ready-roles` | New agent, then the hint line's "or pick a ready-made one": the ready-made gallery (#14) | `/c/rs-learning/chat?new=ready` (needs the fixture's Lead) |
+| `main-empty` | New chat: the main Agent's empty chat with its paragraph and suggestions (#170) | `/c/rs-learning/chat` (needs the fixture's Agents) |
+| `new-agent-empty` | The ready-made SEO content writer added from the gallery: a new Agent's empty chat with its sentence to try (#170) | `/c/rs-learning/chat/61000000-0000-0000-0000-000000000003` (needs the fixture's SEO & Content) |
 | `made-card` | Sidebar, the chat in which Lead made Ads (`th-made-ads`), with the new Agent's card | none (a uuid path; with the fixture pass `--built-path /c/rs-learning/conversations/62000000-0000-0000-0000-000000000002`) |
 | `draft-card` | Sidebar, the Meta campaign chat (`th-meta`), then the first angle: Ads's reply with the campaign plan's draft card under it (#136) | none (a uuid path; on the `draft-shown` visual state pass `--built-path /c/rs-learning/conversations/6d000000-0000-0000-0000-000000000003`) |
 | `review-card` | Sidebar, the team chat (`th-team`): Critic's reply with the review card of the December ad texts under it (#137) | none (a uuid path; on the `review-shown` visual state pass `--built-path /c/rs-learning/conversations/6e000000-0000-0000-0000-000000000003`) |
+| `question-card` | Sidebar, the Meta campaign chat (`th-meta`): Ads's question card, the angle to take, open (#138) | none (a uuid path; with the fixture pass `--built-path /c/rs-learning/conversations/62000000-0000-0000-0000-000000000005`) |
 | `made-agent` | Settings, Agents, Ads: the page of an Agent Lead made, with when and at whose request, and the rules it was told (#18) | `/c/rs-learning/settings?agent=61000000-0000-0000-0000-000000000002` (the fixture's Ads) |
 | `rule-saved` | Sidebar, the chat in which Omar told Ads a lasting rule (`th-rule-ads`), with the saved line under Ads's reply (#18) | none (a uuid path; with the fixture pass `--built-path /c/rs-learning/conversations/62000000-0000-0000-0000-000000000003`) |
 | `chat-on-board` | Sidebar, the chat with Ads about the Meta campaign (`th-meta`), with the corner pill "On the board" (#144) | none (a uuid path; pass `--built-path /c/rs-learning/conversations/<id>` of a chat with an Agent other than the main one whose first reply put its Card on the board) |
@@ -132,6 +135,8 @@ gh workflow run design-compare.yml --ref <branch> -f screen=ready-roles -f fixtu
 gh workflow run design-compare.yml --ref <branch> -f screen=rule-saved -f fixture=true -f built_path=/c/rs-learning/conversations/62000000-0000-0000-0000-000000000003
 # The first Contributor's rule for the team waiting in Omar's "Waiting on you", against the reference's Learning suggestions (#25)
 gh workflow run design-compare.yml --ref <branch> -f screen=learning -f fixture=true
+# Ads's open question card, the angle of the Meta campaign, waiting on Omar's answer (#138)
+gh workflow run design-compare.yml --ref <branch> -f screen=question-card -f fixture=true -f built_path=/c/rs-learning/conversations/62000000-0000-0000-0000-000000000005
 ```
 
 Add `-f lang=en`, `-f theme=light` and `-f width=390` for the other variants; both sides always use the same width, language and theme.

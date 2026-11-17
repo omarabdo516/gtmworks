@@ -7,6 +7,9 @@
 @keyframes gw-rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 @keyframes gw-breathe { 0%, 100% { opacity: .9; } 50% { opacity: .3; } }
 @keyframes gw-modal-out { to { opacity: 0; transform: translateY(4px); } }
+/* An answered card settles (design-reference: settle; #138); its key pops and its check draws with the agent face's
+   gw-ck-pop and gw-draw-check. */
+@keyframes gw-settle { from { opacity: .55; transform: scale(.985); } }
 
 /* The product's global button look (app/globals.css: border, padding, 36px floor, half opacity when disabled) is not
    the reference's; the shell's buttons start bare, as the reference's do. The reset has no more weight than one class,
@@ -39,12 +42,12 @@
    A button the reference gives no transition swaps at once, rather than taking app/globals.css's 160ms fade. A row,
    item or text button gives only when it is a link or a button: a plain row opens nothing. */
 .gw :where(button:not([data-slot])) { transition: none; }
-.gw :is(.btn, .circle-btn, .chip, .agent-tile, .head-pill, .corner-pill, .composer__btn, .link-btn, .panel-row, .sb-item, .menu__item) {
+.gw :is(.btn, .circle-btn, .chip, .agent-tile, .head-pill, .corner-pill, .composer__btn, .link-btn, .opt, .panel-row, .sb-item, .menu__item) {
   transition: background-color var(--gw-dur-fast) var(--gw-ease-out), box-shadow var(--gw-dur-fast) var(--gw-ease-out),
     color var(--gw-dur-fast) var(--gw-ease-out), border-color var(--gw-dur-fast) var(--gw-ease-out), transform var(--gw-dur-fast) var(--gw-ease-out);
 }
 .gw :is(.btn, .circle-btn, .chip, .agent-tile, .head-pill, .corner-pill, .composer__btn):active:not(:disabled):not([aria-disabled="true"]) { transform: scale(0.96); }
-.gw :is(.panel-row, .sb-item, .menu__item, .link-btn):is(a, button):active:not(:disabled):not([aria-disabled="true"]) { transform: scale(0.985); }
+.gw :is(.opt, .panel-row, .sb-item, .menu__item, .link-btn):is(a, button):active:not(:disabled):not([aria-disabled="true"]) { transform: scale(0.985); }
 
 /* ---------- frame ---------- */
 .gw.app-layout { display: grid; grid-template-columns: var(--gw-sidebar-w) minmax(0, 1fr); height: 100vh; height: 100dvh; overflow: hidden; }
@@ -338,6 +341,22 @@
   background: var(--gw-bg-pane); box-shadow: var(--gw-border-3) 0 0 0 1px inset; transition: background-color var(--gw-dur-fast) var(--gw-ease-out);
 }
 @media (hover: hover) { .gw .try-one__btn:hover { background: var(--gw-bg-elevated-hover); } }
+/* An Agent's empty chat once the workspace has more than Lead (#170; design-reference: .empty-chat--agent, .suggest,
+   .empty-chat__hand): the main Agent's suggestions, and a new Agent's hand-back line and sentence to try. The first-run
+   welcome keeps its own spacing. */
+.gw .empty-chat--agent:not(.empty-chat--fresh) { gap: 8px; }
+.gw .empty-chat--agent:not(.empty-chat--fresh) h2 { margin-top: 4px; }
+.gw .empty-chat--agent:not(.empty-chat--fresh) .try-one { margin-top: 16px; }
+.gw .empty-chat .empty-chat__hand { display: inline-flex; align-items: flex-start; gap: 6px; font-size: var(--gw-fs-sm); color: var(--gw-text-2); text-align: start; }
+.gw .empty-chat__hand .gw-icon { width: 16px; height: 16px; margin-top: 3px; }
+.gw .suggest { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: 100%; max-width: 560px; margin-top: 16px; }
+.gw .suggest button {
+  display: grid; place-content: normal; place-items: normal; gap: 2px; padding: 12px 16px; border: 0; border-radius: var(--gw-r-lg); text-align: start; font-weight: 400; font: inherit; color: var(--gw-text-1); cursor: pointer;
+  background: var(--gw-bg-pane); box-shadow: var(--gw-border-3) 0 0 0 1px inset; transition: background-color var(--gw-dur-fast) var(--gw-ease-out);
+}
+.gw .suggest b { font-size: var(--gw-fs-base); font-weight: 600; }
+.gw .suggest span { font-size: var(--gw-fs-sm); color: var(--gw-text-3); text-wrap: pretty; }
+@media (hover: hover) { .gw .suggest button:hover { background: var(--gw-bg-elevated-hover); } }
 .gw .main-h { display: inline-flex; align-items: center; gap: 8px; }
 .gw .badge { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: var(--gw-r-full); font-size: var(--gw-fs-xs); font-weight: 400; line-height: 1.5; background: var(--gw-bg-tertiary); color: var(--gw-text-1); }
 .gw .main-badge { align-self: center; }
@@ -609,6 +628,7 @@
 .gw .born { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; margin: 0; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); }
 .gw .born .gw-icon { width: 13px; height: 13px; color: var(--gw-text-3); }
 .gw .born[data-utc] { visibility: hidden; }
+.gw .born--empty { justify-content: center; }
 .gw .born--sov { margin-top: 2px; }
 .gw .born__link { display: inline-flex; align-items: center; padding: 2px 6px; margin-inline-start: -6px; border-radius: var(--gw-r-xs); font-size: var(--gw-fs-xs); font-weight: 600; color: var(--gw-text-1); }
 @media (hover: hover) { .gw .born__link:hover { background: var(--gw-bg-hover); } }
@@ -642,12 +662,44 @@
 .gw .reply-card .rv-note { margin: 2px 0 0; padding-inline-start: 28px; font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-2); overflow-wrap: anywhere; }
 .gw .reply-card .rv-decision { display: flex; align-items: baseline; gap: 8px; padding: 12px 16px 16px; border-top: 1px solid var(--gw-border-3); font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-1); }
 .gw .reply-card .rv-decision__l { flex: none; color: var(--gw-text-3); }
+/* A question (#138; design-reference: .qcard, .opt, .card.is-just): the question, the hint, and one lettered row per
+   choice, a button while it is open. Answered, only the answer stays, its letter filled and a check after it; typed
+   words have no letter and wrap. The reference's description and cost chip are not drawn. */
+.gw .reply-card--question { box-shadow: var(--gw-border-3) 0 0 0 1px inset; }
+.gw .qcard__head { display: flex; flex-direction: column; gap: 2px; padding: 14px 16px 4px; }
+.gw .qcard__head:last-child { padding-bottom: 16px; }
+.gw .qcard__q { font-size: var(--gw-fs-msg); font-weight: 600; line-height: 1.5; color: var(--gw-text-1); overflow-wrap: anywhere; white-space: pre-line; }
+.gw .qcard__hint { font-size: var(--gw-fs-sm); color: var(--gw-text-3); }
+.gw .qcard__opts { display: flex; flex-direction: column; gap: 1px; padding: 8px; }
+.gw .qcard__error { margin: 0; padding: 0 16px 12px; font-size: var(--gw-fs-sm); color: var(--gw-danger-text); }
+.gw .reply-card .opt { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; column-gap: 10px; width: 100%; padding: 8px; border-radius: var(--gw-r-md); text-align: start; }
+.gw .opt__key {
+  width: 24px; height: 24px; border-radius: var(--gw-r-sm); display: inline-flex; align-items: center; justify-content: center;
+  background: var(--gw-bg-tertiary); box-shadow: var(--gw-border-3) 0 0 0 0.5px inset; font-size: var(--gw-fs-xs); color: var(--gw-text-2);
+  transition: background-color var(--gw-dur-fast) var(--gw-ease-out), color var(--gw-dur-fast) var(--gw-ease-out);
+}
+.gw .opt__t { font-size: var(--gw-fs-base); line-height: 1.5; color: var(--gw-text-1); min-width: 0; overflow-wrap: anywhere; }
+@media (hover: hover) {
+  .gw .opt:hover:not(:disabled) { background: var(--gw-bg-hover); }
+  .gw .opt:hover:not(:disabled) .opt__key { background: var(--gw-primary); color: var(--gw-on-primary); box-shadow: none; }
+}
+.gw .opt.is-chosen { cursor: default; }
+.gw .opt.is-chosen:hover { background: none; }
+.gw .opt.is-chosen .opt__key { background: var(--gw-primary); color: var(--gw-on-primary); box-shadow: none; }
+.gw .reply-card .opt--typed { grid-template-columns: minmax(0, 1fr) auto; }
+.gw .opt--typed .opt__t { white-space: pre-line; overflow-wrap: anywhere; }
+.gw .opt__check { width: 16px; height: 16px; color: var(--gw-text-2); }
+.gw .reply-card--question.is-resolved .qcard__q { color: var(--gw-text-2); }
+.gw .reply-card.is-just { animation: gw-settle 320ms var(--gw-ease-out); }
+.gw .reply-card.is-just .opt.is-chosen .opt__key { animation: gw-ck-pop 320ms var(--gw-ease-spring); }
+.gw .reply-card.is-just .opt__check path { stroke-dasharray: 40; stroke-dashoffset: 40; animation: gw-draw-check 380ms var(--gw-ease-out) 140ms forwards; }
 .gw .tool-tile--ink { background: var(--gw-primary); color: var(--gw-on-primary); box-shadow: none; }
 .gw .tool-tile--ink .gw-icon { width: 22px; height: 22px; }
 
 /* Authored text inside the English interface takes its direction from its own words. */
 [dir="ltr"] .gw :is(.head-pill__title, .thread-item .od-truncate, .reply-card .card__title, .reply-card .card__sub, .reply-card .kv__row dd) { unicode-bidi: plaintext; text-align: left; }
 [dir="ltr"] .gw :is(.dp-id__name, .empty-chat h2, .new-hint__t, .born span, .ac-never span, .modal__sub, .tpl__line, .tpl__hand span) { unicode-bidi: plaintext; }
+[dir="ltr"] .gw .suggest :is(b, span) { unicode-bidi: plaintext; text-align: left; }
 /* Longer Arabic text reads as a right-aligned paragraph (design-reference: .rv-note). */
 [dir="ltr"] .gw .reply-card .rv-note { unicode-bidi: plaintext; }
 
@@ -671,6 +723,7 @@
 /* ---------- narrow screens: the sidebar slides in over the page ---------- */
 @media (max-width: 767px) {
   .gw.app-layout { grid-template-columns: minmax(0, 1fr); }
+  .gw .suggest { grid-template-columns: minmax(0, 1fr); }
   .gw .sidebar {
     position: fixed; top: 0; bottom: 0; inset-inline-start: 0; z-index: 50; width: min(300px, 86vw);
     transform: translateX(105%); transition: transform var(--gw-dur) var(--gw-ease-out); visibility: hidden; box-shadow: var(--gw-shadow-modal);

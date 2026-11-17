@@ -3,7 +3,8 @@
   "entry": [
     "scripts/**/*.{mjs,ts}",
     "tests/**/*.{mjs,ts,tsx}",
-    "playwright.install.config.ts"
+    "playwright.install.config.ts",
+    "playwright.lane.config.ts"
   ],
   "project": [
     "app/**/*.{ts,tsx}",
