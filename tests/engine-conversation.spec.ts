@@ -501,9 +501,10 @@ test('integration: an Agent hands a step over once under its reply, shows none w
   expect(work()).toEqual(before);
  } finally {
   // The turn Done it queued (#140) is reserved on this Connection, which never answers (127.0.0.1:9), and an active
-  // reservation keeps its Connection: the turn goes with the test's Agent.
-  query(`delete from public.conversation_run_reservations where agent_id='${agent}'`);
+  // reservation keeps its Connection: the turn goes with the test's Agent, first, so the worker cannot claim and reserve
+  // it again before its reservation goes.
   query(`delete from public.conversation_queued_turns where agent_id='${agent}'`);
+  query(`delete from public.conversation_run_reservations where conversation_id in (select id from public.conversations where agent_id='${agent}')`);
   detach();
  }
 });
@@ -710,9 +711,10 @@ test('a Card whose chat hands its person a step waits under Waiting on you for e
   await expect(viewer.locator('main')).toContainText('did it');
  } finally {
   language('en'); for(const context of opened) await context.close();
-  // Done it's turn may still hold its reservation, which keeps the Connection detach() removes.
-  query(`delete from public.conversation_run_reservations where conversation_id='${conversation}'`);
+  // Done it's turn may still hold its reservation, which keeps the Connection detach() removes; the turn goes first, so
+  // the worker cannot claim and reserve it again.
   query(`delete from public.conversation_queued_turns where conversation_id='${conversation}'`);
+  query(`delete from public.conversation_run_reservations where conversation_id='${conversation}'`);
   try { detach(); } finally { await fake.close(); }
  }
 });
