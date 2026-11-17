@@ -41,10 +41,19 @@ export function watchOutside(context, note) {
   context.on('request', request => seen(request.url()));
   context.on('page', watchPage);
   context.pages().forEach(watchPage);
-  // `get`, `post` and the others go through `fetch`.
-  const api = context.request, call = api.fetch.bind(api);
+  watchApi(context.request, note);
+}
+
+/**
+ * Names each outside address an API client asked for: the error of a refused call lists them, redirects included and
+ * resolved against its base address. `get`, `post` and the others go through `fetch`.
+ * @param {import('@playwright/test').APIRequestContext} api @param {(host: string) => void} note
+ */
+export function watchApi(api, note) {
+  const call = api.fetch.bind(api);
   api.fetch = (...args) => call(...args).catch(error => {
-    new Set([...String(error?.message).matchAll(/→ [A-Z]+ ([a-z][a-z0-9+.-]*:\/\/\S+)/g)].map(([, url]) => url)).forEach(seen);
+    new Set([...String(error?.message).matchAll(/→ [A-Z]+ ([a-z][a-z0-9+.-]*:\/\/\S+)/g)].map(([, url]) => url))
+      .forEach(url => { if (!isLocalUrl(url)) note(new URL(url).host); });
     throw error;
   });
 }

@@ -1,4 +1,7 @@
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:http';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { test, expect, type BrowserContext, type Page } from './offline-browser';
 
@@ -48,6 +51,17 @@ test('a local address that redirects to an outside one is stopped there and repo
 test('an outside call of the page\'s API client fails and is reported, also when the test catches it', async ({ page, outsideRequests }) => {
   await expect(page.request.get('https://api-call.example.org/v1')).rejects.toThrow(/ECONNREFUSED/);
   expect(outsideRequests.splice(0)).toEqual(['api-call.example.org']);
+});
+
+test('an outside call of the test\'s own API client fails and is reported', async ({ request, outsideRequests }) => {
+  // The node guard writes this refusal to a log of its own, so the run's teardown does not fail on this case's purpose.
+  const runLog = process.env.GTMWORKS_OFFLINE_LOG, apart = mkdtempSync(join(tmpdir(), 'offline-own-api-'));
+  process.env.GTMWORKS_OFFLINE_LOG = join(apart, 'refused.log');
+  try {
+    await expect(request.get('https://own-api.example.org/v1')).rejects.toThrow(/refused a connection to own-api\.example\.org/);
+    expect(readFileSync(process.env.GTMWORKS_OFFLINE_LOG, 'utf8')).toMatch(/^own-api\.example\.org by /);
+  } finally { process.env.GTMWORKS_OFFLINE_LOG = runLog; rmSync(apart, { recursive: true, force: true }); }
+  expect(outsideRequests.splice(0)).toEqual(['own-api.example.org']);
 });
 
 test('the page\'s API client names an outside redirect target and a relative call on an outside base address', async ({ browser, page, outsideRequests }) => {

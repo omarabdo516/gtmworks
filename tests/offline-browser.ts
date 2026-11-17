@@ -1,5 +1,5 @@
 import { test as base, expect, type BrowserContext } from '@playwright/test';
-import { nowhere, watchOutside } from './offline.mjs';
+import { nowhere, watchApi, watchOutside } from './offline.mjs';
 
 export * from '@playwright/test';
 
@@ -27,6 +27,11 @@ export const test = base.extend<{ outsideRequests: string[] }, { outsideBetweenT
     await use(browser);
     browser.off('context', watch);
   }, { scope: 'worker' }],
+  // The test's own API client runs in this process, where the node guard refuses an outside call; this names it.
+  request: [async ({ request }, use) => {
+    watchApi(request, note);
+    await use(request);
+  }, { scope: 'test' }],
   outsideRequests: [async ({}, use, testInfo) => {
     const hosts: string[] = running = [];
     await use(hosts);
