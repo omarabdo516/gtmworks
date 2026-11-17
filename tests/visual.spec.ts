@@ -102,10 +102,6 @@ const review = { line: '3 نصوص · Meta Ads · قبل ما تطلع', items: 
   { text: 'أضمن طريق لأول وظيفة محاسبة', fine: false, note: '«أضمن» وعد مقدرش نثبته. البديل: «أقصر طريق لأول شغلانة محاسبة».' },
   { text: 'Excel وOdoo والضرايب في كورس واحد بـ 2,400 ج', fine: true, note: 'السعر مطابق لصفحة الكورس.' },
 ], decision: '2 جاهزين، و1 رجع لـ Ads بالبديل' };
-// Ads waiting on Omar's answer to the question it asked with the Engine's clarify tool on June 10 (#138), as the
-// reference's th-meta thread shows it (message m3): the Run stays open while it waits, and the card is open.
-const questioned = (n: number) => `71000000-0000-0000-0000-00000000000${n}`;
-const angle = { question: 'اختار زاوية الإعلان', choices: ['من خريج لمحاسب شغال', 'Excel وOdoo في كورس واحد', 'شهادة معتمدة وتدريب عملي'], multiple: false };
 // A state whose rows are append-only (a Conversation's messages) is `admin`: it is set and taken away as the database's
 // own administrator with triggers off (asAdmin), so nothing of it stays behind.
 // Lead, Meta Ads and SEO in RS Learning, with the switches the screen shows on (#15).
@@ -298,22 +294,6 @@ const screenStates: Record<string, { set: string, unset: string, admin?: true }>
       delete from public.conversations where id='${reviewed(3)}';
       delete from public.hermes_agents where id='${reviewed(2)}';
       delete from public.hermes_connections where id='${reviewed(1)}';`,
-  },
-  'question-asked': {
-    admin: true,
-    set: `insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('${questioned(1)}','${rsLearning}','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9/p/visual-question','visual-question','visual-no-key','unreachable');
-      insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('${questioned(2)}','${rsLearning}','${questioned(1)}','Ads','Runs the Meta and Google ads.');
-      insert into public.conversations(id,company_id,person_id,agent_id,agent_name,created_at) values ('${questioned(3)}','${rsLearning}','20000000-0000-0000-0000-000000000001','${questioned(2)}','Ads','2026-06-10T10:12:00Z');
-      insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at) values
-       ('${rsLearning}','${questioned(3)}','person','20000000-0000-0000-0000-000000000001',null,'Omar','@Ads محتاجين حملة Meta لكورس «المحاسب الشامل». الدفعة الجديدة بتبدأ 1 ديسمبر، والميزانية 15,000 ج للشهر. الهدف ليدز على واتساب.','${questioned(4)}','visual-question','2026-06-10T10:12:00Z');
-      insert into public.reply_cards(company_id,conversation_id,run_id,call_id,kind,title,content,state,created_at) values
-       ('${rsLearning}','${questioned(3)}','visual-question','visual-prompt@1','question','${angle.question}','${JSON.stringify(angle)}','open','2026-06-10T10:14:00Z');`,
-    unset: `delete from public.reply_cards where conversation_id='${questioned(3)}';
-      delete from public.conversation_usage where conversation_id='${questioned(3)}';
-      delete from public.conversation_messages where conversation_id='${questioned(3)}';
-      delete from public.conversations where id='${questioned(3)}';
-      delete from public.hermes_agents where id='${questioned(2)}';
-      delete from public.hermes_connections where id='${questioned(1)}';`,
   },
   'rule-told': {
     admin: true,
