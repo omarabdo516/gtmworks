@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(67);
+select plan(72);
 -- #299. Nothing in this transaction takes lead_create_agent's lock before the first key change begins.
 create temporary view held_agent_lock as select exists(select 1 from pg_locks where locktype='advisory' and pid=pg_backend_pid() and granted
  and ((classid::bigint<<32)|objid::bigint)=hashtextextended('hermes_agents',0)) as held;
@@ -188,6 +188,16 @@ select results_eq($$select provider from public.company_key_holds where company_
  $$values ('deepseek'::text),('openrouter')$$,'and the names that are no provider are skipped');
 set local role authenticated;
 select throws_ok($$select public.settle_provider_key_holds('10000000-0000-0000-0000-000000000001','{}')$$,'42501',null,'the Owner cannot settle the holds from the browser');
+reset role;
+set local role service_role;
+select lives_ok($$select public.finish_provider_key_change('10000000-0000-0000-0000-000000000002','openrouter',true,'{}',false)$$,'a set the Engine never answered is finished as held, unanswered');
+select lives_ok($$select public.settle_provider_key_holds('10000000-0000-0000-0000-000000000002','{}')$$,'the Owner''s read finds no key in the space yet');
+reset role;
+select is((select held from public.company_key_holds where company_id='10000000-0000-0000-0000-000000000002' and provider='openrouter'),true,'so the hold is kept, since the write may still land');
+set local role service_role;
+select lives_ok($$select public.finish_provider_key_change('10000000-0000-0000-0000-000000000002','openrouter',false,'{}')$$,'a removal the Engine answered');
+reset role;
+select is((select held from public.company_key_holds where company_id='10000000-0000-0000-0000-000000000002' and provider='openrouter'),false,'lets it go');
 reset role;
 select * from finish();
 rollback;

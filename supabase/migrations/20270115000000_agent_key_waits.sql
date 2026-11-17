@@ -60,6 +60,8 @@ create table public.company_key_holds (
  provider text not null check (provider ~ '^[a-z0-9][a-z0-9._-]{0,63}$'),
  held boolean not null,
  changing boolean not null default false,
+ -- A set the Engine never answered may still land: its hold is kept until a change the Engine answered settles it.
+ uncertain boolean not null default false,
  primary key (company_id,provider)
 );
 alter table public.company_key_holds enable row level security;
@@ -96,15 +98,15 @@ grant execute on function public.begin_provider_key_change(uuid,text) to service
 -- the key is held, the waits of the Agents whose profile the set gave key and model (reached) end, and the answer is the
 -- Company's Agent profiles still waiting, which an Agent made during the set waits on: the server gives those the key and
 -- finishes again. Once the Company holds no key of any provider, nothing is left to wait for, and every wait ends.
-create function public.finish_provider_key_change(c uuid, key_provider text, now_held boolean, reached text[]) returns text[]
+create function public.finish_provider_key_change(c uuid, key_provider text, now_held boolean, reached text[], answered boolean default true) returns text[]
 language plpgsql security definer set search_path='' as $$
 declare kept boolean;
 begin
  if coalesce(key_provider,'') !~ '^[a-z0-9][a-z0-9._-]{0,63}$' then raise exception 'keyInvalid' using errcode='22023'; end if;
  perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
  -- A change whose begin the database did not take has no row yet: its finish records the hold all the same.
- insert into public.company_key_holds as h(company_id,provider,held,changing) values(c,key_provider,coalesce(now_held,false),false)
-  on conflict (company_id,provider) do update set held=coalesce(now_held,h.held),changing=false
+ insert into public.company_key_holds as h(company_id,provider,held,changing,uncertain) values(c,key_provider,coalesce(now_held,false),false,not coalesce(answered,true))
+  on conflict (company_id,provider) do update set held=coalesce(now_held,h.held),changing=false,uncertain=not coalesce(answered,true)
   returning h.held into kept;
  if not public.company_holds_provider_key(c) then
   delete from public.agent_key_waits w where w.company_id=c;
@@ -116,8 +118,8 @@ begin
  return array(select p.profile from public.agent_key_waits w join public.agent_profiles p on p.agent_id=w.agent_id and p.company_id=w.company_id
   where w.company_id=c order by w.id);
 end $$;
-revoke all on function public.finish_provider_key_change(uuid,text,boolean,text[]) from public,anon,authenticated;
-grant execute on function public.finish_provider_key_change(uuid,text,boolean,text[]) to service_role;
+revoke all on function public.finish_provider_key_change(uuid,text,boolean,text[],boolean) from public,anon,authenticated;
+grant execute on function public.finish_provider_key_change(uuid,text,boolean,text[],boolean) to service_role;
 
 -- The Owner's read settles the holds to what the Company's space holds (lib/provider-keys.mjs, queued with the
 -- Company's key changes, so none is half done): every provider is held exactly when the space holds its key, and none
@@ -129,7 +131,9 @@ language plpgsql security definer set search_path='' as $$
 begin
  if held is null then raise exception 'keyInvalid' using errcode='22023'; end if;
  perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
- update public.company_key_holds h set held=coalesce(h.provider=any(settle_provider_key_holds.held),false),changing=false where h.company_id=c;
+ -- An uncertain hold is confirmed by a space that holds the key, and never let go by one that does not yet.
+ update public.company_key_holds h set held=coalesce(h.provider=any(settle_provider_key_holds.held),false) or (h.uncertain and h.held),changing=false,
+  uncertain=h.uncertain and h.held and not coalesce(h.provider=any(settle_provider_key_holds.held),false) where h.company_id=c;
  insert into public.company_key_holds(company_id,provider,held,changing)
   select c,p,true,false from unnest(settle_provider_key_holds.held) p where p ~ '^[a-z0-9][a-z0-9._-]{0,63}$'
   on conflict (company_id,provider) do nothing;

@@ -97,7 +97,7 @@ test('the waiting Agent is listed for the Owner until the next set gives its own
   assert.deepEqual(set.body.agents.at(-1),{agent:agentId(later),name:'Writer later',written:true});
   assert.equal(envOf(fake,later).OPENROUTER_API_KEY,known);
   assert.deepEqual([fake.settings.profiles.get(later).provider,fake.settings.profiles.get(later).model],['openrouter','anthropic/claude-opus-4.6'],'its own profile has the model');
-  assert.deepEqual(owner.calls('finish_provider_key_change'),[{c:company,key_provider:'openrouter',now_held:true,reached:[main,writer,later]}],'the set ends the waits of the profiles it gave key and model');
+  assert.deepEqual(owner.calls('finish_provider_key_change'),[{c:company,key_provider:'openrouter',now_held:true,reached:[main,writer,later],answered:true}],'the set ends the waits of the profiles it gave key and model');
   assert.deepEqual((await read(owner,fake)).waiting,[]);
   const engine=engineOn(fake,later);
   const run=await engine.start({conversation:'conversation-2',input:'Write the June article',idempotencyKey:'send-1'});
@@ -132,19 +132,19 @@ test('a change ends in one finish as the Engine answered: a set holds the key, a
  try {
   made(fake,space,main,writer);
   const finished=async(request,person=sessions(fake))=>{ const answer=await change(person,fake,request).catch(()=>({status:'threw'})); return [answer.status,person.calls('begin_provider_key_change').length,person.calls('finish_provider_key_change')]; };
-  const ended=(now_held,reached=[])=>[{c:company,key_provider:'openrouter',now_held,reached}];
+  const ended=(now_held,reached=[],answered=true)=>[{c:company,key_provider:'openrouter',now_held,reached,answered}];
   fake.settings.envFail.add(writer);
   assert.deepEqual(await finished({intent:'set',value:known}),[200,1,ended(true,[main])],'a set names only the profiles it gave key and model');
   fake.settings.envFail.clear();
   assert.deepEqual(await finished({intent:'remove'}),[200,1,ended(false)],'a removal lets the key go');
   assert.deepEqual(await finished({intent:'remove'}),[200,1,ended(false)],'and so does one that found nothing to remove');
-  assert.deepEqual(await finished({intent:'set',value:known,provider:'nosuch'}),[400,1,[{c:company,key_provider:'nosuch',now_held:null,reached:[]}]],'a refused set leaves it as it was');
+  assert.deepEqual(await finished({intent:'set',value:known,provider:'nosuch'}),[400,1,[{c:company,key_provider:'nosuch',now_held:null,reached:[],answered:true}]],'a refused set leaves it as it was');
   const silent={...pointedAt(fake),set:async()=>({state:'unreachable',model:null,profiles:null}),remove:async()=>({state:'unreachable',profiles:null})};
-  assert.deepEqual(await finished({intent:'set',value:known,driver:silent}),[503,1,ended(true)],'a set the Engine did not answer may be in the space, so later Agents wait');
-  assert.deepEqual(await finished({intent:'remove',driver:silent}),[503,1,ended(null)],'a removal it did not answer keeps the hold it had');
+  assert.deepEqual(await finished({intent:'set',value:known,driver:silent}),[503,1,ended(true,[],false)],'a set the Engine did not answer may be in the space, so later Agents wait, and its hold is marked unanswered');
+  assert.deepEqual(await finished({intent:'remove',driver:silent}),[503,1,ended(null,[],false)],'a removal it did not answer keeps the hold it had');
   const broken=()=>{ const person=sessions(fake); const rpc=person.db.rpc; person.db.rpc=async(name,args)=>{ if(name==='company_key_profiles') throw new Error('down'); return rpc(name,args); }; return person; };
-  assert.deepEqual(await finished({intent:'set',value:known},broken()),['threw',1,ended(true)],'a set that threw after its begin is finished as held');
-  assert.deepEqual(await finished({intent:'remove'},broken()),['threw',1,ended(null)],'a removal that threw keeps the hold');
+  assert.deepEqual(await finished({intent:'set',value:known},broken()),['threw',1,ended(true,[],false)],'a set that threw after its begin is finished as held, unanswered');
+  assert.deepEqual(await finished({intent:'remove'},broken()),['threw',1,ended(null,[],false)],'a removal that threw keeps the hold');
   assert.deepEqual(printed,[]);
  } finally { console.error=kept; await fake.close(); }
 });
@@ -194,7 +194,7 @@ test('a set that gives no profile a model ends no wait, and a change the databas
   fake.settings.modelOptionsFail=true;
   const unsettled=sessions(fake,{extra,waits:[later]});
   await change(unsettled,fake,{intent:'set',value:known});
-  assert.deepEqual(unsettled.calls('finish_provider_key_change'),[{c:company,key_provider:'openrouter',now_held:true,reached:[]}],'no profile got its model, so every Agent still waits');
+  assert.deepEqual(unsettled.calls('finish_provider_key_change'),[{c:company,key_provider:'openrouter',now_held:true,reached:[],answered:true}],'no profile got its model, so every Agent still waits');
   fake.settings.modelOptionsFail=false;
   const failing=sessions(fake,{extra,failing:['finish_provider_key_change']});
   const printed=[]; const kept=console.error; console.error=(...args)=>{ printed.push(args.map(String).join(' ')); };
