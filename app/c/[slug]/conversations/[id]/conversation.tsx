@@ -1,5 +1,5 @@
 'use client';
-import { Suspense, createContext, use, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { Suspense, createContext, use, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import Link from '@/lib/link';
 import { useI18n } from '@/lib/i18n-client';
 import { CompanyAgentFace } from '@/components/company-agent-face';
@@ -29,7 +29,11 @@ export default function ConversationView({slug,agent,details,company,conversatio
  const {c}=useConversationText(); const panel=useDetailsPanel();
  const [draft,setDraft]=useState<Draft>(null); const [early,setEarly]=useState(0); const [live,setLive]=useState<Live|null>(null);
  const record=live?.record; const corner=record?record.board:board;
- return <ChatView value={{slug,agent,company,conversation,writer,setDraft,early,setLive}}><div className="convo"><div className="chat">
+ // The same object while what it holds is the same: a new one reaching the transcript while it still streams in would
+ // make React draw it again in the browser and leave the streamed copy hidden in the page (#172), as a render of this
+ // frame during hydration does (the details panel's media query).
+ const view=useMemo(()=>({slug,agent,company,conversation,writer,setDraft,early,setLive}),[slug,agent,company,conversation,writer,early]);
+ return <ChatView value={view}><div className="convo"><div className="chat">
   <HeadPill panel={panel} agent={agent?.name} face={<span aria-hidden="true"><CompanyAgentFace agent={{connection_id:conversation.face,name:conversation.agent_name}} size={24}/></span>} title={record?titleOf(record.messages,conversation.agent_name):title} titleDir="auto" corner={corner&&<CornerPill slug={slug} board={corner} writer={writer} c={c}/>}/>
   <Suspense fallback={<ChatPlaceholder/>}>{children}</Suspense>
   <div className="composer-area"><ConversationComposer company={company} conversation={conversation} record={record??null} writer={writer} asked={live?.asked??(()=>setEarly(count=>count+1))} draft={draft} usage/></div>
