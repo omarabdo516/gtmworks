@@ -173,8 +173,12 @@ test('integration: Lead makes the Agent the Owner asks for, and nothing for a Ma
  fake.settings.reply=()=>'';
  fake.settings.toolCalls=()=>[{id:'call-0',name:'create_agent',arguments:{name:'SEO',job:'Writes the blog.',apps:[]}}];
  expect(await ask()).toEqual({conversation});
- expect(await close()).toBe(1);
+ const closedOnce=await Promise.all([close(),close()]);
+ expect(closedOnce[0]+closedOnce[1]).toBe(1);
  expect(made().map((row:{name:string})=>row.name).sort()).toEqual(['Meta Ads','SEO']);
+ // A reply that is only the made Agent's card is done, with no reply stored (#227).
+ expect(JSON.parse(query(`select outcome from public.conversation_usage where conversation_id='${conversation}' and run_id='${fake.runs[2].id}'`))).toEqual([{outcome:'completed'}]);
+ expect(JSON.parse(query(`select count(*)::int as n from public.conversation_messages where conversation_id='${conversation}' and author='agent' and run_id='${fake.runs[2].id}'`))[0].n).toBe(0);
  fake.settings.reply=answer;
 
  const manager=(await memberClient('manager@example.com')).person;
@@ -329,6 +333,42 @@ test('integration: an Agent shows a draft once under its reply, also when two cl
   expect(await logged(person)).toEqual(rows);
   expect(await logged((await memberClient('manager@example.com')).person)).toEqual(rows);
   expect(await logged((await memberClient('reviewer@example.com')).person)).toEqual([]);
+ } finally { detach(); }
+});
+
+// #227: a reply that is only a card is a complete reply. The engine reports no words as failed; a Run that stored a card
+// closes done, and one whose only call did not hold still closes failed.
+test('integration: an Agent\'s reply that is only a draft closes done once, also when two closers race, with no reply stored; with a call that does not hold it closes failed',async()=>{
+ test.setTimeout(120000);
+ const fake=fakeEngine(); const {agent,detach}=attachAgent();
+ const plan={title:'Campaign plan',line:'Draft · Meta Ads',rows:[{label:'Goal',value:'WhatsApp leads'}]};
+ const calls:Record<string,unknown>={'Plan the campaign':plan,'No title':{line:plan.line,rows:plan.rows}};
+ fake.settings.reply=()=>'';
+ fake.settings.toolCalls=input=>[{id:'call-0',name:'show_draft',arguments:calls[input]}];
+ try {
+  const {service,person}=await clients();
+  const conversation=randomUUID();
+  const close=()=>closeOpenRuns(service,{encryptionKey,conversation,engineFor:fake.engineFor});
+  const failed=async()=>{
+   const {data:found}=await person.from('conversations').select(conversationColumns).eq('id',conversation).single();
+   return (await conversationRecord(person as unknown as Parameters<typeof conversationRecord>[0],omar,company,found!)).failed;
+  };
+  const send=(message:string)=>sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message,encryptionKey,engineFor:fake.engineFor});
+  expect(await send('Plan the campaign')).toEqual({conversation});
+  const closed=await Promise.all([close(),close()]);
+  expect(closed[0]+closed[1]).toBe(1);
+  expect(await close()).toBe(0);
+  expect(JSON.parse(query(`select run_id,kind,title from public.reply_cards where conversation_id='${conversation}'`))).toEqual([{run_id:fake.runs[0].id,kind:'draft',title:plan.title}]);
+  expect(usageRows(conversation).map((row:{outcome:string})=>row.outcome)).toEqual(['completed']);
+  expect(agentRows(conversation)).toEqual([]);
+  expect(await failed()).toBe(false);
+
+  expect(await send('No title')).toEqual({conversation});
+  expect(await close()).toBe(1);
+  expect(JSON.parse(query(`select count(*)::int as n from public.reply_cards where conversation_id='${conversation}'`))[0].n).toBe(1);
+  expect(JSON.parse(query(`select outcome from public.conversation_usage where conversation_id='${conversation}' and run_id='${fake.runs[1].id}'`))).toEqual([{outcome:'failed'}]);
+  expect(agentRows(conversation)).toEqual([]);
+  expect(await failed()).toBe(true);
  } finally { detach(); }
 });
 
