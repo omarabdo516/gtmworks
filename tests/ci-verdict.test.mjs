@@ -5,9 +5,9 @@ import { resolve } from 'node:path';
 
 // The required `check` (#76, like Hermes `all-checks-pass`): a suite the first job did not ask for counts as passed only
 // when it was skipped; a suite it asked for, or one whose need is unknown, must succeed; a failed or cancelled stage is
-// always red.
+// always red. The compared screens are not a stage: they run on main only and never judge a pull request (#257).
 const script = resolve('scripts/ci-verdict.mjs');
-const stages = ['COMPONENTS', 'DATABASE', 'VISUAL', 'INTEGRATION', 'INSTALL'];
+const stages = ['COMPONENTS', 'DATABASE', 'INTEGRATION', 'INSTALL'];
 const green = { CHANGES_RESULT: 'success', STATIC_RESULT: 'success', ...Object.fromEntries(stages.flatMap(stage => [[`${stage}_RUN`, 'true'], [`${stage}_RESULT`, 'success']])) };
 const verdict = overrides => {
   const env = { PATH: process.env.PATH, ...green, ...overrides };
@@ -39,11 +39,9 @@ for (const stage of stages) {
   });
 }
 
-test('the compared screens alone (integration=visual) were asked for, so they must succeed (#213)', () => {
-  const screensAlone = { VISUAL_RUN: 'visual', INTEGRATION_RUN: 'false', INTEGRATION_RESULT: 'skipped' };
-  assert.equal(verdict({ ...screensAlone, VISUAL_RESULT: 'success' }), 0);
-  assert.equal(verdict({ ...screensAlone, VISUAL_RESULT: 'skipped' }), 1);
-  assert.equal(verdict({ ...screensAlone, VISUAL_RESULT: 'failure' }), 1);
+test('check passes with no compared screens at all: a pull request never runs them (#257)', () => {
+  assert.equal(verdict({ VISUAL_RUN: undefined, VISUAL_RESULT: undefined, LANE_RUN: undefined, LANE_RESULT: undefined }), 0);
+  assert.equal(verdict({ VISUAL_RESULT: 'failure', LANE_RESULT: 'failure' }), 0);
 });
 
 test('classification and static must succeed', () => {
@@ -59,21 +57,36 @@ test('ci.yml decides the suites in its first job, gates each suite on it, and ju
   const { jobs } = workflow;
   const classify = jobs.changes.steps.find(step => step.id === 'classify');
   assert.match(classify.run, /node scripts\/ci-areas\.mjs \$main < "\$RUNNER_TEMP\/changed-files"/);
-  for (const [job, output] of [['components', 'components'], ['database', 'database'], ['visual', 'integration'], ['install', 'install']]) {
+  for (const [job, output] of [['components', 'components'], ['database', 'database'], ['integration', 'integration'], ['install', 'install']]) {
     assert.equal(jobs.changes.outputs[output], `\${{ steps.classify.outputs.${output} }}`, output);
     assert.deepEqual(jobs[job].needs, ['changes'], job);
     assert.equal(jobs[job].if, `\${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.${output} != 'false') }}`, job);
   }
-  // Screens alone (integration=visual) run only the compared screens, and `check` does not ask for the rest.
-  assert.deepEqual(jobs.integration.needs, ['changes']);
-  assert.equal(jobs.integration.if, "${{ !cancelled() && (needs.changes.result != 'success' || (needs.changes.outputs.integration != 'false' && needs.changes.outputs.integration != 'visual')) }}");
   const step = jobs.check.steps.at(-1);
-  assert.equal(step.env.VISUAL_RUN, '${{ needs.changes.outputs.integration }}');
-  assert.equal(step.env.INTEGRATION_RUN, "${{ needs.changes.outputs.integration == 'visual' && 'false' || needs.changes.outputs.integration }}");
   assert.equal(step.run, 'node scripts/ci-verdict.mjs');
   assert.equal(jobs.check.if, '${{ always() }}');
-  assert.deepEqual(jobs.check.needs, ['changes', 'static', 'components', 'database', 'visual', 'integration', 'install']);
+  assert.deepEqual(jobs.check.needs, ['changes', 'static', 'components', 'database', 'integration', 'install']);
   for (const key of Object.keys(green)) assert.ok(step.env[key], key);
+  assert.deepEqual(Object.keys(step.env).filter(key => /VISUAL|LANE/.test(key)), []);
+});
+
+// Omar, 2026-11-17: the compared screens (and the navigation budgets with them) run on a push to main and on a manual
+// run, never on a pull request, and no pull request waits for them. Each job's condition is read for every event.
+test('a pull request starts no compared-screen job, and check needs none of them (#257)', async () => {
+  const { load } = await import('js-yaml');
+  const { readFileSync } = await import('node:fs');
+  const { jobs } = load(readFileSync('.github/workflows/ci.yml', 'utf8'));
+  const screenJobs = ['visual', 'lane', 'lane-proof', 'lane-proof-compare'];
+  for (const name of screenJobs) {
+    assert.ok(jobs[name], name);
+    const condition = jobs[name].if ?? '';
+    assert.match(condition, /github\.event_name == '(push|workflow_dispatch)'/, `${name} names the events it runs on`);
+    assert.doesNotMatch(condition.replace(/github\.event_name == '(push|workflow_dispatch)'/g, ''), /event_name|pull_request/, `${name} has no other event test`);
+    assert.doesNotMatch(condition, /\|\|\s*needs\.changes\.result/, `${name} cannot start because classification failed`);
+  }
+  for (const [name, job] of Object.entries(jobs)) if (!screenJobs.includes(name) && name !== 'ledger') {
+    for (const need of [job.needs ?? []].flat()) assert.ok(!screenJobs.includes(need), `${name} waits for ${need}`);
+  }
 });
 
 test('the browser and install suites never run by default on a manual run: their inputs default to off', async () => {

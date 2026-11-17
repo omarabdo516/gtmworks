@@ -1,9 +1,10 @@
 # As Hermes and T3 Code run CI (#76): the first job (`changes`, scripts/ci-areas.mjs) decides which suites a change
 # needs. Static (lint, types, catalogues, unit tests) runs on every change; the screen component tests (`components`)
 # run when the app, its components or its library change. The database tests, the whole-app browser
-# suite (`integration`) and the Docker install run on a pull request only when their own files change; screens alone
-# (the app's screens, components, catalogues, compared screens and approved images) run only the compared screens from
-# the browser suite (integration=visual, #213). A push to main runs every suite unless every file is a document; a manual
+# suite (`integration`) and the Docker install run on a pull request only when their own files change. The compared
+# screens and the measured navigation budgets (`visual`) and the visual lane (`lane`) run on a push to main and on a
+# manual run only, never on a pull request, and `check` does not wait for them (Omar, 2026-11-17, #257): a failure on main
+# opens or updates one issue labelled visual-regression. A push to main runs every suite unless every file is a document; a manual
 # run starts the browser and install suites only through inputs that default to off. Required `check`
 # (scripts/ci-verdict.mjs) counts a suite nobody asked for as passed when it was skipped, and is red on any failed or
 # cancelled stage. The `ledger` job records each run's timings, runners and test results and labels a red job
@@ -18,6 +19,10 @@
 # repositories' CI: there the stack's ports move to a block of their own above that range, the job removes what this
 # repository's runs start before and after it (scripts/ci-runner.mjs), and ~/.npm, the browsers and the image layers
 # stay on the machine.
+# The visual lane (`lane`, #257) compares a few key screens in Arabic, light and dark, drawn by one browser pinned by
+# digest (tests/visual-lane/renderer) so every runner makes the same bytes. On a manual run, `lane-proof` draws the lane
+# three times on ubuntu-latest and on the CI_RUNNER runner, and `lane-proof-compare` fails unless all six sets of hashes
+# match.
 name: CI
 
 on:
@@ -190,11 +195,13 @@ jobs:
   # images are made on, then the measured navigation budgets. When `changes` says `visual` (screens alone, #213), this is all of the browser suite that runs.
   visual:
     needs: [changes]
-    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.integration != 'false') }}
+    if: ${{ !cancelled() && ((github.event_name == 'push' && needs.changes.outputs.integration != 'false') || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
       contents: read
+      # A failure on main opens or updates the visual-regression issue.
+      issues: write
     steps:
       - uses: actions/checkout@v4
       - name: reserve the stack's ports
@@ -210,6 +217,7 @@ jobs:
         run: ./ci.sh visual
       # A failing comparison writes its expected, actual and difference images here.
       - name: upload route screenshots
+        id: screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -225,6 +233,22 @@ jobs:
           path: playwright-report/html/
           if-no-files-found: ignore
           retention-days: 30
+      # One open issue holds the latest failure on main: a new failure comments on it, or opens it when none is open.
+      - name: open or update the visual-regression issue
+        if: ${{ failure() && github.event_name == 'push' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ARTIFACT_URL: ${{ steps.screenshots.outputs.artifact-url }}
+        run: |
+          body=$(node scripts/visual-regression.mjs ci-ledger/visual "$GITHUB_SHA" "$RUN_URL" "$ARTIFACT_URL")
+          gh label create visual-regression -R "$GITHUB_REPOSITORY" --color B60205 --description 'Compared screens failed on main' 2> /dev/null || true
+          issue=$(gh issue list -R "$GITHUB_REPOSITORY" --label visual-regression --state open --limit 1 --json number -q '.[0].number')
+          if [[ -n $issue ]]; then
+            gh issue comment "$issue" -R "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create -R "$GITHUB_REPOSITORY" --label visual-regression --title 'Compared screens differ on main' --body "$body"
+          fi
       - name: upload ledger results
         if: always()
         # The ledger only reports, so a failed upload leaves the job's result as its tests made it.
@@ -237,10 +261,142 @@ jobs:
           retention-days: 3
           include-hidden-files: false
 
+  # The visual lane (#257): its screens against their approved images, drawn in the pinned renderer, and its guard tests.
+  lane:
+    needs: [changes]
+    if: ${{ !cancelled() && ((github.event_name == 'push' && needs.changes.outputs.integration != 'false') || github.event_name == 'workflow_dispatch') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: reserve the stack's ports
+        if: ${{ runner.environment == 'github-hosted' }}
+        run: |
+          sudo sysctl -w net.ipv4.ip_local_reserved_ports="$(node scripts/ci-runner.mjs reserved-ports)"
+          sysctl net.ipv4.ip_local_reserved_ports
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: lane
+        run: ./ci.sh lane
+      - name: say which screens differ and how to refresh them
+        if: failure()
+        run: |
+          screens=$(find test-results/lane -name '*-diff.png' -printf '%f\n' 2> /dev/null | sed 's/-diff\.png$//' | sort -u || true)
+          {
+            echo '### The visual lane failed'
+            echo
+            if [[ -n $screens ]]; then
+              echo 'These pictures differ from their approved images:'
+              printf -- '- `%s`\n' $screens
+            else
+              echo 'No picture differs from its approved image: the log says what failed.'
+            fi
+            echo
+            echo 'The expected, actual and difference images are in the `lane-screenshots` artifact of this run.'
+            echo 'When the change is intended, refresh the images with `./ci.sh lane-update` and commit them.'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: upload the lane's screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lane-screenshots
+          path: test-results/lane/
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-lane
+          path: playwright-report/lane-html/
+          if-no-files-found: ignore
+          retention-days: 30
+      - name: upload ledger results
+        if: always()
+        # The ledger only reports, so a failed upload leaves the job's result as its tests made it.
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: ledger-${{ github.job }}
+          path: ci-ledger/
+          if-no-files-found: ignore
+          retention-days: 3
+          include-hidden-files: false
+
+  # The renderer draws the same bytes everywhere (#257): GitHub's runner and the CI_RUNNER runner each draw every lane
+  # image three times. It decides nothing for `check`; lane-proof-compare is its verdict.
+  lane-proof:
+    needs: [changes]
+    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, "${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.CI_RUNNER || 'ubuntu-latest' }}"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: reserve the stack's ports
+        if: ${{ runner.environment == 'github-hosted' }}
+        run: |
+          sudo sysctl -w net.ipv4.ip_local_reserved_ports="$(node scripts/ci-runner.mjs reserved-ports)"
+          sysctl net.ipv4.ip_local_reserved_ports
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
+      - name: clear an earlier run and move the stack's ports
+        if: ${{ runner.environment != 'github-hosted' }}
+        # The PC's Docker daemon sees the checkout but not this job's /tmp (see `integration`).
+        run: |
+          node scripts/ci-runner.mjs cleanup
+          node scripts/ci-runner.mjs move-ports 640
+          mkdir -p "$GITHUB_WORKSPACE/.ci-tmp"
+          echo "TMPDIR=$GITHUB_WORKSPACE/.ci-tmp" >> "$GITHUB_ENV"
+      - name: draw the lane three times
+        run: ./ci.sh lane-proof
+      - name: upload the hashes
+        uses: actions/upload-artifact@v4
+        with:
+          name: lane-proof-${{ strategy.job-index }}
+          path: test-results/lane-proof/
+          retention-days: 14
+      - name: remove what this run started
+        if: ${{ always() }}
+        run: node scripts/ci-runner.mjs cleanup
+
+  lane-proof-compare:
+    needs: [lane-proof]
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: lane-proof-*
+          path: lane-proof/
+      - name: every run on every runner drew the same bytes
+        run: |
+          lists=(lane-proof/*/run-*.sha256)
+          for list in "${lists[@]}"; do echo "$list: $(wc -l < "$list") images, $(sha256sum < "$list" | cut -c1-16)"; done
+          if (( ${#lists[@]} != 6 )); then echo "::error::6 lists of hashes expected, ${#lists[@]} found"; exit 1; fi
+          for list in "${lists[@]}"; do [[ -s $list ]] || { echo "::error::$list holds no image: nothing was compared"; exit 1; }; done
+          for list in "${lists[@]:1}"; do
+            diff "${lists[0]}" "$list" || { echo "::error::$list differs from ${lists[0]}"; exit 1; }
+          done
+
   # The rest of the whole-app browser suite: the production-shaped proxy suite in the image and the journeys.
   integration:
     needs: [changes]
-    if: ${{ !cancelled() && (needs.changes.result != 'success' || (needs.changes.outputs.integration != 'false' && needs.changes.outputs.integration != 'visual')) }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.integration != 'false') }}
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.CI_RUNNER || 'ubuntu-latest' }}
     # main's browser suite already took 24 of 25 minutes (run 43398274074); the board, settings, log and numbers specs
     # add to it.
@@ -716,7 +872,7 @@ jobs:
   # label on each red job (scripts/ci-ledger.mjs). It reports only: the verdict stays with `check`, which does not
   # need it.
   ledger:
-    needs: [changes, static, components, database, visual, integration, install]
+    needs: [changes, static, components, database, visual, integration, install, lane]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -755,7 +911,7 @@ jobs:
           retention-days: 90
 
   check:
-    needs: [changes, static, components, database, visual, integration, install]
+    needs: [changes, static, components, database, integration, install]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     permissions:
@@ -770,10 +926,7 @@ jobs:
           COMPONENTS_RESULT: ${{ needs.components.result }}
           DATABASE_RUN: ${{ needs.changes.outputs.database }}
           DATABASE_RESULT: ${{ needs.database.result }}
-          VISUAL_RUN: ${{ needs.changes.outputs.integration }}
-          VISUAL_RESULT: ${{ needs.visual.result }}
-          # Screens alone (integration=visual) ask for the compared screens only.
-          INTEGRATION_RUN: ${{ needs.changes.outputs.integration == 'visual' && 'false' || needs.changes.outputs.integration }}
+          INTEGRATION_RUN: ${{ needs.changes.outputs.integration }}
           INTEGRATION_RESULT: ${{ needs.integration.result }}
           INSTALL_RUN: ${{ needs.changes.outputs.install }}
           INSTALL_RESULT: ${{ needs.install.result }}
