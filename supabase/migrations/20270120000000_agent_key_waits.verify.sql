@@ -40,6 +40,8 @@ select json_build_object(
  'owner_sees_it',position('''agent_key''' in pg_get_functiondef('public.waiting_list(uuid)'::regprocedure))>0
   and position('''question''' in pg_get_functiondef('public.waiting_list(uuid)'::regprocedure))>0
   and pg_get_function_result('public.waiting_list(uuid)'::regprocedure)='TABLE(kind text, id bigint, title text, body text, asked_by text, card_id bigint, conversation_id uuid, created_at timestamp with time zone)',
+ 'settle_checks_under_lock',position('pg_advisory_xact_lock' in pg_get_functiondef('public.settle_provider_key_holds(uuid,text[],bigint)'::regprocedure))
+   between 1 and position('k.version>' in pg_get_functiondef('public.settle_provider_key_holds(uuid,text[],bigint)'::regprocedure))-1,
  'server_changes_keys',(select bool_and(has_function_privilege('service_role',f,'execute') and not has_function_privilege('authenticated',f,'execute')
    and not has_function_privilege('anon',f,'execute') and prosecdef and proconfig @> array['search_path=""'])
   from unnest(array['public.begin_provider_key_change(uuid,text)','public.finish_provider_key_change(uuid,text,boolean,text[],boolean)','public.forget_agent_profile_leftovers(uuid,text[])','public.settle_provider_key_holds(uuid,text[],bigint)','public.lead_key_settle(uuid)']::regprocedure[]) f
