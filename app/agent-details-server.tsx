@@ -5,7 +5,7 @@ import type { supabase } from '@/lib/supabase';
 import { approvalQueue } from '@/lib/approval-queue';
 import { feedSince } from '@/lib/numbers.mjs';
 import { canCreateCard } from '@/lib/card-permissions.mjs';
-import { columnLabel } from '@/lib/board-columns.mjs';
+import { columnLabel, type CardWait } from '@/lib/board-columns.mjs';
 import { agentFiles, agentLogFilter, agentStatus, agentTasks, fileSize, latestActivity, pickTab, type AgentStatus, type DetailsTab } from '@/lib/agent-details.mjs';
 import { ShellIcon } from '@/components/shell-icon';
 import { drawnAt, type LogRow } from '@/lib/activity-log.mjs';
@@ -20,7 +20,7 @@ const logShown=50;
 export async function agentDetails(db:Db,{company,agent,slug,me,role,tab}:{company:string,agent:string,slug:string,me:string,role:string,tab?:string}):Promise<AgentDetailsView> {
  const {t,language}=await getI18n(); const writer=canCreateCard({role}); const drawn=drawnAt();
  const [{data:cardRows},{data:logRows,count},{data:runs},{items:waiting},{data:talkFileRows,count:talkFileCount}]=await Promise.all([
-  db.from('work_cards').select('id,title,stage_id').eq('company_id',company).eq('agent_id',agent).order('id'),
+  db.from('work_cards').select('id,title,stage_id,wait:card_wait').eq('company_id',company).eq('agent_id',agent).order('id'),
   db.from('company_log').select(logColumns,{count:'exact'}).eq('company_id',company).or(agentLogFilter(agent)).order('created_at',{ascending:false}).order('id',{ascending:false}).limit(logShown),
   db.rpc('agent_open_run',{c:company,agent}),
   approvalQueue(db,company,me,role),
@@ -28,7 +28,7 @@ export async function agentDetails(db:Db,{company,agent,slug,me,role,tab}:{compa
   db.from('conversation_attachments').select('id,name,size,created_at,conversation_id,conversations!inner(agent_name)',{count:'exact'}).eq('company_id',company).eq('conversations.agent_id',agent)
    .order('created_at',{ascending:false}).order('id',{ascending:false}),
  ]);
- const cards=(cardRows||[]) as {id:number,title:string,stage_id:number}[]; const ids=cards.map(card=>card.id);
+ const cards=(cardRows||[]) as {id:number,title:string,stage_id:number,wait:CardWait|null}[]; const ids=cards.map(card=>card.id);
  const rows=(logRows||[]) as LogRow[];
  const run=(runs as {started_at:string,my_conversation:string|null}[]|null)?.[0];
  const talkFiles=((talkFileRows||[]) as unknown as {id:number,name:string,size:number,created_at:string,conversation_id:string,conversations:{agent_name:string}}[]).map(file=>({...file,agent_name:file.conversations.agent_name}));

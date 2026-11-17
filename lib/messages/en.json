@@ -984,5 +984,6 @@
   "permissionFailed": "Could not send it. Try again.",
   "logActPermissionAllowed": "approved {0}’s request",
   "logActPermissionRefused": "refused {0}’s request",
-  "logPermissionWaiting": "Waiting for OK"
+  "logPermissionWaiting": "Waiting for OK",
+  "boardWaitingOnChat": "This card is waiting on its chat. Once it’s answered or done there, the card moves back on its own"
 }

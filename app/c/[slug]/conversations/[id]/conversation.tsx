@@ -10,6 +10,7 @@ import { PrivateLine } from '@/app/private-line';
 import { titleOf } from '@/lib/conversations';
 import type { ConversationRecord } from '@/lib/conversation-record';
 import { columnLabel } from '@/lib/board-columns.mjs';
+import { useNewlyWaiting } from '@/lib/newly-waiting';
 import type { MessageBoxHandle } from '@/app/conversation-composer';
 import { ChatPlaceholder, ConversationComposer, ConversationTurns, useConversationRecord, useConversationText, type ThreadConversation } from '@/app/conversation-thread';
 
@@ -29,12 +30,14 @@ export default function ConversationView({slug,agent,details,company,conversatio
  const {c}=useConversationText(); const panel=useDetailsPanel();
  const composer=useRef<MessageBoxHandle>(null); const [early,setEarly]=useState(0); const [live,setLive]=useState<Live|null>(null);
  const record=live?.record; const corner=record?record.board:board;
+ // The pill shakes once when its Card starts waiting while the chat is open (design-reference: syncWaitMarks).
+ const fresh=useNewlyWaiting(corner?.column==='waiting'?[corner.card]:[]);
  // The same object while what it holds is the same: a new one reaching the transcript while it still streams in would
  // make React draw it again in the browser and leave the streamed copy hidden in the page (#172), as a render of this
  // frame during hydration does (the details panel's media query).
  const view=useMemo(()=>({slug,agent,company,conversation,writer,suggest:(text:string)=>composer.current?.insert(text),early,setLive}),[slug,agent,company,conversation,writer,early]);
  return <ChatView value={view}><div className="convo"><div className="chat">
-  <HeadPill panel={panel} agent={agent?.name} face={<span aria-hidden="true"><CompanyAgentFace agent={{connection_id:conversation.face,name:conversation.agent_name}} size={24}/></span>} title={record?titleOf(record.messages,conversation.agent_name):title} titleDir="auto" corner={corner&&<CornerPill slug={slug} board={corner} writer={writer} c={c}/>}/>
+  <HeadPill panel={panel} agent={agent?.name} face={<span aria-hidden="true"><CompanyAgentFace agent={{connection_id:conversation.face,name:conversation.agent_name}} size={24}/></span>} title={record?titleOf(record.messages,conversation.agent_name):title} titleDir="auto" corner={corner&&<CornerPill slug={slug} board={corner} writer={writer} fresh={fresh.has(corner.card)} c={c}/>}/>
   <Transcript>{children}</Transcript>
   <div className="composer-area"><ConversationComposer company={company} conversation={conversation} record={record??null} writer={writer} asked={live?.asked??(()=>setEarly(count=>count+1))} box={composer} usage/></div>
  </div>{agent&&details&&<AgentDetails panel={panel} agent={agent} details={details} slug={slug}/>}</div></ChatView>;
@@ -92,9 +95,9 @@ export function ConversationLoaded({initial,team}:{initial:ConversationRecord,te
 
 // The chat's Card on the board (#144; design-reference: renderChat's corner pill): its column now, and the way to it on
 // the board. A phone shows the column alone.
-function CornerPill({slug,board,writer,c}:{slug:string,board:NonNullable<ConversationRecord['board']>,writer:boolean,c:(key:string,...values:unknown[])=>string}) {
+function CornerPill({slug,board,writer,fresh,c}:{slug:string,board:NonNullable<ConversationRecord['board']>,writer:boolean,fresh:boolean,c:(key:string,...values:unknown[])=>string}) {
  const {t}=useI18n(); const waiting=board.column==='waiting'; const column=t(columnLabel(board.column,writer));
- return <div className="chat__corner"><Link className={`corner-pill${waiting?' is-waiting':''}`} href={`/c/${slug}/work/board?show=${board.card}`} aria-label={`${c('onTheBoard')} ${column}`}>
+ return <div className="chat__corner"><Link className={`corner-pill${waiting?' is-waiting':''}${waiting&&fresh?' is-new':''}`} href={`/c/${slug}/work/board?show=${board.card}`} aria-label={`${c('onTheBoard')} ${column}`}>
   <span className={`dot dot--${waiting?'waiting':'idle'}`} aria-hidden="true"/><span className="corner-pill__lbl">{c('onTheBoard')}</span><span className="corner-pill__col">{column}</span>
  </Link></div>;
 }

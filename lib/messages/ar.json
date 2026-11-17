@@ -984,5 +984,6 @@
   "permissionFailed": "معرفناش نبعتها. جرّب تاني.",
   "logActPermissionAllowed": "وافق على طلب {0}",
   "logActPermissionRefused": "رفض طلب {0}",
-  "logPermissionWaiting": "مستني موافقة"
+  "logPermissionWaiting": "مستني موافقة",
+  "boardWaitingOnChat": "البطاقة دي مستنية محادثتها. أول ما تترد أو تخلص هناك، هترجع مكانها لوحدها"
 }

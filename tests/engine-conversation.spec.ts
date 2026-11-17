@@ -56,6 +56,9 @@ async function memberClient(email:string) {
 }
 const agentRows=(conversation:string)=>JSON.parse(query(`select body from public.conversation_messages where conversation_id='${conversation}' and author='agent' order by id`));
 const usageRows=(conversation:string)=>JSON.parse(query(`select outcome,input_tokens,output_tokens from public.conversation_usage where conversation_id='${conversation}' order by recorded_at,run_id`));
+// A chat with a Card on the board writes its rows on the Card (#146). Untied, as only the database can untie it, a chat
+// has no Card, and its rows stay its person's.
+const untie=(conversation:string)=>query(`update public.work_cards set conversation_id=null where conversation_id='${conversation}'`);
 
 test('integration: a message on the fake engine gets its slow reply stored once, with its usage',async()=>{
  test.setTimeout(120000);
@@ -316,6 +319,8 @@ test('integration: an Agent shows a draft once under its reply, also when two cl
    // A reader and the worker close the run at once: the card is kept once, before the reply is stored.
    const closed=await Promise.all([close(),close()]);
    expect(closed[0]+closed[1]).toBe(1);
+   // A chat with no Card: the first Run's Card is untied, so the later drafts are logged as before.
+   untie(conversation);
   }
   expect(agentRows(conversation)).toEqual(Object.keys(calls).map(message=>({body:`Reply to: ${message}`})));
   const cards=JSON.parse(query(`select run_id,call_id,kind,title,content,state from public.reply_cards where conversation_id='${conversation}' order by id`));
@@ -409,8 +414,10 @@ test('integration: an Agent shows a review once under its reply, shows none for 
    expect(fake.runs.at(-1)?.tools.map(tool=>tool.name)).toEqual(['save_rule','show_draft','show_review','hand_over']);
    expect(await closeOpenRuns(service,{encryptionKey,conversation,engineFor:fake.engineFor})).toBe(1);
   };
-  // The Conversation's first Run puts its Card on the board (#144), so the review's runs are measured after it.
+  // The Conversation's first Run puts its Card on the board (#144), so the review's runs are measured after it. The Card
+  // is untied: a chat with no Card logs its review privately.
   await send('Draft the December ad texts');
+  untie(conversation);
   const before=work();
   for(const message of Object.keys(calls)) await send(message);
   expect(agentRows(conversation)).toEqual(['Draft the December ad texts',...Object.keys(calls)].map(message=>({body:`Reply to: ${message}`})));
@@ -448,8 +455,10 @@ test('integration: an Agent hands a step over once under its reply, shows none w
    expect(fake.runs.at(-1)?.tools.map(tool=>tool.name)).toEqual(['save_rule','show_draft','show_review','hand_over']);
    expect(await closeOpenRuns(service,{encryptionKey,conversation,engineFor:fake.engineFor})).toBe(1);
   };
-  // The Conversation's first Run puts its Card on the board (#144), so the hand's runs are measured after it.
+  // The Conversation's first Run puts its Card on the board (#144), so the hand's runs are measured after it. The Card
+  // is untied: a chat with no Card logs its Done it privately.
   await send('Draft the article');
+  untie(conversation);
   const before=work();
   for(const message of Object.keys(calls)) await send(message);
   expect(agentRows(conversation)).toEqual(['Draft the article',...Object.keys(calls)].map(message=>({body:`Reply to: ${message}`})));
@@ -536,6 +545,8 @@ const speaks=(value:'en'|'ar')=>query(`update public.people set language='${valu
 test('a handed step waits in Waiting on you until Done it, which starts one Run telling the Agent who did it and when; its reply comes under the card and the press adds no message',async({page})=>{
  test.setTimeout(180000);
  const fake=await fakeHermes(); const {conversation,send,show,told,detach}=await handedStep(fake);
+ // A chat with no Card: its step waits as an item of its own (one with a Card is drawn as that Card, #146).
+ untie(conversation);
  try {
   speaks('en');
   await page.setViewportSize({width:1440,height:900});
@@ -621,6 +632,93 @@ test('Done it pressed while the Agent is busy waits as its person\'s next turn a
  } finally { speaks('en'); detach(); await fake.close(); }
 });
 
+// #146: the step is handed over in a chat whose first Run put its Card In progress. While it waits, the Card is drawn
+// once under Waiting on you, for its person, another Contributor and a Viewer with their own badge, and keeps its stage;
+// the chat's pill shows the wait; Done it sends the Card back. The chat's draft and Done it are rows of the Card's Log.
+test('a Card whose chat hands its person a step waits under Waiting on you for each reader and keeps its stage; Done it sends it back, and the chat\'s rows are on the Card\'s Log',async({page,browser})=>{
+ test.setTimeout(240000);
+ const fake=await fakeHermes(); const {conversation,show,detach}=await handedStep(fake);
+ const others=['20000000-0000-0000-0000-000000000003','20000000-0000-0000-0000-000000000004'];
+ const language=(value:'en'|'ar')=>query(`update public.people set language='${value}' where id in ('${omar}','${others.join("','")}')`);
+ const [{id:card,stage_id:stage}]=JSON.parse(query(`select id,stage_id from public.work_cards where conversation_id='${conversation}'`));
+ const stageNow=()=>JSON.parse(query(`select stage_id from public.work_cards where id=${card}`))[0].stage_id;
+ const [{run_id:run}]=JSON.parse(query(`select run_id from public.conversation_messages where conversation_id='${conversation}' and author='person' order by id limit 1`));
+ const opened:{close:()=>Promise<void>}[]=[];
+ const member=async(email:string)=>{ const context=await browser.newContext(); opened.push(context); const other=await context.newPage(); await signIn(other,email,'/c/rs-learning/work/board'); return other; };
+ const kcard=(on:typeof page)=>on.locator(`#board-cols .kcard[data-card-id="${card}"]`);
+ const columnOf=(on:typeof page)=>kcard(on).evaluate(node=>node.closest('.col')?.getAttribute('data-column'));
+ const waitingCount=(on:typeof page)=>on.locator('.col[data-column="waiting"] .col__count');
+ try {
+  language('en');
+  await page.setViewportSize({width:1440,height:900});
+  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+  const sidebar=page.locator('.sidebar .sb-count[href$="/approvals"] .sb-count__n');
+  expect(await columnOf(page)).toBe('progress');
+  const before={sidebar:Number(await sidebar.textContent()),column:Number(await waitingCount(page).textContent())};
+  // A draft shown in the chat once it has its Card, and the step handed over.
+  query(`select public.agent_show_card('${conversation}','${run}','call-1','draft','خطة المقال','{"line":"مسودة","rows":[]}'::jsonb)`);
+  show();
+  const reviewer=await member('reviewer@example.com'), viewer=await member('viewer@example.com');
+  const badges={en:{omar:'Waiting on you',reviewer:'Waiting on عمر',viewer:'Waiting on the team',tag:'Handed to you'},ar:{omar:'مستنيك',reviewer:'مستني عمر',viewer:'مستني الفريق',tag:'اتسلّمتلك'}};
+  for(const value of ['en','ar'] as const) {
+   language(value);
+   for(const [who,on] of [['omar',page],['reviewer',reviewer],['viewer',viewer]] as const) {
+    await on.reload();
+    await expect(on.locator(`.col[data-column="waiting"] .kcard[data-card-id="${card}"]`),`${who} in ${value}`).toHaveCount(1);
+    await expect(kcard(on)).toHaveCount(1);
+    await expect(kcard(on).locator('.wtag--hand')).toHaveText(badges[value].tag);
+    await expect(kcard(on).locator('.badge')).toHaveText(badges[value][who]);
+    await expect(kcard(on).locator('.badge')).toHaveClass(who==='omar'?'badge badge--wait':'badge');
+    await expect(kcard(on).locator('.kcard__t')).toHaveText(handTitle);
+   }
+   await expect(page.locator('a.mcard[data-kind="hand"]')).toHaveCount(0);
+   await expect(sidebar).toHaveText(String(before.sidebar+1));
+   await expect(waitingCount(page)).toHaveText(String(before.column+1));
+  }
+  expect(stageNow()).toBe(stage);
+
+  // The chat's pill shows the wait, as the Card does.
+  language('en');
+  await page.goto(`/c/rs-learning/conversations/${conversation}`);
+  const pill=page.locator('.chat__corner .corner-pill');
+  await expect(pill).toHaveAccessibleName('On the board: Waiting on you');
+  await expect(pill).toHaveClass(/\bis-waiting\b/);
+
+  // The draft is on the Card's Log for another Contributor, and on the Activity log for the Viewer.
+  await reviewer.goto(`/c/rs-learning/work/board?card=${card}`);
+  await reviewer.locator('.sheet #sh-tab-log').click();
+  await expect(reviewer.locator('.sheet .lg-wrap')).toContainText('delivered the draft');
+  await expect(reviewer.locator('.sheet .lg-wrap')).toContainText('خطة المقال');
+  await viewer.goto(`/c/rs-learning/log?card=${card}`);
+  await expect(viewer.locator('main')).toContainText('delivered the draft');
+
+  // Done it: the Card is drawn In progress again, its stage as it was, and the pill names its column.
+  await page.locator('[id^="hand-"]').getByRole('button',{name:'Done it'}).click();
+  await expect(pill).toHaveAccessibleName('On the board: In progress');
+  await expect(pill).not.toHaveClass(/\bis-waiting\b/);
+  for(const on of [page,reviewer,viewer]) {
+   await on.goto('/c/rs-learning/work/board');
+   await expect.poll(()=>columnOf(on)).toBe('progress');
+   await expect(kcard(on).locator('.badge')).toHaveCount(0);
+  }
+  await expect(sidebar).toHaveText(String(before.sidebar));
+  expect(stageNow()).toBe(stage);
+  await reviewer.goto(`/c/rs-learning/work/board?card=${card}`);
+  await reviewer.locator('.sheet #sh-tab-log').click();
+  await expect(reviewer.locator('.sheet .lg-wrap')).toContainText('did it');
+  await expect(reviewer.locator('.sheet .lg-wrap')).toContainText(handTitle);
+  await viewer.goto(`/c/rs-learning/log?card=${card}`);
+  await expect(viewer.locator('main')).toContainText('did it');
+ } finally {
+  language('en'); for(const context of opened) await context.close();
+  // Done it's turn may still hold its reservation, which keeps the Connection detach() removes; the turn goes first, so
+  // the worker cannot claim and reserve it again.
+  query(`delete from public.conversation_queued_turns where conversation_id='${conversation}'`);
+  query(`delete from public.conversation_run_reservations where conversation_id='${conversation}'`);
+  try { detach(); } finally { await fake.close(); }
+ }
+});
+
 // #138: an Agent asks its person with the Engine's own clarify tool; the fake engine scripts the question (the reference's
 // th-meta m3) and gives its reply the answer.
 test('integration: an Agent\'s question is answered once by its person, by a pick or typed words, the same Run goes on to its reply, the record reads the answer as the person\'s, and the log row is the person\'s',async()=>{
@@ -662,6 +760,8 @@ test('integration: an Agent\'s question is answered once by its person, by a pic
   expect(fake.runs).toHaveLength(1);
   expect(agentRows(conversation)).toEqual([{body:`Reply to: Plan the Meta campaign (${angles[1]})`}]);
   expect(await waiting()).toEqual([]);
+  // A chat with no Card: the Card its first Run put on the board is untied, so the next answer is logged privately too.
+  untie(conversation);
   expect(await read()).toEqual({pending:false,asking:false,turns:[{author:'person',kind:null,body:'Plan the Meta campaign',cards:null},{author:'agent',kind:'asked',body:'',cards:[{state:'answered',answer:angles[1]}]},
    {author:'person',kind:'answer',body:angles[1],cards:null},{author:'agent',kind:null,body:`Reply to: Plan the Meta campaign (${angles[1]})`,cards:null}]});
 

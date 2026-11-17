@@ -49,6 +49,14 @@ test('a question about a Card is its line; a Card waiting on someone else shows 
  assert.deepEqual(lines, [{ text: 'Which angle?' }, { text: 'Review' }]);
 });
 
+test('a Card whose chat waits is under Waiting on you with the wait\'s line, its stage kept, as on the board (#146)', () => {
+ const cards = [{ id: 30, title: 'Article', stage_id: 2, wait: { person: 'p-2', kind: 'hand', title: 'Post it' } }, { id: 31, title: 'Reel', stage_id: 2, wait: null }];
+ assert.deepEqual(agentTasks(cards, stages, [], []), [
+  { id: 30, title: 'Article', column: 'waiting', line: { text: 'Post it' }, waiting: true },
+  { id: 31, title: 'Reel', column: 'progress', line: { text: 'Writing' }, waiting: false },
+ ]);
+});
+
 test('latest activity is the newest three rows of the last week, newest first', () => {
  const rows = [
   { id: 1, created_at: '2026-06-01T09:00:00Z' },

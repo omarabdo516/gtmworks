@@ -22,7 +22,7 @@ const stages = [
 export const card = (more: Partial<Card> = {}): Card => ({ id: 1, title: 'أفكار لمحتوى الشهر', stage_id: 1, channel: 'Instagram', format: '', go_live: '2026-06-04T12:00:00+00:00',
  offering: '', segment: '', hook: '', goal: '', caption: '', next_actor: null, mode: null, approval_step_id: null, rejection_reason: null, project_id: null, ...more });
 export const workProps = (more: Partial<WorkProps> = {}): WorkProps => ({
- workAction: vi.fn<WorkAction>(async () => {}), slug: 'rs-learning', company: 'co-1', section: 'work/board', stages, labels: [{ id: 1, name: 'static', color: '#87bba2' }],
+ workAction: vi.fn<WorkAction>(async () => {}), me: 'p-1', slug: 'rs-learning', company: 'co-1', section: 'work/board', stages, labels: [{ id: 1, name: 'static', color: '#87bba2' }],
  cards: [card()], items: [{ id: 1, card_id: 1, title: 'Script Ready', done: false }], members: [{ person_id: 'p-1', people: { name: 'عمر' } }],
  activity: [], creatives: [], versions: [], cardLabels: [], projects: [], assignees: [], approvableIds: [], agents: [],
  canCreate: true, initialCreating: false, attachments: [], ...more,
@@ -35,5 +35,6 @@ export async function showWork(props: WorkProps, { language = 'en', width = 1440
  Object.assign(document.documentElement, { lang: language, dir: language === 'ar' ? 'rtl' : 'ltr' });
  onTestFinished(() => { Object.assign(document.documentElement, { lang, dir }); });
  await page.viewport(width, 900);
- return render(<LanguageProvider language={language}><Frame sidebar={null} title="Work"><main className="content"><Work {...props}/></main></Frame></LanguageProvider>);
+ return render(workView(props, language));
 }
+export const workView = (props: WorkProps, language: Language = 'en') => <LanguageProvider language={language}><Frame sidebar={null} title="Work"><main className="content"><Work {...props}/></main></Frame></LanguageProvider>;
