@@ -67,8 +67,8 @@ export default async function CompanyPage({params,searchParams}:{params:Promise<
  const failed=query.failed||''; const waitingFailure=Object.hasOwn(waitingFailures,failed)?t(waitingFailures[failed]):failed.startsWith('request-')?t('waitingRequestFailed'):message;
  const {steps,cards:myCards,items:waitingItems,available:approvalsAvailable}=await approvalQueue(db,company.id,user.id,membership?.role || '');
  const isWork=section.startsWith('work/')||section==='settings/work';
- // The board, and the same board opened on Waiting on you (/approvals).
- const onBoard=section==='work/board'||section==='approvals';
+ // The board, the board under a new Card (/work/new) and the board opened on Waiting on you (/approvals).
+ const onBoard=section==='work/board'||section==='work/new'||section==='approvals';
  // The board reads its Cards through board_cards (#190): no Card of an Agent hidden from the reader, each with the
  // Company Agents that worked on it (crew). Other places list Cards as before.
  // Typed as the table read it stands in for, whose rows the untyped client leaves open.
