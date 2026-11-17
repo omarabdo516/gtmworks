@@ -138,6 +138,10 @@ export function AppDetail({place,company,owner,rtl,item,text,failed}:{place:Apps
   return ()=>{ stopped=true; clearTimeout(timer); };
  // eslint-disable-next-line react-hooks/exhaustive-deps
  },[run,company,item.key,router]);
+ // Leaving with a queue part done reads the apps again, so the list behind this page shows those Agents connected.
+ const leaving=useRef({done:0,router});
+ useEffect(()=>{ leaving.current={done:run.done.length,router}; });
+ useEffect(()=>()=>{ if(leaving.current.done) leaving.current.router.refresh(); },[]);
  // The vendor's window is opened at the click, before the answer, so the browser lets it open; it is pointed at the
  // vendor once gtmworks has the sign-in page, and never knows this page.
  const connect=(queue:string[],one:boolean,done:string[]=[])=>startTransition(async()=>{
@@ -175,7 +179,8 @@ export function AppDetail({place,company,owner,rtl,item,text,failed}:{place:Apps
   if(!queue.length) { setPickError(true); document.getElementById(`app-pick-${own[0]?.id}`)?.focus(); return; }
   connect(queue,false);
  };
- const pick=(id:string)=>{ if(busy) return; const next=picks.includes(id)?picks.filter(other=>other!==id):[...picks,id]; setPicks(next); if(next.length) setPickError(false); };
+ // The picks are fixed once a sign-in starts, so the Agents still waiting are the ones ticked.
+ const pick=(id:string)=>{ if(busy||run.queue.length) return; const next=picks.includes(id)?picks.filter(other=>other!==id):[...picks,id]; setPicks(next); if(next.length) setPickError(false); };
  // The Agents that lose it on Disconnect: with the app on, at least one.
  const having=own.filter(agent=>agent.state==='connected'||agent.state==='attention');
  const sharedWith=(agent:AppAgent)=>(item.agents.find(other=>other.own&&other.connection===agent.connection)??item.agents.find(other=>other.main))?.name??'';
@@ -207,7 +212,7 @@ export function AppDetail({place,company,owner,rtl,item,text,failed}:{place:Apps
        onClick={()=>{ if(busy) return; if(agent.state==='off') connect([agent.id],true); else turnOff(agent); }}/>}</li>)}</ul></section>
     :owner&&<section className="apps-sec" aria-labelledby="app-pick-h"><h4 className="apps-sec__h" id="app-pick-h">{say('whoGets')} <span className="num muted">{picks.length}</span></h4>
      <div className="panel-card" role="group" aria-labelledby="app-pick-h" aria-describedby="app-pick-err">{own.map(agent=>{ const picked=picks.includes(agent.id);
-      return <button key={agent.id} type="button" className="panel-row tm-pick" role="checkbox" id={`app-pick-${agent.id}`} aria-checked={picked} aria-disabled={busy||undefined} onClick={()=>pick(agent.id)}>
+      return <button key={agent.id} type="button" className="panel-row tm-pick" role="checkbox" id={`app-pick-${agent.id}`} aria-checked={picked} aria-disabled={busy||run.queue.length>0||undefined} onClick={()=>pick(agent.id)}>
        {face(agent)}<span className="panel-row__text"><span className="panel-row__t"><bdi>{agent.name}</bdi></span></span>
        <span className="tm-check" aria-hidden="true">{picked&&<ShellIcon name="check"/>}</span></button>; })}</div>
      <span className="set-err" id="app-pick-err" hidden={!pickError}>{say('pickOne')}</span></section>}
