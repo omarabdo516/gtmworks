@@ -1,5 +1,5 @@
 'use client';
-import { Suspense, createContext, use, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Suspense, createContext, memo, use, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import Link from '@/lib/link';
 import { useI18n } from '@/lib/i18n-client';
 import { CompanyAgentFace } from '@/components/company-agent-face';
@@ -35,10 +35,19 @@ export default function ConversationView({slug,agent,details,company,conversatio
  const view=useMemo(()=>({slug,agent,company,conversation,writer,setDraft,early,setLive}),[slug,agent,company,conversation,writer,early]);
  return <ChatView value={view}><div className="convo"><div className="chat">
   <HeadPill panel={panel} agent={agent?.name} face={<span aria-hidden="true"><CompanyAgentFace agent={{connection_id:conversation.face,name:conversation.agent_name}} size={24}/></span>} title={record?titleOf(record.messages,conversation.agent_name):title} titleDir="auto" corner={corner&&<CornerPill slug={slug} board={corner} writer={writer} c={c}/>}/>
-  <Suspense fallback={<ChatPlaceholder/>}>{children}</Suspense>
+  <Transcript>{children}</Transcript>
   <div className="composer-area"><ConversationComposer company={company} conversation={conversation} record={record??null} writer={writer} asked={live?.asked??(()=>setEarly(count=>count+1))} draft={draft} usage/></div>
  </div>{agent&&details&&<AgentDetails panel={panel} agent={agent} details={details} settingsHref={`/c/${slug}/agents`}/>}</div></ChatView>;
 }
+
+// The transcript's boundary renders only when the transcript itself changes. This frame renders again while it
+// hydrates on a phone, where the details panel's media query answers differently; reaching the boundary while its
+// content still streams in, that render would make React draw the transcript in the browser beside its hidden streamed
+// copy (#172), as a new context value would.
+const loadingTranscript=<ChatPlaceholder/>;
+const Transcript=memo(function Transcript({children}:{children:ReactNode}) {
+ return <Suspense fallback={loadingTranscript}>{children}</Suspense>;
+});
 
 type View={slug:string,agent:DetailsAgent|null,company:string,conversation:ThreadConversation,writer:boolean,setDraft:(next:(current:Draft)=>Draft)=>void,early:number,setLive:(live:Live)=>void};
 // The chat around the transcript: what the transcript tells the title and the composer.
