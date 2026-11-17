@@ -11,10 +11,11 @@ cd "$(dirname "$0")/.."
 #   pulled BEFORE  how many images the registry served since BEFORE (a file `list` wrote)
 #   save           write every Supabase image on this machine into the archive
 archive=${SUPABASE_IMAGES_ARCHIVE:-}
-list() { docker images --format '{{.Repository}}:{{.Tag}}' | grep '^public\.ecr\.aws/supabase/' | sort || true; }
+# A failing `docker images` fails the list; only grep's "no match" is an empty list.
+list() { { docker images --format '{{.Repository}}:{{.Tag}}' || exit 1; } | { grep '^public\.ecr\.aws/supabase/' || true; } | sort; }
 case ${1:-} in
  key)
-  printf 'supabase-images-%s-%s\n' "$(node -p "require('./package-lock.json').packages['node_modules/supabase'].version")" \
+  printf 'supabase-images-%s-%s\n' "$(jq -r '.packages["node_modules/supabase"].version' package-lock.json)" \
     "$(grep -E '^(\[|enabled = |major_version = )' supabase/config.toml | sha256sum | cut -c1-16)"
   ;;
  load)

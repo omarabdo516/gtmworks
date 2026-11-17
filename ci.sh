@@ -156,12 +156,12 @@ PY
   # Every verify file in one psql session, each reported by name with its own ledger line (#259).
   container="supabase_db_$(sed -n 's/^project_id = "\(.*\)"$/\1/p' supabase/config.toml)"
   DB_LEDGER="$PWD/$dir/database.jsonl" node scripts/verify-db-session.mjs "$container" supabase/migrations/*.verify.sql scripts/check-rls.sql
-  # The session itself, on real psql: a file whose first statement fails and whose second passes must fail.
+  # The session itself, on real psql: a file whose statement fails must fail with that statement's error.
   if canary=$(node scripts/verify-db-session.mjs "$container" tests/verify-db-session-canary.sql 2>&1) \
     || [[ $canary != *'tests/verify-db-session-canary.sql: division by zero'* ]]; then
-    echo "$canary" >&2; echo 'the verify session did not fail its canary for the failed first statement' >&2; exit 1
+    echo "$canary" >&2; echo 'the verify session did not fail its canary with its error' >&2; exit 1
   fi
-  echo 'verify session canary: a failed first statement failed its file, as it must'
+  echo 'verify session canary: a failed statement failed its file with its error, as it must'
   # tests/db.sh writes one line per step of its own.
   DB_LEDGER="$PWD/$dir/database.jsonl" npm run test:db
   ;;
@@ -188,6 +188,19 @@ PY
   wait "$build_pid" || { cat playwright-report/build.log >&2; echo 'the browser suite build failed' >&2; exit 1; }
   # The compared screens and the measured budgets run on their own (`ci.sh visual`), on a GitHub-hosted runner.
   GTMWORKS_WEB_PREBUILT=true GTMWORKS_TEST_LANES=$lanes GTMWORKS_HOSTED_ELSEWHERE=true PLAYWRIGHT_JSON_OUTPUT_FILE="$dir/e2e.json" npm run test:e2e
+  ;;
+ images)
+  # Every Supabase image the jobs use, pulled once and archived for the Actions cache (the supabase-images job, #259):
+  # lane 0's stack, and pgTAP's runner through one throwaway test.
+  if [[ "${CI:-}" == "true" ]]; then
+    npm ci
+  fi
+  bash scripts/local-db.sh
+  probe=$(mktemp -d)
+  printf '%s\n' 'begin;' 'select plan(1);' "select pass('the pgTAP runner is here');" 'select * from finish();' 'rollback;' > "$probe/images.sql"
+  npx --no-install supabase test db "$probe/images.sql"
+  rm -rf "$probe"
+  bash scripts/supabase-images.sh save
   ;;
  visual)
   # The compared screens alone, on lane 0 as the seed builds it: no journeys, no proxy suite, no image (#213). Then the
@@ -234,5 +247,5 @@ PY
     find tests/visual-lane -name '*.png' | sort | xargs -r sha256sum > "test-results/lane-proof/run-$run.sha256"
   done
   ;;
- *) echo 'usage: ./ci.sh check | static | components | database | integration | visual | visual-update | lane | lane-update | lane-proof' >&2; exit 2;;
+ *) echo 'usage: ./ci.sh check | static | components | database | images | integration | visual | visual-update | lane | lane-update | lane-proof' >&2; exit 2;;
 esac

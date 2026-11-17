@@ -27,7 +27,7 @@ const covered = new Set([
  ...globSync('supabase/migrations/*.verify.sql'),
  'tests/db.sh',
  // tests/db.sh writes each migration replay (`replay tests/<file>.mjs`) and runs them in one pgTAP session (#259).
- ...(/^step tests\/db\.sh 'migration replays' npx supabase test db "\$replays"$/m.test(database)
+ ...(/^step tests\/db\.sh 'migration replays' bash -c 'set -o pipefail; npx supabase test db "\$1" 2>&1 \| tee "\$2"' _ "\$replays" "\$session"/m.test(database)
   ? [...database.matchAll(/^replay (tests\/[^\s]+\.mjs)$/gm)].map(match => match[1]) : []),
 ]);
 if (/^step supabase\/tests pgTAP npx supabase test db$/m.test(database)) {

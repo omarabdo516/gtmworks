@@ -35,3 +35,9 @@ test("#228's migration only replaces functions", () => {
  assert.ok(statements.length>0,'the migration was read');
  assert.deepEqual(statements.filter(statement=>!/^create\s+or\s+replace\s+function\s+public\.\w+\s*\(/i.test(statement)).map(statement=>statement.slice(0,60)),[]);
 });
+
+test('the statement reader knows escape strings, where a backslash escapes the quote (#259)', () => {
+ assert.deepEqual(topLevelStatements("select E'it\\'s; fine', e'\\\\';\nselect 1/0"), ["select E'it\\'s; fine', e'\\\\'", 'select 1/0']);
+ assert.deepEqual(topLevelStatements("select E'it''s; fine';\nselect 'a\\';\nselect 2;"), ["select E'it''s; fine'", "select 'a\\'", 'select 2']);
+ assert.equal(topLevelStatements("select coalesce'x\\'; select 1").length, 2, 'an e that ends a word opens no escape string');
+});

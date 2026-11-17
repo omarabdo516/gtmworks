@@ -26,15 +26,9 @@ function generated(t, lane) {
  return readFileSync(join(dir, 'supabase/config.toml'), 'utf8');
 }
 
-test('lane 0 starts the same services as every other lane (#259)', t => {
- const first = services(generated(t, 0));
+test('every lane starts the services lane 0 starts, and none starts Studio, the log services or the edge runtime (#259)', t => {
+ const [first, ...others] = Array.from({ length: maxLanes }, (_, lane) => services(generated(t, lane)));
  assert.ok(first.includes('auth') && first.includes('storage'), `lane 0 starts ${first.join(', ')}`);
- for (let n = 1; n < maxLanes; n++) assert.deepEqual(services(generated(t, n)), first, `lane ${n}`);
-});
-
-test('no lane starts Studio, the log services or the edge runtime, which no test uses (#259)', t => {
- for (let n = 0; n < maxLanes; n++) {
-  const started = services(generated(t, n));
-  for (const unused of ['studio', 'analytics', 'edge_runtime']) assert.ok(!started.includes(unused), `lane ${n} starts ${unused}`);
- }
+ for (const unused of ['studio', 'analytics', 'edge_runtime']) assert.ok(!first.includes(unused), `lane 0 starts ${unused}`);
+ for (const [index, started] of others.entries()) assert.deepEqual(started, first, `lane ${index + 1}`);
 });
