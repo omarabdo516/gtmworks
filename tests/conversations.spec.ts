@@ -87,7 +87,8 @@ test('The Owner starts a private conversation from the board and from Home, and 
   await expect(page.locator('.msg[data-author=agent]')).toContainText(`Reply to: ${text}`);
 
   await page.goto('/c/rs-learning/home');
-  await expect(page.locator('.sidebar #btn-apps')).toHaveAttribute('aria-disabled','true');
+  await expect(page.locator('.sidebar #btn-apps')).toHaveAttribute('aria-haspopup','dialog');
+  await expect(page.locator('.sidebar #btn-apps'),'Connect apps opens its sheet (#201)').not.toHaveAttribute('aria-disabled');
   // New chat opens the main Agent (Mona is this company's default).
   await page.locator('.sidebar').getByRole('link',{name:'New chat',exact:true}).click();
   await expect(page.locator('.chat .empty-chat h2')).toContainText('Mona');
@@ -106,6 +107,39 @@ test('The Owner starts a private conversation from the board and from Home, and 
   await expect.poll(placeholders.waiting).toBe(0);
   expect(placeholders.seen()).toEqual([]);
  } finally { detach(agents); await fake.close(); }
+});
+
+// The sidebar's Connect apps and the account menu's item open the apps as a sheet over the page (#201); each way out
+// gives the keyboard back to what opened it.
+test('Connect apps opens its sheet from the sidebar and the account menu, and its close button, Escape and the backdrop each close it back to its opener',async({page})=>{
+ await page.setViewportSize({width:1440,height:900});
+ await ownerSignIn(page);
+ const sheet=page.locator('dialog.apps-sheet');
+ const opened=async(open:()=>Promise<void>)=>{ await open(); await expect(sheet).toBeVisible(); await expect(sheet.locator('#apps-q')).toBeFocused(); };
+ const closedTo=async(opener:string)=>{ await expect(sheet).toBeHidden(); await expect(page.locator(opener)).toBeFocused(); };
+ const fromSidebar=()=>page.locator('.sidebar #btn-apps').click();
+ const fromMenu=async()=>{ await page.locator('.sidebar #btn-me').click(); await page.getByRole('menuitem',{name:/^Connect apps/}).click(); };
+ await opened(fromSidebar);
+ await sheet.locator('#apps-close').click();
+ await closedTo('.sidebar #btn-apps');
+ await opened(fromSidebar);
+ await page.keyboard.press('Escape');
+ await closedTo('.sidebar #btn-apps');
+ // The backdrop is the window the sheet leaves uncovered, at the inline start.
+ await opened(fromSidebar);
+ await page.mouse.click(20,450);
+ await closedTo('.sidebar #btn-apps');
+ await opened(fromMenu);
+ await expect(page.getByRole('menu')).toHaveCount(0);
+ await page.keyboard.press('Escape');
+ await closedTo('.sidebar #btn-me');
+ await opened(fromMenu);
+ await sheet.locator('#apps-close').click();
+ await closedTo('.sidebar #btn-me');
+ await opened(fromMenu);
+ await page.mouse.click(20,450);
+ await closedTo('.sidebar #btn-me');
+ await expect(page).toHaveURL(/\/c\/rs-learning\/home$/);
 });
 
 test('isolation: another member and another company get not found, and a company Owner cannot read or write in another person\'s conversation',async({page,browser})=>{
