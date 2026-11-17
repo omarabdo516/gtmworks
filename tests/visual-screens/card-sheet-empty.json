@@ -1,7 +1,0 @@
-{
-  "about": "Omar opens an idea under Ads with no chat yet (#145): the sheet opens on Chat with \"No chat on this card yet\", Ads's face and the line to write to it, over the composer.",
-  "path": "/c/rs-learning/work/board?card=692002",
-  "state": "card-chat-empty",
-  "dark": true,
-  "ready": ".sheet[open] .empty-chat"
-}

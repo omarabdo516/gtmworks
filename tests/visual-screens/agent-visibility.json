@@ -1,7 +1,0 @@
-{
-  "about": "Which Agents each Member sees (#15): Company settings over Lead, Meta Ads and SEO, with Meta Ads shown to the Manager and to the first Contributor, and SEO to the Manager.",
-  "path": "/c/rs-learning/settings",
-  "state": "visibility",
-  "dark": true,
-  "ready": ".ta-table .switch"
-}

@@ -1,7 +1,0 @@
-{
-  "about": "Omar opens the Card his chat with Ads put In progress (#145): the sheet opens on Chat with that chat's messages, its composer and \"Open in Chats\" in the head.",
-  "path": "/c/rs-learning/work/board?card=692001",
-  "state": "card-on-board",
-  "dark": true,
-  "ready": ".sheet[open] .turns"
-}

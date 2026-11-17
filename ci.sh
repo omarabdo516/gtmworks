@@ -56,14 +56,17 @@ start_lane() {
   mkdir -p playwright-report
   docker pull --quiet "$image" > playwright-report/renderer.log 2>&1 &
   pull=$!
+  load_images
   if [[ "${CI:-}" == "true" ]]; then
     npm ci
   fi
+  images_loaded
   start_lanes
   wait_lanes
   wait "$pull" || { cat playwright-report/renderer.log >&2; echo 'the renderer image did not pull' >&2; exit 1; }
   docker rm --force "$renderer" > /dev/null 2>&1 || true
-  trap 'docker rm --force "$renderer" > /dev/null 2>&1 || true' EXIT
+  # One exit handler for both: images_loaded's report of what was pulled, and the renderer taken away.
+  trap 'docker rm --force "$renderer" > /dev/null 2>&1 || true; bash scripts/supabase-images.sh pulled "$images_before" || true; rm -f "$images_before"' EXIT
   # -i: the server stops when its standard input closes. --unsafe: it takes the launch flags the lane's config sends.
   docker run --detach --interactive --name "$renderer" --init --ipc=host -p "127.0.0.1:$renderer_port:$renderer_port" \
     -v "$PWD:/work:ro" -w /work "$image" \
@@ -85,7 +88,6 @@ case "${1:-check}" in
   bash ci.sh fast
   bash ci.sh database
   bash ci.sh visual
-  bash ci.sh lane
   bash ci.sh integration
   ;;
  fast | static | components)
@@ -142,7 +144,7 @@ case "${1:-check}" in
   PLAYWRIGHT_JSON_OUTPUT_FILE="$dir/proxy.json" npm run test:e2e:proxy
   bash scripts/local-db.sh
   wait "$build_pid" || { cat playwright-report/build.log >&2; echo 'the browser suite build failed' >&2; exit 1; }
-  # The compared screens and the measured budgets run on their own (`ci.sh visual`), on a GitHub-hosted runner.
+  # The measured budgets run on their own (`ci.sh visual`), on a GitHub-hosted runner.
   GTMWORKS_WEB_PREBUILT=true GTMWORKS_TEST_LANES=$lanes GTMWORKS_HOSTED_ELSEWHERE=true PLAYWRIGHT_JSON_OUTPUT_FILE="$dir/e2e.json" npm run test:e2e
   ;;
  images)
@@ -163,35 +165,21 @@ case "${1:-check}" in
   bash scripts/supabase-images.sh save
   ;;
  visual)
-  # The compared screens alone, on lane 0 as the seed builds it: no journeys, no proxy suite, no image (#213). Then the
-  # navigation time budgets, which need a machine of their own (#224).
-  load_images
+  # The visual lane's key screens on the pinned renderer, and its guard tests (#257). Then the navigation time budgets,
+  # which need a machine of their own (#224).
+  start_lane
+  dir=$(ledger_dir visual)
+  status=0
+  PLAYWRIGHT_JSON_OUTPUT_FILE="$dir/lane.json" lane_test || status=$?
   if [[ "${CI:-}" == "true" ]]; then
-    npm ci
     install_chromium
   fi
-  images_loaded
-  bash scripts/local-db.sh
-  dir=$(ledger_dir visual)
-  GTMWORKS_TEST_LANES=1 PLAYWRIGHT_JSON_OUTPUT_FILE="$dir/screens.json" npm run test:visual
-  GTMWORKS_TEST_LANES=1 PLAYWRIGHT_JSON_OUTPUT_FILE="$dir/measured.json" npx playwright test --project=measured --no-deps
+  # Its own output folder: Playwright empties the one it writes to, and test-results/lane/ holds the lane's differences.
+  # The budgets serve the build the lane's web server made; with none (the lane stopped before it), they build their own.
+  GTMWORKS_WEB_PREBUILT=$([[ -f .next/BUILD_ID ]] && echo true || echo false) GTMWORKS_TEST_LANES=1 PLAYWRIGHT_JSON_OUTPUT_FILE="$dir/measured.json" npx playwright test --project=measured --no-deps --output=test-results/measured || status=$?
+  exit "$status"
   ;;
  visual-update)
-  # Rewrites only the approved screen images that changed. Run it where CI runs: the images are made for that system.
-  if [[ "${CI:-}" == "true" ]]; then
-    npm ci
-    install_chromium
-  fi
-  bash scripts/local-db.sh
-  npm run test:visual:update
-  ;;
- lane)
-  # The lane's screens against their approved images, and its guard tests.
-  start_lane
-  dir=$(ledger_dir lane)
-  PLAYWRIGHT_JSON_OUTPUT_FILE="$dir/lane.json" lane_test
-  ;;
- lane-update)
   # Rewrites only the lane's images that changed; the pinned renderer draws them the same on every machine.
   start_lane
   lane_test --update-snapshots=changed
@@ -202,10 +190,18 @@ case "${1:-check}" in
   [[ "${CI:-}" == "true" ]] || { echo 'lane-proof rewrites the approved lane images; it runs in CI only' >&2; exit 2; }
   start_lane
   mkdir -p test-results/lane-proof
-  for run in 1 2 3; do
-    lane_test --update-snapshots=all
-    find tests/visual-lane -name '*.png' | sort | xargs -r sha256sum > "test-results/lane-proof/run-$run.sha256"
-  done
+  # Each run's images are kept beside its hashes, so a difference can be looked at. The first run builds the app and the
+  # next two serve that build; the second declares the screens last to first, so
+  # the same bytes also prove that no screen depends on the ones drawn before it.
+  lane_test --update-snapshots=all
+  find tests/visual-lane -name '*.png' | sort | xargs -r sha256sum > test-results/lane-proof/run-1.sha256
+  cp -r tests/visual-lane/images test-results/lane-proof/run-1-images
+  GTMWORKS_WEB_PREBUILT=true GTMWORKS_LANE_REVERSE=true lane_test --update-snapshots=all
+  find tests/visual-lane -name '*.png' | sort | xargs -r sha256sum > test-results/lane-proof/run-2.sha256
+  cp -r tests/visual-lane/images test-results/lane-proof/run-2-images
+  GTMWORKS_WEB_PREBUILT=true lane_test --update-snapshots=all
+  find tests/visual-lane -name '*.png' | sort | xargs -r sha256sum > test-results/lane-proof/run-3.sha256
+  cp -r tests/visual-lane/images test-results/lane-proof/run-3-images
   ;;
- *) echo 'usage: ./ci.sh check | fast | static | components | database | images | integration | visual | visual-update | lane | lane-update | lane-proof' >&2; exit 2;;
+ *) echo 'usage: ./ci.sh check | fast | static | components | database | images | integration | visual | visual-update | lane-proof' >&2; exit 2;;
 esac

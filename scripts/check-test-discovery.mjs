@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 
 // These are imported browser helpers, not standalone tests.
-const helpers = new Set(['tests/sign-in.ts', 'tests/navigation-measure.ts', 'tests/visual-screens.mjs', 'tests/fake-hermes.mjs', 'tests/fake-engine.mjs', 'tests/sql-statements.mjs', 'tests/pgtap.mjs', 'tests/verify-db-session-canary.sql', 'tests/choose-language.ts', 'tests/tap-overlaps.ts', 'tests/lane.mjs', 'tests/fresh-seed.ts', 'tests/slow-reads.ts', 'tests/motion-table.mjs', 'tests/motion-css.mjs', 'tests/components/work-page.tsx', 'tests/visual-lane-guards.ts', 'tests/visual-lane.mjs', 'tests/offline.mjs', 'tests/offline-browser.ts', 'tests/offline-teardown.ts', 'tests/components/offline-setup.ts', 'tests/clock.mjs']);
+const helpers = new Set(['tests/sign-in.ts', 'tests/navigation-measure.ts', 'tests/fake-hermes.mjs', 'tests/fake-engine.mjs', 'tests/sql-statements.mjs', 'tests/pgtap.mjs', 'tests/verify-db-session-canary.sql', 'tests/choose-language.ts', 'tests/tap-overlaps.ts', 'tests/lane.mjs', 'tests/fresh-seed.ts', 'tests/slow-reads.ts', 'tests/motion-table.mjs', 'tests/motion-css.mjs', 'tests/components/work-page.tsx', 'tests/visual-lane-guards.ts', 'tests/visual-lane.mjs', 'tests/offline.mjs', 'tests/offline-browser.ts', 'tests/offline-teardown.ts', 'tests/components/offline-setup.ts', 'tests/clock.mjs']);
 const generated = new Set(['.git', 'node_modules', '.next', 'test-results', 'playwright-report', '.temp']);
 function files(directory = '.') {
  return readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
@@ -49,10 +49,9 @@ for (const config of readdirSync('.').filter(name => /^playwright(\.[a-z]+)?\.co
  browserFiles(browser.suites);
 }
 
-// Playwright's approved images (`<spec>-snapshots/`), the compared screens (`tests/visual-screens/`), the failed job
-// logs `ci-classify.test.mjs` reads (`tests/ci-logs/`) and the visual lane's screens, images and renderer
-// (`tests/visual-lane/`) are data for a test, not tests.
-const specData = path => /(^|\/)[^/]+-snapshots\//.test(path) || path.startsWith('tests/visual-screens/') || (/^tests\/(ci-logs|visual-lane)\//.test(path) && !/\.(test|spec)\.[^/]+$/.test(path));
+// Playwright's approved images (`<spec>-snapshots/`), the failed job logs `ci-classify.test.mjs` reads (`tests/ci-logs/`)
+// and the visual lane's screens, images and renderer (`tests/visual-lane/`) are data for a test, not tests.
+const specData = path => /(^|\/)[^/]+-snapshots\//.test(path) || (/^tests\/(ci-logs|visual-lane)\//.test(path) && !/\.(test|spec)\.[^/]+$/.test(path));
 const orphans = files().filter(path =>
  !specData(path) &&
  (/(^|\/)(tests?|__tests__)\//.test(path) || /\.(test|spec)\.[^/]+$/.test(path) || path.endsWith('.verify.sql')) &&

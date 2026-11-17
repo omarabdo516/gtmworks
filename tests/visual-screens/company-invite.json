@@ -1,8 +1,0 @@
-{
-  "about": "Inviting a Member from Company settings (#185): the Team table with Nour's open invitation as a row marked Invite sent, Meta Ads switched on for it, and the invitation form opened in place.",
-  "path": "/c/rs-learning/settings",
-  "state": "invite",
-  "act": "invite-open",
-  "dark": true,
-  "ready": ".ta-pending"
-}
