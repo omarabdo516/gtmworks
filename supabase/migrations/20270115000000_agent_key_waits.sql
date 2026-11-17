@@ -1,17 +1,28 @@
--- #299: once a Company holds a provider key, an Agent Lead makes later never runs on Lead's profile. The Engine makes
--- its own profile with no key and no model (a clone would copy the shared space's Skills, #124), so lead_create_agent
--- attaches the Agent there and holds it (agent_key_waits): every Run entry refuses it as agentLevelPending, and the
--- Owner sees it in "Waiting on you" until a key set gives its profile key and model (end_agent_key_waits). A removed
--- Agent's profile stays in the Engine, so its name is kept (agent_profile_leftovers) and company_key_profiles lists it
--- for the next key removal.
+-- #299: once a Company holds a provider key, an Agent Lead makes later never runs on Lead's profile. lead_create_agent
+-- attaches it to its own profile, `ag-<agent>`: the one the Engine made for the call with no key and no model (a clone
+-- would copy the shared space's Skills, #124), or, when the Engine could not provide one or none was asked for («Make
+-- it»), an owner record with no tools, which the worker makes as it makes a lost one. Unless the Engine made it able to
+-- answer, the Agent is held (agent_key_waits): every Run entry refuses it as agentLevelPending, and the Owner sees it in
+-- "Waiting on you" until a key set gives its profile key and model. A removed Agent's profile stays in the Engine, so
+-- its name is kept (agent_profile_leftovers) and company_key_profiles lists it for the next key removal, until a removal
+-- leaves it holding no key.
 --
--- Nothing existing is rewritten: both tables start empty, the trigger writes only on a later removal, and with no wait
--- and no leftover every replaced function answers as before. The previous app version runs against this: its create
--- calls name at most ten arguments, which reach the new function with own_answers true, the path they took before, except
--- that while the Company holds a key a call with no own profile makes no Agent (engineNotReady) instead of one on Lead's
--- profile, and the previous app removes the profile it asked for, as for any call that made none; its key routes read only the 'company' and 'agent' kinds and never call end_agent_key_waits. A wait exists only once this
--- version made one, so after a rollback the previous app lists it as an item it cannot open, and the Agent stays held
--- until this version's next set.
+-- Whether the Company holds a key is company_key_holds, written only by the server through the service role and under
+-- the lock lead_create_agent takes: begin_provider_key_change before the Engine is asked anything, so an Agent made while
+-- a change is under way waits, and finish_provider_key_change with the Engine's answer. finish is the only end of a wait,
+-- so no Owner ends one from the browser.
+--
+-- Nothing existing is rewritten: the new tables start empty but company_key_holds, which is filled once from each
+-- Company's last set or removal of each provider's key in its log; the trigger writes only on a later removal; and with
+-- no key held, no wait and no leftover every replaced function answers as before. The previous app version runs against
+-- this. Its create calls name at most ten arguments and reach the new function with own_answers true, the path they took
+-- before, but while the Company holds a key a call with no own profile (its Engine failed or refused, or the profile had
+-- no model, which that version does not pass on) makes the Agent on an owner record with no tools, waiting, instead of
+-- on Lead's profile; its worker makes that profile as it makes a lost one, and its «Make it» does the same. Its key
+-- routes never begin or finish a change, so a set or removal it makes leaves company_key_holds as it was, ends no wait
+-- and forgets no leftover, and they read only the 'company' and 'agent' kinds. Its "Waiting on you" lists a wait as an
+-- item it cannot open. So while it runs, during an update or after a rollback, such an Agent waits until this version's
+-- next set.
 
 -- An Agent attached to its own profile after the Company's key was set, until a set gives that profile key and model.
 create table public.agent_key_waits (
@@ -27,7 +38,8 @@ revoke all on public.agent_key_waits from anon,authenticated,service_role;
 create policy agent_key_waits_read on public.agent_key_waits for select to authenticated using (public.is_company_owner(company_id));
 grant select on public.agent_key_waits to authenticated;
 
--- A removed Agent's Engine profile, by name only: no key, no profile content. Never deleted here.
+-- A removed Agent's Engine profile, by name only: no key, no profile content. Forgotten once a removal leaves it holding
+-- no key (forget_agent_profile_leftovers).
 create table public.agent_profile_leftovers (
  profile text primary key check (profile ~ '^ag-[0-9a-f]{32}$'),
  company_id uuid not null references public.companies(id) on delete cascade,
@@ -38,24 +50,75 @@ create table public.agent_profile_leftovers (
 alter table public.agent_profile_leftovers enable row level security;
 revoke all on public.agent_profile_leftovers from anon,authenticated,service_role;
 
--- The Engine says whether a profile holds a key only when asked over the network, so the create path reads the
--- Company's log instead: some provider's last set or removal is a set.
+-- Whether the Company holds a provider's key, as the server last recorded the Engine's answer, and `changing` from the
+-- start of a set or removal until that answer is recorded. The Engine says whether a profile holds a key only when asked
+-- over the network, so the create path reads this instead. Provider names only, never a key.
+create table public.company_key_holds (
+ company_id uuid not null references public.companies(id) on delete cascade,
+ provider text not null check (provider ~ '^[a-z0-9][a-z0-9._-]{0,63}$'),
+ held boolean not null,
+ changing boolean not null default false,
+ primary key (company_id,provider)
+);
+alter table public.company_key_holds enable row level security;
+revoke all on public.company_key_holds from anon,authenticated,service_role;
+-- Before this version, only the log knew: a provider's last set or removal there is whether the Company holds its key.
+insert into public.company_key_holds(company_id,provider,held)
+ select distinct on (a.company_id,a.provider) a.company_id,a.provider,a.action='provider_key_set' from public.company_audit a
+  where a.action in ('provider_key_set','provider_key_removed') order by a.company_id,a.provider,a.created_at desc,a.id desc;
+
+-- Some provider's key is held, or a change of one is under way: an Agent made now waits for the Owner's next set.
 create function public.company_holds_provider_key(c uuid) returns boolean language sql stable security definer set search_path='' as $$
- select coalesce(bool_or(l.action='provider_key_set'),false) from (
-  select distinct on (a.provider) a.action from public.company_audit a
-   where a.company_id=c and a.action in ('provider_key_set','provider_key_removed') order by a.provider,a.created_at desc,a.id desc) l;
+ select exists(select 1 from public.company_key_holds h where h.company_id=c and (h.held or h.changing));
 $$;
 revoke all on function public.company_holds_provider_key(uuid) from public,anon,authenticated,service_role;
 
+-- The server is about to set or remove the provider's key (lib/provider-keys.mjs). Under lead_create_agent's lock, so a
+-- create that found no key held has made its Agent, whose profile is among those the change then reads and writes, and
+-- every later one waits.
+create function public.begin_provider_key_change(c uuid, key_provider text) returns void
+language plpgsql security definer set search_path='' as $$
+begin
+ if coalesce(key_provider,'') !~ '^[a-z0-9][a-z0-9._-]{0,63}$' then raise exception 'keyInvalid' using errcode='22023'; end if;
+ perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
+ insert into public.company_key_holds(company_id,provider,held,changing) values(c,key_provider,false,true)
+  on conflict (company_id,provider) do update set changing=true;
+end $$;
+revoke all on function public.begin_provider_key_change(uuid,text) from public,anon,authenticated;
+grant execute on function public.begin_provider_key_change(uuid,text) to service_role;
+
+-- How the Engine answered the change: now_held true for a set it took, false for a removal, null for any other answer
+-- (the key is as it was). While the key is held, the waits of the Agents whose profile the set gave key and model
+-- (reached) end, and the answer is the Company's Agent profiles still waiting, which an Agent made during the set waits
+-- on: the server gives those the key and finishes again. A change the Engine did not answer is not finished, so it
+-- stays changing until the next one.
+create function public.finish_provider_key_change(c uuid, key_provider text, now_held boolean, reached text[]) returns text[]
+language plpgsql security definer set search_path='' as $$
+declare kept boolean;
+begin
+ perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
+ update public.company_key_holds h set held=coalesce(now_held,h.held),changing=false where h.company_id=c and h.provider=key_provider
+  returning h.held into kept;
+ if not coalesce(kept,false) then return '{}'; end if;
+ delete from public.agent_key_waits w using public.agent_profiles p
+  where w.company_id=c and p.agent_id=w.agent_id and p.company_id=c and p.profile=any(coalesce(reached,'{}'));
+ return array(select p.profile from public.agent_key_waits w join public.agent_profiles p on p.agent_id=w.agent_id and p.company_id=w.company_id
+  where w.company_id=c order by w.id);
+end $$;
+revoke all on function public.finish_provider_key_change(uuid,text,boolean,text[]) from public,anon,authenticated;
+grant execute on function public.finish_provider_key_change(uuid,text,boolean,text[]) to service_role;
+
 -- 20261226000000's, replaced with one more argument: own_answers false when the Engine made the profile with the
--- level's tools but it has no model to answer with. A Company that holds a key gets the Agent there, held until the
--- Owner's next set; one that holds none gets it on Lead's profile, as before. A call with no own profile at all makes no
--- Agent while the Company holds a key (engineNotReady), so no Agent made after the key ever runs on Lead's profile.
+-- level's tools but it has no model to answer with. While the Company holds a key, or a change of one is under way, the
+-- Agent always gets its own profile, held until the Owner's next set unless it can answer: the one the Engine made, or
+-- an owner record with no tools when the call names none («Make it», or an Engine that failed or refused), which the
+-- worker makes as it makes a lost one. With no key held, everything is as before: a profile that cannot answer is no
+-- place for the Agent yet, so it goes on Lead's.
 drop function public.lead_create_agent(uuid,text,text,text,text,text[],text,text,integer,integer);
 create function public.lead_create_agent(conversation uuid, run text, call text, agent_name text, job text, apps text[], template text default null, instructions text default null,
  own_level integer default null, own_policy integer default null, own_answers boolean default true) returns jsonb
 language plpgsql security definer set search_path='' as $$
-declare talk public.conversations; linked public.hermes_connections; connection uuid; made uuid; waits boolean:=false;
+declare talk public.conversations; linked public.hermes_connections; connection uuid; made uuid; held boolean; own boolean;
  agent uuid:=public.lead_agent_id(conversation,run,call);
 begin
  perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
@@ -73,30 +136,27 @@ begin
   or not (public.may_use_lead_tools(talk.company_id,talk.agent_id,talk.person_id)
    or exists(select 1 from public.lead_agent_requests r where r.conversation_id=conversation and r.run_id=run and r.call_id=call and r.state='made'
     and public.may_use_lead_tools(talk.company_id,talk.agent_id,r.answered_by))) then return jsonb_build_object('state','refused'); end if;
- if not public.agent_fields_valid(agent_name,job,apps,template,instructions) or (own_level is null)<>(own_policy is null) or own_level not between 1 and 3 then
+ if not public.agent_fields_valid(agent_name,job,apps,template,instructions) or (own_level is null)<>(own_policy is null) or own_level not between 1 and 3
+  or own_answers is null then
   return jsonb_build_object('state','invalid'); end if;
- if own_level is not null and not own_answers then
-  if public.company_holds_provider_key(talk.company_id) then waits:=true; else own_level:=null; own_policy:=null; end if;
- elsif own_level is null and public.company_holds_provider_key(talk.company_id) then
-  -- No own profile was made (the Engine failed, refused it or left a tool on): with a key held, Lead's profile is no
-  -- place for it, so nothing is made and the caller removes the profile it asked for.
-  return jsonb_build_object('state','engineNotReady');
- end if;
+ held:=public.company_holds_provider_key(talk.company_id);
+ if not held and not own_answers then own_level:=null; own_policy:=null; end if;
+ own:=own_level is not null or held;
  select h.* into linked from public.hermes_agents a join public.hermes_connections h on h.id=a.connection_id where a.id=talk.agent_id;
  -- The owner record comes first: the Connection naming the profile and the Agent on it are checked against it. Its tool
  -- state is what was read back, not today's level: a change meanwhile is work for the worker and holds its Runs.
- if own_level is not null then
+ if own then
   insert into public.agent_profiles(agent_id,company_id,tools_level,tools_policy) values(agent,talk.company_id,own_level,own_policy);
  end if;
  insert into public.hermes_connections(company_id,owner_id,address,profile,key_encrypted,state,version,features)
   values(talk.company_id,talk.person_id,linked.address,
-   case when own_level is not null then public.agent_engine_profile(agent) when linked.profile ~ '^ag-[0-9a-f]{32}$' then public.company_engine_profile(talk.company_id) else linked.profile end,
+   case when own then public.agent_engine_profile(agent) when linked.profile ~ '^ag-[0-9a-f]{32}$' then public.company_engine_profile(talk.company_id) else linked.profile end,
    linked.key_encrypted,linked.state,linked.version,linked.features) returning id into connection;
  insert into public.hermes_agents(id,company_id,connection_id,name,speciality,requested_by,apps,template,instructions)
   values(agent,talk.company_id,connection,trim(agent_name),trim(job),talk.person_id,array(select trim(app) from unnest(apps) app),template,
    replace(instructions,'{company}',(select c.name from public.companies c where c.id=talk.company_id))) returning id into made;
  insert into public.lead_made_agents(conversation_id,run_id,call_id,company_id,agent_id) values(conversation,run,call,talk.company_id,made);
- if waits then insert into public.agent_key_waits(agent_id,company_id) values(made,talk.company_id); end if;
+ if held and (own_level is null or not own_answers) then insert into public.agent_key_waits(agent_id,company_id) values(made,talk.company_id); end if;
  insert into public.hermes_agent_audit(company_id,actor_id,actor_name,agent_id,action,details)
   values(talk.company_id,talk.person_id,(select name from public.people where id=talk.person_id),made,'REQUEST_HERMES_AGENT',
    jsonb_strip_nulls(jsonb_build_object('connection_id',connection,'agent_name',trim(agent_name),'job',trim(job),'conversation_id',conversation,'template',template)));
@@ -152,17 +212,6 @@ language sql stable set search_path='' as $$
  order by created_at desc, id desc;
 $$;
 
--- The Owner's set gave these profiles key and model (lib/provider-keys.mjs): their Agents may start Runs there.
-create function public.end_agent_key_waits(c uuid, reached text[]) returns void
-language plpgsql security definer set search_path='' as $$
-begin
- if not public.is_company_owner(c) then raise exception 'keyNotAllowed' using errcode='42501'; end if;
- delete from public.agent_key_waits w using public.agent_profiles p
-  where w.company_id=c and p.agent_id=w.agent_id and p.company_id=c and p.profile=any(reached);
-end $$;
-revoke all on function public.end_agent_key_waits(uuid,text[]) from public,anon,service_role;
-grant execute on function public.end_agent_key_waits(uuid,text[]) to authenticated;
-
 -- Before the Agent goes, and agent_profiles with it, its profile's name is kept, whoever removes it.
 create function public.keep_agent_profile_leftover() returns trigger language plpgsql security definer set search_path='' as $$
 begin
@@ -193,3 +242,12 @@ language sql stable security definer set search_path='' as $$
   where p.company_id=c and public.is_bundled_connection(h.id))
  order by x.rank,x.profile;
 $$;
+
+-- A removal left these removed Agents' profiles holding no key, or the Engine serves them no more (lib/provider-keys.mjs):
+-- the next removal need not reach them. The Engine profile itself is kept.
+create function public.forget_agent_profile_leftovers(c uuid, profiles text[]) returns void
+language sql security definer set search_path='' as $$
+ delete from public.agent_profile_leftovers l where l.company_id=c and l.profile=any(profiles);
+$$;
+revoke all on function public.forget_agent_profile_leftovers(uuid,text[]) from public,anon,authenticated;
+grant execute on function public.forget_agent_profile_leftovers(uuid,text[]) to service_role;

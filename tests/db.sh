@@ -33,3 +33,4 @@ step node tests/remove-agency-migration.mjs
 step node tests/company-log-migration.mjs
 step node tests/member-agent-visibility-migration.mjs
 step node tests/agent-profile-moves-migration.mjs
+step node tests/agent-key-waits-migration.mjs
