@@ -937,6 +937,8 @@
   "agentTryStarting": "Try starting with this sentence",
   "logActAppConnected": "connected",
   "logActAppDisconnected": "disconnected",
+  "logActAppConnectedFor": "let {0} use",
+  "logActAppDisconnectedFor": "stopped {0} using",
   "logActProviderKeySet": "set the API key for",
   "logActProviderKeyRemoved": "removed the API key for",
   "logAppOn": "Connected",
