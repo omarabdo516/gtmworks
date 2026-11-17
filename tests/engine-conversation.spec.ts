@@ -475,9 +475,11 @@ test('integration: an Agent hands a step over once under its reply, shows none w
   expect([first.state,first.first]).toEqual(['done',true]);
   const [kept]=cards();
   expect([kept.state,kept.done_by,typeof kept.done_at]).toEqual(['done',omar,'string']);
-  // A second press, as from a second tab, changes nothing.
+  // A second press, as from a second tab, changes nothing: one record, and the one turn the first press queued to tell
+  // the Agent (#140).
   expect((await person.rpc('mark_hand_done',{c:company,conversation,card})).data).toEqual({...first,first:false});
   expect(cards()).toEqual([kept]);
+  expect(JSON.parse(query(`select count(*)::int as n from public.conversation_queued_turns where conversation_id='${conversation}' and hand_card=${card}`))[0].n).toBe(1);
   const [read]=await shown();
   expect(read).toMatchObject({id:card,state:'done',note:hand.note});
   expect(new Date((read as {at:string}).at).getTime()).toBe(new Date(first.at).getTime());
@@ -488,7 +490,135 @@ test('integration: an Agent hands a step over once under its reply, shows none w
   const line=describeEntry(logged[0]);
   expect([i18n('en').t(line.act[0]),line.obj,line.from,line.to].map(part=>typeof part==='object'&&part&&'key' in part?i18n('en').t(part.key):part)).toEqual(['did it',hand.title,'Handed to you','Done it']);
   expect(work()).toEqual(before);
- } finally { detach(); }
+ } finally {
+  // The turn Done it queued (#140) is reserved on this Connection, which never answers (127.0.0.1:9), and an active
+  // reservation keeps its Connection: the turn goes with the test's Agent, first, so the worker cannot claim and reserve
+  // it again before its reservation goes.
+  query(`delete from public.conversation_queued_turns where agent_id='${agent}'`);
+  query(`delete from public.conversation_run_reservations where conversation_id in (select id from public.conversations where agent_id='${agent}')`);
+  detach();
+ }
+});
+
+// #140: the whole app around a handed step, on a fake Hermes the server and the worker reach as well (the fake engine
+// lives in this test alone, so a press through the page could not start its Run there). The step is shown with the
+// first Run's reply as agent_show_card shows a hand_over call (#139 proves the call itself).
+async function attachHermes(fake:Awaited<ReturnType<typeof fakeHermes>>) {
+ const [connection,agent]=[randomUUID(),randomUUID()];
+ query(`insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values ('${connection}','${company}','${omar}','${fake.address}','hand-${connection.slice(0,8)}','${encryptSecret(fake.settings.key,encryptionKey)}','connected','0.23.0','{run_submission}')`);
+ query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('${agent}','${company}','${connection}','Faye','Marketing')`);
+ query(`insert into public.member_agent_access(company_id,person_id,agent_id) select company_id,person_id,'${agent}' from public.members where company_id='${company}' and removed_at is null and role<>'owner'`);
+ return {agent,detach:()=>{ query(`delete from public.hermes_agents where id='${agent}'`); query(`delete from public.hermes_connections where id='${connection}'`); }};
+}
+const handTitle='انشر المقال';
+async function handedStep(fake:Awaited<ReturnType<typeof fakeHermes>>) {
+ const {service,person}=await clients(); const {agent,detach}=await attachHermes(fake);
+ const conversation=randomUUID();
+ // A message, sent as the route sends it, and its reply closed by whoever reads first (this test, the worker or the page).
+ const send=async(message:string,replies=true)=>{
+  const count=agentRows(conversation).length;
+  expect(await sendMessage(person,service,{company,conversation,sendKey:randomUUID(),agent,message,encryptionKey})).toEqual({conversation});
+  if(replies) await expect.poll(async()=>{ await closeOpenRuns(service,{encryptionKey,conversation}); return agentRows(conversation).length; }).toBe(count+1);
+ };
+ await send('Get the article out');
+ const [{run_id:run}]=JSON.parse(query(`select run_id from public.conversation_messages where conversation_id='${conversation}' and author='person' order by id limit 1`));
+ const show=()=>{
+  query(`select public.agent_show_card('${conversation}','${run}','call-0','hand','${handTitle}','${JSON.stringify({app:'WordPress',line:'The draft is ready; you press Publish.',rows:[]})}'::jsonb)`);
+  return Number(JSON.parse(query(`select id from public.reply_cards where conversation_id='${conversation}' and kind='hand'`))[0].id);
+ };
+ // What the Agent is told: who pressed, the step, its app and the time the database kept, in UTC.
+ const told=(card:number)=>{ const [{done_at}]=JSON.parse(query(`select done_at from public.reply_cards where id=${card}`));
+  return `عمر did the step you handed over, "${handTitle}" in WordPress, and pressed "Done it" at ${new Date(done_at).toISOString().slice(0,16).replace('T',' ')} UTC. Pick up from there.`; };
+ return {conversation,send,show,told,detach};
+}
+const speaks=(value:'en'|'ar')=>query(`update public.people set language='${value}' where id='${omar}'`);
+
+test('a handed step waits in Waiting on you until Done it, which starts one Run telling the Agent who did it and when; its reply comes under the card and the press adds no message',async({page})=>{
+ test.setTimeout(180000);
+ const fake=await fakeHermes(); const {conversation,send,show,told,detach}=await handedStep(fake);
+ try {
+  speaks('en');
+  await page.setViewportSize({width:1440,height:900});
+  await signIn(page,'omar@example.com','/c/rs-learning/approvals');
+  const count=page.locator('.sidebar .sb-count[href$="/approvals"] .sb-count__n');
+  const before=Number(await count.textContent());
+  const card=show();
+  await page.reload();
+  // One item of its own kind, with its Agent, the tag and the step's title, and the count rises by one.
+  const item=page.locator('.col[data-column="waiting"] a.mcard[data-kind="hand"]');
+  await expect(item).toHaveCount(1);
+  await expect(count).toHaveText(String(before+1));
+  await expect(item.locator('.mcard__who')).toHaveText('Faye');
+  await expect(item.locator('.wtag--hand')).toHaveText('Handed to you');
+  await expect(item.locator('.mcard__q')).toHaveText(handTitle);
+  await expect(item).toHaveAttribute('href',`/c/rs-learning/conversations/${conversation}#hand-${card}`);
+  // It opens the Conversation with the card in view, in English and in Arabic.
+  const handCard=page.locator(`#hand-${card}`);
+  await item.click();
+  await expect(handCard).toBeInViewport();
+  await expect(handCard).toBeFocused();
+  // Landed, the address is the Conversation's again, so a reload opens on its newest message.
+  await expect(page).toHaveURL(new RegExp(`/conversations/${conversation}$`));
+  speaks('ar');
+  await page.goto('/c/rs-learning/approvals');
+  await expect(item.locator('.wtag--hand')).toHaveText('اتسلّمتلك');
+  await expect(item.locator('.mcard__q')).toHaveText(handTitle);
+  await expect(count).toHaveText(String(before+1));
+  await item.click();
+  await expect(handCard).toBeInViewport();
+  speaks('en');
+
+  // A message written in the Conversation leaves the item where it is.
+  await send('I will publish it after lunch');
+  await page.goto('/c/rs-learning/approvals');
+  await expect(item).toHaveCount(1);
+
+  // Done it: exactly one new Run, told who did the step and when; the item leaves.
+  await item.click();
+  const runs=fake.settings.runs.length;
+  await handCard.getByRole('button',{name:'Done it'}).click();
+  await expect.poll(()=>fake.settings.runs.length).toBe(runs+1);
+  expect(fake.settings.runs.at(-1)!.input).toBe(told(card));
+  // Its reply comes under the card, and no message of the person's is drawn for the press.
+  const reply=page.locator('.turns > li[data-author="agent"]').filter({hasText:'Reply to: عمر did the step'});
+  await expect(reply).toHaveCount(1);
+  expect(await reply.evaluate((node,id)=>!!(document.getElementById(id)!.compareDocumentPosition(node)&Node.DOCUMENT_POSITION_FOLLOWING),`hand-${card}`)).toBe(true);
+  await expect(page.locator('.turns > li[data-author="person"]').filter({hasText:'did the step you handed over'})).toHaveCount(0);
+  await page.reload();
+  await expect(reply).toHaveCount(1);
+  await expect(page.locator('.turns > li[data-author="person"]').filter({hasText:'did the step you handed over'})).toHaveCount(0);
+  expect(fake.settings.runs.filter(run=>run.input===told(card))).toHaveLength(1);
+  expect(fake.settings.runs).toHaveLength(runs+1);
+  await page.goto('/c/rs-learning/approvals');
+  await expect(item).toHaveCount(0);
+  await expect(count).toHaveText(String(before));
+ } finally { speaks('en'); detach(); await fake.close(); }
+});
+
+test('Done it pressed while the Agent is busy waits as its person\'s next turn and starts once that Run ends',async({page})=>{
+ test.setTimeout(180000);
+ const fake=await fakeHermes(); const {conversation,send,show,told,detach}=await handedStep(fake);
+ try {
+  const card=show();
+  fake.settings.pendingReads=1e9;
+  await send('And the social posts',false);
+  const runs=fake.settings.runs.length;
+  speaks('en');
+  await signIn(page,'omar@example.com',`/c/rs-learning/conversations/${conversation}#hand-${card}`);
+  const handCard=page.locator(`#hand-${card}`);
+  await Promise.all([page.waitForResponse(response=>response.request().method()==='POST'&&response.url().endsWith('/api/conversations')),handCard.getByRole('button',{name:'Done it'}).click()]);
+  await expect(handCard.locator('.card__outcome')).toBeVisible();
+  const turn=()=>JSON.parse(query(`select message,started_at from public.conversation_queued_turns where conversation_id='${conversation}' and hand_card=${card}`));
+  expect(turn()).toEqual([{message:told(card),started_at:null}]);
+  expect(fake.settings.runs).toHaveLength(runs);
+  // The open Run ends; then the turn starts, once.
+  fake.settings.pendingReads=0;
+  await expect.poll(()=>fake.settings.runs.length,{timeout:30000}).toBe(runs+1);
+  expect(fake.settings.runs.at(-1)!.input).toBe(told(card));
+  await expect(page.locator('.turns > li[data-author="agent"]').last()).toContainText('Reply to: عمر did the step');
+  expect(turn()[0].started_at).not.toBeNull();
+  expect(fake.settings.runs).toHaveLength(runs+1);
+ } finally { speaks('en'); detach(); await fake.close(); }
 });
 
 // #138: an Agent asks its person with the Engine's own clarify tool; the fake engine scripts the question (the reference's
@@ -602,7 +732,7 @@ test('integration: a Contributor allows one request once and refuses another fro
   await page.reload();
   await expect(outcome).toHaveText(allowed!);
   expect(new Date((await outcome.locator('time').getAttribute('datetime'))!).getTime()).toBe(new Date(cards()[0].decided_at).getTime());
-  await expect(page.locator('.turns > li').last()).toContainText('Reply to: Clean up the exports (once)');
+  await expect(page.locator('.turns > li[data-author="agent"]').last()).toContainText('Reply to: Clean up the exports (once)');
 
   // The next request is refused from its card.
   await send('Clean up the backups');

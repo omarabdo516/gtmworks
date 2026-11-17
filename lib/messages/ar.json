@@ -914,6 +914,7 @@
   "handDone": "عملتها",
   "handDoneAt": "عملتها · {0}.",
   "handFailed": "معرفناش نسجّلها. جرّب تاني.",
+  "handPickupFailed": "«عملتها» موصلتش للوكيل: محرك الوكلاء مرضيش يبدأها. قولّه في رسالة.",
   "logActHandDone": "عملها",
   "logHandOpen": "اتسلّمتلك",
   "logHandDone": "عملتها",

@@ -186,5 +186,7 @@ test('nothing the request says reaches the server\'s log when a step fails, and 
  for(const line of lines) for(const word of [secret,'delete the old exports','private-client-list']) assert.ok(!line.includes(word),`${line} names the request`);
  const route=readFileSync('app/api/conversations/route.ts','utf8');
  assert.equal(route.match(/console\./g),null,'the route writes no log line of its own');
- assert.deepEqual(route.match(/logActionFailure\([^)]*\)/g),["logActionFailure('conversation',new Error('Conversation request failed')"],'its one failure line is fixed text');
+ const failures=route.match(/logActionFailure\([^)]*\)/g)||[];
+ assert.ok(failures.includes("logActionFailure('conversation',new Error('Conversation request failed')"),'a failed request is logged as a fixed line');
+ for(const failure of failures) assert.match(failure,/^logActionFailure\('conversation',new Error\('[^'`$]*'\)$/,`${failure} logs only fixed text`);
 });

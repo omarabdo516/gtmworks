@@ -92,6 +92,25 @@ test('the worker asks again on a turn whose start was unknown, and never fails i
  assert.ok(refused.order.includes('service fail_conversation_turn'));
 });
 
+// #140: the turn "Done it" queued has no typed message, and is still the person's own: a start whose answer was lost is
+// asked again with the same key, the same input and the same pinned tools, as a retry.
+test('a handed step\'s turn whose first start is unknown is asked again with the same request, as a retry', async () => {
+ const message='Omar did the step you handed over, "Publish the article" in WordPress, and pressed "Done it" at 2026-11-17 07:05 UTC. Pick up from there.';
+ const turn={company:'co',agent:'a',person:'p',send_key:'h',message,connection,note:null};
+ const runNote={offersTools:true}; const runs=[];
+ const asked=(order,outcome)=>({engineFor:()=>({start:async run=>{ order.push(`start retry=${run.retry===true}`); runs.push(run); return outcome; }})});
+ const first=databases({claim:[{...turn,retry:false}],runNote});
+ await startQueuedTurns(first.service,{encryptionKey,...asked(first.order,startUnknown)});
+ assert.deepEqual(first.args.keep_unknown_start,{conversation:'c',message_key:'h'});
+ assert.ok(!first.order.includes('service fail_conversation_turn'));
+ const again=databases({claim:[{...turn,retry:true}],attempt:2,runNote});
+ assert.equal(await startQueuedTurns(again.service,{encryptionKey,...asked(again.order,'run_9')}),1);
+ assert.deepEqual(again.args.record_conversation_turn,{conversation:'c',message_key:'h',run:'run_9',started_on:connection});
+ assert.deepEqual(runs.map(run=>[run.idempotencyKey,run.input,run.retry]),[['c:h',message,false],['c:h',message,true]]);
+ assert.deepEqual(runs[1].tools,runs[0].tools,'the tools pinned at its first start');
+ assert.ok(runs[0].tools?.length);
+});
+
 test('a second attempt of the same key is a retry, and is never released or failed', async () => {
  // The server stopped after the first attempt reached Hermes; the person sends again with the same key.
  const resend=databases({attempt:2});

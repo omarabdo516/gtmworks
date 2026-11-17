@@ -22,7 +22,8 @@ export type AgentRequestView=RequestBase&({state:'waiting',owners:string[]}|{sta
 // version does not know (the database may be newer) is left out.
 // A question (#138) is the Engine's own: open until its person answers it, then answered with that answer (a claimed
 // answer still on its way to the Engine is drawn answered), or closed once the Engine no longer waits for it.
-// A hand card (#139) is open until its person marks the step done, then done at that time.
+// A hand card (#139) is open until its person marks the step done, then done at that time; `failed` when the turn that
+// told its Agent (#140) could not be started.
 // A permission request (#163) is the Engine's own: open until its person decides it, then decided with the choice and
 // when it was made (a choice still on its way to the Engine is drawn decided), or closed once the Engine no longer waits.
 type Permission={id:number,kind:'permission',title:string,description:string,command:string,choices:PermissionChoice[]};
@@ -31,7 +32,7 @@ type Question={id:number,kind:'question',title:string,question:string,choices:st
 export type ReplyCard={id:number,kind:'draft',title:string,line:string,rows:{label:string,value:string}[]}
  |{id:number,kind:'review',title:string,line:string,items:ReviewItem[],decision:string}
  |(Question&({state:'open'}|{state:'answered',answer:string}|{state:'closed'}))
- |(Hand&({state:'open'}|{state:'done',at:string}))
+ |(Hand&({state:'open'}|{state:'done',at:string,failed?:true}))
  |(Permission&({state:'open'}|{state:'decided',choice:PermissionChoice,at:string}|{state:'closed'}));
 type Hand={id:number,kind:'hand',title:string,line:string,app:string,rows:{label:string,value:string}[],url:string|null,note:string|null};
 export const replyCardColumns='id,run_id,kind,title,content,state,answered_at,done_at,decided_at,created_at';
@@ -72,8 +73,8 @@ export type RunSteps={list:RunStep[],seconds:number|null};
 export type RunStepsRow={run_id:string,steps:(RunStep&{call:string})[],seconds:number|null};
 export const runStepsColumns='run_id,steps,seconds';
 export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided'|'boarded'|'asked'|'answer',to?:string,failed?:boolean,cards?:LeadCard[],saved?:SavedRule[],decided?:Decision,steps?:RunSteps};
-type StoredMessage=ConversationMessage&{run_id:string};
-export const messageColumns='id,author,author_name,body,run_id,created_at';
+type StoredMessage=ConversationMessage&{run_id:string,hand_card?:number|null};
+export const messageColumns='id,author,author_name,body,run_id,hand_card,created_at';
 export const conversationColumns='id,agent_id,agent_name,hermes_agents(connection_id,is_default)';
 // A card of a run as the record places it. A question (#138) also carries the answer its person gave, drawn as their
 // own message though none is stored, and the main Agent's question carries the plain words it is drawn as (`words`)
@@ -92,7 +93,8 @@ export function questionParts(row:ReplyCardRow,card:ReplyCard,lead:boolean):Pick
 const isAsked=(row:PlacedCard)=>row.card.kind==='reply'&&(row.card.card.kind==='question'||row.card.card.kind==='permission');
 // A person's message whose run Hermes no longer knew is marked lost (#243), from the run's usage record. A run's
 // questions follow its person's message, each with its answer, before the run's reply (#138), as its requests do (#163). The reply carries its
-// Run's steps when the Engine reported any (#141).
+// Run's steps when the Engine reported any (#141). The message of a turn "Done it" started (#140, `handTurn`) was
+// never written by the person: it draws no bubble, and what its run showed stays.
 export const shown=(messages:StoredMessage[],usage:{run_id:string,outcome:string}[]=[],leadCards:PlacedCard[]=[],agentName='',saved:{run_id:string,rule:SavedRule}[]=[],runSteps:RunStepsRow[]=[]):ConversationMessage[]=>messages.flatMap(message=>{
  const plain={id:message.id,author:message.author,author_name:message.author_name,body:message.body,lost:message.author==='person'&&usage.some(run=>run.run_id===message.run_id&&run.outcome==='lost'),created_at:message.created_at};
  const replied=message.author==='agent'||messages.some(other=>other.author==='agent'&&other.run_id===message.run_id);
@@ -103,10 +105,11 @@ export const shown=(messages:StoredMessage[],usage:{run_id:string,outcome:string
   return [{id,author:'agent',author_name:agentName,body:row.words??'',created_at:row.at,kind:'asked',...(row.words===undefined?{cards:[row.card]}:{})},
    ...(row.answer?[{id,author:'person' as const,author_name:message.author_name,body:row.answer.body,created_at:row.answer.at,kind:'answer' as const,...(row.answer.delivered?{}:{failed:true})}]:[])];
  }):[];
+  const own=handTurn(message)?[]:[plain];
  const steps=message.author==='agent'?runSteps.find(row=>row.run_id===message.run_id):undefined;
  const reply={...plain,...(cards.length?{cards}:{}),...(steps?{steps:{list:steps.steps.map(({tool,preview,state})=>({tool,preview,state})),seconds:steps.seconds}}:{})};
  const turn:ConversationMessage[]=message.author==='agent'?[reply]
-  :replied||!cards.length?[plain,...asked]:[plain,...asked,{id:message.id,author:'agent',author_name:agentName,body:'',created_at:ofRun[0].at,kind:'made',cards}];
+  :replied||!cards.length?[...own,...asked]:[...own,...asked,{id:message.id,author:'agent',author_name:agentName,body:'',created_at:ofRun[0].at,kind:'made',cards}];
  const last=message.author==='agent'||!replied;
  return last&&rules.length?[...turn,{id:message.id,author:'agent',author_name:agentName,body:'',created_at:rules[0].said_at,kind:'saved',saved:rules}]:turn;
 });
@@ -138,15 +141,19 @@ export const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
 // Notes to a person and turns still waiting join the record: notes in the order they were written, waiting turns after
 // everything already sent (they start in that order). A started turn is an ordinary message and is not repeated.
 export type StoredNote={id:number,author_name:string,addressed_name:string,body:string,created_at:string};
-export type QueuedTurn={send_key:string,message:string,queued_at:string,started_at:string|null,failed_at:string|null};
+// A turn "Done it" queued (#140) names its hand card and is drawn by that card, never as a message.
+export type QueuedTurn={send_key:string,message:string,queued_at:string,started_at:string|null,failed_at:string|null,hand_card?:number|null};
 export const noteColumns='id,author_name,addressed_name,body,created_at';
-export const queuedColumns='send_key,message,queued_at,started_at,failed_at';
+export const queuedColumns='send_key,message,queued_at,started_at,failed_at,hand_card';
+// A turn "Done it" queued, and the person's message it became, name their hand card (#140): the one test every reader
+// of the record uses, waiting or started.
+export const handTurn=(row:{hand_card?:number|null})=>row.hand_card!=null;
 export const withTeamWork=(record:ConversationMessage[],notes:StoredNote[]=[],queued:QueuedTurn[]=[],sender=''):ConversationMessage[]=>{
  // The record keeps its own order (by id); each note goes before the first message written after it.
  const merged:ConversationMessage[]=[]; const left=[...notes].sort((a,b)=>a.id-b.id);
  for(const message of record) { while(left.length&&left[0].created_at<=message.created_at) merged.push(noteOf(left.shift()!)); merged.push(message); }
  return [...merged,...left.map(noteOf),
-  ...queued.filter(turn=>!turn.started_at).map((turn,index)=>({id:index,author:'person' as const,author_name:sender,body:turn.message,created_at:turn.queued_at,kind:'queued' as const,...(turn.failed_at?{failed:true}:{})}))];
+  ...queued.filter(turn=>!turn.started_at&&!handTurn(turn)).map((turn,index)=>({id:index,author:'person' as const,author_name:sender,body:turn.message,created_at:turn.queued_at,kind:'queued' as const,...(turn.failed_at?{failed:true}:{})}))];
 };
 const noteOf=(note:StoredNote):ConversationMessage=>({id:note.id,author:'person',author_name:note.author_name,body:note.body,created_at:note.created_at,kind:'note',to:note.addressed_name});
 // Waiting turns keep the page asking until they have started and been answered.
