@@ -36,7 +36,7 @@ export async function agentDetails(db:Db,{company,agent,slug,me,role,tab}:{compa
  const [{data:stages},{data:checklist},{data:ask},people,{data:cardFileRows,count:cardFileCount},firsts]=await Promise.all([
   ids.length?db.from('work_stages').select('id,name,board_column').eq('company_id',company):Promise.resolve({data:[]}),
   ids.length?db.from('work_checklist').select('card_id,title,done').eq('company_id',company).in('card_id',ids).order('id'):Promise.resolve({data:[]}),
-  run?.my_conversation?db.from('conversation_messages').select('body').eq('conversation_id',run.my_conversation).eq('author','person').eq('created_at',run.started_at).order('id',{ascending:false}).limit(1).maybeSingle():Promise.resolve({data:null}),
+  run?.my_conversation?db.from('conversation_messages').select('body,reply_cards(title)').eq('conversation_id',run.my_conversation).eq('author','person').eq('created_at',run.started_at).order('id',{ascending:false}).limit(1).maybeSingle():Promise.resolve({data:null}),
   logPeople(db,company,rows.flatMap(row=>row.card_id!=null?[row.card_id]:[])),
   ids.length?db.from('work_attachments').select('id,name,size,created_at,card_id',{count:'exact'}).eq('company_id',company).in('card_id',ids).order('created_at',{ascending:false}).order('id',{ascending:false}):Promise.resolve({data:[],count:0}),
   // A Conversation is named as the sidebar names it: the first line of its person's first message.
@@ -44,7 +44,9 @@ export async function agentDetails(db:Db,{company,agent,slug,me,role,tab}:{compa
  ]);
  const tasks=agentTasks(cards,stages||[],checklist||[],waiting);
  const recent=latestActivity(rows,feedSince());
- const asked=(ask as {body:string}|null)?.body.split('\n')[0].slice(0,200);
+ // A Run "Done it" started (#140) is on the step the person did, named by its card, not the sentence the Agent was told.
+ const asking=ask as {body:string,reply_cards:{title:string}|null}|null;
+ const asked=(asking?.reply_cards?.title??asking?.body)?.split('\n')[0].slice(0,200);
 
  const activity=run||recent.length?<ul className="panel-card">
    {run&&<li className="panel-row dp-now"><span className="panel-row__text">

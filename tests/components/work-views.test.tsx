@@ -124,3 +124,21 @@ test('in Arabic the crew\'s names are joined as Arabic joins a list, each kept i
  expect([...line.querySelectorAll('bdi')].map(name => name.textContent)).toEqual(['SEO', 'Ads']);
  await expect.element(screen.getByRole('link', { name: 'أفكار لمحتوى الشهر · اشتغل عليها: SEO، Ads', exact: true })).toBeVisible();
 });
+
+// #140: a step an Agent handed to the reader waits in Waiting on you: its Agent and time on top, then the tag (the hand
+// in a small pill, its own width) before the step's title alone, and it opens the Conversation at the card.
+test.each([['en', 'Handed to you'], ['ar', 'اتسلّمتلك']] as const)('in the %s interface, a handed step is tagged before its title and opens its Conversation at the card', async (language, tag) => {
+ const hand = { kind: 'hand', id: 42, title: 'انشر المقال', body: '', asked_by: 'Writer', card_id: null, conversation_id: 'c-7', created_at: '2026-06-10T09:00:00Z' };
+ await showWork(workProps({ waiting: [hand] }), { language });
+ const item = document.querySelector<HTMLAnchorElement>('a.mcard[data-kind="hand"]')!;
+ expect(item.getAttribute('href')).toBe('/c/rs-learning/conversations/c-7#hand-42');
+ expect(item.closest('.col')!.getAttribute('data-column')).toBe('waiting');
+ const wtag = item.querySelector('.wtag.wtag--hand')!;
+ expect(wtag.textContent).toBe(tag);
+ expect(wtag.querySelector('svg.gw-icon')!.getBoundingClientRect().width).toBe(13);
+ expect(wtag.nextElementSibling!.className).toContain('mcard__q');
+ expect(wtag.nextElementSibling!.textContent).toBe('انشر المقال');
+ expect(item.querySelector('.mcard__who')!.textContent).toBe('Writer');
+ expect(wtag.getBoundingClientRect().width).toBeLessThan(item.querySelector('.mcard__q')!.getBoundingClientRect().width);
+ expect(getComputedStyle(wtag).borderRadius).not.toBe('0px');
+});
