@@ -37,6 +37,7 @@ test.each(['en', 'ar'] as const)('in the %s interface, an open request shows the
  await expect.element(group.getByText('delete the old exports', { exact: true })).toBeVisible();
  expect([...group.element().querySelectorAll('dt, dd')].map(text => text.textContent)).toEqual([words[language].command, 'rm -r /srv/exports']);
  expect(group.getByText('rm -r /srv/exports', { exact: true }).element().matches(':dir(ltr)'), 'the command keeps its own direction').toBe(true);
+ expect(group.element().querySelector('dd')!.matches(`:dir(${language === 'ar' ? 'rtl' : 'ltr'})`), 'its row starts where the card does, as the reference\'s rows do').toBe(true);
  expect(buttons(group)).toEqual([[words[language].deny, 'btn btn--secondary'], [words[language].always, 'btn btn--secondary'], [words[language].once, 'btn btn--primary']]);
  expect(group.element().querySelector('.card__outcome'), 'no outcome while it waits').toBeNull();
 });

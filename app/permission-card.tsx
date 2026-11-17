@@ -53,7 +53,7 @@ export function PermissionCard({card,fresh,offered,decide}:{card:PermissionReque
  return <div className={`reply-card reply-card--permission${shown?' is-resolved':''}${just?' is-just':''}${fresh?' card-in':''}`} role="group" aria-label={t('permissionLabel',card.title)}>
   <div className="card__head"><AppTile app={plainTile} size="lg"/>
    <div className="card__titles"><span className="card__title" dir="auto">{title}</span></div></div>
-  {command&&<dl className="kv"><div className="kv__row"><dt>{t('permissionCommand')}</dt><dd dir="auto">{command}</dd></div></dl>}
+  {command&&<dl className="kv"><div className="kv__row"><dt>{t('permissionCommand')}</dt><dd><bdi dir="auto">{command}</bdi></dd></div></dl>}
   {shown?.state==='decided'?line(shown.choice==='deny'?'x':'check',<>{t(outcomes[shown.choice])} · <time dateTime={shown.at} data-utc={zone}>{when(shown.at)}</time></>)
    :shown?.state==='closed'?line('clock',t('permissionClosed'))
    :decide&&offered.length?<div className="card__actions">{offered.map(choice=>
