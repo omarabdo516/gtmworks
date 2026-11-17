@@ -50,6 +50,17 @@ test('an outside call of the page\'s API client fails and is reported, also when
   expect(outsideRequests.splice(0)).toEqual(['api-call.example.org']);
 });
 
+test('the page\'s API client names an outside redirect target and a relative call on an outside base address', async ({ browser, page, outsideRequests }) => {
+  const server = createServer((_, response) => response.writeHead(302, { location: 'https://api-redirected.example.org/v1' }).end());
+  await new Promise<void>(done => server.listen(0, '127.0.0.1', done));
+  const elsewhere = await browser.newContext({ baseURL: 'https://api-base.example.org' });
+  try {
+    await expect(page.request.get(`http://127.0.0.1:${(server.address() as AddressInfo).port}/`)).rejects.toThrow(/ECONNREFUSED/);
+    await expect(elsewhere.request.get('/v1')).rejects.toThrow(/ECONNREFUSED/);
+    expect(outsideRequests.splice(0)).toEqual(['api-redirected.example.org', 'api-base.example.org']);
+  } finally { server.close(); await elsewhere.close(); }
+});
+
 test('a test\'s own requests to this machine still answer, from its page and its API requests', async ({ page }) => {
   const server = createServer((_, response) => response.end('here'));
   await new Promise<void>(done => server.listen(0, '127.0.0.1', done));

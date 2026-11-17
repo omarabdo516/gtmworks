@@ -28,8 +28,9 @@ export const nowhere = { server: 'http://127.0.0.1:9', bypass: [...local.names, 
 
 /**
  * Names each outside address a browser context behind `nowhere` tried, a WebSocket, a redirect hop and a call of its
- * `page.request` included: that API client emits no request event, and reaches the proxy on this machine, so its calls
- * are named by the address they were given.
+ * `page.request` included. That API client emits no request event, follows redirects itself and reaches the proxy on
+ * this machine; an outside call of it always fails at the proxy, and its error lists each address it asked for,
+ * resolved against the context's base address, so the hosts are read from there.
  * @param {import('@playwright/test').BrowserContext} context @param {(host: string) => void} note
  */
 export function watchOutside(context, note) {
@@ -40,7 +41,10 @@ export function watchOutside(context, note) {
   context.pages().forEach(watchPage);
   // `get`, `post` and the others go through `fetch`.
   const api = context.request, call = api.fetch.bind(api);
-  api.fetch = (target, ...rest) => { seen(new URL(typeof target === 'string' ? target : target.url(), 'http://localhost/').href); return call(target, ...rest); };
+  api.fetch = (...args) => call(...args).catch(error => {
+    new Set([...String(error?.message).matchAll(/→ [A-Z]+ ([a-z][a-z0-9+.-]*:\/\/\S+)/g)].map(([, url]) => url)).forEach(seen);
+    throw error;
+  });
 }
 
 // This file, found from its own call site: it loads as ES module and, from a Playwright config, as CommonJS, which has no
