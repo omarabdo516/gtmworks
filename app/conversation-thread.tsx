@@ -108,13 +108,23 @@ export function ChatPlaceholder() {
 // (marked as the reference marks a queued message).
 // A question the Agent waits on (#138) is answered from its card: a pick goes to the waiting Run, and the record is asked
 // for again at once. While it waits, the Agent is not shown working.
-export function ConversationTurns({slug,company,record,asked}:{slug:string,company:string,record:ConversationRecord,asked:()=>void}) {
+// A person who may not write (a Viewer) sees a handed step's "Done it" but cannot press it.
+export function ConversationTurns({slug,company,record,writer,asked}:{slug:string,company:string,record:ConversationRecord,writer:boolean,asked:()=>void}) {
  const {t,language}=useI18n(); const {c,cb}=useConversationText();
  const {conversation,messages,pending,failed,working}=record;
  const answer=async(card:number,choice:number,answerKey:string)=>{
   const failure=await postMessage({company,conversation:conversation.id,intent:'answer',card,choice,answerKey});
   asked();
   return failure;
+ };
+ // "Done it" on a step the Agent handed over (#139) starts no Run, so the record is not read again: the card shows the
+ // time the database kept, and a read can never replace a newer record (a message sent meanwhile).
+ const done=async(card:number)=>{
+  try {
+   const response=await fetch('/api/conversations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company,conversation:conversation.id,intent:'done',card})});
+   const body=await response.json() as {at?:string,first?:boolean,error?:string};
+   return response.ok&&body.at?{at:body.at,first:body.first===true}:{error:body.error||'conversationFailed'};
+  } catch { return {error:'conversationFailed'}; }
  };
  // A card an Agent shows while the chat is open rises in once (design-reference: card-in); those already there do not.
  const [drawnCards]=useState(()=>new Set(replyCardIds(messages)));
@@ -134,7 +144,7 @@ export function ConversationTurns({slug,company,record,asked}:{slug:string,compa
    {!!message.steps?.list.length&&<StepsList steps={message.steps} c={c} cb={cb}/>}
    {message.body&&<div className="bubble bubble--agent" dir="auto">{message.body}</div>}
    {message.cards?.map(card=>card.kind==='made'?<MadeCard key={card.agent.id} slug={slug} agent={card.agent}/>:card.kind==='request'?<RequestCard key={`request${card.request.id}`} slug={slug} request={card.request}/>
-    :<ReplyCard key={`reply${card.card.id}`} card={card.card} fresh={!drawnCards.has(card.card.id)} answer={answer}/>)}
+    :<ReplyCard key={`reply${card.card.id}`} card={card.card} fresh={!drawnCards.has(card.card.id)} answer={answer} done={writer?done:undefined}/>)}
   </li>)}</ol>
   {pending&&!record.asking&&<p className="thinking convo-status" role="status">{working?c('conversationWorkingFor',conversation.agent_name,working):t('conversationWorking',conversation.agent_name)}</p>}
   {failed&&<p className="note convo-status" role="alert">{t('conversationReplyFailed')}</p>}

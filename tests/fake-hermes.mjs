@@ -361,7 +361,7 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
      if(provider==='anthropic') return send(response,400,{detail:'anthropic uses an external CLI; run `hermes auth add anthropic` manually'});
      const id=randomUUID().replaceAll('-','');
      settings.signInSessions.set(id,{provider,profile:scoped,status:'pending'});
-     return send(response,200,{session_id:id,flow:'device_code',user_code:'ABCD-1234',verification_url:'https://auth.openai.com/codex/device',expires_in:900,poll_interval:5});
+     return send(response,200,{session_id:id,flow:'device_code',user_code:'ABCD-1234',verification_url:'https://auth.provider.test/codex/device',expires_in:900,poll_interval:5});
     }
     if(step==='poll'&&request.method==='GET') {
      const found=settings.signInSessions.get(session);

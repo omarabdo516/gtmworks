@@ -1,0 +1,70 @@
+# The node and component tests again under a second time zone (#266): the runner's zone must not decide a test. The day
+# boundary itself is checked with fixed instants in the runner's zone (tests/clock.mjs, sidebar.test.mjs), whatever the
+# hour; the run is set for 02:35 UTC, 23:35 in America/Sao_Paulo (UTC-3 all year) while Cairo and UTC are on the next
+# day, so code that reads the real clock also meets a date that differs from UTC's. It reads the code only and is given
+# no secret.
+name: Time zones
+
+on:
+  schedule:
+    - cron: '35 2 * * *'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/time-zones.yml
+      - tests/clock.mjs
+      - tests/time-zones.test.mjs
+
+permissions:
+  contents: read
+
+concurrency:
+  group: time-zones-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fast-layers:
+    name: node and component tests (${{ matrix.zone }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        zone: [Africa/Cairo, America/Sao_Paulo]
+    env:
+      TZ: ${{ matrix.zone }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: local start time
+        id: start
+        run: echo "at=$(date '+%Y-%m-%d %H:%M:%S %Z')" >> "$GITHUB_OUTPUT"
+      - name: install
+        run: npm ci
+      - name: node tests
+        id: node-tests
+        run: npm test
+      - name: components
+        id: components
+        if: ${{ !cancelled() }}
+        # Installed above: without CI, ci.sh does not install again.
+        env:
+          CI: ''
+        run: ./ci.sh components
+      - name: summary
+        if: always()
+        env:
+          STARTED: ${{ steps.start.outputs.at }}
+          NODE_TESTS: ${{ steps.node-tests.outcome }}
+          COMPONENTS: ${{ steps.components.outcome }}
+        run: |
+          ended=$(date '+%Y-%m-%d %H:%M:%S %Z')
+          crossed=no; [ "${STARTED%% *}" = "${ended%% *}" ] || crossed=yes
+          {
+            echo '| zone | local start | local end | crossed local midnight | node tests | components |'
+            echo '| --- | --- | --- | --- | --- | --- |'
+            echo "| $TZ | $STARTED | $ended | $crossed | $NODE_TESTS | $COMPONENTS |"
+          } >> "$GITHUB_STEP_SUMMARY"

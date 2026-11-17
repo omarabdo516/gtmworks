@@ -5,7 +5,8 @@
 -- the rule Ads keeps (#18; the reference's th-rule-ads), talk in the general channel (#23), and the first Contributor's
 -- Conversation with Ads in which they told it a rule for the team, waiting on Omar and the Manager as a learning
 -- suggestion (#25; the reference's th-yo-ads), Omar's Conversation with Ads waiting on his answer to its question (#138;
--- the reference's th-meta), and the files Ads works from (#21; the reference's ads.files): two on
+-- the reference's th-meta), Omar's Conversation with Ads in which it hands him the article to publish (#139; the
+-- reference's th-team t10), and the files Ads works from (#21; the reference's ads.files): two on
 -- its Card and one in Omar's Conversation with it. Two Cards are tied to those two chats with Ads (#145). Nothing applies it automatically; load it by hand into a throwaway
 -- local database only. The files are named only: their bytes are not in storage, so opening one finds nothing.
 -- Fixed ids (scripts/design-compare-lib.mjs, fixture); running it again adds nothing. The connections point nowhere
@@ -167,6 +168,25 @@ values ('10000000-0000-0000-0000-000000000001','62000000-0000-0000-0000-00000000
  '{"question":"اختار زاوية الإعلان","choices":["من خريج لمحاسب شغال","Excel وOdoo في كورس واحد","شهادة معتمدة وتدريب عملي"],"multiple":false}','open','2026-11-16T10:14:00Z')
 on conflict do nothing;
 
+-- Omar's Conversation with Ads in which Ads hands him a step it may not do, publishing the article on WordPress (#139;
+-- the reference's th-team, message t10, worded as there): his message, Ads's reply and the open hand card under it.
+insert into public.conversations(id,company_id,person_id,agent_id,agent_name,created_at)
+values ('62000000-0000-0000-0000-000000000006','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','61000000-0000-0000-0000-000000000002','Ads','2026-11-16T10:38:00Z')
+on conflict (id) do nothing;
+insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at)
+select '10000000-0000-0000-0000-000000000001','62000000-0000-0000-0000-000000000006',x.author,x.person_id,x.agent_id,x.author_name,x.body,x.send_key,'design-compare-fixture-hand',x.at
+from (values
+ (1,'person','20000000-0000-0000-0000-000000000001'::uuid,null::uuid,'عمر','المقال بتاع «كورس محاسب شامل اونلاين» خلص؟','63000000-0000-0000-0000-000000000007'::uuid,'2026-11-16T10:38:00Z'::timestamptz),
+ (2,'agent',null,'61000000-0000-0000-0000-000000000002','Ads','المقال جاهز مسودة على WordPress. النشر عليك انت:',null,'2026-11-16T10:40:00Z')
+) x(n,author,person_id,agent_id,author_name,body,send_key,at)
+where not exists(select 1 from public.conversation_messages where conversation_id='62000000-0000-0000-0000-000000000006')
+order by x.n;
+insert into public.reply_cards(company_id,conversation_id,run_id,call_id,kind,title,content,state,created_at)
+values ('10000000-0000-0000-0000-000000000001','62000000-0000-0000-0000-000000000006','design-compare-fixture-hand','call-0','hand','انشر مقال «كورس محاسب شامل اونلاين: هتتعلم إيه وهتشتغل فين»',
+ '{"app":"WordPress","line":"SEO سابه مسودة على WordPress، وانت اللي تدوس نشر.","rows":[{"label":"الطول","value":"1,600 كلمة · 5 عناوين فرعية"},{"label":"الروابط","value":"3 روابط لصفحة المحاسب الشامل"},{"label":"المراجعة","value":"Critic: مقبول بعد تعديل واحد"}],"url":"https://rslearning.example/wp-admin/post.php?post=812&action=edit","note":"SEO هيتابع ترتيبه في Search Console."}',
+ 'open','2026-11-16T10:40:00Z')
+on conflict do nothing;
+
 -- The Card sheet's Chat tab (#145): the Card of Omar's chat with Ads above (his own: its chat in the sheet), and the
 -- Card of the first Contributor's chat with Ads (another Member's: the lock Omar sees); 640001 above is the idea with Ads
 -- and no chat. Tied here as the database ties them (only it may), in the first "In progress" stage.
@@ -180,21 +200,21 @@ on conflict do nothing;
 -- its four steps and their 41 seconds): his message, Ads's reply, and the Run's steps as the closer seals them. The
 -- reference's lines are its own sentences; a built line is the tool's name and the Engine's preview of the call.
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name,created_at)
-values ('62000000-0000-0000-0000-000000000006','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','61000000-0000-0000-0000-000000000002','Ads','2026-11-16T10:12:00Z')
+values ('62000000-0000-0000-0000-000000000007','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','61000000-0000-0000-0000-000000000002','Ads','2026-11-16T10:12:00Z')
 on conflict (id) do nothing;
 insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at)
-select '10000000-0000-0000-0000-000000000001','62000000-0000-0000-0000-000000000006',x.author,x.person_id,x.agent_id,x.author_name,x.body,x.send_key,'design-compare-fixture-steps',x.at
+select '10000000-0000-0000-0000-000000000001','62000000-0000-0000-0000-000000000007',x.author,x.person_id,x.agent_id,x.author_name,x.body,x.send_key,'design-compare-fixture-steps',x.at
 from (values
- (1,'person','20000000-0000-0000-0000-000000000001'::uuid,null::uuid,'عمر','@Ads محتاجين حملة Meta لكورس «المحاسب الشامل». الدفعة الجديدة بتبدأ 1 ديسمبر، والميزانية 15,000 ج للشهر. الهدف ليدز على واتساب.','63000000-0000-0000-0000-000000000007'::uuid,'2026-11-16T10:12:00Z'::timestamptz),
+ (1,'person','20000000-0000-0000-0000-000000000001'::uuid,null::uuid,'عمر','@Ads محتاجين حملة Meta لكورس «المحاسب الشامل». الدفعة الجديدة بتبدأ 1 ديسمبر، والميزانية 15,000 ج للشهر. الهدف ليدز على واتساب.','63000000-0000-0000-0000-000000000015'::uuid,'2026-11-16T10:12:00Z'::timestamptz),
  (2,'agent',null,'61000000-0000-0000-0000-000000000002','Ads','قريت نتايج آخر 3 حملات للكورس (من أغسطس لأكتوبر):
 • 412 ليد بمتوسط 34 ج لليد
 • أحسن جمهور: خريجين تجارة من 22 لـ 30 سنة في القاهرة والجيزة والإسكندرية، تكلفة الليد عندهم 27 ج
 • الفيديو القصير جاب ليدز أرخص بـ 22% من الصور',null,'2026-11-16T10:14:00Z')
 ) x(n,author,person_id,agent_id,author_name,body,send_key,at)
-where not exists(select 1 from public.conversation_messages where conversation_id='62000000-0000-0000-0000-000000000006')
+where not exists(select 1 from public.conversation_messages where conversation_id='62000000-0000-0000-0000-000000000007')
 order by x.n;
 insert into public.conversation_run_steps(company_id,conversation_id,run_id,steps,read_to,broken,seconds,sealed_at)
-values ('10000000-0000-0000-0000-000000000001','62000000-0000-0000-0000-000000000006','design-compare-fixture-steps',
+values ('10000000-0000-0000-0000-000000000001','62000000-0000-0000-0000-000000000007','design-compare-fixture-steps',
  '[{"call":"call-1","tool":"meta_ads","preview":"قرا نتايج آخر 3 حملات للكورس","state":"done"},{"call":"call-2","tool":"meta_ads","preview":"راجع 6 جماهير محفوظة","state":"done"},{"call":"call-3","tool":"ga4","preview":"المبيعات","state":"failed"},{"call":"call-4","tool":"sheets","preview":"توزيع الميزانية على 30 يوم","state":"done"}]',
  40,false,41,'2026-11-16T10:14:00Z')
 on conflict do nothing;
