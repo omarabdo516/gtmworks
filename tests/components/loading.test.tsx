@@ -1,13 +1,15 @@
 import { afterEach, beforeAll, expect, test, vi } from 'vitest';
-import type { ComponentProps } from 'react';
+import { use, type ComponentProps } from 'react';
 import { render } from 'vitest-browser-react';
 import { cdp, page } from 'vitest/browser';
 import type {} from '@vitest/browser-playwright';
-import ConversationView from '@/app/c/[slug]/conversations/[id]/conversation';
+import ConversationView, { ConversationLoaded } from '@/app/c/[slug]/conversations/[id]/conversation';
 import { ChatPlaceholder } from '@/app/conversation-thread';
 import { NumbersPlaceholder, PeriodSwitch } from '@/app/c/[slug]/numbers/numbers-client';
 import { LanguageProvider } from '@/lib/i18n-client';
 import type { ConversationRecord } from '@/lib/conversation-record';
+// The loaded chat once its record is read, as the page streams it.
+const Arrived = ({ record, team }: { record: Promise<ConversationRecord>, team: boolean }) => <ConversationLoaded initial={use(record)} team={team}/>;
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }) }));
 // Links stay on the test page: a new page is the test drawing the next one.
@@ -72,7 +74,7 @@ function held() {
  return { record, arrive };
 }
 const opened = (record: Promise<ConversationRecord>) => render(<LanguageProvider language="en"><div className="gw" style={{ height: 900 }}>
- <ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={{ id: 'cv-2', agent_name: 'Mona', face: 'c-2' }} record={record} title="Draft the long launch plan" writer team={false}/>
+ <ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={{ id: 'cv-2', agent_name: 'Mona', face: 'c-2' }} title="Draft the long launch plan" writer><Arrived record={record} team={false}/></ConversationView>
 </div></LanguageProvider>);
 const tops = () => ['.transcript__col', '.composer-area'].map(selector => Math.round(box(document.querySelector(selector)!).top));
 
@@ -99,7 +101,7 @@ test('while the record is on its way the chat keeps its title and composer aroun
 test('text typed while the chat loads stays in the box without taking the focus from where the person moved it', async () => {
  const { record, arrive } = held();
  const screen = await render(<LanguageProvider language="en"><button type="button">Elsewhere</button><div className="gw" style={{ height: 900 }}>
-  <ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={{ id: 'cv-2', agent_name: 'Mona', face: 'c-2' }} record={record} title="Draft the long launch plan" writer team={false}/>
+  <ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={{ id: 'cv-2', agent_name: 'Mona', face: 'c-2' }} title="Draft the long launch plan" writer><Arrived record={record} team={false}/></ConversationView>
  </div></LanguageProvider>);
  await screen.getByRole('textbox', { name: 'Message' }).fill('And the budget');
  const elsewhere = screen.getByRole('button', { name: 'Elsewhere' }).element() as HTMLElement;

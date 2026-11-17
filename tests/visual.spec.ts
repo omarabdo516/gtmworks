@@ -403,15 +403,13 @@ const screenStates: Record<string, { set: string, unset: string, admin?: true }>
        ('${rsLearning}','${loading(3)}','person','20000000-0000-0000-0000-000000000001',null,'Omar','${onBoardAsk}','${loading(4)}','visual-loading','2026-06-10T10:00:00Z'),
        ('${rsLearning}','${loading(3)}','agent',null,'${loading(2)}','Ads','تمام، هبدأ بالجمهور وبعدها أكتب 3 إعلانات وأبعتهملك تشوفهم.',null,'visual-loading','2026-06-10T10:01:00Z');
       insert into public.conversation_usage(company_id,conversation_id,run_id,outcome,input_tokens,output_tokens,recorded_at) values ('${rsLearning}','${loading(3)}','visual-loading','completed',1200,300,'2026-06-10T10:01:00Z');
-      ${slowReads('conversation_usage', 7).set}`,
-    unset: `${slowReads('conversation_usage', 7).unset}
-      delete from public.conversation_usage where conversation_id='${loading(3)}';
+      `,
+    unset: `delete from public.conversation_usage where conversation_id='${loading(3)}';
       delete from public.conversation_messages where conversation_id='${loading(3)}';
       delete from public.conversations where id='${loading(3)}';
       delete from public.hermes_agents where id='${loading(2)}';
       delete from public.hermes_connections where id='${loading(1)}';`,
   },
-  'numbers-loading': { admin: true, ...slowReads('company_log', 7) },
 };
 // The Agent details' Files tab (#21): Meta Ads with a file on its June brief Card and one in Omar's own Conversation with
 // it, as the agent-details state holds them, written with triggers off and taken away after.
@@ -472,12 +470,16 @@ async function appsEngine() {
 // prefetches its page whole and keeps it (lib/link.tsx), so the shown page is opened again with that page's requests
 // held, and they go once the link is clicked. The page is still waiting while it is pictured, so the window is sized
 // without waiting for the network to go quiet.
-const openSlowly = (path: string, link: string, placeholder: string) => async (page: Page) => {
+// The table is slowed only once Home is drawn: slowed from the start, Home's prefetch of every page that reads it holds
+// a database connection each, and the opened page's own frame then waits behind them.
+const openSlowly = (path: string, link: string, placeholder: string, table: string) => async (page: Page) => {
   const held = await holdPages(page, url => url.pathname === path);
-  const undo = async () => { held.letGo(); await held.stop(); };
+  const slow = slowReads(table, 7);
+  const undo = async () => { asAdmin(slow.unset); held.letGo(); await held.stop(); };
   try {
     await page.reload();
     await expect(page.locator('.content').first()).toBeVisible();
+    asAdmin(slow.set);
     await openNavigation(page);
     await page.locator(link).click();
     held.letGo();
@@ -516,8 +518,8 @@ const screenActs: Record<string, (page: Page, language: Language) => Promise<() 
     await expect(page.locator('#inv-email')).toBeFocused();
     return async () => {};
   },
-  'open-chat-slowly': openSlowly(`/c/rs-learning/conversations/${loading(3)}`, `#sb-recent a[href="/c/rs-learning/conversations/${loading(3)}"]`, '.chat .transcript [aria-busy="true"]'),
-  'open-numbers-slowly': openSlowly('/c/rs-learning/numbers', '.nav a[href="/c/rs-learning/numbers"]', '.numbers-page [aria-busy="true"]'),
+  'open-chat-slowly': openSlowly(`/c/rs-learning/conversations/${loading(3)}`, `#sb-recent a[href="/c/rs-learning/conversations/${loading(3)}"]`, '.chat .transcript [aria-busy="true"]', 'conversation_usage'),
+  'open-numbers-slowly': openSlowly('/c/rs-learning/numbers', '.nav a[href="/c/rs-learning/numbers"]', '.numbers-page [aria-busy="true"]', 'company_log'),
   // Another Member's chat opens its Card on Log (#145); the Chat tab, picked as a person picks it, shows the lock.
   'sheet-chat-tab': async page => {
     await page.locator('.sheet #sh-tab-chat').click();

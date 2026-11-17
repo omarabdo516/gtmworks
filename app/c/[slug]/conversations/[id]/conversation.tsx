@@ -1,5 +1,5 @@
 'use client';
-import { Suspense, use, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import { Suspense, createContext, use, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import Link from '@/lib/link';
 import { useI18n } from '@/lib/i18n-client';
 import { CompanyAgentFace } from '@/components/company-agent-face';
@@ -25,23 +25,26 @@ type Left={start:number,end:number,focus:'box'|'head'|Element|null};
 // attached. In a team, a line at the top says the chat is between this person and the Agent only (#25).
 // The record arrives after the page (#172): until then the transcript shows the reference's placeholder under the title
 // the sidebar gives the chat, and the composer already takes a message. What was typed there, the caret and the focus
-// carry into the loaded chat, and a message sent from it has its reply asked for once the chat is loaded.
-export default function ConversationView({slug,agent,details,company,conversation,record,title,writer,team}:{slug:string,agent:DetailsAgent|null,details:AgentDetailsView|null,company:string,conversation:ThreadConversation,record:Promise<ConversationRecord>,title:string,writer:boolean,team:boolean}) {
+// carry into the loaded chat, and a message sent from it has its reply asked for once the chat is loaded. `children` is
+// the loaded chat (ConversationLoaded), drawn by the server once the record is read.
+export default function ConversationView({slug,agent,details,company,conversation,title,writer,children}:{slug:string,agent:DetailsAgent|null,details:AgentDetailsView|null,company:string,conversation:ThreadConversation,title:string,writer:boolean,children:ReactNode}) {
  const panel=useDetailsPanel();
  const [draft,setDraft]=useState<Draft>(null); const [typed,setTyped]=useState<Typed>({text:''}); const [early,setEarly]=useState(0);
  const leftRef=useRef<Left|null>(null);
- const view={slug,agent,company,conversation,writer,panel,leftRef};
- return <div className="convo"><div className="chat">
-  <Suspense fallback={<Loading {...view} title={title} setTyped={setTyped} setDraft={setDraft} sent={()=>setEarly(count=>count+1)}/>}>
-   <Loaded {...view} record={record} team={team} draft={draft??(typed.text?{text:typed.text,n:0,key:typed.key}:null)} setDraft={setDraft} early={early}/>
-  </Suspense>
- </div>{agent&&details&&<AgentDetails panel={panel} agent={agent} details={details} settingsHref={`/c/${slug}/agents`}/>}</div>;
+ const view:View={slug,agent,company,conversation,writer,panel,leftRef,draft:draft??(typed.text?{text:typed.text,n:0,key:typed.key}:null),setDraft,early};
+ return <ChatView value={view}><div className="convo"><div className="chat">
+  <Suspense fallback={<Loading title={title} setTyped={setTyped} sent={()=>setEarly(count=>count+1)}/>}>{children}</Suspense>
+ </div>{agent&&details&&<AgentDetails panel={panel} agent={agent} details={details} settingsHref={`/c/${slug}/agents`}/>}</div></ChatView>;
 }
 
-type View={slug:string,agent:DetailsAgent|null,company:string,conversation:ThreadConversation,writer:boolean,panel:DetailsPanel,leftRef:RefObject<Left|null>};
+type View={slug:string,agent:DetailsAgent|null,company:string,conversation:ThreadConversation,writer:boolean,panel:DetailsPanel,leftRef:RefObject<Left|null>,draft:Draft,setDraft:(next:(current:Draft)=>Draft)=>void,early:number};
+// The chat around the record: what the loading chat and the loaded one share.
+const ChatView=createContext<View|null>(null);
+const useView=()=>use(ChatView)!;
 const Face=({conversation,size}:{conversation:ThreadConversation,size:number})=><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:conversation.face,name:conversation.agent_name}} size={size}/></span>;
 
-function Loading({agent,company,conversation,writer,panel,leftRef,title,setTyped,setDraft,sent}:View&{title:string,setTyped:(typed:Typed)=>void,setDraft:(next:(current:Draft)=>Draft)=>void,sent:()=>void}) {
+function Loading({title,setTyped,sent}:{title:string,setTyped:(typed:Typed)=>void,sent:()=>void}) {
+ const {agent,company,conversation,writer,panel,leftRef,setDraft}=useView();
  const {t}=useI18n(); const area=useRef<HTMLDivElement>(null); const shown=useRef(true);
  useLayoutEffect(()=>{
   const box=area.current?.querySelector('textarea');
@@ -69,9 +72,11 @@ function Loading({agent,company,conversation,writer,panel,leftRef,title,setTyped
  </>;
 }
 
-function Loaded({slug,agent,company,conversation,writer,panel,leftRef,record:arriving,team,draft,setDraft,early}:View&{record:Promise<ConversationRecord>,team:boolean,draft:Draft,setDraft:(next:(current:Draft)=>Draft)=>void,early:number}) {
+// The chat once its record is read, in place of the loading one.
+export function ConversationLoaded({initial,team}:{initial:ConversationRecord,team:boolean}) {
+ const {slug,agent,company,conversation,writer,panel,leftRef,draft,setDraft,early}=useView();
  const {c}=useConversationText();
- const {record,asked}=useConversationRecord({company,initial:use(arriving)});
+ const {record,asked}=useConversationRecord({company,initial});
  const {messages}=record;
  const box=useRef<HTMLDivElement>(null); const stick=useRef(true); const area=useRef<HTMLDivElement>(null);
  // Kept on the newest message while the reader is there (design-reference: renderTranscript).

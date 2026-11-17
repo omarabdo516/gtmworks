@@ -160,6 +160,8 @@ export function parseArgs(argv) {
   if (!languages.includes(raw.lang)) throw new UsageError('--lang must be ar or en.');
   if (!themes.includes(raw.theme)) throw new UsageError('--theme must be light or dark.');
   const builtPath = raw.builtPath ?? screens[raw.screen].builtPath;
+  // A held loading state (#172) is captured on the reference alone: the built one is its approved image.
+  if (builtPath === null && screens[raw.screen].reference.hold) referenceOnly = true;
   if (builtPath === null && !referenceOnly) throw new UsageError(`Screen "${raw.screen}" has no built equivalent yet; pass --built-path PATH or --reference-only.`);
   return {
     screen: raw.screen,

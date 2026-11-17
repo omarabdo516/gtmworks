@@ -148,6 +148,8 @@ test('a screen with no built equivalent needs --built-path or --reference-only',
   const log = ['--screen', 'agent-chat', '--width', '1440', '--lang', 'en', '--theme', 'light'];
   assert.throws(() => parseArgs(log), error => error.exitCode === 2 && /Screen "agent-chat" has no built equivalent yet; pass --built-path PATH or --reference-only\./.test(error.message));
   assert.equal(parseArgs([...log, '--reference-only']).builtPath, null);
+  const held = ['--screen', 'numbers-loading', '--width', '1440', '--lang', 'en', '--theme', 'light'];
+  assert.equal(parseArgs(held).referenceOnly, true, 'a held loading state is the reference alone');
   assert.equal(parseArgs([...log, '--built-path', '/c/rs-learning/home']).builtPath, '/c/rs-learning/home');
 });
 

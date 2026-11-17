@@ -3,7 +3,7 @@ import { getI18n } from '@/lib/i18n-server';
 import { supabase } from '@/lib/supabase';
 import Shell from '@/app/shell';
 import { approvalQueue } from '@/lib/approval-queue';
-import ConversationView from './conversation';
+import ConversationView, { ConversationLoaded } from './conversation';
 import { conversationColumns, faceOf, uuid } from '@/lib/conversations';
 import { conversationRecord } from '@/lib/conversation-record';
 import { madeColumns, madeOf } from '@/lib/agent-made';
@@ -35,6 +35,11 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  const title=(first?.body as string|undefined)?.split('\n')[0]||conversation.agent_name;
  return <Shell company={company} companies={companies||[]} personId={user.id} section="conversations" title={title} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={waitingItems.length} agentId={conversation.agent_id||undefined} conversationId={id}>
-  <main className="convo-page h-full"><ConversationView slug={slug} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={details} company={company.id} conversation={{id:conversation.id,agent_name:conversation.agent_name,face:faceOf(conversation)}} record={record} title={title} writer={!!writer} team={company.work_mode==='team'}/></main>
+  <main className="convo-page h-full"><ConversationView slug={slug} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={details} company={company.id} conversation={{id:conversation.id,agent_name:conversation.agent_name,face:faceOf(conversation)}} title={title} writer={!!writer}><Loaded record={record} team={company.work_mode==='team'}/></ConversationView></main>
  </Shell>;
+}
+
+// The chat once its record is read, streamed in place of the placeholder.
+async function Loaded({record,team}:{record:ReturnType<typeof conversationRecord>,team:boolean}) {
+ return <ConversationLoaded initial={await record} team={team}/>;
 }
