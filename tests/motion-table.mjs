@@ -18,6 +18,7 @@ export const motionTable = [
   { ref: '.sidebar', built: '.gw .sidebar', file: 'app/shell.css', html: '<div class="gw"><aside class="sidebar"></aside></div>' },
   { ref: '.details', built: '.gw .details', file: 'app/shell.css', html: '<div class="gw"><aside class="details"></aside></div>' },
   { ref: '.try-one__btn', built: '.gw .try-one__btn', file: 'app/shell.css', html: '<div class="gw"><button type="button" class="try-one__btn"></button></div>' },
+  { ref: '.suggest button', built: '.gw .suggest button', file: 'app/shell.css', html: '<div class="gw"><div class="suggest"><button type="button"></button></div></div>' },
   // A card an Agent's reply carries rises in when it arrives while the Conversation is open (#136).
   { ref: '.card-in', built: '.gw .reply-card.card-in', file: 'app/shell.css', html: '<div class="gw"><div class="reply-card card-in" role="group"></div></div>' },
   // The dialog (the ready-made gallery): its entrance, its leave and its search field.

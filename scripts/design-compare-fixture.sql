@@ -26,13 +26,14 @@ select ('60000000-0000-0000-0000-00000000000'||n)::uuid,'10000000-0000-0000-0000
 from generate_series(1,5) n
 on conflict (id) do nothing;
 
--- Lead is the main Agent unless the company already has one. Lead made Ads for Omar.
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,created_at,requested_by,apps,requester_opened_at)
+-- Lead is the main Agent unless the company already has one. Lead made Ads for Omar. SEO & Content is made from the
+-- ready-made SEO content writer (#170).
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,created_at,requested_by,apps,requester_opened_at,template)
 select ('61000000-0000-0000-0000-00000000000'||x.n)::uuid,'10000000-0000-0000-0000-000000000001',('60000000-0000-0000-0000-00000000000'||x.n)::uuid,
  x.name,x.speciality,x.n=1 and not exists(select 1 from public.hermes_agents where company_id='10000000-0000-0000-0000-000000000001' and is_default),
- x.made,case when x.made is not null then '20000000-0000-0000-0000-000000000001'::uuid end,x.apps,x.made+interval '2 minutes'
-from (values (1,'Lead','Marketing lead',null::timestamptz,null::text[]),(2,'Ads','Ads agent','2026-10-10T11:03:00Z',array['Meta Ads','Google Ads','GA4']),
- (3,'SEO & Content','Content & SEO agent',null,null),(4,'Analyst','Analyst',null,null),(5,'Critic','Critic',null,null)) x(n,name,speciality,made,apps)
+ x.made,case when x.made is not null then '20000000-0000-0000-0000-000000000001'::uuid end,x.apps,x.made+interval '2 minutes',x.template
+from (values (1,'Lead','Marketing lead',null::timestamptz,null::text[],null::text),(2,'Ads','Ads agent','2026-10-10T11:03:00Z',array['Meta Ads','Google Ads','GA4'],null),
+ (3,'SEO & Content','Content & SEO agent',null,null,'writer'),(4,'Analyst','Analyst',null,null,null),(5,'Critic','Critic',null,null,null)) x(n,name,speciality,made,apps,template)
 on conflict (id) do nothing;
 
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name)
