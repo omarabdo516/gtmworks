@@ -52,7 +52,7 @@ export function CardSheetChat({slug,company,card,chat,writer,shown,openLog}:{slu
    const failure=await postMessage({company,conversation:id,card,message,sendKey});
    if(failure==='sheetChatTaken') router.refresh();
    if(failure) return failure;
-   setStarted({conversation:{id,agent_name:chat.agent.name,face:chat.agent.connection_id},messages:[{id:0,author:'person',author_name:'',body:message,created_at:new Date().toISOString()}],
+   setStarted({conversation:{id,agent_id:chat.agent.id,agent_name:chat.agent.name,face:chat.agent.connection_id},messages:[{id:0,author:'person',author_name:'',body:message,created_at:new Date().toISOString()}],
     usage:{input:0,output:0,unknown:0},pending:true,failed:false,working:null,canStop:false});
    router.refresh();
    return null;
@@ -74,6 +74,6 @@ function SheetThread({slug,company,initial,writer,shown}:{slug:string,company:st
   <div {...panel} ref={box} onScroll={event=>{ const view=event.currentTarget; stick.current=view.scrollHeight-view.scrollTop-view.clientHeight<80; }}>
    <div className="transcript__col"><ConversationTurns slug={slug} record={record}/></div>
   </div>
-  <div className="composer-area"><ConversationComposer company={company} record={record} writer={writer} asked={asked} usage={false}/></div>
+  <div className="composer-area"><ConversationComposer company={company} conversation={record.conversation} record={record} writer={writer} asked={asked} usage={false}/></div>
  </>;
 }

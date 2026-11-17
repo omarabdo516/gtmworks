@@ -7,7 +7,8 @@ import { extname, join, resolve, sep } from 'node:path';
 // A named screen says how to reach it in the reference and which built page it is compared with (null: none yet).
 // The prototype has no URL routes: its sidebar switches views by `data-view` (chat, board, dashboard, log) and the
 // account menu opens the settings overlay (`#sov`) with its sections. Each step is one `click`, `waitFor`, `waitGone`, `fill` ([selector, text]) or
-// `scrollTo` with a CSS selector; a click on a sidebar item hidden behind the narrow-screen menu opens the menu first. A screen's `builtSteps` run the same way on the built page after it opens.
+// `scrollTo` with a CSS selector, or one `press` with a key as Playwright names it (`{ press: 'ArrowDown' }`), pressed
+// where the focus is; a click on a sidebar item hidden behind the narrow-screen menu opens the menu first. A screen's `builtSteps` run the same way on the built page after it opens.
 // Every screen starts from the prototype's default state. Only the alone screens and a Member's request screens touch
 // the "viewing as" switcher: the alone ones show the workspace of an Owner working alone (#10); built, that is seeded
 // R&S Consultations, its one Member Omar, with work_mode set to 'alone' (tests/visual.spec.ts, state `alone`). The
@@ -124,7 +125,19 @@ export const screens = {
   'card-chat-locked': { reference: { steps: [...asYoussef, { click: '#btn-newchat' }, { fill: ['#ta-main', `@Ads ${youssefAsks}`] },
    { click: '[data-action="send"][data-key="main"]' }, { waitFor: '#chat-transcript .turn' }, { click: '#btn-me' }, { click: '[data-action="set-as"][data-person="omar"][data-world="team"]' },
    { waitFor: '#sb-recent' }, { waitGone: '#toast-host .toast' }, ...board, { click: `.kcard[aria-label^="${youssefAsks}"]` }, ...pickChat] }, builtPath: '/c/rs-learning/work/board?card=640007', builtSteps: pickChat },
+  // #173. The account menu moved through with the keyboard: Arrow Down from the chosen language shows the next entry's
+  // focus ring.
+  'account-menu-keys': { reference: { steps: [{ click: '#btn-me' }, { waitFor: '#me-menu:not([hidden])' }, { press: 'ArrowDown' }] }, builtPath: '/c/rs-learning/chat', builtSteps: [{ click: '#btn-me' }, { waitFor: '#me-menu' }, { press: 'ArrowDown' }] },
+  // #173. "N" on the board opens the new chat with its composer focused. Built, the chat has a composer only when the
+  // Company has an Agent (the comparison fixture's Lead).
+  'new-chat-key': { reference: { steps: [...board, { press: 'n' }, { waitFor: '#ta-main:focus' }] }, builtPath: '/c/rs-learning/work/board', builtSteps: [{ press: 'KeyN' }, { waitFor: '.composer__input:focus' }] },
   'team-channel': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-team"]' }, { waitFor: '.ch-intro' }] }, builtPath: null },
+  // #172. The placeholders the reference shows while a chat or the dashboard loads, held on screen (`hold`: the
+  // prototype's timers of 100ms or more never fire, so the content that replaces them never comes). The built
+  // placeholder shows only while the server is slow, which the capture cannot make: its pictures are the approved
+  // images of tests/visual-screens/chat-loading.json and numbers-loading.json.
+  'chat-loading': { reference: { hold: true, steps: [{ waitFor: '#chat-transcript [aria-busy="true"]' }] }, builtPath: null },
+  'numbers-loading': { reference: { hold: true, steps: [{ click: '#sb-nav [data-view="dashboard"]' }, { waitFor: '#view-dashboard [aria-busy="true"]' }] }, builtPath: null },
 };
 
 export const languages = ['ar', 'en'];
@@ -159,6 +172,8 @@ export function parseArgs(argv) {
   if (!languages.includes(raw.lang)) throw new UsageError('--lang must be ar or en.');
   if (!themes.includes(raw.theme)) throw new UsageError('--theme must be light or dark.');
   const builtPath = raw.builtPath ?? screens[raw.screen].builtPath;
+  // A held loading state (#172) is captured on the reference alone: the built one is its approved image.
+  if (builtPath === null && screens[raw.screen].reference.hold) referenceOnly = true;
   if (builtPath === null && !referenceOnly) throw new UsageError(`Screen "${raw.screen}" has no built equivalent yet; pass --built-path PATH or --reference-only.`);
   return {
     screen: raw.screen,

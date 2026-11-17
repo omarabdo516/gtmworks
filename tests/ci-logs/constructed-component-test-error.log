@@ -1,0 +1,11 @@
+2026-11-16T20:33:14.7402261Z Current runner version: '2.338.2'
+2026-11-16T20:33:14.7451825Z ##[group]Runner Image Provisioner
+2026-11-16T20:33:14.7452761Z Hosted Compute Agent
+[excerpt: lines omitted]
+2026-11-16T20:33:23.6394198Z ##[group]Run ./ci.sh components
+2026-11-16T20:34:01.0000000Z  FAIL  tests/components/board.test.tsx > the board says why it could not load
+2026-11-16T20:34:01.0000001Z Error: the board shows "toomanyrequests: try again later" for a 429
+2026-11-16T20:34:01.0000002Z  ❯ tests/components/board.test.tsx:40:5
+2026-11-16T20:34:02.0000000Z [2m Test Files [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m17 passed[39m[22m[90m (18)[39m
+2026-11-16T20:34:02.0000001Z [2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m212 passed[39m[22m[90m (213)[39m
+2026-11-16T20:34:02.0400000Z ##[error]Process completed with exit code 1.

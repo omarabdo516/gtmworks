@@ -5,7 +5,8 @@ import { signIn, openNavigation } from './sign-in';
 import { resetFirstRun } from '../scripts/first-run-db.mjs';
 import { idle } from './navigation-measure';
 import { languages, widths, screens, snapshotName } from './visual-screens.mjs';
-import { appOrigin, dbContainerOf, lane } from './lane.mjs';
+import { appOrigin, lane } from './lane.mjs';
+import { asAdmin, holdPages, slowReads } from './slow-reads';
 import { fakeHermes } from './fake-hermes.mjs';
 import { encryptSecret } from '../lib/agent-crypto.mjs';
 import { appByKey, appConfig } from '../lib/app-catalogue.mjs';
@@ -48,14 +49,14 @@ async function chooseLanguage(page: Page, language: Language) {
 
 // The shell scrolls inside its own frame, so a page taller than the window would be cut at the fold. Grow the window until
 // nothing scrolls, so the whole screen is compared.
-async function showWholePage(page: Page, width: number) {
+async function showWholePage(page: Page, width: number, settle = idle) {
   for (let attempt = 0; attempt < 4; attempt++) {
     const hidden = await page.evaluate(() => Math.max(0, ...Array.from(document.querySelectorAll('*'))
       .filter(element => /auto|scroll/.test(getComputedStyle(element).overflowY) && element.clientHeight > 0)
       .map(element => element.scrollHeight - element.clientHeight)));
     if (hidden <= 1) return;
     await page.setViewportSize({ width, height: Math.min(page.viewportSize()!.height + hidden, 8000) });
-    await idle(page);
+    await settle(page);
   }
 }
 
@@ -101,10 +102,8 @@ const review = { line: '3 نصوص · Meta Ads · قبل ما تطلع', items: 
   { text: 'أضمن طريق لأول وظيفة محاسبة', fine: false, note: '«أضمن» وعد مقدرش نثبته. البديل: «أقصر طريق لأول شغلانة محاسبة».' },
   { text: 'Excel وOdoo والضرايب في كورس واحد بـ 2,400 ج', fine: true, note: 'السعر مطابق لصفحة الكورس.' },
 ], decision: '2 جاهزين، و1 رجع لـ Ads بالبديل' };
-// A state whose rows are append-only (a Conversation's messages) is set and taken away as the database's own
-// administrator with triggers off, the way tests/fresh-seed.ts puts the seed back, so nothing of it stays behind.
-const asAdmin = (sql: string) => execFileSync('docker', ['exec', '-i', dbContainerOf(), 'psql', '-U', 'supabase_admin', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-q', '--single-transaction'],
-  { input: `set session_replication_role = replica;\n${sql}`, stdio: ['pipe', 'ignore', 'pipe'], encoding: 'utf8' });
+// A state whose rows are append-only (a Conversation's messages) is `admin`: it is set and taken away as the database's
+// own administrator with triggers off (asAdmin), so nothing of it stays behind.
 // Lead, Meta Ads and SEO in RS Learning, with the switches the screen shows on (#15).
 const seen = (n: number) => `68000000-0000-0000-0000-00000000000${n}`;
 const general = '69000000-0000-0000-0000-000000000001';
@@ -144,6 +143,8 @@ const onBoard = (n: number) => `6d000000-0000-0000-0000-00000000000${n}`;
 const onBoardAsk = 'خطة إعلانات Meta لكورس المحاسب الشامل';
 // Ads and an idea under it with no chat yet (#145): the Card's sheet opens on the way to start one.
 const cardIdea = (n: number) => `6e000000-0000-0000-0000-00000000000${n}`;
+// Omar's chat with Ads that opens while its record is slow (#172).
+const loading = (n: number) => `6f000000-0000-0000-0000-00000000000${n}`;
 // #حملة ديسمبر (#24): the Owner, the Manager and the first Contributor with Meta Ads and SEO, SEO hidden from the
 // Contributor everywhere else; the Manager calls SEO there, and wrote once in the general channel.
 const team = (n: number) => `6c000000-0000-0000-0000-0000000000${String(n).padStart(2, '0')}`;
@@ -391,9 +392,39 @@ const screenStates: Record<string, { set: string, unset: string, admin?: true }>
       delete from public.hermes_agents where id in ('${busy(4)}','${busy(5)}');
       delete from public.hermes_connections where id in ('${busy(1)}','${busy(2)}');`,
   },
+  // The chat and Numbers while their data is on its way (#172): reads only the waiting part makes are slowed, the
+  // record's usage for Omar's chat with Ads about the Meta campaign (th-meta), and the log for Numbers' figures.
+  'chat-loading': {
+    admin: true,
+    set: `insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('${loading(1)}','${rsLearning}','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9/p/visual-loading','visual-loading','visual-no-key','unreachable');
+      insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('${loading(2)}','${rsLearning}','${loading(1)}','Ads','Runs the Meta and Google ads.');
+      insert into public.conversations(id,company_id,person_id,agent_id,agent_name,created_at) values ('${loading(3)}','${rsLearning}','20000000-0000-0000-0000-000000000001','${loading(2)}','Ads','2026-06-10T10:00:00Z');
+      insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at) values
+       ('${rsLearning}','${loading(3)}','person','20000000-0000-0000-0000-000000000001',null,'Omar','${onBoardAsk}','${loading(4)}','visual-loading','2026-06-10T10:00:00Z'),
+       ('${rsLearning}','${loading(3)}','agent',null,'${loading(2)}','Ads','تمام، هبدأ بالجمهور وبعدها أكتب 3 إعلانات وأبعتهملك تشوفهم.',null,'visual-loading','2026-06-10T10:01:00Z');
+      insert into public.conversation_usage(company_id,conversation_id,run_id,outcome,input_tokens,output_tokens,recorded_at) values ('${rsLearning}','${loading(3)}','visual-loading','completed',1200,300,'2026-06-10T10:01:00Z');
+      `,
+    unset: `delete from public.conversation_usage where conversation_id='${loading(3)}';
+      delete from public.conversation_messages where conversation_id='${loading(3)}';
+      delete from public.conversations where id='${loading(3)}';
+      delete from public.hermes_agents where id='${loading(2)}';
+      delete from public.hermes_connections where id='${loading(1)}';`,
+  },
 };
 // The Agent details' Files tab (#21): Meta Ads with a file on its June brief Card and one in Omar's own Conversation with
 // it, as the agent-details state holds them, written with triggers off and taken away after.
+// Numbers' figures read this week's agent rows of the log; a filter is only weighed on rows the read finds, so the
+// slowed log needs one, of an Agent the reader sees, for the figures to wait (#172).
+screenStates['numbers-loading'] = {
+  admin: true,
+  set: `insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('${loading(5)}','${rsLearning}','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9/p/visual-numbers','visual-numbers','visual-no-key','unreachable');
+    insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('${loading(6)}','${rsLearning}','${loading(5)}','Ads','Runs the Meta and Google ads.');
+    insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,agent_id,action,details,source,source_id,created_at) values
+     ('${rsLearning}','${loading(6)}','agent','Ads','agent','${loading(6)}','agent_changed','{"agent_name":"Ads"}','hermes_agent_audit',691172,now()-interval '1 hour');`,
+  unset: `delete from public.company_log where source='hermes_agent_audit' and source_id=691172;
+    delete from public.hermes_agents where id='${loading(6)}';
+    delete from public.hermes_connections where id='${loading(5)}';`,
+};
 screenStates['agent-files'] = {
   admin: true,
   set: `${screenStates['agent-details'].set}
@@ -447,6 +478,39 @@ async function appsEngine() {
   return async () => { asAdmin(unset); await fake.close(); };
 }
 
+// A page whose reads its state slowed (#172), opened from the sidebar of the shown page: its placeholder. Every link
+// prefetches its page whole and keeps it (lib/link.tsx), so the shown page is opened again with that page's requests
+// held, and they go once the link is clicked. The page is still waiting while it is pictured, so the window is sized
+// without waiting for the network to go quiet.
+// The table is slowed only once Home is drawn: slowed from the start, Home's prefetch of every page that reads it holds
+// a database connection each, and the opened page's own frame then waits behind them.
+const openSlowly = (path: string, link: string, placeholder: string, table: string, seconds: number) => async (page: Page) => {
+  const held = await holdPages(page, url => url.pathname === path);
+  const slow = slowReads(table, seconds);
+  const undo = async () => { asAdmin(slow.unset); held.letGo(); await held.stop(); };
+  try {
+    await page.reload();
+    await expect(page.locator('.content').first()).toBeVisible();
+    asAdmin(slow.set);
+    await openNavigation(page);
+    await page.locator(link).click();
+    held.letGo();
+    // The picture is of the placeholder's look: its first 400ms hidden (components/loading.test.tsx) is ended here.
+    await page.locator(placeholder).waitFor({ state: 'attached', timeout: 15000 });
+    await page.locator(placeholder).evaluate(element => element.getAnimations().forEach(animation => { if ((animation as CSSAnimation).animationName === 'gw-sk-hold') animation.finish(); }));
+    await expect(page.locator(placeholder)).toBeVisible();
+    await expect(page.locator('.sidebar.is-open')).toHaveCount(0);
+    const width = page.viewportSize()!.width;
+    await page.setViewportSize({ width, height: 900 });
+    await showWholePage(page, width, shown => shown.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))));
+    await fixClockText(page);
+    return undo;
+  } catch (error) {
+    await undo();
+    throw error;
+  }
+};
+
 // What a person does on a shown page to bring up something that does not stay, taken before its picture. Each returns
 // what puts the page back.
 const screenActs: Record<string, (page: Page, language: Language) => Promise<() => Promise<void>>> = {
@@ -469,11 +533,32 @@ const screenActs: Record<string, (page: Page, language: Language) => Promise<() 
     await expect(page.locator('#inv-email')).toBeFocused();
     return async () => {};
   },
+  'open-chat-slowly': openSlowly(`/c/rs-learning/conversations/${loading(3)}`, `#sb-recent a[href="/c/rs-learning/conversations/${loading(3)}"]`, '.chat .transcript [aria-busy="true"]', 'conversation_usage', 7),
+  'open-numbers-slowly': openSlowly('/c/rs-learning/numbers', '.nav a[href="/c/rs-learning/numbers"]', '.numbers-page [aria-busy="true"]', 'company_log', 7),
   // Another Member's chat opens its Card on Log (#145); the Chat tab, picked as a person picks it, shows the lock.
   'sheet-chat-tab': async page => {
     await page.locator('.sheet #sh-tab-chat').click();
     await expect(page.locator('.sheet .priv-sheet')).toBeVisible();
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    return async () => {};
+  },
+  // The account menu moved through with the keyboard (#173): Arrow Down from the chosen language shows the next entry's
+  // focus ring, kept for the picture. On a phone the account row is inside the drawer.
+  'account-menu-keys': async page => {
+    await openNavigation(page);
+    await page.locator('#btn-me').click();
+    await expect(page.locator('#me-menu [aria-checked="true"]').first()).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await expect(page.locator('#me-menu .menu__item:focus-visible')).toHaveCount(1);
+    return async () => { await page.keyboard.press('Escape'); };
+  },
+  // "N" on the board (#173) opens the new chat with its composer focused, kept for the picture.
+  'new-chat-key': async page => {
+    await page.keyboard.press('KeyN');
+    await expect(page).toHaveURL(/\/c\/rs-learning\/chat$/);
+    await expect(page.locator('.composer__input')).toBeFocused();
+    await idle(page);
+    await showWholePage(page, page.viewportSize()!.width);
     return async () => {};
   },
 };

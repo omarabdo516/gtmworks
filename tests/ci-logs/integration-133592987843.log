@@ -1,0 +1,147 @@
+2026-11-16T20:33:15.1085520Z Current runner version: '2.338.0'
+2026-11-16T20:33:15.1090261Z Runner name: 'omar-pc-ci_gtmworks'
+2026-11-16T20:33:15.1090767Z Runner group name: 'Default'
+[excerpt: lines omitted]
+2026-11-16T20:33:27.1801719Z ##[group]Run '/usr/local/bin/ci-job-cleanup.sh'
+[excerpt: lines omitted]
+2026-11-16T20:33:28.7264945Z ##[group]Run actions/checkout@v4
+[excerpt: lines omitted]
+2026-11-16T20:33:30.4969738Z ##[group]Run actions/setup-node@v4
+[excerpt: lines omitted]
+2026-11-16T20:33:30.7258735Z ##[group]Run node scripts/ci-runner.mjs cleanup
+[excerpt: lines omitted]
+2026-11-16T20:33:31.0120935Z ##[group]Run node scripts/ci-runner.mjs lanes "$RUNNER_ENVIRONMENT" >> "$GITHUB_ENV"
+[excerpt: lines omitted]
+2026-11-16T20:33:31.0426144Z ##[group]Run docker/build-push-action@v6
+[excerpt: lines omitted]
+2026-11-16T20:34:40.0465046Z ##[group]Run ./ci.sh integration
+[excerpt: lines omitted]
+2026-11-16T20:36:13.1170227Z [evidence] POST http://127.0.0.1:64021/auth/v1/token?grant_type=password -> 200
+2026-11-16T20:36:13.4314514Z [evidence] request failed: POST https://app.gtmworks.test/api/recent-cards net::ERR_NETWORK_CHANGED
+2026-11-16T20:36:13.4315969Z [evidence] console error: Failed to load resource: net::ERR_NETWORK_CHANGED
+2026-11-16T20:36:13.4320442Z [evidence] request failed: GET https://app.gtmworks.test/c/rs-learning/chat?_rsc=M6dRPN-aUjhucU8N net::ERR_NETWORK_CHANGED
+2026-11-16T20:36:13.4321849Z [evidence] console error: Failed to load resource: net::ERR_NETWORK_CHANGED
+2026-11-16T20:36:13.4329538Z [evidence] console error: Failed to fetch RSC payload for https://app.gtmworks.test/c/rs-learning/chat. Falling back to browser navigation. TypeError: Failed to fetch
+2026-11-16T20:36:13.4332479Z     at window.fetch (https://app.gtmworks.test/_next/static/chunks/app/not-found-d74da498dc514ef5.js:1:678)
+2026-11-16T20:36:13.4334756Z     at window.fetch (https://app.gtmworks.test/_next/static/chunks/app/layout-2170a7dae86fb0c5.js:1:11846)
+[excerpt: lines omitted]
+2026-11-16T20:37:31.3646384Z ##[error]  1) [functional] › tests/activity-log.spec.ts:16:5 › the Activity log filters by who and by Card, and opens a Card 
+    Error: page.goto: net::ERR_NETWORK_CHANGED at http://127.0.0.1:3000/c/rs-learning/log
+    Call log:
+      - navigating to "http://127.0.0.1:3000/c/rs-learning/log", waiting until "load"
+
+
+       at sign-in.ts:6
+
+      4 | export const seededPassword='local-seed-password';
+      5 | export async function signIn(page:Page,email:string,path:string,*** {
+    > 6 |  await page.request.delete(inbox); await page.goto(path); await expect(page).toHaveURL(/sign-in/);
+        |                                               ^
+      7 |  // A wrong password fails at once. Only the auth service's rate limit is waited out: every test signs in from this one
+[excerpt: lines omitted]
+2026-11-16T20:39:44.1090513Z ##[error]  2) [functional] › tests/frame.spec.ts:60:5 › Home has four parts in order and missing sources show unavailable, never zero 
+    Error: page.goto: net::ERR_NETWORK_CHANGED at http://127.0.0.1:3001/c/rs-learning/work/board
+    Call log:
+      - navigating to "http://127.0.0.1:3001/c/rs-learning/work/board", waiting until "load"
+
+
+      88 |  await expect(badge).toHaveText(String(count));
+      89 |  await expect(badge).toHaveAccessibleName(count?`${count} things waiting on you`:'Nothing waiting on you');
+    > 90 |  await page.goto('/c/rs-learning/work/board');
+         |             ^
+      91 |  await openNavigation(page);
+      92 |  await badge.click();
+      93 |  await expect(page).toHaveURL(/\/approvals$/);
+[excerpt: lines omitted]
+2026-11-16T20:39:44.1168494Z ##[error]  2) [functional] › tests/frame.spec.ts:60:5 › Home has four parts in order and missing sources show unavailable, never zero 
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+    Error: page.goto: net::ERR_NETWORK_CHANGED at http://127.0.0.1:3001/c/rs-learning/approvals
+    Call log:
+      - navigating to "http://127.0.0.1:3001/c/rs-learning/approvals", waiting until "load"
+
+
+      81 |  await expect(assigned.locator('td').last()).toHaveText('وكيل المحتوى');
+      82 |  // The Inbox count sits on the Marketing board entry and opens the Inbox.
+    > 83 |  await page.goto('/c/rs-learning/approvals');
+         |             ^
+      84 |  await expect(page.locator('.approvals')).toBeVisible();
+[excerpt: lines omitted]
+2026-11-16T20:43:35.6900326Z ##[error]  3) [functional] › tests/settings-overlay.spec.ts:236:5 › the Owner invites a Member from the Team table, the row says Invite sent, and becomes a Member row when accepted 
+    Error: expect(received).toBeTruthy()
+
+    Received: ""
+
+       at sign-in.ts:30
+
+      28 |  let link='';
+      29 |  for(let i=0;i<30 && !link;i++) { const response=await page.request.get(inbox); const mailbox=await response.json(); const summary=mailbox.messages?.find((message:{To:{Address:string}[]})=>message.To.some(to=>to.Address===email)); if(summary) { const message=await (await page.request.get(`${mail}/api/v1/message/${summary.ID}`)).json(); const body=message.HTML || message.Text; link=body.
+    > 30 |  expect(link).toBeTruthy(); return link;
+         |               ^
+      31 | }
+      32 |
+[excerpt: lines omitted]
+2026-11-16T20:43:35.6909915Z ##[error]  3) [functional] › tests/settings-overlay.spec.ts:236:5 › the Owner invites a Member from the Team table, the row says Invite sent, and becomes a Member row when accepted 
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+    Error: expect(received).toBeTruthy()
+
+    Received: ""
+
+       at sign-in.ts:30
+
+      28 |  let link='';
+      29 |  for(let i=0;i<30 && !link;i++) { const response=await page.request.get(inbox); const mailbox=await response.json(); const summary=mailbox.messages?.find((message:{To:{Address:string}[]})=>message.To.some(to=>to.Address===email)); if(summary) { const message=await (await page.request.get(`${mail}/api/v1/message/${summary.ID}`)).json(); const body=message.HTML || message.Text; link=body.
+    > 30 |  expect(link).toBeTruthy(); return link;
+         |               ^
+[excerpt: lines omitted]
+2026-11-16T20:43:35.7231480Z       32 |
+2026-11-16T20:43:35.7231650Z       33 | export async function openNavigation(page:Page) {
+2026-11-16T20:43:35.7231927Z         at emailLink (/srv/ci/_work/gtmworks/gtmworks/gtmworks/tests/sign-in.ts:30:15)
+2026-11-16T20:43:35.7232240Z         at /srv/ci/_work/gtmworks/gtmworks/gtmworks/tests/settings-overlay.spec.ts:267:13
+2026-11-16T20:43:35.7232480Z 
+2026-11-16T20:43:35.7235672Z     Error Context: test-results/settings-overlay-the-Owner-56d10--a-Member-row-when-accepted-functional-retry1/error-context.md
+2026-11-16T20:43:35.7236040Z 
+2026-11-16T20:43:35.7236381Z   3) [functional] › tests/activity-log.spec.ts:16:5 › the Activity log filters by who and by Card, and opens a Card 
+2026-11-16T20:43:35.7236653Z 
+2026-11-16T20:43:35.7236847Z     Error: page.goto: net::ERR_NETWORK_CHANGED at http://127.0.0.1:3000/c/rs-learning/log
+2026-11-16T20:43:35.7237069Z     Call log:
+2026-11-16T20:43:35.7237291Z       - navigating to "http://127.0.0.1:3000/c/rs-learning/log", waiting until "load"
+2026-11-16T20:43:35.7237534Z 
+2026-11-16T20:43:35.7237539Z 
+2026-11-16T20:43:35.7237611Z        at sign-in.ts:6
+2026-11-16T20:43:35.7237707Z 
+2026-11-16T20:43:35.7237826Z       4 | export const seededPassword='local-seed-password';
+2026-11-16T20:43:35.7239084Z       5 | export async function signIn(page:Page,email:string,path:string,*** {
+2026-11-16T20:43:35.7239530Z     > 6 |  await page.request.delete(inbox); await page.goto(path); await expect(page).toHaveURL(/sign-in/);
+2026-11-16T20:43:35.7239849Z         |                                               ^
+2026-11-16T20:43:35.7240366Z       7 |  // A wrong password fails at once. Only the auth service's rate limit is waited out: every test signs in from this one
+2026-11-16T20:43:35.7240805Z       8 |  // address, and the allowance refills within seconds. The install job goes past the limit on purpose (issue #41).
+2026-11-16T20:43:35.7241098Z       9 |  for(let attempt=1;;attempt++) {
+2026-11-16T20:43:35.7241337Z         at signIn (/srv/ci/_work/gtmworks/gtmworks/gtmworks/tests/sign-in.ts:6:47)
+2026-11-16T20:43:35.7241634Z         at /srv/ci/_work/gtmworks/gtmworks/gtmworks/tests/activity-log.spec.ts:17:2
+2026-11-16T20:43:35.7241790Z 
+2026-11-16T20:43:35.7242077Z     Error Context: test-results/activity-log-the-Activity--46b3a-nd-by-Card-and-opens-a-Card-functional/error-context.md
+2026-11-16T20:43:35.7242338Z 
+2026-11-16T20:43:35.7242404Z   2 failed
+2026-11-16T20:43:35.7242764Z     [functional] › tests/frame.spec.ts:60:5 › Home has four parts in order and missing sources show unavailable, never zero 
+2026-11-16T20:43:35.7243349Z     [functional] › tests/settings-overlay.spec.ts:236:5 › the Owner invites a Member from the Team table, the row says Invite sent, and becomes a Member row when accepted 
+2026-11-16T20:43:35.7243694Z   1 flaky
+2026-11-16T20:43:35.7243993Z     [functional] › tests/activity-log.spec.ts:16:5 › the Activity log filters by who and by Card, and opens a Card 
+2026-11-16T20:43:35.7244263Z   189 passed (6.2m)
+2026-11-16T20:43:35.9867491Z ##[notice]  2 failed
+    [functional] › tests/frame.spec.ts:60:5 › Home has four parts in order and missing sources show unavailable, never zero 
+    [functional] › tests/settings-overlay.spec.ts:236:5 › the Owner invites a Member from the Team table, the row says Invite sent, and becomes a Member row when accepted 
+  1 flaky
+    [functional] › tests/activity-log.spec.ts:16:5 › the Activity log filters by who and by Card, and opens a Card 
+  189 passed (6.2m)
+2026-11-16T20:43:36.0946441Z ##[error]Process completed with exit code 1.
+2026-11-16T20:43:36.1321677Z ##[group]Run actions/upload-artifact@v4
+[excerpt: lines omitted]
+2026-11-16T20:43:43.8732307Z ##[group]Run actions/upload-artifact@v4
+[excerpt: lines omitted]
+2026-11-16T20:43:48.5105616Z ##[group]Run echo "the runner's memory group, peak since it started: $(( $(cat "/sys/fs/cgroup$(sed -n 's/^0:://p' /proc/self/cgroup)/memory.peak" 2> /dev/null || echo 0) / 1048576 )) MiB"
+[excerpt: lines omitted]
+2026-11-16T20:43:51.8914725Z ##[group]Run node scripts/ci-runner.mjs cleanup
+[excerpt: lines omitted]
+2026-11-16T20:43:59.6351688Z ##[group]Run '/usr/local/bin/ci-job-cleanup.sh'

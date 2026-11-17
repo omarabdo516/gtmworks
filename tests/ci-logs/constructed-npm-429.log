@@ -1,0 +1,15 @@
+2026-11-16T20:33:14.7402261Z Current runner version: '2.338.2'
+2026-11-16T20:33:14.7451825Z ##[group]Runner Image Provisioner
+2026-11-16T20:33:14.7452761Z Hosted Compute Agent
+[excerpt: lines omitted]
+2026-11-16T20:33:20.0000000Z ##[group]Run ./ci.sh static
+2026-11-16T20:33:20.0000001Z ./ci.sh static
+2026-11-16T20:33:20.0000002Z ##[endgroup]
+2026-11-16T20:33:31.0000000Z npm error code E429
+2026-11-16T20:33:31.0000001Z npm error 429 Too Many Requests - GET https://registry.npmjs.org/next/-/next-15.5.4.tgz
+2026-11-16T20:33:31.0000002Z npm error
+2026-11-16T20:33:31.0000003Z npm error This request was refused because too many were made in a short time.
+2026-11-16T20:33:31.0000004Z npm error Try again later.
+2026-11-16T20:33:31.0000005Z npm error
+2026-11-16T20:33:31.0000006Z npm error A complete log of this run can be found in: /home/runner/.npm/_logs/2026-11-16T20_33_21_000Z-debug-0.log
+2026-11-16T20:33:31.0400000Z ##[error]Process completed with exit code 1.

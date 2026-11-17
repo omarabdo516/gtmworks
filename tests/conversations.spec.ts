@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { fakeHermes } from './fake-hermes.mjs';
 import { execFileSync } from 'node:child_process';
 import { signIn } from './sign-in';
+import { asAdmin, holdPages, watchPlaceholders, whileSlow } from './slow-reads';
 
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 // Omar signs in as the Owner of RS Learning, who connects and attaches its agents.
@@ -61,6 +62,14 @@ test('The Owner starts a private conversation from the board and from Home, and 
   await page.getByRole('button',{name:'Send',exact:true}).click();
   await expect(page).toHaveURL(/\/c\/rs-learning\/conversations\/[0-9a-f-]{36}$/);
   const conversation=page.url().split('/').pop()!;
+  // While the Run is open its Agent's tile thinks; when it ends a check shows for a moment, then the idle dot (#184).
+  const face=page.locator('.sidebar .agent-tile').filter({hasText:'Nour'}).locator('.face-wrap');
+  await expect(face.locator('.think')).toBeVisible();
+  await expect(face).toHaveClass(/\bis-thinking\b/);
+  await expect(face.locator('.done-ck')).toBeVisible();
+  await expect(face.locator('.think')).toHaveCount(0);
+  await expect(face.locator('.done-ck')).toHaveCount(0);
+  await expect(face.locator('.dot')).toHaveClass('dot dot--idle');
   await expect(page.locator('.msg[data-author=person]')).toHaveText(new RegExp(text));
   await expect(page.locator('.msg[data-author=agent]')).toContainText(`Reply to: ${text}`);
   expect(await page.evaluate(()=>(window as unknown as {stayed?:boolean}).stayed)).toBe(true);
@@ -265,4 +274,80 @@ test('A Contributor starts a Card\'s chat from its sheet; the Owner, another Con
   try { await locked(reader.page); } finally { await reader.context.close(); }
   expect(fake.settings.runs).toHaveLength(1);
  } finally { detach(agents); await fake.close(); }
+});
+
+// Omar's Conversation with Ads, six turns long, each with its usage, as the engine leaves them; written with triggers off
+// and taken away after (#172).
+const slowChat=(n:number)=>`6f000000-0000-0000-0000-00000000000${n}`;
+const omar='20000000-0000-0000-0000-000000000001';
+const slowChatPath=`/c/rs-learning/conversations/${slowChat(3)}`;
+const slowChatRows={
+ set:`insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('${slowChat(1)}','${company}','${omar}','http://127.0.0.1:9/p/slow-chat','slow-chat','slow-chat-no-key','unreachable');
+  insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('${slowChat(2)}','${company}','${slowChat(1)}','Ads','Runs the ads.');
+  insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${slowChat(3)}','${company}','${omar}','${slowChat(2)}','Ads');
+  insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at)
+   select '${company}','${slowChat(3)}',author,case when author='person' then '${omar}'::uuid end,case when author='agent' then '${slowChat(2)}'::uuid end,
+    case when author='person' then 'Omar' else 'Ads' end,'Turn '||n||E'\\n'||repeat('About the launch week. ',30),case when author='person' then gen_random_uuid() end,
+    'slow-chat-'||n,now()-interval '1 hour'+n*interval '2 minutes'+case when author='agent' then interval '1 minute' else interval '0' end
+   from generate_series(1,6) n cross join unnest(array['person','agent']) author;
+  insert into public.conversation_usage(company_id,conversation_id,run_id,outcome,input_tokens,output_tokens,recorded_at)
+   select '${company}','${slowChat(3)}','slow-chat-'||n,'completed',120,80,now()-interval '1 hour'+n*interval '2 minutes'+interval '1 minute' from generate_series(1,6) n;`,
+ unset:`delete from public.conversation_usage where conversation_id='${slowChat(3)}';
+  delete from public.conversation_messages where conversation_id='${slowChat(3)}';
+  delete from public.conversations where id='${slowChat(3)}';
+  delete from public.hermes_agents where id='${slowChat(2)}';
+  delete from public.hermes_connections where id='${slowChat(1)}';`,
+};
+const where=async(page:Page,selector:string)=>{ const box=(await page.locator(selector).boundingBox())!; return {x:Math.round(box.x),y:Math.round(box.y),width:Math.round(box.width),height:Math.round(box.height)}; };
+
+test('a Conversation whose record is slow shows the placeholder in its transcript, under its title and over its composer, then its messages at the newest',async({page})=>{
+ test.setTimeout(90000);
+ const placeholders=await watchPlaceholders(page);
+ // Only the record reads the usage (lib/conversation-record.ts); the page's frame and the sidebar never do.
+ const held=await holdPages(page,url=>url.pathname===slowChatPath);
+ asAdmin(slowChatRows.unset); asAdmin(slowChatRows.set);
+ try {
+  await ownerSignIn(page);
+  const link=page.locator(`#sb-recent a[href="${slowChatPath}"]`);
+  await expect(link).toBeVisible();
+  await whileSlow('conversation_usage',3,async()=>{
+   await link.click(); held.letGo();
+   const placeholder=page.locator('.chat .transcript [aria-busy="true"]');
+   await expect(placeholder).toBeVisible();
+   await expect(placeholder).toHaveAttribute('aria-label','Loading the chat');
+   await expect(placeholder.locator('.sk-msg')).toHaveCount(3);
+   await expect(page).toHaveURL(new RegExp(`${slowChatPath}$`));
+   await expect(page.locator('.sidebar')).toBeVisible();
+   await expect(page.locator('.chat .head-pill__title')).toHaveText('Turn 1');
+   await expect(page.locator('.chat .composer-area').getByLabel('Message',{exact:true})).toBeVisible();
+   const frame=[await where(page,'.chat .transcript'),await where(page,'.chat .composer-area')];
+   const messages=page.locator('.chat .turns > .msg');
+   await expect(messages).toHaveCount(12,{timeout:15000});
+   await expect(placeholder).toHaveCount(0);
+   expect([await where(page,'.chat .transcript'),await where(page,'.chat .composer-area')],'the transcript and the composer keep their places').toEqual(frame);
+   const transcript=page.locator('.chat .transcript');
+   expect(await transcript.evaluate(box=>box.scrollHeight>box.clientHeight),'the messages are taller than the transcript').toBe(true);
+   await expect.poll(()=>transcript.evaluate(box=>box.scrollHeight-box.scrollTop-box.clientHeight)).toBeLessThan(2);
+   await expect(messages.last()).toBeInViewport();
+  });
+  expect(await placeholders.seen()).toEqual(['Loading the chat']);
+ } finally { held.letGo(); await held.stop(); asAdmin(slowChatRows.unset); }
+});
+
+test('a Conversation ready at once never shows its placeholder, opened or reached from the sidebar',async({page})=>{
+ const placeholders=await watchPlaceholders(page);
+ asAdmin(slowChatRows.unset); asAdmin(slowChatRows.set);
+ try {
+  await ownerSignIn(page);
+  const messages=page.locator('.chat .turns > .msg');
+  await page.goto(slowChatPath);
+  await expect(messages).toHaveCount(12);
+  await page.locator('.nav a[href$="/work/board"]').click();
+  await expect(page.locator('.board')).toBeVisible();
+  await page.locator(`#sb-recent a[href="${slowChatPath}"]`).click();
+  await expect(page).toHaveURL(new RegExp(`${slowChatPath}$`));
+  await expect(messages).toHaveCount(12);
+  await expect.poll(placeholders.waiting).toBe(0);
+  expect(await placeholders.seen()).toEqual([]);
+ } finally { asAdmin(slowChatRows.unset); }
 });

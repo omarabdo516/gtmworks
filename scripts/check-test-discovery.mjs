@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 
 // These are imported browser helpers, not standalone tests.
-const helpers = new Set(['tests/sign-in.ts', 'tests/navigation-measure.ts', 'tests/visual-screens.mjs', 'tests/fake-hermes.mjs', 'tests/fake-engine.mjs', 'tests/sql-statements.mjs', 'tests/choose-language.ts', 'tests/tap-overlaps.ts', 'tests/lane.mjs', 'tests/fresh-seed.ts', 'tests/motion-table.mjs', 'tests/motion-css.mjs', 'tests/components/work-page.tsx']);
+const helpers = new Set(['tests/sign-in.ts', 'tests/navigation-measure.ts', 'tests/visual-screens.mjs', 'tests/fake-hermes.mjs', 'tests/fake-engine.mjs', 'tests/sql-statements.mjs', 'tests/choose-language.ts', 'tests/tap-overlaps.ts', 'tests/lane.mjs', 'tests/fresh-seed.ts', 'tests/slow-reads.ts', 'tests/motion-table.mjs', 'tests/motion-css.mjs', 'tests/components/work-page.tsx']);
 const generated = new Set(['.git', 'node_modules', '.next', 'test-results', 'playwright-report', '.temp']);
 function files(directory = '.') {
  return readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
@@ -26,9 +26,9 @@ const covered = new Set([
  ...globSync('tests/components/**/*.test.tsx'),
  ...globSync('supabase/migrations/*.verify.sql'),
  'tests/db.sh',
- ...[...database.matchAll(/^node (tests\/[^\s]+\.mjs)$/gm)].map(match => match[1]),
+ ...[...database.matchAll(/^(?:step )?node (tests\/[^\s]+\.mjs)$/gm)].map(match => match[1]),
 ]);
-if (/^npx supabase test db$/m.test(database)) {
+if (/^(?:step )?npx supabase test db$/m.test(database)) {
  // Supabase's pg_prove invocation searches recursively for both extensions.
  for (const path of [...globSync('supabase/tests/**/*.sql'), ...globSync('supabase/tests/**/*.pg')]) covered.add(path);
 }
@@ -47,9 +47,9 @@ for (const config of readdirSync('.').filter(name => /^playwright(\.[a-z]+)?\.co
  browserFiles(browser.suites);
 }
 
-// Playwright's approved images (`<spec>-snapshots/`) and the compared screens (`tests/visual-screens/`) are data for a
-// spec, not tests.
-const specData = path => /(^|\/)[^/]+-snapshots\//.test(path) || path.startsWith('tests/visual-screens/');
+// Playwright's approved images (`<spec>-snapshots/`), the compared screens (`tests/visual-screens/`) and the failed job
+// logs `ci-classify.test.mjs` reads (`tests/ci-logs/`) are data for a test, not tests.
+const specData = path => /(^|\/)[^/]+-snapshots\//.test(path) || path.startsWith('tests/visual-screens/') || (path.startsWith('tests/ci-logs/') && !/\.(test|spec)\.[^/]+$/.test(path));
 const orphans = files().filter(path =>
  !specData(path) &&
  (/(^|\/)(tests?|__tests__)\//.test(path) || /\.(test|spec)\.[^/]+$/.test(path) || path.endsWith('.verify.sql')) &&

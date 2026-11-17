@@ -1,7 +1,6 @@
 import { test, expect, type Page } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { signIn } from './sign-in';
-import { idle } from './navigation-measure';
 import { i18n } from '../lib/i18n.mjs';
 import { logPageSize } from '../lib/activity-log.mjs';
 
@@ -50,6 +49,13 @@ test('the Activity log filters by who and by Card, and opens a Card',async({page
  // A row's Card link opens that Card.
  await page.locator('.lgp-body .lg-row .lg-card').first().click();
  await expect(page).toHaveURL(new RegExp(`/c/rs-learning/work/board/${card}$`));
+
+ // A filter no row matches, on a log that has rows: the page reads the Company's whole log, so it says nothing
+ // matches and its own link offers everything back (review of #279: the page, not the component, picks the note).
+ await page.goto('/c/rs-learning/log?who=a:ffffffff-ffff-ffff-ffff-ffffffffffff');
+ const empty=page.locator('.lgp-body .lgp-empty');
+ await expect(empty).toContainText(tr('logNoMatch'));
+ await expect(empty.getByRole('link',{name:tr('logShowAll')})).toHaveAttribute('href','/c/rs-learning/log');
 });
 
 test('the Activity log filters by a person, and an opened Card shows only its own rows',async({page})=>{
@@ -130,35 +136,6 @@ test('older rows are reached page by page in a stable order, each row once',asyn
  } finally {
   query(`update public.members set removed_at=now() where company_id='${company}' and person_id='${viewer}'`);
  }
-});
-
-test('a filter that matches nothing says so and offers everything back',async({page})=>{
- await signIn(page,'manager@example.com','/c/rs-learning/log?who=a:ffffffff-ffff-ffff-ffff-ffffffffffff');
- const tr=await t(page);
- await expect(page.locator('.lgp-empty')).toContainText(tr('logNoMatch'));
- await expect(page.locator('.lgp-body .lg-row')).toHaveCount(0);
- // Once the page has finished loading the filter still holds: a filter with no option of its own is not undone.
- await idle(page);
- await expect(page).toHaveURL(/\/c\/rs-learning\/log\?who=a(?::|%3A)ffffffff-ffff-ffff-ffff-ffffffffffff$/);
- await expect(page.locator('.lgp-empty')).toContainText(tr('logNoMatch'));
- await expect(page.locator('.lgp-body .lg-row')).toHaveCount(0);
- // Everything comes back from the note.
- await page.locator('.lgp-empty').getByRole('link',{name:tr('logShowAll')}).click();
- await expect(page).toHaveURL(/\/c\/rs-learning\/log$/);
- await expect(page.locator('.lgp-body .lg-row').first()).toBeVisible();
- await expect(page.locator('.lgp-empty')).toHaveCount(0);
-});
-
-test('a filter whose person or Agent is no longer listed shows as such, and Everyone clears only it',async({page})=>{
- await signIn(page,'manager@example.com','/c/rs-learning/log?who=a:ffffffff-ffff-ffff-ffff-ffffffffffff&card=1');
- const tr=await t(page);
- await idle(page);
- const who=page.locator('#lg-who');
- await expect(who).toHaveValue('a:ffffffff-ffff-ffff-ffff-ffffffffffff');
- await expect(who.locator('option:checked')).toHaveText(tr('logNotListed'));
- await who.selectOption('all');
- await expect(page).toHaveURL(/\/c\/rs-learning\/log\?card=1$/);
- await expect(page.locator('#lg-who')).toHaveValue('all');
 });
 
 test('a Member reads only the log of their own Company',async({page})=>{

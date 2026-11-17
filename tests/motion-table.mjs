@@ -99,6 +99,13 @@ export const motionTable = [
   { ref: '.fr[open]', built: '.gw .fr', file: 'app/first-run-choice.css', html: '<div class="gw"><div class="fr" role="dialog"></div></div>' },
   { ref: '.fr__col > *', built: '.gw .fr__col > *', file: 'app/first-run-choice.css', html: '<div class="gw"><form class="fr__col"><div class="fr__head"></div></form></div>' },
   { ref: '.cr-kind', built: '.gw .cr-kind', file: 'app/first-run-choice.css', html: '<div class="gw"><label class="cr-kind fr-choice"></label></div>' },
+  // An Agent at work on its sidebar tile (#184): its eyes scan, three dots think; when the Run ends, a check pops and draws.
+  // The dot's ping is a ::after, which a row cannot name: tests/components/agent-face-dot.test.tsx reads it.
+  { ref: '.face.is-thinking .face__f', built: '.gw .face-wrap.is-thinking .face__f', file: 'app/shell.css', html: '<div class="gw"><span class="face-wrap is-thinking"><svg><g class="face__f"></g></svg></span></div>' },
+  { ref: '.face-wrap .think', built: '.gw .face-wrap .think', file: 'app/shell.css', html: '<div class="gw"><span class="face-wrap"><span class="think"></span></span></div>' },
+  { ref: '.face-wrap .think i', built: '.gw .face-wrap .think i', file: 'app/shell.css', html: '<div class="gw"><span class="face-wrap"><span class="think"><i></i></span></span></div>' },
+  { ref: '.face-wrap .done-ck', built: '.gw .face-wrap .done-ck', file: 'app/shell.css', html: '<div class="gw"><span class="face-wrap"><span class="done-ck"></span></span></div>' },
+  { ref: '.face-wrap .done-ck .od-icon path', built: '.gw .face-wrap .done-ck .gw-icon path', file: 'app/shell.css', html: '<div class="gw"><span class="face-wrap"><span class="done-ck"><svg class="gw-icon"><path></path></svg></span></span></div>' },
 ];
 
 // The reference's six motion tokens; the product's carry the gw- prefix (`--dur` is `--gw-dur`).

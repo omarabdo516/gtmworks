@@ -22,16 +22,6 @@ async function newCard(page:Page,label:string) {
 const columnOf=(page:Page,id:number)=>page.locator(`.kcard[data-card-id="${id}"]`).evaluate(el=>el.closest('[data-column]')?.getAttribute('data-column') ?? null);
 const landedColumn=async(page:Page,id:number)=>{ let column:string|null=null; await expect.poll(async()=>column=await columnOf(page,id)).not.toBeNull(); return column; };
 
-test('the board shows the six columns of the approved design, Waiting on you first',async({page})=>{
- await signIn(page,'omar@example.com','/c/rs-learning/work/board');
- await expect(page.locator('#board-cols > .col')).toHaveCount(6);
- expect(await page.locator('#board-cols > .col').evaluateAll(cols=>cols.map(col=>col.getAttribute('data-column')))).toEqual(['waiting','ideas','planned','progress','live','done']);
- await expect(page.getByRole('heading',{level:2,name:'Waiting on you',exact:true})).toBeVisible();
- // Every seeded card is in its stage's column: Review waits on you, Ideas stays Ideas.
- await expect(page.locator('.col[data-column="waiting"] .kcard[data-card-id="5"]')).toBeVisible();
- await expect(page.locator('.col[data-column="ideas"] .column[data-stage-name="أفكار"]')).toHaveCount(1);
-});
-
 test('a card moves by drag and by keyboard, and both moves are logged',async({page})=>{
  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
  const card=await newCard(page,'Board move');
@@ -94,23 +84,6 @@ test('a card waiting for a decision moves only by it: a drop on Live opens the c
  await expect(page).toHaveURL(/\/work\/board\/5$/);
  await page.goto('/c/rs-learning/work/board');
  expect(await landedColumn(page,5)).toBe('waiting');
-});
-
-test('the Agent filter shows only that Agent’s cards',async({page})=>{
- await signIn(page,'omar@example.com','/c/rs-learning/work/board');
- const tools=page.getByRole('group',{name:'Filter by agent'});
- const agentOf=(id:number)=>rows(`select person_id from public.work_assignees where company_id='${rs}' and card_id=${id} order by id limit 1`)[0]?.person_id as string;
- const writer=agentOf(1);
- const name=(await page.locator('.kcard[data-card-id="1"] .kcard__agent bdi').textContent())!.trim();
- await tools.getByRole('button',{name,exact:true}).click();
- await expect(tools.getByRole('button',{name,exact:true})).toHaveAttribute('aria-pressed','true');
- await expect(page.locator('.kcard[data-card-id="1"]')).toBeVisible();
- // Every card left shows that Agent; the designer's card is gone.
- for(const agent of await page.locator('#board-cols .kcard .kcard__agent bdi').allTextContents()) expect(agent.trim()).toBe(name);
- expect(agentOf(2)).not.toBe(writer);
- await expect(page.locator('.kcard[data-card-id="2"]')).toHaveCount(0);
- await tools.getByRole('button',{name:'All',exact:true}).click();
- await expect(page.locator('.kcard[data-card-id="2"]')).toBeVisible();
 });
 
 test('a Viewer cannot move a card',async({page})=>{

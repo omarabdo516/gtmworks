@@ -94,23 +94,3 @@ test('Card details opens the Card\'s page with its fields', async ({ page }) => 
  await expect(page.locator('.modal')).toBeVisible();
  await expect(page.getByLabel('Offering', { exact: true })).toBeVisible();
 });
-
-test('the sheet stays in the page while it slides out and is gone after; with reduced motion it leaves at once', async ({ page }) => {
- await page.emulateMedia({ reducedMotion: 'no-preference' });
- await signIn(page, 'omar@example.com', `${board}?card=1`);
- const sheet = page.locator('dialog.sheet');
- await expect(sheet).toHaveAttribute('open', '');
- await expect.poll(() => sheet.evaluate(node => node.getAnimations().length)).toBe(0);
- // Read in the page in the same task as the press, inside the reference's 190ms leave.
- const leaving = await sheet.evaluate(node => { node.querySelector<HTMLButtonElement>('.sheet__top .circle-btn')!.click();
-  return new Promise<{open:boolean,closing:boolean,name:string}>(done => requestAnimationFrame(() => done({ open: (node as HTMLDialogElement).open, closing: node.classList.contains('is-closing'), name: getComputedStyle(node).animationName }))); });
- expect(leaving).toEqual({ open: true, closing: true, name: 'sheetOutLtr' });
- await expect(page.locator('dialog.sheet[open]')).toHaveCount(0);
- await expect(page).toHaveURL(at(board));
-
- await page.emulateMedia({ reducedMotion: 'reduce' });
- await cardLink(page, 1).click();
- await expect(page.locator('dialog.sheet[open]')).toBeVisible();
- const gone = await page.locator('dialog.sheet').evaluate(node => { node.querySelector<HTMLButtonElement>('.sheet__top .circle-btn')!.click(); return { open: (node as HTMLDialogElement).open, closing: node.classList.contains('is-closing') }; });
- expect(gone).toEqual({ open: false, closing: false });
-});

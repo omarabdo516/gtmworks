@@ -17,6 +17,7 @@ import { ReplyCard } from '@/app/reply-card';
 import { overlayHref } from '@/lib/settings-overlay.mjs';
 import type { ConversationRecord } from '@/lib/conversation-record';
 import { localeFor } from '@/lib/i18n.mjs';
+import { useReportRun } from '@/lib/live-runs';
 
 export type ThreadConversation=ConversationRecord['conversation'];
 type Text=(key:string,...values:unknown[])=>string;
@@ -41,6 +42,8 @@ export function useConversationRecord({company,initial}:{company:string,initial:
  const id=initial.conversation.id;
  const [record,setRecord]=useState(initial); const [sent,setSent]=useState(0);
  const {messages,pending}=record;
+ // The open Run moves its Agent's tile in the sidebar, from the page and from a Card's sheet alike (#184).
+ useReportRun(record.conversation.agent_id??undefined,pending);
  // The sidebar's Agents and the board come from the server render: an Agent Lead makes while the record is asked for
  // again, or a Card's new column, is only on the page once the server parts are drawn again, so they show without a
  // reload.
@@ -86,6 +89,18 @@ export function useConversationRecord({company,initial}:{company:string,initial:
  return {record,asked};
 }
 
+// The transcript while the Conversation is still loading (#172; design-reference: skeletonHTML): the person's message,
+// a reply with its face, and a reply with a card.
+export function ChatPlaceholder() {
+ const {c}=useConversationText();
+ const line=(width:number)=><div className="sk sk-line" style={{width:`${width}%`}}/>;
+ return <div className="transcript__col sk-hold" aria-busy="true" aria-label={c('chatLoading')}>
+  <div className="sk-msg" style={{alignSelf:'flex-end',width:'55%'}}>{line(100)}{line(70)}</div>
+  <div className="sk-msg" style={{width:'80%'}}><div className="sk" style={{width:20,height:20,borderRadius:'50%'}}/>{line(90)}{line(95)}{line(60)}</div>
+  <div className="sk-msg" style={{width:'90%'}}>{line(100)}{line(80)}<div className="sk" style={{height:180,borderRadius:'var(--gw-r-card)',width:'100%'}}/></div>
+ </div>;
+}
+
 // The messages as the reference draws them (design-reference: msgHTML): the Agent's turns on the start side, the
 // person's on the end side, with every card and line the Conversation has; then whether the Agent is working, and for
 // whom, or that the reply failed. While the Agent works, a message sent meanwhile waits as its sender's next turn
@@ -118,10 +133,11 @@ export function ConversationTurns({slug,record}:{slug:string,record:Conversation
 
 // What goes under the messages (design-reference: composerHTML): the composer for a person who may write, whose stop
 // square stops the open run for the person who started it, or a Manager or Owner; the view-only line for a Viewer. The
-// Conversation's own page adds its usage line; a Card's sheet draws none.
-export function ConversationComposer({company,record,writer,asked,draft,usage}:{company:string,record:ConversationRecord,writer:boolean,asked:()=>void,draft?:{text:string,n:number}|null,usage:boolean}) {
+// Conversation's own page adds its usage line; a Card's sheet draws none. While the record is still on its way (#172) it
+// already takes a message, with no stop square, and keeps the usage line's place.
+export function ConversationComposer({company,conversation,record,writer,asked,draft,usage}:{company:string,conversation:ThreadConversation,record:ConversationRecord|null,writer:boolean,asked:()=>void,draft?:{text:string,n:number}|null,usage:boolean}) {
  const {t,language}=useI18n(); const {c}=useConversationText();
- const {conversation,working,canStop}=record;
+ const working=record?.working; const canStop=record?.canStop;
  const count=(value:number)=>new Intl.NumberFormat(localeFor(language)).format(value);
  return <>
   {writer?<MessageBox key={draft?.n||0} draft={draft?.text} placeholder={t('writeTo',conversation.agent_name)} stop={working&&canStop?{label:c('conversationStop',conversation.agent_name),run:async()=>{
@@ -133,7 +149,8 @@ export function ConversationComposer({company,record,writer,asked,draft,usage}:{
    if(!failure) asked();
    return failure;
   }}/>:<p className="ro-line" role="note"><ShellIcon name="eye"/><span>{t('viewOnly')}</span></p>}
-  {usage&&<p className="chat-usage" data-usage>{t('conversationUsage',count(record.usage.input+record.usage.output),count(record.usage.input),count(record.usage.output))}{record.usage.unknown>0&&<> · {t('usageUnknownRuns',count(record.usage.unknown))}</>}</p>}
+  {usage&&(record?<p className="chat-usage" data-usage>{t('conversationUsage',count(record.usage.input+record.usage.output),count(record.usage.input),count(record.usage.output))}{record.usage.unknown>0&&<> · {t('usageUnknownRuns',count(record.usage.unknown))}</>}</p>
+   :<p className="chat-usage" aria-hidden="true">{'\u00a0'}</p>)}
  </>;
 }
 

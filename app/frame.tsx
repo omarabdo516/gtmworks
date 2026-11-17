@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } fro
 import { usePathname } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
 import { ShellIcon } from '@/components/shell-icon';
+import { onComposerFocus, takeComposerFocus } from '@/lib/composer-focus';
 
 const narrowQuery='(max-width: 767px)';
 const subscribe=(notify:()=>void)=>{const media=window.matchMedia(narrowQuery);media.addEventListener('change',notify);return ()=>media.removeEventListener('change',notify);};
@@ -17,7 +18,9 @@ export function Frame({sidebar,title,breadcrumb,chat=false,children}:{sidebar:Re
  // A new page closes the drawer, whatever opened it (a link, Back, a redirect).
  const [shown,setShown]=useState(pathname);
  if(shown!==pathname) { setShown(pathname); setOpen(false); }
- const drawer=useRef<HTMLElement>(null);
+ const drawer=useRef<HTMLElement>(null); const content=useRef<HTMLDivElement>(null);
+ // "N" (app/new-chat-key) closes the drawer, as a new page does.
+ useEffect(()=>onComposerFocus(()=>setOpen(false)),[]);
  // On a narrow screen the open drawer covers the page: the page behind it (all but the menu button) is inert, so
  // neither the keyboard nor assistive technology reaches it.
  const narrow=useSyncExternalStore(subscribe,()=>window.matchMedia(narrowQuery).matches,()=>false);
@@ -27,7 +30,13 @@ export function Frame({sidebar,title,breadcrumb,chat=false,children}:{sidebar:Re
  // Escape closes it, and closing it in any way gives focus back to the menu button. While it covers the page it is
  // announced as a modal dialog; beside the page it stays a labelled landmark.
  useEffect(()=>{
-  if(!open) { if(wasOpen.current) menu.current?.focus(); wasOpen.current=false; return; }
+  // Closing gives focus back to the menu button, unless a new chat's composer waits for it or has already taken it.
+  if(!open) {
+   if(wasOpen.current) { const composer=content.current?.querySelector<HTMLTextAreaElement>('.composer__input');
+    if(composer&&takeComposerFocus(location.pathname+location.search)) composer.focus();
+    else if(!document.activeElement||document.activeElement===document.body||drawer.current?.contains(document.activeElement)) menu.current?.focus(); }
+   wasOpen.current=false; return;
+  }
   wasOpen.current=true;
   const targets=()=>Array.from(drawer.current?.querySelectorAll<HTMLElement>('a[href],button:not([disabled]),input:not([disabled]),textarea:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])')||[]).filter(node=>node.getClientRects().length>0);
   targets()[0]?.focus();
@@ -51,7 +60,7 @@ export function Frame({sidebar,title,breadcrumb,chat=false,children}:{sidebar:Re
     <button ref={menu} type="button" className="mobile-menu circle-btn md:hidden" aria-label={t('openMenu')} aria-controls="sidebar" aria-expanded={open} onClick={()=>setOpen(true)}><ShellIcon name="menu"/></button>
     <div className="contents" inert={covered}>{breadcrumb??<div className="heading m-0 min-w-0"><h1 className="text-sm font-medium uppercase tracking-wide">{title}</h1></div>}</div>
    </header>
-   <div className="app-content flex-1 min-h-0 overflow-auto" inert={covered}>{children}</div>
+   <div ref={content} className="app-content flex-1 min-h-0 overflow-auto" inert={covered}>{children}</div>
   </div>
  </div>;
 }
