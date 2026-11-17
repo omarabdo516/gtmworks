@@ -6,7 +6,7 @@ import { topLevelStatements } from './sql-statements.mjs';
 // with no change under way and no set unanswered, so an Agent made right after the update waits only when the Company's
 // log says it holds a key. The migration's one insert is replayed on rows of the log; the database this runs on has the
 // migration.
-const seed=topLevelStatements(readFileSync('supabase/migrations/20270115000000_agent_key_waits.sql','utf8')).filter(statement=>/^insert\s+into\s+public\.company_key_holds\b/i.test(statement));
+const seed=topLevelStatements(readFileSync('supabase/migrations/20270118000000_agent_key_waits.sql','utf8')).filter(statement=>/^insert\s+into\s+public\.company_key_holds\b/i.test(statement));
 if(seed.length!==1) throw new Error(`expected one insert into company_key_holds, found ${seed.length}`);
 const sql=`begin;
 create extension if not exists pgtap with schema extensions;
