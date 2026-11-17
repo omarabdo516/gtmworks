@@ -1,5 +1,7 @@
+import type { ReactNode } from 'react';
 import Link from '@/lib/link';
 import type { I18n, Language } from '@/lib/i18n.mjs';
+import type { WaitingItem } from '@/lib/approval-queue';
 import { formatFigure, type NumbersTile, type Period } from '@/lib/numbers.mjs';
 import { PageIcon } from '../log/icons';
 import { PeriodSwitch } from './numbers-client';
@@ -25,4 +27,14 @@ export function NumbersFigures({t,language,locale,period,connected,tiles}:{t:T,l
 
 export function NoApp({t,slug}:{t:T,slug:string}) {
  return <div className="wait-empty dash-empty"><b>{t('numbersNoApp')}</b><span>{t('numbersNoAppNote')}</span><Link className="btn btn--secondary btn--sm" href={`/c/${slug}/connections`}><PageIcon name="plug"/>{t('numbersConnect')}</Link></div>;
+}
+
+// One row of what waits on the reader. An Agent waiting for the Company's key (#299) names no Card or Conversation, so it
+// gives its reason and opens "Waiting on you", where its card says how the wait ends.
+export function WaitingRow({t,slug,writer,item,face}:{t:T,slug:string,writer:boolean,item:WaitingItem,face:ReactNode}) {
+ const href=item.card_id!=null?`/c/${slug}/work/board/${item.card_id}`:item.conversation_id?`/c/${slug}/conversations/${item.conversation_id}`:`/c/${slug}/approvals`;
+ const detail=item.kind==='approval'?t('numbersWaitingStep',item.body):item.kind==='agent_key'?t('waitingAgentKeyReason'):<bdi>{item.body||item.asked_by}</bdi>;
+ return <Link className="panel-row" href={href}>{face}
+  <span className="panel-row__text"><bdi className="panel-row__t">{item.title}</bdi><span className="panel-row__d">{detail}</span></span>
+  <span className="panel-row__meta panel-row__meta--wait"><span className="dot dot--waiting" aria-hidden="true"/>{t(writer?'numbersWaitingOnYou':'numbersWaiting')}</span></Link>;
 }

@@ -19,6 +19,7 @@ const NewCard=lazy(()=>import('./new-card'));
 import { ChatCardFoot, useShowCard, type CardAgent } from './board-show';
 import { decideAgentRule } from './skill-actions';
 import { OwnerRequestCard } from './agent-request-card';
+import { AgentKeyWaitCard } from './agent-key-wait-card';
 import { Decision } from './decision';
 import { ActivityRow, Avatar, isMessage, MessageRow, NoteReplyRow, type WorkActivity, type WorkAttachment, type WorkMember, MemberPicker } from '@/lib/work-activity';
 import { NoteText, type EditableNote } from '@/app/note-edit';
@@ -124,6 +125,7 @@ export default function Work(p:WorkProps) { const {workAction}=p; const {t,local
  const decidedHere:Record<string,(item:WaitingItem)=>ReactNode>={
   rule_suggestion:ruleView,
   agent_request:item=><OwnerRequestCard key={`${item.kind}:${item.id}`} slug={p.slug} company={p.company} lead={lead} item={item}/>,
+  agent_key:item=><AgentKeyWaitCard key={`${item.kind}:${item.id}`} item={item}/>,
  };
  const answeredHere=(item:WaitingItem)=>Object.hasOwn(decidedHere,item.kind);
  // A mention (#22) names who wrote the note and on which Card, shows the note and opens it on its Card.

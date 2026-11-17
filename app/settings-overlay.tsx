@@ -192,7 +192,7 @@ function AgentPage({t,rtl,slug,company,userId,agent,status,main,rules,owner,canM
     {(['settingsAbout','settingsHow','settingsThinks','settingsVoice','settingsTools','settingsSkills'] as const).map(key=><SoonSec key={key} t={t} id={`set-h-${key}`} label={t(key)}/>)}
     {owner&&<section className="dp-sec" aria-labelledby="set-h-danger"><Label id="set-h-danger">{t('settingsDanger')}</Label><ul className="panel-card">
      <li className="panel-row"><span className="panel-row__text"><span className="panel-row__t">{t('settingsPause')}</span><span className="panel-row__d">{t('settingsPauseD')}</span></span>
-      <button type="button" className="btn btn--secondary btn--sm" aria-disabled="true" title={t('soon')}>{t('settingsPauseButton')}</button></li>
+      <button type="button" id="danger-pause" className="btn btn--secondary btn--sm" aria-disabled="true" title={t('soon')}>{t('settingsPauseButton')}</button></li>
      {isMain?<li className="panel-row"><span className="panel-row__text"><span className="panel-row__t">{t('settingsDelete',agent.name)}</span><span className="panel-row__d">{t('settingsDeleteMain')}</span></span></li>
       :<DeleteAgent company={company} slug={slug} agent={agent}/>}
     </ul></section>}
