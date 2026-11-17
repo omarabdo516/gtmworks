@@ -233,6 +233,9 @@ test('only the main branch\'s scheduled or manual run may write the issue; a pul
   const { jobs } = load(readFileSync('.github/workflows/ci-health.yml', 'utf8'));
   const writers = Object.entries(jobs).filter(([, job]) => Object.values(job.permissions ?? {}).includes('write')).map(([name]) => name);
   assert.deepEqual(writers, ['report']);
+  // Runs that share a group queue, and a newer one replaces a pending one: only main's runs, the writers, share one.
+  const workflow = load(readFileSync('.github/workflows/ci-health.yml', 'utf8'));
+  assert.deepEqual(workflow.concurrency, { group: 'ci-health-${{ github.ref }}', 'cancel-in-progress': false });
   assert.deepEqual(jobs.report.permissions, { contents: 'read', actions: 'read', issues: 'write' });
   assert.equal(jobs.report.if, "${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}");
   const script = job => job.steps.find(step => /ci-health\.mjs/.test(step.run ?? ''));

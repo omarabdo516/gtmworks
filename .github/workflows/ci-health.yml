@@ -14,9 +14,10 @@ on:
       - .github/workflows/ci-health.yml
       - scripts/ci-health.mjs
 
-# One writer of the tracking issue at a time.
+# One writer of the tracking issue at a time: main's scheduled and manual runs share a group. A pull request or another
+# branch has one of its own, so its dry run never queues behind, or replaces, a report waiting to write.
 concurrency:
-  group: ci-health-${{ github.event_name == 'pull_request' && github.ref || 'main' }}
+  group: ci-health-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
