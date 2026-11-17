@@ -52,7 +52,9 @@ const agentWeek={
 };
 const where=async(locator:Locator)=>{ const box=(await locator.boundingBox())!; return {x:Math.round(box.x),y:Math.round(box.y),width:Math.round(box.width)}; };
 
-test('while its figures are slow Numbers keeps its title and period switch over the placeholder, also after a period change, with the focus on the chosen period',async({page})=>{
+// QUARANTINED until 2026-11-24 (#305, Omar's 7-day rule, #255 D8): on hosted runners the figures can arrive with the
+// frame, so the placeholder is never drawn. The fix holds the placeholder with a state the test controls; see #305.
+test.fixme('while its figures are slow Numbers keeps its title and period switch over the placeholder, also after a period change, with the focus on the chosen period',async({page})=>{
  const placeholders=await watchPlaceholders(page);
  // Only the figures read the log (Figures in app/c/[slug]/numbers/page.tsx); the page's frame and the sidebar do not.
  const week=await holdPages(page,url=>url.pathname===numbersPath&&!url.searchParams.has('period'));
