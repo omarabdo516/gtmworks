@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { outputLine, run, steps } from '../scripts/ci-fast.mjs';
+import { choose, outputLine, run, steps } from '../scripts/ci-fast.mjs';
 
 // The fast job (#258, spec #255 D1): static, unit and component tests run as parallel steps of one command, and each
 // step reports its own result, so a red lint leaves the rest green and readable.
@@ -137,4 +137,12 @@ test('typecheck reads no file that the tests running beside it write and delete'
   const { files } = JSON.parse(execFileSync(process.execPath, ['node_modules/typescript/bin/tsc', '--showConfig'], { encoding: 'utf8' }));
   assert.ok(files.some(file => file.startsWith('./app/')), 'the program still holds the app');
   for (const probe of probes) assert.ok(!files.includes(`./${probe}`), probe);
+});
+
+test('a chosen step that runs tests keeps the discovery gate; a choice of checks alone does not add it', () => {
+  const names = only => choose(steps, only).map(step => step.name);
+  assert.deepEqual(names(['components']), ['discovery', 'components']);
+  assert.deepEqual(names(['node', 'lint']), ['discovery', 'lint', 'node']);
+  assert.deepEqual(names(['lint']), ['lint']);
+  assert.deepEqual(names(undefined), steps.map(step => step.name));
 });

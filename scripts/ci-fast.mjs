@@ -76,6 +76,13 @@ export async function run(list, { skip = [], env = process.env, write = text => 
   return results;
 }
 
+/** The steps `--only` names, in table order, with the gate kept whenever a chosen step waits for it. */
+export function choose(list, only) {
+  if (!only) return list;
+  const gated = list.some(step => step.gated && only.includes(step.name));
+  return list.filter(step => only.includes(step.name) || (step.gate && gated));
+}
+
 /** The fast job's `steps` output, which `check` lists (scripts/ci-verdict.mjs). */
 export const outputLine = results => `steps=${results.map(({ name, result }) => `${name}=${result}`).join(' ')}`;
 
@@ -84,7 +91,7 @@ async function main(argv) {
   if (!ledger) throw new Error('usage: node scripts/ci-fast.mjs <ledger folder> [--skip <step>]... [--only <step>]...');
   const unknown = [...values.skip, ...(values.only ?? [])].filter(name => !steps.some(step => step.name === name));
   if (unknown.length) throw new Error(`no such step: ${unknown.join(', ')}`);
-  const list = values.only ? steps.filter(step => values.only.includes(step.name)) : steps;
+  const list = choose(steps, values.only);
   const results = await run(list, { skip: values.skip, env: { ...process.env, LEDGER: ledger } });
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `${outputLine(results)}\n`);
   process.exitCode = results.every(({ result }) => result !== 'failure' && result !== 'cancelled') ? 0 : 1;
