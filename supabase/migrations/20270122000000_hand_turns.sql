@@ -63,7 +63,7 @@ begin
  return jsonb_build_object('state','done','at',handed.done_at,'first',true);
 end $$;
 
--- As #138's, and an open hand card waits on its Conversation's person while they may still write and see its Agent: no
+-- As 20270121000000_agent_key_waits's (#303), and an open hand card waits on its Conversation's person while they may still write and see its Agent: no
 -- Viewer has one, and it stays until "Done it", whatever is written meanwhile or however its Run ended.
 create or replace function public.waiting_list(c uuid)
 returns table(kind text, id bigint, title text, body text, asked_by text, card_id bigint, conversation_id uuid, created_at timestamptz)
@@ -89,6 +89,11 @@ language sql stable set search_path='' as $$
    join public.conversations v on v.id=q.conversation_id and v.company_id=q.company_id
    where q.company_id=c and q.kind='question' and q.state='open' and v.person_id=auth.uid()
     and not exists(select 1 from public.conversation_usage u where u.conversation_id=q.conversation_id and u.run_id=q.run_id)
+  union all
+  select 'agent_key'::text, k.id, g.name, ''::text, ''::text, null::bigint, null::uuid, k.created_at
+   from public.agent_key_waits k
+   join public.hermes_agents g on g.company_id=k.company_id and g.id=k.agent_id
+   where k.company_id=c and public.agent_key_waits_shown(c)
   union all
   select 'hand'::text, h.id, h.title, ''::text, v.agent_name, null::bigint, h.conversation_id, h.created_at
    from public.reply_cards h

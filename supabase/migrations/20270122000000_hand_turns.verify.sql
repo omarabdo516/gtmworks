@@ -17,7 +17,8 @@ select json_build_object(
   and position('''agent_hand_done''' in pg_get_functiondef('public.mark_hand_done(uuid,uuid,bigint)'::regprocedure))>0,
  'hand_waits_on_the_person',position('''hand''' in pg_get_functiondef('public.waiting_list(uuid)'::regprocedure))>0
   and position('''question''' in pg_get_functiondef('public.waiting_list(uuid)'::regprocedure))>0
-  and position('agent_request' in pg_get_functiondef('public.waiting_list(uuid)'::regprocedure))>0,
+  and position('agent_request' in pg_get_functiondef('public.waiting_list(uuid)'::regprocedure))>0
+  and position('''agent_key''' in pg_get_functiondef('public.waiting_list(uuid)'::regprocedure))>0,
  'grants_kept',has_function_privilege('authenticated','public.mark_hand_done(uuid,uuid,bigint)','execute')
   and not has_function_privilege('anon','public.mark_hand_done(uuid,uuid,bigint)','execute')
   and not has_function_privilege('service_role','public.mark_hand_done(uuid,uuid,bigint)','execute')
