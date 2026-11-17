@@ -46,6 +46,26 @@ test('Connect apps is drawn but not built yet, and "More sections" reaches the s
  await expect.element(screen.getByRole('menu')).not.toBeInTheDocument();
 });
 
+test('in the menu Arrow Down and Up move through the items and wrap, Home and End go to the ends, Tab closes it, and Escape closes it back to its button', async () => {
+ const screen = await menu('en');
+ const button = screen.getByRole('button', { name: 'Account menu' });
+ await button.click();
+ // The first item is Settings and the last the last of "More sections"; the focus starts on the chosen language.
+ const item = (role: 'menuitem' | 'menuitemradio', name: string) => screen.getByRole(role, { name: new RegExp(`^${name}`) });
+ await expect.element(item('menuitemradio', 'English')).toHaveFocus();
+ for (const [key, role, name] of [['{ArrowDown}', 'menuitemradio', 'العربية'], ['{ArrowUp}', 'menuitemradio', 'English'], ['{Home}', 'menuitem', 'Settings'], ['{ArrowUp}', 'menuitem', 'Agents'], ['{ArrowDown}', 'menuitem', 'Settings'], ['{End}', 'menuitem', 'Agents']] as const) {
+  await userEvent.keyboard(key);
+  await expect.element(item(role, name)).toHaveFocus();
+ }
+ await userEvent.keyboard('{Tab}');
+ await expect.element(screen.getByRole('menu')).not.toBeInTheDocument();
+ await button.click();
+ await expect.element(item('menuitemradio', 'English')).toHaveFocus();
+ await userEvent.keyboard('{Escape}');
+ await expect.element(screen.getByRole('menu')).not.toBeInTheDocument();
+ await expect.element(button).toHaveFocus();
+});
+
 // The look the system asks for, as the browser reports it.
 const system = (dark: boolean) => vi.stubGlobal('matchMedia', (query: string) => ({ matches: dark && query === '(prefers-color-scheme: dark)', media: query, addEventListener() {}, removeEventListener() {} }));
 const toggle = (theme: string) => <LanguageProvider language="en"><ThemeToggleView theme={theme} saveTheme={saveTheme}/></LanguageProvider>;

@@ -476,6 +476,25 @@ const screenActs: Record<string, (page: Page, language: Language) => Promise<() 
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     return async () => {};
   },
+  // The account menu moved through with the keyboard (#173): Arrow Down from the chosen language shows the next entry's
+  // focus ring, kept for the picture. On a phone the account row is inside the drawer.
+  'account-menu-keys': async page => {
+    await openNavigation(page);
+    await page.locator('#btn-me').click();
+    await expect(page.locator('#me-menu [aria-checked="true"]').first()).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await expect(page.locator('#me-menu .menu__item:focus-visible')).toHaveCount(1);
+    return async () => { await page.keyboard.press('Escape'); };
+  },
+  // "N" on the board (#173) opens the new chat with its composer focused, kept for the picture.
+  'new-chat-key': async page => {
+    await page.keyboard.press('KeyN');
+    await expect(page).toHaveURL(/\/c\/rs-learning\/chat$/);
+    await expect(page.locator('.composer__input')).toBeFocused();
+    await idle(page);
+    await showWholePage(page, page.viewportSize()!.width);
+    return async () => {};
+  },
 };
 
 async function showScreen(page: Page, screen: (typeof screens)[number], width: number) {

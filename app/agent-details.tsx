@@ -7,6 +7,7 @@ import { ShellIcon } from '@/components/shell-icon';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { MadeLine } from '@/app/agent-made';
 import type { Made } from '@/lib/agent-made';
+import { onComposerFocus } from '@/lib/composer-focus';
 import { statusKeys } from '@/lib/agent-details.mjs';
 import type { AgentDetailsView } from '@/app/agent-details-server';
 
@@ -46,6 +47,9 @@ export function DetailsShell({panel,label,start,children}:{panel:DetailsPanel,la
  const covering=panel.overlay&&panel.expanded;
  const {close:hide}=panel;
  const done=useCallback(()=>{hide();document.getElementById('btn-details')?.focus();},[hide]);
+ // "N" (app/new-chat-key) closes the details over the chat, as the reference's setView does, so the composer it focuses is
+ // not left behind them.
+ useEffect(()=>covering?onComposerFocus(hide):undefined,[covering,hide]);
  useEffect(()=>{
   if(!covering) return;
   close.current?.focus();
