@@ -4,9 +4,10 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 
 // docs/testing.md keeps one row per file under tests/ (#69): what it guards, its runtime and the decision.
-// The approved images and the compared screens are data folders with one row each, so adding a screen needs no row.
+// The approved images, the compared screens and the failed job logs are data folders with one row each, so adding a
+// screen or a log needs no row.
 test('docs/testing.md has exactly one row per file under tests/', () => {
-  const folders = ['visual.spec.ts-snapshots/', 'visual-screens/'];
+  const folders = ['visual.spec.ts-snapshots/', 'visual-screens/', 'ci-logs/'];
   const tracked = execFileSync('git', ['ls-files', 'tests'], { encoding: 'utf8' }).split('\n').filter(Boolean)
     .map(path => path.slice('tests/'.length)).map(path => folders.find(folder => path.startsWith(folder)) ?? path);
   const rows = [...readFileSync('docs/testing.md', 'utf8').matchAll(/^\| `([^`]+)` \|/gm)].map(match => match[1]);

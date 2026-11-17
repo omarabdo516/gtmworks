@@ -3,12 +3,13 @@ import { render } from 'vitest-browser-react';
 import { page, userEvent } from 'vitest/browser';
 import type { ComponentProps } from 'react';
 import AgentChat from '@/app/c/[slug]/chat/[[...agent]]/agent-chat';
+import NewChatKey from '@/app/new-chat-key';
 import { detailsTabs } from '@/app/agent-details-tabs';
 import { LanguageProvider } from '@/lib/i18n-client';
 import { i18n } from '@/lib/i18n.mjs';
 import '@/app/shell.css';
 
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }) }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/chat', useSearchParams: () => new URLSearchParams() }));
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 
 const mona = { id: 'ag-1', connection_id: 'c-1', name: 'Mona', speciality: 'Marketing', main: true };
@@ -52,6 +53,21 @@ test('below 1024px the details start closed and open over the chat with the focu
 
 // An Agent with no run, Card, file or log row yet, drawn with the tabs the server builds.
 const seo = { id: 'ag-2', connection_id: 'c-2', name: 'SEO', speciality: 'Writes the blog.', main: false };
+test('below 1024px "N" pressed in the details over the new chat closes them and focuses the composer', async () => {
+ const start = location.href;
+ history.replaceState(history.state, '', '/c/rs-learning/chat');
+ try {
+  const screen = await chat(900);
+  await render(<NewChatKey href="/c/rs-learning/chat"/>);
+  await screen.getByRole('button', { name: 'New chat · Details: Mona' }).click();
+  const details = panel(screen);
+  await expect.element(details.getByRole('button', { name: 'Close details' })).toHaveFocus();
+  await userEvent.keyboard('n');
+  await expect.element(details).not.toBeVisible();
+  await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveFocus();
+ } finally { history.replaceState(history.state, '', start); }
+});
+
 const nothingYet = () => page.viewport(1440, 900).then(() => render(<div className="gw"><LanguageProvider language="en">
  <AgentChat slug="rs-learning" company="co-1" agent={seo} details={{ status: 'idle', actions: true, tab: 'activity', tabs: detailsTabs({ t: i18n('en').t, slug: 'rs-learning', agent: seo.id, fileCount: 0, logCount: 0 }) }} writer/>
 </LanguageProvider></div>));

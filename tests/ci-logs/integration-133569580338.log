@@ -1,0 +1,75 @@
+﻿2026-11-16T19:54:51.8434823Z Current runner version: '2.338.0'
+2026-11-16T19:54:51.8439490Z Runner name: 'omar-pc-ci_gtmworks'
+2026-11-16T19:54:51.8439948Z Runner group name: 'Default'
+[excerpt: lines omitted]
+2026-11-16T19:58:14.7609234Z [evidence] POST https://app.gtmworks.test/api/recent-cards -> 200
+2026-11-16T19:58:14.8693563Z [evidence] request failed: GET https://app.gtmworks.test/c/rs-learning/approvals?_rsc=M6dRPN-aUjhucU8N net::ERR_NETWORK_CHANGED
+2026-11-16T19:58:14.8702925Z [evidence] console error: Failed to load resource: net::ERR_NETWORK_CHANGED
+2026-11-16T19:58:14.8740366Z [evidence] console error: Failed to fetch RSC payload for https://app.gtmworks.test/c/rs-learning/approvals. Falling back to browser navigation. TypeError: Failed to fetch
+[excerpt: lines omitted]
+2026-11-16T19:58:14.8792900Z     at async Object.o [as task] (https://app.gtmworks.test/_next/static/chunks/1255-3935578cb14f2052.js:1:173199)
+2026-11-16T19:58:14.8796815Z [evidence] request failed: GET https://app.gtmworks.test/c/rs-learning/home?_rsc=M6dRPN-aUjhucU8N net::ERR_NETWORK_CHANGED
+2026-11-16T19:58:14.8802438Z [evidence] console error: Failed to load resource: net::ERR_NETWORK_CHANGED
+[excerpt: lines omitted]
+2026-11-16T19:59:43.7500716Z ##[error]  1) tests/proxy/production-shape.spec.ts:28:5 › Send invitation shows its confirmation, the address gets the link and the link signs the member in 
+    Test timeout of 90000ms exceeded.
+2026-11-16T19:59:43.7636106Z ##[error]  1) tests/proxy/production-shape.spec.ts:28:5 › Send invitation shows its confirmation, the address gets the link and the link signs the member in 
+    Error: page.goto: Test timeout of 90000ms exceeded.
+    Call log:
+      - navigating to "http://127.0.0.1:64021/auth/v1/verify?token=0e0c37c1f83b53305e00c28e5b999eb00d2579a8c3705ce0027a3e9b&type=invite&redirect_to=https%3A%2F%2Fapp.gtmworks.test%2Fauth%2Faccept%3Fnext%3D%2Fc%2Frs-learning%2Fsettings%2Fmembers", waiting until "load"
+
+
+      42 |   expect(link).toBeTruthy();
+      43 |   await context.clearCookies();
+    > 44 |   await page.goto(link);
+         |              ^
+      45 |   // A new Member chooses a password before the Company opens (#41).
+      46 |   await page.getByLabel('New password').fill('invited-password');
+      47 |   await page.getByLabel('Confirm password').fill('invited-password');
+[excerpt: lines omitted]
+2026-11-16T20:01:16.7461447Z ##[error]  2) tests/proxy/production-shape.spec.ts:53:5 › inviting someone who already has an account sends them a sign-in link 
+    Test timeout of 90000ms exceeded.
+2026-11-16T20:01:16.7472352Z ##[error]  2) tests/proxy/production-shape.spec.ts:53:5 › inviting someone who already has an account sends them a sign-in link 
+    Error: locator.fill: Test timeout of 90000ms exceeded.
+    Call log:
+      - waiting for getByLabel('Email')
+
+
+      55 |   await signIn(page, 'manager@example.com', '/c/rs-learning/settings/members');
+      56 |   await page.request.delete(inbox);
+    > 57 |   await page.getByLabel('Email').fill('multi@example.com');
+         |                                  ^
+      58 |   await page.getByRole('button', { name: 'Send invitation' }).click();
+      59 |   await expect(page.getByRole('status').filter({hasText:'An invitation link was sent'})).toContainText('An invitation link was sent', { timeout: 15000 });
+      60 |   await expect(async () => {
+[excerpt: lines omitted]
+2026-11-16T20:01:34.3132878Z ##[error]  3) tests/proxy/production-shape.spec.ts:66:5 › a key that cannot be revoked says so instead of staying silently active 
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('[role=alert]:not(#__next-route-announcer__)').filter({ hasText: 'Could not save the change' })
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" locator('[role=alert]:not(#__next-route-announcer__)').filter({ hasText: 'Could not save the change' }) with timeout 15000ms
+      - waiting for locator('[role=alert]:not(#__next-route-announcer__)').filter({ hasText: 'Could not save the change' })
+
+
+[excerpt: lines omitted]
+2026-11-16T20:01:36.6949173Z       80 | test('the old all-companies address is not found through the proxy', async ({ page }) => {
+2026-11-16T20:01:36.6950312Z         at /srv/ci/_work/gtmworks/gtmworks/gtmworks/tests/proxy/production-shape.spec.ts:77:79
+2026-11-16T20:01:36.6951043Z 
+2026-11-16T20:01:36.6951752Z     Error Context: test-results/production-shape-a-key-tha-c9ca9--of-staying-silently-active/error-context.md
+2026-11-16T20:01:36.6952277Z 
+2026-11-16T20:01:36.6952587Z   3 failed
+2026-11-16T20:01:36.6953982Z     tests/proxy/production-shape.spec.ts:28:5 › Send invitation shows its confirmation, the address gets the link and the link signs the member in 
+2026-11-16T20:01:36.6958515Z     tests/proxy/production-shape.spec.ts:53:5 › inviting someone who already has an account sends them a sign-in link 
+2026-11-16T20:01:36.6961551Z     tests/proxy/production-shape.spec.ts:66:5 › a key that cannot be revoked says so instead of staying silently active 
+2026-11-16T20:01:36.6962606Z   4 passed (3.5m)
+2026-11-16T20:01:36.6966746Z ##[notice]  3 failed
+    tests/proxy/production-shape.spec.ts:28:5 › Send invitation shows its confirmation, the address gets the link and the link signs the member in 
+    tests/proxy/production-shape.spec.ts:53:5 › inviting someone who already has an account sends them a sign-in link 
+    tests/proxy/production-shape.spec.ts:66:5 › a key that cannot be revoked says so instead of staying silently active 
+  4 passed (3.5m)
+2026-11-16T20:01:36.7330444Z ##[error]Process completed with exit code 1.

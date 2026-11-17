@@ -1,0 +1,42 @@
+﻿2026-11-16T20:21:14.9526301Z Current runner version: '2.338.0'
+2026-11-16T20:21:14.9530623Z Runner name: 'omar-pc-ci_gtmworks'
+2026-11-16T20:21:14.9531077Z Runner group name: 'Default'
+[excerpt: lines omitted]
+2026-11-16T20:23:57.1974264Z [WebServer]  ✓ Ready in 127ms
+2026-11-16T20:23:57.9856843Z [evidence] request failed: GET https://app.gtmworks.test/sign-in net::ERR_NETWORK_CHANGED
+2026-11-16T20:23:59.1287153Z   ✘  1 tests/proxy/production-shape.spec.ts:20:5 › the page is served over https from the public host name through the proxy (1.2s)
+[excerpt: lines omitted]
+2026-11-16T20:23:59.1339189Z ##[error]  1) tests/proxy/production-shape.spec.ts:20:5 › the page is served over https from the public host name through the proxy 
+    Error: page.goto: net::ERR_NETWORK_CHANGED at https://app.gtmworks.test/sign-in
+    Call log:
+      - navigating to "https://app.gtmworks.test/sign-in", waiting until "load"
+
+
+      20 | test('the page is served over https from the public host name through the proxy', async ({ page }) => {
+      21 |   watch(page);
+    > 22 |   const response = await page.goto('/sign-in');
+         |                               ^
+      23 |   expect(response?.headers()['via']).toContain('Caddy');
+      24 |   expect(new URL(page.url()).protocol).toBe('https:');
+      25 |   expect(new URL(page.url()).hostname).toBe('app.gtmworks.test');
+[excerpt: lines omitted]
+2026-11-16T20:24:08.7525028Z 
+2026-11-16T20:24:08.7525409Z     Error: page.goto: net::ERR_NETWORK_CHANGED at https://app.gtmworks.test/sign-in
+2026-11-16T20:24:08.7526149Z     Call log:
+[excerpt: lines omitted]
+2026-11-16T20:24:08.7528719Z     > 22 |   const response = await page.goto('/sign-in');
+2026-11-16T20:24:08.7529354Z          |                               ^
+2026-11-16T20:24:08.7529745Z       23 |   expect(response?.headers()['via']).toContain('Caddy');
+2026-11-16T20:24:08.7530515Z       24 |   expect(new URL(page.url()).protocol).toBe('https:');
+2026-11-16T20:24:08.7531200Z       25 |   expect(new URL(page.url()).hostname).toBe('app.gtmworks.test');
+2026-11-16T20:24:08.7532229Z         at /srv/ci/_work/gtmworks/gtmworks/gtmworks/tests/proxy/production-shape.spec.ts:22:31
+2026-11-16T20:24:08.7532495Z 
+2026-11-16T20:24:08.7532808Z     Error Context: test-results/production-shape-the-page--804b6-host-name-through-the-proxy/error-context.md
+2026-11-16T20:24:08.7533328Z 
+2026-11-16T20:24:08.7533749Z   1 failed
+2026-11-16T20:24:08.7534640Z     tests/proxy/production-shape.spec.ts:20:5 › the page is served over https from the public host name through the proxy 
+2026-11-16T20:24:08.7535428Z   6 passed (14.3s)
+2026-11-16T20:24:08.7542764Z ##[notice]  1 failed
+    tests/proxy/production-shape.spec.ts:20:5 › the page is served over https from the public host name through the proxy 
+  6 passed (14.3s)
+2026-11-16T20:24:08.7664465Z ##[error]Process completed with exit code 1.

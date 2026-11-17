@@ -1,0 +1,37 @@
+﻿2026-11-16T20:46:38.2545636Z Current runner version: '2.338.2'
+2026-11-16T20:46:38.2581912Z ##[group]Runner Image Provisioner
+2026-11-16T20:46:38.2583220Z Hosted Compute Agent
+[excerpt: lines omitted]
+2026-11-16T20:47:40.7164017Z v2.197.0: Pulling from supabase/gotrue
+2026-11-16T20:47:40.7757841Z Error response from daemon: error from registry: Rate exceeded
+2026-11-16T20:47:40.7774114Z 0a0b1cce89bf: Pulling fs layer
+2026-11-16T20:47:40.7774635Z 6c11b30372ef: Pulling fs layer
+2026-11-16T20:47:40.7795253Z Retrying after 4s: public.ecr.aws/supabase/logflare:1.50.15
+2026-11-16T20:47:40.8104308Z f2ba4e98874d: Pulling fs layer
+[excerpt: lines omitted]
+2026-11-16T20:47:40.8175708Z 7c115bed1203: Pulling fs layer
+2026-11-16T20:47:40.8344290Z error from registry: Rate exceeded
+2026-11-16T20:47:40.8411537Z Retrying after 4s: public.ecr.aws/supabase/kong:2.8.1
+2026-11-16T20:47:40.8544011Z e759012dbcb6: Pulling fs layer
+[excerpt: lines omitted]
+2026-11-16T20:47:41.0118242Z 75b6b2138ef1: Download complete
+2026-11-16T20:47:41.0140681Z error from registry: Rate exceeded
+2026-11-16T20:47:41.0193176Z Retrying after 4s: public.ecr.aws/supabase/gotrue:v2.197.0
+2026-11-16T20:47:41.0695717Z error from registry: Rate exceeded
+[excerpt: lines omitted]
+2026-11-16T20:50:26.1501029Z psql:/home/runner/work/gtmworks/gtmworks/supabase/tests/work.sql:2: NOTICE:  extension "pgtap" already exists, skipping
+2026-11-16T20:50:26.2529420Z /home/runner/work/gtmworks/gtmworks/supabase/tests/work.sql ......................... ok
+2026-11-16T20:50:26.2739784Z psql:/home/runner/work/gtmworks/gtmworks/supabase/tests/work_mode.sql:2: NOTICE:  extension "pgtap" already exists, skipping
+2026-11-16T20:50:26.3096170Z /home/runner/work/gtmworks/gtmworks/supabase/tests/work_mode.sql .................... ok
+2026-11-16T20:50:26.3097052Z 
+2026-11-16T20:50:26.3097304Z Test Summary Report
+2026-11-16T20:50:26.3097825Z -------------------
+2026-11-16T20:50:26.3113115Z /home/runner/work/gtmworks/gtmworks/supabase/tests/card_readers_guard.sql         (Wstat: 0 Tests: 8 Failed: 2)
+2026-11-16T20:50:26.3115955Z   Failed tests:  3, 5
+2026-11-16T20:50:26.3117218Z /home/runner/work/gtmworks/gtmworks/supabase/tests/member_invites.sql             (Wstat: 0 Tests: 24 Failed: 4)
+2026-11-16T20:50:26.3117847Z   Failed tests:  13-14, 23-24
+2026-11-16T20:50:26.3118440Z Files=65, Tests=1767,  7 wallclock secs ( 0.31 usr  0.12 sys +  0.61 cusr  0.42 csys =  1.46 CPU)
+2026-11-16T20:50:26.3118905Z Result: FAIL
+2026-11-16T20:50:26.7714139Z error running container: exit 1
+2026-11-16T20:50:26.7715615Z Try rerunning the command with --debug to troubleshoot the error.
+2026-11-16T20:50:26.8084048Z ##[error]Process completed with exit code 1.

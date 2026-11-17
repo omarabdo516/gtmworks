@@ -1,0 +1,90 @@
+﻿2026-11-16T21:52:28.9873506Z Current runner version: '2.338.0'
+2026-11-16T21:52:28.9886426Z Runner name: 'omar-pc-ci_gtmworks'
+2026-11-16T21:52:28.9887558Z Runner group name: 'Default'
+[excerpt: lines omitted]
+2026-11-16T21:56:30.9004744Z ##[error]  1) tests/proxy/production-shape.spec.ts:20:5 › the page is served over https from the public host name through the proxy 
+    Error: browserType.launch: Target page, context or browser has been closed
+    Browser logs:
+
+    <launching> /srv/ci/_work/gtmworks/gtmworks/gtmworks/scripts/browser-netns.mjs --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-def
+    <launched> pid=263093
+    [pid=263093][err] unshare: unshare failed: Operation not permitted
+    Call log:
+      - <launching> /srv/ci/_work/gtmworks/gtmworks/gtmworks/scripts/browser-netns.mjs --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no
+[excerpt: lines omitted]
+2026-11-16T21:56:31.1974361Z ##[error]  2) tests/proxy/production-shape.spec.ts:28:5 › Send invitation shows its confirmation, the address gets the link and the link signs the member in 
+    Error: browserType.launch: Target page, context or browser has been closed
+    Browser logs:
+
+    <launching> /srv/ci/_work/gtmworks/gtmworks/gtmworks/scripts/browser-netns.mjs --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-def
+    <launched> pid=263113
+    [pid=263113][err] unshare: unshare failed: Operation not permitted
+    Call log:
+      - <launching> /srv/ci/_work/gtmworks/gtmworks/gtmworks/scripts/browser-netns.mjs --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no
+[excerpt: lines omitted]
+2026-11-16T21:56:31.5422021Z ##[error]  3) tests/proxy/production-shape.spec.ts:53:5 › inviting someone who already has an account sends them a sign-in link 
+    Error: browserType.launch: Target page, context or browser has been closed
+    Browser logs:
+
+    <launching> /srv/ci/_work/gtmworks/gtmworks/gtmworks/scripts/browser-netns.mjs --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-def
+    <launched> pid=263133
+    [pid=263133][err] unshare: unshare failed: Operation not permitted
+    Call log:
+      - <launching> /srv/ci/_work/gtmworks/gtmworks/gtmworks/scripts/browser-netns.mjs --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no
+[excerpt: lines omitted]
+2026-11-16T21:56:32.0129440Z ##[error]  4) tests/proxy/production-shape.spec.ts:66:5 › a key that cannot be revoked says so instead of staying silently active 
+    Error: browserType.launch: Target page, context or browser has been closed
+    Browser logs:
+
+    <launching> /srv/ci/_work/gtmworks/gtmworks/gtmworks/scripts/browser-netns.mjs --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-def
+    <launched> pid=263153
+    [pid=263153][err] unshare: unshare failed: Operation not permitted
+    Call log:
+      - <launching> /srv/ci/_work/gtmworks/gtmworks/gtmworks/scripts/browser-netns.mjs --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no
+[excerpt: lines omitted]
+2026-11-16T21:56:32.4397264Z ##[error]  5) tests/proxy/production-shape.spec.ts:80:5 › the old all-companies address is not found through the proxy 
+    Error: browserType.launch: Target page, context or browser has been closed
+    Browser logs:
+
+    <launching> /srv/ci/_work/gtmworks/gtmworks/gtmworks/scripts/browser-netns.mjs --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-def
+    <launched> pid=263173
+    [pid=263173][err] unshare: unshare failed: Operation not permitted
+    Call log:
+      - <launching> /srv/ci/_work/gtmworks/gtmworks/gtmworks/scripts/browser-netns.mjs --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no
+[excerpt: lines omitted]
+2026-11-16T21:56:32.8728987Z ##[error]  6) tests/proxy/production-shape.spec.ts:87:5 › a server action whose request fails shows an error and reports it 
+    Error: browserType.launch: Target page, context or browser has been closed
+    Browser logs:
+
+    <launching> /srv/ci/_work/gtmworks/gtmworks/gtmworks/scripts/browser-netns.mjs --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-def
+    <launched> pid=263193
+    [pid=263193][err] unshare: unshare failed: Operation not permitted
+    Call log:
+      - <launching> /srv/ci/_work/gtmworks/gtmworks/gtmworks/scripts/browser-netns.mjs --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no
+[excerpt: lines omitted]
+2026-11-16T21:56:33.2209333Z ##[error]  7) tests/proxy/production-shape.spec.ts:99:5 › a rejection nobody handled is shown on the page ───
+    Error: browserType.launch: Target page, context or browser has been closed
+    Browser logs:
+
+    <launching> /srv/ci/_work/gtmworks/gtmworks/gtmworks/scripts/browser-netns.mjs --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-def
+    <launched> pid=263213
+    [pid=263213][err] unshare: unshare failed: Operation not permitted
+    Call log:
+      - <launching> /srv/ci/_work/gtmworks/gtmworks/gtmworks/scripts/browser-netns.mjs --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no
+[excerpt: lines omitted]
+2026-11-16T21:56:33.5593431Z     tests/proxy/production-shape.spec.ts:20:5 › the page is served over https from the public host name through the proxy 
+2026-11-16T21:56:33.5597331Z     tests/proxy/production-shape.spec.ts:28:5 › Send invitation shows its confirmation, the address gets the link and the link signs the member in 
+2026-11-16T21:56:33.5599546Z     tests/proxy/production-shape.spec.ts:53:5 › inviting someone who already has an account sends them a sign-in link 
+2026-11-16T21:56:33.5604116Z     tests/proxy/production-shape.spec.ts:66:5 › a key that cannot be revoked says so instead of staying silently active 
+2026-11-16T21:56:33.5610388Z     tests/proxy/production-shape.spec.ts:80:5 › the old all-companies address is not found through the proxy 
+2026-11-16T21:56:33.5612480Z     tests/proxy/production-shape.spec.ts:87:5 › a server action whose request fails shows an error and reports it 
+2026-11-16T21:56:33.5613674Z     tests/proxy/production-shape.spec.ts:99:5 › a rejection nobody handled is shown on the page ────
+2026-11-16T21:56:33.5624923Z ##[notice]  7 failed
+    tests/proxy/production-shape.spec.ts:20:5 › the page is served over https from the public host name through the proxy 
+    tests/proxy/production-shape.spec.ts:28:5 › Send invitation shows its confirmation, the address gets the link and the link signs the member in 
+    tests/proxy/production-shape.spec.ts:53:5 › inviting someone who already has an account sends them a sign-in link 
+    tests/proxy/production-shape.spec.ts:66:5 › a key that cannot be revoked says so instead of staying silently active 
+    tests/proxy/production-shape.spec.ts:80:5 › the old all-companies address is not found through the proxy 
+    tests/proxy/production-shape.spec.ts:87:5 › a server action whose request fails shows an error and reports it 
+    tests/proxy/production-shape.spec.ts:99:5 › a rejection nobody handled is shown on the page ────
+2026-11-16T21:56:33.5663499Z ##[error]Process completed with exit code 1.
