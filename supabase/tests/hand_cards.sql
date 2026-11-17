@@ -64,9 +64,8 @@ select results_eq($$select run_id,state,title,content->>'app',jsonb_array_length
  $$values ('hand-run-1','open','انشر المقال','WordPress',2,true,true,null::uuid,null::timestamptz),('hand-run-2','open','انشر المقال','WordPress',2,true,true,null,null),
   ('hand-run-3','open','انشر المقال','WordPress',2,true,true,null,null),('hand-run-5','open',repeat('t',100),repeat('a',40),8,true,true,null,null),('hand-run-5','open','Pay the invoice','Stripe',0,false,false,null,null),('hand-run-5','open','Publish','WordPress',0,true,false,null,null)$$,
  'each hand card shown is kept open, with its rows, address and note as given, and nobody has marked it done');
-select results_eq($$select actor_id,actor_kind,action,details->'card',details->>'private',details->>'teller' from public.company_log where agent_id='f7000000-0000-0000-0000-000000000002' and source='reply_cards' and details->>'teller'='20000000-0000-0000-0000-000000000003'$$,
- $$values ('f7000000-0000-0000-0000-000000000002'::uuid,'agent','agent_card_shown','{"kind":"hand","title":"انشر المقال"}'::jsonb,'true','20000000-0000-0000-0000-000000000003')$$,
- 'a hand card shown is logged once, privately, as the Agent handing it over, with its kind and title');
+select is((select count(*) from public.company_log where source='reply_cards' and details->'card'->>'kind'='hand'),0::bigint,
+ 'a hand card shown writes no log row: its one row is its person''s Done it (#139)');
 
 -- Only the Conversation's own person marks it done, once; another Member of the Company, the Owner included, and a
 -- Viewer are refused.

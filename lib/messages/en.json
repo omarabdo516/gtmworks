@@ -906,7 +906,6 @@
   "handDone": "Done it",
   "handDoneAt": "Done · {0}.",
   "handFailed": "Could not mark it done. Try again.",
-  "logActHandShown": "handed over",
   "logActHandDone": "did it",
   "logHandOpen": "Handed to you",
   "logHandDone": "Done it",

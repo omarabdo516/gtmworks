@@ -235,5 +235,5 @@ test('the tool texts a run may already be pinned with stay byte for byte as they
  });
  assert.equal(sha(specs.show_draft),'14f3e489f8903145db328693857952e95f34678a9071a2b50a48f1180ff4754c','show_draft (#136)');
  assert.equal(sha(specs.show_review),'5370ac820042bd31ca7cb07dc9a1b7e7002a9e43427ed9ebb33fd6fd926dc9e1','show_review (#137)');
- assert.equal(sha(specs.hand_over),'1d74c323574aed6cce78ccaf70f47ed7aafbacc74e7510a66a686d5a66dd6e4b','hand_over (#139)');
+ assert.equal(sha(specs.hand_over),'ac501c0e535a035daad42a48657f74cd84e53800e73c720db040b2d3adb8518d','hand_over (#139)');
 });

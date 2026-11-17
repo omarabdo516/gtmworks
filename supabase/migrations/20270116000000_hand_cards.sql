@@ -74,7 +74,8 @@ create or replace function public.run_tools(c uuid, agent uuid, person uuid) ret
   case when public.may_show_reply_cards(c,agent,person) then 'hand_over' end],null);
 $$;
 
--- As #137's, and a hand card is judged and kept open, waiting for its person's "Done it"; every other kind is shown.
+-- As #137's, and a hand card is judged and kept open, waiting for its person's "Done it"; every other kind is shown. A
+-- hand card writes no row here: its one log row is its person's "Done it" (mark_hand_done), as #139 asks.
 create or replace function public.agent_show_card(conversation uuid, run text, call text, kind text, title text, content jsonb) returns jsonb
 language plpgsql security definer set search_path='' as $$
 declare talk public.conversations; kept public.reply_cards; opened text:=case when kind='hand' then 'open' else 'shown' end;
@@ -90,7 +91,7 @@ begin
   on conflict (conversation_id,run_id,call_id) do nothing returning * into kept;
  if kept.id is null then
   select * into kept from public.reply_cards r where r.conversation_id=conversation and r.run_id=run and r.call_id=call;
- else
+ elsif kept.kind<>'hand' then
   insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,agent_id,action,details,source,source_id,created_at)
    values(talk.company_id,talk.agent_id,'agent',(select name from public.hermes_agents where id=talk.agent_id),'agent',talk.agent_id,'agent_card_shown',
     jsonb_build_object('card',jsonb_build_object('kind',kept.kind,'title',kept.title)||case when kept.kind='review' then
