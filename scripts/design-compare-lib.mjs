@@ -9,6 +9,9 @@ import { extname, join, resolve, sep } from 'node:path';
 // account menu opens the settings overlay (`#sov`) with its sections. Each step is one `click`, `waitFor`, `waitGone`, `fill` ([selector, text]) or
 // `scrollTo` with a CSS selector, or one `press` with a key as Playwright names it (`{ press: 'ArrowDown' }`), pressed
 // where the focus is; a click on a sidebar item hidden behind the narrow-screen menu opens the menu first. A screen's `builtSteps` run the same way on the built page after it opens.
+// The built steps also take `goto` (a built page opened as a document, captured while it still streams) and `finish` (a
+// selector whose own animations are ended at once); `builtSettle: false` captures right after the steps, without waiting
+// for the network to go quiet.
 // Every screen starts from the prototype's default state. Only the alone screens and a Member's request screens touch
 // the "viewing as" switcher: the alone ones show the workspace of an Owner working alone (#10); built, that is seeded
 // R&S Consultations, its one Member Omar, with work_mode set to 'alone' (tests/visual.spec.ts, state `alone`). The
@@ -45,6 +48,13 @@ export const fixture = {
   // Omar's Conversation in which Ads waits on his answer to its question (#138), as the reference's th-meta (message m3).
   questionConversation: '62000000-0000-0000-0000-000000000005',
 };
+// #172. The chat and Numbers while their waiting part is still on its way. The workflow first applies the screen's own
+// scripts/design-compare-<screen>.sql, which slows the one table that part reads; the tool itself never writes. The page
+// is then opened as a document, which streams its frame and placeholder first (a sidebar link would show the page it
+// had already prefetched whole), its 400ms hidden start is ended, and it is captured at once.
+const loading = n => `6f000000-0000-0000-0000-00000000000${n}`;
+const openSlowly = (page, placeholder) => [{ goto: page }, { finish: placeholder }, { waitFor: placeholder }];
+
 export const screens = {
   // The prototype's main screen: the Conversation with the main Agent, Lead, which it opens on.
   home: { reference: { steps: [] }, builtPath: '/c/rs-learning/chat' },
@@ -142,11 +152,12 @@ export const screens = {
   'new-chat-key': { reference: { steps: [...board, { press: 'n' }, { waitFor: '#ta-main:focus' }] }, builtPath: '/c/rs-learning/work/board', builtSteps: [{ press: 'KeyN' }, { waitFor: '.composer__input:focus' }] },
   'team-channel': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-team"]' }, { waitFor: '.ch-intro' }] }, builtPath: null },
   // #172. The placeholders the reference shows while a chat or the dashboard loads, held on screen (`hold`: the
-  // prototype's timers of 100ms or more never fire, so the content that replaces them never comes). The built
-  // placeholder shows only while the server is slow, which the capture cannot make: its pictures are the approved
-  // images of tests/visual-screens/chat-loading.json and numbers-loading.json.
-  'chat-loading': { reference: { hold: true, steps: [{ waitFor: '#chat-transcript [aria-busy="true"]' }] }, builtPath: null },
-  'numbers-loading': { reference: { hold: true, steps: [{ click: '#sb-nav [data-view="dashboard"]' }, { waitFor: '#view-dashboard [aria-busy="true"]' }] }, builtPath: null },
+  // prototype's timers of 100ms or more never fire, so the content that replaces them never comes). Built: the same
+  // page while the one table its waiting part reads is slow (above).
+  'chat-loading': { reference: { hold: true, steps: [{ waitFor: '#chat-transcript [aria-busy="true"]' }] }, builtPath: '/c/rs-learning/home',
+   builtSteps: openSlowly(`/c/rs-learning/conversations/${loading(3)}`, '.chat .transcript[aria-busy="true"]'), builtSettle: false },
+  'numbers-loading': { reference: { hold: true, steps: [{ click: '#sb-nav [data-view="dashboard"]' }, { waitFor: '#view-dashboard [aria-busy="true"]' }] }, builtPath: '/c/rs-learning/home',
+   builtSteps: openSlowly('/c/rs-learning/numbers', '.numbers-page [aria-busy="true"]'), builtSettle: false },
 };
 
 export const languages = ['ar', 'en'];
@@ -181,8 +192,6 @@ export function parseArgs(argv) {
   if (!languages.includes(raw.lang)) throw new UsageError('--lang must be ar or en.');
   if (!themes.includes(raw.theme)) throw new UsageError('--theme must be light or dark.');
   const builtPath = raw.builtPath ?? screens[raw.screen].builtPath;
-  // A held loading state (#172) is captured on the reference alone: the built one is its approved image.
-  if (builtPath === null && screens[raw.screen].reference.hold) referenceOnly = true;
   if (builtPath === null && !referenceOnly) throw new UsageError(`Screen "${raw.screen}" has no built equivalent yet; pass --built-path PATH or --reference-only.`);
   return {
     screen: raw.screen,

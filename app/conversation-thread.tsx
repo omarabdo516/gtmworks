@@ -95,11 +95,11 @@ export function useConversationRecord({company,initial}:{company:string,initial:
 export function ChatPlaceholder() {
  const {c}=useConversationText();
  const line=(width:number)=><div className="sk sk-line" style={{width:`${width}%`}}/>;
- return <div className="transcript__col sk-hold" aria-busy="true" aria-label={c('chatLoading')}>
+ return <div className="transcript sk-hold" aria-busy="true"><span className="sr-only">{c('chatLoading')}</span><div className="transcript__col" aria-hidden="true">
   <div className="sk-msg" style={{alignSelf:'flex-end',width:'55%'}}>{line(100)}{line(70)}</div>
   <div className="sk-msg" style={{width:'80%'}}><div className="sk" style={{width:20,height:20,borderRadius:'50%'}}/>{line(90)}{line(95)}{line(60)}</div>
   <div className="sk-msg" style={{width:'90%'}}>{line(100)}{line(80)}<div className="sk" style={{height:180,borderRadius:'var(--gw-r-card)',width:'100%'}}/></div>
- </div>;
+ </div></div>;
 }
 
 // The messages as the reference draws them (design-reference: msgHTML): the Agent's turns on the start side, the

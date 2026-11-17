@@ -58,8 +58,8 @@ The prototype has no URL routes. Its sidebar switches between four views (`data-
 | `card-chat` | Board, the card of Omar's chat with Ads (`c-meta`): its sheet on Chat, with that chat and its composer (#145) | `/c/rs-learning/work/board?card=640006` (needs the fixture: the card of Omar's chat with Ads) |
 | `card-chat-empty` | Board, an idea with Ads and no chat (`c-idea2`): its sheet on Chat, "No chat on this card yet" (#145) | `/c/rs-learning/work/board?card=640001` (needs the fixture: its idea with Ads) |
 | `card-chat-locked` | Viewing as Youssef, a new chat to @Ads puts its card on the board; back as Omar, that card's sheet, Chat: the lock (#145) | `/c/rs-learning/work/board?card=640007`, Chat picked (needs the fixture: the card of the first Contributor's chat with Ads) |
-| `chat-loading` | The chat as it opens, its transcript still loading: the three grey blocks under the title (skeletonHTML, held on screen) (#172) | none: the built placeholder shows only while the server is slow; its pictures are the approved images of `tests/visual-screens/chat-loading.json` |
-| `numbers-loading` | Sidebar, Numbers, while it loads: the header and the period switch over four grey tiles and two rows of panels (renderDashboard's loading branch, held on screen) (#172) | none: as `chat-loading`, the approved images of `tests/visual-screens/numbers-loading.json` |
+| `chat-loading` | The chat as it opens, its transcript still loading: the three grey blocks under the title (skeletonHTML, held on screen) (#172) | `/c/rs-learning/home`, then Omar's chat with Ads about the Meta campaign opened while its usage reads are slow (the workflow slows its read first: below) |
+| `numbers-loading` | Sidebar, Numbers, while it loads: the header and the period switch over four grey tiles and two rows of panels (renderDashboard's loading branch, held on screen) (#172) | `/c/rs-learning/home`, then Numbers opened while its log reads are slow (the workflow slows its read first: below) |
 | `agent-chat` | The Ads Agent's tile in the sidebar: a Conversation with an Agent other than Lead, with the private line of a team at its top (#25) | none |
 | `agent-files` | That chat's details, Files tab: the files Ads works from (#21) | `/c/rs-learning/chat/61000000-0000-0000-0000-000000000002?tab=files` (the fixture's Ads; its files are the ones of its Cards and of the signed-in person's own Conversations with it) |
 | `agent-screen` | The SEO Agent's chat, details on Activity: its screen card, asleep (#21). The product always shows the empty frame: the pinned Engine shows no Agent's screen | `/c/rs-learning/chat/61000000-0000-0000-0000-000000000002` (the fixture's Ads) |
@@ -94,6 +94,19 @@ The built settings overlay is route-backed: `/c/<slug>/settings` opens it, `?sec
 
 Every screen starts from the prototype's default state. The "viewing as" switcher is touched only by the alone screens and by `ask-agent`, `request-sent` and `request-made`, which show Youssef, a Contributor (#17). To add a screen, add a row in `scripts/design-compare-lib.mjs` with its steps (`click`, `waitFor` or `scrollTo`, each with a CSS selector) and its built path.
 
+#### Built steps for a page still loading
+
+A screen's built steps may also take two actions the reference never has:
+
+| Step | What it does |
+| --- | --- |
+| `{ goto: '<built path>' }` | Opens that page as a document and goes on as soon as it starts arriving, so a page still streaming is captured as it is. |
+| `{ finish: '<selector>' }` | Ends that element's own animations at once, such as the placeholder's 400ms hold. |
+
+`builtSettle: false` takes the picture right after the steps, without waiting for the network to go quiet, which would outlast a slowed read.
+
+`chat-loading` and `numbers-loading` use them. Before the capture, the workflow applies the screen's own `scripts/design-compare-<screen>.sql` into the run's own fresh database, as it loads the fixture: the page's rows and a policy that slows the one table its waiting part reads for 7s (under the signed-in role's 8s statement timeout). The file refuses any database without the seed's Omar and its test-only agent key, so it cannot touch a real installation; the tool itself never writes. The page is then opened as a document: a sidebar link prefetches its page whole and keeps it for five minutes, so a click would show the page as read before the table was slowed.
+
 ### Where the database exists
 
 The built side needs the app on the seeded local database. Without one, run the `Design compare` workflow (`.github/workflows/design-compare.yml`). It starts the local database and the production app, runs the command with the owner signed in, and uploads the images as the `design-compare` artifact. Its inputs are `screen`, `width`, `lang` and `theme`, with defaults `home`, `1440`, `ar` and `dark`. It also runs, with those defaults, on every pull request that changes the tool (`scripts/design-compare.mjs`, `scripts/design-compare-lib.mjs`), the workflow itself, or `design-reference/`. Download the `design-compare` artifact from that run.
@@ -105,7 +118,7 @@ gh run download <run-id> -n design-compare -R omarabdo516/gtmworks
 
 ### Representative captures
 
-The seed has no real Agents and no Conversations, so the default captures show an empty agent grid and a chat with no Agent attached. For a capture with the reference's five Agents (Lead the main one), a real main Agent and a populated Conversation, run the workflow with `fixture` checked. That loads `scripts/design-compare-fixture.sql` into the run's own fresh database before the capture. The tool itself never writes to a database, and the fixture refuses any database without the seed's Omar and test-only agent key, so it cannot touch a real installation. Pull request runs never load it.
+The seed has no real Agents and no Conversations, so the default captures show an empty agent grid and a chat with no Agent attached. For a capture with the reference's five Agents (Lead the main one), a real main Agent and a populated Conversation, run the workflow with `fixture` checked. That loads `scripts/design-compare-fixture.sql` into the run's own fresh database before the capture. The tool itself never writes to a database. The fixture and the loading screens' files refuse any database without the seed's Omar and test-only agent key, so neither can touch a real installation. Pull request runs never load the fixture.
 
 ```sh
 # Lead's populated Conversation against the reference's main screen

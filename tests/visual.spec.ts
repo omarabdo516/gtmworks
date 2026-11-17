@@ -493,12 +493,16 @@ const openSlowly = (path: string, link: string, placeholder: string, table: stri
     await expect(page.locator('.content').first()).toBeVisible();
     asAdmin(slow.set);
     await openNavigation(page);
+    // The opened page's sidebar asks for its recent cards once it is drawn; the picture waits for them, not the clock.
+    const recent = page.waitForResponse(response => new URL(response.url()).pathname === '/api/recent-cards');
     await page.locator(link).click();
     held.letGo();
     // The picture is of the placeholder's look: its first 400ms hidden (components/loading.test.tsx) is ended here.
-    await page.locator(placeholder).waitFor({ state: 'attached', timeout: 15000 });
+    await page.locator(placeholder).waitFor({ state: 'attached' });
     await page.locator(placeholder).evaluate(element => element.getAnimations().forEach(animation => { if ((animation as CSSAnimation).animationName === 'gw-sk-hold') animation.finish(); }));
     await expect(page.locator(placeholder)).toBeVisible();
+    const { cards } = await (await recent).json() as { cards: unknown[] };
+    await expect(page.locator('.recent-cards a')).toHaveCount(cards.length);
     await expect(page.locator('.sidebar.is-open')).toHaveCount(0);
     const width = page.viewportSize()!.width;
     await page.setViewportSize({ width, height: 900 });
@@ -533,7 +537,7 @@ const screenActs: Record<string, (page: Page, language: Language) => Promise<() 
     await expect(page.locator('#inv-email')).toBeFocused();
     return async () => {};
   },
-  'open-chat-slowly': openSlowly(`/c/rs-learning/conversations/${loading(3)}`, `#sb-recent a[href="/c/rs-learning/conversations/${loading(3)}"]`, '.chat .transcript [aria-busy="true"]', 'conversation_usage', 7),
+  'open-chat-slowly': openSlowly(`/c/rs-learning/conversations/${loading(3)}`, `#sb-recent a[href="/c/rs-learning/conversations/${loading(3)}"]`, '.chat .transcript[aria-busy="true"]', 'conversation_usage', 7),
   'open-numbers-slowly': openSlowly('/c/rs-learning/numbers', '.nav a[href="/c/rs-learning/numbers"]', '.numbers-page [aria-busy="true"]', 'company_log', 7),
   // Another Member's chat opens its Card on Log (#145); the Chat tab, picked as a person picks it, shows the lock.
   'sheet-chat-tab': async page => {

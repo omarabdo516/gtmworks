@@ -33,9 +33,10 @@ export default async function NumbersPage({params,searchParams}:{params:Promise<
   db.from('people').select('name').eq('id',user.id).single(),
   db.from('members').select('role').eq('company_id',company.id).eq('person_id',user.id).is('removed_at',null).maybeSingle(),
  ]);
- const queue=await approvalQueue(db,company.id,user.id,membership?.role||'');
+ // Read beside the figures: the sidebar counts it once it arrives, and the figures list it.
+ const queue=approvalQueue(db,company.id,user.id,membership?.role||'');
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
- return <Shell company={company} companies={companies||[]} personId={user.id} section="numbers" title={t('numbers')} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={queue.items.length}>
+ return <Shell company={company} companies={companies||[]} personId={user.id} section="numbers" title={t('numbers')} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={queue.then(({items})=>items.length)}>
   <main className="numbers-page">
    <div className="dash">
     <NumbersHead t={t} slug={slug} period={period}/>
@@ -49,10 +50,11 @@ export default async function NumbersPage({params,searchParams}:{params:Promise<
 
 type Db=Awaited<ReturnType<typeof supabase>>;
 type I18n=Awaited<ReturnType<typeof getI18n>>;
-async function Figures({db,company,slug,period,writer,queue:{items,cards},t,language}:{db:Db,company:string,slug:string,period:'7'|'30',writer:boolean,queue:Awaited<ReturnType<typeof approvalQueue>>,t:I18n['t'],language:I18n['language']}) {
- const [{data:agentRows},{connected,tiles}]=await Promise.all([
+async function Figures({db,company,slug,period,writer,queue,t,language}:{db:Db,company:string,slug:string,period:'7'|'30',writer:boolean,queue:ReturnType<typeof approvalQueue>,t:I18n['t'],language:I18n['language']}) {
+ const [{data:agentRows},{connected,tiles},{items,cards}]=await Promise.all([
   db.from('company_log').select(logColumns).eq('company_id',company).eq('actor_kind','agent').gte('created_at',feedSince()).order('created_at',{ascending:false}).order('id',{ascending:false}).limit(6),
   readNumbers({company,period}),
+  queue,
  ]);
  const feed=(agentRows||[]) as LogRow[];
  const people=await logPeople(db,company,[...feed.flatMap(row=>row.card_id!=null?[row.card_id]:[]),...items.flatMap(item=>item.card_id!=null?[item.card_id]:[])]);

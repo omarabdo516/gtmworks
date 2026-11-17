@@ -54,12 +54,11 @@ export async function conversationRecord(db:Database,person:string,company:strin
  const runner=(working as {person:string,name:string}[]|null)?.[0];
  const {data:manages}=runner&&runner.person!==person?await db.rpc('can_manage_company',{target:company}):{data:false};
  const {data:me}=await db.from('people').select('name').eq('id',person).maybeSingle();
- const {data:tied}=await db.from('work_cards').select('id,created_at,work_stages(board_column)').eq('company_id',company).eq('conversation_id',conversation).maybeSingle();
- const card=tied as {id:number,created_at:string,work_stages:{board_column:BoardColumn}|null}|null;
- const board=card?.work_stages?{card:card.id,column:card.work_stages.board_column}:undefined;
+ const card=await tiedCard(db,company,conversation);
+ const board=card&&{card:card.card,column:card.column};
  // Only a Card the chat's first Run put on the board says so; a chat started from its Card (#145) found it there.
  const first=messages.find(message=>message.author==='person');
- const firstReply=board&&first&&card&&card.created_at>first.created_at?messages.find(message=>message.author==='agent'&&message.run_id===first.run_id)?.id:undefined;
+ const firstReply=card&&first&&card.created_at>first.created_at?messages.find(message=>message.author==='agent'&&message.run_id===first.run_id)?.id:undefined;
  return {
   conversation:{id:found.id,agent_id:found.agent_id,agent_name:found.agent_name,face:faceOf(found)},
   messages:withBoardNote(withTeamWork(withDecisions(shown(messages,usage,cards,found.agent_name,saved),decisions,found.agent_name),notes,queued,me?.name||''),firstReply),
@@ -73,6 +72,13 @@ export async function conversationRecord(db:Database,person:string,company:strin
  };
 }
 export type ConversationRecord=Awaited<ReturnType<typeof conversationRecord>>;
+
+// The chat's Card on the board (#144), the one it put there or was started from (#145), with its column now.
+export async function tiedCard(db:Database,company:string,conversation:string) {
+ const {data}=await db.from('work_cards').select('id,created_at,work_stages(board_column)').eq('company_id',company).eq('conversation_id',conversation).maybeSingle();
+ const card=data as {id:number,created_at:string,work_stages:{board_column:BoardColumn}|null}|null;
+ return card?.work_stages?{card:card.id,column:card.work_stages.board_column,created_at:card.created_at}:undefined;
+}
 
 // What a question adds to its place in the record (#138): the answer its person gave, at the time they gave it, and for
 // the main Agent the plain words it is drawn as (the question, then each choice on its own line).
