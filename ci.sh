@@ -115,9 +115,8 @@ PY
     npx --no-install supabase db query --read-only --file "$file" -o json --agent no | node scripts/verify-db.mjs "$file" || status=$?
     database_record "$file" verify "$started" "$status"
   done
-  started=$(date +%s%N) status=0
-  npm run test:db || status=$?
-  database_record tests/db.sh test:db "$started" "$status"
+  # tests/db.sh writes one line per step of its own.
+  DB_LEDGER="$PWD/$dir/database.jsonl" npm run test:db
   ;;
  integration)
   if [[ "${CI:-}" == "true" ]]; then

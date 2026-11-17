@@ -26,9 +26,9 @@ const covered = new Set([
  ...globSync('tests/components/**/*.test.tsx'),
  ...globSync('supabase/migrations/*.verify.sql'),
  'tests/db.sh',
- ...[...database.matchAll(/^node (tests\/[^\s]+\.mjs)$/gm)].map(match => match[1]),
+ ...[...database.matchAll(/^(?:step )?node (tests\/[^\s]+\.mjs)$/gm)].map(match => match[1]),
 ]);
-if (/^npx supabase test db$/m.test(database)) {
+if (/^(?:step )?npx supabase test db$/m.test(database)) {
  // Supabase's pg_prove invocation searches recursively for both extensions.
  for (const path of [...globSync('supabase/tests/**/*.sql'), ...globSync('supabase/tests/**/*.pg')]) covered.add(path);
 }
@@ -49,7 +49,7 @@ for (const config of readdirSync('.').filter(name => /^playwright(\.[a-z]+)?\.co
 
 // Playwright's approved images (`<spec>-snapshots/`), the compared screens (`tests/visual-screens/`) and the failed job
 // logs `ci-classify.test.mjs` reads (`tests/ci-logs/`) are data for a test, not tests.
-const specData = path => /(^|\/)[^/]+-snapshots\//.test(path) || path.startsWith('tests/visual-screens/') || path.startsWith('tests/ci-logs/');
+const specData = path => /(^|\/)[^/]+-snapshots\//.test(path) || path.startsWith('tests/visual-screens/') || (path.startsWith('tests/ci-logs/') && !/\.(test|spec)\.[^/]+$/.test(path));
 const orphans = files().filter(path =>
  !specData(path) &&
  (/(^|\/)(tests?|__tests__)\//.test(path) || /\.(test|spec)\.[^/]+$/.test(path) || path.endsWith('.verify.sql')) &&

@@ -34,6 +34,18 @@ test('the slowest tests are cut at twenty, by p50, with how often each ran', () 
   assert.doesNotMatch(text, /case 5 \|/);
 });
 
+test('a skipped test adds no duration and no run, and a test that only skipped is not among the slowest', () => {
+  const tests = [testRecord('ran once', 120000), ...Array.from({ length: 6 }, () => testRecord('ran once', 0, 'skipped')), testRecord('never ran', 0, 'skipped')];
+  const text = section(report(tests, { now, days: 7, runs: 7 }), 'Slowest tests');
+  assert.match(text, /^\| integration \| playwright \| tests\/board\.spec\.ts › ran once \| 120\.0 s \| 1 \|$/m);
+  assert.doesNotMatch(text, /never ran/);
+});
+
+test('a report that could not read every ledger in its window says how many it left out', () => {
+  assert.match(report([], { now, days: 7, runs: 400, left: 12 }), /12 older ones in the window are not counted\./);
+  assert.doesNotMatch(report([], { now, days: 7, runs: 3 }), /not counted/);
+});
+
 test('flaky and failed tests are counted', () => {
   const tests = [testRecord('drags', 1, 'flaky'), testRecord('drags', 1, 'flaky'), testRecord('drags', 1, 'failed'), testRecord('drags', 1), testRecord('steady', 1)];
   const text = section(report(tests, { now, days: 7, runs: 4 }), 'Flaky and failed tests');
