@@ -19,13 +19,16 @@ export type AgentRequestView=RequestBase&({state:'waiting',owners:string[]}|{sta
 // version does not know (the database may be newer) is left out.
 // A question (#138) is the Engine's own: open until its person answers it, then answered with that answer (a claimed
 // answer still on its way to the Engine is drawn answered), or closed once the Engine no longer waits for it.
+// A hand card (#139) is open until its person marks the step done, then done at that time.
 type ReviewItem={text:string,fine:boolean,note:string};
 type Question={id:number,kind:'question',title:string,question:string,choices:string[],multiple:boolean};
 export type ReplyCard={id:number,kind:'draft',title:string,line:string,rows:{label:string,value:string}[]}
  |{id:number,kind:'review',title:string,line:string,items:ReviewItem[],decision:string}
- |(Question&({state:'open'}|{state:'answered',answer:string}|{state:'closed'}));
-export const replyCardColumns='id,run_id,kind,title,content,state,answered_at,created_at';
-export type ReplyCardRow={id:number,run_id:string,kind:string,title:string,content:unknown,state:string,answered_at:string|null,created_at:string};
+ |(Question&({state:'open'}|{state:'answered',answer:string}|{state:'closed'}))
+ |(Hand&({state:'open'}|{state:'done',at:string}));
+type Hand={id:number,kind:'hand',title:string,line:string,app:string,rows:{label:string,value:string}[],url:string|null,note:string|null};
+export const replyCardColumns='id,run_id,kind,title,content,state,answered_at,done_at,created_at';
+export type ReplyCardRow={id:number,run_id:string,kind:string,title:string,content:unknown,state:string,answered_at:string|null,done_at:string|null,created_at:string};
 // The database keeps only rows each kind's reader can read (reply_card_valid); a kind with no reader fails the build.
 const replyReaders:{[K in ReplyCard['kind']]:(row:ReplyCardRow)=>Extract<ReplyCard,{kind:K}>}={
  draft:({id,title,content})=>{ const {line,rows}=content as {line:string,rows:{label:string,value:string}[]}; return {id,kind:'draft',title,line,rows}; },
@@ -34,6 +37,11 @@ const replyReaders:{[K in ReplyCard['kind']]:(row:ReplyCardRow)=>Extract<ReplyCa
   const {question,choices,multiple,answer}=content as {question:string,choices:string[],multiple:boolean,answer?:string};
   const asked:Question={id,kind:'question',title,question,choices,multiple};
   return state==='open'?{...asked,state:'open'}:state==='closed'||answer===undefined?{...asked,state:'closed'}:{...asked,state:'answered',answer};
+ },
+ hand:({id,title,content,state,done_at})=>{
+  const {line,app,rows,url,note}=content as {line:string,app:string,rows:{label:string,value:string}[],url?:string,note?:string};
+  const handed:Hand={id,kind:'hand',title,line,app,rows,url:url??null,note:note??null};
+  return state==='done'&&done_at?{...handed,state:'done',at:done_at}:{...handed,state:'open'};
  },
 };
 export const replyCardOf=(row:ReplyCardRow):ReplyCard|null=>Object.hasOwn(replyReaders,row.kind)?replyReaders[row.kind as ReplyCard['kind']](row):null;

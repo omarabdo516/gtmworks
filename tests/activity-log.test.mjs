@@ -75,6 +75,19 @@ test('a person answered an Agent\'s question: the Agent is named, the question i
  assert.deepEqual([bare.act, bare.obj, bare.to], [['logActQuestionAnswered', { text: 'Ads' }], undefined, undefined]);
 });
 
+// #139: the Agent handing a step over is the shown row's actor; the person who pressed "Done it" is the done row's, with
+// the step's title, from "Handed to you" to "Done it" (design-reference: handDone's log line).
+test('an Agent handed a step over, and a person did it, named by the step\'s title, in both languages', () => {
+ const handed = describeEntry({ subject: 'agent', action: 'agent_card_shown', agent_id: lead, details: { card: { kind: 'hand', title: 'انشر المقال' }, private: true } });
+ assert.deepEqual([handed.act, handed.obj, handed.from, handed.to], [['logActHandShown'], 'انشر المقال', undefined, undefined]);
+ const done = describeEntry({ subject: 'agent', action: 'agent_hand_done', agent_id: lead, details: { hand: { title: 'انشر المقال' }, private: true } }, { agentName: () => 'SEO' });
+ assert.deepEqual([done.act, done.obj, done.from, done.to], [['logActHandDone'], 'انشر المقال', { key: 'logHandOpen' }, { key: 'logHandDone' }]);
+ assert.deepEqual(['en', 'ar'].map(language => { const { t } = i18n(language); return [t('logActHandShown'), t('logActHandDone'), t('logHandOpen'), t('logHandDone')]; }),
+  [['handed over', 'did it', 'Handed to you', 'Done it'], ['سلّم', 'عملها', 'اتسلّمتلك', 'عملتها']]);
+ const bare = describeEntry({ subject: 'agent', action: 'agent_hand_done', agent_id: lead, details: { hand: { title: 7 } } });
+ assert.deepEqual([bare.act, bare.obj], [['logActHandDone'], undefined]);
+});
+
 test('an Agent called in a note replies in the log, with its reply as the note under the line (#22)', () => {
  const reply = describeEntry({ subject: 'card', action: 'note_reply', agent_id: lead, body: 'Here is the draft.', details: { reply_to: 12 } });
  assert.deepEqual([reply.act, reply.note, reply.from, reply.to], [['logActNoteReply'], 'Here is the draft.', undefined, undefined]);

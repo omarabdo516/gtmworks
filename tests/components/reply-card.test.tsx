@@ -5,12 +5,13 @@ import ConversationView, { ConversationLoaded } from '@/app/c/[slug]/conversatio
 import { ReplyCard } from '@/app/reply-card';
 import { ShellIcon } from '@/components/shell-icon';
 import { LanguageProvider } from '@/lib/i18n-client';
+import { localeFor } from '@/lib/i18n.mjs';
 import type { ConversationRecord } from '@/lib/conversation-record';
 import type { ReplyCard as Card } from '@/lib/conversations';
 // The loaded chat once its record is read, as the page streams it.
 const Arrived = ({ record, team }: { record: Promise<ConversationRecord>, team: boolean }) => <ConversationLoaded initial={use(record)} team={team}/>;
 
-vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }) }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/conversations/cv-1', useSearchParams: () => new URLSearchParams() }));
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 // The record as the server hands it over once it is read: React's use() takes a promise it can see is settled at once.
@@ -125,4 +126,133 @@ test('a card that arrives while the Conversation is open rises in once; the card
  expect(asks).toHaveBeenCalledTimes(1);
  await expect.element(screen.getByRole('group', { name: plan.title })).toBeVisible();
  expect([rising(outline), rising(plan)]).toEqual(['none', 'gw-rise']);
+});
+
+// #139: a step no Agent may do, handed to the person (design-reference: threads['th-team'] t10, cardHTML's hand branch).
+type Hand = Extract<Card, { kind: 'hand' }>;
+const article = 'https://rslearning.example/wp-admin/post.php?post=812&action=edit';
+const handed = (more: Partial<Hand> = {}): Hand => ({ id: 7, kind: 'hand', title: 'انشر مقال «كورس محاسب شامل اونلاين»', line: 'SEO سابه مسودة على WordPress، وانت اللي تدوس نشر.', app: 'WordPress',
+ rows: [{ label: 'الطول', value: '1,600 كلمة · 5 عناوين فرعية' }, { label: 'المراجعة', value: 'Critic: مقبول بعد تعديل واحد' }], url: article, note: 'SEO هيتابع ترتيبه في Search Console.', state: 'open', ...more } as Hand);
+const handWords = {
+ en: { badge: 'Handed to you', open: 'Open the draft', done: 'Done it', label: (title: string) => `Handed to you: ${title}`, at: (time: string) => `Done · ${time}.` },
+ ar: { badge: 'اتسلّمتلك', open: 'افتح المسودة', done: 'عملتها', label: (title: string) => `اتسلّمتلك: ${title}`, at: (time: string) => `عملتها · ${time}.` },
+};
+const handDrawn = (card: Card, language: 'en' | 'ar', done?: (card: number) => Promise<string | null>) =>
+ render(<LanguageProvider language={language}><div dir={language === 'ar' ? 'rtl' : 'ltr'}><ReplyCard card={card} fresh={false} done={done}/>
+  <div data-testid="icons"><ShellIcon name="hand"/><ShellIcon name="open"/><ShellIcon name="check"/></div></div></LanguageProvider>);
+const timeOf = (value: string, language: 'en' | 'ar') => new Date(value).toLocaleTimeString(localeFor(language), { hour: '2-digit', minute: '2-digit' });
+
+test.each(['en', 'ar'] as const)('in the %s interface, an open hand card shows the badge, the app\'s tile, the title, the line, the rows, a link to the draft in a new tab and Done it', async language => {
+ const card = handed();
+ const screen = await handDrawn(card, language, async () => null);
+ const group = screen.getByRole('group', { name: handWords[language].label(card.title) });
+ await expect.element(group).toBeVisible();
+ const [hand, open] = [...screen.getByTestId('icons').element().querySelectorAll('svg')].map(icon => icon.innerHTML);
+ const badge = group.element().querySelector('.hcard__top .badge.ck-badge');
+ expect([badge?.textContent, badge?.querySelector('svg')?.innerHTML]).toEqual([handWords[language].badge, hand]);
+ expect(group.element().querySelector('.card__head .tool-tile.tool-tile--lg svg.tool-logo'), 'WordPress draws its logo').not.toBeNull();
+ await expect.element(group.getByText(card.title, { exact: true })).toBeVisible();
+ await expect.element(group.getByText(card.line, { exact: true })).toBeVisible();
+ expect([...group.element().querySelectorAll('dt, dd')].map(text => text.textContent)).toEqual(card.rows.flatMap(row => [row.label, row.value]));
+ const link = group.getByRole('link', { name: handWords[language].open });
+ await expect.element(link).toHaveAttribute('href', article);
+ await expect.element(link).toHaveAttribute('target', '_blank');
+ expect(link.element().getAttribute('rel')?.split(' ').sort()).toEqual(['noopener', 'noreferrer']);
+ expect(link.element().querySelector('svg')?.innerHTML).toBe(open);
+ expect(group.getByRole('button').elements().map(button => button.textContent)).toEqual([handWords[language].done]);
+ expect(group.element().matches(':dir(rtl)'), 'the card follows its title, not the interface or the badge').toBe(true);
+ expect(group.element().classList.contains('is-resolved')).toBe(false);
+ expect(group.element().textContent, 'the closing note waits for Done it').not.toContain(card.note);
+});
+
+test('a hand card with no address shows Done it alone, and an English one is laid out left to right', async () => {
+ const card = handed({ title: 'Pay the December invoice', line: 'The invoice is ready in Stripe.', app: 'Stripe', url: null, rows: [] });
+ const screen = await handDrawn(card, 'ar', async () => null);
+ const group = screen.getByRole('group', { name: handWords.ar.label(card.title) });
+ await expect.element(group).toBeVisible();
+ expect(group.getByRole('link').elements()).toEqual([]);
+ expect(group.getByRole('button').elements().map(button => button.textContent)).toEqual([handWords.ar.done]);
+ expect(group.element().querySelector('dl'), 'no rows, no list').toBeNull();
+ expect(group.element().matches(':dir(ltr)')).toBe(true);
+});
+
+test.each([['an app gtmworks does not know', 'Stripe', '·', false], ['a known app by its key', 'wp', '', true], ['a known app by its name in any case', 'google search console', '', true], ['a catalogue app', 'Klaviyo', 'K', false]] as const)(
+ 'the tile of %s is drawn as the reference draws it', async (_, app, mark, logo) => {
+  const screen = await handDrawn(handed({ app }), 'en', async () => null);
+  const tile = screen.getByRole('group').element().querySelector('.card__head .tool-tile.tool-tile--lg');
+  expect([tile?.textContent, !!tile?.querySelector('svg.tool-logo')]).toEqual([mark, logo]);
+ });
+
+test.each(['en', 'ar'] as const)('in the %s interface, a done hand card shows Done with its time and the note, and nothing to press', async language => {
+ const card = handed({ state: 'done', at: '2026-06-10T09:41:00Z' } as Partial<Hand>);
+ const screen = await handDrawn(card, language);
+ const group = screen.getByRole('group', { name: handWords[language].label(card.title) });
+ await expect.element(group).toBeVisible();
+ expect(group.element().classList.contains('is-resolved')).toBe(true);
+ expect(group.element().classList.contains('is-just'), 'a card done before the page was drawn does not settle').toBe(false);
+ const outcome = group.element().querySelector('.card__outcome');
+ expect(outcome?.querySelector('svg')?.innerHTML).toBe(screen.getByTestId('icons').element().querySelectorAll('svg')[2].innerHTML);
+ expect(outcome?.textContent).toBe(`${handWords[language].at(timeOf('2026-06-10T09:41:00Z', language))} ${card.note}`);
+ expect(outcome?.querySelector('time')?.getAttribute('datetime')).toBe('2026-06-10T09:41:00Z');
+ expect([...group.element().querySelectorAll('a, button')]).toEqual([]);
+ const bare = await handDrawn(handed({ id: 8, title: 'Publish', state: 'done', at: '2026-06-10T09:41:00Z', note: null } as Partial<Hand>), language);
+ expect(bare.getByRole('group', { name: handWords[language].label('Publish') }).element().querySelector('.card__outcome')?.textContent).toBe(handWords[language].at(timeOf('2026-06-10T09:41:00Z', language)));
+});
+
+test.each(['en', 'ar'] as const)('in the %s interface, Done it calls done once with the card, reads done at once and settles only once; a second click sends nothing', async language => {
+ vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+ let settle = (_: string | null) => {};
+ const done = vi.fn(() => new Promise<string | null>(resolve => { settle = resolve; }));
+ const card = handed();
+ const screen = await handDrawn(card, language, done);
+ const group = screen.getByRole('group', { name: handWords[language].label(card.title) });
+ const button = group.getByRole('button', { name: handWords[language].done }).element() as HTMLButtonElement;
+ button.click(); button.click();
+ await expect.element(group).toHaveClass('is-resolved');
+ expect(done).toHaveBeenCalledExactlyOnceWith(7);
+ expect(group.element().querySelectorAll('a, button')).toHaveLength(0);
+ expect(group.element().querySelector('.card__outcome')?.textContent).toContain(card.note);
+ expect(group.element().classList.contains('is-just'), 'it settles where it was pressed').toBe(true);
+ settle(null);
+ await vi.advanceTimersByTimeAsync(900);
+ await expect.element(group).not.toHaveClass('is-just');
+ expect(done).toHaveBeenCalledTimes(1);
+});
+
+test('a Done it the server refuses gives the button back with the refusal, and a press then sends again', async () => {
+ const done = vi.fn().mockResolvedValueOnce('conversationFailed').mockResolvedValueOnce(null);
+ const card = handed();
+ const screen = await handDrawn(card, 'en', done);
+ await screen.getByRole('button', { name: 'Done it' }).click();
+ await expect.element(screen.getByRole('alert')).toHaveTextContent('Could not mark it done. Try again.');
+ const group = screen.getByRole('group', { name: handWords.en.label(card.title) });
+ expect(group.element().classList.contains('is-resolved')).toBe(false);
+ await screen.getByRole('button', { name: 'Done it' }).click();
+ await expect.element(group).toHaveClass('is-resolved');
+ expect(done).toHaveBeenCalledTimes(2);
+ expect(screen.getByRole('alert').elements()).toEqual([]);
+});
+
+test('in the chat, Done it posts the done intent with the card, the record is read once, and the Agent is not shown working', async () => {
+ const sheets = await Promise.all(['app/tokens.css', 'app/shell.css'].map(async file => (await import(/* @vite-ignore */ `/${file}?inline`)).default as string));
+ const styles = sheets.map(css => Object.assign(document.createElement('style'), { textContent: css }));
+ document.head.append(...styles);
+ onTestFinished(() => styles.forEach(style => style.remove()));
+ const open = handed();
+ const conversation = { id: '7d3f0b1e-1c2a-4b5d-8e6f-9a0b1c2d3e4f', agent_id: null, agent_name: 'SEO', face: 'c-1' };
+ const record = (card: Hand): ConversationRecord => ({ ...turns([card], false), conversation });
+ const calls = vi.fn(async (_url: string, init?: RequestInit) => init?.method === 'POST' ? Response.json({ state: 'done' })
+  : Response.json(record({ ...open, state: 'done', at: '2026-06-10T09:42:00Z' } as Hand)));
+ vi.stubGlobal('fetch', calls);
+ const screen = await render(<LanguageProvider language="en"><div className="gw"><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={conversation} title="" writer><Arrived record={arrived(record(open))} team={false}/></ConversationView></div></LanguageProvider>);
+ const group = screen.getByRole('group', { name: handWords.en.label(open.title) });
+ await screen.getByRole('button', { name: 'Done it' }).click();
+ // Done on this page, the card settles and its check draws (design-reference: .card.is-just).
+ const motion = (part: Element) => { const style = getComputedStyle(part); return [style.animationName, style.animationDuration, style.animationDelay]; };
+ expect([group.element(), group.element().querySelector('.card__outcome svg path')!].map(motion)).toEqual([['gw-settle', '0.32s', '0s'], ['gw-draw-check', '0.38s', '0.14s']]);
+ await expect.poll(() => calls.mock.calls.filter(([, init]) => init?.method !== 'POST').length).toBe(1);
+ const posted = calls.mock.calls.filter(([, init]) => init?.method === 'POST');
+ expect(posted.map(([url, init]) => [url, JSON.parse(init!.body as string)])).toEqual([['/api/conversations', { company: 'co-1', conversation: conversation.id, intent: 'done', card: 7 }]]);
+ await expect.poll(() => group.element().querySelector('time')?.getAttribute('datetime')).toBe('2026-06-10T09:42:00Z');
+ expect(document.querySelector('.convo-status'), 'no Run starts, so no one is shown working').toBeNull();
 });

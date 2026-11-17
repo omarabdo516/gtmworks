@@ -63,6 +63,15 @@ async function answer(db:Database,body:Record<string,unknown>) {
  return reply({state:answered.state});
 }
 
+// "Done it" on a step an Agent handed over (#139): the person's own word, recorded once by the database with who and when
+// (mark_hand_done), under the person's own session. gtmworks does not do the step and checks nothing outside.
+async function done(db:Database,body:Record<string,unknown>) {
+ if(typeof body.conversation!=='string'||!uuid.test(body.conversation)||!(typeof body.card==='number'&&Number.isSafeInteger(body.card)&&body.card>0)) return refuse('conversationFailed',400);
+ const {error}=await db.rpc('mark_hand_done',{c:body.company,conversation:body.conversation,card:body.card});
+ if(error) return refuseFor(error.code);
+ return reply({state:'done'});
+}
+
 // Reading the record also closes any of its runs Hermes has ended (lib/conversation-runs.mjs, as the worker does), so
 // the page shows the reply, and the usage of every ended run, without a reload; then a turn that waited for that run
 // starts. The person's session must see the conversation first; only their own runs of it are closed.
@@ -88,7 +97,7 @@ async function respond(request:NextRequest) {
   // The route's permission (lib/route-permissions.mjs), with the role read now: a Viewer's send is refused here, and
   // the database refuses it again (conversation_can_write) before the engine is called.
   if(!await routeAllowed(db,'app/api/conversations/route.ts',request.method,body.company,user.id)) return refuse('conversationNotAllowed',403);
-  if(writing) return body.intent==='stop'?await stop(db,body):body.intent==='answer'?await answer(db,body):await send(db,body);
+  if(writing) return body.intent==='stop'?await stop(db,body):body.intent==='answer'?await answer(db,body):body.intent==='done'?await done(db,body):await send(db,body);
   if(body.conversation===undefined) {
    // What the composer needs: whether this person may chat (any Member but a Viewer, #287), and the company's agents.
    const {data:writer}=await db.rpc('conversation_can_write',{c:body.company});
