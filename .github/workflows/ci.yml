@@ -6,7 +6,8 @@
 # the browser suite (integration=visual, #213). A push to main runs every suite unless every file is a document; a manual
 # run starts the browser and install suites only through inputs that default to off. Required `check`
 # (scripts/ci-verdict.mjs) counts a suite nobody asked for as passed when it was skipped, and is red on any failed or
-# cancelled stage.
+# cancelled stage. The `ledger` job records each run's timings, runners and test results and labels a red job
+# (scripts/ci-ledger.mjs, #256); it reports and never decides.
 # `integration` runs on the runner the repo variable CI_RUNNER names (#224): Omar's PC (`pc-ci`) while ci-router keeps
 # it there, else ubuntu-latest. A pull request from a fork runs it on ubuntu-latest, where every other job runs. The PC
 # runs one job at a time, so only the job it shortens goes there: `database` and `install` take as long or longer on it
@@ -106,6 +107,15 @@ jobs:
           cache: npm
       - name: static
         run: ./ci.sh static
+      - name: upload ledger results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ledger-${{ github.job }}
+          path: ci-ledger/
+          if-no-files-found: ignore
+          retention-days: 3
+          include-hidden-files: false
 
   # Screens as components in headless Chromium, in two shards, as T3 Code runs them (#81).
   components:
@@ -129,6 +139,15 @@ jobs:
         env:
           SHARD: ${{ matrix.shard }}
         run: ./ci.sh components
+      - name: upload ledger results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ledger-${{ github.job }}-${{ strategy.job-index }}
+          path: ci-ledger/
+          if-no-files-found: ignore
+          retention-days: 3
+          include-hidden-files: false
 
   # Migrations replayed and verified, row-level security and grants, on one local stack (tests/db.sh).
   database:
@@ -151,6 +170,15 @@ jobs:
           cache: npm
       - name: database
         run: ./ci.sh database
+      - name: upload ledger results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ledger-${{ github.job }}
+          path: ci-ledger/
+          if-no-files-found: ignore
+          retention-days: 3
+          include-hidden-files: false
 
   # The compared screens (the `visual` Playwright project) on lane 0 as the seed builds it, on the runner their approved
   # images are made on, then the measured navigation budgets. When `changes` says `visual` (screens alone, #213), this is all of the browser suite that runs.
@@ -191,6 +219,15 @@ jobs:
           path: playwright-report/html/
           if-no-files-found: ignore
           retention-days: 30
+      - name: upload ledger results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ledger-${{ github.job }}
+          path: ci-ledger/
+          if-no-files-found: ignore
+          retention-days: 3
+          include-hidden-files: false
 
   # The rest of the whole-app browser suite: the production-shaped proxy suite in the image and the journeys.
   integration:
@@ -267,6 +304,15 @@ jobs:
         run: |
           echo "the runner's memory group, peak since it started: $(( $(cat "/sys/fs/cgroup$(sed -n 's/^0:://p' /proc/self/cgroup)/memory.peak" 2> /dev/null || echo 0) / 1048576 )) MiB"
           docker stats --no-stream --format '{{.Name}} {{.MemUsage}}' | grep -E '_repo(-lane-[0-9]+)? ' || true
+      - name: upload ledger results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ledger-${{ github.job }}
+          path: ci-ledger/
+          if-no-files-found: ignore
+          retention-days: 3
+          include-hidden-files: false
       - name: remove what this run started
         if: ${{ always() }}
         run: node scripts/ci-runner.mjs cleanup
@@ -655,6 +701,46 @@ jobs:
       - name: remove the isolated Docker machine
         if: ${{ always() }}
         run: docker rm -fv install-docker || true
+
+  # The ledger (#256): every job's timings, queue, runner and test records, the layer table in the job summary, and a
+  # label on each red job (scripts/ci-ledger.mjs). It reports only: the verdict stays with `check`, which does not
+  # need it.
+  ledger:
+    needs: [changes, static, components, database, visual, integration, install]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ledger-*
+          path: ci-ledger-in/
+      - name: record the run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          DECISIONS_COMPONENTS: ${{ needs.changes.outputs.components }}
+          DECISIONS_DATABASE: ${{ needs.changes.outputs.database }}
+          DECISIONS_INTEGRATION: ${{ needs.changes.outputs.integration }}
+          DECISIONS_INSTALL: ${{ needs.changes.outputs.install }}
+        run: |
+          mkdir -p ci-ledger-in
+          node scripts/ci-ledger.mjs ci-ledger-in ci-ledger-out >> "$GITHUB_STEP_SUMMARY"
+      - name: upload the ledger
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ledger
+          path: ci-ledger-out/ledger.jsonl
+          retention-days: 90
 
   check:
     needs: [changes, static, components, database, visual, integration, install]

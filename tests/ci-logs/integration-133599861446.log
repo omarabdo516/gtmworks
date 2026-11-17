@@ -1,0 +1,52 @@
+﻿2026-11-16T20:44:45.4341421Z Current runner version: '2.338.2'
+2026-11-16T20:44:45.4361459Z ##[group]Runner Image Provisioner
+2026-11-16T20:44:45.4362278Z Hosted Compute Agent
+[excerpt: lines omitted]
+2026-11-16T20:48:25.5903628Z             },
+2026-11-16T20:48:25.5934144Z             "body": "Closes #241\n\n## Why\nSince #224 the whole-app browser job `integration` runs on Omar's PC. On 2026-11-16 every PR's `integration` there failed with Chromium's `net::ERR_NETWORK_CHANGED`: PR #234 (jobs 133574814781 and earlier), #237 (133569580338) and #242 (133580631427). Every failing request went to `https://app.gtmworks.test`, the proxy suite'
+2026-11-16T20:48:25.5955454Z             "changed_files": 7,
+[excerpt: lines omitted]
+2026-11-16T20:57:48.8628545Z ##[error]  1) [functional] › tests/app.spec.ts:201:5 › agent creates and submits a card; rejection produces a signed webhook 
+    Error: apiRequestContext.get: read ECONNRESET
+    Call log:
+      - → GET http://127.0.0.1:3003/api/v1/companies/rs-learning/cards?next_actor=me
+        - user-agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.8078.4 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - Authorization: ***
+        - cookie: sb-gtmworks-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdjaU9pSkZVekkxTmlJc0ltdHBaQ0k2SW1JNE1USTJPV1l4TFRJeFpEZ3ROR1l5WlMxaU56RTVMV015TWpRd1lUZzBNR1E1TUNJc0luUjVjQ0k2SWtwWFZDSjkuZXlKcGMzTWlPaUpvZEhSd09pOHZNVEkzTGpBdU1DNHhPalUwTmpJeEwyRjFkR2d2ZGpFaUxDSnpkV0lpT2lJeU1EQXdNREF3TUMwd01EQXdMVEF3TURBdE1EQXdNQzB3TURBd01EQXdNREF3TURFaUxDSmhkV1FpT2lKaGRYUm9aVzUwYVdOaGRHVmtJaXdpWlhod0lq
+
+
+      253 |   const agentKey=page.locator('.section-title').filter({has:page.locator('strong',{hasText:'وكيل المحتوى'})}).first();
+      254 |   await agentKey.getByRole('button',{name:'Revoke key وكيل المحتوى'}).click();
+[excerpt: lines omitted]
+2026-11-16T20:57:48.8721992Z ##[error]  1) [functional] › tests/app.spec.ts:201:5 › agent creates and submits a card; rejection produces a signed webhook 
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 401
+
+      218 |   const headers={Authorization:'***'};
+      219 |   const root='/api/v1/companies/rs-learning/cards';
+    > 220 |   const initial=await page.request.get(`${root}?next_actor=me`,{headers}); expect(initial.status()).toBe(200);
+          |                                                                                                     ^
+      221 |   const listing=await initial.json(); expect(Array.isArray(listing.cards)).toBe(true);
+[excerpt: lines omitted]
+2026-11-16T21:07:14.2180880Z       222 |   const title=`عمل الوكيل ${Date.now()}`;
+2026-11-16T21:07:14.2182572Z       223 |   const created=await page.request.post(root,{headers:{...headers,'Idempotency-Key':`create-${Date.now()}`},data:{title,stage:Number(ideaStage),evidence:'https://example.test/evidence'}}); expect(created.status()).toBe(201);
+2026-11-16T21:07:14.2183748Z         at /home/runner/work/gtmworks/gtmworks/tests/app.spec.ts:220:101
+2026-11-16T21:07:14.2184283Z 
+2026-11-16T21:07:14.2184883Z     Error Context: test-results/app-agent-creates-and-subm-785d7-n-produces-a-signed-webhook-functional-retry1/error-context.md
+2026-11-16T21:07:14.2185512Z 
+2026-11-16T21:07:14.2185886Z   Slow test file: [functional] › tests/engine-conversation.spec.ts (6.8m)
+2026-11-16T21:07:14.2186630Z   Consider running tests from slow files in parallel. See: https://playwright.dev/docs/test-parallel
+2026-11-16T21:07:14.2187160Z   1 failed
+2026-11-16T21:07:14.2187854Z     [functional] › tests/app.spec.ts:201:5 › agent creates and submits a card; rejection produces a signed webhook 
+2026-11-16T21:07:14.2188463Z   190 passed (13.1m)
+2026-11-16T21:07:14.5127789Z ##[warning][functional] › tests/engine-conversation.spec.ts took 6.8m
+2026-11-16T21:07:14.5130890Z ##[notice]  1 failed
+    [functional] › tests/app.spec.ts:201:5 › agent creates and submits a card; rejection produces a signed webhook 
+  190 passed (13.1m)
+2026-11-16T21:07:14.5517661Z ##[error]Process completed with exit code 1.
