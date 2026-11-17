@@ -583,7 +583,7 @@ test('integration: a Contributor allows one request once and refuses another fro
   const exports=page.getByRole('group',{name:'Approval request: delete the old exports'});
   await expect(exports.getByRole('button')).toHaveText(['Don’t allow','Allow once']);
   await expect(exports.locator('.kv__row')).toHaveText('Commandrm -r /srv/exports');
-  await expect(page.locator('.convo-status')).toHaveText('Faye is working on a reply…');
+  await expect(page.locator('.convo-status')).toHaveText(/^Faye is working on a reply\b/);
   await exports.getByRole('button',{name:'Allow once'}).click();
   const outcome=exports.locator('.card__outcome');
   await expect(outcome).toHaveText(/^Allowed once · \S/);
