@@ -7,6 +7,8 @@ import { overlayHref } from '@/lib/settings-overlay.mjs';
 import { AppTile } from '@/components/app-tile';
 import { ShellIcon } from '@/components/shell-icon';
 import { SettingsIcon } from './settings-icons';
+import { toast } from './toast';
+import { appsChanged } from './company-apps-read';
 import type { AppCategory, CompanyApp } from '@/lib/app-catalogue.mjs';
 
 // Settings, Apps (#30; design-reference: appsHeadHTML, appsListHTML, appCardHTML, appDetailHTML). The server reads each
@@ -27,11 +29,13 @@ const order:AppCategory[]=['content','communication','analytics','sales'];
 const named=(line:string,name:string)=>{ const [before,after='']=line.split('{0}'); return <>{before}<bdi>{name}</bdi>{after}</>; };
 
 // One step between the list and an app's page: a link in Settings, a button in the sheet, with the same id, class and
-// label. `stay` keeps the person on the app's page while a sign-in is followed or a request is on its way.
+// label. `stay` keeps the person on the app's page while a sign-in is followed or a request is on its way: the control
+// is marked unavailable, and in Settings it has no address, so no click of any kind leaves.
 type Step={open:string}|{back:string};
 function To({place,step,stay=false,...props}:{place:AppsPlace,step:Step,stay?:boolean,className:string,id:string,'aria-label'?:string,children:ReactNode}) {
- if(place.kind==='address') return <Link {...props} href={overlayHref(place.slug,'apps','open' in step?{app:step.open}:{})} replace={'back' in step||undefined} onClick={stay?event=>event.preventDefault():undefined}/>;
- return <button type="button" {...props} onClick={()=>{ if(stay) return; if('open' in step) place.open(step.open); else place.back(step.back); }}/>;
+ if(place.kind==='address') return stay?<a {...props} role="link" tabIndex={0} aria-disabled="true"/>
+  :<Link {...props} href={overlayHref(place.slug,'apps','open' in step?{app:step.open}:{})} replace={'back' in step||undefined}/>;
+ return <button type="button" {...props} aria-disabled={stay||undefined} onClick={()=>{ if(stay) return; if('open' in step) place.open(step.open); else place.back(step.back); }}/>;
 }
 function Close({place}:{place:AppsPlace}) {
  const {t}=useI18n();
@@ -71,10 +75,12 @@ export function AppsList({place,owner,items:read,text}:{place:AppsPlace,owner:bo
    {read!==undefined&&<div className="tpl-cats" role="group" aria-label={say('categories')}>{(['all',...order.filter(kind=>items.some(item=>item.category===kind))] as const).map(kind=>
     <button key={kind} type="button" className="chip" id={`apps-cat-${kind}`} aria-pressed={category===kind} onClick={()=>setCategory(kind)}>{say(`category.${kind}`)}<span className="chip__n num">{items.filter(item=>kind==='all'||item.category===kind).length}</span></button>)}</div>}
   </header>
-  <div className="apps-body" id="apps-body" aria-live="polite">{read===undefined?null:shown.length?<>{group(say('groupOn'),shown.filter(item=>item.state!=='off'),'apps-h-on')}{group(say('groupOff'),shown.filter(item=>item.state==='off'),'apps-h-off')}</>
+  <div className="apps-body" id="apps-body" aria-live="polite">{read===undefined?null
+   :read===null?<div className="panel-card"><p className="panel-empty">{say('unreadable')}</p></div>
+   :!read.length?<div className="panel-card"><p className="panel-empty">{say('noneOffered')}</p></div>
+   :shown.length?<>{group(say('groupOn'),shown.filter(item=>item.state!=='off'),'apps-h-on')}{group(say('groupOff'),shown.filter(item=>item.state==='off'),'apps-h-off')}</>
    :<div className="tpl-empty"><b>{needle?say('noMatch',query.trim()):say('noneHere')}</b><span>{say('emptyHint')}</span>
-    {needle&&<div className="tpl-empty__acts"><button type="button" className="btn btn--secondary btn--sm" onClick={()=>{setQuery('');search.current?.focus();}}>{say('clear')}</button></div>}</div>}
-   {read===null?<div className="panel-card"><p className="panel-empty">{say('unreadable')}</p></div>:read&&!read.length&&<div className="panel-card"><p className="panel-empty">{say('noneOffered')}</p></div>}</div>
+    {needle&&<div className="tpl-empty__acts"><button type="button" className="btn btn--secondary btn--sm" onClick={()=>{setQuery('');search.current?.focus();}}>{say('clear')}</button></div>}</div>}</div>
  </>;
 }
 
@@ -88,10 +94,24 @@ async function ask(body:Record<string,string>) {
 const pollEvery=2000, pollFor=15*60*1000;
 
 export function AppDetail({place,company,owner,rtl,item,text,soon,failed}:{place:AppsPlace,company:string,owner:boolean,rtl:boolean,item:AppItem,text:Text,soon:string,failed:boolean}) {
- const say=sayer(text); const router=useRouter();
+ const say=sayer(text); const router=useRouter(); const {language}=useI18n();
  const [waiting,setWaiting]=useState(false); const [asking,setAsking]=useState(false); const [error,setError]=useState(failed?'signInFailed':'');
  const [pending,startTransition]=useTransition();
  const state=item.state; const on=state!=='off';
+ // Settings draws its apps on the server and reads them again with the page; the sidebar's count and the sheet read
+ // them in the browser.
+ const address=place.kind==='address';
+ // The vendor's window, and the sign-in being followed in it, for the page closing under it (the sheet closed, Settings
+ // left): that sign-in is cancelled, its window closed, and the person told.
+ const vendor=useRef<Window|null>(null);
+ const followed=useRef<{company:string,app:string,said:string}|null>(null);
+ useEffect(()=>{ followed.current=waiting?{company,app:item.key,said:say('signInCancelled',item.name)}:null; });
+ useEffect(()=>()=>{
+  const left=followed.current; if(!left) return;
+  void fetch('/api/company-apps',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json'},body:JSON.stringify({company:left.company,app:left.app,action:'cancel'})}).catch(()=>{});
+  vendor.current?.close();
+  toast(left.said,{icon:'x'});
+ },[]);
  // While the vendor's window is open the sign-in is followed until it connects, fails, or the page closes.
  useEffect(()=>{
   if(!waiting) return;
@@ -102,28 +122,29 @@ export function AppDetail({place,company,owner,rtl,item,text,soon,failed}:{place
    const status=String(answer.body.status||'');
    if(answer.ok&&status==='waiting'&&Date.now()<until) { timer=setTimeout(poll,pollEvery); return; }
    setWaiting(false);
-   if(answer.ok&&status==='connected') router.refresh();
+   if(answer.ok&&status==='connected') { void appsChanged(company,language); if(address) router.refresh(); }
    else setError(answer.ok?'signInFailed':`error.${String(answer.body.error||'appsFailed')}`);
   };
   timer=setTimeout(poll,pollEvery);
   return ()=>{ stopped=true; clearTimeout(timer); };
- },[waiting,company,item.key,router]);
+ },[waiting,company,item.key,router,language,address]);
  // The vendor's window is opened at the click, before the answer, so the browser lets it open; it is pointed at the
  // vendor once gtmworks has the sign-in page, and never knows this page.
  const connect=()=>startTransition(async()=>{
   setError('');
+  // A blocked window starts no sign-in, and the page stays where it is.
   const opened=window.open('about:blank','_blank');
+  if(!opened) { setError('popupBlocked'); return; }
   const answer=await ask({company,app:item.key,action:'connect'});
-  if(!answer.ok) { opened?.close(); setError(`error.${String(answer.body.error||'appsFailed')}`); return; }
-  if(opened) { opened.opener=null; opened.location.href=String(answer.body.url); setWaiting(true); }
-  else window.location.assign(String(answer.body.url));
+  if(!answer.ok) { opened.close(); setError(`error.${String(answer.body.error||'appsFailed')}`); return; }
+  opened.opener=null; opened.location.href=String(answer.body.url); vendor.current=opened; setWaiting(true);
  });
  const cancel=()=>startTransition(async()=>{ await ask({company,app:item.key,action:'cancel'}); setWaiting(false); });
  const disconnect=()=>startTransition(async()=>{
   const answer=await ask({company,app:item.key,action:'disconnect'});
   if(!answer.ok) { setError(`error.${String(answer.body.error||'appsFailed')}`); return; }
   if(place.kind==='address') router.replace(overlayHref(place.slug,'apps')); else place.back(item.key);
-  router.refresh();
+  void appsChanged(company,language); if(address) router.refresh();
  });
  const busy=pending||waiting;
  const back=<To place={place} step={{back:item.key}} stay={busy} className="btn btn--secondary" id="app-cancel">{say(owner&&state==='off'?'cancel':'done')}</To>;

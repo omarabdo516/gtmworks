@@ -4,9 +4,11 @@ import { useI18n } from '@/lib/i18n-client';
 import { ShellIcon } from '@/components/shell-icon';
 import { leave } from '@/lib/motion';
 import { AppsList, AppDetail, connectedCount, type AppItem, type AppsPlace } from './settings-apps-client';
+import { readApps, useCompanyApps } from './company-apps-read';
 import en from '@/lib/messages/apps.en.json';
 import ar from '@/lib/messages/apps.ar.json';
 import './sheet.css';
+import './settings.css';
 import './apps.css';
 
 // Connect apps (#201; design-reference: openApps, renderApps, renderAppsBtn, the open-apps, apps-close, app-open and
@@ -18,25 +20,19 @@ type Sheet={phase:'closed'}|{phase:'open'|'closing',view:string|null,opener:HTML
 type Apps={items:AppItem[]|null|undefined,open:(opener:HTMLElement|null)=>void};
 const AppsContext=createContext<Apps|null>(null);
 
-// Every page draws its own Shell, so the provider is drawn anew on each page: the last read of each Company is kept here,
-// outside it, so the count stays in place while the new page's read is on its way.
-const lastRead=new Map<string,AppItem[]|null>();
-
 // sheetOut in sheet.css.
 const leaveMs=190;
 
-// `apps` is the Shell's read, handed over unawaited so no page waits on the Engine. A page drawn again (a refresh after a
-// connect, another page) hands a new read; the last one read stays shown until it lands, so neither the count nor an
-// open sheet empties meanwhile.
-export function AppsSheetProvider({apps,company,owner,rtl,children}:{apps:Promise<AppItem[]|null>,company:string,owner:boolean,rtl:boolean,children:ReactNode}) {
+// The apps are read by the browser after the page is drawn (app/company-apps-read.ts), again each time the sheet opens,
+// and after an app is connected or disconnected; the last good read stays shown meanwhile.
+export function AppsSheetProvider({company,owner,rtl,children}:{company:string,owner:boolean,rtl:boolean,children:ReactNode}) {
  const {t,language}=useI18n(); const text:Record<string,string>=language==='ar'?ar:en;
- const [items,setItems]=useState<AppItem[]|null|undefined>(()=>lastRead.get(company));
- useEffect(()=>{ let current=true; void apps.then(read=>{ lastRead.set(company,read); if(current) setItems(read); }); return ()=>{ current=false; }; },[apps,company]);
+ const items=useCompanyApps(company,language);
  const [sheet,setSheet]=useState<Sheet>({phase:'closed'});
  const box=useRef<HTMLDialogElement>(null); const stopLeaving=useRef(()=>{});
  // Where the keyboard goes once the sheet has drawn the view it moved to; after back, the app's button keeps it.
  const focusNext=useRef<string|null>(null); const kept=useRef<string|null>(null);
- const open=(opener:HTMLElement|null)=>{ focusNext.current='apps-q'; kept.current=null; setSheet({phase:'open',view:null,opener}); };
+ const open=(opener:HTMLElement|null)=>{ void readApps(company,language); focusNext.current='apps-q'; kept.current=null; setSheet({phase:'open',view:null,opener}); };
  const close=()=>{
   const dialog=box.current; if(!dialog?.open||sheet.phase!=='open') return;
   stopLeaving.current=leave(leaveMs,()=>setSheet(now=>now.phase==='open'?{...now,phase:'closing'}:now),()=>dialog.close());

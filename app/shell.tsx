@@ -22,7 +22,6 @@ import NewChatKey from './new-chat-key';
 import { SidebarSearchProvider, SearchToggle, SearchBox } from './sidebar-search';
 import { Frame } from './frame';
 import { AppsSheetProvider, AppsButton } from './apps-sheet';
-import { companyAppItems } from '@/lib/company-app-items';
 import type { ReactNode } from 'react';
 import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbPage, BreadcrumbSeparator } from '@/components/paperclip/ui/breadcrumb';
 import { Fragment } from 'react';
@@ -89,8 +88,8 @@ export default async function Shell({company,companies,section,title,crumbs,pers
     {company?.id&&<RecentCards key={company.id} slug={slug}/>}
    </section>
   </>}</nav>
-  {/* The apps sheet's read is not awaited: the page is drawn at once and the sidebar's count lands when the Engine answers. */}
-  <div className="sb-foot sidebar-bottom">{company?<AppsSheetProvider apps={companyAppItems(company.id,language)} company={company.id} owner={owner} rtl={language==='ar'}><AppsButton/>{account}</AppsSheetProvider>:account}</div>
+  {/* The apps are read by the browser (app/company-apps-read.ts): the page is drawn with no Engine read and the count lands after. */}
+  <div className="sb-foot sidebar-bottom">{company?<AppsSheetProvider company={company.id} owner={owner} rtl={language==='ar'}><AppsButton/>{account}</AppsSheetProvider>:account}</div>
  </SidebarSearchProvider>;
  // Paperclip BreadcrumbBar: a trail of two or more crumbs replaces the single page title. Rendered on the server so it adds no route JavaScript.
  const breadcrumb=crumbs&&crumbs.length>1?<div className="heading m-0 min-w-0 flex-1 overflow-hidden"><Breadcrumb aria-label={t('breadcrumb')} className="min-w-0 overflow-hidden"><BreadcrumbList className="flex-nowrap">{crumbs.map((crumb,index)=>{const last=index===crumbs.length-1;return <Fragment key={index}>{index>0&&<BreadcrumbSeparator/>}<BreadcrumbItem className={last?'min-w-0':'shrink-0'}>{last||!crumb.href?<BreadcrumbPage className="truncate"><bdi>{crumb.label}</bdi></BreadcrumbPage>:<Link className="hover:text-foreground transition-colors" href={crumb.href}><bdi>{crumb.label}</bdi></Link>}</BreadcrumbItem></Fragment>;})}</BreadcrumbList></Breadcrumb></div>:undefined;

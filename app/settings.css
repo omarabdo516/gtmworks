@@ -1,6 +1,7 @@
 /* The settings overlay (#26), ported from the approved reference (design-reference/index.html: "settings in one place",
    panel-card, panel-row, set-*, segmented, switch, badge, btn, talk-tip, table and ta-*, know-vs, kpis). Colours come
-   from the shell's gw tokens (app/shell.css); the few it does not carry are set here for both themes. */
+   from the shell's gw tokens (app/shell.css); the few it does not carry are set here for both themes. The Connect apps
+   sheet (app/apps.css, #201), drawn outside the overlay, shares its buttons, notes and hints and their 44px tap rings. */
 .gw.sov-root {
   --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 24px; --s8: 32px; --s12: 48px; --s16: 64px;
   --sov-btn2-bg: #1C1C1C0F; --sov-btn2-ring: transparent; --sov-btn2-hover: #1C1C1C1A; --sov-fs-2xl: 28px;
@@ -19,9 +20,9 @@
 .gw .sov :where(h2, h3, h4, p) { margin: 0; letter-spacing: normal; text-transform: none; }
 .gw .sov :where(a) { color: inherit; text-decoration: none; }
 .gw .sov [aria-disabled="true"] { cursor: default; }
-.gw .sov .sov-icon { width: var(--od-icon-size, 18px); height: var(--od-icon-size, 18px); flex: none; display: inline-block; }
+.gw :is(.sov, .apps-sheet) .sov-icon { width: var(--od-icon-size, 18px); height: var(--od-icon-size, 18px); flex: none; display: inline-block; }
 .gw .sov .num { font-variant-numeric: tabular-nums; }
-.gw .sov .muted { color: var(--gw-text-3); }
+.gw :is(.sov, .apps-sheet) .muted { color: var(--gw-text-3); }
 .gw .sov .od-fill { flex: 1 1 0; min-width: 0; }
 .gw .sov .od-field { display: grid; gap: 2px; min-width: 0; }
 .gw .sov .od-field > * { display: block; }
@@ -38,7 +39,7 @@
   display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; flex: none; border-radius: var(--gw-r-full);
   background: var(--gw-bg-pane); box-shadow: var(--gw-border-3) 0 0 0 0.5px inset, var(--gw-border-3) 0 0 0 0.5px; color: var(--gw-text-1);
 }
-@media (hover: hover) { .gw .sov .circle-btn:hover { background: var(--gw-bg-elevated-hover); } }
+@media (hover: hover) { .gw :is(.sov, .apps-sheet) .circle-btn:hover { background: var(--gw-bg-elevated-hover); } }
 .gw .sov:focus { outline: none; }
 .gw .sov-ro { align-self: center; --od-icon-size: 13px; color: var(--gw-text-2); }
 .gw .sov__body { display: grid; grid-template-columns: 264px minmax(0, 1fr); min-height: 0; }
@@ -58,20 +59,20 @@
 .gw .sov-sub { font-size: var(--gw-fs-base); line-height: 1.7; color: var(--gw-text-2); max-width: 64ch; }
 
 /* buttons */
-.gw .sov .btn {
+.gw :is(.sov, .apps-sheet) .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; padding: 0 var(--s4); border-radius: var(--gw-r-full);
   font-size: var(--gw-fs-base); font-weight: 600; white-space: nowrap; --od-icon-size: 16px;
 }
-.gw .sov .btn--primary { background: var(--gw-primary); color: var(--gw-on-primary); }
-.gw .sov .btn--secondary { background: var(--sov-btn2-bg); color: var(--gw-text-1); box-shadow: var(--sov-btn2-ring) 0 0 0 1px inset; }
-.gw .sov :is(.btn--primary, .btn--secondary):disabled { background: var(--gw-primary-disabled); color: var(--gw-text-4); box-shadow: none; }
-.gw .sov .btn--sm { height: 30px; padding: 0 var(--s3); font-size: var(--gw-fs-sm); }
-.gw .sov .link-btn { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: var(--gw-r-xs); font-size: var(--gw-fs-sm); color: var(--gw-text-2); --od-icon-size: 14px; }
+.gw :is(.sov, .apps-sheet) .btn--primary { background: var(--gw-primary); color: var(--gw-on-primary); }
+.gw :is(.sov, .apps-sheet) .btn--secondary { background: var(--sov-btn2-bg); color: var(--gw-text-1); box-shadow: var(--sov-btn2-ring) 0 0 0 1px inset; }
+.gw :is(.sov, .apps-sheet) :is(.btn--primary, .btn--secondary):disabled { background: var(--gw-primary-disabled); color: var(--gw-text-4); box-shadow: none; }
+.gw :is(.sov, .apps-sheet) .btn--sm { height: 30px; padding: 0 var(--s3); font-size: var(--gw-fs-sm); }
+.gw :is(.sov, .apps-sheet) .link-btn { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: var(--gw-r-xs); font-size: var(--gw-fs-sm); color: var(--gw-text-2); --od-icon-size: 14px; }
 .gw .sov .badge { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; height: 22px; padding: 0 var(--s2); border-radius: var(--gw-r-full); font-size: var(--gw-fs-xs); background: var(--gw-bg-tertiary); color: var(--gw-text-1); }
 @media (hover: hover) {
-  .gw .sov .btn--primary:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--gw-primary-hover); }
-  .gw .sov .btn--secondary:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--sov-btn2-hover); }
-  .gw .sov .link-btn:hover { background: var(--gw-bg-hover); color: var(--gw-text-1); }
+  .gw :is(.sov, .apps-sheet) .btn--primary:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--gw-primary-hover); }
+  .gw :is(.sov, .apps-sheet) .btn--secondary:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--sov-btn2-hover); }
+  .gw :is(.sov, .apps-sheet) .link-btn:hover { background: var(--gw-bg-hover); color: var(--gw-text-1); }
   .gw .sov a.panel-row:hover, .gw .sov button.panel-row:hover:not(:disabled) { background: var(--gw-bg-hover); }
   .gw .sov-nav .sb-item:hover { background: var(--gw-bg-hover); }
   .gw .sov-nav .sb-item[aria-current="page"]:hover { background: var(--gw-bg-active); }
@@ -91,8 +92,8 @@
 .gw .sov .panel-row__d { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); overflow-wrap: anywhere; }
 .gw .sov .panel-row__meta { font-size: var(--gw-fs-xs); color: var(--gw-text-3); flex: none; display: inline-flex; align-items: center; gap: 4px; --od-icon-size: 14px; }
 .gw .sov .panel-empty { margin: 0; padding: 10px var(--s2); font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-3); }
-.gw .sov .ro-note { display: flex; align-items: flex-start; gap: 6px; padding: 0; font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-2); --od-icon-size: 16px; }
-.gw .sov .ro-note .sov-icon { margin-top: 3px; color: var(--gw-text-3); }
+.gw :is(.sov, .apps-sheet) .ro-note { display: flex; align-items: flex-start; gap: 6px; padding: 0; font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-2); --od-icon-size: 16px; }
+.gw :is(.sov, .apps-sheet) .ro-note .sov-icon { margin-top: 3px; color: var(--gw-text-3); }
 .gw .sov .ro-text { padding: 10px var(--s2); font-size: var(--gw-fs-sm); line-height: 1.7; color: var(--gw-text-1); overflow-wrap: anywhere; }
 .gw .sov .set-card { gap: var(--s4); padding: var(--s3); }
 .gw .sov .set-field { display: grid; gap: 6px; }
@@ -105,8 +106,8 @@
 .gw .sov .set-input:focus { border-color: var(--gw-border-1); box-shadow: 0 0 0 3px var(--gw-bg-active); }
 .gw .sov .set-input::placeholder { color: var(--gw-text-4); opacity: 1; }
 .gw .sov .set-input[readonly] { cursor: default; }
-.gw .sov .set-hint { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); }
-.gw .sov .set-err { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-danger-text); }
+.gw :is(.sov, .apps-sheet) .set-hint { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); }
+.gw :is(.sov, .apps-sheet) .set-err { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-danger-text); }
 .gw .sov .set-textarea { height: auto; min-height: 136px; padding: var(--s2) 10px; line-height: 1.7; resize: vertical; }
 .gw .sov .set-hint-row { display: flex; align-items: flex-start; gap: var(--s2); }
 .gw .sov .set-count { flex: none; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); white-space: nowrap; }
@@ -131,8 +132,8 @@
 .gw .sov .switch[aria-disabled="true"] { opacity: .55; }
 .gw .sov .danger-confirm { display: grid; gap: var(--s2); padding: var(--s2); }
 .gw .sov .danger-confirm p { font-size: var(--gw-fs-sm); line-height: 1.7; color: var(--gw-text-1); }
-.gw .sov .panel-form__row { display: flex; gap: var(--s2); }
-.gw .sov .panel-form__row--end { justify-content: flex-end; }
+.gw :is(.sov, .apps-sheet) .panel-form__row { display: flex; gap: var(--s2); }
+.gw :is(.sov, .apps-sheet) .panel-form__row--end { justify-content: flex-end; }
 
 /* the company */
 .gw .sov .co-name { display: flex; gap: var(--s2); align-items: center; }
@@ -167,8 +168,8 @@
 .gw .sov .inv-row { display: grid; grid-template-columns: minmax(0, 1fr) 148px auto; gap: var(--s2); align-items: start; }
 .gw .sov .inv-go { margin-top: calc(var(--gw-fs-xs) * 1.5 + 6px); min-width: 88px; }
 @media (max-width: 639px) { .gw .sov .inv-row { grid-template-columns: minmax(0, 1fr); } .gw .sov .inv-go { margin-top: 0; justify-self: start; } }
-.gw .sov .sov-warn { padding: var(--s3) var(--s4); border-radius: var(--gw-r-md); background: var(--gw-wait-bg); color: var(--gw-wait-text); }
-.gw .sov .sov-warn .sov-icon { color: inherit; }
+.gw :is(.sov, .apps-sheet) .sov-warn { padding: var(--s3) var(--s4); border-radius: var(--gw-r-md); background: var(--gw-wait-bg); color: var(--gw-wait-text); }
+.gw :is(.sov, .apps-sheet) .sov-warn .sov-icon { color: inherit; }
 
 /* the Agents and one Agent */
 .gw .sov .talk-tip { display: flex; align-items: center; flex-wrap: wrap; gap: 4px var(--s2); margin: 0 0 var(--s4); padding: var(--s3) var(--s4); border-radius: var(--gw-r-md); background: var(--gw-bg-tertiary); font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-1); --od-icon-size: 16px; }
@@ -279,15 +280,15 @@
      it (inside the space the reference leaves around it) makes the tap area 44px. */
   .gw .sov-nav .sb-item { width: auto; height: 36px; white-space: nowrap; position: relative; }
   .gw .sov-nav .sb-item::before { content: ""; position: absolute; inset: -4px 0; }
-  .gw .sov .circle-btn { width: 36px; height: 36px; position: relative; }
-  .gw .sov .circle-btn::before { content: ""; position: absolute; inset: -4px; }
-  .gw .sov :is(.btn--sm, .link-btn, .segmented :is(button, a), .switch, .chip) { position: relative; }
-  .gw .sov .chip::before { content: ""; position: absolute; inset: -5px 0; }
-  .gw .sov .btn--sm::before { content: ""; position: absolute; inset: -7px 0; }
+  .gw .sov .circle-btn { width: 36px; height: 36px; }
+  .gw :is(.sov, .apps-sheet) .circle-btn::before { content: ""; position: absolute; inset: -4px; }
+  .gw :is(.sov, .apps-sheet) :is(.circle-btn, .btn--sm, .link-btn, .segmented :is(button, a), .switch, .chip) { position: relative; }
+  .gw :is(.sov, .apps-sheet) .chip::before { content: ""; position: absolute; inset: -5px 0; }
+  .gw :is(.sov, .apps-sheet) .btn--sm::before { content: ""; position: absolute; inset: -7px 0; }
   .gw .sov .inv-go { position: relative; }
   .gw .sov .inv-go::before { content: ""; position: absolute; inset: -4px 0; }
   .gw .sov .segmented :is(button, a)::before { content: ""; position: absolute; inset: -8px 0; }
-  .gw .sov .link-btn::before { content: ""; position: absolute; inset: -11px 0; }
+  .gw :is(.sov, .apps-sheet) .link-btn::before { content: ""; position: absolute; inset: -11px 0; }
   .gw .sov .switch::before { content: ""; position: absolute; inset: -12px -6px; }
   .gw .sov .sov-password :is(input, button[type="submit"]) { height: 44px; }
 }
