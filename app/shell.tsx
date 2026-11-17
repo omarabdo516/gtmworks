@@ -12,6 +12,7 @@ import { agentStates, statusKeys } from '@/lib/agent-details.mjs';
 import { ShellIcon } from '@/components/shell-icon';
 import { agentIdentities } from '@/lib/agent-identities';
 import { AgentIdentitiesProvider } from '@/lib/agent-identities-client';
+import { CallableAgentsProvider } from '@/app/conversation-composer';
 import Switcher from '@/app/c/[slug]/[[...section]]/switcher';
 import RecentCards, { RecentCardsProvider } from './recent-cards';
 import RecentChats from './recent-chats';
@@ -101,5 +102,7 @@ export default async function Shell({company,companies,section,title,crumbs,pers
  const question=asking&&company?<FirstRunChoice slug={company.slug} company={company.id} companyName={company.name} personName={personName} lead={main?{name:main.name,connection_id:main.connection_id}:null} mark={mark} brand={<>gtm<span>works</span></>}/>:null;
  const frame=<Frame sidebar={sidebar} title={chat?t('chats'):title} breadcrumb={chat?undefined:breadcrumb} chat={chat}>{children}</Frame>;
  const shown=question?<><div style={{display:'contents'}} inert>{frame}</div>{question}</>:frame;
- return <AgentIdentitiesProvider agents={await agentIdentities()}>{company?.id?<RecentCardsProvider key={company.id} company={company.id} cardId={cardId}>{shown}</RecentCardsProvider>:shown}</AgentIdentitiesProvider>;
+ // The composer's "+" menu calls the Agents this Member sees, as the sidebar lists them (#153).
+ const callable=agents.map(({id,connection_id,name})=>({id,connection_id,name}));
+ return <AgentIdentitiesProvider agents={await agentIdentities()}><CallableAgentsProvider agents={callable}>{company?.id?<RecentCardsProvider key={company.id} company={company.id} cardId={cardId}>{shown}</RecentCardsProvider>:shown}</CallableAgentsProvider></AgentIdentitiesProvider>;
 }

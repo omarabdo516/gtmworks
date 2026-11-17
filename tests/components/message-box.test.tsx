@@ -78,13 +78,13 @@ test('while the Agent works an empty box offers stop, and typed text still sends
  await expect.poll(() => send.mock.calls.length).toBe(1);
 });
 
-test('a sentence put in the box shows there, focused; extras and dictation say Soon', async () => {
+test('a sentence put in the box shows there, focused; dictation says Soon', async () => {
  const handle = createRef<MessageBoxHandle>();
  const screen = await box({ send: async () => null, ref: handle });
  await act(() => handle.current?.insert('Make an Agent'));
  await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('Make an Agent');
  await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveFocus();
- await expect.element(screen.getByRole('button', { name: 'More · Soon' })).toHaveAttribute('aria-disabled', 'true');
+ await expect.element(screen.getByRole('button', { name: 'Voice dictation · Soon' })).toHaveAttribute('aria-disabled', 'true');
 });
 
 test('in Arabic the box speaks Arabic and its text keeps its own direction', async () => {
@@ -92,7 +92,7 @@ test('in Arabic the box speaks Arabic and its text keeps its own direction', asy
  const message = screen.getByRole('textbox', { name: 'الرسالة' });
  await expect.element(message).toHaveAttribute('dir', 'auto');
  await expect.element(screen.getByRole('button', { name: 'ابعت' })).toBeDisabled();
- await expect.element(screen.getByRole('button', { name: 'إضافات · قريبًا' })).toBeVisible();
+ await expect.element(screen.getByRole('button', { name: 'إملاء بالصوت · قريبًا' })).toBeVisible();
 });
 
 test('text typed into the server-drawn box before the page hydrates is kept, and Send sends it', async () => {

@@ -985,5 +985,11 @@
   "logActPermissionAllowed": "approved {0}’s request",
   "logActPermissionRefused": "refused {0}’s request",
   "logPermissionWaiting": "Waiting for OK",
-  "boardWaitingOnChat": "This card is waiting on its chat. Once it’s answered or done there, the card moves back on its own"
+  "boardWaitingOnChat": "This card is waiting on its chat. Once it’s answered or done there, the card moves back on its own",
+  "plusLabelCall": "More: call someone, commands",
+  "plusLabel": "More: commands",
+  "plusCallPerson": "Call someone in the channel",
+  "plusCallAgent": "Call an agent",
+  "plusCommands": "Commands",
+  "plusCommandAgent": "Ask for a new agent"
 }

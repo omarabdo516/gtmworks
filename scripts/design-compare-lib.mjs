@@ -146,6 +146,11 @@ export const screens = {
   'request-sent': { reference: { steps: [...asYoussef, ...youssefRequest] }, builtPath: '/c/rs-learning/conversations/6b000000-0000-0000-0000-000000000003' },
   'request-waiting': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-wa-req"]' }, { waitFor: '.ac-card--req' }] }, builtPath: '/c/rs-learning/approvals' },
   'request-made': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-wa-req"]' }, { click: '#ac-yes-rq-seed' }, { waitFor: '.ac-card:not(.ac-card--req)' }, ...asYoussef, ...youssefRequest] }, builtPath: '/c/rs-learning/conversations/6b000000-0000-0000-0000-000000000003' },
+  // #153. The composer's "+" menu, opened: in the Conversation with Lead, and in the general channel.
+  'plus-menu': { reference: { steps: [{ click: '.composer [data-action="plus-menu"]:visible' }, { waitFor: '[data-plus-menu]:not([hidden])' }, { finish: '[data-plus-menu]:not([hidden])' }] }, builtPath: '/c/rs-learning/chat',
+   builtSteps: [{ click: '.composer__btn[aria-haspopup="menu"]' }, { waitFor: '.composer .menu' }, { finish: '.composer .menu' }] },
+  'plus-menu-channel': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="ch-general"]' }, { waitFor: '.ch-intro' }, { click: '.composer [data-action="plus-menu"]:visible' }, { waitFor: '[data-plus-menu]:not([hidden])' }, { finish: '[data-plus-menu]:not([hidden])' }] },
+   builtPath: `/c/rs-learning/channels/${fixture.channel}`, builtSteps: [{ click: '.composer__btn[aria-haspopup="menu"]' }, { waitFor: '.composer .menu' }, { finish: '.composer .menu' }] },
   // #24. New channel, from the "+" beside Channels; built, ?new=channel opens it over any page.
   'new-channel': { reference: { steps: [{ click: '#sb-threads [data-action="channel-new"]' }, { waitFor: '#modal[open] #tm-name' }] }, builtPath: `/c/rs-learning/channels/${fixture.channel}?new=channel` },
   // #24. The team channel حملة ديسمبر (th-team) with its members and Agents. Built: a team channel's own address (pass

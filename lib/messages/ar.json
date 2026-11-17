@@ -985,5 +985,11 @@
   "logActPermissionAllowed": "وافق على طلب {0}",
   "logActPermissionRefused": "رفض طلب {0}",
   "logPermissionWaiting": "مستني موافقة",
-  "boardWaitingOnChat": "البطاقة دي مستنية محادثتها. أول ما تترد أو تخلص هناك، هترجع مكانها لوحدها"
+  "boardWaitingOnChat": "البطاقة دي مستنية محادثتها. أول ما تترد أو تخلص هناك، هترجع مكانها لوحدها",
+  "plusLabelCall": "إضافات: نادي حد، الأوامر",
+  "plusLabel": "إضافات: الأوامر",
+  "plusCallPerson": "نادي حد من القناة",
+  "plusCallAgent": "نادي وكيل",
+  "plusCommands": "الأوامر",
+  "plusCommandAgent": "اطلب وكيل جديد"
 }
