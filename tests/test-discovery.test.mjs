@@ -24,8 +24,9 @@ function ciSandbox(t) {
 
 const command = (dir, executable, args) => spawnSync(executable, args, {
  cwd: dir, encoding: 'utf8', timeout: 30000,
- // Nested node --test needs its own runner context, including on Node 22.
- env: { ...process.env, CI: '', NODE_TEST_CONTEXT: undefined },
+ // Nested node --test needs its own runner context, including on Node 22. The nested run must not write the outer
+ // job's outputs (the fast job's step list, #258).
+ env: { ...process.env, CI: '', NODE_TEST_CONTEXT: undefined, GITHUB_OUTPUT: undefined },
 });
 
 test('npm test discovers a new nested unit file and reports its failing assertion', t => {

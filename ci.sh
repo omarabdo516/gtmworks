@@ -60,7 +60,7 @@ case "${1:-check}" in
    static) chosen=(--skip components);;
    components) chosen=(--only components);;
   esac
-  node scripts/ci-fast.mjs "$dir" "${chosen[@]}"
+  node scripts/ci-fast.mjs "$dir" ${chosen[@]+"${chosen[@]}"}
   ;;
  database)
   # Migrations replayed and verified, row-level security and grants, on lane 0's stack.
