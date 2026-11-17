@@ -81,6 +81,9 @@ export const screens = {
   // #14. The ready-made gallery, opened from that hint line's link. Built, it has its own address and needs a main
   // Agent: the comparison fixture's Lead (the seed alone has none, so it shows the plain chat).
   'ready-roles': { reference: { steps: [{ click: '#sb-agents [data-action="new-agent"]' }, { waitFor: '.new-hint' }, { click: '[data-action="open-gallery-alt"]' }, { waitFor: '#modal[open] .tpl' }] }, builtPath: '/c/rs-learning/chat?new=ready' },
+  // #170. The main Agent's empty chat once the workspace has other Agents: the reference's New chat. Built: Lead's chat
+  // with the comparison fixture's five Agents.
+  'main-empty': { reference: { steps: [{ click: '#btn-newchat' }, { waitFor: '.suggest' }] }, builtPath: '/c/rs-learning/chat' },
   // #170. A new Agent's empty chat: the reference adds the ready-made SEO content writer from the gallery and opens it.
   // Built: the comparison fixture's SEO & Content, made from that role, which Omar has not written to.
   'new-agent-empty': { reference: { steps: [{ click: '#sb-agents [data-action="new-agent"]' }, { waitFor: '.new-hint' }, { click: '[data-action="open-gallery-alt"]' }, { waitFor: '#modal[open] .tpl' }, { click: '[data-action="tpl-add"][data-tpl="writer"]' }, { waitFor: '#cr-name' }, { click: '[data-action="cr-create"]' }, { waitFor: '.try-one' }] }, builtPath: `/c/rs-learning/chat/${fixture.newAgent}` },
