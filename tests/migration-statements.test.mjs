@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
-import { topLevelStatements } from './sql-statements.mjs';
+import { codeOutsideQuotes, topLevelStatements } from './sql-statements.mjs';
 
 // Two runners apply the same migration files. The installer streams every pending file and its history row through one
 // `psql --single-transaction`; the Supabase CLI (local database, CI, design compare, visual baselines) sends a file's
@@ -40,4 +40,12 @@ test('the statement reader knows escape strings, where a backslash escapes the q
  assert.deepEqual(topLevelStatements("select E'it\\'s; fine', e'\\\\';\nselect 1/0"), ["select E'it\\'s; fine', e'\\\\'", 'select 1/0']);
  assert.deepEqual(topLevelStatements("select E'it''s; fine';\nselect 'a\\';\nselect 2;"), ["select E'it''s; fine'", "select 'a\\'", 'select 2']);
  assert.equal(topLevelStatements("select coalesce'x\\'; select 1").length, 2, 'an e that ends a word opens no escape string');
+});
+
+test('the statement reader nests block comments and opens a dollar quote only where a word ends (#259)', () => {
+ const nested="select json_build_object('ok', false) /* outer /* inner */ ' */\n\\g /dev/null\nselect json_build_object('ok', true);";
+ assert.match(codeOutsideQuotes(nested), /\\g/, 'the quote sits inside the outer comment, so the psql command after it is code');
+ const glued="select json_build_object('ok', false) as result$tag$\n\\g /dev/null\nselect json_build_object('ok', true);";
+ assert.match(codeOutsideQuotes(glued), /\\g/, 'result$tag$ is one name, not a dollar quote');
+ assert.deepEqual(topLevelStatements('do $body$ begin perform 1; end $body$; select $$a;b$$'), ['do $body$ begin perform 1; end $body$', 'select $$a;b$$']);
 });

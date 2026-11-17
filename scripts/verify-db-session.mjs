@@ -21,7 +21,8 @@ const refused = new Map(files.flatMap((file, index) => {
 
 // Each file gets a connection and a read-only transaction of its own, as it had a CLI process of its own, so nothing it
 // sets reaches the next file and it writes nothing. Its statement runs even without a final semicolon, and an error
-// fails the file: psql keeps the last error's code after a later statement succeeds.
+// fails the file: psql keeps the last error's code after a later statement succeeds. psql prints a SQL NULL as null and
+// reports the file's row count, so a file passes only on exactly one row holding one JSON value.
 const script = files.flatMap((file, index) => refused.has(index) ? [] : [[
  '\\connect',
  "\\set LAST_ERROR_SQLSTATE '00000'",
@@ -30,6 +31,7 @@ const script = files.flatMap((file, index) => refused.has(index) ? [] : [[
  '\\timing on',
  sql[index],
  ...codeOutsideQuotes(sql[index]).trimEnd().endsWith(';') ? [] : [';'],
+ "\\echo '@rows' :ROW_COUNT",
  '\\timing off',
  'rollback;',
  "select :'LAST_ERROR_SQLSTATE' <> '00000' as verify_failed \\gset",
@@ -40,18 +42,19 @@ const script = files.flatMap((file, index) => refused.has(index) ? [] : [[
 
 const psql = spawnSync('docker', [
  'exec', '-i', '-e', 'PGOPTIONS=-c default_transaction_read_only=on', container,
- 'psql', '-X', '-q', '-A', '-t', '-v', 'ON_ERROR_STOP=0', '-U', 'postgres', '-d', 'postgres',
+ 'psql', '-X', '-q', '-A', '-t', '-P', 'null=null', '-v', 'ON_ERROR_STOP=0', '-U', 'postgres', '-d', 'postgres',
 ], { input: script, encoding: 'utf8', stdio: ['pipe', 'pipe', 'inherit'], maxBuffer: 64 * 1024 * 1024 });
 
 const blocks = new Map();
 let current = null;
 for (const line of (psql.stdout ?? '').split('\n')) {
  const started = line.match(/^@verify (\d+)$/);
- if (started) { current = { lines: [], ms: 0, error: null }; blocks.set(Number(started[1]), current); continue; }
+ if (started) { current = { lines: [], ms: 0, error: null, rows: null }; blocks.set(Number(started[1]), current); continue; }
  if (!current) continue;
  const timing = line.match(/^Time: ([\d.]+) ms/);
  if (timing) current.ms += Number(timing[1]);
  else if (line.startsWith('@failed ')) current.error = line.slice('@failed '.length);
+ else if (/^@rows \d+$/.test(line)) current.rows = Number(line.slice('@rows '.length));
  else current.lines.push(line);
 }
 
@@ -62,6 +65,7 @@ for (const [index, file] of files.entries()) {
  if (refused.has(index)) message = refused.get(index);
  else if (!block) message = `${file}: the session ended before this file ran`;
  else if (block.error !== null) message = `${file}: ${block.error}`;
+ else if (block.rows !== 1) message = `${file}: Database verification returned ${block.rows ?? 'no count of its'} rows (a verify file selects one json value in one row)`;
  else {
   try {
    const output = block.lines.join('\n').trim();

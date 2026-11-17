@@ -8,14 +8,23 @@ function pieces(sql) {
  while(i<sql.length) {
   const rest=sql.slice(i,i+2);
   if(rest==='--') { const end=sql.indexOf('\n',i); const stop=end<0?sql.length:end; keep('comment',sql.slice(i,stop)); i=stop; continue; }
-  if(rest==='/*') { const end=sql.indexOf('*/',i+2); const stop=end<0?sql.length:end+2; keep('comment',sql.slice(i,stop)); i=stop; continue; }
+  if(rest==='/*') {
+   // Block comments nest in Postgres: the comment ends where its depth returns to zero.
+   let depth=0, end=i;
+   while(end<sql.length) {
+    const pair=sql.slice(end,end+2);
+    if(pair==='/*') { depth++; end+=2; } else if(pair==='*/') { depth--; end+=2; if(!depth) break; } else end++;
+   }
+   keep('comment',sql.slice(i,end)); i=end; continue;
+  }
   if(sql[i]==="'"||sql[i]==='"') {
    // In an escape string (E'...', the E not ending a longer word) a backslash escapes the next character, quote included.
    const quote=sql[i], escapes=quote==="'"&&/(^|[^\w$])[Ee]$/.test(sql.slice(Math.max(0,i-2),i)); let end=i+1;
    while(end<sql.length) { if(escapes&&sql[end]==='\\') { end+=2; continue; } if(sql[end]===quote) { if(sql[end+1]===quote) { end+=2; continue; } break; } end++; }
    keep('quoted',sql.slice(i,end+1)); i=end+1; continue;
   }
-  const dollar=sql[i]==='$'&&sql.slice(i).match(/^\$([A-Za-z_]\w*)?\$/);
+  // A dollar quote opens only where a word ends: after a letter, digit, _ or $ the sign belongs to a name (result$tag$).
+  const dollar=sql[i]==='$'&&!/[\p{L}\p{N}_$]/u.test(sql[i-1]??'')&&sql.slice(i).match(/^\$([A-Za-z_]\w*)?\$/);
   if(dollar) { const end=sql.indexOf(dollar[0],i+dollar[0].length); const stop=end<0?sql.length:end+dollar[0].length; keep('quoted',sql.slice(i,stop)); i=stop; continue; }
   code+=sql[i]; i++;
  }
