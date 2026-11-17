@@ -668,6 +668,7 @@
   "settingsTalkTipAgent": "أسهل طريقة تغيّر {0} إنك تقوله في المحادثة، زي «من دلوقتي ما تبعتش حاجة للعميل من غير ما أشوفها». بيتحفظ هنا وبيتكتب في السجل.",
   "settingsTalkTo": "كلّم {0}",
   "settingsAllAgents": "كل الوكلاء",
+  "settingsBack": "رجوع",
   "settingsTabMemory": "الذاكرة",
   "settingsRules": "قواعد اتقالتله",
   "settingsRulesEmpty": "لسه محدش قاله قاعدة. اكتبله في المحادثة «من دلوقتي…» وهتتحفظ هنا.",

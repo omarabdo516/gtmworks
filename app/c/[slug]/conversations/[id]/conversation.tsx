@@ -37,7 +37,7 @@ export default function ConversationView({slug,agent,details,company,conversatio
   <HeadPill panel={panel} agent={agent?.name} face={<span aria-hidden="true"><CompanyAgentFace agent={{connection_id:conversation.face,name:conversation.agent_name}} size={24}/></span>} title={record?titleOf(record.messages,conversation.agent_name):title} titleDir="auto" corner={corner&&<CornerPill slug={slug} board={corner} writer={writer} c={c}/>}/>
   <Transcript>{children}</Transcript>
   <div className="composer-area"><ConversationComposer company={company} conversation={conversation} record={record??null} writer={writer} asked={live?.asked??(()=>setEarly(count=>count+1))} box={composer} usage/></div>
- </div>{agent&&details&&<AgentDetails panel={panel} agent={agent} details={details} settingsHref={`/c/${slug}/agents`}/>}</div></ChatView>;
+ </div>{agent&&details&&<AgentDetails panel={panel} agent={agent} details={details} slug={slug}/>}</div></ChatView>;
 }
 
 // The transcript's boundary renders only when the transcript itself changes. This frame renders again while it

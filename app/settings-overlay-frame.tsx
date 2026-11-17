@@ -1,10 +1,11 @@
 'use client';
 import { useEffect, useRef, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from '@/lib/link';
 import { useI18n } from '@/lib/i18n-client';
-import { closeTarget } from '@/lib/settings-overlay.mjs';
+import { closeTarget, overlayHref } from '@/lib/settings-overlay.mjs';
 import { SettingsIcon } from './settings-icons';
-import { openedFrom as storedFrom } from './settings-opener';
+import { leaveOverlay, returnFocusTo, takeReturnFocus } from './settings-opener';
 
 // Kept apart from the overlay's controls (settings-overlay-client.tsx), which import server actions, so the frame and
 // its close button alone are a client module that a component test can render.
@@ -12,10 +13,11 @@ import { openedFrom as storedFrom } from './settings-opener';
 export function OverlayFrame({slug,children}:{slug:string,children:ReactNode}) {
  const router=useRouter();
  const box=useRef<HTMLDivElement>(null);
- // Opening moves focus into the overlay (the dialog itself), so Tab starts at its close button and section list.
- useEffect(()=>{ if(!box.current?.contains(document.activeElement)) box.current?.focus({preventScroll:true}); },[]);
+ // Opening moves focus into the overlay: an Agent's page on its Settings tab (reference: openSov), else the dialog
+ // itself, so Tab starts at its close button and section list.
+ useEffect(()=>{ if(!box.current?.contains(document.activeElement)) (document.getElementById('sov-tab-settings')??box.current)?.focus({preventScroll:true}); },[]);
  useEffect(()=>{
-  const keys=(event:globalThis.KeyboardEvent)=>{ if(event.key==='Escape'&&!event.defaultPrevented) router.push(closeTarget(storedFrom(),slug)); };
+  const keys=(event:globalThis.KeyboardEvent)=>{ if(event.key==='Escape'&&!event.defaultPrevented) router.push(closeTarget(leaveOverlay(),slug)); };
   document.addEventListener('keydown',keys);
   return ()=>document.removeEventListener('keydown',keys);
  },[router,slug]);
@@ -24,5 +26,17 @@ export function OverlayFrame({slug,children}:{slug:string,children:ReactNode}) {
 
 export function CloseButton({slug}:{slug:string}) {
  const {t}=useI18n(); const router=useRouter();
- return <button type="button" className="circle-btn" id="sov-close" aria-label={t('settingsCloseLabel')} title={t('settingsCloseTitle')} onClick={()=>router.push(closeTarget(storedFrom(),slug))}><SettingsIcon name="x"/></button>;
+ return <button type="button" className="circle-btn" id="sov-close" aria-label={t('settingsCloseLabel')} title={t('settingsCloseTitle')} onClick={()=>router.push(closeTarget(leaveOverlay(),slug))}><SettingsIcon name="x"/></button>;
+}
+
+// From an Agent's page back to the Agents list, where that Agent's row takes the focus (reference: sov-agent-back and
+// "Back" in The job).
+export function BackLink({slug,agent,id,className,children}:{slug:string,agent:string,id?:string,className:string,children:ReactNode}) {
+ return <Link className={className} id={id} href={overlayHref(slug,'agents')} replace onClick={()=>returnFocusTo(`sov-ag-${agent}`)}>{children}</Link>;
+}
+
+// Drawn in the Agents list: gives the focus to the row of the Agent whose page was just left.
+export function FocusReturn({ids}:{ids:string[]}) {
+ useEffect(()=>{ const id=ids.find(takeReturnFocus); if(id) document.getElementById(id)?.focus(); },[]); // eslint-disable-line react-hooks/exhaustive-deps
+ return null;
 }

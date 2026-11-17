@@ -9,6 +9,8 @@ import { MadeLine } from '@/app/agent-made';
 import type { Made } from '@/lib/agent-made';
 import { onComposerFocus } from '@/lib/composer-focus';
 import { statusKeys } from '@/lib/agent-details.mjs';
+import { overlayHref } from '@/lib/settings-overlay.mjs';
+import { rememberOpener, takeReturnFocus } from '@/app/settings-opener';
 import type { AgentDetailsView } from '@/app/agent-details-server';
 
 export type DetailsAgent={id:string,connection_id:string,name:string,speciality:string,main:boolean,made?:Made|null};
@@ -16,7 +18,7 @@ export type DetailsAgent={id:string,connection_id:string,name:string,speciality:
 // overlayDetails, @media (max-width: 1023px) .details).
 const overlayQuery='(max-width: 1023px)';
 const subscribe=(notify:()=>void)=>{const media=window.matchMedia(overlayQuery);media.addEventListener('change',notify);return ()=>media.removeEventListener('change',notify);};
-export type DetailsPanel={overlay:boolean,expanded:boolean,toggle:()=>void,close:()=>void};
+export type DetailsPanel={overlay:boolean,expanded:boolean,toggle:()=>void,open:()=>void,close:()=>void};
 
 // Beside the chat the panel starts open and the title pill hides or shows it; over the chat it starts closed and the
 // pill opens it (design-reference: state.detailsOpen, toggle-details).
@@ -24,7 +26,7 @@ export function useDetailsPanel():DetailsPanel {
  const overlay=useSyncExternalStore(subscribe,()=>window.matchMedia(overlayQuery).matches,()=>false);
  const [beside,setBeside]=useState(true); const [over,setOver]=useState(false);
  const close=useCallback(()=>(overlay?setOver:setBeside)(false),[overlay]);
- return {overlay,expanded:overlay?over:beside,toggle:()=>(overlay?setOver:setBeside)(value=>!value),close};
+ return {overlay,expanded:overlay?over:beside,toggle:()=>(overlay?setOver:setBeside)(value=>!value),open:()=>(overlay?setOver:setBeside)(true),close};
 }
 
 // The chat's floating title (design-reference: .head-pill). With an Agent, or a channel's `details` label, it is the
@@ -69,9 +71,19 @@ export function DetailsShell({panel,label,start,children}:{panel:DetailsPanel,la
  </>;
 }
 
-export function AgentDetails({panel,agent,details,settingsHref}:{panel:DetailsPanel,agent:DetailsAgent,details:AgentDetailsView,settingsHref:string}) {
+export function AgentDetails({panel,agent,details,slug}:{panel:DetailsPanel,agent:DetailsAgent,details:AgentDetailsView,slug:string}) {
  const {t,language}=useI18n();
  const [tab,setTab]=useState<Tab>(details.tab);
+ // Back from the Agent's settings the gear takes the focus again (reference: the overlay's close); over the chat the
+ // panel starts closed, so it opens first. This runs after the panel's own focus on its close button.
+ const back=useRef<boolean|null>(null);
+ const {overlay,expanded,open:show}=panel;
+ useEffect(()=>{
+  back.current??=takeReturnFocus('dp-settings');
+  if(!back.current) return;
+  if(overlay&&!expanded) { show(); return; }
+  document.getElementById('dp-settings')?.focus(); back.current=false;
+ },[overlay,expanded,show]);
  const move=(event:KeyEvent<HTMLButtonElement>)=>{
   if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight') return;
   event.preventDefault();
@@ -79,7 +91,7 @@ export function AgentDetails({panel,agent,details,settingsHref}:{panel:DetailsPa
   const next=open[(open.findIndex(item=>item.key===tab)+step+open.length)%open.length].key;
   setTab(next); document.getElementById(`dp-tab-${next}`)?.focus();
  };
- return <DetailsShell panel={panel} label={t('chatDetailsOf',agent.name)} start={details.actions&&<Link className="circle-btn" href={settingsHref} aria-label={t('chatAgentSettings',agent.name)} title={t('settings')}><ShellIcon name="gear"/></Link>}>
+ return <DetailsShell panel={panel} label={t('chatDetailsOf',agent.name)} start={<Link className="circle-btn" id="dp-settings" href={overlayHref(slug,'agents',{agent:agent.id})} aria-haspopup="dialog" aria-label={t('chatAgentSettings',agent.name)} title={t('settings')} onClick={()=>rememberOpener('dp-settings')}><ShellIcon name="gear"/></Link>}>
   <div className="dp-id">
    <span className="face-wrap face-wrap--lg" aria-hidden="true"><CompanyAgentFace agent={agent} size={64}/><span className={`dot dot--${details.status}`}/></span>
    <div>

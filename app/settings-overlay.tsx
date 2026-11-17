@@ -10,6 +10,7 @@ import { AgentFaceDot } from './agent-face-dot';
 import { agentStates, statusKeys, type AgentStatus } from '@/lib/agent-details.mjs';
 import { pickSection, overlayHref, agentsMainFirst, usageTotals, type OverlaySection } from '@/lib/settings-overlay.mjs';
 import { OverlayChrome } from './settings-overlay-chrome';
+import { BackLink, FocusReturn } from './settings-overlay-frame';
 import { AccountChoices, MakeMain, DeleteAgent, CompanyName, Invite, AgentSwitch, RuleSaid, RemoveRule } from './settings-overlay-client';
 import { SettingsIcon } from './settings-icons';
 import PasswordSettings from './password-settings';
@@ -85,7 +86,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
 }
 
 const Head=({title,sub,extra}:{title:string,sub?:string,extra?:ReactNode})=><header className="sov-head"><div className="sov-head__t"><h3 className="sov-h" id="sov-h" tabIndex={-1}>{title}</h3>{sub&&<p className="sov-sub">{sub}</p>}</div>{extra}</header>;
-const Label=({id,children}:{id:string,children:ReactNode})=><h4 className="dp-label" id={id}><span>{children}</span></h4>;
+const Label=({id,children,extra}:{id:string,children:ReactNode,extra?:ReactNode})=><h4 className="dp-label" id={id}><span>{children}</span>{extra}</h4>;
 // A part of the reference whose feature is not built yet: drawn in its place, empty, and saying "Soon".
 const Soon=({t}:{t:T})=><div className="panel-card sov-soon" aria-disabled="true" title={t('soon')}><p className="panel-empty">{t('soon')}</p></div>;
 const SoonSec=({t,id,label}:{t:T,id:string,label:string})=><section className="dp-sec" aria-labelledby={id}><Label id={id}>{label}</Label><Soon t={t}/></section>;
@@ -151,7 +152,7 @@ function AgentsSection({t,rtl,slug,agents,stateOf,canManage,canWrite,owner}:{t:T
     {agent.speciality&&<span className="panel-row__d"><bdi>{agent.speciality}</bdi></span>}</span>
    <span className="panel-row__meta">{t(statusKeys[stateOf(agent.id)])}</span>
    <span className="panel-row__icon sov-chev"><SettingsIcon name="forward" rtl={rtl}/></span></Link>)
-   :<p className="panel-empty">{t('noAgentsYet')}</p>}</div></>;
+   :<p className="panel-empty">{t('noAgentsYet')}</p>}</div><FocusReturn ids={agents.map(agent=>`sov-ag-${agent.id}`)}/></>;
 }
 
 function AgentPage({t,rtl,slug,company,userId,agent,status,main,rules,owner,canManage,canWrite}:{t:T,rtl:boolean,slug:string,company:string,userId:string,agent:Agent,status:AgentStatus,main?:Agent,rules:Rule[],owner:boolean,canManage:boolean,canWrite:boolean}) {
@@ -162,7 +163,7 @@ function AgentPage({t,rtl,slug,company,userId,agent,status,main,rules,owner,canM
   :isMain?<section className="dp-sec" id="set-main" aria-labelledby="set-h-main"><Label id="set-h-main">{t('settingsMainAgent')}</Label><div className="panel-card"><p className="panel-empty">{t('settingsMainOwnerOnly',agent.name)}</p></div></section>:null;
  return <>
   {isNewFor(agent,userId)&&<OpenedMark company={company} agent={agent.id}/>}
-  <Link className="link-btn sov-back" id="sov-back" href={overlayHref(slug,'agents')} replace><SettingsIcon name="back" rtl={rtl}/><span>{t('settingsAllAgents')}</span></Link>
+  <BackLink className="link-btn sov-back" id="sov-back" slug={slug} agent={agent.id}><SettingsIcon name="back" rtl={rtl}/><span>{t('settingsAllAgents')}</span></BackLink>
   <div className="sov-agent-id"><AgentFaceDot agent={face(agent)} size={48} status={status} lg/><div className="od-fill">
    <div className="dp-id__name"><bdi>{agent.name}</bdi>{isMain&&<span className="badge dp-id__badge">{t('mainAgent')}</span>}</div>
    <div className="dp-id__role"><span>{agent.speciality&&<><bdi>{agent.speciality}</bdi> · </>}</span>{t(statusKeys[status])}</div>{made&&<MadeLine made={made} where="sov"/>}</div></div>
@@ -176,7 +177,7 @@ function AgentPage({t,rtl,slug,company,userId,agent,status,main,rules,owner,canM
    <div className="dp-sections sov-rules"><AgentRules t={t} company={company} userId={userId} rules={rules} canManage={canManage}/></div>
    <div className="dp-sections">
     {!canManage&&<p className="ro-note"><SettingsIcon name="shield"/><span>{t('settingsAgentsRO')}</span></p>}
-    <section className="dp-sec" aria-labelledby="set-h-job"><Label id="set-h-job">{t('settingsJob')}</Label>
+    <section className="dp-sec" aria-labelledby="set-h-job"><Label id="set-h-job" extra={<BackLink className="link-btn" slug={slug} agent={agent.id}>{t('settingsBack')}</BackLink>}>{t('settingsJob')}</Label>
      {/* Renaming an Agent or changing its role is not built yet: the fields show them read only. */}
      <div className="panel-card set-card">
       <div className="set-field"><label className="set-label" htmlFor="set-name">{t('settingsName')}</label><input className="set-input" id="set-name" type="text" dir="auto" readOnly aria-disabled="true" title={t('soon')} defaultValue={agent.name}/></div>

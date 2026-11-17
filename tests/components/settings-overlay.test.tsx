@@ -1,8 +1,9 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
-import { page } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
 import type { ComponentProps } from 'react';
 import { OverlayChrome } from '@/app/settings-overlay-chrome';
+import { BackLink, CloseButton, FocusReturn, OverlayFrame } from '@/app/settings-overlay-frame';
 import AccountChoicesView from '@/app/account-choices-view';
 import { LanguageProvider } from '@/lib/i18n-client';
 import { i18n, type Language } from '@/lib/i18n.mjs';
@@ -11,11 +12,12 @@ import '@/app/tokens.css';
 import '@/app/shell.css';
 import '@/app/settings.css';
 
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }) }));
+const push = vi.hoisted(() => vi.fn());
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push, refresh: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }) }));
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'> & { replace?: boolean }) => <a {...Object.fromEntries(Object.entries(props).filter(([name]) => name !== 'replace'))}/> }));
 
 const saveLanguage = vi.fn<(state: string, form: FormData) => Promise<string>>();
-afterEach(() => saveLanguage.mockReset());
+afterEach(() => { saveLanguage.mockReset(); push.mockReset(); sessionStorage.clear(); });
 
 // The Owner's Settings open on Your account, as the server draws them.
 const account = (language: Language) => render(<LanguageProvider language={language}>
@@ -59,4 +61,50 @@ test('while the chosen language is being saved the other choice waits, so the ch
  await expect.element(arabic).toBeEnabled();
  expect(saveLanguage).toHaveBeenCalledOnce();
  await expect.element(screen.getByRole('alert')).not.toBeInTheDocument();
+});
+
+// An Agent's page as the server draws its focus targets: the Settings tab, "All agents" and "Back" beside The job.
+const agentPage = () => render(<LanguageProvider language="en"><OverlayFrame slug="rs-learning">
+ <CloseButton slug="rs-learning"/>
+ <BackLink className="link-btn sov-back" id="sov-back" slug="rs-learning" agent="ag-2">All agents</BackLink>
+ <div role="tablist"><button type="button" role="tab" id="sov-tab-settings" aria-selected="true">Settings</button></div>
+ <h4 className="dp-label" id="set-h-job"><span>The job</span><BackLink className="link-btn" slug="rs-learning" agent="ag-2">Back</BackLink></h4>
+</OverlayFrame></LanguageProvider>);
+
+test('an Agent\'s page opens with the focus on its Settings tab', async () => {
+ const screen = await agentPage();
+ await expect.element(screen.getByRole('tab', { name: 'Settings' })).toHaveFocus();
+});
+
+test('closing goes back to where the gear was pressed and leaves the gear its focus there, by the button and by Escape', async () => {
+ sessionStorage.setItem('gw-settings-from', JSON.stringify({ from: '/c/rs-learning/conversations/cv-1', focus: 'dp-settings' }));
+ const screen = await agentPage();
+ await screen.getByRole('button', { name: 'Close settings and go back' }).click();
+ expect(push).toHaveBeenLastCalledWith('/c/rs-learning/conversations/cv-1');
+ expect(sessionStorage.getItem('gw-return-focus')).toBe('dp-settings');
+ sessionStorage.removeItem('gw-return-focus');
+ await userEvent.keyboard('{Escape}');
+ expect(push).toHaveBeenCalledTimes(2);
+ expect(push).toHaveBeenLastCalledWith('/c/rs-learning/conversations/cv-1');
+ expect(sessionStorage.getItem('gw-return-focus')).toBe('dp-settings');
+});
+
+test('an address stored before the focus was kept still closes to it, with no focus to return', async () => {
+ sessionStorage.setItem('gw-settings-from', '/c/rs-learning/chat/ag-2');
+ const screen = await agentPage();
+ await screen.getByRole('button', { name: 'Close settings and go back' }).click();
+ expect(push).toHaveBeenLastCalledWith('/c/rs-learning/chat/ag-2');
+ expect(sessionStorage.getItem('gw-return-focus')).toBeNull();
+});
+
+for (const name of ['Back', 'All agents']) test(`"${name}" goes to the Agents list, where that Agent's row takes the focus once`, async () => {
+ const screen = await agentPage();
+ const link = screen.getByRole('link', { name, exact: true });
+ await expect.element(link).toHaveAttribute('href', '/c/rs-learning/settings?section=agents');
+ link.element().addEventListener('click', event => event.preventDefault());
+ await link.click();
+ expect(sessionStorage.getItem('gw-return-focus')).toBe('sov-ag-ag-2');
+ const list = await render(<div><a href="#1" id="sov-ag-ag-1">Lead</a><a href="#2" id="sov-ag-ag-2">SEO</a><FocusReturn ids={['sov-ag-ag-1', 'sov-ag-ag-2']}/></div>);
+ await expect.element(list.getByRole('link', { name: 'SEO' })).toHaveFocus();
+ expect(sessionStorage.getItem('gw-return-focus')).toBeNull();
 });
