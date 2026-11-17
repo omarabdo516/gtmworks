@@ -57,6 +57,9 @@ export const motionTable = [
   { ref: '.mcard', built: '.gw .board-view .mcard', file: 'app/board.css', html: '<div class="gw"><div class="board-view"><a class="mcard" href="#"></a></div></div>' },
   // A chat's Card on the board (#144): the corner pill eases its colours and gives under a press.
   { ref: '.corner-pill', built: '.gw .corner-pill', file: 'app/shell.css', html: '<div class="gw"><div class="chat__corner"><a class="corner-pill" href="#"></a></div></div>', held: 0.96 },
+  // A Card that just started waiting on the reader shakes its badge once (#146). Its chat's pill shakes with the same
+  // rule, which also carries the pill's own colours and press: tests/components/conversation-card.test.tsx reads it.
+  { ref: '.badge--wait.is-new', built: '.gw .kcard .badge--wait.is-new', file: 'app/board.css', html: '<div class="gw"><div class="board-view"><div class="kcard"><span class="badge badge--wait is-new">Waiting on you</span></div></div></div>' },
   // Everything a person can press fades and gives under the finger (#128), wherever it is drawn. The sidebar:
   { ref: '.circle-btn', built: '.gw .circle-btn', file: 'app/shell.css', html: '<div class="gw"><aside class="sidebar"><div class="sb-icons"><a class="circle-btn" href="#" aria-label="New chat"></a></div></aside></div>', held: 0.96 },
   { ref: '.sb-item', built: '.gw .sb-item', file: 'app/shell.css', html: '<div class="gw"><aside class="sidebar"><div class="sb-row"><a class="sb-item" href="#">Board</a></div></aside></div>', held: 0.985 },
@@ -135,7 +138,7 @@ export const motionTable = [
 export const motionTokens = ['--dur-fast', '--dur', '--dur-slow', '--ease-out', '--ease-in', '--ease-spring'];
 
 // The reference's keyframes the product shares, each written once in app/shell.css under its gw- name.
-export const sharedKeyframes = { fadeIn: 'gw-fade-in', rise: 'gw-rise', breathe: 'gw-breathe', modalOut: 'gw-modal-out', settle: 'gw-settle', ckPop: 'gw-ck-pop', drawCheck: 'gw-draw-check' };
+export const sharedKeyframes = { fadeIn: 'gw-fade-in', rise: 'gw-rise', breathe: 'gw-breathe', modalOut: 'gw-modal-out', settle: 'gw-settle', ckPop: 'gw-ck-pop', drawCheck: 'gw-draw-check', nudge: 'gw-nudge' };
 
 /** @param {string} token */
 export const builtToken = token => `--gw-${token.slice(2)}`;

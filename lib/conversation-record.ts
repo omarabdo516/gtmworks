@@ -2,7 +2,7 @@ import { ownerNames } from './company-owners.mjs';
 import type { supabase } from './supabase';
 import { faceOf, handTurn, latestEnded, messageColumns, noteColumns, queuedColumns, queuedWaiting, questionParts, replyCardColumns, replyCardOf, runStepsColumns, shown, totalOf, usageColumns, waiting, withBoardNote, withDecisions, withTeamWork, type AgentRequestView, type Decision, type LeadCard, type PlacedCard, type QueuedTurn, type ReplyCard, type ReplyCardRow, type RunStepsRow, type SavedRule, type RunUsage, type StoredNote } from './conversations';
 import { isNewFor } from './sidebar.mjs';
-import type { BoardColumn } from './board-columns.mjs';
+import { columnOf, type BoardColumn, type CardWait } from './board-columns.mjs';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
 
@@ -85,9 +85,10 @@ const handPickup=(card:ReplyCard|null,queued:QueuedTurn[],messages:{author:strin
  return failed&&!written?{...card,failed:true}:card;
 };
 
-// The chat's Card on the board (#144), the one it put there or was started from (#145), with its column now.
+// The chat's Card on the board (#144), the one it put there or was started from (#145), with its column now: "Waiting
+// on you" while the chat waits on its person (#146).
 export async function tiedCard(db:Database,company:string,conversation:string) {
- const {data}=await db.from('work_cards').select('id,created_at,work_stages(board_column)').eq('company_id',company).eq('conversation_id',conversation).maybeSingle();
- const card=data as {id:number,created_at:string,work_stages:{board_column:BoardColumn}|null}|null;
- return card?.work_stages?{card:card.id,column:card.work_stages.board_column,created_at:card.created_at}:undefined;
+ const {data}=await db.from('work_cards').select('id,created_at,stage_id,wait:card_wait,work_stages(id,board_column)').eq('company_id',company).eq('conversation_id',conversation).maybeSingle();
+ const card=data as {id:number,created_at:string,stage_id:number,wait:CardWait|null,work_stages:{id:number,board_column:BoardColumn}|null}|null;
+ return card?.work_stages?{card:card.id,column:columnOf(card,[card.work_stages]) as BoardColumn,created_at:card.created_at}:undefined;
 }

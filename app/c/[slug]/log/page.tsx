@@ -48,7 +48,7 @@ export default async function ActivityLogPage({params,searchParams}:{params:Prom
  const entries=(logRows||[]) as LogRow[];
  const loggedCards=[...new Set((cardRows||[]).map(row=>row.card_id as number))];
  const people=await logPeople(db,company.id,[...loggedCards,...entries.flatMap(row=>row.card_id!=null?[row.card_id]:[])]);
- const {items:waitingItems}=await approvalQueue(db,company.id,user.id,membership?.role||'');
+ const {count:waitingCount}=await approvalQueue(db,company.id,user.id,membership?.role||'');
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  const writer=canCreateCard({role:membership?.role}); const drawn=drawnAt();
  const live=people.members.filter(member=>!member.removed_at);
@@ -61,7 +61,7 @@ export default async function ActivityLogPage({params,searchParams}:{params:Prom
  const n=(before?count:left)??entries.length;
  const older=(left??0)>entries.length&&entries.length>0;
  const pageLink=(cursor:string|null)=>{ const next=new URLSearchParams(); if(whoValue!=='all') next.set('who',whoValue); if(card!=null) next.set('card',String(card)); if(cursor) next.set('before',cursor); return `/c/${slug}/log${next.size?`?${next}`:''}`; };
- return <Shell company={company} companies={companies||[]} personId={user.id} section="log" title={t('activityLog')} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={waitingItems.length}>
+ return <Shell company={company} companies={companies||[]} personId={user.id} section="log" title={t('activityLog')} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={waitingCount}>
   <main className="log-page">
    <div className="lgp">
     <header className="page-head"><div className="od-field"><h1 className="page-title">{t('activityLog')}</h1><p className="page-sub"><bdi>{t('logSub',company.name)}</bdi></p></div></header>

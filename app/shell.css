@@ -10,6 +10,8 @@
 /* An answered card settles (design-reference: settle; #138); its key pops and its check draws with the agent face's
    gw-ck-pop and gw-draw-check. */
 @keyframes gw-settle { from { opacity: .55; transform: scale(.985); } }
+/* A badge and a chat's pill that just started waiting on the reader shake once (design-reference: nudge; #146). */
+@keyframes gw-nudge { 0%, 100% { transform: none; } 20% { transform: translateX(-3px) rotate(-2deg); } 40% { transform: translateX(3px) rotate(2deg); } 60% { transform: translateX(-2px); } 80% { transform: translateX(1px); } }
 
 /* The product's global button look (app/globals.css: border, padding, 36px floor, half opacity when disabled) is not
    the reference's; the shell's buttons start bare, as the reference's do. The reset has no more weight than one class,
@@ -268,6 +270,7 @@
 .gw .corner-pill.is-waiting .corner-pill__col { color: var(--gw-wait-text); font-weight: 600; }
 .gw .corner-pill .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; display: inline-block; background: var(--gw-idle-dot); }
 .gw .corner-pill .dot--waiting { background: var(--gw-wait); }
+.gw .corner-pill.is-new { animation: gw-nudge 520ms var(--gw-ease-out); }
 .gw .transcript {
   overflow-y: auto; overflow-x: hidden; min-height: 0; overscroll-behavior: contain; padding: calc(var(--gw-head-h) + 24px) 16px 24px;
   -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 var(--gw-head-h)); mask-image: linear-gradient(180deg, transparent 0, #000 var(--gw-head-h));

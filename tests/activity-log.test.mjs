@@ -86,6 +86,18 @@ test('a person did a step an Agent handed them, named by the step\'s title, in b
  assert.deepEqual([bare.act, bare.obj], [['logActHandDone'], undefined]);
 });
 
+// #146: a chat with a Card writes these rows on the Card, with no teller; each reads as its row on the Agent does.
+test('a draft, a review, an answer and a Done it written on the chat\'s Card read as they do on its Agent', () => {
+ const names = { agentName: () => 'Ads' };
+ for (const [action, details] of [['agent_card_shown', { card: { kind: 'draft', title: 'خطة الحملة' } }], ['agent_card_shown', { card: { kind: 'review', title: 'مراجعة', fine: 2, edits: 1 } }],
+  ['agent_question_answered', { question: { text: 'اختار زاوية الإعلان', answer: 'من خريج لمحاسب شغال' } }], ['agent_hand_done', { hand: { title: 'انشر المقال' } }]]) {
+  const onCard = describeEntry({ subject: 'card', action, agent_id: lead, details }, names);
+  assert.notDeepEqual(onCard.act, ['logActCardOther'], action);
+  assert.deepEqual(onCard, describeEntry({ subject: 'agent', action, agent_id: lead, details: { ...details, private: true } }, names), action);
+ }
+ assert.deepEqual(describeEntry({ subject: 'card', action: 'agent_card_shown', agent_id: lead, details: { card: { kind: 'question', title: 'Which angle?' } } }).act, ['logActCardOther']);
+});
+
 test('an Agent called in a note replies in the log, with its reply as the note under the line (#22)', () => {
  const reply = describeEntry({ subject: 'card', action: 'note_reply', agent_id: lead, body: 'Here is the draft.', details: { reply_to: 12 } });
  assert.deepEqual([reply.act, reply.note, reply.from, reply.to], [['logActNoteReply'], 'Here is the draft.', undefined, undefined]);

@@ -29,7 +29,8 @@ insert into decisions
  select fn,'checks','answers for a Card its Agent hides from the caller, or from the person it names, as for a Card that does not exist' from unnest(array[
   'public.decide_approval(uuid,bigint,text,text,boolean,boolean)','public.decide_skill_lesson(uuid,bigint,boolean)','public.edit_card_note(uuid,bigint,text)',
   'public.enqueue_assignment_webhook()','public.issue_run_key_for(uuid,bigint,uuid,text,integer)','public.lookup_agent_key(text)',
-  'public.propose_skill_lesson(uuid,uuid,text,text,text,text,text)','public.start_card_conversation(uuid,bigint,uuid)','public.card_chat_person(uuid,bigint)']) fn
+  'public.propose_skill_lesson(uuid,uuid,text,text,text,text,text)','public.start_card_conversation(uuid,bigint,uuid)','public.card_chat_person(uuid,bigint)',
+  'public.card_wait(public.work_cards)','public.reply_card_waits(public.reply_cards)']) fn
  union all select 'public.can_see_card_file(text)','checks','a stored file follows each Card it belongs to'
  union all select 'public.can_see_card(uuid,bigint)','exempt','the read rule itself'
  union all select fn,'exempt','a trigger: it runs on a write the table''s own rules admitted, answers no caller, and every row it writes is read under card_agent_visible' from unnest(array[
@@ -41,8 +42,8 @@ insert into decisions
   'public.add_waiting_item(uuid,uuid,text,text,text,bigint,uuid,text)','public.agent_save_rule(uuid,text,text,text)','public.agent_show_card(uuid,text,text,text,text,jsonb)',
   'public.answer_note_start(bigint,integer,text)','public.begin_note_start(bigint)','public.close_note_run(bigint,text,text,text,bigint,bigint)',
   'public.move_company_profile(uuid,text,text,text,text[])','public.note_run_knowledge(bigint)','public.note_runs_due(bigint,bigint)']) fn
- union all select 'public.settle_question(bigint,text)','exempt','the worker''s, callable by the service role only: it settles a question card it was handed and writes its log row, private to the Conversation''s person; it answers no Member'
- union all select 'public.mark_hand_done(uuid,uuid,bigint)','exempt','the Conversation''s own person marks a hand card of that Conversation done and writes its log row, private to that person; it reads and answers no Card'
+ union all select 'public.settle_question(bigint,text)','exempt','the worker''s, callable by the service role only: it settles a question card it was handed and writes its log row, on the chat''s Card when it has one (read under card_agent_visible), else private to the Conversation''s person; it answers no Member'
+ union all select 'public.mark_hand_done(uuid,uuid,bigint)','exempt','the Conversation''s own person marks a hand card of that Conversation done and writes its log row, on the chat''s Card when it has one (read under card_agent_visible), else private to that person; it answers no Card'
  union all select 'public.agent_move_blocked(uuid)','exempt','callable inside the database only; it answers whether an Agent has running work, and names no Card'
  union all select fn,'exempt','reads only the waiting items of rule suggestions, which name no Card; the rule''s Agent is checked with can_see_agent' from unnest(array[
   'public.decide_agent_rule(uuid,bigint,boolean)','public.remove_agent_rule(uuid,uuid)','public.rule_suggestions_sent_to(uuid)']) fn
