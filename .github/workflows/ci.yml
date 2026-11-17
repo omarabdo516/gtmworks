@@ -743,7 +743,9 @@ jobs:
           DECISIONS_INSTALL: ${{ needs.changes.outputs.install }}
         run: |
           mkdir -p ci-ledger-in
-          node scripts/ci-ledger.mjs ci-ledger-in ci-ledger-out >> "$GITHUB_STEP_SUMMARY"
+          set -o pipefail
+          # The table also goes to the job log, where the API and a terminal can read it.
+          node scripts/ci-ledger.mjs ci-ledger-in ci-ledger-out | tee -a "$GITHUB_STEP_SUMMARY"
       - name: upload the ledger
         if: always()
         uses: actions/upload-artifact@v4
