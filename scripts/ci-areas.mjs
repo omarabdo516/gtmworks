@@ -19,8 +19,9 @@ const suites = {
   // The database tests: migrations replayed and verified, RLS and grants (tests/db.sh, *.verify.sql, check-rls.sql).
   database: {
     true: [
-      /^supabase\//, /^scripts\/(check-rls\.sql|verify-db\.mjs|local-db\.sh|local-default-privileges\.sql|bootstrap-owner\.mjs)$/,
-      /^tests\/(db\.sh|[^/]*-migration\.mjs|bootstrap-db\.mjs|hosted-default-privileges\.mjs|agent-role-backfill\.mjs|sql-statements\.mjs)$/,
+      /^supabase\//,
+      /^scripts\/(check-rls\.sql|verify-db(-session)?\.mjs|local-db\.sh|local-default-privileges\.sql|bootstrap-owner\.mjs|supabase-images\.sh)$/,
+      /^tests\/(db\.sh|pgtap\.mjs|[^/]*-migration\.mjs|bootstrap-db\.mjs|hosted-default-privileges\.mjs|agent-role-backfill\.mjs|sql-statements\.mjs)$/,
     ],
   },
   integration: {
@@ -36,7 +37,7 @@ const suites = {
       /^server\.js$/, /^tests\/(.+\/)?[^/]+\.spec\.ts$/, /^tests\/[^/]+\.ts$/,
       /^tests\/(visual-screens|lane|fake-hermes|fake-engine)\.mjs$/,
       /^playwright(\.proxy)?\.config\.ts$/, /^Dockerfile$/, /^\.dockerignore$/,
-      /^scripts\/(web\.sh|local-db\.sh|proxy-stack\.sh|ci-image\.sh|first-run-db\.mjs|local-default-privileges\.sql)$/,
+      /^scripts\/(web\.sh|local-db\.sh|proxy-stack\.sh|ci-image\.sh|first-run-db\.mjs|local-default-privileges\.sql|supabase-images\.sh)$/,
       /^supabase\/(migrations\/|config\.toml$|seed\.sql$)/, /^public\//,
     ],
     // Screens alone: the component tests prove how they behave, and the compared screens (the `visual` Playwright

@@ -172,7 +172,20 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      # The stack's images come from the Actions cache, keyed by the Supabase CLI's version and the stack configuration,
+      # so a warm cache makes no registry call (scripts/supabase-images.sh, #259).
+      - name: Supabase images cache key
+        id: images
+        run: echo "key=$(bash scripts/supabase-images.sh key)" >> "$GITHUB_OUTPUT"
+      - name: restore the Supabase images
+        id: restore-images
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/supabase-images
+          key: ${{ steps.images.outputs.key }}
       - name: database
+        env:
+          SUPABASE_IMAGES_ARCHIVE: ${{ runner.temp }}/supabase-images/images.tar
         run: ./ci.sh database
       - name: upload ledger results
         if: always()
@@ -185,6 +198,18 @@ jobs:
           if-no-files-found: ignore
           retention-days: 3
           include-hidden-files: false
+      # Only this job saves the images, after a green run: its stack and pgTAP use every image the other jobs' stacks use.
+      - name: archive the Supabase images
+        if: ${{ success() && steps.restore-images.outputs.cache-hit != 'true' }}
+        env:
+          SUPABASE_IMAGES_ARCHIVE: ${{ runner.temp }}/supabase-images/images.tar
+        run: bash scripts/supabase-images.sh save
+      - name: save the Supabase images
+        if: ${{ success() && steps.restore-images.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/supabase-images
+          key: ${{ steps.images.outputs.key }}
 
   # The compared screens (the `visual` Playwright project) on lane 0 as the seed builds it, on the runner their approved
   # images are made on, then the measured navigation budgets. When `changes` says `visual` (screens alone, #213), this is all of the browser suite that runs.
@@ -206,7 +231,18 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      # The stack's images from the cache the database job saves (#259).
+      - name: Supabase images cache key
+        id: images
+        run: echo "key=$(bash scripts/supabase-images.sh key)" >> "$GITHUB_OUTPUT"
+      - name: restore the Supabase images
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/supabase-images
+          key: ${{ steps.images.outputs.key }}
       - name: visual
+        env:
+          SUPABASE_IMAGES_ARCHIVE: ${{ runner.temp }}/supabase-images/images.tar
         run: ./ci.sh visual
       # A failing comparison writes its expected, actual and difference images here.
       - name: upload route screenshots
@@ -258,6 +294,17 @@ jobs:
         with:
           node-version: 22
           cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
+      # The stack's images from the cache the database job saves, on a GitHub-hosted runner; the PC keeps its own (#259).
+      - name: Supabase images cache key
+        if: ${{ runner.environment == 'github-hosted' }}
+        id: images
+        run: echo "key=$(bash scripts/supabase-images.sh key)" >> "$GITHUB_OUTPUT"
+      - name: restore the Supabase images
+        if: ${{ runner.environment == 'github-hosted' }}
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/supabase-images
+          key: ${{ steps.images.outputs.key }}
       - name: clear an earlier run and move the stack's ports
         if: ${{ runner.environment != 'github-hosted' }}
         # The PC's Docker daemon sees the checkout but not this job's /tmp, so every file a script hands to a container
@@ -286,6 +333,7 @@ jobs:
       - name: integration
         env:
           CI_IMAGE_PREBUILT: "true"
+          SUPABASE_IMAGES_ARCHIVE: ${{ runner.temp }}/supabase-images/images.tar
         run: ./ci.sh integration
       # The screenshots the journeys write (card and phone checks) are uploaded so a review can see them.
       - name: upload journey screenshots

@@ -1,8 +1,5 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { spawnSync } from 'node:child_process';
 import { bootstrapSql } from '../scripts/bootstrap-owner.mjs';
+import { testDb } from './pgtap.mjs';
 
 const owner='bootstrap-owner@example.test';
 const other='bootstrap-other@example.test';
@@ -49,11 +46,4 @@ select is((select name from public.companies where slug='rs-learning'),'Existing
 select * from finish();
 rollback;
 `;
-const dir=mkdtempSync(join(tmpdir(),'gtmworks-bootstrap-db-'));
-try {
- const file=join(dir,'bootstrap.sql');
- writeFileSync(file,sql);
- // CLI 3 defaults to local. Never accept a remote target from argv or env.
- const result=spawnSync('npx',['--no-install','supabase','test','db',file],{stdio:'inherit'});
- process.exitCode=result.status ?? 1;
-} finally { rmSync(dir,{recursive:true,force:true}); }
+testDb(import.meta.url,sql);

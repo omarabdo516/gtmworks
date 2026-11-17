@@ -25,6 +25,18 @@ wait_lanes() {
     fi
   done
 }
+# The cached Supabase images load while the packages install, and the stage ends by saying how many images the registry
+# served (scripts/supabase-images.sh, #259).
+load_images() {
+  bash scripts/supabase-images.sh load &
+  images_pid=$!
+}
+images_loaded() {
+  wait "$images_pid" || echo 'supabase images: the cached archive did not load' >&2
+  images_before=$(mktemp)
+  bash scripts/supabase-images.sh list > "$images_before"
+  trap 'bash scripts/supabase-images.sh pulled "$images_before"' EXIT
+}
 # Each stage writes its machine-readable test results under ci-ledger/ (Playwright empties test-results/ when it starts);
 # the ledger job reads them back (scripts/ci-ledger.mjs, #256). Prints the folder.
 ledger_dir() {
@@ -32,14 +44,6 @@ ledger_dir() {
   rm -rf "$dir" && mkdir -p "$dir"
   LAYER=$1 node -e 'const env = process.env; console.log(JSON.stringify({ layer: env.LAYER, shard: env.SHARD ?? "", runner: env.RUNNER_NAME ?? "local", environment: env.RUNNER_ENVIRONMENT ?? "local", root: process.cwd() }))' > "$dir/meta.json"
   echo "$dir"
-}
-# One database ledger line per check; a failed check still fails the stage, after its line is written.
-database_record() {
-  local file=$1 name=$2 started=$3 status=$4 outcome=passed
-  ((status == 0)) || outcome=failed
-  printf '{"suite":"database","file":"%s","name":"%s","duration_ms":%d,"outcome":"%s","retries":0}\n' \
-    "$file" "$name" $(( ($(date +%s%N) - started) / 1000000 )) "$outcome" >> "$dir/database.jsonl"
-  ((status == 0)) || exit "$status"
 }
 case "${1:-check}" in
  check)
@@ -108,24 +112,26 @@ PY
   ;;
  database)
   # Migrations replayed and verified, row-level security and grants, on lane 0's stack.
+  load_images
   if [[ "${CI:-}" == "true" ]]; then
     npm ci
   fi
+  images_loaded
   bash scripts/local-db.sh
   dir=$(ledger_dir database)
-  for file in supabase/migrations/*.verify.sql scripts/check-rls.sql; do
-    started=$(date +%s%N) status=0
-    npx --no-install supabase db query --read-only --file "$file" -o json --agent no | node scripts/verify-db.mjs "$file" || status=$?
-    database_record "$file" verify "$started" "$status"
-  done
+  # Every verify file in one psql session, each reported by name with its own ledger line (#259).
+  DB_LEDGER="$PWD/$dir/database.jsonl" node scripts/verify-db-session.mjs \
+    "supabase_db_$(sed -n 's/^project_id = "\(.*\)"$/\1/p' supabase/config.toml)" supabase/migrations/*.verify.sql scripts/check-rls.sql
   # tests/db.sh writes one line per step of its own.
   DB_LEDGER="$PWD/$dir/database.jsonl" npm run test:db
   ;;
  integration)
+  load_images
   if [[ "${CI:-}" == "true" ]]; then
     npm ci
     install_chromium
   fi
+  images_loaded
   dir=$(ledger_dir integration)
   start_lanes
   wait_lanes
@@ -146,10 +152,12 @@ PY
  visual)
   # The compared screens alone, on lane 0 as the seed builds it: no journeys, no proxy suite, no image (#213). Then the
   # navigation time budgets, which need a machine of their own (#224).
+  load_images
   if [[ "${CI:-}" == "true" ]]; then
     npm ci
     install_chromium
   fi
+  images_loaded
   bash scripts/local-db.sh
   dir=$(ledger_dir visual)
   GTMWORKS_TEST_LANES=1 PLAYWRIGHT_JSON_OUTPUT_FILE="$dir/screens.json" npm run test:visual
