@@ -1,7 +1,7 @@
 import { afterEach, expect, test, vi, type Mock } from 'vitest';
 import type { ComponentProps } from 'react';
 import { render } from 'vitest-browser-react';
-import { AppsList, AppDetail, type AppItem } from '@/app/settings-apps-client';
+import { AppsList, AppDetail, type AppItem, type AppsPlace } from '@/app/settings-apps-client';
 import en from '@/lib/messages/apps.en.json';
 import ar from '@/lib/messages/apps.ar.json';
 import { apps } from '@/lib/app-catalogue.mjs';
@@ -16,6 +16,7 @@ const states: Record<string, AppItem['state']> = { klaviyo: 'connected', notion:
 const items: AppItem[] = apps.map(app => ({ key: app.key, name: app.name, mark: app.mark, category: app.category, state: states[app.key] ?? 'off',
   use: text[`use.${app.key}`], can: text[`can.${app.key}`], words: [app.name, ...[en, ar].flatMap(words => [`use.${app.key}`, `alias.${app.key}`].map(key => (words as Record<string, string>)[key]))].join(' ') }));
 const item = (key: string) => items.find(entry => entry.key === key)!;
+const settings: AppsPlace = { kind: 'address', slug: 'rs-learning' };
 // The answers /api/company-apps gives, in order, and every request sent to it.
 function answers(...bodies: [number, object][]) {
   const sent: Record<string, string>[] = [];
@@ -24,7 +25,7 @@ function answers(...bodies: [number, object][]) {
 }
 
 test('the list groups connected and attention apps apart from the rest, and searches in either language', async () => {
-  const screen = await render(<AppsList slug="rs-learning" owner items={items} text={text}/>);
+  const screen = await render(<AppsList place={settings} owner items={items} text={text}/>);
   await expect.element(screen.getByText('2 connected')).toBeVisible();
   const on = screen.getByRole('region', { name: /^Connected/ });
   expect(on.getByRole('heading', { level: 5 }).elements().map(element => element.textContent)).toEqual(['Klaviyo', 'Notion']);
@@ -41,7 +42,7 @@ test('the list groups connected and attention apps apart from the rest, and sear
 });
 
 test('a Member who is not the Owner reads the states with no button', async () => {
-  const screen = await render(<AppsList slug="rs-learning" owner={false} items={items} text={text}/>);
+  const screen = await render(<AppsList place={settings} owner={false} items={items} text={text}/>);
   await expect.element(screen.getByText(text.subOther)).toBeVisible();
   expect(screen.getByRole('link').elements()).toHaveLength(0);
 });
@@ -51,7 +52,7 @@ test('Connect opens the vendor\'s window at the click, points it at the sign-in 
   const open = vi.fn(() => opened);
   vi.stubGlobal('open', open);
   const sent = answers([200, { url: 'https://auth.canva.example/authorize?state=s' }], [200, { status: 'waiting' }], [200, { status: 'connected' }]);
-  const screen = await render(<AppDetail slug="rs-learning" company="c-1" owner rtl={false} item={item('canva')} text={text} soon="Soon" failed={false}/>);
+  const screen = await render(<AppDetail place={settings} company="c-1" owner rtl={false} item={item('canva')} text={text} soon="Soon" failed={false}/>);
   await expect.element(screen.getByRole('heading', { name: 'Connect Canva' })).toBeVisible();
   await screen.getByRole('button', { name: 'Connect', exact: true }).click();
   expect(open).toHaveBeenCalledWith('about:blank', '_blank');
@@ -67,7 +68,7 @@ test('a refused connect closes the window it opened and says why, in the reader\
   const opened = { opener: {}, location: { href: 'about:blank' }, close: vi.fn() };
   vi.stubGlobal('open', vi.fn(() => opened));
   answers([409, { error: 'appsBusy' }]);
-  const screen = await render(<AppDetail slug="rs-learning" company="c-1" owner rtl={false} item={item('canva')} text={text} soon="Soon" failed={false}/>);
+  const screen = await render(<AppDetail place={settings} company="c-1" owner rtl={false} item={item('canva')} text={text} soon="Soon" failed={false}/>);
   await screen.getByRole('button', { name: 'Connect', exact: true }).click();
   await expect.element(screen.getByRole('alert')).toHaveTextContent(text['error.appsBusy']);
   expect((opened.close as Mock).mock.calls.length).toBe(1);
@@ -75,7 +76,7 @@ test('a refused connect closes the window it opened and says why, in the reader\
 
 test('Disconnect asks first, then turns the app off and returns to the list', async () => {
   const sent = answers([200, { status: 'off' }]);
-  const screen = await render(<AppDetail slug="rs-learning" company="c-1" owner rtl={false} item={item('klaviyo')} text={text} soon="Soon" failed={false}/>);
+  const screen = await render(<AppDetail place={settings} company="c-1" owner rtl={false} item={item('klaviyo')} text={text} soon="Soon" failed={false}/>);
   await expect.element(screen.getByText('For now, every agent in the company can use it.')).toBeVisible();
   await screen.getByRole('button', { name: 'Disconnect Klaviyo' }).click();
   await expect.element(screen.getByText('Disconnect Klaviyo? Your agents won’t be able to reach it until you connect it again.')).toBeVisible();
