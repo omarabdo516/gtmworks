@@ -4,7 +4,8 @@
 // the first job did not ask for (scripts/ci-areas.mjs) passes only when it was skipped; one it asked for, or whose need
 // is unknown, must succeed. A failed or cancelled stage is always red.
 const env = process.env;
-const stages = ['DATABASE', 'VISUAL', 'INTEGRATION', 'INSTALL'];
+// The compared screens are not a stage: they run on main only and never judge a pull request (#257).
+const stages = ['DATABASE', 'INTEGRATION', 'INSTALL'];
 const keys = ['CHANGES_RESULT', 'FAST_RESULT', 'COMPONENTS_RUN', ...stages.flatMap(stage => [`${stage}_RUN`, `${stage}_RESULT`])];
 console.log(keys.map(key => `${key}=${env[key] ?? ''}`).join(' '));
 const fast = new Map((env.FAST_STEPS ?? '').split(' ').filter(Boolean).map(pair => pair.split('=')));

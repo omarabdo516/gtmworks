@@ -1,6 +1,8 @@
 # Updates the approved screen images in the CI environment (#103). Run it from the Actions tab (or
 # `gh workflow run visual-baselines.yml --ref <branch>`), download the `visual-baselines` artifact and commit the
-# images it contains with the change that caused them. It runs the same command as `./ci.sh visual-update`.
+# images it contains with the change that caused them. It runs the same command as `./ci.sh visual-update`. It also
+# refreshes the visual lane's images with `./ci.sh lane-update` (#257), for a fork or a machine without Docker: download
+# the `lane-baselines` artifact into tests/visual-lane/images/.
 name: Visual baselines
 on:
   workflow_dispatch:
@@ -42,5 +44,42 @@ jobs:
         with:
           name: visual-baselines
           path: visual-baselines/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # The visual lane's images, drawn by its pinned renderer (#257), beside the old screens' job.
+  lane:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: reserve the stack's ports
+        if: ${{ runner.environment == 'github-hosted' }}
+        run: |
+          sudo sysctl -w net.ipv4.ip_local_reserved_ports="$(node scripts/ci-runner.mjs reserved-ports)"
+          sysctl net.ipv4.ip_local_reserved_ports
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: update the lane's images
+        run: ./ci.sh lane-update
+      - name: collect the lane's changed images
+        if: always()
+        run: |
+          mkdir -p lane-baselines
+          git status --short --untracked-files=all -- tests/visual-lane/images
+          git ls-files --modified --others --exclude-standard -z -- 'tests/visual-lane/images/*.png' |
+            while IFS= read -r -d '' image; do
+              if [[ -f "$image" ]]; then cp -- "$image" lane-baselines/; fi
+            done
+      - name: upload the lane's changed images
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lane-baselines
+          path: lane-baselines/
           if-no-files-found: ignore
           retention-days: 14

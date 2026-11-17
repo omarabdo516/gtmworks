@@ -8,10 +8,10 @@ import { classify, failedStep } from './ci-classify.mjs';
 
 // Seconds, reported only (spec #255 D16). `changes` has no budget.
 export const budgets = {
-  layers: { fast: 90, database: 180, visual: 300, integration: { 'self-hosted': 480, 'github-hosted': 720 }, install: 720 },
+  layers: { fast: 90, database: 180, visual: 300, integration: { 'self-hosted': 480, 'github-hosted': 720 }, install: 720, lane: 420 },
   run: { pull_request: 600, otherwise: 840 },
 };
-export const layers = ['changes', 'fast', 'database', 'visual', 'integration', 'install'];
+export const layers = ['changes', 'fast', 'database', 'visual', 'integration', 'install', 'lane'];
 
 function budgetOf(layer, environment) {
   const budget = budgets.layers[layer];
@@ -23,22 +23,23 @@ export const layerOf = jobName => jobName.replace(/ \(.*\)$/, '');
 const shardOf = jobName => jobName.match(/ \((\d+\/\d+)\)$/)?.[1] ?? '';
 
 // Which `changes` output each layer follows; the compared screens follow the browser suite's.
-const decisionOf = { database: 'database', visual: 'integration', integration: 'integration', install: 'install' };
+const decisionOf = { database: 'database', visual: 'integration', integration: 'integration', install: 'install', lane: 'integration' };
 const e2eOff = 'manual run: the e2e input is off';
+const mainOnly = 'compared screens run on main and manual runs only (#257)';
 // [decision, event, layer, reason]; `*` matches any. The first matching row wins.
 const skipReasons = [
+  ['*', 'pull_request', 'visual', mainOnly],
+  ['*', 'pull_request', 'lane', mainOnly],
   ['false', 'pull_request', '*', 'no changed file is in its area (scripts/ci-areas.mjs)'],
   ['false', 'push', '*', 'every changed file is a document'],
-  ['false', 'workflow_dispatch', 'visual', e2eOff],
   ['false', 'workflow_dispatch', 'integration', e2eOff],
   ['false', 'workflow_dispatch', 'install', 'manual run: the install input is off'],
-  ['visual', '*', 'integration', 'screens alone: only the compared screens run (visual job)'],
 ];
 const notStarted = 'not started: the run was cancelled or a job it needs did not succeed';
 
 export function skipReason(layer, decisions, event) {
   const decision = decisions[decisionOf[layer]];
-  const row = skipReasons.find(([d, e, l]) => d === decision && (e === '*' || e === event) && (l === '*' || l === layer));
+  const row = skipReasons.find(([d, e, l]) => (d === '*' || d === decision) && (e === '*' || e === event) && (l === '*' || l === layer));
   return row?.[3] ?? notStarted;
 }
 
