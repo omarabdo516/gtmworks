@@ -198,8 +198,9 @@ select results_eq($$select call_id,state,content->>'answer' from public.reply_ca
  $$values ('p4@1','closed','Google'),('p7@1','open',null)$$,
  'a claimed answer whose Run ended closes with the answer kept, and the next question is kept again');
 -- A closer that reports the Engine took that answer after all wins over the Run's end: it reads answered, logged once.
+select set_config('test.claimed_card',(select id::text from public.reply_cards where call_id='p4@1'),true);
 set local role service_role;
-select results_eq($$values (public.settle_question((select id from public.reply_cards where call_id='p4@1'),'answered'))$$,$$values ('answered')$$,
+select results_eq($$values (public.settle_question(current_setting('test.claimed_card')::bigint,'answered'))$$,$$values ('answered')$$,
  'a delivery the Engine took wins over a closed card holding the same answer');
 reset role;
 -- And a Run's end closes its open question at once, before anyone answers it.
