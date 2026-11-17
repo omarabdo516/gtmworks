@@ -1,6 +1,6 @@
 # As Hermes and T3 Code run CI (#76): the first job (`changes`, scripts/ci-areas.mjs) decides which suites a change
-# needs. Static (lint, types, catalogues, unit tests) runs on every change; the screen component tests (`components`)
-# run when the app, its components or its library change. The database tests, the whole-app browser
+# needs. The fast job (lint, types, catalogues, unit tests and the screen component tests, #258) runs on every change;
+# its component tests run when the app, its components or its library change. The database tests, the whole-app browser
 # suite (`integration`) and the Docker install run on a pull request only when their own files change. The compared
 # screens and the measured navigation budgets (`visual`) and the visual lane (`lane`) run on a push to main and on a
 # manual run only, never on a pull request, and `check` does not wait for them (Omar, 2026-11-17, #257): a failure on main
@@ -99,19 +99,90 @@ jobs:
           fi
           echo "$areas" | tee -a "$GITHUB_OUTPUT"
 
-  static:
+  # The fast layers (#258, spec #255 D1): the static checks, the node tests and the component tests at the same time, in
+  # one command (scripts/ci-fast.mjs) whose steps each report a result that `check` lists. The dependencies are restored
+  # by the lock file's hash and the browser by Playwright's version, each saved straight after a fresh install, before
+  # any test runs: the cache never holds the bundler's own (node_modules/.vite), so the component tests always start it
+  # cold, as #218 found they must. Only the component step follows the first job's answer; an unknown answer runs it.
+  fast:
+    needs: [changes]
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     permissions:
       contents: read
+    env:
+      COMPONENTS: ${{ needs.changes.result == 'success' && needs.changes.outputs.components || 'true' }}
+    outputs:
+      steps: ${{ steps.fast.outputs.steps }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
+        id: node
         with:
           node-version: 22
-          cache: npm
-      - name: static
-        run: ./ci.sh static
+      - name: restore dependencies
+        id: modules
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            node_modules
+            !node_modules/.vite
+            !node_modules/.cache
+          key: node-modules-${{ runner.os }}-node-${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json') }}
+      - name: install dependencies
+        if: ${{ steps.modules.outputs.cache-hit != 'true' }}
+        run: npm ci
+      - name: save dependencies
+        if: ${{ steps.modules.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            node_modules
+            !node_modules/.vite
+            !node_modules/.cache
+          key: node-modules-${{ runner.os }}-node-${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json') }}
+      - name: browser version
+        id: browser-version
+        if: ${{ env.COMPONENTS != 'false' }}
+        # A new runner image downloads the browser again for itself.
+        run: echo "version=$(node -p "require('playwright-core/package.json').version")-$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
+      - name: restore the browser
+        id: browser
+        if: ${{ env.COMPONENTS != 'false' }}
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ms-playwright-${{ runner.os }}-${{ steps.browser-version.outputs.version }}
+      - name: install the browser
+        if: ${{ env.COMPONENTS != 'false' && steps.browser.outputs.cache-hit != 'true' }}
+        # The browser alone, as a hit restores it: the image's own system packages and fonts serve every run alike.
+        run: npx playwright install chromium
+      - name: save the browser
+        if: ${{ env.COMPONENTS != 'false' && steps.browser.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ms-playwright-${{ runner.os }}-${{ steps.browser-version.outputs.version }}
+      # The OpenAPI linter's own npm cache (its manifest and its npx install, keyed by its pinned version in
+      # scripts/ci-fast.mjs), so a hit lints with no registry request.
+      - name: restore npx packages
+        id: npx
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/npx-cache
+          key: npx-${{ runner.os }}-node-${{ steps.node.outputs.node-version }}-redocly-2.76.0
+      - name: fast
+        id: fast
+        env:
+          NPX_CACHE: ${{ runner.temp }}/npx-cache
+        run: ./ci.sh fast
+      - name: save npx packages
+        if: ${{ steps.npx.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/npx-cache
+          key: npx-${{ runner.os }}-node-${{ steps.node.outputs.node-version }}-redocly-2.76.0
       - name: upload ledger results
         if: always()
         # The ledger only reports, so a failed upload leaves the job's result as its tests made it.
@@ -119,40 +190,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ledger-${{ github.job }}
-          path: ci-ledger/
-          if-no-files-found: ignore
-          retention-days: 3
-          include-hidden-files: false
-
-  # Screens as components in headless Chromium, in two shards, as T3 Code runs them (#81).
-  components:
-    needs: [changes]
-    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.components != 'false') }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1/2, 2/2]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - name: components
-        env:
-          SHARD: ${{ matrix.shard }}
-        run: ./ci.sh components
-      - name: upload ledger results
-        if: always()
-        # The ledger only reports, so a failed upload leaves the job's result as its tests made it.
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: ledger-${{ github.job }}-${{ strategy.job-index }}
           path: ci-ledger/
           if-no-files-found: ignore
           retention-days: 3
@@ -954,7 +991,7 @@ jobs:
   # label on each red job (scripts/ci-ledger.mjs). It reports only: the verdict stays with `check`, which does not
   # need it.
   ledger:
-    needs: [changes, static, components, database, visual, integration, install, lane]
+    needs: [changes, fast, database, visual, integration, install, lane]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -975,7 +1012,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           EVENT_NAME: ${{ github.event_name }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          DECISIONS_COMPONENTS: ${{ needs.changes.outputs.components }}
           DECISIONS_DATABASE: ${{ needs.changes.outputs.database }}
           DECISIONS_INTEGRATION: ${{ needs.changes.outputs.integration }}
           DECISIONS_INSTALL: ${{ needs.changes.outputs.install }}
@@ -993,7 +1029,7 @@ jobs:
           retention-days: 90
 
   check:
-    needs: [changes, static, components, database, integration, install]
+    needs: [changes, fast, database, integration, install]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     permissions:
@@ -1003,9 +1039,9 @@ jobs:
       - name: all required stages green
         env:
           CHANGES_RESULT: ${{ needs.changes.result }}
-          STATIC_RESULT: ${{ needs.static.result }}
+          FAST_RESULT: ${{ needs.fast.result }}
+          FAST_STEPS: ${{ needs.fast.outputs.steps }}
           COMPONENTS_RUN: ${{ needs.changes.outputs.components }}
-          COMPONENTS_RESULT: ${{ needs.components.result }}
           DATABASE_RUN: ${{ needs.changes.outputs.database }}
           DATABASE_RESULT: ${{ needs.database.result }}
           INTEGRATION_RUN: ${{ needs.changes.outputs.integration }}
