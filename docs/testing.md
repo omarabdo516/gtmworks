@@ -57,8 +57,8 @@ block of their own, and `scripts/ci-runner.mjs cleanup` removes what this reposi
   changes: pages and styles under `app/`, `components/`, `.tsx` and `.css` under `lib/`, the catalogues, the stylesheet
   build and the lane's own files; server code, documents and unit tests do not start it. When a picture changes on
   purpose, one command refreshes the images: `./ci.sh lane-update` (Docker needed; without it, `Visual baselines`
-  uploads them as `lane-baselines`). `lane-proof` draws the lane three times on `ubuntu-latest` and on the `CI_RUNNER`
-  runner when the renderer, the lane's config, its guards or the CI definition change, and on `main`;
+  uploads them as `lane-baselines`). On a pull request that changes the renderer, the lane's config, its guards or the
+  CI definition, `lane-proof` draws the lane three times on `ubuntu-latest` and on the `CI_RUNNER` runner;
   `lane-proof-compare` fails unless all six sets of hashes match.
 - `install` is the Docker install, update, backup, restore, release and one-line install. It runs when the image, its
   build inputs, the install and release files, the migrations it applies or its own checks change, and when `lib/`

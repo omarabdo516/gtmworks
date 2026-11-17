@@ -46,8 +46,25 @@ jobs:
           path: visual-baselines/
           if-no-files-found: ignore
           retention-days: 14
+
+  # The visual lane's images, drawn by its pinned renderer (#257), beside the old screens' job.
+  lane:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: reserve the stack's ports
+        if: ${{ runner.environment == 'github-hosted' }}
+        run: |
+          sudo sysctl -w net.ipv4.ip_local_reserved_ports="$(node scripts/ci-runner.mjs reserved-ports)"
+          sysctl net.ipv4.ip_local_reserved_ports
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
       - name: update the lane's images
-        if: always()
         run: ./ci.sh lane-update
       - name: collect the lane's changed images
         if: always()

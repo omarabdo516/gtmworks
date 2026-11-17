@@ -20,8 +20,9 @@
 # stay on the machine.
 # The visual lane (`lane`, #257) compares a few key screens in Arabic, light and dark, drawn by one browser pinned by
 # digest (tests/visual-lane/renderer) so every runner makes the same bytes; it runs when what a screen is drawn from
-# changes. `lane-proof` draws the lane three times on ubuntu-latest and on the CI_RUNNER runner when the renderer, the
-# lane's config or its guards change, and on main; `lane-proof-compare` fails unless all six sets of hashes match.
+# changes. On a pull request that changes the renderer, the lane's config or its guards (or a file that runs every
+# suite), `lane-proof` draws the lane three times on ubuntu-latest and on the CI_RUNNER runner, and
+# `lane-proof-compare` fails unless all six sets of hashes match.
 name: CI
 
 on:
@@ -313,7 +314,7 @@ jobs:
   # image three times. It decides nothing for `check`; lane-proof-compare is its verdict.
   lane-proof:
     needs: [changes]
-    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.proof != 'false') }}
+    if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.changes.result == 'success' && needs.changes.outputs.proof == 'true' }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     permissions:
