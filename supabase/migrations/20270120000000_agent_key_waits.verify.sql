@@ -3,7 +3,8 @@
 -- answers the previous app version's call, reads the hold under its lock and records the wait, every Run entry holds a
 -- waiting Agent, the Owner's list shows it, only the server begins, finishes and settles a key change (finish and settle
 -- the only ends of a wait, under the same lock), forgets a leftover and asks which Company Lead's create settles, a change
--- counts only within its window (changed_at), and a removed Agent's profile is listed for the next key removal.
+-- or an unanswered set counts until the space settles it (changing, uncertain, the Company's change count in version),
+-- and a removed Agent's profile is listed for the next key removal.
 select json_build_object(
  'waits_owner_read_only',(select relrowsecurity from pg_class where oid='public.agent_key_waits'::regclass)
   and has_table_privilege('authenticated','public.agent_key_waits','select')
@@ -22,7 +23,9 @@ select json_build_object(
   and not exists(select 1 from information_schema.columns where table_schema='public' and table_name='company_key_holds' and column_name ~ '(key|secret|value)'),
  'holds_read',position('company_key_holds' in pg_get_functiondef('public.company_holds_provider_key(uuid)'::regprocedure))>0
   and position('changing' in pg_get_functiondef('public.company_holds_provider_key(uuid)'::regprocedure))>0
-  and position('changed_at' in pg_get_functiondef('public.company_holds_provider_key(uuid)'::regprocedure))>0
+  and position('uncertain' in pg_get_functiondef('public.company_holds_provider_key(uuid)'::regprocedure))>0
+  and exists(select 1 from information_schema.columns where table_schema='public' and table_name='company_key_holds' and column_name='version'
+   and data_type='bigint' and is_nullable='NO')
   and exists(select 1 from information_schema.columns where table_schema='public' and table_name='company_key_holds' and column_name='changed_at'
    and data_type='timestamp with time zone' and is_nullable='YES' and column_default is null)
   and position('company_audit' in pg_get_functiondef('public.company_holds_provider_key(uuid)'::regprocedure))=0,
