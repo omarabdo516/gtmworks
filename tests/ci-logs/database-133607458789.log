@@ -1,0 +1,30 @@
+﻿2026-11-16T20:57:36.3136036Z Current runner version: '2.338.2'
+2026-11-16T20:57:36.3162437Z ##[group]Runner Image Provisioner
+2026-11-16T20:57:36.3163924Z Hosted Compute Agent
+[excerpt: lines omitted]
+2026-11-16T20:58:40.9888675Z f2ba4e98874d: Pull complete
+2026-11-16T20:58:41.0128036Z error from registry: Rate exceeded
+2026-11-16T20:58:41.0185511Z Retrying after 4s: public.ecr.aws/supabase/realtime:v2.151.3
+2026-11-16T20:58:41.0355271Z 531e3bd93090: Download complete
+[excerpt: lines omitted]
+2026-11-16T20:59:06.1901813Z b03f939add7f: Pull complete
+2026-11-16T20:59:06.1925066Z error from registry: Rate exceeded
+2026-11-16T20:59:06.1966903Z Retrying after 4s: public.ecr.aws/supabase/logflare:1.50.15
+2026-11-16T20:59:07.2101344Z 4968548d42a7: Pull complete
+[excerpt: lines omitted]
+2026-11-16T21:01:36.7795243Z psql:/home/runner/work/gtmworks/gtmworks/supabase/tests/waiting_list.sql:2: NOTICE:  extension "pgtap" already exists, skipping
+2026-11-16T21:01:36.8408172Z /home/runner/work/gtmworks/gtmworks/supabase/tests/waiting_list.sql ................. ok
+2026-11-16T21:01:36.8627970Z psql:/home/runner/work/gtmworks/gtmworks/supabase/tests/work.sql:2: NOTICE:  extension "pgtap" already exists, skipping
+2026-11-16T21:01:36.9675367Z /home/runner/work/gtmworks/gtmworks/supabase/tests/work.sql ......................... ok
+2026-11-16T21:01:36.9872254Z psql:/home/runner/work/gtmworks/gtmworks/supabase/tests/work_mode.sql:2: NOTICE:  extension "pgtap" already exists, skipping
+2026-11-16T21:01:37.0226807Z /home/runner/work/gtmworks/gtmworks/supabase/tests/work_mode.sql .................... ok
+2026-11-16T21:01:37.0228813Z 
+2026-11-16T21:01:37.0232988Z Test Summary Report
+2026-11-16T21:01:37.0235116Z -------------------
+2026-11-16T21:01:37.0240107Z /home/runner/work/gtmworks/gtmworks/supabase/tests/agent_states.sql               (Wstat: 0 Tests: 8 Failed: 1)
+2026-11-16T21:01:37.0241548Z   Failed test:  5
+2026-11-16T21:01:37.0242690Z Files=65, Tests=1751,  7 wallclock secs ( 0.32 usr  0.12 sys +  0.63 cusr  0.39 csys =  1.46 CPU)
+2026-11-16T21:01:37.0243479Z Result: FAIL
+2026-11-16T21:01:37.6239155Z error running container: exit 1
+2026-11-16T21:01:37.6241342Z Try rerunning the command with --debug to troubleshoot the error.
+2026-11-16T21:01:37.6611981Z ##[error]Process completed with exit code 1.

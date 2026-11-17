@@ -1,0 +1,14 @@
+﻿2026-11-16T20:33:14.7402261Z Current runner version: '2.338.2'
+2026-11-16T20:33:14.7451825Z ##[group]Runner Image Provisioner
+2026-11-16T20:33:14.7452761Z Hosted Compute Agent
+[excerpt: lines omitted]
+2026-11-16T20:34:04.7996363Z 0a0b1cce89bf: Pulling fs layer
+2026-11-16T20:34:04.7997150Z 814dd06d26c7: Pulling fs layer
+2026-11-16T20:34:04.7997723Z 531e3bd93090: Pulling fs layer
+2026-11-16T20:34:04.7998703Z 213ec9aee27d: Pulling fs layer
+2026-11-16T20:34:04.7999280Z a70653f7a2d5: Pulling fs layer
+2026-11-16T20:34:04.8198563Z 80862ff61dbf: Download complete
+2026-11-16T20:34:04.8301210Z 55afa1ecc21d: Pull complete
+2026-11-16T20:34:05.1055865Z error from registry: Rate exceeded
+2026-11-16T20:36:35.4478636Z Try rerunning the command with --debug to troubleshoot the error.
+2026-11-16T20:36:35.4760171Z ##[error]Process completed with exit code 1.

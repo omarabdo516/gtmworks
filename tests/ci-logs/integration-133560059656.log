@@ -1,0 +1,56 @@
+﻿2026-11-16T19:39:06.2688493Z Current runner version: '2.338.0'
+2026-11-16T19:39:06.2693041Z Runner name: 'omar-pc-ci_gtmworks'
+2026-11-16T19:39:06.2693521Z Runner group name: 'Default'
+[excerpt: lines omitted]
+2026-11-16T19:42:59.6915575Z [WebServer]  ✓ Ready in 153ms
+2026-11-16T19:43:01.3625231Z [evidence] request failed: GET https://app.gtmworks.test/sign-in net::ERR_NETWORK_CHANGED
+2026-11-16T19:43:02.4448234Z   ✘  1 tests/proxy/production-shape.spec.ts:20:5 › the page is served over https from the public host name through the proxy (1.2s)
+[excerpt: lines omitted]
+2026-11-16T19:43:02.4511893Z ##[error]  1) tests/proxy/production-shape.spec.ts:20:5 › the page is served over https from the public host name through the proxy 
+    Error: page.goto: net::ERR_NETWORK_CHANGED at https://app.gtmworks.test/sign-in
+    Call log:
+      - navigating to "https://app.gtmworks.test/sign-in", waiting until "load"
+
+
+      20 | test('the page is served over https from the public host name through the proxy', async ({ page }) => {
+      21 |   watch(page);
+    > 22 |   const response = await page.goto('/sign-in');
+         |                               ^
+      23 |   expect(response?.headers()['via']).toContain('Caddy');
+      24 |   expect(new URL(page.url()).protocol).toBe('https:');
+      25 |   expect(new URL(page.url()).hostname).toBe('app.gtmworks.test');
+[excerpt: lines omitted]
+2026-11-16T19:43:03.5806787Z [evidence] POST https://app.gtmworks.test/api/recent-cards -> 200
+2026-11-16T19:43:03.6701189Z [evidence] request failed: GET https://app.gtmworks.test/c/rs-learning/chat?_rsc=M6dRPN-aUjhucU8N net::ERR_NETWORK_CHANGED
+2026-11-16T19:43:03.6702221Z [evidence] console error: Failed to load resource: net::ERR_NETWORK_CHANGED
+[excerpt: lines omitted]
+2026-11-16T19:43:22.4255380Z ##[error]  2) tests/proxy/production-shape.spec.ts:66:5 › a key that cannot be revoked says so instead of staying silently active 
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('.agent-secret code')
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" locator('.agent-secret code') with timeout 15000ms
+      - waiting for locator('.agent-secret code')
+
+
+[excerpt: lines omitted]
+2026-11-16T19:43:24.5446289Z       73 |   await page.reload();
+2026-11-16T19:43:24.5446596Z       74 |   // The request names a company the person has no key in, so the database changes nothing.
+2026-11-16T19:43:24.5447114Z       75 |   await page.locator('.agent-key-row input[name=company]').first().evaluate(input => { (input as HTMLInputElement).value = '00000000-0000-0000-0000-000000000000'; });
+2026-11-16T19:43:24.5447986Z         at /srv/ci/_work/gtmworks/gtmworks/gtmworks/tests/proxy/production-shape.spec.ts:72:52
+2026-11-16T19:43:24.5448772Z 
+2026-11-16T19:43:24.5449257Z     Error Context: test-results/production-shape-a-key-tha-c9ca9--of-staying-silently-active/error-context.md
+2026-11-16T19:43:24.5449692Z 
+2026-11-16T19:43:24.5450064Z   2 failed
+2026-11-16T19:43:24.5451173Z     tests/proxy/production-shape.spec.ts:20:5 › the page is served over https from the public host name through the proxy 
+2026-11-16T19:43:24.5451914Z     tests/proxy/production-shape.spec.ts:66:5 › a key that cannot be revoked says so instead of staying silently active 
+2026-11-16T19:43:24.5452446Z   5 passed (27.6s)
+2026-11-16T19:43:24.5457400Z ##[notice]  2 failed
+    tests/proxy/production-shape.spec.ts:20:5 › the page is served over https from the public host name through the proxy 
+    tests/proxy/production-shape.spec.ts:66:5 › a key that cannot be revoked says so instead of staying silently active 
+  5 passed (27.6s)
+2026-11-16T19:43:24.5545832Z ##[error]Process completed with exit code 1.

@@ -7,7 +7,8 @@ export default defineConfig({
   testMatch: '*.spec.ts',
   timeout: 90000,
   workers: 1,
-  reporter: [['list'], ...(process.env.CI ? [['github'] as const] : [])],
+  // ci.sh asks for the JSON reporter for the CI ledger (#256).
+  reporter: [['list'], ...(process.env.CI ? [['github'] as const] : []), ...(process.env.PLAYWRIGHT_JSON_OUTPUT_FILE ? [['json'] as const] : [])],
   use: { baseURL: `https://${host}`, ignoreHTTPSErrors: true, launchOptions: { args: [`--host-resolver-rules=MAP ${host} 127.0.0.1`] } },
   webServer: {
     command: 'bash scripts/proxy-stack.sh',

@@ -1,0 +1,30 @@
+﻿2026-11-16T21:30:15.6373667Z Current runner version: '2.338.2'
+2026-11-16T21:30:15.6400181Z ##[group]Runner Image Provisioner
+2026-11-16T21:30:15.6400779Z Hosted Compute Agent
+[excerpt: lines omitted]
+2026-11-16T21:31:05.4098415Z 44136fa355b3: Already exists
+2026-11-16T21:31:05.6783425Z error from registry: Rate exceeded
+2026-11-16T21:31:05.6816536Z Retrying after 4s: public.ecr.aws/supabase/postgres:17.11.0.011
+2026-11-16T21:31:05.6852977Z f2ba4e98874d: Download complete
+[excerpt: lines omitted]
+2026-11-16T21:31:23.5590262Z d22c69a95cf4: Pull complete
+2026-11-16T21:31:23.6771045Z error from registry: Rate exceeded
+2026-11-16T21:31:23.6810605Z Retrying after 4s: public.ecr.aws/supabase/realtime:v2.151.3
+2026-11-16T21:31:23.8457626Z 2cfab517365c: Pull complete
+[excerpt: lines omitted]
+2026-11-16T21:33:57.2112024Z DETAIL:  function invite_member(uuid,text,member_role_current,boolean) depends on type member_role_current
+2026-11-16T21:33:57.2112710Z HINT:  Use DROP ... CASCADE to drop the dependent objects too.
+2026-11-16T21:33:57.2156667Z /tmp/gtmworks-remove-agency-ivIasv/migration.sql .. 
+2026-11-16T21:33:57.2162030Z Dubious, test returned 3 (wstat 768, 0x300)
+2026-11-16T21:33:57.2162561Z Failed 19/19 subtests 
+2026-11-16T21:33:57.2162705Z 
+2026-11-16T21:33:57.2162798Z Test Summary Report
+2026-11-16T21:33:57.2162995Z -------------------
+2026-11-16T21:33:57.2163446Z /tmp/gtmworks-remove-agency-ivIasv/migration.sql (Wstat: 768 (exited 3) Tests: 0 Failed: 0)
+2026-11-16T21:33:57.2163856Z   Non-zero exit status: 3
+2026-11-16T21:33:57.2164156Z   Parse errors: Bad plan.  You planned 19 tests but ran 0.
+2026-11-16T21:33:57.2164561Z Files=1, Tests=0,  0 wallclock secs ( 0.02 usr +  0.00 sys =  0.02 CPU)
+2026-11-16T21:33:57.2164875Z Result: FAIL
+2026-11-16T21:33:57.7801347Z error running container: exit 1
+2026-11-16T21:33:57.7802223Z Try rerunning the command with --debug to troubleshoot the error.
+2026-11-16T21:33:57.8284088Z ##[error]Process completed with exit code 1.

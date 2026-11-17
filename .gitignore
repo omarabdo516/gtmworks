@@ -21,3 +21,4 @@ backups/
 .impeccable/review/
 .vitest/
 .ci-tmp/
+ci-ledger/

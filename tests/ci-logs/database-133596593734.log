@@ -1,0 +1,35 @@
+﻿2026-11-16T20:39:13.2152231Z Current runner version: '2.338.2'
+2026-11-16T20:39:13.2177321Z ##[group]Runner Image Provisioner
+2026-11-16T20:39:13.2178231Z Hosted Compute Agent
+[excerpt: lines omitted]
+2026-11-16T20:40:16.0835842Z f2ba4e98874d: Download complete
+2026-11-16T20:40:16.0981479Z Error response from daemon: error from registry: Rate exceeded
+2026-11-16T20:40:16.1049403Z Retrying after 4s: public.ecr.aws/supabase/postgres:17.11.0.011
+2026-11-16T20:40:16.1196058Z 921bfecda4c1: Download complete
+[excerpt: lines omitted]
+2026-11-16T20:40:17.7679659Z 531e3bd93090: Download complete
+2026-11-16T20:40:17.7781077Z error from registry: Rate exceeded
+2026-11-16T20:40:17.7807321Z Retrying after 4s: public.ecr.aws/supabase/mailpit:v1.31.3
+2026-11-16T20:40:17.7895122Z 9acba1e45411: Download complete
+[excerpt: lines omitted]
+2026-11-16T20:40:41.4329884Z b03f939add7f: Pull complete
+2026-11-16T20:40:41.4370625Z error from registry: Rate exceeded
+2026-11-16T20:40:41.4395228Z Retrying after 4s: public.ecr.aws/supabase/logflare:1.50.15
+2026-11-16T20:40:44.0905874Z ede70a568cf6: Pull complete
+[excerpt: lines omitted]
+2026-11-16T20:43:11.0099371Z psql:/home/runner/work/gtmworks/gtmworks/supabase/tests/waiting_list.sql:2: NOTICE:  extension "pgtap" already exists, skipping
+2026-11-16T20:43:11.0691158Z /home/runner/work/gtmworks/gtmworks/supabase/tests/waiting_list.sql ................. ok
+2026-11-16T20:43:11.0892733Z psql:/home/runner/work/gtmworks/gtmworks/supabase/tests/work.sql:2: NOTICE:  extension "pgtap" already exists, skipping
+2026-11-16T20:43:11.1871418Z /home/runner/work/gtmworks/gtmworks/supabase/tests/work.sql ......................... ok
+2026-11-16T20:43:11.2077303Z psql:/home/runner/work/gtmworks/gtmworks/supabase/tests/work_mode.sql:2: NOTICE:  extension "pgtap" already exists, skipping
+2026-11-16T20:43:11.2445849Z /home/runner/work/gtmworks/gtmworks/supabase/tests/work_mode.sql .................... ok
+2026-11-16T20:43:11.2450069Z 
+2026-11-16T20:43:11.2450730Z Test Summary Report
+2026-11-16T20:43:11.2451468Z -------------------
+2026-11-16T20:43:11.2452532Z /home/runner/work/gtmworks/gtmworks/supabase/tests/agent_states.sql               (Wstat: 0 Tests: 8 Failed: 1)
+2026-11-16T20:43:11.2453205Z   Failed test:  5
+2026-11-16T20:43:11.2453729Z Files=65, Tests=1751,  7 wallclock secs ( 0.30 usr  0.13 sys +  0.65 cusr  0.39 csys =  1.47 CPU)
+2026-11-16T20:43:11.2454169Z Result: FAIL
+2026-11-16T20:43:11.8022139Z error running container: exit 1
+2026-11-16T20:43:11.8023314Z Try rerunning the command with --debug to troubleshoot the error.
+2026-11-16T20:43:11.8385926Z ##[error]Process completed with exit code 1.
