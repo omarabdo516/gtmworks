@@ -10,6 +10,7 @@ import { AgentFaceDot } from './agent-face-dot';
 import { agentStates, statusKeys, type AgentStatus } from '@/lib/agent-details.mjs';
 import { pickSection, overlayHref, agentsMainFirst, usageTotals, type OverlaySection } from '@/lib/settings-overlay.mjs';
 import { OverlayChrome } from './settings-overlay-chrome';
+import { BackLink, FocusReturn } from './settings-overlay-frame';
 import { AccountChoices, MakeMain, DeleteAgent, CompanyName, Invite, AgentSwitch, RuleSaid, RemoveRule } from './settings-overlay-client';
 import { SettingsIcon } from './settings-icons';
 import PasswordSettings from './password-settings';
@@ -81,7 +82,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
   :section==='account'?<AccountSection t={t} theme={theme} personName={personName} role={role} roleName={roleNames[role]||''} companyName={company.name} company={company.id} memberNote={memberNote}/>
   :section==='knowledge'?<><Head title={t('settingsKnowledge')} sub={t('settingsKnowledgeSub')}/>{ro}<CompanyKnowledge slug={slug} company={company.id} canManage={canManage} part={query.part}/></>
   :<SoonSection t={t} section={section} ro={ro} models={<ModelsSubscriptions company={company.id} owner={owner} subscriptions={subscriptions}/>}/>;
- return <OverlayChrome t={t} slug={slug} companyName={company.name} role={role} readOnly={!canManage} section={section} learningWaiting={learningWaiting}>{page}</OverlayChrome>;
+ return <OverlayChrome t={t} slug={slug} companyName={company.name} role={role} readOnly={!canManage} section={section} learningWaiting={learningWaiting} initialFocus={agent?'sov-tab-settings':undefined}>{page}</OverlayChrome>;
 }
 
 const Head=({title,sub,extra}:{title:string,sub?:string,extra?:ReactNode})=><header className="sov-head"><div className="sov-head__t"><h3 className="sov-h" id="sov-h" tabIndex={-1}>{title}</h3>{sub&&<p className="sov-sub">{sub}</p>}</div>{extra}</header>;
@@ -151,7 +152,7 @@ function AgentsSection({t,rtl,slug,agents,stateOf,canManage,canWrite,owner}:{t:T
     {agent.speciality&&<span className="panel-row__d"><bdi>{agent.speciality}</bdi></span>}</span>
    <span className="panel-row__meta">{t(statusKeys[stateOf(agent.id)])}</span>
    <span className="panel-row__icon sov-chev"><SettingsIcon name="forward" rtl={rtl}/></span></Link>)
-   :<p className="panel-empty">{t('noAgentsYet')}</p>}</div></>;
+   :<p className="panel-empty">{t('noAgentsYet')}</p>}</div><FocusReturn/></>;
 }
 
 function AgentPage({t,rtl,slug,company,userId,agent,status,main,rules,owner,canManage,canWrite}:{t:T,rtl:boolean,slug:string,company:string,userId:string,agent:Agent,status:AgentStatus,main?:Agent,rules:Rule[],owner:boolean,canManage:boolean,canWrite:boolean}) {
@@ -162,7 +163,7 @@ function AgentPage({t,rtl,slug,company,userId,agent,status,main,rules,owner,canM
   :isMain?<section className="dp-sec" id="set-main" aria-labelledby="set-h-main"><Label id="set-h-main">{t('settingsMainAgent')}</Label><div className="panel-card"><p className="panel-empty">{t('settingsMainOwnerOnly',agent.name)}</p></div></section>:null;
  return <>
   {isNewFor(agent,userId)&&<OpenedMark company={company} agent={agent.id}/>}
-  <Link className="link-btn sov-back" id="sov-back" href={overlayHref(slug,'agents')} replace><SettingsIcon name="back" rtl={rtl}/><span>{t('settingsAllAgents')}</span></Link>
+  <BackLink className="link-btn sov-back" id="sov-back" slug={slug} agent={agent.id}><SettingsIcon name="back" rtl={rtl}/><span>{t('settingsAllAgents')}</span></BackLink>
   <div className="sov-agent-id"><AgentFaceDot agent={face(agent)} size={48} status={status} lg/><div className="od-fill">
    <div className="dp-id__name"><bdi>{agent.name}</bdi>{isMain&&<span className="badge dp-id__badge">{t('mainAgent')}</span>}</div>
    <div className="dp-id__role"><span>{agent.speciality&&<><bdi>{agent.speciality}</bdi> · </>}</span>{t(statusKeys[status])}</div>{made&&<MadeLine made={made} where="sov"/>}</div></div>

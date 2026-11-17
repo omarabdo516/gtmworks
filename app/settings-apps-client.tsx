@@ -9,6 +9,7 @@ import { ShellIcon } from '@/components/shell-icon';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { SettingsIcon } from './settings-icons';
 import { toast } from './toast';
+import { appsChanged } from './company-apps-read';
 import type { AppAgent, AppCategory, CompanyApp } from '@/lib/app-catalogue.mjs';
 
 // Settings, Apps (#30; design-reference: appsHeadHTML, appsListHTML, appCardHTML, appDetailHTML, the app-agent and
@@ -34,11 +35,13 @@ const faces=(agents:AppAgent[])=><span className="fstack" aria-hidden="true">{ag
 const face=(agent:AppAgent)=><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:agent.connection,name:agent.name}} size={28}/></span>;
 
 // One step between the list and an app's page: a link in Settings, a button in the sheet, with the same id, class and
-// label. `stay` keeps the person on the app's page while a sign-in is followed or a request is on its way.
+// label. `stay` keeps the person on the app's page while a sign-in is followed or a request is on its way: the control
+// is marked unavailable, and in Settings it has no address, so no click of any kind leaves.
 type Step={open:string}|{back:string};
 function To({place,step,stay=false,...props}:{place:AppsPlace,step:Step,stay?:boolean,className:string,id:string,'aria-label'?:string,children:ReactNode}) {
- if(place.kind==='address') return <Link {...props} href={overlayHref(place.slug,'apps','open' in step?{app:step.open}:{})} replace={'back' in step||undefined} onClick={stay?event=>event.preventDefault():undefined}/>;
- return <button type="button" {...props} onClick={()=>{ if(stay) return; if('open' in step) place.open(step.open); else place.back(step.back); }}/>;
+ if(place.kind==='address') return stay?<a {...props} role="link" tabIndex={0} aria-disabled="true"/>
+  :<Link {...props} href={overlayHref(place.slug,'apps','open' in step?{app:step.open}:{})} replace={'back' in step||undefined}/>;
+ return <button type="button" {...props} aria-disabled={stay||undefined} onClick={()=>{ if(stay) return; if('open' in step) place.open(step.open); else place.back(step.back); }}/>;
 }
 function Close({place}:{place:AppsPlace}) {
  const {t}=useI18n();
@@ -78,10 +81,12 @@ export function AppsList({place,owner,items:read,text}:{place:AppsPlace,owner:bo
    {read!==undefined&&<div className="tpl-cats" role="group" aria-label={say('categories')}>{(['all',...order.filter(kind=>items.some(item=>item.category===kind))] as const).map(kind=>
     <button key={kind} type="button" className="chip" id={`apps-cat-${kind}`} aria-pressed={category===kind} onClick={()=>setCategory(kind)}>{say(`category.${kind}`)}<span className="chip__n num">{items.filter(item=>kind==='all'||item.category===kind).length}</span></button>)}</div>}
   </header>
-  <div className="apps-body" id="apps-body" aria-live="polite">{read===undefined?null:shown.length?<>{group(say('groupOn'),shown.filter(item=>item.state!=='off'),'apps-h-on')}{group(say('groupOff'),shown.filter(item=>item.state==='off'),'apps-h-off')}</>
+  <div className="apps-body" id="apps-body" aria-live="polite">{read===undefined?null
+   :read===null?<div className="panel-card"><p className="panel-empty">{say('unreadable')}</p></div>
+   :!read.length?<div className="panel-card"><p className="panel-empty">{say('noneOffered')}</p></div>
+   :shown.length?<>{group(say('groupOn'),shown.filter(item=>item.state!=='off'),'apps-h-on')}{group(say('groupOff'),shown.filter(item=>item.state==='off'),'apps-h-off')}</>
    :<div className="tpl-empty"><b>{needle?say('noMatch',query.trim()):say('noneHere')}</b><span>{say('emptyHint')}</span>
-    {needle&&<div className="tpl-empty__acts"><button type="button" className="btn btn--secondary btn--sm" onClick={()=>{setQuery('');search.current?.focus();}}>{say('clear')}</button></div>}</div>}
-   {read===null?<div className="panel-card"><p className="panel-empty">{say('unreadable')}</p></div>:read&&!read.length&&<div className="panel-card"><p className="panel-empty">{say('noneOffered')}</p></div>}</div>
+    {needle&&<div className="tpl-empty__acts"><button type="button" className="btn btn--secondary btn--sm" onClick={()=>{setQuery('');search.current?.focus();}}>{say('clear')}</button></div>}</div>}</div>
  </>;
 }
 
@@ -100,7 +105,7 @@ type Run={queue:string[],following:string|null,done:string[],one:boolean};
 const idle:Run={queue:[],following:null,done:[],one:false};
 
 export function AppDetail({place,company,owner,rtl,item,text,failed}:{place:AppsPlace,company:string,owner:boolean,rtl:boolean,item:AppItem,text:Text,failed:boolean}) {
- const say=sayer(text); const router=useRouter();
+ const say=sayer(text); const router=useRouter(); const {language}=useI18n();
  const [run,setRun]=useState<Run>(idle); const [asking,setAsking]=useState(false); const [error,setError]=useState(failed?'signInFailed':'');
  const own=item.agents.filter(agent=>agent.own);
  const [picks,setPicks]=useState<string[]>(()=>own.filter(agent=>agent.main).map(agent=>agent.id)); const [pickError,setPickError]=useState(false);
@@ -111,6 +116,21 @@ export function AppDetail({place,company,owner,rtl,item,text,failed}:{place:Apps
  const names=(ids:string[])=>ids.map(nameOf).join(say('namesSep'));
  // After a refresh draws the page again, the keyboard goes where the step left it.
  useEffect(()=>{ const id=focusNext.current; if(id&&document.getElementById(id)) { focusNext.current=null; document.getElementById(id)?.focus(); } });
+ // Settings draws its apps on the server and reads them again with the page; the sidebar's count and the sheet read
+ // them in the browser.
+ const address=place.kind==='address';
+ const refreshApps=()=>{ void appsChanged(company,language); if(address) router.refresh(); };
+ // The vendor's window, and the sign-in being followed in it, for the page closing under it (the sheet closed, Settings
+ // left): that sign-in is cancelled, its window closed, and the person told.
+ const vendor=useRef<Window|null>(null);
+ const followed=useRef<{company:string,agent:string,app:string,said:string}|null>(null);
+ useEffect(()=>{ followed.current=run.following?{company,agent:run.following,app:item.key,said:say('signInCancelled',item.name)}:null; });
+ useEffect(()=>()=>{
+  const left=followed.current; if(!left) return;
+  void fetch('/api/company-apps',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json'},body:JSON.stringify({company:left.company,agent:left.agent,app:left.app,action:'cancel'})}).catch(()=>{});
+  vendor.current?.close();
+  toast(left.said,{icon:'x'});
+ },[]);
  // While the vendor's window is open the sign-in is followed until it connects, fails, or the page closes.
  useEffect(()=>{
   const agent=run.following;
@@ -124,7 +144,7 @@ export function AppDetail({place,company,owner,rtl,item,text,failed}:{place:Apps
    if(!(answer.ok&&status==='connected')) {
     setError(answer.ok?'signInFailed':`error.${String(answer.body.error||'appsFailed')}`);
     // Agents already connected in this run stay so; the rest wait for another click.
-    if(run.done.length) { setRun({...run,following:null}); router.refresh(); } else setRun(idle);
+    if(run.done.length) { setRun({...run,following:null}); refreshApps(); } else setRun(idle);
     return;
    }
    const done=[...run.done,agent]; const queue=run.queue.filter(id=>id!==agent);
@@ -132,30 +152,31 @@ export function AppDetail({place,company,owner,rtl,item,text,failed}:{place:Apps
    setRun(idle);
    if(run.one) { toast(say('agentCanUse',nameOf(agent),item.name)); focusNext.current=`app-ag-${agent}`; }
    else { toast(say('connectedNames',item.name,names(done))); focusNext.current='apps-done'; }
-   router.refresh();
+   refreshApps();
   };
   timer=setTimeout(poll,pollEvery);
   return ()=>{ stopped=true; clearTimeout(timer); };
  // eslint-disable-next-line react-hooks/exhaustive-deps
- },[run,company,item.key,router]);
+ },[run,company,item.key,router,language,address]);
  // Leaving with a queue part done reads the apps again, so the list behind this page shows those Agents connected.
- const leaving=useRef({done:0,router});
- useEffect(()=>{ leaving.current={done:run.done.length,router}; });
- useEffect(()=>()=>{ if(leaving.current.done) leaving.current.router.refresh(); },[]);
+ const leaving=useRef({done:0,refreshApps});
+ useEffect(()=>{ leaving.current={done:run.done.length,refreshApps}; });
+ useEffect(()=>()=>{ if(leaving.current.done) leaving.current.refreshApps(); },[]);
  // The vendor's window is opened at the click, before the answer, so the browser lets it open; it is pointed at the
  // vendor once gtmworks has the sign-in page, and never knows this page.
  const connect=(queue:string[],one:boolean,done:string[]=[])=>startTransition(async()=>{
   const agent=queue[0]; if(!agent) return;
   setError('');
+  // A blocked window starts no sign-in, and the page stays where it is.
   const opened=window.open('about:blank','_blank');
+  if(!opened) { setError('popupBlocked'); return; }
   const answer=await ask({company,agent,app:item.key,action:'connect'});
-  if(!answer.ok) { opened?.close(); setError(`error.${String(answer.body.error||'appsFailed')}`); setRun(done.length?{queue,following:null,done,one}:idle); return; }
-  if(opened) { opened.opener=null; opened.location.href=String(answer.body.url); setRun({queue,following:agent,done,one}); }
-  else window.location.assign(String(answer.body.url));
+  if(!answer.ok) { opened.close(); setError(`error.${String(answer.body.error||'appsFailed')}`); setRun(done.length?{queue,following:null,done,one}:idle); return; }
+  opened.opener=null; opened.location.href=String(answer.body.url); vendor.current=opened; setRun({queue,following:agent,done,one});
  });
  const cancel=()=>startTransition(async()=>{
   if(run.following) await ask({company,agent:run.following,app:item.key,action:'cancel'});
-  setRun(idle); if(run.done.length) router.refresh();
+  setRun(idle); if(run.done.length) refreshApps();
  });
  const turnOff=(agent:AppAgent)=>startTransition(async()=>{
   setError('');
@@ -163,14 +184,14 @@ export function AppDetail({place,company,owner,rtl,item,text,failed}:{place:Apps
   if(!answer.ok) { setError(`error.${String(answer.body.error||'appsFailed')}`); return; }
   toast(say('agentCannotUse',agent.name,item.name),{icon:'x'});
   focusNext.current=`app-ag-${agent.id}`;
-  router.refresh();
+  refreshApps();
  });
  const disconnect=()=>startTransition(async()=>{
   const answer=await ask({company,app:item.key,action:'disconnect'});
   if(!answer.ok) { setError(`error.${String(answer.body.error||'appsFailed')}`); return; }
   toast(say('disconnected',item.name),{icon:'x'});
   if(place.kind==='address') router.replace(overlayHref(place.slug,'apps')); else place.back(item.key);
-  router.refresh();
+  void appsChanged(company,language); if(address) router.refresh();
  });
  const busy=pending||waiting;
  // Connect on an app that is off signs in for every picked Agent, in the list's order; none picked is said first.

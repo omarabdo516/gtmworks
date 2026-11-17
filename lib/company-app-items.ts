@@ -14,8 +14,8 @@ const catalogues:Text[]=[en,ar];
 
 // A Company's apps as Settings, Apps and the Connect apps sheet draw them (#30, #201): each with its state read now from
 // the Company's own profile in the Engine (lib/company-apps.mjs), in the reader's words; search reads an app's words in
-// both languages. null when the Engine or the database cannot be read: it never rejects, so the Shell can hand it to the
-// page unawaited. Read once per request, so a page that draws both shares the read.
+// both languages. null when the Engine or the database cannot be read; it never rejects. Settings reads it while drawing;
+// the sheet asks for it through GET /api/company-apps, so no other page waits on the Engine.
 export const companyAppItems=cache(async(company:string,language:Language):Promise<AppItem[]|null>=>{
  try {
   const apps=await readCompanyApps(await supabase(),createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false}}),{company,encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY});

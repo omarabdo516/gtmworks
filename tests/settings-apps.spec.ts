@@ -221,3 +221,23 @@ test('a Manager reads the states with no button, and the server refuses their co
   expect([fake.settings.appFlows.size,fake.settings.appCallbacks.length]).toEqual([flows,callbacks]);
  } finally { await context.close(); }
 });
+
+// The Shell reads no Engine (#201): a page is drawn and its sidebar shows Connect apps with no count, and the count lands
+// from GET /api/company-apps after it.
+test('a page is drawn with no read of the Engine, and the sidebar\'s count comes after it from the apps route',async({page})=>{
+ let release=()=>{}; const held=new Promise<void>(resolve=>{ release=resolve; });
+ const reads=/\/api\/company-apps\?company=/;
+ await page.route(reads,async route=>{ await held; await route.continue().catch(()=>{}); });
+ await signIn(page,'omar@example.com','/c/rs-learning/home');
+ const catalogueReads=()=>fake.settings.managementRequests.filter(request=>request.path?.startsWith('/api/mcp/catalog')).length;
+ const before=catalogueReads();
+ const drawn=await page.goto('/c/rs-learning/home');
+ await expect(page.locator('#btn-apps')).toHaveText('Connect apps');
+ expect(await drawn!.text(),'the page carries no count').not.toContain('sb-apps__n');
+ expect(catalogueReads(),'drawing the page asked the Engine nothing').toBe(before);
+ const answer=page.waitForResponse(response=>reads.test(response.url())&&response.request().method()==='GET');
+ release();
+ expect((await answer).headers()['cache-control']).toBe('no-store');
+ await expect(page.locator('#btn-apps .sb-apps__n')).toHaveText(/^\d+ connected$/);
+ expect(catalogueReads()).toBeGreaterThan(before);
+});

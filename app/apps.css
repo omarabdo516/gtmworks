@@ -1,8 +1,8 @@
 /* Settings, Apps (#30) and the Connect apps sheet (#201), ported from the approved reference (design-reference/index.html:
    «ربط التطبيقات» sheet, .sheet__*, .kv, .app-off, and "the apps catalogue, placed as it is" in the settings overlay).
-   The search, the chips, the empty state, the footer and the tiles are the shell's (app/shell.css); in Settings the
-   buttons, rows and notes are the overlay's (app/settings.css), and the sheet, which is not inside the overlay, draws the
-   same ones below. "Needs attention" has no approved look: it takes the reference's state text in the waiting colour. */
+   The search, the chips, the empty state, the footer and the tiles are the shell's (app/shell.css); the buttons, rows
+   and notes are the overlay's (app/settings.css), in Settings and in the sheet. "Needs attention" has no approved look:
+   it takes the reference's state text in the waiting colour. */
 .gw :is(.sov-apps, .apps-sheet) .apps-head { display: grid; gap: var(--s3); border-bottom: 0.5px solid var(--gw-border-3); }
 .gw .sov-apps .apps-head { padding: 0 0 var(--s4); }
 .gw :is(.sov-apps, .apps-sheet) .sheet__top { display: flex; align-items: center; gap: var(--s3); }
@@ -71,7 +71,12 @@
 .gw .apps-sheet .apps-head { padding: var(--s4) var(--s5) var(--s3); background: var(--gw-bg-chrome); }
 .gw .apps-sheet .apps-body { overflow-y: auto; min-height: 0; overscroll-behavior: contain; padding: var(--s4) var(--s5) var(--s6); }
 .gw .apps-sheet .modal__foot { padding-inline: var(--s5); }
-/* The overlay's pieces the apps use (app/settings.css), as the reference draws them. */
+/* The overlay's buttons, notes and hints are shared with the sheet in app/settings.css; their second-button colours are
+   the shell's here, where the overlay's root is not. */
+.gw .apps-sheet { --sov-btn2-bg: var(--gw-btn2-bg); --sov-btn2-ring: var(--gw-btn2-ring); --sov-btn2-hover: var(--gw-btn2-hover); }
+.gw .apps-sheet :where(p) { margin: 0; }
+.gw .apps-sheet :is(p, .set-hint) { text-wrap: pretty; }
+/* The rows, faces and switches of an app's Agents (#30): the overlay draws them in Settings (app/settings.css), the sheet here. */
 .gw .apps-sheet .panel-row { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 6px var(--s2); border-radius: var(--gw-r-sm); width: 100%; text-align: start; position: relative; color: var(--gw-text-1); }
 .gw .apps-sheet .panel-row + .panel-row::before { content: ""; position: absolute; top: 0; inset-inline: var(--s2); height: 0.5px; background: var(--gw-border-2); }
 .gw .apps-sheet .panel-row__text { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0; }
@@ -90,38 +95,4 @@
 [dir="ltr"] .gw .apps-sheet .switch[aria-checked="true"]::after { transform: translateX(12px); }
 :root[data-theme="dark"] .gw .apps-sheet .switch[aria-checked="true"]::after { background: #121212; }
 .gw .apps-sheet .switch[aria-disabled="true"] { opacity: .55; }
-.gw .apps-sheet .sov-icon { width: var(--od-icon-size, 18px); height: var(--od-icon-size, 18px); flex: none; display: inline-block; }
-.gw .apps-sheet .muted { color: var(--gw-text-3); }
-.gw .apps-sheet :is(p, .set-hint) { text-wrap: pretty; }
-.gw .apps-sheet .btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; padding: 0 var(--s4); border-radius: var(--gw-r-full);
-  font-size: var(--gw-fs-base); font-weight: 600; white-space: nowrap; --od-icon-size: 16px;
-}
-.gw .apps-sheet .btn--primary { background: var(--gw-primary); color: var(--gw-on-primary); }
-.gw .apps-sheet .btn--secondary { background: var(--gw-btn2-bg); color: var(--gw-text-1); box-shadow: var(--gw-btn2-ring) 0 0 0 1px inset; }
-.gw .apps-sheet :is(.btn--primary, .btn--secondary):disabled { background: var(--gw-primary-disabled); color: var(--gw-text-4); box-shadow: none; }
-.gw .apps-sheet .btn--sm { height: 30px; padding: 0 var(--s3); font-size: var(--gw-fs-sm); }
-.gw .apps-sheet .link-btn { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: var(--gw-r-xs); font-size: var(--gw-fs-sm); color: var(--gw-text-2); --od-icon-size: 14px; }
-@media (hover: hover) {
-  .gw .apps-sheet .btn--primary:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--gw-primary-hover); }
-  .gw .apps-sheet .btn--secondary:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--gw-btn2-hover); }
-  .gw .apps-sheet .link-btn:hover { background: var(--gw-bg-hover); color: var(--gw-text-1); }
-  .gw .apps-sheet button.panel-row:hover:not([aria-disabled="true"]) { background: var(--gw-bg-hover); }
-  .gw .apps-sheet .circle-btn:hover { background: var(--gw-bg-elevated-hover); }
-}
-.gw .apps-sheet .ro-note { display: flex; align-items: flex-start; gap: 6px; padding: 0; margin: 0; font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-2); --od-icon-size: 16px; }
-.gw .apps-sheet .ro-note .sov-icon { margin-top: 3px; color: var(--gw-text-3); }
-.gw .apps-sheet .sov-warn { padding: var(--s3) var(--s4); border-radius: var(--gw-r-md); background: var(--gw-wait-bg); color: var(--gw-wait-text); }
-.gw .apps-sheet .sov-warn .sov-icon { color: inherit; }
-.gw .apps-sheet .set-hint { margin: 0; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); }
-.gw .apps-sheet .set-err { margin: 0; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-danger-text); }
-.gw .apps-sheet .panel-form__row { display: flex; gap: var(--s2); }
-.gw .apps-sheet .panel-form__row--end { justify-content: flex-end; }
-@media (max-width: 767px) {
-  /* 44px touch targets on a phone (PRODUCT.md), as the overlay gives them (app/settings.css). */
-  .gw .apps-sheet :is(.circle-btn, .btn--sm, .link-btn, .tpl-cats .chip) { position: relative; }
-  .gw .apps-sheet .circle-btn::before { content: ""; position: absolute; inset: -4px; }
-  .gw .apps-sheet .tpl-cats .chip::before { content: ""; position: absolute; inset: -5px 0; }
-  .gw .apps-sheet .btn--sm::before { content: ""; position: absolute; inset: -7px 0; }
-  .gw .apps-sheet .link-btn::before { content: ""; position: absolute; inset: -11px 0; }
-}
+@media (hover: hover) { .gw .apps-sheet button.panel-row:hover:not([aria-disabled="true"]) { background: var(--gw-bg-hover); } }
