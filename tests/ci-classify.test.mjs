@@ -56,6 +56,20 @@ test('a failed test whose own error is a 429, and a later step that hit a rate l
   assert.deepEqual(outcome(classify(text)), yourChange);
 });
 
+test('a rate limit counts where the failed step ended: in an action\'s own error, from npm, or before a few lines of diagnostics', () => {
+  for (const [name, evidence] of [['constructed-action-rate-limit', /toomanyrequests/], ['constructed-npm-429', /E429|429 Too Many Requests/], ['constructed-registry-rate-limit', /Rate exceeded/]]) {
+    const result = classify(log(name));
+    assert.deepEqual(outcome(result), infrastructure('registry rate limit'), name);
+    assert.match(result.evidence, evidence, name);
+  }
+});
+
+test('what an earlier step printed, or a failed test prints, is not where the job ended', () => {
+  for (const name of ['constructed-short-failed-step', 'constructed-node-test-port', 'constructed-quoted-shutdown']) {
+    assert.deepEqual(outcome(classify(log(name))), yourChange, name);
+  }
+});
+
 test('any other red is your change', () => {
   for (const job of ['database-133610408482', 'integration-133640016093', 'integration-133599861446']) {
     assert.deepEqual(outcome(classify(log(job))), yourChange, job);

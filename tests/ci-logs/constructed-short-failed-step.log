@@ -1,0 +1,10 @@
+2026-11-16T20:33:14.7402261Z Current runner version: '2.338.2'
+2026-11-16T20:33:14.7451825Z ##[group]Runner Image Provisioner
+2026-11-16T20:33:14.7452761Z Hosted Compute Agent
+[excerpt: lines omitted]
+2026-11-16T20:33:20.0000000Z ##[group]Run node scripts/ci-runner.mjs cleanup
+2026-11-16T20:33:20.5000000Z failed to bind host port 0.0.0.0:54322/tcp: address already in use
+2026-11-16T20:33:20.6000000Z removed the stopped stack that held it; the port is free
+2026-11-16T20:33:21.0000000Z ##[group]Run node scripts/verify-db.mjs supabase/migrations/20261116000000_x.verify.sql
+2026-11-16T20:33:21.5000000Z supabase/migrations/20261116000000_x.verify.sql: 1 check failed
+2026-11-16T20:33:21.5400000Z ##[error]Process completed with exit code 1.

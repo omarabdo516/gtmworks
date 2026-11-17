@@ -1,0 +1,18 @@
+2026-11-16T20:33:14.7402261Z Current runner version: '2.338.2'
+2026-11-16T20:33:14.7451825Z ##[group]Runner Image Provisioner
+2026-11-16T20:33:14.7452761Z Hosted Compute Agent
+[excerpt: lines omitted]
+2026-11-16T20:33:40.0000000Z ##[group]Run docker/build-push-action@v6
+2026-11-16T20:33:40.0000001Z with:
+2026-11-16T20:33:40.0000002Z   context: .
+2026-11-16T20:33:40.0000003Z ##[endgroup]
+2026-11-16T20:34:01.0000000Z #3 [internal] load metadata for docker.io/library/node:22-bookworm-slim
+2026-11-16T20:34:01.5000000Z #3 ERROR: failed to authorize: failed to fetch anonymous token: unexpected status from GET request to https://auth.docker.io/token: 429 Too Many Requests
+2026-11-16T20:34:01.6000000Z ------
+2026-11-16T20:34:01.6000001Z  > [internal] load metadata for docker.io/library/node:22-bookworm-slim:
+2026-11-16T20:34:01.6000002Z ------
+2026-11-16T20:34:01.7000000Z ##[error]buildx failed with: ERROR: failed to solve: node:22-bookworm-slim: failed to resolve source metadata for docker.io/library/node:22-bookworm-slim: toomanyrequests: You have reached your unauthenticated pull rate limit
+2026-11-16T20:34:01.8000000Z ##[group]Run actions/upload-artifact@v4
+2026-11-16T20:34:02.0000000Z No files were found with the provided path: test-results/screenshots/. No artifacts will be uploaded.
+2026-11-16T20:34:03.0000000Z ##[group]Run node scripts/ci-runner.mjs cleanup
+2026-11-16T20:34:04.0000000Z removed 0 objects

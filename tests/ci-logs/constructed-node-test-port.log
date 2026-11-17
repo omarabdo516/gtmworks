@@ -1,0 +1,15 @@
+2026-11-16T20:33:14.7402261Z Current runner version: '2.338.2'
+2026-11-16T20:33:14.7451825Z ##[group]Runner Image Provisioner
+2026-11-16T20:33:14.7452761Z Hosted Compute Agent
+[excerpt: lines omitted]
+2026-11-16T20:33:20.0000000Z ##[group]Run ./ci.sh static
+2026-11-16T20:34:50.0000000Z ✖ cleanup names what it could not remove (12.3ms)
+2026-11-16T20:34:50.0000001Z   AssertionError [ERR_ASSERTION]: The input did not match the regular expression /could not remove/. Input:
+2026-11-16T20:34:50.0000002Z   
+2026-11-16T20:34:50.0000003Z   'Bind for 0.0.0.0:54322 failed: port is already allocated\n'
+2026-11-16T20:34:50.0000004Z   
+2026-11-16T20:34:50.0000005Z       at TestContext.<anonymous> (file:///home/runner/work/gtmworks/gtmworks/tests/ci-runners.test.mjs:265:9)
+2026-11-16T20:34:51.0000000Z ℹ tests 810
+2026-11-16T20:34:51.0000001Z ℹ pass 809
+2026-11-16T20:34:51.0000002Z ℹ fail 1
+2026-11-16T20:34:51.0400000Z ##[error]Process completed with exit code 1.

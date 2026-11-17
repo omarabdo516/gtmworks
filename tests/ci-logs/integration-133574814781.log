@@ -1,12 +1,29 @@
-﻿2026-11-16T20:03:24.3193509Z Current runner version: '2.338.0'
+2026-11-16T20:03:24.3193509Z Current runner version: '2.338.0'
 2026-11-16T20:03:24.3200365Z Runner name: 'omar-pc-ci_gtmworks'
 2026-11-16T20:03:24.3201027Z Runner group name: 'Default'
+[excerpt: lines omitted]
+2026-11-16T20:03:37.7687734Z ##[group]Run '/usr/local/bin/ci-job-cleanup.sh'
+[excerpt: lines omitted]
+2026-11-16T20:03:40.9361365Z ##[group]Run actions/checkout@v4
+[excerpt: lines omitted]
+2026-11-16T20:03:42.9228473Z ##[group]Run actions/setup-node@v4
+[excerpt: lines omitted]
+2026-11-16T20:03:43.2248260Z ##[group]Run node scripts/ci-runner.mjs cleanup
+[excerpt: lines omitted]
+2026-11-16T20:03:43.7523519Z ##[group]Run node scripts/ci-runner.mjs lanes "$RUNNER_ENVIRONMENT" >> "$GITHUB_ENV"
+[excerpt: lines omitted]
+2026-11-16T20:03:43.7925875Z ##[group]Run docker/build-push-action@v6
+[excerpt: lines omitted]
+2026-11-16T20:03:48.6557146Z ##[group]Run ./ci.sh integration
 [excerpt: lines omitted]
 2026-11-16T20:05:16.7404874Z [evidence] POST https://app.gtmworks.test/api/recent-cards -> 200
 2026-11-16T20:05:17.1972849Z [evidence] request failed: POST https://app.gtmworks.test/c/rs-learning/settings/members net::ERR_NETWORK_CHANGED
 2026-11-16T20:05:17.1977524Z [evidence] console error: Failed to load resource: net::ERR_NETWORK_CHANGED
 2026-11-16T20:05:17.1980411Z [evidence] request failed: GET https://app.gtmworks.test/_next/static/chunks/8343-c7b3055098a6d365.js net::ERR_NETWORK_CHANGED
 2026-11-16T20:05:17.1985380Z [evidence] console error: Failed to load resource: net::ERR_NETWORK_CHANGED
+2026-11-16T20:05:17.1989799Z [evidence] request failed: GET https://app.gtmworks.test/_next/static/chunks/app/c/%5Bslug%5D/chat/%5B%5B...agent%5D%5D/page-ee41b4106e9e636a.js net::ERR_NETWORK_CHANGED
+2026-11-16T20:05:17.1992647Z [evidence] console error: Failed to load resource: net::ERR_NETWORK_CHANGED
+2026-11-16T20:05:17.1998511Z [evidence] request failed: GET https://app.gtmworks.test/c/rs-learning/chat?_rsc=M6dRPN-aUjhucU8N net::ERR_NETWORK_CHANGED
 [excerpt: lines omitted]
 2026-11-16T20:05:32.7832160Z ##[error]  1) tests/proxy/production-shape.spec.ts:28:5 › Send invitation shows its confirmation, the address gets the link and the link signs the member in 
     Error: expect(locator).toContainText(expected) failed
@@ -36,6 +53,31 @@
 
 
 [excerpt: lines omitted]
+2026-11-16T20:05:53.3988187Z       35 |   let link = '';
+2026-11-16T20:05:53.3989395Z       36 |   for (let i = 0; i < 30 && !link; i++) {
+2026-11-16T20:05:53.3990327Z       37 |     const mailbox = await (await page.request.get(inbox)).json();
+2026-11-16T20:05:53.3992064Z         at /srv/ci/_work/gtmworks/gtmworks/gtmworks/tests/proxy/production-shape.spec.ts:34:90
+2026-11-16T20:05:53.3992660Z 
+2026-11-16T20:05:53.3992954Z     Error Context: test-results/production-shape-Send-invi-eec62-he-link-signs-the-member-in/error-context.md
+2026-11-16T20:05:53.3993560Z 
+2026-11-16T20:05:53.3994345Z   2) tests/proxy/production-shape.spec.ts:66:5 › a key that cannot be revoked says so instead of staying silently active 
+2026-11-16T20:05:53.3994884Z 
+2026-11-16T20:05:53.3995327Z     Error: expect(locator).toBeVisible() failed
+2026-11-16T20:05:53.3995599Z 
+2026-11-16T20:05:53.3996152Z     Locator: locator('.agent-secret code')
+2026-11-16T20:05:53.3996708Z     Expected: visible
+2026-11-16T20:05:53.3997415Z     Timeout: 15000ms
+2026-11-16T20:05:53.3998460Z     Error: element(s) not found
+2026-11-16T20:05:53.3998822Z 
+2026-11-16T20:05:53.3999199Z     Call log:
+2026-11-16T20:05:53.3999962Z       - Expect "toBeVisible" locator('.agent-secret code') with timeout 15000ms
+2026-11-16T20:05:53.4000694Z       - waiting for locator('.agent-secret code')
+2026-11-16T20:05:53.4001214Z 
+2026-11-16T20:05:53.4001219Z 
+2026-11-16T20:05:53.4001976Z       70 |   await page.getByRole('menuitemradio', { name: 'Lead', exact: true }).click();
+2026-11-16T20:05:53.4002909Z       71 |   await page.getByRole('button', { name: 'Create key' }).click();
+2026-11-16T20:05:53.4003725Z     > 72 |   await expect(page.locator('.agent-secret code')).toBeVisible({ timeout: 15000 });
+2026-11-16T20:05:53.4004638Z          |                                                    ^
 2026-11-16T20:05:53.4005386Z       73 |   await page.reload();
 2026-11-16T20:05:53.4006119Z       74 |   // The request names a company the person has no key in, so the database changes nothing.
 2026-11-16T20:05:53.4007065Z       75 |   await page.locator('.agent-key-row input[name=company]').first().evaluate(input => { (input as HTMLInputElement).value = '00000000-0000-0000-0000-000000000000'; });
@@ -52,3 +94,12 @@
     tests/proxy/production-shape.spec.ts:66:5 › a key that cannot be revoked says so instead of staying silently active 
   5 passed (40.8s)
 2026-11-16T20:05:53.4098679Z ##[error]Process completed with exit code 1.
+2026-11-16T20:05:53.4255862Z ##[group]Run actions/upload-artifact@v4
+[excerpt: lines omitted]
+2026-11-16T20:05:53.5990700Z ##[group]Run actions/upload-artifact@v4
+[excerpt: lines omitted]
+2026-11-16T20:05:53.7196222Z ##[group]Run echo "the runner's memory group, peak since it started: $(( $(cat "/sys/fs/cgroup$(sed -n 's/^0:://p' /proc/self/cgroup)/memory.peak" 2> /dev/null || echo 0) / 1048576 )) MiB"
+[excerpt: lines omitted]
+2026-11-16T20:05:56.0343415Z ##[group]Run node scripts/ci-runner.mjs cleanup
+[excerpt: lines omitted]
+2026-11-16T20:06:02.9679039Z ##[group]Run '/usr/local/bin/ci-job-cleanup.sh'

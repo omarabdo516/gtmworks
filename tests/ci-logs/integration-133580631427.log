@@ -1,11 +1,27 @@
-﻿2026-11-16T20:12:57.2183847Z Current runner version: '2.338.0'
+2026-11-16T20:12:57.2183847Z Current runner version: '2.338.0'
 2026-11-16T20:12:57.2189524Z Runner name: 'omar-pc-ci_gtmworks'
 2026-11-16T20:12:57.2190071Z Runner group name: 'Default'
+[excerpt: lines omitted]
+2026-11-16T20:13:26.2387719Z ##[group]Run '/usr/local/bin/ci-job-cleanup.sh'
+[excerpt: lines omitted]
+2026-11-16T20:13:27.4221800Z ##[group]Run actions/checkout@v4
+[excerpt: lines omitted]
+2026-11-16T20:13:29.3739659Z ##[group]Run actions/setup-node@v4
+[excerpt: lines omitted]
+2026-11-16T20:13:29.7771038Z ##[group]Run node scripts/ci-runner.mjs cleanup
+[excerpt: lines omitted]
+2026-11-16T20:13:30.0768107Z ##[group]Run node scripts/ci-runner.mjs lanes "$RUNNER_ENVIRONMENT" >> "$GITHUB_ENV"
+[excerpt: lines omitted]
+2026-11-16T20:13:30.1073000Z ##[group]Run docker/build-push-action@v6
+[excerpt: lines omitted]
+2026-11-16T20:14:35.2335240Z ##[group]Run ./ci.sh integration
 [excerpt: lines omitted]
 2026-11-16T20:16:22.7959894Z   ✓  5 tests/proxy/production-shape.spec.ts:80:5 › the old all-companies address is not found through the proxy (725ms)
 2026-11-16T20:16:22.9942250Z [evidence] request failed: GET https://app.gtmworks.test/_next/static/chunks/6572.a0f65ee950410ea1.js net::ERR_NETWORK_CHANGED
 2026-11-16T20:16:22.9942691Z [evidence] console error: Failed to load resource: net::ERR_NETWORK_CHANGED
 2026-11-16T20:16:23.0025654Z [WebServer] {"event":"client_error","at":"2026-11-16T20:16:23.001Z","source":"sign-in","path":"/sign-in","stage":"password","status":null,"code":null,"digest":null,"message":"Sign-in failed: ChunkLoadError unknown none","stack":null,"userAgent":"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.8078.4 Safari/537.36"}
+2026-11-16T20:16:23.0062423Z [evidence] POST https://app.gtmworks.test/api/client-errors -> 204
+2026-11-16T20:16:37.9622338Z   ✘  6 tests/proxy/production-shape.spec.ts:87:5 › a server action whose request fails shows an error and reports it (15.1s)
 [excerpt: lines omitted]
 2026-11-16T20:16:37.9645635Z ##[error]  1) tests/proxy/production-shape.spec.ts:87:5 › a server action whose request fails shows an error and reports it 
     Error: expect(received).not.toBe(expected) // Object.is equality
@@ -20,7 +36,30 @@
       12 |   await page.getByRole('button',{name:'Sign in',exact:true}).click();
       13 |   const outcome=async()=>!new URL(page.url()).pathname.startsWith('/sign-in')?'signed in':await page.getByText('Wrong email or password.').isVisible()?'wrong':await page.getByText('Too many sign-in attempts. Try again later.').isVisible()?'limited':'waiting';
     > 14 |   await expect.poll(outcome,{timeout:15000}).not.toBe('waiting');
-[excerpt: lines omitted]
+         |                                                  ^
+      15 |   const result=await outcome();
+      16 |   if(result==='signed in') return;
+      17 |   if(result==='wrong') throw new Error(`Sign-in refused for ${email}: wrong email or password`);
+        at signIn (/srv/ci/_work/gtmworks/gtmworks/gtmworks/tests/sign-in.ts:14:50)
+        at /srv/ci/_work/gtmworks/gtmworks/gtmworks/tests/proxy/production-shape.spec.ts:89:3
+2026-11-16T20:16:38.3826048Z [WebServer] {"event":"client_error","at":"2026-11-16T20:16:38.381Z","source":"promise","path":"/sign-in","stage":null,"status":null,"code":null,"digest":null,"message":"forced failure","stack":"Error: forced failure\n    at eval (eval at evaluate (:370:30), <anonymous>:2:25)\n    at UtilityScript.evaluate (<anonymous>:372:16)\n    at UtilityScript.<anonymous> (<anonymo
+2026-11-16T20:16:38.3950868Z   ✓  7 tests/proxy/production-shape.spec.ts:99:5 › a rejection nobody handled is shown on the page (143ms)
+2026-11-16T20:16:38.5551287Z 
+2026-11-16T20:16:38.5553099Z 
+2026-11-16T20:16:38.5558097Z   1) tests/proxy/production-shape.spec.ts:87:5 › a server action whose request fails shows an error and reports it 
+2026-11-16T20:16:38.5558525Z 
+2026-11-16T20:16:38.5558787Z     Error: expect(received).not.toBe(expected) // Object.is equality
+2026-11-16T20:16:38.5559041Z 
+2026-11-16T20:16:38.5559131Z     Expected: not "waiting"
+2026-11-16T20:16:38.5559275Z 
+2026-11-16T20:16:38.5559358Z     Call Log:
+2026-11-16T20:16:38.5559670Z     - Timeout 15000ms exceeded while waiting on the predicate
+2026-11-16T20:16:38.5559892Z 
+2026-11-16T20:16:38.5559991Z        at ../sign-in.ts:14
+2026-11-16T20:16:38.5560147Z 
+2026-11-16T20:16:38.5560363Z       12 |   await page.getByRole('button',{name:'Sign in',exact:true}).click();
+2026-11-16T20:16:38.5561448Z       13 |   const outcome=async()=>!new URL(page.url()).pathname.startsWith('/sign-in')?'signed in':await page.getByText('Wrong email or password.').isVisible()?'wrong':await page.getByText('Too many sign-in attempts. Try again later.').isVisible()?'limited':'waiting';
+2026-11-16T20:16:38.5562453Z     > 14 |   await expect.poll(outcome,{timeout:15000}).not.toBe('waiting');
 2026-11-16T20:16:38.5562827Z          |                                                  ^
 2026-11-16T20:16:38.5563124Z       15 |   const result=await outcome();
 2026-11-16T20:16:38.5563403Z       16 |   if(result==='signed in') return;
@@ -37,3 +76,12 @@
     tests/proxy/production-shape.spec.ts:87:5 › a server action whose request fails shows an error and reports it 
   6 passed (28.5s)
 2026-11-16T20:16:38.5683241Z ##[error]Process completed with exit code 1.
+2026-11-16T20:16:38.5729519Z ##[group]Run actions/upload-artifact@v4
+[excerpt: lines omitted]
+2026-11-16T20:16:38.6906688Z ##[group]Run actions/upload-artifact@v4
+[excerpt: lines omitted]
+2026-11-16T20:16:38.8050780Z ##[group]Run echo "the runner's memory group, peak since it started: $(( $(cat "/sys/fs/cgroup$(sed -n 's/^0:://p' /proc/self/cgroup)/memory.peak" 2> /dev/null || echo 0) / 1048576 )) MiB"
+[excerpt: lines omitted]
+2026-11-16T20:16:41.0878096Z ##[group]Run node scripts/ci-runner.mjs cleanup
+[excerpt: lines omitted]
+2026-11-16T20:16:47.9950952Z ##[group]Run '/usr/local/bin/ci-job-cleanup.sh'
