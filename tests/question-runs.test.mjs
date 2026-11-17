@@ -24,6 +24,7 @@ function databases(/** @type {ReturnType<typeof fakeEngine>} */ fake) {
     for(const card of cards) if(card.run===args.run&&card.state==='open'&&(args.ended||card.question!==args.asking?.id&&card.at<args.read_started_at)) card.state='closed';
     return ok(cards.filter(card=>card.run===args.run&&card.state==='sending').map(card=>({card:card.id,question:card.question,answer:card.content.answer})));
    }
+   if(name==='track_run_permission') return ok([]);
    if(name==='settle_question') { const card=cards.find(each=>each.id===args.card); if(card?.state==='sending') card.state=args.verdict; return ok(card?.state); }
    if(name==='close_conversation_run') { closed.set(args.run,args); return ok(true); }
    return {data:null,error:{message:'unexpected'}};
