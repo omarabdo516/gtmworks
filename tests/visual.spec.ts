@@ -413,6 +413,14 @@ const screenStates: Record<string, { set: string, unset: string, admin?: true }>
 };
 // The Agent details' Files tab (#21): Meta Ads with a file on its June brief Card and one in Omar's own Conversation with
 // it, as the agent-details state holds them, written with triggers off and taken away after.
+// Numbers' figures read this week's agent rows of the log; a filter is only weighed on rows the read finds, so the
+// slowed log needs one for the figures to wait (#172).
+screenStates['numbers-loading'] = {
+  admin: true,
+  set: `insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,agent_id,action,details,source,source_id,created_at) values
+    ('${rsLearning}','6f000000-0000-0000-0000-000000000001','agent','Ads','agent','6f000000-0000-0000-0000-000000000001','agent_changed','{"agent_name":"Ads"}','hermes_agent_audit',691172,now()-interval '1 hour');`,
+  unset: `delete from public.company_log where source='hermes_agent_audit' and source_id=691172;`,
+};
 screenStates['agent-files'] = {
   admin: true,
   set: `${screenStates['agent-details'].set}
@@ -484,10 +492,7 @@ const openSlowly = (path: string, link: string, placeholder: string, table: stri
     await page.locator(link).click();
     held.letGo();
     // The page's own reads can wait on the slowed table too; the waiting part only starts reading after them.
-    await expect(page.locator(placeholder)).toBeVisible({ timeout: 15000 }).catch(async error => {
-      console.log(`[172-visual] ${page.url()} ${JSON.stringify(await page.evaluate(() => ({ main: document.querySelector('main')?.className, busy: document.querySelectorAll('[aria-busy]').length, kpis: document.querySelectorAll('.kpis .kpi').length, segments: [...document.querySelectorAll('div[hidden][id^="S:"]')].length })))}`);
-      throw error;
-    });
+    await expect(page.locator(placeholder)).toBeVisible({ timeout: 15000 });
     await expect(page.locator('.sidebar.is-open')).toHaveCount(0);
     const width = page.viewportSize()!.width;
     await page.setViewportSize({ width, height: 900 });
