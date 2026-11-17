@@ -58,12 +58,13 @@ export function AppsSheetProvider({company,owner,rtl,children}:{company:string,o
  const item=sheet.phase!=='closed'&&sheet.view?items?.find(entry=>entry.key===sheet.view):undefined;
  return <AppsContext.Provider value={{items,open}}>
   {children}
-  <dialog ref={box} className={`sheet apps-sheet${sheet.phase==='closing'?' is-closing':''}`} id="apps" aria-labelledby="apps-title"
+  {/* Drawn only while open or leaving, so a page with the sheet closed holds no dialog. */}
+  {sheet.phase!=='closed'&&<dialog ref={box} className={`sheet apps-sheet${sheet.phase==='closing'?' is-closing':''}`} id="apps" aria-labelledby="apps-title"
    onCancel={event=>{ if(event.cancelable) { event.preventDefault(); close(); } }} onClose={closed} onClick={event=>{ if(event.target===event.currentTarget) close(); }}>
-   {sheet.phase!=='closed'&&<div className="apps-inner">{item
+   <div className="apps-inner">{item
     ?<AppDetail key={item.key} place={place} company={company} owner={owner} rtl={rtl} item={item} text={text} soon={t('soon')} failed={false}/>
-    :<AppsList place={place} owner={owner} items={items} text={text}/>}</div>}
-  </dialog>
+    :<AppsList place={place} owner={owner} items={items} text={text}/>}</div>
+  </dialog>}
  </AppsContext.Provider>;
 }
 
