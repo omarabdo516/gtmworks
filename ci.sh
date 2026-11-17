@@ -120,8 +120,13 @@ PY
   bash scripts/local-db.sh
   dir=$(ledger_dir database)
   # Every verify file in one psql session, each reported by name with its own ledger line (#259).
-  DB_LEDGER="$PWD/$dir/database.jsonl" node scripts/verify-db-session.mjs \
-    "supabase_db_$(sed -n 's/^project_id = "\(.*\)"$/\1/p' supabase/config.toml)" supabase/migrations/*.verify.sql scripts/check-rls.sql
+  container="supabase_db_$(sed -n 's/^project_id = "\(.*\)"$/\1/p' supabase/config.toml)"
+  DB_LEDGER="$PWD/$dir/database.jsonl" node scripts/verify-db-session.mjs "$container" supabase/migrations/*.verify.sql scripts/check-rls.sql
+  # The session itself, on real psql: a file whose first statement fails and whose second passes must fail.
+  if canary=$(node scripts/verify-db-session.mjs "$container" tests/verify-db-session-canary.sql 2>&1) \
+    || [[ $canary != *'tests/verify-db-session-canary.sql: division by zero'* ]]; then
+    echo "$canary" >&2; echo 'the verify session did not fail its canary for the failed first statement' >&2; exit 1
+  fi
   # tests/db.sh writes one line per step of its own.
   DB_LEDGER="$PWD/$dir/database.jsonl" npm run test:db
   ;;

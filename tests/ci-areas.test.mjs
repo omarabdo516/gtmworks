@@ -90,7 +90,7 @@ for (const path of [
   // tests/bootstrap-db.mjs runs this file's SQL against the real constraints and triggers.
   'scripts/bootstrap-owner.mjs',
   // The verify session, the migration replays' shared pgTAP runner and the stack's cached images (#259).
-  'scripts/verify-db-session.mjs', 'tests/pgtap.mjs', 'scripts/supabase-images.sh',
+  'scripts/verify-db-session.mjs', 'tests/pgtap.mjs', 'tests/verify-db-session-canary.sql', 'scripts/supabase-images.sh',
 ]) {
   test(`${path} runs the database tests`, () => assert.equal(areas('app/page.tsx', path).database, 'true'));
 }
