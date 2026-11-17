@@ -7,8 +7,9 @@ import { appOrigin, lane } from './lane.mjs';
 import { appByKey, appConfig } from '../lib/app-catalogue.mjs';
 
 // #30, Settings, Apps. RS Learning runs on its own profile in a fake Engine whose MCP catalogue and sign-ins answer as the
-// pinned release's do. The list and each app's state come from that Engine; the Owner connects an app through the
-// vendor's window, which returns through gtmworks, and disconnects it; both are in the Activity log. A Manager reads the
+// pinned release's do; Lead, its main Agent, keeps that profile. The list and each app's state come from that Engine; the
+// Owner connects an app for Lead through the vendor's window, which returns through gtmworks, and disconnects it; both
+// are in the Activity log with Lead's name. A Manager reads the
 // states only, and the server refuses them. The Connect apps sheet (#201), opened from the sidebar over any page, holds
 // the same list and pages; a Viewer reads it too. No screen names the Engine or shows a file path.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
@@ -150,7 +151,7 @@ test('the Owner connects an app through the vendor\'s window and disconnects it;
  await vendor.close();
 
  await page.locator('#app-off').click();
- await expect(page.locator('#app-off-t')).toHaveText('Disconnect Canva? Your agents won’t be able to reach it until you connect it again.');
+ await expect(page.locator('#app-off-t')).toHaveText('Disconnect Canva? Lead won’t be able to reach it until you connect it again.');
  await page.locator('#app-off-go').click();
  await expect(page).toHaveURL(/\/c\/rs-learning\/settings\?section=apps$/);
  await expect(card(page,'Canva').locator('.app__state')).toHaveText('Not connected');
@@ -159,7 +160,7 @@ test('the Owner connects an app through the vendor\'s window and disconnects it;
  expect(JSON.parse(query(`select actor_id,action,details->>'app' as app from public.company_log where company_id='${company}' and action in ('app_connected','app_disconnected') order by id`)))
   .toEqual([{actor_id:omar,action:'app_connected',app:'canva'},{actor_id:omar,action:'app_disconnected',app:'canva'}]);
  await page.goto('/c/rs-learning/log');
- for(const act of ['connected','disconnected']) {
+ for(const act of ['let Lead use','stopped Lead using']) {
   const row=page.locator('.lgp-body .lg-row').filter({has:page.locator('.lg-act',{hasText:new RegExp(`^${act}$`)})}).filter({has:page.locator('.lg-obj',{hasText:'Canva'})}).first();
   await expect(row.locator('.lg-name')).toHaveText('عمر');
  }
