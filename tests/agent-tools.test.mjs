@@ -79,7 +79,7 @@ test('create_agent makes the Agent its own profile, and the database attaches it
  assert.deepEqual(fake.removed,[]);
 });
 
-test('a profile the Engine made but could not provide leaves the Agent on Lead\'s profile, and stays in the Engine',async()=>{
+test('a profile the Engine could not provide (forbidden, failed, refused) is not sent as the Agent\'s own, so the database decides where the Agent goes, and the profile stays in the Engine',async()=>{
  for(const state of /** @type {const} */(['forbidden','failed','refused'])) {
   const {fake,engine,rpcs,call}=harness({},{state:'created',agent:'agent-1'},own);
   await leadReady(engine); fake.settings.agentProfile=state;
