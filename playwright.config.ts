@@ -1,11 +1,16 @@
 import { randomBytes } from 'node:crypto';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { defineConfig } from '@playwright/test';
+// Offline by default (#266): the runner, its workers and the servers below refuse outside connections and name the host.
+import './tests/offline.mjs';
 import { appOrigin, lanes, originOf, serverLogOf } from './tests/lane.mjs';
 // First run opens only with the install's setup code (issue #50). The web server and the test workers inherit this one.
 process.env.SETUP_CODE ||= randomBytes(32).toString('hex');
 // Each run's spec files restore the seed before they start (tests/fresh-seed.ts); the workers inherit this run's name.
 process.env.GTMWORKS_TEST_RUN ||= randomBytes(8).toString('hex');
 const hostedElsewhere = process.env.GTMWORKS_HOSTED_ELSEWHERE === 'true';
+const offline = [process.env.NODE_OPTIONS, `--import=${pathToFileURL(resolve('tests/offline.mjs')).href}`].filter(Boolean).join(' ');
 export default defineConfig({
   testDir: './tests',
   testMatch: '*.spec.ts',
@@ -18,7 +23,7 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   use: { baseURL: appOrigin },
   // Lane 0 builds the app and serves it; every other lane serves that build on its own port (scripts/web.sh).
-  webServer: Array.from({ length: lanes }, (_, n) => ({ command: `mkdir -p playwright-report && LANE=${n} bash scripts/web.sh production > ${serverLogOf(n)} 2>&1`, url: `${originOf(n)}/sign-in`, reuseExistingServer: false, timeout: 240000 })),
+  webServer: Array.from({ length: lanes }, (_, n) => ({ command: `mkdir -p playwright-report && LANE=${n} bash scripts/web.sh production > ${serverLogOf(n)} 2>&1`, url: `${originOf(n)}/sign-in`, reuseExistingServer: false, timeout: 240000, env: { NODE_OPTIONS: offline, GTMWORKS_BUILD_NODE_OPTIONS: process.env.NODE_OPTIONS ?? '' } })),
   // Playwright's own reporters only: CI uploads the HTML report, the GitHub reporter marks failures and flaky tests on
   // the run, and ci.sh asks for the JSON one for the CI ledger (#256). The report keeps a folder of its own, since the
   // servers write their logs to playwright-report/.

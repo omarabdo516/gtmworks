@@ -1,4 +1,6 @@
 import { defineConfig } from '@playwright/test';
+// Offline by default (#266): the runner and its workers refuse outside connections and name the host.
+import './tests/offline.mjs';
 const host = 'app.gtmworks.test';
 // The same pages as the main suite, reached the way people reach them on the server: https, a public-looking host
 // name, a reverse proxy in front of the production image (scripts/proxy-stack.sh).

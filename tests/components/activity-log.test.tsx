@@ -34,7 +34,7 @@ test('a filter that matches nothing says so, still holds once the page has loade
  await loaded();
  expect(push).not.toHaveBeenCalled();
  await expect.element(screen.getByLabelText('Who')).toHaveValue(gone);
- screen.unmount();
+ await screen.unmount();
 
  // A log with no rows at all says it is empty, and has nothing to offer back.
  const empty = await render(log('all', 'all', 0));

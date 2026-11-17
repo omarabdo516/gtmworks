@@ -51,7 +51,7 @@ test('only an Owner or a Manager has "+", which opens New channel', async () => 
  vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
  const reader = await list();
  await expect.element(reader.getByRole('button', { name: 'New channel' })).not.toBeInTheDocument();
- reader.unmount();
+ await reader.unmount();
  const manager = await list({ manage: true });
  await manager.getByRole('button', { name: 'New channel' }).click();
  await expect.element(manager.getByRole('dialog', { name: 'New channel' })).toBeVisible();

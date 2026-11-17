@@ -90,8 +90,9 @@ PY
   # Unused files, exports and dependencies (knip.json), as T3 Code checks them (#81).
   npx --no-install knip --no-progress
   dir=$(ledger_dir static)
-  # `npm test`'s files, with the ledger reporter beside the usual one; the flags must come before the glob.
-  node --test --test-reporter=spec --test-reporter-destination=stdout \
+  # `npm test`'s files, offline as `npm test` runs them, with the ledger reporter beside the usual one; the flags must come
+  # before the glob.
+  node --import ./tests/offline.mjs --test --test-reporter=spec --test-reporter-destination=stdout \
     --test-reporter=./scripts/ci-ledger-node.mjs --test-reporter-destination="$dir/node.jsonl" 'tests/**/*.test.mjs'
   ;;
  components)

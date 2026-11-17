@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from '../offline-browser';
 import { inbox, mail } from '../lane.mjs';
 import { signIn } from '../sign-in';
 

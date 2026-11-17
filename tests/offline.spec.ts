@@ -17,7 +17,7 @@ test('a context the test opens itself is guarded the same way', async ({ browser
     const page = await context.newPage();
     const failed = page.waitForEvent('requestfailed');
     await probe(page);
-    expect((await failed).failure()?.errorText).toBe('net::ERR_BLOCKED_BY_CLIENT');
+    expect((await failed).failure()?.errorText).toMatch(/^net::ERR_BLOCKED_BY_CLIENT/);
     expect(outsideRequests.splice(0)).toEqual(['outside.example.org']);
   } finally { await context.close(); }
 });

@@ -1,10 +1,10 @@
-import { test as base } from '@playwright/test';
+import { test as base } from './offline-browser';
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { dbContainerOf, seedSnapshotOf } from './lane.mjs';
 
-export * from '@playwright/test';
+export * from './offline-browser';
 
 // Every functional spec file starts from the database exactly as the seed builds it (#69): before its first test, or in
 // its own beforeAll when it prepares data there, the lane's data is put back from the snapshot scripts/local-db.sh took.

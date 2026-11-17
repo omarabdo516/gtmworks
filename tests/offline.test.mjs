@@ -46,7 +46,7 @@ test('a file that swallows a refused outside request fails, and the run names th
       "  assert.equal(error.message, 'offline test run: refused a connection to outside.example.org:443 (tests/offline.mjs)');",
       '});',
     ].join('\n'));
-    const { NODE_TEST_CONTEXT: _, ...env } = process.env;
+    const env = { ...process.env, NODE_TEST_CONTEXT: undefined };
     const run = spawnSync(process.execPath, ['--import', pathToFileURL(resolve('tests/offline.mjs')).href, '--test', '--test-reporter=spec', join(dir, 'swallow.test.mjs')], { encoding: 'utf8', env });
     const output = run.stdout + run.stderr;
     assert.notEqual(run.status, 0, output);
