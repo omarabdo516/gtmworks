@@ -18,7 +18,9 @@ const TICK_MS=140;
 const baseBars=()=>Array.from({length:WAVE_N},(_,index)=>0.3+0.5*Math.abs(Math.sin(index*0.9)));
 const clock=(seconds:number)=>`${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`;
 const reducedMotion=()=>typeof window!=='undefined'&&!!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-const languageName=(language:string)=>{ try { return new Intl.DisplayNames(['en'],{type:'language'}).of(language)||language; } catch { return language; } };
+// The listening language's name in the interface's own language, so an Arabic page says "العربية (مصر)" and not an English
+// name; a language Intl does not know is shown by its tag.
+const languageName=(language:string,interfaceLanguage:'ar'|'en')=>{ try { return new Intl.DisplayNames([interfaceLanguage],{type:'language'}).of(language)||language; } catch { return language; } };
 const audioUrl=async(blob:Blob)=>{
  const bytes=new Uint8Array(await blob.arrayBuffer());
  let binary=''; for(const byte of bytes) binary+=String.fromCharCode(byte);
@@ -33,7 +35,7 @@ type Session={mode:Mode,started:number};
 export function useComposerDictation({target,insert,field,onStart}:{target?:DictationTarget,insert:(text:string)=>void,field:()=>void,onStart?:()=>void}) {
  // The clock's own count, so reaching 60 stops the recording once, outside React's state updater.
  const counted=useRef(0);
- const {t}=useI18n();
+ const {t,language:interfaceLanguage}=useI18n();
  const [session,setSession]=useState<Session|null>(null);
  const [seconds,setSeconds]=useState(0);
  const [bars,setBars]=useState<number[]>(baseBars);
@@ -43,7 +45,7 @@ export function useComposerDictation({target,insert,field,onStart}:{target?:Dict
  // The language read with the Agent it was read for, so another Agent's language never shows here.
  const placeKey=target?`${target.company}:${target.agent??''}:${target.channel??''}`:'';
  const [spoken,setSpoken]=useState<{key:string,language:string}|null>(null);
- const language=spoken?.key===placeKey?spoken.language:null;
+ const listening=spoken?.key===placeKey?spoken.language:null;
  const live=useRef<Session|null>(null); const askedFor=useRef('');
  const clockTimer=useRef<ReturnType<typeof setInterval>|null>(null);
  const waveTimer=useRef<ReturnType<typeof setInterval>|null>(null);
@@ -231,7 +233,10 @@ export function useComposerDictation({target,insert,field,onStart}:{target?:Dict
  useEffect(()=>()=>{ mounted.current=false; clearTimers(); stopAudio(); try { recorder.current?.stop(); } catch {} },[]); // eslint-disable-line react-hooks/exhaustive-deps
 
  const mode=session?.mode;
- const hint=session?`${t('chatDictationListening')}${language?` ${languageName(language)}`:''}${mode==='hold'?` ${t('chatDictationHold')}`:mode==='click'?` ${t('chatDictationClick')}`:''}`:'';
+ // The catalogue's "Listening ·" keeps its separator; the language and its own separator are left out when none was read,
+ // so the hint never shows two separators in a row.
+ const listeningLine=t('chatDictationListening').replace(/\s*·\s*$/,'');
+ const hint=session?`${listeningLine}${listening?` · ${languageName(listening,interfaceLanguage)}`:''}${mode==='hold'?` ${t('chatDictationHold')}`:mode==='click'?` ${t('chatDictationClick')}`:''}`:'';
  const disabled=unavailable?'true':undefined;
  const label=session?t('chatDictationFinish'):unavailable?t('chatDictationUnavailable'):t('chatDictationStart');
  const cancelButton=<button type="button" className="composer__btn" aria-label={t('chatDictationCancel')} title={t('chatDictationCancel')} onClick={cancel}><ShellIcon name="x"/></button>;
