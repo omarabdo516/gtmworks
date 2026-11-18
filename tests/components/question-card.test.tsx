@@ -20,11 +20,11 @@ type Question = Extract<Card, { kind: 'question' }>;
 const angles = ['من خريج لمحاسب شغال', 'Excel وOdoo في كورس واحد', 'شهادة معتمدة وتدريب عملي', 'فيديو قصير من طالب اتوظف'];
 const asked = (choices: string[], more: Partial<Question> = {}): Question => ({ id: 42, kind: 'question', title: 'اختار زاوية الإعلان', question: 'اختار زاوية الإعلان', choices, multiple: false, state: 'open', ...more } as Question);
 const words = {
- en: { letters: ['A', 'B', 'C', 'D'], hint: 'Pick one, or write your answer in the message', answered: 'Answered', closed: 'This question can no longer be answered', inWords: 'Write your answer in the message' },
- ar: { letters: ['أ', 'ب', 'ج', 'د'], hint: 'اختار واحدة، أو اكتب رأيك في الرسالة', answered: 'اتجاوب', closed: 'السؤال ده مبقاش ينفع يتجاوب', inWords: 'اكتب ردك في الرسالة' },
+ en: { letters: ['A', 'B', 'C', 'D'], hint: 'Pick one, or write your answer in the message', answered: 'Answered', closed: 'This question can no longer be answered', inWords: 'Write your answer in the message', orType: 'or type the answer below' },
+ ar: { letters: ['أ', 'ب', 'ج', 'د'], hint: 'اختار واحدة، أو اكتب رأيك في الرسالة', answered: 'اتجاوب', closed: 'السؤال ده مبقاش ينفع يتجاوب', inWords: 'اكتب ردك في الرسالة', orType: 'أو اكتب الإجابة تحت' },
 };
-const drawn = (card: Card, language: 'en' | 'ar', answer?: (card: number, choice: number, key: string) => Promise<string | null>) =>
- render(<LanguageProvider language={language}><div dir={language === 'ar' ? 'rtl' : 'ltr'}><ReplyCard card={card} fresh={false} answer={answer}/>
+const drawn = (card: Card, language: 'en' | 'ar', answer?: (card: number, choice: number, key: string) => Promise<string | null>, chips = false) =>
+ render(<LanguageProvider language={language}><div dir={language === 'ar' ? 'rtl' : 'ltr'}><ReplyCard card={card} fresh={false} answer={answer} chips={chips}/>
   <div data-testid="icons"><ShellIcon name="check"/></div></div></LanguageProvider>);
 const keys = (group: Element) => [...group.querySelectorAll('.opt__key')].map(key => key.textContent);
 
@@ -133,11 +133,81 @@ test.each([['open-ended', asked([])], ['several may be picked', asked(angles.sli
  expect(group.getByRole('button').elements()).toEqual([]);
 });
 
+// #143: the main Agent's question is the same Engine question drawn in the reference's chip form (ask1HTML): the
+// question, one chip per choice and "or type the answer below"; no letters. Any other Agent's keeps the lettered card.
+test.each([['en', 2], ['en', 4], ['ar', 2], ['ar', 4]] as const)('in the %s interface, the main Agent\'s open question with %i choices draws the chip card: the question, one chip per choice and the line to type', async (language, count) => {
+ const card = asked(angles.slice(0, count));
+ const screen = await drawn(card, language, async () => null, true);
+ const group = screen.getByRole('group', { name: card.question });
+ await expect.element(group).toBeVisible();
+ expect(group.element().querySelector('.ask1__q')?.textContent).toBe(card.question);
+ expect(group.element().querySelector('.ask1__or')?.textContent).toBe(words[language].orType);
+ const chips = group.getByRole('button').elements();
+ expect(chips.map(chip => chip.textContent)).toEqual(card.choices);
+ expect(chips.every(chip => chip.classList.contains('chip'))).toBe(true);
+ expect(group.element().querySelectorAll('.opt__key'), 'no letters on the main Agent\'s card').toHaveLength(0);
+ expect(group.element().querySelector('.opt__check'), 'no check while it is open').toBeNull();
+ for (const chip of chips) {
+  await userEvent.keyboard('{Tab}');
+  expect(document.activeElement, chip.textContent ?? '').toBe(chip);
+ }
+});
+
+test.each(['en', 'ar'] as const)('in the %s interface, a chip closes the main Agent\'s card with that answer and a check, sending its card and key once', async language => {
+ vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+ const card = asked(angles.slice(0, 3));
+ const answer = vi.fn(async () => null);
+ const screen = await drawn(card, language, answer, true);
+ const group = screen.getByRole('group', { name: card.question });
+ await group.getByRole('button', { name: angles[1] }).click();
+ const resolved = screen.getByRole('group', { name: `${card.question}: ${words[language].answered}` });
+ await expect.element(resolved).toBeVisible();
+ expect(answer).toHaveBeenCalledExactlyOnceWith(42, 1, expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/));
+ expect(resolved.getByRole('button').elements(), 'nothing left to click').toEqual([]);
+ expect(resolved.element().querySelector('.ask1__q')?.textContent, 'the question stays').toBe(card.question);
+ expect(resolved.element().querySelector('.card__outcome')?.textContent).toContain(angles[1]);
+ const check = screen.getByTestId('icons').element().querySelector('svg')?.innerHTML;
+ expect(resolved.element().querySelector('.card__outcome .gw-icon')?.innerHTML).toBe(check);
+ expect(resolved.element().classList.contains('is-just'), 'it settles where it was answered').toBe(true);
+ await vi.advanceTimersByTimeAsync(900);
+ await expect.element(resolved).not.toHaveClass('is-just');
+});
+
+test.each(['en', 'ar'] as const)('in the %s interface, the main Agent\'s card answered before the page was drawn shows the answer with its check and offers nothing', async language => {
+ const card = asked(angles.slice(0, 3), { state: 'answered', answer: angles[2] } as Partial<Question>);
+ const screen = await drawn(card, language, undefined, true);
+ const group = screen.getByRole('group', { name: `${card.question}: ${words[language].answered}` });
+ await expect.element(group).toBeVisible();
+ expect(group.getByRole('button').elements()).toEqual([]);
+ expect(group.element().querySelector('.card__outcome')?.textContent).toContain(angles[2]);
+ expect(group.element().classList.contains('is-just'), 'a card answered before the page was drawn does not settle').toBe(false);
+});
+
+test.each(['en', 'ar'] as const)('in the %s interface, a question the main Agent asked that the Engine no longer waits for says so in one line', async language => {
+ const card = asked(angles.slice(0, 3), { state: 'closed' });
+ const screen = await drawn(card, language, async () => null, true);
+ const group = screen.getByRole('group', { name: card.question });
+ await expect.element(group.getByText(words[language].closed, { exact: true })).toBeVisible();
+ expect(group.getByRole('button').elements()).toEqual([]);
+ expect(group.element().querySelector('.ask1__opts')).toBeNull();
+});
+
+test('the main Agent\'s question with no single choice to pick is answered in words: no chips, and the hint says to write', async () => {
+ for (const card of [asked([], { question: 'What should it do?' } as Partial<Question>), asked(angles.slice(0, 3), { multiple: true, question: 'Which angles?' } as Partial<Question>)]) {
+  const screen = await drawn(card, 'en', async () => null, true);
+  const group = screen.getByRole('group', { name: card.question });
+  await expect.element(group.getByText(words.en.inWords, { exact: true })).toBeVisible();
+  expect(group.getByRole('button').elements()).toEqual([]);
+  expect(group.element().querySelector('.ask1__opts')).toBeNull();
+ }
+});
+
+
 // The chat: the Agent waits on its question, so it is not shown working; a pick posts the answer intent and the record is
 // read again, which shows the card answered and the pick as the person's message after it.
 const at = '2026-06-10T09:41:00Z';
 const conversation = { id: '7d3f0b1e-1c2a-4b5d-8e6f-9a0b1c2d3e4f', agent_id: null, agent_name: 'Ads', face: 'c-1' };
-const record = (card: Question, answer?: string): ConversationRecord => ({
+const record = (card: Question, answer?: string, lead = false): ConversationRecord => ({
  conversation,
  messages: [
   { id: 1, author: 'person', author_name: 'Omar', body: 'محتاجين حملة Meta لكورس «المحاسب الشامل»', created_at: at },
@@ -145,6 +215,19 @@ const record = (card: Question, answer?: string): ConversationRecord => ({
   ...answer ? [{ id: 42, author: 'person' as const, author_name: 'Omar', body: answer, created_at: at, kind: 'answer' as const }] : [],
  ],
  usage: { input: 0, output: 0 }, pending: true, ...answer ? {} : { asking: true as const }, failed: false, working: 'Omar', canStop: true,
+ ...(lead ? { lead: true as const } : {}),
+});
+
+// The same question in the chat: the main Agent's Conversation draws the chip card, any other Agent's the lettered one.
+test.each([[true, '.ask1__opts .chip', '.ask1__or'], [false, '.opt__key', '.qcard__hint']] as const)('in the chat, the main Agent\'s question draws the reference\'s chip card and any other Agent\'s the lettered card (main Agent: %s)', async (lead, selector, line) => {
+ const open = asked(angles.slice(0, 3));
+ vi.stubGlobal('fetch', vi.fn(async () => Response.json(record(open, undefined, lead))));
+ const screen = await render(<LanguageProvider language="en"><div className="gw"><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={conversation} title="" writer><Arrived record={arrived(record(open, undefined, lead))}/></ConversationView></div></LanguageProvider>);
+ const group = screen.getByRole('group', { name: open.question });
+ await expect.element(group).toBeVisible();
+ expect(group.element().querySelectorAll(selector)).toHaveLength(3);
+ expect(group.element().querySelector(line)).not.toBeNull();
+ expect(group.element().querySelector(lead ? '.opt__key' : '.ask1__opts')).toBeNull();
 });
 
 test('in the chat, a pick posts the answer, the record is read again, and the pick shows as the person\'s message after the answered card', async () => {

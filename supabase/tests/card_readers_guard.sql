@@ -38,8 +38,8 @@ insert into decisions
   'public.resolve_waiting_on_card()','public.resolve_waiting_on_reply()','public.schedule_approved_card()','public.work_audit()','public.work_guard()']) fn
  union all select fn,'exempt','the worker''s, callable by the service role only: it answers the worker, never a Member, and the rows it writes are read under card_agent_visible' from unnest(array[
   'public.add_waiting_item(uuid,uuid,text,text,text,bigint,uuid,text)','public.agent_save_rule(uuid,text,text,text)','public.agent_show_card(uuid,text,text,text,text,jsonb)',
-  'public.answer_note_start(bigint,integer,text)','public.begin_note_start(bigint)','public.close_note_run(bigint,text,text,text,bigint,bigint)',
-  'public.move_company_profile(uuid)','public.note_runs_due(bigint,bigint)']) fn
+  'public.answer_note_start(bigint,integer,text)','public.begin_note_start(bigint)','public.channel_show_card(bigint,text,text,text,text,jsonb)','public.close_note_run(bigint,text,text,text,bigint,bigint)',
+  'public.lead_hand_to_agent(uuid,text,text,text,text,text)','public.move_company_profile(uuid)','public.note_runs_due(bigint,bigint)']) fn
  union all select 'public.settle_question(bigint,text)','exempt','the worker''s, callable by the service role only: it settles a question card it was handed and writes its log row, on the chat''s Card when it has one (read under card_agent_visible), else private to the Conversation''s person; it answers no Member'
  union all select 'public.settle_permission(bigint,text)','exempt','the worker''s, callable by the service role only: it settles a permission request card it was handed and writes its log row, private to the Conversation''s person; it answers no Member'
  union all select 'public.settle_channel_permission(bigint,text)','exempt','the worker''s, callable by the service role only: it settles a channel''s permission request it was handed and writes its log row, private to the Member who decided it; it answers no Member'

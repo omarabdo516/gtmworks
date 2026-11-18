@@ -716,6 +716,21 @@
 .gw .reply-card.is-just { animation: gw-settle 320ms var(--gw-ease-out); }
 .gw .reply-card.is-just .opt.is-chosen .opt__key { animation: gw-ck-pop 320ms var(--gw-ease-spring); }
 .gw .reply-card.is-just .opt__check path { stroke-dasharray: 40; stroke-dashoffset: 40; animation: gw-draw-check 380ms var(--gw-ease-out) 140ms forwards; }
+/* The main Agent's question (#143; design-reference: .ask1__head, .ask1__q, .ask1__opts, .ask1__or, the text chip):
+   the question, one chip per choice and "or type the answer below"; answered, the question stays and the answer shows
+   with a check in the reference's outcome line. The card keeps the standard card frame, not the lettered card's border. */
+.gw .reply-card--ask1 { box-shadow: var(--gw-shadow-card); }
+.gw .ask1__head { display: grid; gap: 2px; padding: 14px 16px 0; }
+.gw .ask1__q { font-size: var(--gw-fs-base); font-weight: 600; line-height: 1.6; color: var(--gw-text-1); overflow-wrap: anywhere; white-space: pre-line; }
+.gw .ask1__opts { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 16px 0; }
+.gw .ask1__or { margin: 0; padding: 8px 16px 16px; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); }
+.gw .reply-card .chip {
+  display: inline-flex; align-items: center; height: 34px; padding: 0 12px; border-radius: var(--gw-r-full);
+  background: var(--gw-bg-pane); box-shadow: var(--gw-border-2) 0 0 0 0.5px inset; font-size: var(--gw-fs-sm);
+  line-height: 1; color: var(--gw-text-1); white-space: nowrap; transition: background-color var(--gw-dur-fast) var(--gw-ease-out);
+}
+@media (hover: hover) { .gw .reply-card .chip:hover { background: var(--gw-bg-elevated-hover); } }
+.gw .reply-card--ask1.is-resolved .card__outcome { padding-top: 8px; }
 /* A step handed to the person (#139; design-reference: .hcard, .ck-badge, .card__actions, .card__outcome, .card.is-resolved,
    .card.is-just): the badge, the app's tile, the title, its rows, then "Open the draft" and "Done it"; once done, the
    outcome line with its check, which draws on the page where it was pressed. */
