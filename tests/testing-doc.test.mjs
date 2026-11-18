@@ -2,19 +2,74 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { problems, readRows, rowProblems, rowPath, testFiles } from '../scripts/testing-doc.mjs';
 
-// docs/testing.md keeps one row per file under tests/ (#69): what it guards, its runtime and the decision.
-// The failed job logs and the visual lane's data (its screens and approved images) are data folders with one row each,
-// so adding a screen, an image or a log needs no row.
-test('docs/testing.md has exactly one row per file under tests/', () => {
-  const folders = ['ci-logs/', 'visual-lane/'];
-  const tracked = execFileSync('git', ['ls-files', 'tests'], { encoding: 'utf8' }).split('\n').filter(Boolean)
-    .map(path => path.slice('tests/'.length))
-    .map(path => (/\.(test|spec)\.[^/]+$/.test(path) ? undefined : folders.find(folder => path.startsWith(folder))) ?? path);
-  const rows = [...readFileSync('docs/testing.md', 'utf8').matchAll(/^\| `([^`]+)` \|/gm)].map(match => match[1]);
-  assert.deepEqual([...rows].sort(), [...new Set(tracked)].sort());
-  assert.equal(new Set(rows).size, rows.length, 'a file has more than one row');
+// docs/testing.md's table has one row per file under tests/ (#69). Each row lives with the file it names, in
+// tests/rows/, so two pull requests that add different tests never edit one shared table (#229); this file writes the
+// tables into docs/testing.md from those rows (`node scripts/testing-doc.mjs --write`) and fails when a file has no row,
+// a row names no file, a file has two rows, or the tables do not match the rows.
+const row = path => ({ path, file: rowPath(path), row: `| \`${path}\` | promise | — | — | keep |`, cases: [], other: [] });
+
+test('a file with no row and a row with no file are both named, and each file keeps exactly one row', () => {
+  assert.deepEqual(rowProblems(['a.test.mjs', 'b.test.mjs'], [row('a.test.mjs')]), [
+    'tests/b.test.mjs: no row (write tests/rows/b.test.mjs.md)',
+  ]);
+  assert.deepEqual(rowProblems(['a.test.mjs'], [row('a.test.mjs'), row('gone.test.mjs')]), [
+    'tests/rows/gone.test.mjs.md: names no file (tests/gone.test.mjs does not exist)',
+  ]);
+  assert.deepEqual(rowProblems(['a.test.mjs'], [row('a.test.mjs'), row('a.test.mjs')]), [
+    'tests/a.test.mjs: more than one row (tests/rows/a.test.mjs.md and tests/rows/a.test.mjs.md)',
+  ]);
 });
+
+test('every file under tests/ has exactly one row in tests/rows/, and both tables in docs/testing.md match them', () => {
+  assert.deepEqual(problems(), []);
+  const rows = readRows();
+  const files = testFiles();
+  assert.deepEqual(rows.filter(entry => entry.row).map(entry => entry.path).sort(), files.sort());
+  assert.equal(new Set(rows.map(entry => entry.path)).size, rows.length);
+  // A spec whose last case moved or was removed is gone, and only its case rows are kept.
+  for (const entry of rows.filter(entry => !entry.row)) {
+    assert.ok(entry.path.endsWith('.spec.ts') && !files.includes(entry.path), `${entry.file} keeps only the cases of a spec no longer in the tree`);
+    assert.ok(entry.cases.every(line => / \| (moved|removed) \|/.test(line)), `${entry.file} keeps no case that stays`);
+  }
+  assert.ok(rows.filter(entry => entry.cases.length > 0).length > 20, 'the browser specs keep their case rows');
+});
+
+// #229: the row travels with the test, so two branches that add different tests do not conflict in one table. Their rows
+// sort apart here, as two different tests do: the merge keeps both and the merged table is still what the rows write.
+test('two branches that each add a test with its row merge without a conflict and leave a valid table', t => {
+  mkdirSync('test-results', { recursive: true });
+  const dir = mkdtempSync(join('test-results', 'rows-merge-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  execFileSync('git', ['clone', '--quiet', '--shared', resolve('.'), dir], { encoding: 'utf8' });
+  const git = (...args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8' });
+  git('config', 'user.email', 'tests@example.test');
+  git('config', 'user.name', 'testing doc');
+  const base = git('rev-parse', '--abbrev-ref', 'HEAD').trim();
+  const add = (branch, file) => {
+    git('checkout', '--quiet', '-b', branch);
+    writeFileSync(join(dir, 'tests', file), `import { test } from 'node:test';\ntest('added on ${branch}', () => {});\n`);
+    mkdirSync(join(dir, 'tests/rows'), { recursive: true });
+    writeFileSync(join(dir, 'tests/rows', `${file}.md`), `| \`${file}\` | a test added on ${branch}, with its row | — | — | keep |\n`);
+    execFileSync(process.execPath, ['scripts/testing-doc.mjs', '--write'], { cwd: dir, encoding: 'utf8' });
+    git('add', '--all');
+    git('commit', '--quiet', '-m', `test: add ${file}`);
+  };
+  add('first', 'aa-merge-first.test.mjs');
+  git('checkout', '--quiet', base);
+  add('second', 'zz-merge-second.test.mjs');
+  git('checkout', '--quiet', 'first');
+  const merge = spawnSync('git', ['merge', '--no-edit', 'second'], { cwd: dir, encoding: 'utf8' });
+  assert.equal(merge.status, 0, `the branches conflicted:\n${merge.stdout}${merge.stderr}`);
+  const doc = readFileSync(join(dir, 'docs/testing.md'), 'utf8');
+  assert.doesNotMatch(doc, /^(<{7}|={7}|>{7})/m, 'the merged table has conflict markers');
+  for (const file of ['aa-merge-first.test.mjs', 'zz-merge-second.test.mjs']) assert.match(doc, new RegExp(`\\| \`${file}\` \\|`), `the merged table has ${file}'s row`);
+  const check = spawnSync(process.execPath, ['scripts/testing-doc.mjs'], { cwd: dir, encoding: 'utf8' });
+  assert.equal(check.status, 0, `the merged table is not valid:\n${check.stdout}${check.stderr}`);
+});
+
 
 // #218: every case of the `functional` project has its decision in "The browser suite, case by case". The cases come
 // from Playwright itself (`--list` loads the config and the spec files, and starts no browser or server), so a case

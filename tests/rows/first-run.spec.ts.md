@@ -1,0 +1,1 @@
+| `first-run.spec.ts` | An empty install creates its first Owner and Company only through the setup link; wrong codes, short passwords and races create nothing; no password reaches a log. (first-run project, last) | 24 s | setup-code.test.mjs, first-run.test.mjs (route logic without a browser) | keep (decision #50) |

@@ -1,0 +1,1 @@
+| `visual-lane-guards.ts` | helper: the visual lane's fixed clock, its block on requests off the machine, the check before each comparison that the picture would be drawn the same way again, and the dark-text and quiet-text contrast checks | — | — | helper, new (#257) |

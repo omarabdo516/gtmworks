@@ -1,0 +1,1 @@
+| `navigation.spec.ts` | Prepared navigation stays within its time budgets with no unlisted `transition-property: all` under `.gw`, prefetches, honours reduced motion, invalidates on own changes; drawer tap areas. (measured project, alone) | 56.9 s | navigation-path.test.mjs (the measured path only) | keep |
