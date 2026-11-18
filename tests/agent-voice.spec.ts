@@ -54,6 +54,13 @@ test('the Owner changes the speaking language and the speed, saves, and the Engi
  await expect(overlay.locator('#set-voice-hint')).toContainText('Hi Omar, I finished the December campaign analysis');
  await overlay.getByRole('button',{name:'Stop',exact:true}).click();
  await expect(overlay.getByRole('button',{name:'Listen',exact:true})).toHaveAttribute('aria-pressed','false');
+ // The Engine was given the server's own sentence, the reader's first name in English, not anything the browser chose.
+ const spoken=()=>fake.settings.managementRequests.filter(request=>request.path?.startsWith('/api/audio/speak')).at(-1);
+ expect(spoken()?.body).toEqual({text:'Hi Omar, I finished the December campaign analysis and I have three new angles.'});
+ const direct=await page.request.post('/api/agent-speak',{data:{company,agent:lead,text:'Say something else entirely.'}});
+ expect(direct.ok()).toBe(true);
+ expect(spoken()?.body.text).toContain('Hi Omar, I finished');
+ expect(spoken()?.body.text).not.toContain('Say something else entirely.');
  // A change of language and of speed, saved with the bar; Listen is off while they are unsaved.
  await language.selectOption('ar');
  await overlay.getByRole('radio',{name:'1.25×'}).click();
@@ -88,7 +95,7 @@ test('a Contributor and a Viewer read the voice rows with no control, and the se
   await expect(overlay.locator('#set-voice')).toHaveCount(0);
   await expect(overlay.locator('#set-speed-l')).toHaveCount(0);
   await expect(overlay.locator('#dp-savebar')).toHaveCount(0);
-  for(const [path,body] of [['/api/agent-page',{company,agent:lead,changes:{voice:{language:'en'}}}],['/api/agent-speak',{company,agent:lead,text:'Hello.'}]] as const){
+  for(const [path,body] of [['/api/agent-page',{company,agent:lead,changes:{voice:{language:'en'}}}],['/api/agent-speak',{company,agent:lead}]] as const){
    const refused=await page.request.post(path,{data:body});
    expect(refused.status(),path).toBe(403);
    expect(await refused.json()).toEqual({error:path.endsWith('speak')?'voiceNotAllowed':'agentPageNotAllowed'});
@@ -96,5 +103,5 @@ test('a Contributor and a Viewer read the voice rows with no control, and the se
  }
  // Nothing they sent reached the Engine.
  expect(fake.settings.profiles.get(profile)?.config?.stt?.language).toBe('ar');
- expect(fake.settings.managementRequests.filter(request=>request.path?.startsWith('/api/audio/speak')).length).toBe(1);
+ expect(fake.settings.managementRequests.filter(request=>request.path?.startsWith('/api/audio/speak')).length).toBe(2);
 });

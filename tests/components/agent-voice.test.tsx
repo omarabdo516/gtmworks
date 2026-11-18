@@ -69,7 +69,7 @@ test('Listen plays the Engine\'s sound, the button reads Stop and stays pressed 
  await expect.poll(() => FakeAudio.made.length).toBe(1);
  expect(FakeAudio.made[0].src).toBe('data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAA');
  const sent = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body));
- expect(sent).toEqual({ company, agent: sent.agent, text: sample });
+ expect(sent).toEqual({ company, agent: sent.agent });
  const stop = screen.getByRole('button', { name: 'Stop' });
  await expect.element(stop).toHaveAttribute('aria-pressed', 'true');
  await expect.element(screen.getByText(`en-US-AriaNeural says: “${sample}” · 1×`)).toBeVisible();
