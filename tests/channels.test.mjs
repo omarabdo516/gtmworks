@@ -26,7 +26,7 @@ function database({ agents, runs = [], open = [], states = [], messages = [], no
    : table === 'channel_notes' ? notes
    : [];
   const link = {
-   select: () => link, eq: () => link, is: () => link, gte: () => link, order: () => link, limit: () => link,
+   select: () => link, eq: () => link, is: () => link, gte: () => link, in: () => link, order: () => link, limit: () => link,
    maybeSingle: async () => ({ data, error: null }),
    then: (resolve, reject) => Promise.resolve({ data, error: null }).then(resolve, reject),
   };

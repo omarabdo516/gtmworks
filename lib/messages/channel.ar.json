@@ -50,5 +50,16 @@
   "channelByManager": "{0} (المدير)",
   "channelNamesLast": " و",
   "channelChangeFailed": "معرفناش نغيّر مين في القناة. جرّب تاني.",
-  "channelInviteNote": "{0} عزم {1}، ودخل «{2}» على طول"
+  "channelInviteNote": "{0} عزم {1}، ودخل «{2}» على طول",
+  "stepsUsedOne": "استخدم {0} أداة",
+  "stepsUsedMany": "استخدم {0} أدوات",
+  "stepsSeconds": "{0} ثانية",
+  "stepsMinutes": "{0} دقيقة",
+  "stepsMinutesSeconds": "{0} و{1}",
+  "stepsSecondsMany": "{0} ثواني",
+  "stepsMinutesMany": "{0} دقايق",
+  "stepsUsedTook": "{0} · {1}",
+  "stepLine": "{0} · {1}",
+  "stepDone": "تم",
+  "stepSkipped": "اتخطى"
 }
