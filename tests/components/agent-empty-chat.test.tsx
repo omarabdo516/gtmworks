@@ -4,6 +4,7 @@ import { page, userEvent } from 'vitest/browser';
 import type { ComponentProps } from 'react';
 import AgentChat from '@/app/c/[slug]/chat/[[...agent]]/agent-chat';
 import type { EmptyChat } from '@/app/agent-empty-chat';
+import type { AgentDetailsView } from '@/app/agent-details-server';
 import type { Language } from '@/lib/i18n.mjs';
 import { LanguageProvider } from '@/lib/i18n-client';
 import '@/app/globals.css';
@@ -27,11 +28,12 @@ const metaRole: EmptyChat = { state: 'new', works: 'team', made, line: metaLine,
  handoff: 'It leaves the article as a draft, and you publish it.',
  example: 'Plan a Meta campaign for our next offer, with a budget you suggest' };
 
-const chat = ({ agent = lead, empty, writer = true, width = 1440, language = 'en' }: { agent?: typeof lead, empty: EmptyChat, writer?: boolean, width?: number, language?: Language }) =>
+const chat = ({ agent = lead, empty, writer = true, width = 1440, language = 'en', agents, details = null }: { agent?: typeof lead, empty: EmptyChat, writer?: boolean, width?: number, language?: Language, agents?: ComponentProps<typeof AgentChat>['agents'], details?: ComponentProps<typeof AgentChat>['details'] }) =>
  page.viewport(width, 900).then(() => render(<div className="gw" dir={language === 'ar' ? 'rtl' : 'ltr'}><LanguageProvider language={language}>
-  <AgentChat slug="rs-learning" company="co-1" agent={agent} details={null} writer={writer} team empty={empty}/>
+  <AgentChat slug="rs-learning" company="co-1" agent={agent} details={details} writer={writer} team empty={empty} agents={agents}/>
  </LanguageProvider></div>));
 const suggestions = (screen: Awaited<ReturnType<typeof chat>>) => [...screen.container.querySelectorAll<HTMLButtonElement>('.suggest button')];
+const chips = (screen: Awaited<ReturnType<typeof chat>>) => [...screen.container.querySelectorAll<HTMLButtonElement>('.agent-picker .chip')];
 const box = (button: Element) => button.getBoundingClientRect();
 
 const paragraphs: [EmptyChat, string][] = [
@@ -183,4 +185,128 @@ test('in Arabic the main Agent speaks Egyptian Arabic, its suggestions read righ
  const fresh = await chat({ agent: metaAds, empty: { ...metaRole, line: null, handoff: null, made: null, example: 'قولي هتساعدني في إيه، وإيه الأدوات اللي محتاجها' }, language: 'ar' });
  await expect.element(fresh.getByText('Runs the Meta ads · شغال مع الفريق كله', { exact: true })).toBeVisible();
  await expect.element(fresh.getByText('جرّب تبدأ بالجملة دي', { exact: true })).toBeVisible();
+});
+
+// The known empty chat (#171): the faces of every Agent this Member sees, the heading, the line, a chip for each Agent
+// (the main one first, the opened one pressed) and the reference's two general suggestions. Picking a chip turns the page
+// into that Agent's empty chat with no navigation: the title, the details, the placeholder and the suggestion follow, and
+// the chip keeps the focus. Nothing is sent until a message is.
+const seo = { id: 'ag-3', connection_id: 'c-3', name: 'SEO', speciality: 'Writes the blog', main: false };
+const knownMeta: EmptyChat = { state: 'known', example: 'Plan a Meta campaign for our next offer, with a budget you suggest' };
+const knownSeo: EmptyChat = { state: 'known', example: 'Suggest five articles about the accountancy course' };
+const mainMember: EmptyChat = { state: 'main', reader: 'member', owners: ['Omar'] };
+const seoNew: EmptyChat = { state: 'new', works: 'team', line: 'Writes the blog.', handoff: null, example: 'Suggest five articles about the accountancy course', made: null };
+const detailsOf = (name: string) => ({ status: 'idle', tab: 'activity', tabs: { activity: <p>Activity of {name}</p>, tasks: null, files: null, log: null } } as unknown as AgentDetailsView);
+// Every Agent this Member sees, the main Agent first, each with its own state and details, as the page hands them over.
+const seen = [
+ { agent: lead, empty: mainMember, details: detailsOf('Lead') },
+ { agent: seo, empty: seoNew, details: detailsOf('SEO') },
+ { agent: metaAds, empty: knownMeta, details: detailsOf('Meta Ads') },
+];
+const seenKnown = [{ agent: lead, empty: mainMember, details: detailsOf('Lead') }, { agent: seo, empty: knownSeo, details: detailsOf('SEO') }, { agent: metaAds, empty: knownMeta, details: detailsOf('Meta Ads') }];
+
+test('an Agent the Member already writes to shows the faces of every Agent they see, what this chat asks, and one chip each, the main Agent first and its own chip pressed', async () => {
+ const screen = await chat({ agent: metaAds, empty: knownMeta, agents: seen, details: detailsOf('Meta Ads') });
+ await expect.element(screen.getByRole('heading', { level: 2 })).toHaveTextContent('What should we work on today?');
+ const line = screen.container.querySelector('.empty-chat p')!;
+ expect(line.textContent).toBe('Pick the agent you want to talk to, or type @ in your message to call any of them.');
+ expect(line.querySelector('bdi')?.textContent).toBe('@');
+ expect(screen.container.querySelectorAll('.empty-chat__faces svg')).toHaveLength(3);
+ expect(chips(screen).map(chip => chip.textContent)).toEqual(['Lead', 'SEO', 'Meta Ads']);
+ expect(chips(screen).map(chip => chip.getAttribute('aria-pressed'))).toEqual(['false', 'false', 'true']);
+ expect(screen.container.querySelector('.agent-picker')?.getAttribute('aria-label')).toBe('Pick an agent');
+ expect(suggestions(screen).map(button => button.textContent)).toEqual(['Tell me what you can doand the tools you need', 'Start with a first jobPlan a Meta campaign for our next offer, with a budget you suggest']);
+ // A chip carries a face of its own, hidden from the reader who hears the Agent's name beside it.
+ expect(chips(screen).every(chip => chip.querySelector('.chip__face[aria-hidden="true"] svg'))).toBe(true);
+});
+
+test('a Viewer sees the faces, the line and the picker of the known empty chat, and no suggestions', async () => {
+ const screen = await chat({ agent: metaAds, empty: knownMeta, agents: seen, details: detailsOf('Meta Ads'), writer: false });
+ expect(screen.container.querySelector('.suggest')).toBeNull();
+ expect(chips(screen)).toHaveLength(3);
+ expect(screen.container.querySelector('textarea')).toBeNull();
+ await expect.element(screen.getByRole('note').filter({ hasText: 'view-only' })).toBeVisible();
+ await screen.getByRole('button', { name: 'Lead', exact: true }).click();
+ await expect.element(screen.getByRole('heading', { level: 2 })).toHaveTextContent('LeadMain');
+});
+
+test('picking an Agent the Member writes to turns the page into that Agent\'s empty chat: its chip pressed and focused, and the title, the details and the placeholder follow it', async () => {
+ const screen = await chat({ agent: seo, empty: knownSeo, agents: seenKnown, details: detailsOf('SEO') });
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveAttribute('placeholder', 'Write to SEO…');
+ await expect.element(screen.getByRole('button', { name: 'New chat · Details: SEO' })).toBeVisible();
+ const meta = screen.getByRole('button', { name: 'Meta Ads', exact: true });
+ await meta.click();
+ await expect.element(meta).toHaveAttribute('aria-pressed', 'true');
+ await expect.element(meta).toHaveFocus();
+ await expect.element(screen.getByRole('button', { name: 'New chat · Details: Meta Ads' })).toBeVisible();
+ await expect.element(screen.getByRole('complementary', { name: 'Details: Meta Ads' })).toBeVisible();
+ expect(screen.container.querySelector('.dp-sections')?.textContent).toBe('Activity of Meta Ads');
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveAttribute('placeholder', 'Write to Meta Ads…');
+ await expect.element(screen.getByRole('heading', { level: 2 })).toHaveTextContent('What should we work on today?');
+ expect(suggestions(screen)[1].textContent).toBe('Start with a first jobPlan a Meta campaign for our next offer, with a budget you suggest');
+});
+
+test('picking the main Agent shows its own empty chat, and picking an Agent not written to yet shows the new Agent\'s', async () => {
+ const screen = await chat({ agent: metaAds, empty: knownMeta, agents: seen, details: detailsOf('Meta Ads') });
+ await screen.getByRole('button', { name: 'Lead', exact: true }).click();
+ await expect.element(screen.getByText('The team’s main point of contact. Need a new agent? Tell it and it prepares the request for Omar.', { exact: true })).toBeVisible();
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveAttribute('placeholder', 'Write to Lead…');
+ await expect.element(screen.getByRole('heading', { level: 2 }), { message: 'the focus moves into the empty chat the pick opened' }).toHaveFocus();
+ expect(screen.container.querySelector('.agent-picker'), 'the main Agent draws no picker').toBeNull();
+ screen.unmount();
+ const other = await chat({ agent: metaAds, empty: knownMeta, agents: seen, details: detailsOf('Meta Ads') });
+ await other.getByRole('button', { name: 'SEO', exact: true }).click();
+ await expect.element(other.getByRole('heading', { level: 2 })).toHaveTextContent('SEO');
+ await expect.element(other.getByText('Writes the blog · Works with the whole team', { exact: true })).toBeVisible();
+ await expect.element(other.getByRole('textbox', { name: 'Message' })).toHaveAttribute('placeholder', 'Write to SEO…');
+ await expect.element(other.getByRole('complementary', { name: 'Details: SEO' })).toBeVisible();
+ await expect.element(other.getByRole('heading', { level: 2 })).toHaveFocus();
+ expect(other.container.querySelector('.agent-picker')).toBeNull();
+});
+
+test('the two general suggestions fill the composer with the title, a colon and the second line, and send nothing', async () => {
+ const screen = await chat({ agent: metaAds, empty: knownMeta, agents: seen, details: detailsOf('Meta Ads') });
+ const field = screen.getByRole('textbox', { name: 'Message' });
+ await screen.getByRole('button', { name: 'Tell me what you can do', exact: false }).click();
+ await expect.element(field).toHaveValue('Tell me what you can do: and the tools you need');
+ await expect.element(field).toHaveFocus();
+ await screen.getByRole('button', { name: 'Start with a first job', exact: false }).click();
+ await expect.element(field).toHaveValue('Tell me what you can do: and the tools you need\nStart with a first job: Plan a Meta campaign for our next offer, with a budget you suggest');
+ expect(fetches).not.toHaveBeenCalled();
+ expect(push).not.toHaveBeenCalled();
+});
+
+test('an Agent with no first sentence of its own says what to write, and a Viewer is offered neither suggestion', async () => {
+ const screen = await chat({ agent: metaAds, empty: { state: 'known', example: null }, agents: seen, details: detailsOf('Meta Ads') });
+ expect(suggestions(screen).map(button => button.textContent)).toEqual(['Tell me what you can doand the tools you need', 'Start with a first jobWrite it what you need']);
+ await screen.getByRole('button', { name: 'Start with a first job', exact: false }).click();
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('Start with a first job: Write it what you need');
+ screen.unmount();
+ const viewer = await chat({ agent: metaAds, empty: knownMeta, agents: seen, details: detailsOf('Meta Ads'), writer: false });
+ expect(viewer.container.querySelector('.suggest')).toBeNull();
+});
+
+test('a message sent after picking starts the Conversation with the picked Agent', async () => {
+ fetches.mockImplementation(async () => new Response('{}', { status: 200 }));
+ const screen = await chat({ agent: seo, empty: knownSeo, agents: seenKnown, details: detailsOf('SEO') });
+ await screen.getByRole('button', { name: 'Meta Ads', exact: true }).click();
+ const field = screen.getByRole('textbox', { name: 'Message' });
+ await field.fill('Plan the June campaign');
+ await userEvent.keyboard('{Enter}');
+ await expect.poll(() => fetches.mock.calls.length).toBe(1);
+ const body = JSON.parse(String(fetches.mock.calls[0][1].body));
+ expect(body.agent).toBe('ag-2');
+ await expect.poll(() => push.mock.calls.length).toBe(1);
+ expect(String(push.mock.calls[0][0])).toMatch(/^\/c\/rs-learning\/conversations\/[0-9a-f-]{36}$/);
+});
+
+test('in Arabic the known empty chat speaks Egyptian Arabic, its picker and its two suggestions read right to left', async () => {
+ const screen = await chat({ agent: metaAds, empty: { state: 'known', example: 'خطط حملة ميتا للعرض الجاي، بميزانية تقترحها' }, agents: seen, details: detailsOf('Meta Ads'), language: 'ar' });
+ await expect.element(screen.getByRole('heading', { level: 2 })).toHaveTextContent('تحب نشتغل على إيه النهارده؟');
+ expect(screen.container.querySelector('.empty-chat p')?.textContent).toBe('اختار الوكيل اللي هتكلمه، أو اكتب @ في الرسالة عشان تنادي أي حد فيهم.');
+ expect(screen.container.querySelector('.agent-picker')?.getAttribute('aria-label')).toBe('اختار الوكيل');
+ expect(suggestions(screen).map(button => button.textContent)).toEqual(['قولي بتعرف تعمل إيهوالأدوات اللي محتاجها', 'ابدأ بأول شغلانةخطط حملة ميتا للعرض الجاي، بميزانية تقترحها']);
+ expect(box(chips(screen)[0]).left).toBeGreaterThan(box(chips(screen)[1]).left);
+ await screen.getByRole('button', { name: 'قولي بتعرف تعمل إيه', exact: false }).click();
+ await expect.element(screen.getByRole('textbox')).toHaveValue('قولي بتعرف تعمل إيه: والأدوات اللي محتاجها');
 });
