@@ -357,6 +357,7 @@
   "conversationHermesFailed": "تعذّر الوصول إلى محرك الوكلاء. لم تُرسل رسالتك، وما زالت في المربع.",
   "conversationFailed": "تعذّر إرسال الرسالة. حاول مرة أخرى.",
   "attachRemove": "شيل {0}",
+  "attachOpen": "افتح {0}",
   "attachTypeRefused": "الوكيل لسه مابيعرفش يقرا النوع ده من الملفات. ارفق صورة PNG أو JPEG أو GIF أو WebP.",
   "attachCountRefused": "الرسالة الواحدة تاخد لحد {0} صور.",
   "attachSizeRefused": "في صورة حجمها أكبر من المسموح. أقصى حجم للصورة 20 ميجابايت.",

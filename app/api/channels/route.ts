@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { supabaseConfig } from '@/lib/supabase-config';
 import { decideChannelPermission, driveChannelRuns, postChannelMessage } from '@/lib/channel-runs.mjs';
+import { conversationFilesProblem, maxRequestBytes } from '@/lib/attachments.mjs';
 import type { PermissionChoice } from '@/lib/engine.mjs';
 import { logActionFailure } from '@/lib/diagnostics.mjs';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
@@ -15,6 +16,8 @@ const refuse=(error:string,status:number)=>reply({error},status);
 const service=()=>createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}});
 const permissionChoices:readonly unknown[]=['once','always','deny'] satisfies PermissionChoice[];
 const refusals:Record<string,[string,number]>={P0002:['channelNotFound',404],'42501':['channelNotAllowed',403],'22023':['channelFailed',400]};
+// Why a chosen image, or a set of them, cannot go with this message (#156): the same line as a Conversation's (#155).
+const fileRefusal=(problem:'type'|'count'|'size'|'request')=>problem==='type'?'attachTypeRefused':problem==='count'?'attachCountRefused':problem==='size'?'attachSizeRefused':'attachRequestRefused';
 
 // A choice on the request an Agent's Run in this channel waits on (#165): one of three fixed words, never text. Only the
 // Member who called the Agent decides (decide_channel_permission); the press is answered once the choice is kept, and
@@ -31,22 +34,44 @@ async function respond(request:NextRequest) {
   const db=await supabase(); const {data:{user}}=await db.auth.getUser();
   if(!user) return refuse('channelNotFound',401);
   const writing=request.method==='POST';
-  if(writing&&(!request.headers.get('content-type')?.startsWith('application/json')||crossSiteWrite(request.headers))) return refuse('channelNotAllowed',403);
-  const raw=writing?await request.text():''; if(raw.length>24000) return refuse('channelFailed',400);
-  const body=writing?JSON.parse(raw):Object.fromEntries(request.nextUrl.searchParams);
-  if(![body.company,body.channel].every(value=>typeof value==='string'&&uuid.test(value))) return refuse('channelFailed',400);
-  if(!await routeAllowed(db,'app/api/channels/route.ts',request.method,body.company,user.id)) return refuse(writing?'channelNotAllowed':'channelNotFound',writing?403:404);
+  // A message with images goes as a form (#156), as a Conversation's does (#155): the fields a text-only send posts in
+  // JSON, and the images as `files`. Any other write is the JSON it always was; nothing of either is logged.
+  const contentType=request.headers.get('content-type')||'';
+  const form=writing&&contentType.startsWith('multipart/form-data');
+  if(writing&&(!(contentType.startsWith('application/json')||form)||crossSiteWrite(request.headers))) return refuse('channelNotAllowed',403);
+  let body:Record<string,unknown>; let chosen:File[]=[];
+  if(!writing) body=Object.fromEntries(request.nextUrl.searchParams);
+  else if(form) {
+   // A message the Engine could never take is refused before its bytes are read: one request is at most 10 MB.
+   if(Number(request.headers.get('content-length')||0)>maxRequestBytes) return refuse('attachRequestRefused',413);
+   const fields=await request.formData();
+   const field=(name:string)=>{ const value=fields.get(name); return typeof value==='string'?value:undefined; };
+   body={company:field('company'),channel:field('channel'),sendKey:field('sendKey'),message:field('message'),intent:field('intent')};
+   chosen=fields.getAll('files').filter((file):file is File=>file instanceof File);
+   if(chosen.length&&body.intent!==undefined) return refuse('channelFailed',400);
+  } else {
+   const raw=await request.text(); if(raw.length>24000) return refuse('channelFailed',400);
+   body=JSON.parse(raw);
+  }
+  const company=typeof body.company==='string'?body.company:''; const channelId=typeof body.channel==='string'?body.channel:'';
+  if(![company,channelId].every(value=>uuid.test(value))) return refuse('channelFailed',400);
+  if(!await routeAllowed(db,'app/api/channels/route.ts',request.method,company,user.id)) return refuse(writing?'channelNotAllowed':'channelNotFound',writing?403:404);
   if(writing&&body.intent==='permit') return await permit(db,body);
   if(writing) {
-   if(typeof body.sendKey!=='string'||!uuid.test(body.sendKey)||typeof body.message!=='string'||!body.message.trim()||body.message.length>20000) return refuse('channelFailed',400);
-   const sent=await postChannelMessage(db,service(),{channel:body.channel,sendKey:body.sendKey,message:body.message});
+   if(typeof body.sendKey!=='string'||!uuid.test(body.sendKey)||typeof body.message!=='string'||body.message.length>20000) return refuse('channelFailed',400);
+   // An image the Engine cannot read, more of them than a message carries, or text and images past its request limit:
+   // refused here, with one line saying why, and nothing is stored or sent.
+   const problem=conversationFilesProblem(chosen,body.message);
+   if(problem) return refuse(fileRefusal(problem),400);
+   if(!chosen.length&&!body.message.trim()) return refuse('channelFailed',400);
+   const sent=await postChannelMessage(db,service(),{company,channel:channelId,sendKey:body.sendKey,message:body.message,files:chosen});
    return 'refused' in sent?refuse(sent.refused,sent.status):reply(sent);
   }
-  const record=await channelRecord(db,user.id,body.company,body.channel,true);
+  const record=await channelRecord(db,user.id,company,channelId,true);
   if(!record) return refuse('channelNotFound',404);
   if(!record.open) return reply(record);
-  await driveChannelRuns(service(),{channel:body.channel});
-  return reply(await channelRecord(db,user.id,body.company,body.channel,true)??record);
+  await driveChannelRuns(service(),{channel:channelId});
+  return reply(await channelRecord(db,user.id,company,channelId,true)??record);
  } catch { logActionFailure('channel',new Error('Channel request failed')); return refuse('channelFailed',400); }
 }
 export const GET=respond;

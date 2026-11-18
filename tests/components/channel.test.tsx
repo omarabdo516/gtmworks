@@ -13,8 +13,8 @@ vi.mock('@/app/channel-actions', () => ({ changeChannel: vi.fn(), channelChoices
 afterEach(() => { vi.unstubAllGlobals(); });
 
 const at = '2026-06-10T09:05:00Z';
-const peer: ChannelMessage = { id: 1, author: 'person', mine: false, name: 'Sara Adel', role: 'manager', body: 'Morning all', at, mention: null };
-const called = (state: 'open' | 'answered' | 'unanswered'): ChannelMessage => ({ id: 2, author: 'person', mine: true, name: 'Omar', role: 'owner', body: 'Hey @lead, what is due today?', at, mention: { agent: 'Lead', face: 'c-1', state, permissions: [] } });
+const peer: ChannelMessage = { id: 1, author: 'person', mine: false, name: 'Sara Adel', role: 'manager', body: 'Morning all', at, files: [], mention: null };
+const called = (state: 'open' | 'answered' | 'unanswered'): ChannelMessage => ({ id: 2, author: 'person', mine: true, name: 'Omar', role: 'owner', body: 'Hey @lead, what is due today?', at, files: [], mention: { agent: 'Lead', face: 'c-1', state, permissions: [] } });
 const reply: ChannelMessage = { id: 3, author: 'agent', name: 'Lead', face: 'c-1', body: 'Two things are due.', at };
 const record = (messages: ChannelMessage[], more: Partial<ChannelRecord> = {}): ChannelRecord => ({
  channel: { id: 'ch-1', company: 'co-1', kind: 'general' },
@@ -22,7 +22,7 @@ const record = (messages: ChannelMessage[], more: Partial<ChannelRecord> = {}): 
  agents: [{ id: 'a-1', connection_id: 'c-1', name: 'Lead', speciality: 'General', main: true, only: false }],
  writer: true, manage: false, managers: [], may: ['once', 'always', 'deny'], messages, open: messages.some(message => message.author === 'person' && message.mention?.state === 'open'), ...more,
 });
-const channel = (initial: ChannelRecord) => render(<LanguageProvider language="en"><ChannelView person="p-1" initial={initial}/></LanguageProvider>);
+const channel = (initial: ChannelRecord) => render(<LanguageProvider language="en"><ChannelView person="p-1" initial={initial} slug="rs-learning"/></LanguageProvider>);
 
 test('another member writes on the start side with their first name and role, the reader on the end side, and the called Agent is marked and replies', async () => {
  vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
@@ -41,7 +41,7 @@ test('another member writes on the start side with their first name and role, th
 
 test('in Arabic the composer gives the same hint, with the general channel named عام', async () => {
  vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
- const screen = await render(<LanguageProvider language="ar"><ChannelView person="p-1" initial={record([peer])}/></LanguageProvider>);
+ const screen = await render(<LanguageProvider language="ar"><ChannelView person="p-1" initial={record([peer])} slug="rs-learning"/></LanguageProvider>);
  const box = screen.getByRole('textbox', { name: 'اكتب رسالتك في القناة', exact: true });
  await expect.element(box).toHaveAttribute('placeholder', 'اكتب في #عام… والوكيل بيرد بس لو ناديته باسمه');
 });
@@ -75,6 +75,20 @@ test('a message is posted to the channel with its own send key', async () => {
  expect(body).toEqual({ company: 'co-1', channel: 'ch-1', message: 'Morning, team', sendKey: expect.stringMatching(/^[0-9a-f-]{36}$/) });
 });
 
+test('the images of a message sit under it as chips, on the writer\'s side and on the start side', async () => {
+ vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
+ const theirs: ChannelMessage = { ...peer, files: [{ id: 12, name: 'logo.jpeg' }] };
+ const mine: ChannelMessage = { id: 4, author: 'person', mine: true, name: 'Omar', role: 'owner', body: 'Here it is', at, files: [{ id: 11, name: 'cover.png' }], mention: null };
+ const screen = await channel(record([theirs, mine]));
+ const peerChip = screen.container.querySelector('.turn--peer .msg-files a.file-chip');
+ expect(peerChip?.textContent).toBe('logo.jpeg');
+ expect(peerChip?.getAttribute('href')).toBe('/c/rs-learning/files/channel/12');
+ expect(peerChip?.getAttribute('aria-label')).toBe('Open logo.jpeg');
+ const ownChip = screen.container.querySelector('.turn--user .msg-files a.file-chip');
+ expect(ownChip?.textContent).toBe('cover.png');
+ expect(ownChip?.getAttribute('href')).toBe('/c/rs-learning/files/channel/11');
+});
+
 test('a Viewer reads the channel with no composer', async () => {
  vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
  const screen = await channel(record([peer], { writer: false }));
@@ -90,7 +104,7 @@ const team = (more: Partial<ChannelRecord> = {}): ChannelRecord => record([peer]
  managers: [{ name: 'Omar', role: 'owner' }, { name: 'Sara Adel', role: 'manager' }],
  ...more,
 });
-const reader = (initial: ChannelRecord) => render(<LanguageProvider language="en"><ChannelView person="p-3" initial={initial}/></LanguageProvider>);
+const reader = (initial: ChannelRecord) => render(<LanguageProvider language="en"><ChannelView person="p-3" initial={initial} slug="rs-learning"/></LanguageProvider>);
 
 test('a team channel\'s Agent hidden from the reader elsewhere is marked as shown here only, and a reader who cannot change it is told who can', async () => {
  vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));

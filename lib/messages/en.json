@@ -357,6 +357,7 @@
   "conversationHermesFailed": "The agent engine could not be reached. Your message was not sent; it is still in the box.",
   "conversationFailed": "Could not send the message. Try again.",
   "attachRemove": "Remove {0}",
+  "attachOpen": "Open {0}",
   "attachTypeRefused": "The agent can’t read that kind of file yet. Attach a PNG, JPEG, GIF or WebP image.",
   "attachCountRefused": "A message carries up to {0} images.",
   "attachSizeRefused": "An image is too large. Each image can be up to 20 MB.",
