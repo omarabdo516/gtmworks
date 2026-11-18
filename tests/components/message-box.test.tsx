@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from 'vitest';
-import { act, createRef, type Ref } from 'react';
+import { act, createRef, useState, type Ref } from 'react';
 import { hydrateRoot } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 import { render } from 'vitest-browser-react';
@@ -509,6 +509,42 @@ test('a permission that resolves after its session was cancelled starts no recor
  await act(async () => { await vi.advanceTimersByTimeAsync(0); await Promise.resolve(); });
  expect(nextTrack.stop, 'the recording that ended is the one that stops its microphone').toHaveBeenCalled();
  expect(engine.calls).toHaveLength(1);
+});
+
+test('a recording is sent for the Agent it started on, and an answer that arrives after the Agent changed inserts nothing', async () => {
+ vi.useFakeTimers(); mic(); const engine = dictate({ deferred: true });
+ let switchTarget: () => void = () => {};
+ function Switcher() {
+  const [target, setTarget] = useState(voice);
+  switchTarget = () => setTarget({ company: 'co-1', agent: 'ag-2' });
+  return <LanguageProvider language="en"><MessageBox placeholder="Write" voice={target} send={async () => null}/></LanguageProvider>;
+ }
+ const screen = await render(<Switcher/>);
+ await hold(boxOf(screen));
+ await expect.poll(() => engine.calls.length).toBe(1);
+ expect(engine.calls[0].body).toMatchObject({ company: 'co-1', agent: 'ag-1' });
+ await act(async () => { switchTarget(); });
+ await act(async () => { engine.finish(Response.json({ text: 'words for the other agent' })); await Promise.resolve(); await Promise.resolve(); });
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('');
+});
+
+test('changing the Agent while recording cancels it, sending nothing and inserting nothing', async () => {
+ vi.useFakeTimers(); mic(); const engine = dictate({ text: 'never inserted' });
+ let switchTarget: () => void = () => {};
+ function Switcher() {
+  const [target, setTarget] = useState(voice);
+  switchTarget = () => setTarget({ company: 'co-1', agent: 'ag-2' });
+  return <LanguageProvider language="en"><MessageBox placeholder="Write" voice={target} send={async () => null}/></LanguageProvider>;
+ }
+ const screen = await render(<Switcher/>); const button = boxOf(screen);
+ await pointer(button, 'pointerdown'); await flush();
+ await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+ await act(async () => { switchTarget(); }); await flush();
+ await expect.element(screen.getByRole('button', { name: 'Voice dictation: hold and talk, or click once to start' })).toBeVisible();
+ await pointer(button, 'pointerup'); await flush();
+ await act(async () => { await vi.advanceTimersByTimeAsync(0); await Promise.resolve(); });
+ expect(engine.calls).toEqual([]);
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('');
 });
 
 test('in Arabic the dictation hint names the listening language in Arabic (#160)', async () => {
