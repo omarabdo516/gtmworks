@@ -189,14 +189,16 @@ test('Forget this hides the note at once, gives the focus to the next Forget thi
  await screen.getByRole('button', { name: /^Forget this: Prefers short/ }).click();
  expect([...screen.container.querySelectorAll('.mem-note__t')].map(node => node.textContent)).toEqual(['Omar works in Cairo.']);
  expect(screen.container.querySelector('.dp-label .num')?.textContent).toBe('1');
- await expect.poll(() => document.querySelector('.toast')?.textContent).toContain('Ads forgot this note');
- expect(document.querySelector('.toast__act')?.textContent).toBe('Undo');
- await expect.element(screen.getByRole('button', { name: /^Forget this: Omar works/ })).toHaveFocus();
+ // The clock is checked before any poll: expect.poll and expect.element advance fake timers on each retry, so on a slow
+ // machine they would carry the clock past the toast's end on their own.
  expect(send).not.toHaveBeenCalled();
  await vi.advanceTimersByTimeAsync(5999);
  expect(send).not.toHaveBeenCalled();
+ expect(document.querySelector('.toast')?.textContent).toContain('Ads forgot this note');
+ expect(document.querySelector('.toast__act')?.textContent).toBe('Undo');
  await vi.advanceTimersByTimeAsync(1);
  await expect.poll(() => send.mock.calls.length).toBe(1);
+ await expect.element(screen.getByRole('button', { name: /^Forget this: Omar works/ })).toHaveFocus();
  const [url, init] = send.mock.calls[0];
  expect([url, init.method, String(init.body)]).toEqual(['/api/agent-memory', 'DELETE', JSON.stringify({ company: 'co-1', agent: 'ag-1', note: 'memory:memory:0:4d2c1b0a9f8e' })]);
  await expect.poll(() => refresh.mock.calls.length).toBe(1);
