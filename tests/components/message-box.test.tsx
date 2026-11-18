@@ -528,6 +528,25 @@ test('a recording is sent for the Agent it started on, and an answer that arrive
  await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('');
 });
 
+test('an answer that arrives after the Agent changed and changed back inserts nothing', async () => {
+ vi.useFakeTimers(); mic(); const engine = dictate({ deferred: true });
+ let switchTarget: (agent: string) => void = () => {};
+ function Switcher() {
+  const [target, setTarget] = useState(voice);
+  switchTarget = (agent: string) => setTarget({ company: 'co-1', agent });
+  return <LanguageProvider language="en"><MessageBox placeholder="Write" voice={target} send={async () => null}/></LanguageProvider>;
+ }
+ const screen = await render(<Switcher/>);
+ await hold(boxOf(screen));
+ await expect.poll(() => engine.calls.length).toBe(1);
+ expect(engine.calls[0].body).toMatchObject({ company: 'co-1', agent: 'ag-1' });
+ // A → B → A: the box is back on A, but A's first recording was already replaced.
+ await act(async () => { switchTarget('ag-2'); });
+ await act(async () => { switchTarget('ag-1'); });
+ await act(async () => { engine.finish(Response.json({ text: 'words from before the switch' })); await Promise.resolve(); await Promise.resolve(); });
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('');
+});
+
 test('changing the Agent while recording cancels it, sending nothing and inserting nothing', async () => {
  vi.useFakeTimers(); mic(); const engine = dictate({ text: 'never inserted' });
  let switchTarget: () => void = () => {};

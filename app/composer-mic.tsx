@@ -66,6 +66,9 @@ export function useComposerDictation({target,insert,field,onStart}:{target?:Dict
  const focusAfterDraw=()=>setTimeout(()=>focusField.current(),0);
  const targetNow=useRef(target); targetNow.current=target;
  const placeKeyNow=useRef(placeKey); placeKeyNow.current=placeKey;
+ // What the last draw was for: every change of it invalidates an answer already on its way, even one that comes back to
+ // the same Agent (A → B → A), so an old recording is never put into the box the person is looking at.
+ const lastPlaceKey=useRef(placeKey);
  // What a recording was started for, and the insert of the composer it was started in: a later pick never redirects it.
  const recordingFor=useRef<{key:string,target:DictationTarget,insert:(text:string)=>void}|null>(null);
  const finishing=useRef(false);
@@ -238,12 +241,15 @@ export function useComposerDictation({target,insert,field,onStart}:{target?:Dict
  const finishNow=useRef(finish); finishNow.current=finish;
  const upNow=useRef(onPointerUp); upNow.current=onPointerUp;
  const cancelNow=useRef(onPointerCancel); cancelNow.current=onPointerCancel;
- // A pick changes the Agent without remounting this box: a recording started for the old one is cancelled, and a
- // transcription still on its way inserts nothing, since it no longer belongs to the Agent on screen.
+ // A pick changes the Agent without remounting this box: every target change invalidates the session, so a recording
+ // started for the old one is cancelled and a transcription still on its way inserts nothing, even when the pick
+ // comes back to the Agent it started on (A → B → A).
  useEffect(()=>{
-  if(!recordingFor.current||recordingFor.current.key===placeKeyNow.current) return;
-  recordingFor.current=null;
+  if(lastPlaceKey.current===placeKey) return;
+  lastPlaceKey.current=placeKey;
   if(live.current) finishNow.current(false);
+  sessionNo.current+=1;
+  recordingFor.current=null;
  },[placeKey]);
  useEffect(()=>{
   if(!session) return;
