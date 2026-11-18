@@ -51,8 +51,10 @@ export function MessageBox({placeholder,label,send,stop,focus=false,call,model,r
  useEffect(()=>{ const typed=field.current?.value; if(typed) setText(current=>current||typed); },[]);
  const caret=useRef<number|null>(null);
  // A waiting message the Engine refused for its model comes back to an empty box with the model line, as a sent one stays.
- const [shownRefusal,setShownRefusal]=useState<string>();
- if(refused&&refused.key!==shownRefusal) { setShownRefusal(refused.key); setText(current=>current||refused.text); setError('conversationModelRefused'); }
+ // It goes once that message is no longer the latest (another tab sent one); the box's text and any other line stay.
+ const [shownRefusal,setShownRefusal]=useState<string>(); const [refusalLine,setRefusalLine]=useState(false);
+ if(refused&&refused.key!==shownRefusal) { setShownRefusal(refused.key); setText(current=>current||refused.text); setError('conversationModelRefused'); setRefusalLine(true); }
+ if(!refused&&shownRefusal) { setShownRefusal(undefined); setRefusalLine(false); if(refusalLine&&error==='conversationModelRefused') setError(''); }
  useImperativeHandle(ref,()=>({insert(sentence) {
   if(busy) return;
   const next=text.trim()?`${text.trimEnd()}\n${sentence}`:sentence;
@@ -72,13 +74,13 @@ export function MessageBox({placeholder,label,send,stop,focus=false,call,model,r
  useEffect(()=>{ const take=()=>{ if(field.current&&!field.current.closest('[inert]')&&takeComposerFocus(search?`${pathname}?${search}`:pathname)) field.current.focus(); }; take(); return onComposerFocus(take); },[pathname,search]);
  async function submit() {
   if(!text.trim()||busy) return;
-  setBusy(true); setError('');
+  setBusy(true); setError(''); setRefusalLine(false);
   const failure=await send(text,key);
   setBusy(false);
   if(failure) setError(failure); else { setText(''); setKey(newId()); }
  }
  async function halt({run}:{run:()=>Promise<string|null>}) {
-  setBusy(true); setError('');
+  setBusy(true); setError(''); setRefusalLine(false);
   const failure=await run();
   setBusy(false);
   if(failure) setError(failure);
