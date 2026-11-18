@@ -20,7 +20,7 @@ end $$;
 revoke all on function public.create_work_card(uuid,bigint,text,uuid) from public,anon;
 grant execute on function public.create_work_card(uuid,bigint,text,uuid) to authenticated;
 
--- The Card's own activity row distinguishes an idea from another Card (20261106000000's work_audit, unchanged else).
+-- The Card's own activity row distinguishes an idea from another Card (20261118000000_projects's work_audit, unchanged else).
 create or replace function public.work_audit() returns trigger language plpgsql security definer set search_path='' as $$
 declare rowdata jsonb; previous jsonb; cid bigint; company uuid; field text; ev text; details jsonb; action_name text; begin
  rowdata=case when tg_op='DELETE' then to_jsonb(old) else to_jsonb(new) end;
@@ -28,10 +28,11 @@ declare rowdata jsonb; previous jsonb; cid bigint; company uuid; field text; ev 
  company=(rowdata->>'company_id')::uuid; cid=case when tg_table_name='work_cards' then (rowdata->>'id')::bigint else (rowdata->>'card_id')::bigint end;
  ev=nullif(current_setting('work.evidence',true),'');
  if tg_table_name='work_cards' and tg_op='UPDATE' then
-  foreach field in array array['title','stage_id','offering','segment','hook','channel','format','go_live','goal','caption','next_actor'] loop
+  foreach field in array array['title','stage_id','offering','segment','hook','channel','format','go_live','goal','caption','next_actor','project_id'] loop
    if rowdata->field is distinct from previous->field then
     details=jsonb_build_object('field',field,'old',previous->field,'new',rowdata->field);
     if field='stage_id' then details=details || jsonb_build_object('old_name',(select name from public.work_stages where id=(previous->>'stage_id')::bigint),'new_name',(select name from public.work_stages where id=(rowdata->>'stage_id')::bigint)); end if;
+    if field='project_id' then details=details || jsonb_build_object('old_name',(select name from public.work_projects where id=(previous->>'project_id')::bigint),'new_name',(select name from public.work_projects where id=(rowdata->>'project_id')::bigint)); end if;
     insert into public.work_activity(company_id,card_id,actor_id,action,details,evidence) values(company,cid,auth.uid(),'card_changed',details,ev);
    end if;
   end loop;

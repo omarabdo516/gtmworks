@@ -13,7 +13,7 @@ test('Card, Member and Agent rows say who changed what', () => {
  assert.deepEqual([note.act, note.note], [['logActNote'], 'ملاحظة']);
  // An idea added in the Ideas column (#188) says so, in both languages.
  const idea = describeEntry({ subject: 'card', action: 'idea_added', details: {} });
- assert.deepEqual([idea.act, i18n('en').t('logActIdeaAdded'), i18n('ar').t('logActIdeaAdded')], [['logActIdeaAdded'], 'added an idea', 'ضاف فكرة']);
+ assert.deepEqual([idea.act, idea.to, i18n('en').t('logActIdeaAdded'), i18n('ar').t('logActIdeaAdded')], [['logActIdeaAdded'], { key: 'boardColIdeas' }, 'added an idea', 'ضاف فكرة'], 'with the column it landed in');
  const handed = describeEntry({ subject: 'card', action: 'card_changed', details: { field: 'next_actor', old: omar, new: writer } }, { name: id => ({ [omar]: 'عمر', [writer]: 'وكيل المحتوى' })[id] });
  assert.deepEqual([handed.act, handed.from, handed.to], [['logActHandedOver'], { text: 'عمر' }, { text: 'وكيل المحتوى' }]);
  const caption = describeEntry({ subject: 'card', action: 'card_changed', details: { field: 'caption', old: 'a', new: 'b' } });

@@ -37,7 +37,7 @@ export default function AddIdea({company,slug,stage,agents,preferred,workAction,
   <label htmlFor="idea-agent">{t('cardAgent')}</label>
   <select id="idea-agent" value={agent} onChange={event=>setAgent(event.target.value)} disabled={!agents.length}>{agents.map(choice=><option key={choice.id} value={choice.id}>{choice.name}</option>)}</select>
   <div className="add-idea__row">
-   <button type="submit" className="btn btn--primary btn--sm" disabled={!agents.length||pending}>{t('add')}</button>
+   <button type="submit" className="btn btn--primary btn--sm" disabled={!agents.length||pending}>{t('ideaAdd')}</button>
    <button type="button" className="btn btn--secondary btn--sm" onClick={close}>{t('cancel')}</button>
   </div>
  </form>;
