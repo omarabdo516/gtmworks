@@ -4,36 +4,19 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { actionAllowed } from '@/lib/route-permissions.mjs';
-import { skillLibrary } from '@/lib/skill-library.mjs';
+import { changeCompanySkill } from '@/lib/company-skills.mjs';
 import { answerRequest } from '@/lib/agent-requests.mjs';
 import { createClient } from '@supabase/supabase-js';
 import { supabaseConfig } from '@/lib/supabase-config';
-// The stored copy is the only source of a skill's instructions: a library skill is read from the code, never from the form.
-export const installSkill=withActionLog('installSkill',async function installSkill(form:FormData) {
- const db=await supabase(); const slug=String(form.get('slug')); const path=`/c/${slug}/skills`; const kind=String(form.get('source'));
- let body='';
- if(kind==='library') body=skillLibrary.find(entry=>entry.name===String(form.get('entry')))?.content || '';
- else if(kind==='team') body=String(form.get('content') || '');
- else { const file=form.get('file'); if(file instanceof File && file.size>64*1024) redirect(`${path}?refused=too_large`); if(file instanceof File && file.size>0) body=await file.text(); }
- const {data,error}=!await actionAllowed(db,'installSkill',String(form.get('company')))?{data:null,error:{message:'not permitted'}}:body?await db.rpc('install_skill',{c:String(form.get('company')),src:kind,body}):{data:null,error:{message:'empty'}};
+// A SKILL.md, uploaded or written, goes into the chosen Agent's own profile in the Engine (#343); lib/company-skills.mjs
+// refuses anything else. The skill's text is never logged.
+export const writeSkill=withActionLog('writeSkill',async function writeSkill(form:FormData) {
+ const db=await supabase(); const company=String(form.get('company')); const path=`/c/${String(form.get('slug'))}/skills`;
+ const file=form.get('file'); const content=file instanceof File?(file.size>128*1024?'':await file.text()):String(form.get('content')||'');
+ const {state}=!await actionAllowed(db,'writeSkill',company)?{state:'refused'}:await changeCompanySkill(db,createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}}),{company,agent:form.get('agent'),content,encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY});
  revalidatePath(path);
- if(error) logActionFailure('installSkill',error,{form});
- redirect(error?`${path}?failed=1`:Array.isArray(data?.refused)?`${path}?refused=${data.refused.join(',')}`:path);
-});
-export const setSkillEnabled=withActionLog('setSkillEnabled',async function setSkillEnabled(form:FormData) {
- const db=await supabase(); const path=`/c/${String(form.get('slug'))}/skills`;
- const {error}=!await actionAllowed(db,'setSkillEnabled',String(form.get('company')))?{error:{message:'not permitted'}}:await db.rpc('set_skill_enabled',{c:String(form.get('company')),s:String(form.get('skill')),a:String(form.get('agent')),enable:form.get('intent')==='enable'});
- revalidatePath(path);
- if(error) logActionFailure('setSkillEnabled',error,{form});
- redirect(error?`${path}?failed=1`:path);
-});
-// Only a person who manages the company decides on a lesson; the database refuses anyone else, and an agent has no way to reach this action.
-export const decideSkillLesson=withActionLog('decideSkillLesson',async function decideSkillLesson(form:FormData) {
- const db=await supabase(); const path=`/c/${String(form.get('slug'))}/approvals`;
- const {error}=!await actionAllowed(db,'decideSkillLesson',String(form.get('company')))?{error:{message:'not permitted'}}:await db.rpc('decide_skill_lesson',{c:String(form.get('company')),l:Number(form.get('lesson')),approve:form.get('intent')==='approve'});
- revalidatePath(path); revalidatePath(path.replace('/approvals','/skills'));
- if(error) logActionFailure('decideSkillLesson',error,{form});
- redirect(error?`${path}?failed=1`:path);
+ if(state!=='written'&&!['invalid','shared','notOwn'].includes(state)) logActionFailure('writeSkill',{message:state},{});
+ redirect(state==='written'?path:['invalid','shared','notOwn'].includes(state)?`${path}?refused=${state}`:`${path}?failed=1`);
 });
 // Only an Owner or a Manager decides a learning suggestion (#25), from their own item in "Waiting on you"; the database
 // checks again, and an agent has no way to reach this action.

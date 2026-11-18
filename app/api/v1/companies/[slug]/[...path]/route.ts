@@ -29,31 +29,6 @@ async function serve(request: NextRequest, slug: string, path: string[], agent: 
  };
  if (agent.slug!==slug) return refuse(404);
  const runCard=agent.run_card;
- // Skills come only from what the company stored and enabled for this agent; no request field, card or message can add instructions.
- // A skill read belongs to a run, so only a run key reads skills and its own loads; a company key is refused.
- if (path.length===1 && path[0]==='skills' && request.method==='GET') {
-  if (!runCard) return refuse();
-  const result=await db.rpc('agent_load_skills',{c,k:agent.key_id});
-  if(result.error) return result.error.code==='42501' ? refuse() : NextResponse.json({error:'read failed'},{status:500});
-  return NextResponse.json({skills:result.data});
- }
- if (path.length===1 && path[0]==='skill-loads' && request.method==='GET') {
-  if (!runCard) return refuse();
-  const result=await db.from('skill_loads').select('slug,version,sha256,loaded_at').eq('company_id',c).eq('key_id',agent.key_id).order('slug');
-  if(result.error) return NextResponse.json({error:'read failed'},{status:500});
-  return NextResponse.json({loads:result.data});
- }
- // An agent proposes a lesson for one of its skills from a run: the run's card is the card it was learned on. Nothing is added to the skill until a person approves it.
- if (path.length===3 && path[0]==='skills' && path[2]==='lessons' && request.method==='POST') {
-  if (!runCard) return refuse();
-  const idempotency=request.headers.get('idempotency-key');
-  if (!idempotency || idempotency.length>200) return NextResponse.json({error:'idempotency key required'},{status:400});
-  const raw=await request.text(); let payload;
-  try { payload=JSON.parse(raw); if (!payload || typeof payload!=='object' || Array.isArray(payload)) throw new Error(); } catch { return NextResponse.json({error:'invalid JSON'},{status:400}); }
-  const result=await db.rpc('propose_skill_lesson',{c,k:agent.key_id,skill_slug:path[1],req_key:idempotency,print:requestFingerprint(request.method,path.join('/'),raw),lesson_text:typeof payload.lesson==='string'?payload.lesson:'',why:typeof payload.reason==='string'?payload.reason:''});
-  if(result.error) return writeError(result.error);
-  return NextResponse.json(result.data,{status:201});
- }
  // A run key reaches its one card (and the list of that card) and nothing else; it can end itself but cannot issue keys or create cards.
  if (runCard && !(path[0]==='cards' && (path.length===1 ? request.method==='GET' : Number(path[1])===runCard && (path[2]!=='run-keys' || request.method==='DELETE')))) return refuse();
  if (path.length===1 && path[0]==='cards' && request.method==='GET') {

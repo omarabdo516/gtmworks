@@ -13,11 +13,11 @@ select json_build_object(
  'members_ask_card_visibility',has_function_privilege('authenticated','public.can_see_card(uuid,bigint)','execute')
   and not has_function_privilege('anon','public.can_see_card(uuid,bigint)','execute')
   and not has_function_privilege('service_role','public.can_see_card(uuid,bigint)','execute'),
- 'tied_rows_follow_agent',(select count(*)=14 and bool_and(permissive='RESTRICTIVE' and cmd='SELECT' and roles=array['authenticated']::name[]) from pg_policies
+ 'tied_rows_follow_agent',(select count(*)=13 and bool_and(permissive='RESTRICTIVE' and cmd='SELECT' and roles=array['authenticated']::name[]) from pg_policies
   where schemaname='public' and policyname='card_agent_visible'
    and tablename in ('work_cards','work_checklist','work_card_labels','work_assignees','work_creatives','work_versions','work_comments','work_activity',
-    'work_attachments','work_card_visits','note_runs','skill_lessons','waiting_items','company_log')),
- 'tied_rows_take_no_hidden_writes',(select count(*)=13 and bool_and(permissive='RESTRICTIVE' and cmd='INSERT' and roles=array['authenticated']::name[]) from pg_policies
+    'work_attachments','work_card_visits','note_runs','waiting_items','company_log')),
+ 'tied_rows_take_no_hidden_writes',(select count(*)=12 and bool_and(permissive='RESTRICTIVE' and cmd='INSERT' and roles=array['authenticated']::name[]) from pg_policies
   where schemaname='public' and policyname='card_agent_visible_write'),
  'tied_files_follow_agent',(select count(*)=2 and bool_and(permissive='RESTRICTIVE' and roles=array['authenticated']::name[]) from pg_policies
   where schemaname='storage' and tablename='objects' and policyname in ('card_file_visible','card_file_visible_write'))
