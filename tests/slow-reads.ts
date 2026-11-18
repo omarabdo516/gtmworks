@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import type { Page, Route } from '@playwright/test';
 import { dbContainerOf } from './lane.mjs';
 
@@ -7,18 +7,69 @@ import { dbContainerOf } from './lane.mjs';
 export const asAdmin = (sql: string) => execFileSync('docker', ['exec', '-i', dbContainerOf(), 'psql', '-U', 'supabase_admin', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-q', '--single-transaction'],
   { input: `set session_replication_role = replica;\n${sql}`, stdio: ['pipe', 'ignore', 'pipe'], encoding: 'utf8' });
 
-// Every read of `table` by a signed-in person waits `seconds` first (#172): a restrictive policy only a test adds. The
-// page's other reads stay as fast as ever, so only the part of a page that reads this table is slow. Signed-in reads
-// end at the role's statement timeout (8s on Supabase), so `seconds` stays under it.
-export const slowReads = (table: string, seconds: number) => ({
-  set: `create policy test_slow_read on public.${table} as restrictive for select to authenticated using ((select pg_sleep(${seconds})) is not null);`,
+// Every read of `table` by a signed-in person waits on `waits` first (#172): a restrictive policy only a test adds. The
+// page's other reads stay as fast as ever, so only the part of a page that reads this table waits. Signed-in reads end
+// at the role's statement timeout (8s on Supabase), so a slow read's seconds stay under it.
+export const slowReads = (table: string, waits: string) => ({
+  set: `create policy test_slow_read on public.${table} as restrictive for select to authenticated using ((select ${waits}) is not null);`,
   unset: `drop policy if exists test_slow_read on public.${table};`,
 });
 
 export async function whileSlow(table: string, seconds: number, run: () => Promise<void>) {
-  const { set, unset } = slowReads(table, seconds);
+  const { set, unset } = slowReads(table, `pg_sleep(${seconds})`);
   asAdmin(`${unset}\n${set}`);
   try { await run(); } finally { asAdmin(unset); }
+}
+
+// Holds every read of `table` by a signed-in person until `letGo` (#305): the same policy as slowReads, waiting instead
+// on an advisory lock the test takes in a session of its own. So the part of a page that reads the table waits for the
+// test, which lets it go when its assertions are done, and no clock decides when it arrives. `hold` takes the lock
+// again for a later part of the same journey, and `stop` lets the reads run and takes the policy away.
+export async function holdReads(table: string) {
+  const key = 305; // the test's own lock: no part of the app takes one
+  const { set, unset } = slowReads(table, `pg_advisory_xact_lock(${key})`);
+  asAdmin(`${unset}\n${set}`);
+  const session = spawn('docker', ['exec', '-i', dbContainerOf(), 'psql', '-U', 'supabase_admin', '-d', 'postgres', '-X', '-A', '-t', '-v', 'ON_ERROR_STOP=1'],
+    { stdio: ['pipe', 'pipe', 'pipe'] });
+  let said = '';
+  let closed = false;
+  let gone: Error | null = null;
+  const waiting: { marker: string, held: () => void, failed: (error: Error) => void }[] = [];
+  const ended = new Promise<void>(resolve => session.once('exit', () => { closed = true; resolve(); }));
+  // A session that has gone takes none of the locks, and its pipes are closed.
+  const failed = (error: Error) => { gone = error; for (const waiter of waiting.splice(0)) waiter.failed(error); };
+  session.stdin.on('error', () => {});
+  session.stdout.setEncoding('utf8');
+  session.stdout.on('data', (chunk: string) => {
+    said += chunk;
+    for (const waiter of waiting.filter(waiter => said.includes(waiter.marker))) {
+      waiting.splice(waiting.indexOf(waiter), 1);
+      waiter.held();
+    }
+  });
+  session.on('error', failed);
+  session.on('exit', (code, signal) => failed(new Error(`the hold on ${table} ended (${code ?? signal}): ${said.trim()}`)));
+  // psql's answer names the marker once the lock is granted, so the test knows the read will wait.
+  let taken = 0;
+  const hold = () => new Promise<void>((held, fails) => {
+    const marker = `held-${++taken}`;
+    if (gone) return fails(gone);
+    if (said.includes(marker)) return held();
+    waiting.push({ marker, held, failed: fails });
+    session.stdin.write(`select pg_advisory_lock(${key}), '${marker}';\n`);
+  });
+  const letGo = () => { if (!closed) session.stdin.write(`select pg_advisory_unlock(${key});\n`); };
+  try { await hold(); } catch (error) { session.kill(); asAdmin(unset); throw error; }
+  return {
+    hold,
+    letGo,
+    stop: async () => {
+      letGo();
+      session.stdin.end();
+      await ended;
+      asAdmin(unset);
+    },
+  };
 }
 
 // Holds the page's own requests for the pages `matches` names until `letGo`. Every link prefetches its page whole and
@@ -79,8 +130,8 @@ export async function watchPlaceholders(page: Page) {
   };
 }
 
-// Takes away every slowing policy a test added (slowReads), as the seed is put back: a run stopped inside whileSlow
-// leaves its policy behind, and the restored data does not hold policies.
+// Takes away every slowing policy a test added (slowReads, holdReads), as the seed is put back: a run stopped inside
+// whileSlow or holdReads leaves its policy behind, and the restored data does not hold policies.
 export const noSlowReads = `do $$ declare found record; begin
   for found in select tablename from pg_policies where schemaname = 'public' and policyname = 'test_slow_read' loop
     execute format('drop policy test_slow_read on public.%I', found.tablename);
