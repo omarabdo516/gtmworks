@@ -104,6 +104,22 @@ test('another page\'s return focus is left for that page', async () => {
 
 // An Agent with no run, Card, file or log row yet, drawn with the tabs the server builds.
 const seo = { id: 'ag-2', connection_id: 'c-2', name: 'SEO', speciality: 'Writes the blog.', main: false };
+test('the arrow keys move from the tab that has the focus, so a press that lands as the tabs change still moves on from it', async () => {
+ const screen = await chat(1440);
+ const details = panel(screen);
+ const tab = (name: string) => details.getByRole('tab', { name, exact: true });
+ await tab('Tasks').click();
+ await expect.element(tab('Tasks')).toHaveAttribute('aria-selected', 'true');
+ // A press has moved the focus on to Files while the panel has not drawn that change yet, so the state still says Tasks.
+ await act(async () => { (tab('Files').element() as HTMLElement).focus(); });
+ await userEvent.keyboard('{ArrowRight}');
+ await expect.element(tab('Log')).toHaveAttribute('aria-selected', 'true');
+ await expect.element(tab('Log')).toHaveFocus();
+ await userEvent.keyboard('{ArrowLeft}');
+ await expect.element(tab('Files')).toHaveAttribute('aria-selected', 'true');
+ await expect.element(tab('Files')).toHaveFocus();
+});
+
 test('below 1024px "N" pressed in the details over the new chat closes them and focuses the composer', async () => {
  const start = location.href;
  history.replaceState(history.state, '', '/c/rs-learning/chat');

@@ -1,0 +1,1 @@
+| `unit.test.mjs` | Glossary terms, Role-only access and other small rules across lib/; `public/` holds no font file, by its name or its first bytes (moved from app.spec.ts, #218). | 2 s | — | keep, extended (#218) |

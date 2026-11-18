@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import childProcess from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
-import { localQuery, resetFirstRun } from '../scripts/first-run-db.mjs';
+import { localQuery, resetFirstRun, resetRetryPause } from '../scripts/first-run-db.mjs';
 
 const baseURL='http://127.0.0.1:3000';
 
@@ -44,6 +44,28 @@ test('seed restore appends the unmodified seed after resetting to post-migration
  const seed=readFileSync('supabase/seed.sql','utf8');
  assert.equal(restored,empty.replace(/\n \n $/,()=>`\n ${seed}\n `));
  assert.doesNotMatch(restored,/update public\.setup_claim set closed=true/);
+});
+
+test('a reset that meets a deadlock runs its whole transaction again; any other failure is raised at once',t=>{
+ const deadlock=Object.assign(new Error('Command failed'),{stderr:'psql:<stdin>:4: ERROR:  deadlock detected\nDETAIL:  Process 1231 waits for AccessExclusiveLock on relation 19537'});
+ let calls=0;
+ const command=stubExecution(t,()=>{ if(++calls===1) throw deadlock; return ''; });
+ resetFirstRun(baseURL,true);
+ assert.equal(command.mock.callCount(),2);
+ assert.equal(command.mock.calls[1].arguments[2].input,command.mock.calls[0].arguments[2].input);
+ // A failure that is not a deadlock left the database as it was: it says what is wrong and is not run again.
+ const wrong=Object.assign(new Error('Command failed'),{stderr:'psql:<stdin>:5: ERROR:  relation "public.setup_claim" does not exist'});
+ const other=stubExecution(t,()=>{throw wrong;});
+ assert.throws(()=>resetFirstRun(baseURL),error=>error===wrong);
+ assert.equal(other.mock.callCount(),1);
+});
+
+test('only a deadlock in a transaction rolled back whole is retried, five attempts at most',()=>{
+ assert.equal(resetRetryPause('psql:<stdin>:4: ERROR:  deadlock detected',1),200);
+ assert.equal(resetRetryPause('psql:<stdin>:4: ERROR:  deadlock detected',4),800);
+ assert.equal(resetRetryPause('psql:<stdin>:4: ERROR:  deadlock detected',5),null);
+ for(const [stderr,attempt] of [['psql:<stdin>:4: ERROR:  lock timeout',1],['psql:<stdin>:4: ERROR:  canceling statement due to statement timeout',2],['',1],[undefined,1],[null,3]])
+  assert.equal(resetRetryPause(stderr,attempt),null,`${stderr} at attempt ${attempt}`);
 });
 
 test('local SELECTs parse the CLI non-agent row array and retain native JSON types',t=>{

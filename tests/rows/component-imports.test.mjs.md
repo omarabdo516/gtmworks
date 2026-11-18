@@ -1,0 +1,1 @@
+| `component-imports.test.mjs` | No component test imports, directly or through another file, `server-only`: with it Vite's dependency scan stops on a cold cache in CI, the run reloads with a second React and the whole shard fails (#220, #221, #223). A failure names the test file, the import chain and the module; a fixture chain proves the message. (#218) | 0.1 s | — | new |

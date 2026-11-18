@@ -1,0 +1,1 @@
+| `verify-db-session-canary.sql` | data: a verify file whose one statement fails; `ci.sh database` runs it through the real psql session, which must fail it with its error (#259) | — | — | data, new (#259) |

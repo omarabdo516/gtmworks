@@ -15,4 +15,5 @@ export declare function keyboardTarget(column: string, key: string, rtl: boolean
 export declare function blockReason(from: string, to: string, byChat?: boolean): '' | 'same' | 'decide' | 'chat' | 'waiting';
 export declare function cardAgent(card: {id:number, next_actor:string|null}, assignees: {card_id:number, person_id:string}[], agentIds: Set<string>): string | null;
 export declare function inEdgeBand(box: {left:number, right:number, top:number, bottom:number, width:number, height:number}, point: {x:number, y:number}, scrolls?: {x:boolean, y:boolean}, share?: number): boolean;
+export declare function scrollAxes(room: {x:number, y:number}): {x:boolean, y:boolean};
 export declare function visibleApprovals<C extends {id:number, agent_id?:string|null}, I extends {kind:string, id:number}>(cards: C[], items: I[], seen: Set<string>): {cards: C[], items: I[]};

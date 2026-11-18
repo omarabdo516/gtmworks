@@ -1,0 +1,1 @@
+| `fake-engine.mjs` | browser helper: an in-memory engine, whose runs report their tool calls as numbered events and their length (#141), and may wait on requests to allow an action that take one choice, expire or end with a stop (#163) | — | — | helper, kept |

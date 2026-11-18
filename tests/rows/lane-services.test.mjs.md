@@ -1,0 +1,1 @@
+| `lane-services.test.mjs` | Every lane starts the Supabase services lane 0 starts, read from the stack configuration `scripts/local-db.sh` writes for each lane, and none starts Studio, the log services or the edge runtime. (#259) | 0.8 s | — | new (#259) |
