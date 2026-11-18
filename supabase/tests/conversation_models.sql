@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(21);
+select plan(30);
 -- #158. Ads in RS Learning, shown to every Member; one Conversation with Ads each for the Owner (1), the Manager (2), a
 -- Contributor (3) and the Viewer (4), and a second one for the Owner.
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
@@ -74,5 +74,33 @@ reset role;
 set local role authenticated;
 select throws_ok($$select public.pin_run_model('e9000000-0000-0000-0000-000000000001','ea000000-0000-0000-0000-000000000001')$$,'42501',null,'only the worker pins');
 reset role;
+-- A waiting turn the Engine refused for its model is settled in one call with its attempt (refuse_run_model with three
+-- arguments): the revert, the turn's mark and its failure commit together, and only while that attempt is the latest.
+insert into public.conversation_queued_turns(conversation_id,send_key,company_id,person_id,agent_id,message) values
+ ('e9000000-0000-0000-0000-000000000001','ea000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','e8000000-0000-0000-0000-000000000002','Draft the offer email');
+insert into public.conversation_run_reservations(conversation_id,send_key,company_id,connection_id,person_id,agent_id,message,profile) values
+ ('e9000000-0000-0000-0000-000000000001','ea000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','e8000000-0000-0000-0000-000000000001',
+  '20000000-0000-0000-0000-000000000001','e8000000-0000-0000-0000-000000000002','Draft the offer email','model-test');
+select public.pinned_run_note('e9000000-0000-0000-0000-000000000001','ea000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select public.set_conversation_model('10000000-0000-0000-0000-000000000001','e9000000-0000-0000-0000-000000000001','{"provider":"anthropic","model":"claude-opus-4-6"}');
+reset role;
+set local role service_role;
+select public.pin_run_model('e9000000-0000-0000-0000-000000000001','ea000000-0000-0000-0000-000000000003');
+select public.begin_start('e9000000-0000-0000-0000-000000000001','ea000000-0000-0000-0000-000000000003');
+select public.begin_start('e9000000-0000-0000-0000-000000000001','ea000000-0000-0000-0000-000000000003');
+select is(public.refuse_run_model('e9000000-0000-0000-0000-000000000001','ea000000-0000-0000-0000-000000000003',1),false,'a refusal of an attempt a newer one followed changes nothing');
+select is(public.pin_run_model('e9000000-0000-0000-0000-000000000001','ea000000-0000-0000-0000-000000000003'),'{"provider":"anthropic","model":"claude-opus-4-6"}'::jsonb,'the newer attempt keeps the model it was pinned with');
+reset role;
+select is((select model from public.conversations where id='e9000000-0000-0000-0000-000000000001'),'{"provider":"anthropic","model":"claude-opus-4-6"}'::jsonb,'and the Conversation keeps its model');
+select is((select (failed_at is null) and not model_refused from public.conversation_queued_turns where conversation_id='e9000000-0000-0000-0000-000000000001' and send_key='ea000000-0000-0000-0000-000000000003'),true,'and the turn is neither failed nor marked');
+set local role service_role;
+select is(public.refuse_run_model('e9000000-0000-0000-0000-000000000001','ea000000-0000-0000-0000-000000000003',2),true,'the refusal of the latest attempt is told');
+reset role;
+select is((select model from public.conversations where id='e9000000-0000-0000-0000-000000000001'),current_setting('test.pick')::jsonb,'it puts the Conversation back on its earlier model');
+select is((select model_refused from public.conversation_queued_turns where conversation_id='e9000000-0000-0000-0000-000000000001' and send_key='ea000000-0000-0000-0000-000000000003'),true,'marks the turn refused for its model');
+select isnt((select failed_at from public.conversation_queued_turns where conversation_id='e9000000-0000-0000-0000-000000000001' and send_key='ea000000-0000-0000-0000-000000000003'),null,'and fails it in the same call, so it never starts again');
+select is((select count(*)::int from public.conversation_run_reservations where conversation_id='e9000000-0000-0000-0000-000000000001' and send_key='ea000000-0000-0000-0000-000000000003'),0,'with its reservation released');
 select * from finish();
 rollback;
