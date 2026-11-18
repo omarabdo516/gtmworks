@@ -216,6 +216,12 @@ for(const [mode,language] of [['alone','en'],['team','ar']] as const) test(`firs
  const open=dialog.getByRole('button',{name:language==='ar'?'افتح المساحة':'Open the workspace'});
  await expect(open).toBeDisabled();
  await dialog.getByRole('radio',{name:choiceNames[language][mode==='alone'?0:1]}).check();
+ // A team answers a second step first: who is on it. Alone opens the workspace at once (#186).
+ if(mode==='team') {
+  await dialog.getByRole('button',{name:language==='ar'?'كمّل':'Continue'}).click();
+  await expect(dialog.getByRole('heading',{name:language==='ar'?'مين معاك في التيم؟':'Who’s on your team?'})).toBeVisible();
+  await expect(dialog.locator('#fr-email-0')).toBeFocused();
+ }
  await open.click();
  await expect(page).toHaveURL(new RegExp(`/c/${slug}/conversations/[0-9a-f-]{36}(\\?first=${mode})?$`));
  // The workspace says it is ready, on the page first run lands on (#169), and the one-time flag leaves the address.
@@ -254,4 +260,73 @@ for(const [mode,language] of [['alone','en'],['team','ar']] as const) test(`firs
  await expect(page.locator('.home-dashboard')).toBeVisible();
  await expect(page.getByRole('dialog')).toHaveCount(0);
  expect(workspace(baseURL!)).toEqual([{work_mode:mode,agents:'Lead:true',conversations:1,cards:0}]);
+});
+
+// #186: the Owner signs up and answers first run's second question, "Who’s on your team?".
+async function newOwner(page:Page) {
+ await page.request.delete(inbox);
+ await page.goto(`/first-run#code=${code}`);
+ await fillFirstRun(page,input);
+ await page.getByRole('button',{name:'Create and sign in'}).click();
+ await expect(page).toHaveURL(/\/c\/first-company-[a-f0-9]{8}\/home$/);
+ return new URL(page.url()).pathname.split('/')[2];
+}
+const invitations=(baseURL:string)=>localQuery(`select email,role from public.member_invitations order by email`,baseURL);
+const invitedLog=(baseURL:string)=>localQuery(`select details->>'email' email, details->>'role' role from public.company_log where action='member_invited' order by id`,baseURL);
+
+test('"Open the workspace" with two filled rows makes two invitations with their Roles and two log rows, saves team, and lands in the Owner\'s Conversation with Lead; the mailbox holds both emails (#186)',async({page,baseURL})=>{
+ const stamp=Date.now(), first=`nour-${stamp}@example.com`, second=`karim-${stamp}@example.com`;
+ const slug=await newOwner(page);
+ const dialog=page.getByRole('dialog',{name:question.en});
+ await expect(dialog).toBeVisible();
+ expect(workspace(baseURL!)).toEqual([{work_mode:null,agents:null,conversations:0,cards:0}]);
+ expect(workerAddsLead(baseURL!)).toEqual([{attached:true}]);
+ await page.reload();
+
+ await dialog.getByRole('radio',{name:'With a team'}).check();
+ await dialog.getByRole('button',{name:'Continue'}).click();
+ await dialog.getByRole('button',{name:'Add a member'}).click();
+ await dialog.locator('#fr-email-0').fill(first);
+ await dialog.locator('#fr-role-0').selectOption('manager');
+ await dialog.locator('#fr-email-1').fill(second);
+ await dialog.locator('#fr-role-1').selectOption('viewer');
+ await dialog.getByRole('button',{name:'Open the workspace'}).click();
+
+ await expect(page).toHaveURL(new RegExp(`/c/${slug}/conversations/[0-9a-f-]{36}`));
+ await expect(page.locator('.toast')).toHaveText('Sent 2 invites · start with Lead and ask it for your first agent');
+ await expect.poll(()=>new URL(page.url()).search).not.toContain('first=');
+ expect(workspace(baseURL!)).toEqual([{work_mode:'team',agents:'Lead:true',conversations:1,cards:0}]);
+ expect(invitations(baseURL!)).toEqual([{email:first,role:'manager'},{email:second,role:'viewer'}]);
+ expect(invitedLog(baseURL!)).toEqual([{email:first,role:'manager'},{email:second,role:'viewer'}]);
+ const mailbox=await (await page.request.get(inbox)).json();
+ expect((mailbox.messages ?? []).map((message:{To:{Address:string}[]})=>message.To[0].Address).sort()).toEqual([first,second].sort());
+});
+
+test('"Back" and Escape return to the question with the team chosen and nothing saved; "Skip" saves team with no invitation (#186)',async({page,baseURL})=>{
+ const slug=await newOwner(page);
+ const dialog=page.getByRole('dialog',{name:question.en});
+ await expect(dialog).toBeVisible();
+ expect(workerAddsLead(baseURL!)).toEqual([{attached:true}]);
+ await page.reload();
+
+ await dialog.getByRole('radio',{name:'With a team'}).check();
+ await dialog.getByRole('button',{name:'Continue'}).click();
+ await dialog.getByRole('button',{name:'Back'}).click();
+ await expect(dialog.getByRole('radio',{name:'With a team'})).toBeChecked();
+ await expect(dialog.getByRole('button',{name:'Continue'})).toBeVisible();
+ expect(workspace(baseURL!)).toEqual([{work_mode:null,agents:'Lead:true',conversations:0,cards:0}]);
+
+ await dialog.getByRole('button',{name:'Continue'}).click();
+ await page.keyboard.press('Escape');
+ await expect(dialog.getByRole('radio',{name:'With a team'})).toBeChecked();
+ await expect(dialog.getByRole('button',{name:'Continue'})).toBeVisible();
+ expect(workspace(baseURL!)).toEqual([{work_mode:null,agents:'Lead:true',conversations:0,cards:0}]);
+
+ await dialog.getByRole('button',{name:'Continue'}).click();
+ await dialog.getByRole('button',{name:'Skip'}).click();
+ await expect(page).toHaveURL(new RegExp(`/c/${slug}/conversations/[0-9a-f-]{36}`));
+ await expect(page.locator('.toast')).toHaveText('The workspace is open · start with Lead and ask it for your first agent');
+ expect(workspace(baseURL!)).toEqual([{work_mode:'team',agents:'Lead:true',conversations:1,cards:0}]);
+ expect(invitations(baseURL!)).toEqual([]);
+ expect(invitedLog(baseURL!)).toEqual([]);
 });
