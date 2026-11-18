@@ -110,14 +110,15 @@ export function AgentMemory({company,agent,notes,main,canReset,canEdit,canForget
  };
  const removeLatest=useRef(removeNote);
  useEffect(()=>{ removeLatest.current=removeNote; });
- // Leaving the page removes a note whose toast never ended; a hidden note stays hidden on the way out.
+ // Leaving the page, or the memory being drawn away (another tab, another Agent), removes a note whose toast never
+ // ended at once, so no clock outlives the view it was started in; a hidden note stays hidden on the way out.
  useEffect(()=>{
   const leave=()=>{
    const waiting=forgetting.current; if(!waiting) return;
    forgetting.current=null; window.clearTimeout(waiting.timer); void removeLatest.current(waiting.note,true);
   };
   window.addEventListener('pagehide',leave);
-  return ()=>window.removeEventListener('pagehide',leave);
+  return ()=>{ window.removeEventListener('pagehide',leave); leave(); };
  },[]);
  const forget=(note:MemoryNote)=>{
   // A second forget while a toast is up removes the first note at once, as its toast gives way to the new one.

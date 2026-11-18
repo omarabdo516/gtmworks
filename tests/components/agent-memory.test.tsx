@@ -227,6 +227,17 @@ test('leaving the page removes a note whose toast never ended', async () => {
  expect(send.mock.calls[0][1].keepalive).toBe(true);
 });
 
+test('the memory drawn away removes a note whose toast never ended, and no clock is left behind', async () => {
+ const send = responder({ forgotten: true });
+ vi.stubGlobal('fetch', send);
+ const screen = await drawn({ canForget: true });
+ await screen.getByRole('button', { name: /^Forget this: Prefers short/ }).click();
+ expect(send).not.toHaveBeenCalled();
+ await screen.unmount();
+ await expect.poll(() => send.mock.calls.length).toBe(1);
+ expect(JSON.parse(String(send.mock.calls[0][1].body)).note).toBe('memory:memory:0:4d2c1b0a9f8e');
+});
+
 test('in Arabic the note actions read as the reference words them', async () => {
  const screen = await drawn({ canEdit: true, canForget: true }, 'ar');
  await expect.element(screen.getByRole('button', { name: /^عدّل: Prefers/ })).toBeVisible();
