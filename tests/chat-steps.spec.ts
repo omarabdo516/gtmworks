@@ -55,7 +55,8 @@ test('a reply\'s steps on screen are its Hermes session\'s, and the chat shows t
  await signIn(page,'omar@example.com','/c/rs-learning/home');
  const toggle=page.locator('.steps__toggle');
  const opened=Date.now();
- await page.goto(`/c/rs-learning/conversations/${conversation}`);
+ // The clock stops when the steps are on screen, not at the page's load event (decision 0042, Omar 2026-11-18).
+ await page.goto(`/c/rs-learning/conversations/${conversation}`,{waitUntil:'commit'});
  await expect(toggle).toHaveText('Used 2 tools · 41 sec');
  const took=Date.now()-opened;
  console.log(`chat open to steps visible: ${took} ms`);
