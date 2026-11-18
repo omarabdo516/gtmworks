@@ -273,10 +273,11 @@ function PlusMenu({open,setOpen,callable,channel,model,attach,pickFile,insert,fi
    <div className="menu__label">{t('plusCommands')}</div>
    {commands.map(command=><button key={command.command} type="button" className="menu__item" role="menuitem" onClick={()=>pick(`${command.command} `)}>
     <ShellIcon name="slash"/><span className="menu__t">{t(command.label,command.agent)}</span><span className="menu__hint menu__code">{command.command}</span></button>)}
-   {attach&&<><div className="menu__sep" role="separator"/>
-    <button type="button" className="menu__item" role="menuitem" onClick={()=>{ setOpen(false); pickFile(); }}>
-     <ShellIcon name="clip"/><span className="menu__t">{t('plusAttach')}</span></button></>}
-   {place&&<><div className="menu__sep" role="separator"/><Suspense fallback={null}><ConnectApps place={place} close={()=>setOpen(false)} opener={()=>button.current}/></Suspense></>}
+   {/* design-reference: plusMenuHTML. One separator, then Attach a file and Connect apps together. */}
+   {(attach||place)&&<div className="menu__sep" role="separator"/>}
+   {attach&&<button type="button" className="menu__item" role="menuitem" onClick={()=>{ setOpen(false); pickFile(); }}>
+    <ShellIcon name="clip"/><span className="menu__t">{t('plusAttach')}</span></button>}
+   {place&&<Suspense fallback={null}><ConnectApps place={place} close={()=>setOpen(false)} opener={()=>button.current}/></Suspense>}
    {picks&&models&&models.list.length>0&&<><div className="menu__sep" role="separator"/>
     <div className="menu__label">{t('plusModel')}</div>
     {models.list.map(row=>{ const on=row.provider===models.current?.provider&&row.model===models.current?.model;

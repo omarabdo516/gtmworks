@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(29);
+select plan(30);
 -- #156: a channel message keeps its images, every Member of the channel reads them (a Viewer included), and only a
 -- Member of the channel who may write keeps them. A message of images alone is stored and starts no Run; a text of
 -- spaces only is still refused, as before.
@@ -122,6 +122,15 @@ select throws_ok($$select public.reserve_channel_files('69000000-0000-0000-0000-
  'P0002','channelNotFound','nor attaches one in it');
 set local role anon;
 select throws_ok($$select count(*) from public.channel_attachments$$,'42501',null,'a visitor reads none');
+reset role;
+
+-- The stored bytes are as open as their row: a Member of the channel reads the image the server wrote for it.
+insert into storage.objects(bucket_id,name) values
+ ('creatives','10000000-0000-0000-0000-000000000001/channels/69000000-0000-0000-0000-000000000001/d2400000-0000-0000-0000-000000000001-0');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+select is((select count(*)::int from storage.objects where name='10000000-0000-0000-0000-000000000001/channels/69000000-0000-0000-0000-000000000001/d2400000-0000-0000-0000-000000000001-0'),
+ 1,'a Member of the channel reads its stored image');
 reset role;
 
 select * from finish();

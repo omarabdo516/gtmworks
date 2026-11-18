@@ -97,7 +97,7 @@ test('in a Conversation the Contributor\'s "Call an agent" lists exactly the Age
   const seen=await page.locator('.sidebar .agent-tile:not(.agent-tile--new) .agent-tile__name').allTextContents();
   expect(seen).not.toContain('Reach');
   // Connect apps is every Member's (#158; design-reference: plusMenuHTML's open-apps item), drawn once its code arrives.
-  await expect.poll(()=>groups(page)).toEqual({'Call an agent':seen,'Commands':['Ask for a new agent','Connect apps']});
+  await expect.poll(()=>groups(page)).toEqual({'Call an agent':seen,'Commands':['Ask for a new agent','Attach a file','Connect apps']});
   // Reach was made from the meta role but is hidden from this Member, so its command is not listed (#159).
   expect((await groups(page)).Commands).not.toContain('New campaign with Reach');
   await expect(page.getByRole('menu').locator('.menu__item .agent-face')).toHaveCount(seen.length);
@@ -111,7 +111,7 @@ test('in a Conversation the Commands name the Agent each role was given, after "
  await plus.click();
  // Reach is this Company's meta Agent and Sage its writer; no Agent was made from numbers or hook, so those two commands
  // are not listed. /agent comes last among the Commands and Connect apps after them (#159; design-reference: CMDS).
- await expect.poll(async()=>(await groups(page)).Commands).toEqual(['New campaign with Reach','New SEO article from Sage','Ask for a new agent','Connect apps']);
+ await expect.poll(async()=>(await groups(page)).Commands).toEqual(['New campaign with Reach','New SEO article from Sage','Ask for a new agent','Attach a file','Connect apps']);
  // The "/" list offers the same Commands, each naming its Agent, with the command in code after the line; opening it
  // closes the "+" menu.
  await page.getByRole('textbox',{name:'Message'}).fill('/');
@@ -144,7 +144,7 @@ test('in the general channel "Call someone in the channel" lists the other Membe
  // New channel follows the Agents for the Owner of a Company worked as a team (#158; design-reference: plus-team), and
  // Connect apps is drawn once its code arrives. Reach was made from the meta role, so the channel's Commands name it too
  // (#159); Sage's writer command is there as well.
- await expect.poll(async()=>(await groups(page)).Commands).toEqual(['New campaign with Reach','New SEO article from Sage','Ask for a new agent','Connect apps']);
+ await expect.poll(async()=>(await groups(page)).Commands).toEqual(['New campaign with Reach','New SEO article from Sage','Ask for a new agent','Attach a file','Connect apps']);
  const found=await groups(page);
  expect(Object.keys(found)).toEqual(['Call someone in the channel','Call an agent','Commands']);
  expect([...found['Call someone in the channel']].sort()).toEqual([...others].sort());
