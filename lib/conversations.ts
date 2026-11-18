@@ -139,8 +139,9 @@ export const shown=(messages:StoredMessage[],ends:RunEnd[]=[],leadCards:PlacedCa
  const last=message.author==='agent'||!replied;
  return last&&rules.length?[...turn,{id:message.id,author:'agent',author_name:agentName,body:'',created_at:rules[0].said_at,kind:'saved',saved:rules}]:turn;
 });
-// A Conversation that put its Card on the board (#144) says so once, under the Agent's reply to its first Run
-// (`kind` boarded; design-reference: send's note after the first reply).
+// A Conversation that put its Card on the board (#144) says so once, under the Agent's reply to its first Run, or under
+// the handover's answer when Lead's handover put it there (#147; design-reference: send's note and mainTurn's note after
+// the handover).
 export const withBoardNote=(record:ConversationMessage[],reply:number|undefined):ConversationMessage[]=>record.flatMap(message=>
  message.author==='agent'&&!message.kind&&message.id===reply?[message,{id:message.id,author:'agent',author_name:message.author_name,body:'',created_at:message.created_at,kind:'boarded'}]:[message]);
 // Each decision goes before the first item shown after it.

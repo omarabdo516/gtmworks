@@ -470,6 +470,7 @@
   "logActMoved": "moved the card",
   "logActChanged": "changed {0}",
   "logActHandedOver": "handed the card over",
+  "logActHandedTo": "handed to {0}",
   "logActApproved": "approved the card",
   "logActRejected": "sent the card back",
   "logActSkipped": "skipped a removed approval step",

@@ -40,8 +40,8 @@ function handover(overrides = {}) {
     if(row.state==='returning') { row.follow_up_run=args.run; row.state='follow_up'; return ok(true); }
     return ok(false);
    }
-   if(name==='close_handover_target') { Object.assign(row,{state:'returning',target_outcome:args.outcome,summary:args.summary}); return ok(true); }
-   if(name==='close_handover_follow_up') { ends.push({run:args.run,outcome:args.outcome}); if(args.reply) messages.push({author:'agent',body:args.reply,run:args.run}); row.state='done'; row.follow_up_outcome=args.outcome; return ok(true); }
+   if(name==='close_handover_target') { Object.assign(row,{state:'returning',target_outcome:args.run_outcome,summary:args.words}); return ok(true); }
+   if(name==='close_handover_follow_up') { ends.push({run:args.run,outcome:args.run_outcome}); if(args.reply) messages.push({author:'agent',body:args.reply,run:args.run}); row.state='done'; row.follow_up_outcome=args.run_outcome; return ok(true); }
    return {data:null,error:{message:'unexpected'}};
   },
  };
@@ -62,7 +62,7 @@ const drive=async(/** @type {any} */ service,/** @type {any} */ engineFor,/** @t
 };
 
 test('Lead\'s handover runs the job on the target\'s own profile with no tools, then a follow-up Lead Run in the conversation\'s session reports what came of it',async()=>{
- const {row,service,messages}=handover();
+ const {row,service,messages,calls}=handover();
  const {lead,target,engineFor}=engines();
  target.settings.reply=()=>'Three ad sets, 30 days, EGP 9,000.';
  lead.settings.reply=()=>'Ads planned the March intake: three ad sets, 30 days, EGP 9,000.';
@@ -90,6 +90,10 @@ test('Lead\'s handover runs the job on the target\'s own profile with no tools, 
  assert.deepEqual(followUp[0].tools,[],'the follow-up writes the reply, it does not hand on again');
  assert.equal(followUp[0].instructions,'Lead the team.','it runs as the Lead on the Company\'s profile, with its instructions');
  assert.deepEqual(messages,[{author:'agent',body:'Ads planned the March intake: three ad sets, 30 days, EGP 9,000.',run:followUp[0].id}]);
+ // The arguments are the names the handover functions declare: PostgREST resolves a call by them, so one that names
+ // another leaves the leg where it is (a Card still follows the handover, #147).
+ assert.deepEqual(calls.filter(([name])=>name.startsWith('close_handover')).map(([name,args])=>[name,Object.keys(args).sort().join(',')]),
+  [['close_handover_target','h,run,run_outcome,words'],['close_handover_follow_up','h,reply,run,run_outcome']]);
 });
 
 test('a Target Run that fails still brings Lead back to say the job did not finish, and the handover keeps no summary',async()=>{

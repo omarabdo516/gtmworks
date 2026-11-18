@@ -40,7 +40,10 @@ update isolation_matrix m set fixed = v.fixed::jsonb from (values
  ('conversation_messages', $${"author": "'person'", "send_key": "gen_random_uuid()"}$$),
  ('conversation_run_ends', $${"outcome": "'completed'"}$$),
  ('members', $${"person_id": "'e3370000-0000-0000-0000-000000000002'", "role": "'contributor'"}$$),
- ('reply_cards', $${"kind": "'draft'", "state": "'shown'", "content": "'{\"line\": \"isolation\", \"rows\": []}'"}$$),
+ -- A card sits in one place: a Conversation's or a channel message's (#148); this row names a Conversation, as the
+ -- test's own Conversation row does.
+ ('reply_cards', $${"kind": "'draft'", "state": "'shown'", "content": "'{\"line\": \"isolation\", \"rows\": []}'",
+   "conversation_id": "'e3370000-0000-0000-0000-00000000000c'"}$$),
  ('waiting_items', $${"card_id": "1"}$$),
  ('work_attachments', $${"path": "'10000000-0000-0000-0000-000000000001/isolation'"}$$),
  ('work_stages', $${"board_column": "'ideas'"}$$),

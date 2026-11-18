@@ -32,9 +32,9 @@ const stored = {
 };
 const replied = '2026-06-10T09:42:00Z';
 type TiedCard = { id: number, column: string, made?: string, wait?: { person: string, kind: 'question' | 'hand', title: string } };
-function database(card: TiedCard | null) {
+function database(card: TiedCard | null, messages: typeof stored = stored) {
  // The messages and how their runs ended are read through the Conversation, in one statement (lib/conversation-record.ts).
- const { conversation_run_ends, conversation_messages, ...rest } = stored;
+ const { conversation_run_ends, conversation_messages, ...rest } = messages;
  const rows: Record<string, unknown[]> = { ...rest, conversations: [{ conversation_run_ends, conversation_messages, conversation_queued_turns: [], lead_agent_requests: [], lead_made_agents: [] }], work_cards: card ? [{ id: card.id, created_at: card.made ?? replied, stage_id: 3, wait: card.wait ?? null, work_stages: { id: 3, board_column: card.column } }] : [] };
  const table = (name: string) => {
   const found = rows[name] ?? [];
@@ -45,6 +45,19 @@ function database(card: TiedCard | null) {
  return { from: table, rpc: async () => ({ data: null, error: null }) } as unknown as Parameters<typeof conversationRecord>[0];
 }
 const recordWith = (card: TiedCard | null) => conversationRecord(database(card), 'p-3', 'co-1', { id: 'cv-1', agent_id: null, agent_name: 'Ads', hermes_agents: { connection_id: 'c-1' } });
+// #147: a chat with Lead, whose Card only a handover makes. The person's message comes first, the Card when Lead's reply
+// hands the job over, Lead's reply of that Run, then the follow-up reply the handover's answer is.
+const at0 = '2026-06-10T09:41:00Z';
+const leadStored = {
+ conversation_run_ends: [{ run_id: 'r1', outcome: 'completed' }, { run_id: 'r9', outcome: 'completed' }],
+ conversation_messages: [
+  { id: 1, author: 'person', author_name: 'Youssef', body: 'Plan the March intake', run_id: 'r1', created_at: at0 },
+  { id: 2, author: 'agent', author_name: 'Lead', body: 'That is Ads’s work: I handed it over.', run_id: 'r1', created_at: '2026-06-10T09:41:05Z' },
+  { id: 3, author: 'agent', author_name: 'Lead', body: 'Ads planned the March intake.', run_id: 'r9', created_at: '2026-06-10T09:42:10Z' },
+ ],
+ people: [{ name: 'Youssef' }],
+};
+const leadRecordWith = (card: TiedCard | null) => conversationRecord(database(card, leadStored), 'p-3', 'co-1', { id: 'cv-9', agent_id: 'a-lead', agent_name: 'Lead', hermes_agents: { connection_id: 'c-0', is_default: true } });
 // The page reads the chat's Card beside the record and hands it to the frame, as here.
 const view = (record: ConversationRecord, { language = 'en', writer = true }: { language?: 'en' | 'ar', writer?: boolean } = {}) => <LanguageProvider language={language}>
  <div className="gw"><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={record.conversation} title="" writer={writer} board={record.board}><Arrived record={arrived(record)} team={false}/></ConversationView></div>
@@ -76,6 +89,16 @@ test('a chat started from its Card (#145) has the pill but no line, since the Ca
  await expect.element(screen.getByRole('link', { name: 'On the board: In progress' })).toBeVisible();
  expect(document.querySelectorAll('.turns > li[data-kind="boarded"]')).toHaveLength(0);
  expect(document.querySelectorAll('.turns > li')).toHaveLength(4);
+});
+
+test('a chat with Lead whose Card a handover made says so once, under the handover\'s answer', async () => {
+ await page.viewport(1440, 900);
+ const screen = await show(await leadRecordWith({ id: 9, column: 'progress', made: '2026-06-10T09:41:02Z' }));
+ // The line follows the follow-up reply the handover's answer is, never Lead's reply that handed the job over.
+ const turns = [...document.querySelectorAll('.turns > li')].map(row => `${row.getAttribute('data-author') ?? ''}:${row.getAttribute('data-kind') ?? ''}`);
+ expect(turns).toEqual(['person:', 'agent:', 'agent:', ':boarded']);
+ await expect.element(screen.getByText('This card was added to the board under “In progress”')).toBeVisible();
+ await expect.element(screen.getByRole('link', { name: 'On the board: In progress' })).toBeVisible();
 });
 
 test('a chat with no Card on the board has no pill and no line', async () => {
