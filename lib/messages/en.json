@@ -697,6 +697,7 @@
   "settingsKnowCompanyD": "One set of pages for the whole company. Every agent reads them before any job. Edited by the Owner and the Managers.",
   "settingsKnowMemory": "An agent’s memory",
   "settingsKnowMemoryD": "Each agent’s own: what it was told and what it learned from its work. You find it under “Memory” on each agent.",
+  "knowOpenMemory": "Open the memory of {0}",
   "knowVoice": "Brand voice",
   "knowAudience": "Audience",
   "knowProducts": "Products and prices",
