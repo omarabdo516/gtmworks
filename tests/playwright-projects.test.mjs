@@ -2,7 +2,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 
 // The real playwright.config.ts runs in a sandbox with stand-in specs and no web server, so the order and the
 // skip rules of its projects (functional, then measured alone, then first run) are observed through Playwright itself, as CI runs them (CI=true: one retry).
@@ -118,4 +118,36 @@ describe('the Playwright projects', { concurrency: 3 }, () => {
    assert.ok(ends(results, 'measured') <= starts(results, 'first-run'), output);
   }
  });
+});
+
+// The real config and specs, listed and never run: --list starts no web server.
+const list = (args, ci) => {
+ const env = { ...process.env, NODE_TEST_CONTEXT: undefined, GTMWORKS_HOSTED_ELSEWHERE: 'true' };
+ if (ci) env.CI = 'true'; else delete env.CI;
+ const child = spawnSync(process.execPath, [resolve('node_modules/@playwright/test/cli.js'), 'test', '--list', '--reporter=json', ...args], { encoding: 'utf8', env, maxBuffer: 64 * 1024 * 1024 });
+ assert.equal(child.status, 0, child.stderr);
+ return JSON.parse(child.stdout);
+};
+const listed = report => {
+ const ids = [];
+ const walk = suites => { for (const suite of suites ?? []) { for (const spec of suite.specs ?? []) for (const t of spec.tests) ids.push(`${t.projectName} ${spec.file} ${spec.title}`); walk(suite.suites); } };
+ walk(report.suites);
+ return ids;
+};
+
+test('the real config retries a failed browser test once on CI and never locally', () => {
+ for (const [ci, retries] of [[true, 1], [false, 0]]) {
+  const { config } = list([], ci);
+  assert.ok(config.projects.length > 0);
+  for (const project of config.projects) assert.equal(project.retries, retries, `${project.name} CI=${ci}`);
+ }
+});
+
+// CI runs the browser suite as --shard=<i>/3 (#335): together the three shards list every test exactly once.
+test('the three shards together run every browser test exactly once (#335, #319)', () => {
+ const whole = listed(list([], true)).sort();
+ assert.ok(whole.length > 0);
+ const shards = [1, 2, 3].map(shard => listed(list([`--shard=${shard}/3`], true)));
+ for (const shard of shards) assert.ok(shard.length > 0, 'every shard has tests');
+ assert.deepEqual(shards.flat().sort(), whole);
 });
