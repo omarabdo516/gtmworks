@@ -49,8 +49,8 @@ test.each(['en', 'ar'] as const)('in the %s interface, the line and rows of an A
  for (const text of texts) expect(text?.matches(':dir(rtl)'), text?.textContent ?? '').toBe(true);
 });
 
-// design-reference/index.html: Arabic content inside the English interface takes each line's direction from its own text
-// and keeps the interface's left edge; a label stays in its column. In the Arabic interface nothing changes.
+// design-reference/index.html: Arabic content inside the English interface keeps the interface's left edge; a label stays
+// in its column. Every text follows the card's direction (#307), so none takes its own. In the Arabic interface nothing changes.
 test.each([['en', 'left'], ['ar', 'start']] as const)('in the %s interface, the title, line and values align %s', async (language, align) => {
  const sheets = await Promise.all(['app/tokens.css', 'app/shell.css'].map(async file => (await import(/* @vite-ignore */ `/${file}?inline`)).default as string));
  const styles = sheets.map(css => Object.assign(document.createElement('style'), { textContent: css }));
@@ -62,7 +62,7 @@ test.each([['en', 'left'], ['ar', 'start']] as const)('in the %s interface, the 
  const style = (text: string) => { const found = getComputedStyle(group.getByText(text, { exact: true }).element()); return [found.textAlign, found.unicodeBidi]; };
  for (const text of [plan.title, plan.line, plan.rows[0].value]) {
   expect(style(text)[0], text).toBe(align);
-  if (language === 'en') expect(style(text)[1], text).toBe('plaintext');
+  expect(style(text)[1], `${text} follows the card (#307)`).not.toBe('plaintext');
  }
  expect(style(plan.rows[0].label)[0], 'a label keeps its column').toBe('start');
  if (language === 'en') {
