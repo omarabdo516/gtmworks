@@ -24,7 +24,8 @@ test.beforeAll(({},testInfo)=>{
   delete from public.member_invitations where company_id='${company}';
   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
    ('${lead}','${company}','${id(1)}','Lead','General',true,'team-lead'),
-   ('${ads}','${company}','${id(2)}','Meta Ads','Runs the Meta ads.',false,'team-ads');
+   ('${ads}','${company}','${id(2)}','Meta Ads','Runs the Meta ads.',false,'team-ads')
+  on conflict (id) do nothing;
  end $$;`);
 });
 
@@ -94,6 +95,9 @@ test('the Owner invites a Member from inside the dialog, its errors shown, and t
 });
 
 test('a Manager holds the Team table and can turn a switch, and has no invite button',async({page})=>{
+ // A Manager's table holds the Agents shown to them, as Settings, Company does (hermes_agents_read): Meta Ads is shown
+ // to them here, so its column is theirs to switch for another Member.
+ query(`insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','20000000-0000-0000-0000-000000000002','${ads}') on conflict do nothing`);
  await signIn(page,'manager@example.com','/c/rs-learning/home');
  const {dialog}=await openTeam(page);
  await expect(dialog.locator('.ta-table')).toBeVisible();
