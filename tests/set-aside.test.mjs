@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
+import { listedSpecs } from './playwright-list.mjs';
 
 // A flaky browser test may be set aside for 7 days at most, with an issue (#336, decision 0036). It is skipped with
 // Playwright's own skip (test.fixme or test.skip) and named in tests/set-aside.json; a sign-in or Company isolation
@@ -15,18 +16,7 @@ function skippedCases(config) {
   const list = JSON.parse(run.stdout);
   assert.deepEqual((list.errors ?? []).map(error => error.message), [], `${config}: playwright --list reported errors`);
   assert.equal(run.status, 0, `${config}: playwright --list exited ${run.status}: ${run.stderr}`);
-  const cases = [];
-  const walk = (suites, outer) => {
-    for (const suite of suites) {
-      const path = suite.file && suite.title === suite.file ? outer : [...outer, suite.title];
-      for (const spec of suite.specs ?? []) {
-        if (spec.tests.some(item => item.expectedStatus === 'skipped')) cases.push(`${spec.file} › ${[...path, spec.title].join(' › ')}`);
-      }
-      walk(suite.suites ?? [], path);
-    }
-  };
-  walk(list.suites, []);
-  return cases;
+  return listedSpecs(list).filter(({ spec }) => spec.tests.some(item => item.expectedStatus === 'skipped')).map(({ name }) => name);
 }
 
 export function setAsideProblems({ entries, skipped, doc, today }) {

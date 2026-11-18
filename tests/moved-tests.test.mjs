@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
+import { listedSpecs } from './playwright-list.mjs';
 
 // #338: a browser case that checked only the server moved to the database or node tests. tests/moved-tests.json names
 // each moved case and its new homes: a home is a file and the name of one test in it, written as the test names itself
@@ -45,15 +46,7 @@ test('a moved case still listed, with no home, a missing home file or a missing 
 test('every moved browser case is gone from the browser suite and each of its new homes holds its test', () => {
   const run = spawnSync(process.execPath, ['node_modules/@playwright/test/cli.js', 'test', '--list', '--reporter=json'], { encoding: 'utf8' });
   assert.equal(run.status, 0, `playwright --list exited ${run.status}: ${run.stderr}`);
-  const listed = [];
-  const walk = (suites, outer) => {
-    for (const suite of suites) {
-      const path = suite.file && suite.title === suite.file ? outer : [...outer, suite.title];
-      for (const spec of suite.specs ?? []) listed.push(`${spec.file} › ${[...path, spec.title].join(' › ')}`);
-      walk(suite.suites ?? [], path);
-    }
-  };
-  walk(JSON.parse(run.stdout).suites, []);
+  const listed = listedSpecs(JSON.parse(run.stdout)).map(({ name }) => name);
   assert.ok(listed.length > 100, 'Playwright lists the browser suite');
   const moved = JSON.parse(readFileSync('tests/moved-tests.json', 'utf8'));
   assert.ok(moved.length > 0, 'the move list names the moved cases');

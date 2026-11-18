@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
+import { listedSpecs } from './playwright-list.mjs';
 
 // The real playwright.config.ts runs in a sandbox with stand-in specs and no web server, so the order and the
 // skip rules of its projects (functional, then measured alone, then first run) are observed through Playwright itself, as CI runs them (CI=true: one retry).
@@ -128,12 +129,7 @@ const list = (args, ci) => {
  assert.equal(child.status, 0, child.stderr);
  return JSON.parse(child.stdout);
 };
-const listed = report => {
- const ids = [];
- const walk = suites => { for (const suite of suites ?? []) { for (const spec of suite.specs ?? []) for (const t of spec.tests) ids.push(`${t.projectName} ${spec.file} ${spec.title}`); walk(suite.suites); } };
- walk(report.suites);
- return ids;
-};
+const listed = report => listedSpecs(report).flatMap(({ spec }) => spec.tests.map(t => `${t.projectName} ${spec.file} ${spec.title}`));
 
 test('the real config retries a failed browser test once on CI and never locally', () => {
  for (const [ci, retries] of [[true, 1], [false, 0]]) {
