@@ -91,6 +91,13 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   forget(/** @type {string} */ run,/** @type {number} */ count) { streams.get(run)?.backlog.splice(0,count); },
   sweep(/** @type {string} */ run) { const stream=streams.get(run); streams.delete(run); for(const reader of stream?.readers||[]) reader.end(); },
   backlogLimit:1000,runSeconds:41,
+  // An Agent's work folder (#194), as the dashboard's file routes read it: each entry is the folder's absolute path to
+  // the entries `/api/files?path=` reports (a name, whether it is a folder, its size, its mtime, and `resolves`: the
+  // path a link points at, which is the entry itself unless it leaves the folder), and `fileBytes` holds the bytes
+  // `/api/fs/download?path=` serves, by absolute file path. A folder not in `files` is not found.
+  files:/** @type {Map<string,{name:string,isFolder?:boolean,size?:number,mtime?:number,resolves?:string,broken?:boolean}[]>} */(new Map()),
+  fileBytes:/** @type {Map<string,{body:string|Uint8Array,type?:string}>} */(new Map()),
+  filesUnreadable:/** @type {Set<string>} */(new Set()),
   // Sessions by id (#346): the profile each belongs to and its messages as the listener returns them
   // (hermes_cli/web_routers/sessions.py get_session_messages), oldest first: role, content, tool_calls, tool_call_id,
   // tool_name and timestamp; and (#347) the session's token use as its detail reports it (get_session_detail), with the
@@ -109,6 +116,9 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
  };
  const merge=(base,over)=>{ const out={...base}; for(const [key,value] of Object.entries(over||{})) out[key]=value&&typeof value==='object'&&!Array.isArray(value)&&base?.[key]&&typeof base[key]==='object'?merge(base[key],value):value; return out; };
  const send=(response,code,body)=>{response.writeHead(code,{'Content-Type':'application/json',Location:'/must-not-follow'});response.end(JSON.stringify(body));};
+ // The type the pinned release gives a managed file (mimetypes.guess_type, files.py _fs_mime_type).
+ const mimeOf=name=>{const ext=(/\.([a-z0-9]+)$/i.exec(name)?.[1]||'').toLowerCase();
+  return {png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',gif:'image/gif',webp:'image/webp',csv:'text/csv',md:'text/markdown',txt:'text/plain',json:'application/json'}[ext]||'application/octet-stream';};
  // The memory an Agent's profile holds (#350): MEMORY.md's entries first, then USER.md's, each named by its position in
  // the combined list and a digest of its text (agent/learning_graph.py memory_node_id, memory_fingerprint).
  const memoryCards=name=>{
@@ -242,6 +252,33 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
    }
    if(request.headers.authorization!==`Bearer ${settings.key}`) return send(response,401,{error:'session_expired',message:request.headers.authorization});
    if(settings.managementStatus!==200) return send(response,settings.managementStatus,{detail:request.headers.authorization});
+   // An Agent's work folder (#194). `/api/files?path=` lists a folder under the managed root with each entry's size,
+   // time and resolved path (hermes_cli/web_routers/files.py 616, web_server_files.py _managed_file_entry), refusing a
+   // path outside it (403); `/api/fs/download?path=` serves one file as an attachment (files.py 1356).
+   if(url.pathname==='/api/files'&&request.method==='GET') {
+    const path=(url.searchParams.get('path')||'').replace(/\/+$/,'');
+    if(!path.startsWith('/opt/data/')) return send(response,403,{detail:'Path outside managed files root'});
+    if(settings.filesUnreadable.has(path)) return send(response,500,{detail:'Could not read directory'});
+    const entries=settings.files.get(path);
+    if(!entries) return send(response,404,{detail:'Path not found'});
+    return send(response,200,{path,parent:null,root:'/opt/data',locked_root:'/opt/data',can_change_path:false,entries:entries.map(entry=>{
+     const folder=entry.isFolder===true;
+     const at=entry.broken?`${path}/${entry.name}`:entry.resolves??`${path}/${entry.name}`;
+     return {name:entry.name,path:at,is_directory:folder,size:folder||entry.broken?null:entry.size??0,mtime:folder||entry.broken?null:entry.mtime??1763500000,
+      mime_type:folder||entry.broken?null:mimeOf(entry.name),...(entry.broken?{broken_link:true}:{})};
+    })});
+   }
+   if(url.pathname==='/api/fs/download'&&['GET','HEAD'].includes(request.method)) {
+    const path=url.searchParams.get('path')||'';
+    const cut=path.lastIndexOf('/');
+    const entry=(settings.files.get(path.slice(0,cut))||[]).find(item=>item.name===path.slice(cut+1));
+    if(!entry||entry.broken) return send(response,404,{detail:'File not found'});
+    if(entry.isFolder===true) return send(response,400,{detail:'Path points to a directory'});
+    const file=settings.fileBytes.get(path)||{body:`the bytes of ${entry.name}`,type:mimeOf(entry.name)};
+    const body=Buffer.from(file.body);
+    response.writeHead(200,{'Content-Type':file.type??mimeOf(entry.name),'Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(entry.name)}`,'Content-Length':body.length});
+    return response.end(request.method==='HEAD'?undefined:body);
+   }
    // A session answers only under its own profile; a page holds at most 500 messages, from `offset`.
    const sessionMessages=url.pathname.match(/^\/api\/sessions\/([^/]+)\/messages$/);
    if(sessionMessages&&request.method==='GET') {

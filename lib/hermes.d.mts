@@ -11,6 +11,13 @@ export function readSession(connection:import('./engine.mjs').EngineConnection,s
 export type ProfileUsage={state:'found',input:number,output:number,sessions:number}|{state:'refused'|'unreachable',input:null,output:null,sessions:null};
 export function readUsage(connection:import('./engine.mjs').EngineConnection,days:number):Promise<ProfileUsage>;
 export function hermesEngine(connection:import('./engine.mjs').EngineConnection):import('./engine.mjs').Engine;
+// The Library of an Agent (#194): one folder of the Agent's work folder in its own Engine profile, and one of its files.
+export type LibraryEntry={name:string,isFolder:boolean,size:number|null,time:string|null};
+export type LibraryList={state:'found',entries:LibraryEntry[]}|{state:'missing'|'refused'|'unreachable'|'invalid',entries:null};
+export type LibraryFile={state:'found',name:string,type:string,size:number,body:Uint8Array<ArrayBuffer>}|{state:'missing'|'refused'|'unreachable'|'invalid'|'tooLarge'};
+export function workSegments(raw:unknown):string[]|null;
+export function listAgentFiles(connection:import('./engine.mjs').EngineConnection,folder?:unknown):Promise<LibraryList>;
+export function downloadAgentFile(connection:import('./engine.mjs').EngineConnection,file:{folder?:unknown,name?:unknown}):Promise<LibraryFile>;
 export type ProfileTools={state:'configured'|'missing'|'refused'|'unreachable'|'failed',toolsets:string[]|null};
 export function provideProfile(connection:import('./engine.mjs').EngineConnection,profile:{name:string,soul:string,config:object,forbidden:string[]}):Promise<ProfileTools>;
 export function configureProfile(connection:import('./engine.mjs').EngineConnection,profile:{name:string,config:object,forbidden:string[]}):Promise<ProfileTools>;

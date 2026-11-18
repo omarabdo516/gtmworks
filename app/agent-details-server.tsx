@@ -13,6 +13,7 @@ import { FeedWhen, LogDays } from '@/app/c/[slug]/log/log-client';
 import { FeedText, LogEntry, logColumns, logPeople } from '@/app/c/[slug]/log/entries';
 import { detailsTabs } from '@/app/agent-details-tabs';
 import { ConnectedTools } from '@/app/connected-tools';
+import { AgentLibrary } from '@/app/agent-library';
 import { AgentMemory } from '@/app/agent-memory';
 import { readAgentMemory } from '@/lib/agent-memory.mjs';
 
@@ -86,8 +87,12 @@ export async function agentDetails(db:Db,{company,agent,name:named,slug,me,role:
 
  const log=rows.length?<div className="lg-wrap"><LogDays items={rows.map(row=>({id:row.id,at:row.created_at,node:<LogEntry row={row} people={people} me={me} slug={slug} company={company} canWrite={writer} drawnAt={drawn} t={t} language={language} faceSize={24}/>}))}/></div>:undefined;
 
+ // The Agent's Library (#194): the Owner and Managers open it, and the route refuses anyone below them. Its folder is
+ // read in the browser after the panel is drawn, so no page waits on the Engine.
+ const library=role==='owner'||role==='manager'?<AgentLibrary company={company} slug={slug} agent={agent} name={name}/>:undefined;
+
  return {status:agentStatus({waitingMine:waiting.some(item=>item.card_id!=null&&ids.includes(item.card_id)),running:!!run}),tab:pickTab(tab),
-  tabs:detailsTabs({t,slug,agent,activity,tools:<ConnectedTools company={company} agent={agent} name={name} owner={role==='owner'}/>,tasks:tasksTab,files:filesList,fileCount:(cardFileCount??0)+(talkFileCount??0),
+  tabs:detailsTabs({t,slug,agent,activity,tools:<ConnectedTools company={company} agent={agent} name={name} owner={role==='owner'}/>,tasks:tasksTab,files:filesList,library,fileCount:(cardFileCount??0)+(talkFileCount??0),
    memory:memory.state==='found'?<AgentMemory company={company} agent={{id:agent,name}} notes={memory.notes} main={memory.main} canReset={role==='owner'}/>:undefined,
    log,logCount:count??rows.length})};
 }
