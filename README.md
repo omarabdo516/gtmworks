@@ -85,7 +85,11 @@ worker gives every company its own profile in the bundled Hermes
 company's agents to it. A company's agents get marketing tools only:
 terminal, file, code-execution, browser and desktop tools are turned off in that
 profile at every Agent level, so a member cannot ask an agent to read another
-company's files. The Owner chooses the Agent level in Settings, Company (read and
+company's files. An install was proven with four Agents across two companies, and
+twenty more Agent profiles for capacity: each of the 20 took TBD seconds to be
+ready, the engine held TBD before and TBD after making them, and one profile
+takes TBD KiB of disk with the engine's bundled Skills and TBD KiB without.
+The Owner chooses the Agent level in Settings, Company (read and
 draft, act on approval, or scheduled work); new companies start at read and draft.
 The Owner connects a subscription in Settings, Subscription and models: ChatGPT
 signs in from that page; Claude signs in only from the install's command line,

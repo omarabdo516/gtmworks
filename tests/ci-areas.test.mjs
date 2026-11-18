@@ -127,6 +127,12 @@ test('the install browser check is not a browser suite file, and a browser spec 
   assert.equal(areas('tests/frame.spec.ts').install, 'false');
 });
 
+test('the install job\'s profile proof and its unit test run the install suite', () => {
+  for (const path of ['scripts/check-install-profiles.mjs', 'tests/check-install-profiles.test.mjs']) {
+    assert.deepEqual(areas(path), { components: 'false', database: 'false', integration: 'false', install: 'true' }, path);
+  }
+});
+
 test('the CI definition itself and the dependencies run every suite', () => {
   for (const path of ['.github/workflows/ci.yml', 'ci.sh', 'scripts/ci-areas.mjs', 'scripts/ci-verdict.mjs', 'scripts/ci-runner.mjs', 'scripts/ci-fast.mjs', 'package.json', 'package-lock.json']) {
     assert.deepEqual(areas(path), all, path);
