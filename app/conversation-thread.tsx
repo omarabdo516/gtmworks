@@ -201,7 +201,7 @@ export function ConversationComposer({company,conversation,record,writer,asked,b
  // A waiting message the Engine refused for the Conversation's model (#158) is told as a sent one is, while it is the latest.
  const last=record?.messages.at(-1); const refused=last?.kind==='queued'&&last.failed&&last.model_refused?{key:`${last.created_at}:${last.body}`,text:last.body}:undefined;
  return <>
-  {writer?<MessageBox ref={box} placeholder={t('writeTo',conversation.agent_name)} model={{company,conversation:conversation.id,agent:conversation.agent_name}} refused={refused} stop={working&&canStop?{label:c('conversationStop',conversation.agent_name),run:async()=>{
+  {writer?<MessageBox ref={box} placeholder={t('writeTo',conversation.agent_name)} model={{company,conversation:conversation.id,agent:conversation.agent_name}} voice={conversation.agent_id?{company,agent:conversation.agent_id}:undefined} refused={refused} stop={working&&canStop?{label:c('conversationStop',conversation.agent_name),run:async()=>{
    const failure=await postMessage({company,conversation:conversation.id,intent:'stop'});
    if(!failure) asked();
    return failure;

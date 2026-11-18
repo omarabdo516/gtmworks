@@ -21,7 +21,7 @@ select json_build_object(
   and pg_get_constraintdef(oid)='UNIQUE (company_id, path)'),
  'body_may_be_empty',(select pg_get_constraintdef(oid) like '%(length(body) >= 0)%' from pg_constraint
   where conname='channel_messages_body_check' and conrelid='public.channel_messages'::regclass),
- 'post_allows_images_alone',position($q$btrim(message)=''$q$ in pg_get_functiondef('public.post_channel_message(uuid,uuid,text)'::regprocedure))=0,
+ 'post_allows_images_alone',position($q$or btrim(message)='' or$q$ in pg_get_functiondef('public.post_channel_message(uuid,uuid,text)'::regprocedure))=0,
  'spaces_still_refused',position($q$(length(message)>0 and btrim(message)='')$q$ in pg_get_functiondef('public.post_channel_message(uuid,uuid,text)'::regprocedure))>0,
  'start_says_which_run_carries_them',(select pg_get_function_result(p.oid) like '%has_files boolean%'
   from pg_proc p where p.oid='public.begin_channel_start(bigint)'::regprocedure),

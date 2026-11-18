@@ -43,7 +43,7 @@ select is(public.reserve_conversation_files('c2200000-0000-0000-0000-00000000000
 select is((select public.discard_conversation_files('c2200000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d2200000-0000-0000-0000-000000000003')),
  '10000000-0000-0000-0000-000000000001/conversations/c2200000-0000-0000-0000-000000000001/d2200000-0000-0000-0000-000000000003-0'::text,'a refused send gives its own file path back');
 select is((select count(*)::int from public.conversation_attachments where send_key='d2200000-0000-0000-0000-000000000003'),0,'and keeps no row for it');
-select is((select count(*)::int from public.discard_conversation_files('c2200000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d2200000-0000-0000-0000-000000000001')),2,'a message''s own files are not a refused send''s to remove');
+select is((select count(*)::int from public.discard_conversation_files('c2200000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d2200000-0000-0000-0000-000000000001')),0,'a message''s own files are not a refused send''s to remove');
 
 -- Rules on what may be kept: one to five, a path inside the sender's Conversation, and never by hand.
 select throws_ok($$select public.reserve_conversation_files('c2200000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d2200000-0000-0000-0000-000000000004',
@@ -83,7 +83,7 @@ select throws_ok($$select public.reserve_conversation_files('c2200000-0000-0000-
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select throws_ok($$select public.reserve_conversation_files('c2200000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000003','d2200000-0000-0000-0000-000000000009',
  $json$[{"position":0,"name":"other.png","content_type":"image/png","size":1,"path":"10000000-0000-0000-0000-000000000003/conversations/c2200000-0000-0000-0000-000000000003/d2200000-0000-0000-0000-000000000009-0"}]$json$::jsonb)$$,
- '42501','conversationNotAllowed','an Owner attaches nothing in another Company');
+ 'P0002','conversationNotFound','an Owner attaches nothing to another person''s Conversation in another Company they are in');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000005',true);
 select throws_ok($$select public.reserve_conversation_files('c2200000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d2200000-0000-0000-0000-000000000010',
  $json$[{"position":0,"name":"someone.png","content_type":"image/png","size":1,"path":"10000000-0000-0000-0000-000000000001/conversations/c2200000-0000-0000-0000-000000000001/d2200000-0000-0000-0000-000000000010-0"}]$json$::jsonb)$$,

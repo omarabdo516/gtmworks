@@ -91,6 +91,11 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   forget(/** @type {string} */ run,/** @type {number} */ count) { streams.get(run)?.backlog.splice(0,count); },
   sweep(/** @type {string} */ run) { const stream=streams.get(run); streams.delete(run); for(const reader of stream?.readers||[]) reader.end(); },
   backlogLimit:1000,runSeconds:41,
+  // One recording as text (#160): the profile it was sent for, the MIME type and how many bytes, and the words the
+  // Engine hears ('' is silence). A `transcriptionStatus` that is not 200 answers with `transcriptionDetail`, and the
+  // pinned image's missing speech-to-text provider is that detail with a 400, as its route answers.
+  transcriptions:/** @type {{profile:string,mimeType:unknown,bytes:number}[]} */([]),transcriptionTranscript:'The words the engine heard',
+  transcriptionStatus:200,transcriptionDetail:'No STT provider available. Configure stt.provider or install a local speech model.',
   // Sessions by id (#346): the profile each belongs to and its messages as the listener returns them
   // (hermes_cli/web_routers/sessions.py get_session_messages), oldest first: role, content, tool_calls, tool_call_id,
   // tool_name and timestamp; and (#347) the session's token use as its detail reports it (get_session_detail), with the
@@ -235,6 +240,15 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
    if(request.headers.authorization!==`Bearer ${settings.key}`) return send(response,401,{error:'session_expired',message:request.headers.authorization});
    if(settings.managementStatus!==200) return send(response,settings.managementStatus,{detail:request.headers.authorization});
    // A session answers only under its own profile; a page holds at most 500 messages, from `offset`.
+   // One recording as text (#160; hermes_cli/web_routers/audio.py 89-149): the body is a data URL and its MIME type,
+   // the answer the transcript and the provider. Only its size and type are kept here, never the recording.
+   if(url.pathname==='/api/audio/transcribe'&&request.method==='POST') {
+    const profile=url.searchParams.get('profile')||'default';
+    const dataUrl=typeof body?.data_url==='string'?body.data_url:'';
+    settings.transcriptions.push({profile,mimeType:body?.mime_type,bytes:Math.max(0,dataUrl.length-(dataUrl.indexOf(',')+1))});
+    if(settings.transcriptionStatus!==200) return send(response,settings.transcriptionStatus,{detail:settings.transcriptionDetail});
+    return send(response,200,{ok:true,transcript:settings.transcriptionTranscript,provider:'local'});
+   }
    const sessionMessages=url.pathname.match(/^\/api\/sessions\/([^/]+)\/messages$/);
    if(sessionMessages&&request.method==='GET') {
     const id=decodeURIComponent(sessionMessages[1]); const found=settings.sessions.get(id);

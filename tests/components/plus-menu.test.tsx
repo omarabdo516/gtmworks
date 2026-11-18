@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { render } from 'vitest-browser-react';
 import { userEvent } from 'vitest/browser';
-import { CallableAgentsProvider, MessageBox } from '@/app/conversation-composer';
+import { CallableAgentsProvider, MessageBox, type CallableAgent } from '@/app/conversation-composer';
 import { LanguageProvider } from '@/lib/i18n-client';
 import type { Language } from '@/lib/i18n.mjs';
 import '@/app/tokens.css';
@@ -9,7 +9,7 @@ import '@/app/shell.css';
 
 // #153, the composer's "+" menu (design-reference: plusMenuHTML, togglePlus, insertAtCaret, the menu's keys).
 const agents = [{ id: 'a1', connection_id: 'c1', name: 'Lead' }, { id: 'a2', connection_id: 'c2', name: 'Reach' }];
-const composer = (props: { call?: Parameters<typeof MessageBox>[0]['call'], attach?: boolean, seen?: typeof agents, language?: Language } = {}) => render(<div className="gw" style={{paddingTop: 480}}><div className="composer-area">
+const composer = (props: { call?: Parameters<typeof MessageBox>[0]['call'], attach?: boolean, seen?: CallableAgent[], language?: Language } = {}) => render(<div className="gw" style={{paddingTop: 480}}><div className="composer-area">
  <LanguageProvider language={props.language ?? 'en'}><CallableAgentsProvider agents={props.seen ?? agents}>
   <MessageBox placeholder="Write" send={async () => null} call={props.call} attach={props.attach}/>
  </CallableAgentsProvider></LanguageProvider>
@@ -48,6 +48,23 @@ test('in Arabic the menu speaks the reference\'s words', async () => {
  await expect.element(screen.getByText('نادي وكيل')).toBeVisible();
  await expect.element(screen.getByText('الأوامر')).toBeVisible();
  await expect.element(screen.getByRole('menuitem', { name: 'اطلب وكيل جديد /agent' })).toBeVisible();
+});
+
+test('"Commands" lists each role\'s command with the Agent this Member sees, then /agent, and a role with no Agent has none', async () => {
+ // #159: Ready and Figures were made from a role (meta, numbers), Reach by hand, so only their two commands are listed.
+ const seen: CallableAgent[] = [{ id: 'b1', connection_id: 'e1', name: 'Reach' }, { id: 'b2', connection_id: 'e2', name: 'Ready', role: 'meta' }, { id: 'b3', connection_id: 'e3', name: 'Figures', role: 'numbers' }];
+ const screen = await composer({ seen });
+ await screen.getByRole('button', { name: 'More: call someone, commands, attach' }).click();
+ const items = screen.getByRole('menuitem').elements().map(item => item.textContent);
+ expect(items.filter(text => text?.includes('/'))).toEqual(['New campaign with Ready/campaign', 'Numbers summary from Figures/report', 'Ask for a new agent/agent']);
+ await screen.getByRole('menuitem', { name: 'Numbers summary from Figures /report' }).click();
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('/report ');
+});
+
+test('in Arabic "Commands" names the Agent in the reference\'s words', async () => {
+ const screen = await composer({ seen: [{ id: 'b1', connection_id: 'e1', name: 'محتوى', role: 'writer' }], language: 'ar' });
+ await screen.getByRole('button', { name: 'إضافات: نادي حد، الأوامر، إرفاق' }).click();
+ await expect.element(screen.getByRole('menuitem', { name: 'مقال SEO جديد من محتوى /article' })).toBeVisible();
 });
 
 test('picking an entry closes the menu and puts its text at the caret, one space after it and one before when needed, and the field takes the focus', async () => {
