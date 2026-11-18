@@ -92,6 +92,18 @@ declare current_kind text; current_column text; stage bigint; arrived text; befo
   select coalesce(max(w.board_order),0)+1 into place from public.work_cards w join public.work_stages s on s.company_id=w.company_id and s.id=w.stage_id
    where w.company_id=c and s.board_column=target and w.id<>card;
  else
+  -- The column's Cards are locked, so the place read here is still the place when the Card takes it. Two moves at once
+  -- can leave two Cards on one place, and then there is no number between the neighbour above and the Card below: the
+  -- column is numbered again, two apart, in the order the board draws it (place, then id; #174), so the slot is free.
+  perform 1 from public.work_cards w join public.work_stages s on s.company_id=w.company_id and s.id=w.stage_id
+   where w.company_id=c and s.board_column=target and w.id<>card for update of w;
+  if exists(select 1 from public.work_cards w join public.work_stages s on s.company_id=w.company_id and s.id=w.stage_id
+   where w.company_id=c and s.board_column=target and w.id<>card group by coalesce(w.board_order,0) having count(*)>1) then
+   update public.work_cards w set board_order=o.again from (select w2.id,(row_number() over (order by coalesce(w2.board_order,0),w2.id))*2 as again
+    from public.work_cards w2 join public.work_stages s2 on s2.company_id=w2.company_id and s2.id=w2.stage_id
+    where w2.company_id=c and s2.board_column=target and w2.id<>card) o
+    where w.company_id=c and w.id=o.id;
+  end if;
   select w.board_order into before_place from public.work_cards w join public.work_stages s on s.company_id=w.company_id and s.id=w.stage_id
    where w.company_id=c and s.board_column=target and w.id=before_card and w.id<>card;
   if not found then raise exception 'the card it lands above is not in that column' using errcode='22023'; end if;

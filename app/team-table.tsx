@@ -1,5 +1,5 @@
 'use client';
-import { useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
 import { CompanyAgentFace } from '@/components/company-agent-face';
@@ -26,6 +26,15 @@ const initial=(name:string)=>name.trim().slice(0,1).toUpperCase()||'?';
 function AgentSwitch({company,target,agent,agentName,personName,on,label,save}:{company:string,target:{member:string}|{invitation:string},agent:string,agentName:string,personName:string,on:boolean,label:string,save:SaveSwitch}) {
  const {t}=useI18n(); const router=useRouter();
  const [checked,setChecked]=useState(on); const [pending,startTransition]=useTransition(); const [error,setError]=useState('');
+ // The table reads its access again after an invite, and a refresh can bring another Manager's change: a switch shows the
+ // value it is given now, and keeps the one it turned to while its own save is still on its way.
+ const given=useRef(on); const waiting=useRef(false);
+ useEffect(()=>{
+  if(pending) return;
+  if(given.current!==on) { given.current=on; waiting.current=true; }
+  if(!waiting.current) return;
+  waiting.current=false; setChecked(on);
+ },[on,pending]);
  return <><button type="button" className="switch" role="switch" aria-checked={checked} aria-label={label} disabled={pending} onClick={()=>startTransition(async()=>{
   const next=!checked; setChecked(next); setError('');
   const failure=await save(company,target,agent,next);

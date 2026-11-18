@@ -110,8 +110,8 @@ test('a malformed email and the same email twice show their errors under their r
  await screen.getByRole('button', { name: 'Open the workspace' }).click();
  await expect.poll(() => finish.mock.calls.length).toBe(1);
  expect(JSON.parse(String(finish.mock.calls[0][1].get('rows')))).toEqual([
-  { email: 'nour@example.test', role: 'contributor' },
-  { email: 'karim@example.test', role: 'contributor' },
+  { id: 1, email: 'nour@example.test', role: 'contributor' },
+  { id: 2, email: 'karim@example.test', role: 'contributor' },
  ]);
 });
 
@@ -125,7 +125,30 @@ test('an email already invited comes back under its row with the focus there and
  expect(errors()[0].textContent).toBe('This email has already been invited.');
  await expect.poll(() => document.activeElement).toBe(fields()[0]);
  expect(screen.getByRole('dialog', { name: 'Who’s on your team?' }).element()).toBeVisible();
- expect(JSON.parse(String(finish.mock.calls[0][1].get('rows')))).toEqual([{ email: 'nour@example.test', role: 'contributor' }]);
+ expect(JSON.parse(String(finish.mock.calls[0][1].get('rows')))).toEqual([{ id: 0, email: 'nour@example.test', role: 'contributor' }]);
+});
+
+test('a refusal stays on its own email when the row above it is removed', async () => {
+ finish.mockImplementation(async (_state, form) => {
+  const sent = JSON.parse(String(form.get('rows'))) as { id: number, email: string }[];
+  return { rowErrors: { [sent[1].id]: 'inviteEmailTaken' }, firstError: sent[1].id, sent: [] };
+ });
+ const screen = await show();
+ await showStepTwo(screen);
+ await screen.getByRole('button', { name: 'Add a member' }).click();
+ await userEvent.type(fields()[0], 'nour@example.test');
+ await userEvent.type(fields()[1], 'karim@example.test');
+ await screen.getByRole('button', { name: 'Open the workspace' }).click();
+ await expect.poll(() => errors()[1].hidden).toBe(false);
+ expect(errors()[1].textContent).toBe('This email has already been invited.');
+ await expect.poll(() => document.activeElement).toBe(fields()[1]);
+ // The row above goes: the refusal and the focus stay with Karim's email, not with a place.
+ await screen.getByRole('button', { name: 'Remove member 1' }).click();
+ expect(fields()).toHaveLength(1);
+ expect(fields()[0].value).toBe('karim@example.test');
+ await expect.poll(() => errors()[0].hidden).toBe(false);
+ expect(errors()[0].textContent).toBe('This email has already been invited.');
+ expect(document.activeElement).toBe(fields()[0]);
 });
 
 test('in Arabic the second step keeps its words, its email field left to right and the example the invite form uses', async () => {
@@ -146,4 +169,17 @@ test('Enter in an email field opens the workspace with its invitations, never Sk
  await userEvent.keyboard('{Enter}');
  await expect.poll(() => finish.mock.calls.length).toBe(1);
  expect(finish.mock.calls[0][1].get('choice')).toBe('open');
+});
+
+test('Back\'s chevron points the way the reference draws it: left in English', async () => {
+ const screen = await show();
+ await showStepTwo(screen);
+ expect(document.querySelector('#fr-back svg path')!.getAttribute('d'), 'English Back points left, as icon(\'chevronRight\') flips').toBe('M15 6l-6 6 6 6');
+});
+
+test('Back\'s chevron in Arabic points right, as the reference\'s chevronRight does', async () => {
+ const screen = await show('ar');
+ await screen.getByRole('radio', { name: 'مع تيم' }).click();
+ await screen.getByRole('button', { name: 'كمّل' }).click();
+ expect(document.querySelector('#fr-back svg path')!.getAttribute('d')).toBe('M9 6l6 6-6 6');
 });

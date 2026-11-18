@@ -119,26 +119,29 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
    router.refresh();
   });
  };
- const move=(id:number,to:string,before:number|null=null)=>{
-  const c=p.cards.find(x=>x.id===id); if(!c||!p.canCreate) return;
+ const move=(id:number,to:string,before:number|null=null):Promise<boolean>=>{
+  const c=p.cards.find(x=>x.id===id); if(!c||!p.canCreate) return Promise.resolve(false);
   const from=columnOfCard(c);
   // "Waiting on you" keeps its own order, newest first, and takes no place by hand (ADR 0013).
-  if(from==='waiting'&&to==='waiting') return;
+  if(from==='waiting'&&to==='waiting') return Promise.resolve(false);
   const why=blockReason(from,to,!!c.wait&&columnOf({...c,wait:null},p.stages)!=='waiting');
-  if(why==='waiting') { toast(t('boardWaitingFillsItself'),{icon:'clock'}); return; }
-  if(why==='chat') { toast(t('boardWaitingOnChat'),{icon:'hand'}); router.push(`${base}/board/${c.id}`); return; }
-  if(why==='decide') { toast(t(to==='live'||to==='done'?'boardDecideFirst':'boardWaitingForDecision'),{icon:'hand'}); router.push(`${base}/board/${c.id}`); return; }
+  if(why==='waiting') { toast(t('boardWaitingFillsItself'),{icon:'clock'}); return Promise.resolve(false); }
+  if(why==='chat') { toast(t('boardWaitingOnChat'),{icon:'hand'}); router.push(`${base}/board/${c.id}`); return Promise.resolve(false); }
+  if(why==='decide') { toast(t(to==='live'||to==='done'?'boardDecideFirst':'boardWaitingForDecision'),{icon:'hand'}); router.push(`${base}/board/${c.id}`); return Promise.resolve(false); }
   const form=new FormData(); form.set('company',p.company); form.set('slug',p.slug); form.set('card',String(id)); form.set('column',to); form.set('before',before==null?'':String(before));
   setPlaceError(null); setMoving(true);
-  void placeMove(form).then(result=>{
-   // A refused place (#168, #174): the board stays as it is and says why; a place the server took draws the Card again.
-   if('error' in result) { setPlaceError(result.error); focusCard.current={id:0,column:''}; return; }
+  // The answer, not the request, says whether the Card moved: a place the server took is the one the board animates, and
+  // a refused one never lands (it stays where it is, with its reason, #168, #174).
+  return placeMove(form).then(result=>{
+   if('error' in result) { setPlaceError(result.error); focusCard.current={id:0,column:''}; return false; }
    // A move to another column is told with "Undo" for six seconds; a place inside one column says nothing.
    if(to!==from) toast(t('boardMoved',columnName(to)),{action:{label:t('boardUndo'),run:()=>undo(id)}});
    focusCard.current={id,column:to};
-   requestAnimationFrame(()=>land(document.querySelector<HTMLElement>(`#board-cols .kcard[data-card-id="${id}"]`)));
-  }).finally(()=>setMoving(false));
+   return true;
+  },()=>{ setPlaceError(t('couldNotSaveTheChangeCheckPermissionsAnd')); focusCard.current={id:0,column:''}; return false; }).finally(()=>setMoving(false));
  };
+ // A place the person asked for with the keyboard lands once the server took it, as a drop does.
+ const landWhenMoved=(id:number,moved:Promise<boolean>)=>void moved.then(ok=>{ if(ok) requestAnimationFrame(()=>land(document.querySelector<HTMLElement>(`#board-cols .kcard[data-card-id="${id}"]`))); });
  const keys=(c:Card)=>(event:KeyboardEvent)=>{
   if(!event.shiftKey||!p.canCreate) return;
   const column=columnOfCard(c);
@@ -146,12 +149,12 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
    event.preventDefault();
    if(column==='waiting') return;
    const before=placeByOne(inColumn(column).map(card=>card.id),c.id,event.key);
-   if(before!==undefined) move(c.id,column,before);
+   if(before!==undefined) landWhenMoved(c.id,move(c.id,column,before));
    return;
   }
   if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight') return;
   event.preventDefault();
-  const to=keyboardTarget(column,event.key,rtl); if(to) move(c.id,to);
+  const to=keyboardTarget(column,event.key,rtl); if(to) landWhenMoved(c.id,move(c.id,to));
  };
  const due=(c:Card)=>c.go_live?date(c.go_live,language,{month:'short'}):'';
  const waitingOn=(person:string|null)=>{ const owner=person?p.members.find(m=>m.person_id===person)?.people?.name?.split(' ')[0]:undefined; return owner?t('boardWaitingOn',owner):t('boardWaitingTeam'); };

@@ -53,7 +53,7 @@ export function land(el:HTMLElement|null,from:{left:number,top:number}|null=null
  window.setTimeout(()=>{ el.style.transition=''; el.classList.remove('is-landing'); },380);
 }
 
-export function KanbanBoard({label,busy,cards,columnName,onMove,renderOverlay,children}:{label:string,busy:boolean,cards:{id:number,title:string,column:string}[],columnName:(column:string)=>string,onMove:(card:number,column:string,before:number|null)=>Promise<void>|void,renderOverlay:(id:number)=>ReactNode,children:ReactNode}) {
+export function KanbanBoard({label,busy,cards,columnName,onMove,renderOverlay,children}:{label:string,busy:boolean,cards:{id:number,title:string,column:string}[],columnName:(column:string)=>string,onMove:(card:number,column:string,before:number|null)=>Promise<boolean>|boolean,renderOverlay:(id:number)=>ReactNode,children:ReactNode}) {
  const {t}=useI18n();
  const [activeId,setActiveId]=useState<number|null>(null);
  const [place,setPlace]=useState<DropPlace>(nowhere);
@@ -77,15 +77,17 @@ export function KanbanBoard({label,busy,cards,columnName,onMove,renderOverlay,ch
   return {column:column.getAttribute('data-column'),before:next?Number(next.dataset.cardId):null};
  };
  useEffect(()=>{
-  const follow=(event:TouchEvent|MouseEvent)=>{ const at='touches' in event?event.touches[0]:event; if(!at) return; finger.current={x:at.clientX,y:at.clientY};
-   if(carrying.current===null) return;
-   const next=placeAt(at.clientX,at.clientY,carrying.current);
+  // The place under the pointer, read again on every move of the mouse or the finger, and when the board or a column
+  // scrolls under a resting pointer: the Cards move without a pointer move, and the line and the drop follow them.
+  const read=()=>{ const at=finger.current; if(carrying.current===null||!at) return;
+   const next=placeAt(at.x,at.y,carrying.current);
    if(next.column===shown.current.column&&next.before===shown.current.before) return;
    shown.current=next; dropped.current=next; setPlace(next);
   };
+  const follow=(event:TouchEvent|MouseEvent)=>{ const at='touches' in event?event.touches[0]:event; if(!at) return; finger.current={x:at.clientX,y:at.clientY}; read(); };
   const options={capture:true,passive:true};
-  window.addEventListener('touchstart',follow,options); window.addEventListener('touchmove',follow,options); window.addEventListener('mousedown',follow,options); window.addEventListener('mousemove',follow,options);
-  return ()=>{ window.removeEventListener('touchstart',follow,options); window.removeEventListener('touchmove',follow,options); window.removeEventListener('mousedown',follow,options); window.removeEventListener('mousemove',follow,options); };
+  window.addEventListener('touchstart',follow,options); window.addEventListener('touchmove',follow,options); window.addEventListener('mousedown',follow,options); window.addEventListener('mousemove',follow,options); window.addEventListener('scroll',read,options);
+  return ()=>{ window.removeEventListener('touchstart',follow,options); window.removeEventListener('touchmove',follow,options); window.removeEventListener('mousedown',follow,options); window.removeEventListener('mousemove',follow,options); window.removeEventListener('scroll',read,options); };
  },[]);
  const canScroll=(element:Element)=>{
   if(!finger.current) return true;
@@ -98,12 +100,16 @@ export function KanbanBoard({label,busy,cards,columnName,onMove,renderOverlay,ch
  const columnFor=(id:string|number|undefined)=>id===undefined?undefined:String(id).startsWith('column:')?String(id).slice(7):cards.find(card=>card.id===Number(id))?.column;
  const putAway=()=>{ carrying.current=null; dropped.current=nowhere; shown.current=nowhere; setActiveId(null); setPlace(nowhere); };
  return <DndContext id="work-board" sensors={sensors} autoScroll={{canScroll}} onDragStart={({active})=>{ carrying.current=Number(active.id); setActiveId(Number(active.id)); }} onDragCancel={putAway} onDragEnd={({active,over})=>{
-  const id=Number(active.id); const card=cards.find(item=>item.id===id); const at=dropped.current; const was=active.rect.current.translated;
+  const id=Number(active.id); const card=cards.find(item=>item.id===id); const was=active.rect.current.translated;
+  // The place under the pointer now, not the one the last pointer move named: a column or the board may have scrolled
+  // since, moving the Cards under a resting finger (design-reference: dragEnd's card under the pointer).
+  const at=finger.current?placeAt(finger.current.x,finger.current.y,id):dropped.current;
   putAway();
   if(!card||!over||!at.column) return;
   // A drop on the Card's own place changes nothing (design-reference: dragEnd's sameSpot).
   if(!placeChanges(cards.filter(item=>item.column===at.column).map(item=>item.id),id,at.before)) return;
-  void Promise.resolve(onMove(id,at.column,at.before)).then(()=>land(document.querySelector<HTMLElement>(`#board-cols .kcard[data-card-id="${id}"]`),was?{left:was.left,top:was.top}:null));
+  // The Card lands only once the server took the place: a refused move stays where it is, with no motion to say it went.
+  void Promise.resolve(onMove(id,at.column,at.before)).then(ok=>{ if(ok) land(document.querySelector<HTMLElement>(`#board-cols .kcard[data-card-id="${id}"]`),was?{left:was.left,top:was.top}:null); });
  }} accessibility={{screenReaderInstructions:{draggable:t('boardDragHint')},announcements:{onDragStart:({active})=>t('dragStarted',cards.find(card=>card.id===Number(active.id))?.title),onDragOver:({over})=>over?t('dragOver',columnName(columnFor(over.id)||'')):t('dragCancelled'),onDragEnd:({over})=>over?t('dragEnded',columnName(columnFor(over.id)||'')):t('dragCancelled'),onDragCancel:()=>t('dragCancelled')}}}>
   <DropMark.Provider value={{place,carrying:activeId!==null}}>
    <div className="board board-cols" id="board-cols" aria-label={label} aria-busy={busy}>{children}</div>

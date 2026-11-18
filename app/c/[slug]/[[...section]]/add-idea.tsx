@@ -11,6 +11,7 @@ export default function AddIdea({company,slug,stage,agents,preferred,workAction,
  const [title,setTitle]=useState('');
  const [agent,setAgent]=useState(preferred&&agents.some(choice=>choice.id===preferred)?preferred:agents[0]?.id||'');
  const [error,setError]=useState(false);
+ const [failed,setFailed]=useState(false);
  const [pending,setPending]=useState(false);
  const input=useRef<HTMLInputElement>(null);
  // Opening moves the focus into the Idea field, as the reference does.
@@ -21,21 +22,24 @@ export default function AddIdea({company,slug,stage,agents,preferred,workAction,
   const idea=title.trim();
   if(!idea) { setError(true); input.current?.focus({preventScroll:true}); return; }
   if(!agent) return;
-  setPending(true);
+  setPending(true); setFailed(false);
   const form=new FormData();
   form.set('op','idea'); form.set('company',company); form.set('slug',slug); form.set('stage',String(stage));
   form.set('title',idea); form.set('agent',agent);
-  void workAction(form).catch(()=>setPending(false));
+  // A form that could not be sent says so under the Idea it kept, and Add works again; one that was added closes back onto
+  // the column's "+", so no Add is left disabled in a form still open (#188).
+  void workAction(form).then(()=>{ setPending(false); close(); },()=>{ setPending(false); setFailed(true); });
  };
  return <form className="add-idea" id="add-idea" onSubmit={event=>{ event.preventDefault(); send(); }}
   onKeyDown={event=>{ if(event.key==='Escape') { event.preventDefault(); event.stopPropagation(); close(); } }}>
   <label htmlFor="idea-title">{t('ideaLabel')}</label>
   <input ref={input} id="idea-title" type="text" autoComplete="off" dir={title?'auto':undefined} placeholder={t('ideaPlaceholder')} aria-describedby="idea-err"
-   aria-invalid={error||undefined} value={title} onChange={event=>{ setTitle(event.target.value); if(event.target.value.trim()) setError(false); }}
+   aria-invalid={error||undefined} value={title} onChange={event=>{ setTitle(event.target.value); setFailed(false); if(event.target.value.trim()) setError(false); }}
    onKeyDown={event=>{ if(event.key==='Enter'&&!event.nativeEvent.isComposing) { event.preventDefault(); send(); } }}/>
   <span className="add-idea__err" id="idea-err" hidden={!error}>{t('ideaNeedsText')}</span>
+  {failed&&<span className="add-idea__err" role="alert">{t('ideaFailed')}</span>}
   <label htmlFor="idea-agent">{t('cardAgent')}</label>
-  <select id="idea-agent" value={agent} onChange={event=>setAgent(event.target.value)} disabled={!agents.length}>{agents.map(choice=><option key={choice.id} value={choice.id}>{choice.name}</option>)}</select>
+  <select id="idea-agent" value={agent} onChange={event=>{ setAgent(event.target.value); setFailed(false); }} disabled={!agents.length}>{agents.map(choice=><option key={choice.id} value={choice.id}>{choice.name}</option>)}</select>
   <div className="add-idea__row">
    <button type="submit" className="btn btn--primary btn--sm" disabled={!agents.length||pending}>{t('ideaAdd')}</button>
    <button type="button" className="btn btn--secondary btn--sm" onClick={close}>{t('cancel')}</button>
