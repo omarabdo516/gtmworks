@@ -18,18 +18,34 @@ let firstField: HTMLElement | null = null;
 const emit = () => listeners.forEach(listener => listener());
 const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
 const differs = () => !!state && Object.keys(state.saved).some(key => state!.saved[key] !== state!.draft[key]);
-const same = (a: Values, b: Values) => Object.keys(a).every(key => a[key] === b[key]) && Object.keys(b).every(key => a[key] === b[key]);
 
-// The page's fields seed the draft with what the server read, once per Agent. Coming back to the same Agent keeps what
-// is saved; a new Agent (or a read that changed under no edit) starts from the new values.
+// The page's fields seed the draft with what the server read, once per Agent: each field seeds only its own keys, so a
+// section arriving later never wipes another's, and an unsaved edit stays while the read under it changes. Coming back to
+// the same Agent keeps what is saved; a new Agent starts from the new values.
 /** @param {string} agent @param {Values} values */
 export function seedDraft(agent: string, values: Values) {
- if (state && state.agent === agent) {
-  if (!differs() && !same(state.saved, values)) { state = { agent, saved: { ...values }, draft: { ...values } }; emit(); }
+ if (!state || state.agent !== agent) {
+  state = { agent, saved: { ...values }, draft: { ...values } };
+  emit();
   return;
  }
- state = { agent, saved: { ...values }, draft: { ...values } };
+ const saved = { ...state.saved }, draft = { ...state.draft };
+ let changed = false;
+ for (const [key, value] of Object.entries(values)) {
+  if (key in saved && saved[key] !== draft[key]) continue;
+  if (saved[key] !== value || draft[key] !== value) { saved[key] = value; draft[key] = value; changed = true; }
+ }
+ if (!changed) return;
+ state = { agent, saved, draft };
  emit();
+}
+
+// The fields whose draft differs from what was saved, as the one object the save bar sends.
+/** @param {string} agent @returns {Values} */
+export function changedValues(agent: string) {
+ const current = state;
+ if (!current || current.agent !== agent) return {};
+ return Object.fromEntries(Object.keys(current.saved).filter(key => current.saved[key] !== current.draft[key]).map(key => [key, current.draft[key]]));
 }
 
 /** @param {string} field @param {string} value */
@@ -51,7 +67,8 @@ export function restoreDraft() {
 /** @param {Values} saved */
 export function commitDraft(saved: Values) {
  if (!state) return;
- state = { agent: state.agent, saved: { ...saved }, draft: { ...saved } };
+ // A save may carry only the fields that changed: the others keep what they had.
+ state = { agent: state.agent, saved: { ...state.saved, ...saved }, draft: { ...state.draft, ...saved } };
  emit();
 }
 

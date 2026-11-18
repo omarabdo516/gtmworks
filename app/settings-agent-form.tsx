@@ -2,11 +2,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { useI18n } from '@/lib/i18n-client';
 import { toast } from './toast';
-import { commitDraft, registerFirstField, registerSave, restoreDraft, seedDraft, setDraftValue, useBarFlash, useDraftDirty, useDraftValue } from './settings-draft';
+import { changedValues, commitDraft, registerFirstField, registerSave, restoreDraft, seedDraft, setDraftValue, useBarFlash, useDraftDirty, useDraftValue } from './settings-draft';
 
-// An Agent's page in Settings (#161; design-reference: settingsHTML's About and sovAgentHTML's save bar). The fields
-// hold a draft until Save, and the bar appears at the bottom of the page as soon as it differs from what was saved.
-// Later fields (#176, #179, #180, #182) join this same draft and bar.
+// An Agent's page in Settings (#161, #176; design-reference: settingsHTML's About and How it works, and sovAgentHTML's
+// save bar). The fields hold a draft until Save, and the bar appears at the bottom of the page as soon as one differs
+// from what was saved. Later fields (#179, #180) join this same draft and bar.
 
 // About is the description of the Agent's own Engine profile, with the reference's placeholder and hint.
 export function AgentAbout({agent,name,description}:{agent:string,name:string,description:string}) {
@@ -24,12 +24,36 @@ export function AgentAbout({agent,name,description}:{agent:string,name:string,de
  </div></div>;
 }
 
+// How it works is the Agent's profile SOUL.md outside the team's rules section (#176), with the reference's tall field,
+// its hint and a counter of the whole file against the size the Engine loads (the rules section counts). The field takes
+// no text that would push the file past that size; there is no placeholder (the reference's name demo Agents).
+export function AgentInstructions({agent,name,instructions,sectionChars,limit}:{agent:string,name:string,instructions:string,sectionChars:number,limit:number}) {
+ const {t,locale}=useI18n();
+ const text=useDraftValue(agent,'instructions',instructions);
+ // The draft starts from what the server read, once for this Agent; a read that changed while nothing is unsaved wins.
+ useEffect(()=>{ seedDraft(agent,{instructions}); },[agent,instructions]);
+ // The counter follows the typing, as the reference's input handler does (design-reference app.js 3631).
+ const count=(value:number)=>new Intl.NumberFormat(locale).format(value);
+ const allowed=Math.max(0,limit-sectionChars);
+ return <div className="panel-card set-card"><div className="set-field">
+  <label className="sr-only" htmlFor="set-instr">{t('settingsHowFor',name)}</label>
+  <textarea className="set-input set-textarea set-textarea--tall" id="set-instr" rows={6} dir="auto" value={text} maxLength={allowed}
+   aria-describedby="set-instr-hint set-instr-count" onChange={event=>setDraftValue('instructions',event.target.value.slice(0,allowed))}/>
+  <div className="set-hint-row"><span className="set-hint od-fill" id="set-instr-hint">{t('settingsHowHint',name)}</span>
+   <span className="set-count num" id="set-instr-count">{count(text.length+sectionChars)} / {count(limit)}</span></div>
+ </div></div>;
+}
+
+// What every other Role reads in its place: the text with its line breaks kept, or the reference's empty line.
+export function AgentInstructionsReadOnly({instructions,empty}:{instructions:string,empty:string}) {
+ return <div className="panel-card"><p className="ro-text ro-text--lines" id="set-how">{instructions||empty}</p></div>;
+}
+
 // The page's save bar: hidden until the draft differs. Cancel puts back what was saved and the focus on the first field;
-// Save sends the changed fields, then shows what the Engine kept. Every way out of the page asks the shared store first,
-// which flashes this bar and focuses Save.
+// Save sends every changed field in one request, then shows what the Engine kept. Every way out of the page asks the
+// shared store first, which flashes this bar and focuses Save.
 export function AgentSaveBar({company,agent,name}:{company:string,agent:string,name:string}) {
  const {t}=useI18n();
- const about=useDraftValue(agent,'about','');
  const dirty=useDraftDirty(agent);
  const flash=useBarFlash();
  const [saving,setSaving]=useState(false);
@@ -48,12 +72,15 @@ export function AgentSaveBar({company,agent,name}:{company:string,agent:string,n
  },[flash,dirty]);
  const discard=()=>{ setFailed(false); restoreDraft(); toast(t('settingsBackSaved'),{icon:'x'}); };
  const write=async()=>{
+  const changes=changedValues(agent);
+  if(!Object.keys(changes).length) return;
   setSaving(true); setFailed(false);
   try {
-   const response=await fetch('/api/agent-page',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company,agent,changes:{about}})});
+   const response=await fetch('/api/agent-page',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company,agent,changes})});
    const answer=await response.json().catch(()=>null);
-   if(!response.ok||typeof answer?.saved?.about!=='string') { setFailed(true); return; }
-   commitDraft({about:answer.saved.about});
+   const saved=answer?.saved&&typeof answer.saved==='object'?answer.saved as Record<string,unknown>:null;
+   if(!response.ok||!saved||!Object.keys(changes).every(key=>typeof saved[key]==='string')) { setFailed(true); return; }
+   commitDraft(Object.fromEntries(Object.keys(changes).map(key=>[key,saved[key] as string])));
    toast(t('settingsSaved',name));
   } catch { setFailed(true); } finally { setSaving(false); }
  };

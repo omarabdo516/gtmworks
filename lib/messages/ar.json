@@ -988,5 +988,10 @@
   "logEdited": "اتعدّل",
   "settingsPerModel": "لكل موديل",
   "usageModel": "الموديل",
-  "usageHeaviest": "أكتر وكيل استهلاك"
+  "usageHeaviest": "أكتر وكيل استهلاك",
+  "settingsHowFor": "تعليمات ثابتة لـ {0}",
+  "settingsHowHint": "تعليمات ثابتة {0} بيمشي عليها دايماً: اللهجة، الأولويات، والحاجات اللي يبعد عنها. وبيتعلّم كمان من المحادثات والذاكرة.",
+  "settingsHowEmpty": "مفيش تعليمات ثابتة.",
+  "settingsHowRO": "التعليمات الثابتة بيغيّرها المالك بس.",
+  "logFieldInstructions": "التعليمات"
 }

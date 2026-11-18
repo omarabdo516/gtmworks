@@ -988,5 +988,10 @@
   "logEdited": "Edited",
   "settingsPerModel": "Per model",
   "usageModel": "Model",
-  "usageHeaviest": "Heaviest agent"
+  "usageHeaviest": "Heaviest agent",
+  "settingsHowFor": "Standing instructions for {0}",
+  "settingsHowHint": "Standing instructions {0} always follows: tone, priorities and things to avoid. It also learns from chats and memory.",
+  "settingsHowEmpty": "No standing instructions.",
+  "settingsHowRO": "Standing instructions are changed by the Owner only.",
+  "logFieldInstructions": "the instructions"
 }

@@ -38,6 +38,11 @@ test('Card, Member and Agent rows say who changed what', () => {
   [['changed the description in the settings of Ads', 'Edited'], ['غيّر الوصف في إعدادات Ads', 'اتعدّل']]);
  const unknownField = describeEntry({ subject: 'agent', action: 'agent_setting_changed', agent_id: lead, details: { agent_name: 'Ads', field: 'thinking' } }, { agentName: () => 'Ads' });
  assert.deepEqual([unknownField.act, unknownField.to], [['logActAgentChanged'], undefined], 'a field with no words is never guessed');
+ // The standing instructions read as Edited too (#176): their text is never in the row.
+ const instructions = describeEntry({ subject: 'agent', action: 'agent_setting_changed', agent_id: lead, details: { agent_name: 'Ads', field: 'instructions' } });
+ assert.deepEqual([instructions.act, instructions.obj, instructions.from, instructions.to], [['logActSettingChanged', { key: 'logFieldInstructions' }, { text: 'Ads' }], undefined, undefined, { key: 'logEdited' }]);
+ assert.deepEqual(['en', 'ar'].map(language => { const { t } = i18n(language); const [key, ...args] = instructions.act; return t(key, ...args.map(value => 'key' in value ? t(value.key) : value.text)); }),
+  ['changed the instructions in the settings of Ads', 'غيّر التعليمات في إعدادات Ads']);
  // A Contributor's rule suggested for the team, then approved or refused, naming who taught it (#25).
  const [suggested, approved, rejected] = ['agent_rule_suggested', 'agent_rule_approved', 'agent_rule_rejected'].map(action => describeEntry({ subject: 'agent', action, agent_id: lead, details: { agent_name: 'Ads', rule, ...(action === 'agent_rule_suggested' ? {} : { taught_by: 'يوسف' }) } }));
  assert.deepEqual([suggested.act, suggested.obj, suggested.to], [['logActRuleSuggested', { text: 'Ads' }, { text: '' }], rule, { key: 'logRuleWaiting' }]);
