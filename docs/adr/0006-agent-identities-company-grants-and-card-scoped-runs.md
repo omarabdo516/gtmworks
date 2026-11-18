@@ -1,10 +1,12 @@
 ---
-status: accepted
+status: accepted, partly superseded by #341
 ---
 
 # Agents have their own identities, company grants and card-scoped runs; the dashboard runs no AI
 
 Decisions: Omar, 2026-11-06/07. Today's runtime design is in [ADR 0008](0008-gtmworks-connects-to-hermes-with-encrypted-profile-keys.md) and [ADR 0010](0010-hermes-ships-inside-the-gtmworks-install-and-is-the-engine.md).
+
+Update (#341, decision 0042): the external-agent API this ADR describes (company and run keys, the `v1` routes, the planned run dispatch through it) is removed; Hermes ships inside the install (ADR 0010) and every Run goes through the Engine contract (ADR 0009). Agent identities, company grants, the no-model rule and human approval remain.
 
 ## Decision
 

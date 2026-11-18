@@ -1,10 +1,12 @@
 ---
-status: accepted
+status: superseded by #341
 ---
 
 # Run keys are pushed by webhook, or pulled by the assigned agent
 
 Settles a finding on #78 (Hermes, 2026-11-09). Builds on [ADR 0006](0006-agent-identities-company-grants-and-card-scoped-runs.md).
+
+Superseded (#341, decision 0042): run keys, the webhooks that pushed them and the route that let an agent pull one are removed with the external-agent API. Nothing below is built any more; Runs go through the Engine contract (ADR 0009, ADR 0010).
 
 ## Decision
 
