@@ -122,3 +122,12 @@ test('every case of the functional project has its decision, and only kept cases
   for (const file of ['visual-lane.spec.ts', 'first-run.spec.ts', 'navigation.spec.ts', 'proxy/production-shape.spec.ts']) assert.ok(!listed.cases.some(item => item.file === file), `${file} is not in the functional project`);
   assert.deepEqual(decisionProblems(readFileSync('docs/testing.md', 'utf8'), listed), []);
 });
+
+// #336: the doc says how to set a flaky test aside and when it must come back.
+test('docs/testing.md says how to set a test aside and when it must come back', () => {
+  const doc = readFileSync('docs/testing.md', 'utf8');
+  const start = doc.indexOf('\n## Setting a test aside');
+  assert.ok(start >= 0, 'docs/testing.md has a "Setting a test aside" section');
+  const section = doc.slice(start, doc.indexOf('\n## ', start + 1));
+  for (const words of ['test.fixme', 'tests/set-aside.json', 'issue', 'must come back within 7 days', 'never set aside']) assert.ok(section.includes(words), `the section names ${words}`);
+});
