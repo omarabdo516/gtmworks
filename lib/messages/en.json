@@ -972,5 +972,13 @@
   "connectBy": "Apps are connected by {0}",
   "connectByOwner": "Apps are connected by the Owner",
   "connectFailed": "The sign-in didn’t finish. Try again.",
-  "connectBlocked": "Your browser blocked the sign-in window. Allow pop-ups for this site and try again."
+  "connectBlocked": "Your browser blocked the sign-in window. Allow pop-ups for this site and try again.",
+  "ideaAdd": "Add",
+  "ideaLabel": "Idea",
+  "ideaPlaceholder": "e.g. a LinkedIn post about the new cohort",
+  "ideaNeedsText": "Write the idea first, even a short sentence.",
+  "ideaAdded": "Idea added",
+  "boardNewIdeaFrom": "New idea from {0}",
+  "logActIdeaAdded": "added an idea",
+  "addedAnIdea": "Added an idea"
 }
