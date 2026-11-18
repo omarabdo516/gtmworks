@@ -25,7 +25,7 @@ select is((select agent_id from public.work_cards where company_id='10000000-000
 
 -- A Manager and a Contributor add ideas; the Contributor only with an Agent they see, the main Agent included.
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
-select lives_ok($$select public.create_work_card('10000000-0000-0000-0000-000000000001',(select id from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' and kind='ideas'),'Manager idea','a1880000-0000-0000-0000-000000000002'::uuid)$$,'a Manager adds an idea');
+select lives_ok($$select public.create_work_card('10000000-0000-0000-0000-000000000001',(select id from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' and kind='ideas'),'Manager idea','a1880000-0000-0000-0000-000000000001'::uuid)$$,'a Manager adds an idea with the main Agent, shown to everyone');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
 select lives_ok($$select public.create_work_card('10000000-0000-0000-0000-000000000001',(select id from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' and kind='ideas'),'Contributor idea','a1880000-0000-0000-0000-000000000002'::uuid)$$,'a Contributor adds an idea with an Agent shown to them');
 select lives_ok($$select public.create_work_card('10000000-0000-0000-0000-000000000001',(select id from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' and kind='ideas'),'Contributor main idea','a1880000-0000-0000-0000-000000000001'::uuid)$$,'a Contributor adds an idea with the main Agent');
