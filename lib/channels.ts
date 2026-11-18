@@ -84,7 +84,7 @@ export async function channelRecord(db:Database,person:string,company:string,cha
  const stepsOf=new Map<number,RunSteps>();
  const replies=ordered.filter(message=>message.author==='agent'&&message.reply_to!==null);
  if(session&&replies.length) {
-  const {data:runsRead}=await db.rpc('channel_run_sessions',{ch:channel});
+  const {data:runsRead}=await db.rpc('channel_run_sessions',{ch:channel,after:askedIds[0]??0});
   const runOfMessage=new Map(((runsRead||[]) as StoredSession[]).map(row=>[row.message_id,row]));
   const groups=new Map<string,{agent:string,profile:string,session:string,replies:StoredMessage[]}>();
   for(const reply of replies) {
