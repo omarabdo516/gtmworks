@@ -12,6 +12,10 @@ export type UsageModel={model:string,input:number,output:number,sessions:number}
 export type ProfileUsage={state:'found',input:number,output:number,sessions:number,models:UsageModel[]}|{state:'refused'|'unreachable',input:null,output:null,sessions:null,models:null};
 export function readUsage(connection:import('./engine.mjs').EngineConnection,days:number):Promise<ProfileUsage>;
 export function hermesEngine(connection:import('./engine.mjs').EngineConnection):import('./engine.mjs').Engine;
+export function readModels(connection:import('./engine.mjs').EngineConnection):Promise<import('./engine.mjs').AgentModels>;
+export type ProfileModels={state:'found',models:Record<string,{provider:string,model:string}|null>}|{state:'refused'|'unreachable'|'failed',models:null};
+export function readProfileModels(connection:HermesConnection,profiles:string[]):Promise<ProfileModels>;
+export function writeProfileModel(connection:HermesConnection,change:{profile:string,provider:string,model:string}):Promise<{state:'saved',provider:string,model:string}|{state:'mismatch'|'refused'|'unreachable'|'failed',provider:null,model:null}>;
 export type ProfileTools={state:'configured'|'missing'|'refused'|'unreachable'|'failed',toolsets:string[]|null};
 export function provideProfile(connection:import('./engine.mjs').EngineConnection,profile:{name:string,soul:string,config:object,forbidden:string[]}):Promise<ProfileTools>;
 export function configureProfile(connection:import('./engine.mjs').EngineConnection,profile:{name:string,config:object,forbidden:string[]}):Promise<ProfileTools>;

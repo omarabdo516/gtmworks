@@ -5,12 +5,16 @@ export type EngineSettingLimits={min?:number,max?:number,integer?:boolean,source
 export type EngineSetting={key:string,where:EngineSettingWhere,type:EngineSettingType,label:string,source?:string,choices?:string[],default?:unknown,limits?:EngineSettingLimits};
 export type ListedSetting={key:string,where:EngineSettingWhere,type:EngineSettingType,choices:string[]|null,default:unknown,value:unknown,limits:EngineSettingLimits|null,label:string};
 export type SettingsRead={state:'found',settings:ListedSetting[]}|{state:'refused'|'unreachable'|'failed',settings:null};
-export type SettingWrite={state:'saved'|'unchanged',old:unknown,new:unknown}|{state:'invalid',problem:'type'|'choice'|'limit'}|{state:'unknown'|'owned'|'installOnly'|'refused'|'unreachable'|'failed'|'mismatch',old?:unknown};
+export type SettingWrite={state:'saved'|'unchanged',old:unknown,new:unknown}|{state:'invalid',problem:'type'|'choice'|'limit'}|{state:'unknown'|'owned'|'installOnly'|'profileOnly'|'refused'|'unreachable'|'failed'|'mismatch',old?:unknown};
 export type AgentSettings={id:string,name:string,own:boolean,settings:ListedSetting[]|null};
 export const engineSettings:Readonly<EngineSetting[]>;
 export function engineOwnsSetting(key:unknown):boolean;
 export function settingsSchemaProblems(list:EngineSetting[],schema:{fields?:Record<string,{type?:string}>},defaults:Record<string,unknown>):string[];
 export function readSettings(connection:{address:string,profile:string,key:string,managementAddress?:string},request?:{list?:EngineSetting[],installProfile?:string,driver?:object}):Promise<SettingsRead>;
 export function writeSetting(connection:{address:string,profile:string,key:string,managementAddress?:string},request:{setting:unknown,value:unknown,list?:EngineSetting[],driver?:object}):Promise<SettingWrite>;
+export type ModelOption={provider:string,providerName:string,model:string};
+export type CompanyModelAgent={id:string,name:string,own:boolean,choosable:boolean,model:string|null,choice:string|null,subagents:boolean,options:ModelOption[],settings:ListedSetting[]};
+export type CompanyModels={default:{model:string|null,options:ModelOption[]},agents:CompanyModelAgent[]};
+export function readCompanyModels(db:SupabaseClient,request:{company:string,agent?:string|null,owner?:boolean,hermes?:{address:string,key:string}|null,driver?:object}):Promise<{models:CompanyModels|null}>;
 export function readAgentSettings(db:SupabaseClient,request:{company:string,agent?:string|null,hermes?:{address:string,key:string}|null,driver?:object,list?:EngineSetting[]}):Promise<{agents:AgentSettings[]|null}>;
 export function changeCompanySetting(db:SupabaseClient,request:{company:string,agent?:string|null,setting:unknown,value:unknown,hermes?:{address:string,key:string}|null,driver?:object,list?:EngineSetting[]}):Promise<{status:number,body:Record<string,unknown>}>;
