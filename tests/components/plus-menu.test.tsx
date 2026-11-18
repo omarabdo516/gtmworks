@@ -54,7 +54,7 @@ test('"Commands" lists each role\'s command with the Agent this Member sees, the
  // #159: Ready and Figures were made from a role (meta, numbers), Reach by hand, so only their two commands are listed.
  const seen: CallableAgent[] = [{ id: 'b1', connection_id: 'e1', name: 'Reach' }, { id: 'b2', connection_id: 'e2', name: 'Ready', role: 'meta' }, { id: 'b3', connection_id: 'e3', name: 'Figures', role: 'numbers' }];
  const screen = await composer({ seen });
- await screen.getByRole('button', { name: 'More: call someone, commands' }).click();
+ await screen.getByRole('button', { name: 'More: call someone, commands, attach' }).click();
  const items = screen.getByRole('menuitem').elements().map(item => item.textContent);
  expect(items.filter(text => text?.includes('/'))).toEqual(['New campaign with Ready/campaign', 'Numbers summary from Figures/report', 'Ask for a new agent/agent']);
  await screen.getByRole('menuitem', { name: 'Numbers summary from Figures /report' }).click();
@@ -63,7 +63,7 @@ test('"Commands" lists each role\'s command with the Agent this Member sees, the
 
 test('in Arabic "Commands" names the Agent in the reference\'s words', async () => {
  const screen = await composer({ seen: [{ id: 'b1', connection_id: 'e1', name: 'محتوى', role: 'writer' }], language: 'ar' });
- await screen.getByRole('button', { name: 'إضافات: نادي حد، الأوامر' }).click();
+ await screen.getByRole('button', { name: 'إضافات: نادي حد، الأوامر، إرفاق' }).click();
  await expect.element(screen.getByRole('menuitem', { name: 'مقال SEO جديد من محتوى /article' })).toBeVisible();
 });
 
