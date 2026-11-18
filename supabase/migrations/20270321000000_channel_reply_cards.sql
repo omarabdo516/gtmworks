@@ -98,16 +98,16 @@ revoke all on function public.channel_show_card(bigint,text,text,text,text,jsonb
 grant execute on function public.channel_show_card(bigint,text,text,text,text,jsonb) to service_role;
 
 -- The sessions a channel's replies were made in, for their steps (#346): one row per completed Run that has a reply,
--- with the profile it ran on, read by the channel's members only. The steps are read live from that session; gtmworks
--- keeps none. `after` starts the list at a message id.
+-- with the profile it ran on, read by the channel's members only. A member reads the steps of a reply they can read,
+-- also when the Agent is hidden from them elsewhere. The steps are read live from that session; gtmworks keeps none.
+-- `after` starts the list at a message id.
 create function public.channel_run_sessions(ch uuid, after bigint default 0)
 returns table(message_id bigint, agent_id uuid, profile text, session uuid)
 language sql stable security definer set search_path='' as $$
  select r.message_id,r.agent_id,r.profile,r.session from public.channel_runs r
  where r.channel_id=ch and auth.uid() is not null and public.in_channel(ch) and r.message_id>coalesce(after,0)
   and r.outcome='completed' and r.agent_id is not null and r.profile is not null and r.session is not null
-  and exists(select 1 from public.channel_messages m where m.reply_to=r.message_id and m.author='agent')
-  and public.channel_agent(ch,auth.uid(),r.agent_id);
+  and exists(select 1 from public.channel_messages m where m.reply_to=r.message_id and m.author='agent');
 $$;
 revoke all on function public.channel_run_sessions(uuid,bigint) from public,anon,service_role;
 grant execute on function public.channel_run_sessions(uuid,bigint) to authenticated;

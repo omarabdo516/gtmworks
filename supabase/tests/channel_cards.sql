@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(32);
+select plan(36);
 -- #148. Ads in RS Learning's general channel, shown to the Manager (2) and Contributor 3; the Owner (1) sees every
 -- Agent and Viewer 4 neither. SEO is in the "scripts" team channel only and hidden from everyone outside it, where
 -- Contributor 3 calls it and Viewer 4 reads. Karim is a Manager of Aleem only, so he is not in these channels.
@@ -81,6 +81,12 @@ select results_eq($$select kind,state,title from public.reply_cards where channe
 select is((select content from public.reply_cards where channel_message_id=current_setting('test.manager')::bigint and kind='review'),
  current_setting('test.review')::jsonb,'the review keeps its verdicts and its decision');
 
+-- The Runs that ended have their Agent's reply, so their sessions are the steps of a reply a member reads.
+insert into public.channel_messages(company_id,channel_id,author,agent_id,author_name,body,reply_to) values
+ ('10000000-0000-0000-0000-000000000001','69000000-0000-0000-0000-000000000001','agent','e8148000-0000-0000-0000-000000000001','Ads','Here is the plan.',current_setting('test.owner')::bigint),
+ ('10000000-0000-0000-0000-000000000001','e8140000-0000-0000-0000-000000000001','agent','e8148000-0000-0000-0000-000000000002','SEO','Reviewed the article.',current_setting('test.team')::bigint);
+update public.channel_runs set outcome='completed', closed_at=now() where message_id in (current_setting('test.owner')::bigint,current_setting('test.team')::bigint);
+
 -- Who reads them: everyone in the channel, a Viewer included, and nobody outside it.
 create temporary table seen(who int, general int, team int, team_log int);
 grant insert on seen to authenticated;
@@ -121,6 +127,20 @@ select is((select team_log from seen where who=3),1,'the member who called the h
 select is((select team_log from seen where who=4),1,'and so does the Viewer in that channel');
 select is((select team_log from seen where who=2),0,'a Manager outside the team channel reads no row for it');
 select is((select team_log from seen where who=6),0,'and another Company reads none');
+
+-- The steps themselves: a reply's session is read by every member of its channel, a Viewer included, also where the
+-- Agent is hidden from them elsewhere; a Member outside the channel reads none.
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
+select is((select count(*)::int from public.channel_run_sessions('69000000-0000-0000-0000-000000000001')),1,'the Viewer reads the steps of a general channel reply whose Agent is hidden from them elsewhere');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+select is((select count(*)::int from public.channel_run_sessions('e8140000-0000-0000-0000-000000000001')),1,'a team channel''s member reads its reply''s steps');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select is((select count(*)::int from public.channel_run_sessions('e8140000-0000-0000-0000-000000000001')),0,'a Member of the Company outside the channel reads no step of it');
+select set_config('request.jwt.claim.sub','e8149000-0000-0000-0000-000000000001',true);
+select is((select count(*)::int from public.channel_run_sessions('69000000-0000-0000-0000-000000000001'))
+ +(select count(*)::int from public.channel_run_sessions('e8140000-0000-0000-0000-000000000001')),0,'and another Company reads none');
+reset role;
 
 select * from finish();
 rollback;
