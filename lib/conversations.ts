@@ -83,7 +83,7 @@ export type Decision=({kind:'rule'}&RuleDecision)|({kind:'request',by:string,nam
 export type RunStep={tool:string,preview:string|null,state:'started'|'done'|'failed'};
 export type RunSteps={list:RunStep[],seconds:number|null};
 export type RunStepsRow={run_id:string,steps:RunStep[],seconds:number|null};
-type SessionTurn={at:number,seconds:number,steps:RunStep[]};
+export type SessionTurn={at:number,seconds:number,steps:RunStep[]};
 // Each reply takes the last turn its session started after the reply before it and by the time the reply was written:
 // one turn is one Run, and a Run that ended with no reply leaves its turn to none. No turn, or none with a tool call,
 // no steps. The session's clock and the database's are the same machine's (the bundled Engine, ADR 0010).

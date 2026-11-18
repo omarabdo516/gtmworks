@@ -15,6 +15,8 @@ import { madeDay, useZone } from '@/app/agent-made';
 import { changeChannel, channelChoices } from '@/app/channel-actions';
 import { channelTitle, firstName, withMention, type ChannelAgent, type ChannelMessage, type ChannelRecord } from '@/lib/channels';
 import { PermissionCard, type DecidePermission, type PermissionOutcome } from '@/app/permission-card';
+import { ReplyCard } from '@/app/reply-card';
+import { StepsList, type StepsBidiText } from '@/app/run-steps';
 import { offeredChoices } from '@/lib/conversations';
 
 type Say=(key:string,...values:unknown[])=>string;
@@ -27,6 +29,8 @@ const Names=({agents,c}:{agents:ChannelAgent[],c:Say})=><>{agents.map((agent,ind
 export default function ChannelView({person,initial}:{person:string,initial:ChannelRecord}) {
  const {t,language}=useI18n(); const own:Record<string,string>=language==='ar'?channelAr:channelEn;
  const c:Say=(key,...values)=>own[key].replace(/\{(\d+)\}/g,(_,index)=>String(values[Number(index)] ?? ''));
+ // The same, for the steps' tool lines: each value isolated in its own direction, as a Conversation draws them.
+ const cb:StepsBidiText=(key,...values)=>own[key].split(/\{(\d+)\}/).map((part,index)=>index%2?<bdi key={index}>{values[Number(part)]}</bdi>:part);
  const [record,setRecord]=useState(initial); const [sent,setSent]=useState(0); const panel=useDetailsPanel(); const zone=useZone();
  const {channel,members,agents,writer,messages,open,may}=record;
  const refresh=useCallback(async()=>{
@@ -69,7 +73,7 @@ export default function ChannelView({person,initial}:{person:string,initial:Chan
  };
  // A card an Agent's Run shows while the channel is open rises in once (design-reference: card-in); those already there
  // do not.
- const [drawnCards]=useState(()=>new Set(initial.messages.flatMap(message=>message.author==='person'?message.mention?.permissions.map(card=>card.id)??[]:[])));
+ const [drawnCards]=useState(()=>new Set(initial.messages.flatMap(message=>message.author==='person'?message.mention?.permissions.map(card=>card.id)??[]:message.author==='agent'?message.cards?.map(card=>card.id)??[]:[])));
  const transcript=useRef<HTMLDivElement>(null); const last=messages.at(-1)?.id;
  // Opened from "Waiting on you" at a request (#165, `#permission-<id>`): that card in view and focused, not the newest
  // message, on the first draw only; the address is then the channel's again.
@@ -104,7 +108,7 @@ export default function ChannelView({person,initial}:{person:string,initial:Chan
    </div>
    <ol className="turns" aria-label={c('channelMessages',name)}>{messages.map((message,index)=><Fragment key={message.id}>
     {(index===0||dayOf(messages[index-1].at,zone)!==dayOf(message.at,zone))&&<li className="divider"><time dateTime={message.at} data-utc={zone}>{dayLabel(message.at)}</time></li>}
-    <Turn message={message} time={time} c={c}/>
+    <Turn message={message} time={time} c={c} name={name} cb={cb} drawnCards={drawnCards}/>
     {message.author==='person'&&!!message.mention?.permissions.length&&<li className="turn turn--agent msg" data-author="agent">
      <div className="sender"><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:message.mention.face,name:message.mention.agent}} size={20}/></span><bdi>{message.mention.agent}</bdi></div>
      {message.mention.permissions.map(card=><PermissionCard key={card.id} card={card} fresh={!drawnCards.has(card.id)} offered={offeredChoices(card,may)} decide={message.mine&&writer?permit:undefined}/>)}
@@ -113,7 +117,7 @@ export default function ChannelView({person,initial}:{person:string,initial:Chan
    {waiting?.mention&&<p className="thinking convo-status" role="status">{t('conversationWorking',waiting.mention.agent)}</p>}
   </div></div>
   <div className="composer-area">
-   {writer?<MessageBox label={c('channelMessageLabel')} placeholder={c('channelPlaceholder',name)} call={{people:members.filter(member=>member.person!==person).map(member=>({id:member.person,name:member.name})),agents}} send={async(message,sendKey)=>{
+   {writer?<MessageBox label={c('channelMessageLabel')} placeholder={c('channelPlaceholder',name)} call={{people:members.flatMap(member=>member.person&&member.person!==person?[{id:member.person,name:member.name}]:[]),agents}} send={async(message,sendKey)=>{
     const failure=await postMessage({company:channel.company,channel:channel.id,message,sendKey},'/api/channels');
     if(!failure) setSent(value=>value+1);
     return failure;
@@ -122,11 +126,17 @@ export default function ChannelView({person,initial}:{person:string,initial:Chan
  </div><ChannelDetails panel={panel} name={name} person={person} record={record} tip={tip} c={c} refresh={refresh}/></div>;
 }
 
-function Turn({message,time,c}:{message:ChannelMessage,time:(value:string)=>string,c:Say}) {
+function Turn({message,time,c,name,cb,drawnCards}:{message:ChannelMessage,time:(value:string)=>string,c:Say,name:string,cb:StepsBidiText,drawnCards:Set<number>}) {
  const {t}=useI18n();
+ // The quiet line an invitation adds (#207): not a message, and the channel's own name is the one it joined.
+ if(message.author==='note') return <li className="note note--icon" data-kind={message.kind}>
+  <ShellIcon name="team" className="note__icon"/><span>{c('channelInviteNote',firstName(message.actor),message.name,name)}</span>
+ </li>;
  if(message.author==='agent') return <li className="turn turn--agent msg" data-author="agent">
   <div className="sender"><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:message.face,name:message.name}} size={20}/></span><bdi>{message.name}</bdi><time className="sender__time" dateTime={message.at}>{time(message.at)}</time></div>
+  {!!message.steps?.list.length&&<StepsList steps={message.steps} c={c} cb={cb}/>}
   <div className="bubble bubble--agent" dir="auto">{message.body}</div>
+  {message.cards?.map(card=><ReplyCard key={`reply${card.id}`} card={card} fresh={!drawnCards.has(card.id)}/>)}
  </li>;
  const body=withMention(message.body,message.mention?.agent).map((part,index)=>part.mention?<bdi key={index} className="mention">{part.text}</bdi>:<Fragment key={index}>{part.text}</Fragment>);
  const failed=message.mention?.state==='unanswered'&&<p className="note" role="alert">{c('channelCouldNotReply',message.mention.agent)}</p>;
@@ -155,7 +165,7 @@ function ChannelDetails({panel,name,person,record,tip,c,refresh}:{panel:DetailsP
   set(open);
   if(open&&!choices) setChoices(await channelChoices(channel.company));
  };
- const change=async(made:{person:string,present:boolean}|{agent:string,present:boolean},opener:string)=>{
+ const change=async(made:{person:string,present:boolean}|{invitation:string,present:boolean}|{agent:string,present:boolean},opener:string)=>{
   const failure=await changeChannel(channel.company,channel.id,made);
   setFailed(!!failure);
   if(failure) return;
@@ -163,11 +173,11 @@ function ChannelDetails({panel,name,person,record,tip,c,refresh}:{panel:DetailsP
   await refresh();
   document.getElementById(opener)?.focus();
  };
- const remove=(id:string,label:string,made:{person:string,present:boolean}|{agent:string,present:boolean},opener:string)=>
+ const remove=(id:string,label:string,made:{person:string,present:boolean}|{invitation:string,present:boolean}|{agent:string,present:boolean},opener:string)=>
   <button type="button" className="link-btn" id={id} aria-label={c('channelRemoveFrom',label)} onClick={()=>void change(made,opener)}>{c('channelRemove')}</button>;
  const addRow=(id:string,open:boolean,label:string,toggle:()=>void)=><li><button type="button" className="panel-row tm-add" id={id} aria-expanded={open} onClick={toggle}>
   <span className="panel-row__icon"><ShellIcon name={open?'x':'plus'}/></span><span className="panel-row__text"><span className="panel-row__t">{open?c('channelAddDone'):label}</span></span></button></li>;
- const personCandidates=(choices?.people||[]).filter(candidate=>!members.some(member=>member.person===candidate.person));
+ const personCandidates=(choices?.people||[]).filter(candidate=>!members.some(member=>member.person?member.person===candidate.person:member.invitation===candidate.invitation));
  const agentCandidates=(choices?.agents||[]).filter(candidate=>!agents.some(agent=>agent.id===candidate.id));
  const empty=(text:string)=><li className="panel-row"><span className="panel-row__text"><span className="panel-row__d">{text}</span></span></li>;
  const byName=managers.map(manager=>c(manager.role==='owner'?'channelByOwner':'channelByManager',manager.name));
@@ -182,14 +192,14 @@ function ChannelDetails({panel,name,person,record,tip,c,refresh}:{panel:DetailsP
    <section className="dp-sec" aria-labelledby="ch-h-p">
     <h3 className="dp-label" id="ch-h-p"><span>{t('members')} <span className="muted num">{count(members.length)}</span></span></h3>
     <ul className="panel-card">
-     {members.map(member=><li key={member.person} className="panel-row"><Initial name={member.name} size={28}/>
+     {members.map(member=><li key={member.person??member.invitation} className="panel-row"><Initial name={member.name} size={28}/>
       <span className="panel-row__text"><span className="panel-row__t"><bdi>{member.name}</bdi>{member.person===person&&<> <span className="ch-you">{c('channelYou')}</span></>}</span>
-       <span className="panel-row__d">{t(roleKeys[member.role])}{member.role==='viewer'&&` · ${c('channelReadsOnly')}`}</span></span>
-      {manage&&member.person!==person&&remove(`ch-rm-${member.person}`,member.name,{person:member.person,present:false},'ch-add-open')}</li>)}
+       <span className="panel-row__d">{t(roleKeys[member.role])}{member.email&&<> · <bdi dir="ltr">{member.email}</bdi></>}{member.role==='viewer'&&` · ${c('channelReadsOnly')}`}{member.invitation&&` · ${t('settingsInvitePending')}`}</span></span>
+      {manage&&member.person!==person&&remove(`ch-rm-${member.person??member.invitation}`,member.name,member.person?{person:member.person,present:false}:{invitation:member.invitation!,present:false},'ch-add-open')}</li>)}
      {manage&&addRow('ch-add-open',addingPerson,c('channelAddMember'),()=>void pick(!addingPerson,setAddingPerson))}
-     {manage&&addingPerson&&choices&&(personCandidates.length?personCandidates.map(candidate=><li key={candidate.person} className="panel-row tm-cand"><Initial name={candidate.name} size={28}/>
-      <span className="panel-row__text"><span className="panel-row__t"><bdi>{candidate.name}</bdi></span><span className="panel-row__d">{t(roleKeys[candidate.role])}</span></span>
-      <button type="button" className="btn btn--secondary btn--sm" id={`ch-add-${candidate.person}`} onClick={()=>void change({person:candidate.person,present:true},'ch-add-open')}>{c('channelAdd')}</button></li>)
+     {manage&&addingPerson&&choices&&(personCandidates.length?personCandidates.map(candidate=><li key={candidate.person??candidate.invitation} className="panel-row tm-cand"><Initial name={candidate.name} size={28}/>
+      <span className="panel-row__text"><span className="panel-row__t"><bdi>{candidate.name}</bdi></span><span className="panel-row__d">{t(roleKeys[candidate.role])}{candidate.email&&<> · <bdi dir="ltr">{candidate.email}</bdi></>}</span></span>
+      <button type="button" className="btn btn--secondary btn--sm" id={`ch-add-${candidate.person??candidate.invitation}`} onClick={()=>void change(candidate.person?{person:candidate.person,present:true}:{invitation:candidate.invitation!,present:true},'ch-add-open')}>{c('channelAdd')}</button></li>)
       :empty(c('channelEveryoneHere')))}
      {!team&&<li className="tm-hint"><ShellIcon name="team"/><span>{c('channelEveryone',name)}</span></li>}
     </ul>
