@@ -15,8 +15,8 @@ import { logOpen, markOpen, startOpen } from '@/lib/chat-open-timing';
 
 // Only the person who started a conversation can read it; everyone else, in this company or another, gets not found.
 // ?tab=<key> opens the Agent's details on that tab.
-export default async function ConversationPage({params,searchParams}:{params:Promise<{slug:string,id:string}>,searchParams:Promise<{tab?:string}>}) {
- const timing=startOpen(); const {slug,id}=await params; const {tab}=await searchParams;
+export default async function ConversationPage({params,searchParams}:{params:Promise<{slug:string,id:string}>,searchParams:Promise<{tab?:string,first?:string}>}) {
+ const timing=startOpen(); const {slug,id}=await params; const {tab,first:firstRun}=await searchParams;
  const db=await supabase();
  // The person's own Companies and the Conversation are read beside the sign-in check (RLS reads nothing without one),
  // and the Conversation is then held to the Company in the address.
@@ -70,7 +70,7 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  const title=(first?.body as string|undefined)?.split('\n')[0]||conversation.agent_name;
  const tied=await tiedRead;
  return <Shell company={company} companies={companies||[]} personId={user.id} section="conversations" title={title} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={waitingCount} agentId={conversation.agent_id||undefined} conversationId={id}>
-  <main className="convo-page h-full"><ConversationView slug={slug} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={agent?details:null} tab={pickTab(tab)} company={company.id} conversation={{id:conversation.id,agent_id:conversation.agent_id,agent_name:conversation.agent_name,face:faceOf(conversation)}} title={title} writer={!!writer} board={tied&&{card:tied.card,column:tied.column}}><Loaded record={record} team={company.work_mode==='team'}/></ConversationView></main>
+  <main className="convo-page h-full"><ConversationView slug={slug} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={agent?details:null} tab={pickTab(tab)} company={company.id} conversation={{id:conversation.id,agent_id:conversation.agent_id,agent_name:conversation.agent_name,face:faceOf(conversation)}} title={title} writer={!!writer} board={tied&&{card:tied.card,column:tied.column}} first={firstRun==='alone'||firstRun==='team'?firstRun:undefined}><Loaded record={record} team={company.work_mode==='team'}/></ConversationView></main>
  </Shell>;
 }
 
