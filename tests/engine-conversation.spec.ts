@@ -151,7 +151,7 @@ test('integration: Lead makes the Agent the Owner asks for, and nothing for a Ma
  // the toast away, and a reload of the Conversation raises no second one.
  await signIn(page,'omar@example.com',`/c/rs-learning/conversations/${conversation}`);
  const madeToast=page.locator('.toast');
- await expect(madeToast).toHaveText('Meta Ads was made and shows in your agents');
+ await expect(madeToast.locator('span').first()).toHaveText('Meta Ads was made and shows in your agents');
  await madeToast.getByRole('button',{name:'Open Meta Ads'}).click();
  await expect(page).toHaveURL(new RegExp(`/c/rs-learning/chat/${agent.id}$`));
  await expect(page.locator('.toast')).toHaveCount(0);
