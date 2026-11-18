@@ -58,7 +58,7 @@ const checkProfile=async profile=>{
  assert.deepEqual(riskyToolsets.filter(name=>enabled.includes(name)),[],`${profile} offers no terminal, file or code tools`);
  assert.ok(enabled.includes('web')&&enabled.includes('memory'),`${profile} keeps its marketing tools`);
 };
-const spaceOf=company=>`cs-${company.replaceAll('-','')}`;
+const spaceOf=entry=>`cs-${entry.company.replaceAll('-','')}`;
 const shown=entry=>({company:entry.company,profile:entry.profile,space:entry.space,agent:entry.agent,second:entry.secondProfile});
 // The fake model: one Arabic reply, streamed or not, and every request it was sent.
 const fakeModel=async(requests,results=[])=>{
@@ -109,7 +109,7 @@ if(step==='prepare') {
    const spaces=await checked(service.rpc('shared_skills_work'));
    return (spaces||[]).find(found=>found.company_id===entry.company&&typeof found.folder==='string');
   },180);
-  assert.equal(space.profile,spaceOf(entry.company));
+  assert.equal(space.profile,spaceOf(entry));
   assert.match(space.folder,new RegExp(`/${space.profile}/skills$`));
   entry.space=space.profile; entry.folder=space.folder;
  }
@@ -184,7 +184,7 @@ if(step==='prepare') {
   for(const entry of companies) {
    assert.equal(entry.profile,companyProfile(entry.company),'the main Agent keeps its Company profile');
    assert.equal(entry.secondProfile,`ag-${entry.second.replaceAll('-','')}`,'the second Agent has its own profile');
-   assert.equal(entry.space,spaceOf(entry.company),'the shared space is its Company\'s own');
+   assert.equal(entry.space,spaceOf(entry),'the shared space is its Company\'s own');
    assert.notEqual(entry.profile,entry.secondProfile);
    assert.notEqual(entry.profile,entry.space);
    assert.notEqual(entry.secondProfile,entry.space);
@@ -279,7 +279,7 @@ if(step==='prepare') {
   const provider=(offered.keys.find(found=>found.provider==='openrouter')||offered.keys[0])?.provider;
   assert.ok(provider,'the Engine takes a key for a provider');
   const holds=async profile=>Object.values(await (await manage(`/api/env?profile=${encodeURIComponent(profile)}`)).json()).some(row=>row?.provider===provider&&row.provider_primary===true&&row.is_set===true);
-  const providerKeys=async()=>Promise.all([spaceOf(first),first.profile,first.secondProfile,spaceOf(other),other.profile,other.secondProfile,'default'].map(holds));
+  const providerKeys=async()=>Promise.all([spaceOf(first),first.profile,first.secondProfile,other.space,other.profile,other.secondProfile,'default'].map(holds));
   assert.equal((await setProviderKey({...engine,profile:first.profile,key},{...keyed,provider,value:`install-check-${randomUUID().replaceAll('-','')}`})).state,'written');
   const keyedStates=await providerKeys();
   assert.deepEqual(keyedStates,[true,true,true,false,false,false,false],'the key is in the first company\'s space and its two Agent profiles only, never the root');

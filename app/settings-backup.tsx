@@ -15,9 +15,9 @@ export function BackupSection({t}:{t:I18n['t']}) {
    {label('bk-h-in',t('settingsBackupHolds'))}
    <div className="ln-rules">
     <div className="panel-card ln-rule"><b><SettingsIcon name="check"/>{t('settingsBackupIncluded')}</b>
-     <ul>{backupIncludes.map(item=><li key={item.title}>{t(item.title)}: {t(item.detail)}{item.file&&<> <bdi dir="ltr">{item.file}</bdi></>}</li>)}</ul></div>
+     <ul>{backupIncludes.map(item=><li key={item.title}><span>{t(item.title)}</span>: {t(item.detail)}{item.file&&<> <bdi dir="ltr">{item.file}</bdi></>}</li>)}</ul></div>
     <div className="panel-card ln-rule"><b><SettingsIcon name="x"/>{t('settingsBackupNotIncluded')}</b>
-     <ul>{backupExcludes.map(item=><li key={item.title}>{t(item.title)}{item.detail&&<>: {t(item.detail)}</>}</li>)}</ul></div>
+     <ul>{backupExcludes.map(item=><li key={item.title}><span>{t(item.title)}</span>{item.detail&&<>: {t(item.detail)}</>}</li>)}</ul></div>
    </div>
   </section>
   <section className="dp-sec" aria-labelledby="bk-h-cmd">

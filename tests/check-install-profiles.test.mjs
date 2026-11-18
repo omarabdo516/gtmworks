@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { load } from 'js-yaml';
 import { generateInstallEnv } from '../lib/install-env.mjs';
-import { proof, proofName } from '../lib/install-proof.mjs';
+import { proof, proofName, writeProof, writeName } from '../lib/install-proof.mjs';
 
 // The install job's proof (#126) runs on the pinned Engine, against a real install: four Agents in two Companies, the
 // shared space of each, a key set for one Company, and the capacity of twenty more Agent profiles. It prints names,
@@ -58,4 +58,13 @@ test('the install job fills the capacity step and proves the database refuses an
  const scan=job.indexOf('check-hermes-keys.py');
  assert.ok(prepared>=0&&capacity>prepared,'capacity runs after the four Agents are proven');
  assert.ok(scan>capacity,'the secrets scan covers every profile, the capacity ones included');
+});
+
+test('the script\'s printers write the proof\'s line and the bare name, and nothing else', t => {
+ const written=[];
+ t.mock.method(process.stdout,'write',chunk=>{ written.push(String(chunk)); return true; });
+ writeProof({step:'capacity',seconds:1.5,key:'not printed'});
+ writeName('co-c0000000000040008000000000000001');
+ t.mock.restoreAll();
+ assert.deepEqual(written,[proof({step:'capacity',seconds:1.5}),'co-c0000000000040008000000000000001\n']);
 });
