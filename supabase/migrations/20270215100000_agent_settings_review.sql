@@ -20,3 +20,23 @@ begin
 end $$;
 revoke all on function public.log_agent_setting(uuid,uuid,text,text,text) from public,anon,service_role;
 grant execute on function public.log_agent_setting(uuid,uuid,text,text,text) to authenticated;
+
+-- #29's rows: an Agent is choosable only while its Engine profile is the one its Agent record names. An Agent the worker
+-- is moving still names the Company's `co-` profile for a while, so its own record exists but its model is not its own yet;
+-- it is written with the Company default until the move finishes. Additive: the columns stay as they were.
+create or replace function public.company_agent_models(c uuid)
+returns table(agent uuid, name text, profile text, own boolean, choosable boolean, model_choice text, subagents boolean)
+language sql stable security definer set search_path='' as $$
+ select a.id,a.name,a.profile,
+  (a.profile=p.profile and a.id=public.company_profile_keeper(c)) or exists(select 1 from public.agent_profiles ap where ap.agent_id=a.id and ap.company_id=c and ap.profile=a.profile),
+  g.agent_id is not null and g.profile=a.profile,
+  g.model_choice,coalesce(g.subagents,false)
+ from public.hermes_agents a
+  join public.company_profiles p on p.company_id=c
+  left join public.agent_profiles g on g.agent_id=a.id and g.company_id=c
+ where a.company_id=c and public.can_see_agent(c,a.id)
+  and (a.profile=p.profile or a.profile=public.agent_engine_profile(a.id))
+ order by a.is_default desc,a.name,a.id;
+$$;
+revoke all on function public.company_agent_models(uuid) from public,anon,service_role;
+grant execute on function public.company_agent_models(uuid) to authenticated;

@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(21);
+select plan(22);
 -- #29: an Agent's model choice and its sub-agents switch are the Owner's, checked in the database; a member reads them;
 -- and the worker's list carries the switch so its profile is written with the policy's delegation variant.
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
@@ -15,6 +15,11 @@ insert into public.agent_profiles(agent_id,company_id,tools_level,tools_policy) 
  ('e9000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001',1,public.engine_tool_policy()),
  ('e9000000-0000-0000-0000-000000000012','10000000-0000-0000-0000-000000000002',1,public.engine_tool_policy());
 update public.hermes_agents set profile=public.agent_engine_profile(id) where id in ('e9000000-0000-0000-0000-000000000002','e9000000-0000-0000-0000-000000000012');
+-- An Agent the worker is moving: its record exists, but the Agent still names the Company's profile, so it is not choosable.
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
+ ('e9000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','e9000000-0000-0000-0000-000000000013','Mover','Writing',false,'co-10000000000000000000000000000001');
+insert into public.agent_profiles(agent_id,company_id,tools_level,tools_policy) values
+ ('e9000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001',1,public.engine_tool_policy());
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 
@@ -37,6 +42,7 @@ set local role authenticated;
 select is((select concat_ws('|',name,choosable,coalesce(model_choice,'-'),subagents) from public.company_agent_models('10000000-0000-0000-0000-000000000001') where name='Writer'),
  'Writer|t|-|t','a member reads the Writer''s empty choice and its sub-agents state');
 select is((select choosable from public.company_agent_models('10000000-0000-0000-0000-000000000001') where name='Lead'),false,'the main Agent on the Company profile has no model field of its own');
+select is((select choosable from public.company_agent_models('10000000-0000-0000-0000-000000000001') where name='Mover'),false,'nor an Agent the worker is still moving, whose record exists but still runs on the Company profile');
 select is((select count(*)::int from public.company_agent_models('10000000-0000-0000-0000-000000000002')),1,'another Company''s rows name only its own Agents');
 
 -- A Manager, a Contributor and a Viewer choose neither.

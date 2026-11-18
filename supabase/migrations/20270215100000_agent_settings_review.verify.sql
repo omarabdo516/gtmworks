@@ -7,3 +7,8 @@ select json_build_object(
  'log_for_members',has_function_privilege('authenticated','public.log_agent_setting(uuid,uuid,text,text,text)','execute'),
  'log_private',not has_function_privilege('anon','public.log_agent_setting(uuid,uuid,text,text,text)','execute')
 );
+-- An Agent mid-move keeps a model record but is not choosable while its record still runs on the Company profile.
+select json_build_object(
+ 'choosable_needs_its_profile',position('g.profile=a.profile' in pg_get_functiondef('public.company_agent_models(uuid)'::regprocedure))>0,
+ 'rows_for_members',has_function_privilege('authenticated','public.company_agent_models(uuid)','execute')
+);

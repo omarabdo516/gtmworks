@@ -185,6 +185,10 @@ test('one Agent\'s model is written to its own profile and remembered as its cho
   const shared=await changeCompanySetting(db,{company,agent:lead,setting:'model',value:'openrouter/openai/gpt-5.5',hermes:install(fake),driver:driver(fake)});
   assert.equal(shared.status,409);
   assert.equal(shared.body.error,'settingAgentShared');
+  // An Agent the worker is still moving holds a record but runs on the Company profile: it is not choosable either.
+  const moving=rows(); moving[1]={...moving[1],own:false};
+  const mid=await changeCompanySetting(database({rowsFor:moving}).db,{company,agent:writer,setting:'model',value:'openrouter/openai/gpt-5.5',hermes:install(fake),driver:driver(fake)});
+  assert.deepEqual([mid.status,mid.body.error],[409,'settingAgentShared']);
  } finally { await fake.close(); }
 });
 
