@@ -25,6 +25,10 @@ create policy skill_enablements_read on public.skill_enablements for select usin
 create policy skill_loads_read on public.skill_loads for select using (true); create policy skill_lessons_read on public.skill_lessons for select using (true);
 create table public.agent_keys(company_id uuid, person_id uuid, kind text); create table public.agent_refusals(company_id uuid);
 create table public.agent_webhooks(company_id uuid); create table public.webhook_deliveries(company_id uuid);
+-- conversation_usage stood then too (#347 renamed it conversation_run_ends and dropped its tokens); its policy and its
+-- per-day reader, a SQL function whose body is checked, read these columns.
+create table public.conversation_usage(company_id uuid, conversation_id uuid, recorded_at timestamptz, input_tokens bigint, output_tokens bigint);
+create policy conversation_usage_read on public.conversation_usage for select using (true);
 drop policy if exists agent_keys_owner_read on public.agent_keys; drop policy if exists agent_keys_owner_create on public.agent_keys; drop policy if exists agent_keys_owner_update on public.agent_keys;
 drop policy if exists agent_refusals_owner_read on public.agent_refusals; drop policy if exists agent_webhooks_owner on public.agent_webhooks; drop policy if exists webhook_deliveries_owner_read on public.webhook_deliveries;
 drop policy invitation_insert on public.member_invitations; drop policy invitation_update on public.member_invitations;
