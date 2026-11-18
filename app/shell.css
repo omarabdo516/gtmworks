@@ -329,6 +329,19 @@
 .gw .queued { display: inline-flex; align-items: center; gap: 4px; padding-inline-end: 4px; font-size: var(--gw-fs-xs); color: var(--gw-text-3); }
 .gw .queued .gw-icon { width: 13px; height: 13px; }
 .gw .turn--user.is-queued .bubble--user { opacity: .72; }
+/* The images a person sent with their message sit under their bubble, on the start side (#155; design-reference:
+   .msg-files, .file-chip), and so do the images chosen for the message above the composer's field. */
+.gw .msg-files, .gw .composer__files { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.gw .composer__files { padding: 8px 8px 0; }
+.gw .file-chip {
+  display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: var(--gw-r-full); max-width: 260px;
+  background: var(--gw-bg-pane); box-shadow: var(--gw-border-2) 0 0 0 0.5px inset; font-size: var(--gw-fs-sm); color: var(--gw-text-2);
+}
+.gw a.file-chip { text-decoration: none; }
+.gw .file-chip .gw-icon { width: 14px; height: 14px; flex: none; }
+.gw .file-chip bdi { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gw .file-chip button { display: inline-flex; color: var(--gw-text-3); border-radius: 50%; }
+@media (hover: hover) { .gw .file-chip button:hover { color: var(--gw-text-1); } }
 .gw .composer__send.is-stop .gw-icon { width: 16px; height: 16px; }
 .gw .empty-chat { margin: auto 0; display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; padding: 40px 0; }
 .gw .empty-chat__faces { display: flex; gap: 8px; margin-bottom: 8px; }

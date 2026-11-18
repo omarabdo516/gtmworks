@@ -10,7 +10,7 @@ import Link from '@/lib/link';
 import { useI18n } from '@/lib/i18n-client';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { ShellIcon } from '@/components/shell-icon';
-import { MessageBox, postMessage, type MessageBoxHandle } from '@/app/conversation-composer';
+import { MessageBox, postMessage, postMessageWithFiles, type MessageBoxHandle } from '@/app/conversation-composer';
 import type { Decision, RunSteps, SavedRule } from '@/lib/conversations';
 import { MadeCard, RequestCard } from '@/app/agent-card';
 import { ReplyCard } from '@/app/reply-card';
@@ -170,7 +170,8 @@ export function ConversationTurns({slug,company,record,writer,asked}:{slug:strin
  return <>
   <ol className="turns" aria-label={t('conversationMessages')}>{messages.map(message=>message.kind==='boarded'?<li key={`boarded${message.id}`} className="note" data-kind="boarded"><span>{c('cardAddedToBoard')}</span></li>:message.kind==='saved'?<Fragment key={`saved${message.id}`}>{message.saved?.map(rule=>rule.sentTo?<SuggestedLine key={rule.id} to={rule.sentTo} cb={cb}/>:<SavedLine key={rule.id} slug={slug} agent={conversation.agent_name} rule={rule} c={c}/>)}</Fragment>
    :message.kind==='decided'&&message.decided?<DecidedLine key={`decided${message.id}`} decided={message.decided} c={c} cb={cb} lead={<div className="sender">{face(20)}<bdi>{conversation.agent_name}</bdi><time className="sender__time" dateTime={message.created_at}>{time(message.created_at)}</time></div>}/>:message.author==='person'?<li key={`${message.kind||'m'}${message.id}`} className={`turn turn--user msg${message.kind==='queued'&&!message.failed?' is-queued':''}`} data-author="person" data-kind={message.kind}>
-   <div className="bubble-row"><time className="bubble__time" dateTime={message.created_at}>{time(message.created_at)}</time><div className="bubble bubble--user" dir="auto">{message.body}</div></div>
+   {!!message.body.trim()&&<div className="bubble-row"><time className="bubble__time" dateTime={message.created_at}>{time(message.created_at)}</time><div className="bubble bubble--user" dir="auto">{message.body}</div></div>}
+   {!!message.files?.length&&<div className="msg-files">{message.files.map(file=><a key={file.id} className="file-chip" href={`/c/${slug}/files/conversation/${file.id}`} target="_blank" rel="noreferrer"><ShellIcon name="clip"/><bdi dir="auto">{file.name}</bdi></a>)}</div>}
    {message.kind==='queued'&&!message.failed&&<span className="queued"><ShellIcon name="clock"/>{c('conversationQueued')}</span>}
    {message.kind==='queued'&&message.failed&&<p className="note" role="alert">{c('conversationQueuedFailed')}</p>}
    {message.kind==='answer'&&message.failed&&<p className="note" role="status">{c('conversationAnswerNotDelivered')}</p>}
@@ -204,8 +205,8 @@ export function ConversationComposer({company,conversation,record,writer,asked,b
    const failure=await postMessage({company,conversation:conversation.id,intent:'stop'});
    if(!failure) asked();
    return failure;
-  }}:undefined} send={async(message,sendKey)=>{
-   const failure=await postMessage({company,conversation:conversation.id,message,sendKey});
+  }}:undefined} send={async(message,sendKey,files)=>{
+   const failure=files.length?await postMessageWithFiles({company,conversation:conversation.id,message,sendKey},files):await postMessage({company,conversation:conversation.id,message,sendKey});
    if(!failure) asked();
    return failure;
   }}/>:<p className="ro-line" role="note"><ShellIcon name="eye"/><span>{t('viewOnly')}</span></p>}

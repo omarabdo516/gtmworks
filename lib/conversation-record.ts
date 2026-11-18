@@ -2,7 +2,7 @@ import { ownerNames } from './company-owners.mjs';
 import type { supabase } from './supabase';
 import type { PermissionChoice, SessionUsage } from './engine.mjs';
 import type { AppStates } from './conversations';
-import { faceOf, handTurn, latestEnded, messageColumns, noteColumns, queuedColumns, queuedWaiting, questionParts, replyCardColumns, replyCardOf, shown, stepsOfReplies, waiting, withBoardNote, withDecisions, withTeamWork, type AgentRequestView, type Decision, type LeadCard, type PlacedCard, type QueuedTurn, type ReplyCard, type ReplyCardRow, type RunStep, type SavedRule, type RunEnd, type StoredNote } from './conversations';
+import { faceOf, handTurn, latestEnded, messageColumns, noteColumns, queuedColumns, queuedWaiting, questionParts, replyCardColumns, replyCardOf, shown, stepsOfReplies, waiting, withBoardNote, withDecisions, withTeamWork, type AgentRequestView, type Decision, type LeadCard, type PlacedCard, type QueuedTurn, type ReplyCard, type ReplyCardRow, type RunStep, type SavedRule, type RunEnd, type StoredFile, type StoredNote } from './conversations';
 import { isNewFor } from './sidebar.mjs';
 import { columnOf, type BoardColumn, type CardWait } from './board-columns.mjs';
 
@@ -34,7 +34,7 @@ export async function conversationRecord(db:Database,person:string,company:strin
  type RequestRow={id:number,run_id:string,call_id:string,agent_name:string,job:string,apps:string[],asked_with:string,state:AgentRequestView['state'],answered_at:string|null,reason:string|null,created_at:string,answerer:{name:string}|null,asker:{name:string}|null};
  type Message={id:number,author:'person'|'agent',author_name:string,body:string,run_id:string,hand_card:number|null,created_at:string};
  type MadeRow={run_id:string,call_id:string,created_at:string,hermes_agents:{id:string,connection_id:string,name:string,speciality:string,apps:string[]|null,is_default:boolean,requested_by:string|null,requester_opened_at:string|null}|null};
- const [{ends,messages,queued,requestRows,madeRows},notes,replyRows,rows,{data:working},{data:me},card]=await Promise.all([
+ const [{ends,messages,queued,requestRows,madeRows},notes,replyRows,rows,files,{data:working},{data:me},card]=await Promise.all([
   db.from('conversations').select(`conversation_run_ends(run_id,outcome),conversation_messages(${messageColumns}),conversation_queued_turns(${queuedColumns}),`
    +'lead_agent_requests(id,run_id,call_id,agent_name,job,apps,asked_with,state,answered_at,reason,created_at,answerer:people!answered_by(name),asker:people!asked_by(name)),'
    +'lead_made_agents(run_id,call_id,created_at,hermes_agents(id,connection_id,name,speciality,apps,is_default,requested_by,requester_opened_at))')
@@ -45,6 +45,9 @@ export async function conversationRecord(db:Database,person:string,company:strin
   db.from('conversation_notes').select(noteColumns).eq('conversation_id',conversation).order('id').then(({data})=>(data||[]) as StoredNote[]),
   db.from('reply_cards').select(replyCardColumns).eq('conversation_id',conversation).order('id').then(({data})=>(data||[]) as ReplyCardRow[]),
   db.from('agent_rules').select('id,run_id,agent_id,removed_at,said_at,body,suggestion,decided_at,decider:people!decided_by(name)').eq('conversation_id',conversation).order('said_at').then(({data})=>(data||[]) as unknown as SavedRow[]),
+  // The files each message was sent with (#155), read beside it: the message they were linked to, or the send key of a
+  // turn still waiting. Only this Conversation's own person reads them (RLS, conversation_attachments_read).
+  db.from('conversation_attachments').select('id,name,message_id,send_key,position').eq('conversation_id',conversation).order('position').then(({data})=>(data||[]) as StoredFile[]),
   db.rpc('conversation_working_for',{conversation}),
   db.from('people').select('name').eq('id',person).maybeSingle(),
   tiedCard(db,company,conversation),
@@ -83,7 +86,7 @@ export async function conversationRecord(db:Database,person:string,company:strin
  const firstReply=card&&first&&card.created_at>first.created_at?messages.find(message=>message.author==='agent'&&message.run_id===first.run_id)?.id:undefined;
  return {
   conversation:{id:found.id,agent_id:found.agent_id,agent_name:found.agent_name,face:faceOf(found)},
-  messages:withBoardNote(withTeamWork(withDecisions(shown(messages,ends,cards,found.agent_name,saved,stepsOfReplies(messages,(await read)?.turns??null)),decisions,found.agent_name),notes,queued,me?.name||''),firstReply),
+  messages:withBoardNote(withTeamWork(withDecisions(shown(messages,ends,cards,found.agent_name,saved,stepsOfReplies(messages,(await read)?.turns??null),files),decisions,found.agent_name),notes,queued,me?.name||'',files),firstReply),
   usage:(await read)?.usage??null,
   pending:waiting(messages,ends).length>0||queuedWaiting(queued),
   ...(replyRows.some(row=>row.kind==='question'&&row.state==='open')?{asking:true as const}:{}),

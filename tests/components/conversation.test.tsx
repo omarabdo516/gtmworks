@@ -159,3 +159,18 @@ for (const [language, line] of [['en', 'The agent could not finish this reply. S
  await expect.element(failed.getByRole('group', { name: 'Campaign plan' })).toBeVisible();
  await expect.element(failed.getByRole('alert').filter({ hasText: line })).toBeVisible();
 });
+
+// #155: the images a message was sent with sit under the Member's bubble, each opening the file by its own address; a
+// message with images alone shows no empty bubble, and keeps its chips after a reload (they come from the record).
+test('a sent message keeps its images as chips under its bubble, and a message of images alone shows no bubble', async () => {
+ const files = [{ id: 11, name: 'cover.png' }, { id: 12, name: 'غلاف.jpg' }];
+ const withText = await render(view(talk([{ ...sent, body: 'Here is the cover', files }])));
+ const turn = withText.getByRole('list', { name: 'Messages' }).getByRole('listitem').filter({ hasText: 'Here is the cover' });
+ await expect.element(turn.getByRole('link', { name: 'cover.png' })).toHaveAttribute('href', '/c/rs-learning/files/conversation/11');
+ await expect.element(turn.getByRole('link', { name: 'غلاف.jpg' })).toHaveAttribute('href', '/c/rs-learning/files/conversation/12');
+ expect(turn.element().querySelector('.bubble--user')?.textContent).toBe('Here is the cover');
+ const alone = await render(view(talk([{ ...sent, body: '', files: [{ id: 13, name: 'alone.png' }] }])));
+ const quiet = alone.getByRole('list', { name: 'Messages' }).getByRole('listitem').filter({ hasText: 'alone.png' });
+ await expect.element(quiet.getByRole('link', { name: 'alone.png' })).toBeVisible();
+ expect(quiet.element().querySelector('.bubble--user')).toBeNull();
+});

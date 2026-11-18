@@ -9,6 +9,8 @@ import { logActionFailure } from '@/lib/diagnostics.mjs';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
 import { routeAllowed } from '@/lib/route-permissions.mjs';
 import { conversationColumns, uuid } from '@/lib/conversations';
+import { conversationFilesProblem, maxRequestBytes } from '@/lib/attachments.mjs';
+import { conversationExists, discardConversationFiles, imagesOf, keepConversationFiles } from '@/lib/conversation-files';
 import type { PermissionChoice } from '@/lib/engine.mjs';
 import { conversationRecord } from '@/lib/conversation-record';
 import { agentAppStates, agentSessionTurns } from '@/lib/company-app-items';
@@ -19,6 +21,8 @@ const refusals:Record<string,[string,number]>={P0002:['conversationNotFound',404
 const refuse=(error:string,status:number)=>reply({error},status);
 const service=()=>createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}});
 const refuseFor=(code:string|undefined)=>refuse(...(refusals[code||'']||['conversationFailed',500]));
+// Why a chosen image, or a set of them, cannot go with this message (#155), in the catalogue's words.
+const fileRefusal=(problem:'type'|'count'|'size'|'request')=>problem==='type'?'attachTypeRefused':problem==='count'?'attachCountRefused':problem==='size'?'attachSizeRefused':'attachRequestRefused';
 const permissionChoices:readonly unknown[]=['once','always','deny'] satisfies PermissionChoice[];
 
 // A message is checked, sent to the agent's engine and stored by lib/conversation-runs.mjs (through the engine
@@ -26,19 +30,46 @@ const permissionChoices:readonly unknown[]=['once','always','deny'] satisfies Pe
 // is the signed-in person: no field of the request names an author, and any such field is ignored.
 // A first message from a Card's sheet names the Card (#145): the database starts the Card's chat with its Agent, or
 // answers the caller's own chat already on it, and the message goes there.
-async function send(db:Database,body:Record<string,unknown>) {
+// Images go with the message (#155): the check runs before anything is uploaded or sent, the images are read into the
+// Agent's Run, and only a stored message keeps them (lib/conversation-files.ts). Nothing of the request is logged.
+async function send(db:Database,body:Record<string,unknown>,chosen:File[]) {
  if(![body.conversation,body.sendKey].every(value=>typeof value==='string'&&uuid.test(value))||body.agent!==undefined&&(typeof body.agent!=='string'||!uuid.test(body.agent))) return refuse('conversationFailed',400);
  if(body.card!==undefined&&!(typeof body.card==='number'&&Number.isSafeInteger(body.card)&&body.card>0)) return refuse('conversationFailed',400);
- if(typeof body.message!=='string'||!body.message.trim()||body.message.length>20000) return refuse('conversationFailed',400);
+ if(typeof body.message!=='string'||body.message.length>20000) return refuse('conversationFailed',400);
+ // A file the Agent cannot read, more of them than a message carries, or a message whose text and images pass the
+ // Engine's request limit: refused here, with one line saying why, and nothing is stored or sent.
+ const problem=conversationFilesProblem(chosen,body.message);
+ if(problem) return refuse(fileRefusal(problem),400);
+ if(!chosen.length&&!body.message.trim()) return refuse('conversationFailed',400);
  let conversation=body.conversation as string;
  if(body.card!==undefined) {
   const {data:started,error}=await db.rpc('start_card_conversation',{c:body.company,card:body.card,conversation});
   if(error) return error.message==='cardChatTaken'?refuse('sheetChatTaken',409):refuseFor(error.code);
   conversation=started as string;
  }
- const sent=await sendMessage(db,service(),{company:body.company as string,conversation,sendKey:body.sendKey as string,agent:body.card===undefined?body.agent as string|undefined:undefined,message:body.message});
- if('code' in sent) return refuseFor(sent.code);
- if('error' in sent) return refuse(sent.error,sent.status);
+ const images=chosen.length?await imagesOf(chosen):undefined;
+ const messageKey=body.sendKey as string; const company=body.company as string;
+ const files=()=>({company,conversation,messageKey});
+ // A Conversation already there keeps its images before the Agent is asked, so a turn that has to wait behind another
+ // Run is started with them, whenever the worker takes it. A new Conversation is never busy: its images go into its
+ // first Run here, and are kept once its message is stored.
+ const early=chosen.length>0&&await conversationExists(db,company,conversation);
+ if(early) {
+  const kept=await keepConversationFiles(db,service(),{...files(),files:chosen});
+  if(kept.error) return refuse(kept.error,kept.error==='conversationFailed'?500:403);
+ }
+ const sent=await sendMessage(db,service(),{company,conversation,sendKey:messageKey,agent:body.card===undefined?body.agent as string|undefined:undefined,message:body.message,...(images?{images}:{})});
+ // The engine refused the send: nothing was stored, so the images kept for it go too.
+ if('code' in sent) { if(early) await discardConversationFiles(db,service(),files()); return refuseFor(sent.code); }
+ if('error' in sent) { if(early) await discardConversationFiles(db,service(),files()); return refuse(sent.error,sent.status); }
+ // A note to a person and an answer to a question store no message, so nothing can sit under one: their images go.
+ if(early&&('addressed' in sent||'answered' in sent)) { await discardConversationFiles(db,service(),files()); return reply(sent); }
+ // Kept only for a message that is stored, and for a new Conversation only now, when its row is there.
+ if(chosen.length&&!early) {
+  const kept=await keepConversationFiles(db,service(),{...files(),files:chosen});
+  // The message is stored either way, so a retry with the same send key finds it and keeps the files then.
+  if(kept.error) return refuse(kept.error,kept.error==='conversationFailed'?500:403);
+ }
  return reply(sent);
 }
 
@@ -153,16 +184,33 @@ async function respond(request:NextRequest) {
   const db=await supabase(); const {data:{user}}=await db.auth.getUser();
   if(!user) return refuse('conversationNotFound',401);
   const writing=request.method==='POST';
-  if(writing&&(!request.headers.get('content-type')?.startsWith('application/json')||crossSiteWrite(request.headers))) return refuse('conversationNotAllowed',403);
-  const raw=writing?await request.text():''; if(raw.length>24000) return refuse('conversationFailed',400);
-  const body=writing?JSON.parse(raw):Object.fromEntries(request.nextUrl.searchParams);
+  // A message with images goes as a form (#155): the same fields a text-only send posts in JSON, and the images as
+  // `files`. Any other write is the JSON it always was; nothing of either is logged.
+  const contentType=request.headers.get('content-type')||'';
+  const form=writing&&contentType.startsWith('multipart/form-data');
+  if(writing&&(!(contentType.startsWith('application/json')||form)||crossSiteWrite(request.headers))) return refuse('conversationNotAllowed',403);
+  let body:Record<string,unknown>; let chosen:File[]=[];
+  if(!writing) body=Object.fromEntries(request.nextUrl.searchParams);
+  else if(form) {
+   // A message the Engine could never take is refused before its bytes are read: one request is at most 10 MB.
+   if(Number(request.headers.get('content-length')||0)>maxRequestBytes) return refuse('attachRequestRefused',413);
+   const fields=await request.formData();
+   const field=(name:string)=>{ const value=fields.get(name); return typeof value==='string'?value:undefined; };
+   const card=field('card');
+   body={company:field('company'),conversation:field('conversation'),sendKey:field('sendKey'),message:field('message'),agent:field('agent'),intent:field('intent'),...(card!==undefined?{card:Number(card)}:{})};
+   chosen=fields.getAll('files').filter((file):file is File=>file instanceof File&&file.size>0);
+   if(chosen.length&&body.intent!==undefined) return refuse('conversationFailed',400);
+  } else {
+   const raw=await request.text(); if(raw.length>24000) return refuse('conversationFailed',400);
+   body=JSON.parse(raw);
+  }
   if(typeof body.company!=='string'||!uuid.test(body.company)) return refuse('conversationFailed',400);
   const {data:company}=await db.from('companies').select('id').eq('id',body.company).maybeSingle();
   if(!company) return refuse('conversationNotFound',404);
   // The route's permission (lib/route-permissions.mjs), with the role read now: a Viewer's send is refused here, and
   // the database refuses it again (conversation_can_write) before the engine is called.
   if(!await routeAllowed(db,'app/api/conversations/route.ts',request.method,body.company,user.id)) return refuse('conversationNotAllowed',403);
-  if(writing) return await (typeof body.intent==='string'&&Object.hasOwn(writes,body.intent)?writes[body.intent as keyof typeof writes]:send)(db,body);
+  if(writing) return await (typeof body.intent==='string'&&Object.hasOwn(writes,body.intent)?writes[body.intent as keyof typeof writes](db,body):send(db,body,chosen));
   if(body.conversation===undefined) {
    // What the composer needs: whether this person may chat (any Member but a Viewer, #287), and the company's agents.
    const {data:writer}=await db.rpc('conversation_can_write',{c:body.company});

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { attachmentHeaders, filesProblem, isThumbnail, maxBytes, maxFiles } from '../lib/attachments.mjs';
+import { attachmentHeaders, conversationFilesProblem, filesProblem, isThumbnail, maxBytes, maxFiles, maxRequestBytes } from '../lib/attachments.mjs';
 
 test('a raster image is shown in the page; any other type is downloaded as opaque bytes', () => {
  for(const type of ['image/png','image/jpeg','image/gif','image/webp']) {
@@ -37,4 +37,29 @@ test('a message carries at most five files of at most 20 MiB, none empty', () =>
  assert.equal(filesProblem(Array.from({length:6},()=>({size:1}))),'count');
  assert.equal(filesProblem([{size:maxBytes+1}]),'size');
  assert.equal(filesProblem([{size:0}]),'size');
+});
+
+// #155: what a Conversation's message may carry is narrower than a Card's, because the Engine reads images only and one
+// request is at most 10 MB. Each way it is refused is checked here, and the server and the composer ask the same
+// function, so the line a person reads and the refusal the route answers are one rule.
+const image=(size=1024,type='image/png')=>({name:'a.png',content_type:type,size});
+test('a message carries only the image kinds the Agent reads, at most five, of at most 20 MiB each', () => {
+ assert.equal(maxRequestBytes,10_000_000);
+ assert.equal(conversationFilesProblem([]),null);
+ assert.equal(conversationFilesProblem([image()]),null);
+ assert.equal(conversationFilesProblem(Array.from({length:maxFiles},()=>image())),null);
+ for(const type of ['application/pdf','text/plain','image/svg+xml','']) assert.equal(conversationFilesProblem([image(1024,type)]),'type',type);
+ assert.equal(conversationFilesProblem(Array.from({length:maxFiles+1},()=>image())),'count','more files than maxFiles');
+ assert.equal(conversationFilesProblem([image(0)]),'size','an empty file');
+ assert.equal(conversationFilesProblem([image(maxBytes+1)]),'size','a file past the per-file size');
+});
+
+test('the message is refused when its text and base64 images would pass the Engine request limit', () => {
+ // Base64 is four bytes for every three, so this many bytes of image comes to just under the limit alone.
+ const almost=maxRequestBytes/4*3;
+ assert.equal(conversationFilesProblem([image(almost-200,'image/png')],''),null,'one image just under the limit is sent');
+ assert.equal(conversationFilesProblem([image(almost,'image/png')],''),'request','the base64 of the image passes it');
+ assert.equal(conversationFilesProblem([image(almost-200,'image/png')],'x'.repeat(400)),'request','the text counts beside the images');
+ assert.equal(conversationFilesProblem([image(almost/2,'image/png'),image(almost/2,'image/png')],''),'request','many images count together');
+ assert.equal(conversationFilesProblem([],'x'.repeat(maxRequestBytes+1)),'request','the text alone can pass it');
 });

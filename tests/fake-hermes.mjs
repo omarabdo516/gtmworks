@@ -21,7 +21,10 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
  // stream closes.
  const endEvents=(/** @type {string} */ id,/** @type {string} */ name)=>{ if(streams.get(id)?.ended===false) { const run=settings.runs.find(each=>each.id===id); push(id,{event:name,...(run?{timestamp:run.created+settings.runSeconds}:{})}); push(id,null); } };
  // runs: one entry per run Hermes created; the same Idempotency-Key replays the same run.
- const settings={version:'0.23.0',status:200,key:'test-only-key',features:{run_submission:true,run_events_sse:true},requests:/** @type {{method?:string,path?:string,authorization?:string,session?:string,idempotency?:string}[]} */([]),runs:/** @type {{id:string,key?:string,session?:string,input:string,instructions?:string,history?:{role:string,content:string}[],body?:string,reads:number,stopped?:boolean,asked:{prompt_id:string,question:string,choices:string[],multi_select:boolean,answer?:string,settled:'answered'|'expired'|null}[],approvals:{request_id:string,description:string,command:string,choices:string[],choice?:string,settled:'answered'|'expired'|null}[]}[]} */([]),pendingReads:0,loseStarts:0,stallEvents:false,reply:input=>`Reply to: ${input}`,
+ // What a Run's input says in words: the text part of its last message when it carries images (#155), or the message
+ // itself, so a fake's reply, questions and approvals read a person's words as they always did.
+ const inputText=input=>typeof input==='string'?input:Array.isArray(input)?(input.at(-1)?.content??[]).flatMap(part=>part.type==='text'?[part.text]:[]).join(''):String(input);
+ const settings={version:'0.23.0',status:200,key:'test-only-key',features:{run_submission:true,run_events_sse:true},requests:/** @type {{method?:string,path?:string,authorization?:string,session?:string,idempotency?:string}[]} */([]),runs:/** @type {{id:string,key?:string,session?:string,input:any,instructions?:string,history?:{role:string,content:string}[],body?:string,reads:number,stopped?:boolean,asked:{prompt_id:string,question:string,choices:string[],multi_select:boolean,answer?:string,settled:'answered'|'expired'|null}[],approvals:{request_id:string,description:string,command:string,choices:string[],choice?:string,settled:'answered'|'expired'|null}[]}[]} */([]),pendingReads:0,loseStarts:0,stallEvents:false,reply:input=>`Reply to: ${input}`,
   // How a finished run ends and the usage it reports; a run cleared from runs is one Hermes lost (404).
   // A run first asks the questions `questions` gives for its input (clarify, #138), one at a time, as the pinned release
   // does: it stays running with the question in pending_controls until it is answered on the run's clarify route,
@@ -126,8 +129,8 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     if(!run) {
      const sent=JSON.parse(raw);
      if(settings.refusedModels.has(sent.model)) return send(response,400,{error:{message:`Model '${sent.model}' is not available`,type:'invalid_request_error'}});
-     const asked=settings.questions(sent.input).map(each=>({prompt_id:randomUUID().replaceAll('-','').slice(0,10),question:each.question,choices:each.choices??[],multi_select:each.multi_select===true,settled:null}));
-     const approvals=settings.approvals(sent.input).map(each=>({request_id:randomUUID().replaceAll('-',''),description:each.description,command:each.command,choices:each.choices??['once','session','always','deny'],settled:null}));
+     const asked=settings.questions(inputText(sent.input)).map(each=>({prompt_id:randomUUID().replaceAll('-','').slice(0,10),question:each.question,choices:each.choices??[],multi_select:each.multi_select===true,settled:null}));
+     const approvals=settings.approvals(inputText(sent.input)).map(each=>({request_id:randomUUID().replaceAll('-',''),description:each.description,command:each.command,choices:each.choices??['once','session','always','deny'],settled:null}));
      run={id:`run_${instance}_${settings.runs.length+1}`,key,session:request.headers['x-hermes-session-key'],input:sent.input,instructions:sent.instructions,history:sent.conversation_history,body:raw,reads:0,asked,approvals,created:Date.now()/1000}; settings.runs.push(run);
      streams.set(run.id,{backlog:[],next:0,ended:false,readers:new Set()});
     }
@@ -155,7 +158,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
       event:'approval.request',run_id:run.id,timestamp:Date.now()/1000,choices:asking.choices}});
     const done=run.reads++>=settings.pendingReads;
     if(done) endEvents(run.id,settings.ending==='completed'?'run.completed':'run.failed');
-    return send(response,200,{object:'hermes.run',run_id:run.id,status:done?settings.ending:'running',session_id:run.session,...times,...(done&&settings.ending==='completed'?{output:settings.reply(run.input,(run.asked||[]).map(asked=>asked.answer??null),(run.approvals||[]).map(asking=>asking.choice??null))}:{}),...(done&&settings.usage?{usage:settings.usage}:{}),pending_controls:[]});
+    return send(response,200,{object:'hermes.run',run_id:run.id,status:done?settings.ending:'running',session_id:run.session,...times,...(done&&settings.ending==='completed'?{output:settings.reply(inputText(run.input),(run.asked||[]).map(asked=>asked.answer??null),(run.approvals||[]).map(asking=>asking.choice??null))}:{}),...(done&&settings.usage?{usage:settings.usage}:{}),pending_controls:[]});
    }
    // The run's own routes (api_server_runs.py): stop, the answer to the question it waits for, which takes exactly
    // request_id, execution_generation and answer, and the choice for the request it waits on (_handle_run_approval).
