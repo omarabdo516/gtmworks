@@ -26,22 +26,20 @@ select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002'
 select lives_ok($$select public.check_agent_setting('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-0000000000b1')$$,'a Manager may too');
 select public.log_agent_setting('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-0000000000b1','about',null,null);
 select is((select actor_id from public.company_log where action='agent_setting_changed' order by id desc limit 1),'20000000-0000-0000-0000-000000000002'::uuid,'the row names the Manager');
-select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
-select public.log_agent_setting('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-0000000000b1','instructions','before','after');
-select is((select jsonb_build_object('field',details->>'field','old',details->>'old','new',details->>'new') from public.company_log where action='agent_setting_changed' order by id desc limit 1),
- '{"field":"instructions","old":"before","new":"after"}'::jsonb,'a later field keeps its old and new value');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select throws_ok($$select public.log_agent_setting('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-0000000000b1','instructions','before','after')$$,'22023','agentSettingInvalid','a Manager names no field but About and Voice, and keeps no text of its own');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
 select throws_ok($$select public.check_agent_setting('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-0000000000b1')$$,'42501','agentSettingNotAllowed','a Contributor may not');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
 select throws_ok($$select public.log_agent_setting('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-0000000000b1','about',null,null)$$,'42501','agentSettingNotAllowed','nor a Viewer');
-select is(pg_temp.setting_rows(),3::bigint,'refused changes write no row');
+select is(pg_temp.setting_rows(),2::bigint,'refused changes write no row');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select throws_ok($$select public.check_agent_setting('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-0000000000b3')$$,'42501','agentSettingNotAllowed','an Agent of another Company is refused');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
 select throws_ok($$select public.log_agent_setting('10000000-0000-0000-0000-000000000003','e1000000-0000-0000-0000-0000000000b3','about',null,null)$$,'42501','agentSettingNotAllowed','and a Manager of one Company changes nothing in another');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select throws_ok($$select public.log_agent_setting('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-0000000000b1','About',null,null)$$,'22023','agentSettingInvalid','a field name this version has no words for is never logged');
-select throws_ok($$select public.log_agent_setting('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-0000000000b1','about',repeat('x',501),null)$$,'22023','agentSettingInvalid','nor a value too long for the log');
+select throws_ok($$select public.log_agent_setting('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-0000000000b1','about',repeat('x',501),null)$$,'22023','agentSettingInvalid','nor any value of its own');
 reset role;
 select ok(not has_function_privilege('anon','public.check_agent_setting(uuid,uuid)','execute'),'no signed-out caller reaches the check');
 select ok(not has_function_privilege('anon','public.log_agent_setting(uuid,uuid,text,text,text)','execute'),'nor the log');
