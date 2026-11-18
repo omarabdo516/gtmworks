@@ -135,6 +135,8 @@
   background: var(--gw-bg-pane); color: var(--gw-text-1); font-family: inherit; font-size: var(--gw-fs-sm);
 }
 .gw .board-view .add-idea input:focus, .gw .board-view .add-idea select:focus { outline: none; border-color: var(--gw-border-1); box-shadow: 0 0 0 3px var(--gw-bg-active); }
+/* The Agent keeps the select's own arrow, as the reference's plain select does. */
+.gw .board-view .add-idea select { appearance: auto; }
 .gw .board-view .add-idea__err { font-size: var(--gw-fs-xs); color: var(--gw-danger-text); }
 .gw .board-view .add-idea__row { display: flex; gap: var(--s2); }
 .gw .board-view .add-idea__row .btn { flex: 1 1 0; }
