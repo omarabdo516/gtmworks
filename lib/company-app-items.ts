@@ -47,15 +47,15 @@ export const agentToolItems=cache(async(company:string,agent:string,language:Lan
  } catch { return null; }
 });
 
-// The token use of every Company this person owns over the last `days` (#347), each Agent's Hermes profile's own, for
-// the usage screens: one row per profile, by Company name. A Company whose Engine or database does not answer has no
-// rows; a profile Hermes does not answer for has unknown usage (nulls).
+// The token use of every Company this person manages (Owner or Manager) over the last `days` (#347, #32), each Agent's
+// Hermes profile's own with its per-model rows, for the usage screens: one row per profile, by Company name. A Company
+// whose Engine or database does not answer has no rows; a profile Hermes does not answer for has unknown usage (nulls).
 export type UsageRow=AgentsUsage&{company_id:string,company_name:string};
-export const ownedUsage=cache(async(person:string,days:number):Promise<UsageRow[]>=>{
+export const managedUsage=cache(async(person:string,days:number):Promise<UsageRow[]>=>{
  const db=await supabase();
- const {data}=await db.from('members').select('company_id,companies(name)').eq('person_id',person).eq('role','owner').is('removed_at',null);
- const owned=((data||[]) as unknown as {company_id:string,companies:{name:string}|null}[]).sort((a,b)=>(a.companies?.name||'').localeCompare(b.companies?.name||''));
- const rows=await Promise.all(owned.map(async({company_id,companies})=>{
+ const {data}=await db.from('members').select('company_id,companies(name)').eq('person_id',person).in('role',['owner','manager']).is('removed_at',null);
+ const managed=((data||[]) as unknown as {company_id:string,companies:{name:string}|null}[]).sort((a,b)=>(a.companies?.name||'').localeCompare(b.companies?.name||''));
+ const rows=await Promise.all(managed.map(async({company_id,companies})=>{
   const read=await readCompanyUsage(db,{company:company_id,days}).catch(()=>null);
   return (read||[]).map(entry=>({...entry,company_id,company_name:companies?.name||''}));
  }));

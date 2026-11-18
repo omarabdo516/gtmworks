@@ -95,8 +95,9 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   // Sessions by id (#346): the profile each belongs to and its messages as the listener returns them
   // (hermes_cli/web_routers/sessions.py get_session_messages), oldest first: role, content, tool_calls, tool_call_id,
   // tool_name and timestamp; and (#347) the session's token use as its detail reports it (get_session_detail), with the
-  // time it started in seconds, which the profile's usage analytics count from.
-  sessions:/** @type {Map<string,{profile:string,messages:any[],input_tokens?:unknown,output_tokens?:unknown,started_at?:number}>} */(new Map()),
+  // time it started in seconds, which the profile's usage analytics count from, and the model it ran on (#32), which
+  // the analytics group into by_model.
+  sessions:/** @type {Map<string,{profile:string,messages:any[],input_tokens?:unknown,output_tokens?:unknown,model?:string,started_at?:number}>} */(new Map()),
   approve(session) { const found=settings.signInSessions.get(session); if(!found) return; found.status='approved'; credentialsOf(found.profile)[found.provider]=`codex-token-${randomUUID()}`; }};
  const profileOf=name=>name==='default'?{config:settings.defaultConfig,credentials:settings.defaultCredentials}:settings.profiles.get(name);
  const credentialsOf=name=>profileOf(name)?.credentials||{};
@@ -245,12 +246,21 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     return send(response,200,{session_id:id,profile:found.profile,messages:page,pagination:{limit,offset,order:url.searchParams.get('order')||'oldest',returned:page.length}});
    }
    // A profile's usage over the last `days` (#347): the sums of its sessions started since then, null with none, as
-   // the pinned release's SQL sums are.
+   // the pinned release's SQL sums are. #32: by_model groups the sessions that named a model, tokens descending, with
+   // the price the pinned release answers beside them so a reader can prove it drops it; the release also merges
+   // auxiliary usage in, which this fake does not keep.
    if(url.pathname==='/api/analytics/usage'&&request.method==='GET') {
     const since=Date.now()/1000-Number(url.searchParams.get('days')??30)*86400; const profile=url.searchParams.get('profile')||'default';
     const counted=[...settings.sessions.values()].filter(found=>found.profile===profile&&(found.started_at??Date.now()/1000)>since);
     const sum=(/** @type {'input_tokens'|'output_tokens'} */ key)=>counted.length?counted.reduce((total,found)=>total+Number(found[key]??0),0):null;
-    return send(response,200,{daily:[],by_model:[],by_task:[],totals:{total_input:sum('input_tokens'),total_output:sum('output_tokens'),total_sessions:counted.length},period_days:Number(url.searchParams.get('days')??30),skills:[],tools:[]});
+    const byModel=[...counted.reduce((grouped,found)=>{
+     if(typeof found.model!=='string'||!found.model) return grouped;
+     const row=grouped.get(found.model)||{model:found.model,input_tokens:0,output_tokens:0,estimated_cost:0,sessions:0,api_calls:0};
+     row.input_tokens+=Number(found.input_tokens??0); row.output_tokens+=Number(found.output_tokens??0); row.sessions+=1; row.api_calls+=1;
+     return grouped.set(found.model,row);
+    },new Map()).values()].map(row=>({...row,estimated_cost:Math.round((row.input_tokens+row.output_tokens)/1000*0.62*100)/100}))
+     .sort((a,b)=>(b.input_tokens+b.output_tokens)-(a.input_tokens+a.output_tokens));
+    return send(response,200,{daily:[],by_model:byModel,by_task:[],totals:{total_input:sum('input_tokens'),total_output:sum('output_tokens'),total_sessions:counted.length},period_days:Number(url.searchParams.get('days')??30),skills:[],tools:[]});
    }
    const sessionDetail=url.pathname.match(/^\/api\/sessions\/([^/]+)$/);
    if(sessionDetail&&request.method==='GET') {

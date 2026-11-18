@@ -364,7 +364,7 @@
   "usageOutput": "Output tokens",
   "usageSessions": "Conversations",
   "usageUnknown": "Usage unknown",
-  "usageNone": "No usage to show. An Owner sees the usage of the companies they own.",
+  "usageNone": "No usage to show in this period.",
   "conversationUsage": "{0} tokens used ({1} in, {2} out)",
   "navigation": "Navigation",
   "mainMenu": "Main menu",
@@ -991,5 +991,8 @@
   "settingUnknown": "A setting",
   "logActSettingChanged": "changed {0} for {1}",
   "logOn": "On",
-  "logOff": "Off"
+  "logOff": "Off",
+  "settingsPerModel": "Per model",
+  "usageModel": "Model",
+  "usageHeaviest": "Heaviest agent"
 }

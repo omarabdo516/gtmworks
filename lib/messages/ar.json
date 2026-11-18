@@ -364,7 +364,7 @@
   "usageOutput": "رموز الإخراج",
   "usageSessions": "المحادثات",
   "usageUnknown": "استهلاك غير معروف",
-  "usageNone": "لا يوجد استهلاك لعرضه. يرى المالك استهلاك الشركات التي يملكها.",
+  "usageNone": "مفيش استهلاك في الفترة دي.",
   "conversationUsage": "استُخدم {0} رمز ({1} إدخال، {2} إخراج)",
   "navigation": "التنقل",
   "mainMenu": "القايمة الرئيسية",
@@ -991,5 +991,8 @@
   "settingUnknown": "إعداد",
   "logActSettingChanged": "غيّر {0} عند {1}",
   "logOn": "مفتوح",
-  "logOff": "مقفول"
+  "logOff": "مقفول",
+  "settingsPerModel": "لكل موديل",
+  "usageModel": "الموديل",
+  "usageHeaviest": "أكتر وكيل استهلاك"
 }
