@@ -146,6 +146,24 @@ test.each([['en', 'Handed to you'], ['ar', 'اتسلّمتلك']] as const)('in 
  expect(getComputedStyle(wtag).borderRadius).not.toBe('0px');
 });
 
+// #165: a permission request waits on its person as an item of its own: its Agent's face and name on top, what it asks
+// under them, and it opens the Conversation at its card, or a channel's request the channel.
+test.each(['en', 'ar'] as const)('in the %s interface, a permission request names its Agent with its face and opens its chat at the card', async language => {
+ const agent = { connection_id: 'c-ads', name: 'Ads' };
+ const asked = { kind: 'permission', id: 51, title: 'delete the old exports', body: '', asked_by: 'Ads', card_id: null, conversation_id: 'c-7', created_at: '2026-06-10T09:00:00Z', agent };
+ const inChannel = { ...asked, kind: 'channel_permission', id: 6, title: 'delete the old backups', conversation_id: null, channel_id: 'ch-1' };
+ await showWork(workProps({ waiting: [asked, inChannel] }), { language });
+ const item = document.querySelector<HTMLAnchorElement>('a.mcard[data-kind="permission"]')!;
+ expect(item.closest('.col')!.getAttribute('data-column')).toBe('waiting');
+ expect(item.getAttribute('href')).toBe('/c/rs-learning/conversations/c-7#permission-51');
+ expect(item.querySelector('.mcard__who')!.textContent).toBe('Ads');
+ expect(item.querySelector('.mcard__who .ln-who > [aria-hidden="true"] svg, .mcard__who .ln-who > [aria-hidden="true"] img')).not.toBeNull();
+ expect(item.querySelector('.mcard__q')!.textContent).toBe('delete the old exports');
+ const channel = document.querySelector<HTMLAnchorElement>('a.mcard[data-kind="channel_permission"]')!;
+ expect(channel.getAttribute('href')).toBe('/c/rs-learning/channels/ch-1#permission-6');
+ expect(channel.querySelector('.mcard__q')!.textContent).toBe('delete the old backups');
+});
+
 // #146: Card 9 is In progress (stage كتابة), tied to Omar's chat with Ads, whose handed step waits on him. Waiting on you
 // draws it once, with the badge and line for whoever reads it (design-reference: kcardHTML's waiting branch, waitTagHTML).
 const members = [{ person_id: 'p-1', people: { name: 'Omar Abdo' } }, { person_id: 'p-2', people: { name: 'Sara' } }];

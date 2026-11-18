@@ -6,9 +6,9 @@ An open-source, self-hosted marketing operating system. Conversations run on an 
 
 Work arrives as a GitHub issue in this repo with an acceptance list. A UI change with no approved look names its approved prototype in the issue. The pull request body starts with `Closes #<n>`, the required check is `check`, and the pull request is reviewed on GitHub before it merges. CodeRabbit and Codex comments on GitHub are advisory.
 
-Every build runs in `/pstack:poteto-mode` and follows its playbooks. No other workflow skill is used in this repo. Money, secrets, deletion, release tags and repo settings stay with Omar, so in this repo they join the playbooks' always-pause list. Impeccable stays the design tool for screens (Design workflow below).
+Every build uses Matt Pocock's engineering skills (configured in `docs/agents/`, see the Agent skills section of `CLAUDE.md`) with Ponytail; the pstack trial ended on 17 Nov 2026. Money, secrets, deletion, release tags and repo settings stay with Omar: a build always pauses for them. Impeccable stays the design tool for screens (Design workflow below).
 
-Every pull request merges itself. Once `check` is green on the head and every review thread is fixed or answered and resolved, the builder turns on GitHub auto-merge (`gh pr merge <n> --auto --squash`), and GitHub merges it. This is the standing request to merge that the Babysit and Shipping playbooks wait for, so no build stops at merge-ready waiting for a person. Never merge directly, bypass the ruleset, or weaken a test to go green.
+Every pull request merges itself. Once `check` is green on the head and every review thread is fixed or answered and resolved, the builder turns on GitHub auto-merge (`gh pr merge <n> --auto --squash`), and GitHub merges it. This is the standing request to merge, so no build stops at merge-ready waiting for a person. Never merge directly, bypass the ruleset, or weaken a test to go green.
 
 ## Before exploring, read these
 

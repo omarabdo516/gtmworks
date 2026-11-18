@@ -377,6 +377,18 @@
 }
 .gw .composer__btn .gw-icon { width: 16px; height: 16px; }
 .gw .composer__mic { background: transparent; box-shadow: none; color: var(--gw-text-2); }
+@media (hover: hover) { .gw .composer__btn:hover:not([aria-disabled="true"]) { background: var(--gw-bg-secondary-hover); } }
+/* The "+" button while its menu is open (#153; design-reference: .composer__btn[aria-expanded]): its plus turns to a cross. */
+.gw .composer__btn[aria-expanded="true"] { background: var(--gw-bg-secondary-hover); }
+.gw .composer__btn .gw-icon { transition: transform var(--gw-dur-fast) var(--gw-ease-out); }
+.gw .composer__btn[aria-expanded="true"] .gw-icon { transform: rotate(45deg); }
+/* The "+" menu rises over the composer from its start edge (design-reference: .menu, .menu__hint, .menu__code). */
+.gw .composer .menu {
+  inset-inline: 0 auto; bottom: calc(100% + 6px); width: 288px; max-width: calc(100vw - 32px);
+  animation: gw-rise 120ms var(--gw-ease-out);
+}
+.gw .menu__hint { font-size: var(--gw-fs-xs); color: var(--gw-text-3); flex: none; }
+.gw .menu__code { font-family: ui-monospace, Menlo, Consolas, monospace; direction: ltr; }
 .gw .composer__input {
   flex: 1 1 0; min-width: 0; display: block; max-height: 200px; resize: none; border: 0; outline: 0; background: transparent; box-shadow: none;
   padding: 11px 0; margin: 0; font: inherit; field-sizing: content; min-height: 44px; font-size: var(--gw-fs-msg); line-height: 22px; color: var(--gw-text-1);
@@ -458,6 +470,12 @@
   .gw .details a.panel-row:hover { background: var(--gw-bg-hover); }
   .gw .details .link-btn:hover { background: var(--gw-bg-hover); color: var(--gw-text-1); }
 }
+/* An Agent's connected tools (#204; design-reference: activityHTML's toolsSec, .btn--sm, .btn--primary, .panel-row__meta). */
+.gw .details .dp-tools .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex: none; height: 30px; padding: 0 var(--s3); border-radius: var(--gw-r-full); font-size: var(--gw-fs-sm); font-weight: 600; white-space: nowrap; }
+.gw .details .dp-tools .btn--primary { background: var(--gw-primary); color: var(--gw-on-primary); }
+.gw .details .dp-tools .panel-row__meta .gw-icon { width: 14px; height: 14px; }
+.gw .details .dp-tools__err { margin: 0; padding-inline: var(--s3); font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-danger-text); text-wrap: pretty; }
+@media (hover: hover) { .gw .details .dp-tools .btn--primary:hover:not(:disabled) { background: var(--gw-primary-hover); color: var(--gw-on-primary); } }
 .gw .details .num { font-variant-numeric: tabular-nums; }
 .gw .details .muted { color: var(--gw-text-3); }
 .gw .details .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; display: inline-block; background: var(--gw-idle-dot); }
@@ -711,7 +729,7 @@
 @media (hover: hover) {
   .gw .reply-card .btn--primary:hover:not(:disabled) { background: var(--gw-primary-hover); }
 }
-.gw .reply-card :is(.hand__error, .permission__error) { margin: -6px 0 0; padding: 0 16px 16px; font-size: var(--gw-fs-sm); color: var(--gw-danger-text); }
+.gw .reply-card :is(.hand__error, .permission__error, .connect__error) { margin: -6px 0 0; padding: 0 16px 16px; font-size: var(--gw-fs-sm); color: var(--gw-danger-text); }
 .gw .reply-card.is-just .card__outcome .gw-icon path { stroke-dasharray: 40; stroke-dashoffset: 40; animation: gw-draw-check 380ms var(--gw-ease-out) 140ms forwards; }
 /* A request to allow an action (#163; design-reference: the approval card, .card, .kv, .card__actions, .card__outcome,
    .card.is-just): the hand card's frame, rows, buttons and outcome line, as one card system. Its title may be the

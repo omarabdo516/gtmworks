@@ -11,7 +11,7 @@ import { randomUUID } from 'node:crypto';
 /** @typedef {{id:string,description:string,command:string,choices:import('../lib/engine.mjs').PermissionChoice[],choice?:string|null,settled:'answered'|'expired'|null}} FakePermission */
 /** @typedef {{tool:string,preview?:string|null,call?:string|null,failed?:boolean,open?:boolean}} FakeStep */
 /** @typedef {{id:string,key:string,conversation:string,input:string,instructions:string|null,tools:import('../lib/engine.mjs').ToolSpec[],history:import('../lib/engine.mjs').HistoryEntry[]|null,reads:number,stopped:boolean,ended:boolean,asked:FakeQuestion[],permissions:FakePermission[],events:import('../lib/engine.mjs').RunStepEvent[],oldest:number,swept:boolean}} FakeRun */
-/** @returns {{settings:{ending:'completed'|'failed',pendingReads:number,reply:(input:string,answers:(string|null)[],choices:(string|null)[])=>string,toolCalls:(input:string)=>import('../lib/engine.mjs').ToolCall[],usage:{input:number,output:number}|null,agentProfile:import('../lib/engine.mjs').ProvidedAgent['state'],questions:(input:string)=>{text:string,choices?:string[],multiple?:boolean}[],unreachableAnswers:number,permissions:(input:string)=>{description:string,command:string,choices?:import('../lib/engine.mjs').PermissionChoice[]}[],unreachablePermits:number,steps:(input:string)=>FakeStep[],seconds:number,unreachableSteps:number},runs:FakeRun[],connections:object[],eventReads:{count:number},agentReads:string[],provided:{name:string,instructions:string,level:number}[],removed:string[],answers:{run:string,question:string,text:string}[],permits:{run:string,permission:string,choice:string}[],expire:(run:string)=>boolean,forget:(run:string,count:number)=>void,sweep:(run:string)=>void,engineFor:(connection:object)=>import('../lib/engine.mjs').Engine}} */
+/** @returns {{settings:{ending:'completed'|'failed',pendingReads:number,reply:(input:string,answers:(string|null)[],choices:(string|null)[])=>string,toolCalls:(input:string)=>import('../lib/engine.mjs').ToolCall[],usage:{input:number,output:number}|null,agentProfile:import('../lib/engine.mjs').ProvidedAgent['state'],questions:(input:string)=>{text:string,choices?:string[],multiple?:boolean}[],unreachableAnswers:number,permissions:(input:string)=>{description:string,command:string,choices?:import('../lib/engine.mjs').PermissionChoice[]}[],unreachablePermits:number,steps:(input:string)=>FakeStep[],seconds:number,unreachableSteps:number,apps:Record<string,import('../lib/app-catalogue.mjs').AppState>|'refused'|'unreachable'|'failed'},runs:FakeRun[],connections:object[],eventReads:{count:number},appReads:{count:number},agentReads:string[],provided:{name:string,instructions:string,level:number}[],removed:string[],answers:{run:string,question:string,text:string}[],permits:{run:string,permission:string,choice:string}[],expire:(run:string)=>boolean,forget:(run:string,count:number)=>void,sweep:(run:string)=>void,engineFor:(connection:object)=>import('../lib/engine.mjs').Engine}} */
 export function fakeEngine() {
  const settings={ending:/** @type {'completed'|'failed'} */('completed'),pendingReads:0,reply:(/** @type {string} */ input)=>`Reply to: ${input}`,toolCalls:/** @type {(input:string)=>import('../lib/engine.mjs').ToolCall[]} */(()=>[]),usage:/** @type {{input:number,output:number}|null} */({input:14000,output:12}),
   // How providing an Agent's own profile ends: with no subscription, a made profile has no model to answer with.
@@ -21,7 +21,9 @@ export function fakeEngine() {
   // The requests a run waits on after them, and how many choices find the engine unreachable first.
   permissions:/** @type {(input:string)=>{description:string,command:string,choices?:import('../lib/engine.mjs').PermissionChoice[]}[]} */(()=>[]),unreachablePermits:0,
   // The tool calls a run makes, its length in seconds, and how many reads of its events find the engine unreachable.
-  steps:/** @type {(input:string)=>FakeStep[]} */(()=>[]),seconds:41,unreachableSteps:0};
+  steps:/** @type {(input:string)=>FakeStep[]} */(()=>[]),seconds:41,unreachableSteps:0,
+  // The profile's apps by key and state (#203), or how a read of them fails.
+  apps:/** @type {Record<string,import('../lib/app-catalogue.mjs').AppState>|'refused'|'unreachable'|'failed'} */({})};
  // Run ids are unique across fakes, as an engine's are: the database refuses a Member's run already used elsewhere (#287).
  const instance=randomUUID().slice(0,8);
  const runs=/** @type {FakeRun[]} */([]);
@@ -33,6 +35,8 @@ export function fakeEngine() {
  const permits=/** @type {{run:string,permission:string,choice:string}[]} */([]);
  // How many reads of a run's events were made.
  const eventReads={count:0};
+ // How many reads of the profile's apps were made.
+ const appReads={count:0};
  // The engine's own time limit runs out on the question or the request a run waits for: it stops waiting, and the run
  // goes on.
  const expire=(/** @type {string} */ id)=>{ const run=runs.find(run=>run.id===id); const waiting=run?.asked.find(question=>!question.settled)??run?.permissions.find(asking=>!asking.settled); if(waiting) waiting.settled='expired'; return !!waiting; };
@@ -109,6 +113,11 @@ export function fakeEngine() {
    Object.assign(asking,{settled:'answered',choice});
    return 'answered';
   },
+  async apps() {
+   appReads.count++;
+   const apps=settings.apps;
+   return typeof apps==='string'?{state:apps,apps:null}:{state:'found',apps:Object.entries(apps).map(([key,state])=>({key,state}))};
+  },
   // An Agent is made once per name; the same name again exists.
   async createAgent({name,instructions,model=null}) {
    if(agents.has(name)) return {state:'exists',agent:null};
@@ -132,5 +141,5 @@ export function fakeEngine() {
    return {state:agents.delete(name)?'removed':'missing'};
   },
  };
- return {settings,runs,connections,agentReads,provided,removed,answers,permits,eventReads,expire,forget,sweep,engineFor:connection=>{ connections.push(connection); return engine; }};
+ return {settings,runs,connections,appReads,agentReads,provided,removed,answers,permits,eventReads,expire,forget,sweep,engineFor:connection=>{ connections.push(connection); return engine; }};
 }

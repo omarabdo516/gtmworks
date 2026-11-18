@@ -1,7 +1,7 @@
 'use client';
 import channelEn from '@/lib/messages/channel.en.json';
 import channelAr from '@/lib/messages/channel.ar.json';
-import { Fragment, useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useI18n } from '@/lib/i18n-client';
 import { localeFor } from '@/lib/i18n.mjs';
 import { dayOf } from '@/lib/activity-log.mjs';
@@ -12,6 +12,8 @@ import { MessageBox, postMessage } from '@/app/conversation-composer';
 import { madeDay, useZone } from '@/app/agent-made';
 import { changeChannel, channelChoices } from '@/app/channel-actions';
 import { channelTitle, firstName, withMention, type ChannelAgent, type ChannelMessage, type ChannelRecord } from '@/lib/channels';
+import { PermissionCard, type DecidePermission, type PermissionOutcome } from '@/app/permission-card';
+import { offeredChoices } from '@/lib/conversations';
 
 type Say=(key:string,...values:unknown[])=>string;
 type Choices=NonNullable<Awaited<ReturnType<typeof channelChoices>>>;
@@ -24,7 +26,7 @@ export default function ChannelView({person,initial}:{person:string,initial:Chan
  const {t,language}=useI18n(); const own:Record<string,string>=language==='ar'?channelAr:channelEn;
  const c:Say=(key,...values)=>own[key].replace(/\{(\d+)\}/g,(_,index)=>String(values[Number(index)] ?? ''));
  const [record,setRecord]=useState(initial); const [sent,setSent]=useState(0); const panel=useDetailsPanel(); const zone=useZone();
- const {channel,members,agents,writer,messages,open}=record;
+ const {channel,members,agents,writer,messages,open,may}=record;
  const refresh=useCallback(async()=>{
   try {
    const response=await fetch(`/api/channels?company=${channel.company}&channel=${channel.id}`,{cache:'no-store'});
@@ -52,8 +54,33 @@ export default function ChannelView({person,initial}:{person:string,initial:Chan
   timer=setTimeout(poll,sent?300:open?1500:6000);
   return ()=>{stopped=true;clearTimeout(timer);};
  },[open,sent,channel.company,channel.id]);
+ // The Member who called the Agent decides its Run's request (#165), as a Conversation's person does (#163); the choice
+ // then goes to the waiting Run after the answer, and the next read shows the reply.
+ const permit:DecidePermission=async(request,choice)=>{
+  try {
+   const response=await fetch('/api/channels',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company:channel.company,channel:channel.id,intent:'permit',request,choice})});
+   const body=await response.json() as {state?:PermissionOutcome['state'],choice?:typeof choice,at?:string,first?:boolean,error?:string};
+   if(!response.ok||!body.state) return {error:body.error==='channelNotAllowed'?body.error:'conversationFailed'};
+   setSent(value=>value+1);
+   return body.state==='decided'&&body.choice&&body.at?{state:'decided',choice:body.choice,at:body.at,first:body.first===true}:{state:'closed',first:body.first===true};
+  } catch { return {error:'conversationFailed'}; }
+ };
+ // A card an Agent's Run shows while the channel is open rises in once (design-reference: card-in); those already there
+ // do not.
+ const [drawnCards]=useState(()=>new Set(initial.messages.flatMap(message=>message.author==='person'?message.mention?.permissions.map(card=>card.id)??[]:[])));
  const transcript=useRef<HTMLDivElement>(null); const last=messages.at(-1)?.id;
- useEffect(()=>{ const box=transcript.current; if(box) box.scrollTop=box.scrollHeight; },[last]);
+ // Opened from "Waiting on you" at a request (#165, `#permission-<id>`): that card in view and focused, not the newest
+ // message, on the first draw only; the address is then the channel's again.
+ const landed=useRef(false);
+ useLayoutEffect(()=>{
+  const card=/^#permission-\d+$/.test(location.hash)?transcript.current?.querySelector<HTMLElement>(location.hash):null;
+  if(!card) return;
+  landed.current=true;
+  card.scrollIntoView({block:'center'}); card.focus({preventScroll:true});
+  history.replaceState(history.state,'',location.pathname+location.search);
+ },[]); // eslint-disable-line react-hooks/exhaustive-deps
+ const seen=useRef(last);
+ useEffect(()=>{ const box=transcript.current; if(landed.current&&seen.current===last) return; landed.current=false; seen.current=last; if(box) box.scrollTop=box.scrollHeight; },[last]);
  const name=channelTitle(t,channel);
  const count=(value:number)=>new Intl.NumberFormat(localeFor(language)).format(value);
  const time=(value:string)=>new Date(value).toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit'});
@@ -76,11 +103,15 @@ export default function ChannelView({person,initial}:{person:string,initial:Chan
    <ol className="turns" aria-label={c('channelMessages',name)}>{messages.map((message,index)=><Fragment key={message.id}>
     {(index===0||dayOf(messages[index-1].at,zone)!==dayOf(message.at,zone))&&<li className="divider"><time dateTime={message.at} data-utc={zone}>{dayLabel(message.at)}</time></li>}
     <Turn message={message} time={time} c={c}/>
+    {message.author==='person'&&!!message.mention?.permissions.length&&<li className="turn turn--agent msg" data-author="agent">
+     <div className="sender"><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:message.mention.face,name:message.mention.agent}} size={20}/></span><bdi>{message.mention.agent}</bdi></div>
+     {message.mention.permissions.map(card=><PermissionCard key={card.id} card={card} fresh={!drawnCards.has(card.id)} offered={offeredChoices(card,may)} decide={message.mine&&writer?permit:undefined}/>)}
+    </li>}
    </Fragment>)}</ol>
    {waiting?.mention&&<p className="thinking convo-status" role="status">{t('conversationWorking',waiting.mention.agent)}</p>}
   </div></div>
   <div className="composer-area">
-   {writer?<MessageBox label={c('channelMessageLabel')} placeholder={c('channelPlaceholder',name)} send={async(message,sendKey)=>{
+   {writer?<MessageBox label={c('channelMessageLabel')} placeholder={c('channelPlaceholder',name)} call={{people:members.filter(member=>member.person!==person).map(member=>({id:member.person,name:member.name})),agents}} send={async(message,sendKey)=>{
     const failure=await postMessage({company:channel.company,channel:channel.id,message,sendKey},'/api/channels');
     if(!failure) setSent(value=>value+1);
     return failure;

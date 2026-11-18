@@ -30,6 +30,7 @@ function databases({parts,knowledge}={}) {
    return {data:pinned.get(given.message_key)??[],error:null};
   }
   if(name==='pin_run_history') return {data:null,error:null};
+  if(name==='pin_run_model') return {data:null,error:null};
   if(name==='begin_start') { attempts.set(given.message_key,(attempts.get(given.message_key)??0)+1); return {data:attempts.get(given.message_key),error:null}; }
   if(['send_conversation_message','record_conversation_turn'].includes(name)) return {data:true,error:null};
   return {data:null,error:{message:`unexpected ${name}`}}; };

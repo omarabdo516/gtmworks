@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { supabaseConfig } from '@/lib/supabase-config';
-import { driveChannelRuns, postChannelMessage } from '@/lib/channel-runs.mjs';
+import { decideChannelPermission, driveChannelRuns, postChannelMessage } from '@/lib/channel-runs.mjs';
+import type { PermissionChoice } from '@/lib/engine.mjs';
 import { logActionFailure } from '@/lib/diagnostics.mjs';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
 import { routeAllowed } from '@/lib/route-permissions.mjs';
@@ -13,6 +14,18 @@ const reply=(body:object,status=200)=>NextResponse.json(body,{status,headers:{'C
 const refuse=(error:string,status:number)=>reply({error},status);
 const service=()=>createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}});
 const encryptionKey=()=>process.env.WEBHOOK_ENCRYPTION_KEY;
+const permissionChoices:readonly unknown[]=['once','always','deny'] satisfies PermissionChoice[];
+const refusals:Record<string,[string,number]>={P0002:['channelNotFound',404],'42501':['channelNotAllowed',403],'22023':['channelFailed',400]};
+
+// A choice on the request an Agent's Run in this channel waits on (#165): one of three fixed words, never text. Only the
+// Member who called the Agent decides (decide_channel_permission); the press is answered once the choice is kept, and
+// the choice then goes to the waiting Run after the answer. Nothing of the request is logged.
+async function permit(db:Awaited<ReturnType<typeof supabase>>,body:Record<string,unknown>) {
+ if(!(typeof body.request==='number'&&Number.isSafeInteger(body.request)&&body.request>0)||!permissionChoices.includes(body.choice)) return refuse('channelFailed',400);
+ const decided=await decideChannelPermission(db,service(),{company:body.company as string,channel:body.channel as string,request:body.request,choice:body.choice as PermissionChoice,encryptionKey:encryptionKey(),later:after});
+ if('code' in decided) return refuse(...(refusals[decided.code||'']||['channelFailed',500]));
+ return reply(decided);
+}
 
 async function respond(request:NextRequest) {
  try {
@@ -24,6 +37,7 @@ async function respond(request:NextRequest) {
   const body=writing?JSON.parse(raw):Object.fromEntries(request.nextUrl.searchParams);
   if(![body.company,body.channel].every(value=>typeof value==='string'&&uuid.test(value))) return refuse('channelFailed',400);
   if(!await routeAllowed(db,'app/api/channels/route.ts',request.method,body.company,user.id)) return refuse(writing?'channelNotAllowed':'channelNotFound',writing?403:404);
+  if(writing&&body.intent==='permit') return await permit(db,body);
   if(writing) {
    if(typeof body.sendKey!=='string'||!uuid.test(body.sendKey)||typeof body.message!=='string'||!body.message.trim()||body.message.length>20000) return refuse('channelFailed',400);
    const sent=await postChannelMessage(db,service(),{channel:body.channel,sendKey:body.sendKey,message:body.message,encryptionKey:encryptionKey()});

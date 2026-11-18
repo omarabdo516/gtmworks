@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
+import { engineName } from './ui-words.mjs';
 
 // A person never reads the Engine's name (#286). Message keys may keep it; no value may.
 const catalogues=readdirSync('lib/messages').filter(file=>file.endsWith('.json')).sort();
@@ -17,6 +18,6 @@ test('every message catalogue is checked, English and Arabic included', () => {
 
 test('no message value names the Engine, in any language', () => {
  const named=catalogues.flatMap(file=>values(JSON.parse(readFileSync(`lib/messages/${file}`,'utf8')),file,[]))
-  .filter(([,text])=>/hermes|هيرمس|هرمس/i.test(text)).map(([path])=>path);
+  .filter(([,text])=>engineName.test(text)).map(([path])=>path);
  assert.deepEqual(named,[]);
 });

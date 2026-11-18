@@ -53,6 +53,9 @@ export const fixture = {
   stepsConversation: '62000000-0000-0000-0000-000000000007',
   // Omar's Conversation in which Ads's Run waits on his OK to publish the article (#163), as the reference's th-seo.
   permissionConversation: '62000000-0000-0000-0000-000000000008',
+  // Omar's Conversation in which Analyst asks him to connect an app for the weekly report (#203), as the reference's
+  // th-report (message r1).
+  connectConversation: '62000000-0000-0000-0000-000000000009',
 };
 // #172. The chat and Numbers while their waiting part is still on its way. The workflow first applies the screen's own
 // scripts/design-compare-<screen>.sql, which slows the one table that part reads; the tool itself never writes. The page
@@ -80,6 +83,12 @@ export const screens = {
   // Conversations with it.
   'agent-files': { reference: { steps: [{ click: '#sb-agents [data-action="open-agent"][data-agent="ads"]' }, { click: '#dp-tab-files' }, { waitFor: '#dp-tab-files[aria-selected="true"]' }] }, builtPath: `/c/rs-learning/chat/${fixture.agent}?tab=files` },
   'agent-screen': { reference: { steps: [{ click: '#sb-agents [data-action="open-agent"][data-agent="seo"]' }, { waitFor: '.scr-card' }] }, builtPath: `/c/rs-learning/chat/${fixture.agent}` },
+  // #204. Ads's details, Activity: "Connected tools" (Meta Ads and Google Ads connected, GA4 not), then Manage pressed.
+  // Built: an Agent with apps in its own Engine profile and one it was made to use (pass --built-path).
+  'agent-tools': { reference: { steps: [{ click: '#sb-agents [data-action="open-agent"][data-agent="ads"]' }, { waitFor: '[data-action="manage-tools"]' }, { scrollTo: '[data-action="manage-tools"]' }] },
+   builtPath: null, builtSteps: [{ waitFor: '.dp-tools .panel-row' }, { scrollTo: '.dp-tools' }] },
+  'agent-tools-manage': { reference: { steps: [{ click: '#sb-agents [data-action="open-agent"][data-agent="ads"]' }, { click: '[data-action="manage-tools"]' }, { waitFor: '[data-action="disconnect"]' }, { scrollTo: '[data-action="manage-tools"]' }] },
+   builtPath: null, builtSteps: [{ click: '.dp-tools .dp-label .link-btn' }, { waitFor: '.dp-tools .panel-row .link-btn' }, { scrollTo: '.dp-tools' }] },
   // The settings overlay opens on its Company section. The built overlay is route-backed (app/settings-overlay.tsx):
   // ?section= opens a section and ?agent=<id> one Agent's page.
   settings: { reference: { steps: settings }, builtPath: '/c/rs-learning/settings' },
@@ -123,6 +132,17 @@ export const screens = {
   // #163. The SEO article chat (th-seo): the approval card to publish the article, waiting. Built: the fixture's
   // permissionConversation (pass --built-path).
   'permission-card': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-seo"]' }, { waitFor: '[data-action="approve"]' }, { scrollTo: '.card__actions' }] }, builtPath: null },
+  // #165. "Waiting on you" with the request Ads's Run waits on: the reference's board, its card waiting on Omar's OK to
+  // publish the SEO article (c-seo); built, Approvals with the fixture's permissionConversation's request as its item.
+  'permission-waiting': { reference: { steps: [...board, { waitFor: '.kcard[data-card="c-seo"]' }, { scrollTo: '.kcard[data-card="c-seo"]' }] }, builtPath: '/c/rs-learning/approvals',
+   builtSteps: [{ waitFor: 'a.mcard[data-kind="permission"]' }, { scrollTo: 'a.mcard[data-kind="permission"]' }] },
+  // #165. A request in a channel, under the Agent's turn. The reference draws a request only in a chat, so it is the
+  // th-seo card as permission-card's. Built: a channel whose Agent's Run waits on the signed-in Member (pass --built-path).
+  'permission-channel': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-seo"]' }, { waitFor: '[data-action="approve"]' }, { scrollTo: '.card__actions' }] }, builtPath: null,
+   builtSteps: [{ waitFor: '[id^="permission-"] .card__actions' }, { scrollTo: '[id^="permission-"] .card__actions' }] },
+  // #203. The weekly report chat (th-report): Analyst's reply with the card asking to connect an app, open. Built: the
+  // fixture's connectConversation (pass --built-path).
+  'connect-card': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-report"]' }, { waitFor: '[data-action="connect"]' }, { scrollTo: '.card__actions' }] }, builtPath: null },
   // #141. The Meta campaign chat (th-meta): Ads's reply with "Used 4 tools · 41 sec" pressed, its four steps open, one
   // skipped. Built: the fixture's stepsConversation (pass --built-path), its steps pressed open the same way.
   'run-steps': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-meta"]' }, { click: '[data-action="toggle-steps"][data-msg="m3"]' }, { waitFor: '#st-th-meta-m3:not([hidden])' }, { scrollTo: '#st-th-meta-m3' }] },
@@ -146,6 +166,18 @@ export const screens = {
   'request-sent': { reference: { steps: [...asYoussef, ...youssefRequest] }, builtPath: '/c/rs-learning/conversations/6b000000-0000-0000-0000-000000000003' },
   'request-waiting': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-wa-req"]' }, { waitFor: '.ac-card--req' }] }, builtPath: '/c/rs-learning/approvals' },
   'request-made': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-wa-req"]' }, { click: '#ac-yes-rq-seed' }, { waitFor: '.ac-card:not(.ac-card--req)' }, ...asYoussef, ...youssefRequest] }, builtPath: '/c/rs-learning/conversations/6b000000-0000-0000-0000-000000000003' },
+  // #153. The composer's "+" menu, opened: in the Conversation with Lead, and in the general channel.
+  'plus-menu': { reference: { steps: [{ click: '.composer [data-action="plus-menu"]:visible' }, { waitFor: '[data-plus-menu]:not([hidden])' }, { finish: '[data-plus-menu]:not([hidden])' }] }, builtPath: '/c/rs-learning/chat',
+   builtSteps: [{ click: '.composer__btn[aria-haspopup="menu"]' }, { waitFor: '.composer .menu' }, { finish: '.composer .menu' }] },
+  'plus-menu-channel': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="ch-general"]' }, { waitFor: '.ch-intro' }, { click: '.composer [data-action="plus-menu"]:visible' }, { waitFor: '[data-plus-menu]:not([hidden])' }, { finish: '[data-plus-menu]:not([hidden])' }] },
+   builtPath: `/c/rs-learning/channels/${fixture.channel}`, builtSteps: [{ click: '.composer__btn[aria-haspopup="menu"]' }, { waitFor: '.composer .menu' }, { finish: '.composer .menu' }] },
+  // #158. The same menu in a Conversation, scrolled to its end: Connect apps and the Owner's Model. Built: a Conversation's
+  // own address (pass --built-path /c/rs-learning/conversations/<id>; its Model rows are the Agent's Engine's).
+  'plus-menu-model': { reference: { steps: [{ click: '.composer [data-action="plus-menu"]:visible' }, { waitFor: '[data-plus-menu]:not([hidden])' }, { finish: '[data-plus-menu]:not([hidden])' }, { scrollTo: '[data-plus-menu]:not([hidden]) [data-action="pick-model"]:last-child' }] }, builtPath: null,
+   builtSteps: [{ click: '.composer__btn[aria-haspopup="menu"]' }, { waitFor: '.composer .menu [role="menuitemradio"]' }, { finish: '.composer .menu' }, { scrollTo: '.composer .menu [role="menuitemradio"]:last-child' }] },
+  // #202. The composer's "+" menu, Connect apps: the apps sheet over the Conversation with Lead, the keyboard in its search.
+  'plus-apps': { reference: { steps: [{ click: '.composer [data-action="plus-menu"]:visible' }, { waitFor: '[data-plus-menu]:not([hidden])' }, { click: '[data-plus-menu]:not([hidden]) [data-action="open-apps"]' }, { waitFor: '#apps[open] #apps-q' }, { finish: '#apps[open]' }] }, builtPath: '/c/rs-learning/chat',
+   builtSteps: [{ click: '.composer__btn[aria-haspopup="menu"]' }, { waitFor: '.composer .menu' }, { click: '.composer .menu [aria-haspopup="dialog"]' }, { waitFor: 'dialog.apps-sheet[open] #apps-q' }, { finish: 'dialog.apps-sheet[open]' }] },
   // #24. New channel, from the "+" beside Channels; built, ?new=channel opens it over any page.
   'new-channel': { reference: { steps: [{ click: '#sb-threads [data-action="channel-new"]' }, { waitFor: '#modal[open] #tm-name' }] }, builtPath: `/c/rs-learning/channels/${fixture.channel}?new=channel` },
   // #24. The team channel حملة ديسمبر (th-team) with its members and Agents. Built: a team channel's own address (pass

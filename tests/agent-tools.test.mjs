@@ -250,6 +250,33 @@ test('hand_over asks the database to show the handed step as the model wrote it,
  assert.match(JSON.parse(toolSpecTexts().hand_over).description,/may not do yourself.*Done it.*approves, publishes and spends nothing/s);
 });
 
+// #203: an Agent asks its person for an app on gtmworks's list that its own profile does not have connected. The Engine is
+// asked for the Run's profile's apps, and only a listed app that is not connected there reaches the database; an unknown
+// app, or one already connected, shows nothing, and an Engine that does not answer leaves the run open for a retry.
+test('ask_for_app shows a card only for a listed app not connected in the Run\'s profile, with the reason trimmed, and leaves the run open while the Engine does not answer',async()=>{
+ const {fake,rpcs,call}=harness({},{state:'shown',card:45});
+ fake.settings.apps={notion:'connected',canva:'off',klaviyo:'attention'};
+ for(const args of /** @type {unknown[]} */([null,'canva',{app:'ga4',reason:'Needed for sales'},{app:'toString',reason:'x'},{app:'canva'},{app:'canva',reason:7},{app:'canva',reason:'x'.repeat(201)},{app:'canva',reason:'Need\u0000it'}]))
+  assert.deepEqual(await call('ask_for_app',args),{state:'ignored'},JSON.stringify(args));
+ assert.deepEqual(rpcs,[],'nothing is asked of the database for an app off the list or a reason that cannot be kept');
+ assert.deepEqual(await call('ask_for_app',{app:'notion',reason:'To read the briefs'}),{state:'ignored'},'one already connected for this Agent');
+ assert.deepEqual(await call('ask_for_app',{app:'canva',reason:' محتاجه عشان أجيب التصميمات. '}),{state:'shown',card:45});
+ await call('ask_for_app',{app:'klaviyo',reason:'The sign-in stopped working.'});
+ fake.settings.apps={};
+ assert.deepEqual(await call('ask_for_app',{app:'canva',reason:'x'}),{state:'ignored'},'an app the Engine does not offer this profile');
+ fake.settings.apps='unreachable';
+ assert.deepEqual(await call('ask_for_app',{app:'canva',reason:'x'}),{state:'engineUnreachable'});
+ fake.settings.apps='refused';
+ assert.deepEqual(await call('ask_for_app',{app:'canva',reason:'x'}),{state:'ignored'},'an Engine with no apps of its own for this profile');
+ const sent=(/** @type {string} */ title,/** @type {object} */ content)=>['agent_show_card',{conversation:'conversation-1',run:'run-1',call:'call-0',kind:'connect',title,content}];
+ assert.deepEqual(rpcs,[sent('Canva',{app:'canva',reason:'محتاجه عشان أجيب التصميمات.'}),sent('Klaviyo',{app:'klaviyo',reason:'The sign-in stopped working.'})]);
+ assert.equal(fake.appReads.count,6,'the Engine is asked only once a call reads');
+ const spec=JSON.parse(toolSpecTexts().ask_for_app);
+ assert.deepEqual(spec.parameters.properties.app.enum,['klaviyo','canva','notion','airtable','gamma','amplitude','mixpanel']);
+ assert.equal(spec.parameters.properties.reason.maxLength,200);
+ assert.match(spec.description,/connects it.*approves, publishes and spends nothing/s);
+});
+
 test('an Engine is ready for a new Agent only when it has the Company\'s profile ready',async()=>{
  const {fake,engine}=harness();
  assert.equal(await engineReady(engine,profile),'engineNotReady');

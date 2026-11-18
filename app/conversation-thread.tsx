@@ -15,6 +15,9 @@ import type { Decision, RunSteps, SavedRule } from '@/lib/conversations';
 import { MadeCard, RequestCard } from '@/app/agent-card';
 import { ReplyCard } from '@/app/reply-card';
 import type { DecidePermission, PermissionOutcome } from '@/app/permission-card';
+import type { ConnectApps } from '@/app/connect-card';
+import { signInToApp } from '@/app/app-sign-in';
+import { appsChanged } from '@/app/company-apps-read';
 import { overlayHref } from '@/lib/settings-overlay.mjs';
 import type { ConversationRecord } from '@/lib/conversation-record';
 import { localeFor } from '@/lib/i18n.mjs';
@@ -143,6 +146,23 @@ export function ConversationTurns({slug,company,record,writer,asked}:{slug:strin
    return body.state==='decided'&&body.choice&&body.at?{state:'decided',choice:body.choice,at:body.at,first:body.first===true}:{state:'closed',first:body.first===true};
   } catch { return {error:'conversationFailed'}; }
  };
+ // An app the Agent asked for (#203): the Owner signs in to it for this Conversation's Agent, as Settings, Apps does,
+ // and the sidebar's count is read again once it is connected; Later is kept by the database.
+ const agent=conversation.agent_id;
+ const connect:ConnectApps|undefined=record.connect&&{...record.connect,
+  start:async(app,signal)=>{
+   if(!agent) return {error:'connectFailed'};
+   const result=await signInToApp({company,agent,app,signal});
+   if('state' in result) void appsChanged(company,language);
+   return result;
+  },
+  later:async card=>{
+   try {
+    const response=await fetch('/api/conversations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company,conversation:conversation.id,intent:'later',card})});
+    const body=await response.json() as {state?:string,error?:string};
+    return response.ok&&body.state==='postponed'?{state:'postponed'}:{error:body.error||'conversationFailed'};
+   } catch { return {error:'conversationFailed'}; }
+  }};
  // A card an Agent shows while the chat is open rises in once (design-reference: card-in); those already there do not.
  const [drawnCards]=useState(()=>new Set(replyCardIds(messages)));
  const time=(value:string)=>new Date(value).toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit'});
@@ -161,7 +181,7 @@ export function ConversationTurns({slug,company,record,writer,asked}:{slug:strin
    {!!message.steps?.list.length&&<StepsList steps={message.steps} c={c} cb={cb}/>}
    {message.body&&<div className="bubble bubble--agent" dir="auto">{message.body}</div>}
    {message.cards?.map(card=>card.kind==='made'?<MadeCard key={card.agent.id} slug={slug} agent={card.agent}/>:card.kind==='request'?<RequestCard key={`request${card.request.id}`} slug={slug} request={card.request}/>
-    :<ReplyCard key={`reply${card.card.id}`} card={card.card} fresh={!drawnCards.has(card.card.id)} answer={answer} done={writer?done:undefined} decide={writer?permit:undefined} may={record.permit}/>)}
+    :<ReplyCard key={`reply${card.card.id}`} card={card.card} fresh={!drawnCards.has(card.card.id)} answer={answer} done={writer?done:undefined} decide={writer?permit:undefined} may={record.permit} connect={connect}/>)}
   </li>)}</ol>
   {pending&&!record.asking&&<p className="thinking convo-status" role="status">{working?c('conversationWorkingFor',conversation.agent_name,working):t('conversationWorking',conversation.agent_name)}</p>}
   {failed&&<p className="note convo-status" role="alert">{t('conversationReplyFailed')}</p>}
@@ -177,8 +197,10 @@ export function ConversationComposer({company,conversation,record,writer,asked,b
  // A Run waiting on its person's answer is not working (#138): the box keeps its send arrow, as the reference's does.
  const working=record?.asking?null:record?.working; const canStop=record?.canStop;
  const count=(value:number)=>new Intl.NumberFormat(localeFor(language)).format(value);
+ // A waiting message the Engine refused for the Conversation's model (#158) is told as a sent one is, while it is the latest.
+ const last=record?.messages.at(-1); const refused=last?.kind==='queued'&&last.failed&&last.model_refused?{key:`${last.created_at}:${last.body}`,text:last.body}:undefined;
  return <>
-  {writer?<MessageBox ref={box} placeholder={t('writeTo',conversation.agent_name)} stop={working&&canStop?{label:c('conversationStop',conversation.agent_name),run:async()=>{
+  {writer?<MessageBox ref={box} placeholder={t('writeTo',conversation.agent_name)} model={{company,conversation:conversation.id,agent:conversation.agent_name}} refused={refused} stop={working&&canStop?{label:c('conversationStop',conversation.agent_name),run:async()=>{
    const failure=await postMessage({company,conversation:conversation.id,intent:'stop'});
    if(!failure) asked();
    return failure;

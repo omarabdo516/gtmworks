@@ -27,7 +27,7 @@ test('the apps listed are the registry apps the Engine offers, each off until co
   const read=await readApps(target);
   assert.equal(read.state,'found');
   assert.deepEqual(read.apps.map(app=>app.key),apps.map(app=>app.key).filter(key=>key!=='gamma'));
-  assert.deepEqual(read.apps[0],{key:'klaviyo',name:'Klaviyo',mark:'K',category:'communication',state:'off'});
+  assert.deepEqual(read.apps[0],{key:'klaviyo',name:'Klaviyo',mark:'K',category:'communication',installed:false,state:'off'});
   assert.ok(!read.apps.some(app=>['figma','webflow','wordpress-com'].includes(app.key)),'a catalogue entry outside the registry is never listed');
  } finally { await fake.close(); }
 });

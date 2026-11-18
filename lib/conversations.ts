@@ -1,4 +1,5 @@
 import type { PermissionChoice } from './engine.mjs';
+import type { AppState } from './app-catalogue.mjs';
 export type { PermissionChoice };
 // The conversation record as the page shows it: run ids stay on the server. A note is a person's message addressed to
 // another Member (`to`, no run); a queued message waits for the Agent to finish the current reply (`queued`), or was
@@ -27,18 +28,24 @@ export type AgentRequestView=RequestBase&({state:'waiting',owners:string[]}|{sta
 // A permission request (#163) is the Engine's own: open until its person decides it, then decided with the choice and
 // when it was made (a choice still on its way to the Engine is drawn decided), or closed once the Engine no longer waits.
 type Permission={id:number,kind:'permission',title:string,description:string,command:string,choices:PermissionChoice[]};
+// An app the Agent asked for (#203): open while the Agent's profile does not have it connected, connected once the Engine
+// says it is (never kept, so it is read whenever the card is), and postponed for good once the Owner said Later.
+type Connect={id:number,kind:'connect',title:string,app:string,reason:string};
 type ReviewItem={text:string,fine:boolean,note:string};
 type Question={id:number,kind:'question',title:string,question:string,choices:string[],multiple:boolean};
 export type ReplyCard={id:number,kind:'draft',title:string,line:string,rows:{label:string,value:string}[]}
  |{id:number,kind:'review',title:string,line:string,items:ReviewItem[],decision:string}
  |(Question&({state:'open'}|{state:'answered',answer:string}|{state:'closed'}))
  |(Hand&({state:'open'}|{state:'done',at:string,failed?:true}))
- |(Permission&({state:'open'}|{state:'decided',choice:PermissionChoice,at:string}|{state:'closed'}));
+ |(Permission&({state:'open'}|{state:'decided',choice:PermissionChoice,at:string}|{state:'closed'}))
+ |(Connect&{state:'open'|'connected'|'postponed'});
 type Hand={id:number,kind:'hand',title:string,line:string,app:string,rows:{label:string,value:string}[],url:string|null,note:string|null};
 export const replyCardColumns='id,run_id,kind,title,content,state,answered_at,done_at,decided_at,created_at';
 export type ReplyCardRow={id:number,run_id:string,kind:string,title:string,content:unknown,state:string,answered_at:string|null,done_at:string|null,decided_at:string|null,created_at:string};
 // The database keeps only rows each kind's reader can read (reply_card_valid); a kind with no reader fails the build.
-const replyReaders:{[K in ReplyCard['kind']]:(row:ReplyCardRow)=>Extract<ReplyCard,{kind:K}>}={
+// The apps of the Agent's profile now, by key (null when the Engine could not be read).
+export type AppStates=Record<string,AppState>|null;
+const replyReaders:{[K in ReplyCard['kind']]:(row:ReplyCardRow,apps:AppStates)=>Extract<ReplyCard,{kind:K}>}={
  draft:({id,title,content})=>{ const {line,rows}=content as {line:string,rows:{label:string,value:string}[]}; return {id,kind:'draft',title,line,rows}; },
  review:({id,title,content})=>{ const {line,items,decision}=content as {line:string,items:ReviewItem[],decision:string}; return {id,kind:'review',title,line,items,decision}; },
  question:({id,title,content,state})=>{
@@ -56,12 +63,16 @@ const replyReaders:{[K in ReplyCard['kind']]:(row:ReplyCardRow)=>Extract<ReplyCa
   const asked:Permission={id,kind:'permission',title,description,command,choices};
   return state==='open'?{...asked,state:'open'}:(state==='sending'||state==='decided')&&choice&&decided_at?{...asked,state:'decided',choice,at:decided_at}:{...asked,state:'closed'};
  },
+ connect:({id,title,content,state},apps)=>{
+  const {app,reason}=content as {app:string,reason:string};
+  return {id,kind:'connect',title,app,reason,state:state==='postponed'?'postponed':apps?.[app]==='connected'?'connected':'open'};
+ },
 };
 // The buttons one person sees on an open request: the choices their role may send (`may`, permission_choices) that the
 // Engine offered, in the reference's order.
 export const offeredChoices=(card:Extract<ReplyCard,{kind:'permission'}>,may:readonly PermissionChoice[]):PermissionChoice[]=>
  (['deny','always','once'] as const).filter(choice=>card.choices.includes(choice)&&may.includes(choice));
-export const replyCardOf=(row:ReplyCardRow):ReplyCard|null=>Object.hasOwn(replyReaders,row.kind)?replyReaders[row.kind as ReplyCard['kind']](row):null;
+export const replyCardOf=(row:ReplyCardRow,apps:AppStates=null):ReplyCard|null=>Object.hasOwn(replyReaders,row.kind)?replyReaders[row.kind as ReplyCard['kind']](row,apps):null;
 export type LeadCard={kind:'made',agent:MadeAgent}|{kind:'request',request:AgentRequestView}|{kind:'reply',card:ReplyCard};
 export type SavedRule={id:string,agent:string|null,removed:boolean,said_at:string,sentTo?:string[]};
 type RuleDecision={approved:boolean,by:string,rule:string,at:string};
@@ -72,7 +83,7 @@ export type RunStep={tool:string,preview:string|null,state:'started'|'done'|'fai
 export type RunSteps={list:RunStep[],seconds:number|null};
 export type RunStepsRow={run_id:string,steps:(RunStep&{call:string})[],seconds:number|null};
 export const runStepsColumns='run_id,steps,seconds';
-export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided'|'boarded'|'asked'|'answer',to?:string,failed?:boolean,cards?:LeadCard[],saved?:SavedRule[],decided?:Decision,steps?:RunSteps};
+export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided'|'boarded'|'asked'|'answer',to?:string,failed?:boolean,model_refused?:boolean,cards?:LeadCard[],saved?:SavedRule[],decided?:Decision,steps?:RunSteps};
 type StoredMessage=ConversationMessage&{run_id:string,hand_card?:number|null};
 export const messageColumns='id,author,author_name,body,run_id,hand_card,created_at';
 export const conversationColumns='id,agent_id,agent_name,hermes_agents(connection_id,is_default)';
@@ -90,6 +101,7 @@ export function questionParts(row:ReplyCardRow,card:ReplyCard,lead:boolean):Pick
 }
 // What the Engine stops a Run for, a question (#138) or a request to allow an action (#163), is the Agent's own turn
 // after the message of that Run, before its reply.
+const isConnect=(row:PlacedCard)=>row.card.kind==='reply'&&row.card.card.kind==='connect';
 const isAsked=(row:PlacedCard)=>row.card.kind==='reply'&&(row.card.card.kind==='question'||row.card.card.kind==='permission');
 // A person's message whose run Hermes no longer knew is marked lost (#243), from the run's usage record. A run's
 // questions follow its person's message, each with its answer, before the run's reply (#138), as its requests do (#163). The reply carries its
@@ -98,7 +110,8 @@ const isAsked=(row:PlacedCard)=>row.card.kind==='reply'&&(row.card.card.kind==='
 export const shown=(messages:StoredMessage[],usage:{run_id:string,outcome:string}[]=[],leadCards:PlacedCard[]=[],agentName='',saved:{run_id:string,rule:SavedRule}[]=[],runSteps:RunStepsRow[]=[]):ConversationMessage[]=>messages.flatMap(message=>{
  const plain={id:message.id,author:message.author,author_name:message.author_name,body:message.body,lost:message.author==='person'&&usage.some(run=>run.run_id===message.run_id&&run.outcome==='lost'),created_at:message.created_at};
  const replied=message.author==='agent'||messages.some(other=>other.author==='agent'&&other.run_id===message.run_id);
- const ofRun=leadCards.filter(row=>row.run_id===message.run_id&&!isAsked(row)); const cards=ofRun.map(row=>row.card);
+ // A connect card (#203) sits right under the reply's text, before the run's other cards (design-reference: msgHTML).
+ const ofRun=leadCards.filter(row=>row.run_id===message.run_id&&!isAsked(row)).sort((a,b)=>Number(isConnect(b))-Number(isConnect(a))); const cards=ofRun.map(row=>row.card);
  const rules=saved.filter(row=>row.run_id===message.run_id).map(row=>row.rule);
  const asked=message.author==='person'?leadCards.filter(row=>row.run_id===message.run_id&&isAsked(row)).flatMap((row):ConversationMessage[]=>{
   const id=row.card.kind==='reply'?row.card.card.id:0;
@@ -142,9 +155,9 @@ export const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
 // everything already sent (they start in that order). A started turn is an ordinary message and is not repeated.
 export type StoredNote={id:number,author_name:string,addressed_name:string,body:string,created_at:string};
 // A turn "Done it" queued (#140) names its hand card and is drawn by that card, never as a message.
-export type QueuedTurn={send_key:string,message:string,queued_at:string,started_at:string|null,failed_at:string|null,hand_card?:number|null};
+export type QueuedTurn={send_key:string,message:string,queued_at:string,started_at:string|null,failed_at:string|null,hand_card?:number|null,model_refused?:boolean};
 export const noteColumns='id,author_name,addressed_name,body,created_at';
-export const queuedColumns='send_key,message,queued_at,started_at,failed_at,hand_card';
+export const queuedColumns='send_key,message,queued_at,started_at,failed_at,hand_card,model_refused';
 // A turn "Done it" queued, and the person's message it became, name their hand card (#140): the one test every reader
 // of the record uses, waiting or started.
 export const handTurn=(row:{hand_card?:number|null})=>row.hand_card!=null;
@@ -153,7 +166,7 @@ export const withTeamWork=(record:ConversationMessage[],notes:StoredNote[]=[],qu
  const merged:ConversationMessage[]=[]; const left=[...notes].sort((a,b)=>a.id-b.id);
  for(const message of record) { while(left.length&&left[0].created_at<=message.created_at) merged.push(noteOf(left.shift()!)); merged.push(message); }
  return [...merged,...left.map(noteOf),
-  ...queued.filter(turn=>!turn.started_at&&!handTurn(turn)).map((turn,index)=>({id:index,author:'person' as const,author_name:sender,body:turn.message,created_at:turn.queued_at,kind:'queued' as const,...(turn.failed_at?{failed:true}:{})}))];
+  ...queued.filter(turn=>!turn.started_at&&!handTurn(turn)).map((turn,index)=>({id:index,author:'person' as const,author_name:sender,body:turn.message,created_at:turn.queued_at,kind:'queued' as const,...(turn.failed_at?{failed:true,...(turn.model_refused?{model_refused:true}:{})}:{})}))];
 };
 const noteOf=(note:StoredNote):ConversationMessage=>({id:note.id,author:'person',author_name:note.author_name,body:note.body,created_at:note.created_at,kind:'note',to:note.addressed_name});
 // Waiting turns keep the page asking until they have started and been answered.

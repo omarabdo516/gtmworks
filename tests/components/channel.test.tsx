@@ -14,13 +14,13 @@ afterEach(() => { vi.unstubAllGlobals(); });
 
 const at = '2026-06-10T09:05:00Z';
 const peer: ChannelMessage = { id: 1, author: 'person', mine: false, name: 'Sara Adel', role: 'manager', body: 'Morning all', at, mention: null };
-const called = (state: 'open' | 'answered' | 'unanswered'): ChannelMessage => ({ id: 2, author: 'person', mine: true, name: 'Omar', role: 'owner', body: 'Hey @lead, what is due today?', at, mention: { agent: 'Lead', state } });
+const called = (state: 'open' | 'answered' | 'unanswered'): ChannelMessage => ({ id: 2, author: 'person', mine: true, name: 'Omar', role: 'owner', body: 'Hey @lead, what is due today?', at, mention: { agent: 'Lead', face: 'c-1', state, permissions: [] } });
 const reply: ChannelMessage = { id: 3, author: 'agent', name: 'Lead', face: 'c-1', body: 'Two things are due.', at };
 const record = (messages: ChannelMessage[], more: Partial<ChannelRecord> = {}): ChannelRecord => ({
  channel: { id: 'ch-1', company: 'co-1', kind: 'general' },
  members: [{ person: 'p-1', name: 'Omar', role: 'owner' }, { person: 'p-2', name: 'Sara Adel', role: 'manager' }],
  agents: [{ id: 'a-1', connection_id: 'c-1', name: 'Lead', speciality: 'General', main: true, only: false }],
- writer: true, manage: false, managers: [], messages, open: messages.some(message => message.author === 'person' && message.mention?.state === 'open'), ...more,
+ writer: true, manage: false, managers: [], may: ['once', 'always', 'deny'], messages, open: messages.some(message => message.author === 'person' && message.mention?.state === 'open'), ...more,
 });
 const channel = (initial: ChannelRecord) => render(<LanguageProvider language="en"><ChannelView person="p-1" initial={initial}/></LanguageProvider>);
 
@@ -126,4 +126,38 @@ test('an Owner or a Manager takes a Member out and adds one the channel does not
  await expect.poll(() => vi.mocked(changeChannel).mock.calls.at(-1)).toEqual(['co-1', 'ch-1', { person: 'p-4', present: true }]);
  await details.getByRole('button', { name: 'Remove SEO from the channel' }).click();
  await expect.poll(() => vi.mocked(changeChannel).mock.calls.at(-1)).toEqual(['co-1', 'ch-1', { agent: 'a-2', present: false }]);
+});
+
+// #165: an Agent called in a channel asks to be allowed an action. The card sits under the Agent's turn; the Member who
+// called it decides it, and everyone else reads the team's wait line.
+const asking = (mine: boolean): ChannelMessage => ({ ...called('open'), mine, mention: { agent: 'Lead', face: 'c-1', state: 'open', permissions: [
+ { id: 9, kind: 'permission', title: 'delete the old exports', description: 'delete the old exports', command: 'rm -r exports', choices: ['once', 'deny'], state: 'open' }] } }) as ChannelMessage;
+
+test('the caller decides the request under the Agent\'s turn, and the press goes to the channel route once', async () => {
+ const sent: unknown[] = [];
+ vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+  if (init?.method === 'POST') { sent.push(JSON.parse(String(init.body))); return Promise.resolve(Response.json({ state: 'decided', choice: 'once', at, first: true })); }
+  return new Promise<Response>(() => {});
+ });
+ const screen = await channel(record([asking(true)]));
+ const turn = screen.getByRole('list', { name: 'Messages in #general' }).getByRole('listitem').nth(2);
+ await expect.element(turn).toHaveClass(/turn--agent/);
+ const card = turn.getByRole('group', { name: 'Approval request: delete the old exports' });
+ expect(turn.element().textContent).toMatch(/^Lead/);
+ await expect.element(card).toHaveAttribute('id', 'permission-9');
+ expect(card.getByRole('button').elements().map(button => button.textContent)).toEqual(['Don’t allow', 'Allow once']);
+ await card.getByRole('button', { name: 'Allow once' }).click();
+ await expect.element(card.getByText(/^Allowed once · /)).toBeInTheDocument();
+ expect(sent).toEqual([{ company: 'co-1', channel: 'ch-1', intent: 'permit', request: 9, choice: 'once' }]);
+});
+
+test('another Member, and a Viewer, read the team\'s wait line on the request and no button', async () => {
+ vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
+ for (const more of [{}, { writer: false, may: [] }] as Partial<ChannelRecord>[]) {
+  const screen = await channel(record([asking(false)], more));
+  const card = screen.getByRole('group', { name: 'Approval request: delete the old exports' });
+  await expect.element(card.getByText('Waiting for someone on the team to approve')).toBeInTheDocument();
+  expect(card.getByRole('button').elements()).toEqual([]);
+  screen.unmount();
+ }
 });

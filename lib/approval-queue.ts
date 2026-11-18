@@ -10,7 +10,9 @@ import { boardCardColumns, visibleApprovals, waitingCount } from './board-column
 // read, so the Owner never answers a request seen in part.
 type RuleSuggestion={rule:string,agent:{connection_id:string,name:string}|null};
 type AgentRequest={apps:string[],asked_with:string};
-export type WaitingItem={kind:string,id:number,title:string,body:string,asked_by:string,card_id:number|null,conversation_id:string|null,created_at:string,suggestion?:RuleSuggestion,request?:AgentRequest|null,note_id?:number|null};
+// A permission request (#165, kind permission in a Conversation, channel_permission in a channel: title what it asks,
+// asked_by its Agent's name) also carries its Agent's face, and a channel's its channel, so it opens there.
+export type WaitingItem={kind:string,id:number,title:string,body:string,asked_by:string,card_id:number|null,conversation_id:string|null,created_at:string,suggestion?:RuleSuggestion,request?:AgentRequest|null,note_id?:number|null,agent?:{connection_id:string,name:string}|null,channel_id?:string|null};
 // "Waiting on you" is one list (#16), read once per request from waiting_list(company) as the signed-in person: the
 // approvals they hold (`cards`, for the card's decision), those the board shows them (`visible`: none of an Agent hidden
 // from them, #190), every item but a hidden Agent's approvals, newest first (`items`), so no count names a Card the
@@ -27,13 +29,23 @@ export const approvalQueue=cache(async(db:Awaited<ReturnType<typeof supabase>>,c
  const ruleIds=listed.filter(item=>item.kind==='rule_suggestion').map(item=>item.id);
  const requestIds=listed.filter(item=>item.kind==='agent_request').map(item=>item.id);
  const mentionIds=listed.filter(item=>item.kind==='mention').map(item=>item.id);
- const [cardResult,agentResult,ruleResult,requestResult,mentionResult]=await Promise.all([
+ const chats=[...new Set(listed.filter(item=>item.kind==='permission'&&item.conversation_id).map(item=>item.conversation_id!))];
+ const channelIds=listed.filter(item=>item.kind==='channel_permission').map(item=>item.id);
+ const [cardResult,agentResult,ruleResult,requestResult,mentionResult,chatResult,channelResult]=await Promise.all([
   ids.length?db.from('work_cards').select(boardCardColumns).eq('company_id',company).in('id',ids):{data:[],error:null},
   ids.length?db.from('hermes_agents').select('id').eq('company_id',company):{data:[],error:null},
   ruleIds.length?db.from('waiting_items').select('id,agent_rules(body,hermes_agents(connection_id,name))').in('id',ruleIds):{data:[],error:null},
   requestIds.length?db.from('lead_agent_requests').select('id,apps,asked_with').eq('company_id',company).in('id',requestIds):{data:[],error:null},
   mentionIds.length?db.from('waiting_items').select('id,note_id,work_comments(body)').in('id',mentionIds):{data:[],error:null},
+  chats.length?db.from('conversations').select('id,agent_id').eq('company_id',company).in('id',chats):{data:[],error:null},
+  channelIds.length?db.from('channel_permissions').select('id,channel_id,channel_runs(agent_id)').eq('company_id',company).in('id',channelIds):{data:[],error:null},
  ]);
+ type ChatRow={id:string,agent_id:string}; type ChannelRow={id:number,channel_id:string,channel_runs:{agent_id:string|null}|null};
+ const chatAgents=new Map(((chatResult.data || []) as ChatRow[]).map(row=>[row.id,row.agent_id]));
+ const channelRows=new Map(((channelResult.data || []) as unknown as ChannelRow[]).map(row=>[row.id,row]));
+ const askingIds=[...new Set([...chatAgents.values(),...[...channelRows.values()].flatMap(row=>row.channel_runs?.agent_id??[])])];
+ const {data:faces,error:faceError}=askingIds.length?await db.from('hermes_agents').select('id,connection_id,name').eq('company_id',company).in('id',askingIds):{data:[],error:null};
+ const faceOf=(agent:string|null|undefined)=>((faces || []) as {id:string,connection_id:string,name:string}[]).find(row=>row.id===agent) ?? null;
  const cards=ids.map(id=>(cardResult.data || []).find(card=>card.id===id)).filter(Boolean) as (ApprovalCard&{agent_id:string|null})[];
  const visible=visibleApprovals(cards,listed,new Set(((agentResult.data || []) as {id:string}[]).map(agent=>agent.id)));
  type RuleRow={id:number,agent_rules:{body:string,hermes_agents:{connection_id:string,name:string}|null}|null};
@@ -44,10 +56,12 @@ export const approvalQueue=cache(async(db:Awaited<ReturnType<typeof supabase>>,c
  const mentions=new Map(((mentionResult.data || []) as unknown as MentionRow[]).map(row=>[row.id,row]));
  const items=visible.items.map(item=>{
   if(item.kind==='agent_request') return {...item,request:requests.get(item.id)??null};
+  if(item.kind==='permission') { const face=faceOf(chatAgents.get(item.conversation_id!)); return {...item,agent:face&&{connection_id:face.connection_id,name:face.name}}; }
+  if(item.kind==='channel_permission') { const row=channelRows.get(item.id); const face=faceOf(row?.channel_runs?.agent_id); return {...item,channel_id:row?.channel_id??null,agent:face&&{connection_id:face.connection_id,name:face.name}}; }
   const rule=item.kind==='rule_suggestion'&&rules.get(item.id);
   if(rule) return {...item,suggestion:{rule:rule.body,agent:rule.hermes_agents}};
   const mention=item.kind==='mention'?mentions.get(item.id):undefined;
   return mention?{...item,note_id:mention.note_id,body:mention.work_comments?.body??item.body}:item;
  });
- return {steps:(stepResult.data || []) as Step[],cards,visible:visible.cards,items,count:waitingCount(visible.items),available:!stepResult.error&&!listResult.error&&!cardResult.error&&!agentResult.error&&!ruleResult.error&&!requestResult.error&&!mentionResult.error};
+ return {steps:(stepResult.data || []) as Step[],cards,visible:visible.cards,items,count:waitingCount(visible.items),available:!stepResult.error&&!listResult.error&&!cardResult.error&&!agentResult.error&&!ruleResult.error&&!requestResult.error&&!mentionResult.error&&!chatResult.error&&!channelResult.error&&!faceError};
 });

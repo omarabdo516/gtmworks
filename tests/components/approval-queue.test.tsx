@@ -23,3 +23,16 @@ test('an approval that shares its id with a mention keeps its own step, and the 
   {kind:'mention',body:'Note as it now stands',note_id:41},
  ]);
 });
+
+// A permission item names its Conversation; that read is kept to the caller's Company, as the reads beside it are.
+test('a permission item\'s Conversation is read within the caller\'s Company only',async()=>{
+ const filters:string[][]=[];
+ const db={rpc:async()=>({data:[{kind:'permission',id:3,title:'',body:'',asked_by:'',card_id:null,conversation_id:'c1',created_at:'2026-06-01T00:00:00Z'}],error:null}),
+  from:(name:string)=>{ const seen:string[]=[]; if(name==='conversations') filters.push(seen);
+   const query:Record<string,unknown>={then:(resolve:(value:unknown)=>unknown)=>resolve({data:[],error:null})};
+   for(const method of ['select','is','order']) query[method]=()=>query;
+   for(const method of ['eq','in']) query[method]=(column:string,value:unknown)=>{ seen.push(`${method} ${column} ${JSON.stringify(value)}`); return query; };
+   return query; }} as unknown as Parameters<typeof approvalQueue>[0];
+ await approvalQueue(db,'company-a','person','owner');
+ expect(filters).toEqual([['eq company_id "company-a"','in id ["c1"]']]);
+});

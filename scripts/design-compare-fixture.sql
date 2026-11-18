@@ -7,7 +7,8 @@
 -- suggestion (#25; the reference's th-yo-ads), Omar's Conversation with Ads waiting on his answer to its question (#138;
 -- the reference's th-meta), Omar's Conversation with Ads in which it hands him the article to publish (#139; the
 -- reference's th-team t10), Omar's Conversation in which Ads's Run waits on his OK to publish the article (#163; the
--- reference's th-seo), and the files Ads works from (#21; the reference's ads.files): two on
+-- reference's th-seo), Omar's Conversation with Analyst in which it asks him to connect an app for the weekly report (#203;
+-- the reference's th-report), and the files Ads works from (#21; the reference's ads.files): two on
 -- its Card and one in Omar's Conversation with it. Two Cards are tied to those two chats with Ads (#145). Nothing applies it automatically; load it by hand into a throwaway
 -- local database only. The files are named only: their bytes are not in storage, so opening one finds nothing.
 -- Fixed ids (scripts/design-compare-lib.mjs, fixture); running it again adds nothing. The connections point nowhere
@@ -233,6 +234,27 @@ where not exists(select 1 from public.conversation_messages where conversation_i
 insert into public.reply_cards(company_id,conversation_id,run_id,call_id,kind,title,content,state,created_at)
 values ('10000000-0000-0000-0000-000000000001','62000000-0000-0000-0000-000000000008','design-compare-fixture-permission','design-compare-approval-1','permission','نشر المقال على موقع الأكاديمية',
  '{"description":"نشر المقال على موقع الأكاديمية","command":"wp post edit 812 --post_status=publish","choices":["once","always","deny"]}','open','2026-11-16T13:36:00Z')
+on conflict do nothing;
+
+-- Omar's Conversation with Analyst in which it asks for an app it needs for the weekly report (#203; the reference's
+-- th-report, message r1, worded as there): his message, Analyst's reply and the connect card under it. The reference's
+-- GA4 is not on gtmworks's list of apps, so the card asks for Amplitude, an analytics app that is. The Engine is never
+-- read here, so the card is open.
+insert into public.conversations(id,company_id,person_id,agent_id,agent_name,created_at)
+values ('62000000-0000-0000-0000-000000000009','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','61000000-0000-0000-0000-000000000004','Analyst','2026-11-16T09:28:00Z')
+on conflict (id) do nothing;
+insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at)
+select '10000000-0000-0000-0000-000000000001','62000000-0000-0000-0000-000000000009',x.author,x.person_id,x.agent_id,x.author_name,x.body,x.send_key,'design-compare-fixture-connect',x.at
+from (values
+ (1,'person','20000000-0000-0000-0000-000000000001'::uuid,null::uuid,'عمر','@Analyst ابدأ التقرير الأسبوعي','63000000-0000-0000-0000-000000000017'::uuid,'2026-11-16T09:28:00Z'::timestamptz),
+ (2,'agent',null,'61000000-0000-0000-0000-000000000004','Analyst','بدأت التقرير الأسبوعي (5 – 11 نوفمبر). أرقام Meta وGoogle اتجمعت.
+لسه ناقصني بيانات المبيعات من GA4، ولو متوصلش لحد الخميس هكتب التقرير بالليدز بس وهوضّح ده في أوله.',null,'2026-11-16T09:30:00Z')
+) x(n,author,person_id,agent_id,author_name,body,send_key,at)
+where not exists(select 1 from public.conversation_messages where conversation_id='62000000-0000-0000-0000-000000000009')
+order by x.n;
+insert into public.reply_cards(company_id,conversation_id,run_id,call_id,kind,title,content,state,created_at)
+values ('10000000-0000-0000-0000-000000000001','62000000-0000-0000-0000-000000000009','design-compare-fixture-connect','call-0','connect','Amplitude',
+ '{"app":"amplitude","reason":"محتاجه عشان أضيف المبيعات للتقرير الأسبوعي قبل الخميس."}','open','2026-11-16T09:30:00Z')
 on conflict do nothing;
 
 commit;
