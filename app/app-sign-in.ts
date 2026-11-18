@@ -6,11 +6,20 @@
 // connect is logged there once. Used by an Agent's connect card (#203) and its details' Connect (#204).
 export type SignInOutcome={state:'connected'}|{error:'connectBlocked'|'connectFailed'};
 
-async function ask(body:Record<string,string>) {
- try {
-  const response=await fetch('/api/company-apps',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+// Each request, its answer's body included, ends within its own deadline or when the caller stops, so the caller is
+// always settled; the request is then aborted.
+const askFor=30*1000;
+type Answer={ok:boolean,body:Record<string,unknown>};
+async function ask(body:Record<string,string>,signal?:AbortSignal):Promise<Answer> {
+ const ended=new AbortController(); const end=()=>ended.abort();
+ const timer=setTimeout(end,askFor); signal?.addEventListener('abort',end,{once:true});
+ const failed:Answer={ok:false,body:{}};
+ const given=new Promise<Answer>(resolve=>ended.signal.addEventListener('abort',()=>resolve(failed),{once:true}));
+ const asked=(async()=>{ try {
+  const response=await fetch('/api/company-apps',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:ended.signal});
   return {ok:response.ok,body:await response.json().catch(()=>({})) as Record<string,unknown>};
- } catch { return {ok:false,body:{}}; }
+ } catch { return failed; } })();
+ try { return await Promise.race([asked,given]); } finally { clearTimeout(timer); signal?.removeEventListener('abort',end); end(); }
 }
 // A sign-in the Engine keeps for fifteen minutes is followed at most that long.
 const pollEvery=2000, pollFor=15*60*1000;
@@ -18,20 +27,22 @@ const pollEvery=2000, pollFor=15*60*1000;
 export async function signInToApp({company,agent,app,signal}:{company:string,agent:string,app:string,signal?:AbortSignal}):Promise<SignInOutcome> {
  const opened=window.open('about:blank','_blank');
  if(!opened) return {error:'connectBlocked'};
- const started=await ask({company,agent,app,action:'connect'});
- if(!started.ok||typeof started.body.url!=='string') { opened.close(); return {error:'connectFailed'}; }
- opened.opener=null; opened.location.href=started.body.url;
- const stop=()=>{ void fetch('/api/company-apps',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json'},body:JSON.stringify({company,agent,app,action:'cancel'})}).catch(()=>{}); opened.close(); };
+ // Every outcome but connected cancels the sign-in, in case one was made, and closes its window, once.
+ let stopped=false;
+ const stop=()=>{ if(stopped) return; stopped=true; void fetch('/api/company-apps',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json'},body:JSON.stringify({company,agent,app,action:'cancel'})}).catch(()=>{}); opened.close(); };
  signal?.addEventListener('abort',stop,{once:true});
  try {
+  const started=await ask({company,agent,app,action:'connect'},signal);
+  if(signal?.aborted||!started.ok||typeof started.body.url!=='string') { stop(); return {error:'connectFailed'}; }
+  opened.opener=null; opened.location.href=started.body.url;
   for(const until=Date.now()+pollFor;Date.now()<until;) {
    await new Promise(resolve=>setTimeout(resolve,pollEvery));
-   if(signal?.aborted) return {error:'connectFailed'};
-   const polled=await ask({company,agent,app,action:'poll'});
-   if(signal?.aborted) return {error:'connectFailed'};
+   if(signal?.aborted) break;
+   const polled=await ask({company,agent,app,action:'poll'},signal);
+   if(signal?.aborted) break;
    if(polled.ok&&polled.body.status==='connected') return {state:'connected'};
-   if(!(polled.ok&&polled.body.status==='waiting')) return {error:'connectFailed'};
+   if(!(polled.ok&&polled.body.status==='waiting')) break;
   }
-  return {error:'connectFailed'};
+  stop(); return {error:'connectFailed'};
  } finally { signal?.removeEventListener('abort',stop); }
 }
