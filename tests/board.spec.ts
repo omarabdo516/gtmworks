@@ -105,7 +105,7 @@ test('+ on Ideas adds an idea with its Agent, flashes and focuses the Card, rais
   const card=ideas.locator('.kcard').filter({hasText:title});
   await expect(card).toBeVisible();
   await expect(card.locator('.kcard__foot')).toContainText('Ads');
-  await expect(card.locator('.kcard__t')).toHaveText('New idea from Omar');
+  await expect(card.locator('.kcard__t')).toHaveText('New idea from عمر');
   await expect(card.locator('a')).toBeFocused();
   await expect(ideas.locator('.col__count')).toHaveText(String(before+1));
   // The new idea is the first Card in the column.
@@ -411,7 +411,8 @@ test('Shift with Up or Down moves the focused Card one place in its column, and 
 // #174: the order is every Member's; a place inside one column is not announced and writes no log row, and a move to
 // another column is both.
 test('a second Member sees the same order; a place inside a column is not announced or logged, a move to another column is',async({page,browser})=>{
- await page.setViewportSize({width:2200,height:900});
+ // A tall window keeps the whole Ideas column on screen: the cases before this one leave about ten Cards in it.
+ await page.setViewportSize({width:2200,height:2000});
  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
  const stamp=Date.now();
  const [a,b]=placeCards(stamp,2);
@@ -426,7 +427,7 @@ test('a second Member sees the same order; a place inside a column is not announ
  // The Manager, in a window of their own, reads the same order.
  const other=await browser.newContext(); const managerPage=await other.newPage();
  try {
-  await managerPage.setViewportSize({width:2200,height:900});
+  await managerPage.setViewportSize({width:2200,height:2000});
   await signIn(managerPage,'manager@example.com','/c/rs-learning/work/board');
   await expect.poll(()=>orderIn(managerPage,'ideas')).toEqual(shown);
  } finally { await other.close(); }
