@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { actionAllowed } from '@/lib/route-permissions.mjs';
-import { changeCompanySkill, changeCompanySkillEnabled, skillProblems } from '@/lib/company-skills.mjs';
+import { changeCompanySkill, skillProblems } from '@/lib/company-skills.mjs';
 import { answerRequest } from '@/lib/agent-requests.mjs';
 // Back to the skills screen: done, a refusal it names, or a failure, which is logged by its state only.
 function skillsScreen(action:string,path:string,state:string,done:string) {
@@ -20,12 +20,6 @@ export const writeSkill=withActionLog('writeSkill',async function writeSkill(for
  const file=form.get('file'); const content=file instanceof File?(file.size>128*1024?'':await file.text()):String(form.get('content')||'');
  const {state}=!await actionAllowed(db,'writeSkill',company)?{state:'notAllowed'}:await changeCompanySkill(db,{company,agent:form.get('agent'),content});
  skillsScreen('writeSkill',path,state,'written');
-});
-// One of an Agent's own skills switched on or off for that Agent alone, checked and logged as a write is.
-export const setSkillEnabled=withActionLog('setSkillEnabled',async function setSkillEnabled(form:FormData) {
- const db=await supabase(); const company=String(form.get('company')); const path=`/c/${String(form.get('slug'))}/skills`;
- const {state}=!await actionAllowed(db,'setSkillEnabled',company)?{state:'notAllowed'}:await changeCompanySkillEnabled(db,{company,agent:form.get('agent'),name:form.get('skill'),enabled:form.get('intent')==='enable'});
- skillsScreen('setSkillEnabled',path,state,'changed');
 });
 // Only an Owner or a Manager decides a learning suggestion (#25), from their own item in "Waiting on you"; the database
 // checks again, and an agent has no way to reach this action.

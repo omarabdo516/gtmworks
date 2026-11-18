@@ -988,5 +988,10 @@
   "logEdited": "Edited",
   "settingsPerModel": "Per model",
   "usageModel": "Model",
-  "usageHeaviest": "Heaviest agent"
+  "usageHeaviest": "Heaviest agent",
+  "settingsSkillsEmpty": "No skills yet. Tell {0} in the chat what it does, and it’ll suggest the skills it needs.",
+  "settingsSkillOn": "On",
+  "settingsSkillOff": "Off",
+  "settingsSkillLearned": "Learned on its own",
+  "settingsSkillsUnread": "The skills cannot be read right now."
 }

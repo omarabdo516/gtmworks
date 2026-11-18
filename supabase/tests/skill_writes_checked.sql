@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(14);
+select plan(15);
 -- Review of spec #340: a skill change in an Agent's Engine profile is the Owner's or a Manager's, checked here before the
 -- Engine is written, refused for a text that looks like a secret, and logged once as a row of the Company log naming the
 -- Agent and the skill. RS Learning: 1 Owner, 2 Manager, 3 Contributor, 4 Viewer; Aleem is another Company.
@@ -25,12 +25,15 @@ select throws_ok($$select public.log_skill_change('10000000-0000-0000-0000-00000
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
 select public.log_skill_change('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000071','weekly-recap','disabled');
 select is((select action from public.company_log where action like 'skill_%' order by id desc limit 1),'skill_disabled','a Manager switches a skill off, logged');
+select public.log_skill_change('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000071','ads-brief','disabled');
+select is((select jsonb_agg(details->>'skill' order by details->>'skill') from public.company_log where action='skill_disabled' and agent_id='e1000000-0000-0000-0000-000000000071'),
+ '["ads-brief", "weekly-recap"]'::jsonb,'two skills changed in one save are two log rows, each with its skill');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
 select throws_ok($$select public.check_skill_write('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000071','x')$$,'42501','skillNotAllowed','a Contributor may not');
 select throws_ok($$select public.log_skill_change('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000071','weekly-recap','enabled')$$,'42501','skillNotAllowed','nor log a change');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
 select throws_ok($$select public.check_skill_write('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000071','x')$$,'42501','skillNotAllowed','nor a Viewer');
-select is(pg_temp.skill_rows(),2::bigint,'refused changes write no log row');
+select is(pg_temp.skill_rows(),3::bigint,'refused changes write no log row');
 reset role;
 select ok(not has_function_privilege('anon','public.check_skill_write(uuid,uuid,text)','execute'),'no signed-out caller reaches the check');
 select hasnt_function('public','record_conversation_run',array['uuid','text','text','text','text','bigint','bigint'],'no Member records a Run''s end or session');

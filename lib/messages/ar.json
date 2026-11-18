@@ -988,5 +988,10 @@
   "logEdited": "اتعدّل",
   "settingsPerModel": "لكل موديل",
   "usageModel": "الموديل",
-  "usageHeaviest": "أكتر وكيل استهلاك"
+  "usageHeaviest": "أكتر وكيل استهلاك",
+  "settingsSkillsEmpty": "لسه مفيش مهارات. اكتب لـ {0} في الشات بيعمل إيه، وهو هيقترح المهارات اللي محتاجها.",
+  "settingsSkillOn": "شغالة",
+  "settingsSkillOff": "مقفولة",
+  "settingsSkillLearned": "اتعلّمها لوحده",
+  "settingsSkillsUnread": "مش قادرين نقرا المهارات دلوقتي."
 }
