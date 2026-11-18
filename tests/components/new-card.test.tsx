@@ -1,8 +1,11 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import type { ComponentProps } from 'react';
 import { cdp, userEvent } from 'vitest/browser';
+import { render } from 'vitest-browser-react';
 import type {} from '@vitest/browser-playwright';
-import { showWork, workProps } from './work-page';
+import NewCard from '@/app/c/[slug]/[[...section]]/new-card';
+import { LanguageProvider } from '@/lib/i18n-client';
+import { sent, showWork, workProps } from './work-page';
 
 const push = vi.hoisted(() => vi.fn<(href: string) => void>());
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push, refresh: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/work/board' }));
@@ -52,4 +55,16 @@ for (const language of ['en', 'ar'] as const) for (const width of [1440, 390]) t
  await expect.poll(() => { const box = dialog(screen).element().getBoundingClientRect(); return box.left >= 0 && box.top >= 0 && box.right <= width && box.bottom <= 900; }).toBe(true);
  await dialog(screen).getByRole('button', { name: language === 'en' ? 'Close' : 'إغلاق', exact: true }).click();
  await expect.element(dialog(screen)).not.toBeInTheDocument();
+});
+
+// #174, #188: a Card started in a column's own quick form carries the template it asks for. The board's "+" on Ideas
+// opens the column's idea form since #188, so the quick form is mounted here with the Ideas stage, as the board used to
+// open it: the form is what this guards, and the template's checklist is supabase/tests/work.sql's.
+test('a card started with the reel template asks for that template and sends it', async () => {
+ const props = workProps();
+ const screen = await render(<LanguageProvider language="en"><NewCard slug="rs-learning" company="co-1" agents={[]} members={[{ person_id: 'p-1', people: { name: 'Omar' } }]} stage={1} fromRoute={false} workAction={props.workAction} onClose={() => {}}/></LanguageProvider>);
+ await userEvent.fill(screen.getByLabelText('Card title'), 'اختبار ريل');
+ await userEvent.selectOptions(screen.getByRole('combobox', { name: /^Template/ }), 'reel');
+ await screen.getByRole('button', { name: 'Create card' }).click();
+ await expect.poll(() => sent(props)).toEqual([{ op: 'create', slug: 'rs-learning', company: 'co-1', stage: '1', title: 'اختبار ريل', template: 'reel' }]);
 });

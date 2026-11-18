@@ -2,7 +2,7 @@ import { afterEach, expect, test, vi } from 'vitest';
 import type { ComponentProps } from 'react';
 import { userEvent } from 'vitest/browser';
 import type {} from '@vitest/browser-playwright';
-import { card, sent, showWork, workProps, workView } from './work-page';
+import { card, placed, showWork, workProps, workView } from './work-page';
 
 // #168: a move to another column is told with "Undo" for six seconds, and "Undo" puts the Card back in the column it
 // left, with the keyboard on it and the reference's landing motion (none for a person who wants less motion).
@@ -27,7 +27,7 @@ test('a move to another column is told with Undo, and Undo puts the Card back wh
  const screen = await showWork(props);
  link(1).focus();
  await userEvent.keyboard('{Shift>}{ArrowRight}{/Shift}');
- await expect.poll(() => sent(props)).toEqual([{ op: 'place', company: 'co-1', slug: 'rs-learning', card: '1', column: 'planned', before: '' }]);
+ await expect.poll(() => placed(props)).toEqual([{ company: 'co-1', slug: 'rs-learning', card: '1', column: 'planned', before: '' }]);
  // The move is told with "Undo", and nothing happens until it is pressed.
  await expect.poll(() => toast).toHaveBeenCalledWith('Moved to “Planned”', { action: { label: 'Undo', run: expect.any(Function) } });
  expect(props.undoMove).not.toHaveBeenCalled();
@@ -81,12 +81,12 @@ test('a move the board refuses is told with no Undo', async () => {
  await userEvent.keyboard('{Shift>}{ArrowRight}{/Shift}');
  await expect.poll(() => toast).toHaveBeenCalledWith('This card is waiting for your decision. Decide in the chat first', { icon: 'hand' });
  expect(options()?.action).toBeUndefined();
- expect(sent(props)).toEqual([]);
+ expect(placed(props)).toEqual([]);
  // Nothing drops into "Waiting on you" either: it fills up by itself.
  vi.mocked(toast).mockClear();
  link(2).focus();
  await userEvent.keyboard('{Shift>}{ArrowLeft}{/Shift}');
  await expect.poll(() => toast).toHaveBeenCalledWith('“Waiting on you” fills up on its own when an agent needs your OK', { icon: 'clock' });
  expect(options()?.action).toBeUndefined();
- expect(sent(props)).toEqual([]);
+ expect(placed(props)).toEqual([]);
 });

@@ -19,20 +19,24 @@ create table public.work_card_moves (
  moved_at timestamptz not null default now(),
  foreign key(company_id,card_id) references public.work_cards(company_id,id)
 );
--- Only the Card table writes a move. A Member reads only their own moves, which is all "Undo" needs: another person's
--- moves, of Cards that may be hidden from this Member, stay theirs.
+-- Only the Card table writes a move. A Member reads only their own moves, on a Card they can see, which is all "Undo"
+-- needs: another person's moves, and the moves of a Card a chat's Agent hides from this Member, stay theirs.
 alter table public.work_card_moves enable row level security;
 revoke all on public.work_card_moves from anon,authenticated,service_role;
-create policy work_card_moves_read on public.work_card_moves for select to authenticated using (person_id=auth.uid() and public.is_member(company_id));
+create policy work_card_moves_read on public.work_card_moves for select to authenticated using (person_id=auth.uid() and public.is_member(company_id)
+ and exists(select 1 from public.work_cards w where w.company_id=work_card_moves.company_id and w.id=work_card_moves.card_id));
 grant select on public.work_card_moves to authenticated;
 create index work_card_moves_seek on public.work_card_moves(company_id,card_id,person_id,moved_at desc,id desc);
 
 -- The stage and place a Card left, and the stage and place it arrived at. place_work_card settles a board move's place in
 -- the same update as its stage (below), so the row names the place the Card really took. A move back is not a move to
--- undo in turn, and it is logged as its own row by work_audit, so neither is remembered here.
+-- undo in turn, and it is logged as its own row by work_audit, so neither is remembered here. A decision is the one move
+-- a person cannot take back: decide_approval writes the stage it gives the Card with approval.internal marked, and that
+-- write is not remembered, so "Undo" never offers the approver their own decision (#168).
 create function public.work_card_moved() returns trigger language plpgsql security definer set search_path='' as $$
 begin
- if new.stage_id is distinct from old.stage_id and coalesce(current_setting('work.undo',true),'')<>'yes' then
+ if new.stage_id is distinct from old.stage_id and coalesce(current_setting('work.undo',true),'')<>'yes'
+  and coalesce(current_setting('approval.internal',true),'')<>'yes' then
   insert into public.work_card_moves(company_id,card_id,person_id,from_stage_id,from_place,to_stage_id,to_place)
    values(new.company_id,new.id,auth.uid(),old.stage_id,old.board_order,new.stage_id,new.board_order);
  end if;
@@ -98,8 +102,8 @@ declare current_kind text; current_column text; stage bigint; arrived text; befo
  perform set_config('work.evidence',coalesce(evidence,''),true);
  perform set_config('work.place_exact','yes',true);
  update public.work_cards w set stage_id=coalesce(stage,w.stage_id),board_order=place where w.company_id=c and w.id=card;
+ if not found then perform set_config('work.place_exact','',true); raise exception 'card not found or not permitted'; end if;
  perform set_config('work.place_exact','',true);
- if not found then raise exception 'card not found or not permitted'; end if;
  return stage;
 end $$;
 revoke all on function public.place_work_card(uuid,bigint,text,bigint,text) from public,anon,service_role;
@@ -132,16 +136,16 @@ declare moved public.work_card_moves; current_stage bigint; current_place numeri
  perform set_config('work.undo','yes',true);
  perform set_config('work.place_exact','yes',true);
  update public.work_cards w set stage_id=moved.from_stage_id,board_order=moved.from_place where w.company_id=c and w.id=card;
+ if not found then perform set_config('work.place_exact','',true); perform set_config('work.undo','',true); raise exception 'card not found or not permitted'; end if;
  perform set_config('work.place_exact','',true);
  perform set_config('work.undo','',true);
- if not found then raise exception 'card not found or not permitted'; end if;
  return from_column;
 end $$;
 revoke all on function public.undo_work_card_move(uuid,bigint) from public,anon,service_role;
 grant execute on function public.undo_work_card_move(uuid,bigint) to authenticated;
 
 -- The way back is one row of its own, "moved the card back" (design-reference: undoMove's log line), with who made it and
--- the stage it left and returned to (20270215000000_add_idea's work_audit, unchanged else).
+-- the board column it left and returned to (20270215000000_add_idea's work_audit, unchanged else).
 create or replace function public.work_audit() returns trigger language plpgsql security definer set search_path='' as $$
 declare rowdata jsonb; previous jsonb; cid bigint; company uuid; field text; ev text; details jsonb; action_name text; begin
  rowdata=case when tg_op='DELETE' then to_jsonb(old) else to_jsonb(new) end;
@@ -152,7 +156,9 @@ declare rowdata jsonb; previous jsonb; cid bigint; company uuid; field text; ev 
   foreach field in array array['title','stage_id','offering','segment','hook','channel','format','go_live','goal','caption','next_actor','project_id'] loop
    if rowdata->field is distinct from previous->field then
     details=jsonb_build_object('field',field,'old',previous->field,'new',rowdata->field);
-    if field='stage_id' then details=details || jsonb_build_object('old_name',(select name from public.work_stages where id=(previous->>'stage_id')::bigint),'new_name',(select name from public.work_stages where id=(rowdata->>'stage_id')::bigint)); end if;
+    if field='stage_id' then details=details || jsonb_build_object('old_name',(select name from public.work_stages where id=(previous->>'stage_id')::bigint),'new_name',(select name from public.work_stages where id=(rowdata->>'stage_id')::bigint));
+     -- The way back (#168) is told by the board's columns, not the stages: it is the board's own "Undo".
+     if coalesce(current_setting('work.undo',true),'')='yes' then details=details || jsonb_build_object('old_column',(select board_column from public.work_stages where id=(previous->>'stage_id')::bigint),'new_column',(select board_column from public.work_stages where id=(rowdata->>'stage_id')::bigint)); end if; end if;
     if field='project_id' then details=details || jsonb_build_object('old_name',(select name from public.work_projects where id=(previous->>'project_id')::bigint),'new_name',(select name from public.work_projects where id=(rowdata->>'project_id')::bigint)); end if;
     insert into public.work_activity(company_id,card_id,actor_id,action,details,evidence) values(company,cid,auth.uid(),
      case when field='stage_id' and coalesce(current_setting('work.undo',true),'')='yes' then 'card_moved_back' else 'card_changed' end,details,ev);

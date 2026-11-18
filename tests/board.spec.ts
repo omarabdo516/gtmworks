@@ -443,6 +443,27 @@ test('a second Member sees the same order; a place inside a column is not announ
  await expect(page.locator('.detail-row').filter({hasText:'Moved the card from أفكار to بريف جاهز'})).toHaveCount(1);
 });
 
+// #168, #174: a place the server refuses keeps the board as it was: the Contributor is told in the page, stays on the
+// board and is offered no "Undo", and a reload shows the Card where it stood.
+test('a Contributor dropping a Card on Live is told it cannot move it, stays on the board with no Undo, and the Card stays put',async({page})=>{
+ await page.setViewportSize({width:2200,height:900});
+ await signIn(page,'reviewer@example.com','/c/rs-learning/work/board');
+ // Card 1 is seeded in Ideas; a Contributor moves Cards, but not into Live, which only the people who manage the Company do.
+ await expect(page.locator('.col[data-column="ideas"] .kcard[data-card-id="1"]')).toBeVisible();
+ const from=(await page.locator('.kcard[data-card-id="1"]').boundingBox())!,to=(await page.locator('.col[data-column="live"] .col__body').boundingBox())!;
+ await page.mouse.move(from.x+from.width/2,from.y+20);
+ await page.mouse.down();
+ await page.mouse.move(from.x+from.width/2+8,from.y+20,{steps:2});
+ await page.mouse.move(to.x+to.width/2,to.y+40,{steps:10});
+ await page.mouse.up();
+ await expect(page.locator('.work-error')).toHaveText('You cannot move the card to this stage.');
+ await expect(page).toHaveURL(/\/work\/board$/);
+ await expect(page.getByRole('button',{name:'Undo'})).toHaveCount(0);
+ await expect(page.locator('.col[data-column="ideas"] .kcard[data-card-id="1"]')).toBeVisible();
+ await page.reload();
+ expect(await columnOf(page,1)).toBe('ideas');
+});
+
 // #168: "Undo" on a move is offered for six seconds and puts the Card back in the stage it left, not only in its column;
 // the keyboard returns to it and the log keeps both rows. A move the board refuses offers no "Undo".
 test('a move to another column is offered as Undo, which puts the Card back in the stage and place it left, focused, with both log rows',async({page})=>{
@@ -471,7 +492,7 @@ test('a move to another column is offered as Undo, which puts the Card back in t
  // The log keeps one row for the move and one for the way back, each naming who and both stages.
  await page.goto(`/c/rs-learning/work/board/${a}`);
  await expect(page.locator('.detail-row').filter({hasText:'Moved the card from كتابة to بريف جاهز'})).toHaveCount(1);
- await expect(page.locator('.detail-row').filter({hasText:'Moved the card back from بريف جاهز to كتابة'})).toHaveCount(1);
+ await expect(page.locator('.detail-row').filter({hasText:'Moved the card back from Planned to In progress'})).toHaveCount(1);
  // The keyboard's move is told with "Undo" too, and its Undo brings the Card back again.
  await page.goto('/c/rs-learning/work/board');
  await page.locator(`.kcard[data-card-id="${a}"] a`).focus();
