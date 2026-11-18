@@ -469,6 +469,40 @@
 .gw .details .lib-empty { display: grid; justify-items: center; gap: 6px; padding: var(--s5) var(--s3); text-align: center; color: var(--gw-text-3); }
 .gw .details .lib-empty .gw-icon { width: 22px; height: 22px; }
 .gw .details .lib-empty p { margin: 0; font-size: var(--gw-fs-sm); line-height: 1.6; max-width: 32ch; text-wrap: pretty; }
+
+/* A file's read-only preview (#195; design-reference: .pv, .pv__inner, .pv-title, .pv__body, .pv-fig, .pv-img, .pv-article,
+   .modal.is-closing): a centred dialog over the page, the body scrolling between its head and its foot, and the foot's
+   Download. The leave runs 190ms, as closeDlg waits. */
+.gw dialog.pv {
+  position: fixed; inset: 0; margin: auto; display: block; padding: 0; border: 0;
+  width: min(760px, calc(100vw - 32px)); height: min(820px, calc(100dvh - 48px)); max-width: none; max-height: none;
+  border-radius: var(--gw-r-lg); background: var(--gw-bg-chrome); color: var(--gw-text-1); box-shadow: var(--gw-shadow-modal); overflow: hidden;
+  font-family: var(--gw-font); font-size: var(--gw-fs-base); line-height: 1.5; -webkit-font-smoothing: antialiased;
+}
+.gw dialog.pv::backdrop { background: var(--gw-bg-scrim); }
+.gw dialog.pv[open] { animation: gw-rise var(--gw-dur-slow) var(--gw-ease-out); }
+.gw dialog.pv.is-closing { animation: gw-modal-out 190ms var(--gw-ease-in) forwards; }
+.gw .pv__inner { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 100%; min-height: 0; }
+.gw .pv-title { overflow-wrap: anywhere; }
+.gw .pv__body { overflow-y: auto; min-height: 0; overscroll-behavior: contain; padding: var(--s2) var(--s6) var(--s6); display: flex; flex-direction: column; gap: var(--s4); }
+.gw .pv-text { margin: 0; font-family: inherit; font-size: var(--gw-fs-sm); line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+.gw .pv-fig { margin: 0; display: grid; justify-items: center; gap: var(--s2); }
+.gw .pv-img { display: block; max-width: 100%; max-height: min(540px, calc(100dvh - 300px)); width: auto; height: auto; border-radius: var(--gw-r-sm); box-shadow: var(--gw-border-2) 0 0 0 0.5px; }
+.gw .pv-none { display: grid; justify-items: center; gap: var(--s2); padding: var(--s6) 0; color: var(--gw-text-3); text-align: center; }
+.gw .pv-none .gw-icon { width: 40px; height: 40px; }
+.gw .pv-none span { font-size: var(--gw-fs-sm); overflow-wrap: anywhere; }
+.gw :is(.pv-more, .pv-note) { margin: 0; font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-3); }
+.gw .pv .table-wrap { overflow-x: auto; }
+.gw .pv .table { width: 100%; border-collapse: collapse; font-size: var(--gw-fs-sm); }
+.gw .pv .table th { text-align: start; font-weight: 400; color: var(--gw-text-3); padding: 0 var(--s2) var(--s2); border-bottom: 0.5px solid var(--gw-border-2); white-space: nowrap; background: none; }
+.gw .pv .table td { padding: var(--s3) var(--s2); border-bottom: 0.5px solid var(--gw-border-3); white-space: nowrap; }
+.gw .pv .table tbody tr:last-child :is(td, th) { border-bottom: 0; }
+.gw .pv .lib-thumb--lg { width: 44px; height: 44px; }
+.gw .pv .lib-thumb--lg .gw-icon { width: 22px; height: 22px; }
+@media (max-width: 599px) {
+  .gw dialog.pv { width: 100vw; height: 100dvh; border-radius: 0; }
+  .gw .pv__body { padding-inline: var(--s4); }
+}
 /* The Agent's memory (#350; design-reference: .mem-intro, .mem-know, .mem-main, .mem-note, .mem-confirm). Only the
    parts built are styled: the Add form, the search and the edit and forget controls arrive with #191 and #192. */
 .gw .details .mem-intro { margin: 0; padding-inline: var(--s3); font-size: var(--gw-fs-sm); line-height: 1.7; color: var(--gw-text-2); text-wrap: pretty; }

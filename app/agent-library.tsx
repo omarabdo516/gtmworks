@@ -7,29 +7,23 @@
 // its disk reaches this page: each row is a name, a size, a time and a folder or a file.
 import { useEffect, useRef, useState } from 'react';
 import { ShellIcon } from '@/components/shell-icon';
+import { FileName } from '@/components/file-name';
 import { useI18n } from '@/lib/i18n-client';
 import { fileSize } from '@/lib/agent-details.mjs';
 import { FeedWhen } from '@/app/c/[slug]/log/log-client';
 import { toast } from '@/app/toast';
+import { AgentFilePreview, type PreviewFile } from '@/app/agent-file-preview';
 import type { LibraryRow } from '@/lib/agent-files.mjs';
 
 // The folder last read, and the folder it was read for: a folder the reader has just opened is drawn as loading until
 // its own answer lands, without an effect setting the state it is already in.
 type Read={key:string,state:'loading'}|{key:string,state:'found',entries:LibraryRow[]}|{key:string,state:'failed'};
 
-// A file's name as the reference writes it (fname): an Arabic name keeps its extension at its end, a Latin one runs left
-// to right as a whole.
-function FileName({name}:{name:string}) {
- const at=name.lastIndexOf('.');
- const base=at>0?name.slice(0,at):name; const extension=at>0?name.slice(at):'';
- if(/^[A-Za-z0-9]/.test(base)) return <bdi dir="ltr">{name}</bdi>;
- return <><bdi dir="rtl">{base}</bdi>{extension?<bdi dir="ltr">{extension}</bdi>:null}</>;
-}
-
 export function AgentLibrary({company,slug,agent,name}:{company:string,slug:string;agent:string;name:string}) {
  const {t}=useI18n();
  const [path,setPath]=useState<string[]>([]);
  const [read,setRead]=useState<Read>({key:'',state:'loading'});
+ const [preview,setPreview]=useState<PreviewFile|null>(null);
  const rootHeading=useRef<HTMLHeadingElement>(null); const folderHeading=useRef<HTMLHeadingElement>(null);
  const rows=useRef(new Map<string,HTMLButtonElement>());
  // A move the reader made takes the focus where the reference puts it: the opened folder's own name, and on the way
@@ -65,6 +59,10 @@ export function AgentLibrary({company,slug,agent,name}:{company:string,slug:stri
  const count=path.length?entries?.length??0:(entries??[]).reduce((total,entry)=>total+(entry.isFolder?entry.files??0:1),0);
  const filesWord=(n:number)=>n===1?t('agentLibraryFilesOne'):n===2?t('agentLibraryFilesTwo'):n<=10?t('agentLibraryFilesFew',n):t('agentLibraryFilesMany',n);
  const download=(entry:LibraryRow)=>`/c/${encodeURIComponent(slug)}/agent-files/${encodeURIComponent(agent)}?${new URLSearchParams({...(path.length?{folder:path.join('/')}:{}),name:entry.name})}`;
+ // A file's row opens the read-only preview (#195), and however the dialog closes the keyboard comes back to that row.
+ const openFile=(entry:LibraryRow)=>setPreview({name:entry.name,folder:key,size:entry.size,time:entry.time});
+ const closePreview=()=>{ const row=preview?rows.current.get(preview.name):null; setPreview(null); row?.focus(); };
+ const dialog=preview&&<AgentFilePreview company={company} slug={slug} agent={agent} agentName={name} file={preview} onClosed={closePreview}/>;
 
  const list=entries&&entries.length?<ul className="panel-card">{entries.map(entry=>entry.isFolder?
   <li key={entry.name} className="panel-row lib-file"><button type="button" className="lib-file__main lib-folder" ref={node=>{ if(node) rows.current.set(entry.name,node); else rows.current.delete(entry.name); }} onClick={()=>open(entry.name)}>
@@ -75,11 +73,11 @@ export function AgentLibrary({company,slug,agent,name}:{company:string,slug:stri
    <ShellIcon name="chevron" className="lib-chev"/>
   </button></li>
   :<li key={entry.name} className="panel-row lib-file">
-   <span className="lib-file__main">
+   <button type="button" className="lib-file__main" aria-haspopup="dialog" ref={node=>{ if(node) rows.current.set(entry.name,node); else rows.current.delete(entry.name); }} onClick={()=>openFile(entry)}>
     <span className="lib-thumb"><ShellIcon name="file"/></span>
     <span className="panel-row__text"><span className="panel-row__t lib-1l" title={entry.name}><FileName name={entry.name}/></span>
      <span className="panel-row__d lib-1l">{entry.size===null?null:<bdi dir="ltr">{fileSize(entry.size)}</bdi>}{entry.time?<>{entry.size===null?null:' · '}<FeedWhen value={entry.time}/></>:null}</span></span>
-   </span>
+   </button>
    <a className="circle-btn lib-dl" href={download(entry)} download onClick={()=>toast(t('agentLibraryDownloading',entry.name),{icon:'download'})} aria-label={t('agentLibraryDownload',entry.name)} title={t('agentLibraryDownload',entry.name)}><ShellIcon name="download"/></a>
   </li>)}</ul>:null;
 
@@ -88,19 +86,19 @@ export function AgentLibrary({company,slug,agent,name}:{company:string,slug:stri
   :entries&&!entries.length?<div className="panel-card"><div className="lib-empty"><ShellIcon name="folder"/><p>{path.length?t('agentLibraryFolderEmpty'):t('agentLibraryEmpty',name)}</p></div></div>
   :null;
 
- if(!path.length) return <section className="dp-sec dp-library" aria-labelledby="dp-lib-h">
+ if(!path.length) return <><section className="dp-sec dp-library" aria-labelledby="dp-lib-h">
   <h3 className="dp-label" id="dp-lib-h" tabIndex={-1} ref={rootHeading}><span>{t('agentLibraryOf',name)} <span className="muted num">{count}</span></span></h3>
   {list??blank}
   <p className="lib-hint">{t('agentLibraryHint',name)}</p>
- </section>;
+ </section>{dialog}</>;
 
  const current=path[path.length-1];
- return <section className="dp-sec dp-library" aria-labelledby="dp-lib-cur">
+ return <><section className="dp-sec dp-library" aria-labelledby="dp-lib-cur">
   <nav className="lib-crumbs" aria-label={t('agentLibraryPlace')}>
    <button type="button" className="link-btn" onClick={up}>{t('agentLibraryOf',name)}</button>
    <ShellIcon name="chevron"/>
    <h3 className="lib-crumbs__cur" id="dp-lib-cur" tabIndex={-1} ref={folderHeading} aria-current="location">{current} <span className="muted num">{count}</span></h3>
   </nav>
   {list??blank}
- </section>;
+ </section>{dialog}</>;
 }
