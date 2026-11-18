@@ -40,7 +40,7 @@ export default function AgentChat({slug,company,agent,details,writer,team=false,
    <div className="composer-area" ref={composer}>{agent&&writer&&newAgent&&<div className="new-hint" role="note"><ShellIcon name="userPlus" className="new-hint__ic"/><p className="new-hint__t">{!askOf?t('newAgentHint',agent.name):askOf.length?t('newAgentHintMember',agent.name,new Intl.ListFormat(localeFor(language),{type:'conjunction'}).format(askOf)):t('newAgentHintMemberAnyOwner',agent.name)}</p>
     {!askOf&&<Link className="link-btn new-hint__alt" href={`/c/${slug}/chat?new=ready`}>{t('newAgentReadyMade')}</Link>}</div>}
     {agent&&gallery&&<Suspense fallback={null}><ReadyMade slug={slug} company={company} agent={agent.id} companyName={gallery.company} alone={gallery.alone} lead={agent.name} roles={gallery.roles}/></Suspense>}
-    {agent&&(writer?<MessageBox key={`${newAgent}`} ref={box} focus={newAgent&&!gallery} placeholder={newAgent?t('newAgentExample'):t('writeTo',agent.name)} send={async(message,sendKey)=>{
+    {agent&&(writer?<MessageBox key={`${newAgent}`} ref={box} focus={newAgent&&!gallery} placeholder={newAgent?t('newAgentExample'):t('writeTo',agent.name)} voice={{company,agent:agent.id}} send={async(message,sendKey)=>{
     const failure=await postMessage({company,conversation,agent:agent.id,message,sendKey});
     if(failure) return failure;
     // The page moves to the Conversation just started; until it has, the box stays busy, so neither a suggestion nor a

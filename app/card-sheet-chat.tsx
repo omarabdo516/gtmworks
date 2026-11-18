@@ -48,7 +48,7 @@ export function CardSheetChat({slug,company,card,chat,writer,shown,openLog}:{slu
    <h2>{t('sheetChatEmpty')}</h2>
    <p>{before}<bdi>{chat.agent.name}</bdi>{after}</p>
   </div></div></div>
-  <div className="composer-area">{writer?<MessageBox placeholder={t('writeTo',chat.agent.name)} send={async(message,sendKey)=>{
+  <div className="composer-area">{writer?<MessageBox placeholder={t('writeTo',chat.agent.name)} voice={{company,agent:chat.agent.id}} send={async(message,sendKey)=>{
    const failure=await postMessage({company,conversation:id,card,message,sendKey});
    if(failure==='sheetChatTaken') router.refresh();
    if(failure) return failure;

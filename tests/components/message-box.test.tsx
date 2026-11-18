@@ -12,7 +12,7 @@ import type { Language } from '@/lib/i18n.mjs';
 import '@/app/tokens.css';
 import '@/app/shell.css';
 
-afterEach(() => { vi.unstubAllGlobals(); });
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 type Send = (text: string, sendKey: string) => Promise<string | null>;
 const box = (props: { send: Send, stop?: { label: string, run: () => Promise<string | null> }, ref?: Ref<MessageBoxHandle>, call?: Callable, seen?: CallableAgent[] }, language: Language = 'en') =>
  render(<LanguageProvider language={language}><CallableAgentsProvider agents={props.seen ?? []}><MessageBox placeholder="Write" {...props}/></CallableAgentsProvider></LanguageProvider>);
@@ -276,4 +276,187 @@ test('in Arabic the list speaks the reference\'s words', async () => {
  const menu = screen.getByRole('listbox').element();
  expect([...menu.querySelectorAll('.menu__label')].map(label => label.textContent)).toEqual(['حد من الفريق', 'نادي وكيل']);
  expect(screen.getByRole('option').elements().map(option => option.textContent)).toEqual(['سسارة حسنمشاهد · بتقرا بس@سارة', 'Reachشغال · Runs Meta ads']);
+});
+// #160: voice dictation. The browser records, the Engine turns one recording into text for the Agent's own profile, and
+// the words go in where the caret was (design-reference: the mic press and click, Escape, the cross, 60 seconds, send,
+// the waveform, the dot and clock, insertAtCaret). A fake microphone and a fake recorder stand in for the device, and the
+// clock is fake, so a 400 ms hold and a 60 second recording are instant.
+type DataEvent = { data?: Blob };
+class FakeRecorder {
+ static made: FakeRecorder[] = [];
+ state = 'inactive'; mimeType: string; ondataavailable: (event: DataEvent) => void = () => {}; onstop: () => void = () => {};
+ constructor(public stream: unknown, options?: { mimeType?: string }) { this.mimeType = options?.mimeType ?? 'audio/webm'; FakeRecorder.made.push(this); }
+ start() { this.state = 'recording'; }
+ stop() {
+  if (this.state === 'inactive') return;
+  this.state = 'inactive';
+  this.ondataavailable({ data: new Blob(['voice sample'], { type: this.mimeType }) });
+  this.onstop();
+ }
+}
+const mic = (deny = false) => {
+ FakeRecorder.made = [];
+ const track = { stop: vi.fn() };
+ const stream = { getTracks: () => [track], getAudioTracks: () => [track] };
+ const getUserMedia = vi.spyOn(navigator.mediaDevices, 'getUserMedia').mockImplementation(deny ? async () => { throw new Error('denied'); } : async () => stream as unknown as MediaStream);
+ vi.stubGlobal('MediaRecorder', FakeRecorder);
+ return { getUserMedia, track };
+};
+type DictationReply = { text?: string, state?: string, language?: string | null, deferred?: boolean };
+const dictate = (reply: DictationReply = {}) => {
+ const calls: { url: string, body: Record<string, unknown> }[] = [];
+ let finish: (value: Response) => void = () => {};
+ const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+  if (init?.method !== 'POST') return Response.json(reply.language === null ? {} : { language: reply.language ?? 'en' });
+  calls.push({ url, body: JSON.parse(String(init.body)) });
+  if (reply.deferred) return new Promise<Response>(resolve => { finish = resolve; });
+  return Response.json(reply.state ? { state: reply.state } : { text: reply.text ?? '' });
+ });
+ vi.stubGlobal('fetch', fetchMock);
+ return { calls, finish: (value: Response) => finish(value), fetchMock };
+};
+const voice = { company: 'co-1', agent: 'ag-1' };
+const voiced = (props: Parameters<typeof box>[0], language: Language = 'en') => render(<LanguageProvider language={language}><MessageBox placeholder="Write" voice={voice} {...props} /></LanguageProvider>);
+const pointer = (element: Element, type: string) => act(async () => { element.dispatchEvent(new PointerEvent(type, { bubbles: true, button: 0, pointerId: 1 })); });
+const flush = () => act(async () => { await vi.advanceTimersByTimeAsync(0); });
+// A hold: pressed, longer than 400 ms, then released, which finishes the recording and keeps its words.
+const hold = async (element: Element) => {
+ await pointer(element, 'pointerdown'); await flush();
+ await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+ await pointer(element, 'pointerup'); await flush();
+};
+const field = (screen: { container: HTMLElement }) => screen.container.querySelector('textarea')!;
+const boxOf = (screen: Awaited<ReturnType<typeof voiced>>) => screen.container.querySelector<HTMLButtonElement>('.composer__mic')!;
+
+test('holding the microphone longer than 400 ms records until release and keeps the words at the caret', async () => {
+ vi.useFakeTimers(); mic(); const engine = dictate({ text: 'hello from the Engine' });
+ const send = vi.fn<Send>(async () => null); const screen = await voiced({ send });
+ const message = screen.getByRole('textbox', { name: 'Message' });
+ await userEvent.type(message, 'Plan the launch');
+ const button = boxOf(screen);
+ await pointer(button, 'pointerdown'); await flush();
+ expect(FakeRecorder.made[0].state).toBe('recording');
+ await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+ await expect.element(screen.getByText('Listening · English · release the button when you’re done')).toBeVisible();
+ const bars = () => Array.from(screen.container.querySelectorAll<HTMLElement>('.wave__bar')).map(bar => bar.style.transform);
+ expect(bars()).toHaveLength(28);
+ const moving = bars();
+ await act(async () => { await vi.advanceTimersByTimeAsync(140); });
+ expect(bars()).not.toEqual(moving);
+ await expect.element(screen.getByRole('button', { name: 'Finish recording' })).toHaveAttribute('aria-pressed', 'true');
+ await expect.element(screen.getByRole('button', { name: 'Finish recording' })).toHaveAttribute('title', 'Finish recording');
+ await expect.element(screen.getByRole('button', { name: 'Cancel recording' })).toBeVisible();
+ expect(screen.container.querySelector('.rec-dot')).not.toBeNull();
+ expect(screen.container.querySelector('.composer__rec')?.textContent).toBe('0:00');
+ // The recording came from the microphone and went to the Engine as one audio data URL.
+ await pointer(button, 'pointerup'); await act(async () => { await vi.advanceTimersByTimeAsync(0); await Promise.resolve(); });
+ await expect.poll(() => engine.calls.length).toBe(1);
+ expect(engine.calls[0].url).toBe('/api/dictation');
+ expect(engine.calls[0].body).toMatchObject({ company: 'co-1', agent: 'ag-1', mimeType: 'audio/webm' });
+ expect(String(engine.calls[0].body.dataUrl)).toMatch(/^data:audio\/webm;base64,/);
+ await expect.element(message).toHaveValue('Plan the launch hello from the Engine');
+ await expect.element(message).toHaveFocus();
+ expect(send).not.toHaveBeenCalled();
+});
+
+test('a quick click starts and a second click finishes; Escape and the cross cancel and insert nothing', async () => {
+ vi.useFakeTimers(); mic(); const engine = dictate({ text: 'never used' });
+ const screen = await voiced({ send: async () => null }); const button = boxOf(screen);
+ // A click is a short press: it records in click mode, with its own hint.
+ await pointer(button, 'pointerdown'); await flush(); await pointer(button, 'pointerup'); await flush();
+ await expect.element(screen.getByText('Listening · English · click again when you’re done, or Esc to cancel')).toBeVisible();
+ expect(screen.container.querySelector('.rec-dot')).not.toBeNull();
+ await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+ expect(screen.container.querySelector('.composer__rec')?.textContent).toBe('0:01');
+ await pointer(button, 'pointerdown'); await pointer(button, 'pointerup'); await flush();
+ // Escape cancels: the recording is dropped, the field comes back and nothing is sent.
+ await pointer(button, 'pointerdown'); await flush();
+ act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); }); await flush();
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('');
+ expect(engine.calls).toEqual([]);
+ // The cross cancels the same way.
+ await pointer(button, 'pointerdown'); await flush();
+ await expect.element(screen.getByRole('button', { name: 'Cancel recording' })).toBeVisible();
+ await screen.getByRole('button', { name: 'Cancel recording' }).click(); await flush();
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('');
+ expect(engine.calls).toEqual([]);
+});
+
+test('recording stops by itself at 60 seconds and keeps the words', async () => {
+ vi.useFakeTimers(); mic(); const engine = dictate({ text: 'the long thought' });
+ const screen = await voiced({ send: async () => null }); const button = boxOf(screen);
+ await pointer(button, 'pointerdown'); await flush(); await pointer(button, 'pointerup'); await flush();
+ await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+ await act(async () => { await vi.advanceTimersByTimeAsync(0); await Promise.resolve(); });
+ await expect.poll(() => engine.calls.length).toBe(1);
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('the long thought');
+ await expect.element(screen.getByRole('button', { name: 'Voice dictation: hold and talk, or click once to start' })).toBeVisible();
+});
+
+test('the waveform stands still with reduced motion', async () => {
+ vi.useFakeTimers(); mic();
+ vi.stubGlobal('matchMedia', (query: string) => ({ matches: query.includes('reduce'), media: query, addEventListener() {}, removeEventListener() {} }));
+ const screen = await voiced({ send: async () => null }); const button = boxOf(screen);
+ await pointer(button, 'pointerdown'); await flush();
+ const bars = () => Array.from(screen.container.querySelectorAll<HTMLElement>('.wave__bar')).map(bar => bar.style.transform);
+ const still = bars();
+ expect(still).toHaveLength(28);
+ await act(async () => { await vi.advanceTimersByTimeAsync(700); });
+ expect(bars()).toEqual(still);
+});
+
+test('a finished recording writes "Writing what you said…" then puts the words in at the caret, with a space before them, and focuses the field', async () => {
+ vi.useFakeTimers(); mic(); const engine = dictate({ deferred: true });
+ const screen = await voiced({ send: async () => null });
+ const message = screen.getByRole('textbox', { name: 'Message' });
+ await userEvent.type(message, 'Plan the launch'); field(screen).setSelectionRange(4, 4);
+ await hold(boxOf(screen));
+ await expect.element(message).toHaveAttribute('placeholder', 'Writing what you said…');
+ await act(async () => { engine.finish(Response.json({ text: 'hello world' })); await Promise.resolve(); await Promise.resolve(); });
+ await expect.element(message).toHaveValue('Plan hello world the launch');
+ await expect.element(message).toHaveFocus();
+ expect(field(screen).selectionStart).toBe(16);
+});
+
+test('silence inserts nothing and restores the placeholder', async () => {
+ vi.useFakeTimers(); mic(); dictate({ text: '   ' });
+ const screen = await voiced({ send: async () => null });
+ await hold(boxOf(screen));
+ await act(async () => { await vi.advanceTimersByTimeAsync(0); await Promise.resolve(); });
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('');
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveAttribute('placeholder', 'Write');
+});
+
+test('a refused microphone leaves the typed text untouched and says so under the composer', async () => {
+ vi.useFakeTimers(); mic(true); dictate();
+ const screen = await voiced({ send: async () => null });
+ await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), 'still here');
+ await pointer(boxOf(screen), 'pointerdown'); await flush();
+ await expect.element(screen.getByRole('alert')).toHaveTextContent('The microphone could not be opened. Allow it in the browser and try again.');
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('still here');
+ expect(screen.container.querySelector('.composer')?.classList.contains('is-rec')).toBe(false);
+});
+
+test('an Engine with no speech-to-text provider leaves the text untouched, says which piece is missing and quiets the microphone', async () => {
+ vi.useFakeTimers(); mic(); dictate({ state: 'unavailable' });
+ const screen = await voiced({ send: async () => null });
+ await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), 'still here');
+ await hold(boxOf(screen));
+ await act(async () => { await vi.advanceTimersByTimeAsync(0); await Promise.resolve(); });
+ await expect.element(screen.getByRole('alert')).toHaveTextContent('Voice dictation is unavailable: the Engine has no speech-to-text provider.');
+ await expect.element(screen.getByRole('button', { name: 'Voice dictation is unavailable: the Engine has no speech-to-text provider.' })).toHaveAttribute('aria-disabled', 'true');
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('still here');
+});
+
+test('sending a message while recording ends the recording and sends the typed text', async () => {
+ const send = vi.fn<Send>(async () => null);
+ const screen = await voiced({ send });
+ await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), 'Send this now');
+ vi.useFakeTimers(); mic(); dictate();
+ await pointer(boxOf(screen), 'pointerdown'); await flush();
+ await screen.getByRole('button', { name: 'Send' }).click(); await flush();
+ await expect.poll(() => send.mock.calls.length).toBe(1);
+ expect(send.mock.calls[0][0]).toBe('Send this now');
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('');
+ await expect.element(screen.getByRole('button', { name: 'Voice dictation: hold and talk, or click once to start' })).toBeVisible();
 });

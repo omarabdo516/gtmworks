@@ -9,6 +9,7 @@ import { ShellIcon } from '@/components/shell-icon';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { firstName } from '@/lib/channels';
 import { AppTile } from '@/components/app-tile';
+import { useComposerDictation, type DictationTarget } from './composer-mic';
 import { toast } from './toast';
 
 // Loaded when drawn, so a composer outside a Company's pages loads neither.
@@ -18,7 +19,8 @@ const ConnectApps=lazy(()=>import('./plus-menu-apps'));
 export const newId=()=>{const b=crypto.getRandomValues(new Uint8Array(16));b[6]=(b[6]&15)|64;b[8]=(b[8]&63)|128;const h=[...b].map(x=>x.toString(16).padStart(2,'0')).join('');return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;};
 
 // The reference's composer (design-reference: composerHTML): one rounded box with the "+" button, the text, the
-// microphone and the send arrow. Dictation is not built yet, so its button is drawn but says "Soon".
+// microphone and the send arrow. The microphone dictates (#160, app/composer-mic.tsx) for the Agent named by `voice`; a
+// box drawn without one (outside a Company) keeps the button, marked "Soon".
 // The "+" menu (#153; design-reference: plusMenuHTML): `call` names whom a channel's composer calls (its other Members,
 // then its Agents); every other composer calls the Agents this Member sees, as the sidebar lists them
 // (CallableAgentsProvider). New channel, Connect apps and Model (#158) read the page's Company and the reader's role
@@ -90,7 +92,7 @@ export function MentionPop({listId,label,items,index,pick}:{listId:string,label:
 }
 type SuggestionList={token:{type:string,q:string,start:number,end:number},items:Suggestion[],index:number};
 export type ModelTarget={company:string,conversation:string,agent:string};
-export function MessageBox({placeholder,label,send,stop,focus=false,call,model,refused,ref}:{placeholder:string,label?:string,send:(text:string,sendKey:string)=>Promise<string|null>,stop?:{label:string,run:()=>Promise<string|null>},focus?:boolean,call?:Callable,model?:ModelTarget,refused?:{key:string,text:string},ref?:Ref<MessageBoxHandle>}) {
+export function MessageBox({placeholder,label,send,stop,focus=false,call,model,refused,voice,ref}:{placeholder:string,label?:string,send:(text:string,sendKey:string)=>Promise<string|null>,stop?:{label:string,run:()=>Promise<string|null>},focus?:boolean,call?:Callable,model?:ModelTarget,refused?:{key:string,text:string},voice?:DictationTarget,ref?:Ref<MessageBoxHandle>}) {
  const {t}=useI18n(); const [text,setText]=useState(''); const [key,setKey]=useState(newId); const [busy,setBusy]=useState(false); const [error,setError]=useState('');
  const seen=useContext(CallableAgents); const callable=call??{people:[],agents:seen};
  // The suggestion list's token, entries and marked entry (#154); the field keeps the keyboard and points at the entry.
@@ -143,10 +145,14 @@ export function MessageBox({placeholder,label,send,stop,focus=false,call,model,r
   if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing) { event.preventDefault(); void submit(); }
  }
  useEffect(()=>{ const box=field.current; if(caret.current===null||!box) return; box.focus(); box.setSelectionRange(caret.current,caret.current); caret.current=null; },[text]);
+ // Recording takes the field's place, so the suggestion list and the "+" menu close as it starts (design-reference:
+ // startMic calls closePlus and closePop).
+ const dictation=useComposerDictation({target:voice,insert:insertAtCaret,field:()=>field.current?.focus(),onStart:()=>{ setList(null); setPlusOpen(false); }});
  const pathname=usePathname()??''; const search=useSearchParams()?.toString()??'';
  // An inert box (behind the phone drawer) leaves the request to the frame, which focuses it once the drawer has closed.
  useEffect(()=>{ const take=()=>{ if(field.current&&!field.current.closest('[inert]')&&takeComposerFocus(search?`${pathname}?${search}`:pathname)) field.current.focus(); }; take(); return onComposerFocus(take); },[pathname,search]);
  async function submit() {
+  if(dictation.recording) dictation.finish(false);
   if(!text.trim()||busy) return;
   setBusy(true); setError(''); setRefusalLine(false); setList(null);
   const failure=await send(text,key);
@@ -159,17 +165,20 @@ export function MessageBox({placeholder,label,send,stop,focus=false,call,model,r
   setBusy(false);
   if(failure) setError(failure);
  }
- return <div className="composer">
-  {list&&<MentionPop listId={listId} label={t('mentionSuggestions')} items={list.items} index={list.index} pick={pickEntry}/>}
+ return <div className={`composer${dictation.recording?' is-rec':''}`}>
+  {list&&!dictation.recording&&<MentionPop listId={listId} label={t('mentionSuggestions')} items={list.items} index={list.index} pick={pickEntry}/>}
   <div className="composer__row">
-   <PlusMenu open={plusOpen} setOpen={next=>{ if(next) setList(null); setPlusOpen(next); }} callable={callable} channel={!!call} model={model} insert={insertAtCaret} field={()=>field.current?.focus()} fail={setError}/>
-   <textarea ref={field} className="composer__input" dir="auto" rows={1} autoFocus={focus} readOnly={busy} aria-busy={busy} aria-label={label??t('conversationMessage')} placeholder={placeholder} value={text} aria-autocomplete="list" aria-expanded={!!list} aria-activedescendant={list?`${listId}-${list.index}`:undefined}
+   {dictation.recording?dictation.cancel:<PlusMenu open={plusOpen} setOpen={next=>{ if(next) setList(null); setPlusOpen(next); }} callable={callable} channel={!!call} model={model} insert={insertAtCaret} field={()=>field.current?.focus()} fail={setError}/>}
+   <textarea ref={field} className="composer__input" dir="auto" rows={1} autoFocus={focus} readOnly={busy} aria-busy={busy} aria-label={label??t('conversationMessage')} placeholder={dictation.writing?t('chatDictationWriting'):placeholder} value={text} aria-autocomplete="list" aria-expanded={!!list&&!dictation.recording} aria-activedescendant={list&&!dictation.recording?`${listId}-${list.index}`:undefined}
     onChange={event=>{ const value=event.target.value; setText(value); setKey(newId()); updateList(value,event.target.selectionStart??value.length); }} onKeyDown={typeKeys}/>
-   <button type="button" className="composer__btn composer__mic" aria-disabled="true" aria-label={`${t('chatDictation')} · ${t('soon')}`} title={t('soon')}><ShellIcon name="mic"/></button>
+   {dictation.recording&&dictation.wave}
+   {dictation.recording&&dictation.clock}
+   {voice?dictation.button:<button type="button" className="composer__btn composer__mic" aria-disabled="true" aria-label={`${t('chatDictation')} · ${t('soon')}`} title={t('soon')}><ShellIcon name="mic"/></button>}
    {stop&&!text.trim()?<button type="button" className="composer__send is-stop" aria-label={stop.label} title={stop.label} disabled={busy} onClick={()=>void halt(stop)}><svg className="gw-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/></svg></button>
    :<button type="button" className="composer__send" aria-label={t('conversationSend')} disabled={!text.trim()||busy} onClick={()=>void submit()}><ShellIcon name="send"/></button>}
   </div>
   {error&&<p role="alert" className="composer-error">{t(error)}</p>}
+  {dictation.error&&<p role="alert" className="composer-error">{t(dictation.error)}</p>}
  </div>;
 }
 

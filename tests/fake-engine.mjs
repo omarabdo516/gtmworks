@@ -23,7 +23,12 @@ export function fakeEngine() {
   // Each session's token use by id (#347); a session without one has unknown usage.
   sessionUsage:/** @type {Map<string,import('../lib/engine.mjs').SessionUsage>} */(new Map()),
   // The profile's apps by key and state (#203), or how a read of them fails.
-  apps:/** @type {Record<string,import('../lib/app-catalogue.mjs').AppState>|'refused'|'unreachable'|'failed'} */({})};
+  apps:/** @type {Record<string,import('../lib/app-catalogue.mjs').AppState>|'refused'|'unreachable'|'failed'} */({}),
+  // One recording as text (#160): the transcript the engine answers with ('' is silence), and the language its profile
+  // listens in; `transcription` replaces the answer with an unavailable, refused or failed one.
+  transcript:'The words the engine heard',
+  dictationLanguage:/** @type {string|null} */('en'),
+  transcription:/** @type {import('../lib/engine.mjs').Transcription['state']|null} */(null)};
  // Run ids are unique across fakes, as an engine's are: the database refuses a Member's run already used elsewhere (#287).
  const instance=randomUUID().slice(0,8);
  const runs=/** @type {FakeRun[]} */([]);
@@ -70,6 +75,11 @@ export function fakeEngine() {
    if(!run||run.stopped||run.reads>settings.pendingReads) return false;
    run.stopped=true; return true;
   },
+  async transcribe({dataUrl}) {
+   if(settings.transcription) return settings.transcription==='transcribed'?{state:'transcribed',text:settings.transcript}:{state:settings.transcription};
+   return dataUrl.startsWith('data:audio/')?{state:'transcribed',text:settings.transcript}:{state:'refused'};
+  },
+  async dictation() { return {state:'found',language:settings.dictationLanguage}; },
   async session(id) { const turns=settings.sessions.get(id); return turns?{state:'found',turns:structuredClone(turns),usage:settings.sessionUsage.get(id)??null}:{state:'missing',turns:null,usage:null}; },
   // A question still waited for takes the first answer; one answered already says so again; any other is gone.
   async answer(id,question,text) {

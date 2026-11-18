@@ -26,11 +26,18 @@ export type ProvidedAgent={state:'provided'|'noModel'|'forbidden'|'failed'|'refu
 export type RemovedAgent={state:'removed'|'missing'|'refused'|'unreachable'};
 // The apps of the profile an Engine is bound to (#203): each listed app the Engine offers it, with its state there.
 export type ProfileApps={state:'found',apps:{key:string,state:import('./app-catalogue.mjs').AppState}[]}|{state:'refused'|'unreachable'|'failed',apps:null};
+// One recording as text (#160): the transcript, or why there is none. `unavailable` is the engine saying it has no
+// speech-to-text provider to use; an empty transcript is silence, not an error.
+export type Transcription={state:'transcribed',text:string}|{state:'unavailable'|'refused'|'unreachable'|'failed'};
+// The language an Agent's profile listens in (`stt.language`); null when the profile detects it itself.
+export type DictationSettings={state:'found',language:string|null}|{state:'refused'|'unreachable'|'failed',language:null};
 export type ProviderKeys={state:'found',keys:import('./hermes.mjs').ProviderKey[]}|{state:'refused'|'unreachable'|'failed',keys:null};
 export type StartUnknown={readonly state:'unknown'};
 export function startOutcomeUnknown(result:unknown):result is StartUnknown;
 export type Engine={
  start(run:{conversation:string,input:string,idempotencyKey:string,instructions?:string,tools?:ToolSpec[],history?:HistoryEntry[],model?:ModelChoice,retry?:boolean}):Promise<string|null|StartUnknown>,
+ transcribe(audio:{dataUrl:string,mimeType:string}):Promise<Transcription>,
+ dictation?():Promise<DictationSettings>,
  read(run:string):Promise<RunState>,
  stop(run:string):Promise<boolean>,
  answer(run:string,question:string,text:string):Promise<AnsweredQuestion>,
