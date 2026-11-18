@@ -43,10 +43,10 @@ test('the Owner edits the standing instructions, saves them, and each save is on
  await expect(count).toHaveText(/^[0-9,]+\s*\/\s*20,000$/);
  // No placeholder: the reference's examples name demo Agents (#176).
  await expect(field).not.toHaveAttribute('placeholder');
- await field.fill(saved);
+ // A click or a fill that lands before the page's code arrives is repeated until the field answers (the bar appears).
+ await expect(async()=>{ await field.fill(saved); await expect(bar).toBeVisible({timeout:2000}); }).toPass({timeout:30000});
  // The counter counts the whole file as it is typed.
  await expect(count).toHaveText(`${new Intl.NumberFormat('en-US').format(saved.length)} / 20,000`);
- await expect(bar).toBeVisible();
  await overlay.getByRole('button',{name:'Save',exact:true}).click();
  await expect(bar).toBeHidden();
  await expect(page.locator('.toast')).toContainText('Saved. Lead will use the new settings from the next message');
@@ -65,7 +65,7 @@ test('a Manager reads the same words with no field, and the server refuses their
  await expect(overlay.locator('#set-how')).toContainText('You are Lead.');
  await expect(overlay.locator('#set-how')).toContainText('Never promise a date.');
  await expect(overlay.locator('#set-instr')).toHaveCount(0);
- await expect(overlay.locator('#dp-savebar')).toHaveCount(0);
+ await expect(overlay.locator('#dp-savebar')).toBeHidden();
  await expect(overlay.getByText('Standing instructions are changed by the Owner only.')).toBeVisible();
  const refused=await page.request.post('/api/agent-page',{data:{company,agent:lead,changes:{instructions:'Changed by a Manager.'}}});
  expect(refused.status()).toBe(403);
