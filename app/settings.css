@@ -128,6 +128,9 @@
 .gw .sov .switch[aria-checked="true"]::after { transform: translateX(-12px); background: var(--gw-bg-pane); }
 [dir="ltr"] .gw .sov .switch[aria-checked="true"]::after { transform: translateX(12px); }
 :root[data-theme="dark"] .gw .sov .switch[aria-checked="true"]::after { background: #121212; }
+/* A skill the Engine says the Agent learned on its own (#180; design-reference: .sk-learned). No version: the Engine
+   numbers none. Its link to the steps comes with #181. */
+.gw .sov .sk-learned { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 2px; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-2); --od-icon-size: 12px; }
 /* Not built yet: the reference's control, quieter, saying "Soon". */
 .gw .sov .switch[aria-disabled="true"] { opacity: .55; }
 .gw .sov .danger-confirm { display: grid; gap: var(--s2); padding: var(--s2); }

@@ -18,18 +18,25 @@ let firstField: HTMLElement | null = null;
 const emit = () => listeners.forEach(listener => listener());
 const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
 const differs = () => !!state && Object.keys(state.saved).some(key => state!.saved[key] !== state!.draft[key]);
-const same = (a: Values, b: Values) => Object.keys(a).every(key => a[key] === b[key]) && Object.keys(b).every(key => a[key] === b[key]);
 
-// The page's fields seed the draft with what the server read, once per Agent. Coming back to the same Agent keeps what
-// is saved; a new Agent (or a read that changed under no edit) starts from the new values.
+// The page's fields seed the draft with what the server read, once per Agent, each section with its own keys only: a
+// field that arrives later never wipes what another read, and coming back to the same Agent keeps what is saved. A key
+// the reader has edited keeps the draft; a new value from the server is what Cancel goes back to.
 /** @param {string} agent @param {Values} values */
 export function seedDraft(agent: string, values: Values) {
- if (state && state.agent === agent) {
-  if (!differs() && !same(state.saved, values)) { state = { agent, saved: { ...values }, draft: { ...values } }; emit(); }
+ if (!state || state.agent !== agent) {
+  state = { agent, saved: { ...values }, draft: { ...values } };
+  emit();
   return;
  }
- state = { agent, saved: { ...values }, draft: { ...values } };
- emit();
+ const saved = { ...state.saved, ...values };
+ const draft = { ...state.draft };
+ let changed = false;
+ for (const key of Object.keys(values)) {
+  if (state.saved[key] === state.draft[key] && state.draft[key] !== values[key]) { draft[key] = values[key]; changed = true; }
+  if (state.saved[key] !== values[key]) changed = true;
+ }
+ if (changed) { state = { agent, saved, draft }; emit(); }
 }
 
 /** @param {string} field @param {string} value */
@@ -51,7 +58,10 @@ export function restoreDraft() {
 /** @param {Values} saved */
 export function commitDraft(saved: Values) {
  if (!state) return;
- state = { agent: state.agent, saved: { ...saved }, draft: { ...saved } };
+ const next = { ...state.saved, ...saved };
+ const draft = { ...state.draft };
+ for (const key of Object.keys(saved)) draft[key] = saved[key];
+ state = { agent: state.agent, saved: next, draft };
  emit();
 }
 
@@ -73,6 +83,8 @@ export function holdLeave(nudge: string) {
 }
 
 export function useDraftDirty(agent: string) { return useSyncExternalStore(subscribe, () => state?.agent === agent && differs(), () => false); }
+// The whole draft for this Agent, the saved values beside it: the bar sends every key that differs in one request.
+export function useDraftState(agent: string) { return useSyncExternalStore(subscribe, () => state?.agent === agent ? state : null, () => null); }
 export function useBarFlash() { return useSyncExternalStore(subscribe, () => flashes, () => 0); }
 /** @param {string} agent @param {string} field @param {string} fallback */
 export function useDraftValue(agent: string, field: string, fallback: string) {

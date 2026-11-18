@@ -68,6 +68,10 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   appFlows:/** @type {Map<string,{server:string,profile:string,status:string,state:string,redirect:string}>} */(new Map()),appCallbacks:/** @type {string[]} */([]),
   // Each profile's own Skills by name (their SKILL.md text), and the Skills each profile locked, as `profile:name`.
   skills:/** @type {Map<string,Map<string,string>>} */(new Map()),skillLocks:/** @type {Set<string>} */(new Set()),skillsOff:/** @type {Set<string>} */(new Set()),
+  // The provenance `GET /api/skills` reports for a profile's own Skill (`hub`, `bundled` or `agent`), as `profile:name`;
+  // the shared folder's are always external. The Skills a profile learned on its own, whose learning graph node says
+  // `createdBy:"agent"` (#180).
+  skillProvenance:/** @type {Map<string,string>} */(new Map()),learnedSkills:/** @type {Map<string,Set<string>>} */(new Map()),
   // The provider keys a profile's .env takes (hermes_cli/web_routers/config_env.py 264-330): each provider's primary
   // password row, and rows that are not one (an alias, a URL, a tool's key). Each profile keeps its own values in `env`;
   // the root's are defaultEnv. A provider listed in providerModels offers those models once its key is set. A profile in
@@ -110,6 +114,12 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   return configurable.filter(name=>listed.includes(name)&&!disabled.includes(name));
  };
  const merge=(base,over)=>{ const out={...base}; for(const [key,value] of Object.entries(over||{})) out[key]=value&&typeof value==='object'&&!Array.isArray(value)&&base?.[key]&&typeof base[key]==='object'?merge(base[key],value):value; return out; };
+ // The description and category a SKILL.md's front matter gives it, as the Engine lists them.
+ const skillHeader=content=>{
+  const header=/^---\r?\n([\s\S]*?)\r?\n---/.exec(content||'')?.[1]||'';
+  const field=name=>(new RegExp(`(?:^|\\n)${name}:[ \\t]*["']?([^\\n"']*)["']?[ \\t]*(?:\\r?\\n|$)`).exec(header)?.[1]||'').trim();
+  return {description:field('description'),category:field('category')||null};
+ };
  const send=(response,code,body)=>{response.writeHead(code,{'Content-Type':'application/json',Location:'/must-not-follow'});response.end(JSON.stringify(body));};
  const server=createServer((request,response)=>{
   let raw=''; request.on('data',chunk=>{raw+=chunk;}); request.on('end',()=>{
@@ -367,13 +377,17 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
    if(skillsPath) {
     if(!home) return send(response,404,{detail:`Profile '${scoped}' does not exist.`});
     const owners=[scoped,...(home.config?.skills?.external_dirs||[]).map(folder=>/^\/opt\/data\/profiles\/([^/]+)\/skills$/.exec(folder)?.[1]).filter(owner=>settings.profiles.has(owner))];
-    const listed=owners.flatMap((owner,at)=>[...(settings.skills.get(owner)||new Map()).keys()].map(name=>({name,owner,provenance:at?'external':'agent'})));
+    const listed=[
+     {name:'hermes-agent',owner:scoped,provenance:'bundled',description:'',category:null},
+     ...owners.flatMap((owner,at)=>[...(settings.skills.get(owner)||new Map())].filter(([name])=>name!=='hermes-agent').map(([name,content])=>({
+      name,owner,content,provenance:at?'external':settings.skillProvenance.get(`${scoped}:${name}`)||'agent',...skillHeader(content)})))];
     const name=skillsPath[1]==='content'&&request.method==='GET'?url.searchParams.get('name'):body?.name;
     const found=listed.find(skill=>skill.name===name);
     const missing=()=>send(response,404,{detail:`Skill '${name}' not found.`});
-    if(!skillsPath[1]&&request.method==='GET') return send(response,200,listed.map(skill=>({name:skill.name,description:'',category:null,locked:settings.skillLocks.has(`${scoped}:${skill.name}`),enabled:!settings.skillsOff.has(`${scoped}:${skill.name}`),usage:0,provenance:skill.provenance})));
-    // A switch is the profile's own (skills.disabled), on any name, listed or not.
-    if(skillsPath[1]==='toggle'&&request.method==='PUT') { settings.skillsOff[body.enabled?'delete':'add'](`${scoped}:${name}`); return send(response,200,{ok:true,name,enabled:body.enabled}); }
+    if(!skillsPath[1]&&request.method==='GET') return send(response,200,listed.map(skill=>({name:skill.name,description:skill.description,category:skill.category,locked:settings.skillLocks.has(`${scoped}:${skill.name}`),enabled:skill.name==='hermes-agent'||!settings.skillsOff.has(`${scoped}:${skill.name}`),usage:0,provenance:skill.provenance})));
+    // A switch is the profile's own (skills.disabled), on any name, listed or not. The essential skill answers ok but
+    // stays on, as the Engine drops it from the disabled list (#180).
+    if(skillsPath[1]==='toggle'&&request.method==='PUT') { if(name!=='hermes-agent') settings.skillsOff[body.enabled?'delete':'add'](`${scoped}:${name}`); return send(response,200,{ok:true,name,enabled:body.enabled}); }
     if(!skillsPath[1]&&request.method==='POST') {
      if(found) return send(response,400,{detail:`A skill named '${name}' already exists.`});
      if(!settings.skills.has(scoped)) settings.skills.set(scoped,new Map());
@@ -384,6 +398,14 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     if(skillsPath[1]==='content'&&request.method==='GET') return send(response,200,{name,content:settings.skills.get(found.owner).get(name),path:`/opt/data/profiles/${found.owner}/skills/${name}/SKILL.md`});
     if(skillsPath[1]==='content'&&request.method==='PUT') { settings.skills.get(found.owner).set(name,body.content); return send(response,200,{success:true,message:`Skill '${name}' updated.`}); }
     if(skillsPath[1]==='lock'&&request.method==='PUT') { settings.skillLocks[body.locked?'add':'delete'](`${scoped}:${name}`); return send(response,200,{ok:true,name,locked:body.locked}); }
+   }
+   // What a profile learned on its own (#180; hermes_cli/web_routers/status.py 746, agent/learning_graph.py 218-245):
+   // skill nodes whose `createdBy` is "agent", beside memory nodes. Only the names and who wrote them matter here.
+   if(url.pathname==='/api/learning/graph'&&request.method==='GET') {
+    if(!home) return send(response,404,{detail:`Profile '${scoped}' does not exist.`});
+    const learned=[...(settings.learnedSkills.get(scoped)||[])];
+    return send(response,200,{nodes:[...learned.map(name=>({id:name,label:name,kind:'skill',createdBy:'agent'})),
+     {id:'memory-1',label:'A memory',kind:'memory',createdBy:'memory'}],edges:[],clusters:[],memory:[]});
    }
    // The model providers a profile is signed in to (hermes_cli/web_routers/models.py, get_model_options): a profile with
    // no credential of its own uses the root profile's, and its current provider without one is listed unauthenticated.
