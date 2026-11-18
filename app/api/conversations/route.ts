@@ -124,9 +124,9 @@ async function pickModel(db:Database,body:Record<string,unknown>) {
 
 // The models the Owner may pick from for their own Conversation: the Engine's own list for its Agent's profile, and the
 // one in use, the Conversation's choice or else the profile's own. Anyone else is answered as the database refuses them.
-async function models(db:Database,company:string,conversation:string) {
+async function models(db:Database,person:string,company:string,conversation:string) {
  if((await db.rpc('is_company_owner',{c:company})).data!==true) return refuse('conversationNotAllowed',403);
- const {data:found}=await db.from('conversations').select('model,hermes_agents(connection_id)').eq('id',conversation).eq('company_id',company).maybeSingle();
+ const {data:found}=await db.from('conversations').select('model,hermes_agents(connection_id)').eq('id',conversation).eq('company_id',company).eq('person_id',person).maybeSingle();
  const pinned=(found?.hermes_agents as {connection_id?:string}|null)?.connection_id;
  if(!found||!pinned) return refuse('conversationNotFound',404);
  const connection=await sendingConnection(service(),company,pinned,encryptionKey());
@@ -145,6 +145,9 @@ async function read(db:Database,person:string,company:string,conversation:string
  return reply(await conversationRecord(db,person,company,found,agent=>agentAppStates(company,agent)));
 }
 
+// Each write's intent and its handler; any other intent is a message to send.
+const writes={stop,answer,done,permit,model:pickModel,later};
+
 async function respond(request:NextRequest) {
  try {
   const db=await supabase(); const {data:{user}}=await db.auth.getUser();
@@ -159,14 +162,14 @@ async function respond(request:NextRequest) {
   // The route's permission (lib/route-permissions.mjs), with the role read now: a Viewer's send is refused here, and
   // the database refuses it again (conversation_can_write) before the engine is called.
   if(!await routeAllowed(db,'app/api/conversations/route.ts',request.method,body.company,user.id)) return refuse('conversationNotAllowed',403);
-  if(writing) return body.intent==='stop'?await stop(db,body):body.intent==='answer'?await answer(db,body):body.intent==='done'?await done(db,body):body.intent==='permit'?await permit(db,body):body.intent==='model'?await pickModel(db,body):body.intent==='later'?await later(db,body):await send(db,body);
+  if(writing) return await (typeof body.intent==='string'&&Object.hasOwn(writes,body.intent)?writes[body.intent as keyof typeof writes]:send)(db,body);
   if(body.conversation===undefined) {
    // What the composer needs: whether this person may chat (any Member but a Viewer, #287), and the company's agents.
    const {data:writer}=await db.rpc('conversation_can_write',{c:body.company});
    const {data:agents}=writer?await db.from('hermes_agents').select('id,connection_id,name,is_default').eq('company_id',body.company).order('name'):{data:[]};
    return reply({writer:!!writer,agents:agents||[]});
   }
-  if(body.intent==='models') return typeof body.conversation==='string'&&uuid.test(body.conversation)?await models(db,body.company,body.conversation):refuse('conversationNotFound',404);
+  if(body.intent==='models') return typeof body.conversation==='string'&&uuid.test(body.conversation)?await models(db,user.id,body.company,body.conversation):refuse('conversationNotFound',404);
   return typeof body.conversation==='string'&&uuid.test(body.conversation)?await read(db,user.id,body.company,body.conversation):refuse('conversationNotFound',404);
  } catch { logActionFailure('conversation',new Error('Conversation request failed')); return refuse('conversationFailed',400); }
 }

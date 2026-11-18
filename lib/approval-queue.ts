@@ -37,7 +37,7 @@ export const approvalQueue=cache(async(db:Awaited<ReturnType<typeof supabase>>,c
   ruleIds.length?db.from('waiting_items').select('id,agent_rules(body,hermes_agents(connection_id,name))').in('id',ruleIds):{data:[],error:null},
   requestIds.length?db.from('lead_agent_requests').select('id,apps,asked_with').eq('company_id',company).in('id',requestIds):{data:[],error:null},
   mentionIds.length?db.from('waiting_items').select('id,note_id,work_comments(body)').in('id',mentionIds):{data:[],error:null},
-  chats.length?db.from('conversations').select('id,agent_id').in('id',chats):{data:[],error:null},
+  chats.length?db.from('conversations').select('id,agent_id').eq('company_id',company).in('id',chats):{data:[],error:null},
   channelIds.length?db.from('channel_permissions').select('id,channel_id,channel_runs(agent_id)').eq('company_id',company).in('id',channelIds):{data:[],error:null},
  ]);
  type ChatRow={id:string,agent_id:string}; type ChannelRow={id:number,channel_id:string,channel_runs:{agent_id:string|null}|null};

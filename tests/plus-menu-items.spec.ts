@@ -108,6 +108,21 @@ test('a Manager has New channel, only the count, and no Model; a Contributor has
  await expect(menu(page).getByRole('menuitem',{name:/^Connect apps/}).locator('.menu__d')).toHaveText('1 connected');
 });
 
+// The Owner's Model is for their own Conversation only: the server reads no list and keeps no pick for another
+// Member's, and answers as if it were not there.
+test('the Owner reads no model list and picks no model for a Conversation that is not their own',async({page})=>{
+ await signIn(page,'manager@example.com',`/c/rs-learning/chat/${lead}`);
+ const conversation=await conversationWith(page,'Draft the newsletter');
+ await page.context().clearCookies();
+ await signIn(page,'omar@example.com',`/c/rs-learning/chat/${lead}`);
+ const list=await page.request.get(`/api/conversations?company=${company}&conversation=${conversation}&intent=models`);
+ expect(list.status()).toBe(404);
+ expect(await list.json()).toEqual({error:'conversationNotFound'});
+ const picked=await page.request.post('/api/conversations',{data:{company,conversation,intent:'model',choice:{provider:'openrouter',model:'openai/gpt-5.5'}}});
+ expect(picked.status()).toBe(404);
+ expect(rows(`select model from public.conversations where id='${conversation}'`)).toEqual([{model:null}]);
+});
+
 // #202 (design-reference: the open-apps case and the apps sheet's close): the sheet opens over the page with the
 // keyboard in its search; the address and the message being written stay, and closing it gives the focus back to the
 // "+" it was opened from, in a Conversation and in a channel.
