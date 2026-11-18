@@ -22,7 +22,7 @@ const initial=(name:string)=>name.trim().slice(0,1).toUpperCase()||'?';
 
 // One Member × Agent switch, or one on an invited row, kept with the invitation until the person joins. It turns at
 // once and goes back, with the reason, when the database refuses.
-export function AgentSwitch({company,target,agent,on,label,save}:{company:string,target:{member:string}|{invitation:string},agent:string,on:boolean,label:string,save:SaveSwitch}) {
+function AgentSwitch({company,target,agent,on,label,save}:{company:string,target:{member:string}|{invitation:string},agent:string,on:boolean,label:string,save:SaveSwitch}) {
  const {t}=useI18n(); const router=useRouter();
  const [checked,setChecked]=useState(on); const [pending,startTransition]=useTransition(); const [error,setError]=useState('');
  return <><button type="button" className="switch" role="switch" aria-checked={checked} aria-label={label} disabled={pending} onClick={()=>startTransition(async()=>{
