@@ -20,6 +20,7 @@ export default function AddIdea({company,slug,stage,agents,preferred,workAction,
   if(pending) return;
   const idea=title.trim();
   if(!idea) { setError(true); input.current?.focus({preventScroll:true}); return; }
+  if(!agent) return;
   setPending(true);
   const form=new FormData();
   form.set('op','idea'); form.set('company',company); form.set('slug',slug); form.set('stage',String(stage));
