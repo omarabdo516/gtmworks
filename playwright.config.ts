@@ -42,11 +42,11 @@ export default defineConfig({
     // functional test, and before first run.
     { name: 'measured-anchor', testMatch: /^$/, dependencies: ['seeded'], teardown: 'measured' },
     { name: 'functional-anchor', testMatch: /^$/, dependencies: ['measured-anchor'], teardown: 'functional' },
-    { name: 'functional', testIgnore: ['first-run.spec.ts', 'navigation.spec.ts', '**/proxy/**', 'visual-lane*.spec.ts'] },
+    { name: 'functional', testIgnore: ['first-run.spec.ts', 'fresh-install-journey.spec.ts', 'navigation.spec.ts', '**/proxy/**', 'visual-lane*.spec.ts'] },
     // CI measures the budgets in a job of their own on ubuntu-latest (`./ci.sh visual`), on a machine no other job
     // shares; `ci.sh integration` leaves this project empty, so it still orders the projects around it.
     { name: 'measured', testMatch: hostedElsewhere ? /^$/ : 'navigation.spec.ts', workers: 1 },
-    // Empty-install scenarios mutate the whole local database and run only after seeded functional tests finish.
-    { name: 'first-run', testMatch: 'first-run.spec.ts' },
+    // Empty-install scenarios (first run, and the whole journey from it, #329) mutate the whole local database and run only after seeded functional tests finish.
+    { name: 'first-run', testMatch: ['first-run.spec.ts', 'fresh-install-journey.spec.ts'] },
   ],
 });

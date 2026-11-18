@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { agency, reviewer } from './ui-words.mjs';
 
 // Nobody outside a Company's Members enters it and the reviewer Role is gone (ADR 0012), so no interface string names
-// an Agency or a reviewer. Arabic: the Agency stem is وكال (وكيل, an agent, is not); a reviewer is مراجع as a word,
-// while مراجعة (a review) stays.
+// an Agency or a reviewer (the terms: tests/ui-words.mjs).
 const catalogues={en:JSON.parse(readFileSync('lib/messages/en.json','utf8')),ar:JSON.parse(readFileSync('lib/messages/ar.json','utf8'))};
-const forbidden={en:[/agenc/i,/\breviewers?\b/i],ar:[/وكال/u,/(?<!\p{L})(?:[وفبل])?(?:ال)?مراجع(?:ون|ين|و)?(?!\p{L})/u]};
+const forbidden={en:[agency.en,reviewer.en],ar:[agency.ar,reviewer.ar]};
 
 function agencyTerms(language,messages) {
  return Object.entries(messages).flatMap(([key,value])=>forbidden[language].some(term=>term.test(key)||term.test(value))?[`${language}: ${key}: ${value}`]:[]);
