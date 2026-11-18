@@ -45,9 +45,16 @@ export async function keepMessageFiles(db:SupabaseClient,service:SupabaseClient,
  const rows=files.map((file,index)=>({position:index,name:file.name.slice(0,255)||'image',content_type:file.type.slice(0,127),size:file.size}));
  const {data,error}=await db.rpc(reserve,{...reserveArgs(place),files:rows});
  if(error) return {error:refusalOf(error.code,words)};
- // -1: the files of this send key are already a stored message's own, so there is nothing to write again; the send goes
- // on to its message, which the send key answers with the one it stored.
- if(typeof data==='number'&&data<0) return {};
+ // -1: the files of this send key are already a stored message's own; the send goes on to its message, which the send key
+ // answers with the one it stored. A file whose upload failed the first time is written now, and one already stored is
+ // never replaced (no upsert: "already exists" is the file being there). Its rows stay: they are the message's.
+ if(typeof data==='number'&&data<0) {
+  for(const [index,file] of files.entries()) {
+   const stored=await service.storage.from(bucket).upload(messageFilePath(place,index),Buffer.from(await file.arrayBuffer()),{contentType:rows[index].content_type,upsert:false});
+   if(stored.error&&!/exist|duplicate/i.test(stored.error.message)) return {error:words.failed};
+  }
+  return {};
+ }
  for(const [index,file] of files.entries()) {
   const path=messageFilePath(place,index);
   const stored=await service.storage.from(bucket).upload(path,Buffer.from(await file.arrayBuffer()),{contentType:rows[index].content_type,upsert:true});

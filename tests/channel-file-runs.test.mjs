@@ -19,8 +19,8 @@ const stored=[
 ];
 const imagePart=(type,base64)=>({type:'image_url',image_url:{url:`data:${type};base64,${base64}`}});
 
-/** @param {{mention?:boolean,attachments?:{content_type:string,path:string,bytes:string}[],refusePost?:boolean,failUpload?:boolean,failUploadAt?:number|null,discard?:string[],alreadyStored?:boolean}} [options] */
-function databases({mention=false,attachments=stored,refusePost=false,failUpload=false,failUploadAt=null,discard=[],alreadyStored=false}={}) {
+/** @param {{mention?:boolean,attachments?:{content_type:string,path:string,bytes:string}[],refusePost?:boolean,failUpload?:boolean,failUploadAt?:number|null,discard?:string[],alreadyStored?:boolean,inStorage?:string[]}} [options] */
+function databases({mention=false,attachments=stored,refusePost=false,failUpload=false,failUploadAt=null,discard=[],alreadyStored=false,inStorage=alreadyStored?[`${company}/channels/${channel}/q-0`,`${company}/channels/${channel}/q-1`]:[]}={}) {
  const calls=/** @type {[string,any][]} */([]);
  const uploads=/** @type {string[]} */([]);
  const removals=/** @type {string[][]} */([]);
@@ -40,7 +40,10 @@ function databases({mention=false,attachments=stored,refusePost=false,failUpload
  };
  const chain=(/** @type {unknown} */ data)=>{ const c={select:()=>c,eq:()=>c,order:async()=>ok(data)}; return c; };
  const storage={from:()=>({
-  upload:async(/** @type {string} */ path)=>{ if(failUpload||(failUploadAt!==null&&uploads.length===failUploadAt)) return {error:{message:'storage refused'}}; uploads.push(path); return {error:null}; },
+  upload:async(/** @type {string} */ path,/** @type {unknown} */ _bytes,/** @type {{upsert?:boolean}} */ options={})=>{ if(failUpload||(failUploadAt!==null&&uploads.length===failUploadAt)) return {error:{message:'storage refused'}};
+   // Storage refuses to write over a stored object unless asked to replace it.
+   if(!options.upsert&&inStorage.includes(path)) return {error:{message:'The resource already exists'}};
+   uploads.push(path); return {error:null}; },
   remove:async(/** @type {string[]} */ paths)=>{ removals.push(paths); return {error:null}; },
   download:async(/** @type {string} */ path)=>{ downloads.push(path); const file=attachments.find(each=>each.path===path);
    return file?{data:new Blob([file.bytes]),error:null}:{data:null,error:{message:'not found'}}; },
@@ -99,6 +102,14 @@ test('a retry of a send whose files a stored message already took keeps nothing 
  assert.deepEqual(stand.uploads,[],'a stored send uploads nothing a second time');
  assert.deepEqual(stand.calls.map(([name])=>name).slice(0,2),['reserve_channel_files','post_channel_message']);
  assert.equal(fake.runs.length,0,'the stored message starts no second Run');
+});
+
+test('a retry of a stored send whose first upload failed writes the missing image, and never replaces the stored one',async()=>{
+ const fake=fakeEngine(); const stand=databases({alreadyStored:true,inStorage:[`${company}/channels/${channel}/q-0`]});
+ const sent=await postChannelMessage(stand.db,stand.service,{company,channel,sendKey:'q',message:'@Faye look',files,hermes,engineFor:fake.engineFor});
+ assert.deepEqual(sent,{message:7});
+ assert.deepEqual(stand.uploads,[`${company}/channels/${channel}/q-1`],'only the image missing from storage is written');
+ assert.deepEqual(stand.removals,[],'nothing of the stored message is removed');
 });
 
 test('an image-only retry of a stored send answers that message, with its images kept',async()=>{

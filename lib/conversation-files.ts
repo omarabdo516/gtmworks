@@ -23,8 +23,8 @@ export async function conversationExists(db:SupabaseClient,company:string,conver
 
 // Keeps a sent message's images with it: the rows first, under the database's own check (reserve_conversation_files
 // refuses another person's Conversation, a Viewer and an image the Engine cannot read, and answers -1 for a send key
-// whose files a stored message already took, so nothing is uploaded again), then the bytes in the Company's folder, at
-// the paths the database built.
+// whose files a stored message already took, so only a file missing from storage is written, never over a stored one),
+// then the bytes in the Company's folder, at the paths the database built.
 export async function keepConversationFiles(db:SupabaseClient,service:SupabaseClient,{company,conversation,messageKey,files}:{company:string,conversation:string,messageKey:string,files:File[]}):Promise<{error?:string}> {
  return keepMessageFiles(db,service,{place:placeOf(company,conversation,messageKey),files,reserve,reserveArgs,discard,discardArgs,words});
 }
