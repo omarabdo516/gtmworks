@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { overlaySections, visibleSections, pickSection, overlayHref, closeTarget, agentsMainFirst, usageTotals, companyKnowledgeHref } from '../lib/settings-overlay.mjs';
+import { overlaySections, visibleSections, pickSection, overlayHref, closeTarget, agentsMainFirst, usageTotals, companyKnowledgeHref, agentTab, agentTabFocus, memoryAgent } from '../lib/settings-overlay.mjs';
 import { messages } from '../lib/i18n.mjs';
 
 test('the overlay lists the reference’s ten sections in its order, Your account under “You”', () => {
@@ -51,6 +51,26 @@ test('closing returns to the page Settings was opened from, never outside the co
 test('the Agents list puts the main Agent first and keeps the others in order', () => {
   const agents = [{ id: 'a', is_default: false }, { id: 'b', is_default: true }, { id: 'c', is_default: false }];
   assert.deepEqual(agentsMainFirst(agents).map(agent => agent.id), ['b', 'a', 'c']);
+});
+
+// #193: the Memory tab of an Agent's page is a real tab with its own address, and the address opens it with the focus.
+test('an Agent’s Memory tab has its own address and opens with the focus on it', () => {
+  assert.equal(overlayHref('rs', 'agents', { agent: 'a-1', tab: 'memory' }), '/c/rs/settings?agent=a-1&tab=memory');
+  assert.equal(overlayHref('rs', 'agents', { agent: 'a-1' }), '/c/rs/settings?agent=a-1');
+  assert.equal(agentTab('memory'), 'memory');
+  for (const other of [undefined, '', 'settings', 'anything']) assert.equal(agentTab(other), 'settings', String(other));
+  assert.equal(agentTabFocus('memory'), 'sov-tab-memory');
+  assert.equal(agentTabFocus('settings'), 'sov-tab-settings');
+});
+
+// #193: Company knowledge links to the memory of the first Agent the reader sees that is not the main one, or to the main
+// Agent when there is no other; a reader who sees no Agent is offered no link.
+test('Company knowledge opens the memory of the first Agent that is not main, else the main one', () => {
+  const main = { id: 'main', is_default: true }, ads = { id: 'ads', is_default: false }, seo = { id: 'seo', is_default: false };
+  assert.equal(memoryAgent([main, ads, seo]).id, 'ads');
+  assert.equal(memoryAgent([seo, main]).id, 'seo');
+  assert.equal(memoryAgent([main]).id, 'main');
+  assert.equal(memoryAgent([]), null);
 });
 
 // #347: the period is Hermes's (its usage analytics over the days asked); the totals add up this company's profiles.

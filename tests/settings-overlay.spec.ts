@@ -101,9 +101,14 @@ test('the Owner sees the company’s real Agents, main first, and makes another 
   await expect(page).toHaveURL(new RegExp(`\\?agent=${ads}$`));
   await expect(overlay.locator('#set-name')).toHaveValue('Ads');
   await expect(overlay.locator('#set-role')).toHaveValue('Ads agent');
-  // The Memory tab is not built yet: drawn, disabled, saying Soon.
-  await expect(overlay.locator('#sov-tab-memory')).toHaveAttribute('aria-disabled','true');
-  await expect(overlay.locator('#sov-tab-memory')).toHaveAttribute('title','Soon');
+  // The Memory tab (#193) is a real tab with its own address; with no Engine profile to read it says so.
+  await overlay.locator('#sov-tab-memory').click();
+  await expect(page).toHaveURL(new RegExp(`\\?agent=${ads}&tab=memory$`));
+  await expect(overlay.locator('#sov-tab-memory')).toHaveAttribute('aria-selected','true');
+  await expect(overlay.locator('#sov-agent-panel')).toContainText(/What Ads remembers|Its memory can’t be read right now/);
+  await overlay.locator('#sov-tab-settings').click();
+  await expect(page).toHaveURL(new RegExp(`\\?agent=${ads}$`));
+  await expect(overlay.locator('#set-name')).toHaveValue('Ads');
   await overlay.locator('#set-make-main').click();
   await expect(overlay.locator('.dp-id__name')).toContainText('Main');
   await expect.poll(()=>JSON.parse(query(`select is_default from public.hermes_agents where id='${ads}'`))[0].is_default).toBe(true);
