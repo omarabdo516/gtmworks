@@ -1,4 +1,5 @@
 import type { supabase } from './supabase';
+import { agentStatus, type AgentStatus } from './agent-details.mjs';
 import { replyCardOf, type PermissionChoice, type ReplyCard } from './conversations';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
@@ -12,8 +13,9 @@ export type ChannelMessage=
  | {id:number,author:'agent',name:string,face:string,body:string,at:string};
 export type ChannelName={kind:'general'}|{kind:'team',name:string};
 export type ChannelSummary=ChannelName&{id:string,unread:number};
-// `only`: shown to the reader in this channel and hidden from them everywhere else.
-export type ChannelAgent={id:string,connection_id:string,name:string,speciality:string,main:boolean,only:boolean};
+// `only`: shown to the reader in this channel and hidden from them everywhere else. `state` is the Agent's own state
+// (#206), with a Run started by a call in this channel counting as working; never whom that work is for or on what.
+export type ChannelAgent={id:string,connection_id:string,name:string,speciality:string,main:boolean,only:boolean,state:AgentStatus};
 export type ChannelRecord={
  channel:{id:string,company:string}&ChannelName,
  members:{person:string,name:string,role:MemberRole}[],
@@ -52,17 +54,23 @@ export async function channelRecord(db:Database,person:string,company:string,cha
  // Runs first: a Run closed between the two reads then shows its reply too (both are written in one transaction). Each
  // Run has its own message, so the latest Runs by message cover every Run of the messages shown.
  const runs=((await db.from('channel_runs').select('message_id,agent_id,agent_name,outcome').eq('channel_id',channel).order('message_id',{ascending:false}).limit(shownMessages)).data||[]) as StoredRun[];
- const {count:waiting}=await db.from('channel_runs').select('message_id',{count:'exact',head:true}).eq('channel_id',channel).is('outcome',null);
+ const {data:openRuns}=await db.from('channel_runs').select('agent_id').eq('channel_id',channel).is('outcome',null);
  const latest=((await db.from('channel_messages').select('id,author,person_id,agent_id,author_name,body,created_at').eq('channel_id',channel).order('id',{ascending:false}).limit(shownMessages)).data||[]) as StoredMessage[];
  const {data:members}=await db.rpc('channel_members',{ch:channel});
  // A team channel's Agents come with it, also one hidden from the reader elsewhere, so its replies keep their face.
  const {data:agents}=await db.rpc('channel_agent_list',{ch:channel});
+ // Each Agent's own state (#206): what waits on the reader, and its open Runs. It runs as the reader, so only their own
+ // state comes back, and only the state is kept below.
+ const {data:states}=await db.rpc('agent_states',{c:company});
  const {data:writer}=await db.rpc('conversation_can_write',{c:company});
  const {data:manager}=await db.rpc('can_manage_company',{target:company});
  const {data:may}=await db.rpc('permission_choices',{c:company});
  const asked=runs.length?((await db.from('channel_permissions').select('id,message_id,title,content,state,decided_at,created_at').eq('channel_id',channel).gte('message_id',runs.at(-1)!.message_id).order('id')).data||[]) as StoredPermission[]:[];
  const people=(members||[]) as {person:string,name:string,role:MemberRole}[];
  const seen=(agents||[]) as StoredAgent[];
+ // A Run open in this channel counts as its Agent working, in addition to the Runs the Agent's own state sees.
+ const working=new Set(((openRuns||[]) as {agent_id:string|null}[]).flatMap(run=>run.agent_id??[]));
+ const stateOfAgent=new Map(((states||[]) as {agent:string,running:boolean,waiting_mine:boolean}[]).map(row=>[row.agent,row]));
  // Only who is in a team channel can change it (set_channel_person, set_channel_agent), so only they are named: the
  // Owner first, then the Managers.
  const managers=name.kind==='team'?(['owner','manager'] as const).flatMap(role=>people.filter(member=>member.role===role&&member.name).map(member=>({name:member.name,role}))):[];
@@ -79,12 +87,16 @@ export async function channelRecord(db:Database,person:string,company:string,cha
  return {
   channel:{id:found.id,company:found.company_id,...name},
   members:people,
-  agents:seen.map(agent=>({id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.main,only:agent.here_only})),
+  agents:seen.map(agent=>{
+   const own=stateOfAgent.get(agent.id);
+   return {id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.main,only:agent.here_only,
+    state:agentStatus({waitingMine:own?.waiting_mine??false,running:(own?.running??false)||working.has(agent.id)})};
+  }),
   writer:!!writer,
   manage:!!manager&&name.kind==='team',
   managers,
   messages,
-  open:(waiting??0)>0,
+  open:((openRuns||[]) as {agent_id:string|null}[]).length>0,
   may:(may||[]) as PermissionChoice[],
  };
 }
