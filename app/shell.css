@@ -727,10 +727,10 @@
 .gw .reply-card .chip {
   display: inline-flex; align-items: center; height: 34px; padding: 0 12px; border-radius: var(--gw-r-full);
   background: var(--gw-bg-pane); box-shadow: var(--gw-border-2) 0 0 0 0.5px inset; font-size: var(--gw-fs-sm);
-  line-height: 1; color: var(--gw-text-1); white-space: nowrap;
+  line-height: 1; color: var(--gw-text-1); white-space: nowrap; transition: background-color var(--gw-dur-fast) var(--gw-ease-out);
 }
 @media (hover: hover) { .gw .reply-card .chip:hover { background: var(--gw-bg-elevated-hover); } }
-.gw .reply-card--ask1.is-resolved .card__outcome { padding-top: 10px; }
+.gw .reply-card--ask1.is-resolved .card__outcome { padding-top: 8px; }
 /* A step handed to the person (#139; design-reference: .hcard, .ck-badge, .card__actions, .card__outcome, .card.is-resolved,
    .card.is-just): the badge, the app's tile, the title, its rows, then "Open the draft" and "Done it"; once done, the
    outcome line with its check, which draws on the page where it was pressed. */
