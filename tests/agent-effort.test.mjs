@@ -129,8 +129,10 @@ test('the models section reads each Agent\'s own level, an absent one as medium'
   Object.assign(fake.settings.profiles.get(co),{provider:'openrouter',model:'openai/gpt-5.5'});
   Object.assign(fake.settings.profiles.get(own(writer)),{provider:'anthropic',model:'claude-opus-4-6'});
   fake.settings.profiles.get(co).config={agent:{reasoning_effort:'high'}};
+  fake.settings.profiles.get(own(writer)).config={agent:{reasoning_effort:'loud'}};
   const {db}=database();
   const read=await readCompanyModels(db,{company,owner:false,hermes:install(fake),driver:driver(fake)});
+  // Lead saved none and the Writer saved a level the Engine does not have: both read as the reference's Medium.
   assert.deepEqual(read.models.agents.map(agent=>[agent.name,agent.effort]),[['Lead','high'],['Writer','medium'],['Helper','high']]);
  } finally { await fake.close(); }
 });
