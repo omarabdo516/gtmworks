@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useI18n } from '@/lib/i18n-client';
 import { toast } from './toast';
-import { commitDraft, registerFirstField, registerSave, restoreDraft, seedDraft, setDraftValue, useBarFlash, useDraftDirty, useDraftValue } from './settings-draft';
+import { commitPatch, registerFirstField, registerSave, restoreDraft, seedDraft, setDraftValue, useBarFlash, useDraftChanges, useDraftDirty, useDraftValue } from './settings-draft';
 
 // An Agent's page in Settings (#161; design-reference: settingsHTML's About and sovAgentHTML's save bar). The fields
 // hold a draft until Save, and the bar appears at the bottom of the page as soon as it differs from what was saved.
@@ -25,11 +25,15 @@ export function AgentAbout({agent,name,description}:{agent:string,name:string,de
 }
 
 // The page's save bar: hidden until the draft differs. Cancel puts back what was saved and the focus on the first field;
-// Save sends the changed fields, then shows what the Engine kept. Every way out of the page asks the shared store first,
-// which flashes this bar and focuses Save.
+// Save sends every changed field in one request, then shows what the Engine kept. Each section is one part of `changes`
+// (About's words, the Voice section's values), so a field added later joins the same save. Every way out of the page asks
+// the shared store first, which flashes this bar and focuses Save.
 export function AgentSaveBar({company,agent,name}:{company:string,agent:string,name:string}) {
  const {t}=useI18n();
- const about=useDraftValue(agent,'about','');
+ const changed=useDraftChanges(agent);
+ const language=useDraftValue(agent,'voice.language','');
+ const speed=useDraftValue(agent,'voice.speed','1');
+ const voice=useDraftValue(agent,'voice.voice','');
  const dirty=useDraftDirty(agent);
  const flash=useBarFlash();
  const [saving,setSaving]=useState(false);
@@ -49,11 +53,29 @@ export function AgentSaveBar({company,agent,name}:{company:string,agent:string,n
  const discard=()=>{ setFailed(false); restoreDraft(); toast(t('settingsBackSaved'),{icon:'x'}); };
  const write=async()=>{
   setSaving(true); setFailed(false);
+  const changes:Record<string,unknown>={};
+  if('about' in changed) changes.about=changed.about;
+  if(['voice.language','voice.speed','voice.voice'].some(key=>key in changed))
+   changes.voice={language,speed,...(voice?{voice}:{})};
   try {
-   const response=await fetch('/api/agent-page',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company,agent,changes:{about}})});
+   const response=await fetch('/api/agent-page',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company,agent,changes})});
    const answer=await response.json().catch(()=>null);
-   if(!response.ok||typeof answer?.saved?.about!=='string') { setFailed(true); return; }
-   commitDraft({about:answer.saved.about});
+   const kept=answer?.saved;
+   if(!response.ok||!kept||typeof kept!=='object') { setFailed(true); return; }
+   /** @type {Record<string,string>} */
+   const patch:Record<string,string>={};
+   if(changes.about!==undefined) {
+    if(typeof kept.about!=='string') { setFailed(true); return; }
+    patch.about=kept.about;
+   }
+   if(changes.voice!==undefined) {
+    const keptVoice=kept.voice;
+    if(!keptVoice||typeof keptVoice.language!=='string'||typeof keptVoice.speed!=='number') { setFailed(true); return; }
+    patch['voice.language']=keptVoice.language;
+    patch['voice.speed']=String(keptVoice.speed);
+    if(typeof keptVoice.voice==='string') patch['voice.voice']=keptVoice.voice;
+   }
+   commitPatch(patch);
    toast(t('settingsSaved',name));
   } catch { setFailed(true); } finally { setSaving(false); }
  };

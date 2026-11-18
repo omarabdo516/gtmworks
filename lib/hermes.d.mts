@@ -38,6 +38,11 @@ export function readSavedConfig(connection:import('./engine.mjs').EngineConnecti
 export function readConfigDefaults(connection:import('./engine.mjs').EngineConnection):Promise<{state:'found',config:Record<string,unknown>}|{state:'refused'|'unreachable'|'failed',config:null}>;
 export function readConfigSchema(connection:import('./engine.mjs').EngineConnection):Promise<{state:'found',schema:{fields:Record<string,{type?:string,options?:unknown[]}>,category_order?:string[]}}|{state:'refused'|'unreachable'|'failed',schema:null}>;
 export function writeConfig(connection:import('./engine.mjs').EngineConnection,config:Record<string,unknown>):Promise<{state:'written'|'refused'|'unreachable'|'failed'}>;
+export type VoiceChoice={id:string,name:string,label:string};
+export type VoiceList={state:'found',available:boolean,voices:VoiceChoice[],error?:string}|{state:'refused'|'unreachable'|'failed',available:false,voices:[]};
+export const speakLimit:number;
+export function readVoices(connection:import('./engine.mjs').EngineConnection):Promise<VoiceList>;
+export function speakText(connection:import('./engine.mjs').EngineConnection,say:{text:string}):Promise<{state:'spoken',dataUrl:string,mimeType:string|null,provider:string|null}|{state:'refused'|'unreachable'|'failed'|'tooLarge',dataUrl:null,mimeType:null,provider:null}>;
 export function provideSharedSpace(connection:import('./engine.mjs').EngineConnection,space:{name:string}):Promise<{state:'provided',folder:string}|{state:'refused'|'unreachable'|'failed',folder:null}>;
 export function writeSoulRules(connection:import('./engine.mjs').EngineConnection,change:{profile:string,rules:string[]}):Promise<{state:'unchanged'|'written'|'missing'|'refused'|'unreachable'|'failed'}>;
 export function readSkills(connection:import('./engine.mjs').EngineConnection):Promise<{state:'found',skills:{name:string,shared:boolean}[]}|{state:'refused'|'unreachable'|'failed',skills:null}>;

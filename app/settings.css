@@ -207,6 +207,14 @@
 .gw .sov .dp-savebar.is-flash { animation: barFlash 1.4s var(--gw-ease-out); }
 @keyframes barFlash { 0%, 40% { box-shadow: inset 0 0 0 2px var(--text-1); } 100% { box-shadow: inset 0 0 0 0 transparent; } }
 .gw .sov .sov-savebar { position: sticky; bottom: var(--s4); z-index: 1; border: 0.5px solid var(--gw-border-2); border-radius: var(--gw-r-lg); box-shadow: var(--gw-shadow-popover); }
+/* The Voice section's row (#162; design-reference: .vc-row, .vc-select, .vc-play, .vc-quote): the voice select fills the
+   row, Listen keeps its own size beside it, and the playing hint takes the reference's quieter colour. */
+.gw .sov .vc-row { display: flex; align-items: center; gap: var(--s2); }
+.gw .sov .vc-row .vc-select { flex: 1 1 0; min-width: 0; }
+.gw .sov .vc-select { cursor: pointer; }
+.gw .sov .vc-select:disabled { cursor: default; }
+.gw .sov .vc-play { flex: none; --od-icon-size: 14px; }
+.gw .sov .vc-quote { color: var(--gw-text-2); }
 .gw .sov .sov-rules { margin-bottom: var(--s6); }
 .gw .sov .sov-soon .panel-empty { padding-block: 10px; }
 /* The rules an Agent was told in its chat (#18; design-reference: .rl-list, .rl-row), with an Owner's or a Manager's Remove */

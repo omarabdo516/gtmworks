@@ -19,7 +19,8 @@ import { UsageTable, UsageModels } from './c/[slug]/[[...section]]/usage';
 import { managedUsage, type UsageRow } from '@/lib/company-app-items';
 import { readCompanySignIns } from '@/lib/company-sign-in.mjs';
 import { readAgentAbout, type AgentAbout } from '@/lib/agent-about.mjs';
-import { AgentLevel, CompanySubscriptions, MemberNote, AgentAbout as AgentAboutField, AgentSaveBar } from './settings-lazy';
+import { readAgentVoice, type AgentVoice as AgentVoiceRead } from '@/lib/agent-voice.mjs';
+import { AgentLevel, CompanySubscriptions, MemberNote, AgentAbout as AgentAboutField, AgentSaveBar, AgentVoice as AgentVoiceField } from './settings-lazy';
 import { MadeLine, OpenedMark } from './agent-made';
 import { madeColumns, madeOf } from '@/lib/agent-made';
 import { isNewFor } from '@/lib/sidebar.mjs';
@@ -70,6 +71,9 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  // The Agent's own Engine profile: its name, About and title, and whether the profile is its own (#161). Read only on an
  // Agent's page; another Agent on the Company's shared profile would change the main Agent too, so its About is read only.
  const about=agent?await readAgentAbout(db,{company:company.id,agent:agent.id}):null;
+ // The Agent's voice is its own profile's settings too (#162): the language it listens in, the voice of its provider and
+ // the speed, read with the Engine's own defaults. Listen is the Engine speaking with them, asked for from the page.
+ const voice=agent?await readAgentVoice(db,{company:company.id,agent:agent.id}):null;
  // Each Agent's state for this reader, read in one call as the sidebar reads it (#184).
  const stateOf=agentStates(section==='agents'?(await db.rpc('agent_states',{c:company.id})).data:null);
  // The Agent's rules in force for the team (#18), newest first as the reference lists them: a suggestion only once it is
@@ -80,7 +84,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  const ro=!canManage&&<p className="ro-note"><SettingsIcon name="shield"/><span>{t('settingsRO')}</span></p>;
  const page=section==='company'?<CompanySection t={t} company={company} solo={workMode==='alone'} members={members} invitations={invitations} agents={agents} allowed={allowed} invitedAllowed={invitedAllowed} userId={userId} slug={slug} owner={owner} canManage={canManage} sharedEngine={sharedEngine} agentLevel={agentLevel} roleNames={roleNames} ro={ro}/>
-  :section==='agents'?(agent?<AgentPage t={t} rtl={rtl} slug={slug} company={company.id} userId={userId} agent={agent} about={about} status={stateOf(agent.id)} main={agents[0]} rules={rules} owner={owner} canManage={canManage} canWrite={canWrite}/>:<AgentsSection t={t} rtl={rtl} slug={slug} agents={agents} stateOf={stateOf} canManage={canManage} canWrite={canWrite} owner={owner}/>)
+  :section==='agents'?(agent?<AgentPage t={t} rtl={rtl} slug={slug} company={company.id} userId={userId} personName={personName} agent={agent} about={about} voice={voice} status={stateOf(agent.id)} main={agents[0]} rules={rules} owner={owner} canManage={canManage} canWrite={canWrite}/>:<AgentsSection t={t} rtl={rtl} slug={slug} agents={agents} stateOf={stateOf} canManage={canManage} canWrite={canWrite} owner={owner}/>)
   :section==='apps'?<AppsSection slug={slug} company={company.id} owner={owner} rtl={rtl} app={query.app} failed={query.signin==='failed'}/>
   :section==='usage'?<UsageSection t={t} locale={locale} slug={slug} company={company.id} rows={usageRows} period={query.period==='30'?30:7}/>
   :section==='account'?<AccountSection t={t} theme={theme} personName={personName} role={role} roleName={roleNames[role]||''} companyName={company.name} company={company.id} memberNote={memberNote}/>
@@ -158,7 +162,7 @@ function AgentsSection({t,rtl,slug,agents,stateOf,canManage,canWrite,owner}:{t:T
    :<p className="panel-empty">{t('noAgentsYet')}</p>}</div><FocusReturn/></>;
 }
 
-function AgentPage({t,rtl,slug,company,userId,agent,about,status,main,rules,owner,canManage,canWrite}:{t:T,rtl:boolean,slug:string,company:string,userId:string,agent:Agent,about:AgentAbout|null,status:AgentStatus,main?:Agent,rules:Rule[],owner:boolean,canManage:boolean,canWrite:boolean}) {
+function AgentPage({t,rtl,slug,company,userId,personName,agent,about,voice,status,main,rules,owner,canManage,canWrite}:{t:T,rtl:boolean,slug:string,company:string,userId:string,personName:string,agent:Agent,about:AgentAbout|null,voice:AgentVoiceRead|null,status:AgentStatus,main?:Agent,rules:Rule[],owner:boolean,canManage:boolean,canWrite:boolean}) {
  const isMain=agent.is_default; const made=madeOf(agent,userId,slug);
  // The handle gtmworks calls the Agent by in messages, which a change of the Engine's name would not touch
  // (lib/conversation-runs.mjs: @ and the name, lowercased).
@@ -166,6 +170,10 @@ function AgentPage({t,rtl,slug,company,userId,agent,about,status,main,rules,owne
  // About is editable by the Owner and Managers who see the Agent, on the Agent's own Engine profile only, and only when
  // the Engine was read: an unknown description is never drawn empty and saved over.
  const editable=canManage&&about?.state==='found'&&about.own;
+ // The Voice section (#162) is editable on the Agent's own profile, and read-only for everyone else: its rows name the
+ // speaking language and the real voice with the speed, as the reference's read-only form does.
+ const voiceEditable=canManage&&voice?.state==='found'&&voice.own;
+ const spokenLanguage=voice?.state!=='found'?null:voice.language==='ar'?t('settingsVoiceArabic'):voice.language==='en'?t('settingsVoiceEnglish'):voice.language||t('settingsVoiceDetect');
  const mainSec=owner?<section className="dp-sec" id="set-main" aria-labelledby="set-h-main"><Label id="set-h-main">{t('settingsMainAgent')}</Label><ul className="panel-card">
    {isMain?<li className="panel-row"><span className="panel-row__icon"><SettingsIcon name="check"/></span><span className="panel-row__text"><span className="panel-row__t">{t('settingsIsMain',agent.name)}</span><span className="panel-row__d">{t('settingsIsMainD')}</span></span></li>
     :<MakeMain company={company} agent={agent} current={main?.name||''}/>}</ul></section>
@@ -201,7 +209,18 @@ function AgentPage({t,rtl,slug,company,userId,agent,about,status,main,rules,owne
     <section className="dp-sec" aria-labelledby="set-h-about"><Label id="set-h-about">{t('settingsAbout')}</Label>
      {editable?<AgentAboutField agent={agent.id} name={agent.name} description={about?.description??''}/>
       :<div className="panel-card"><p className="ro-text" id="set-about">{about?.description||'—'}</p></div>}</section>
-    {(['settingsHow','settingsThinks','settingsVoice','settingsTools','settingsSkills'] as const).map(key=><SoonSec key={key} t={t} id={`set-h-${key}`} label={t(key)}/>)}
+    {(['settingsHow','settingsThinks'] as const).map(key=><SoonSec key={key} t={t} id={`set-h-${key}`} label={t(key)}/>)}
+    {/* The Agent's voice (#162): its language, its real voice with Listen, and the speed. */}
+    <section className="dp-sec" aria-labelledby="set-h-voice"><Label id="set-h-voice">{t('settingsVoice')}</Label>
+     {voiceEditable?<AgentVoiceField company={company} agent={agent.id} personName={personName} voice={voice}/>
+      :<ul className="panel-card">
+       <li className="panel-row"><span className="panel-row__text"><span className="panel-row__t">{t('settingsVoiceLang')}</span>
+        <span className="panel-row__d ro-val" id="set-voice-lang-val">{spokenLanguage??'—'}</span></span></li>
+       <li className="panel-row"><span className="panel-row__text"><span className="panel-row__t">{t('settingsVoice')}</span>
+        <span className="panel-row__d ro-val" id="set-voice-val">{voice?.state==='found'?voice.voiceName??'—':'—'}{voice?.state==='found'&&<> · <bdi dir="ltr">{voice.speed}×</bdi></>}</span></span></li>
+      </ul>}
+    </section>
+    {(['settingsTools','settingsSkills'] as const).map(key=><SoonSec key={key} t={t} id={`set-h-${key}`} label={t(key)}/>)}
     {owner&&<section className="dp-sec" aria-labelledby="set-h-danger"><Label id="set-h-danger">{t('settingsDanger')}</Label><ul className="panel-card">
      <li className="panel-row"><span className="panel-row__text"><span className="panel-row__t">{t('settingsPause')}</span><span className="panel-row__d">{t('settingsPauseD')}</span></span>
       <button type="button" id="danger-pause" className="btn btn--secondary btn--sm" aria-disabled="true" title={t('soon')}>{t('settingsPauseButton')}</button></li>
@@ -211,7 +230,7 @@ function AgentPage({t,rtl,slug,company,userId,agent,about,status,main,rules,owne
    </div>
   </div>
   {/* design-reference: sovAgentHTML's bar, after the tab panel: hidden until the draft differs from what was saved. */}
-  {editable&&<AgentSaveBar company={company} agent={agent.id} name={agent.name}/>}
+  {(editable||voiceEditable)&&<AgentSaveBar company={company} agent={agent.id} name={agent.name}/>}
  </>;
 }
 

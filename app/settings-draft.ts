@@ -19,13 +19,21 @@ const emit = () => listeners.forEach(listener => listener());
 const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
 const differs = () => !!state && Object.keys(state.saved).some(key => state!.saved[key] !== state!.draft[key]);
 const same = (a: Values, b: Values) => Object.keys(a).every(key => a[key] === b[key]) && Object.keys(b).every(key => a[key] === b[key]);
+const noChanges: Values = {};
+let changedCache: { state: DraftState, values: Values } | null = null;
 
 // The page's fields seed the draft with what the server read, once per Agent. Coming back to the same Agent keeps what
-// is saved; a new Agent (or a read that changed under no edit) starts from the new values.
+// is saved; a new Agent (or a read that changed under no edit) starts from the new values. Each field seeds its own keys,
+// so the fields that come next (#162's voice) join this draft instead of replacing what another field seeded.
 /** @param {string} agent @param {Values} values */
 export function seedDraft(agent: string, values: Values) {
  if (state && state.agent === agent) {
-  if (!differs() && !same(state.saved, values)) { state = { agent, saved: { ...values }, draft: { ...values } }; emit(); }
+  const saved = { ...state.saved, ...values };
+  // A field added while another is unsaved joins with its read value, and the person's own edits stay.
+  const draft = differs() ? { ...values, ...state.draft } : { ...saved };
+  if (same(state.saved, saved) && same(state.draft, draft)) return;
+  state = { agent, saved, draft };
+  emit();
   return;
  }
  state = { agent, saved: { ...values }, draft: { ...values } };
@@ -47,11 +55,11 @@ export function restoreDraft() {
  firstField?.focus();
 }
 
-/** The Engine holds these values now: they are what was saved, and nothing is unsaved. */
-/** @param {Values} saved */
-export function commitDraft(saved: Values) {
+/** The Engine kept these fields: only the ones the save named, as the save sent only what changed. */
+/** @param {Values} kept */
+export function commitPatch(kept: Values) {
  if (!state) return;
- state = { agent: state.agent, saved: { ...saved }, draft: { ...saved } };
+ state = { agent: state.agent, saved: { ...state.saved, ...kept }, draft: { ...state.draft, ...kept } };
  emit();
 }
 
@@ -74,6 +82,19 @@ export function holdLeave(nudge: string) {
 
 export function useDraftDirty(agent: string) { return useSyncExternalStore(subscribe, () => state?.agent === agent && differs(), () => false); }
 export function useBarFlash() { return useSyncExternalStore(subscribe, () => flashes, () => 0); }
+/** The fields whose draft differs from what was saved, with the draft's value: what a save sends. */
+export function useDraftChanges(agent: string) {
+ return useSyncExternalStore(subscribe, () => {
+  if (!state || state.agent !== agent) return noChanges;
+  if (changedCache?.state !== state) {
+   /** @type {Values} */
+   const values: Values = {};
+   for (const key of Object.keys(state.draft)) if (state.draft[key] !== state.saved[key]) values[key] = state.draft[key];
+   changedCache = { state, values };
+  }
+  return changedCache.values;
+ }, () => noChanges);
+}
 /** @param {string} agent @param {string} field @param {string} fallback */
 export function useDraftValue(agent: string, field: string, fallback: string) {
  return useSyncExternalStore(subscribe, () => state?.agent === agent ? state.draft[field] ?? fallback : fallback, () => fallback);
