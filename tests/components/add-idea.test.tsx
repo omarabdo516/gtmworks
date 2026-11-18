@@ -118,3 +118,31 @@ test('the toast says the idea was added once the board comes back with it', asyn
  await showWork(withAgents({ ideaAdded: true }));
  await expect.poll(() => toast.mock.calls).toEqual([['Idea added']]);
 });
+
+test('an idea that could not be sent says so under it with its words kept, and Add works again', async () => {
+ const workAction = vi.fn(async () => { throw new Error('down'); });
+ const screen = await showWork(withAgents({ workAction }));
+ await screen.getByRole('button', { name: 'Add an idea' }).click();
+ await userEvent.fill(screen.getByLabelText('Idea'), 'A post about the new cohort');
+ await screen.getByRole('button', { name: 'Add', exact: true }).click();
+ await expect.element(screen.getByRole('alert')).toHaveTextContent('Could not add the idea. Try again.');
+ await expect.element(screen.getByLabelText('Idea')).toHaveValue('A post about the new cohort');
+ expect(screen.getByRole('button', { name: 'Add', exact: true }).element()).toBeEnabled();
+ expect(workAction).toHaveBeenCalledTimes(1);
+ // The failure leaves when the person writes again, and the form is still the one they were in.
+ await userEvent.fill(screen.getByLabelText('Idea'), 'A post about the next cohort');
+ await expect.element(screen.getByRole('alert')).not.toBeInTheDocument();
+ await expect.element(screen.getByLabelText('Idea')).toHaveFocus();
+});
+
+test('an idea the server took closes the form back onto the column\'s "+", so no Add is left in an open form', async () => {
+ const props = withAgents();
+ const screen = await showWork(props);
+ const add = screen.getByRole('button', { name: 'Add an idea' });
+ await add.click();
+ await userEvent.fill(screen.getByLabelText('Idea'), 'A post about the next cohort');
+ await screen.getByRole('button', { name: 'Add', exact: true }).click();
+ await expect.poll(() => document.querySelector('#idea-title')).toBeNull();
+ await expect.element(add).toHaveAttribute('aria-expanded', 'false');
+ await expect.element(add).toHaveFocus();
+});

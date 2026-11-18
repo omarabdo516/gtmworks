@@ -1030,6 +1030,7 @@
   "ideaLabel": "الفكرة",
   "ideaPlaceholder": "مثلاً: بوست LinkedIn عن الدفعة الجديدة",
   "ideaNeedsText": "اكتب الفكرة الأول، ولو جملة قصيرة.",
+  "ideaFailed": "مقدرناش نضيف الفكرة. جرّب تاني.",
   "ideaAdded": "الفكرة اتضافت",
   "boardNewIdeaFrom": "فكرة جديدة من {0}",
   "logActIdeaAdded": "ضاف فكرة",
