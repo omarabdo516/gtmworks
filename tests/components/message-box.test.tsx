@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from 'vitest';
-import { act, createRef, useState, type Ref } from 'react';
+import { act, createRef, StrictMode, useState, type Ref } from 'react';
 import { hydrateRoot } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 import { render } from 'vitest-browser-react';
@@ -545,6 +545,15 @@ test('changing the Agent while recording cancels it, sending nothing and inserti
  await act(async () => { await vi.advanceTimersByTimeAsync(0); await Promise.resolve(); });
  expect(engine.calls).toEqual([]);
  await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('');
+});
+
+test('under React Strict Mode the microphone still records and puts its words in, after the effect runs twice', async () => {
+ vi.useFakeTimers(); mic(); const engine = dictate({ text: 'strict mode words' });
+ const screen = await render(<StrictMode><LanguageProvider language="en"><MessageBox placeholder="Write" voice={voice} send={async () => null}/></LanguageProvider></StrictMode>);
+ await hold(boxOf(screen));
+ await act(async () => { await vi.advanceTimersByTimeAsync(0); await Promise.resolve(); });
+ await expect.poll(() => engine.calls.length).toBe(1);
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('strict mode words');
 });
 
 test('in Arabic the dictation hint names the listening language in Arabic (#160)', async () => {

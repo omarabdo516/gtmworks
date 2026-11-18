@@ -255,7 +255,7 @@ export function useComposerDictation({target,insert,field,onStart}:{target?:Dict
   document.addEventListener('pointercancel',cancelled);
   return ()=>{ document.removeEventListener('keydown',keys); document.removeEventListener('pointerup',up); document.removeEventListener('pointercancel',cancelled); };
  },[session]);
- useEffect(()=>()=>{ mounted.current=false; clearTimers(); stopAudio(); try { recorder.current?.stop(); } catch {} },[]); // eslint-disable-line react-hooks/exhaustive-deps
+ useEffect(()=>{ mounted.current=true; return ()=>{ mounted.current=false; clearTimers(); stopAudio(); try { recorder.current?.stop(); } catch {} }; },[]); // eslint-disable-line react-hooks/exhaustive-deps
 
  const mode=session?.mode;
  // The catalogue's "Listening ·" keeps its separator; the language and its own separator are left out when none was read,
