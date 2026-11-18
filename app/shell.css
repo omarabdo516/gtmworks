@@ -762,6 +762,20 @@
 .gw .steps__list.is-just .step__ck path { stroke-dasharray: 40; stroke-dashoffset: 40; animation: gw-draw-check 320ms var(--gw-ease-out) forwards; animation-delay: calc(var(--i, 0) * 45ms + 160ms); }
 .gw .tool-tile--ink { background: var(--gw-primary); color: var(--gw-on-primary); box-shadow: none; }
 .gw .tool-tile--ink .gw-icon { width: 22px; height: 22px; }
+/* A job Lead handed another Agent (#317; design-reference: .handoff): a quiet row under Lead's reply, both faces with
+   the arrow between them, the other Agent's name in the record's own voice, and the job after it. It has nothing to
+   press and no motion of its own: it arrives with the reply. */
+.gw .handed {
+ display: inline-flex; align-items: center; flex-wrap: wrap; justify-content: center; align-self: center; gap: 2px 6px; max-width: min(560px,100%);
+ min-height: 28px; margin: 0; padding: 3px var(--s3); padding-inline-start: 4px; border-radius: var(--gw-r-full);
+ box-shadow: var(--gw-border-2) 0 0 0 0.5px inset; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-2);
+}
+.gw .handed__faces { display: inline-flex; align-items: center; gap: 2px; flex: none; color: var(--gw-text-3); }
+.gw .handed__arrow { width: 12px; height: 12px; }
+.gw .handed__t { color: var(--gw-text-1); font-weight: 600; }
+.gw .handed__d { color: var(--gw-text-3); overflow-wrap: anywhere; }
+.gw .handed__d::before { content: "·"; margin-inline-end: 6px; }
+[dir="ltr"] .gw .handed__t { unicode-bidi: plaintext; }
 
 /* Authored text inside the English interface takes its direction from its own words. */
 [dir="ltr"] .gw :is(.head-pill__title, .thread-item .od-truncate, .reply-card .card__title, .reply-card .card__sub, .reply-card .kv__row dd) { unicode-bidi: plaintext; text-align: left; }
