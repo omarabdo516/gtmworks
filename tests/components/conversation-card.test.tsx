@@ -21,7 +21,7 @@ const arrived = (record: ConversationRecord) => Object.assign(Promise.resolve(re
 // page and its route read.
 const at = '2026-06-10T09:41:00Z';
 const stored = {
- conversation_usage: [{ run_id: 'r1', outcome: 'completed', input_tokens: 10, output_tokens: 2 }, { run_id: 'r2', outcome: 'completed', input_tokens: 10, output_tokens: 2 }],
+ conversation_run_ends: [{ run_id: 'r1', outcome: 'completed' }, { run_id: 'r2', outcome: 'completed' }],
  conversation_messages: [
   { id: 1, author: 'person', author_name: 'Youssef', body: 'Plan the June campaign', run_id: 'r1', created_at: at },
   { id: 2, author: 'agent', author_name: 'Ads', body: 'On it: audience first.', run_id: 'r1', created_at: at },

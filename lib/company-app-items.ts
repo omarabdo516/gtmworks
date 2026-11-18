@@ -3,7 +3,7 @@ import { cache } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { supabaseConfig } from './supabase-config';
-import { readAgentApps, readAgentSession, readAgentTools, readCompanyApps } from './company-apps.mjs';
+import { readAgentApps, readAgentSession, readAgentTools, readCompanyApps, readCompanyUsage, type AgentsUsage } from './company-apps.mjs';
 import type { Language } from './i18n.mjs';
 import en from './messages/apps.en.json';
 import ar from './messages/apps.ar.json';
@@ -34,7 +34,8 @@ export const agentAppStates=cache(async(company:string,agent:string):Promise<App
  try { return await readAgentApps(await supabase(),service(),{company,agent,encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY}); } catch { return null; }
 });
 
-// One Agent's Hermes session now, as its turns, for the steps of its Conversation (#346); null when it cannot be read.
+// One Agent's Hermes session now, its turns and token use, for its Conversation's steps and usage (#346, #347); null
+// when it cannot be read.
 export const agentSessionTurns=cache(async(company:string,agent:string,session:string)=>{
  try { return await readAgentSession(await supabase(),service(),{company,agent,session,encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY}); } catch { return null; }
 });
@@ -47,4 +48,19 @@ export const agentToolItems=cache(async(company:string,agent:string,language:Lan
   const text:Text=language==='ar'?ar:en;
   return tools&&tools.map(tool=>({...tool,use:text[`use.${tool.key}`]}));
  } catch { return null; }
+});
+
+// The token use of every Company this person owns over the last `days` (#347), each Agent's Hermes profile's own, for
+// the usage screens: one row per profile, by Company name. A Company whose Engine or database does not answer has no
+// rows; a profile Hermes does not answer for has unknown usage (nulls).
+export type UsageRow=AgentsUsage&{company_id:string,company_name:string};
+export const ownedUsage=cache(async(person:string,days:number):Promise<UsageRow[]>=>{
+ const db=await supabase();
+ const {data}=await db.from('members').select('company_id,companies(name)').eq('person_id',person).eq('role','owner').is('removed_at',null);
+ const owned=((data||[]) as unknown as {company_id:string,companies:{name:string}|null}[]).sort((a,b)=>(a.companies?.name||'').localeCompare(b.companies?.name||''));
+ const rows=await Promise.all(owned.map(async({company_id,companies})=>{
+  const read=await readCompanyUsage(db,service(),{company:company_id,days,encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY}).catch(()=>null);
+  return (read||[]).map(entry=>({...entry,company_id,company_name:companies?.name||''}));
+ }));
+ return rows.flat();
 });

@@ -163,7 +163,7 @@ reset role;
 select is((select state||coalesce(content->>'choice','') from public.reply_cards where id=current_setting('test.card5')::bigint),'closed','and it keeps no choice');
 
 -- A Run's end closes its claimed request with the choice kept, and the Conversation's next Run is asked again.
-insert into public.conversation_usage(company_id,conversation_id,run_id,outcome) values ('10000000-0000-0000-0000-000000000001','e2000000-0000-0000-0000-000000000001','p-run-1','completed');
+insert into public.conversation_run_ends(company_id,conversation_id,run_id,outcome) values ('10000000-0000-0000-0000-000000000001','e2000000-0000-0000-0000-000000000001','p-run-1','completed');
 insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id)
  values ('10000000-0000-0000-0000-000000000001','e2000000-0000-0000-0000-000000000001','person','20000000-0000-0000-0000-000000000001','Someone','And the backups?',gen_random_uuid(),'p-run-1b');
 set local role service_role;
@@ -173,9 +173,9 @@ select results_eq($$select run_id,state,content->>'choice' from public.reply_car
  $$values ('p-run-1','closed','deny'),('p-run-1b','open',null)$$,'a claimed choice whose Run ended closes with the choice kept, and the next Run''s request is kept');
 -- A request left open for a Run that had already ended (recreated here by writing that Run's end with the trigger off)
 -- cannot be decided any more, and a later read keeps nothing for that Run.
-alter table public.conversation_usage disable trigger conversation_usage_closes_permissions;
-insert into public.conversation_usage(company_id,conversation_id,run_id,outcome) values ('10000000-0000-0000-0000-000000000001','e2000000-0000-0000-0000-000000000001','p-run-1b','completed');
-alter table public.conversation_usage enable trigger conversation_usage_closes_permissions;
+alter table public.conversation_run_ends disable trigger conversation_run_ends_closes_permissions;
+insert into public.conversation_run_ends(company_id,conversation_id,run_id,outcome) values ('10000000-0000-0000-0000-000000000001','e2000000-0000-0000-0000-000000000001','p-run-1b','completed');
+alter table public.conversation_run_ends enable trigger conversation_run_ends_closes_permissions;
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select is(public.decide_permission('10000000-0000-0000-0000-000000000001','e2000000-0000-0000-0000-000000000001',(select id from public.reply_cards where call_id='a3'),'once')->>'state','closed',

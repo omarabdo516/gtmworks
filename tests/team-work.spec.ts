@@ -150,7 +150,7 @@ test('integration: stop is refused to another Contributor and works for a Manage
   expect(await stopConversationRun(lead,service,{company,conversation,encryptionKey,engineFor:fake.engineFor})).toEqual({stopped:true});
   expect(fake.runs[0].stopped).toBe(true);
   expect(await closeOpenRuns(service,{encryptionKey,conversation,engineFor:fake.engineFor})).toBe(1);
-  expect(JSON.parse(query(`select outcome from public.conversation_usage where conversation_id='${conversation}'`))).toEqual([{outcome:'stopped'}]);
+  expect(JSON.parse(query(`select outcome from public.conversation_run_ends where conversation_id='${conversation}'`))).toEqual([{outcome:'stopped'}]);
  } finally { detach(); }
 });
 

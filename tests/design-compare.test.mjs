@@ -185,7 +185,7 @@ test('every screen says how to reach it in the reference and which built page it
   // #172. The built placeholders: the workflow's setup file adds the page's rows and slows its one waiting table, then
   // the page is opened, its hold ended, and it is captured without waiting for the slowed read.
   for (const [name, table, page, placeholder] of [
-    ['chat-loading', 'conversation_usage', '/c/rs-learning/conversations/6f000000-0000-0000-0000-000000000003', '.chat .transcript[aria-busy="true"]'],
+    ['chat-loading', 'conversation_run_ends', '/c/rs-learning/conversations/6f000000-0000-0000-0000-000000000003', '.chat .transcript[aria-busy="true"]'],
     ['numbers-loading', 'company_log', '/c/rs-learning/numbers', '.numbers-page [aria-busy="true"]'],
   ]) {
     const screen = screens[name];

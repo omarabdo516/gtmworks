@@ -217,7 +217,7 @@ test('A Viewer has no composer and the server refuses their message',async({page
 });
 
 const agentRows=(conversation:string)=>JSON.parse(query(`select body from public.conversation_messages where conversation_id='${conversation}' and author='agent' order by id`));
-const usageRows=(conversation:string)=>JSON.parse(query(`select outcome,input_tokens,output_tokens from public.conversation_usage where conversation_id='${conversation}' order by run_id`));
+const endRows=(conversation:string)=>JSON.parse(query(`select outcome from public.conversation_run_ends where conversation_id='${conversation}' order by run_id`));
 
 test('integration: a run unknown to Hermes is recorded as lost and the conversation accepts a new message',async({page})=>{
  const fake=await fakeHermes(); fake.settings.pendingReads=1e9; let agents={};
@@ -233,7 +233,7 @@ test('integration: a run unknown to Hermes is recorded as lost and the conversat
   expect(lost.failed).toBe(true);
   expect(lost.messages.map((row:{author:string,lost:boolean})=>[row.author,row.lost])).toEqual([['person',true]]);
   expect(agentRows(conversation)).toEqual([]);
-  expect(usageRows(conversation)).toEqual([{outcome:'lost',input_tokens:null,output_tokens:null}]);
+  expect(endRows(conversation)).toEqual([{outcome:'lost'}]);
   await page.goto(`/c/rs-learning/conversations/${conversation}`);
   await expect(page.locator('[data-outcome=lost]')).toContainText('Lost');
   fake.settings.pendingReads=0;
@@ -322,7 +322,7 @@ test('A Contributor starts a Card\'s chat from its sheet; the Owner, another Con
  } finally { detach(agents); await fake.close(); }
 });
 
-// Omar's Conversation with Ads, six turns long, each with its usage, as the engine leaves them; written with triggers off
+// Omar's Conversation with Ads, six turns long, each with its end, as the engine leaves them; written with triggers off
 // and taken away after (#172).
 const slowChat=(n:number)=>`6f000000-0000-0000-0000-00000000000${n}`;
 const omar='20000000-0000-0000-0000-000000000001';
@@ -336,9 +336,9 @@ const slowChatRows={
     case when author='person' then 'Omar' else 'Ads' end,'Turn '||n||E'\\n'||repeat('About the launch week. ',30),case when author='person' then gen_random_uuid() end,
     'slow-chat-'||n,now()-interval '1 hour'+n*interval '2 minutes'+case when author='agent' then interval '1 minute' else interval '0' end
    from generate_series(1,6) n cross join unnest(array['person','agent']) author;
-  insert into public.conversation_usage(company_id,conversation_id,run_id,outcome,input_tokens,output_tokens,recorded_at)
-   select '${company}','${slowChat(3)}','slow-chat-'||n,'completed',120,80,now()-interval '1 hour'+n*interval '2 minutes'+interval '1 minute' from generate_series(1,6) n;`,
- unset:`delete from public.conversation_usage where conversation_id='${slowChat(3)}';
+  insert into public.conversation_run_ends(company_id,conversation_id,run_id,outcome,recorded_at)
+   select '${company}','${slowChat(3)}','slow-chat-'||n,'completed',now()-interval '1 hour'+n*interval '2 minutes'+interval '1 minute' from generate_series(1,6) n;`,
+ unset:`delete from public.conversation_run_ends where conversation_id='${slowChat(3)}';
   delete from public.conversation_messages where conversation_id='${slowChat(3)}';
   delete from public.conversations where id='${slowChat(3)}';
   delete from public.hermes_agents where id='${slowChat(2)}';
@@ -348,14 +348,14 @@ const where=async(page:Page,selector:string)=>{ const box=(await page.locator(se
 
 test('a Conversation whose record is slow shows the placeholder in its transcript, under its title and over its composer, then its messages at the newest',async({page})=>{
  const placeholders=await watchPlaceholders(page);
- // Only the record reads the usage (lib/conversation-record.ts); the page's frame and the sidebar never do.
+ // Only the record reads the Run ends (lib/conversation-record.ts); the page's frame and the sidebar never do.
  const held=await holdPages(page,url=>url.pathname===slowChatPath);
  asAdmin(slowChatRows.unset); asAdmin(slowChatRows.set);
  try {
   await ownerSignIn(page);
   const link=page.locator(`#sb-recent a[href="${slowChatPath}"]`);
   await expect(link).toBeVisible();
-  await whileSlow('conversation_usage',3,async()=>{
+  await whileSlow('conversation_run_ends',3,async()=>{
    await link.click(); held.letGo();
    const placeholder=page.locator('.chat .transcript[aria-busy="true"]');
    await expect(placeholder).toBeVisible();

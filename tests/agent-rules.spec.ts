@@ -28,7 +28,7 @@ test.beforeAll(({},testInfo)=>{
    ('${company}','${conversation}','person','${omar}',null,'Omar','${rule}','${id(4)}','rule-run-1'),
    ('${company}','${conversation}','agent',null,'${ads}','Ads','تمام يا عمر. من دلوقتي أي حاجة رايحة لعميل هجهّزها وأستناك تشوفها الأول.',null,'rule-run-1'),
    ('${company}','${conversation}','person','${omar}',null,'Omar','${later}','${id(5)}','rule-run-2');
-  insert into public.conversation_usage(company_id,conversation_id,run_id,outcome) values ('${company}','${conversation}','rule-run-2','failed');
+  insert into public.conversation_run_ends(company_id,conversation_id,run_id,outcome) values ('${company}','${conversation}','rule-run-2','failed');
   perform public.agent_save_rule('${conversation}','rule-run-1','call-0','${rule}');
   perform public.agent_save_rule('${conversation}','rule-run-2','call-0','${later}');
   update public.agent_rules set said_at=said_at+interval '1 minute' where run_id='rule-run-2';

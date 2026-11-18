@@ -32,7 +32,7 @@ test.beforeAll(({},testInfo)=>{
    ('${company}','${conversation}','person','${omar}',null,'Omar','I want someone to handle Meta ads','${id(8)}','made-run-1'),
    ('${company}','${conversation}','agent',null,'${lead}','Lead','Done. Meta Ads runs your Meta ads from now on.',null,'made-run-1'),
    ('${company}','${conversation}','person','${omar}',null,'Omar','And someone for the blog','${id(9)}','made-run-2');
-  insert into public.conversation_usage(company_id,conversation_id,run_id,outcome) values ('${company}','${conversation}','made-run-2','completed');
+  insert into public.conversation_run_ends(company_id,conversation_id,run_id,outcome) values ('${company}','${conversation}','made-run-2','completed');
   insert into public.lead_made_agents(conversation_id,run_id,call_id,company_id,agent_id,created_at) values
    ('${conversation}','made-run-1','call-0','${company}','${ads}','2026-06-10T09:01:00Z'),
    ('${conversation}','made-run-2','call-0','${company}','${seo}','2026-06-11T09:01:00Z');

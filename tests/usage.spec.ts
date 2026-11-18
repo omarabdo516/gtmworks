@@ -1,103 +1,102 @@
-import { test, expect, type Page } from './fresh-seed';
+import { test, expect, freshSeed, type Page } from './fresh-seed';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fakeHermes } from './fake-hermes.mjs';
 import { signIn } from './sign-in';
+import { lane } from './lane.mjs';
 
+// #347 (decision 0042): token use is Hermes's own, never counted by gtmworks. RS Learning and Aleem run on their own
+// profiles in a fake Engine whose management listener answers a session's totals and a profile's usage analytics as
+// the pinned release does; RS Learning's Writer has a profile of its own. A chat shows its session's tokens, and the
+// usage screens show each Agent's profile's numbers to the Owner of its Company.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
-// Omar signs in as the Owner of all three seeded companies.
-async function ownerSignIn(page:Page) {
- query(`update public.people set language='en' where id='${omar}'`);
- await signIn(page,'omar@example.com','/c/rs-learning/home');
-}
-const company='10000000-0000-0000-0000-000000000001';
+const rs='10000000-0000-0000-0000-000000000001';
 const aleem='10000000-0000-0000-0000-000000000003';
 const omar='20000000-0000-0000-0000-000000000001';
 const manager='20000000-0000-0000-0000-000000000002';
-type Fake=Awaited<ReturnType<typeof fakeHermes>>;
-type Total={input:number,output:number,unknown:number};
+const profileOf=(company:string)=>`co-${company.replaceAll('-','')}`;
+const [rsLead,aleemLead,writer]=[randomUUID(),randomUUID(),randomUUID()];
+const writerProfile=`ag-${writer.replaceAll('-','')}`;
+let fake:Awaited<ReturnType<typeof fakeHermes>>;
 
-// One agent on its own profile of the fake Hermes; removed again after the test.
-async function attachAgent(page:Page,fake:Fake) {
- const saved=await page.request.post('/api/hermes-connections',{data:{company,intent:'save',address:fake.address,profile:`usage-${randomUUID().slice(0,8)}`,key:fake.settings.key}});
- expect(saved.status()).toBe(200); const connection=(await saved.json()).connection.id as string;
- const attached=await page.request.post('/api/hermes-agents',{data:{company,intent:'attach',connection,name:'Mona',speciality:'Marketing',makeDefault:true}});
- expect(attached.status()).toBe(200);
- return {id:(await attached.json()).agents.find((agent:{connection_id:string})=>agent.connection_id===connection).id as string,connection};
+// The Company's Lead on its own profile of the bundled Engine, as chat-steps.spec.ts sets it up.
+async function bundled(page:Page,company:string,lead:string) {
+ const saved=await page.request.post('/api/hermes-connections',{data:{company,intent:'save',address:fake.address,profile:profileOf(company),key:fake.settings.key}});
+ expect(saved.status()).toBe(200);
+ const connection=(await saved.json()).connection.id;
+ query(`do $$ begin
+  insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('${lead}','${company}','${connection}','Lead','General',true);
+  insert into public.hermes_agent_audit(company_id,actor_id,agent_id,action,details) values ('${company}','${omar}','${lead}','PROVIDE_BUNDLED_HERMES_AGENT',jsonb_build_object('connection_id','${connection}'));
+  insert into public.company_profiles(company_id,profile,tools_level,tools_policy) select id,'${profileOf(company)}',agent_level,public.engine_tool_policy() from public.companies where id='${company}'
+   on conflict (company_id) do update set profile=excluded.profile,tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false;
+ end $$;`);
 }
-const detach=(agent?:{id:string,connection:string})=>{ if(!agent) return; query(`delete from public.hermes_agents where id='${agent.id}'`); query(`delete from public.hermes_connections where id='${agent.connection}'`); };
-const send=(page:Page,conversation:string,message:string)=>page.request.post('/api/conversations',{data:{company,conversation,message,sendKey:randomUUID()}});
-const read=async(page:Page,conversation:string)=>(await page.request.get(`/api/conversations?company=${company}&conversation=${conversation}`)).json() as Promise<{messages:{author:string}[],usage:Total,failed:boolean}>;
-const stored=(conversation:string)=>JSON.parse(query(`select outcome,input_tokens,output_tokens from public.conversation_usage where conversation_id='${conversation}' order by recorded_at,run_id`));
-test.use({actionTimeout:15000});
 
-test('integration: two completed replies store their tokens and the conversation shows the running total',async({page})=>{
- test.setTimeout(120000);
- const fake=await fakeHermes(); let agent;
+test.describe.configure({mode:'serial'});
+test.beforeAll(async({browser},testInfo)=>{
+ freshSeed(testInfo.file);
+ fake=await fakeHermes({host:`127.0.0.${90+lane}`,managementPort:9119});
+ for(const profile of [profileOf(rs),profileOf(aleem),writerProfile]) fake.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
+ query(`update public.people set language='en' where id in ('${omar}','${manager}')`);
+ const page=await browser.newPage();
  try {
-  await ownerSignIn(page); agent=await attachAgent(page,fake);
-  const conversation=randomUUID();
-  fake.settings.usage={input_tokens:14000,output_tokens:12};
-  expect((await send(page,conversation,'Plan the launch week')).status()).toBe(200);
-  expect((await read(page,conversation)).usage).toEqual({input:14000,output:12,unknown:0});
-  fake.settings.usage={input_tokens:15000,output_tokens:20};
-  expect((await send(page,conversation,'Now the teaser')).status()).toBe(200);
-  const second=await read(page,conversation);
-  expect(second.messages.map(message=>message.author)).toEqual(['person','agent','person','agent']);
-  expect(second.usage).toEqual({input:29000,output:32,unknown:0});
-  expect(stored(conversation)).toEqual([{outcome:'completed',input_tokens:14000,output_tokens:12},{outcome:'completed',input_tokens:15000,output_tokens:20}]);
-  await page.goto(`/c/rs-learning/conversations/${conversation}`);
-  await expect(page.locator('[data-usage]')).toHaveText('29,032 tokens used (29,000 in, 32 out)');
- } finally { detach(agent); await fake.close(); }
+  await signIn(page,'omar@example.com','/c/rs-learning/home');
+  await bundled(page,rs,rsLead); await bundled(page,aleem,aleemLead);
+  // Writer moved to its own profile (ADR 0016).
+  const own=randomUUID();
+  query(`do $$ begin
+   insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('${own}','${rs}','${omar}','${fake.address}','${writerProfile}','unused','connected');
+   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('${writer}','${rs}','${own}','Writer','Writing',false);
+   insert into public.hermes_agent_audit(company_id,actor_id,agent_id,action,details) values ('${rs}','${omar}','${writer}','MOVE_AGENT_PROFILE',jsonb_build_object('connection_id','${own}'));
+   insert into public.agent_profiles(agent_id,company_id) values ('${writer}','${rs}');
+  end $$;`);
+ } finally { await page.close(); }
+});
+test.afterAll(async()=>{ await fake?.close(); });
+
+test('a chat shows its Hermes session\'s token use, and none while Hermes does not know the session',async({page})=>{
+ const [known,unknown]=[randomUUID(),randomUUID()]; const session=`session-${known.slice(0,8)}`;
+ for(const [conversation,id] of [[known,session],[unknown,`gone-${unknown.slice(0,8)}`]]) query(`do $$ begin
+  insert into public.conversations(id,company_id,person_id,agent_id,agent_name,hermes_session_id) values ('${conversation}','${rs}','${omar}','${rsLead}','Lead','${id}');
+  insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id) values ('${rs}','${conversation}','person','${omar}','Omar','Plan the launch week','${randomUUID()}','run-${conversation.slice(0,8)}');
+  insert into public.conversation_messages(company_id,conversation_id,author,agent_id,author_name,body,run_id) values ('${rs}','${conversation}','agent','${rsLead}','Lead','Here is the week.','run-${conversation.slice(0,8)}');
+ end $$;`);
+ fake.settings.sessions.set(session,{profile:profileOf(rs),messages:[],input_tokens:29000,output_tokens:32});
+ await signIn(page,'omar@example.com','/c/rs-learning/home');
+ await page.goto(`/c/rs-learning/conversations/${known}`);
+ await expect(page.locator('[data-usage]')).toHaveText('29,032 tokens used (29,000 in, 32 out)');
+ expect(fake.settings.managementRequests.some(request=>request.path===`/api/sessions/${session}?profile=${profileOf(rs)}`),'read from the Agent\'s own profile').toBe(true);
+ await page.goto(`/c/rs-learning/conversations/${unknown}`);
+ await expect(page.getByText('Here is the week.')).toBeVisible();
+ await expect(page.locator('[data-usage]'),'usage Hermes cannot read is never shown as zero').toHaveCount(0);
 });
 
-test('integration: a stopped run keeps what Hermes reported and a lost run records unknown usage, never zero',async({page})=>{
- test.setTimeout(120000);
- const fake=await fakeHermes(); let agent;
- try {
-  await ownerSignIn(page); agent=await attachAgent(page,fake);
-  const conversation=randomUUID();
-  fake.settings.ending='cancelled'; fake.settings.usage={input_tokens:900,output_tokens:7};
-  expect((await send(page,conversation,'Stop after a while')).status()).toBe(200);
-  const stopped=await read(page,conversation);
-  expect(stopped).toMatchObject({failed:true,usage:{input:900,output:7,unknown:0}});
-  expect(stopped.messages.map(message=>message.author)).toEqual(['person']);
-  // Hermes restarted and no longer knows the second run.
-  fake.settings.ending='completed';
-  expect((await send(page,conversation,'Try again')).status()).toBe(200);
-  fake.settings.runs.length=0;
-  expect((await read(page,conversation)).usage).toEqual({input:900,output:7,unknown:1});
-  expect(stored(conversation)).toEqual([{outcome:'stopped',input_tokens:900,output_tokens:7},{outcome:'lost',input_tokens:null,output_tokens:null}]);
-  await page.goto(`/c/rs-learning/conversations/${conversation}`);
-  await expect(page.locator('[data-usage]')).toHaveText('907 tokens used (900 in, 7 out) · usage unknown for 1 replies');
-  // Reopened, the page still says the latest reply did not finish.
-  await expect(page.locator('.convo-status[role=alert]')).toHaveText('The agent could not finish this reply. Send the message again to retry.');
- } finally { detach(agent); await fake.close(); }
-});
-
-test('an Owner of several companies sees each one\'s tokens per day, and an Owner of one company only their own',async({page,browser})=>{
- test.setTimeout(120000);
- // A day no other test writes to, so the rows are this test's own.
- const day=new Date(Date.UTC(2001,0,1)+Math.floor(Math.random()*9000)*86400000).toISOString().slice(0,10);
- const [rs,other]=[randomUUID(),randomUUID()];
- query(`insert into public.conversations(id,company_id,person_id,agent_name) values ('${rs}','${company}','${omar}','Mona'),('${other}','${aleem}','${omar}','Sara')`);
- query(`insert into public.conversation_usage(company_id,conversation_id,run_id,outcome,input_tokens,output_tokens,recorded_at) values ('${company}','${rs}','run_a','completed',1200,34,'${day}T08:00Z'),('${company}','${rs}','run_b','lost',null,null,'${day}T09:00Z'),('${aleem}','${other}','run_c','completed',5000,60,'${day}T10:00Z')`);
- const rowsOn=(viewer:Page)=>viewer.getByRole('row').filter({hasText:day});
- await ownerSignIn(page);
+test('an Owner of several companies sees each Agent\'s tokens from Hermes, and an Owner of one company only their own',async({page,browser})=>{
+ const now=Date.now()/1000;
+ fake.settings.sessions.set(`u-${randomUUID()}`,{profile:profileOf(rs),messages:[],input_tokens:1200,output_tokens:34,started_at:now-3600});
+ fake.settings.sessions.set(`u-${randomUUID()}`,{profile:profileOf(rs),messages:[],input_tokens:800,output_tokens:6,started_at:now-2*86400});
+ fake.settings.sessions.set(`u-${randomUUID()}`,{profile:writerProfile,messages:[],input_tokens:5000,output_tokens:60,started_at:now-3600});
+ fake.settings.sessions.set(`u-${randomUUID()}`,{profile:writerProfile,messages:[],input_tokens:9000,output_tokens:90,started_at:now-20*86400});
+ fake.settings.sessions.set(`u-${randomUUID()}`,{profile:profileOf(aleem),messages:[],input_tokens:700,output_tokens:7,started_at:now-3600});
+ const row=(viewer:Page,company:string,agent:string)=>viewer.getByRole('row').filter({hasText:company}).filter({has:viewer.getByRole('cell',{name:agent,exact:true})});
+ await signIn(page,'omar@example.com','/c/rs-learning/home');
  await page.goto('/c/rs-learning/settings');
  await page.getByRole('link',{name:'Usage',exact:true}).click();
- // Usage is a section of the settings overlay (#26), with the same table.
+ // Usage is a section of the settings overlay (#26): the last 7 days by default, each Agent's profile's own count.
  await expect(page).toHaveURL(/\/c\/rs-learning\/settings\?section=usage$/);
- await expect(rowsOn(page)).toHaveCount(2);
- await expect(rowsOn(page).filter({hasText:'RS Learning'}).getByRole('cell')).toHaveText(['RS Learning',day,'1,200','34','2','1']);
- await expect(rowsOn(page).filter({hasText:'Aleem'}).getByRole('cell')).toHaveText(['Aleem',day,'5,000','60','1','0']);
- query(`update public.members set role='owner' where company_id='${company}' and person_id='${manager}'`);
+ await expect(row(page,'RS Learning','Lead').getByRole('cell')).toHaveText(['RS Learning','Lead','2,000','40','2']);
+ await expect(row(page,'RS Learning','Writer').getByRole('cell')).toHaveText(['RS Learning','Writer','5,000','60','1']);
+ await expect(row(page,'Aleem','Lead').getByRole('cell')).toHaveText(['Aleem','Lead','700','7','1']);
+ await expect(page.locator('.use-kpis .kpi__val')).toHaveText(['7,100','3','0']);
+ expect(fake.settings.managementRequests.some(request=>request.path===`/api/analytics/usage?profile=${writerProfile}&days=7`),'read from the Agent\'s own profile').toBe(true);
+ await page.getByRole('link',{name:'Last 30 days'}).click();
+ await expect(row(page,'RS Learning','Writer').getByRole('cell')).toHaveText(['RS Learning','Writer','14,000','150','2']);
+ query(`update public.members set role='owner' where company_id='${rs}' and person_id='${manager}'`);
  const context=await browser.newContext(); const owner=await context.newPage();
  try {
   await signIn(owner,'manager@example.com','/c/rs-learning/usage');
-  await expect(owner.getByRole('table')).toBeVisible();
-  await expect(rowsOn(owner)).toHaveCount(1);
-  await expect(rowsOn(owner).getByRole('cell')).toHaveText(['RS Learning',day,'1,200','34','2','1']);
+  await expect(row(owner,'RS Learning','Writer').getByRole('cell')).toHaveText(['RS Learning','Writer','14,000','150','2']);
+  await expect(owner.getByRole('row').filter({hasText:'Aleem'})).toHaveCount(0);
   expect((await owner.goto('/c/aleem/usage'))!.status()).toBe(404);
- } finally { await context.close(); query(`update public.members set role='manager' where company_id='${company}' and person_id='${manager}'`); }
+ } finally { await context.close(); query(`update public.members set role='manager' where company_id='${rs}' and person_id='${manager}'`); }
 });

@@ -27,7 +27,7 @@ const record = (request: AgentRequestView, decided: ConversationRecord['messages
   { id: 2, author: 'agent', author_name: 'Lead', body: 'I prepared your request and sent it to the Owner.', created_at: at, cards: [{ kind: 'request', request }] },
   ...decided,
  ],
- usage: { input: 0, output: 0, unknown: 0 }, pending: false, failed: false, working: null, canStop: false,
+ usage: { input: 0, output: 0 }, pending: false, failed: false, working: null, canStop: false,
 });
 const waiting = record({ ...asked, state: 'waiting', owners: ['Omar'] });
 const declined = record({ ...asked, state: 'declined', by: 'Omar', at, reason },
@@ -56,7 +56,7 @@ test('a Member who keeps their Conversation open sees the Owner\'s answer arrive
 });
 
 const talk = (messages: ConversationRecord['messages'], more: Partial<ConversationRecord> = {}): ConversationRecord => ({
- conversation: { id: 'cv-2', agent_id: null, agent_name: 'Mona', face: 'c-2' }, messages, usage: { input: 0, output: 0, unknown: 0 }, pending: false, failed: false, working: null, canStop: false, ...more,
+ conversation: { id: 'cv-2', agent_id: null, agent_name: 'Mona', face: 'c-2' }, messages, usage: { input: 0, output: 0 }, pending: false, failed: false, working: null, canStop: false, ...more,
 });
 const view = (initial: ConversationRecord, language: 'en' | 'ar' = 'en') => <LanguageProvider language={language}><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={initial.conversation} title="" writer><Arrived record={arrived(initial)} team={false}/></ConversationView></LanguageProvider>;
 const sent = { id: 1, author: 'person' as const, author_name: 'Omar', body: 'Draft the long launch plan', created_at: at };
@@ -147,7 +147,7 @@ test('Lead\'s sentence to try in a new workspace keeps the text already typed an
 const asking = { id: 1, author: 'person' as const, author_name: 'Omar', body: 'Plan the December campaign', created_at: at, run_id: 'run-1' };
 const draft = { run_id: 'run-1', at, card: { kind: 'reply' as const, card: { id: 5, kind: 'draft' as const, title: 'Campaign plan', line: 'Draft · Meta Ads', rows: [{ label: 'Goal', value: 'WhatsApp leads' }] } } };
 const onlyCard = (outcome: 'completed' | 'failed') => {
- const usage = [{ run_id: 'run-1', outcome, input_tokens: null, output_tokens: null }];
+ const usage = [{ run_id: 'run-1', outcome }];
  return talk(shown([asking], usage, [draft], 'Mona'), { failed: latestEnded([asking], usage) });
 };
 for (const [language, line] of [['en', 'The agent could not finish this reply. Send the message again to retry.'], ['ar', 'الوكيل مقدرش يكمّل الرد ده. ابعت الرسالة تاني عشان تجرّب من الأول.']] as const) test(`in ${language} a reply that is only a card shows the card and no failure line, and a failed one shows the line`, async () => {

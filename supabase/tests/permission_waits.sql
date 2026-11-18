@@ -87,8 +87,8 @@ reset role;
 set local role service_role;
 select public.track_run_permission('e2650000-0000-0000-0000-000000000001','w-run-1',null,false,'2026-06-10T10:16:00Z');
 reset role;
-insert into public.conversation_usage(company_id,conversation_id,run_id,outcome,input_tokens,output_tokens)
- values ('10000000-0000-0000-0000-000000000001','e2650000-0000-0000-0000-000000000005','w-run-5','completed',1,1);
+insert into public.conversation_run_ends(company_id,conversation_id,run_id,outcome)
+ values ('10000000-0000-0000-0000-000000000001','e2650000-0000-0000-0000-000000000005','w-run-5','completed');
 set local role authenticated;
 select pg_temp.read_all();
 reset role;

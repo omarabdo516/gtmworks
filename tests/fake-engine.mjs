@@ -9,7 +9,7 @@ import { randomUUID } from 'node:crypto';
 /** @typedef {{id:string,text:string,choices:string[],multiple:boolean,answer?:string|null,settled:'answered'|'expired'|null}} FakeQuestion */
 /** @typedef {{id:string,description:string,command:string,choices:import('../lib/engine.mjs').PermissionChoice[],choice?:string|null,settled:'answered'|'expired'|null}} FakePermission */
 /** @typedef {{id:string,key:string,conversation:string,input:string,instructions:string|null,tools:import('../lib/engine.mjs').ToolSpec[],history:import('../lib/engine.mjs').HistoryEntry[]|null,reads:number,stopped:boolean,ended:boolean,asked:FakeQuestion[],permissions:FakePermission[]}} FakeRun */
-/** @returns {{settings:{ending:'completed'|'failed',pendingReads:number,reply:(input:string,answers:(string|null)[],choices:(string|null)[])=>string,toolCalls:(input:string)=>import('../lib/engine.mjs').ToolCall[],usage:{input:number,output:number}|null,agentProfile:import('../lib/engine.mjs').ProvidedAgent['state'],questions:(input:string)=>{text:string,choices?:string[],multiple?:boolean}[],unreachableAnswers:number,permissions:(input:string)=>{description:string,command:string,choices?:import('../lib/engine.mjs').PermissionChoice[]}[],unreachablePermits:number,sessions:Map<string,import('../lib/engine.mjs').SessionTurn[]>,apps:Record<string,import('../lib/app-catalogue.mjs').AppState>|'refused'|'unreachable'|'failed'},runs:FakeRun[],connections:object[],appReads:{count:number},agentReads:string[],provided:{name:string,instructions:string,level:number}[],removed:string[],answers:{run:string,question:string,text:string}[],permits:{run:string,permission:string,choice:string}[],expire:(run:string)=>boolean,engineFor:(connection:object)=>import('../lib/engine.mjs').Engine}} */
+/** @returns {{settings:{ending:'completed'|'failed',pendingReads:number,reply:(input:string,answers:(string|null)[],choices:(string|null)[])=>string,toolCalls:(input:string)=>import('../lib/engine.mjs').ToolCall[],usage:{input:number,output:number}|null,agentProfile:import('../lib/engine.mjs').ProvidedAgent['state'],questions:(input:string)=>{text:string,choices?:string[],multiple?:boolean}[],unreachableAnswers:number,permissions:(input:string)=>{description:string,command:string,choices?:import('../lib/engine.mjs').PermissionChoice[]}[],unreachablePermits:number,sessions:Map<string,import('../lib/engine.mjs').SessionTurn[]>,sessionUsage:Map<string,import('../lib/engine.mjs').SessionUsage>,apps:Record<string,import('../lib/app-catalogue.mjs').AppState>|'refused'|'unreachable'|'failed'},runs:FakeRun[],connections:object[],appReads:{count:number},agentReads:string[],provided:{name:string,instructions:string,level:number}[],removed:string[],answers:{run:string,question:string,text:string}[],permits:{run:string,permission:string,choice:string}[],expire:(run:string)=>boolean,engineFor:(connection:object)=>import('../lib/engine.mjs').Engine}} */
 export function fakeEngine() {
  const settings={ending:/** @type {'completed'|'failed'} */('completed'),pendingReads:0,reply:(/** @type {string} */ input)=>`Reply to: ${input}`,toolCalls:/** @type {(input:string)=>import('../lib/engine.mjs').ToolCall[]} */(()=>[]),usage:/** @type {{input:number,output:number}|null} */({input:14000,output:12}),
   // How providing an Agent's own profile ends: with no subscription, a made profile has no model to answer with.
@@ -20,6 +20,8 @@ export function fakeEngine() {
   permissions:/** @type {(input:string)=>{description:string,command:string,choices?:import('../lib/engine.mjs').PermissionChoice[]}[]} */(()=>[]),unreachablePermits:0,
   // Each session's turns by id.
   sessions:/** @type {Map<string,import('../lib/engine.mjs').SessionTurn[]>} */(new Map()),
+  // Each session's token use by id (#347); a session without one has unknown usage.
+  sessionUsage:/** @type {Map<string,import('../lib/engine.mjs').SessionUsage>} */(new Map()),
   // The profile's apps by key and state (#203), or how a read of them fails.
   apps:/** @type {Record<string,import('../lib/app-catalogue.mjs').AppState>|'refused'|'unreachable'|'failed'} */({})};
  // Run ids are unique across fakes, as an engine's are: the database refuses a Member's run already used elsewhere (#287).
@@ -68,7 +70,7 @@ export function fakeEngine() {
    if(!run||run.stopped||run.reads>settings.pendingReads) return false;
    run.stopped=true; return true;
   },
-  async session(id) { const turns=settings.sessions.get(id); return turns?{state:'found',turns:structuredClone(turns)}:{state:'missing',turns:null}; },
+  async session(id) { const turns=settings.sessions.get(id); return turns?{state:'found',turns:structuredClone(turns),usage:settings.sessionUsage.get(id)??null}:{state:'missing',turns:null,usage:null}; },
   // A question still waited for takes the first answer; one answered already says so again; any other is gone.
   async answer(id,question,text) {
    answers.push({run:id,question,text});

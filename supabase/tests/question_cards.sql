@@ -183,9 +183,9 @@ insert into public.conversation_messages(company_id,conversation_id,author,perso
 set local role service_role;
 select public.track_run_question('f2000000-0000-0000-0000-000000000001','q-run-1b','{"id":"p6@1","text":"Which budget?","choices":["Low","High"],"multiple":false}',false,'2026-06-10T10:30:00Z');
 reset role;
-alter table public.conversation_usage disable trigger conversation_usage_closes_questions;
-insert into public.conversation_usage(company_id,conversation_id,run_id,outcome) values ('10000000-0000-0000-0000-000000000001','f2000000-0000-0000-0000-000000000001','q-run-1b','completed');
-alter table public.conversation_usage enable trigger conversation_usage_closes_questions;
+alter table public.conversation_run_ends disable trigger conversation_run_ends_closes_questions;
+insert into public.conversation_run_ends(company_id,conversation_id,run_id,outcome) values ('10000000-0000-0000-0000-000000000001','f2000000-0000-0000-0000-000000000001','q-run-1b','completed');
+alter table public.conversation_run_ends enable trigger conversation_run_ends_closes_questions;
 select set_config('test.ended_card',(select id::text from public.reply_cards where call_id='p6@1' and state='open'),true);
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
@@ -197,7 +197,7 @@ select results_eq($$select state,content ? 'answer' from public.reply_cards wher
 
 -- An answer claimed as its Run ends is never delivered: the Run's end closes it with the answer kept, and the
 -- Conversation's next question is kept again.
-insert into public.conversation_usage(company_id,conversation_id,run_id,outcome) values ('10000000-0000-0000-0000-000000000001','f2000000-0000-0000-0000-000000000002','q-run-2','completed');
+insert into public.conversation_run_ends(company_id,conversation_id,run_id,outcome) values ('10000000-0000-0000-0000-000000000001','f2000000-0000-0000-0000-000000000002','q-run-2','completed');
 insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id)
  values ('10000000-0000-0000-0000-000000000001','f2000000-0000-0000-0000-000000000002','person','20000000-0000-0000-0000-000000000002','Someone','Next one',gen_random_uuid(),'q-run-2b');
 set local role service_role;
@@ -213,7 +213,7 @@ select results_eq($$values (public.settle_question(current_setting('test.claimed
  'a delivery the Engine took wins over a closed card holding the same answer');
 reset role;
 -- And a Run's end closes its open question at once, before anyone answers it.
-insert into public.conversation_usage(company_id,conversation_id,run_id,outcome) values ('10000000-0000-0000-0000-000000000001','f2000000-0000-0000-0000-000000000002','q-run-2b','completed');
+insert into public.conversation_run_ends(company_id,conversation_id,run_id,outcome) values ('10000000-0000-0000-0000-000000000001','f2000000-0000-0000-0000-000000000002','q-run-2b','completed');
 select is((select state from public.reply_cards where call_id='p7@1'),'closed','the question closes as its Run ends, before anyone answers it');
 
 -- A question claimed but never delivered before a Run's end closed its questions (recreated with the trigger off) no
@@ -221,12 +221,12 @@ select is((select state from public.reply_cards where call_id='p7@1'),'closed','
 insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id)
  values ('10000000-0000-0000-0000-000000000001','f2000000-0000-0000-0000-000000000005','person','20000000-0000-0000-0000-000000000005','Someone','Old one',gen_random_uuid(),'q-run-5c'),
   ('10000000-0000-0000-0000-000000000001','f2000000-0000-0000-0000-000000000005','person','20000000-0000-0000-0000-000000000005','Someone','New one',gen_random_uuid(),'q-run-5d');
-alter table public.conversation_usage disable trigger conversation_usage_closes_questions;
+alter table public.conversation_run_ends disable trigger conversation_run_ends_closes_questions;
 insert into public.reply_cards(company_id,conversation_id,run_id,call_id,kind,title,content,state,answered_by,answered_at,answer_key)
  values ('10000000-0000-0000-0000-000000000001','f2000000-0000-0000-0000-000000000005','q-run-5c','p8@1','question','Which week?',
   '{"question":"Which week?","choices":[],"multiple":false,"answer":"Next week"}','sending','20000000-0000-0000-0000-000000000005',now(),'f3000000-0000-0000-0000-00000000000f');
-insert into public.conversation_usage(company_id,conversation_id,run_id,outcome) values ('10000000-0000-0000-0000-000000000001','f2000000-0000-0000-0000-000000000005','q-run-5c','completed');
-alter table public.conversation_usage enable trigger conversation_usage_closes_questions;
+insert into public.conversation_run_ends(company_id,conversation_id,run_id,outcome) values ('10000000-0000-0000-0000-000000000001','f2000000-0000-0000-0000-000000000005','q-run-5c','completed');
+alter table public.conversation_run_ends enable trigger conversation_run_ends_closes_questions;
 set local role service_role;
 select public.track_run_question('f2000000-0000-0000-0000-000000000005','q-run-5d','{"id":"p9@1","text":"Which hour?","choices":["Morning","Evening"],"multiple":false}',false,'2026-06-10T10:50:00Z');
 reset role;

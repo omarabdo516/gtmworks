@@ -24,11 +24,11 @@ test('a session\'s turns are read from Hermes: each turn\'s tool calls in order,
    asked(1007,[call('call_3','terminal',{command:'ls'})]),
    replied(1041.4,'Here is the plan.'),
    user(2000,'And the budget?'),
-   replied(2003,'15,000 a month.')]});
+   replied(2003,'15,000 a month.')],input_tokens:29000,output_tokens:32});
   const read=await engineFor(connection(fake)).session('session-1');
   assert.deepEqual(read,{state:'found',turns:[
    {at:1000,seconds:41,steps:[{tool:'web_search',preview:'accounting courses Cairo',state:'done'},{tool:'read_file',preview:'campaigns.csv',state:'failed'},{tool:'terminal',preview:'ls',state:'started'}]},
-   {at:2000,seconds:3,steps:[]}]});
+   {at:2000,seconds:3,steps:[]}],usage:{input:29000,output:32}});
   assert.ok(fake.settings.managementRequests.some(request=>request.path?.startsWith(`/api/sessions/session-1/messages?profile=${profile}`)),'read from the profile the conversation runs on');
  } finally { await fake.close(); }
 });
@@ -37,11 +37,11 @@ test('a session Hermes does not know is missing, a refused key refused, an Engin
  const fake=await fakeHermes();
  try {
   fake.settings.sessions.set('elsewhere',{profile:'co-other',messages:[user(1,'hi')]});
-  assert.deepEqual(await engineFor(connection(fake)).session('unknown'),{state:'missing',turns:null});
-  assert.deepEqual(await engineFor(connection(fake)).session('elsewhere'),{state:'missing',turns:null},'another profile\'s session is not this one\'s');
-  assert.deepEqual(await engineFor({...connection(fake),key:'wrong'}).session('session-1'),{state:'refused',turns:null});
-  assert.deepEqual(await engineFor({...connection(fake),address:'http://8.8.8.8:1',managementAddress:'http://8.8.8.8:2'}).session('session-1'),{state:'unreachable',turns:null},'an address that is not allowed is never called');
-  assert.deepEqual(await engineFor(connection(fake)).session('../profiles'),{state:'missing',turns:null},'no id that is not a session id is sent');
+  assert.deepEqual(await engineFor(connection(fake)).session('unknown'),{state:'missing',turns:null,usage:null});
+  assert.deepEqual(await engineFor(connection(fake)).session('elsewhere'),{state:'missing',turns:null,usage:null},'another profile\'s session is not this one\'s');
+  assert.deepEqual(await engineFor({...connection(fake),key:'wrong'}).session('session-1'),{state:'refused',turns:null,usage:null});
+  assert.deepEqual(await engineFor({...connection(fake),address:'http://8.8.8.8:1',managementAddress:'http://8.8.8.8:2'}).session('session-1'),{state:'unreachable',turns:null,usage:null},'an address that is not allowed is never called');
+  assert.deepEqual(await engineFor(connection(fake)).session('../profiles'),{state:'missing',turns:null,usage:null},'no id that is not a session id is sent');
  } finally { await fake.close(); }
 });
 
@@ -65,5 +65,18 @@ test('a long session is read page by page, oldest first',async()=>{
   const read=await engineFor(connection(fake)).session('session-3');
   assert.equal(read.turns?.[0].steps.length,600);
   assert.equal(read.turns?.[0].steps.at(-1)?.preview,'q599');
+ } finally { await fake.close(); }
+});
+
+// #347: the session's token use is Hermes's own (the session's input_tokens and output_tokens, get_session_detail);
+// gtmworks keeps none. A session whose totals cannot be read has unknown usage, never zero.
+test('a session\'s token use is read from Hermes with its turns, and unknown when Hermes reports none',async()=>{
+ const fake=await fakeHermes();
+ try {
+  fake.settings.sessions.set('session-4',{profile,messages:[user(1,'Go'),replied(2,'Done')],input_tokens:1200,output_tokens:34});
+  assert.deepEqual((await engineFor(connection(fake)).session('session-4')).usage,{input:1200,output:34});
+  assert.ok(fake.settings.managementRequests.some(request=>request.path===`/api/sessions/session-4?profile=${profile}`),'read from the profile the conversation runs on');
+  fake.settings.sessions.set('session-5',{profile,messages:[user(1,'Go')],input_tokens:'many',output_tokens:-1});
+  assert.deepEqual(await engineFor(connection(fake)).session('session-5'),{state:'found',turns:[{at:1,seconds:0,steps:[]}],usage:null});
  } finally { await fake.close(); }
 });

@@ -50,8 +50,7 @@ insert into decisions
  union all select fn,'exempt','reads only the waiting items of rule suggestions, which name no Card; the rule''s Agent is checked with can_see_agent' from unnest(array[
   'public.decide_agent_rule(uuid,bigint,boolean)','public.remove_agent_rule(uuid,uuid)','public.rule_suggestions_sent_to(uuid)']) fn
  union all select fn,'exempt','an Owner or a Manager changes an approval step: every Card on it moves with it so none is left on a removed step, and nothing about a Card is answered' from unnest(array[
-  'public.remove_approval_step(uuid,bigint)','public.save_approval_step(uuid,bigint,text,integer,uuid,public.member_role)']) fn
- union all select 'public.usage_by_day()','exempt','the Owner''s alone, and an Owner sees every Agent; it answers token sums by day, no Card';
+  'public.remove_approval_step(uuid,bigint)','public.save_approval_step(uuid,bigint,text,integer,uuid,public.member_role)']) fn;
 
 select is((select count(*)::int from card_tables),13,'the card tables are the 13 that carry #221''s rule, the Card itself among them');
 select ok(not exists(select 1 from pg_proc p where p.pronamespace='public'::regnamespace and p.prosecdef

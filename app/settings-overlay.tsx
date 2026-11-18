@@ -14,7 +14,8 @@ import { BackLink, FocusReturn } from './settings-overlay-frame';
 import { AccountChoices, MakeMain, DeleteAgent, CompanyName, Invite, AgentSwitch, RuleSaid, RemoveRule } from './settings-overlay-client';
 import { SettingsIcon } from './settings-icons';
 import PasswordSettings from './password-settings';
-import { UsageTable, type UsageDay } from './c/[slug]/[[...section]]/usage';
+import { UsageTable } from './c/[slug]/[[...section]]/usage';
+import { ownedUsage, type UsageRow } from '@/lib/company-app-items';
 import { createClient } from '@supabase/supabase-js';
 import { supabaseConfig } from '@/lib/supabase-config';
 import { readCompanySignIns } from '@/lib/company-sign-in.mjs';
@@ -62,7 +63,8 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  // The Company's model sign-in, read from its own profile in the agent engine (#3). The service role reads only the
  // key of that Company's bundled Connection, after the database said the person is a member (company_engine_target).
  const subscriptions=section==='models'?await (async()=>{ try { return await readCompanySignIns(db,createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false}}),{company:company.id,encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY}); } catch { return {profile:null,oneCompany:false,signIns:null}; } })():null;
- const usageRows:UsageDay[]=section==='usage'?((await db.rpc('usage_by_day')).data||[]) as UsageDay[]:[];
+ // The token use of the period, read from each owned Company's Agents' Hermes profiles (#347).
+ const usageRows=section==='usage'?await ownedUsage(userId,query.period==='30'?30:7):[];
  // The person's own note for the Agents in this Company (RLS: nobody else reads it).
  const memberNote=section==='account'?(await db.from('member_notes').select('note').eq('company_id',company.id).eq('person_id',userId).maybeSingle()).data?.note||'':'';
  const agent=section==='agents'&&query.agent?agents.find(item=>item.id===query.agent):undefined;
@@ -212,13 +214,13 @@ function AgentRules({t,company,userId,rules,canManage}:{t:T,company:string,userI
   :<div className="panel-card"><p className="panel-empty">{t('settingsRulesEmpty')}</p></div>}</section>;
 }
 
-function UsageSection({t,locale,slug,company,rows,period}:{t:T,locale:string,slug:string,company:string,rows:UsageDay[],period:7|30}) {
- const totals=usageTotals(rows,company,period);
+function UsageSection({t,locale,slug,company,rows,period}:{t:T,locale:string,slug:string,company:string,rows:UsageRow[],period:7|30}) {
+ const totals=usageTotals(rows,company);
  const seg=<div className="segmented use-seg" role="group" aria-label={t('settingsPeriod')}>{([[7,'settingsLast7'],[30,'settingsLast30']] as const).map(([days,label])=><Link key={days} replace href={overlayHref(slug,'usage',days===30?{period:'30'}:{})} aria-pressed={period===days} id={`use-p-${days}`}>{t(label)}</Link>)}</div>;
  const kpi=(label:string,value:number)=><div className="kpi"><span className="kpi__label">{label}</span><span className="kpi__val num">{new Intl.NumberFormat(locale).format(value)}</span></div>;
  return <><Head title={t('usage')} sub={t('settingsUsageSub')} extra={seg}/>
-  <div className="kpis use-kpis">{kpi(t('settingsTokens'),totals.tokens)}{kpi(t('usageRuns'),totals.runs)}{kpi(t('usageUnknown'),totals.unknown)}</div>
-  <section className="dp-sec" aria-labelledby="use-h"><Label id="use-h">{t('settingsPerDay')}</Label>
+  <div className="kpis use-kpis">{kpi(t('settingsTokens'),totals.tokens)}{kpi(t('usageSessions'),totals.sessions)}{kpi(t('usageUnknown'),totals.unknown)}</div>
+  <section className="dp-sec" aria-labelledby="use-h"><Label id="use-h">{t('settingsPerAgent')}</Label>
    {rows.length?<div className="sov-ta"><UsageTable rows={rows}/></div>:<div className="panel-card"><p className="panel-empty">{t('usageNone')}</p></div>}</section></>;
 }
 

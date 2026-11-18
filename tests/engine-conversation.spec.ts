@@ -55,12 +55,12 @@ async function memberClient(email:string) {
  return {service,person};
 }
 const agentRows=(conversation:string)=>JSON.parse(query(`select body from public.conversation_messages where conversation_id='${conversation}' and author='agent' order by id`));
-const usageRows=(conversation:string)=>JSON.parse(query(`select outcome,input_tokens,output_tokens from public.conversation_usage where conversation_id='${conversation}' order by recorded_at,run_id`));
+const endRows=(conversation:string)=>JSON.parse(query(`select outcome from public.conversation_run_ends where conversation_id='${conversation}' order by recorded_at,run_id`));
 // A chat with a Card on the board writes its rows on the Card (#146). Untied, as only the database can untie it, a chat
 // has no Card, and its rows stay its person's.
 const untie=(conversation:string)=>query(`update public.work_cards set conversation_id=null where conversation_id='${conversation}'`);
 
-test('integration: a message on the fake engine gets its slow reply stored once, with its usage',async()=>{
+test('integration: a message on the fake engine gets its slow reply stored once, with its end',async()=>{
  test.setTimeout(120000);
  const fake=fakeEngine(); fake.settings.pendingReads=1; fake.settings.usage={input:3200,output:41};
  const {service,person}=await clients(); const {agent,detach}=attachAgent();
@@ -76,16 +76,16 @@ test('integration: a message on the fake engine gets its slow reply stored once,
   // The reply is slow: the first pass finds the run still running.
   expect(await close()).toBe(0);
   expect(agentRows(conversation)).toEqual([]);
-  // Two passes at once (a reader and the worker) store the reply and its usage once.
+  // Two passes at once (a reader and the worker) store the reply and its end once.
   const closed=await Promise.all([close(),close()]);
   expect(closed[0]+closed[1]).toBe(1);
   expect(await close()).toBe(0);
   expect(agentRows(conversation)).toEqual([{body:'Reply to: Plan the launch week'}]);
-  expect(usageRows(conversation)).toEqual([{outcome:'completed',input_tokens:3200,output_tokens:41}]);
+  expect(endRows(conversation)).toEqual([{outcome:'completed'}]);
  } finally { detach(); }
 });
 
-test('integration: on the fake engine a failed run and a stopped run end with their usage and no reply',async()=>{
+test('integration: on the fake engine a failed run and a stopped run end with their outcome and no reply',async()=>{
  test.setTimeout(120000);
  const fake=fakeEngine(); fake.settings.pendingReads=1e9;
  const {service,person}=await clients(); const {agent,detach}=attachAgent();
@@ -101,7 +101,7 @@ test('integration: on the fake engine a failed run and a stopped run end with th
   expect(await send('This one fails')).toEqual({conversation});
   expect(await close()).toBe(1);
   expect(agentRows(conversation)).toEqual([]);
-  expect(usageRows(conversation)).toEqual([{outcome:'stopped',input_tokens:14000,output_tokens:12},{outcome:'failed',input_tokens:null,output_tokens:null}]);
+  expect(endRows(conversation)).toEqual([{outcome:'stopped'},{outcome:'failed'}]);
   // A run the engine cannot start is refused, and nothing is stored for it.
   fake.engineFor=()=>({...engine,start:async()=>null});
   expect(await send('Never started')).toEqual({error:'conversationHermesFailed',status:502});
@@ -160,7 +160,7 @@ test('integration: Lead makes the Agent the Owner asks for, and nothing for a Ma
  expect(closedOnce[0]+closedOnce[1]).toBe(1);
  expect(made().map((row:{name:string})=>row.name).sort()).toEqual(['Meta Ads','SEO']);
  // A reply that is only the made Agent's card is done, with no reply stored (#227).
- expect(JSON.parse(query(`select outcome from public.conversation_usage where conversation_id='${conversation}' and run_id='${fake.runs[2].id}'`))).toEqual([{outcome:'completed'}]);
+ expect(JSON.parse(query(`select outcome from public.conversation_run_ends where conversation_id='${conversation}' and run_id='${fake.runs[2].id}'`))).toEqual([{outcome:'completed'}]);
  expect(JSON.parse(query(`select count(*)::int as n from public.conversation_messages where conversation_id='${conversation}' and author='agent' and run_id='${fake.runs[2].id}'`))[0].n).toBe(0);
  fake.settings.reply=answer;
 
@@ -344,14 +344,14 @@ test('integration: an Agent\'s reply that is only a draft closes done once, also
   expect(closed[0]+closed[1]).toBe(1);
   expect(await close()).toBe(0);
   expect(JSON.parse(query(`select run_id,kind,title from public.reply_cards where conversation_id='${conversation}'`))).toEqual([{run_id:fake.runs[0].id,kind:'draft',title:plan.title}]);
-  expect(usageRows(conversation).map((row:{outcome:string})=>row.outcome)).toEqual(['completed']);
+  expect(endRows(conversation).map((row:{outcome:string})=>row.outcome)).toEqual(['completed']);
   expect(agentRows(conversation)).toEqual([]);
   expect(await failed()).toBe(false);
 
   expect(await send('No title')).toEqual({conversation});
   expect(await close()).toBe(1);
   expect(JSON.parse(query(`select count(*)::int as n from public.reply_cards where conversation_id='${conversation}'`))[0].n).toBe(1);
-  expect(JSON.parse(query(`select outcome from public.conversation_usage where conversation_id='${conversation}' and run_id='${fake.runs[1].id}'`))).toEqual([{outcome:'failed'}]);
+  expect(JSON.parse(query(`select outcome from public.conversation_run_ends where conversation_id='${conversation}' and run_id='${fake.runs[1].id}'`))).toEqual([{outcome:'failed'}]);
   expect(agentRows(conversation)).toEqual([]);
   expect(await failed()).toBe(true);
 
@@ -362,7 +362,7 @@ test('integration: an Agent\'s reply that is only a draft closes done once, also
   expect((await runToolCall({db:service,engine:fake.engineFor({}),profile:'',conversation,run},{id:'call-0',name:'show_draft',arguments:plan})).state).toBe('shown');
   const gone=(connection:object)=>({...fake.engineFor(connection),read:async()=>({state:'failed' as const,reply:null,session:null,usage:null,toolCalls:[]})});
   expect(await closeOpenRuns(service,{encryptionKey,conversation,engineFor:gone})).toBe(1);
-  expect(JSON.parse(query(`select outcome from public.conversation_usage where conversation_id='${conversation}' and run_id='${run}'`))).toEqual([{outcome:'failed'}]);
+  expect(JSON.parse(query(`select outcome from public.conversation_run_ends where conversation_id='${conversation}' and run_id='${run}'`))).toEqual([{outcome:'failed'}]);
   expect(await failed()).toBe(true);
  } finally { detach(); }
 });

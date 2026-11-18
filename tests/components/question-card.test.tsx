@@ -144,7 +144,7 @@ const record = (card: Question, answer?: string): ConversationRecord => ({
   { id: 42, author: 'agent', author_name: 'Ads', body: '', created_at: at, kind: 'asked', cards: [{ kind: 'reply', card }] },
   ...answer ? [{ id: 42, author: 'person' as const, author_name: 'Omar', body: answer, created_at: at, kind: 'answer' as const }] : [],
  ],
- usage: { input: 0, output: 0, unknown: 0 }, pending: true, ...answer ? {} : { asking: true as const }, failed: false, working: 'Omar', canStop: true,
+ usage: { input: 0, output: 0 }, pending: true, ...answer ? {} : { asking: true as const }, failed: false, working: 'Omar', canStop: true,
 });
 
 test('in the chat, a pick posts the answer, the record is read again, and the pick shows as the person\'s message after the answered card', async () => {

@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(61);
+select plan(59);
 -- Notes and mentions in the log (#22). Seed people of RS Learning: Omar 0001 owns it, 0002 مدير is a Manager, 0003 مراجع
 -- and 0005 عضو are Contributors, 0004 مشاهد is a Viewer, 30000000-…-0001 is a role Agent. Faye is shown to the Manager;
 -- Secret to nobody but the Owner. 0005 is also a Contributor of Aleem.
@@ -159,17 +159,5 @@ select is(public.move_company_profile('10000000-0000-0000-0000-000000000003','ht
 select ok(public.close_note_run((select id from notes where label='aleem'),null,'lost',null,null,null),'once it ended');
 select is(public.move_company_profile('10000000-0000-0000-0000-000000000003','http://hermes:8642','encrypted','0.23.0','{run_submission}'),1,'the Company moves');
 
--- The Owner's usage counts the note Runs that ran.
-reset role;
-create temp table used_want on commit drop as select coalesce(sum(input_tokens),0)::bigint input_tokens, count(*)::bigint runs from (
- select input_tokens from public.conversation_usage where company_id='10000000-0000-0000-0000-000000000001'
- union all select input_tokens from public.channel_runs where company_id='10000000-0000-0000-0000-000000000001' and outcome is not null and run_id is not null
- union all select input_tokens from public.note_runs where company_id='10000000-0000-0000-0000-000000000001' and outcome is not null and run_id is not null) u;
-grant select on used_want to authenticated;
-set local role authenticated;
-select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
-select is((select array[sum(input_tokens),sum(runs)]::bigint[] from public.usage_by_day() where company_id='10000000-0000-0000-0000-000000000001'),
- (select array[input_tokens,runs] from used_want),'the Owner''s usage counts the note Runs that ran and their tokens');
-select ok((select input_tokens from used_want)>=120,'which here holds Faye''s 120 tokens');
 select * from finish();
 rollback;

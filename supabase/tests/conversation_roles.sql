@@ -43,7 +43,7 @@ select throws_ok($$select public.send_conversation_message('e2000000-0000-0000-0
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select is((select string_agg(id::text,',') from public.conversations),'e2000000-0000-0000-0000-000000000101','the Owner reads only their own conversation');
 select is((select count(*)::int from public.conversation_messages where conversation_id<>'e2000000-0000-0000-0000-000000000101'),0,'the Owner reads no message of another Member');
-select is((select count(*)::int from public.conversation_usage),0,'the Owner reads no usage of another Member''s conversation');
+select is((select count(*)::int from public.conversation_run_ends),0,'the Owner reads no Run end of another Member''s conversation');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
 select is((select string_agg(id::text,',') from public.conversations),'e2000000-0000-0000-0000-000000000102','a Manager reads only their own conversation');
 select is((select count(*)::int from public.conversation_messages where conversation_id<>'e2000000-0000-0000-0000-000000000102'),0,'a Manager reads no message of another Member');

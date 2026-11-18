@@ -68,7 +68,7 @@ insert into public.conversation_messages(company_id,conversation_id,author,perso
  ('10000000-0000-0000-0000-000000000001','b1200000-0000-0000-0000-000000000002','person','20000000-0000-0000-0000-000000000001','Omar','Write the first post',gen_random_uuid(),'w-1',now()-interval '10 minutes');
 select is(public.move_agent_profile((select agent from named where name='writer')),false,'an open Run in one of its Conversations holds the move, ten minutes after its message');
 select ok(not pg_temp.listed(),'and keeps it off the list');
-insert into public.conversation_usage(company_id,conversation_id,run_id,outcome) values ('10000000-0000-0000-0000-000000000001','b1200000-0000-0000-0000-000000000002','w-1','failed');
+insert into public.conversation_run_ends(company_id,conversation_id,run_id,outcome) values ('10000000-0000-0000-0000-000000000001','b1200000-0000-0000-0000-000000000002','w-1','failed');
 select ok(pg_temp.listed(),'once that Run has ended it may move');
 insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id,created_at) values
  ('10000000-0000-0000-0000-000000000001','b1200000-0000-0000-0000-000000000002','person','20000000-0000-0000-0000-000000000001','Omar','Shorter, please',gen_random_uuid(),'w-2',now()-interval '4 minutes'),
@@ -202,7 +202,7 @@ insert into public.conversations(id,company_id,person_id,agent_id,agent_name) se
 insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id,created_at)
  select '10000000-0000-0000-0000-000000000001','b1200000-0000-0000-0000-000000000003','person','20000000-0000-0000-0000-000000000001','Omar',lpad(n::text,200000,'x'),gen_random_uuid(),'b-'||n,now()-interval '2 hours'+n*interval '1 second'
  from generate_series(1,31) n;
-insert into public.conversation_usage(company_id,conversation_id,run_id,outcome) select '10000000-0000-0000-0000-000000000001','b1200000-0000-0000-0000-000000000003','b-'||n,'failed' from generate_series(1,31) n;
+insert into public.conversation_run_ends(company_id,conversation_id,run_id,outcome) select '10000000-0000-0000-0000-000000000001','b1200000-0000-0000-0000-000000000003','b-'||n,'failed' from generate_series(1,31) n;
 set local role authenticated;
 select set_config('request.jwt.claims','{"role":"authenticated"}',true);
 insert into sent select 'long',public.reserve_conversation_turn('b1200000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001',agent,'b1300000-0000-0000-0000-000000000005','Sum it up') from named where name='writer';

@@ -100,7 +100,7 @@ const own = (more: Partial<ConversationRecord> = {}): ConversationRecord => ({
   { id: 1, author: 'person', author_name: 'Omar', body: 'Plan three ads for the course', created_at: at },
   { id: 2, author: 'agent', author_name: 'Ads', body: 'On it: the audience first, then three ads.', created_at: at },
  ],
- usage: { input: 10, output: 2, unknown: 0 }, pending: false, failed: false, working: null, canStop: false, board: { card: 7, column: 'progress' }, ...more,
+ usage: { input: 10, output: 2 }, pending: false, failed: false, working: null, canStop: false, board: { card: 7, column: 'progress' }, ...more,
 });
 const chatPanel = (screen: Awaited<ReturnType<typeof show>>) => screen.getByRole('tabpanel', { name: 'Chat' });
 

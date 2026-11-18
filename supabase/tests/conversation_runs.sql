@@ -20,11 +20,11 @@ select is((select count(*)::int from public.open_conversation_runs('e2000000-000
 select is(public.close_conversation_run('e2000000-0000-0000-0000-000000000001','run_1','completed','Hi Omar','session_1',14000,12),true,'a finished run is closed with its reply');
 select is(public.close_conversation_run('e2000000-0000-0000-0000-000000000001','run_1','completed','Hi again','session_1',1,1),false,'closing the same run again stores nothing');
 select is(public.close_conversation_run('e2000000-0000-0000-0000-000000000001','run_2','lost',null,null,null,null),true,'a run Hermes no longer knows is closed as lost');
-select is(public.close_conversation_run('e2000000-0000-0000-0000-000000000001','run_3','stopped',null,null,900,7),true,'a stopped run is closed with what Hermes reported');
+select is(public.close_conversation_run('e2000000-0000-0000-0000-000000000001','run_3','stopped',null,null,900,7),true,'a stopped run is closed');
 -- The service role reads no table: check the record as the database owner, then go on as the service role.
 reset role;
 select is((select string_agg(author||':'||body,',' order by id) from public.conversation_messages),'person:Hello,person:Again,person:Stop,agent:Hi Omar','only the completed run stores a reply, once');
-select is((select string_agg(run_id||':'||outcome||':'||coalesce(input_tokens::text,'unknown')||':'||coalesce(output_tokens::text,'unknown'),',' order by run_id) from public.conversation_usage),'run_1:completed:14000:12,run_2:lost:unknown:unknown,run_3:stopped:900:7','every closed run records its usage once, unknown when Hermes reported none');
+select is((select string_agg(run_id||':'||outcome,',' order by run_id) from public.conversation_run_ends),'run_1:completed,run_2:lost,run_3:stopped','every closed run records its end once');
 select is((select hermes_session_id from public.conversations),'session_1','the Hermes session is recorded');
 set local role service_role;
 select is((select count(*)::int from public.open_conversation_runs()),0,'no run is left open');
