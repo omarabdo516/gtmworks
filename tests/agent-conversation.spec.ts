@@ -2,25 +2,25 @@ import { test, expect, type Page } from './fresh-seed';
 import { chooseLanguageInSettings } from './choose-language';
 import { mkdir } from 'node:fs/promises';
 import { signIn } from './sign-in';
-// This file sorts before app.spec.ts on purpose: that file revokes the public fixture key at its end.
-const agent={Authorization:'Bearer agt_local_fixture_for_tests_only'};
-const root='/api/v1/companies/rs-learning/cards';
-// The fixture key belongs to the Writer agent; its role colour is #b5d9cf.
+import { execFileSync } from 'node:child_process';
+const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
+const rows=(sql:string)=>{ const out=JSON.parse(query(sql)); return (Array.isArray(out)?out:out.rows) as Record<string,unknown>[]; };
+// The Writer agent; its role colour is #b5d9cf.
 const writerName='وكيل المحتوى';
 async function chooseLanguage(page:Page,language:'en'|'ar') {
  await chooseLanguageInSettings(page,language);
  await expect(page.locator('html')).toHaveAttribute('lang',language);
 }
 
-test('people and agents reply inside one card, in order, each labelled and in its own direction', async ({page,request}) => {
+test('people and agents reply inside one card, in order, each labelled and in its own direction', async ({page}) => {
  await mkdir('test-results/screenshots',{recursive:true});
  const stamp=Date.now();
- const created=await request.post(root,{headers:{...agent,'Idempotency-Key':`conversation-card-${stamp}`},data:{title:`Conversation ${stamp}`,stage:1}});
- expect(created.status()).toBe(201);
- const card=(await created.json()).id as number;
  const first=`Draft is ready مسودة جاهزة ${stamp}`;
- const posted=await request.post(`${root}/${card}/comment`,{headers:{...agent,'Idempotency-Key':`conversation-agent-${stamp}`},data:{body:first}});
- expect(posted.status()).toBe(200);
+ // A card with the Writer's message on it, as an Agent's reply is stored.
+ const card=Number(rows(`with card as (insert into public.work_cards(company_id,stage_id,title) select company_id,id,'Conversation ${stamp}' from public.work_stages
+  where company_id='10000000-0000-0000-0000-000000000001' order by position limit 1 returning company_id,id),
+ note as (insert into public.work_comments(company_id,card_id,body,author_id) select company_id,id,'${first}','30000000-0000-0000-0000-000000000001' from card returning card_id)
+ select card_id from note`)[0].card_id);
 
  await signIn(page,'omar@example.com',`/c/rs-learning/work/board/${card}`);
  const messages=page.locator('.conversation .message');

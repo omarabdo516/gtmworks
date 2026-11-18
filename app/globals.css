@@ -170,12 +170,11 @@ button.add-card { justify-content:flex-start; border:0; background:transparent; 
 .agent-webhook-form { display:grid; gap:8px; margin-top:20px; }
 .agent-webhook-form button { justify-self:start; }
 .agent-notice { margin-top:16px; }
-.agent-secret code { display:block; overflow-wrap:anywhere; user-select:all; }
 .agent-key-row.section-title { margin:0; }
 .agent-row-main { min-width:0; flex:1; }
 .company-hermes-agents .member-picker bdi { min-width:0; overflow-wrap:anywhere; }
 .agent-row-main strong { display:block; }
-.agent-row-main p,.agent-delivery-row p { overflow-wrap:anywhere; }
+.agent-row-main p { overflow-wrap:anywhere; }
 .login { width:calc(100% - 32px); max-width:430px; margin:12vh auto; }
 a:has(.link-pending) { background:var(--sidebar-accent)!important; color:var(--sidebar-accent-foreground)!important; }
 .navigation-progress { position:fixed; inset:0 0 auto; height:3px; background:var(--primary); z-index:60; pointer-events:none; }

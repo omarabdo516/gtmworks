@@ -16,8 +16,11 @@ create extension if not exists pgtap with schema extensions;
 select plan(19);
 create temporary table migration_history(name text primary key);
 -- The earlier shape: the role type with reviewer, the Agency flag and functions, and a policy that uses them.
-drop policy agent_keys_owner_read on public.agent_keys; drop policy agent_keys_owner_create on public.agent_keys; drop policy agent_keys_owner_update on public.agent_keys;
-drop policy agent_refusals_owner_read on public.agent_refusals; drop policy agent_webhooks_owner on public.agent_webhooks; drop policy webhook_deliveries_owner_read on public.webhook_deliveries;
+-- The external-agent API's tables (dropped later, #341) stood then: the migration rewrites their Owner policies.
+create table public.agent_keys(company_id uuid, person_id uuid, kind text); create table public.agent_refusals(company_id uuid);
+create table public.agent_webhooks(company_id uuid); create table public.webhook_deliveries(company_id uuid);
+drop policy if exists agent_keys_owner_read on public.agent_keys; drop policy if exists agent_keys_owner_create on public.agent_keys; drop policy if exists agent_keys_owner_update on public.agent_keys;
+drop policy if exists agent_refusals_owner_read on public.agent_refusals; drop policy if exists agent_webhooks_owner on public.agent_webhooks; drop policy if exists webhook_deliveries_owner_read on public.webhook_deliveries;
 drop policy invitation_insert on public.member_invitations; drop policy invitation_update on public.member_invitations;
 alter table public.approval_steps drop constraint approval_steps_approver_role;
 -- A CHECK constraint naming the type in a literal is re-read with the renamed type, so these two go and come back.

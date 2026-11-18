@@ -50,8 +50,6 @@ do $$ declare n integer; agent uuid; target bigint; begin
  perform set_config('request.jwt.claim.sub','',true);
 end $$;
 
--- Public local fixture only; never use this key outside the local seed.
-insert into public.agent_keys(company_id,person_id,key_hash) values ('10000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000001','f0358ec2fdc223a1ac2213a6e4b2cec6efe6d175ec823cb2a574e15ecdcf8226');
 
 -- The four role agents are shared identities; the local fixture grants them to RS Learning only.
 insert into public.agents(id,role) select person_id,agent_role::text from public.members where company_id='10000000-0000-0000-0000-000000000001' and agent_role is not null;

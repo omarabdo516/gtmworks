@@ -193,7 +193,7 @@ test('a company on the shared profile moves only once its own profile holds a si
  } finally { await fake.close(); }
 });
 
-test('the tool health check records which Agents can reach a terminal, files or code', async () => {
+test('the profile check has a lost company profile made again and records no tools (#341)', async () => {
  const fake=await fakeHermes();
  try {
   const name=companyProfile(two);
@@ -208,8 +208,8 @@ test('the tool health check records which Agents can reach a terminal, files or 
   fake.settings.unknownProfiles.push(companyProfile(three));
   assert.equal(await checkAgentTools(db,{encryptionKey}),2);
   assert.deepEqual(calls.filter(call=>call.rpc==='forget_company_profile').map(call=>call.args),[{connection:'lost'}]);
-  // A pasted profile with Hermes's default tools has a terminal, files and code; the company profile has none.
-  assert.deepEqual(calls.filter(call=>call.rpc==='record_engine_tools').map(call=>call.args),[{connection:'pasted',risky:['terminal','code_execution','file']},{connection:'own',risky:[]}]);
+  // The Owner's tool warning is gone with engine_tool_checks: nothing is recorded.
+  assert.deepEqual(calls.map(call=>call.rpc),['engine_tools_due','forget_company_profile']);
  } finally { await fake.close(); }
 });
 
@@ -463,7 +463,7 @@ test('a level change and a move read in the company log in both languages', () =
  const changed=describeEntry({subject:'company',action:'agent_level_changed',details:{old_level:1,new_level:3}});
  assert.deepEqual(changed,{act:['logActAgentLevel'],obj:undefined,from:{key:'agentLevel1'},to:{key:'agentLevel3'},note:undefined});
  assert.deepEqual(describeEntry({subject:'agent',action:'agent_own_profile',details:{agent_name:'Lead'}}).act,['logActAgentOwnProfile']);
- for(const language of ['en','ar']) for(const key of ['logActAgentLevel','logActAgentOwnProfile','agentLevel1','agentLevel3','agentToolWarning','signInTerminalOnly'])
+ for(const language of ['en','ar']) for(const key of ['logActAgentLevel','logActAgentOwnProfile','agentLevel1','agentLevel3','signInTerminalOnly'])
   assert.notEqual(i18n(language).t(key),key,`${language}:${key}`);
 });
 

@@ -1,6 +1,5 @@
 import { test, expect } from './fresh-seed';
 import { chooseLanguageInSettings } from './choose-language';
-import { createHmac } from 'node:crypto';
 import { signIn, chooseCompany } from './sign-in';
 import { appOrigin, inbox, mail } from './lane.mjs';
 // Every page here is read in both languages at 1440, and the List and the Agents page also at 390. At 390 the visual
@@ -215,63 +214,13 @@ test('approval queue, rejection and ordered steps',async({page})=>{
  await expect(step).toHaveCount(0);
 });
 
-test('agent creates and submits a card; rejection produces a signed webhook', async ({page}) => {
- const {createServer}=await import('node:http');
- const received:{body:string,signature:string|undefined}[]=[];
- const receiver=createServer((req,res)=>{let body='';req.setEncoding('utf8');req.on('data',chunk=>body+=chunk);req.on('end',()=>{received.push({body,signature:req.headers['x-gtmworks-signature'] as string|undefined});res.writeHead(204).end();});});
- await new Promise<void>(resolve=>receiver.listen(0,'127.0.0.1',resolve));
- try {
-  const address=receiver.address(); if(!address || typeof address==='string') throw new Error('receiver unavailable');
-  await signIn(page,'omar@example.com','/c/rs-learning/settings/agents');
-  await page.getByLabel("Notification URL").fill(`http://127.0.0.1:${address.port}/events`);
-  await page.getByLabel("Signing secret").fill('fixture-webhook-secret');
-  await page.getByRole('button',{name:"Save notifications"}).click();
-  await expect(page.getByRole('status').filter({hasText:'Notification settings saved.'})).toContainText('Notification settings saved.');
-  await page.goto('/c/rs-learning/work/board/1');
-  const review=await page.getByLabel("Move to list").locator('option').filter({hasText:'مراجعة'}).getAttribute('value');
-  expect(review).toBeTruthy();
-  const ideaStage=await page.getByLabel("Move to list").locator('option').filter({hasText:'أفكار'}).getAttribute('value');
-  expect(ideaStage).toBeTruthy();
-  const headers={Authorization:'Bearer agt_local_fixture_for_tests_only'};
-  const root='/api/v1/companies/rs-learning/cards';
-  const initial=await page.request.get(`${root}?next_actor=me`,{headers}); expect(initial.status()).toBe(200);
-  const listing=await initial.json(); expect(Array.isArray(listing.cards)).toBe(true);
-  const title=`عمل الوكيل ${Date.now()}`;
-  const created=await page.request.post(root,{headers:{...headers,'Idempotency-Key':`create-${Date.now()}`},data:{title,stage:Number(ideaStage),evidence:'https://example.test/evidence'}}); expect(created.status()).toBe(201);
-  const {id}=await created.json();
-  const invalid=await page.request.post(root,{headers:{...headers,'Idempotency-Key':`invalid-${id}`},data:{title,stage:'invalid'}}); expect(invalid.status()).toBe(400);
-  const uploadKey=`upload-${id}`; const multipart={file:{name:'fixture.txt',mimeType:'text/plain',buffer:Buffer.from('creative fixture')},evidence:'https://example.test/creative'};
-  const uploaded=await page.request.post(`${root}/${id}/upload`,{headers:{...headers,'Idempotency-Key':uploadKey},multipart}); expect(uploaded.status()).toBe(201);
-  const retried=await page.request.post(`${root}/${id}/upload`,{headers:{...headers,'Idempotency-Key':uploadKey},multipart}); expect(retried.status()).toBe(201); expect(await retried.json()).toEqual(await uploaded.json());
-  const commentFile={body:'دليل العمل',file:{name:'evidence.txt',mimeType:'text/plain',buffer:Buffer.from('evidence fixture')}};
-  const commentHeaders={...headers,'Idempotency-Key':`comment-${id}`};
-  const comment=await page.request.post(`${root}/${id}/comment`,{headers:commentHeaders,multipart:commentFile}); expect(comment.status()).toBe(200);
-  const commentRetry=await page.request.post(`${root}/${id}/comment`,{headers:commentHeaders,multipart:commentFile}); expect(commentRetry.status()).toBe(200); expect(await commentRetry.json()).toEqual(await comment.json());
-  const moved=await page.request.post(`${root}/${id}/move`,{headers:{...headers,'Idempotency-Key':`move-${id}`},data:{stage:Number(review),evidence:'https://example.test/review'}}); expect(moved.status()).toBe(200);
-  // A message to an agent is one card for a repeated key; a changed body, an unknown mode or a non-agent member is refused.
-  const ask={message:`رسالة لوكيل ${Date.now()}`,agent:'30000000-0000-0000-0000-000000000005',mode:'answer'}; const askHeaders={...headers,'Idempotency-Key':`ask-${id}`};
-  const asked=await page.request.post(root,{headers:askHeaders,data:ask}); expect(asked.status()).toBe(201);
-  const askedAgain=await page.request.post(root,{headers:askHeaders,data:ask}); expect(askedAgain.status()).toBe(201); expect(await askedAgain.json()).toEqual(await asked.json());
-  expect((await page.request.post(root,{headers:askHeaders,data:{...ask,message:'changed'}})).status()).toBe(409);
-  expect((await page.request.post(root,{headers:{...headers,'Idempotency-Key':`mode-${id}`},data:{...ask,mode:'later'}})).status()).toBe(400);
-  expect((await page.request.post(root,{headers:{...headers,'Idempotency-Key':`agent-${id}`},data:{...ask,agent:'30000000-0000-0000-0000-000000000004'}})).status()).toBe(404);
-  await page.goto('/c/rs-learning/work/board'); await expect(page.locator('.card').filter({hasText:ask.message})).toHaveCount(1);
-  await page.goto('/c/rs-learning/work/board'); await expect(page.getByText(title)).toBeVisible();
-  await page.goto(`/c/rs-learning/work/board/${id}`); await expect(page.getByLabel('وكيل المحتوى').first()).toBeVisible(); await expect(page.getByText("Created the card")).toBeVisible(); await expect(page.getByRole('link',{name:"View evidence file"})).toBeVisible();
-  await page.goto('/c/rs-learning/approvals'); const row=page.locator('.approval-card').filter({hasText:title}); await expect(row).toBeVisible(); await expect(row.getByLabel('وكيل المحتوى')).toBeVisible();
-  // The decision is made inside the card (ADR 0013).
-  await row.getByRole('link',{name:title}).click(); const decision=page.locator('[data-card-section="review"]'); await decision.getByText("Reject with a reason").click(); await decision.getByLabel("Rejection reason").fill('يرجى تعديل التصميم'); await decision.getByLabel("Design needs work",{exact:true}).check();
-  const start=Date.now(); await decision.getByRole('button',{name:"Confirm rejection"}).click();
-  await expect.poll(()=>received.length,{timeout:10000}).toBeGreaterThan(0); expect(Date.now()-start).toBeLessThan(10000);
-  const message=received.find(x=>JSON.parse(x.body).event_type==='rejected'); expect(message).toBeTruthy();
-  const event=JSON.parse(message!.body); expect(event.reason).toBe('يرجى تعديل التصميم'); expect(event.marked_parts.design).toBe(true); expect(event.card).toBe(id);
-  expect(message!.signature).toBe(`sha256=${createHmac('sha256','fixture-webhook-secret').update(message!.body).digest('hex')}`);
-  await page.goto('/c/rs-learning/settings/agents');
-  const agentKey=page.locator('.section-title').filter({has:page.locator('strong',{hasText:'وكيل المحتوى'})}).first();
-  await agentKey.getByRole('button',{name:'Revoke key وكيل المحتوى'}).click();
-  await expect.poll(async()=> (await page.request.get(`${root}?next_actor=me`,{headers})).status()).toBe(401);
-
- } finally { await new Promise<void>((resolve,reject)=>receiver.close(err=>err?reject(err):resolve())); }
+// The external-agent API is gone (#341): its routes answer not found, with or without a key.
+test('the old agent API routes answer not found', async ({request}) => {
+ const key={Authorization:'Bearer agt_local_fixture_for_tests_only'};
+ const root='/api/v1/companies/rs-learning';
+ for(const [method,path] of [['GET',`${root}/cards?next_actor=me`],['POST',`${root}/cards`],['PATCH',`${root}/cards/1`],['POST',`${root}/cards/1/comment`],
+  ['POST',`${root}/cards/1/run-keys`],['DELETE',`${root}/cards/1/run-keys`],['GET',`${root}/skills`],['GET',`${root}/cards/1/files/1`]] as const)
+  for(const headers of [key,{}]) expect((await request.fetch(path,{method,headers,data:method==='GET'||method==='DELETE'?undefined:{}})).status(),`${method} ${path}`).toBe(404);
 });
 
 // The caption's lines survive the real save and a reload, in English and in Arabic; its height and direction are

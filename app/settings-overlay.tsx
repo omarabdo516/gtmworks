@@ -55,10 +55,8 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  const invitations:Invitation[]=section==='company'&&canManage?((await db.from('member_invitations').select('id,email,role').eq('company_id',company.id).is('claimed_at',null).order('created_at')).data||[]):[];
  const invitedAllowed=new Set(invitations.length?((await db.from('invitation_agent_access').select('invitation_id,agent_id').eq('company_id',company.id)).data||[]).map(row=>`${row.invitation_id}:${row.agent_id}`):[]);
  const sharedEngine=section==='company'&&owner?(await db.rpc('bundled_engine_shared',{c:company.id})).data===true:false;
- // The Company's Agent level, and for its Owner the Agents whose engine offers terminal, code or file tools while the
- // Company has more than one member (agent_tool_warning returns nothing to anyone else).
+ // The Company's Agent level.
  const agentLevel=section==='company'?Number((await db.from('companies').select('agent_level').eq('id',company.id).maybeSingle()).data?.agent_level)||1:1;
- const toolWarning=section==='company'&&owner?((await db.rpc('agent_tool_warning',{c:company.id})).data||[]) as {agent_name:string}[]:[];
  // The Company's model sign-in, read from its own profile in the agent engine (#3). The service role reads only the
  // key of that Company's bundled Connection, after the database said the person is a member (company_engine_target).
  const subscriptions=section==='models'?await (async()=>{ try { return await readCompanySignIns(db,createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false}}),{company:company.id,encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY}); } catch { return {profile:null,oneCompany:false,signIns:null}; } })():null;
@@ -75,7 +73,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  const rules:Rule[]=agent?(((await db.from('agent_rules').select('id,body,said_by,said_at,teller:people!said_by(name)').eq('agent_id',agent.id).is('removed_at',null).or('suggestion.is.null,suggestion.eq.approved').order('said_at',{ascending:false})).data||[]) as unknown as Rule[]):[];
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  const ro=!canManage&&<p className="ro-note"><SettingsIcon name="shield"/><span>{t('settingsRO')}</span></p>;
- const page=section==='company'?<CompanySection t={t} company={company} solo={workMode==='alone'} members={members} invitations={invitations} agents={agents} allowed={allowed} invitedAllowed={invitedAllowed} userId={userId} slug={slug} owner={owner} canManage={canManage} sharedEngine={sharedEngine} agentLevel={agentLevel} toolWarning={toolWarning.map(row=>row.agent_name)} roleNames={roleNames} ro={ro}/>
+ const page=section==='company'?<CompanySection t={t} company={company} solo={workMode==='alone'} members={members} invitations={invitations} agents={agents} allowed={allowed} invitedAllowed={invitedAllowed} userId={userId} slug={slug} owner={owner} canManage={canManage} sharedEngine={sharedEngine} agentLevel={agentLevel} roleNames={roleNames} ro={ro}/>
   :section==='agents'?(agent?<AgentPage t={t} rtl={rtl} slug={slug} company={company.id} userId={userId} agent={agent} status={stateOf(agent.id)} main={agents[0]} rules={rules} owner={owner} canManage={canManage} canWrite={canWrite}/>:<AgentsSection t={t} rtl={rtl} slug={slug} agents={agents} stateOf={stateOf} canManage={canManage} canWrite={canWrite} owner={owner}/>)
   :section==='apps'?<AppsSection slug={slug} company={company.id} owner={owner} rtl={rtl} app={query.app} failed={query.signin==='failed'}/>
   :section==='usage'?<UsageSection t={t} locale={locale} slug={slug} company={company.id} rows={usageRows} period={query.period==='30'?30:7}/>
@@ -92,7 +90,7 @@ const Soon=({t}:{t:T})=><div className="panel-card sov-soon" aria-disabled="true
 const SoonSec=({t,id,label}:{t:T,id:string,label:string})=><section className="dp-sec" aria-labelledby={id}><Label id={id}>{label}</Label><Soon t={t}/></section>;
 const initial=(name:string)=>name.trim().slice(0,1).toUpperCase()||'?';
 
-function CompanySection({t,company,solo,members,invitations,agents,allowed,invitedAllowed,userId,slug,owner,canManage,sharedEngine,agentLevel,toolWarning,roleNames,ro}:{t:T,company:{id:string,name:string},solo:boolean,members:Member[],invitations:Invitation[],agents:Agent[],allowed:Set<string>,invitedAllowed:Set<string>,userId:string,slug:string,owner:boolean,canManage:boolean,sharedEngine:boolean,agentLevel:number,toolWarning:string[],roleNames:Record<string,string>,ro:ReactNode}) {
+function CompanySection({t,company,solo,members,invitations,agents,allowed,invitedAllowed,userId,slug,owner,canManage,sharedEngine,agentLevel,roleNames,ro}:{t:T,company:{id:string,name:string},solo:boolean,members:Member[],invitations:Invitation[],agents:Agent[],allowed:Set<string>,invitedAllowed:Set<string>,userId:string,slug:string,owner:boolean,canManage:boolean,sharedEngine:boolean,agentLevel:number,roleNames:Record<string,string>,ro:ReactNode}) {
  const count=members.length;
  const name=<section className="dp-sec" aria-labelledby="co-h-name"><Label id="co-h-name">{t('settingsCompanyName')}</Label>
   <div className="panel-card set-card">{owner?<div className="set-field"><label className="set-label" htmlFor="co-name">{t('settingsCompanyNameHint')}</label>
@@ -128,7 +126,6 @@ function CompanySection({t,company,solo,members,invitations,agents,allowed,invit
   <div className="panel-card">{members.map(member=><div className="panel-row" key={member.person_id}><span className="me__av pp-av" aria-hidden="true">{initial(member.people?.name||t('member'))}</span><span className="panel-row__text"><span className="panel-row__t"><bdi>{member.people?.name||t('member')}</bdi>{member.person_id===userId&&<> <span className="ch-you">{t('settingsYouMark')}</span></>}</span><span className="panel-row__d">{roleNames[member.role]||''}</span></span></div>)}</div></section>;
  return <><Head title={t('settingsCompany')} sub={t('settingsCompanySub')}/>{ro}
   {sharedEngine&&<p className="ro-note sov-warn" role="note"><SettingsIcon name="shield"/><span>{t('sharedEngineWarning')}</span></p>}
-  {toolWarning.length>0&&<p className="ro-note sov-warn" role="note" id="co-tool-warning"><SettingsIcon name="shield"/><span>{t('agentToolWarning',toolWarning.join(', '))}</span></p>}
   {name}{mode}<AgentLevel company={company.id} level={agentLevel} owner={owner}/>{solo?invite:canManage?table:list}</>;
 }
 

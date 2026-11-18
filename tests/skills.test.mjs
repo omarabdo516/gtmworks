@@ -25,9 +25,6 @@ test('a library skill is installed from the stored catalogue, never from text se
  const { readFileSync } = await import('node:fs');
  const actions = readFileSync('app/c/[slug]/[[...section]]/skill-actions.ts', 'utf8');
  assert.match(actions, /skillLibrary\.find\(entry=>entry\.name===String\(form\.get\('entry'\)\)\)\?\.content/);
- const route = readFileSync('app/api/v1/companies/[slug]/[...path]/route.ts', 'utf8');
- assert.doesNotMatch(route, /skill_versions['"]\)\.(insert|upsert|update)/);
- assert.match(route, /agent_load_skills/);
 });
 
 test('the Skills page strings exist in both languages and stay out of the browser bundle', async () => {

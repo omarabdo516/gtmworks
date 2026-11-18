@@ -2,12 +2,7 @@ import { test, expect, type Page } from './fresh-seed';
 import { chooseLanguageInSettings } from './choose-language';
 import { mkdir } from 'node:fs/promises';
 import { signIn } from './sign-in';
-import { appOrigin } from './lane.mjs';
-// This file sorts before app.spec.ts on purpose: that file revokes the public fixture key at its end.
-const agent={Authorization:'Bearer agt_local_fixture_for_tests_only'};
-const root='/api/v1/companies/rs-learning/cards';
-const bearer=(key:string)=>({Authorization:`Bearer ${key}`});
-// A real 1 x 1 PNG: the page must show it, and the API must return exactly these bytes.
+// A real 1 x 1 PNG: the page must show it.
 const bytes=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII=','base64');
 const picture=(name:string)=>({name,mimeType:'image/png',buffer:bytes});
 const attach=(page:Page)=>page.locator('input[type=file][name=files]');
@@ -70,54 +65,4 @@ test('a file attached in the composer and in a reply shows as a thumbnail, in bo
    for(const width of [1440,390]) { await page.setViewportSize({width,height:900}); await page.locator('.modal').first().screenshot({path:`test-results/screenshots/attachments-card-${language}-${width}.png`}); }
   }
  } finally { await chooseLanguage(page,'en'); }
-});
-
-test('a run key downloads the files of its own card and no other, and another company finds nothing',async({page,request,browser})=>{
- const stamp=Date.now();
- // The seeded cards 1 and 2 are RS Learning's: the agent holds the first of them (as in agent-run-keys.spec.ts), the other is a card it must not reach.
- const ids:number[]=(await (await request.get(`${root}?next_actor=me`,{headers:agent})).json()).cards.map((card:{id:number})=>card.id);
- expect(ids.length).toBeGreaterThan(0);
- const own=ids[0]; const other=own===1?2:1;
- await signIn(page,'omar@example.com',`/c/rs-learning/work/board/${own}`);
- const ownFile=Number((await reply(page,`File on the own card ${stamp}`)).split('/').pop());
- await page.goto(`/c/rs-learning/work/board/${other}`);
- const otherFile=Number((await reply(page,`File on the other card ${stamp}`)).split('/').pop());
-
- const issued=await request.post(`${root}/${own}/run-keys`,{headers:agent,data:{}});
- expect(issued.status()).toBe(201);
- const run=bearer((await issued.json()).key);
- const download=await request.get(`${root}/${own}/files/${ownFile}`,{headers:run});
- expect(download.status()).toBe(200);
- expect(download.headers()['content-type']).toBe('image/png');
- expect(await download.body()).toEqual(bytes);
- // Its own card lists the file; another card is forbidden, and a file of another card asked for through its own card is not found.
- const listed=await request.get(`${root}?next_actor=me`,{headers:run});
- expect((await listed.json()).cards[0].attachments).toEqual(expect.arrayContaining([expect.objectContaining({id:ownFile,name:'reply.png',content_type:'image/png'})]));
- expect((await request.get(`${root}/${other}/files/${otherFile}`,{headers:run})).status()).toBe(403);
- expect((await request.get(`${root}/${own}/files/${otherFile}`,{headers:run})).status()).toBe(404);
- expect((await request.get(`${root}/${own}/files/999999`,{headers:run})).status()).toBe(404);
- // The company key reaches every card of its company.
- expect((await request.get(`${root}/${other}/files/${otherFile}`,{headers:agent})).status()).toBe(200);
-
- // Another company: a file of Aleem's is found by Aleem's members only.
- // Aleem has no agent granted yet, so its card comes from the board's stage form.
- await page.goto('/c/aleem/work/board');
- await page.getByRole('button',{name:'+ Add card'}).first().click();
- await page.getByLabel('Card title').fill(`Aleem files ${stamp}`);
- await page.getByRole('button',{name:'Create card',exact:true}).click();
- await expect(page).toHaveURL(/\/c\/aleem\/work\/board\/\d+$/);
- const aleemCard=Number(new URL(page.url()).pathname.split('/').pop());
- const aleemFile=await reply(page,`File in Aleem ${stamp}`);
- expect((await page.request.get(aleemFile)).status()).toBe(200);
- const outside=await browser.newContext({baseURL:appOrigin});
- try {
-  const outsider=await outside.newPage();
-  await signIn(outsider,'reviewer@example.com','/c/rs-learning/home'); // A member of RS Learning only.
-  expect((await outsider.request.get(aleemFile)).status()).toBe(404);
-  expect((await outsider.request.get(aleemFile.replace('/c/aleem/','/c/rs-learning/'))).status()).toBe(404);
-  expect((await outsider.request.get(`/c/rs-learning/files/${ownFile}`)).status()).toBe(200);
- } finally { await outside.close(); }
- expect((await request.get(aleemFile,{maxRedirects:0})).status()).not.toBe(200); // Signed out: a redirect to sign-in or not found, never the file.
- // RS Learning's agent key is not Aleem's.
- expect((await request.get(`/api/v1/companies/aleem/cards/${aleemCard}/files/${aleemFile.split('/').pop()}`,{headers:agent})).status()).toBe(404);
 });

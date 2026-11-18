@@ -28,8 +28,7 @@ create temporary table decisions(fn text primary key, decision text not null che
 insert into decisions
  select fn,'checks','answers for a Card its Agent hides from the caller, or from the person it names, as for a Card that does not exist' from unnest(array[
   'public.decide_approval(uuid,bigint,text,text,boolean,boolean)','public.decide_skill_lesson(uuid,bigint,boolean)','public.edit_card_note(uuid,bigint,text)',
-  'public.enqueue_assignment_webhook()','public.issue_run_key_for(uuid,bigint,uuid,text,integer)','public.lookup_agent_key(text)',
-  'public.propose_skill_lesson(uuid,uuid,text,text,text,text,text)','public.start_card_conversation(uuid,bigint,uuid)','public.card_chat_person(uuid,bigint)',
+  'public.start_card_conversation(uuid,bigint,uuid)','public.card_chat_person(uuid,bigint)',
   'public.card_wait(public.work_cards)','public.reply_card_waits(public.reply_cards)']) fn
  union all select 'public.can_see_card_file(text)','checks','a stored file follows each Card it belongs to'
  union all select 'public.can_see_card(uuid,bigint)','exempt','the read rule itself'
@@ -37,7 +36,6 @@ insert into decisions
   'public.approval_card_guard()','public.conversation_reply_card()','public.log_agent_change()','public.log_card_activity()','public.log_card_comment()',
   'public.log_company_change()','public.log_member_change()','public.log_member_invitation()','public.log_note_edit()','public.note_mentions()','public.pin_channel_run_knowledge()',
   'public.resolve_waiting_on_card()','public.resolve_waiting_on_reply()','public.schedule_approved_card()','public.work_audit()','public.work_guard()']) fn
- union all select 'public.enqueue_person_webhook()','exempt','a trigger whose delivery goes to the Company webhook, which only Owners set and read, and an Owner sees every Agent'
  union all select fn,'exempt','the worker''s, callable by the service role only: it answers the worker, never a Member, and the rows it writes are read under card_agent_visible' from unnest(array[
   'public.add_waiting_item(uuid,uuid,text,text,text,bigint,uuid,text)','public.agent_save_rule(uuid,text,text,text)','public.agent_show_card(uuid,text,text,text,text,jsonb)',
   'public.answer_note_start(bigint,integer,text)','public.begin_note_start(bigint)','public.close_note_run(bigint,text,text,text,bigint,bigint)',

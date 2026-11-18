@@ -3,18 +3,6 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 
 // The database (supabase/tests/skill_lessons.sql) decides what is stored and who may decide; these guard the pieces around it.
-const route = readFileSync('app/api/v1/companies/[slug]/[...path]/route.ts', 'utf8');
-const block = route.slice(route.indexOf("path[0]==='skills' && path[2]==='lessons'"), route.indexOf('// A run key reaches its one card'));
-
-test('a lesson is proposed only from a run, takes its card from the key and never writes a skill', () => {
- assert.match(block, /path\[0\]==='skills' && path\[2\]==='lessons' && request\.method==='POST'/);
- assert.match(block, /if \(!runCard\) return refuse\(\)/);
- assert.match(block, /rpc\('propose_skill_lesson'/);
- assert.match(block, /k:agent\.key_id/);
- assert.doesNotMatch(block, /payload\.card|payload\.company|skill_versions|skill_lessons['"]\)/, 'the card and company come from the key, and rows are written by the database function');
- assert.doesNotMatch(route, /decide_skill_lesson/, 'an agent route has no way to decide');
-});
-
 test('deciding on a lesson is a person action that calls the database function and nothing else', () => {
  const actions = readFileSync('app/c/[slug]/[[...section]]/skill-actions.ts', 'utf8');
  const decide = actions.slice(actions.indexOf('export const decideSkillLesson'));

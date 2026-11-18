@@ -3,27 +3,22 @@ import { chooseLanguageInSettings } from './choose-language';
 import { mkdir } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { signIn } from './sign-in';
-import { hashKey } from '../lib/agent-crypto.mjs';
 import { appOrigin } from './lane.mjs';
-// This spec makes its own Writer key and removes every skill it installed, because skills.spec starts from an empty Skills page.
-const writerKey='agt_lessons_spec_writer_key';
-const headers={Authorization:`Bearer ${writerKey}`};
+// This spec removes every skill it installed, because skills.spec starts from an empty Skills page.
 // Supabase CLI targets the local test database by default; never pass --remote.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
-const api='/api/v1/companies/rs-learning';
+const rows=(sql:string)=>{ const out=JSON.parse(query(sql)); return (Array.isArray(out)?out:out.rows) as Record<string,unknown>[]; };
 const company=`(select id from public.companies where slug='rs-learning')`;
 const cleanUp=()=>{ for(const table of ['skill_lessons','skill_loads','skill_enablements','skill_events','skill_versions','skills']) query(`delete from public.${table} where company_id=${company}`); };
 async function chooseLanguage(page:Page,language:'en'|'ar') {
  await chooseLanguageInSettings(page,language);
  await expect(page.locator('html')).toHaveAttribute('lang',language);
 }
-test('an agent proposes a lesson from its run, the Inbox shows the change, the reason and the card, approving adds it to the skill and rejecting does not', async ({page,browser}) => {
+test('a lesson an agent left on a card waits in the Inbox, which shows the change, the reason and the card, approving adds it to the skill and rejecting does not', async ({page,browser}) => {
  test.setTimeout(150000);
  await mkdir('test-results/screenshots',{recursive:true});
  await signIn(page,'omar@example.com','/c/rs-learning/skills');
  cleanUp();
- query(`delete from public.agent_keys where key_hash='${hashKey(writerKey)}'`);
- query(`insert into public.agent_keys(company_id,person_id,key_hash) select m.company_id,m.person_id,'${hashKey(writerKey)}' from public.members m join public.companies c on c.id=m.company_id where c.slug='rs-learning' and m.agent_role='writer' and m.removed_at is null`);
  const outside=await browser.newContext({baseURL:appOrigin});
  try {
   await chooseLanguage(page,'en');
@@ -32,28 +27,16 @@ test('an agent proposes a lesson from its run, the Inbox shows the change, the r
   const writer=page.getByRole('form',{name:'caption-hooks Writer',exact:true});
   await writer.getByRole('button',{name:'Enable caption-hooks for Writer'}).click();
   await expect(writer.getByText('Enabled',{exact:true})).toBeVisible();
-  // The Writer works a card on a run key; a company key proposes nothing.
-  const cards=await (await page.request.get(`${api}/cards?next_actor=me`,{headers})).json();
-  const card=cards.cards[0] as {id:number,title:string};
-  const issued=await page.request.post(`${api}/cards/${card.id}/run-keys`,{headers,data:{ttl_seconds:900}}); expect(issued.status()).toBe(201);
-  const run={Authorization:`Bearer ${(await issued.json()).key}`};
-  const stamp=Date.now();
-  const propose=(skill:string,body:object,key:string|null,auth=run)=>page.request.post(`${api}/skills/${skill}/lessons`,{headers:key?{...auth,'Idempotency-Key':key}:auth,data:body});
-  const first={lesson:'Open every hook with the number.\nThen name the problem.',reason:'Hooks that opened with a number were saved more often.'};
-  const second={lesson:'Never name a price in a hook.',reason:'Two captions with prices failed the brand check.'};
-  expect((await propose('caption-hooks',first,`lesson-company-${stamp}`,headers)).status()).toBe(403);
-  expect((await propose('caption-hooks',first,null)).status()).toBe(400);
-  expect((await propose('caption-hooks',{lesson:'',reason:'x'},`lesson-empty-${stamp}`)).status()).toBe(400);
-  expect((await propose('no-such-skill',first,`lesson-missing-${stamp}`)).status()).toBe(404);
-  const proposed=await propose('caption-hooks',first,`lesson-one-${stamp}`); expect(proposed.status()).toBe(201);
-  const body=await proposed.json(); expect(body.status).toBe('pending');
-  const again=await propose('caption-hooks',first,`lesson-one-${stamp}`); expect(again.status()).toBe(201); expect((await again.json()).id).toBe(body.id);
-  expect((await propose('caption-hooks',second,`lesson-one-${stamp}`)).status()).toBe(409);
-  expect((await propose('caption-hooks',second,`lesson-two-${stamp}`)).status()).toBe(201);
-  const skillText=async()=>{ const response=await page.request.get(`${api}/skills`,{headers:run}); expect(response.status()).toBe(200); return (await response.json()).skills[0] as {version:number,content:string}; };
+  // Two lessons the Writer left on the first card, as an Agent's run left them before the external-agent API was removed (#341).
+  const card=rows(`select id,title from public.work_cards where company_id=${company} order by id limit 1`)[0] as {id:number,title:string};
+  query(`insert into public.skill_lessons(company_id,skill_id,card_id,proposed_by,lesson,reason,base_version,request_key,fingerprint)
+   select s.company_id,s.id,${card.id},m.person_id,l.lesson,l.reason,1,l.k,'f-'||l.k from public.skills s join public.members m on m.company_id=s.company_id and m.agent_role='writer' and m.removed_at is null,
+   (values ('one','Open every hook with the number. Then name the problem.','Hooks that opened with a number were saved more often.'),('two','Never name a price in a hook.','Two captions with prices failed the brand check.')) l(k,lesson,reason)
+   where s.company_id=${company} and s.slug='caption-hooks'`);
+  const skillText=()=>rows(`select v.version,v.content from public.skill_versions v join public.skills s on s.id=v.skill_id where s.company_id=${company} and s.slug='caption-hooks' order by v.version desc limit 1`)[0] as {version:number,content:string};
   // Nothing is in the skill while the proposals wait.
-  expect((await skillText()).version).toBe(1);
-  expect((await skillText()).content).not.toContain('Open every hook with the number');
+  expect(skillText().version).toBe(1);
+  expect(skillText().content).not.toContain('Open every hook with the number');
   // The Inbox shows each proposal with the change, the reason and the card.
   await page.goto('/c/rs-learning/approvals');
   const lessons=page.getByRole('group',{name:'Lesson for caption-hooks'});
@@ -89,18 +72,18 @@ test('an agent proposes a lesson from its run, the Inbox shows the change, the r
   }
   await chooseLanguage(page,'en');
   await page.setViewportSize({width:1440,height:900});
-  // Approving adds the lesson to the skill; the next run reads it.
+  // Approving adds the lesson to the skill.
   await page.goto('/c/rs-learning/approvals');
   await page.getByRole('group',{name:'Lesson for caption-hooks'}).filter({hasText:'Open every hook with the number.'}).getByRole('button',{name:'Approve the lesson for caption-hooks'}).click();
   await expect(page.getByRole('group',{name:'Lesson for caption-hooks'})).toHaveCount(1);
-  const approved=await skillText();
+  const approved=skillText();
   expect(approved.version).toBe(2);
   expect(approved.content).toContain('## Lessons\n\n- Open every hook with the number. Then name the problem.');
   expect(approved.content).toContain('Name the one problem');
   // Rejecting adds nothing.
   await page.getByRole('button',{name:'Reject the lesson for caption-hooks'}).click();
   await expect(page.getByRole('group',{name:'Lesson for caption-hooks'})).toHaveCount(0);
-  const after=await skillText();
+  const after=skillText();
   expect(after.version).toBe(2);
   expect(after.content).toBe(approved.content);
   expect(after.content).not.toContain('Never name a price');
@@ -108,7 +91,6 @@ test('an agent proposes a lesson from its run, the Inbox shows the change, the r
   expect(decided.map((row:{status:string,result_version:number|null})=>`${row.status}:${row.result_version}`)).toEqual(['approved:2','rejected:null']);
  } finally {
   await outside.close();
-  query(`update public.agent_keys set revoked_at=now() where key_hash='${hashKey(writerKey)}'`);
   await chooseLanguage(page,'en');
   cleanUp();
  }

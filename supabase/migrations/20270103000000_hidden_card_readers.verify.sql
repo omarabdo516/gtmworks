@@ -1,10 +1,5 @@
 with replaced(fn,result,definer,callers) as (values
- ('public.issue_run_key_for(uuid,bigint,uuid,text,integer)','timestamp with time zone',true,array['service_role']),
- ('public.lookup_agent_key(text)','TABLE(key_id uuid, company_id uuid, person_id uuid, slug text, key_hash text, kind text, card_id bigint)',true,array['service_role']),
  ('public.agent_write(uuid,text,text,text,bigint,jsonb)','jsonb',false,array['anon','authenticated','service_role']),
- ('public.revoke_run_keys(uuid,bigint,uuid)','integer',true,array['authenticated']),
- ('public.enqueue_assignment_webhook()','trigger',true,array[]::text[]),
- ('public.propose_skill_lesson(uuid,uuid,text,text,text,text,text)','jsonb',true,array['authenticated']),
  ('public.decide_skill_lesson(uuid,bigint,boolean)','integer',true,array['authenticated']),
  ('public.decide_approval(uuid,bigint,text,text,boolean,boolean)','void',true,array['anon','authenticated','service_role']),
  ('public.edit_card_note(uuid,bigint,text)','boolean',true,array['authenticated'])),
