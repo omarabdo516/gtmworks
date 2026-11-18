@@ -26,6 +26,11 @@ create unique index channel_runs_one_agent on public.channel_runs(message_id, ag
 alter table public.channel_messages add column reply_ordinal smallint check (reply_ordinal between 1 and 3);
 alter table public.channel_messages drop constraint channel_messages_reply_to_key;
 create unique index channel_messages_one_reply on public.channel_messages(reply_to, reply_ordinal);
+-- Every member reads which of a message's Agents a reply is, so each reply draws its own cards and steps.
+grant select (reply_ordinal) on public.channel_messages to authenticated;
+-- A channel card names the place of the Run that showed it, so a message that called two Agents draws each one's cards
+-- under that Agent's own reply. A card #148 kept before this is the first place's.
+alter table public.reply_cards add column channel_ordinal smallint check (channel_ordinal between 1 and 3);
 
 -- A request belongs to one Run, not to its message: the engine run id is the link (it is already unique on the Run), and
 -- `ordinal` names the Agent whose turn it is drawn under, which every member of the channel reads.
@@ -274,8 +279,8 @@ begin
   or not public.channel_can_show_cards(r.channel_id,m.person_id,r.agent_id) then return jsonb_build_object('state','refused'); end if;
  if not (public.reply_card_text(to_jsonb(title),100) and public.reply_card_valid(kind,'shown',content)) then
   return jsonb_build_object('state','invalid'); end if;
- insert into public.reply_cards(company_id,channel_message_id,run_id,call_id,kind,title,content,state)
-  values(r.company_id,message,run,call,kind,title,content,'shown')
+ insert into public.reply_cards(company_id,channel_message_id,channel_ordinal,run_id,call_id,kind,title,content,state)
+  values(r.company_id,message,r.ordinal,run,call,kind,title,content,'shown')
   on conflict (channel_message_id,run_id,call_id) do nothing returning * into kept;
  if kept.id is null then
   select * into kept from public.reply_cards c where c.channel_message_id=message and c.run_id=run and c.call_id=call;

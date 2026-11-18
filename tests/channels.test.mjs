@@ -17,13 +17,14 @@ const { channelRecord } = await import('../lib/channels.ts');
 // The channel's reads as the page makes them. `runs` are the channel's closed Runs, newest first; `open` are the Runs
 // still open, and `states` is the one agent_states call. `states` rows carry more than the record may keep: the state is
 // all a channel's reader gets. `notes` are the quiet lines the channel got, and `members` what channel_members answered.
-function database({ agents, runs = [], open = [], states = [], messages = [], notes = [], members = [{ person: 'p-1', name: 'Omar', role: 'owner', invitation: null, email: null }, { person: 'p-2', name: 'Sara Adel', role: 'viewer', invitation: null, email: null }] }) {
+function database({ agents, runs = [], open = [], states = [], messages = [], notes = [], cards = [], members = [{ person: 'p-1', name: 'Omar', role: 'owner', invitation: null, email: null }, { person: 'p-2', name: 'Sara Adel', role: 'viewer', invitation: null, email: null }] }) {
  const rows = select => String(select).includes('message_id') ? runs : select === 'agent_id' ? open : [];
  const chain = table => {
   const data = table === 'channels' ? { id: 'ch-1', company_id: 'co-1', kind: 'team', name: 'Launch week' }
    : table === 'channel_runs' ? rows(selectOf.get(table))
    : table === 'channel_messages' ? messages
    : table === 'channel_notes' ? notes
+   : table === 'reply_cards' ? cards
    : [];
   const link = {
    select: () => link, eq: () => link, is: () => link, gte: () => link, in: () => link, order: () => link, limit: () => link,
@@ -133,4 +134,24 @@ test('a message that called two Agents carries both turns in the order named, ea
  assert.equal(said?.author === 'person' ? said.mention?.agent : null, 'Ads', 'the first Agent is still the message\'s one mention');
  assert.equal(record?.open, true, 'the second Agent is still working');
  assert.deepEqual(record?.agents.map(row => row.state), ['idle', 'working'], 'the Agent answering is working, the one that answered is idle');
+});
+
+test('a message that called two Agents draws each one\'s card under that Agent\'s own reply', async () => {
+ const at = '2026-06-10T10:00:00Z';
+ const card = (id, ordinal, title) => ({ id, run_id: `run-${ordinal}`, kind: 'draft', title, content: { line: 'Draft', rows: [] }, state: 'shown', answered_at: null, done_at: null, decided_at: null, created_at: at, channel_message_id: 2, channel_ordinal: ordinal });
+ const record = await channelRecord(database({
+  agents: [agent('a-1', 'Ads'), agent('a-2', 'SEO')],
+  runs: [
+   { message_id: 2, ordinal: 2, agent_id: 'a-2', agent_name: 'SEO', outcome: 'completed' },
+   { message_id: 2, ordinal: 1, agent_id: 'a-1', agent_name: 'Ads', outcome: 'completed' },
+  ],
+  messages: [
+   { id: 4, author: 'agent', person_id: null, agent_id: 'a-2', author_name: 'SEO', body: 'The section.', reply_to: 2, reply_ordinal: 2, created_at: at },
+   { id: 3, author: 'agent', person_id: null, agent_id: 'a-1', author_name: 'Ads', body: 'Two scripts.', reply_to: 2, reply_ordinal: 1, created_at: at },
+   { id: 2, author: 'person', person_id: 'p-1', agent_id: null, author_name: 'Omar', body: '@Ads @SEO two scripts and a section', reply_to: null, reply_ordinal: null, created_at: at },
+  ],
+  cards: [card(21, 1, 'Scripts'), card(22, 2, 'Section')],
+ }), 'p-1', 'co-1', 'ch-1');
+ const replies = (record?.messages ?? []).filter(message => message.author === 'agent');
+ assert.deepEqual(replies.map(reply => [reply.name, reply.author === 'agent' ? reply.cards?.map(shown => shown.title) : null]), [['Ads', ['Scripts']], ['SEO', ['Section']]]);
 });
