@@ -56,6 +56,8 @@ export const workAction=withActionLog('workAction',async function workAction(for
  else if(op==='move') ({error}=await db.rpc('move_work_card',{c:company,card,stage:Number(form.get('stage')),evidence}));
  // The board moves a card by column (ADR 0013); the database picks the column's stage and applies every stage rule.
  else if(op==='move-column') ({error}=await db.rpc('move_work_card_to_column',{c:company,card,target:String(form.get('column')||''),evidence}));
+ // A card keeps its place inside its column (#174): above the card it was dropped on, or at the column's end.
+ else if(op==='place') ({error}=await db.rpc('place_work_card',{c:company,card,target:String(form.get('column')||''),before_card:Number(form.get('before'))||null,evidence}));
  else if(op==='edit') { const fields=Object.fromEntries(['title','offering','segment','hook','channel','format','go_live','goal','caption'].map(k=>[k,String(form.get(k)||'')])); ({error}=await db.rpc('edit_work_card',{c:company,card,fields,evidence})); }
  else if(op==='comment') {
   const stored=await storeFiles(db,company,form,`${card}/${crypto.randomUUID()}`); error=stored.error;
