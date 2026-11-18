@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(65);
+select plan(67);
 insert into public.companies(id,slug,name) values ('10000000-0000-0000-0000-000000000099','work-isolated','Test');
 insert into public.work_cards(company_id,stage_id,title) select company_id,id,'Private' from public.work_stages where company_id='10000000-0000-0000-0000-000000000099' and position=1;
 insert into public.work_creatives(company_id,card_id,name) select company_id,id,'Private' from public.work_cards where company_id='10000000-0000-0000-0000-000000000099';
@@ -71,6 +71,11 @@ select is((select count(*)::int from public.work_cards p where p.company_id='100
 select is((select count(*)::int from public.work_activity where company_id='10000000-0000-0000-0000-000000000001' and card_id=(select id from public.work_cards where company_id='10000000-0000-0000-0000-000000000001' and title='Place 1') and action='card_changed' and details->>'field'='stage_id'),1,'a move to another column is logged');
 select public.move_work_card_to_column('10000000-0000-0000-0000-000000000001',(select id from public.work_cards where company_id='10000000-0000-0000-0000-000000000001' and title='Place 2'),'progress');
 select is((select count(*)::int from public.work_cards p where p.company_id='10000000-0000-0000-0000-000000000001' and p.title='Place 2' and p.board_order>(select max(w.board_order) from public.work_cards w join public.work_stages s on s.company_id=w.company_id and s.id=w.stage_id where w.company_id='10000000-0000-0000-0000-000000000001' and s.board_column='progress' and w.id<>p.id)),1,'a plain move goes to the end of its column too');
+-- #174: two Cards can hold the same place (a move copies one); a Card dropped above one of them lands between the two, as
+-- the board draws them, place first and then the older Card.
+update public.work_cards set board_order=10 where company_id='10000000-0000-0000-0000-000000000001' and title in ('Place 1','Place 2');
+select lives_ok($$select public.place_work_card('10000000-0000-0000-0000-000000000001',(select id from public.work_cards where company_id='10000000-0000-0000-0000-000000000001' and title='Place 3'),'progress',(select id from public.work_cards where company_id='10000000-0000-0000-0000-000000000001' and title='Place 2'))$$,'a card is placed above one of two cards on the same place');
+select is((select array_agg(title order by board_order,id) from public.work_cards p where p.company_id='10000000-0000-0000-0000-000000000001' and p.title like 'Place %' and exists(select 1 from public.work_stages s where s.company_id=p.company_id and s.id=p.stage_id and s.board_column='progress')),array['Place 1','Place 3','Place 2'],'the placed card sits between the two cards that shared a place');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
 select throws_ok($$select public.place_work_card('10000000-0000-0000-0000-000000000001',(select id from public.work_cards where company_id='10000000-0000-0000-0000-000000000001' and title='Place 3'),'planned',null)$$,'42501','not permitted','a Viewer places no card');
 -- A Contributor places before review, and nowhere after it.
