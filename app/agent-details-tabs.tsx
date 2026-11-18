@@ -24,7 +24,8 @@ export function detailsTabs({t,slug,agent,activity,tools,tasks,files,fileCount,l
   // files of its Cards and of the reader's own Conversations with it.
   files:<>{library}<section className="dp-sec" aria-labelledby="dp-files-h"><h3 className="dp-label" id="dp-files-h"><span>{t('agentFiles')} <span className="muted num">{fileCount}</span></span></h3>
    {files??<Empty text={t('agentFilesEmpty')}/>}</section></>,
-  // design-reference: memoryHTML, without its Add button, search, edit and forget (#191, #192).
+  // design-reference: memoryHTML, without its Add button, which is not built: the notes, the search (#192), the edit
+  // and the forget controls (#191).
   memory:memory??<section className="dp-sec"><Empty text={t('agentMemoryUnread')}/></section>,
   log:<section className="dp-sec"><h3 className="dp-label"><span>{t('chatTabLog')} <span className="muted num">{logCount}</span></span><Link className="link-btn" href={`/c/${slug}/log?who=a:${agent}`}>{t('agentOpenLog')}</Link></h3>
    {log??<Empty text={t('agentLogEmpty')}/>}

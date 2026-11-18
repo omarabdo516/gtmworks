@@ -14,10 +14,10 @@ import '@/app/shell.css';
 // The Memory tab of an Agent's Settings page (#193): a real tab beside Settings with its own address, moved between by
 // pointer and by the arrow keys in the reader's direction, opening the same AgentMemory the details panel draws, with
 // the same flags: a Viewer reads and is offered no buttons.
-const push = vi.hoisted(() => vi.fn());
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push, refresh: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }) }));
+const replace = vi.hoisted(() => vi.fn());
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace, prefetch: vi.fn() }) }));
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'> & { replace?: boolean }) => <a {...Object.fromEntries(Object.entries(props).filter(([name]) => name !== 'replace'))}/> }));
-afterEach(() => push.mockReset());
+afterEach(() => replace.mockReset());
 
 const notes = [
  { id: 'memory:memory:0:4d2c1b0a9f8e', text: 'Prefers short subject lines.' },
@@ -41,12 +41,12 @@ test('both tabs are drawn, each with its own address, and the open tab is the on
 
 test('the arrow keys move to the other tab, in the reader’s direction, and leave the focus on it', async () => {
  for (const [language, key] of [['en', 'ArrowRight'], ['en', 'ArrowLeft'], ['ar', 'ArrowLeft'], ['ar', 'ArrowRight']] as const) {
-  push.mockReset();
+  replace.mockReset();
   const screen = await tabs('settings', language);
   const settings = screen.getByRole('tab', { name: language === 'en' ? 'Settings' : 'الإعدادات', exact: true });
   settings.element().focus();
   await userEvent.keyboard(`{${key}}`);
-  expect(push).toHaveBeenCalledWith('/c/rs-learning/settings?agent=ag-1&tab=memory');
+  expect(replace).toHaveBeenCalledWith('/c/rs-learning/settings?agent=ag-1&tab=memory');
   await expect.element(screen.getByRole('tab', { name: language === 'en' ? 'Memory' : 'الذاكرة', exact: true })).toHaveFocus();
   await screen.unmount();
  }

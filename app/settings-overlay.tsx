@@ -176,7 +176,7 @@ function AgentPage({t,rtl,slug,company,userId,agent,tab,memory,status,main,rules
   <AgentTabs slug={slug} agent={agent.id} tab={tab} label={agent.name}/>
   <div id="sov-agent-panel" role="tabpanel" aria-labelledby={`sov-tab-${tab}`}>
    {tab==='memory'
-    ?<div className="dp-sections">{memory?.state==='found'?<AgentMemory company={company} agent={{id:agent.id,name:agent.name}} notes={memory.notes||[]} main={memory.main} canReset={owner} canEdit={canManage} canForget={owner}/>:<section className="dp-sec"><p className="panel-empty">{t('agentMemoryUnread')}</p></section>}</div>
+    ?<div className="dp-sections">{memory?.state==='found'?<AgentMemory company={company} agent={{id:agent.id,name:agent.name}} notes={memory.notes||[]} main={memory.main} canReset={owner} canEdit={canManage} canForget={owner} knowledgeHref={canWrite?overlayHref(slug,'knowledge'):undefined}/>:<section className="dp-sec"><p className="panel-empty">{t('agentMemoryUnread')}</p></section>}</div>
     :(<>
    <TalkTip t={t} rtl={rtl} text={t('settingsTalkTipAgent',agent.name)} talk={canWrite&&!isMain?{href:`/c/${slug}/chat/${agent.id}`,name:agent.name}:undefined}/>
    <div className="dp-sections sov-rules"><AgentRules t={t} company={company} userId={userId} rules={rules} canManage={canManage}/></div>

@@ -1,24 +1,30 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
 import { userEvent } from 'vitest/browser';
+import type { ComponentProps } from 'react';
 import { AgentMemory, type AgentMemoryProps } from '@/app/agent-memory';
 import { ToastHost } from '@/app/toast';
 import { LanguageProvider } from '@/lib/i18n-client';
+import { companyKnowledgeHref } from '@/lib/settings-overlay.mjs';
 import '@/app/shell.css';
 
 // The Memory tab (#350; design-reference: memoryHTML): one Agent's notes from its own Engine profile, or the empty
 // state, the main Agent's line (#121), and the Owner's Reset, which asks before it sends anything. An Owner and a
-// Manager edit a note in place and the Owner forgets one with Undo (#191); no "Add" is drawn for anyone, and searching
-// is #192.
+// Manager edit a note in place and the Owner forgets one with Undo (#191); no "Add" is drawn for anyone. The search
+// narrows the notes as a person types (#192), and the intro's second line and the way to Company knowledge follow what
+// the person may do.
 const { refresh } = vi.hoisted(() => ({ refresh: vi.fn() }));
 const responder=(body:unknown,status=200)=>vi.fn(async (url:string,init:RequestInit)=>{ void url; void init; return new Response(JSON.stringify(body),{status}); });
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh, push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }) }));
+vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); refresh.mockClear(); });
 
 const notes = [
  { id: 'memory:memory:0:4d2c1b0a9f8e', text: 'Prefers short subject lines.' },
  { id: 'memory:profile:1:7a1b2c3d4e5f', text: 'Omar works in Cairo.' },
 ];
+// Three notes, for the search (#192): a query keeps one of them, and the heading still counts all three.
+const three = [...notes, { id: 'memory:memory:2:9e8d7c6b5a4f', text: 'Never mention prices before the offer.' }];
 const drawn = (props: Partial<AgentMemoryProps> = {}, language: 'en' | 'ar' = 'en') => render(<LanguageProvider language={language}>
  <div className="gw"><div className="details is-open" dir={language === 'ar' ? 'rtl' : 'ltr'}>
   <div className="dp-sections"><AgentMemory company="co-1" agent={{ id: 'ag-1', name: 'Ads' }} notes={notes} main={false} canReset={false} canEdit={false} canForget={false} {...props}/></div>
@@ -34,8 +40,9 @@ test('an Agent with notes shows each note as its own row, under the heading with
   ['memory:memory:0:4d2c1b0a9f8e', 'Prefers short subject lines.'],
   ['memory:profile:1:7a1b2c3d4e5f', 'Omar works in Cairo.'],
  ]);
- // Neither the Add form of the reference nor its search: those are #191 and #192.
- expect(screen.container.querySelector('#mem-new, #mem-q')).toBeNull();
+ // The Add form of the reference is #191's absence; the search arrives with #192.
+ expect(screen.container.querySelector('#mem-new')).toBeNull();
+ await expect.element(screen.getByRole('searchbox', { name: 'Search memory' })).toBeVisible();
  expect(screen.container.querySelectorAll('button')).toHaveLength(0);
 });
 
@@ -209,4 +216,79 @@ test('in Arabic the note actions read as the reference words them', async () => 
  await screen.getByRole('button', { name: /^انسى ده: Prefers/ }).click();
  await expect.poll(() => document.querySelector('.toast')?.textContent).toContain('Ads نسي الملاحظة دي');
  expect(document.querySelector('.toast__act')?.textContent).toBe('رجّعها');
+});
+
+// #192: the search narrows the notes as a person types, keeps the heading's whole count, and a search that finds
+// nothing offers "Clear search"; Escape in a filled field does the same. The two intro lines name the Agent and offer
+// the edit line only to someone who may edit or forget a note, and "Open company knowledge" reaches Settings for
+// everyone but a Viewer (visibleSections, lib/settings-overlay.mjs).
+test('typing in Search memory keeps only the notes that hold the text, and the heading keeps the whole count', async () => {
+ const screen = await drawn({ notes: three });
+ const field = screen.getByRole('searchbox', { name: 'Search memory' });
+ await userEvent.fill(field, 'cairo');
+ expect([...screen.container.querySelectorAll('.mem-note__t')].map(node => node.textContent)).toEqual(['Omar works in Cairo.']);
+ await expect.element(screen.getByRole('heading', { name: 'What Ads remembers 3' })).toBeVisible();
+ await userEvent.fill(field, '');
+ expect(screen.container.querySelectorAll('.mem-note__t')).toHaveLength(3);
+});
+
+test('a search with no match says so, and Clear search empties the field, gives it the focus and shows every note', async () => {
+ const screen = await drawn({ notes: three });
+ const field = screen.getByRole('searchbox', { name: 'Search memory' });
+ await userEvent.fill(field, '  zzz  ');
+ await expect.element(screen.getByText('Nothing in the Ads memory matches “zzz”.')).toBeVisible();
+ expect(screen.container.querySelectorAll('.mem-note')).toHaveLength(0);
+ await screen.getByRole('button', { name: 'Clear search' }).click();
+ await expect.element(field).toHaveFocus();
+ expect((field.element() as HTMLInputElement).value).toBe('');
+ expect(screen.container.querySelectorAll('.mem-note')).toHaveLength(3);
+});
+
+test('Escape in a filled search empties it as Clear search does, and in an empty field changes nothing', async () => {
+ const screen = await drawn({ notes: three });
+ const field = screen.getByRole('searchbox', { name: 'Search memory' });
+ await userEvent.fill(field, 'cairo');
+ expect(screen.container.querySelectorAll('.mem-note')).toHaveLength(1);
+ await userEvent.keyboard('{Escape}');
+ expect((field.element() as HTMLInputElement).value).toBe('');
+ expect(screen.container.querySelectorAll('.mem-note')).toHaveLength(3);
+ await userEvent.keyboard('{Escape}');
+ expect(screen.container.querySelectorAll('.mem-note')).toHaveLength(3);
+ await expect.element(field).toHaveFocus();
+});
+
+test('the intro names the Agent, and offers the edit line only to a person who may edit or forget a note', async () => {
+ const reader = await drawn({ notes: three });
+ await expect.element(reader.getByText(/Notes it comes back to on every job/)).toBeVisible();
+ expect(reader.container.textContent).toContain('Ads is one agent for the whole company with one memory, so what anyone teaches it, it remembers for everyone.');
+ expect(reader.container.textContent).not.toContain('You can edit or delete anything.');
+ const manager = await drawn({ notes: three, canEdit: true });
+ expect(manager.container.textContent).toContain('You can edit or delete anything.');
+ const forgetter = await drawn({ notes: three, canForget: true });
+ expect(forgetter.container.textContent).toContain('You can edit or delete anything.');
+});
+
+test('Open company knowledge links to the Company knowledge section, and is absent for a Viewer', async () => {
+ const owner = await drawn({ notes: three, knowledgeHref: companyKnowledgeHref('rs-learning', 'owner') });
+ await expect.element(owner.getByRole('link', { name: 'Open company knowledge' })).toHaveAttribute('href', '/c/rs-learning/settings?section=knowledge');
+ const viewer = await drawn({ notes: three, knowledgeHref: companyKnowledgeHref('rs-learning', 'viewer') });
+ expect(viewer.container.querySelector('a[href*="knowledge"]')).toBeNull();
+ expect(viewer.container.textContent).not.toContain('Open company knowledge');
+});
+
+test('forgetting the last note gives the focus to Search memory, where the reference puts it', async () => {
+ vi.stubGlobal('fetch', responder({ forgotten: true }));
+ const screen = await drawn({ notes: [notes[0]], canForget: true });
+ await screen.getByRole('button', { name: /^Forget this: Prefers short/ }).click();
+ await expect.element(screen.getByRole('searchbox', { name: 'Search memory' })).toHaveFocus();
+});
+
+test('in Arabic the search, its no-match line, Clear search and the knowledge link read as the reference words them', async () => {
+ const screen = await drawn({ notes: three, knowledgeHref: companyKnowledgeHref('rs-learning', 'manager') }, 'ar');
+ const field = screen.getByRole('searchbox', { name: 'دوّر في الذاكرة' });
+ await expect.element(field).toBeVisible();
+ await expect.element(screen.getByRole('link', { name: 'افتح معرفة الشركة' })).toBeVisible();
+ await userEvent.fill(field, 'zzz');
+ await expect.element(screen.getByText(/مفيش حاجة في ذاكرة Ads فيها «zzz»/)).toBeVisible();
+ await expect.element(screen.getByRole('button', { name: 'امسح البحث' })).toBeVisible();
 });

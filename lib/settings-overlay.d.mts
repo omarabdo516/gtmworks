@@ -4,6 +4,7 @@ export const overlaySections: readonly (readonly [OverlaySection, string, Overla
 export function visibleSections(role: string): (readonly [OverlaySection, string, OverlayIcon, boolean, boolean])[];
 export function pickSection(requested: unknown, role: string): OverlaySection;
 export function overlayHref(slug: string, section: OverlaySection, extra?: Record<string, string | undefined>): string;
+export function companyKnowledgeHref(slug: string, role: string): string | undefined;
 export function closeTarget(stored: unknown, slug: string): string;
 export type AgentTab = 'settings' | 'memory';
 export function agentTab(value: unknown): AgentTab;
