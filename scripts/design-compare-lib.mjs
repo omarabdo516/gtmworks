@@ -83,6 +83,12 @@ export const screens = {
   // Conversations with it.
   'agent-files': { reference: { steps: [{ click: '#sb-agents [data-action="open-agent"][data-agent="ads"]' }, { click: '#dp-tab-files' }, { waitFor: '#dp-tab-files[aria-selected="true"]' }] }, builtPath: `/c/rs-learning/chat/${fixture.agent}?tab=files` },
   'agent-screen': { reference: { steps: [{ click: '#sb-agents [data-action="open-agent"][data-agent="seo"]' }, { waitFor: '.scr-card' }] }, builtPath: `/c/rs-learning/chat/${fixture.agent}` },
+  // #204. Ads's details, Activity: "Connected tools" (Meta Ads and Google Ads connected, GA4 not), then Manage pressed.
+  // Built: an Agent with apps in its own Engine profile and one it was made to use (pass --built-path).
+  'agent-tools': { reference: { steps: [{ click: '#sb-agents [data-action="open-agent"][data-agent="ads"]' }, { waitFor: '[data-action="manage-tools"]' }, { scrollTo: '[data-action="manage-tools"]' }] },
+   builtPath: null, builtSteps: [{ waitFor: '.dp-tools .panel-row' }, { scrollTo: '.dp-tools' }] },
+  'agent-tools-manage': { reference: { steps: [{ click: '#sb-agents [data-action="open-agent"][data-agent="ads"]' }, { click: '[data-action="manage-tools"]' }, { waitFor: '[data-action="disconnect"]' }, { scrollTo: '[data-action="manage-tools"]' }] },
+   builtPath: null, builtSteps: [{ click: '.dp-tools .dp-label .link-btn' }, { waitFor: '.dp-tools .panel-row .link-btn' }, { scrollTo: '.dp-tools' }] },
   // The settings overlay opens on its Company section. The built overlay is route-backed (app/settings-overlay.tsx):
   // ?section= opens a section and ?agent=<id> one Agent's page.
   settings: { reference: { steps: settings }, builtPath: '/c/rs-learning/settings' },
