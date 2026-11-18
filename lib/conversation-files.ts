@@ -34,18 +34,20 @@ const refusalOf=(code:string|undefined)=>code==='42501'?'conversationNotAllowed'
 // upload gives the rows back, so nothing is left of a send that kept nothing. Called after the message is stored, so a
 // send the engine refused stores nothing at all.
 export async function keepConversationFiles(db:SupabaseClient,service:SupabaseClient,{company,conversation,messageKey,files}:{company:string,conversation:string,messageKey:string,files:File[]}):Promise<{error?:string}> {
- const rows=files.map((file,index)=>({position:index,name:file.name.slice(0,255)||'image',content_type:file.type.slice(0,127),size:file.size,path:conversationFilePath(company,conversation,messageKey,index)}));
+ // The database builds every path itself and ignores one sent here; the server uploads to the same place.
+ const rows=files.map((file,index)=>({position:index,name:file.name.slice(0,255)||'image',content_type:file.type.slice(0,127),size:file.size}));
  const {error}=await db.rpc('reserve_conversation_files',{conversation,c:company,message_key:messageKey,files:rows});
  if(error) return {error:refusalOf(error.code)};
  const written:string[]=[];
  for(const [index,file] of files.entries()) {
-  const stored=await service.storage.from(bucket).upload(rows[index].path,Buffer.from(await file.arrayBuffer()),{contentType:rows[index].content_type,upsert:true});
+  const path=conversationFilePath(company,conversation,messageKey,index);
+  const stored=await service.storage.from(bucket).upload(path,Buffer.from(await file.arrayBuffer()),{contentType:rows[index].content_type,upsert:true});
   if(stored.error) {
    if(written.length) await service.storage.from(bucket).remove(written);
    await discardConversationFiles(db,service,{company,conversation,messageKey});
    return {error:'conversationFailed'};
   }
-  written.push(rows[index].path);
+  written.push(path);
  }
  return {};
 }
