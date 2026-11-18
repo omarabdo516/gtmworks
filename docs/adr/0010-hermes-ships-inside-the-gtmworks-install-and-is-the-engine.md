@@ -30,6 +30,6 @@ ADR 0008 had each person install gtmworks beside their own Hermes and paste its 
 - The install guide has no Hermes step, and the install test sends an Arabic message to the bundled Hermes, answered by a fake model provider, so CI needs no subscription.
 - The companies of one install share the bundled `default` profile and so its memory. An Agency owner who needs a company's memory kept apart connects a separate Hermes profile for it, as ADR 0008 allows. Separate profiles per company inside the bundled Hermes need a later ticket.
 - A model provider and its sign-in are configured in Hermes; gtmworks still holds no model credentials.
-- `install.sh backup` does not include the `hermes` volume yet, so Hermes's memory and sign-in are not restored with a backup.
+- `install.sh backup` includes the `hermes` volume since #349: an archive holds every Agent's profile, rules, memory, skills and history, and a restore puts them back with numeric owners and modes kept. An archive made before that still restores, and the command says in one line that the Agents' Hermes data was not in it.
 - Everything ADR 0008 says about the Hermes driver still holds.
 - [ADR 0011](0011-agents-are-engine-profiles-made-on-the-management-listener.md) (#293) switches on Hermes's management listener (port 9119) with the same key, also on the compose network only, to create Agents as profiles.

@@ -27,6 +27,7 @@ const paths = {
  spark: <><path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9L12 17.5l-1.9-5.1L5 10.5l5.1-1.9z"/><path d="M18.5 16.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/></>,
  play: <path d="M8 5.5v13l10.5-6.5z"/>,
  stopFill: <rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/>,
+ copy: <><rect x="8.5" y="8.5" width="11.5" height="11.5" rx="2"/><path d="M15.5 8.5V5.5a1.5 1.5 0 0 0-1.5-1.5H5.5A1.5 1.5 0 0 0 4 5.5V14a1.5 1.5 0 0 0 1.5 1.5h3"/></>,
 };
 export type SettingsIconName = keyof typeof paths;
 // `forward` points where reading goes (left in Arabic), `back` the other way; English swaps them, as the reference does.
