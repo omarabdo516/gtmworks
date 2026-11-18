@@ -27,7 +27,7 @@ where s.definer and (s.body ~ pattern.tables
 create temporary table decisions(fn text primary key, decision text not null check (decision in ('checks','exempt')), reason text not null check (btrim(reason)<>''));
 insert into decisions
  select fn,'checks','answers for a Card its Agent hides from the caller, or from the person it names, as for a Card that does not exist' from unnest(array[
-  'public.decide_approval(uuid,bigint,text,text,boolean,boolean)','public.decide_skill_lesson(uuid,bigint,boolean)','public.edit_card_note(uuid,bigint,text)',
+  'public.decide_approval(uuid,bigint,text,text,boolean,boolean)','public.edit_card_note(uuid,bigint,text)',
   'public.start_card_conversation(uuid,bigint,uuid)','public.card_chat_person(uuid,bigint)',
   'public.card_wait(public.work_cards)','public.reply_card_waits(public.reply_cards)']) fn
  union all select 'public.can_see_card_file(text)','checks','a stored file follows each Card it belongs to'
@@ -51,7 +51,7 @@ insert into decisions
   'public.remove_approval_step(uuid,bigint)','public.save_approval_step(uuid,bigint,text,integer,uuid,public.member_role)']) fn
  union all select 'public.usage_by_day()','exempt','the Owner''s alone, and an Owner sees every Agent; it answers token sums by day, no Card';
 
-select is((select count(*)::int from card_tables),14,'the card tables are the 14 that carry #221''s rule, the Card itself among them');
+select is((select count(*)::int from card_tables),13,'the card tables are the 13 that carry #221''s rule, the Card itself among them');
 select ok(not exists(select 1 from pg_proc p where p.pronamespace='public'::regnamespace and p.prosecdef
   and (not coalesce(p.proconfig,'{}') && array['search_path=""'] or regexp_replace(regexp_replace(p.prosrc,'/\*.*?\*/',' ','g'),'--[^\n]*',' ','g') ~* '\yexecute\y')),
  'every function that runs as its owner has an empty search path and no dynamic SQL, so every table it reads is named with its schema in its body');

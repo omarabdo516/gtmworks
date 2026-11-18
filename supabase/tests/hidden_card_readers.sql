@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(12);
+select plan(10);
 -- #228. RS Learning's Ads Agent is shown to the Manager, the first Contributor (…03, whose chat made the Card) and the
 -- Viewer, and hidden from the second Contributor (…05) and from the Writer agent (30…01), which is
 -- is assigned the Card. Each function that reads Cards as its owner answers for this Card, to a caller Ads is hidden
@@ -54,8 +54,6 @@ insert into writes values
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
-select public.install_skill('10000000-0000-0000-0000-000000000001','library',E'---\nname: hidden-hooks\ndescription: Write hooks\npermissions: cards.read\n---\nOpen with the reader''s problem.');
-select public.set_skill_enabled('10000000-0000-0000-0000-000000000001',(select id from public.skills where company_id='10000000-0000-0000-0000-000000000001' and slug='hidden-hooks'),'30000000-0000-0000-0000-000000000001',true);
 select public.move_work_card_to_column('10000000-0000-0000-0000-000000000001',current_setting('test.card')::bigint,'waiting');
 reset role;
 select public.add_waiting_item('10000000-0000-0000-0000-000000000001',p,'question','About the June campaign','',current_setting('test.card')::bigint)
@@ -104,12 +102,6 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub','30000000-0000-0000-0000-000000000001',true);
 select set_config('request.jwt.claims','{"sub":"30000000-0000-0000-0000-000000000001","role":"authenticated"}',true);
 select matches(pg_temp.answer(call,'card'),'^ok \{"id": \d+\}$','it writes on the Card') from writes where op='comment';
-reset role;
--- A lesson learned on the Card, as an Agent's run left one before the external-agent API was removed (#341).
-insert into public.skill_lessons(company_id,skill_id,card_id,proposed_by,lesson,reason,base_version,request_key,fingerprint)
- select company_id,id,current_setting('test.card')::bigint,'30000000-0000-0000-0000-000000000001','Open with the number.','Saved more often.',1,'lesson-1','f'
- from public.skills where company_id='10000000-0000-0000-0000-000000000001' and slug='hidden-hooks';
-set local role authenticated;
 
 select set_config('request.jwt.claims','',true);
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000005',true);
@@ -122,20 +114,14 @@ select is(pg_temp.answer(call,'note'),'ok true','shown again, they edit it')
  from (select $$public.edit_card_note('10000000-0000-0000-0000-000000000001',%s,'Shorter hook, with the number')$$ as call) x;
 
 reset role;
-select set_config('test.lesson',(select id::text from public.skill_lessons where card_id=current_setting('test.card')::bigint),true);
-select set_config('test.missing_lesson',(select (max(id)+1000)::text from public.skill_lessons),true);
 delete from public.member_agent_access where person_id='20000000-0000-0000-0000-000000000002' and agent_id='a2280000-0000-0000-0000-000000000001';
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
-select is(pg_temp.answer(call,'lesson'),pg_temp.answer(call,'missing_lesson'),'hidden from the Manager, a lesson learned on the Card is not found to decide, as a missing lesson')
- from (select $$public.decide_skill_lesson('10000000-0000-0000-0000-000000000001',%s,false)$$ as call) x;
 select is(pg_temp.answer(call,'card'),pg_temp.answer(call,'missing'),'and the Card''s approval is not theirs to decide, as on a missing Card')
  from (select $$public.decide_approval('10000000-0000-0000-0000-000000000001',%s,'approve')$$ as call) x;
 reset role;
 insert into public.member_agent_access(company_id,person_id,agent_id) values ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','a2280000-0000-0000-0000-000000000001');
 set local role authenticated;
-select is(pg_temp.answer(call,'lesson'),'ok ','shown again, they decide the lesson')
- from (select $$public.decide_skill_lesson('10000000-0000-0000-0000-000000000001',%s,false)$$ as call) x;
 select is(pg_temp.answer(call,'card'),'ok ','and approve the Card')
  from (select $$public.decide_approval('10000000-0000-0000-0000-000000000001',%s,'approve')$$ as call) x;
 reset role;
