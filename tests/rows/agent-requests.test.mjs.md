@@ -1,0 +1,1 @@
+| `agent-requests.test.mjs` | «Make it» answers that the Engine is not ready or did not answer, and asks the database nothing, until the Company's profile is ready, reading only the bundled Connection's key; «No» asks no Engine; each refusal of the database is one answer. (#17) | 0.1 s | agent-requests.spec.ts (both answers through the page) | new |

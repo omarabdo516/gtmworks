@@ -1,0 +1,1 @@
+| `motion-css.mjs` | helper: reads a part's transition and animation from the reference's stylesheet and from `app/`, tokens and keyframes resolved, and a computed style the same way; the component test calls it through the Vitest browser commands in `vitest.config.mts` (#127) | — | — | helper, new |

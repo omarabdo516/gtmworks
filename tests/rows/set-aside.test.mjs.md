@@ -1,0 +1,1 @@
+| `set-aside.test.mjs` | A set-aside browser test is skipped by Playwright's own skip and listed in `set-aside.json`, and every skipped one is listed; an entry older than 7 days, with no issue, or naming a sign-in or Company isolation test turns it red (#336). | 1.5 s | — | new |

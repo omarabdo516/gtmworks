@@ -1,6 +1,6 @@
 import { test, expect, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { laneImage, loadLaneScreens, themes, widths } from './visual-lane.mjs';
-import { blockOutsideRequests, forgetBlocked, expectDarkContrast, expectDeterministic, expectQuietContrast, fixClock, type QuietCheck } from './visual-lane-guards';
+import { blockOutsideRequests, forgetBlocked, expectDarkContrast, expectDeterministic, expectQuietContrast, fixClock, fixClockText, type QuietCheck } from './visual-lane-guards';
 import { freshSeed } from './fresh-seed';
 import { signIn, openNavigation } from './sign-in';
 import { idle } from './navigation-measure';
@@ -96,23 +96,6 @@ async function showWholePage(page: Page, width: number) {
     await page.setViewportSize({ width, height: Math.min(page.viewportSize()!.height + hidden, 8000) });
     await idle(page);
   }
-}
-
-// Times and the 14 day chart labels follow the real calendar, so they are replaced by fixed text; the layout around
-// them, their font and their colour are still compared.
-async function fixClockText(page: Page) {
-  await page.evaluate(() => {
-    (document.activeElement as HTMLElement | null)?.blur(); // no focus ring or open picker in the picture
-    const months = 'January|February|March|April|May|June|July|August|September|October|November|December|يناير|فبراير|مارس|أبريل|مايو|يونيو|يوليو|أغسطس|سبتمبر|أكتوبر|نوفمبر|ديسمبر';
-    const monthName = new RegExp(months);
-    const skipped = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE', 'TITLE']);
-    for (const element of Array.from(document.querySelectorAll('body *'))) {
-      if (element.children.length || skipped.has(element.tagName)) continue;
-      const text = (element.textContent ?? '').trim();
-      if (element.closest('.chart-bars') && /\d/.test(text) && monthName.test(text)) element.textContent = 'Month 00';
-      else if (element.tagName === 'TIME' || /\d{1,2}:\d{2}/.test(text)) element.textContent = 'Date, 00:00';
-    }
-  });
 }
 
 async function laneContext(browser: Browser) {

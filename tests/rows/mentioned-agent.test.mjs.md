@@ -1,0 +1,1 @@
+| `mentioned-agent.test.mjs` | How a new chat's first message calls an Agent (#153), as a channel reads a call: "@" and a name in any case between spaces, punctuation or the ends; not inside a word, an email or for an Agent the sender does not see; the earliest call wins, and at one place the longest name. | — | plus-menu.spec.ts (the call on the fake engine) | new |

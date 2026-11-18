@@ -22,7 +22,8 @@ let fake:Awaited<ReturnType<typeof fakeHermes>>;
 test.describe.configure({mode:'serial'});
 test.use({actionTimeout:15000});
 test.beforeAll(async({browser},testInfo)=>{
- freshSeed(testInfo.file);
+ // A retry, or a repeat of this serial file, starts it again from the seed, so its rows are inserted once.
+ freshSeed(testInfo.file,testInfo.retry>0||testInfo.repeatEachIndex>0);
  fake=await laneHermes();
  fake.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
  const page=await browser.newPage();

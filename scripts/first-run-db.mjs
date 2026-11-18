@@ -26,6 +26,15 @@ export function localQuery(sql,baseURL) {
  if(!Array.isArray(result)) throw new Error('Local query returned an unexpected JSON result');
  return result;
 }
+// A reset meets the lane's own app in a deadlock when one of its sessions holds a lock the truncate needs while
+// waiting for one the truncate holds (#326). Postgres rolls the whole transaction back and names the deadlock, so
+// nothing was reset and the same reset is run again, up to five attempts, as freshSeed does (tests/fresh-seed.ts).
+// Any other failure is the reset's own and is raised at once. Returns the pause before the next attempt, or null
+// when the reset must fail.
+export function resetRetryPause(stderr,attempt) {
+ if(attempt>=5 || !String(stderr).includes('deadlock detected')) return null;
+ return 200*attempt;
+}
 export function resetFirstRun(baseURL,seed=false) {
  assertLocalTarget(baseURL);
  const project=readFileSync(join(root,'supabase/config.toml'),'utf8').match(/^project_id\s*=\s*"([a-zA-Z0-9_-]+)"/m)?.[1];
@@ -38,6 +47,15 @@ export function resetFirstRun(baseURL,seed=false) {
  insert into public.setup_claim(closed) values(false);
  ${seed?readFileSync(join(root,'supabase/seed.sql'),'utf8'):''}
  `;
- // Pin both connections to local sockets; --file=- makes psql wrap stdin in one transaction.
- execFileSync('docker',['--host','unix:///var/run/docker.sock','exec','-i',`supabase_db_${project}${lane?`-lane-${lane}`:''}`,'psql','-X','-h','/var/run/postgresql','-U','postgres','-d','postgres','-v','ON_ERROR_STOP=1','--single-transaction','--file=-'],{cwd:root,encoding:'utf8',input:sql});
+ for(let attempt=1;;attempt++) {
+  try {
+   // Pin both connections to local sockets; --file=- makes psql wrap stdin in one transaction.
+   execFileSync('docker',['--host','unix:///var/run/docker.sock','exec','-i',`supabase_db_${project}${lane?`-lane-${lane}`:''}`,'psql','-X','-h','/var/run/postgresql','-U','postgres','-d','postgres','-v','ON_ERROR_STOP=1','--single-transaction','--file=-'],{cwd:root,encoding:'utf8',input:sql});
+   return;
+  } catch(error) {
+   const pause=resetRetryPause(error?.stderr,attempt);
+   if(pause===null) throw error;
+   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,pause);
+  }
+ }
 }
