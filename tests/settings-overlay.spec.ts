@@ -8,8 +8,9 @@ import { signIn, openNavigation, emailLink } from './sign-in';
 const company='10000000-0000-0000-0000-000000000003';
 const owner='20000000-0000-0000-0000-000000000001';
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
-// The reference's ten sections, the company's nine first and Your account under "You".
+// The reference's ten sections, the company's nine first and Your account under "You". Backup is the Owner's alone (#33).
 const sections=['Company','Agents','Company knowledge','Learning','Subscription and models','Apps','Recurring tasks','Usage','Backups','Your account'];
+const staffSections=sections.filter(section=>section!=='Backups');
 
 test('the account menu opens Settings over the page, Escape and the close button return to it',async({page})=>{
  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
@@ -28,9 +29,10 @@ test('the account menu opens Settings over the page, Escape and the close button
   await overlay.locator('#sov-nav-account').click();
   await expect(page).toHaveURL(/\?section=account$/);
   await expect(overlay.getByRole('heading',{name:'Your account',exact:true})).toBeVisible();
-  // Sections whose features come later show their place, empty, marked Soon, with no sample figures.
+  // The Backup section is the Owner's read-only page (#33): what the archive holds and leaves out, and the commands.
   await overlay.locator('#sov-nav-backup').click();
-  await expect(overlay.locator('.sov-soon').first()).toHaveText('Soon');
+  await expect(overlay.getByRole('heading',{name:'Backups',exact:true})).toBeVisible();
+  await expect(overlay.getByRole('heading',{name:'What a backup holds'})).toBeVisible();
   if(close==='button') await overlay.getByRole('button',{name:'Close settings and go back'}).click();
   else await page.keyboard.press('Escape');
   await expect(page).toHaveURL(/\/c\/rs-learning\/work\/board$/);
@@ -207,8 +209,8 @@ const surfaces={
 };
 const roleViews=[
  {role:'Owner',email:'omar@example.com',sections,readOnly:false,movesMain:true,company:['#co-name','.sov-ta table','.inv-sec .inv-open'],agents:['a[href$="/chat?new=agent"]','.talk-tip a'],agent:['#set-make-main','#danger-pause','#danger-delete','.talk-tip a']},
- {role:'Manager',email:'manager@example.com',sections,readOnly:false,movesMain:false,company:['.ro-text','.sov-ta table'],agents:['a[href$="/chat?new=agent"]','.talk-tip a'],agent:['.talk-tip a']},
- {role:'Contributor',email:'reviewer@example.com',sections,readOnly:true,movesMain:false,company:['.ro-text','.ro-note:not(.sov-warn)','[aria-labelledby=co-h-mem] .panel-row'],agents:['a[href$="/chat?new=agent"]','.ro-note','.talk-tip a'],agent:['.ro-note','.talk-tip a']},
+ {role:'Manager',email:'manager@example.com',sections:staffSections,readOnly:false,movesMain:false,company:['.ro-text','.sov-ta table'],agents:['a[href$="/chat?new=agent"]','.talk-tip a'],agent:['.talk-tip a']},
+ {role:'Contributor',email:'reviewer@example.com',sections:staffSections,readOnly:true,movesMain:false,company:['.ro-text','.ro-note:not(.sov-warn)','[aria-labelledby=co-h-mem] .panel-row'],agents:['a[href$="/chat?new=agent"]','.ro-note','.talk-tip a'],agent:['.ro-note','.talk-tip a']},
  {role:'Viewer',email:'viewer@example.com',sections:['Agents','Your account'],readOnly:true,movesMain:false,company:null,agents:['.ro-note'],agent:['.ro-note']},
 ];
 
