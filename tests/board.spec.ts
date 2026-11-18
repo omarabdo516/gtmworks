@@ -22,6 +22,31 @@ async function newCard(page:Page,label:string) {
 const columnOf=(page:Page,id:number)=>page.locator(`.kcard[data-card-id="${id}"]`).evaluate(el=>el.closest('[data-column]')?.getAttribute('data-column') ?? null);
 const landedColumn=async(page:Page,id:number)=>{ let column:string|null=null; await expect.poll(async()=>column=await columnOf(page,id)).not.toBeNull(); return column; };
 
+// #174: a Card keeps its place inside its column. Cards made for one test sit at their column's end, in the order made.
+const placeCards=(stamp:number,n:number,stage='أفكار')=>rows(`with made as (insert into public.work_cards(company_id,stage_id,title)
+ select '${rs}',s.id,'Place ${stamp} '||x from public.work_stages s, generate_series(1,${n}) x where s.company_id='${rs}' and s.name='${stage}' returning id)
+ select id from made order by id`).map(row=>Number(row.id));
+// The order a column is drawn in.
+const orderIn=(page:Page,column:string)=>page.locator(`#board-cols .col[data-column="${column}"] .kcard[data-card-id]`).evaluateAll(nodes=>nodes.map(node=>Number(node.getAttribute('data-card-id'))));
+// The point just above a Card's middle: a Card dropped there lands above it.
+const pointAbove=async(page:Page,column:string,id:number)=>{ const box=(await page.locator(`#board-cols .col[data-column="${column}"] .kcard[data-card-id="${id}"]`).boundingBox())!; return {x:box.x+box.width/2,y:box.y+4}; };
+// The column's own end, under its last Card.
+const columnEnd=async(page:Page,column:string)=>{ const box=(await page.locator(`#board-cols .col[data-column="${column}"] .col__body`).boundingBox())!; return {x:box.x+box.width/2,y:box.y+box.height-6}; };
+// Carry a Card with the mouse to a place in a column and drop it there (design-reference: pointerdown, dragMove,
+// pointerup). The place is read once the Card is in view, so the aim is where the board stands when the drag starts.
+async function carry(page:Page,id:number,to:{column:string,before?:number,end?:boolean}) {
+ const source=page.locator(`#board-cols .kcard[data-card-id="${id}"]`);
+ await expect(source).toBeVisible();
+ await source.scrollIntoViewIfNeeded();
+ const from=(await source.boundingBox())!;
+ const aim=to.end?await columnEnd(page,to.column):await pointAbove(page,to.column,to.before!);
+ await page.mouse.move(from.x+from.width/2,from.y+20);
+ await page.mouse.down();
+ await page.mouse.move(from.x+from.width/2+8,from.y+20,{steps:2});
+ await page.mouse.move(aim.x,aim.y,{steps:12});
+ await page.mouse.up();
+}
+
 test('a card moves by drag and by keyboard, and both moves are logged',async({page})=>{
  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
  const card=await newCard(page,'Board move');
@@ -304,4 +329,113 @@ test('Waiting on you lists an Agent question and an item of a new kind, each ope
   if(attachedAgent.id) query(`delete from public.hermes_agents where id='${attachedAgent.id}'`);
   await fake.close();
  }
+});
+
+// #174: a Card is carried anywhere in a column: above another Card or at the column's end, in its own column or another.
+// The order a column's Cards take once one is placed above `before` (null: at the end).
+const placed=(order:number[],id:number,before:number|null)=>{ const rest=order.filter(other=>other!==id); const at=before==null?rest.length:rest.indexOf(before); rest.splice(at<0?rest.length:at,0,id); return rest; };
+
+test('a Card is carried to the top, the middle and the end of its own column, and into another, kept after a reload',async({page})=>{
+ await page.setViewportSize({width:2200,height:900});
+ await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ const stamp=Date.now();
+ const [a,b,c]=placeCards(stamp,3);
+ await page.reload();
+ // The three Cards made now sit at their column's end, in the order they were made.
+ const start=await orderIn(page,'ideas');
+ expect(start.slice(-3)).toEqual([a,b,c]);
+ // To the top.
+ await carry(page,c,{column:'ideas',before:start[0]});
+ const top=placed(start,c,start[0]);
+ await expect.poll(()=>orderIn(page,'ideas')).toEqual(top);
+ await page.reload();
+ expect(await orderIn(page,'ideas')).toEqual(top);
+ // To the middle, above the Card made before the last one.
+ await carry(page,c,{column:'ideas',before:b});
+ const middle=placed(top,c,b);
+ await expect.poll(()=>orderIn(page,'ideas')).toEqual(middle);
+ await page.reload();
+ expect(await orderIn(page,'ideas')).toEqual(middle);
+ // To the end.
+ await carry(page,c,{column:'ideas',end:true});
+ const end=placed(middle,c,null);
+ await expect.poll(()=>orderIn(page,'ideas')).toEqual(end);
+ await page.reload();
+ expect(await orderIn(page,'ideas')).toEqual(end);
+ // Into the middle of another column: above the Card made there last.
+ const [d]=placeCards(stamp,1,'بريف جاهز');
+ await page.reload();
+ const planned=await orderIn(page,'planned');
+ expect(planned[planned.length-1]).toBe(d);
+ await carry(page,a,{column:'planned',before:d});
+ await expect(page.locator('.toast')).toHaveText('Moved to “Planned”');
+ await expect.poll(()=>orderIn(page,'planned')).toEqual(placed(planned,a,d));
+ await expect.poll(()=>orderIn(page,'ideas')).toEqual(end.filter(id=>id!==a));
+ await page.reload();
+ expect(await orderIn(page,'planned')).toEqual(placed(planned,a,d));
+});
+
+// #174: Shift with Up or Down moves the focused Card one place, and nothing happens at either end.
+test('Shift with Up or Down moves the focused Card one place in its column, and at the ends nothing happens',async({page})=>{
+ await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ const stamp=Date.now();
+ const [,b]=placeCards(stamp,3);
+ await page.reload();
+ const start=await orderIn(page,'ideas');
+ const focus=(id:number)=>page.locator(`#board-cols .kcard[data-card-id="${id}"] a`).focus();
+ // Up: above the Card before it, with the focus kept and no toast.
+ await focus(b);
+ await page.keyboard.press('Shift+ArrowUp');
+ const up=placed(start,b,start[start.indexOf(b)-1]);
+ await expect.poll(()=>orderIn(page,'ideas')).toEqual(up);
+ await expect(page.locator(`#board-cols .kcard[data-card-id="${b}"] a`)).toBeFocused();
+ await expect(page.locator('.toast')).toHaveCount(0);
+ // Down: above the Card after the next one.
+ await focus(b);
+ await page.keyboard.press('Shift+ArrowDown');
+ const down=placed(up,b,up[up.indexOf(b)+2]??null);
+ await expect.poll(()=>orderIn(page,'ideas')).toEqual(down);
+ await expect(page.locator(`#board-cols .kcard[data-card-id="${b}"] a`)).toBeFocused();
+ // At the top and at the bottom nothing happens.
+ await focus(down[0]);
+ await page.keyboard.press('Shift+ArrowUp');
+ await expect(page.locator('.board-status')).toHaveCount(0);
+ expect(await orderIn(page,'ideas')).toEqual(down);
+ await focus(down[down.length-1]);
+ await page.keyboard.press('Shift+ArrowDown');
+ await expect(page.locator('.board-status')).toHaveCount(0);
+ await page.reload();
+ expect(await orderIn(page,'ideas')).toEqual(down);
+});
+
+// #174: the order is every Member's; a place inside one column is not announced and writes no log row, and a move to
+// another column is both.
+test('a second Member sees the same order; a place inside a column is not announced or logged, a move to another column is',async({page,browser})=>{
+ await page.setViewportSize({width:2200,height:900});
+ await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ const stamp=Date.now();
+ const [a,b]=placeCards(stamp,2);
+ await page.reload();
+ const start=await orderIn(page,'ideas');
+ await carry(page,a,{column:'ideas',before:start[0]});
+ const shown=placed(start,a,start[0]);
+ await expect.poll(()=>orderIn(page,'ideas')).toEqual(shown);
+ await expect(page.locator('.toast')).toHaveCount(0);
+ await page.goto(`/c/rs-learning/work/board/${a}`);
+ await expect(page.locator('.detail-row').filter({hasText:'Moved the card from'})).toHaveCount(0);
+ // The Manager, in a window of their own, reads the same order.
+ const other=await browser.newContext(); const managerPage=await other.newPage();
+ try {
+  await managerPage.setViewportSize({width:2200,height:900});
+  await signIn(managerPage,'manager@example.com','/c/rs-learning/work/board');
+  await expect.poll(()=>orderIn(managerPage,'ideas')).toEqual(shown);
+ } finally { await other.close(); }
+ // A move to another column is announced and logged.
+ await page.goto('/c/rs-learning/work/board');
+ const planned=await orderIn(page,'planned');
+ await carry(page,b,{column:'planned',before:planned[0]});
+ await expect(page.locator('.toast')).toHaveText('Moved to “Planned”');
+ await expect.poll(()=>orderIn(page,'planned')).toEqual(placed(planned,b,planned[0]));
+ await page.goto(`/c/rs-learning/work/board/${b}`);
+ await expect(page.locator('.detail-row').filter({hasText:'Moved the card from أفكار to بريف جاهز'})).toHaveCount(1);
 });

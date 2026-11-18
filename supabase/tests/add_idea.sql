@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(16);
+select plan(17);
 -- #188. RS Learning's Agents: Lead (main), Ads (shown to the Contributor) and Hidden (shown to nobody but an Owner);
 -- Aleem has an Agent of its own. The seed's Roles are the same as the board's.
 insert into public.hermes_agents(id,company_id,name,speciality,profile,is_default) values
@@ -33,6 +33,9 @@ select throws_ok($$select public.create_work_card('10000000-0000-0000-0000-00000
 select throws_ok($$select public.create_work_card('10000000-0000-0000-0000-000000000001',(select id from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' and kind='ideas'),'Other company idea','a1880000-0000-0000-0000-000000000004'::uuid)$$,null,'agent not found','another Company''s Agent is refused');
 select throws_ok($$select public.create_work_card('10000000-0000-0000-0000-000000000001',(select id from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' and kind='review'),'Wrong stage idea','a1880000-0000-0000-0000-000000000001'::uuid)$$,null,'no Ideas stage','an idea cannot be put in another stage');
 select throws_ok($$select public.create_work_card('10000000-0000-0000-0000-000000000001',(select id from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' and kind='ideas'),'   ','a1880000-0000-0000-0000-000000000001'::uuid)$$,'22023','invalid idea','an empty idea is refused');
+
+-- The newest idea sits at the top of Ideas (#174's order): above every Card already in the column.
+select ok((select board_order from public.work_cards where title='Contributor main idea')<(select min(w.board_order) from public.work_cards w join public.work_stages t on t.company_id=w.company_id and t.id=w.stage_id where w.company_id='10000000-0000-0000-0000-000000000001' and t.board_column='ideas' and w.title<>'Contributor main idea'),'a new idea goes to the top of Ideas');
 
 -- A Viewer adds nothing.
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);

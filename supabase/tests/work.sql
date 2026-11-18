@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(48);
+select plan(65);
 insert into public.companies(id,slug,name) values ('10000000-0000-0000-0000-000000000099','work-isolated','Test');
 insert into public.work_cards(company_id,stage_id,title) select company_id,id,'Private' from public.work_stages where company_id='10000000-0000-0000-0000-000000000099' and position=1;
 insert into public.work_creatives(company_id,card_id,name) select company_id,id,'Private' from public.work_cards where company_id='10000000-0000-0000-0000-000000000099';
@@ -58,5 +58,38 @@ select lives_ok($$select public.edit_work_card('10000000-0000-0000-0000-00000000
 select is((select count(*)::int from public.work_activity where card_id=1 and details->>'field'='go_live' and evidence='https://example.test/changed'),1,'changed date creates activity');
 select lives_ok($$select public.create_work_card('10000000-0000-0000-0000-000000000001',(select id from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' and name='أفكار'),'اختبار ريل','reel')$$,'a card is made from the reel template in Ideas');
 select is((select array_agg(title order by id) from public.work_checklist where card_id=(select id from public.work_cards where company_id='10000000-0000-0000-0000-000000000001' and title='اختبار ريل')),array['Script Ready','Caption Written','videographer','Video Edited','Review','Approved','ScheduledPublished'],'the reel template''s checklist starts at Script Ready');
+-- #174: a Card keeps a place inside its column, the same order for everyone, and a change of place is not a stage change.
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+insert into public.work_cards(company_id,stage_id,title) select '10000000-0000-0000-0000-000000000001',s.id,'Place '||n from public.work_stages s, generate_series(1,3) n where s.company_id='10000000-0000-0000-0000-000000000001' and s.name='بريف جاهز';
+select is((select array_agg(title order by board_order,id) from public.work_cards where company_id='10000000-0000-0000-0000-000000000001' and title like 'Place %'),array['Place 1','Place 2','Place 3'],'a new card goes to the end of its column');
+select is((select count(distinct board_order)::int from public.work_cards where company_id='10000000-0000-0000-0000-000000000001' and title like 'Place %'),3,'cards made together take a place each');
+select lives_ok($$select public.place_work_card('10000000-0000-0000-0000-000000000001',(select id from public.work_cards where company_id='10000000-0000-0000-0000-000000000001' and title='Place 3'),'planned',(select id from public.work_cards where company_id='10000000-0000-0000-0000-000000000001' and title='Place 1'))$$,'a card is placed above another in its own column');
+select is((select array_agg(title order by board_order,id) from public.work_cards where company_id='10000000-0000-0000-0000-000000000001' and title like 'Place %'),array['Place 3','Place 1','Place 2'],'the placed card sits above the card it was dropped on');
+select is((select count(*)::int from public.work_activity where company_id='10000000-0000-0000-0000-000000000001' and card_id=(select id from public.work_cards where company_id='10000000-0000-0000-0000-000000000001' and title='Place 3')),1,'a place inside one column writes no log row');
+select lives_ok($$select public.place_work_card('10000000-0000-0000-0000-000000000001',(select id from public.work_cards where company_id='10000000-0000-0000-0000-000000000001' and title='Place 1'),'progress',null)$$,'a card is placed at the end of another column');
+select is((select count(*)::int from public.work_cards p where p.company_id='10000000-0000-0000-0000-000000000001' and p.title='Place 1' and p.board_order>(select max(w.board_order) from public.work_cards w join public.work_stages s on s.company_id=w.company_id and s.id=w.stage_id where w.company_id='10000000-0000-0000-0000-000000000001' and s.board_column='progress' and w.id<>p.id)),1,'a card moved to another column goes to its end');
+select is((select count(*)::int from public.work_activity where company_id='10000000-0000-0000-0000-000000000001' and card_id=(select id from public.work_cards where company_id='10000000-0000-0000-0000-000000000001' and title='Place 1') and action='card_changed' and details->>'field'='stage_id'),1,'a move to another column is logged');
+select public.move_work_card_to_column('10000000-0000-0000-0000-000000000001',(select id from public.work_cards where company_id='10000000-0000-0000-0000-000000000001' and title='Place 2'),'progress');
+select is((select count(*)::int from public.work_cards p where p.company_id='10000000-0000-0000-0000-000000000001' and p.title='Place 2' and p.board_order>(select max(w.board_order) from public.work_cards w join public.work_stages s on s.company_id=w.company_id and s.id=w.stage_id where w.company_id='10000000-0000-0000-0000-000000000001' and s.board_column='progress' and w.id<>p.id)),1,'a plain move goes to the end of its column too');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
+select throws_ok($$select public.place_work_card('10000000-0000-0000-0000-000000000001',(select id from public.work_cards where company_id='10000000-0000-0000-0000-000000000001' and title='Place 3'),'planned',null)$$,'42501','not permitted','a Viewer places no card');
+-- A Contributor places before review, and nowhere after it.
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+select lives_ok($$select public.place_work_card('10000000-0000-0000-0000-000000000001',(select id from public.work_cards where company_id='10000000-0000-0000-0000-000000000001' and title='Place 3'),'planned',null)$$,'a Contributor places a card before review');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+-- Set up a Card past review the way an approval does (decide_approval's internal flag), so the refusal is the placing's own.
+select set_config('approval.internal','yes',true);
+select public.move_work_card_to_column('10000000-0000-0000-0000-000000000001',(select id from public.work_cards where company_id='10000000-0000-0000-0000-000000000001' and title='Place 3'),'live');
+select set_config('approval.internal','',true);
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+select throws_ok($$select public.place_work_card('10000000-0000-0000-0000-000000000001',(select id from public.work_cards where company_id='10000000-0000-0000-0000-000000000001' and title='Place 3'),'live',null)$$,'42501','not permitted','a Contributor places no card after review');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select lives_ok($$select public.place_work_card('10000000-0000-0000-0000-000000000001',(select id from public.work_cards where company_id='10000000-0000-0000-0000-000000000001' and title='Place 3'),'live',null)$$,'a Manager places a card after review');
+-- "Waiting on you" is filled by the database, never placed, and a Member places nothing in another Company.
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select throws_ok($$select public.place_work_card('10000000-0000-0000-0000-000000000001',(select id from public.work_cards where company_id='10000000-0000-0000-0000-000000000001' and title='Place 1'),'waiting',null)$$,'42501','waiting is not placed by hand','Waiting on you takes no placing');
+select throws_ok($$select public.place_work_card('10000000-0000-0000-0000-000000000001',1,'ideas',null)$$,'42501','waiting is not placed by hand','a card waiting for a decision is not placed');
+select throws_ok($$select public.place_work_card('10000000-0000-0000-0000-000000000099',1,'ideas',null)$$,'42501','not permitted','a Member places no card in another Company');
+select throws_ok($$select public.place_work_card('10000000-0000-0000-0000-000000000001',999999,'ideas',null)$$,'P0001','card not found or not permitted','a card that is not there is not placed');
 select * from finish();
 rollback;
