@@ -177,6 +177,22 @@ test('the install job leaves the successful update to issue 52 and keeps the fai
   "to_regclass('public.update_should_rollback') is null","fail_update 'old version healthy after failed update'"]) assert.ok(run.includes(text),text);
 });
 
+// The Agents' profiles, rules, knowledge, skills, memory and history live only in the bundled Engine's volume (#349), so
+// the install job writes a rule and the Company knowledge through the engine contract before the backup and reads both
+// back after the restore: a backup that left the volume out fails there.
+test('the install job writes an Agent rule and the Company knowledge before the backup and reads both back after the restore', () => {
+ const run=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install.steps.find(step=>step.env?.INSTALL_REF).run;
+ const lines=run.split('\n');
+ const at=pattern=>lines.findIndex(line=>pattern.test(line));
+ const seed=at(/^lifecycle seed/),backup=at(/sh scripts\/install\.sh backup/);
+ const restore=at(/sh scripts\/install\.sh restore "\$backup" \|\|/),verify=at(/^lifecycle verify/);
+ for(const [index,name] of [[seed,'seed'],[backup,'backup'],[restore,'restore'],[verify,'verify']]) assert.ok(index>=0,`the job runs ${name}`);
+ assert.ok(seed<backup&&backup<restore&&restore<verify,lines.join('\n'));
+ const script=readFileSync('scripts/check-install.mjs','utf8');
+ for(const call of ['writeSoulRules','writeSharedSkill','readSharedSkill']) assert.match(script,new RegExp(`${call}\\(`),`check-install.mjs ${call}`);
+ assert.match(script,/knowledgeSkill\(/);
+});
+
 test('failed backup resumes the install and leaves no archive or secrets behind', t => {
  const directory=mkdtempSync(join(tmpdir(),'gtmworks-backup-'));
  t.after(()=>rmSync(directory,{recursive:true,force:true}));
@@ -200,17 +216,22 @@ case "$*" in *'tar -czf'*) echo 'partial-private-archive'; exit 9;; esac
 test('backup and restore round-trip the Compose volumes and keys; failed extraction stays offline', t => {
  const compose=load(readFileSync('docker-compose.install.yml','utf8'));
  const paths=['var/lib/postgresql/data','etc/postgresql-custom','var/lib/storage'];
+ // The Agents' profiles, rules, knowledge, skills, memory and history live only in the bundled Engine's volume (#349).
+ const hermesData='opt/data';
  assert.ok(compose.services.db.volumes.includes(`database:/${paths[0]}`));
  assert.ok(compose.services.db.volumes.includes(`database-config:/${paths[1]}`));
  assert.ok(compose.services.storage.volumes.includes(`files:/${paths[2]}`));
  assert.equal(compose.services.storage.environment.FILE_STORAGE_BACKEND_PATH,`/${paths[2]}`);
+ assert.ok(compose.services.hermes.volumes.includes(`hermes:/${hermesData}`));
  const directory=mkdtempSync(join(tmpdir(),'gtmworks-roundtrip-'));
  t.after(()=>rmSync(directory,{recursive:true,force:true}));
- for(const folder of ['scripts','bin',...paths.map(path=>`volumes/${path}`)]) mkdirSync(join(directory,folder),{recursive:true});
+ for(const folder of ['scripts','bin',...[...paths,hermesData].map(path=>`volumes/${path}`)]) mkdirSync(join(directory,folder),{recursive:true});
  copyFileSync('scripts/install.sh',join(directory,'scripts/install.sh'));
  const secrets=Object.entries(generateInstallEnv()).map(([name,value])=>`${name}=${value}`).join('\n');
  writeFileSync(join(directory,'.env.install'),secrets,{mode:0o600});
  for(const path of paths) writeFileSync(join(directory,'volumes',path,'saved'),'original',{mode:0o640});
+ mkdirSync(join(directory,'volumes',hermesData,'agents'));
+ writeFileSync(join(directory,'volumes',hermesData,'agents','SOUL.md'),'the team says this',{mode:0o600});
  writeFileSync(join(directory,'bin/docker'),`#!/usr/bin/env node
 import assert from 'node:assert/strict';
 import { appendFileSync, copyFileSync, readFileSync, writeFileSync } from 'node:fs';
@@ -231,7 +252,8 @@ if(args[0]==='compose') {
  if(args.includes('--volumes-from')) {
   assert.equal(readFileSync(cwd+'/stopped','utf8'),'yes');
   assert.equal(args[args.indexOf('--volumes-from')+1],'db-stopped');
-  assert.equal(args[args.lastIndexOf('--volumes-from')+1],'storage-stopped');
+  assert.equal(args[args.lastIndexOf('--volumes-from')+1],'hermes-stopped');
+  assert.ok(args.includes('storage-stopped'),'the files volume is archived too');
  }
  if(command[0]==='tar' && command[1]==='-czf') {
   // BusyBox has one global -C, unlike GNU tar's positional -C options.
@@ -248,6 +270,7 @@ if(args[0]==='compose') {
   .replaceAll('/backup/',cwd+'/.install-lock/')
   .replaceAll('/var/lib/',root+'/var/lib/')
   .replaceAll('/etc/postgresql-custom',root+'/etc/postgresql-custom')
+  .replaceAll('/opt/data',root+'/opt/data')
   .replaceAll('-C / ','-C '+root+' '));
  const child=spawnSync(mapped[0],mapped.slice(1),{stdio:'inherit'});
  process.exit(child.status ?? 1);
@@ -259,10 +282,19 @@ if(args[0]==='compose') {
  assert.equal(backup.status,0,backup.stderr);
  const archive=join('backups',readdirSync(join(directory,'backups'))[0]);
  assert.equal(statSync(join(directory,archive)).mode & 0o777,0o600);
+ // The whole volume is in the archive, the Engine's files under their own names and modes.
+ const listed=spawnSync('tar',['-tzf',join(directory,archive)],{encoding:'utf8'});
+ assert.equal(listed.status,0,listed.stderr);
+ const entries=listed.stdout.trimEnd().split('\n');
+ for(const entry of ['opt/data/','opt/data/agents/','opt/data/agents/SOUL.md']) assert.ok(entries.includes(entry),entry);
+ assert.ok(entries.includes('var/lib/storage/'));
  for(const path of paths) {
   rmSync(join(directory,'volumes',path,'saved'));
   writeFileSync(join(directory,'volumes',path,'fresh'),'discard');
  }
+ rmSync(join(directory,'volumes',hermesData),{recursive:true});
+ mkdirSync(join(directory,'volumes',hermesData));
+ writeFileSync(join(directory,'volumes',hermesData,'fresh'),'discard');
  writeFileSync(join(directory,'.env.install'),'fresh keys');
  const restore=run('restore',archive);
  assert.equal(restore.status,0,restore.stderr);
@@ -273,12 +305,80 @@ if(args[0]==='compose') {
   assert.equal(readFileSync(join(directory,'volumes',path,'saved'),'utf8'),'original');
   assert.equal(statSync(join(directory,'volumes',path,'saved')).mode & 0o777,0o640);
  }
+ // The Hermes volume is cleared and put back as it was, its own owners and modes kept.
+ assert.deepEqual(readdirSync(join(directory,'volumes',hermesData)).sort(),['agents']);
+ assert.equal(readFileSync(join(directory,'volumes',hermesData,'agents','SOUL.md'),'utf8'),'the team says this');
+ assert.equal(statSync(join(directory,'volumes',hermesData,'agents','SOUL.md')).mode & 0o777,0o600);
+ assert.doesNotMatch(restore.stdout,/Hermes data was not in this backup/);
  assert.match(readFileSync(join(directory,'commands'),'utf8'),/--force-recreate/);
  writeFileSync(join(directory,'commands'),'');
  const failed=spawnSync('sh',['scripts/install.sh','restore',archive],{cwd:directory,env:{...env,FAIL_EXTRACTION:'1'},encoding:'utf8'});
  assert.equal(failed.status,9,failed.stderr);
  assert.doesNotMatch(readFileSync(join(directory,'commands'),'utf8'),/"up"/);
  assert.equal(existsSync(join(directory,'.install-lock')),false);
+});
+
+test('an archive made before Hermes data was included restores, says what it lacks, and still refuses an unknown entry', t => {
+ const directory=mkdtempSync(join(tmpdir(),'gtmworks-old-backup-'));
+ t.after(()=>rmSync(directory,{recursive:true,force:true}));
+ const paths=['var/lib/postgresql/data','etc/postgresql-custom','var/lib/storage'];
+ const tree=join(directory,'tree');
+ for(const folder of ['scripts','bin','volumes/opt/data',...paths.map(path=>`volumes/${path}`),...paths.map(path=>`tree/${path}`)]) mkdirSync(join(directory,folder),{recursive:true});
+ copyFileSync('scripts/install.sh',join(directory,'scripts/install.sh'));
+ const secrets=Object.entries(generateInstallEnv()).map(([name,value])=>`${name}=${value}`).join('\n');
+ writeFileSync(join(directory,'.env.install'),'fresh keys',{mode:0o600});
+ for(const path of paths) writeFileSync(join(tree,path,'saved'),'original',{mode:0o640});
+ writeFileSync(join(tree,'.env.install'),secrets);
+ // The archive the installer made before #349: the four paths, and no opt/data.
+ const archive=join(directory,'old.tgz');
+ const made=spawnSync('tar',['-czf',archive,'-C',tree,'.env.install',...paths],{encoding:'utf8'});
+ assert.equal(made.status,0,made.stderr);
+ writeFileSync(join(directory,'volumes/opt/data/running'),'kept');
+ writeFileSync(join(directory,'bin/docker'),`#!/usr/bin/env node
+ import assert from 'node:assert/strict';
+ import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+ import { spawnSync } from 'node:child_process';
+ const args=process.argv.slice(2),cwd=process.cwd(),root=cwd+'/volumes';
+ appendFileSync(cwd+'/commands',JSON.stringify(args)+'\\n');
+ if(args[0]==='compose') {
+  if(args.includes('stop')) writeFileSync(cwd+'/stopped','yes');
+  if(args.includes('up')) writeFileSync(cwd+'/stopped','no');
+  if(args.includes('ps')) console.log(args.at(-1)+'-stopped');
+  if(args.includes('psql')) console.log('t');
+ } else if(args.includes('alpine:3.21')) {
+  const command=args.slice(args.indexOf('alpine:3.21')+1);
+  if(args.includes('--volumes-from')) assert.equal(args[args.lastIndexOf('--volumes-from')+1],'hermes-stopped');
+  const mapped=command.map(arg=>arg==='/' ? root : arg
+   .replaceAll('/backup/',cwd+'/.install-lock/')
+   .replaceAll('/var/lib/',root+'/var/lib/')
+   .replaceAll('/etc/postgresql-custom',root+'/etc/postgresql-custom')
+   .replaceAll('-C / ','-C '+root+' '));
+  const child=spawnSync(mapped[0],mapped.slice(1),{stdio:'inherit'});
+  process.exit(child.status ?? 1);
+ }
+ `,{mode:0o755});
+ const env={...process.env,PATH:`${directory}/bin:${process.env.PATH}`};
+ const run=(...args)=>spawnSync('sh',['scripts/install.sh',...args],{cwd:directory,env,encoding:'utf8'});
+ const restored=run('restore',archive);
+ assert.equal(restored.status,0,restored.stderr);
+ const lines=restored.stdout.split('\n').filter(line=>/Hermes data/.test(line));
+ assert.equal(lines.length,1,restored.stdout);
+ assert.match(lines[0],/The Agents' Hermes data was not in this backup/);
+ // Nothing replaced the Engine's running data, and the rest of the archive went in.
+ assert.equal(readFileSync(join(directory,'volumes/opt/data/running'),'utf8'),'kept');
+ assert.equal(readFileSync(join(directory,'.env.install'),'utf8'),secrets);
+ for(const path of paths) assert.equal(readFileSync(join(directory,'volumes',path,'saved'),'utf8'),'original');
+ // An entry outside the backup is still refused before anything is replaced.
+ writeFileSync(join(directory,'.env.install'),'fresh keys');
+ mkdirSync(join(tree,'home'));
+ writeFileSync(join(tree,'home/x'),'x');
+ const unknown=join(directory,'unknown.tgz');
+ const madeUnknown=spawnSync('tar',['-czf',unknown,'-C',tree,'.env.install',...paths,'home/x'],{encoding:'utf8'});
+ assert.equal(madeUnknown.status,0,madeUnknown.stderr);
+ const refused=run('restore',unknown);
+ assert.notEqual(refused.status,0);
+ assert.match(refused.stderr,/Unrecognised backup\./);
+ assert.equal(readFileSync(join(directory,'.env.install'),'utf8'),'fresh keys');
 });
 
 test('restore refuses an occupied install before replacing any volume or key', t => {
@@ -376,37 +476,63 @@ test('generated installs start independently; tampered, missing and example secr
  assert.throws(()=>checkSettings({...env,NODE_ENV:'production'}),/APP_ORIGIN.*https/);
 });
 
-test('install.sh takes over a lock only when the install that left it is shown gone', async t => {
+// The lock is a file descriptor's flock, held by the kernel: a lock file an install that was killed left behind is held
+// by no one and never blocks the next run, and an install that is still running keeps it, so it is never taken over.
+test('install.sh holds its lock through flock: a killed run leaves no holder, and a live run is never taken over', async t => {
  const directory=mkdtempSync(join(tmpdir(),'gtmworks-lock-'));
  t.after(()=>rmSync(directory,{recursive:true,force:true}));
  mkdirSync(join(directory,'scripts'));
  copyFileSync('scripts/install.sh',join(directory,'scripts/install.sh'));
- const boot=readFileSync('/proc/sys/kernel/random/boot_id','utf8').trim();
- const started=pid=>readFileSync(`/proc/${pid}/stat`,'utf8').replace(/^.*\) /s,'').split(' ')[19];
- const live=spawn('sleep',['60']);
- t.after(()=>live.kill());
- await new Promise(resolve=>live.once('spawn',resolve));
- const gone=spawnSync('true').pid;
- // An operation install.sh does not know: past the lock it stops with its usage, and its own lock is removed on exit.
- const run=owner=>{
-  rmSync(join(directory,'.install-lock'),{recursive:true,force:true});
-  mkdirSync(join(directory,'.install-lock'));
-  if(owner!==undefined) writeFileSync(join(directory,'.install-lock/owner'),owner);
-  return spawnSync('sh',['scripts/install.sh','frobnicate'],{cwd:directory,encoding:'utf8'});
+ // An operation install.sh does not know: past the lock it stops with its usage, and its own scratch folder is removed.
+ const run=()=>spawnSync('sh',['scripts/install.sh','frobnicate'],{cwd:directory,encoding:'utf8'});
+ const lockFile=join(directory,'.install.lock');
+ const passes=label=>{
+  const result=run();
+  assert.equal(result.status,1,label);
+  assert.match(result.stderr,/Usage: sh scripts\/install\.sh/,label);
+  assert.doesNotMatch(result.stderr,/Another install is running/,label);
+  assert.equal(existsSync(join(directory,'.install-lock')),false,`${label}: the run's own scratch folder is removed`);
+  assert.equal(existsSync(lockFile),true,`${label}: the lock file stays, so every run opens the same one`);
  };
- for(const [owner,label] of [[`${boot} ${live.pid} ${started(live.pid)}\n`,'a running owner'],[undefined,'no owner named'],[`${boot} ${gone}\n`,'an owner without its start time'],['garbage\n','an unreadable owner']]) {
-  const refused=run(owner);
+ // A lock file a killed run left, with no process holding it: it never blocks the next run.
+ writeFileSync(lockFile,'left by an install that was killed\n');
+ passes('a lock file nobody holds');
+ // A live run holds it: a second run stops before its own work, and the holder's lock file is left alone.
+ const live=spawn('sh',['-c','exec 9>.install.lock; flock -n 9 || exit 1; echo held; exec sleep 60'],{cwd:directory});
+ t.after(()=>live.kill('SIGKILL'));
+ await new Promise(resolve=>live.stdout.once('data',resolve));
+ for(const label of ['a second run','a third run']) {
+  const refused=run();
   assert.equal(refused.status,1,label);
-  assert.match(refused.stderr,/^Another install is running \(or remove stale \.install-lock\)\.$/m,label);
+  assert.match(refused.stderr,/^Another install is running: wait for it to finish, then run this again\.$/m,label);
   assert.doesNotMatch(refused.stderr,/Usage:/,label);
-  assert.equal(existsSync(join(directory,'.install-lock')),true,`${label}: the lock is left alone`);
+  assert.equal(existsSync(join(directory,'.install-lock')),false,`${label}: its own scratch folder was never made`);
+  assert.equal(existsSync(lockFile),true,`${label}: the live run's lock file is left alone`);
  }
- for(const [owner,label] of [[`${boot} ${gone} 12345\n`,'a process that is gone'],[`${boot} ${live.pid} 1\n`,'its number reused by another process'],[`another-boot ${live.pid} ${started(live.pid)}\n`,'an owner from before a restart']]) {
-  const taken=run(owner);
-  assert.match(taken.stderr,/Taking over \.install-lock from an install that stopped/,label);
-  assert.match(taken.stderr,/Usage: sh scripts\/install\.sh/,label);
-  assert.equal(existsSync(join(directory,'.install-lock')),false,`${label}: the run that took it over removed it`);
- }
+ // The live run is killed: the kernel drops its lock, so the lock file it left is held by no one.
+ live.kill('SIGKILL');
+ await new Promise(resolve=>live.once('exit',resolve));
+ passes('the lock file a killed run left');
+});
+
+test('install.sh leaves alone the scratch folder of a running installer from before flock, and clears one left by a gone one', t => {
+ const directory=mkdtempSync(join(tmpdir(),'gtmworks-old-lock-'));
+ t.after(()=>rmSync(directory,{recursive:true,force:true}));
+ mkdirSync(join(directory,'scripts'));
+ copyFileSync('scripts/install.sh',join(directory,'scripts/install.sh'));
+ const run=()=>spawnSync('sh',['scripts/install.sh','frobnicate'],{cwd:directory,encoding:'utf8'});
+ // The old installer named its owner as "<boot id> <process> <start time>" in .install-lock/owner.
+ const oldLock=pid=>{ mkdirSync(join(directory,'.install-lock'),{recursive:true}); writeFileSync(join(directory,'.install-lock/owner'),`boot ${pid} 1\n`); writeFileSync(join(directory,'.install-lock/backup.tgz'),'in use'); };
+ oldLock(process.pid);
+ const refused=run();
+ assert.equal(refused.status,1);
+ assert.match(refused.stderr,/Another install is running/);
+ assert.equal(existsSync(join(directory,'.install-lock/backup.tgz')),true,'a running old installer keeps its scratch files');
+ const gone=spawnSync('sh',['-c','echo $$']).stdout.toString().trim();
+ oldLock(gone);
+ const passed=run();
+ assert.match(passed.stderr,/Usage: sh scripts\/install\.sh/);
+ assert.equal(existsSync(join(directory,'.install-lock')),false,'a gone old installer\'s folder is cleared');
 });
 
 // The installer's last probes, run for real: the docker stand-in runs the script install.sh hands to the web container

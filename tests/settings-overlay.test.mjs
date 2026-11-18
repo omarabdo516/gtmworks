@@ -10,9 +10,14 @@ test('the overlay lists the reference’s ten sections in its order, Your accoun
   for (const [key, label] of overlaySections) for (const language of ['en', 'ar']) assert.ok(messages[language][label], `${key}: ${language} label`);
 });
 
-test('a Viewer sees only their account and the Agents; everyone else sees every section', () => {
+test('a Viewer sees only their account and the Agents; the Owner alone sees Backup (#33)', () => {
   assert.deepEqual(visibleSections('viewer').map(([key]) => key), ['agents', 'account']);
-  for (const role of ['owner', 'manager', 'contributor']) assert.equal(visibleSections(role).length, 10, role);
+  assert.equal(visibleSections('owner').length, 10);
+  for (const role of ['manager', 'contributor', 'viewer']) {
+    assert.ok(!visibleSections(role).some(([key]) => key === 'backup'), `Backup is the Owner's: ${role}`);
+    assert.notEqual(pickSection('backup', role), 'backup', `a request for Backup falls back: ${role}`);
+  }
+  assert.equal(pickSection('backup', 'owner'), 'backup');
 });
 
 test('a request opens the section asked for only when the person may see it, else their first one', () => {
