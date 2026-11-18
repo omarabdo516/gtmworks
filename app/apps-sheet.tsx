@@ -1,10 +1,10 @@
 'use client';
-import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useI18n } from '@/lib/i18n-client';
 import { ShellIcon } from '@/components/shell-icon';
 import { leave } from '@/lib/motion';
-import { AppsList, AppDetail, connectedCount, type AppItem, type AppsPlace } from './settings-apps-client';
-import { readApps, useCompanyApps } from './company-apps-read';
+import { AppsList, AppDetail, connectedCount, type AppsPlace } from './settings-apps-client';
+import { readApps, useCompanyApps, useHeldApps } from './company-apps-read';
 import en from '@/lib/messages/apps.en.json';
 import ar from '@/lib/messages/apps.ar.json';
 import './sheet.css';
@@ -16,8 +16,11 @@ import './apps.css';
 // inline end over whatever page is open. The sidebar's button and the account menu open it; one app's page opens inside
 // it with no change of address. Every Member reads it; only the Owner gets the buttons.
 type Sheet={phase:'closed'}|{phase:'open'|'closing',view:string|null,opener:HTMLElement|null};
-// The apps as last read: undefined until the first read lands, null when the Engine could not be read.
-type Apps={items:AppItem[]|null|undefined,open:(opener:HTMLElement|null)=>void};
+// The Company and how to open its sheet, the same object for the whole visit: the provider wraps the whole page, and a
+// new value arriving while a part of the page still streams in would make React draw that part again in the browser
+// beside its hidden streamed copy (#172), a Conversation's transcript among them. The apps reach the count through
+// their store (app/company-apps-read.ts).
+type Apps={company:string,open:(opener:HTMLElement|null)=>void};
 const AppsContext=createContext<Apps|null>(null);
 
 // sheetOut in sheet.css.
@@ -56,7 +59,9 @@ export function AppsSheetProvider({company,owner,rtl,children}:{company:string,o
  useLayoutEffect(()=>{ if(kept.current&&box.current?.open&&!box.current.contains(document.activeElement)) document.getElementById(kept.current)?.focus(); },[items]);
  useEffect(()=>()=>stopLeaving.current(),[]);
  const item=sheet.phase!=='closed'&&sheet.view?items?.find(entry=>entry.key===sheet.view):undefined;
- return <AppsContext.Provider value={{items,open}}>
+ const opening=useRef(open); useLayoutEffect(()=>{ opening.current=open; });
+ const value=useMemo(()=>({company,open:(opener:HTMLElement|null)=>opening.current(opener)}),[company]);
+ return <AppsContext.Provider value={value}>
   {children}
   {/* Drawn only while open or leaving, so a page with the sheet closed holds no dialog. It sits beside the frame, as the
    reference's dialog#apps does, so it carries the shell's tokens (.gw) itself. */}
@@ -71,9 +76,13 @@ export function AppsSheetProvider({company,owner,rtl,children}:{company:string,o
 
 // "N connected", once the apps are read; left out when the Engine could not be read.
 export function AppsCount({className}:{className:string}) {
- const apps=useContext(AppsContext); const {language}=useI18n();
- if(!apps?.items) return null;
- return <span className={className}>{connectedCount(apps.items)} {(language==='ar'?ar:en).connected}</span>;
+ const apps=useContext(AppsContext);
+ return apps&&<Count company={apps.company} className={className}/>;
+}
+function Count({company,className}:{company:string,className:string}) {
+ const {language}=useI18n(); const items=useHeldApps(company,language);
+ if(!items) return null;
+ return <span className={className}>{connectedCount(items)} {(language==='ar'?ar:en).connected}</span>;
 }
 
 // What opens the sheet, for the account menu; null where the Shell drew no sheet.

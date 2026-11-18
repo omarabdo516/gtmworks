@@ -26,7 +26,8 @@ let fake:Awaited<ReturnType<typeof fakeHermes>>;
 test.describe.configure({mode:'serial'});
 test.use({actionTimeout:15000});
 test.beforeAll(async({browser},testInfo)=>{
- freshSeed(testInfo.file);
+ // A retry starts from the seed again: Lead and its Connection below are inserted once per run of this file.
+ freshSeed(testInfo.file,testInfo.retry>0);
  fake=await fakeHermes({host:`127.0.0.${60+lane}`,managementPort:9119});
  const klaviyo={url:'https://mcp.klaviyo.example/mcp',auth:'oauth',...appConfig(appByKey('klaviyo')!,`${appOrigin}/api/apps/callback/klaviyo`).mcp_servers.klaviyo};
  fake.settings.profiles.set(profile,{soul:'',provider:'anthropic',model:'claude-opus-4-6',key:fake.settings.key,config:{mcp_servers:{klaviyo}},credentials:{anthropic:'signed-in'},env:{OPENROUTER_API_KEY:'set'}} as never);
@@ -125,7 +126,9 @@ test('Connect apps opens the sheet over a Conversation and over a channel, keeps
   await menu(page).getByRole('menuitem',{name:/^Connect apps/}).click();
   await expect(menu(page)).toHaveCount(0);
   await expect(sheet).toBeVisible();
-  // Docked at the inline end, as drawn from the sidebar: the sheet's own styles reach it beside the frame.
+  // Docked at the inline end, as drawn from the sidebar: the sheet's own styles reach it beside the frame. Measured once
+  // it has slid in, since a box read while it moves can be a fraction of a pixel off.
+  await sheet.evaluate(dialog=>Promise.all(dialog.getAnimations().map(animation=>animation.finished)));
   expect((await sheet.boundingBox())?.width).toBe(580);
   await expect(page.locator('#apps-q')).toBeFocused();
   await page.keyboard.press('Escape');
@@ -192,12 +195,16 @@ test('the Owner picks a model: the menu closes, the field has the focus, the toa
 test('a model the Engine refuses leaves the Conversation on its earlier model and says so in one line under the composer',async({page})=>{
  await signIn(page,'omar@example.com','/c/rs-learning/home');
  const conversation=await conversationWith(page,'Plan the launch');
+ // Lead is idle before the refused send, so it starts a Run at once rather than waiting as a queued turn.
+ await expect(page.locator('.msg').filter({hasText:'Reply to: Plan the launch'})).toBeVisible({timeout:20000});
  await plus(page).click();
  await menu(page).getByRole('menuitemradio',{name:/^openai\/gpt-5\.5/}).click();
  await expect(page.locator('.toast')).toHaveText('Lead will think with openai/gpt-5.5');
  fake.settings.refusedModels.add('anthropic/claude-opus-4.6');
  await plus(page).click();
  await menu(page).getByRole('menuitemradio',{name:/^anthropic\/claude-opus-4\.6/}).click();
+ // The toast says the pick was kept; a message sent before then would still go on the earlier model.
+ await expect(page.locator('.toast')).toHaveText('Lead will think with anthropic/claude-opus-4.6');
  await field(page).fill('Write the first post');
  await field(page).press('Enter');
  await expect(page.locator('.composer-error')).toHaveText('The agent engine did not take that model, so this chat stays on the model it had. Your message is still in the box.');

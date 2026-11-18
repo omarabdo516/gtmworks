@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(39);
+select plan(41);
 -- #138. Ads in RS Learning, shown to the Manager (2), the Contributors (3, 5) and the Viewer (4); the Owner (1) sees every
 -- Agent. One Conversation with Ads each, and in it the message of one run.
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
@@ -75,6 +75,15 @@ select results_eq($$select conversation_id,state,content->>'answer',answered_by,
 set local role service_role;
 select is(public.track_run_question('f2000000-0000-0000-0000-000000000003','q-run-3',current_setting('test.asking')::jsonb,false,'2026-06-10T10:16:00Z'),
  jsonb_build_array(jsonb_build_object('card',current_setting('test.card')::bigint,'question','p1@1','answer','Students')),'the next read hands over the claim to deliver');
+-- One closer at a time delivers a claim (two closers race: the answer's own request, the page's read, the worker): a
+-- read while it is handed over gets nothing, and one after its 15 seconds gets it again, as a closer that died would.
+select is(public.track_run_question('f2000000-0000-0000-0000-000000000003','q-run-3',current_setting('test.asking')::jsonb,false,'2026-06-10T10:16:01Z'),
+ '[]'::jsonb,'a second closer is not handed the claim another closer is delivering');
+reset role;
+update public.reply_cards set delivering_at=now()-interval '16 seconds' where id=current_setting('test.card')::bigint;
+set local role service_role;
+select is(public.track_run_question('f2000000-0000-0000-0000-000000000003','q-run-3',current_setting('test.asking')::jsonb,false,'2026-06-10T10:16:02Z'),
+ jsonb_build_array(jsonb_build_object('card',current_setting('test.card')::bigint,'question','p1@1','answer','Students')),'a claim whose closer went quiet is handed over again');
 select results_eq($$values (public.settle_question(current_setting('test.card')::bigint,'answered')),(public.settle_question(current_setting('test.card')::bigint,'closed')),
   (public.settle_question(current_setting('test.owner_card')::bigint,'closed'))$$,
  $$values ('answered'),('answered'),('closed')$$,'the Engine took one answer, and a later verdict does not change it; the other came too late and is closed');
