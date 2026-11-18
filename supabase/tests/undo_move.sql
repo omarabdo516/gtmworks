@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(44);
+select plan(45);
 -- A Company of its own, with the ten stages a new one receives (ADR 0013): «كتابة» and «تصميم ومونتاج» are both In
 -- progress, and «بريف جاهز» is Planned, so a Card's stage and its column are told apart.
 insert into public.companies(id,slug,name) values ('10000000-0000-0000-0000-000000000097','undo-move','Undo move');
@@ -117,7 +117,10 @@ select is(public.undo_work_card_move('10000000-0000-0000-0000-000000000097',(sel
 
 -- No Member writes a move record, and a Member of another Company puts nothing back.
 select throws_ok($$insert into public.work_card_moves(company_id,card_id,from_stage_id,to_stage_id) values ('10000000-0000-0000-0000-000000000097',(select id from public.work_cards where title='Undo A'),1,2)$$,'42501','permission denied for table work_card_moves','a Member writes no move record of their own');
-select isnt((select count(*)::int from public.work_card_moves where company_id='10000000-0000-0000-0000-000000000097'),0,'a Member reads the Company''s own moves');
+select isnt((select count(*)::int from public.work_card_moves where company_id='10000000-0000-0000-0000-000000000097'),0,'a Member reads their own moves');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+select is((select count(*)::int from public.work_card_moves where company_id='10000000-0000-0000-0000-000000000097' and person_id='20000000-0000-0000-0000-000000000001'),0,'and not another Member''s');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select throws_ok($$select public.undo_work_card_move('10000000-0000-0000-0000-000000000099',(select id from public.work_cards where title='Undo A'))$$,'42501','not permitted','a Member puts no Card back in another Company');
 select is((select count(*)::int from public.work_card_moves where company_id='10000000-0000-0000-0000-000000000099'),0,'another Company''s moves are neither read nor written');
 select * from finish();

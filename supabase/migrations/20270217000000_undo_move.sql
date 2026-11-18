@@ -19,10 +19,11 @@ create table public.work_card_moves (
  moved_at timestamptz not null default now(),
  foreign key(company_id,card_id) references public.work_cards(company_id,id)
 );
--- Only the Card table writes a move; a Member reads the Company's own, through the undo function below.
+-- Only the Card table writes a move. A Member reads only their own moves, which is all "Undo" needs: another person's
+-- moves, of Cards that may be hidden from this Member, stay theirs.
 alter table public.work_card_moves enable row level security;
 revoke all on public.work_card_moves from anon,authenticated,service_role;
-create policy work_card_moves_read on public.work_card_moves for select to authenticated using (public.is_member(company_id));
+create policy work_card_moves_read on public.work_card_moves for select to authenticated using (person_id=auth.uid() and public.is_member(company_id));
 grant select on public.work_card_moves to authenticated;
 create index work_card_moves_seek on public.work_card_moves(company_id,card_id,person_id,moved_at desc,id desc);
 
