@@ -53,7 +53,7 @@ export function land(el:HTMLElement|null,from:{left:number,top:number}|null=null
  window.setTimeout(()=>{ el.style.transition=''; el.classList.remove('is-landing'); },380);
 }
 
-export function KanbanBoard({label,busy,cards,columnName,onMove,renderOverlay,children}:{label:string,busy:boolean,cards:{id:number,title:string,column:string}[],columnName:(column:string)=>string,onMove:(card:number,column:string,before:number|null)=>Promise<void>|void,renderOverlay:(id:number)=>ReactNode,children:ReactNode}) {
+export function KanbanBoard({label,busy,cards,columnName,onMove,renderOverlay,children}:{label:string,busy:boolean,cards:{id:number,title:string,column:string}[],columnName:(column:string)=>string,onMove:(card:number,column:string,before:number|null)=>Promise<boolean>|boolean,renderOverlay:(id:number)=>ReactNode,children:ReactNode}) {
  const {t}=useI18n();
  const [activeId,setActiveId]=useState<number|null>(null);
  const [place,setPlace]=useState<DropPlace>(nowhere);
@@ -105,7 +105,8 @@ export function KanbanBoard({label,busy,cards,columnName,onMove,renderOverlay,ch
   if(!card||!over||!at.column) return;
   // A drop on the Card's own place changes nothing (design-reference: dragEnd's sameSpot).
   if(!placeChanges(cards.filter(item=>item.column===at.column).map(item=>item.id),id,at.before)) return;
-  void Promise.resolve(onMove(id,at.column,at.before)).then(()=>land(document.querySelector<HTMLElement>(`#board-cols .kcard[data-card-id="${id}"]`),was?{left:was.left,top:was.top}:null));
+  // The Card lands only once the server took the place: a refused move stays where it is, with no motion to say it went.
+  void Promise.resolve(onMove(id,at.column,at.before)).then(ok=>{ if(ok) land(document.querySelector<HTMLElement>(`#board-cols .kcard[data-card-id="${id}"]`),was?{left:was.left,top:was.top}:null); });
  }} accessibility={{screenReaderInstructions:{draggable:t('boardDragHint')},announcements:{onDragStart:({active})=>t('dragStarted',cards.find(card=>card.id===Number(active.id))?.title),onDragOver:({over})=>over?t('dragOver',columnName(columnFor(over.id)||'')):t('dragCancelled'),onDragEnd:({over})=>over?t('dragEnded',columnName(columnFor(over.id)||'')):t('dragCancelled'),onDragCancel:()=>t('dragCancelled')}}}>
   <DropMark.Provider value={{place,carrying:activeId!==null}}>
    <div className="board board-cols" id="board-cols" aria-label={label} aria-busy={busy}>{children}</div>
