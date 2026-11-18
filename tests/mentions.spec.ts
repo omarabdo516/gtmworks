@@ -16,14 +16,16 @@ const [seen, hidden] = [id(701), id(702)];
 
 test.describe.configure({ mode: 'serial' });
 test.beforeAll(({}, testInfo) => {
- freshSeed(testInfo.file);
+ // A retry starts from the seed again: this file's two Agents are inserted once per run of it.
+ freshSeed(testInfo.file, testInfo.retry > 0);
  // The general channel holds every Member, and every Agent the reader sees. Two Agents exist: the Contributor may call
- // the first, and the second stays hidden from them everywhere but a channel that holds it (#15).
+ // the first, and the second stays hidden from them everywhere but a channel that holds it (#15). Each Agent names its
+ // own profile on the bundled Hermes, as every Agent does (#342).
  query(`do $$ begin
   update public.people set language='en' where id in ('${contributor}','20000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000004');
-  insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values
-   ('${seen}','${company}','${id(11)}','Visible Agent','Plans the work'),
-   ('${hidden}','${company}','${id(12)}','Hidden Agent','Stays out');
+  insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile) values
+   ('${seen}','${company}','${id(11)}','Visible Agent','Plans the work','mention-seen'),
+   ('${hidden}','${company}','${id(12)}','Hidden Agent','Stays out','mention-hidden');
   insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','${contributor}','${seen}');
  end $$;`);
 });
@@ -55,15 +57,17 @@ test('in the general channel "@" offers the other Members with their Role, a Vie
  const list = page.locator('.composer [role="listbox"]');
  await expect(list).toBeVisible();
  await expect(page.locator('.composer .menu__label')).toHaveText(['Someone on the team', 'Call an agent']);
- // A Manager first (the channel's own order), then the Owner, then the Viewer marked "reads only"; the Agent comes last.
- await expect(page.getByRole('option').first()).toContainText('Manager');
+ // The Owner first, then the Manager, then the Viewer marked "reads only", as the channel lists its Members; the Agent
+ // comes last.
+ await expect(page.getByRole('option').first()).toContainText('Owner');
  await expect(page.getByRole('option').first()).not.toContainText('read');
+ await expect(page.getByRole('option').filter({ hasText: 'Manager' })).toHaveCount(1);
  await expect(page.getByRole('option').filter({ hasText: 'Owner' })).toHaveCount(1);
  const reads = page.getByRole('option').filter({ hasText: 'reads only' });
  await expect(reads).toHaveCount(1);
  await expect(reads).toContainText('Viewer');
  await expect(page.getByRole('option').last()).toContainText('Visible Agent');
- // Tab puts the marked entry in place of what was typed, with one space after it.
+ // Tab puts the marked entry in place of what was typed, with one space after it: the Owner's first name.
  await box.press('Tab');
- await expect(box).toHaveValue('@مدير ');
+ await expect(box).toHaveValue('@عمر ');
 });

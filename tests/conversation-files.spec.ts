@@ -8,21 +8,22 @@ import { signIn } from './sign-in';
 // with an image and no text is named by the image; a file the Agent cannot read is refused before anything is stored;
 // and a Conversation's file opens only for the person whose Conversation it is.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
-const rows=<T>(sql:string):T[]=>JSON.parse(query(sql)) as T[];
+// A read answers an array (or `{rows}` on a newer CLI); a write answers no rows, so it goes through `query`.
+const rows=<T>(sql:string):T[]=>{ const out=JSON.parse(query(sql)); return (Array.isArray(out)?out:out.rows) as T[]; };
 const company='10000000-0000-0000-0000-000000000001';
 // A one-pixel PNG: the Engine is given the bytes and the type the browser names, and reads the part.
 const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==','base64');
 const image={name:'cover.png',mimeType:'image/png',buffer:png};
 
 async function ownerSignIn(page:Page) {
- rows(`update public.people set language='en' where id='20000000-0000-0000-0000-000000000001'`);
+ query(`update public.people set language='en' where id='20000000-0000-0000-0000-000000000001'`);
  await signIn(page,'omar@example.com','/c/rs-learning/home');
 }
 // The default Agent is the one the chat opens on; the seed's own Lead is detached so the fake Hermes's profile is used.
 function defaultAgent() {
  const stamp=randomUUID().slice(0,8); const id=randomUUID(); const connection=randomUUID();
- rows(`update public.hermes_agents set is_default=false where company_id='${company}' and is_default`);
- rows(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${id}','${company}','${connection}','Mona','Marketing',true,'mona-${stamp}')`);
+ query(`update public.hermes_agents set is_default=false where company_id='${company}' and is_default`);
+ query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${id}','${company}','${connection}','Mona','Marketing',true,'mona-${stamp}')`);
  return {id,connection};
 }
 const conversationsOf=()=>rows<{n:number}>(`select count(*)::int as n from public.conversations where company_id='${company}'`)[0].n;
@@ -48,10 +49,11 @@ test('an image with no text is sent, shows under the Member\'s message and names
   await expect(page).toHaveURL(/\/c\/rs-learning\/conversations\/[0-9a-f-]{36}$/);
   const conversation=page.url().split('/').pop()!;
   // The message keeps the image under its bubble, and the chat is named by the image (the sidebar and its own title).
-  const turn=page.locator('.msg[data-author=person]');
+  // The newest person turn is this send, so a retry of this test reads its own message and not the attempt before it.
+  const turn=page.locator('.msg[data-author=person]').last();
   await expect(turn.locator('.msg-files .file-chip')).toHaveText(/cover\.png/);
   await expect(turn.locator('.bubble--user')).toHaveCount(0);
-  await expect(page.locator('.sidebar .thread-item').filter({hasText:'cover.png'})).toBeVisible();
+  await expect(page.locator(`.sidebar .thread-item[href$="/conversations/${conversation}"]`)).toContainText('cover.png');
   await expect(page.locator('.head-pill')).toContainText('cover.png');
   const href=await turn.locator('.msg-files a.file-chip').getAttribute('href');
   expect(href).toMatch(new RegExp(`^/c/rs-learning/files/conversation/\\d+$`));
@@ -60,8 +62,8 @@ test('an image with no text is sent, shows under the Member\'s message and names
   expect(run?.input).toEqual([{role:'user',content:[{type:'image_url',image_url:{url:`data:image/png;base64,${png.toString('base64')}`}}]}]);
   // After a reload, the record still carries the image.
   await page.reload();
-  await expect(page.locator('.msg[data-author=person] .msg-files .file-chip')).toHaveText(/cover\.png/);
-  await expect(page.locator('.msg[data-author=person] .msg-files a.file-chip')).toHaveAttribute('href',href!);
+  await expect(page.locator('.msg[data-author=person] .msg-files .file-chip').last()).toHaveText(/cover\.png/);
+  await expect(page.locator('.msg[data-author=person] .msg-files a.file-chip').last()).toHaveAttribute('href',href!);
   expect([conversationsOf(),conversationFiles(),storedConversationFiles()].every(count=>count>0)).toBe(true);
   expect(rows<{id:string}>(`select id from public.conversation_attachments where conversation_id='${conversation}'`).length).toBe(1);
  } finally { await fake.close(); }
