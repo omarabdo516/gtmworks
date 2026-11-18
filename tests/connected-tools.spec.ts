@@ -48,6 +48,7 @@ test.beforeAll(async({browser},testInfo)=>{
     select '${second}',company_id,owner_id,address,'${own}',key_encrypted,state,version,features from public.hermes_connections where id='${connection}';
    insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,apps) values ('${writer}','${company}','${second}','Writer','Content',false,'{Mixpanel}');
    insert into public.hermes_agent_audit(company_id,actor_id,agent_id,action,details) values ('${company}','${omar}','${writer}','PROVIDE_BUNDLED_HERMES_AGENT',jsonb_build_object('connection_id','${second}'));
+   insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','20000000-0000-0000-0000-000000000002','${writer}'),('${company}','20000000-0000-0000-0000-000000000004','${writer}');
   end $$;`);
  } finally { await page.close(); }
 });
