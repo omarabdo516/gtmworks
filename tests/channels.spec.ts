@@ -53,7 +53,7 @@ test('the Viewer reads the channel, with the writer and their role, and has no c
 // a Viewer included. The session is the fake Hermes's, on the profile the Run was pinned to.
 test('a channel reply shows its Run\'s steps and its review card to the channel\'s members',async({page})=>{
  const lead=String(rows(`select id from public.hermes_agents where company_id='${company}' and is_default order by id limit 1`)[0].id);
- const session=`session-148-${randomUUID().slice(0,8)}`; const profile=`ag-148-${randomUUID().slice(0,8)}`; const run=`run-148-${randomUUID().slice(0,8)}`;
+ const session=randomUUID(); const profile=`ag-148-${randomUUID().slice(0,8)}`; const run=`run-148-${randomUUID().slice(0,8)}`;
  const sent=Date.parse('2026-11-16T10:12:00Z')/1000;
  query(`do $$ declare asked bigint; begin
   insert into public.channel_messages(company_id,channel_id,author,person_id,author_name,body,send_key,created_at)
