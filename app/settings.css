@@ -210,7 +210,9 @@
 .gw .sov .kpi > * { display: block; min-width: 0; }
 .gw .sov .kpi__label { font-size: var(--gw-fs-sm); color: var(--gw-text-2); }
 .gw .sov .kpi__val { font-size: clamp(24px, 2.1vw, var(--sov-fs-2xl)); font-weight: 600; line-height: 1.25; white-space: nowrap; color: var(--gw-text-1); }
+.gw .sov .use-kpis .kpi__val bdi { font-size: inherit; }
 .gw .sov .usage-table td:first-child { min-width: 0; }
+.gw .sov .usage-models td:first-child { color: var(--gw-text-2); white-space: nowrap; }
 
 /* company knowledge */
 .gw .sov .know-vs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s3); }

@@ -364,7 +364,7 @@
   "usageOutput": "Output tokens",
   "usageSessions": "Conversations",
   "usageUnknown": "Usage unknown",
-  "usageNone": "No usage to show. An Owner sees the usage of the companies they own.",
+  "usageNone": "No usage to show in this period.",
   "conversationUsage": "{0} tokens used ({1} in, {2} out)",
   "navigation": "Navigation",
   "mainMenu": "Main menu",
@@ -972,5 +972,8 @@
   "connectBy": "Apps are connected by {0}",
   "connectByOwner": "Apps are connected by the Owner",
   "connectFailed": "The sign-in didn’t finish. Try again.",
-  "connectBlocked": "Your browser blocked the sign-in window. Allow pop-ups for this site and try again."
+  "connectBlocked": "Your browser blocked the sign-in window. Allow pop-ups for this site and try again.",
+  "settingsPerModel": "Per model",
+  "usageModel": "Model",
+  "usageHeaviest": "Heaviest agent"
 }
