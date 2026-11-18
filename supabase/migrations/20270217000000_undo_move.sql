@@ -111,8 +111,10 @@ grant execute on function public.place_work_card(uuid,bigint,text,bigint,text) t
 
 -- The id of a Card's latest remembered move, whoever made it, for a Member of its Company: Undo puts back only a move that
 -- is still the Card's latest, and another person's moves are not the caller's to read (work_card_moves_read).
+-- Latest by id, not by moved_at: moved_at is its transaction's start, while a move waits on the Card's row lock, so the
+-- id follows the order the moves committed in.
 create function public.work_card_latest_move(c uuid, card bigint) returns bigint language sql stable security definer set search_path='' as $$
- select m.id from public.work_card_moves m where public.is_member(c) and m.company_id=c and m.card_id=card order by m.moved_at desc,m.id desc limit 1;
+ select m.id from public.work_card_moves m where public.is_member(c) and m.company_id=c and m.card_id=card order by m.id desc limit 1;
 $$;
 revoke all on function public.work_card_latest_move(uuid,bigint) from public,anon,service_role;
 grant execute on function public.work_card_latest_move(uuid,bigint) to authenticated;
@@ -132,7 +134,7 @@ declare moved public.work_card_moves; current_stage bigint; current_place numeri
   where w.company_id=c and w.id=card for update of w;
  if not found then raise exception 'card not found or not permitted'; end if;
  select m.* into moved from public.work_card_moves m where m.company_id=c and m.card_id=card and m.person_id=auth.uid()
-  order by m.moved_at desc,m.id desc limit 1;
+  order by m.id desc limit 1;
  if not found then raise exception 'nothing to undo' using errcode='42501'; end if;
  -- The caller's move must still be the Card's latest: a later move by anyone, even one that put it back on the same
  -- stage and place, is not the caller's to undo.
