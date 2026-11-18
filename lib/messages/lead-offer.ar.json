@@ -1,0 +1,8 @@
+{
+  "makeIt": "أعمله؟",
+  "makeItChoice": "اعمله",
+  "askForIt": "أطلبه من {0}؟",
+  "askForItChoice": "اطلبه من {0}",
+  "notNow": "مش دلوقتي",
+  "ownerFallback": "المالك"
+}

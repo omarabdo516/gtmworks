@@ -158,11 +158,11 @@ test('a question is read from its row: open with no answer, answered with its an
  assert.deepEqual(replyCardOf(askedRow('closed')),{...question,state:'closed'});
 });
 
-test('a Run\'s question follows its person\'s message, its answer is that person\'s turn, and the Run\'s reply comes after; the main Agent\'s is its plain words',()=>{
+test('a Run\'s question follows its person\'s message with its card, also the main Agent\'s, its answer is that person\'s turn, and the Run\'s reply comes after',()=>{
  const sent=[{id:1,author:/** @type {const} */('person'),author_name:'Omar',body:'محتاجين حملة Meta',run_id:'r1',created_at:at(1)}];
- const placed=(/** @type {string} */ state,/** @type {string|undefined} */ answer,/** @type {string|undefined} */ words)=>{
+ const placed=(/** @type {string} */ state,/** @type {string|undefined} */ answer)=>{
   const card={kind:/** @type {const} */('reply'),card:/** @type {import('../lib/conversations.ts').ReplyCard} */(replyCardOf(askedRow(state,answer)))};
-  return [{run_id:'r1',at:at(2),card,...(answer===undefined?{}:{answer:{body:answer,at:at(3),delivered:true}}),...(words===undefined?{}:{words})}];
+  return [{run_id:'r1',at:at(2),card,...(answer===undefined?{}:{answer:{body:answer,at:at(3),delivered:true}})}];
  };
  const open=shown(sent,[],placed('open'),'Ads');
  assert.deepEqual(open,[{id:1,author:'person',author_name:'Omar',body:'محتاجين حملة Meta',lost:false,created_at:at(1)},
@@ -172,12 +172,13 @@ test('a Run\'s question follows its person\'s message, its answer is that person
  const answered=shown(replied,[{run_id:'r1',outcome:'completed'}],placed('answered',angles[1]),'Ads');
  assert.deepEqual(order(answered),[1,'asked','answer',2]);
  assert.deepEqual(answered[2],{id:5,author:'person',author_name:'Omar',body:angles[1],created_at:at(3),kind:'answer'});
- const lead=shown(sent,[],placed('open',undefined,`اختار زاوية الإعلان\n- ${angles[0]}\n- ${angles[1]}`),'Lead');
- assert.deepEqual(lead[1],{id:5,author:'agent',author_name:'Lead',body:`اختار زاوية الإعلان\n- ${angles[0]}\n- ${angles[1]}`,created_at:at(2),kind:'asked'});
+ const lead=shown(sent,[],placed('open'),'Lead');
+ assert.deepEqual(lead[1],{id:5,author:'agent',author_name:'Lead',body:'',created_at:at(2),kind:'asked',cards:[placed('open')[0].card]},
+  'the main Agent\'s question is its card, drawn as chips by the page (#143), not plain words');
 });
 
 test('an answer claimed after the Engine stopped waiting is the person\'s turn marked not delivered; one the Engine took is not marked',()=>{
- const parts=(/** @type {string} */ state)=>{ const row=askedRow(state,angles[1]); return questionParts(row,/** @type {import('../lib/conversations.ts').ReplyCard} */(replyCardOf(row)),false); };
+ const parts=(/** @type {string} */ state)=>{ const row=askedRow(state,angles[1]); return questionParts(row,/** @type {import('../lib/conversations.ts').ReplyCard} */(replyCardOf(row))); };
  assert.deepEqual(parts('closed'),{answer:{body:angles[1],at:at(3),delivered:false}});
  assert.deepEqual(parts('answered'),{answer:{body:angles[1],at:at(3),delivered:true}});
  assert.deepEqual(parts('sending'),{answer:{body:angles[1],at:at(3),delivered:true}},'one still on its way is drawn as sent');
@@ -206,7 +207,7 @@ test('a Run\'s request follows its person\'s message as the Agent\'s turn with i
  const sent=[{id:1,author:/** @type {const} */('person'),author_name:'Omar',body:'نضّف الملفات القديمة',run_id:'r1',created_at:at(1)}];
  const placed=(/** @type {string} */ state,/** @type {string|undefined} */ choice)=>{
   const row=permissionRow(state,choice); const card=/** @type {import('../lib/conversations.ts').ReplyCard} */(replyCardOf(row));
-  return [{run_id:'r1',at:at(2),card:{kind:/** @type {const} */('reply'),card},...questionParts(row,card,true)}];
+  return [{run_id:'r1',at:at(2),card:{kind:/** @type {const} */('reply'),card},...questionParts(row,card)}];
  };
  for(const agent of ['Ads','Lead']) assert.deepEqual(shown(sent,[],placed('open'),agent),[{id:1,author:'person',author_name:'Omar',body:'نضّف الملفات القديمة',lost:false,created_at:at(1)},
   {id:8,author:'agent',author_name:agent,body:'',created_at:at(2),kind:'asked',cards:[placed('open')[0].card]}],agent);

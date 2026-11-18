@@ -866,6 +866,7 @@
   "questionLetters": "أبجد",
   "questionHint": "اختار واحدة، أو اكتب رأيك في الرسالة",
   "questionHintWords": "اكتب ردك في الرسالة",
+  "questionOrType": "أو اكتب الإجابة تحت",
   "questionAnswered": "اتجاوب",
   "questionClosed": "السؤال ده مبقاش ينفع يتجاوب",
   "questionTaken": "السؤال ده اتجاوب خلاص",
