@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(33);
+select plan(35);
 -- #156: a channel message keeps its images, every Member of the channel reads them (a Viewer included), and only a
 -- Member of the channel who may write keeps them. A message of images alone is stored and starts no Run; a text of
 -- spaces only is still refused, as before.
@@ -105,11 +105,21 @@ select is((select count(*)::int from public.channel_attachments where name='refu
 select is(public.reserve_channel_files('69000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d2400000-0000-0000-0000-000000000012',
  $json$[{"position":0,"name":"waiting.png","content_type":"image/png","size":1,"path":"anywhere"}]$json$::jsonb),
  1,'a sender keeps an image under a fresh key');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+select throws_ok($$select public.reserve_channel_files('69000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d2400000-0000-0000-0000-000000000012',
+ $json$[{"position":1,"name":"theirs.png","content_type":"image/png","size":1,"path":"anywhere"}]$json$::jsonb)$$,
+ 'P0002','channelNotFound','another writer cannot reserve under a pending key of someone else');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select lives_ok($$insert into sent select 'retried', public.post_channel_message('69000000-0000-0000-0000-000000000001','d2400000-0000-0000-0000-000000000012','Owner retry')$$,
  'the Owner stores the message under that key');
 select is(public.reserve_channel_files('69000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d2400000-0000-0000-0000-000000000012',
  $json$[{"position":0,"name":"waiting.png","content_type":"image/png","size":1,"path":"anywhere"}]$json$::jsonb),
  -1,'a retry by the same sender of a stored send is already stored');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+select throws_ok($$select public.reserve_channel_files('69000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d2400000-0000-0000-0000-000000000012',
+ $json$[{"position":0,"name":"theirs.png","content_type":"image/png","size":1,"path":"anywhere"}]$json$::jsonb)$$,
+ 'P0002','channelNotFound','another Member still cannot take a stored message''s send');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 
 -- A team channel's files are its own Members' only.
 select is(public.reserve_channel_files('69000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','d2400000-0000-0000-0000-000000000005',

@@ -1,6 +1,7 @@
 -- #355 review: a send whose answer was lost still finishes. A retry of a send key whose files are already a stored
 -- message's own is that same send: the reserve answers -1 (nothing to write again) and the send goes on to its message,
--- which the send key answers with the one it stored.
+-- which the send key answers with the one it stored. A waiting channel send belongs to one person: another writer's
+-- rows under its key are refused, and a channel message links only its own sender's files.
 --
 -- Additive: the functions keep their signatures, the previous app version reads every row it read before, and no data is
 -- dropped or rewritten. A previous app version that ignores -1 uploads the same paths again (upsert), which is harmless.
@@ -43,8 +44,9 @@ begin
 end;
 $$;
 
--- The sender's files for one channel message. A retry of a send key whose files a stored message already took is
--- answered -1, so the post goes on and its message deduplicates the send.
+-- The sender's files for one channel message. A waiting key belongs to one sender: rows under it written by another
+-- person are refused, so nobody adds a file to someone else's waiting send. A retry of a send key whose files a stored
+-- message already took is answered -1, so the post goes on and its message deduplicates the send.
 create or replace function public.reserve_channel_files(ch uuid, c uuid, message_key uuid, files jsonb) returns integer
 language plpgsql security definer set search_path='' as $$
 declare k public.channels;
@@ -58,6 +60,9 @@ begin
  select * into k from public.channels where id=ch and company_id=c;
  if not found or not public.in_channel(ch) then raise exception 'channelNotFound' using errcode='P0002'; end if;
  if not public.conversation_can_write(c) then raise exception 'channelNotAllowed' using errcode='42501'; end if;
+ if exists(select 1 from public.channel_attachments a
+   where a.channel_id=ch and a.company_id=c and a.send_key=message_key and a.person_id<>auth.uid()) then
+  raise exception 'channelNotFound' using errcode='P0002'; end if;
  if exists(select 1 from public.channel_attachments a
    where a.channel_id=ch and a.company_id=c and a.send_key=message_key and a.message_id is not null) then
   return -1; end if;
@@ -73,3 +78,16 @@ begin
 end;
 $$;
 
+-- A channel message links only its own sender's waiting files, so a key another person happened to name is never taken
+-- by this message.
+create or replace function public.link_channel_files() returns trigger language plpgsql security definer set search_path='' as $$
+begin
+ if new.author='person' and new.send_key is not null then
+  update public.channel_attachments set message_id=new.id
+   where channel_attachments.channel_id=new.channel_id and channel_attachments.company_id=new.company_id
+    and channel_attachments.send_key=new.send_key and channel_attachments.message_id is null
+    and channel_attachments.person_id=new.person_id;
+ end if;
+ return null;
+end;
+$$;
