@@ -34,9 +34,15 @@ test.beforeAll(async({browser},testInfo)=>{
 test.afterAll(async()=>{ await fake?.close(); });
 
 const agentPage=(email:string,page:Page)=>signIn(page,email,`/c/rs-learning/settings?agent=${lead}`);
+// A field typed into before React hydrated it loses the input: wait until the About field's handlers are attached.
+const hydrated=(page:Page)=>page.waitForFunction(()=>{
+ const field=document.querySelector('#set-desc');
+ return !!field&&Object.getOwnPropertyNames(field).some(name=>name.startsWith('__reactFiber$')||name.startsWith('__reactProps$'));
+});
 
 test('the Owner edits About, cancels back to the saved words, saves, and each save is one row of the log',async({page})=>{
  await agentPage('omar@example.com',page);
+ await hydrated(page);
  const overlay=page.getByRole('dialog',{name:'Settings'});
  // Name and Role are the reference's read-only rows for everyone (#161): the pinned Engine writes neither on a named profile.
  await expect(overlay.locator('#set-name-val')).toHaveText('Lead · @lead');
@@ -68,6 +74,7 @@ test('the Owner edits About, cancels back to the saved words, saves, and each sa
 
 test('while the draft differs, a section, "All agents", the Memory tab, the close button and Escape all keep the page',async({page})=>{
  await agentPage('omar@example.com',page);
+ await hydrated(page);
  const overlay=page.getByRole('dialog',{name:'Settings'});
  const field=overlay.locator('#set-desc'), bar=overlay.locator('#dp-savebar'), save=overlay.getByRole('button',{name:'Save',exact:true});
  const agent=page.url();
@@ -96,6 +103,7 @@ test('while the draft differs, a section, "All agents", the Memory tab, the clos
 
 test('a Manager saves About; a Contributor reads it and the server refuses their save',async({page})=>{
  await agentPage('manager@example.com',page);
+ await hydrated(page);
  const overlay=page.getByRole('dialog',{name:'Settings'});
  const field=overlay.locator('#set-desc');
  await expect(field).toBeVisible();
