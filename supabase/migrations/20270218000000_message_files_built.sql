@@ -114,3 +114,10 @@ begin
  if position($q$(length(message)>0 and btrim(message)='')$q$ in def)=0 then raise exception 'post_channel_message changed: %',def; end if;
  execute replace(def,$q$(length(message)>0 and btrim(message)='')$q$,$q$(btrim(message)='' and not exists(select 1 from public.channel_attachments a where a.channel_id=ch and a.send_key=message_key and a.message_id is null and a.person_id=auth.uid()))$q$);
 end $$;
+
+-- A channel's stored image is read by the Members of that channel. Inside the subquery a bare `name` is the channel's own
+-- name, not the object's path, so the policy names the object's column outright.
+alter policy channel_file_read on storage.objects using (bucket_id='creatives'
+ and (storage.foldername(objects.name))[2]='channels'
+ and exists(select 1 from public.channels k where k.id::text=(storage.foldername(objects.name))[3]
+  and k.company_id::text=(storage.foldername(objects.name))[1] and public.in_channel(k.id)));
