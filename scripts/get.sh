@@ -367,10 +367,13 @@ op_install() {
     fi
     applied=$(data_migrations) || fail "Could not read the migrations of the database in $dir: see gtmworks status. Nothing was changed."
   else
-    target=${requested:-$(latest_release)}
-    [ "$target" != stable ] || target=$(latest_release)
-    # A first install the machine stopped in is finished with the target it began with, not one chosen again now.
-    if [ "$interrupted" = yes ]; then target=$current; fi
+    # A first install the machine stopped in is finished with the target it began with, not one chosen again now (no
+    # release list is read for it).
+    if [ "$interrupted" = yes ]; then target=$current
+    else
+      target=${requested:-$(latest_release)}
+      [ "$target" != stable ] || target=$(latest_release)
+    fi
     say "Installing gtmworks $target into $dir."
     mkdir -p "$dir"
     cd "$dir"
@@ -574,6 +577,11 @@ op_restore() {
   new_stage
   download_release "$version" "$stage"
   check_archive
+  # A release from before #349 refuses an archive holding the Agents' data, but only once the volumes are gone: ask its
+  # install.sh first.
+  if printf '%s\n' "$entries" | grep -Eq '^opt/data(/|$)' && ! grep -Fq 'opt/data/*' "$stage/install.sh"; then
+    fail "gtmworks $version cannot restore $archive: it holds the Agents' data, which releases before it cannot restore. Restore it with a newer release. Nothing was changed."
+  fi
   check_archive_settings
   archived=$(archive_migrations)
   carried=$(carried_by "$release_ref") || fail "Could not read the migrations of $release_ref. Nothing was changed."

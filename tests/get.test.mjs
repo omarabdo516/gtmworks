@@ -40,8 +40,11 @@ const lockStart=installText.indexOf('exec 9>.install.lock');
 const lockEnd="flock -n 9 || { echo 'Another install is running: wait for it to finish, then run this again.' >&2; exit 1; }\n";
 assert.ok(lockStart>0&&installText.indexOf(lockEnd)>lockStart,'install.sh takes its lock with flock on .install.lock');
 const lockBlock=installText.slice(lockStart,installText.indexOf(lockEnd)+lockEnd.length);
+// get.sh tells a release that restores the Agents' data (#349) by this pattern in its install.sh.
+assert.ok(installText.includes('opt/data/*'),'install.sh restores opt/data/* entries, as get.sh looks for');
 const installerTemplate=`#!/bin/sh
 release_image=@REF@
+# restore accepts opt/data/* (the Agents' data, #349)
 op=\${1:-install}
 ${lockBlock}printf '%s %s\\n' "\${release_image##*:}" "$*" >> "$INSTALLER_LOG"
 case "$op" in
@@ -837,6 +840,15 @@ test('gtmworks restore --version checks the archive and asks before it replaces 
   assert.match(refused.stderr,message,JSON.stringify(extra));
   nothingChanged(refused,JSON.stringify(extra));
  }
+ // A release from before #349 would refuse the Agents' data only after the volumes are removed: it is asked first.
+ const targetInstaller=join(m.env.FIXTURE,'v1.2.3','install.sh');
+ const withAgents=readFileSync(targetInstaller,'utf8');
+ writeFileSync(targetInstaller,withAgents.replace(/^# restore accepts opt\/data.*\n/m,''));
+ m.clear();
+ const older=m.gtmworks(['restore',archive,'--version','v1.2.3','--yes'],{extra:{ARCHIVE_ENTRIES:'var/lib/postgresql/data/\netc/postgresql-custom/\nvar/lib/storage/\n.env.install\nopt/data/'}});
+ assert.match(older.stderr,/gtmworks v1\.2\.3 cannot restore .*old\.tgz: it holds the Agents' data, which releases before it cannot restore\./);
+ nothingChanged(older,'a release before the Agents\' data');
+ writeFileSync(targetInstaller,withAgents);
  // An archive whose migrations cannot be read is not taken for one with none.
  m.clear();
  const unread=m.gtmworks(['restore',archive,'--version','v1.2.3','--yes'],{extra:{ARCHIVE_UNREADABLE:'1'}});
