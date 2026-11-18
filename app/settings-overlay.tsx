@@ -29,7 +29,7 @@ import { readCompanyLearning } from '@/lib/company-learning.mjs';
 import { LearningSection } from './settings-learning';
 import { readAgentInstructions } from '@/lib/agent-instructions.mjs';
 import { readAgentVoice, type AgentVoice as AgentVoiceRead } from '@/lib/agent-voice.mjs';
-import { AgentLevel, CompanySubscriptions, MemberNote, AgentAbout as AgentAboutField, AgentInstructions as AgentInstructionsField, AgentInstructionsReadOnly as AgentInstructionsRead, AgentSkills, AgentSaveBar, AgentVoice as AgentVoiceField, ProviderKeys, DefaultModel, EachAgent, AgentModel } from './settings-lazy';
+import { AgentLevel, CompanySubscriptions, MemberNote, AgentAbout as AgentAboutField, AgentInstructions as AgentInstructionsField, AgentInstructionsReadOnly as AgentInstructionsRead, AgentSkills, AgentSaveBar, AgentVoice as AgentVoiceField, AgentEffort, DefaultEffort, ProviderKeys, DefaultModel, EachAgent, AgentModel } from './settings-lazy';
 import { MadeLine, OpenedMark } from './agent-made';
 import { madeColumns, madeOf } from '@/lib/agent-made';
 import { isNewFor } from '@/lib/sidebar.mjs';
@@ -118,7 +118,8 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
   :<SoonSection t={t} section={section} ro={ro} subscriptions={<ModelsSubscriptions company={company.id} owner={owner} subscriptions={subscriptions}/>}
     keys={<ProviderKeys company={company.id} owner={owner} data={keys}/>}
     defaultModel={models?.models?<DefaultModel company={company.id} owner={owner} models={models.models.default}/>:null}
-    eachAgent={models?.models?<EachAgent company={company.id} owner={owner} models={models.models}/>:null}/>;
+    eachAgent={models?.models?<EachAgent company={company.id} owner={owner} models={models.models}/>:null}
+    defaultEffort={<DefaultEffort/>}/>;
  return <OverlayChrome t={t} slug={slug} companyName={company.name} role={role} readOnly={!canManage} section={section} learningWaiting={learningWaiting} initialFocus={agent?'sov-tab-settings':undefined}>{page}</OverlayChrome>;
 }
 
@@ -189,7 +190,7 @@ function AgentsSection({t,rtl,slug,agents,stateOf,canManage,canWrite,owner}:{t:T
    :<p className="panel-empty">{t('noAgentsYet')}</p>}</div><FocusReturn/></>;
 }
 
-function AgentPage({t,rtl,slug,company,userId,personName,agent,about,skills,how,voice,status,main,rules,agentModel,owner,canManage,canWrite}:{t:T,rtl:boolean,slug:string,company:string,userId:string,personName:string,agent:Agent,about:AgentAbout|null,skills:Awaited<ReturnType<typeof readAgentSkills>>,how:Awaited<ReturnType<typeof readAgentInstructions>>,voice:AgentVoiceRead|null,status:AgentStatus,main?:Agent,rules:Rule[],agentModel:{models:{agents:{model:string|null,choosable:boolean,options:{provider:string,providerName:string,model:string}[]}[]}|null}|null,owner:boolean,canManage:boolean,canWrite:boolean}) {
+function AgentPage({t,rtl,slug,company,userId,personName,agent,about,skills,how,voice,status,main,rules,agentModel,owner,canManage,canWrite}:{t:T,rtl:boolean,slug:string,company:string,userId:string,personName:string,agent:Agent,about:AgentAbout|null,skills:Awaited<ReturnType<typeof readAgentSkills>>,how:Awaited<ReturnType<typeof readAgentInstructions>>,voice:AgentVoiceRead|null,status:AgentStatus,main?:Agent,rules:Rule[],agentModel:{models:{agents:{model:string|null,choosable:boolean,effort:string|null,options:{provider:string,providerName:string,model:string}[]}[]}|null}|null,owner:boolean,canManage:boolean,canWrite:boolean}) {
  const isMain=agent.is_default; const made=madeOf(agent,userId,slug);
  // The handle gtmworks calls the Agent by in messages, which a change of the Engine's name would not touch
  // (lib/conversation-runs.mjs: @ and the name, lowercased).
@@ -204,6 +205,9 @@ function AgentPage({t,rtl,slug,company,userId,personName,agent,about,skills,how,
  // The Voice section (#162) is editable on the Agent's own profile, and read-only for everyone else: its rows name the
  // speaking language and the real voice with the speed, as the reference's read-only form does.
  const voiceEditable=canManage&&voice?.state==='found'&&voice.own;
+ // The thinking level is the Owner's alone (#179), on the Agent's own profile (an Agent on the shared Company profile
+ // would change the main Agent too) and only once the Engine was read, so an unread level is never drawn as Medium.
+ const effortEditable=owner&&agentModel?.models?.agents[0]?.choosable===true&&agentModel.models.agents[0].effort!==null;
  const spokenLanguage=voice?.state!=='found'?null:voice.language==='ar'?t('settingsVoiceArabic'):voice.language==='en'?t('settingsVoiceEnglish'):voice.language||t('settingsVoiceDetect');
  const mainSec=owner?<section className="dp-sec" id="set-main" aria-labelledby="set-h-main"><Label id="set-h-main">{t('settingsMainAgent')}</Label><ul className="panel-card">
    {isMain?<li className="panel-row"><span className="panel-row__icon"><SettingsIcon name="check"/></span><span className="panel-row__text"><span className="panel-row__t">{t('settingsIsMain',agent.name)}</span><span className="panel-row__d">{t('settingsIsMainD')}</span></span></li>
@@ -246,10 +250,13 @@ function AgentPage({t,rtl,slug,company,userId,personName,agent,about,skills,how,
      {!owner&&<p className="ro-note"><SettingsIcon name="shield"/><span>{t('settingsHowRO')}</span></p>}
      {howEditable?<AgentInstructionsField agent={agent.id} name={agent.name} instructions={how?.instructions??''} sectionChars={how?.sectionChars??0} limit={how?.limit??20000}/>
       :<AgentInstructionsRead instructions={how?.state==='found'?how.instructions:''} empty={how?.state==='found'?t('settingsHowEmpty'):'—'}/>}</section>
-    {/* Thinks with: the Agent's own Engine profile's model (#29), written there and read back. */}
+    {/* Thinks with: the Agent's own Engine profile's model (#29), written there and read back, then its thinking level
+        (#179): the eight the Engine accepts, saved with the same bar, read as text by every other Role. */}
     <section className="dp-sec" aria-labelledby="set-h-thinks"><Label id="set-h-thinks">{t('settingsThinks')}</Label>
-     {agentModel?.models?.agents[0]?<AgentModel company={company} agent={agent.id} name={agent.name} model={agentModel.models.agents[0].model} options={agentModel.models.agents[0].options} choosable={agentModel.models.agents[0].choosable} owner={owner}/>
-      :<div className="panel-card"><p className="panel-empty">{t('settingsModelsUnread')}</p></div>}
+     {agentModel?.models?.agents[0]?<>
+      <AgentModel company={company} agent={agent.id} name={agent.name} model={agentModel.models.agents[0].model} options={agentModel.models.agents[0].options} choosable={agentModel.models.agents[0].choosable} owner={owner}/>
+      <AgentEffort agent={agent.id} effort={agentModel.models.agents[0].effort} editable={effortEditable}/>
+     </>:<div className="panel-card"><p className="panel-empty">{t('settingsModelsUnread')}</p></div>}
      <p className="set-hint">{t('settingsThinksHint')}</p></section>
     {/* The Agent's voice (#162): its language, its real voice with Listen, and the speed. */}
     <section className="dp-sec" aria-labelledby="set-h-voice"><Label id="set-h-voice">{t('settingsVoice')}</Label>
@@ -273,7 +280,7 @@ function AgentPage({t,rtl,slug,company,userId,personName,agent,about,skills,how,
    </div>
   </div>
   {/* design-reference: sovAgentHTML's bar, after the tab panel: hidden until the draft differs from what was saved. */}
-  {(editable||skillsEditable||howEditable||voiceEditable)&&<AgentSaveBar company={company} agent={agent.id} name={agent.name}/>}
+  {(editable||skillsEditable||howEditable||voiceEditable||effortEditable)&&<AgentSaveBar company={company} agent={agent.id} name={agent.name}/>}
  </>;
 }
 
@@ -321,10 +328,10 @@ function AccountSection({t,theme,personName,role,roleName,companyName,company,me
 
 // The company's sections whose features come later (#29–#33): each keeps the reference's heading, its explanation and
 // its parts in place, empty and marked "Soon", with no sample figures. Learning (#28) has its own section.
-function SoonSection({t,section,ro,subscriptions,keys,defaultModel,eachAgent}:{t:T,section:OverlaySection,ro:ReactNode,subscriptions:ReactNode,keys:ReactNode,defaultModel:ReactNode,eachAgent:ReactNode}) {
+function SoonSection({t,section,ro,subscriptions,keys,defaultModel,eachAgent,defaultEffort}:{t:T,section:OverlaySection,ro:ReactNode,subscriptions:ReactNode,keys:ReactNode,defaultModel:ReactNode,eachAgent:ReactNode,defaultEffort:ReactNode}) {
  if(section==='models') return <><Head title={t('settingsModels')} sub={t('settingsModelsSub')}/>{ro}
   {subscriptions}{keys}{defaultModel??<div className="panel-card"><p className="panel-empty">{t('settingsModelsUnread')}</p></div>}
-  <SoonSec t={t} id="md-h-settingsModelsEffort" label={t('settingsModelsEffort')}/>{eachAgent}</>;
+  {defaultEffort}{eachAgent}</>;
  if(section==='routines') return <><Head title={t('settingsRoutines')} sub={t('settingsRoutinesSub')}/><Soon t={t}/></>;
  return null;
 }

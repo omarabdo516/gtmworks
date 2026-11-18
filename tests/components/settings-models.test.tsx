@@ -1,7 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
 import { page } from 'vitest/browser';
-import { ProviderKeys, DefaultModel, EachAgent, AgentModel, type AgentModels, type ModelOption } from '@/app/settings-models';
+import { ProviderKeys, DefaultModel, EachAgent, AgentModel, DefaultEffort, type AgentModels, type ModelOption } from '@/app/settings-models';
 import { LanguageProvider } from '@/lib/i18n-client';
 import en from '@/lib/messages/en.json';
 import ar from '@/lib/messages/ar.json';
@@ -28,7 +28,7 @@ const keysData = {
 };
 const agent = (extra: Partial<AgentModels> = {}): AgentModels => ({
   id: 'a-1', name: 'Writer', own: true, choosable: true, model: 'openrouter/openai/gpt-5.5', choice: null,
-  subagents: false, options, settings: [], ...extra,
+  subagents: false, options, effort: 'medium', settings: [], ...extra,
 });
 const stub = (body: object = { ok: true }) => {
   const sent: { url: string, body: object }[] = [];
@@ -131,4 +131,22 @@ test('an Agent\'s "Thinks with" rows change its own profile\'s model, and an Age
   await renderNode(<AgentModel company={company} agent="lead" name="Lead" model="openrouter/openai/gpt-5.5" options={[]} choosable={false} owner/>);
   expect(document.querySelectorAll('[role=radio]')).toHaveLength(0);
   expect(document.getElementById('set-model')?.textContent).toContain('gpt-5.5');
+});
+
+test('each Agent in "Each agent" reads its model and its own thinking level', async () => {
+ const agents = [agent({ effort: 'high' }), agent({ id: 'a-2', name: 'Critic', model: 'anthropic/claude-opus-4-6', effort: 'low' })];
+ await renderNode(<EachAgent company={company} owner={false} models={{ default: { model: 'openrouter/openai/gpt-5.5', options }, agents }}/>);
+ expect(document.getElementById('mdl-agent-a-1-model')?.textContent).toBe(`${en.settingsModelsFollows} · openrouter/openai/gpt-5.5 · ${en.settingsEffortHigh}`);
+ expect(document.getElementById('mdl-agent-a-2-model')?.textContent).toBe(`${en.settingsModelsFollows} · anthropic/claude-opus-4-6 · ${en.settingsEffortLow}`);
+});
+
+test('the default thinking level is the reference\'s read-only Medium with its line, for every Role', async () => {
+ const screen = await renderNode(<DefaultEffort/>);
+ await expect.poll(() => document.getElementById('mdl-eff')?.textContent).toBe(en.settingsEffortMedium);
+ await expect.element(screen.getByText(en.settingsEffortMediumHint)).toBeVisible();
+ expect(document.querySelectorAll('[role=radio]')).toHaveLength(0);
+ await screen.unmount();
+ await renderNode(<DefaultEffort/>, 'ar');
+ await expect.poll(() => document.getElementById('mdl-eff')?.textContent).toBe(ar.settingsEffortMedium);
+ await expect.element(page.getByText(ar.settingsEffortMediumHint)).toBeVisible();
 });
