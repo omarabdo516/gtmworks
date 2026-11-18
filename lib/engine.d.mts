@@ -31,6 +31,9 @@ export type ProviderKeys={state:'found',keys:import('./hermes.mjs').ProviderKey[
 export type MemoryNote={id:string,text:string};
 export type MemoryNotes={state:'found',notes:MemoryNote[]}|{state:'refused'|'unreachable'|'failed',notes:null};
 export type MemoryReset={state:'reset'|'refused'|'unreachable'|'failed'};
+// One note rewritten or removed by the Engine's own id (#191); a note that changed since it was read is `stale`.
+export type MemoryEdit={state:'edited'|'stale'|'refused'|'unreachable'|'failed'};
+export type MemoryForget={state:'forgotten'|'stale'|'refused'|'unreachable'|'failed'};
 export type StartUnknown={readonly state:'unknown'};
 export function startOutcomeUnknown(result:unknown):result is StartUnknown;
 export type Engine={
@@ -52,6 +55,8 @@ export type Engine={
  downloadFile?(file:{folder?:unknown,name?:unknown}):Promise<import('./hermes.mjs').LibraryFile>;
  memory?():Promise<MemoryNotes>,
  resetMemory?():Promise<MemoryReset>,
+ editMemory?(change:{note:string,text:string}):Promise<MemoryEdit>,
+ forgetMemory?(change:{note:string}):Promise<MemoryForget>,
 };
 export function engineFor(connection:EngineConnection):Engine;
 export function outcomeOf(run:Pick<RunState,'state'|'reply'>):'completed'|'failed'|'stopped'|'lost'|null;

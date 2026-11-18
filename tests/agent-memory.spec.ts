@@ -134,3 +134,75 @@ test('a Contributor reads the notes and the log line but is offered no Reset',as
  await details.getByRole('tab',{name:'Log',exact:true}).click();
  await expect(memoryTab(details).locator('.lg-line').filter({hasText:'reset the memory of Lead'})).toHaveCount(1);
 });
+
+// #191: a note is edited in place (an empty note and one the Engine refuses as too long say so) and forgotten with
+// Undo; a forget is removed from the Engine when the six-second toast ends, and a reload no longer shows it. The
+// component's parts are in components/agent-memory.test.tsx, the contract and the Roles in agent-memory.test.mjs, and
+// the log rows in supabase/tests/memory_notes.sql.
+const adsNoteAgain=()=>fake.settings.memory.set(own(ads),{memory:[adsNote],profile:[]});
+
+test('the Owner edits a note in place, cancels one, and a note too long is refused',async({page})=>{
+ adsNoteAgain();
+ const details=await openDetails(page,'omar@example.com',ads,'Ads');
+ await details.getByRole('tab',{name:'Memory',exact:true}).click();
+ const panel=memoryTab(details);
+ const edit=()=>panel.getByRole('button',{name:/^Edit: Runs the June campaign/});
+ await edit().click();
+ const field=panel.getByRole('textbox',{name:'Edit note'});
+ await expect(field).toBeFocused();
+ await field.fill('Runs the July campaign.');
+ await panel.getByRole('button',{name:'Save',exact:true}).click();
+ await expect(panel.locator('.mem-note__t')).toHaveText(['Runs the July campaign.']);
+ await expect(page.locator('.toast')).toContainText('Note updated');
+ await expect(edit()).toBeFocused();
+
+ await edit().click();
+ await field.fill('Runs the August campaign.');
+ await panel.getByRole('button',{name:'Cancel',exact:true}).click();
+ await expect(panel.locator('.mem-note__t')).toHaveText(['Runs the July campaign.']);
+ await expect(edit()).toBeFocused();
+
+ await edit().click();
+ await field.fill('x'.repeat(3000));
+ await panel.getByRole('button',{name:'Save',exact:true}).click();
+ await expect(panel.getByText('That note is too long for the memory. Make it shorter.')).toBeVisible();
+ await expect(field).toBeFocused();
+ await panel.getByRole('button',{name:'Cancel',exact:true}).click();
+ expect(fake.settings.memory.get(own(ads))?.memory).toEqual(['Runs the July campaign.']);
+});
+
+test('the Owner forgets a note, and Undo puts it back without removing it from the Engine',async({page})=>{
+ adsNoteAgain();
+ const details=await openDetails(page,'omar@example.com',ads,'Ads');
+ await details.getByRole('tab',{name:'Memory',exact:true}).click();
+ const panel=memoryTab(details);
+ await panel.getByRole('button',{name:/^Forget this: Runs the June campaign/}).click();
+ await expect(panel.locator('.mem-note__t')).toHaveCount(0);
+ await expect(page.locator('.toast')).toContainText('Ads forgot this note');
+ await page.locator('.toast__act',{hasText:'Undo'}).click();
+ await expect(page.locator('.toast')).toContainText('Note restored');
+ await expect(panel.locator('.mem-note__t')).toHaveText([adsNote]);
+ await expect(panel.getByRole('button',{name:/^Forget this: Runs the June campaign/})).toBeFocused();
+ await page.waitForTimeout(6500);
+ expect(fake.settings.memory.get(own(ads))?.memory).toEqual([adsNote]);
+ await page.reload();
+ const reloaded=page.getByRole('complementary',{name:'Details: Ads',exact:true});
+ await reloaded.getByRole('tab',{name:'Memory',exact:true}).click();
+ await expect(reloaded.getByRole('tabpanel').locator('.mem-note__t')).toHaveText([adsNote]);
+});
+
+test('a forgotten note leaves the Engine when its toast ends, so a reload no longer shows it',async({page})=>{
+ adsNoteAgain();
+ const details=await openDetails(page,'omar@example.com',ads,'Ads');
+ await details.getByRole('tab',{name:'Memory',exact:true}).click();
+ const panel=memoryTab(details);
+ await panel.getByRole('button',{name:/^Forget this: Runs the June campaign/}).click();
+ await expect(panel.locator('.mem-note__t')).toHaveCount(0);
+ await expect(page.locator('.toast')).toBeHidden({timeout:8000});
+ await expect.poll(()=>fake.settings.memory.get(own(ads))?.memory).toEqual([]);
+ await expect(panel.getByText('Nothing yet. What Ads learns from its work shows here.')).toBeVisible();
+ await page.reload();
+ const reloaded=page.getByRole('complementary',{name:'Details: Ads',exact:true});
+ await reloaded.getByRole('tab',{name:'Memory',exact:true}).click();
+ await expect(reloaded.getByRole('tabpanel').getByText('Nothing yet. What Ads learns from its work shows here.')).toBeVisible();
+});

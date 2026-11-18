@@ -411,6 +411,31 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   const skill=settings.skills.get(named)?.get(id);
   return skill?send(response,200,{ok:true,kind:'skill',id,label:id,content:skill}):send(response,404,{detail:'not found'});
  }
+ // A note rewritten or removed by its id (status.py 780-795, agent/learning_mutations.py edit_node/delete_node): an id
+ // whose entry changed under the reader is stale, an empty note is refused, and a note over its file's limit too.
+ if(url.pathname==='/api/learning/node'&&['PUT','DELETE'].includes(request.method)) {
+  const named=url.searchParams.get('profile')||'default';
+  if(!profileOf(named)) return send(response,404,{detail:`Profile '${named}' does not exist.`});
+  const id=body?.id;
+  if(typeof id!=='string'||!/^memory:(memory|profile):\d{1,9}(:[0-9a-f]{12})?$/.test(id)) return send(response,400,{detail:`bad memory node id: ${id}`});
+  const source=id.split(':')[1]; const files=settings.memory.get(named)||{memory:[],profile:[]};
+  const card=memoryCards(named).find(found=>found.id===id);
+  const at=card?files[source].indexOf(card.text):-1;
+  if(!card||at<0) return send(response,400,{detail:'memory node id is stale — refresh the graph'});
+  const name=source==='memory'?'MEMORY.md':'USER.md';
+  if(request.method==='DELETE') {
+   files[source].splice(at,1); settings.memory.set(named,files);
+   return send(response,200,{ok:true,message:`deleted memory from ${name}`});
+  }
+  if(typeof body?.content!=='string'||!body.content.trim()) return send(response,400,{detail:'empty memory — use delete to remove it'});
+  const replacement=body.content.trim();
+  const next=[...files[source].slice(0,at),replacement,...files[source].slice(at+1)];
+  const limit=source==='memory'?2200:1375;
+  if(next.join('\n§\n').length>limit) return send(response,400,{detail:'Replacement would put memory at '+(next.join('\n§\n').length)+'/'+limit+' chars. Shorten the new content.'});
+  files[source]=next; settings.memory.set(named,files);
+  return send(response,200,{ok:true,message:`updated memory in ${name}`});
+ }
+
  // A reset deletes that profile's MEMORY.md and USER.md only, and is refused without a profile while the backend serves
  // several (ops.py 535-553, _common.py destructive_profile).
  if(url.pathname==='/api/memory/reset'&&request.method==='POST') {
