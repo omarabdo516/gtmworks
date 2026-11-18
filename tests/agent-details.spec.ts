@@ -24,16 +24,11 @@ test.beforeAll(({},testInfo)=>{
  // A retry of this serial file starts it again from the seed, so its rows are inserted once.
  freshSeed(testInfo.file,testInfo.retry>0);
  query(`do $$ declare card bigint; begin
-  insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values
-   ('${leadConnection}','${company}','${omar}','http://127.0.0.1:9/p/lead','details-lead','no-key','unreachable'),
-   ('${adsConnection}','${company}','${omar}','http://127.0.0.1:9/p/ads','details-ads','no-key','unreachable'),
-   ('${seoConnection}','${company}','${omar}','http://127.0.0.1:9/p/seo','details-seo','no-key','unreachable'),
-   ('${copyConnection}','${company}','${omar}','http://127.0.0.1:9/p/copy','details-copy','no-key','unreachable');
-  insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,created_at,requested_by) values
-   ('${copy}','${company}','${copyConnection}','Copy','Writes the copy.',false,null,null),
-   ('${lead}','${company}','${leadConnection}','Lead','General',true,null,null),
-   ('${ads}','${company}','${adsConnection}','Meta Ads','Runs the Meta ads.',false,'2026-06-10T09:01:00Z','${omar}'),
-   ('${seo}','${company}','${seoConnection}','SEO','Writes the blog.',false,null,null);
+    insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,created_at,requested_by,profile) values
+   ('${copy}','${company}','${copyConnection}','Copy','Writes the copy.',false,null,null,'details-copy'),
+   ('${lead}','${company}','${leadConnection}','Lead','General',true,null,null,'details-lead'),
+   ('${ads}','${company}','${adsConnection}','Meta Ads','Runs the Meta ads.',false,'2026-06-10T09:01:00Z','${omar}','details-ads'),
+   ('${seo}','${company}','${seoConnection}','SEO','Writes the blog.',false,null,null,'details-seo');
   insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${id(9)}','${company}','${omar}','${lead}','Lead');
   insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at) values
    ('${company}','${id(9)}','person','${omar}',null,'Omar','I want someone to handle our Meta ads','${id(10)}','details-made','2026-06-10T09:00:00Z'),
@@ -49,9 +44,10 @@ test.beforeAll(({},testInfo)=>{
   insert into public.work_cards(company_id,stage_id,title,agent_id) values ('${company}',${stage('ideas')},'Spring copy','${copy}') returning id into card;
   insert into public.waiting_items(company_id,person_id,kind,title,card_id) values ('${company}','${omar}','question','Which tone for spring?',card);
   insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','${viewer}','${copy}'),('${company}','${reviewer}','${copy}');
-  insert into public.hermes_agent_audit(company_id,actor_id,agent_id,action,details,created_at) values
-   ('${company}','${omar}','${ads}','ATTACH_HERMES_AGENT','{}',now()-interval '1 minute'),
-   ('${company}','${omar}','${ads}','RENAME_HERMES_AGENT','{}',now()-interval '10 days');
+  -- Two earlier changes of Meta Ads in the company log, as log_agent_event writes them, dated in the past.
+  insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,agent_id,action,details,source,source_id,created_at)
+   select '${company}','${omar}','person',p.name,'agent','${ads}',x.action,'{"agent_name":"Meta Ads"}','hermes_agent_audit',nextval('public.agent_log_ids'),x.at
+   from public.people p,(values ('agent_added',now()-interval '1 minute'),('rename_hermes_agent',now()-interval '10 days')) x(action,at) where p.id='${omar}';
  end $$;`);
 });
 test.beforeAll(async()=>{

@@ -2,7 +2,6 @@ import { test, expect } from './fresh-seed';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { createClient } from '@supabase/supabase-js';
-import { encryptSecret } from '../lib/agent-crypto.mjs';
 import { driveChannelRuns, postChannelMessage } from '../lib/channel-runs.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 
@@ -11,14 +10,14 @@ const status=()=>{ const env=execFileSync('npx',['--no-install','supabase','stat
 const company='10000000-0000-0000-0000-000000000001';
 const omar='20000000-0000-0000-0000-000000000001';
 const channel='69000000-0000-0000-0000-000000000001';
-const encryptionKey=process.env.WEBHOOK_ENCRYPTION_KEY||'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
+// The install's Hermes as these runs are given it: the fake engine answers in its place (#342).
+const hermes={address:'http://127.0.0.1:9',key:'fake-engine-key'};
 
 function attachAgent() {
  const [connection,agent]=[randomUUID(),randomUUID()];
- query(`insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values ('${connection}','${company}','${omar}','http://127.0.0.1:9','fake-${connection.slice(0,8)}','${encryptSecret('fake-engine-key',encryptionKey)}','connected','0.23.0','{run_submission}')`);
- query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('${agent}','${company}','${connection}','Faye','Marketing')`);
+ query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile) values ('${agent}','${company}','${connection}','Faye','Marketing','fake-${connection.slice(0,8)}')`);
  query(`insert into public.member_agent_access(company_id,person_id,agent_id) select company_id,person_id,'${agent}' from public.members where company_id='${company}' and removed_at is null and role<>'owner'`);
- return {connection,agent,detach:()=>{ query(`delete from public.hermes_agents where id='${agent}'`); query(`delete from public.hermes_connections where id='${connection}'`); }};
+ return {connection,agent,detach:()=>{ query(`delete from public.hermes_agents where id='${agent}'`); }};
 }
 async function memberClient(email:string) {
  const value=status();
@@ -40,14 +39,14 @@ test('integration: ordinary talk starts no Run; a mention starts exactly one, an
  query(`insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${told}','${company}','${omar}','${agent}','Faye')`);
  query(`insert into public.agent_rules(company_id,agent_id,body,said_by,conversation_id,run_id,call_id) values ('${company}','${agent}','Answer in English','${omar}','${told}','channel-rule','call-0')`);
  try {
-  const drive=()=>driveChannelRuns(service,{encryptionKey,channel,engineFor:fake.engineFor});
-  const plain=await postChannelMessage(person,service,{channel,sendKey:randomUUID(),message:'Morning, team',encryptionKey,engineFor:fake.engineFor});
+  const drive=()=>driveChannelRuns(service,{hermes,channel,engineFor:fake.engineFor});
+  const plain=await postChannelMessage(person,service,{channel,sendKey:randomUUID(),message:'Morning, team',hermes,engineFor:fake.engineFor});
   expect(plain).toEqual({message:expect.any(Number)});
   expect(await drive()).toEqual({started:0,closed:0});
   expect(fake.runs).toEqual([]);
   expect(runOf((plain as {message:number}).message)).toEqual([]);
 
-  const mention={channel,sendKey:randomUUID(),message:'@Faye plan the launch week',encryptionKey,engineFor:fake.engineFor};
+  const mention={channel,sendKey:randomUUID(),message:'@Faye plan the launch week',hermes,engineFor:fake.engineFor};
   const sent=await postChannelMessage(person,service,mention) as {message:number};
   expect(fake.runs.map(run=>({key:run.key,input:run.input}))).toEqual([{key:`channel:${sent.message}`,input:'عمر: @Faye plan the launch week'}]);
   expect(fake.connections[0]).toMatchObject({address:'http://127.0.0.1:9',key:'fake-engine-key'});
@@ -76,10 +75,10 @@ test('integration: a start whose answer was lost is asked again with the same ke
  const {service,person}=await memberClient('omar@example.com'); const {detach}=attachAgent();
  try {
   const engine=fake.engineFor({});
-  const post={channel,sendKey:randomUUID(),message:'@Faye draft the teaser',encryptionKey};
+  const post={channel,sendKey:randomUUID(),message:'@Faye draft the teaser',hermes};
   const lost=await postChannelMessage(person,service,{...post,engineFor:()=>({...engine,start:async()=>({state:'unknown'} as const)})}) as {message:number};
   expect(lost).toEqual({message:expect.any(Number)});
-  const drive=()=>driveChannelRuns(service,{encryptionKey,channel,engineFor:fake.engineFor});
+  const drive=()=>driveChannelRuns(service,{hermes,channel,engineFor:fake.engineFor});
   expect(await drive()).toEqual({started:0,closed:0});
   expect(fake.runs).toEqual([]);
   expect(await postChannelMessage(person,service,{...post,engineFor:fake.engineFor})).toEqual(lost);
@@ -87,7 +86,7 @@ test('integration: a start whose answer was lost is asked again with the same ke
   expect(await drive()).toEqual({started:0,closed:1});
   expect(repliesTo(lost.message)).toEqual([{author:'agent',author_name:'Faye',body:'Reply to: عمر: @Faye draft the teaser'}]);
 
-  const refused=await postChannelMessage(person,service,{channel,sendKey:randomUUID(),message:'@Faye never started',encryptionKey,engineFor:()=>({...engine,start:async()=>null})}) as {message:number};
+  const refused=await postChannelMessage(person,service,{channel,sendKey:randomUUID(),message:'@Faye never started',hermes,engineFor:()=>({...engine,start:async()=>null})}) as {message:number};
   expect(runOf(refused.message)).toEqual([{agent_name:'Faye',outcome:'failed'}]);
   expect(await drive()).toEqual({started:0,closed:0});
   expect(repliesTo(refused.message)).toEqual([]);

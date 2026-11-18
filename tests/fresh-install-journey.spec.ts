@@ -1,9 +1,8 @@
 import { test, expect, type Page } from './offline-browser';
 import { localQuery, localStatement, resetFirstRun } from '../scripts/first-run-db.mjs';
-import { encryptSecret } from '../lib/agent-crypto.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
+import { laneHermes } from './lane-hermes';
 import { signIn } from './sign-in';
-import { lane } from './lane.mjs';
 import { agency, engineName } from './ui-words.mjs';
 
 // #329: the whole journey on a fresh install, as a person who just ran the one-line install walks it. It starts from an
@@ -13,7 +12,6 @@ import { agency, engineName } from './ui-words.mjs';
 // gives the new Company its profile and Lead is done through the same database function (attach_company_profile).
 const code=process.env.SETUP_CODE!;
 const owner={name:'Journey owner',email:'journey-owner@example.test',company:'Journey Company',password:'journey-owner-password'};
-const encryptionKey=process.env.WEBHOOK_ENCRYPTION_KEY||'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
 const reason='Without it I can’t tell which leads bought. Connected, I can work out the return.';
 const asks:Record<string,string>={
  'Clean up the exports':'',
@@ -24,7 +22,7 @@ let fake:Awaited<ReturnType<typeof fakeHermes>>;
 test.use({actionTimeout:15000});
 test.beforeAll(async({baseURL})=>{
  resetFirstRun(baseURL);
- fake=await fakeHermes({host:`127.0.0.${80+lane}`,managementPort:9119});
+ fake=await laneHermes();
  fake.settings.approvals=input=>input==='Clean up the exports'?[{description:'delete the old exports',command:'rm -r /srv/exports'}]:[];
  fake.settings.reply=input=>asks[input]||`Reply to: ${input}`;
 });
@@ -74,7 +72,7 @@ test('a fresh install walks from the setup link to sign-in, Lead, the board, Age
  // The worker's step: the Company's own profile in the Engine, and Lead on it.
  fake.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
  localStatement(`insert into public.company_profiles(company_id,profile,tools_level,tools_policy,tools_pending,skills_shared) select id,public.company_engine_profile(id),agent_level,public.engine_tool_policy(),false,true from public.companies`,baseURL);
- expect(localQuery(`select public.attach_company_profile('${company}','${fake.address}','${encryptSecret(fake.settings.key,encryptionKey)}','0.23.0','{run_submission,run_events_sse}') attached`,baseURL)).toEqual([{attached:true}]);
+ expect(localQuery(`select public.attach_company_profile('${company}') attached`,baseURL)).toEqual([{attached:true}]);
 
  // 2. Signed out, the Owner signs in with that email and password, answers alone, and lands in one Conversation with Lead.
  await page.context().clearCookies();

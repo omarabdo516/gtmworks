@@ -3,8 +3,8 @@ import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fakeHermes } from './fake-hermes.mjs';
+import { laneHermes } from './lane-hermes';
 import { signIn } from './sign-in';
-import { lane } from './lane.mjs';
 import { instructionsOf, roleAppNames, roleTemplates } from '../lib/role-templates.mjs';
 
 // #14, the ready-made gallery. Lead is RS Learning's main Agent on the Company's own profile in a fake Hermes, which
@@ -26,7 +26,7 @@ test.describe.configure({mode:'serial'});
 test.use({actionTimeout:15000});
 test.beforeAll(async({browser},testInfo)=>{
  freshSeed(testInfo.file);
- fake=await fakeHermes({host:`127.0.0.${20+lane}`,managementPort:9119});
+ fake=await laneHermes();
  fake.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
  fake.settings.reply=(input:string)=>{
   const id=ids.find(role=>input.toLowerCase().includes(roleNames[`role.${role}`].toLowerCase()));
@@ -37,12 +37,9 @@ test.beforeAll(async({browser},testInfo)=>{
  try {
   await signIn(page,'omar@example.com','/c/rs-learning/home');
   // The Company's own Connection, saved through the Owner's route (its key encrypted), then given Lead as the worker does.
-  const saved=await page.request.post('/api/hermes-connections',{data:{company,intent:'save',address:fake.address,profile,key:fake.settings.key}});
-  expect(saved.status()).toBe(200);
-  const connection=(await saved.json()).connection.id;
+  const connection=randomUUID();
   query(`do $$ begin
-   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('${lead}','${company}','${connection}','Lead','General',true);
-   insert into public.hermes_agent_audit(company_id,actor_id,agent_id,action,details) values ('${company}','${omar}','${lead}','PROVIDE_BUNDLED_HERMES_AGENT',jsonb_build_object('connection_id','${connection}'));
+   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${lead}','${company}','${connection}','Lead','General',true,'${profile}');
    insert into public.company_profiles(company_id,profile,tools_level,tools_policy,skills_shared) select id,'${profile}',agent_level,public.engine_tool_policy(),true from public.companies where id='${company}'
     on conflict (company_id) do update set profile=excluded.profile,tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false,skills_shared=true;
   end $$;`);
@@ -139,8 +136,7 @@ test('a Company worked alone hears the alone wording: no team, and the coder han
  // R&S Consultations, where Omar is the only Member, worked alone, with a Lead of its own (never called here).
  const [rs,connection,itsLead]=['10000000-0000-0000-0000-000000000002',randomUUID(),randomUUID()];
  query(`do $$ begin
-  insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('${connection}','${rs}','${omar}','http://127.0.0.1:9/p/alone-lead','alone-lead','no-key','unreachable');
-  insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('${itsLead}','${rs}','${connection}','Lead','General',true);
+    insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${itsLead}','${rs}','${connection}','Lead','General',true,'alone-lead');
   update public.companies set work_mode='alone' where id='${rs}';
  end $$;`);
  try {

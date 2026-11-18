@@ -2,8 +2,8 @@ import { test, expect, freshSeed, type Page } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { fakeHermes } from './fake-hermes.mjs';
+import { laneHermes } from './lane-hermes';
 import { openNavigation, signIn } from './sign-in';
-import { lane } from './lane.mjs';
 
 // The requests are kept by calling lead_request_agent directly; the engine side is proven in
 // tests/engine-conversation.spec.ts.
@@ -23,18 +23,15 @@ test.describe.configure({mode:'serial'});
 test.use({actionTimeout:15000});
 test.beforeAll(async({browser},testInfo)=>{
  freshSeed(testInfo.file);
- fake=await fakeHermes({host:`127.0.0.${40+lane}`,managementPort:9119});
+ fake=await laneHermes();
  fake.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
  const page=await browser.newPage();
  try {
   await signIn(page,'omar@example.com','/c/rs-learning/home');
   // Saved through the Owner's route so its key is encrypted.
-  const saved=await page.request.post('/api/hermes-connections',{data:{company,intent:'save',address:fake.address,profile,key:fake.settings.key}});
-  expect(saved.status()).toBe(200);
-  const connection=(await saved.json()).connection.id;
+  const connection=randomUUID();
   query(`do $$ begin
-   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('${lead}','${company}','${connection}','Lead','General',true);
-   insert into public.hermes_agent_audit(company_id,actor_id,agent_id,action,details) values ('${company}','${omar}','${lead}','PROVIDE_BUNDLED_HERMES_AGENT',jsonb_build_object('connection_id','${connection}'));
+   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${lead}','${company}','${connection}','Lead','General',true,'${profile}');
    insert into public.company_profiles(company_id,profile,tools_level,tools_policy) select id,'${profile}',agent_level,public.engine_tool_policy() from public.companies where id='${company}'
     on conflict (company_id) do update set profile=excluded.profile,tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false;
    insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${managerTalk}','${company}','${manager}','${lead}','Lead'),('${reviewerTalk}','${company}','${reviewer}','${lead}','Lead');
@@ -83,8 +80,8 @@ test('the Owner makes one, and says no to the other only with a reason',async({p
  await requestCard(page,'WhatsApp Leads').getByRole('button',{name:'Make it'}).click();
  await expect(requestCard(page,'WhatsApp Leads')).toHaveCount(0);
  await expect(page.locator('.sidebar .agent-tile').filter({hasText:'WhatsApp Leads'})).toHaveCount(1);
- const [made]=JSON.parse(query(`select a.id,a.speciality,array_to_string(a.apps,'|') as apps,a.requested_by,h.profile,(select count(*)::int from public.member_agent_access m where m.agent_id=a.id and m.person_id='${manager}') as shown
-  from public.lead_made_agents l join public.hermes_agents a on a.id=l.agent_id join public.hermes_connections h on h.id=a.connection_id where l.conversation_id='${managerTalk}' and l.run_id='ask-1'`));
+ const [made]=JSON.parse(query(`select a.id,a.speciality,array_to_string(a.apps,'|') as apps,a.requested_by,a.profile,(select count(*)::int from public.member_agent_access m where m.agent_id=a.id and m.person_id='${manager}') as shown
+  from public.lead_made_agents l join public.hermes_agents a on a.id=l.agent_id where l.conversation_id='${managerTalk}' and l.run_id='ask-1'`));
  expect(made).toMatchObject({speciality:'Follows up the WhatsApp leads.',apps:'WhatsApp Business',requested_by:manager,profile,shown:1});
 
  const refused=requestCard(page,'Blog Writer');

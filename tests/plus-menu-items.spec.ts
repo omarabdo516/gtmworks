@@ -2,8 +2,9 @@ import { test, expect, freshSeed, type Page } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { fakeHermes } from './fake-hermes.mjs';
+import { laneHermes } from './lane-hermes';
 import { signIn } from './sign-in';
-import { appOrigin, lane } from './lane.mjs';
+import { appOrigin } from './lane.mjs';
 import { appByKey, appConfig } from '../lib/app-catalogue.mjs';
 
 // #158, the "+" menu's New channel, Connect apps and Model. RS Learning, worked as a team, runs on its own profile in a
@@ -28,7 +29,7 @@ test.use({actionTimeout:15000});
 test.beforeAll(async({browser},testInfo)=>{
  // A retry starts from the seed again: Lead and its Connection below are inserted once per run of this file.
  freshSeed(testInfo.file,testInfo.retry>0);
- fake=await fakeHermes({host:`127.0.0.${60+lane}`,managementPort:9119});
+ fake=await laneHermes();
  const klaviyo={url:'https://mcp.klaviyo.example/mcp',auth:'oauth',...appConfig(appByKey('klaviyo')!,`${appOrigin}/api/apps/callback/klaviyo`).mcp_servers.klaviyo};
  fake.settings.profiles.set(profile,{soul:'',provider:'anthropic',model:'claude-opus-4-6',key:fake.settings.key,config:{mcp_servers:{klaviyo}},credentials:{anthropic:'signed-in'},env:{OPENROUTER_API_KEY:'set'}} as never);
  fake.settings.appTokens.add(`${profile}:klaviyo`);
@@ -37,12 +38,9 @@ test.beforeAll(async({browser},testInfo)=>{
  const page=await browser.newPage();
  try {
   await signIn(page,'omar@example.com','/c/rs-learning/home');
-  const saved=await page.request.post('/api/hermes-connections',{data:{company,intent:'save',address:fake.address,profile,key:fake.settings.key}});
-  expect(saved.status()).toBe(200);
-  const connection=(await saved.json()).connection.id;
+  const connection=randomUUID();
   query(`do $$ begin
-   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('${lead}','${company}','${connection}','Lead','General',true);
-   insert into public.hermes_agent_audit(company_id,actor_id,agent_id,action,details) values ('${company}','${omar}','${lead}','PROVIDE_BUNDLED_HERMES_AGENT',jsonb_build_object('connection_id','${connection}'));
+   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${lead}','${company}','${connection}','Lead','General',true,'${profile}');
    insert into public.company_profiles(company_id,profile,tools_level,tools_policy) select id,'${profile}',agent_level,public.engine_tool_policy() from public.companies where id='${company}'
     on conflict (company_id) do update set profile=excluded.profile,tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false;
    insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','${manager}','${lead}'),('${company}','${contributor}','${lead}');
@@ -159,8 +157,7 @@ test('in a Company worked alone the Owner has no New channel',async({page})=>{
  const alone='10000000-0000-0000-0000-000000000002'; const [connection,sage]=[randomUUID(),randomUUID()];
  query(`do $$ begin
   update public.companies set work_mode='alone' where id='${alone}';
-  insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values ('${connection}','${alone}','${omar}','http://127.0.0.1:9','plus-alone','ciphertext','connected','0.23.0','{run_submission}');
-  insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('${sage}','${alone}','${connection}','Sage','General',true);
+    insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${sage}','${alone}','${connection}','Sage','General',true,'plus-alone');
  end $$;`);
  await signIn(page,'omar@example.com',`/c/rs-consultations/chat/${sage}`);
  await expect(plus(page)).toHaveAttribute('aria-label','More: call someone, commands');

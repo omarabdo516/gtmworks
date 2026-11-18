@@ -2,8 +2,8 @@ import { test, expect, freshSeed } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { createClient } from '@supabase/supabase-js';
 import { fakeHermes } from './fake-hermes.mjs';
+import { laneHermes } from './lane-hermes';
 import { signIn } from './sign-in';
-import { lane } from './lane.mjs';
 import { keepSharedSkills } from '../lib/shared-skills.mjs';
 
 // #343: a lesson an Agent learned reaches every Agent as the Company's shared skill team-lessons in Hermes, never a
@@ -13,7 +13,7 @@ import { keepSharedSkills } from '../lib/shared-skills.mjs';
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const status=()=>{ const env=execFileSync('npx',['--no-install','supabase','status','-o','env'],{encoding:'utf8'}); return (name:string)=>env.match(new RegExp(`^${name}="(.*)"$`,'m'))![1]; };
 const company='10000000-0000-0000-0000-000000000001';
-const [omar,reviewer]=['20000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003'];
+const reviewer='20000000-0000-0000-0000-000000000003';
 const hex=company.replaceAll('-','');
 const [profile,space]=[`co-${hex}`,`cs-${hex}`];
 const id=(n:number)=>`69430000-0000-0000-0000-${String(n).padStart(12,'0')}`;
@@ -25,11 +25,10 @@ let fake:Awaited<ReturnType<typeof fakeHermes>>;
 test.describe.configure({mode:'serial'});
 test.beforeAll(async({},testInfo)=>{
  freshSeed(testInfo.file,testInfo.retry>0);
- fake=await fakeHermes({host:`127.0.0.${100+lane}`});
+ fake=await laneHermes();
  fake.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
  query(`do $$ begin
-  insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('${connection}','${company}','${omar}','http://127.0.0.1:9/p/lessons','lessons-ads','no-key','unreachable');
-  insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('${ads}','${company}','${connection}','Ads','Runs the ads.');
+    insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile) values ('${ads}','${company}','${connection}','Ads','Runs the ads.','lessons-ads');
   insert into public.member_agent_access(company_id,person_id,agent_id) select company_id,person_id,'${ads}' from public.members where company_id='${company}' and removed_at is null and role<>'owner';
   insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${theirs}','${company}','${reviewer}','${ads}','Ads');
   insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at) values

@@ -17,14 +17,10 @@ test.beforeAll(({},testInfo)=>{
  freshSeed(testInfo.file);
  query(`do $$ begin
   update public.people set language='en' where id in ('${omar}','20000000-0000-0000-0000-000000000003');
-  insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values
-   ('${id(1)}','${company}','${omar}','http://127.0.0.1:9/p/lead','seen-lead','no-key','unreachable'),
-   ('${id(2)}','${company}','${omar}','http://127.0.0.1:9/p/ads','seen-ads','no-key','unreachable'),
-   ('${id(3)}','${company}','${omar}','http://127.0.0.1:9/p/seo','seen-seo','no-key','unreachable');
-  insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values
-   ('${lead}','${company}','${id(1)}','Lead','General',true),
-   ('${ads}','${company}','${id(2)}','Meta Ads','Runs the Meta ads.',false),
-   ('${seo}','${company}','${id(3)}','SEO','Writes the blog.',false);
+    insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
+   ('${lead}','${company}','${id(1)}','Lead','General',true,'seen-lead'),
+   ('${ads}','${company}','${id(2)}','Meta Ads','Runs the Meta ads.',false,'seen-ads'),
+   ('${seo}','${company}','${id(3)}','SEO','Writes the blog.',false,'seen-seo');
  end $$;`);
 });
 

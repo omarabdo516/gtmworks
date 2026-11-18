@@ -23,6 +23,8 @@ export const projectOf = (n = lane) => `repo${n ? `-lane-${n}` : ''}`;
 export const dbContainerOf = (n = lane) => `supabase_db_${projectOf(n)}`;
 export const seedSnapshotOf = (n = lane) => resolve(`supabase/.temp/lanes/${n}/seed-data.sql`);
 export const appOrigin = originOf();
+/** The bundled Hermes a lane's app and worker are given (scripts/web.sh, #342): a spec starts its fake Hermes there. */
+export const hermesHostOf = (n = lane) => `127.0.0.${110 + n}`;
 
 // Lane 0's ports by role, as supabase/config.toml sets them. The path is from the repository root: Playwright compiles
 // this file to CommonJS, where import.meta does not exist.

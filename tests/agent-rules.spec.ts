@@ -20,8 +20,7 @@ test.use({timezoneId:'UTC'});
 test.beforeAll(({},testInfo)=>{
  freshSeed(testInfo.file);
  query(`do $$ begin
-  insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('${connection}','${company}','${omar}','http://127.0.0.1:9/p/ads','rules-ads','no-key','unreachable');
-  insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('${ads}','${company}','${connection}','Ads','Runs the ads.');
+    insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile) values ('${ads}','${company}','${connection}','Ads','Runs the ads.','rules-ads');
   insert into public.member_agent_access(company_id,person_id,agent_id) select company_id,person_id,'${ads}' from public.members where company_id='${company}' and removed_at is null and role<>'owner';
   insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${conversation}','${company}','${omar}','${ads}','Ads');
   insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id) values

@@ -42,13 +42,11 @@ test('the Numbers page lists what waits on its reader from their own list',async
 // slowed log needs one, of an Agent the reader sees, for the figures to wait. Written with triggers off, taken away after.
 const ads=(n:number)=>`6c000000-0000-0000-0000-00000000000${n}`;
 const agentWeek={
- set:`insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('${ads(1)}','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9/p/slow-numbers','slow-numbers','slow-numbers-no-key','unreachable');
-  insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('${ads(2)}','10000000-0000-0000-0000-000000000001','${ads(1)}','Ads','Runs the ads.');
+ set:`  insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile) values ('${ads(2)}','10000000-0000-0000-0000-000000000001','${ads(1)}','Ads','Runs the ads.','slow-numbers');
   insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,agent_id,action,details,source,source_id,created_at) values
    ('10000000-0000-0000-0000-000000000001','${ads(2)}','agent','Ads','agent','${ads(2)}','agent_changed','{"agent_name":"Ads"}','hermes_agent_audit',691173,now()-interval '1 hour');`,
  unset:`delete from public.company_log where source='hermes_agent_audit' and source_id=691173;
-  delete from public.hermes_agents where id='${ads(2)}';
-  delete from public.hermes_connections where id='${ads(1)}';`,
+  delete from public.hermes_agents where id='${ads(2)}';`,
 };
 const where=async(locator:Locator)=>{ const box=(await locator.boundingBox())!; return {x:Math.round(box.x),y:Math.round(box.y),width:Math.round(box.width)}; };
 

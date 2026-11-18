@@ -19,10 +19,7 @@ test.describe.configure({mode:'serial'});
 test.beforeAll(({},testInfo)=>{
  freshSeed(testInfo.file);
  query(`do $$ begin
-  insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values
-   ('${connection}','${rsLearning}','${omar}','http://127.0.0.1:9/p/suggest','suggest-ads','no-key','unreachable'),
-   ('${elsewhere}','${rsConsultations}','${omar}','http://127.0.0.1:9/p/suggest-alone','suggest-alone','no-key','unreachable');
-  insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('${ads}','${rsLearning}','${connection}','Ads','Runs the ads.'),('${alone}','${rsConsultations}','${elsewhere}','Ads','Runs the ads.');
+    insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile) values ('${ads}','${rsLearning}','${connection}','Ads','Runs the ads.','suggest-ads'),('${alone}','${rsConsultations}','${elsewhere}','Ads','Runs the ads.','suggest-alone');
   insert into public.member_agent_access(company_id,person_id,agent_id) select company_id,person_id,'${ads}' from public.members where company_id='${rsLearning}' and removed_at is null and role<>'owner';
   insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${theirs}','${rsLearning}','${reviewer}','${ads}','Ads'),('${omars}','${rsConsultations}','${omar}','${alone}','Ads');
   insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at) values

@@ -8,7 +8,6 @@ import { load } from 'js-yaml';
 import { generateInstallEnv, validateInstallEnv, missingInstallEnv } from '../lib/install-env.mjs';
 import { hermesVersion, isHermesAddressAllowed } from '../lib/hermes.mjs';
 import { bundledHermes, hermesAt, onProfile } from '../lib/bundled-hermes.mjs';
-import { fakeHermes } from './fake-hermes.mjs';
 
 // Hermes ships inside the install (ADR 0010): one release, pinned by tag and digest, reachable only on the compose network.
 const compose=load(readFileSync('docker-compose.install.yml','utf8'));

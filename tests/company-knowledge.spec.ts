@@ -2,8 +2,8 @@ import { test, expect, freshSeed, type Locator } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { fakeHermes } from './fake-hermes.mjs';
+import { laneHermes } from './lane-hermes';
 import { signIn } from './sign-in';
-import { lane } from './lane.mjs';
 import { knowledgeSkill } from '../lib/company-knowledge-skill.mjs';
 
 // The Company knowledge (#27) in the settings overlay: a Manager fills an empty part and clears it again, every edit is
@@ -11,7 +11,6 @@ import { knowledgeSkill } from '../lib/company-knowledge-skill.mjs';
 // Skill company-knowledge of RS Learning's shared space in a fake Engine (#344), which holds the approved reference's
 // brand voice, last edited by the Manager.
 const rsLearning='10000000-0000-0000-0000-000000000001';
-const omar='20000000-0000-0000-0000-000000000001';
 const manager='20000000-0000-0000-0000-000000000002';
 const profile=`co-${rsLearning.replaceAll('-','')}`;
 const space=`cs-${rsLearning.replaceAll('-','')}`;
@@ -29,19 +28,16 @@ const lastEditor=(part:string)=>rows(`select actor_id from public.company_log wh
 test.describe.configure({mode:'serial'});
 test.beforeAll(async({browser},testInfo)=>{
  freshSeed(testInfo.file,testInfo.retry>0);
- fake=await fakeHermes({host:`127.0.0.${90+lane}`,managementPort:9119});
+ fake=await laneHermes();
  fake.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
  fake.settings.profiles.set(space,{soul:'',provider:'auto',model:'',key:null,config:{},credentials:{}});
  fake.settings.skills.set(space,new Map([['company-knowledge',knowledgeSkill({voice})]]));
  const lead=randomUUID(); const page=await browser.newPage();
  try {
   await signIn(page,'omar@example.com','/c/rs-learning/home');
-  const saved=await page.request.post('/api/hermes-connections',{data:{company:rsLearning,intent:'save',address:fake.address,profile,key:fake.settings.key}});
-  expect(saved.status()).toBe(200);
-  const connection=(await saved.json()).connection.id;
+  const connection=randomUUID();
   query(`do $$ begin
-   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('${lead}','${rsLearning}','${connection}','Lead','General',true);
-   insert into public.hermes_agent_audit(company_id,actor_id,agent_id,action,details) values ('${rsLearning}','${omar}','${lead}','PROVIDE_BUNDLED_HERMES_AGENT',jsonb_build_object('connection_id','${connection}'));
+   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${lead}','${rsLearning}','${connection}','Lead','General',true,'${profile}');
    insert into public.company_profiles(company_id,profile,tools_level,tools_policy) select id,'${profile}',agent_level,public.engine_tool_policy() from public.companies where id='${rsLearning}'
     on conflict (company_id) do update set profile=excluded.profile,tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false;
    insert into public.company_audit(company_id,actor_id,action,knowledge_part,knowledge_cleared) values ('${rsLearning}','${manager}','company_knowledge_changed','voice',false);

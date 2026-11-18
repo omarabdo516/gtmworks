@@ -38,6 +38,24 @@ test('the account menu opens Settings over the page, Escape and the close button
  }
 });
 
+// #342: the bundled Hermes is the only Hermes. No Settings section, menu entry or address connects another one.
+test('Settings offer no way to connect an outside Hermes, in any section, the account menu or the old address',async({page})=>{
+ query(`update public.people set language='en' where id='${owner}'`);
+ await signIn(page,'omar@example.com','/c/rs-learning/settings');
+ const overlay=page.getByRole('dialog',{name:'Settings'});
+ await expect(overlay.locator('.sov-nav .sb-item')).toHaveText(sections);
+ for(const item of await overlay.locator('.sov-nav .sb-item').all()) {
+  await item.click();
+  await expect(overlay.getByLabel(/Hermes address|Engine address|API key/i)).toHaveCount(0);
+  await expect(overlay.getByRole('button',{name:/^Connect (a )?Hermes|^Attach agent$/i})).toHaveCount(0);
+ }
+ await page.goto('/c/rs-learning/home');
+ await openNavigation(page);
+ await expect(page.getByRole('menuitem',{name:/Agent keys|Hermes connection/i})).toHaveCount(0);
+ expect((await page.goto('/c/rs-learning/settings/agents'))?.status()).toBe(404);
+ expect((await page.request.post('/api/hermes-connections',{data:{company:'10000000-0000-0000-0000-000000000001',intent:'save'}})).status()).toBe(404);
+});
+
 test('the keyboard alone opens Settings from the account menu, moves between sections and closes it with Escape',async({page})=>{
  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
  await openNavigation(page);
@@ -69,8 +87,7 @@ test('the keyboard alone opens Settings from the account menu, moves between sec
 test('the Owner sees the company’s real Agents, main first, and makes another one main from its page',async({page})=>{
  // One Agent per connection in a company: two connections.
  const [first,second,lead,ads]=[randomUUID(),randomUUID(),randomUUID(),randomUUID()];
- for(const connection of [first,second]) query(`insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('${connection}','${company}','${owner}','http://localhost','overlay-${connection.slice(0,8)}','ciphertext','connected')`);
- query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('${lead}','${company}','${first}','Lead','Marketing lead',true),('${ads}','${company}','${second}','Ads','Ads agent',false)`);
+ query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${lead}','${company}','${first}','Lead','Marketing lead',true,'overlay-${first.slice(0,8)}'),('${ads}','${company}','${second}','Ads','Ads agent',false,'overlay-${second.slice(0,8)}')`);
  try {
   await signIn(page,'omar@example.com','/c/aleem/home');
   await page.goto('/c/aleem/settings?section=agents');
@@ -96,7 +113,6 @@ test('the Owner sees the company’s real Agents, main first, and makes another 
   await expect(rows.nth(0)).toContainText('Ads');
  } finally {
   query(`delete from public.hermes_agents where id in ('${lead}','${ads}')`);
-  query(`delete from public.hermes_connections where id in ('${first}','${second}')`);
  }
 });
 
@@ -198,8 +214,7 @@ const roleViews=[
 
 for(const view of roleViews) test(`${view.role}: Settings shows only what the Role allows, and only the Owner's request moves the main mark`,async({page})=>{
  const [first,second,lead,ads]=[randomUUID(),randomUUID(),randomUUID(),randomUUID()];
- for(const connection of [first,second]) query(`insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('${connection}','${rsLearning}','${owner}','http://localhost','roles-${connection.slice(0,8)}','ciphertext','connected')`);
- query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('${lead}','${rsLearning}','${first}','Lead','Marketing lead',true),('${ads}','${rsLearning}','${second}','Ads','Ads agent',false)`);
+ query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${lead}','${rsLearning}','${first}','Lead','Marketing lead',true,'overlay-${first.slice(0,8)}'),('${ads}','${rsLearning}','${second}','Ads','Ads agent',false,'overlay-${second.slice(0,8)}')`);
  // Ads is shown to every Member (#15), so each Role reads both Agents and the difference is only what it may do.
  query(`insert into public.member_agent_access(company_id,person_id,agent_id) select company_id,person_id,'${ads}' from public.members where company_id='${rsLearning}' and removed_at is null and role<>'owner'`);
  const main=()=>JSON.parse(query(`select id from public.hermes_agents where company_id='${rsLearning}' and is_default`)).map((row:{id:string})=>row.id);
@@ -244,7 +259,6 @@ for(const view of roleViews) test(`${view.role}: Settings shows only what the Ro
   expect(main()).toEqual([view.movesMain?ads:lead]);
  } finally {
   query(`delete from public.hermes_agents where id in ('${lead}','${ads}')`);
-  query(`delete from public.hermes_connections where id in ('${first}','${second}')`);
  }
 });
 
