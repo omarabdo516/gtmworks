@@ -217,6 +217,43 @@ test('"/" offers the Commands, narrowed by what follows it', async () => {
  await expect.element(list(screen)).not.toBeInTheDocument();
 });
 
+// #159, the job commands (design-reference: CMDS): each belongs to the Agent the Member sees that was made from one
+// ready-made role, and its line names that Agent; a role with no such Agent has no command, and "/agent" comes last.
+const roles: CallableAgent[] = [{ id: 'r1', connection_id: 'd1', name: 'Reach', role: 'meta' }, { id: 'r2', connection_id: 'd2', name: 'Figures', role: 'numbers' },
+ { id: 'r3', connection_id: 'd3', name: 'Critic', role: 'hook' }, { id: 'r4', connection_id: 'd4', name: 'Writer', role: 'writer' }, { id: 'r5', connection_id: 'd5', name: 'Lead' }];
+const commandsOf = (screen: Awaited<ReturnType<typeof box>>) => screen.getByRole('option').elements().map(option => option.textContent);
+
+test('"/" offers each role\'s command with the name of the Agent it was given, then /agent, and narrows by the command', async () => {
+ const screen = await box({ send: async () => null, seen: roles });
+ const field = screen.getByRole('textbox', { name: 'Message' });
+ await userEvent.type(field, '/');
+ await expect.element(list(screen)).toBeVisible();
+ expect(commandsOf(screen)).toEqual([
+  'New campaign with Reach/campaign',
+  'Numbers summary from Figures/report',
+  'Send a script to Critic for review/review',
+  'New SEO article from Writer/article',
+  'Ask for a new agent/agent',
+ ]);
+ await userEvent.type(field, 'r');
+ expect(commandsOf(screen)).toEqual(['Numbers summary from Figures/report', 'Send a script to Critic for review/review']);
+ await userEvent.keyboard('{Enter}');
+ await expect.element(field).toHaveValue('/report ');
+});
+
+test('a role with no Agent this Member sees, or an Agent hidden from them, lists no command', async () => {
+ // Writer and Critic are absent, as a hidden Agent never reaches the Member's list from the server.
+ const screen = await box({ send: async () => null, seen: [roles[0], roles[1], roles[4]] });
+ await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), '/');
+ expect(commandsOf(screen)).toEqual(['New campaign with Reach/campaign', 'Numbers summary from Figures/report', 'Ask for a new agent/agent']);
+});
+
+test('in Arabic the Commands speak the reference\'s words around the Agent\'s name', async () => {
+ const screen = await box({ send: async () => null, seen: [{ id: 'r1', connection_id: 'd1', name: 'محتوى', role: 'writer' }] }, 'ar');
+ await userEvent.type(screen.getByRole('textbox', { name: 'الرسالة' }), '/');
+ expect(commandsOf(screen)).toEqual(['مقال SEO جديد من محتوى/article', 'اطلب وكيل جديد/agent']);
+});
+
 test('Arrow Down and Up move the marked entry and wrap, Enter picks it with one space after, and Enter does not send while the list is open', async () => {
  const send = vi.fn<Send>(async () => null);
  const screen = await box({ send, seen: agents });
