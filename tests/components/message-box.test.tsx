@@ -383,6 +383,8 @@ test('in Arabic the list speaks the reference\'s words', async () => {
 type DataEvent = { data?: Blob };
 class FakeRecorder {
  static made: FakeRecorder[] = [];
+ static held: FakeRecorder[] = [];
+ static deferStop = false;
  state = 'inactive'; mimeType: string; ondataavailable: (event: DataEvent) => void = () => {}; onstop: () => void = () => {};
  constructor(public stream: unknown, options?: { mimeType?: string }) { this.mimeType = options?.mimeType ?? 'audio/webm'; FakeRecorder.made.push(this); }
  start() { this.state = 'recording'; }
@@ -390,11 +392,12 @@ class FakeRecorder {
   if (this.state === 'inactive') return;
   this.state = 'inactive';
   this.ondataavailable({ data: new Blob(['voice sample'], { type: this.mimeType }) });
-  this.onstop();
+  if (FakeRecorder.deferStop) FakeRecorder.held.push(this); else this.onstop();
  }
+ release() { this.onstop(); }
 }
 const mic = (deny = false) => {
- FakeRecorder.made = [];
+ FakeRecorder.made = []; FakeRecorder.held = []; FakeRecorder.deferStop = false;
  const track = { stop: vi.fn() };
  const stream = { getTracks: () => [track], getAudioTracks: () => [track] };
  const getUserMedia = vi.spyOn(navigator.mediaDevices, 'getUserMedia').mockImplementation(deny ? async () => { throw new Error('denied'); } : async () => stream as unknown as MediaStream);
@@ -526,6 +529,54 @@ test('a recording is sent for the Agent it started on, and an answer that arrive
  await act(async () => { switchTarget(); });
  await act(async () => { engine.finish(Response.json({ text: 'words for the other agent' })); await Promise.resolve(); await Promise.resolve(); });
  await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('');
+});
+
+test('an answer that arrives after the Agent changed and changed back inserts nothing', async () => {
+ vi.useFakeTimers(); mic(); const engine = dictate({ deferred: true });
+ let switchTarget: (agent: string) => void = () => {};
+ function Switcher() {
+  const [target, setTarget] = useState(voice);
+  switchTarget = (agent: string) => setTarget({ company: 'co-1', agent });
+  return <LanguageProvider language="en"><MessageBox placeholder="Write" voice={target} send={async () => null}/></LanguageProvider>;
+ }
+ const screen = await render(<Switcher/>);
+ await hold(boxOf(screen));
+ await expect.poll(() => engine.calls.length).toBe(1);
+ expect(engine.calls[0].body).toMatchObject({ company: 'co-1', agent: 'ag-1' });
+ // A → B → A: the box is back on A, but A's first recording was already replaced.
+ await act(async () => { switchTarget('ag-2'); });
+ await act(async () => { switchTarget('ag-1'); });
+ await act(async () => { engine.finish(Response.json({ text: 'words from before the switch' })); await Promise.resolve(); await Promise.resolve(); });
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('');
+});
+
+test('a recording started before the old recorder stops stops only its own microphone', async () => {
+ vi.useFakeTimers();
+ FakeRecorder.made = []; FakeRecorder.held = []; FakeRecorder.deferStop = true;
+ const firstTrack = { stop: vi.fn() }; const secondTrack = { stop: vi.fn() };
+ const firstStream = { getTracks: () => [firstTrack], getAudioTracks: () => [firstTrack] };
+ const secondStream = { getTracks: () => [secondTrack], getAudioTracks: () => [secondTrack] };
+ let asked = 0;
+ vi.spyOn(navigator.mediaDevices, 'getUserMedia')
+  .mockImplementation(async () => (++asked === 1 ? firstStream : secondStream) as unknown as MediaStream);
+ vi.stubGlobal('MediaRecorder', FakeRecorder);
+ const engine = dictate({ text: 'the first recording' });
+ const screen = await voiced({ send: async () => null }); const button = boxOf(screen);
+ // A records and is finished; its onstop waits.
+ await pointer(button, 'pointerdown'); await flush();
+ await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+ await pointer(button, 'pointerup'); await flush();
+ expect(FakeRecorder.held).toHaveLength(1);
+ expect(firstTrack.stop, 'the first recording still holds the microphone').not.toHaveBeenCalled();
+ // B starts before A's onstop.
+ await pointer(button, 'pointerdown'); await flush();
+ expect(FakeRecorder.made).toHaveLength(2);
+ // A's own onstop lets A's microphone go, and leaves B recording.
+ await act(async () => { FakeRecorder.held[0].release(); await Promise.resolve(); await Promise.resolve(); });
+ expect(firstTrack.stop, 'the old session stops its own microphone').toHaveBeenCalled();
+ expect(secondTrack.stop, 'the new session keeps recording').not.toHaveBeenCalled();
+ expect(engine.calls, 'the old recording is not sent').toEqual([]);
+ await expect.element(screen.getByRole('button', { name: 'Finish recording' })).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('changing the Agent while recording cancels it, sending nothing and inserting nothing', async () => {

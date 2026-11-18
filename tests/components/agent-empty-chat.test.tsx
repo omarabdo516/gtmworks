@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
 import { page, userEvent } from 'vitest/browser';
 import type { ComponentProps } from 'react';
+import { act } from 'react';
 import AgentChat from '@/app/c/[slug]/chat/[[...agent]]/agent-chat';
 import type { EmptyChat } from '@/app/agent-empty-chat';
 import type { AgentDetailsView } from '@/app/agent-details-server';
@@ -321,6 +322,54 @@ test('a send that failed for one Agent retries into the Agent picked after it, i
  expect(second.agent).toBe('ag-2');
  expect(second.conversation).toMatch(/^[0-9a-f-]{36}$/);
  expect(second.conversation).not.toBe(first.conversation);
+});
+
+test('returning to an Agent whose send failed reuses its Conversation and retry key', async () => {
+ let attempt = 0;
+ fetches.mockImplementation(async () => ++attempt === 1
+  ? new Response(JSON.stringify({ error: 'conversationFailed' }), { status: 500 })
+  : new Response('{}', { status: 200 }));
+ const screen = await chat({ agent: seo, empty: knownSeo, agents: seenKnown, details: detailsOf('SEO') });
+ const field = screen.getByRole('textbox', { name: 'Message' });
+ await field.fill('Plan next week');
+ await userEvent.keyboard('{Enter}');
+ await expect.poll(() => screen.container.querySelector('textarea')?.readOnly).toBe(false);
+ const first = JSON.parse(String(fetches.mock.calls[0][1].body));
+ expect(first.agent).toBe('ag-3');
+ // A → B → A: coming back to SEO keeps the Conversation and the send key its failed send used.
+ await screen.getByRole('button', { name: 'Meta Ads', exact: true }).click();
+ await expect.element(field).toHaveValue('Plan next week');
+ await screen.getByRole('button', { name: 'SEO', exact: true }).click();
+ await expect.element(field).toHaveValue('Plan next week');
+ await userEvent.click(field);
+ await userEvent.keyboard('{Enter}');
+ await expect.poll(() => fetches.mock.calls.length).toBe(2);
+ const second = JSON.parse(String(fetches.mock.calls[1][1].body));
+ expect(second.agent).toBe('ag-3');
+ expect(second.conversation).toBe(first.conversation);
+ expect(second.sendKey).toBe(first.sendKey);
+});
+
+test('a pick while a send is on its way is ignored, so the pending send still opens its own Conversation', async () => {
+ let answer: (response: Response) => void = () => {};
+ fetches.mockImplementation(() => new Promise<Response>(resolve => { answer = resolve; }));
+ const screen = await chat({ agent: seo, empty: knownSeo, agents: seenKnown, details: detailsOf('SEO') });
+ const field = screen.getByRole('textbox', { name: 'Message' });
+ await field.fill('Plan next week');
+ await userEvent.keyboard('{Enter}');
+ await expect.poll(() => fetches.mock.calls.length).toBe(1);
+ const body = JSON.parse(String(fetches.mock.calls[0][1].body));
+ expect(body.agent).toBe('ag-3');
+ const meta = screen.getByRole('button', { name: 'Meta Ads', exact: true });
+ const seoChip = screen.getByRole('button', { name: 'SEO', exact: true });
+ expect(meta.element().getAttribute('aria-disabled')).toBe('true');
+ expect(seoChip.element().getAttribute('aria-disabled')).toBe('true');
+ await act(async () => { meta.element().dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveAttribute('placeholder', 'Write to SEO…');
+ await expect.element(screen.getByRole('button', { name: 'New chat · Details: SEO' })).toBeVisible();
+ answer(new Response('{}', { status: 200 }));
+ await expect.poll(() => push.mock.calls.length).toBe(1);
+ expect(String(push.mock.calls[0][0])).toMatch(/^\/c\/rs-learning\/conversations\/[0-9a-f-]{36}$/);
 });
 
 test('in Arabic the known empty chat speaks Egyptian Arabic, its picker and its two suggestions read right to left', async () => {

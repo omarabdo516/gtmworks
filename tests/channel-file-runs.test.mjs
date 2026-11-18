@@ -101,6 +101,16 @@ test('a retry of a send whose files a stored message already took keeps nothing 
  assert.equal(fake.runs.length,0,'the stored message starts no second Run');
 });
 
+test('an image-only retry of a stored send answers that message, with its images kept',async()=>{
+ const fake=fakeEngine(); const stand=databases({alreadyStored:true});
+ const sent=await postChannelMessage(stand.db,stand.service,{company,channel,sendKey:'q',message:'',files,hermes,engineFor:fake.engineFor});
+ assert.deepEqual(sent,{message:7},'the empty retry reaches the message its send key already stored');
+ assert.deepEqual(stand.uploads,[],'a stored send uploads its images no second time');
+ assert.deepEqual(stand.calls.map(([name])=>name).slice(0,2),['reserve_channel_files','post_channel_message']);
+ assert.equal(stand.calls[1][1].message,'','the retry posts the same empty body its images carried');
+ assert.equal(fake.runs.length,0,'the stored message starts no second Run');
+});
+
 test('a failed upload leaves removal to the guarded discard, never to a path it wrote itself',async()=>{
  const fake=fakeEngine(); const stand=databases({failUploadAt:1,discard:[]});
  const sent=await postChannelMessage(stand.db,stand.service,{company,channel,sendKey:'q',message:'@Faye look',files,hermes,engineFor:fake.engineFor});

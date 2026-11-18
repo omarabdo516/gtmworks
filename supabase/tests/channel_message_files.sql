@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(35);
+select plan(37);
 -- #156: a channel message keeps its images, every Member of the channel reads them (a Viewer included), and only a
 -- Member of the channel who may write keeps them. A message of images alone is stored and starts no Run; a text of
 -- spaces only is still refused, as before.
@@ -63,9 +63,14 @@ select public.discard_channel_files('69000000-0000-0000-0000-000000000001','1000
 select throws_ok($$select public.reserve_channel_files('69000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d2400000-0000-0000-0000-000000000007',
  $json$[{"position":1,"name":"page.html","content_type":"text/html","size":1,"path":"anywhere"}]$json$::jsonb)$$,
  '22023','channelFilesInvalid','only the image kinds the Engine reads are kept');
-select throws_ok($$select public.reserve_channel_files('69000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d2400000-0000-0000-0000-000000000001',
- $json$[{"position":2,"name":"again.png","content_type":"image/png","size":1,"path":"anywhere"}]$json$::jsonb)$$,
- 'P0002','channelNotFound','a stored message''s images can never be replaced');
+select is(public.reserve_channel_files('69000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d2400000-0000-0000-0000-000000000001',
+ $json$[{"position":2,"name":"again.png","content_type":"image/png","size":1,"path":"anywhere"}]$json$::jsonb),
+ -1,'a stored message''s images are never written again');
+select is((select array_agg(name order by position) from public.channel_attachments
+  where message_id=(select id from sent where label='images')),array['cover.png','logo.jpeg'],
+ 'and its stored message keeps its own files');
+select is(public.post_channel_message('69000000-0000-0000-0000-000000000001','d2400000-0000-0000-0000-000000000001',''),
+ (select id from sent where label='images'),'an image-only retry of a stored send answers the message it stored');
 select throws_ok($$insert into public.channel_attachments(company_id,channel_id,send_key,message_id,name,content_type,size,path)
  values ('10000000-0000-0000-0000-000000000001','69000000-0000-0000-0000-000000000001','d2400000-0000-0000-0000-000000000003',(select id from sent where label='images'),'hand.png','image/png',1,
   '10000000-0000-0000-0000-000000000001/channels/69000000-0000-0000-0000-000000000001/hand.png')$$,

@@ -24,7 +24,7 @@ type Agent={id?:string,name:string,connection_id:string,speciality?:string|null,
 
 // One Agent the reader sees, as the picker draws it (design-reference: visibleAgents): an identity and a face, no data.
 type PickerAgent={id:string,connection_id:string,name:string};
-export type AgentPicker={agents:PickerAgent[],onPick:(id:string)=>void,chipRef?:(chip:HTMLButtonElement|null)=>void};
+export type AgentPicker={agents:PickerAgent[],onPick:(id:string)=>void,disabled?:boolean,chipRef?:(chip:HTMLButtonElement|null)=>void};
 
 // `suggest` puts a sentence in the composer; a Viewer, who cannot write, gets neither the suggestions nor the sentence
 // to try (design-reference: canWrite). `picker` is how this reader moves to another Agent from a known empty chat: the
@@ -68,7 +68,7 @@ export function AgentEmptyChat({agent,empty,askOf=null,suggest,picker}:{agent:Ag
   <h2 tabIndex={-1}>{t('emptyChatHeading')}</h2>
   <p>{t('emptyChatPickLead')} <bdi>@</bdi> {t('emptyChatPickTail')}</p>
   {picker&&<div className="agent-picker" role="group" aria-label={t('agentPickerLabel')}>
-   {picker.agents.map(other=><button key={other.id} type="button" className="chip" aria-pressed={other.id===agent.id} onClick={()=>picker.onPick(other.id)} ref={other.id===agent.id?picker.chipRef:undefined}>
+   {picker.agents.map(other=><button key={other.id} type="button" className="chip" aria-pressed={other.id===agent.id} aria-disabled={picker.disabled?true:undefined} onClick={()=>{ if(!picker.disabled) picker.onPick(other.id); }} ref={other.id===agent.id?picker.chipRef:undefined}>
     <span className="chip__face" aria-hidden="true"><CompanyAgentFace agent={other} size={22}/></span><bdi>{other.name}</bdi></button>)}
   </div>}
   {suggest&&<div className="suggest">{general.map(([title,second])=><button key={title} type="button" onClick={()=>suggest(`${title}: ${second}`)}><b>{title}</b><span>{second}</span></button>)}</div>}
