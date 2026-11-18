@@ -265,7 +265,7 @@ for(const [mode,language] of [['alone','en'],['team','ar']] as const) test(`firs
 // #186: the Owner signs up and answers first run's second question, "Who’s on your team?".
 async function newOwner(page:Page) {
  await page.request.delete(inbox);
- await page.goto(`/first-run#code=${code}`);
+ await page.goto(`/first-run?language=en#code=${code}`);
  await fillFirstRun(page,input);
  await page.getByRole('button',{name:'Create and sign in'}).click();
  await expect(page).toHaveURL(/\/c\/first-company-[a-f0-9]{8}\/home$/);
