@@ -5,7 +5,11 @@ select plan(18);
 -- Owner's first name and the Agents that person sees, pinned once for the Run. Then the question waits in each Role's
 -- own list and only that person answers it.
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile,is_default)
- values('f1430000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001',gen_random_uuid(),'Reach','Plans the Meta ads.','reach-offer-test',false);
+ values('f1430000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001',gen_random_uuid(),'Reach','Plans the Meta ads.','reach143offer',false);
+-- A fresh database has no Agent yet: the test makes the Company's main one, or uses the one it has.
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile,is_default)
+ select 'f1430000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001',gen_random_uuid(),'Lead','General','lead143offer',true
+ where not exists(select 1 from public.hermes_agents where company_id='10000000-0000-0000-0000-000000000001' and is_default);
 select set_config('test.main',(select id::text from public.hermes_agents where company_id='10000000-0000-0000-0000-000000000001' and is_default),true);
 -- A reservation and its note per Role, and a Conversation and a question for each writer.
 insert into public.conversation_run_reservations(conversation_id,send_key,company_id,connection_id,person_id,agent_id,message,profile)
