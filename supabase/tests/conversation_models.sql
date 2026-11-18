@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(30);
+select plan(41);
 -- #158. Ads in RS Learning, shown to every Member; one Conversation with Ads each for the Owner (1), the Manager (2), a
 -- Contributor (3) and the Viewer (4), and a second one for the Owner.
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
@@ -102,5 +102,40 @@ select is((select model from public.conversations where id='e9000000-0000-0000-0
 select is((select model_refused from public.conversation_queued_turns where conversation_id='e9000000-0000-0000-0000-000000000001' and send_key='ea000000-0000-0000-0000-000000000003'),true,'marks the turn refused for its model');
 select isnt((select failed_at from public.conversation_queued_turns where conversation_id='e9000000-0000-0000-0000-000000000001' and send_key='ea000000-0000-0000-0000-000000000003'),null,'and fails it in the same call, so it never starts again');
 select is((select count(*)::int from public.conversation_run_reservations where conversation_id='e9000000-0000-0000-0000-000000000001' and send_key='ea000000-0000-0000-0000-000000000003'),0,'with its reservation released');
+-- A Run sent straight away that the Engine refused for its model is released and refused in one call by its sender
+-- (refuse_conversation_run_model), only while the attempt it names is the reservation's latest (review of #330).
+insert into public.conversation_run_reservations(conversation_id,send_key,company_id,connection_id,person_id,agent_id,message,profile) values
+ ('e9000000-0000-0000-0000-000000000001','ea000000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000001','e8000000-0000-0000-0000-000000000001',
+  '20000000-0000-0000-0000-000000000001','e8000000-0000-0000-0000-000000000002','Draft the offer email','model-test');
+select public.pinned_run_note('e9000000-0000-0000-0000-000000000001','ea000000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select public.set_conversation_model('10000000-0000-0000-0000-000000000001','e9000000-0000-0000-0000-000000000001','{"provider":"anthropic","model":"claude-opus-4-6"}');
+reset role;
+set local role service_role;
+select public.pin_run_model('e9000000-0000-0000-0000-000000000001','ea000000-0000-0000-0000-000000000004');
+select public.begin_start('e9000000-0000-0000-0000-000000000001','ea000000-0000-0000-0000-000000000004');
+select public.begin_start('e9000000-0000-0000-0000-000000000001','ea000000-0000-0000-0000-000000000004');
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select is(public.refuse_conversation_run_model('e9000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','ea000000-0000-0000-0000-000000000004',1),false,'a late refusal of a sent Run''s first attempt, once the second began, changes nothing');
+reset role;
+set local role service_role;
+select is(public.pin_run_model('e9000000-0000-0000-0000-000000000001','ea000000-0000-0000-0000-000000000004'),'{"provider":"anthropic","model":"claude-opus-4-6"}'::jsonb,'the second attempt keeps its pinned model');
+reset role;
+select is((select model from public.conversations where id='e9000000-0000-0000-0000-000000000001'),'{"provider":"anthropic","model":"claude-opus-4-6"}'::jsonb,'the Conversation keeps its model');
+select is((select abandoned_at from public.conversation_run_reservations where conversation_id='e9000000-0000-0000-0000-000000000001' and send_key='ea000000-0000-0000-0000-000000000004'),null,'and the reservation stays held');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select is(public.refuse_conversation_run_model('e9000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','ea000000-0000-0000-0000-000000000004',2),false,'another person cannot refuse it');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select is(public.refuse_conversation_run_model('e9000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000002','ea000000-0000-0000-0000-000000000004',2),false,'nor through another Company');
+select is(public.refuse_conversation_run_model('e9000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','ea000000-0000-0000-0000-000000000004',2),true,'its sender''s refusal of the latest attempt is told');
+reset role;
+select is((select model from public.conversations where id='e9000000-0000-0000-0000-000000000001'),current_setting('test.pick')::jsonb,'it puts the Conversation back on its earlier model');
+select isnt((select abandoned_at from public.conversation_run_reservations where conversation_id='e9000000-0000-0000-0000-000000000001' and send_key='ea000000-0000-0000-0000-000000000004'),null,'and releases the reservation in the same call');
+select ok(has_function_privilege('authenticated','public.refuse_conversation_run_model(uuid,uuid,uuid,integer)','execute'),'the sender calls it');
+select ok(not has_function_privilege('anon','public.refuse_conversation_run_model(uuid,uuid,uuid,integer)','execute') and not has_function_privilege('service_role','public.refuse_conversation_run_model(uuid,uuid,uuid,integer)','execute'),'no one else does');
 select * from finish();
 rollback;

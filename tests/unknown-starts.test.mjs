@@ -27,7 +27,7 @@ test('a retry of an unknown start is never read as not started', async () => {
 });
 
 const connection='f9000000-0000-0000-0000-000000000001';
-function databases({reserve={state:'reserved',connection,note:null},claim=[],usable=true,attempt=1,kept=true,stored=false,instructions=null,runNote={offersTools:false},model=null}={}) {
+function databases({reserve={state:'reserved',connection,note:null},claim=[],usable=true,attempt=1,kept=true,stored=false,instructions=null,runNote={offersTools:false},model=null,modelRefused=true}={}) {
  const order=[]; const args={}; const reads=[];
  const rpc=who=>async(name,given)=>{ order.push(`${who} ${name}`); args[name]=given;
   if(name==='conversation_agent') return {data:null,error:null};
@@ -46,6 +46,7 @@ function databases({reserve={state:'reserved',connection,note:null},claim=[],usa
   if(name==='pin_run_history') return {data:null,error:null};
   if(name==='pin_run_model') return {data:model,error:null};
   if(name==='keep_unknown_start') return {data:kept,error:null};
+  if(name==='refuse_conversation_run_model') return {data:modelRefused,error:null};
   if(['keep_unknown_start','fail_conversation_turn','release_conversation_run','record_conversation_turn','send_conversation_message','refuse_run_model'].includes(name)) return {data:true,error:null};
   return {data:null,error:{message:'unexpected'}}; };
  const chain=(table,data)=>{ const read={table}; reads.push(read); const c={select:()=>c,eq:(column,value)=>{ read[column]=value; return c; },maybeSingle:async()=>({data,error:null})}; return c; };
@@ -142,6 +143,20 @@ test('a waiting turn the Engine refused for its model is refused and failed in o
  await startQueuedTurns(refused.service,{encryptionKey,...engine(refused.order,null)});
  assert.deepEqual(refused.args.refuse_run_model,{conversation:'c',message_key:'k',attempt:1});
  assert.ok(!refused.order.includes('service fail_conversation_turn'),'the turn is failed inside the refusal, not by a second call');
+});
+
+// Review of #330: a Run sent straight away that the Engine refused for its pinned model is released and refused by its
+// sender in one call naming its attempt, so a late refusal never reverts the model a newer attempt was pinned with.
+test('a sent Run the Engine refused for its model is released and refused in one call, for its own attempt', async () => {
+ const model={provider:'openrouter',model:'openai/gpt-5.5'};
+ const refused=databases({model});
+ assert.deepEqual(await sendMessage(refused.db,refused.service,{company:'co',conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...engine(refused.order,null)}),{error:'conversationModelRefused',status:502});
+ assert.deepEqual(refused.args.refuse_conversation_run_model,{conversation:'c',c:'co',message_key:'k',attempt:1});
+ assert.ok(refused.order.includes('person refuse_conversation_run_model'),'the sender makes it');
+ assert.ok(!refused.order.some(step=>step.endsWith(' release_conversation_run')||step.endsWith(' refuse_run_model')),'and no second call');
+ // A stale attempt, or one whose model was already changed, is told as a refused start.
+ const stale=databases({model,modelRefused:false});
+ assert.deepEqual(await sendMessage(stale.db,stale.service,{company:'co',conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...engine(stale.order,null)}),{error:'conversationHermesFailed',status:502});
 });
 
 test('a lost start whose reservation is gone answers by what was stored, never as waiting', async () => {
