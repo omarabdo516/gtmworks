@@ -81,9 +81,9 @@ test('the Company\'s mode reaches every Agent profile and the shared space, and 
   profileOn(fake,space);
   const {db,logged}=database();
   const changed=await changeLearningMode(db,{company,mode:'ask',hermes:{address:fake.address,key:fake.settings.key},driver:settingsDriver(fake)});
-  assert.equal(changed.status,200,JSON.stringify(changed.body));
-  assert.deepEqual(changed.body.agents.map(agent=>[agent.agent,agent.written]),[[lead,true],[writer,true],[helper,true]]);
-  assert.equal(changed.body.space,true,'the shared space takes the same value');
+  assert.equal(changed.state,'written',JSON.stringify(changed));
+  assert.deepEqual(changed.agents.map(agent=>[agent.agent,agent.written]),[[lead,true],[writer,true],[helper,true]]);
+  assert.equal(changed.space,true,'the shared space takes the same value');
   for(const name of [companyProfile(company),agentProfile(writer),space]) {
    const config=fake.settings.profiles.get(name).config;
    assert.deepEqual([at(config,'memory.write_approval'),at(config,'skills.write_approval')],[true,true],`${name} asks first`);
@@ -102,7 +102,7 @@ test('the Company\'s mode reaches every Agent profile and the shared space, and 
   // The Agent's override writes that Agent's own profile only, and is read back beside the Company's mode.
   const beforeOverride=requestsOf(fake,'PUT').length;
   const override=await changeLearningMode(db,{company,agent:writer,mode:'auto',hermes:{address:fake.address,key:fake.settings.key},driver:settingsDriver(fake)});
-  assert.equal(override.status,200,JSON.stringify(override.body));
+  assert.equal(override.state,'written',JSON.stringify(override));
   assert.deepEqual([at(fake.settings.profiles.get(agentProfile(writer)).config,'memory.write_approval'),at(fake.settings.profiles.get(agentProfile(writer)).config,'skills.write_approval')],[false,false]);
   for(const name of [companyProfile(company),space]) assert.deepEqual([at(fake.settings.profiles.get(name).config,'memory.write_approval'),at(fake.settings.profiles.get(name).config,'skills.write_approval')],[true,true],`${name} keeps the Company's ask first`);
   const reread=await readAgentSettings(db,{company,hermes:{address:fake.address,key:fake.settings.key},driver:settingsDriver(fake)});
@@ -113,12 +113,12 @@ test('the Company\'s mode reaches every Agent profile and the shared space, and 
   // by itself, and its own profile keeps the choice.
   await changeLearningMode(db,{company,agent:writer,mode:'ask',hermes:{address:fake.address,key:fake.settings.key},driver:settingsDriver(fake)});
   const companyAuto=await changeLearningMode(db,{company,mode:'auto',hermes:{address:fake.address,key:fake.settings.key},driver:settingsDriver(fake)});
-  assert.equal(companyAuto.status,200,JSON.stringify(companyAuto.body));
+  assert.equal(companyAuto.state,'written',JSON.stringify(companyAuto));
   assert.deepEqual([at(fake.settings.profiles.get(agentProfile(writer)).config,'memory.write_approval'),at(fake.settings.profiles.get(agentProfile(writer)).config,'skills.write_approval')],[true,true],'the Writer keeps its own ask first');
   for(const name of [companyProfile(company),space]) assert.deepEqual([at(fake.settings.profiles.get(name).config,'memory.write_approval'),at(fake.settings.profiles.get(name).config,'skills.write_approval')],[false,false],`${name} follows the Company by itself`);
   // Following the Company again writes the Company's own mode to that Agent and forgets its choice.
   const follow=await changeLearningMode(db,{company,agent:writer,mode:'follow',hermes:{address:fake.address,key:fake.settings.key},driver:settingsDriver(fake)});
-  assert.equal(follow.status,200,JSON.stringify(follow.body));
+  assert.equal(follow.state,'written',JSON.stringify(follow));
   assert.deepEqual([at(fake.settings.profiles.get(agentProfile(writer)).config,'memory.write_approval'),at(fake.settings.profiles.get(agentProfile(writer)).config,'skills.write_approval')],[false,false],'the Writer takes the Company\'s by itself');
   const afterFollow=await readCompanyLearning(db,{company,hermes:{address:fake.address,key:fake.settings.key},driver:driverAt(fake)});
   assert.deepEqual(afterFollow.agents.map(agent=>[agent.name,agent.mode,agent.follow]),[['Lead','auto',true],['Writer','auto',true],['Helper','auto',true]],'the Writer follows the Company again');
@@ -133,9 +133,9 @@ test('the mode changes for the Owner only, before the Engine is asked, and a mod
   profileOn(fake,space);
   const before=requestsOf(fake,'PUT').length;
   const denied=await changeLearningMode(database({owner:false}).db,{company,mode:'ask',hermes:{address:fake.address,key:fake.settings.key},driver:settingsDriver(fake)});
-  assert.deepEqual([denied.status,denied.body.error],[403,'settingNotAllowed']);
+  assert.deepEqual(denied.state,'notAllowed');
   const invalid=await changeLearningMode(database().db,{company,mode:'sometimes',hermes:{address:fake.address,key:fake.settings.key},driver:settingsDriver(fake)});
-  assert.deepEqual([invalid.status,invalid.body.error],[400,'learningModeInvalid']);
+  assert.deepEqual(invalid.state,'invalid');
   assert.equal(requestsOf(fake,'PUT').length,before,'no value reached the Engine');
  } finally { await fake.close(); }
 });

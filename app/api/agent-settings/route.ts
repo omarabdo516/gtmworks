@@ -12,6 +12,24 @@ import { changeCompanySetting, changeCompanySettings, changeLearningMode, readAg
 // for the whole Company or one Agent, with the same Owner check, read-back and log rows.
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const reply=(body:object,status=200)=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store'}});
+// The service answers an outcome, and this route decides its status and error code: a refused Role, an Agent not there,
+// a shared profile, an Engine away, or a read-back that did not match.
+function outcomeReply(result:Record<string,unknown>&{state?:string}) {
+ const {state,...body}=result;
+ if(state==='written') return reply(body);
+ if(state==='invalid') return reply({error:'settingInvalid',...(body.problem?{problem:body.problem}:{})},400);
+ if(state==='notAllowed') return reply({error:'settingNotAllowed'},403);
+ if(state==='agentUnknown') return reply({error:'settingAgentUnknown'},404);
+ if(state==='noEngine') return reply({error:'settingNoEngine'},409);
+ if(state==='shared') return reply({error:'settingAgentShared'},409);
+ if(state==='subagentsOff') return reply({error:'settingSubagentsOff'},409);
+ if(state==='noDefault') return reply({error:'settingNoDefault'},409);
+ if(state==='unknown') return reply({error:'settingUnknown'},400);
+ if(state==='installOnly') return reply({error:'settingInstallOnly'},409);
+ if(state==='mismatch') return reply({error:'settingMismatch'},502);
+ if(state==='unreachable') return reply({error:'settingFailed'},503);
+ return reply({error:'settingFailed'},502);
+}
 export async function GET(request:NextRequest) {
  try {
   const db=await supabase(); const {data:{user}}=await db.auth.getUser();
@@ -49,6 +67,6 @@ export async function POST(request:NextRequest) {
   const result=body.mode!==undefined?await changeLearningMode(db,{company:body.company,agent:body.agent,mode:body.mode})
    :body.settings!==undefined?await changeCompanySettings(db,{company:body.company,agent:body.agent,settings:body.settings})
    :await changeCompanySetting(db,{company:body.company,agent:body.agent,setting:body.setting,value:body.value});
-  return reply(result.body,result.status);
- } catch { return reply({error:'settingInvalid'},400); }
+  return outcomeReply(result);
+ } catch { return reply({error:'settingFailed'},500); }
 }
