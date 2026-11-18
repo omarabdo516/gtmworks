@@ -1,12 +1,13 @@
 # As Hermes and T3 Code run CI (#76): the first job (`changes`, scripts/ci-areas.mjs) decides which suites a change
 # needs. The fast job (lint, types, catalogues, unit tests and the screen component tests, #258) runs on every change;
 # its component tests run when the app, its components or its library change. The database tests, the whole-app browser
-# suite (`integration`) and the Docker install run on a pull request only when their own files change. The visual
+# suite (`integration`) and the Docker install run on a pull request only when their own files change, and never on a
+# draft: marking it ready (ready_for_review) starts them, and every later push runs them again (#333). The visual
 # lane's key screens and the measured navigation budgets (`visual`) run on a push to main and on a
 # manual run only, never on a pull request, and `check` does not wait for them (Omar, 2026-11-17, #257): a failure on main
 # opens or updates one issue labelled visual-regression. A push to main runs every suite unless every file is a document; a manual
 # run starts the browser and install suites only through inputs that default to off. Required `check`
-# (scripts/ci-verdict.mjs) counts a suite nobody asked for as passed when it was skipped, and is red on any failed or
+# (scripts/ci-verdict.mjs) counts a suite nobody asked for, or a draft's heavy suite, as passed when it was skipped, and is red on any failed or
 # cancelled stage.
 # Every job runs on a GitHub-hosted ubuntu-latest runner (decision 0038, #334); the measured navigation budgets need a
 # machine no other job shares. The stack's ports lie in Linux's range for outgoing connections, so a job reserves them
@@ -17,6 +18,8 @@ name: CI
 
 on:
   pull_request:
+    # ready_for_review: marking a draft ready starts the heavy suites it skipped (#333).
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
   workflow_dispatch:
@@ -181,7 +184,7 @@ jobs:
   # own runner. `visual`, on main only, waits for it. It never fails a run.
   supabase-images:
     needs: [changes]
-    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.database != 'false' || needs.changes.outputs.integration != 'false') }}
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && (needs.changes.result != 'success' || needs.changes.outputs.database != 'false' || needs.changes.outputs.integration != 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     continue-on-error: true
@@ -224,7 +227,7 @@ jobs:
   # Migrations replayed and verified, row-level security and grants, on one local stack (tests/db.sh).
   database:
     needs: [changes]
-    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.database != 'false') }}
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && (needs.changes.result != 'success' || needs.changes.outputs.database != 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -357,7 +360,7 @@ jobs:
   # The rest of the whole-app browser suite: the production-shaped proxy suite in the image and the journeys.
   integration:
     needs: [changes]
-    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.integration != 'false') }}
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && (needs.changes.result != 'success' || needs.changes.outputs.integration != 'false') }}
     runs-on: ubuntu-latest
     # main's browser suite already took 24 of 25 minutes (run 43398274074); the board, settings, log and numbers specs
     # add to it.
@@ -432,7 +435,7 @@ jobs:
 
   install:
     needs: [changes]
-    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.install != 'false') }}
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && (needs.changes.result != 'success' || needs.changes.outputs.install != 'false') }}
     runs-on: ubuntu-latest
     # The release install and update below add a fresh stack and an update to the source install checks, and the one-line
     # install adds another, an update, a failed update and a return to an older release from a backup.
@@ -828,6 +831,7 @@ jobs:
           CHANGES_RESULT: ${{ needs.changes.result }}
           FAST_RESULT: ${{ needs.fast.result }}
           FAST_STEPS: ${{ needs.fast.outputs.steps }}
+          DRAFT: ${{ github.event.pull_request.draft }}
           COMPONENTS_RUN: ${{ needs.changes.outputs.components }}
           DATABASE_RUN: ${{ needs.changes.outputs.database }}
           DATABASE_RESULT: ${{ needs.database.result }}

@@ -12,7 +12,7 @@ const script = resolve('scripts/ci-verdict.mjs');
 const stages = ['DATABASE', 'INTEGRATION', 'INSTALL'];
 const fastSteps = 'discovery=success docs=success i18n=success openapi=success lint=success typecheck=success knip=success node=success components=success';
 const green = {
-  CHANGES_RESULT: 'success', FAST_RESULT: 'success', FAST_STEPS: fastSteps, COMPONENTS_RUN: 'true',
+  CHANGES_RESULT: 'success', FAST_RESULT: 'success', FAST_STEPS: fastSteps, COMPONENTS_RUN: 'true', DRAFT: 'false',
   ...Object.fromEntries(stages.flatMap(stage => [[`${stage}_RUN`, 'true'], [`${stage}_RESULT`, 'success']])),
 };
 const run = overrides => {
@@ -45,6 +45,21 @@ for (const stage of stages) {
     }
   });
 }
+
+// A draft pull request runs only the fast job (#333): its heavy suites are skipped as not needed, whatever its files.
+test('a draft passes with every heavy suite skipped, even ones its files need', () => {
+  const skipped = Object.fromEntries(stages.map(stage => [`${stage}_RESULT`, 'skipped']));
+  assert.equal(verdict({ DRAFT: 'true', ...skipped }), 0);
+  for (const draft of ['false', '', undefined]) assert.equal(verdict({ DRAFT: draft, ...skipped }), 1, String(draft));
+});
+
+test('a draft is red when any stage that ran failed or was cancelled', () => {
+  for (const result of ['failure', 'cancelled']) {
+    for (const stage of stages) assert.equal(verdict({ DRAFT: 'true', [`${stage}_RESULT`]: result }), 1, `${stage}=${result}`);
+    for (const key of ['CHANGES_RESULT', 'FAST_RESULT']) assert.equal(verdict({ DRAFT: 'true', [key]: result }), 1, `${key}=${result}`);
+    assert.equal(verdict({ DRAFT: 'true', FAST_STEPS: fastSteps.replace('lint=success', `lint=${result}`) }), 1, `lint=${result}`);
+  }
+});
 
 test('check passes with no compared screens at all: a pull request never runs them (#257)', () => {
   assert.equal(verdict({ VISUAL_RUN: undefined, VISUAL_RESULT: undefined, LANE_RUN: undefined, LANE_RESULT: undefined }), 0);
@@ -102,7 +117,7 @@ test('ci.yml decides the suites in its first job, gates each suite on it, and ju
   for (const [job, output] of [['database', 'database'], ['integration', 'integration'], ['install', 'install']]) {
     assert.equal(jobs.changes.outputs[output], `\${{ steps.classify.outputs.${output} }}`, output);
     assert.deepEqual(jobs[job].needs, ['changes'], job);
-    assert.equal(jobs[job].if, `\${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.${output} != 'false') }}`, job);
+    assert.equal(jobs[job].if, `\${{ !cancelled() && github.event.pull_request.draft != true && (needs.changes.result != 'success' || needs.changes.outputs.${output} != 'false') }}`, job);
   }
   // The images job only warms a cache: it cannot fail a run, and check, database and integration do not wait for it (#259).
   assert.equal(jobs['supabase-images']['continue-on-error'], true);
