@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { dirname, join, relative } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { join, relative } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 // Each file under tests/ keeps its row from docs/testing.md's "Every file" table beside it, in tests/rows/ (#229): the
 // file's own row comes first, and a browser spec's rows from "The browser suite, case by case" follow under `## Cases`.
@@ -11,6 +11,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const DOC = 'docs/testing.md';
 export const ROWS = 'tests/rows';
+const ROW_PREFIX = 'rows/';
 const FILE_HEADER = '| File | Promise | Runtime | Also guarded by | Decision |';
 const CASE_HEADER = '| Case | Decision | Why, and what guards it now |';
 const FILE_RULE = '|---|---|---|---|---|';
@@ -25,7 +26,7 @@ export function testFiles(root = '.') {
   const listed = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '--', 'tests'], { cwd: root, encoding: 'utf8' })
     .split('\n').filter(Boolean).map(path => path.slice('tests/'.length));
   return [...new Set(listed
-    .filter(path => !path.startsWith(`${ROWS.slice('tests/'.length)}/`))
+    .filter(path => !path.startsWith(ROW_PREFIX))
     .map(path => (/\.(test|spec)\.[^/]+$/.test(path) ? path : folders.find(folder => path.startsWith(folder)) ?? path)))]
     .sort();
 }
@@ -80,12 +81,10 @@ export function rowProblems(files, rows) {
   return problems;
 }
 
-const tableIndex = (lines, header) => lines.indexOf(header);
-
 /** Replaces the table under `header` with `rows`, leaving the prose around it as it is. */
 export function replaceTable(doc, header, rule, rows) {
   const lines = doc.split('\n');
-  const start = tableIndex(lines, header);
+  const start = lines.indexOf(header);
   if (start < 0) throw new Error(`${DOC} has no "${header}" table`);
   if (lines[start + 1] !== rule) throw new Error(`${DOC}'s "${header}" table has no separator line`);
   let end = start + 2;
@@ -96,7 +95,8 @@ export function replaceTable(doc, header, rule, rows) {
 
 /** docs/testing.md's tests tables, as written from rows. File rows are sorted by path; a spec's cases keep their order. */
 export function renderTables(doc, rows) {
-  const sorted = [...rows].sort((a, b) => a.path.localeCompare(b.path, 'en'));
+  // A plain code-unit sort, so every Node makes the same order: ICU's collation may differ between versions.
+  const sorted = [...rows].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   const fileRows = sorted.map(row => row.row).filter(Boolean);
   const caseRows = sorted.flatMap(row => row.cases);
   const cases = replaceTable(doc, CASE_HEADER, CASE_RULE, caseRows);

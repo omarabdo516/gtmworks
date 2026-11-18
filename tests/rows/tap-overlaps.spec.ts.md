@@ -1,4 +1,3 @@
-
 ## Cases
 
 | `tap-overlaps.spec.ts` "a fixed footer over a list item overlaps it, even inside a box that clips its other children" | moved | `components/tap-overlaps.test.tsx` "a fixed footer over a list item overlaps it, even inside a box that clips its other children" (the same page, measured by the same function `navigation.spec.ts` calls through `tapOverlaps`). |

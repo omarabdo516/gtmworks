@@ -1,12 +1,12 @@
 # Tests: what each file guards
 
 Every file under `tests/` keeps its row beside it, in `tests/rows/` (#69, #229): the product promise it guards, how long it
-runs, the other test that also guards that promise, and the decision. The tables below are written from those rows by
-`node scripts/testing-doc.mjs --write`, and `./ci.sh static` fails when a test file has no row, a row names no file, or a
-table is stale. A test is removed or merged only when another test already proves its
-promise, when it checks only implementation detail or wording nobody depends on, or when it re-proves a step every other
-test walks through. The first-run setup link (#50), the release install and update (decision 0015), contrast, and the
-English/Arabic direction checks are never removed.
+runs, the other test that also guards that promise, and the decision. The "Every file" table and the browser suite's
+case-by-case table below are written from those rows by `node scripts/testing-doc.mjs --write`, and `./ci.sh static` fails
+when a test file has no row, a row names no file, or a table is stale. A test is removed or merged only when another test
+already proves its promise, when it checks only implementation detail or wording nobody depends on, or when it re-proves a
+step every other test walks through. The first-run setup link (#50), the release install and update (decision 0015),
+contrast, and the English/Arabic direction checks are never removed.
 
 ## How CI runs them
 
@@ -231,7 +231,8 @@ already guarded it. A case that guards money, sign-in, permissions or Company is
 faster test guards part of its promise. A moved case's new test was seen failing on a broken version of the behaviour before the case left,
 in the pull request that moved it. `testing-doc.test.mjs` checks that every case of a spec listed here has one row and
 that only the cases that stay are still in the file. Each spec's case rows live in its row file in `tests/rows/`, under
-`## Cases`, beside the file's own row (#229).
+`## Cases`, beside the file's own row (#229); a spec whose last case moved or was removed is gone from the tree, and its
+case rows stay there.
 
 | Case | Decision | Why, and what guards it now |
 |---|---|---|

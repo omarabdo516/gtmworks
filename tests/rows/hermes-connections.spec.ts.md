@@ -1,4 +1,3 @@
-
 ## Cases
 
 | `hermes-connections.spec.ts` "saving a public HTTP Hermes connection requires HTTPS without contacting Hermes" | removed | #342: the pasted-Hermes Connection, its screen and its route are gone; the bundled Hermes is the only Hermes, so nothing is left to test. |
