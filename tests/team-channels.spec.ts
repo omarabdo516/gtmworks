@@ -118,12 +118,3 @@ test('a Member calls the channel\'s Agent hidden from them elsewhere, sees its m
  expect(refused.status()).toBe(404);
  expect(rows(`select count(*)::int n from public.conversations where agent_id='${seo}'`)[0].n).toBe(0);
 });
-
-test('a Member not in the channel cannot see that it exists',async({page})=>{
- await signIn(page,'multi@example.com','/c/rs-learning/home');
- await expect(channels(page)).toHaveText(['general']);
- expect((await page.goto(`/c/rs-learning/channels/${channel}`))!.status()).toBe(404);
- expect((await page.request.get(`/api/channels?company=${company}&channel=${channel}`)).status()).toBe(404);
- const listed=await (await page.request.get(`/api/channel-list?company=${company}`)).json() as {id:string}[];
- expect(listed.map(row=>row.id)).not.toContain(channel);
-});

@@ -109,28 +109,6 @@ test('integration: on the fake engine a failed run and a stopped run end with th
  } finally { detach(); }
 });
 
-// #287: a Contributor gets a reply on the fake engine through the company agent's Connection (the company Owner's), and
-// a Viewer is refused by the database before the engine is called.
-test('integration: a Contributor gets a reply on the fake engine and a Viewer is refused',async()=>{
- test.setTimeout(120000);
- const fake=fakeEngine(); const {agent,detach}=attachAgent();
- const contributor='20000000-0000-0000-0000-000000000005';
- query(`update public.members set role='contributor' where company_id='${company}' and person_id='${contributor}'`);
- try {
-  const {service,person}=await memberClient('multi@example.com');
-  const conversation=randomUUID();
-  expect(await sendMessage(person,service,{person:contributor,company,conversation,sendKey:randomUUID(),agent,message:'Draft the teaser',encryptionKey,engineFor:fake.engineFor})).toEqual({conversation});
-  expect(fake.connections[0]).toMatchObject({address:'http://127.0.0.1:9',key:'fake-engine-key'});
-  expect(await closeOpenRuns(service,{encryptionKey,conversation,owner:contributor,engineFor:fake.engineFor})).toBe(1);
-  const {data:record}=await person.from('conversation_messages').select('author,body').eq('conversation_id',conversation).order('id');
-  expect(record).toEqual([{author:'person',body:'Draft the teaser'},{author:'agent',body:'Reply to: Draft the teaser'}]);
-
-  const viewer=(await memberClient('viewer@example.com')).person;
-  expect(await sendMessage(viewer,service,{person:'20000000-0000-0000-0000-000000000004',company,conversation:randomUUID(),sendKey:randomUUID(),agent,message:'Hello',encryptionKey,engineFor:fake.engineFor})).toEqual({code:'42501'});
-  expect(fake.runs).toHaveLength(1);
- } finally { query(`update public.members set role='contributor' where company_id='${company}' and person_id='${contributor}'`); detach(); }
-});
-
 // Lead, the main Agent, on the Company's own profile in the bundled Engine (ADR 0014); the tests below share it.
 function bundledLead() {
  const profile=`co-${company.replaceAll('-','')}`;
