@@ -37,6 +37,7 @@ import { isolate } from '@/lib/bidi';
 import { inviteeName } from '@/lib/invite.mjs';
 import AppsSection from './settings-apps';
 import { CompanyKnowledge } from './company-knowledge';
+import { BackupSection } from './settings-backup';
 
 type Agent={id:string,connection_id:string,name:string,speciality:string,is_default:boolean,created_at:string|null,requested_by:string|null,requester_opened_at:string|null,requester:unknown,lead_made_agents:unknown};
 type Member={person_id:string,role:string,people:{name:string|null}|null};
@@ -112,6 +113,8 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
   :section==='learning'?<LearningSection t={t} company={company.id} canManage={canManage} owner={owner} data={learning}/>
   :section==='account'?<AccountSection t={t} theme={theme} personName={personName} role={role} roleName={roleNames[role]||''} companyName={company.name} company={company.id} memberNote={memberNote}/>
   :section==='knowledge'?<><Head title={t('settingsKnowledge')} sub={t('settingsKnowledgeSub')}/>{ro}<CompanyKnowledge slug={slug} company={company.id} canManage={canManage} part={query.part}/></>
+  // Backup is the Owner's alone (#33): pickSection never opens it for another Role, and the server renders it only here.
+  :section==='backup'&&owner?<BackupSection t={t}/>
   :<SoonSection t={t} section={section} ro={ro} subscriptions={<ModelsSubscriptions company={company.id} owner={owner} subscriptions={subscriptions}/>}
     keys={<ProviderKeys company={company.id} owner={owner} data={keys}/>}
     defaultModel={models?.models?<DefaultModel company={company.id} owner={owner} models={models.models.default}/>:null}
@@ -323,8 +326,7 @@ function SoonSection({t,section,ro,subscriptions,keys,defaultModel,eachAgent}:{t
   {subscriptions}{keys}{defaultModel??<div className="panel-card"><p className="panel-empty">{t('settingsModelsUnread')}</p></div>}
   <SoonSec t={t} id="md-h-settingsModelsEffort" label={t('settingsModelsEffort')}/>{eachAgent}</>;
  if(section==='routines') return <><Head title={t('settingsRoutines')} sub={t('settingsRoutinesSub')}/><Soon t={t}/></>;
- return <><Head title={t('settingsBackup')} sub={t('settingsBackupSub')}/>{ro}
-  <SoonSec t={t} id="bk-h-list" label={t('settingsBackupList')}/><SoonSec t={t} id="bk-h-in" label={t('settingsBackupHolds')}/></>;
+ return null;
 }
 
 // The company's connected AI subscriptions. A company signs in to its subscription through the Hermes inside gtmworks

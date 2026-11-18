@@ -136,6 +136,21 @@ test('the driver makes a company profile with its key and level-1 tools, and rea
  } finally { await fake.close(); }
 });
 
+test('a capacity profile can be made without the Engine\'s bundled Skills, as the install job measures (#126)', async () => {
+ const fake=await fakeHermes();
+ try {
+  const without=await provideProfile(install(fake),{name:`ag-${'1'.repeat(32)}`,soul:'Capacity.',config:levelConfig(1),forbidden:alwaysOff,noSkills:true});
+  assert.equal(without.state,'configured');
+  const created=fake.settings.managementRequests.find(request=>request.method==='POST'&&request.path==='/api/profiles');
+  assert.deepEqual(Object.keys(created.body).sort(),['name','no_skills','soul']);
+  assert.equal(created.body.no_skills,true);
+  // The default stays as it was: the bundled Skills are copied into every other new profile.
+  await provideProfile(install(fake),{name:`ag-${'2'.repeat(32)}`,soul:'Capacity.',config:levelConfig(1),forbidden:alwaysOff});
+  const bodies=fake.settings.managementRequests.filter(request=>request.method==='POST'&&request.path==='/api/profiles').map(request=>request.body);
+  assert.ok(!('no_skills' in bodies.at(-1)));
+ } finally { await fake.close(); }
+});
+
 // A service-role client stand-in for the worker: the work the database lists, and the calls the worker makes.
 function workerDatabase(rows,{failRecord=false}={}) {
  const calls=[];
@@ -509,9 +524,13 @@ test('the install job proves profiles per company on the pinned release, after t
  assert.match(script,/service\.rpc\('lead_create_agent',\{conversation:first\.conversation,run,call:'install-check',agent_name:'Install writer',job:'Writes the install check\.',apps:\[\]\}\)/);
  assert.match(script,/assert\.deepEqual\(after,\[true,false\]\)/);
  // #122: the Owner approves a Contributor's suggestion; it reaches the first company's Agents only, locked against their edits.
- assert.match(script,/person\.rpc\('decide_agent_rule',\{c:first\.company,item:item\.id,approve:true\}\)/);
- assert.match(script,/assert\.deepEqual\(lessons,\[true,true,false\]\)/);
+ assert.match(script,/personOf\(first\)\.rpc\('decide_agent_rule',\{c:first\.company,item:item\.id,approve:true\}\)/);
+ assert.match(script,/assert\.deepEqual\(lessons,\[true,true,false,false\]\)/);
  assert.match(script,/assert\.equal\(await skill\(spaceOf\(first\)\),written,'team-lessons is unchanged'\)/);
+ // #126: four Agents in two Companies, each on its own profile, and the marker reaches only the first Company's main Agent.
+ assert.match(script,/assert\.equal\(new Set\(profiles\)\.size,4,'each of the four Agents has a profile of its own'\)/);
+ assert.match(script,/assert\.deepEqual\(memory,\[true,false,false,false\]\)/);
+ assert.match(script,/assert\.deepEqual\(\[await listsSkill\(other\.profile\),await listsSkill\(other\.secondProfile\)\],\[false,false\]/);
 });
 
 // The person's session and the service role, as sendMessage sees them; every call is recorded in order.

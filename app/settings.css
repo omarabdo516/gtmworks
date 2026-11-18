@@ -387,3 +387,10 @@
   .gw .sov .md-agent .panel-row { flex-wrap: wrap; }
   .gw .sov .md-agent__pick { width: 100%; }
 }
+
+/* Backup (#33): the reference's two columns of what a backup holds and leaves out (sovBackupHTML), and the host
+   commands with their copy button. A command is an identifier: Paper Mono, kept left to right in both languages. The two
+   columns are Learning's .ln-rules and .ln-rule, above. */
+.gw .sov .bk-cmd .panel-row__text { gap: 2px; }
+.gw .sov .bk-cmd .sub-code { margin-top: 2px; max-width: 100%; }
+.gw .sov .bk-copy { flex: none; }

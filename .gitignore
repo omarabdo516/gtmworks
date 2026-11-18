@@ -10,6 +10,7 @@ prod.env
 .env.install
 .env.install.tmp
 .install-lock/
+.install.lock
 .install-gateway
 backups/
 

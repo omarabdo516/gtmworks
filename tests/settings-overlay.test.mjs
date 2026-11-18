@@ -12,8 +12,18 @@ test('the overlay lists the reference’s ten sections in its order, Your accoun
 
 test('a Viewer sees only their account and the Agents; Usage is the Owner’s and the Managers’, in the same order', () => {
   assert.deepEqual(visibleSections('viewer').map(([key]) => key), ['agents', 'account']);
-  assert.deepEqual(visibleSections('contributor').map(([key]) => key), ['company', 'agents', 'knowledge', 'learning', 'models', 'apps', 'routines', 'backup', 'account']);
-  for (const role of ['owner', 'manager']) assert.deepEqual(visibleSections(role).map(([key]) => key), overlaySections.map(([key]) => key), role);
+  assert.deepEqual(visibleSections('contributor').map(([key]) => key), ['company', 'agents', 'knowledge', 'learning', 'models', 'apps', 'routines', 'account']);
+  assert.deepEqual(visibleSections('manager').map(([key]) => key), overlaySections.map(([key]) => key).filter(key => key !== 'backup'));
+  assert.deepEqual(visibleSections('owner').map(([key]) => key), overlaySections.map(([key]) => key));
+});
+
+test('the Owner alone sees Backup (#33)', () => {
+  assert.equal(visibleSections('owner').length, 10);
+  for (const role of ['manager', 'contributor', 'viewer']) {
+    assert.ok(!visibleSections(role).some(([key]) => key === 'backup'), `Backup is the Owner's: ${role}`);
+    assert.notEqual(pickSection('backup', role), 'backup', `a request for Backup falls back: ${role}`);
+  }
+  assert.equal(pickSection('backup', 'owner'), 'backup');
 });
 
 test('a request opens the section asked for only when the person may see it, else their first one', () => {
