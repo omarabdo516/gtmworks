@@ -31,7 +31,7 @@ async function storeFiles(db: Awaited<ReturnType<typeof supabase>>, company: str
  return {files,error:null};
 }
 // "Undo" on a move (#168): the database puts the Card back in the stage and place it left, as the person, and decides
-// every refusal itself. The board says in a toast why it stayed, and changes nothing; no page changes.
+// every refusal itself. The board says in a toast what happened, and is drawn again only when the Card really went back.
 export const undoMove=withActionLog('undoMove',async function undoMove(form: FormData): Promise<{state:'undone',column:string}|{state:'gone'}|{state:'refused'}> {
  const db=await supabase(); const company=String(form.get('company')); const card=Number(form.get('card'));
  if(!await actionAllowed(db,'undoMove',company)) return {state:'refused'};

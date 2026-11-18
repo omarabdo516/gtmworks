@@ -15,5 +15,6 @@ export const chooseWorkMode=withActionLog('chooseWorkMode',async function choose
  if(!await actionAllowed(db,'chooseWorkMode',company)) return t('firstRunFailed');
  const {data:conversation,error}=await db.rpc('choose_work_mode',{c:company,mode});
  if(error) { logActionFailure('chooseWorkMode',error); return t('firstRunFailed'); }
- redirect(conversation?`/c/${slug}/conversations/${conversation}`:`/c/${slug}/chat`);
+ // The workspace's first page says it is ready, once (#169): the flag reaches the page it lands on.
+ redirect(conversation?`/c/${slug}/conversations/${conversation}?first=${mode}`:`/c/${slug}/chat?first=${mode}`);
 });

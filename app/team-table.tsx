@@ -7,6 +7,7 @@ import { inviteeName } from '@/lib/invite.mjs';
 import { inviteRoles } from '@/lib/member-roles.mjs';
 import { SettingsIcon } from './settings-icons';
 import { InviteSection } from './invite-section';
+import { toast } from './toast';
 
 // The Team table (#15, #185, #187; design-reference: teamTableHTML): one row per Member, the main Agent shown to all,
 // and a switch per Agent beside it. Settings, Company and the Team dialog in the account menu draw the same table, so it
@@ -22,13 +23,14 @@ const initial=(name:string)=>name.trim().slice(0,1).toUpperCase()||'?';
 
 // One Member × Agent switch, or one on an invited row, kept with the invitation until the person joins. It turns at
 // once and goes back, with the reason, when the database refuses.
-function AgentSwitch({company,target,agent,on,label,save}:{company:string,target:{member:string}|{invitation:string},agent:string,on:boolean,label:string,save:SaveSwitch}) {
+function AgentSwitch({company,target,agent,agentName,personName,on,label,save}:{company:string,target:{member:string}|{invitation:string},agent:string,agentName:string,personName:string,on:boolean,label:string,save:SaveSwitch}) {
  const {t}=useI18n(); const router=useRouter();
  const [checked,setChecked]=useState(on); const [pending,startTransition]=useTransition(); const [error,setError]=useState('');
  return <><button type="button" className="switch" role="switch" aria-checked={checked} aria-label={label} disabled={pending} onClick={()=>startTransition(async()=>{
   const next=!checked; setChecked(next); setError('');
   const failure=await save(company,target,agent,next);
-  if(failure) { setChecked(!next); setError(failure); } else router.refresh();
+  if(failure) { setChecked(!next); setError(failure); }
+  else { toast(t(next?'settingsAgentShown':'settingsAgentHidden',agentName,personName),{icon:next?'check':'x'}); router.refresh(); }
  })}/>{error&&<span className="set-err" role="alert">{t(error)}</span>}</>;
 }
 
@@ -38,15 +40,15 @@ export function TeamTable({company,members,invitations,agents,allowed,invitedAll
  const others=agents.filter(agent=>!agent.is_default);
  return <><div className="table-wrap"><table className="table ta-table">
   <thead><tr><th scope="col">{t('settingsMember')}</th>{agents.map(agent=><th scope="col" key={agent.id}><span className="ta-ag"><CompanyAgentFace agent={agent} size={24}/><bdi>{agent.name}</bdi></span></th>)}</tr></thead>
-  <tbody>{members.map(member=><tr key={member.person_id}><th scope="row">{who(member)}</th>
+  <tbody>{members.map(member=>{const name=(member.people?.name||t('member')).split(' ')[0]; return <tr key={member.person_id}><th scope="row">{who(member)}</th>
    {agents.length>0&&<td><span className="ta-all">{t('settingsShownToAll')}</span></td>}
    {member.role==='owner'?(others.length>0&&<td colSpan={others.length}><span className="ta-all">{t('settingsOwnerSeesAll')}</span></td>)
-    :others.map(agent=><td key={agent.id}><AgentSwitch company={company} target={{member:member.person_id}} agent={agent.id} on={allowed.has(`${member.person_id}:${agent.id}`)} label={`${member.people?.name||t('member')} · ${agent.name}`} save={save}/></td>)}
-  </tr>)}
+    :others.map(agent=><td key={agent.id}><AgentSwitch company={company} target={{member:member.person_id}} agent={agent.id} agentName={agent.name} personName={name} on={allowed.has(`${member.person_id}:${agent.id}`)} label={`${member.people?.name||t('member')} · ${agent.name}`} save={save}/></td>)}
+  </tr>;})}
   {/* An invited person, drawn as the reference draws a pending one (teamTableHTML: Q.pending). */}
   {invitations.map(invitation=>{const name=inviteeName(invitation.email); return <tr key={invitation.id}><th scope="row"><span className="ta-who"><span className="me__av pp-av" aria-hidden="true">{initial(name)}</span><span className="od-field"><span className="ta-name"><bdi>{name}</bdi></span><span className="ta-role">{t(invitation.role)} · <bdi dir="ltr">{invitation.email}</bdi></span><span className="badge ta-pending"><SettingsIcon name="clock"/>{t('settingsInvitePending')}</span></span></span></th>
    {agents.length>0&&<td><span className="ta-all">{t('settingsShownToAll')}</span></td>}
-   {others.map(agent=><td key={agent.id}><AgentSwitch company={company} target={{invitation:invitation.id}} agent={agent.id} on={invitedAllowed.has(`${invitation.id}:${agent.id}`)} label={`${name} · ${agent.name}`} save={saveInvitation}/></td>)}
+   {others.map(agent=><td key={agent.id}><AgentSwitch company={company} target={{invitation:invitation.id}} agent={agent.id} agentName={agent.name} personName={name} on={invitedAllowed.has(`${invitation.id}:${agent.id}`)} label={`${name} · ${agent.name}`} save={saveInvitation}/></td>)}
   </tr>;})}</tbody></table></div>
  <p className="set-hint ta-hint">{t('settingsTeamHint')}</p>
  {owner&&<InviteSection mode="table" roles={inviteRoles(t)} send={send}/>}</>;

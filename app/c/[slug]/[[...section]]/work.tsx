@@ -40,7 +40,7 @@ export type WorkAction=(form:FormData)=>Promise<void>;
 // "Undo" on a move (#168): the server's answer, and nothing else, decides whether the Card went back.
 type UndoResult={state:'undone',column:string}|{state:'gone'}|{state:'refused'};
 export type UndoMove=(form:FormData)=>Promise<UndoResult>;
-export type WorkProps={workAction:WorkAction,undoMove:UndoMove,me:string,slug:string,company:string,section:string,cardId?:number,stages:Stage[],labels:Label[],cards:Card[],items:Item[],members:Person[],activity:Activity[],creatives:Creative[],versions:Version[],cardLabels:CL[],projects:Project[],assignees:{card_id:number,person_id:string}[],message?:string,approvableIds:number[],agents:{person_id:string,role:string,granted:boolean}[],canCreate:boolean,initialCreating:boolean,attachments:WorkAttachment[],waiting?:WaitingItem[],focus?:'waiting',alone?:boolean,notes?:CardNotes,sheet?:CardSheetData,show?:number,ideaAdded?:boolean,cardAgents?:CardAgent[]};
+export type WorkProps={workAction:WorkAction,undoMove:UndoMove,me:string,slug:string,company:string,section:string,cardId?:number,stages:Stage[],labels:Label[],cards:Card[],items:Item[],members:Person[],activity:Activity[],creatives:Creative[],versions:Version[],cardLabels:CL[],projects:Project[],assignees:{card_id:number,person_id:string}[],message?:string,approvableIds:number[],agents:{person_id:string,role:string,granted:boolean}[],canCreate:boolean,initialCreating:boolean,attachments:WorkAttachment[],waiting?:WaitingItem[],focus?:'waiting',alone?:boolean,notes?:CardNotes,sheet?:CardSheetData,show?:number,ideaAdded?:boolean,ruleDecision?:{approve:boolean,agent:string},cardAgents?:CardAgent[]};
 const emptyKey:Record<string,[string,string]>={waiting:['boardEmptyWaiting','boardEmptyWaitingHint'],ideas:['boardEmptyIdeas','boardEmptyIdeasHint'],planned:['boardEmptyPlanned','boardEmptyPlannedHint'],progress:['boardEmptyProgress','boardEmptyProgressHint'],live:['boardEmptyLive','boardEmptyLiveHint'],done:['boardEmptyDone','']};
 export default function Work(p:WorkProps) { const {workAction,undoMove}=p; const {t,locale,language}=useI18n(); const router=useRouter(); const identities=useAgentIdentities();
  // A change-only form cannot submit before React attaches its handler.
@@ -96,6 +96,13 @@ export default function Work(p:WorkProps) { const {workAction,undoMove}=p; const
  // An idea just added comes back on the board with the card it made (#188): the reference confirms it with a toast,
  // while useShowCard flashes that Card and puts the focus on it.
  useEffect(()=>{ if(p.ideaAdded) toast(t('ideaAdded')); },[p.ideaAdded,t]);
+ // A decided learning suggestion comes back to the board with its outcome in the address (#169): the item has left the
+ // list, and the toast names the Agent it was for. Shown once; a reload does not say it again.
+ useEffect(()=>{ if(!p.ruleDecision) return;
+  toast(t(p.ruleDecision.approve?'waitingRuleDecidedTeamWide':'waitingRuleDecidedDeclined',p.ruleDecision.agent),{icon:p.ruleDecision.approve?'check':'x'});
+  const url=new URL(location.href); url.searchParams.delete('decided'); url.searchParams.delete('agent');
+  history.replaceState(history.state,'',url.pathname+url.search+url.hash);
+ },[p.ruleDecision,t]);
  // A Card is placed where its person drops it, or one place up or down its column with Shift and Up or Down (#174): the
  // column's own order is kept in the database, and a change of place inside one column is not a move to announce.
  const inColumn=(column:string)=>orderColumn(drawnCards.filter(c=>columnOfCard(c)===column),column).map(id=>drawnCards.find(c=>c.id===id)!);

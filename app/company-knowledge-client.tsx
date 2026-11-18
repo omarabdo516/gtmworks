@@ -7,6 +7,7 @@ import { dateFormatter, dayOf } from '@/lib/activity-log.mjs';
 import { madeDay, useZone } from './agent-made';
 import { SettingsIcon } from './settings-icons';
 import { saveCompanyKnowledge } from './company-knowledge-actions';
+import { toast } from './toast';
 
 type KnowledgeOutcome=Awaited<ReturnType<typeof saveCompanyKnowledge>>;
 const saved:KnowledgeOutcome[]=['companyKnowledgeSaved','companyKnowledgeCleared','companyKnowledgeUnchanged'];
@@ -17,17 +18,31 @@ const saved:KnowledgeOutcome[]=['companyKnowledgeSaved','companyKnowledgeCleared
 export default function KnowledgeEditor({company,part,title,body,children}:{company:string,part:string,title:string,body:string,children:ReactNode}) {
  const {t}=useI18n(); const router=useRouter();
  const [draft,setDraft]=useState<string|null>(null); const [error,setError]=useState<KnowledgeOutcome|''>('');
- const [status,setStatus]=useState<KnowledgeOutcome|''>(''); const [pending,startTransition]=useTransition();
+ const [pending,startTransition]=useTransition();
  const editButton=useRef<HTMLButtonElement>(null); const field=useRef<HTMLTextAreaElement>(null); const moved=useRef(false);
- const editing=draft!==null;
+ const editing=draft!==null; const dirty=draft!==null&&draft.trim()!==body.trim();
  useEffect(()=>{ if(moved.current) (editing?field:editButton).current?.focus(); },[editing]);
- const open=()=>{ moved.current=true; setStatus(''); setError(''); setDraft(body); };
+ // A link that would leave the page with the text changed keeps the person here: the reference's sovDirty (#169).
+ useEffect(()=>{
+  if(!dirty) return;
+  const leaving=(event:MouseEvent)=>{
+   const target=event.target instanceof Element?event.target.closest('.sov a[href], #sov-close'):null;
+   if(!target) return;
+   event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation();
+   toast(t('knowSaveOrCancel'));
+   document.getElementById('know-save')?.focus();
+  };
+  document.addEventListener('click',leaving,true);
+  return ()=>document.removeEventListener('click',leaving,true);
+ },[dirty,t]);
+ const open=()=>{ moved.current=true; setError(''); setDraft(body); };
  const close=()=>{ moved.current=true; setError(''); setDraft(null); };
  const save=()=>{ if(draft===null||pending) return; startTransition(async()=>{
   const outcome=await saveCompanyKnowledge(company,part,draft).catch(():KnowledgeOutcome=>'companyKnowledgeFailed');
   if(!saved.includes(outcome)) { setError(outcome); field.current?.focus(); return; }
+  toast(t(outcome,title));
   // The page leaves edit mode together with the text read again, so the old text is never shown in between.
-  startTransition(()=>{ setStatus(outcome); close(); router.refresh(); });
+  startTransition(()=>{ close(); router.refresh(); });
  }); };
  const keys=(event:KeyboardEvent<HTMLElement>)=>{
   if(event.key==='Escape') { event.preventDefault(); close(); }
@@ -48,7 +63,6 @@ export default function KnowledgeEditor({company,part,title,body,children}:{comp
     <button ref={editButton} type="button" className="btn btn--secondary btn--sm" id="know-edit-btn" onClick={open}><SettingsIcon name="pencil"/><span>{t('knowEdit')}</span></button></div>
    {children}
   </>}
-  <p className="set-hint know-status" id="know-status" role="status">{status?t(status,title):null}</p>
  </article>;
 }
 

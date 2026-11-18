@@ -238,7 +238,6 @@
 .gw .sov .know-ul { margin: 0; padding-inline-start: var(--s5); display: grid; gap: var(--s1); list-style: disc; }
 .gw .sov .know-empty { padding: var(--s3) 0 0; border-top: 0.5px solid var(--gw-border-2); }
 .gw .sov .know-ta { min-height: 300px; font-size: var(--gw-fs-msg); }
-.gw .sov .know-status:empty { display: none; }
 
 /* your account */
 .gw .sov .lang-native { display: block; }

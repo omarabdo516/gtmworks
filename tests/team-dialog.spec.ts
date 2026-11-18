@@ -24,7 +24,8 @@ test.beforeAll(({},testInfo)=>{
   delete from public.member_invitations where company_id='${company}';
   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
    ('${lead}','${company}','${id(1)}','Lead','General',true,'team-lead'),
-   ('${ads}','${company}','${id(2)}','Meta Ads','Runs the Meta ads.',false,'team-ads');
+   ('${ads}','${company}','${id(2)}','Meta Ads','Runs the Meta ads.',false,'team-ads')
+  on conflict (id) do nothing;
  end $$;`);
 });
 
@@ -54,13 +55,15 @@ test('the Owner turns a switch in the Team dialog: Settings reads it and the sec
  await expect(toggle).toHaveAttribute('aria-checked','false');
  await expect(page.getByRole('dialog').locator('.ta-table tbody tr').filter({hasText:'Owner'}).getByText('The Owner sees every agent')).toBeVisible();
  await toggle.click();
+ await expect(page.locator('.toast')).toHaveText('Meta Ads now shows for مراجع');
  await expect(toggle).toHaveAttribute('aria-checked','true');
  await expect(toggle).toBeEnabled();
 
  // The same switch in Settings, Company, read after the change.
  await page.goto('/c/rs-learning/settings?section=company');
  const settingsTable=page.getByRole('dialog',{name:'Settings'}).locator('.ta-table');
- await expect(settingsTable.locator('tbody tr').filter({hasText:'مراجع'}).getByRole('switch',{name:'مراجع · Meta Ads'})).toHaveAttribute('aria-checked','true');
+ const inSettings=settingsTable.locator('tbody tr').filter({hasText:'مراجع'}).getByRole('switch',{name:'مراجع · Meta Ads'});
+ await expect(inSettings).toHaveAttribute('aria-checked','true');
 
  // The second Member finds the Agent in their sidebar.
  const context=await browser.newContext(); const member=await context.newPage();
@@ -69,6 +72,11 @@ test('the Owner turns a switch in the Team dialog: Settings reads it and the sec
   await openNavigation(member);
   await expect(names(member)).toHaveText(['Lead','Meta Ads']);
  } finally { await context.close(); }
+
+ // Hidden again, with the same table and the other toast; the Member's sidebar then has Lead alone.
+ await inSettings.click();
+ await expect(page.locator('.toast')).toHaveText('Meta Ads is hidden from مراجع');
+ await expect(inSettings).toHaveAttribute('aria-checked','false');
 });
 
 test('the Owner invites a Member from inside the dialog, its errors shown, and the invitation joins the table',async({page})=>{
@@ -94,6 +102,9 @@ test('the Owner invites a Member from inside the dialog, its errors shown, and t
 });
 
 test('a Manager holds the Team table and can turn a switch, and has no invite button',async({page})=>{
+ // A Manager's table holds the Agents shown to them, as Settings, Company does (hermes_agents_read): Meta Ads is shown
+ // to them here, so its column is theirs to switch for another Member.
+ query(`insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','20000000-0000-0000-0000-000000000002','${ads}') on conflict do nothing`);
  await signIn(page,'manager@example.com','/c/rs-learning/home');
  const {dialog}=await openTeam(page);
  await expect(dialog.locator('.ta-table')).toBeVisible();
@@ -102,6 +113,7 @@ test('a Manager holds the Team table and can turn a switch, and has no invite bu
  const toggle=dialog.locator('.ta-table tbody tr').filter({hasText:'عضو'}).getByRole('switch',{name:'عضو · Meta Ads'});
  await expect(toggle).toHaveAttribute('aria-checked','false');
  await toggle.click();
+ await expect(page.locator('.toast')).toHaveText('Meta Ads now shows for عضو');
  await expect(toggle).toHaveAttribute('aria-checked','true');
  await expect(toggle).toBeEnabled();
 });

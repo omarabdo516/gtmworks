@@ -10,6 +10,7 @@ import { AgentEmptyChat, type EmptyChat } from '@/app/agent-empty-chat';
 import { PrivateLine } from '@/app/private-line';
 import { AgentDetails, HeadPill, useDetailsPanel, type DetailsAgent } from '@/app/agent-details';
 import { OpenedMark } from '@/app/agent-made';
+import { FirstRunToast } from '@/app/first-run-toast';
 import Link from '@/lib/link';
 import type { ReadyRole } from '@/lib/ready-roles';
 import type { AgentDetailsView } from '@/app/agent-details-server';
@@ -25,12 +26,12 @@ const ReadyMade=lazy(()=>import('@/app/ready-made'));
 // write (#189), which `gallery` opens over the chat (?new=ready); leaving it gives the focus back to the composer.
 // `askOf`: the Owners a Manager or a Contributor asks for an Agent instead (#17). In a team, a line at the top says the
 // chat is between this person and the Agent only (#25).
-export default function AgentChat({slug,company,agent,details,writer,team=false,empty={state:'known'},newAgent=false,askOf=null,isNew=false,gallery=null}:{slug:string,company:string,agent:DetailsAgent|null,details:AgentDetailsView|null,writer:boolean,team?:boolean,empty?:EmptyChat,newAgent?:boolean,askOf?:string[]|null,isNew?:boolean,gallery?:{company:string,alone:boolean,roles:ReadyRole[],owner:boolean,owners:string[]}|null}) {
+export default function AgentChat({slug,company,agent,details,writer,team=false,empty={state:'known'},newAgent=false,askOf=null,isNew=false,gallery=null,first}:{slug:string,company:string,agent:DetailsAgent|null,details:AgentDetailsView|null,writer:boolean,team?:boolean,empty?:EmptyChat,newAgent?:boolean,askOf?:string[]|null,isNew?:boolean,gallery?:{company:string,alone:boolean,roles:ReadyRole[],owner:boolean,owners:string[]}|null,first?:'alone'|'team'}) {
  const {t,language}=useI18n(); const router=useRouter(); const [conversation]=useState(newId); const panel=useDetailsPanel();
  const composer=useRef<HTMLDivElement>(null); const picking=!!gallery; const wasPicking=useRef(picking);
  const box=useRef<MessageBoxHandle>(null);
  useEffect(()=>{ if(wasPicking.current&&!picking) composer.current?.querySelector('textarea')?.focus(); wasPicking.current=picking; },[picking]);
- return <div className="convo">
+ return <div className="convo">{first&&agent&&<FirstRunToast mode={first} agent={agent.name}/>}
   <div className="chat">
    <HeadPill panel={panel} agent={agent?.name} face={agent&&<span aria-hidden="true"><CompanyAgentFace agent={agent} size={24}/></span>} title={t('newChat')}/>
    <div className="transcript"><div className="transcript__col">

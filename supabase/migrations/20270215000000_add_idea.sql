@@ -10,7 +10,7 @@ declare result bigint; begin
  if not exists(select 1 from public.work_stages where company_id=c and id=s and kind='ideas') then raise exception 'no Ideas stage'; end if;
  -- An Agent of this Company that this person sees: another Company's is not found, and a hidden one is not found.
  if agent is null or not exists(select 1 from public.hermes_agents h where h.company_id=c and h.id=agent)
-  or not public.agent_visible_to(c,auth.uid(),agent) then raise exception 'agent not found'; end if;
+  or not public.can_see_agent(c,agent) then raise exception 'agent not found'; end if;
  -- The Card's own log row says it was an idea, as the reference's saveIdea logs "added an idea".
  perform set_config('work.idea','yes',true);
  insert into public.work_cards(company_id,stage_id,title,agent_id) values(c,s,card_title,agent) returning id into result;

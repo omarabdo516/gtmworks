@@ -217,7 +217,12 @@ for(const [mode,language] of [['alone','en'],['team','ar']] as const) test(`firs
  await expect(open).toBeDisabled();
  await dialog.getByRole('radio',{name:choiceNames[language][mode==='alone'?0:1]}).check();
  await open.click();
- await expect(page).toHaveURL(new RegExp(`/c/${slug}/conversations/[0-9a-f-]{36}$`));
+ await expect(page).toHaveURL(new RegExp(`/c/${slug}/conversations/[0-9a-f-]{36}(\\?first=${mode})?$`));
+ // The workspace says it is ready, on the page first run lands on (#169), and the one-time flag leaves the address.
+ const ready={alone:{en:'Your workspace is ready: just you and Lead. Tell it what you need an agent for and it makes it',ar:'مساحتك جاهزة: انت وLead بس. قوله محتاج وكيل لإيه وهو يعمله'},
+  team:{en:'The workspace is open · start with Lead and ask it for your first agent',ar:'المساحة مفتوحة · ابدأ مع Lead واطلب منه أول وكيل'}} as const;
+ await expect(page.locator('.toast')).toHaveText(ready[mode][language]);
+ await expect.poll(()=>new URL(page.url()).search).not.toContain('first=');
  expect(workspace(baseURL!)).toEqual([{work_mode:mode,agents:'Lead:true',conversations:1,cards:0}]);
  await expect(page.getByRole('dialog')).toHaveCount(0);
  // One Agent in the list, one chat in the recents, and Lead's first line, which invites asking for an Agent.
