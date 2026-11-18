@@ -312,3 +312,25 @@ test('nothing the request says reaches the server\'s log when a step fails, and 
  assert.ok(failures.includes("logActionFailure('conversation',new Error('Conversation request failed')"),'a failed request is logged as a fixed line');
  for(const failure of failures) assert.match(failure,/^logActionFailure\('conversation',new Error\('[^'`$]*'\)$/,`${failure} logs only fixed text`);
 });
+
+// A delivery that fails after the press logs a fixed label and the error's class or code, never its text: an Engine's
+// or database's message may repeat the request's words.
+test('a choice whose delivery fails after the press logs a fixed line, never the failure\'s text, in a channel and a Conversation',async()=>{
+ const fake=asking();
+ const run=/** @type {string} */(await fake.engineFor({}).start({conversation:'s',input:'Clean up',idempotencyKey:'channel:7'}));
+ const channel=channelDatabases(fake,run);
+ await driveChannelRuns(channel.service,{encryptionKey,engineFor:fake.engineFor});
+ const chat=databases(fake); await start(fake); await close(chat.service,fake);
+ const leaking=Object.assign(new Error(`approval failed for ${secret}`),{code:'XX000'});
+ const lines=/** @type {string[]} */([]); const write=console.error;
+ console.error=(/** @type {unknown[]} */ ...values)=>{ lines.push(values.map(value=>value instanceof Error?`${value.message} ${value.stack}`:String(value)).join(' ')); };
+ try {
+  const later=/** @type {(()=>Promise<void>)[]} */([]);
+  await decideChannelPermission(channel.caller,{rpc:async()=>{ throw leaking; }},{company:'co',channel:'ch',request:1,choice:'once',encryptionKey,engineFor:fake.engineFor,later:deliver=>{ later.push(deliver); }});
+  const {later:chatLater,answered}=pressOf(chat.person,{...chat.service,rpc:async()=>{ throw leaking; }},fake,'once');
+  await answered;
+  for(const deliver of [...later,...chatLater]) await deliver();
+ } finally { console.error=write; }
+ assert.equal(lines.length,2,'each failure was logged');
+ for(const line of lines) { assert.ok(!line.includes(secret),`${line} names the request`); assert.match(line,/^Permission not delivered yet: \S+ (Error|XX000)$/); }
+});
