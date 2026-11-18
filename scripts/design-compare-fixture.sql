@@ -199,8 +199,8 @@ cross join lateral (select id from public.work_stages where company_id='10000000
 on conflict do nothing;
 
 -- Omar's Conversation with Ads whose reply shows the tool calls its Run made (#141; the reference's th-meta, message m3,
--- its four steps and their 41 seconds): his message, Ads's reply, and the Run's steps as the closer seals them. The
--- reference's lines are its own sentences; a built line is the tool's name and the Engine's preview of the call.
+-- its four steps and their 41 seconds): his message and Ads's reply. Its steps are read from the Agent's Hermes session
+-- when the chat opens (#346), and the fixture has no Engine, so this capture shows the reply without them.
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name,created_at)
 values ('62000000-0000-0000-0000-000000000007','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','61000000-0000-0000-0000-000000000002','Ads','2026-11-16T10:12:00Z')
 on conflict (id) do nothing;
@@ -215,11 +215,6 @@ from (values
 ) x(n,author,person_id,agent_id,author_name,body,send_key,at)
 where not exists(select 1 from public.conversation_messages where conversation_id='62000000-0000-0000-0000-000000000007')
 order by x.n;
-insert into public.conversation_run_steps(company_id,conversation_id,run_id,steps,read_to,broken,seconds,sealed_at)
-values ('10000000-0000-0000-0000-000000000001','62000000-0000-0000-0000-000000000007','design-compare-fixture-steps',
- '[{"call":"call-1","tool":"meta_ads","preview":"قرا نتايج آخر 3 حملات للكورس","state":"done"},{"call":"call-2","tool":"meta_ads","preview":"راجع 6 جماهير محفوظة","state":"done"},{"call":"call-3","tool":"ga4","preview":"المبيعات","state":"failed"},{"call":"call-4","tool":"sheets","preview":"توزيع الميزانية على 30 يوم","state":"done"}]',
- 40,false,41,'2026-11-16T10:14:00Z')
-on conflict do nothing;
 
 -- Omar's Conversation with Ads in which its Run stops to ask before it publishes the article (#163; the reference's
 -- th-seo, its pending approval card, worded as there): his message, and the open request its Run waits on, in the

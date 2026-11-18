@@ -20,9 +20,6 @@ insert into public.members (company_id,person_id,role) values
 ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000005','contributor'),
 ('10000000-0000-0000-0000-000000000003','20000000-0000-0000-0000-000000000005','contributor');
 insert into public.role_permissions (company_id,role,permission,allowed) select c.id,r.role,p.permission,case when p.permission in ('approve','reject') then r.role in ('owner','manager') else r.role <> 'viewer' end from public.companies c cross join unnest(enum_range(null::public.member_role)) as r(role) cross join (values ('approve'),('reject'),('edit')) as p(permission);
--- RS Learning's brand voice as the approved reference writes it (design-reference/app.js, KNOW), last edited by the
--- Manager; its other four Company knowledge parts are empty.
-insert into public.company_knowledge(company_id,part,body,edited_by) values ('10000000-0000-0000-0000-000000000001','voice',E'بنكلّم خريج تجارة أو محاسب في أول طريقه زي زميل أكبر منه بسنتين، مش زي مدرّس.\n• إعلانات مصر بالعامية المصرية، وإعلانات الرياض وجدة بلهجة سعودية خفيفة.\n• المقالات بفصحى بسيطة، والعنوان فيه السنة.\n• اسم RS Learning بيتكتب بالإنجليزي دايماً، من غير ترجمة.\n• مفيش علامات تعجب ولا إيموجي في نص الإعلان.\n• نبدأ بالفايدة اللي هتوصل للطالب، وبعدها تفاصيل الكورس.','20000000-0000-0000-0000-000000000002');
 -- Record an example membership change through the same trigger used by the app.
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',false);
 update public.members set grant_publishing=true where company_id='10000000-0000-0000-0000-000000000001' and person_id='20000000-0000-0000-0000-000000000003';

@@ -19,8 +19,7 @@ select json_build_object(
   and not has_column_privilege('authenticated','public.note_runs','run_id','select')
   and not has_column_privilege('authenticated','public.note_runs','reply','select'),
  'lifecycle_service_only',(select bool_and(has_function_privilege('service_role',f,'execute') and not has_function_privilege('authenticated',f,'execute') and not has_function_privilege('anon',f,'execute'))
-  from unnest(array['public.note_runs_due(bigint,bigint)','public.begin_note_start(bigint)','public.answer_note_start(bigint,integer,text)','public.close_note_run(bigint,text,text,text,bigint,bigint)','public.note_run_knowledge(bigint)']) f),
- 'note_runs_get_knowledge',exists(select 1 from pg_trigger where tgrelid='public.note_runs'::regclass and tgname='note_runs_knowledge' and tgenabled='O'),
+  from unnest(array['public.note_runs_due(bigint,bigint)','public.begin_note_start(bigint)','public.answer_note_start(bigint,integer,text)','public.close_note_run(bigint,text,text,text,bigint,bigint)']) f),
  'internals_uncallable',(select bool_and(not has_function_privilege('authenticated',f,'execute') and not has_function_privilege('anon',f,'execute') and not has_function_privilege('service_role',f,'execute'))
   from unnest(array['public.guard_note_edit()','public.stamp_note_time()','public.refuse_note_delete()','public.log_note_edit()','public.mention_at(text,text)','public.note_mentions()']) f),
  'members_edit_and_list',(select bool_and(has_function_privilege('authenticated',f,'execute') and not has_function_privilege('anon',f,'execute'))

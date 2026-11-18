@@ -77,11 +77,11 @@ select public.pinned_run_note('e3000000-0000-0000-0000-000000000001','e4000000-0
 insert into public.conversation_run_notes(conversation_id,send_key,company_id,offers_tools,tools) values ('e3000000-0000-0000-0000-000000000004','e4000000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000001',true,public.lead_tools_spec_89());
 set local role service_role;
 select results_eq($$select public.pin_run(('e3000000-0000-0000-0000-00000000000'||n)::uuid,('e4000000-0000-0000-0000-00000000000'||n)::uuid,current_setting('test.specs')::jsonb) from generate_series(1,4) n order by n$$,
- $$values (jsonb_build_object('tools','[{"name":"save_rule"}]','rules',jsonb_build_array(current_setting('test.rule'),'from now on: answer every comment within the day'))),
-  (jsonb_build_object('tools','[{"name":"save_rule"}]','rules',jsonb_build_array(current_setting('test.rule'),'from now on: answer every comment within the day'))),
-  (jsonb_build_object('tools','[{"name":"suggest_rule"}]','rules',jsonb_build_array(current_setting('test.rule'),'from now on: answer every comment within the day'))),
+ $$values (jsonb_build_object('tools','[{"name":"save_rule"}]','rules','[]'::jsonb)),
+  (jsonb_build_object('tools','[{"name":"save_rule"}]','rules','[]'::jsonb)),
+  (jsonb_build_object('tools','[{"name":"suggest_rule"}]','rules','[]'::jsonb)),
   (jsonb_build_object('tools',current_setting('test.spec89'),'rules','[]'::jsonb))$$,
- 'the Owner''s and the Manager''s runs are offered save_rule, the Contributor''s suggest_rule instead (#25), every run of Ads is told its rules, and a run pinned before keeps what it had');
+ 'the Owner''s and the Manager''s runs are offered save_rule, the Contributor''s suggest_rule instead (#25), no run is told its rules any more (#345: they are in its SOUL.md), and a run pinned before keeps what it had');
 select is(public.pin_run('e3000000-0000-0000-0000-000000000001','e4000000-0000-0000-0000-000000000005',current_setting('test.specs')::jsonb),'{"tools":null,"rules":[]}'::jsonb,
  'a run the previous app version already tried to start keeps the request it sent: its tools as that version pinned them (none here) and no rules');
 reset role;
@@ -90,7 +90,7 @@ update public.agent_rules set removed_at=now(),removed_by='20000000-0000-0000-00
 set local role service_role;
 select is(public.pin_run('e3000000-0000-0000-0000-000000000001','e4000000-0000-0000-0000-000000000005',current_setting('test.specs')::jsonb),'{"tools":null,"rules":[]}'::jsonb,'and its retry reads the same');
 select is(public.pin_run('e3000000-0000-0000-0000-000000000001','e4000000-0000-0000-0000-000000000001',current_setting('test.specs')::jsonb),
- jsonb_build_object('tools','[{"name":"save_rule"}]','rules',jsonb_build_array(current_setting('test.rule'),'from now on: answer every comment within the day')),
+ jsonb_build_object('tools','[{"name":"save_rule"}]','rules','[]'::jsonb),
  'a retry of a run this version pinned sends what it first sent, even after a rule changed');
 reset role;
 update public.agent_rules set removed_at=null,removed_by=null where run_id='rule-run-2';
@@ -151,7 +151,7 @@ select ok((select bool_and(removed_at is not null) from public.agent_rules),'and
 select results_eq($$select actor_id,details->>'agent_name',details->>'rule' from public.company_log where action='agent_rule_removed' order by id$$,
  $$values ('20000000-0000-0000-0000-000000000001'::uuid,'Ads',current_setting('test.rule')),('20000000-0000-0000-0000-000000000002'::uuid,'Ads','from now on: answer every comment within the day')$$,
  'the log has one row per removal: who removed it, the Agent and the rule');
-select is(public.agent_rules_in_force('e2000000-0000-0000-0000-000000000002'),'{}'::text[],'a later run of Ads is told neither');
+select is(public.agent_rules_in_force('e2000000-0000-0000-0000-000000000002'),'{}'::text[],'no run of Ads is told rules');
 
 set local role service_role;
 select is(public.agent_save_rule('e3000000-0000-0000-0000-000000000001','rule-run-1','call-0','x')->>'rule',current_setting('test.first_rule'),'closing the saving run again after the removal brings nothing back');

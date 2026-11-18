@@ -7,6 +7,7 @@ export const startUnknown:{readonly state:'unknown'};
 export function startRun(message:HermesConnection&{input:string,instructions?:string,history?:import('./engine.mjs').HistoryEntry[],sessionKey:string,idempotencyKey:string,retry?:boolean}):Promise<string|null|{readonly state:'unknown'}>;
 export type RunUsage={input:number,output:number};
 export function readRun(run:HermesConnection&{run:string}):Promise<{status:'running'|'completed'|'failed'|'cancelled'|'interrupted'|'lost'|'unreachable',output:string|null,session:string|null,usage:RunUsage|null,question?:import('./engine.mjs').RunQuestion}>;
+export function readSession(connection:import('./engine.mjs').EngineConnection,session:string):Promise<import('./engine.mjs').SessionRead>;
 export function hermesEngine(connection:import('./engine.mjs').EngineConnection):import('./engine.mjs').Engine;
 export type ProfileTools={state:'configured'|'missing'|'refused'|'unreachable'|'failed',toolsets:string[]|null};
 export function provideProfile(connection:import('./engine.mjs').EngineConnection,profile:{name:string,soul:string,config:object,forbidden:string[]}):Promise<ProfileTools>;
@@ -28,6 +29,7 @@ export function cancelAppSignIn(connection:import('./engine.mjs').EngineConnecti
 export function finishAppSignIn(connection:import('./engine.mjs').EngineConnection,signIn:{key:string,flow:string,answer:Record<string,unknown>,settle?:number}):Promise<{state:'approved'|'waiting'|'expired'|'unreachable'|'failed'}>;
 export function disconnectApp(connection:import('./engine.mjs').EngineConnection,key:string):Promise<{state:'disconnected'|'refused'|'unreachable'|'failed'}>;
 export function provideSharedSpace(connection:import('./engine.mjs').EngineConnection,space:{name:string}):Promise<{state:'provided',folder:string}|{state:'refused'|'unreachable'|'failed',folder:null}>;
+export function writeSoulRules(connection:import('./engine.mjs').EngineConnection,change:{profile:string,rules:string[]}):Promise<{state:'unchanged'|'written'|'missing'|'refused'|'unreachable'|'failed'}>;
 export function readSkills(connection:import('./engine.mjs').EngineConnection):Promise<{state:'found',skills:{name:string,shared:boolean}[]}|{state:'refused'|'unreachable'|'failed',skills:null}>;
 export function writeSkill(connection:import('./engine.mjs').EngineConnection,skill:{name:string,content:string}):Promise<{state:'written'|'shared'|'refused'|'unreachable'|'failed'}>;
 export function writeSharedSkill(connection:import('./engine.mjs').EngineConnection,skill:{space:string,name:string,content:string}):Promise<{state:'unchanged'|'written'|'missing'|'refused'|'unreachable'|'failed'}>;

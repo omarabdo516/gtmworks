@@ -5,9 +5,8 @@ select json_build_object(
   and position('can_manage_company' in (select qual from pg_policies where tablename='agent_rules' and policyname='agent_rules_read'))>0,
  'contributor_offered_suggest_rule',position('may_suggest_agent_rules' in pg_get_functiondef('public.run_tools(uuid,uuid,uuid)'::regprocedure))>0
   and position('''contributor''' in pg_get_functiondef('public.may_suggest_agent_rules(uuid,uuid,uuid)'::regprocedure))>0,
- 'runs_told_per_person',position('agent_rules_in_force(held.agent_id,held.person_id)' in pg_get_functiondef('public.pin_run(uuid,uuid,jsonb)'::regprocedure))>0,
- 'private_helpers',(select bool_and(not has_function_privilege(r,'public.may_suggest_agent_rules(uuid,uuid,uuid)','execute')
-   and not has_function_privilege(r,'public.agent_rules_in_force(uuid,uuid)','execute')) from unnest(array['anon','authenticated','service_role']) r),
+ -- No Run is told rules any more, and the per-person list is gone (#345, 20270210000000).
+ 'private_helpers',(select bool_and(not has_function_privilege(r,'public.may_suggest_agent_rules(uuid,uuid,uuid)','execute')) from unnest(array['anon','authenticated','service_role']) r),
  'people_decide',has_function_privilege('authenticated','public.decide_agent_rule(uuid,bigint,boolean)','execute')
   and not has_function_privilege('anon','public.decide_agent_rule(uuid,bigint,boolean)','execute')
   and not has_function_privilege('service_role','public.decide_agent_rule(uuid,bigint,boolean)','execute')

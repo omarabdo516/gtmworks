@@ -3,7 +3,7 @@ import { cache } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { supabaseConfig } from './supabase-config';
-import { readAgentApps, readAgentTools, readCompanyApps } from './company-apps.mjs';
+import { readAgentApps, readAgentSession, readAgentTools, readCompanyApps } from './company-apps.mjs';
 import type { Language } from './i18n.mjs';
 import en from './messages/apps.en.json';
 import ar from './messages/apps.ar.json';
@@ -32,6 +32,11 @@ export const companyAppItems=cache(async(company:string,language:Language):Promi
 // One Agent's apps now, by key, for the connect cards of its Conversations (#203); null when they cannot be read.
 export const agentAppStates=cache(async(company:string,agent:string):Promise<AppStates>=>{
  try { return await readAgentApps(await supabase(),service(),{company,agent,encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY}); } catch { return null; }
+});
+
+// One Agent's Hermes session now, as its turns, for the steps of its Conversation (#346); null when it cannot be read.
+export const agentSessionTurns=cache(async(company:string,agent:string,session:string)=>{
+ try { return await readAgentSession(await supabase(),service(),{company,agent,session,encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY}); } catch { return null; }
 });
 
 // One Agent's connected tools now, each with what it is for in the reader's words, for its details (#204); null when
