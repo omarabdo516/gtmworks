@@ -26,12 +26,13 @@ export function OpenedMark({company,agent}:{company:string,agent:string}) {
 export function AgentMadeToast({company,slug,agent}:{company:string,slug:string,agent:{id:string,name:string}}) {
  const {t}=useI18n(); const router=useRouter();
  useEffect(()=>{
-  let current=true;
+  // The server marks the record as shown when it answers true, so that answer is the only toast this Agent raises: it is
+  // raised even if this effect was cleaned up meanwhile, as React's development double effect cleans it between two asks
+  // (the first answer would otherwise be dropped after the record was already marked).
   void fetch('/api/agent-toast',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({company,agent:agent.id}),cache:'no-store'})
    .then(response=>response.ok?response.json() as Promise<{shown?:boolean}>:null)
-   .then(result=>{ if(current&&result?.shown===true) toast(t('agentMadeToast',agent.name),{action:{label:t('agentMadeOpen',agent.name),run:()=>{ dismissToast(); router.push(`/c/${slug}/chat/${agent.id}`); }}}); })
+   .then(result=>{ if(result?.shown===true) toast(t('agentMadeToast',agent.name),{action:{label:t('agentMadeOpen',agent.name),run:()=>{ dismissToast(); router.push(`/c/${slug}/chat/${agent.id}`); }}}); })
    .catch(()=>{});
-  return ()=>{ current=false; };
  },[company,slug,agent.id,agent.name,t,router]);
  return null;
 }
