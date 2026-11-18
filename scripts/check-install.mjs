@@ -54,9 +54,9 @@ if(seed) {
  }
 }
 // Read back from the Engine's volume: the seed reads what it just wrote, and verify reads the volume a restore put back.
-const soul=await fetch(`http://hermes:9119/api/profiles/${ruleProfile}/soul`,{headers:{Authorization:`Bearer ${process.env.HERMES_API_KEY}`}});
-assert.equal(soul.status,200,'the restored volume holds the Agent profile');
-assert.ok((await soul.json()).content.includes(rule),'the restored volume holds the Agent rule');
+const kept=await engineFor(engine).readAgent(ruleProfile);
+assert.equal(kept.state,'found','the restored volume holds the Agent profile');
+assert.ok(kept.agent.instructions.includes(rule),'the restored volume holds the Agent rule');
 const person=createClient(origin,process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,{auth:{persistSession:false}});
 const {user}=await checked(person.auth.signInWithPassword(credentials));
 assert.equal((await checked(person.from('people').select('name').eq('id',user.id).single())).name,'Restore Person');

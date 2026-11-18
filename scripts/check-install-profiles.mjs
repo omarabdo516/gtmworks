@@ -239,7 +239,7 @@ if(step==='prepare') {
   // A Skill written in the first Company's folder is listed for both of its Agents and for neither of the other's.
   const unique=`install-check-${randomUUID().slice(0,8)}`;
   const placed=await manage(`/api/skills?profile=${encodeURIComponent(first.space)}`,{method:'POST',body:JSON.stringify({name:unique,content:`---\nname: ${unique}\ndescription: The install check's own Skill\n---\nWritten for the install check.\n`})});
-  assert.ok(placed.response.ok&&placed.result?.success===true,'the install check writes its Skill in the first Company\'s folder');
+  assert.ok(placed.ok&&(await placed.json())?.success===true,'the install check writes its Skill in the first Company\'s folder');
   const listsSkill=async profile=>(await (await manage(`/api/skills?profile=${encodeURIComponent(profile)}`)).json()).some(found=>found.name===unique);
   await until(`${unique} listed for both of ${first.profile}'s company's Agents`,async()=>await listsSkill(first.profile)&&await listsSkill(first.secondProfile),180);
   assert.deepEqual([await listsSkill(other.profile),await listsSkill(other.secondProfile)],[false,false],'the other Company\'s Agents list no Skill of the first\'s folder');

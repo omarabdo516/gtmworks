@@ -18,6 +18,10 @@ command -v flock > /dev/null 2>&1 || {
 }
 exec 9>.install.lock
 flock -n 9 || { echo 'Another install is running: wait for it to finish, then run this again.' >&2; exit 1; }
+# shortcut: an installer from before #67 locks with the folder and its owner file, not flock; while one still runs it keeps
+# its folder. Remove this once no install can still run a pre-#67 installer.
+old_pid=; if [ -f .install-lock/owner ]; then read -r _ old_pid _ < .install-lock/owner || true; fi
+case "$old_pid" in ''|*[!0-9]*) ;; *) if kill -0 "$old_pid" 2> /dev/null; then echo 'Another install is running (or remove stale .install-lock).' >&2; exit 1; fi;; esac
 rm -rf .install-lock
 mkdir .install-lock
 resume=no
@@ -111,6 +115,7 @@ elif [ "$operation" = restore ]; then
       # Keep the image UIDs/GIDs and modes instead of resolving owners in this helper.
       tar -xzpf /backup/backup.tgz --numeric-owner -C / var/lib/postgresql/data etc/postgresql-custom var/lib/storage opt/data
     else
+      # An archive from before #349: the Engine volume of this empty install stays as it is.
       find /var/lib/postgresql/data /etc/postgresql-custom /var/lib/storage -mindepth 1 -maxdepth 1 -exec rm -rf {} +
       tar -xzpf /backup/backup.tgz --numeric-owner -C / var/lib/postgresql/data etc/postgresql-custom var/lib/storage
     fi
@@ -118,7 +123,7 @@ elif [ "$operation" = restore ]; then
   mv .env.install.tmp .env.install
   compose up -d --force-recreate --wait --wait-timeout 300
   if [ "$hermes_data" = no ]; then
-    echo "The Agents' Hermes data was not in this backup: their knowledge, rules, skills and memory came back empty."
+    echo "The Agents' Hermes data was not in this backup: their knowledge, rules, skills and memory were not restored."
   fi
   return
 elif [ "$operation" = update ] && [ -n "$release_image" ]; then

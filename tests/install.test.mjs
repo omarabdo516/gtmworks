@@ -515,6 +515,26 @@ test('install.sh holds its lock through flock: a killed run leaves no holder, an
  passes('the lock file a killed run left');
 });
 
+test('install.sh leaves alone the scratch folder of a running installer from before flock, and clears one left by a gone one', t => {
+ const directory=mkdtempSync(join(tmpdir(),'gtmworks-old-lock-'));
+ t.after(()=>rmSync(directory,{recursive:true,force:true}));
+ mkdirSync(join(directory,'scripts'));
+ copyFileSync('scripts/install.sh',join(directory,'scripts/install.sh'));
+ const run=()=>spawnSync('sh',['scripts/install.sh','frobnicate'],{cwd:directory,encoding:'utf8'});
+ // The old installer named its owner as "<boot id> <process> <start time>" in .install-lock/owner.
+ const oldLock=pid=>{ mkdirSync(join(directory,'.install-lock'),{recursive:true}); writeFileSync(join(directory,'.install-lock/owner'),`boot ${pid} 1\n`); writeFileSync(join(directory,'.install-lock/backup.tgz'),'in use'); };
+ oldLock(process.pid);
+ const refused=run();
+ assert.equal(refused.status,1);
+ assert.match(refused.stderr,/Another install is running/);
+ assert.equal(existsSync(join(directory,'.install-lock/backup.tgz')),true,'a running old installer keeps its scratch files');
+ const gone=spawnSync('sh',['-c','echo $$']).stdout.toString().trim();
+ oldLock(gone);
+ const passed=run();
+ assert.match(passed.stderr,/Usage: sh scripts\/install\.sh/);
+ assert.equal(existsSync(join(directory,'.install-lock')),false,'a gone old installer\'s folder is cleared');
+});
+
 // The installer's last probes, run for real: the docker stand-in runs the script install.sh hands to the web container
 // under node, with fetch answering from PROBE_PLAN (the health address's answers in turn, the last one repeated; every
 // other address 200) and the one-second pause recorded instead of waited for.
