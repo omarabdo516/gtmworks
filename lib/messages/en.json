@@ -645,7 +645,6 @@
   "settingsJob": "The job",
   "settingsName": "Name",
   "settingsRole": "Role",
-  "settingsRoleHint": "Shows next to the name in the details and the sidebar, like “Ads agent” or “Analyst”.",
   "settingsMainAgent": "Main agent",
   "settingsIsMain": "{0} is the main agent",
   "settingsIsMainD": "First in the list for every member. To change it, open another agent and press “Make it main”.",
