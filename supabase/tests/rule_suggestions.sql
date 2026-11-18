@@ -194,9 +194,9 @@ insert into public.conversation_run_reservations(conversation_id,send_key,compan
   '20000000-0000-0000-0000-000000000005','e5000000-0000-0000-0000-000000000002','Draft the teaser','suggest-test');
 select public.pinned_run_note('e6000000-0000-0000-0000-000000000005','e7000000-0000-0000-0000-000000000006','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000005');
 set local role service_role;
-select is(public.pin_run('e6000000-0000-0000-0000-000000000005','e7000000-0000-0000-0000-000000000006',current_setting('test.specs')::jsonb)->'rules',
+select is((select rules from public.agent_soul_rules_work() where profile='ag-e5000000000000000000000000000002'),
  jsonb_build_array('From now on, write every Saudi ad in a light Saudi dialect','From now on, send nothing to a customer before I see it','From now on, keep every ad under 90 characters'),
- 'another Member''s next run carries them, after the approved one');
+ 'the Agent''s SOUL.md holds them for everyone, after the approved one (#345: no run carries them)');
 reset role;
 select * from finish();
 rollback;

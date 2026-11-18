@@ -48,7 +48,7 @@ select is(public.agent_rules_in_force('e8000000-0000-0000-0000-000000000012'),'{
 select ok(position('agent_rules_in_force' in pg_get_functiondef('public.pin_run(uuid,uuid,jsonb)'::regprocedure))=0,'a conversation Run pins none');
 -- The record, who reads it and the log stay: company separation on agent_rules is unchanged.
 -- The multi-Company Member, here a Contributor of Aleem only.
-delete from public.members where company_id='10000000-0000-0000-0000-000000000001' and person_id='20000000-0000-0000-0000-000000000005';
+update public.members set removed_at=now() where company_id='10000000-0000-0000-0000-000000000001' and person_id='20000000-0000-0000-0000-000000000005';
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000005',true);
 select is((select count(*)::int from public.agent_rules where company_id='10000000-0000-0000-0000-000000000001'),0,'a person of another Company reads none of these rules');
