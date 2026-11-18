@@ -83,7 +83,7 @@ export type RunStep={tool:string,preview:string|null,state:'started'|'done'|'fai
 export type RunSteps={list:RunStep[],seconds:number|null};
 export type RunStepsRow={run_id:string,steps:(RunStep&{call:string})[],seconds:number|null};
 export const runStepsColumns='run_id,steps,seconds';
-export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided'|'boarded'|'asked'|'answer',to?:string,failed?:boolean,cards?:LeadCard[],saved?:SavedRule[],decided?:Decision,steps?:RunSteps};
+export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided'|'boarded'|'asked'|'answer',to?:string,failed?:boolean,model_refused?:boolean,cards?:LeadCard[],saved?:SavedRule[],decided?:Decision,steps?:RunSteps};
 type StoredMessage=ConversationMessage&{run_id:string,hand_card?:number|null};
 export const messageColumns='id,author,author_name,body,run_id,hand_card,created_at';
 export const conversationColumns='id,agent_id,agent_name,hermes_agents(connection_id,is_default)';
@@ -155,9 +155,9 @@ export const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
 // everything already sent (they start in that order). A started turn is an ordinary message and is not repeated.
 export type StoredNote={id:number,author_name:string,addressed_name:string,body:string,created_at:string};
 // A turn "Done it" queued (#140) names its hand card and is drawn by that card, never as a message.
-export type QueuedTurn={send_key:string,message:string,queued_at:string,started_at:string|null,failed_at:string|null,hand_card?:number|null};
+export type QueuedTurn={send_key:string,message:string,queued_at:string,started_at:string|null,failed_at:string|null,hand_card?:number|null,model_refused?:boolean};
 export const noteColumns='id,author_name,addressed_name,body,created_at';
-export const queuedColumns='send_key,message,queued_at,started_at,failed_at,hand_card';
+export const queuedColumns='send_key,message,queued_at,started_at,failed_at,hand_card,model_refused';
 // A turn "Done it" queued, and the person's message it became, name their hand card (#140): the one test every reader
 // of the record uses, waiting or started.
 export const handTurn=(row:{hand_card?:number|null})=>row.hand_card!=null;
@@ -166,7 +166,7 @@ export const withTeamWork=(record:ConversationMessage[],notes:StoredNote[]=[],qu
  const merged:ConversationMessage[]=[]; const left=[...notes].sort((a,b)=>a.id-b.id);
  for(const message of record) { while(left.length&&left[0].created_at<=message.created_at) merged.push(noteOf(left.shift()!)); merged.push(message); }
  return [...merged,...left.map(noteOf),
-  ...queued.filter(turn=>!turn.started_at&&!handTurn(turn)).map((turn,index)=>({id:index,author:'person' as const,author_name:sender,body:turn.message,created_at:turn.queued_at,kind:'queued' as const,...(turn.failed_at?{failed:true}:{})}))];
+  ...queued.filter(turn=>!turn.started_at&&!handTurn(turn)).map((turn,index)=>({id:index,author:'person' as const,author_name:sender,body:turn.message,created_at:turn.queued_at,kind:'queued' as const,...(turn.failed_at?{failed:true,...(turn.model_refused?{model_refused:true}:{})}:{})}))];
 };
 const noteOf=(note:StoredNote):ConversationMessage=>({id:note.id,author:'person',author_name:note.author_name,body:note.body,created_at:note.created_at,kind:'note',to:note.addressed_name});
 // Waiting turns keep the page asking until they have started and been answered.

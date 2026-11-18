@@ -43,13 +43,16 @@ export function ComposerPlaceProvider({place,children}:{place:ComposerPlace|null
  return <Place value={place}>{children}</Place>;
 }
 export type ModelTarget={company:string,conversation:string,agent:string};
-export function MessageBox({placeholder,label,send,stop,focus=false,call,model,ref}:{placeholder:string,label?:string,send:(text:string,sendKey:string)=>Promise<string|null>,stop?:{label:string,run:()=>Promise<string|null>},focus?:boolean,call?:Callable,model?:ModelTarget,ref?:Ref<MessageBoxHandle>}) {
+export function MessageBox({placeholder,label,send,stop,focus=false,call,model,refused,ref}:{placeholder:string,label?:string,send:(text:string,sendKey:string)=>Promise<string|null>,stop?:{label:string,run:()=>Promise<string|null>},focus?:boolean,call?:Callable,model?:ModelTarget,refused?:{key:string,text:string},ref?:Ref<MessageBoxHandle>}) {
  const {t}=useI18n(); const [text,setText]=useState(''); const [key,setKey]=useState(newId); const [busy,setBusy]=useState(false); const [error,setError]=useState('');
  const seen=useContext(CallableAgents); const callable=call??{people:[],agents:seen};
  // Text typed into the server-drawn box before this code arrived is the person's own: it is kept, and Send sends it.
  const field=useRef<HTMLTextAreaElement>(null);
  useEffect(()=>{ const typed=field.current?.value; if(typed) setText(current=>current||typed); },[]);
  const caret=useRef<number|null>(null);
+ // A waiting message the Engine refused for its model comes back to an empty box with the model line, as a sent one stays.
+ const refusedKey=refused?.key; const refusedText=refused?.text;
+ useEffect(()=>{ if(refusedKey===undefined) return; setText(current=>current||(refusedText??'')); setError('conversationModelRefused'); },[refusedKey,refusedText]);
  useImperativeHandle(ref,()=>({insert(sentence) {
   if(busy) return;
   const next=text.trim()?`${text.trimEnd()}\n${sentence}`:sentence;

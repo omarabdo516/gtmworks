@@ -197,8 +197,10 @@ export function ConversationComposer({company,conversation,record,writer,asked,b
  // A Run waiting on its person's answer is not working (#138): the box keeps its send arrow, as the reference's does.
  const working=record?.asking?null:record?.working; const canStop=record?.canStop;
  const count=(value:number)=>new Intl.NumberFormat(localeFor(language)).format(value);
+ // A waiting message the Engine refused for the Conversation's model (#158) is told as a sent one is, while it is the latest.
+ const last=record?.messages.at(-1); const refused=last?.kind==='queued'&&last.failed&&last.model_refused?{key:`${last.created_at}:${last.body}`,text:last.body}:undefined;
  return <>
-  {writer?<MessageBox ref={box} placeholder={t('writeTo',conversation.agent_name)} model={{company,conversation:conversation.id,agent:conversation.agent_name}} stop={working&&canStop?{label:c('conversationStop',conversation.agent_name),run:async()=>{
+  {writer?<MessageBox ref={box} placeholder={t('writeTo',conversation.agent_name)} model={{company,conversation:conversation.id,agent:conversation.agent_name}} refused={refused} stop={working&&canStop?{label:c('conversationStop',conversation.agent_name),run:async()=>{
    const failure=await postMessage({company,conversation:conversation.id,intent:'stop'});
    if(!failure) asked();
    return failure;

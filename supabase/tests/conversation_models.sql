@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(19);
+select plan(21);
 -- #158. Ads in RS Learning, shown to every Member; one Conversation with Ads each for the Owner (1), the Manager (2), a
 -- Contributor (3) and the Viewer (4), and a second one for the Owner.
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
@@ -13,6 +13,9 @@ insert into public.conversations(id,company_id,person_id,agent_id,agent_name)
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values
  ('e9000000-0000-0000-0000-000000000009','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','e8000000-0000-0000-0000-000000000002','Ads');
 select set_config('test.pick','{"provider":"openrouter","model":"openai/gpt-5.5"}',true);
+-- Two of the Owner's messages waited their turn (conversation_queued_turns), with the keys their Runs are pinned under below.
+insert into public.conversation_queued_turns(conversation_id,send_key,company_id,person_id,agent_id,message)
+ select 'e9000000-0000-0000-0000-000000000001',('ea000000-0000-0000-0000-00000000000'||k)::uuid,'10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','e8000000-0000-0000-0000-000000000002','Draft the offer email' from unnest(array[1,2]) k;
 
 -- Only the Owner picks, and only in their own Conversation.
 set local role authenticated;
@@ -62,6 +65,8 @@ set local role service_role;
 select public.pin_run_model('e9000000-0000-0000-0000-000000000001','ea000000-0000-0000-0000-000000000002');
 select is(public.refuse_run_model('e9000000-0000-0000-0000-000000000001','ea000000-0000-0000-0000-000000000002'),true,'the Engine refused the newest choice');
 reset role;
+select is((select model_refused from public.conversation_queued_turns where conversation_id='e9000000-0000-0000-0000-000000000001' and send_key='ea000000-0000-0000-0000-000000000002'),true,'the waiting turn it was is marked refused for its model, for its sender''s page');
+select is((select model_refused from public.conversation_queued_turns where conversation_id='e9000000-0000-0000-0000-000000000001' and send_key='ea000000-0000-0000-0000-000000000001'),false,'a turn refused when nothing changed is not');
 select is((select model from public.conversations where id='e9000000-0000-0000-0000-000000000001'),current_setting('test.pick')::jsonb,'the Conversation is back on its earlier model');
 set local role service_role;
 select is(public.pin_run_model('e9000000-0000-0000-0000-000000000001','ea000000-0000-0000-0000-000000000002'),current_setting('test.pick')::jsonb,'and the same message sent again carries that one');

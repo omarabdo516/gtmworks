@@ -76,6 +76,23 @@ test('a message whose run the engine no longer knows is marked lost', async () =
  await expect.element(turn.getByText('Lost: the agent engine no longer has this reply.')).toBeVisible();
 });
 
+// #158: a message that waited its turn and was refused by the Engine for the Conversation's model is told as a sent one
+// is, with the model line under the composer and the message back in the box; a turn refused for any other reason
+// keeps its own line by the message, and once a later message follows, the model line has gone.
+for (const [language, line] of [['en', 'The agent engine did not take that model, so this chat stays on the model it had. Your message is still in the box.'], ['ar', 'محرك الوكلاء ماقبلش الموديل ده، فالمحادثة فضلت على الموديل اللي كانت عليه. رسالتك لسه في المربع.']] as const) test(`in ${language} a waiting message the Engine refuses for its model shows the model line under the composer, with the message back in the box`, async () => {
+ const queued = { id: 0, author: 'person' as const, author_name: 'Omar', body: 'Now the email version', created_at: at, kind: 'queued' as const, failed: true };
+ const screen = await render(view(talk([sent, { ...queued, model_refused: true }]), language));
+ await expect.element(screen.getByRole('alert').filter({ hasText: line })).toBeVisible();
+ expect(screen.container.querySelector('.composer-error')?.textContent).toBe(line);
+ await expect.element(screen.getByRole('textbox')).toHaveValue('Now the email version');
+ const other = await render(view(talk([sent, queued]), language));
+ expect(other.container.querySelector('textarea')?.value).toBe('');
+ expect(other.container.querySelector('.composer-error')).toBeNull();
+ const later = await render(view(talk([sent, { ...queued, model_refused: true }, { ...sent, id: 3, body: 'Then the post' }]), language));
+ expect(later.container.querySelector('textarea')?.value).toBe('');
+ expect(later.container.querySelector('.composer-error')).toBeNull();
+});
+
 for (const [language, dir, body, own] of [['en', 'ltr', 'خطة إطلاق الكورس for the Meta campaign', 'rtl'], ['ar', 'rtl', 'Plan the launch week', 'ltr']] as const) test(`in ${dir} the person's turn sits on the end side and the Agent's on the start side, and a message in the other script keeps its own direction`, async () => {
  await page.viewport(1440, 900);
  document.documentElement.dir = dir;
