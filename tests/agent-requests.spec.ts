@@ -132,7 +132,8 @@ test('a Manager and a Contributor ask for an agent from the sidebar; a Viewer ha
   await tile.click();
   await expect(page).toHaveURL(/\/c\/rs-learning\/chat\?new=agent$/);
   await expect(page.locator('.new-hint[role="note"] .new-hint__t')).toHaveText('Tell Lead what you need an agent for, and it prepares the request for عمر.');
-  await expect(page.locator('.new-hint__alt')).toHaveCount(0);
+  // #189: every Member who may write reaches the ready-made gallery from the hint line.
+  await expect(page.locator('.new-hint__alt')).toHaveText('or pick a ready-made one');
   await expect(page.getByRole('textbox',{name:'Message'})).toBeFocused();
   await page.context().clearCookies();
  }
