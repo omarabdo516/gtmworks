@@ -103,7 +103,9 @@ test('a profile reads back each listed setting with its type, choices, default, 
  const fake=await fakeHermes();
  try {
   setup(fake);
-  profileOn(fake,agentProfile(writer),{model:'openrouter/anthropic/claude-opus-4.6',delegation:{model:'openai/gpt-5.5',max_concurrent_children:3,reasoning_effort:'high',api_key:'sk-test-only-should-never-leave'},memory:{memory_enabled:false,memory_char_limit:3000},skills:{write_approval:true},display:{personality:'Warm'},timezone:'Africa/Cairo',stt:{language:'ar'},tts:{speed:1.5}});
+  profileOn(fake,agentProfile(writer),{delegation:{model:'openai/gpt-5.5',max_concurrent_children:3,reasoning_effort:'high',api_key:'sk-test-only-should-never-leave'},memory:{memory_enabled:false,memory_char_limit:3000},skills:{write_approval:true},display:{personality:'Warm'},timezone:'Africa/Cairo',stt:{language:'ar'},tts:{speed:1.5}});
+  // The model is the profile's own, not the config's dict: the profile list answers provider/model (#29).
+  Object.assign(fake.settings.profiles.get(agentProfile(writer)),{provider:'openrouter',model:'anthropic/claude-opus-4.6'});
   const read=await readSettings(connection(fake,agentProfile(writer)));
   assert.equal(read.state,'found',JSON.stringify(read));
   const setting=key=>read.settings.find(found=>found.key===key);

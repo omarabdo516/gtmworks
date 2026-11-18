@@ -25,6 +25,8 @@ const paths = {
  back: <path d="M9 6l6 6-6 6"/>,
  pencil: <><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></>,
  spark: <><path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9L12 17.5l-1.9-5.1L5 10.5l5.1-1.9z"/><path d="M18.5 16.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/></>,
+ play: <path d="M8 5.5v13l10.5-6.5z"/>,
+ stopFill: <rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/>,
 };
 export type SettingsIconName = keyof typeof paths;
 // `forward` points where reading goes (left in Arabic), `back` the other way; English swaps them, as the reference does.

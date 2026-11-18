@@ -17,7 +17,9 @@ let firstField: HTMLElement | null = null;
 
 const emit = () => listeners.forEach(listener => listener());
 const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
-const differs = () => !!state && Object.keys(state.saved).some(key => state!.saved[key] !== state!.draft[key]);
+// A key only the draft holds (a voice picked where none was saved) is a change too.
+const keysOf = (current: DraftState) => [...new Set([...Object.keys(current.saved), ...Object.keys(current.draft)])];
+const differs = () => !!state && keysOf(state).some(key => state!.saved[key] !== state!.draft[key]);
 
 // The page's fields seed the draft with what the server read, once per Agent, each section with its own keys only: a
 // field that arrives later never wipes what another read, and coming back to the same Agent keeps what is saved. A key
@@ -39,6 +41,14 @@ export function seedDraft(agent: string, values: Values) {
  if (changed) { state = { agent, saved, draft }; emit(); }
 }
 
+// The fields whose draft differs from what was saved, as the one object the save bar sends.
+/** @param {string} agent @returns {Values} */
+export function changedValues(agent: string) {
+ const current = state;
+ if (!current || current.agent !== agent) return {};
+ return Object.fromEntries(keysOf(current).filter(key => current.saved[key] !== current.draft[key]).map(key => [key, current.draft[key]]));
+}
+
 /** @param {string} field @param {string} value */
 export function setDraftValue(field: string, value: string) {
  if (!state) return;
@@ -58,10 +68,8 @@ export function restoreDraft() {
 /** @param {Values} saved */
 export function commitDraft(saved: Values) {
  if (!state) return;
- const next = { ...state.saved, ...saved };
- const draft = { ...state.draft };
- for (const key of Object.keys(saved)) draft[key] = saved[key];
- state = { agent: state.agent, saved: next, draft };
+ // A save may carry only the fields that changed: the others keep what they had.
+ state = { agent: state.agent, saved: { ...state.saved, ...saved }, draft: { ...state.draft, ...saved } };
  emit();
 }
 
