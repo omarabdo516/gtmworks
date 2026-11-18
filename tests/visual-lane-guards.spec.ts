@@ -1,5 +1,6 @@
 import { test, expect, type Browser } from '@playwright/test';
-import { blockOutsideRequests, expectDarkContrast, expectDeterministic, expectQuietContrast, fixClock, forgetBlocked } from './visual-lane-guards';
+import { readFileSync } from 'node:fs';
+import { blockOutsideRequests, expectDarkContrast, expectDeterministic, expectQuietContrast, fixClock, fixClockText, forgetBlocked } from './visual-lane-guards';
 
 // Each guard of the visual lane fails on the page it exists for and names why, and a quiet page passes them all. The
 // pages are written in place, so these tests need no app.
@@ -28,6 +29,47 @@ test('a font that fails to load is named', async ({ browser }) => {
 test('a page whose clock is not fixed is refused', async ({ browser }) => {
   const page = await pageOf(browser, '<p>الآن</p>', { clock: false });
   await expect(expectDeterministic(page)).rejects.toThrow(/the page's clock reads \S+, not 2026-06-15T12:00:00\.000Z/);
+});
+
+// The day-group header the log draws (LogDays / useDayName, app/c/[slug]/log/log-client.tsx) names the row's day
+// against the reader's clock, outside any <time>, so a run that crosses midnight would draw another word for the same
+// rows. This is the lane's day text at the seed's own moment and again at 00:01 the day after.
+const seedMoment = new Date('2026-06-15T12:00:00Z');
+const dayAfter = new Date('2026-06-16T00:01:00Z');
+const ar = JSON.parse(readFileSync('lib/messages/ar.json', 'utf8')) as Record<string, string>;
+
+async function pageAt(browser: Browser, time: Date) {
+  const context = await browser.newContext();
+  await blockOutsideRequests(context);
+  await context.clock.setFixedTime(time);
+  return context.newPage();
+}
+
+// The page draws the header with the rule useDayName uses: the row's day against today's, in UTC, Today / Yesterday.
+const dayHeaderPage = () => `<section class="lg-day"><h3 class="lg-day__h"></h3><time>12:00</time></section><script>
+  const day = iso => new Date(iso).toLocaleDateString('en-CA', { timeZone: 'UTC' });
+  const today = day(new Date().toISOString()), row = day('2026-06-15T11:55:00Z');
+  const back = Math.round((Date.parse(today + 'T00:00:00Z') - Date.parse(row + 'T00:00:00Z')) / 86400000);
+  document.querySelector('.lg-day__h').textContent = back === 0 ? ${JSON.stringify(ar.logToday)} : back === 1 ? ${JSON.stringify(ar.logYesterday)} : row;
+</script>`;
+
+test('the day a log header names follows the lane clock, and the clock-text pass fixes it so a run at 00:01 the next day draws the same', async ({ browser }) => {
+  const before = await pageAt(browser, seedMoment);
+  await before.setContent(dayHeaderPage());
+  const after = await pageAt(browser, dayAfter);
+  await after.setContent(dayHeaderPage());
+  try {
+    // The clock is what moves it: the same rows read النهارده at the seed's moment and امبارح at 00:01.
+    await expect(before.locator('.lg-day__h')).toHaveText(ar.logToday);
+    await expect(after.locator('.lg-day__h')).toHaveText(ar.logYesterday);
+    await fixClockText(before);
+    await fixClockText(after);
+    expect(await after.locator('.lg-day__h').textContent()).toBe(await before.locator('.lg-day__h').textContent());
+    expect(await after.locator('body').innerText()).toBe(await before.locator('body').innerText());
+  } finally {
+    await before.context().close();
+    await after.context().close();
+  }
 });
 
 test('a request that leaves the machine is blocked and named', async ({ browser }) => {
