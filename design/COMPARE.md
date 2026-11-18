@@ -83,6 +83,8 @@ The prototype has no URL routes. Its sidebar switches between four views (`data-
 | `hand-card` | Sidebar, the team chat (`th-team`), message `t10`: the hand card, the article to publish on WordPress, open, built in the fixture's chat with Ads (SEO & Content keeps no chat for `new-agent-empty`) (#139) | none (a uuid path; with the fixture pass `--built-path /c/rs-learning/conversations/62000000-0000-0000-0000-000000000006`) |
 | `connect-card` | Sidebar, the weekly report chat (`th-report`), message `r1`: the card asking to connect an app, open, built in the fixture's chat with Analyst, which asks for Amplitude since GA4 is not on gtmworks's list (#203) | none (a uuid path; with the fixture pass `--built-path /c/rs-learning/conversations/62000000-0000-0000-0000-000000000009`) |
 | `permission-card` | Sidebar, the SEO article chat (`th-seo`): the approval card to publish the article on the academy website, waiting, built in the fixture's chat with Ads (#163) | none (a uuid path; with the fixture pass `--built-path /c/rs-learning/conversations/62000000-0000-0000-0000-000000000008`) |
+| `permission-waiting` | Sidebar, Marketing board, scrolled to the SEO article's card waiting on Omar's OK to publish (`c-seo`): the reference's "Waiting on you" for a request an Agent's Run waits on (#165) | `/c/rs-learning/approvals`, scrolled to its permission item (needs the fixture's waiting request, #163) |
+| `permission-channel` | Sidebar, the SEO article chat (`th-seo`): the approval card, waiting. The reference draws a request only in a chat, so a channel's request is compared with it (#165) | none (pass `--built-path /c/rs-learning/channels/<id>` of a channel in which the signed-in Member called an Agent whose Run waits on their OK) |
 | `run-steps` | Sidebar, the Meta campaign chat (`th-meta`): Ads's reply with "Used 4 tools · 41 sec" pressed open, its four steps, one skipped (#141) | none (a uuid path; with the fixture pass `--built-path /c/rs-learning/conversations/62000000-0000-0000-0000-000000000007`; the steps are pressed open on both) |
 | `made-agent` | Settings, Agents, Ads: the page of an Agent Lead made, with when and at whose request, and the rules it was told (#18) | `/c/rs-learning/settings?agent=61000000-0000-0000-0000-000000000002` (the fixture's Ads) |
 | `rule-saved` | Sidebar, the chat in which Omar told Ads a lasting rule (`th-rule-ads`), with the saved line under Ads's reply (#18) | none (a uuid path; with the fixture pass `--built-path /c/rs-learning/conversations/62000000-0000-0000-0000-000000000003`) |
@@ -151,6 +153,8 @@ gh workflow run design-compare.yml --ref <branch> -f screen=question-card -f fix
 gh workflow run design-compare.yml --ref <branch> -f screen=hand-card -f fixture=true -f built_path=/c/rs-learning/conversations/62000000-0000-0000-0000-000000000006
 # The request Ads's Run waits on, to publish the article, waiting on Omar's OK (#163)
 gh workflow run design-compare.yml --ref <branch> -f screen=permission-card -f fixture=true -f built_path=/c/rs-learning/conversations/62000000-0000-0000-0000-000000000008
+# The same request as an item in Omar's "Waiting on you", against the reference's board card waiting on his OK (#165)
+gh workflow run design-compare.yml --ref <branch> -f screen=permission-waiting -f fixture=true
 # Analyst's card asking Omar to connect an app for the weekly report (#203)
 gh workflow run design-compare.yml --ref <branch> -f screen=connect-card -f fixture=true -f built_path=/c/rs-learning/conversations/62000000-0000-0000-0000-000000000009
 ```

@@ -132,6 +132,14 @@ export const screens = {
   // #163. The SEO article chat (th-seo): the approval card to publish the article, waiting. Built: the fixture's
   // permissionConversation (pass --built-path).
   'permission-card': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-seo"]' }, { waitFor: '[data-action="approve"]' }, { scrollTo: '.card__actions' }] }, builtPath: null },
+  // #165. "Waiting on you" with the request Ads's Run waits on: the reference's board, its card waiting on Omar's OK to
+  // publish the SEO article (c-seo); built, Approvals with the fixture's permissionConversation's request as its item.
+  'permission-waiting': { reference: { steps: [...board, { waitFor: '.kcard[data-card="c-seo"]' }, { scrollTo: '.kcard[data-card="c-seo"]' }] }, builtPath: '/c/rs-learning/approvals',
+   builtSteps: [{ waitFor: 'a.mcard[data-kind="permission"]' }, { scrollTo: 'a.mcard[data-kind="permission"]' }] },
+  // #165. A request in a channel, under the Agent's turn. The reference draws a request only in a chat, so it is the
+  // th-seo card as permission-card's. Built: a channel whose Agent's Run waits on the signed-in Member (pass --built-path).
+  'permission-channel': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-seo"]' }, { waitFor: '[data-action="approve"]' }, { scrollTo: '.card__actions' }] }, builtPath: null,
+   builtSteps: [{ waitFor: '[id^="permission-"] .card__actions' }, { scrollTo: '[id^="permission-"] .card__actions' }] },
   // #203. The weekly report chat (th-report): Analyst's reply with the card asking to connect an app, open. Built: the
   // fixture's connectConversation (pass --built-path).
   'connect-card': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-report"]' }, { waitFor: '[data-action="connect"]' }, { scrollTo: '.card__actions' }] }, builtPath: null },
