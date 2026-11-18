@@ -112,7 +112,7 @@ $$;
 revoke all on function public.handovers_due(uuid,bigint) from public,anon,authenticated;
 grant execute on function public.handovers_due(uuid,bigint) to service_role;
 
--- One leg's start: what to send, on which profile, in the Conversation's session, and which attempt of the leg it is.
+-- One leg's start: what to send, on which profile, in which session (the target's own for this chat, Lead's for the follow-up), and which attempt of the leg it is.
 -- A target Run is never started on a profile the Company may not use, and a leg whose target has no profile at all is
 -- finished as failed, so Lead is still told. Given up: never started after ten minutes, a start whose answer was lost
 -- after a day (ADR 0015).
@@ -145,7 +145,9 @@ begin
    || E'\n\nThe job:\n' || r.goal
    || coalesce(E'\n\nWhat Lead knows about the job:\n' || r.context,'')
    || E'\n\nDo the job now. Reply with your result for Lead: what you did, what you found and anything Lead must tell the person. Do not ask anyone a question: nobody but Lead reads this chat.';
-  return query select 'waiting'::text, r.target_attempts, r.company_id, target.profile, r.conversation_id, asking, target.instructions;
+  -- The target works in a session of its own for this chat, never Lead's: an Agent on the Company's profile shares
+  -- Lead's profile, and Lead's session holds only what Lead was told.
+  return query select 'waiting'::text, r.target_attempts, r.company_id, target.profile, md5(r.conversation_id::text||':'||r.to_agent::text)::uuid, asking, target.instructions;
   return;
  end if;
 

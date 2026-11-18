@@ -11,6 +11,7 @@ const hermes={address:'http://hermes:8642',key:'test-only-key'};
 const leadProfile='co-10000000000000000000000000000001';
 const targetProfile='ag-01000000000000000000000000000001';
 const conversation='c1000000-0000-0000-0000-000000000001';
+const targetSession='d1000000-0000-0000-0000-000000000001';
 
 /** The one handover as the database keeps it, and what the driver asked of it. */
 function handover(overrides = {}) {
@@ -29,7 +30,7 @@ function handover(overrides = {}) {
     profile:row.state==='waiting'||row.state==='target'?targetProfile:leadProfile,
     attempt:row.state==='returning'?row.return_attempts:row.target_attempts}]);
    if(name==='begin_handover') {
-    if(row.state==='waiting') { row.target_attempts+=1; return ok([{state:'waiting',attempt:row.target_attempts,company:'10000000-0000-0000-0000-000000000001',profile:targetProfile,session:conversation,input:input(),instructions:'Run the Meta ads.'}]); }
+    if(row.state==='waiting') { row.target_attempts+=1; return ok([{state:'waiting',attempt:row.target_attempts,company:'10000000-0000-0000-0000-000000000001',profile:targetProfile,session:targetSession,input:input(),instructions:'Run the Meta ads.'}]); }
     if(row.state==='returning') { row.return_attempts+=1; return ok([{state:'returning',attempt:row.return_attempts,company:'10000000-0000-0000-0000-000000000001',profile:leadProfile,session:conversation,input:input(),instructions:'Lead the team.'}]); }
     return ok([]);
    }
@@ -73,7 +74,7 @@ test('Lead\'s handover runs the job on the target\'s own profile with no tools, 
 
  const targetRuns=target.runs.filter(run=>run.key===`handover:${row.id}:target`);
  assert.equal(targetRuns.length,1,'the Target runs once');
- assert.equal(targetRuns[0].conversation,conversation,'in the conversation\'s session, so both Agents work on the same chat');
+ assert.equal(targetRuns[0].conversation,targetSession,'in a session of its own for this chat, never Lead\'s');
  assert.deepEqual(targetRuns[0].tools,[],'the Target is offered no gtmworks tools: it cannot ask, write shared memory, schedule work or hand on');
  assert.equal(targetRuns[0].instructions,null,'its instructions are its own profile\'s soul, never the Company\'s Agent instructions');
  assert.match(targetRuns[0].input,/Plan the Meta ads for the March intake/);

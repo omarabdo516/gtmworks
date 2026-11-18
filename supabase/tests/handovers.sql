@@ -71,7 +71,7 @@ reset role;
 create temporary table begun as select * from public.begin_handover((select id from public.agent_handovers where run_id='run-owner'));
 select is((select count(*)::int from public.handovers_due(null,0) where id=(select id from public.agent_handovers where run_id='run-owner')),0,'the handover that began is no longer due');
 select is((select state||':'||attempt from public.handovers_due(null,0) where conversation='c3170000-0000-0000-0000-000000000003' limit 1),'waiting:0','another kept handover waits for the worker');
-select is((select profile||':'||session||':'||instructions from begun),'ag-a3170000000000000000000000000012:c3170000-0000-0000-0000-000000000001:Run the Meta ads.','the target''s own profile, the Conversation''s session, and its own instructions');
+select is((select profile||':'||session||':'||instructions from begun),'ag-a3170000000000000000000000000012:'||md5('c3170000-0000-0000-0000-000000000001:'||(select to_agent from public.agent_handovers where run_id='run-owner'))::uuid||':Run the Meta ads.','the target''s own profile, a session of its own for this chat, and its own instructions');
 select is((select attempt from begun),1,'the first attempt of the target''s Run');
 select is((select input from begun) like '%Plan the Meta ads for the March intake%' and (select input from begun) like '%EGP 9,000 for 30 days.%',true,'the job and its context go with it');
 select is((select count(*)::int from public.begin_handover((select id from public.agent_handovers where run_id='run-owner'))),0,'nor does it start again within thirty seconds');

@@ -773,7 +773,7 @@
 }
 .gw .handed__faces { display: inline-flex; align-items: center; gap: 2px; flex: none; color: var(--gw-text-3); }
 .gw .handed__arrow { width: 12px; height: 12px; }
-.gw .handed__t { color: var(--gw-text-1); font-weight: 600; }
+.gw .handed__t bdi { color: var(--gw-text-1); font-weight: 600; }
 .gw .handed__d { color: var(--gw-text-3); overflow-wrap: anywhere; }
 .gw .handed__d::before { content: "·"; margin-inline-end: 6px; }
 [dir="ltr"] .gw .handed__t { unicode-bidi: plaintext; }
