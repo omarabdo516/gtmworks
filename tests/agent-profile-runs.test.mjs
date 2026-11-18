@@ -46,8 +46,6 @@ async function engineServer(profile) {
  return fake;
 }
 const send=({db,service})=>sendMessage(db,service,{company,conversation:'c',sendKey:'k',message:'Draft the offer email',encryptionKey});
-/** @param {string} sent @param {string[]} texts */
-const inOrder=(sent,texts)=>texts.every((text,n)=>sent.includes(text)&&(n===0||sent.indexOf(texts[n-1])<sent.indexOf(text)));
 const starts=fake=>fake.settings.requests.filter(request=>request.method==='POST');
 
 test('a message to an Agent on its own profile starts there without its instructions, and its retry sends the same body',async()=>{
