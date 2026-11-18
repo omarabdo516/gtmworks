@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(23);
+select plan(25);
 -- #165. Ads in RS Learning, shown to the Manager (2), the Contributors (3, 5) and the Viewer (4); the Owner (1) sees every
 -- Agent. Each of them has one Conversation with Ads, and in it the message of one Run that asks to be allowed an action.
 -- Contributor 3's chat has a Card on the board. Karim is a Manager of Aleem only. In the general channel Contributor 3
@@ -160,6 +160,14 @@ reset role;
 set local role service_role;
 select is(public.track_channel_permission(current_setting('test.called')::bigint,'c-run-'||current_setting('test.called'),current_setting('test.asking')::jsonb,false,'2026-06-10T10:18:00Z'),
  jsonb_build_array(jsonb_build_object('card',current_setting('test.ch1')::bigint,'permission','a1','choice','once')),'the closer is handed the claim to deliver');
+-- One closer at a time (the press's own delivery, the channel's read, the worker), as in a Conversation.
+select is(public.track_channel_permission(current_setting('test.called')::bigint,'c-run-'||current_setting('test.called'),current_setting('test.asking')::jsonb,false,'2026-06-10T10:18:00Z'),
+ '[]'::jsonb,'a second closer is not handed the claim another closer is delivering');
+reset role;
+update public.channel_permissions set delivering_at=now()-interval '16 seconds' where id=current_setting('test.ch1')::bigint;
+set local role service_role;
+select is(public.track_channel_permission(current_setting('test.called')::bigint,'c-run-'||current_setting('test.called'),current_setting('test.asking')::jsonb,false,'2026-06-10T10:18:00Z'),
+ jsonb_build_array(jsonb_build_object('card',current_setting('test.ch1')::bigint,'permission','a1','choice','once')),'a claim whose closer went quiet is handed over again');
 select public.settle_channel_permission(current_setting('test.ch1')::bigint,'decided');
 select public.close_channel_run(current_setting('test.other')::bigint,'c-run-'||current_setting('test.other'),'stopped',null,null,null);
 reset role;

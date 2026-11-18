@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(39);
+select plan(41);
 -- #163. Ads in RS Learning on its own profile in the Engine (ADR 0016), shown to the Manager (2), the Contributors (3, 5)
 -- and the Viewer (4); the Owner (1) sees every Agent. One Conversation with Ads each, and in it the message of one Run.
 -- Copy sits on a profile it shares, in one Conversation of the Owner's (6). Karim is a Manager of Aleem only.
@@ -115,6 +115,15 @@ select results_eq($$select conversation_id,state,content->>'choice',decided_by f
 set local role service_role;
 select is(public.track_run_permission('e2000000-0000-0000-0000-000000000003','p-run-3',current_setting('test.asking')::jsonb,false,'2026-06-10T10:16:00Z'),
  jsonb_build_array(jsonb_build_object('card',current_setting('test.card3')::bigint,'permission','a1','choice','once')),'the next read hands over the claim to deliver');
+-- One closer at a time (the press's own delivery, the page's read, the worker): a read while the claim is handed over gets
+-- nothing, and one after its 15 seconds gets it again, as a closer that died would.
+select is(public.track_run_permission('e2000000-0000-0000-0000-000000000003','p-run-3',current_setting('test.asking')::jsonb,false,'2026-06-10T10:16:00Z'),
+ '[]'::jsonb,'a second closer is not handed the claim another closer is delivering');
+reset role;
+update public.reply_cards set delivering_at=now()-interval '16 seconds' where id=current_setting('test.card3')::bigint;
+set local role service_role;
+select is(public.track_run_permission('e2000000-0000-0000-0000-000000000003','p-run-3',current_setting('test.asking')::jsonb,false,'2026-06-10T10:16:00Z'),
+ jsonb_build_array(jsonb_build_object('card',current_setting('test.card3')::bigint,'permission','a1','choice','once')),'a claim whose closer went quiet is handed over again');
 select results_eq($$values (public.settle_permission(current_setting('test.card3')::bigint,'decided')),(public.settle_permission(current_setting('test.card3')::bigint,'closed')),
   (public.settle_permission(current_setting('test.card2')::bigint,'closed'))$$,
  $$values ('decided'),('decided'),('closed')$$,'the Engine took one choice, and a later verdict does not change it; the other was no longer waited for and is closed');
