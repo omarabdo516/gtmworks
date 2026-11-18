@@ -98,6 +98,8 @@ test('a Manager fills an empty part, cancels and saves with the keyboard, then c
  await openEditor(part);
  await page.keyboard.press('Control+s');
  await expect(page.locator('.toast')).toHaveText('Nothing changed.');
+ // The toast comes before the editor closes with the text read again; the next edit waits for it to close.
+ await expect(part.locator('#know-edit')).toHaveCount(0);
  expect(logged('audience')).toEqual([{part:'audience',cleared:false}]);
 
  // Saved empty, the part is cleared and shows its empty state again.

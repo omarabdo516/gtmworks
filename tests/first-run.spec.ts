@@ -203,8 +203,9 @@ for(const [mode,language] of [['alone','en'],['team','ar']] as const) test(`firs
  await page.getByRole('button',{name:/^(Create and sign in|إنشاء وتسجيل الدخول)$/}).click();
  await expect(page).toHaveURL(/\/c\/first-company-[a-f0-9]{8}\/home$/);
  const slug=new URL(page.url()).pathname.split('/')[2];
- const dialog=page.getByRole('dialog',{name:question[language]});
- await expect(dialog).toBeVisible();
+ await expect(page.getByRole('dialog',{name:question[language]})).toBeVisible();
+ // Step 2 names the dialog by its own title (aria-labelledby fr-title), so it is held as the page's one dialog.
+ const dialog=page.getByRole('dialog');
  // Exactly two choices and no other question; nothing is stored until one is picked.
  await expect(dialog.getByRole('radio')).toHaveCount(2);
  for(const [index,name] of choiceNames[language].entries()) await expect(dialog.getByRole('radio').nth(index)).toHaveAccessibleName(name);
@@ -277,8 +278,9 @@ const invitedLog=(baseURL:string)=>localQuery(`select details->>'email' email, d
 test('"Open the workspace" with two filled rows makes two invitations with their Roles and two log rows, saves team, and lands in the Owner\'s Conversation with Lead; the mailbox holds both emails (#186)',async({page,baseURL})=>{
  const stamp=Date.now(), first=`nour-${stamp}@example.com`, second=`karim-${stamp}@example.com`;
  const slug=await newOwner(page);
- const dialog=page.getByRole('dialog',{name:question.en});
- await expect(dialog).toBeVisible();
+ await expect(page.getByRole('dialog',{name:question.en})).toBeVisible();
+ // Step 2 names the dialog by its own title (aria-labelledby fr-title), so it is held as the page's one dialog.
+ const dialog=page.getByRole('dialog');
  expect(workspace(baseURL!)).toEqual([{work_mode:null,agents:null,conversations:0,cards:0}]);
  expect(workerAddsLead(baseURL!)).toEqual([{attached:true}]);
  await page.reload();
@@ -304,8 +306,9 @@ test('"Open the workspace" with two filled rows makes two invitations with their
 
 test('"Back" and Escape return to the question with the team chosen and nothing saved; "Skip" saves team with no invitation (#186)',async({page,baseURL})=>{
  const slug=await newOwner(page);
- const dialog=page.getByRole('dialog',{name:question.en});
- await expect(dialog).toBeVisible();
+ await expect(page.getByRole('dialog',{name:question.en})).toBeVisible();
+ // Step 2 names the dialog by its own title (aria-labelledby fr-title), so it is held as the page's one dialog.
+ const dialog=page.getByRole('dialog');
  expect(workerAddsLead(baseURL!)).toEqual([{attached:true}]);
  await page.reload();
 
