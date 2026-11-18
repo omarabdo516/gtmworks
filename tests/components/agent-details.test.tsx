@@ -114,8 +114,8 @@ test('the arrow keys move from the tab that has the focus, so a press that lands
  // A press has moved the focus on to Files while the panel has not drawn that change yet, so the state still says Tasks.
  await act(async () => { (tab('Files').element() as HTMLElement).focus(); });
  await userEvent.keyboard('{ArrowRight}');
- await expect.element(tab('Log')).toHaveAttribute('aria-selected', 'true');
- await expect.element(tab('Log')).toHaveFocus();
+ await expect.element(tab('Memory')).toHaveAttribute('aria-selected', 'true');
+ await expect.element(tab('Memory')).toHaveFocus();
  await userEvent.keyboard('{ArrowLeft}');
  await expect.element(tab('Files')).toHaveAttribute('aria-selected', 'true');
  await expect.element(tab('Files')).toHaveFocus();
