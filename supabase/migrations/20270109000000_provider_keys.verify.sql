@@ -5,7 +5,7 @@ select json_build_object(
  'profiles_signed_in_only',has_function_privilege('authenticated','public.company_key_profiles(uuid)','execute')
   and not has_function_privilege('anon','public.company_key_profiles(uuid)','execute') and not has_function_privilege('service_role','public.company_key_profiles(uuid)','execute'),
  'profiles_members_only',position('is_member(c)' in pg_get_functiondef('public.company_key_profiles(uuid)'::regprocedure))>0
-  and position('is_bundled_connection' in pg_get_functiondef('public.company_key_profiles(uuid)'::regprocedure))>0,
+  and position('company_profiles' in pg_get_functiondef('public.company_key_profiles(uuid)'::regprocedure))>0,
  'record_signed_in_only',has_function_privilege('authenticated','public.record_provider_key_change(uuid,text,boolean)','execute')
   and not has_function_privilege('anon','public.record_provider_key_change(uuid,text,boolean)','execute')
   and not has_function_privilege('service_role','public.record_provider_key_change(uuid,text,boolean)','execute'),

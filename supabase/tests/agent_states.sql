@@ -4,14 +4,11 @@ select plan(8);
 -- RS Learning with Lead (main, idle), Ads and SEO; Aleem's Lead is another Company's. Ads and SEO each have an open Run
 -- in the Owner's Conversation and a Card with an item waiting on the Owner. The Contributor (…03) and the Viewer (…04)
 -- are shown Ads and not SEO, and SEO's Card also waits on the Contributor.
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state)
- select ('f1840000-0000-0000-0000-00000000000'||n)::uuid,case when n=4 then '10000000-0000-0000-0000-000000000003' else '10000000-0000-0000-0000-000000000001' end::uuid,
-  '20000000-0000-0000-0000-000000000001','http://localhost','states-'||n,'ciphertext','connected' from generate_series(1,4) n;
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values
- ('a1840000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','f1840000-0000-0000-0000-000000000001','Lead','General',true),
- ('a1840000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','f1840000-0000-0000-0000-000000000002','Ads','Ads',false),
- ('a1840000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','f1840000-0000-0000-0000-000000000003','SEO','SEO',false),
- ('a1840000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000003','f1840000-0000-0000-0000-000000000004','Lead','General',true);
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
+ ('a1840000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','f1840000-0000-0000-0000-000000000001','Lead','General',true,'default'),
+ ('a1840000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','f1840000-0000-0000-0000-000000000002','Ads','Ads',false,'default'),
+ ('a1840000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','f1840000-0000-0000-0000-000000000003','SEO','SEO',false,'default'),
+ ('a1840000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000003','f1840000-0000-0000-0000-000000000004','Lead','General',true,'default');
 insert into public.member_agent_access(company_id,person_id,agent_id) values
  ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','a1840000-0000-0000-0000-000000000002'),
  ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000004','a1840000-0000-0000-0000-000000000002');

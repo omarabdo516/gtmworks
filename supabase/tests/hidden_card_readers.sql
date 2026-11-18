@@ -5,10 +5,8 @@ select plan(10);
 -- Viewer, and hidden from the second Contributor (…05) and from the Writer agent (30…01), which is
 -- is assigned the Card. Each function that reads Cards as its owner answers for this Card, to a caller Ads is hidden
 -- from, exactly as for a Card that does not exist, and works on it once Ads is shown.
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values
- ('c2280000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9/p/ads','hidden-cards-ads','no-key','unreachable');
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values
- ('a2280000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','c2280000-0000-0000-0000-000000000001','Ads','Runs the Meta ads.',false);
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
+ ('a2280000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','c2280000-0000-0000-0000-000000000001','Ads','Runs the Meta ads.',false,'hidden-cards-ads');
 insert into public.member_agent_access(company_id,person_id,agent_id)
  select '10000000-0000-0000-0000-000000000001',p,'a2280000-0000-0000-0000-000000000001'
  from unnest(array['20000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000003','20000000-0000-0000-0000-000000000004']::uuid[]) p;

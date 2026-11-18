@@ -6,9 +6,9 @@ select json_build_object(
   and not has_table_privilege('authenticated','public.company_log','delete') and not has_table_privilege('authenticated','public.company_log','truncate')
   and not has_table_privilege('service_role','public.company_log','delete') and not has_table_privilege('service_role','public.company_log','update')
   and not has_table_privilege('anon','public.company_log','select'),
- 'copying_triggers',(select count(*) from pg_trigger where tgname in ('work_activity_company_log','work_comments_company_log','member_audit_company_log','hermes_agent_audit_company_log'))=4,
+ 'copying_triggers',(select count(*) from pg_trigger where tgname in ('work_activity_company_log','work_comments_company_log','member_audit_company_log'))=3,
  'functions_closed',not exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public'
-  and p.proname in ('refuse_log_change','log_actor_kind','log_member_details','log_member_action','log_agent_action','log_card_activity','log_card_comment','log_member_change','log_agent_change')
+  and p.proname in ('refuse_log_change','log_actor_kind','log_member_details','log_member_action','log_agent_action','log_card_activity','log_card_comment','log_member_change','log_agent_event')
   and (has_function_privilege('anon',p.oid,'execute') or has_function_privilege('authenticated',p.oid,'execute'))),
  -- Every Card comment is in the log as a note, with its original author, time and text.
  'comments_migrated',not exists(select 1 from public.work_comments c where not exists(select 1 from public.company_log l where l.source='work_comments' and l.source_id=c.id
@@ -19,6 +19,7 @@ select json_build_object(
  'comments_logged_once',not exists(select 1 from public.company_log l join public.work_activity a on l.source='work_activity' and l.source_id=a.id where a.action='comment_added'),
  'member_changes_migrated',not exists(select 1 from public.member_audit m where not exists(select 1 from public.company_log l where l.source='member_audit' and l.source_id=m.id
   and l.company_id=m.company_id and l.person_id=m.person_id and l.actor_id is not distinct from m.actor_id and l.created_at=m.created_at)),
- 'agent_changes_migrated',not exists(select 1 from public.hermes_agent_audit h where not exists(select 1 from public.company_log l where l.source='hermes_agent_audit' and l.source_id=h.id
-  and l.company_id=h.company_id and l.agent_id=h.agent_id and l.actor_id=h.actor_id and l.created_at=h.created_at))
+ -- The Agent audit table was dropped with #342 (20270213000000): its rows stay in the log under their source, and an
+ -- Agent change is written there directly.
+ 'agent_changes_logged',to_regprocedure('public.log_agent_event(uuid,uuid,text,uuid,text,jsonb)') is not null
 );

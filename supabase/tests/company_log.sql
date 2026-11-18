@@ -3,9 +3,6 @@ create extension if not exists pgtap with schema extensions;
 select plan(20);
 -- One log for the Company (#11). Seed people: Omar owns every Company; 0004 is a Viewer of RS Learning only; 0005 is a
 -- Contributor of RS Learning and Aleem; 30000000-…-0001 is a role Agent (the writer) in RS Learning.
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values
- ('d1100000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://localhost','log-writer','ciphertext','connected'),
- ('d1100000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000001','http://localhost','log-other','ciphertext','connected');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 
@@ -32,11 +29,15 @@ update public.members set role='manager' where company_id='10000000-0000-0000-00
 select is((select concat_ws('|',details->>'old_role',details->>'new_role') from public.company_log where source='member_audit' order by id desc limit 1),'contributor|manager','a Role change keeps the Role before and after');
 
 -- An Agent change writes a row with the Agent and its name.
-select lives_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','attach','d1100000-0000-0000-0000-000000000001',agent_name=>'Scribe',speciality=>'Writing')$$,'the Owner adds an Agent');
+reset role;
+insert into public.hermes_agents(company_id,name,speciality,profile) values ('10000000-0000-0000-0000-000000000001','Scribe','Writing','co-10000000000000000000000000000001'),
+ ('10000000-0000-0000-0000-000000000002','Elsewhere','Writing','co-10000000000000000000000000000002');
+set local role authenticated;
+select lives_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','default',(select id from public.hermes_agents where name='Scribe'))$$,'the Owner makes an Agent the main one');
 select is((select concat_ws('|',actor_id::text,subject,action,details->>'agent_name') from public.company_log where source='hermes_agent_audit' and company_id='10000000-0000-0000-0000-000000000001' order by id desc limit 1),
- '20000000-0000-0000-0000-000000000001|agent|agent_added|Scribe','an Agent change writes a log row naming the Agent');
+ '20000000-0000-0000-0000-000000000001|agent|agent_made_main|Scribe','an Agent change writes a log row naming the Agent');
 select ok((select agent_id from public.company_log where source='hermes_agent_audit' order by id desc limit 1)=(select id from public.hermes_agents where name='Scribe'),'the row points at the Agent');
-select lives_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000002','attach','d1100000-0000-0000-0000-000000000002',agent_name=>'Elsewhere',speciality=>'Writing')$$,'a change in another Company');
+select lives_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000002','default',(select id from public.hermes_agents where name='Elsewhere'))$$,'a change in another Company');
 select is((select count(*)::int from public.company_log where company_id='10000000-0000-0000-0000-000000000002' and details->>'agent_name'='Elsewhere'),1,'the Owner of both reads it');
 
 -- Scope: a Member reads only their own Companies' rows.

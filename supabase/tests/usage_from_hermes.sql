@@ -17,12 +17,9 @@ select hasnt_column('public','note_runs','output_tokens','nor output tokens');
 select is((select count(*)::int from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and (p.prosrc ilike '%conversation_usage%' or p.prosrc ilike '%input_tokens%')),0,'no function reads or writes usage');
 select ok((select relrowsecurity from pg_class where oid='public.conversation_run_ends'::regclass),'Run ends keep row-level security');
 
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values
- ('e0000000-0000-0000-0000-000000000011','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://localhost','writer','ciphertext','connected'),
- ('e0000000-0000-0000-0000-000000000013','10000000-0000-0000-0000-000000000003','20000000-0000-0000-0000-000000000001','http://localhost','aleem','ciphertext','connected');
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values
- ('e1000000-0000-0000-0000-000000000011','10000000-0000-0000-0000-000000000001','e0000000-0000-0000-0000-000000000011','Mona','Writing',true),
- ('e1000000-0000-0000-0000-000000000013','10000000-0000-0000-0000-000000000003','e0000000-0000-0000-0000-000000000013','Sara','Writing',true);
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
+ ('e1000000-0000-0000-0000-000000000011','10000000-0000-0000-0000-000000000001','e0000000-0000-0000-0000-000000000011','Mona','Writing',true,'writer'),
+ ('e1000000-0000-0000-0000-000000000013','10000000-0000-0000-0000-000000000003','e0000000-0000-0000-0000-000000000013','Sara','Writing',true,'aleem');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select public.send_conversation_message('e2000000-0000-0000-0000-000000000011','10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000011','Message '||n,('e3000000-0000-0000-0000-00000000001'||n)::uuid,'run_'||n) from generate_series(1,5) n;

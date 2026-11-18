@@ -2,8 +2,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 select plan(16);
 -- RS Learning: Omar (1) is Owner, 2 is the Manager (مدير).
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('e0000000-0000-0000-0000-000000000311','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://localhost','retries','ciphertext','connected');
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('e1000000-0000-0000-0000-000000000311','10000000-0000-0000-0000-000000000001','e0000000-0000-0000-0000-000000000311','Mona','Writing',false);
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('e1000000-0000-0000-0000-000000000311','10000000-0000-0000-0000-000000000001','e0000000-0000-0000-0000-000000000311','Mona','Writing',false,'retries');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 

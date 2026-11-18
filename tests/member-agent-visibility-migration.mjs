@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { testDb } from './pgtap.mjs';
+import { connectionsAsTheyStood, testDb } from './pgtap.mjs';
 
 // An install updated to per-Member Agent visibility (#15): every Member keeps the Agents they saw before the update.
 const migration=readFileSync('supabase/migrations/20261216150000_member_agent_visibility.sql','utf8');
@@ -7,6 +7,10 @@ const verify=readFileSync('supabase/migrations/20261216150000_member_agent_visib
 const sql=`begin;
 create extension if not exists pgtap with schema extensions;
 select plan(5);
+-- The Connections and the Agent audit this replay's rows were written in, dropped since (#342).
+${connectionsAsTheyStood}
+-- conversation_stop_target answered the Agent's Connection then; the migration defines it with that answer.
+drop function public.conversation_stop_target(uuid,uuid);
 -- RS Learning has Lead (main) and Ads; Aleem has its own Lead and Writer. The Viewer (…04) has left RS Learning.
 insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values
  ('f1510000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://localhost','backfill-1','ciphertext','connected'),

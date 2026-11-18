@@ -10,7 +10,7 @@ select json_build_object(
  'check_owner_and_own_agent',(select bool_and(position('is_company_owner(c)' in pg_get_functiondef(f::regprocedure))>0 and position('company_app_agents(c)' in pg_get_functiondef(f::regprocedure))>0 and position('x.own' in pg_get_functiondef(f::regprocedure))>0)
   from unnest(array['public.start_app_sign_in(uuid,text,text,uuid)','public.record_app_disconnected(uuid,text,uuid)']) f),
  'agents_seen_only',position('can_see_agent(c,a.id)' in pg_get_functiondef('public.company_app_agents(uuid)'::regprocedure))>0
-  and position('is_bundled_connection(h.id)' in pg_get_functiondef('public.company_app_agents(uuid)'::regprocedure))>0,
+  and position('company_profiles' in pg_get_functiondef('public.company_app_agents(uuid)'::regprocedure))>0,
  'agent_kept',(select count(*)=2 from pg_attribute where attname='agent_id' and not attisdropped and not attnotnull and atttypid='uuid'::regtype
   and attrelid in ('public.company_app_sign_ins'::regclass,'public.company_audit'::regclass)),
  'finish_keeps_agent',position('pending.agent_id' in pg_get_functiondef('public.finish_app_sign_in(text,text)'::regprocedure))>0

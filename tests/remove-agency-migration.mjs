@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { testDb } from './pgtap.mjs';
+import { connectionsAsTheyStood, testDb } from './pgtap.mjs';
 
 // The Agency and the reviewer Role are removed (#7, ADR 0012). The database is put back in its earlier shape inside
 // the transaction (the reviewer Role, the Agency flag, a policy using the bypass), a reviewer is seeded, and the real
@@ -14,6 +14,8 @@ const rs='10000000-0000-0000-0000-000000000001', omar='20000000-0000-0000-0000-0
 const sql=`begin;
 create extension if not exists pgtap with schema extensions;
 select plan(19);
+-- The Connections and the Agent audit this replay's rows were written in, dropped since (#342).
+${connectionsAsTheyStood}
 create temporary table migration_history(name text primary key);
 -- The earlier shape: the role type with reviewer, the Agency flag and functions, and a policy that uses them.
 -- Tables dropped later stood then, and the migration rewrites their policies: the external-agent API's (#341) and the
@@ -49,8 +51,7 @@ alter table public.role_permissions add constraint no_contributor_viewer_approva
 create function public.save_approval_step(c uuid, step bigint, step_name text, step_position integer, member uuid, member_role public.member_role) returns void language sql as $legacy$ select $legacy$;
 alter table public.people add column agency_owner boolean not null default false;
 alter table public.hermes_connections rename column owner_id to agency_owner_id;
--- Connections could be retargeted before this migration: its destination guard did not exist yet.
-drop trigger hermes_retarget_refused on public.hermes_connections; drop function public.keep_hermes_destination();
+-- Connections could be retargeted before this migration: its destination guard did not exist yet (nor in the stub).
 create function public.is_agency_owner() returns boolean language sql stable security definer set search_path='' as $legacy$ select exists(select 1 from public.people where id=auth.uid() and agency_owner) $legacy$;
 create function public.agency_access() returns boolean language sql stable security definer set search_path='' as $legacy$ select public.is_agency_owner() and coalesce(auth.jwt()->>'aal','')='aal2' $legacy$;
 create policy company_agency_read on public.companies for select to authenticated using (public.agency_access());

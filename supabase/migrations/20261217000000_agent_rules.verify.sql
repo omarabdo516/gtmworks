@@ -25,5 +25,5 @@ select json_build_object(
   and public.rule_words(E' @Ads From now on:  no emojis!\n')=public.rule_words('from now on: no emojis') and public.rule_words('Never send customer data')<>public.rule_words('send customer data'),
  'previous_app_pins_as_before',has_function_privilege('service_role','public.run_offers_tools(uuid,uuid)','execute') and has_function_privilege('service_role','public.pin_run_tools(uuid,uuid,text)','execute'),
  'logged_with_rule',public.log_agent_action('AGENT_RULE_SAVED')='agent_rule_saved' and public.log_agent_action('AGENT_RULE_REMOVED')='agent_rule_removed'
-  and position('''rule''' in pg_get_functiondef('public.log_agent_change()'::regprocedure))>0
+  and position('''rule''' in pg_get_functiondef('public.log_agent_event(uuid,uuid,text,uuid,text,jsonb)'::regprocedure))>0
 );

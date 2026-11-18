@@ -3,9 +3,7 @@ create extension if not exists pgtap with schema extensions;
 select plan(3);
 -- Recording a reserved run takes the lock the move and the worker's abandon take, so neither can pass between its
 -- check and its insert. Nothing else in this transaction takes that lock before the record.
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
- ('f8000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000001','http://localhost','writer','x','connected','0.23.0','{run_submission}');
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('a8000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000002','f8000000-0000-0000-0000-000000000002','Mona','Writing');
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile) values ('a8000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000002','f8000000-0000-0000-0000-000000000002','Mona','Writing','writer');
 insert into public.conversation_run_reservations(conversation_id,send_key,company_id,connection_id,person_id,agent_id,message,profile)
  values ('c8000000-0000-0000-0000-000000000002','c9000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000002','f8000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000001','a8000000-0000-0000-0000-000000000002','Hi','writer');
 create temporary view held_agent_lock as select exists(select 1 from pg_locks where locktype='advisory' and pid=pg_backend_pid() and granted

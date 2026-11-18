@@ -4,11 +4,9 @@ select plan(59);
 -- Notes and mentions in the log (#22). Seed people of RS Learning: Omar 0001 owns it, 0002 مدير is a Manager, 0003 مراجع
 -- and 0005 عضو are Contributors, 0004 مشاهد is a Viewer, 30000000-…-0001 is a role Agent. Faye is shown to the Manager;
 -- Secret to nobody but the Owner. 0005 is also a Contributor of Aleem.
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state)
- select ('f2200000-0000-0000-0000-00000000000'||n)::uuid,'10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://localhost','notes-'||n,'ciphertext','connected' from generate_series(1,2) n;
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,instructions) values
- ('a2200000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','f2200000-0000-0000-0000-000000000001','Faye','Marketing',false,'Write short.'),
- ('a2200000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','f2200000-0000-0000-0000-000000000002','Secret','Hidden',false,null);
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,instructions,profile) values
+ ('a2200000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','f2200000-0000-0000-0000-000000000001','Faye','Marketing',false,'Write short.','default'),
+ ('a2200000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','f2200000-0000-0000-0000-000000000002','Secret','Hidden',false,null,'default');
 insert into public.member_agent_access(company_id,person_id,agent_id) values ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','a2200000-0000-0000-0000-000000000001');
 insert into public.work_cards(company_id,stage_id,title) select '10000000-0000-0000-0000-000000000003',id,'Aleem launch' from public.work_stages where company_id='10000000-0000-0000-0000-000000000003' order by position limit 1;
 create temporary table card on commit drop as select id, title from public.work_cards where company_id='10000000-0000-0000-0000-000000000001' order by id limit 1;
@@ -145,7 +143,12 @@ select is((select count(*)::int from public.company_log where action='note_reply
 -- A profile move waits for a note's open Run, as for a channel's.
 reset role;
 set local role service_role;
-select cmp_ok(public.provide_bundled_hermes('http://hermes:8642','default','encrypted','0.23.0','{run_submission}'),'>=',1,'Aleem gets Lead on the shared profile');
+-- The previous version's provider put each Company with no Agent on the shared `default` profile (#342 dropped it).
+reset role;
+insert into public.hermes_agents(company_id,name,speciality,is_default,profile) select c.id,'Lead','General',true,'default' from public.companies c
+ where not exists(select 1 from public.hermes_agents a where a.company_id=c.id) and exists(select 1 from public.members m where m.company_id=c.id and m.role='owner' and m.removed_at is null);
+set local role service_role;
+select cmp_ok((select count(*)::int from public.hermes_agents where profile='default'),'>=',1,'Aleem gets Lead on the shared profile');
 select lives_ok($$select public.record_company_profile('10000000-0000-0000-0000-000000000003','co-10000000000000000000000000000003',1,public.engine_tool_policy())$$,'and its own profile is made');
 reset role;
 update public.company_profiles set skills_shared=true where company_id='10000000-0000-0000-0000-000000000003';
@@ -155,9 +158,9 @@ insert into notes values ('aleem',public.change_work_card('10000000-0000-0000-00
 reset role;
 set local role service_role;
 select is((select attempt from public.begin_note_start((select id from notes where label='aleem'))),1,'Aleem''s Lead is asked in a note');
-select is(public.move_company_profile('10000000-0000-0000-0000-000000000003','http://hermes:8642','encrypted','0.23.0','{run_submission}'),0,'its open Run holds the move');
+select is(public.move_company_profile('10000000-0000-0000-0000-000000000003'),0,'its open Run holds the move');
 select ok(public.close_note_run((select id from notes where label='aleem'),null,'lost',null,null,null),'once it ended');
-select is(public.move_company_profile('10000000-0000-0000-0000-000000000003','http://hermes:8642','encrypted','0.23.0','{run_submission}'),1,'the Company moves');
+select is(public.move_company_profile('10000000-0000-0000-0000-000000000003'),1,'the Company moves');
 
 select * from finish();
 rollback;

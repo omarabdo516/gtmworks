@@ -8,27 +8,32 @@ select public.record_company_profile('10000000-0000-0000-0000-000000000002','co-
 reset role;
 update public.company_profiles set skills_shared=true where company_id='10000000-0000-0000-0000-000000000002';
 set local role service_role;
-select public.attach_company_profile('10000000-0000-0000-0000-000000000002','http://hermes:8642','encrypted','0.23.0','{run_submission}');
+select public.attach_company_profile('10000000-0000-0000-0000-000000000002');
 reset role;
 create temporary table ids as select (select connection_id from public.hermes_agents where company_id='10000000-0000-0000-0000-000000000002') as rs;
 grant select on ids to authenticated;
 
--- 1. A Company profile serves its own Company only: not through the sharing confirmation, not through a pasted row.
+-- 1. A Company profile serves its own Company only.
 set local role authenticated;
 select set_config('request.jwt.claims','{"role":"authenticated"}',true);
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
-select throws_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000003','attach',(select rs from ids),null,'Borrowed','General',false,true)$$,'42501','hermesProfileNotShared',
- 'an Owner of both companies cannot attach one company''s profile to the other''s agent, even after the sharing warning');
-select throws_ok($$insert into public.hermes_connections(company_id,owner_id,address,profile,key_encrypted,state) values ('10000000-0000-0000-0000-000000000003','20000000-0000-0000-0000-000000000001','http://hermes:8642','co-10000000000000000000000000000002','x','connected')$$,
- '42501','hermesProfileNotShared','nor save a Connection to it in the other company');
 reset role;
+select throws_ok($$insert into public.hermes_agents(company_id,name,speciality,profile) values ('10000000-0000-0000-0000-000000000003','Borrowed','General','co-10000000000000000000000000000002')$$,'42501','hermesProfileNotShared',
+ 'no Agent of another company is put on one company''s profile');
+select throws_ok($$update public.hermes_agents set profile='co-10000000000000000000000000000003' where company_id='10000000-0000-0000-0000-000000000002'$$,
+ '42501','hermesProfileNotShared','nor is its own Agent moved onto another company''s');
 select throws_ok($$update public.hermes_agents set company_id='10000000-0000-0000-0000-000000000003' where connection_id=(select rs from ids)$$,'42501','hermesProfileNotShared','no writer moves an agent on it to another company');
-select lives_ok($$insert into public.hermes_connections(company_id,owner_id,address,profile,key_encrypted,state) values ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://localhost','writer','x','connected')$$,'other profiles are unchanged');
+select lives_ok($$insert into public.hermes_agents(company_id,name,speciality,profile) values ('10000000-0000-0000-0000-000000000001','Writer','Writing','writer')$$,'other profiles are unchanged');
 
 -- 2. A Run is reserved on its pinned Connection before Hermes is called, and a move waits for it.
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 set local role service_role;
-select cmp_ok(public.provide_bundled_hermes('http://hermes:8642','default','encrypted','0.23.0','{run_submission}'),'>=',1,'Aleem is on the shared profile');
+-- The previous version's provider put each Company with no Agent on the shared `default` profile (#342 dropped it).
+reset role;
+insert into public.hermes_agents(company_id,name,speciality,is_default,profile) select c.id,'Lead','General',true,'default' from public.companies c
+ where not exists(select 1 from public.hermes_agents a where a.company_id=c.id) and exists(select 1 from public.members m where m.company_id=c.id and m.role='owner' and m.removed_at is null);
+set local role service_role;
+select cmp_ok((select count(*)::int from public.hermes_agents where profile='default'),'>=',1,'Aleem is on the shared profile');
 select public.record_company_profile('10000000-0000-0000-0000-000000000003','co-10000000000000000000000000000003',1,public.engine_tool_policy());
 reset role;
 update public.company_profiles set skills_shared=true where company_id='10000000-0000-0000-0000-000000000003';
@@ -43,7 +48,7 @@ select is(public.reserve_conversation_run('c2000000-0000-0000-0000-000000000003'
 reset role;
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 set local role service_role;
-select is(public.move_company_profile('10000000-0000-0000-0000-000000000003','http://hermes:8642','encrypted','0.23.0','{run_submission}'),0,'a move between reservation and start waits');
+select is(public.move_company_profile('10000000-0000-0000-0000-000000000003'),0,'a move between reservation and start waits');
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claims','{"role":"authenticated"}',true);
@@ -54,7 +59,7 @@ reset role;
 select is((select count(*)::int from public.conversation_run_reservations),0,'recording ends the reservation');
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 set local role service_role;
-select is(public.move_company_profile('10000000-0000-0000-0000-000000000003','http://hermes:8642','encrypted','0.23.0','{run_submission}'),0,'the open run still holds the move');
+select is(public.move_company_profile('10000000-0000-0000-0000-000000000003'),0,'the open run still holds the move');
 reset role;
 insert into public.conversation_messages(company_id,conversation_id,author,agent_id,author_name,body,run_id)
  values ('10000000-0000-0000-0000-000000000003','c2000000-0000-0000-0000-000000000003','agent',(select agent from aleem),'Lead','Hi','run_reserved');
@@ -63,7 +68,7 @@ set local session_replication_role=replica;
 update public.conversation_messages set created_at=now()-interval '6 minutes' where company_id='10000000-0000-0000-0000-000000000003';
 set local session_replication_role=origin;
 set local role service_role;
-select is(public.move_company_profile('10000000-0000-0000-0000-000000000003','http://hermes:8642','encrypted','0.23.0','{run_submission}'),1,'once it ended, the company moves');
+select is(public.move_company_profile('10000000-0000-0000-0000-000000000003'),1,'once it ended, the company moves');
 reset role;
 
 -- 3. No new run while the profile's tools differ from the level the Owner chose.

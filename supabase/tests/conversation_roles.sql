@@ -3,8 +3,7 @@ create extension if not exists pgtap with schema extensions;
 select plan(27);
 -- RS Learning: Omar is Owner, 2 Manager, 3 and 5 Contributors, 4 Viewer. Omar speaks as the company's Owner.
 update public.members set role='contributor' where company_id='10000000-0000-0000-0000-000000000001' and person_id='20000000-0000-0000-0000-000000000005';
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('e0000000-0000-0000-0000-000000000011','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://localhost','roles','ciphertext','connected');
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('e1000000-0000-0000-0000-000000000011','10000000-0000-0000-0000-000000000001','e0000000-0000-0000-0000-000000000011','Mona','Writing',true);
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('e1000000-0000-0000-0000-000000000011','10000000-0000-0000-0000-000000000001','e0000000-0000-0000-0000-000000000011','Mona','Writing',true,'roles');
 set local role authenticated;
 
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
@@ -55,8 +54,8 @@ reset role;
 select set_config('request.jwt.claim.sub','',true);
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 set local role service_role;
-select is((select string_agg(run||':'||person||':'||connection,',' order by run) from public.open_conversation_runs('e2000000-0000-0000-0000-000000000103','20000000-0000-0000-0000-000000000005')),'run_2:20000000-0000-0000-0000-000000000005:e0000000-0000-0000-0000-000000000011,run_contributor:20000000-0000-0000-0000-000000000005:e0000000-0000-0000-0000-000000000011','a Contributor''s open runs come with the agent''s Connection');
-select is((select connection_id from public.hermes_agents where id='e1000000-0000-0000-0000-000000000011' and company_id='10000000-0000-0000-0000-000000000001'),'e0000000-0000-0000-0000-000000000011'::uuid,'the server reads which Connection the company''s agent uses');
-select is((select address||':'||profile||':'||state||':'||key_encrypted from public.hermes_connections where id='e0000000-0000-0000-0000-000000000011'),'http://localhost:roles:connected:ciphertext','the server reads the agent''s Connection for a Member''s message');
+select is((select string_agg(run||':'||person||':'||profile,',' order by run) from public.open_conversation_runs('e2000000-0000-0000-0000-000000000103','20000000-0000-0000-0000-000000000005')),'run_2:20000000-0000-0000-0000-000000000005:roles,run_contributor:20000000-0000-0000-0000-000000000005:roles','a Contributor''s open runs come with the agent''s Connection');
+select is((select connection_id from public.hermes_agents where id='e1000000-0000-0000-0000-000000000011' and company_id='10000000-0000-0000-0000-000000000001'),'e0000000-0000-0000-0000-000000000011'::uuid,'the server reads the company''s agent''s own id');
+select is((select profile from public.hermes_agents where id='e1000000-0000-0000-0000-000000000011'),'roles','the server reads the agent''s profile for a Member''s message');
 select * from finish();
 rollback;

@@ -4,10 +4,7 @@ select plan(51);
 -- #122. RS Learning (1): Lead on the Company's own profile, ready but for its shared folder, and the Writer Lead made on
 -- its own profile. Aleem (3) has its own profile too. The Writer is shown to the Manager (2), the Contributor (3) and
 -- the Viewer (4).
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
- ('c5000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9','co-10000000000000000000000000000001','ciphertext','connected','0.23.0','{run_submission}');
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('c5000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','c5000000-0000-0000-0000-000000000001','Lead','General',true);
-insert into public.hermes_agent_audit(company_id,actor_id,agent_id,action,details) values ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','c5000000-0000-0000-0000-000000000002','PROVIDE_BUNDLED_HERMES_AGENT',jsonb_build_object('connection_id','c5000000-0000-0000-0000-000000000001'));
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('c5000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','c5000000-0000-0000-0000-000000000001','Lead','General',true,'co-10000000000000000000000000000001');
 insert into public.company_profiles(company_id,profile,tools_level,tools_policy) values
  ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',1,public.engine_tool_policy()),
  ('10000000-0000-0000-0000-000000000003','co-10000000000000000000000000000003',1,public.engine_tool_policy());
@@ -23,23 +20,21 @@ insert into named(name,agent) select 'writer',(public.lead_create_agent(conversa
  own_level=>1,own_policy=>public.engine_tool_policy())->>'agent')::uuid;
 reset role;
 insert into named values ('lead','c5000000-0000-0000-0000-000000000002');
-update named n set profile=h.profile,connection=h.id from public.hermes_agents a join public.hermes_connections h on h.id=a.connection_id where a.id=n.agent;
+update named n set profile=a.profile,connection=a.connection_id from public.hermes_agents a where a.id=n.agent;
 insert into public.member_agent_access(company_id,person_id,agent_id)
  select '10000000-0000-0000-0000-000000000001',('20000000-0000-0000-0000-00000000000'||n)::uuid,agent from named,generate_series(2,4) n where name='writer';
 select is((select profile from named where name='writer'),public.agent_engine_profile((select agent from named where name='writer')),'the Writer runs on its own profile');
 
--- No Connection names a shared space, and no Agent sits on one; a Run is refused on one found from before.
-select throws_ok($$insert into public.hermes_connections(company_id,owner_id,address,profile,key_encrypted,state) values
- ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9','cs-10000000000000000000000000000001','ciphertext','connected')$$,
- '42501','hermesProfileNotShared','a Connection naming the Company''s own shared space is refused');
+-- No Agent sits on a shared space; a Run is refused on one found from before.
+select throws_ok($$insert into public.hermes_agents(company_id,name,speciality,profile) values
+ ('10000000-0000-0000-0000-000000000001','Spaced','General','cs-10000000000000000000000000000001')$$,
+ '42501','hermesProfileNotShared','an Agent on the Company''s own shared space is refused');
 set local session_replication_role=replica;
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
- ('c5000000-0000-0000-0000-000000000009','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9','cs-10000000000000000000000000000001','ciphertext','connected','0.23.0','{run_submission}');
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('c5000000-0000-0000-0000-000000000008','10000000-0000-0000-0000-000000000001','c5000000-0000-0000-0000-000000000009','Stray','Stray');
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile) values ('c5000000-0000-0000-0000-000000000008','10000000-0000-0000-0000-000000000001','c5000000-0000-0000-0000-000000000009','Stray','Stray','cs-10000000000000000000000000000001');
 set local session_replication_role=origin;
-select throws_ok($$insert into public.hermes_agents(company_id,connection_id,name,speciality) values ('10000000-0000-0000-0000-000000000001','c5000000-0000-0000-0000-000000000009','Other','Other')$$,
- '42501','hermesProfileNotShared','an Agent on a Connection naming a shared space is refused');
-select throws_ok($$update public.hermes_agents set connection_id='c5000000-0000-0000-0000-000000000009' where id='c5000000-0000-0000-0000-000000000002'$$,
+select throws_ok($$insert into public.hermes_agents(company_id,name,speciality,profile) values ('10000000-0000-0000-0000-000000000001','Other','Other','cs-10000000000000000000000000000002')$$,
+ '42501','hermesProfileNotShared','an Agent on another Company''s shared space is refused');
+select throws_ok($$update public.hermes_agents set profile='cs-10000000000000000000000000000001' where id='c5000000-0000-0000-0000-000000000002'$$,
  '42501','hermesProfileNotShared','and so is moving one onto it');
 set local role authenticated;
 select set_config('request.jwt.claims','{"role":"authenticated"}',true);
@@ -117,7 +112,7 @@ select is(pg_temp.reserved('writer','c5200000-0000-0000-0000-000000000002','c530
 -- A profile the Engine lost is confirmed again once made again; a space the Engine lost is made again, and every
 -- profile of its Company is confirmed again.
 set local role service_role;
-select ok(public.forget_company_profile((select connection from named where name='writer')),'tool health forgets the Writer''s lost profile');
+select ok(public.forget_company_profile((select profile from named where name='writer')),'tool health forgets the Writer''s lost profile');
 reset role;
 select is((select skills_shared from public.agent_profiles where agent_id=(select agent from named where name='writer')),false,'and its shared folder is no longer confirmed');
 update public.agent_profiles set tools_level=1,tools_policy=public.engine_tool_policy(),skills_shared=true where agent_id=(select agent from named where name='writer');

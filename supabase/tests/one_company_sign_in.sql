@@ -4,10 +4,7 @@ select plan(24);
 -- #123, ADR 0016 (Sign-in). RS Learning (1): Lead on the Company's own profile through its bundled Connection, and the
 -- profile record of one more Agent; RS Consultations (2) has an Agent profile of its own. The seed has three Companies.
 -- Only the Owner records a subscription's connect and disconnect, each once, in the Company's log by its provider.
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
- ('e1230000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9','co-10000000000000000000000000000001','ciphertext','connected','0.23.0','{run_submission}');
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('e1230000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','e1230000-0000-0000-0000-000000000001','Lead','General',true);
-insert into public.hermes_agent_audit(company_id,actor_id,agent_id,action,details) values ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','e1230000-0000-0000-0000-000000000002','PROVIDE_BUNDLED_HERMES_AGENT',jsonb_build_object('connection_id','e1230000-0000-0000-0000-000000000001'));
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('e1230000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','e1230000-0000-0000-0000-000000000001','Lead','General',true,'co-10000000000000000000000000000001');
 insert into public.company_profiles(company_id,profile,tools_level,tools_policy) values ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',1,public.engine_tool_policy());
 -- The profile records alone, without their Agents: the target reads only which profile is whose.
 set local session_replication_role=replica;

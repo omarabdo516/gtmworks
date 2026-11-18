@@ -18,15 +18,9 @@ select is(public.company_holds_provider_key('10000000-0000-0000-0000-00000000000
 -- RS Learning (1): Lead on the Company's own profile, the Owner's (Omar's) Conversation with Lead and the Manager's.
 -- R&S Consultations (2), where Omar is Owner too, has its own Lead. The Manager (2) is a member of RS Learning only, and
 -- an Outsider of neither.
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
- ('e2990000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9','co-10000000000000000000000000000001','ciphertext','connected','0.23.0','{run_submission}'),
- ('e2990000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9','co-10000000000000000000000000000002','ciphertext','connected','0.23.0','{run_submission}');
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values
- ('e2990000-0000-0000-0000-000000000011','10000000-0000-0000-0000-000000000001','e2990000-0000-0000-0000-000000000001','Lead','General',true),
- ('e2990000-0000-0000-0000-000000000012','10000000-0000-0000-0000-000000000002','e2990000-0000-0000-0000-000000000002','Lead two','General',true);
-insert into public.hermes_agent_audit(company_id,actor_id,agent_id,action,details) values
- ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','e2990000-0000-0000-0000-000000000011','PROVIDE_BUNDLED_HERMES_AGENT',jsonb_build_object('connection_id','e2990000-0000-0000-0000-000000000001')),
- ('10000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000001','e2990000-0000-0000-0000-000000000012','PROVIDE_BUNDLED_HERMES_AGENT',jsonb_build_object('connection_id','e2990000-0000-0000-0000-000000000002'));
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
+ ('e2990000-0000-0000-0000-000000000011','10000000-0000-0000-0000-000000000001','e2990000-0000-0000-0000-000000000001','Lead','General',true,'co-10000000000000000000000000000001'),
+ ('e2990000-0000-0000-0000-000000000012','10000000-0000-0000-0000-000000000002','e2990000-0000-0000-0000-000000000002','Lead two','General',true,'co-10000000000000000000000000000002');
 insert into public.company_profiles(company_id,profile,tools_level,tools_policy,skills_shared) values
  ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',1,public.engine_tool_policy(),true),
  ('10000000-0000-0000-0000-000000000002','co-10000000000000000000000000000002',1,public.engine_tool_policy(),true);
@@ -45,8 +39,8 @@ insert into made(name,agent) values ('waiting',public.lead_agent_id('e2991000-00
 update made set profile=public.agent_engine_profile(agent);
 grant select on made to authenticated,service_role;
 -- Each Agent's own profile, owner record and wait, read as the database's owner.
-create temporary view placed as select m.name,h.profile,p.tools_level,p.tools_policy,exists(select 1 from public.agent_key_waits w where w.agent_id=m.agent) as waits
- from made m join public.hermes_agents a on a.id=m.agent join public.hermes_connections h on h.id=a.connection_id left join public.agent_profiles p on p.agent_id=m.agent;
+create temporary view placed as select m.name,a.profile,p.tools_level,p.tools_policy,exists(select 1 from public.agent_key_waits w where w.agent_id=m.agent) as waits
+ from made m join public.hermes_agents a on a.id=m.agent left join public.agent_profiles p on p.agent_id=m.agent;
 
 set local role authenticated;
 select set_config('request.jwt.claims','{"role":"authenticated"}',true);
@@ -148,7 +142,7 @@ select results_eq($$select name,profile,tools_level,waits from placed where name
  'both on Lead''s profile as before, with no profile of their own and no wait');
 
 set local role authenticated;
-select lives_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','remove',null,(select agent from made where name='waiting'))$$,'the Owner removes the Agent with its own profile');
+select lives_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','remove',(select agent from made where name='waiting'))$$,'the Owner removes the Agent with its own profile');
 select results_eq($$select profile,kind,agent,name from public.company_key_profiles('10000000-0000-0000-0000-000000000001') where kind='removed'$$,
  $$select profile,'removed'::text,agent,'Writer'::text from made where name='waiting'$$,'its profile is still listed, as removed, for the next key removal');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);

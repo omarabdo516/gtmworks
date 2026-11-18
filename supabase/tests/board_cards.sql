@@ -3,12 +3,10 @@ create extension if not exists pgtap with schema extensions;
 select plan(12);
 -- #190. RS Learning with Lead (main), Ads and SEO; Ads is shown to the Contributor (…03), SEO to nobody. A Card of each
 -- Agent and one with none; SEO, then Ads, then an old role agent wrote on the Ads Card. Aleem has a Card of its own.
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state)
- select ('f1900000-0000-0000-0000-00000000000'||n)::uuid,'10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://localhost','board-'||n,'ciphertext','connected' from generate_series(1,3) n;
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values
- ('a1900000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','f1900000-0000-0000-0000-000000000001','Lead','General',true),
- ('a1900000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','f1900000-0000-0000-0000-000000000002','Ads','Ads',false),
- ('a1900000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','f1900000-0000-0000-0000-000000000003','SEO','SEO',false);
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
+ ('a1900000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','f1900000-0000-0000-0000-000000000001','Lead','General',true,'default'),
+ ('a1900000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','f1900000-0000-0000-0000-000000000002','Ads','Ads',false,'default'),
+ ('a1900000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','f1900000-0000-0000-0000-000000000003','SEO','SEO',false,'default');
 insert into public.member_agent_access(company_id,person_id,agent_id) values ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','a1900000-0000-0000-0000-000000000002');
 insert into public.work_cards(company_id,stage_id,title,agent_id)
  select s.company_id,s.id,x.title,x.agent::uuid from (values ('Board Lead','a1900000-0000-0000-0000-000000000001'),('Board Ads','a1900000-0000-0000-0000-000000000002'),

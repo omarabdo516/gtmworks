@@ -13,12 +13,12 @@ select json_build_object(
  'level_logged',pg_get_constraintdef((select oid from pg_constraint where conrelid='public.company_audit'::regclass and conname='company_audit_action_check')) like '%agent_level_changed%'
   and position('agent_level_changed' in pg_get_functiondef('public.log_company_change()'::regprocedure))>0,
  'worker_only',(select bool_and(has_function_privilege('service_role',f,'execute') and not has_function_privilege('authenticated',f,'execute') and not has_function_privilege('anon',f,'execute'))
-  from unnest(array['public.company_profile_work()','public.record_company_profile(uuid,text,integer,integer)','public.attach_company_profile(uuid,text,text,text,text[])',
-   'public.move_company_profile(uuid,text,text,text,text[])','public.engine_tools_due()','public.forget_company_profile(uuid)']) f),
+  from unnest(array['public.company_profile_work()','public.record_company_profile(uuid,text,integer,integer)','public.attach_company_profile(uuid)',
+   'public.move_company_profile(uuid)','public.engine_tools_due()','public.forget_company_profile(text)']) f),
  'person_reads',(select bool_and(has_function_privilege('authenticated',f,'execute') and not has_function_privilege('anon',f,'execute') and not has_function_privilege('service_role',f,'execute'))
   from unnest(array['public.company_engine_target(uuid)']) f),
  'internal_helpers',(select bool_and(not has_function_privilege('authenticated',f,'execute') and not has_function_privilege('service_role',f,'execute') and not has_function_privilege('anon',f,'execute'))
-  from unnest(array['public.company_engine_profile(uuid)','public.is_bundled_connection(uuid)','public.company_profile_ready(uuid)']) f),
+  from unnest(array['public.company_engine_profile(uuid)','public.company_profile_ready(uuid)']) f),
  'tables_closed',(select bool_and(c.relrowsecurity) from pg_class c where c.oid in ('public.company_profiles'::regclass))
   and not has_table_privilege('authenticated','public.company_profiles','select') and not has_table_privilege('service_role','public.company_profiles','insert'),
  'profile_name',public.company_engine_profile('10000000-0000-0000-0000-000000000002')='co-10000000000000000000000000000002',

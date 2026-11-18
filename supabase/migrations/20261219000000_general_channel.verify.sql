@@ -25,5 +25,5 @@ select json_build_object(
  'append_only',exists(select 1 from pg_trigger where tgrelid='public.channel_messages'::regclass and tgname='channel_messages_append_only' and not tgisinternal),
  'one_run_one_reply',exists(select 1 from pg_constraint where conrelid='public.channel_messages'::regclass and contype='u' and pg_get_constraintdef(oid)='UNIQUE (reply_to)')
   and exists(select 1 from pg_constraint where conrelid='public.channel_runs'::regclass and contype='p' and pg_get_constraintdef(oid)='PRIMARY KEY (message_id)'),
- 'move_waits_for_channel_runs',position('channel_runs' in pg_get_functiondef('public.move_company_profile(uuid,text,text,text,text[])'::regprocedure))>0
+ 'move_waits_for_channel_runs',position('channel_runs' in pg_get_functiondef('public.move_company_profile(uuid)'::regprocedure))>0
 );

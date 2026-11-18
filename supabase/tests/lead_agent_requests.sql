@@ -3,13 +3,9 @@ create extension if not exists pgtap with schema extensions;
 select plan(52);
 -- Each seeded person's Conversation with Lead: the Owner (1), the Manager (2), the Contributors (3, 5) and the Viewer (4),
 -- each asking for an Agent in run rq-n.
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
- ('ea000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9','co-10000000000000000000000000000001','ciphertext','connected','0.23.0','{run_submission}'),
- ('ea000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9','request-test-ads','ciphertext','connected','0.23.0','{run_submission}');
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values
- ('ea000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','ea000000-0000-0000-0000-000000000001','Lead','General',true),
- ('ea000000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000001','ea000000-0000-0000-0000-000000000003','Ads','Ads',false);
-insert into public.hermes_agent_audit(company_id,actor_id,agent_id,action,details) values ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','ea000000-0000-0000-0000-000000000002','PROVIDE_BUNDLED_HERMES_AGENT',jsonb_build_object('connection_id','ea000000-0000-0000-0000-000000000001'));
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
+ ('ea000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','ea000000-0000-0000-0000-000000000001','Lead','General',true,'co-10000000000000000000000000000001'),
+ ('ea000000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000001','ea000000-0000-0000-0000-000000000003','Ads','Ads',false,'request-test-ads');
 insert into public.member_agent_access(company_id,person_id,agent_id) values ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','ea000000-0000-0000-0000-000000000004');
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name)
  select ('eb000000-0000-0000-0000-00000000000'||n)::uuid,'10000000-0000-0000-0000-000000000001',('20000000-0000-0000-0000-00000000000'||n)::uuid,'ea000000-0000-0000-0000-000000000002','Lead' from generate_series(1,5) n;
@@ -107,10 +103,10 @@ select is(public.answer_agent_request(current_setting('test.c')::uuid,current_se
 select throws_ok($$select public.answer_agent_request(current_setting('test.c')::uuid,current_setting('test.m')::bigint,false,'Changed my mind')$$,'22023',null,'the other answer is refused');
 reset role;
 select set_config('test.a',(select id::text from public.hermes_agents where name='WhatsApp Leads'),true);
-select ok(exists(select 1 from public.hermes_agents a join public.hermes_connections h on h.id=a.connection_id
+select ok(exists(select 1 from public.hermes_agents a
   where a.id=current_setting('test.a')::uuid and a.speciality='Follows up the WhatsApp leads.' and a.apps='{WhatsApp Business,Canva}' and a.requested_by='20000000-0000-0000-0000-000000000002'
-   and not a.is_default and a.requester_opened_at is null and h.profile='co-10000000000000000000000000000001' and h.owner_id='20000000-0000-0000-0000-000000000002' and public.is_bundled_connection(h.id)),
- 'the Agent has its job, its apps, the Manager as its requester, and its own bundled Connection to the Company''s profile');
+   and not a.is_default and a.requester_opened_at is null and a.profile='co-10000000000000000000000000000001'),
+ 'the Agent has its job, its apps, the Manager as its requester, and runs on the Company''s profile');
 select is((select count(*)::int from public.hermes_agents where company_id='10000000-0000-0000-0000-000000000001'),3,'one Agent is made');
 select results_eq($$select conversation_id,run_id,call_id,agent_id from public.lead_made_agents$$,
  $$values ('eb000000-0000-0000-0000-000000000002'::uuid,'rq-2','call-0',current_setting('test.a')::uuid)$$,'under the call that asked for it');

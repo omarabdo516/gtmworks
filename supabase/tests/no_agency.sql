@@ -34,7 +34,7 @@ select is((select string_agg(key||'='||value,',') from jsonb_each_text(public.re
 select throws_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','default',a=>'00000000-0000-0000-0000-000000000000')$$,'42501','hermesNotAllowed','a non-Member cannot manage a Company''s agents');
 select ok(not public.conversation_can_write('10000000-0000-0000-0000-000000000001'),'a non-Member cannot talk to a Company''s agents');
 select ok(not public.bundled_engine_shared('10000000-0000-0000-0000-000000000001'),'a non-Member is not told about the shared Engine');
-select throws_ok($$insert into public.hermes_connections(company_id,owner_id,address,profile,key_encrypted,state) values ('10000000-0000-0000-0000-000000000001',auth.uid(),'http://localhost','writer','ciphertext','connected')$$,'42501',null,'a non-Member cannot connect an Engine');
+select throws_ok($$insert into public.hermes_agents(company_id,name,speciality,profile) values ('10000000-0000-0000-0000-000000000001','Mine','Writing','writer')$$,'42501',null,'a non-Member cannot add an Agent');
 
 -- The same check sees rows when there are rows to see: the Owner of all three companies reads them.
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);

@@ -1,8 +1,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 select plan(16);
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('e0000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://localhost','writer','ciphertext','connected');
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('e1000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','e0000000-0000-0000-0000-000000000001','Mona','Writing',true);
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('e1000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','e0000000-0000-0000-0000-000000000001','Mona','Writing',true,'writer');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select public.send_conversation_message('e2000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000001','Hello','e3000000-0000-0000-0000-000000000001','run_1');
@@ -14,7 +13,7 @@ reset role;
 select set_config('request.jwt.claim.sub','',true);
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 set local role service_role;
-select is((select string_agg(run||':'||person||':'||connection||':'||profile||':'||state,',' order by run) from public.open_conversation_runs()),'run_1:20000000-0000-0000-0000-000000000001:e0000000-0000-0000-0000-000000000001:writer:connected,run_2:20000000-0000-0000-0000-000000000001:e0000000-0000-0000-0000-000000000001:writer:connected,run_3:20000000-0000-0000-0000-000000000001:e0000000-0000-0000-0000-000000000001:writer:connected','every run left open is listed with its person and Connection');
+select is((select string_agg(run||':'||person||':'||profile,',' order by run) from public.open_conversation_runs()),'run_1:20000000-0000-0000-0000-000000000001:writer,run_2:20000000-0000-0000-0000-000000000001:writer,run_3:20000000-0000-0000-0000-000000000001:writer','every run left open is listed with its person and profile');
 select is((select string_agg(run,',' order by run) from public.open_conversation_runs(null,null,(select min(message) from public.open_conversation_runs()))),'run_2,run_3','the next page starts after the last message seen');
 select is((select count(*)::int from public.open_conversation_runs('e2000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002')),0,'a reader sees only runs of their own conversation');
 select is(public.close_conversation_run('e2000000-0000-0000-0000-000000000001','run_1','completed','Hi Omar','session_1',14000,12),true,'a finished run is closed with its reply');

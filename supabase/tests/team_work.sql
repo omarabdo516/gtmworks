@@ -2,8 +2,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 select plan(33);
 -- RS Learning: Omar (1) is Owner, 2 Manager (مدير), 3 and 5 Contributors, 4 Viewer.
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('e0000000-0000-0000-0000-000000000211','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://localhost','team','ciphertext','connected');
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('e1000000-0000-0000-0000-000000000211','10000000-0000-0000-0000-000000000001','e0000000-0000-0000-0000-000000000211','Mona','Writing',false);
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('e1000000-0000-0000-0000-000000000211','10000000-0000-0000-0000-000000000001','e0000000-0000-0000-0000-000000000211','Mona','Writing',false,'team');
 -- Mona is shown to every Member (#15), as the update shows each Agent that existed before it.
 insert into public.member_agent_access(company_id,person_id,agent_id) select company_id,person_id,'e1000000-0000-0000-0000-000000000211' from public.members where company_id='10000000-0000-0000-0000-000000000001' and removed_at is null and role<>'owner';
 set local role authenticated;
@@ -23,7 +22,7 @@ select is((select string_agg(note,'|') from public.member_notes),'Answer in shor
 
 -- (c) A run starts at once when the Agent is free, with the sender's own note for the engine.
 select is(public.reserve_conversation_turn('e2000000-0000-0000-0000-000000000201','10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000211','e3000000-0000-0000-0000-000000000201','First'),
- jsonb_build_object('state','reserved','connection','e0000000-0000-0000-0000-000000000211','note','Answer in short points.'),'the first message reserves its run, with the sender''s note');
+ jsonb_build_object('state','reserved','connection','e0000000-0000-0000-0000-000000000211','profile','team','note','Answer in short points.'),'the first message reserves its run, with the sender''s note');
 select is(public.send_conversation_message('e2000000-0000-0000-0000-000000000201','10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000211','First','e3000000-0000-0000-0000-000000000201','team_run_1','e0000000-0000-0000-0000-000000000211'),true,'and is recorded with its run');
 -- While that run is open, more messages wait as the sender's own turns, in order; a retry stores nothing twice.
 select is(public.reserve_conversation_turn('e2000000-0000-0000-0000-000000000201','10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000211','e3000000-0000-0000-0000-000000000202','Second'),'{"state":"queued"}'::jsonb,'a message sent while the Agent is busy waits');
