@@ -12,8 +12,7 @@ do $$ begin
  end if;
 end $$;
 set local session_replication_role = replica;
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('6f000000-0000-0000-0000-000000000005','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9/p/visual-numbers','visual-numbers','visual-no-key','unreachable') on conflict do nothing;
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('6f000000-0000-0000-0000-000000000006','10000000-0000-0000-0000-000000000001','6f000000-0000-0000-0000-000000000005','Ads','Runs the Meta and Google ads.') on conflict do nothing;
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile) values ('6f000000-0000-0000-0000-000000000006','10000000-0000-0000-0000-000000000001','6f000000-0000-0000-0000-000000000005','Ads','Runs the Meta and Google ads.','visual-numbers') on conflict do nothing;
 insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,agent_id,action,details,source,source_id,created_at)
  select '10000000-0000-0000-0000-000000000001','6f000000-0000-0000-0000-000000000006','agent','Ads','agent','6f000000-0000-0000-0000-000000000006','agent_changed','{"agent_name":"Ads"}','hermes_agent_audit',691172,now()-interval '1 hour'
  where not exists(select 1 from public.company_log where source='hermes_agent_audit' and source_id=691172);

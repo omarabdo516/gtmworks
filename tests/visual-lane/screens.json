@@ -6,7 +6,7 @@
   "card": { "path": "/c/rs-learning/work/board/1", "ready": ".modal" },
   "chat": { "path": "/c/rs-learning/chat", "ready": ".chat" },
   "channel": { "path": "/c/rs-learning/channels/69000000-0000-0000-0000-000000000001", "state": "channel", "ready": ".ch-intro" },
-  "agents": { "path": "/c/rs-learning/settings/agents" },
+  "agents": { "path": "/c/rs-learning/agents", "ready": ".company-hermes-agents" },
   "agent-details": { "path": "/c/rs-learning/chat/69100000-0000-0000-0000-000000000005", "state": "agent-details", "ready": ".chat" },
   "members": { "path": "/c/rs-learning/settings/members", "ready": ".member-row" },
   "numbers": { "path": "/c/rs-learning/numbers", "ready": ".numbers-page" },

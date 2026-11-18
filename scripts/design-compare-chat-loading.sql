@@ -12,8 +12,7 @@ do $$ begin
  end if;
 end $$;
 set local session_replication_role = replica;
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('6f000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9/p/visual-loading','visual-loading','visual-no-key','unreachable') on conflict do nothing;
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('6f000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','6f000000-0000-0000-0000-000000000001','Ads','Runs the Meta and Google ads.') on conflict do nothing;
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile) values ('6f000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','6f000000-0000-0000-0000-000000000001','Ads','Runs the Meta and Google ads.','visual-loading') on conflict do nothing;
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name,created_at) values ('6f000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','6f000000-0000-0000-0000-000000000002','Ads','2026-06-10T10:00:00Z') on conflict do nothing;
 insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at) values
  ('10000000-0000-0000-0000-000000000001','6f000000-0000-0000-0000-000000000003','person','20000000-0000-0000-0000-000000000001',null,'Omar','خطة إعلانات Meta لكورس المحاسب الشامل','6f000000-0000-0000-0000-000000000004','visual-loading','2026-06-10T10:00:00Z'),

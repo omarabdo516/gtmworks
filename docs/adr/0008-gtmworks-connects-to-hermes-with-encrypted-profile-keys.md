@@ -1,8 +1,10 @@
 ---
-status: accepted
+status: accepted, partly superseded by #342
 ---
 
 # gtmworks connects directly to Hermes with encrypted profile keys
+
+Superseded where it describes pasted connections, by [ADR 0017](0017-hermes-keeps-skills-knowledge-rules-steps-and-usage.md) (#342, decision 0042): the bundled Hermes is the only Hermes. Nobody connects an address, profile and key any more, and there is no Connection row or stored Hermes key. The app and the worker take the bundled Hermes's address and key from the install's environment (`BUNDLED_HERMES_URL`, `HERMES_API_KEY`), and each Agent names its own profile on it. Agent changes go to the company log directly. What still holds: all Hermes calls stay in `lib/hermes.mjs`, no key or remote error body is returned or logged, only the tested Hermes version is used, and Agents do not approve, publish or spend.
 
 Partly superseded by [ADR 0009](0009-conversations-run-on-engines-behind-one-engine-contract.md) (#274): Hermes is now one driver behind the engine contract, not the only engine. The rules below still hold for the Hermes driver.
 

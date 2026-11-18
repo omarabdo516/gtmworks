@@ -494,6 +494,8 @@ function attachHermes() {
 }
 const handTitle='انشر المقال';
 async function handedStep(fake:Awaited<ReturnType<typeof fakeHermes>>) {
+ // The lane's fake Hermes is the install's Hermes these sends reach (#342).
+ const hermes={address:fake.address,key:fake.settings.key};
  const {service,person}=await clients(); const {agent,detach}=attachHermes();
  const conversation=randomUUID();
  // A message, sent as the route sends it, and its reply closed by whoever reads first (this test, the worker or the page).

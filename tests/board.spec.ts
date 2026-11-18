@@ -191,7 +191,8 @@ test('Waiting on you lists an Agent question and an item of a new kind, each ope
  try {
   await signIn(page,'omar@example.com','/c/rs-learning/home');
   attachedAgent.id=randomUUID();
-  query(`insert into public.hermes_agents(id,company_id,name,speciality,profile) values ('${attachedAgent.id}','${rs}','Lead ${stamp}','Marketing','board-${stamp}')`);
+  // As an Owner's attachment made it: the Company's first Agent is its main one.
+  query(`insert into public.hermes_agents(id,company_id,name,speciality,profile,is_default) select '${attachedAgent.id}','${rs}','Lead ${stamp}','Marketing','board-${stamp}',not exists(select 1 from public.hermes_agents where company_id='${rs}')`);
   await page.context().clearCookies();
   await signIn(page,'manager@example.com','/c/rs-learning/approvals');
   // Mail sent by earlier tests (an invite) may already be in the local mailbox; only a change counts.

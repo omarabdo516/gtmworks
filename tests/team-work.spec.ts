@@ -60,7 +60,7 @@ function attachFakeHermes() {
 
 test('integration: two sends while the Agent is busy run as two turns in order, each after the one before ends',async()=>{
  test.setTimeout(120000);
- const fake=await laneHermes(); fake.settings.pendingReads=1e9;
+ const fake=await laneHermes(); const hermes={address:fake.address,key:fake.settings.key}; fake.settings.pendingReads=1e9;
  const {service,person}=await memberClient('omar@example.com'); const {agent,detach}=attachFakeHermes();
  try {
   expect((await person.rpc('save_member_note',{c:company,note:'Answer in short points.'})).error).toBeNull();
@@ -94,7 +94,7 @@ test('integration: two sends while the Agent is busy run as two turns in order, 
 // note it was first reserved with included (the fake Hermes, like the pinned release, refuses another body for a key).
 test('integration: a queued turn whose start answer was lost is asked again, not failed, and runs once',async()=>{
  test.setTimeout(120000);
- const fake=await laneHermes(); fake.settings.pendingReads=1e9;
+ const fake=await laneHermes(); const hermes={address:fake.address,key:fake.settings.key}; fake.settings.pendingReads=1e9;
  const {service,person}=await memberClient('omar@example.com'); const {agent,detach}=attachFakeHermes();
  try {
   const conversation=randomUUID(); const second=randomUUID();
@@ -113,7 +113,7 @@ test('integration: a queued turn whose start answer was lost is asked again, not
 
 test('integration: a send whose answer was lost is kept as its sender\'s turn, and the worker\'s retry sends the note it was first reserved with',async()=>{
  test.setTimeout(120000);
- const fake=await laneHermes();
+ const fake=await laneHermes(); const hermes={address:fake.address,key:fake.settings.key};
  const {service,person}=await memberClient('omar@example.com'); const {agent,detach}=attachFakeHermes();
  try {
   expect((await person.rpc('save_member_note',{c:company,note:'Answer in short points.'})).error).toBeNull();
