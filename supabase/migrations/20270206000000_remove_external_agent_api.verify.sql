@@ -1,7 +1,7 @@
 -- The external-agent API is gone (#341): its tables, functions and webhook triggers; revoking an Agent's access still
 -- works for signed-in people only, and the board's «ask an Agent» keeps its idempotent write.
 select json_build_object(
- 'tables_dropped',(select bool_and(to_regclass('public.'||t) is null) from unnest(array['agent_keys','agent_webhooks','webhook_deliveries','engine_tool_checks']) t),
+ 'tables_dropped',(select bool_and(to_regclass('public.'||t) is null) from unnest(array['agent_keys','agent_webhooks','webhook_deliveries','agent_rate_limits','agent_refusals','engine_tool_checks']) t),
  'functions_dropped',not exists(select 1 from pg_proc where pronamespace='public'::regnamespace and proname in ('log_agent_refusal','agent_rate_limit','enqueue_person_webhook',
   'claim_webhook_deliveries','agent_key_denied','lookup_agent_key','issue_run_key_for','issue_run_key','enqueue_assignment_webhook','revoke_run_keys','agent_key_revoked',
   'agent_load_skills','propose_skill_lesson','record_engine_tools','agent_tool_warning')),

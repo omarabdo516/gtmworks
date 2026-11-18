@@ -1,10 +1,9 @@
 -- #341 (spec #340, decision 0042): the external-agent API of ADR 0006 and 0007 goes. Hermes ships inside the install
--- (ADR 0010) and nothing calls the `v1` routes or receives a webhook any more, so the agent keys, run keys, the
--- webhook settings and deliveries, and the Engine tool checks are dropped with every
+-- (ADR 0010) and nothing calls the `v1` routes or receives a webhook any more, so the agent keys, run keys, their
+-- refusals and rate limits, the webhook settings and deliveries, and the Engine tool checks are dropped with every
 -- function and trigger that served them. No data is copied (decision 0042). Rolling back to v0.1.0 finds them missing
 -- (Omar accepted this).
 --
--- Kept (not on the ticket's list; decision pending with Omar): agent_rate_limits and agent_refusals, now unused.
 -- Kept: agent_write, which the board's «ask an Agent» still calls (its run-key line never matches without a run key),
 -- and agent_requests, its idempotency record; agent_key_waits, which holds an Agent for a provider key (#299), not an
 -- agent key; engine_tools_due and the worker's check that remakes a lost profile; engine_tool_policy.
@@ -48,6 +47,8 @@ end $function$;
 
 -- `cascade` drops only these tables' own policies, triggers and constraints, and the foreign keys other tables hold to
 -- them (skill_loads.key_id, which the skills ticket #343 drops with its table).
+drop table if exists public.agent_rate_limits cascade;
+drop table if exists public.agent_refusals cascade;
 drop table if exists public.webhook_deliveries cascade;
 drop table if exists public.agent_webhooks cascade;
 drop table if exists public.agent_keys cascade;
