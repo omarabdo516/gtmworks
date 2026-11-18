@@ -14,7 +14,7 @@ afterEach(() => { vi.unstubAllGlobals(); });
 
 const at = '2026-06-10T09:05:00Z';
 const peer: ChannelMessage = { id: 1, author: 'person', mine: false, name: 'Sara Adel', role: 'manager', body: 'Morning all', at, mention: null };
-const called = (state: 'open' | 'answered' | 'unanswered'): ChannelMessage => ({ id: 2, author: 'person', mine: true, name: 'Omar', role: 'owner', body: 'Hey @lead, what is due today?', at, mention: { agent: 'Lead', face: 'c-1', state, permissions: [] } });
+const called = (state: 'open' | 'answered' | 'unanswered'): ChannelMessage => ({ id: 2, author: 'person', mine: true, name: 'Omar', role: 'owner', body: 'Hey @lead, what is due today?', at, mention: { agent: 'Lead', face: 'c-1', state, permissions: [], questions: [] } });
 const reply: ChannelMessage = { id: 3, author: 'agent', name: 'Lead', face: 'c-1', body: 'Two things are due.', at };
 const record = (messages: ChannelMessage[], more: Partial<ChannelRecord> = {}): ChannelRecord => ({
  channel: { id: 'ch-1', company: 'co-1', kind: 'general' },
@@ -280,8 +280,8 @@ test('a Viewer reads a channel reply\'s steps and its card, and the card has no 
 // #152: a message that calls two Agents marks both names, the working line names the Agent replying now, and an Agent
 // that could not reply gets its own line while the other Agent's reply still shows, in both languages.
 const two = (second: 'open' | 'unanswered'): ChannelMessage => ({ id: 5, author: 'person', mine: true, name: 'Omar', role: 'owner', body: '@Ads @SEO we need two scripts', at,
- mention: { agent: 'Ads', face: 'c-1', state: 'answered', permissions: [] },
- mentions: [{ agent: 'Ads', face: 'c-1', state: 'answered', permissions: [] }, { agent: 'SEO', face: 'c-2', state: second, permissions: [] }] });
+ mention: { agent: 'Ads', face: 'c-1', state: 'answered', permissions: [], questions: [] },
+ mentions: [{ agent: 'Ads', face: 'c-1', state: 'answered', permissions: [], questions: [] }, { agent: 'SEO', face: 'c-2', state: second, permissions: [], questions: [] }] });
 const adsReply: ChannelMessage = { id: 6, author: 'agent', name: 'Ads', face: 'c-1', body: 'Two scripts are in.', at };
 
 test.each([
@@ -302,7 +302,7 @@ test.each([
 // #165: an Agent called in a channel asks to be allowed an action. The card sits under the Agent's turn; the Member who
 // called it decides it, and everyone else reads the team's wait line.
 const asking = (mine: boolean): ChannelMessage => ({ ...called('open'), mine, mention: { agent: 'Lead', face: 'c-1', state: 'open', permissions: [
- { id: 9, kind: 'permission', title: 'delete the old exports', description: 'delete the old exports', command: 'rm -r exports', choices: ['once', 'deny'], state: 'open' }] } }) as ChannelMessage;
+ { id: 9, kind: 'permission', title: 'delete the old exports', description: 'delete the old exports', command: 'rm -r exports', choices: ['once', 'deny'], state: 'open' }], questions: [] } }) as ChannelMessage;
 
 test('the caller decides the request under the Agent\'s turn, and the press goes to the channel route once', async () => {
  const sent: unknown[] = [];
@@ -332,3 +332,4 @@ test('another Member, and a Viewer, read the team\'s wait line on the request an
   screen.unmount();
  }
 });
+

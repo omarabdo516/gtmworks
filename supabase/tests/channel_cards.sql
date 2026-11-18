@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(36);
+select plan(37);
 -- #148. Ads in RS Learning's general channel, shown to the Manager (2) and Contributor 3; the Owner (1) sees every
 -- Agent and Viewer 4 neither. SEO is in the "scripts" team channel only and hidden from everyone outside it, where
 -- Contributor 3 calls it and Viewer 4 reads. Karim is a Manager of Aleem only, so he is not in these channels.
@@ -60,8 +60,9 @@ select set_config('test.pinned',public.pin_channel_run(current_setting('test.man
 select is(public.pin_channel_run(current_setting('test.manager')::bigint,'{}'::jsonb)->>'tools',current_setting('test.pinned'),'a retry keeps the tools pinned at the first start, whatever it is sent now');
 reset role;
 
--- The cards: a draft and a review under their replies, once per message, run and call; refused to a Viewer, to another
--- run's id and to a kind a channel does not offer; a call that does not hold is invalid and its Run still replies.
+-- The cards: a draft, a review and a handed step under their replies, once per message, run and call; refused to a
+-- Viewer, to another run's id and to a kind a channel does not offer; a call that does not hold is invalid and its Run
+-- still replies.
 select set_config('test.draft','{"line":"مسودة · Meta Ads","rows":[{"label":"Scripts","value":"3"}]}',true);
 select set_config('test.review','{"line":"3 نصوص · Meta Ads","items":[{"text":"A","fine":true,"note":"Fine"},{"text":"B","fine":false,"note":"Swap the promise"}],"decision":"1 ready, 1 back"}',true);
 set local role service_role;
@@ -71,13 +72,14 @@ select is(public.channel_show_card(current_setting('test.owner')::bigint,'run-ow
 select is(public.channel_show_card(current_setting('test.manager')::bigint,'run-manager','call-1','review','مراجعة النصوص',current_setting('test.review')::jsonb)->>'state','shown','the Manager''s channel Run shows its review card');
 select is(public.channel_show_card(current_setting('test.viewer')::bigint,'run-viewer','call-1','draft','Not offered',current_setting('test.draft')::jsonb)->>'state','refused','a Viewer''s channel Run shows no card');
 select is(public.channel_show_card(current_setting('test.owner')::bigint,'another-run','call-2','draft','Elsewhere',current_setting('test.draft')::jsonb)->>'state','refused','a Run id that is not this message''s is refused');
-select is(public.channel_show_card(current_setting('test.owner')::bigint,'run-owner','call-2','hand','Publish it','{"app":"WordPress","line":"Ready","rows":[]}'::jsonb)->>'state','refused','a kind a channel does not offer is refused');
+select is(public.channel_show_card(current_setting('test.owner')::bigint,'run-owner','call-2','connect','Connect Klaviyo','{"app":"klaviyo","reason":"To send the teaser"}')->>'state','refused','a kind a channel does not offer is refused');
+select is(public.channel_show_card(current_setting('test.owner')::bigint,'run-owner','call-4','hand','Publish it','{"app":"WordPress","line":"Ready","rows":[]}'::jsonb)->>'state','shown','a handed step is shown in a channel, open for the team''s Done it (#149)');
 select is(public.channel_show_card(current_setting('test.owner')::bigint,'run-owner','call-3','draft',null,current_setting('test.draft')::jsonb)->>'state','invalid','a card that does not hold is invalid');
 select is(public.channel_show_card(current_setting('test.team')::bigint,'run-seo','call-1','review','مراجعة المقال',current_setting('test.review')::jsonb)->>'state','shown','a team channel''s hidden Agent shows its card to the member who called it');
 select set_config('test.teamcard',public.channel_show_card(current_setting('test.team')::bigint,'run-seo','call-1','review','مراجعة المقال',current_setting('test.review')::jsonb)->>'card',true);
 reset role;
 select results_eq($$select kind,state,title from public.reply_cards where channel_message_id=current_setting('test.owner')::bigint order by id$$,
- $$values ('draft','shown','خطة ديسمبر')$$,'the draft is kept under the Owner''s reply as the Agent wrote it');
+ $$values ('draft','shown','خطة ديسمبر'),('hand','open','Publish it')$$,'the draft and the handed step are kept under the Owner''s reply as the Agent wrote them, the step open for the team''s Done it');
 select is((select content from public.reply_cards where channel_message_id=current_setting('test.manager')::bigint and kind='review'),
  current_setting('test.review')::jsonb,'the review keeps its verdicts and its decision');
 
@@ -105,15 +107,15 @@ insert into seen select 5,(select count(*)::int from public.reply_cards where ch
 select set_config('request.jwt.claim.sub','e8149000-0000-0000-0000-000000000001',true);
 insert into seen select 6,(select count(*)::int from public.reply_cards),(select count(*)::int from public.reply_cards),(select count(*)::int from public.company_log where source='reply_cards');
 reset role;
-select is((select general from seen where who=1),2,'the Owner reads both cards of the general channel they are in');
+select is((select general from seen where who=1),3,'the Owner reads the draft, the handed step and the review of the general channel they are in');
 select is((select team from seen where who=1),0,'and none of a team channel they are not in');
-select is((select general from seen where who=2),2,'the Manager reads the general channel''s cards');
+select is((select general from seen where who=2),3,'the Manager reads the general channel''s draft, handed step and review');
 select is((select team from seen where who=2),0,'and none of a team channel they are not in');
-select is((select general from seen where who=3),2,'the Contributor reads the general channel''s cards');
+select is((select general from seen where who=3),3,'the Contributor reads the general channel''s cards');
 select is((select team from seen where who=3),1,'and its own team channel''s card, whose Agent is hidden elsewhere');
-select is((select general from seen where who=4),2,'the Viewer reads the cards of a channel they are in');
+select is((select general from seen where who=4),3,'the Viewer reads the cards of a channel they are in');
 select is((select team from seen where who=4),1,'and its team channel''s card too');
-select is((select general from seen where who=5),2,'a Contributor the Agent is hidden from reads the general channel''s cards');
+select is((select general from seen where who=5),3,'a Contributor the Agent is hidden from reads the general channel''s cards');
 select is((select general from seen where who=6)+(select team from seen where who=6),0,'and a Member of another Company reads nothing');
 
 -- The log rows of #136 and #137 are written for a channel reply and read by the channel's members, also where the Agent

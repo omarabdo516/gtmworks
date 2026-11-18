@@ -33,7 +33,7 @@ export function NoApp({t,slug}:{t:T,slug:string}) {
 // One row of what waits on the reader. An Agent waiting for the Company's key (#299) names no Card or Conversation, so it
 // gives its reason and opens "Waiting on you", where its card says how the wait ends.
 export function WaitingRow({t,slug,writer,item,face}:{t:T,slug:string,writer:boolean,item:WaitingItem,face:ReactNode}) {
- const href=(item.kind==='permission'||item.kind==='channel_permission')&&chatPlace(slug,item)||(item.card_id!=null?`/c/${slug}/work/board/${item.card_id}`:item.conversation_id?`/c/${slug}/conversations/${item.conversation_id}`:`/c/${slug}/approvals`);
+ const href=(item.kind==='permission'||item.kind==='channel_permission'||item.kind==='channel_question'||item.kind==='channel_hand')&&chatPlace(slug,item)||(item.card_id!=null?`/c/${slug}/work/board/${item.card_id}`:item.conversation_id?`/c/${slug}/conversations/${item.conversation_id}`:`/c/${slug}/approvals`);
  const detail=item.kind==='approval'?t('numbersWaitingStep',item.body):item.kind==='agent_key'?t('waitingAgentKeyReason'):<bdi>{item.body||item.asked_by}</bdi>;
  return <Link className="panel-row" href={href}>{face}
   <span className="panel-row__text"><bdi className="panel-row__t">{item.title}</bdi><span className="panel-row__d">{detail}</span></span>
