@@ -77,16 +77,28 @@ export type LeadCard={kind:'made',agent:MadeAgent}|{kind:'request',request:Agent
 export type SavedRule={id:string,agent:string|null,removed:boolean,said_at:string,sentTo?:string[]};
 type RuleDecision={approved:boolean,by:string,rule:string,at:string};
 export type Decision=({kind:'rule'}&RuleDecision)|({kind:'request',by:string,name:string,at:string}&({made:true}|{made:false,reason:string}));
-// The tool calls the Engine reported for the Run of an Agent's reply (#141), in the Engine's order, and the Run's length
-// in seconds (null when the Engine's record gave none). A call that never reported its end is `started`.
+// The tool calls the Engine made for the Run of an Agent's reply (#141), in the Engine's order, and the Run's length in
+// seconds, read from the Agent's session when the chat opens (#346). A call whose result never came is `started`.
 export type RunStep={tool:string,preview:string|null,state:'started'|'done'|'failed'};
 export type RunSteps={list:RunStep[],seconds:number|null};
-export type RunStepsRow={run_id:string,steps:(RunStep&{call:string})[],seconds:number|null};
-export const runStepsColumns='run_id,steps,seconds';
+export type RunStepsRow={run_id:string,steps:RunStep[],seconds:number|null};
+type SessionTurn={at:number,seconds:number,steps:RunStep[]};
+// Each reply takes the last turn its session started after the reply before it and by the time the reply was written:
+// one turn is one Run, and a Run that ended with no reply leaves its turn to none. No turn, or none with a tool call,
+// no steps. The session's clock and the database's are the same machine's (the bundled Engine, ADR 0010).
+export function stepsOfReplies(messages:{author:string,run_id:string,created_at:string}[],turns:SessionTurn[]|null):RunStepsRow[] {
+ let after=-Infinity;
+ return turns?messages.flatMap(message=>{
+  if(message.author!=='agent') return [];
+  const from=after; const by=Date.parse(message.created_at)/1000; after=by;
+  const turn=turns.findLast(each=>each.at>from&&each.at<=by);
+  return turn?.steps.length?[{run_id:message.run_id,steps:turn.steps,seconds:turn.seconds}]:[];
+ }):[];
+}
 export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided'|'boarded'|'asked'|'answer',to?:string,failed?:boolean,model_refused?:boolean,cards?:LeadCard[],saved?:SavedRule[],decided?:Decision,steps?:RunSteps};
 type StoredMessage=ConversationMessage&{run_id:string,hand_card?:number|null};
 export const messageColumns='id,author,author_name,body,run_id,hand_card,created_at';
-export const conversationColumns='id,agent_id,agent_name,hermes_agents(connection_id,is_default)';
+export const conversationColumns='id,agent_id,agent_name,hermes_session_id,hermes_agents(connection_id,is_default)';
 // A card of a run as the record places it. A question (#138) also carries the answer its person gave, drawn as their
 // own message though none is stored, and the main Agent's question carries the plain words it is drawn as (`words`)
 // until #143 draws its own card.

@@ -11,7 +11,7 @@ insert into isolation_matrix(name) values
  ('company_app_sign_ins'),('company_audit'),('company_key_holds'),('company_key_unfinished'),('company_knowledge'),('company_log'),
  ('company_profile_keepers'),('company_profiles'),('company_shared_spaces'),
  ('conversation_attachments'),('conversation_messages'),('conversation_notes'),('conversation_queued_turns'),
- ('conversation_run_notes'),('conversation_run_reservations'),('conversation_run_steps'),('conversation_usage'),('conversations'),
+ ('conversation_run_notes'),('conversation_run_reservations'),('conversation_usage'),('conversations'),
  ('engine_tool_checks'),('hermes_agent_audit'),('hermes_agents'),('hermes_connections'),
  ('invitation_agent_access'),('lead_agent_requests'),('lead_made_agents'),
  ('member_agent_access'),('member_audit'),('member_invitations'),('member_notes'),('members'),

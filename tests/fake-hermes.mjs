@@ -87,6 +87,10 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
   forget(/** @type {string} */ run,/** @type {number} */ count) { streams.get(run)?.backlog.splice(0,count); },
   sweep(/** @type {string} */ run) { const stream=streams.get(run); streams.delete(run); for(const reader of stream?.readers||[]) reader.end(); },
   backlogLimit:1000,runSeconds:41,
+  // Sessions by id (#346): the profile each belongs to and its messages as the listener returns them
+  // (hermes_cli/web_routers/sessions.py get_session_messages), oldest first: role, content, tool_calls, tool_call_id,
+  // tool_name and timestamp.
+  sessions:/** @type {Map<string,{profile:string,messages:any[]}>} */(new Map()),
   approve(session) { const found=settings.signInSessions.get(session); if(!found) return; found.status='approved'; credentialsOf(found.profile)[found.provider]=`codex-token-${randomUUID()}`; }};
  const profileOf=name=>name==='default'?{config:settings.defaultConfig,credentials:settings.defaultCredentials}:settings.profiles.get(name);
  const credentialsOf=name=>profileOf(name)?.credentials||{};
@@ -225,6 +229,15 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
    }
    if(request.headers.authorization!==`Bearer ${settings.key}`) return send(response,401,{error:'session_expired',message:request.headers.authorization});
    if(settings.managementStatus!==200) return send(response,settings.managementStatus,{detail:request.headers.authorization});
+   // A session answers only under its own profile; a page holds at most 500 messages, from `offset`.
+   const sessionMessages=url.pathname.match(/^\/api\/sessions\/([^/]+)\/messages$/);
+   if(sessionMessages&&request.method==='GET') {
+    const id=decodeURIComponent(sessionMessages[1]); const found=settings.sessions.get(id);
+    if(!found||found.profile!==(url.searchParams.get('profile')||'default')) return send(response,404,{detail:'Session not found'});
+    const limit=Math.min(Number(url.searchParams.get('limit')??500),500); const offset=Number(url.searchParams.get('offset')??0);
+    const page=found.messages.slice(offset,offset+limit);
+    return send(response,200,{session_id:id,profile:found.profile,messages:page,pagination:{limit,offset,order:url.searchParams.get('order')||'oldest',returned:page.length}});
+   }
    if(url.pathname==='/api/profiles'&&request.method==='GET') return send(response,200,{profiles:[{name:'default',path:'/opt/data',is_default:true,model:'default-model',provider:'auto'},...[...settings.profiles].map(([name,profile])=>({name,path:`/opt/data/profiles/${name}`,is_default:false,model:profile.model,provider:profile.provider}))]});
    if(url.pathname==='/api/profiles'&&request.method==='POST') {
     if(body?.name==='default'||settings.profiles.has(body?.name)) return send(response,400,{detail:`A profile named '${body.name}' already exists. Choose another name.`});

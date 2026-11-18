@@ -10,7 +10,7 @@ import { routeAllowed } from '@/lib/route-permissions.mjs';
 import { conversationColumns, uuid } from '@/lib/conversations';
 import type { PermissionChoice } from '@/lib/engine.mjs';
 import { conversationRecord } from '@/lib/conversation-record';
-import { agentAppStates } from '@/lib/company-app-items';
+import { agentAppStates, agentSessionTurns } from '@/lib/company-app-items';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
 const reply=(body:object,status=200)=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store'}});
@@ -142,7 +142,7 @@ async function read(db:Database,person:string,company:string,conversation:string
  if(!found) return refuse('conversationNotFound',404);
  await closeOpenRuns(service(),{encryptionKey:encryptionKey(),conversation,owner:person});
  await startQueuedTurns(service(),{encryptionKey:encryptionKey(),conversation});
- return reply(await conversationRecord(db,person,company,found,agent=>agentAppStates(company,agent)));
+ return reply(await conversationRecord(db,person,company,found,agent=>agentAppStates(company,agent),(agent,session)=>agentSessionTurns(company,agent,session)));
 }
 
 // Each write's intent and its handler; any other intent is a message to send.
