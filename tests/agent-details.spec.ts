@@ -21,8 +21,8 @@ const stage=(column:string)=>`(select id from public.work_stages where company_i
 test.describe.configure({mode:'serial'});
 test.use({timezoneId:'UTC'});
 test.beforeAll(({},testInfo)=>{
- // A retry of this serial file starts it again from the seed, so its rows are inserted once.
- freshSeed(testInfo.file,testInfo.retry>0);
+ // A retry, or a repeat of this serial file, starts it again from the seed, so its rows are inserted once.
+ freshSeed(testInfo.file,testInfo.retry>0||testInfo.repeatEachIndex>0);
  query(`do $$ declare card bigint; begin
     insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,created_at,requested_by,profile) values
    ('${copy}','${company}','${copyConnection}','Copy','Writes the copy.',false,null,null,'details-copy'),

@@ -14,7 +14,7 @@ export * from './offline-browser';
 // another lane starts that lane from the seed, as the file itself did.
 const snapshot = seedSnapshotOf();
 const marker = join(dirname(snapshot), 'seeded-for');
-// `again` restores it even for the file that ran last: a serial file's retry starts from the beginning.
+// `again` restores it even for the file that ran last: a serial file's retry, or its next repeat, starts from the beginning.
 export function freshSeed(file: string, again = false) {
   const owner = `${process.env.GTMWORKS_TEST_RUN} ${file}`;
   try { if (!again && readFileSync(marker, 'utf8') === owner) return; } catch { /* no file has used this lane yet */ }
