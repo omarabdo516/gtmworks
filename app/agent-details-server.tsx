@@ -13,7 +13,6 @@ import { FeedWhen, LogDays } from '@/app/c/[slug]/log/log-client';
 import { FeedText, LogEntry, logColumns, logPeople } from '@/app/c/[slug]/log/entries';
 import { detailsTabs } from '@/app/agent-details-tabs';
 import { ConnectedTools } from '@/app/connected-tools';
-import { agentToolItems } from '@/lib/company-app-items';
 
 type Db=Awaited<ReturnType<typeof supabase>>;
 export type AgentDetailsView={status:AgentStatus,tab:DetailsTab,tabs:Record<DetailsTab,ReactNode>};
@@ -21,7 +20,7 @@ const logShown=50;
 
 export async function agentDetails(db:Db,{company,agent,name,slug,me,role,tab}:{company:string,agent:string,name:string,slug:string,me:string,role:string,tab?:string}):Promise<AgentDetailsView> {
  const {t,language}=await getI18n(); const writer=canCreateCard({role}); const drawn=drawnAt();
- const [{data:cardRows},{data:logRows,count},{data:runs},{items:waiting},{data:talkFileRows,count:talkFileCount},tools]=await Promise.all([
+ const [{data:cardRows},{data:logRows,count},{data:runs},{items:waiting},{data:talkFileRows,count:talkFileCount}]=await Promise.all([
   db.from('work_cards').select('id,title,stage_id,wait:card_wait').eq('company_id',company).eq('agent_id',agent).order('id'),
   db.from('company_log').select(logColumns,{count:'exact'}).eq('company_id',company).or(agentLogFilter(agent)).order('created_at',{ascending:false}).order('id',{ascending:false}).limit(logShown),
   db.rpc('agent_open_run',{c:company,agent}),
@@ -29,8 +28,6 @@ export async function agentDetails(db:Db,{company,agent,name,slug,me,role,tab}:{
   // The files of the reader's own Conversations with the Agent (#21): row-level security shows a person only theirs.
   db.from('conversation_attachments').select('id,name,size,created_at,conversation_id,conversations!inner(agent_name)',{count:'exact'}).eq('company_id',company).eq('conversations.agent_id',agent)
    .order('created_at',{ascending:false}).order('id',{ascending:false}),
-  // The apps of this Agent's own Engine profile (#204), read now as Settings, Apps reads them.
-  agentToolItems(company,agent,language),
  ]);
  const cards=(cardRows||[]) as {id:number,title:string,stage_id:number,wait:CardWait|null}[]; const ids=cards.map(card=>card.id);
  const rows=(logRows||[]) as LogRow[];
@@ -80,5 +77,5 @@ export async function agentDetails(db:Db,{company,agent,name,slug,me,role,tab}:{
  const log=rows.length?<div className="lg-wrap"><LogDays items={rows.map(row=>({id:row.id,at:row.created_at,node:<LogEntry row={row} people={people} me={me} slug={slug} company={company} canWrite={writer} drawnAt={drawn} t={t} language={language} faceSize={24}/>}))}/></div>:undefined;
 
  return {status:agentStatus({waitingMine:waiting.some(item=>item.card_id!=null&&ids.includes(item.card_id)),running:!!run}),tab:pickTab(tab),
-  tabs:detailsTabs({t,slug,agent,activity,tools:<ConnectedTools company={company} agent={agent} name={name} owner={role==='owner'} tools={tools}/>,tasks:tasksTab,files:filesList,fileCount:(cardFileCount??0)+(talkFileCount??0),log,logCount:count??rows.length})};
+  tabs:detailsTabs({t,slug,agent,activity,tools:<ConnectedTools company={company} agent={agent} name={name} owner={role==='owner'}/>,tasks:tasksTab,files:filesList,fileCount:(cardFileCount??0)+(talkFileCount??0),log,logCount:count??rows.length})};
 }

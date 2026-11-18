@@ -68,3 +68,27 @@ test('an Engine that cannot be read shows the apps\' line, with no rows and no M
  expect(unread.container.querySelector('.panel-empty')?.textContent).toBe('The apps can’t be read right now. Try again in a minute.');
  expect(unread.container.querySelectorAll('button, .panel-row')).toHaveLength(0);
 });
+
+// A page is drawn with no read of the Engine (#201): the section draws its heading first and reads the Agent's tools
+// from /api/company-apps after it.
+test('drawn with no tools, the section reads this Agent\'s tools from the apps route after it is drawn', async () => {
+ let answer: (response: Response) => void = () => {}; const held = new Promise<Response>(resolve => { answer = resolve; });
+ const fetch = vi.spyOn(window, 'fetch').mockReturnValue(held);
+ try {
+  const screen = await drawn({ tools: undefined, owner: true });
+  await expect.element(screen.getByRole('heading', { name: 'Connected tools' })).toBeVisible();
+  expect(fetch).toHaveBeenCalledWith('/api/company-apps?company=co-1&agent=ag-1', { cache: 'no-store' });
+  expect(screen.container.querySelectorAll('button, .panel-row, .panel-empty')).toHaveLength(0);
+  answer(new Response(JSON.stringify({ tools }), { headers: { 'Content-Type': 'application/json' } }));
+  await expect.element(screen.getByRole('button', { name: 'Manage' })).toBeVisible();
+  expect(rows(screen).map(row => row[2])).toEqual(['Connected', 'Turned off for it', 'Needs attention', 'Connect']);
+ } finally { fetch.mockRestore(); }
+});
+test('a read of the tools that fails shows the apps\' line', async () => {
+ const fetch = vi.spyOn(window, 'fetch').mockResolvedValue(new Response('{}', { status: 500 }));
+ try {
+  const screen = await drawn({ tools: undefined, owner: true });
+  await expect.element(screen.getByText('The apps can’t be read right now. Try again in a minute.')).toBeVisible();
+  expect(screen.container.querySelectorAll('button, .panel-row')).toHaveLength(0);
+ } finally { fetch.mockRestore(); }
+});
