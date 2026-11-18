@@ -49,6 +49,15 @@ test('Work settings name every stage\'s and every label\'s fields for what they 
  for (const name of ['Stage name أفكار', 'Stage order أفكار', 'Label name static', 'Label color static']) await expect.element(screen.getByLabelText(name, { exact: true })).toBeVisible();
 });
 
+// #313, from app.spec.ts "card stage control and work settings navigation" (#257 removed the compared `work-settings`
+// screens): the settings tabs are General, Members and Work, and the board's "+ New card" stays off them.
+test('Work settings\' tabs show General and Members, and no "+ New card"', async () => {
+ const screen = await showWork(workProps({ section: 'settings/work' }));
+ await expect.element(screen.getByRole('link', { name: 'General', exact: true })).toBeVisible();
+ await expect.element(screen.getByRole('link', { name: 'Members', exact: true })).toBeVisible();
+ expect(screen.getByRole('button', { name: '+ New card' }).elements()).toHaveLength(0);
+});
+
 // The board's six columns over the stages (ADR 0013): card 5 is in the review stage, which is Waiting on you, and waits
 // for the reader's approval; card 1 is in أفكار, the Ideas column's one stage.
 test('the board shows the six columns of the approved design, Waiting on you first, each Card in its stage\'s column', async () => {
