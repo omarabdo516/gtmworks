@@ -20,7 +20,7 @@ test('creating an Agent makes a profile with its instructions, model and the key
    {method:'PUT',path:'/api/env?profile=seo-agent',body:{key:'API_SERVER_KEY',value:'test-only-key'}},
   ]);
   assert.ok(fake.settings.managementRequests.every(request=>request.authorization==='Bearer test-only-key'));
-  assert.deepEqual(await engine.readAgent('seo-agent'),{state:'found',agent:{...seo,ready:true}});
+  assert.deepEqual(await engine.readAgent('seo-agent'),{state:'found',agent:{...seo,ready:true,displayName:null,description:'',descriptionAuto:true,botTitle:null}});
   const agent=engineFor({...connection(fake),profile:'seo-agent'});
   const run=await agent.start(message);
   assert.equal(typeof run,'string');
@@ -35,7 +35,7 @@ test('an Agent with no model keeps the Engine default, and an unknown name reads
   const engine=engineFor(connection(fake));
   assert.deepEqual(await engine.createAgent({name:'writer',instructions:'Write.'}),{state:'created',agent:{name:'writer',instructions:'Write.',model:null,ready:true}});
   assert.ok(!fake.settings.managementRequests.some(request=>request.path.endsWith('/model')));
-  assert.deepEqual(await engine.readAgent('writer'),{state:'found',agent:{name:'writer',instructions:'Write.',model:null,ready:true}});
+  assert.deepEqual(await engine.readAgent('writer'),{state:'found',agent:{name:'writer',instructions:'Write.',model:null,ready:true,displayName:null,description:'',descriptionAuto:true,botTitle:null}});
   assert.deepEqual(await engine.readAgent('nobody'),{state:'missing',agent:null});
  } finally { await fake.close(); }
 });
