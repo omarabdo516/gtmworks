@@ -34,15 +34,15 @@ test('the proof script never prints on its own, so every line goes through the p
 });
 
 // The README carries the figures the first green install run measured: twenty more Agent profiles in one Company, the
-// Engine's memory around them, and the disk one profile takes with and without its bundled Skills. The figures are TBD
-// until that run fills them; the sentence's shape is pinned here so a rewrite cannot drop one.
-const figure=String.raw`(?:TBD|\d+(?:\.\d+)? ?(?:KiB|MiB|GiB)?)`;
+// Engine's memory around them, and the disk one profile takes with and without its bundled Skills (CI run 44398966783).
+// The sentence's shape is pinned here so a rewrite cannot drop one, and no figure is left a placeholder.
+const figure=String.raw`\d+(?:\.\d+)?(?: to \d+(?:\.\d+)?)?(?: ?(?:KiB|MiB|GiB))?`;
 const sentence=new RegExp(String.raw`An install was proven with four Agents across two companies, and twenty more Agent profiles for capacity: each of the 20 took ${figure} seconds to be ready, the engine held ${figure} before and ${figure} after making them, and one profile takes ${figure} KiB of disk with the engine's bundled Skills and ${figure} KiB without\.`);
 
 test('the README states the figures the install job measured, and the number of Agents proven', () => {
  const readme=readFileSync('README.md','utf8').replace(/\s+/g,' ');
  assert.match(readme,sentence);
- assert.match(readme,/TBD|\d+(?:\.\d+)?/,'a figure is written, a placeholder or the measured value');
+ assert.doesNotMatch(readme,/\bTBD\b/,'every figure is the measured value');
 });
 
 test('the install job fills the capacity step and proves the database refuses another Company\'s profile', () => {
