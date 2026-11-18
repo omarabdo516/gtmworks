@@ -3,21 +3,23 @@ import { supabase } from '@/lib/supabase';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
 import { routeAllowed } from '@/lib/route-permissions.mjs';
 import { changeAgentAbout } from '@/lib/agent-about.mjs';
+import { changeAgentInstructions } from '@/lib/agent-instructions.mjs';
 import { changeCompanySkillEnabled } from '@/lib/company-skills.mjs';
 
-// One Agent's settings page (#161, #180): every changed field is saved at once on the Agent's own Engine profile. The
-// request runs as the signed-in person; the route accepts an Owner or a Manager, and each field is checked again by the
-// database before the Engine is written, then logged. `changes` holds a key per field: `about` is the profile's
-// description (check_agent_setting / log_agent_setting), and `skill:<name>` is one Skill's switch, "on" or "off"
+// One Agent's settings page (#161, #176, #180): every changed field is saved at once on the Agent's own Engine profile.
+// The request runs as the signed-in person; the route accepts an Owner or a Manager, and each field is checked again by
+// the database before the Engine is written, then logged. `changes` holds a key per field: `about` is the profile's
+// description (check_agent_setting / log_agent_setting); `instructions` is the profile's SOUL.md outside the team's rules
+// section, written by the Owner alone (check_agent_owner_setting); and `skill:<name>` is one Skill's switch, "on" or "off"
 // (check_skill_write / log_skill_change, one row per Skill). Later fields join with their own checks. Nothing in this
 // body reaches a log, and the Engine's answer is what the page shows.
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const skillName=/^[a-z0-9][a-z0-9_-]{0,63}$/;
 const reply=(body:object,status=200)=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store'}});
-// Each refusal of a field, as the page's answer: a person below Manager or an Agent not theirs, a malformed field, no
-// Engine, or the Engine's own failure.
+// Each refusal of a field, as the page's answer: a person not allowed or an Agent not theirs, a malformed or too long
+// field, no Engine, or the Engine's own failure.
 const refused=(state:string)=>state==='notOwn'||state==='notAllowed'?reply({error:'agentPageNotAllowed'},403)
- :state==='invalid'||state==='shared'||state==='essential'?reply({error:'agentPageInvalid'},400)
+ :state==='invalid'||state==='tooLong'||state==='shared'||state==='essential'?reply({error:'agentPageInvalid'},400)
  :state==='noEngine'?reply({error:'agentPageNoEngine'},503):reply({error:'agentPageFailed'},502);
 export async function POST(request:NextRequest) {
  const db=await supabase(); const {data:{user}}=await db.auth.getUser();
@@ -28,26 +30,32 @@ export async function POST(request:NextRequest) {
  if(typeof body?.company!=='string'||!uuid.test(body.company)||typeof body.agent!=='string'||!uuid.test(body.agent)||!changes||!Object.keys(changes).length) return reply({error:'agentPageInvalid'},400);
  // Every field is read before any write: one malformed key saves nothing.
  const about=typeof changes.about==='string'?changes.about:undefined;
+ const instructions=typeof changes.instructions==='string'?changes.instructions:undefined;
  const skills:Record<string,boolean>={};
  for(const [key,value] of Object.entries(changes)) {
-  if(key==='about') { if(about===undefined) return reply({error:'agentPageInvalid'},400); continue; }
+  if(key==='about'||key==='instructions') { if(typeof value!=='string') return reply({error:'agentPageInvalid'},400); continue; }
   const name=key.startsWith('skill:')?key.slice(6):null;
   if(!name||!skillName.test(name)||(value!=='on'&&value!=='off')) return reply({error:'agentPageInvalid'},400);
   skills[name]=value==='on';
  }
  if(!await routeAllowed(db,'app/api/agent-page/route.ts','POST',body.company,user.id)) return reply({error:'agentPageNotAllowed'},403);
  try {
-  const saved:Record<string,string>={};
+  const saved:Record<string,string>={}; let sectionChars:number|undefined;
   if(about!==undefined) {
    const changed=await changeAgentAbout(db,{company:body.company,agent:body.agent,description:about});
    if(changed.state!=='written') return refused(changed.state);
    saved.about=changed.description;
+  }
+  if(instructions!==undefined) {
+   const changed=await changeAgentInstructions(db,{company:body.company,agent:body.agent,instructions});
+   if(changed.state!=='written') return refused(changed.state);
+   saved.instructions=changed.instructions; sectionChars=changed.sectionChars;
   }
   for(const [name,enabled] of Object.entries(skills)) {
    const changed=await changeCompanySkillEnabled(db,{company:body.company,agent:body.agent,name,enabled});
    if(changed.state!=='changed') return refused(changed.state);
    saved[`skill:${name}`]=enabled?'on':'off';
   }
-  return reply({saved});
+  return reply({saved,...(sectionChars===undefined?{}:{sectionChars})});
  } catch { return reply({error:'agentPageFailed'},500); }
 }

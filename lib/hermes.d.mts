@@ -18,6 +18,9 @@ export function configureProfile(connection:import('./engine.mjs').EngineConnect
 export function readToolsets(connection:HermesConnection):Promise<{state:'found'|'missing'|'refused'|'unreachable'|'failed',toolsets:string[]|null}>;
 export function readAgent(connection:import('./engine.mjs').EngineConnection,name:string):Promise<(import('./engine.mjs').FoundAgent)>;
 export function writeAgentAbout(connection:HermesConnection,change:{name:string,description:string}):Promise<{state:'written',description:string}|{state:'refused'|'unreachable'|'failed',description:null}>;
+export type AgentInstructions={state:'found',instructions:string,sectionChars:number,limit:number}|{state:'missing'|'refused'|'unreachable'|'failed',instructions:string,sectionChars:number,limit:number};
+export function readAgentInstructions(connection:import('./engine.mjs').EngineConnection,name:string):Promise<AgentInstructions>;
+export function writeAgentInstructions(connection:import('./engine.mjs').EngineConnection,change:{profile:string,instructions:string}):Promise<{state:'written',instructions:string,sectionChars:number,limit:number}|{state:'tooLong'|'missing'|'refused'|'unreachable'|'failed',instructions:null,sectionChars:number,limit:number}>;
 export type SignInProvider='openai-codex'|'anthropic';
 export const signInProviders:SignInProvider[];
 export type SignIns=Record<SignInProvider,{connected:boolean,shared:boolean,flow:'device_code'|'external'}>;

@@ -15,6 +15,8 @@ const LazyKnowledge=lazy(()=>import('./company-knowledge-client'));
 const LazyEditedAt=lazy(()=>import('./company-knowledge-client').then(module=>({default:module.KnowledgeEditedAt})));
 const LazyAbout=lazy(()=>import('./settings-agent-form').then(module=>({default:module.AgentAbout})));
 const LazySkills=lazy(()=>import('./settings-agent-form').then(module=>({default:module.AgentSkills})));
+const LazyInstructions=lazy(()=>import('./settings-agent-form').then(module=>({default:module.AgentInstructions})));
+const LazyInstructionsRead=lazy(()=>import('./settings-agent-form').then(module=>({default:module.AgentInstructionsReadOnly})));
 const LazySaveBar=lazy(()=>import('./settings-agent-form').then(module=>({default:module.AgentSaveBar})));
 export function AgentLevel(props:ComponentProps<typeof Level>) { return <Suspense fallback={null}><LazyLevel {...props}/></Suspense>; }
 export function CompanySubscriptions(props:ComponentProps<typeof Subscriptions>) { return <Suspense fallback={null}><LazySubscriptions {...props}/></Suspense>; }
@@ -25,5 +27,9 @@ export function KnowledgeEditedAt(props:{at:string}) { return <Suspense fallback
 export function AgentAbout(props:{agent:string,name:string,description:string}) { return <Suspense fallback={null}><LazyAbout {...props}/></Suspense>; }
 /** @param {{agent:string,name:string,skills:import('./settings-agent-form').AgentSkillRow[]|null,editable:boolean}} props */
 export function AgentSkills(props:{agent:string,name:string,skills:import('./settings-agent-form').AgentSkillRow[]|null,editable:boolean}) { return <Suspense fallback={null}><LazySkills {...props}/></Suspense>; }
+/** @param {{agent:string,name:string,instructions:string,sectionChars:number,limit:number}} props */
+export function AgentInstructions(props:{agent:string,name:string,instructions:string,sectionChars:number,limit:number}) { return <Suspense fallback={null}><LazyInstructions {...props}/></Suspense>; }
+/** @param {{instructions:string,empty:string}} props */
+export function AgentInstructionsReadOnly(props:{instructions:string,empty:string}) { return <Suspense fallback={null}><LazyInstructionsRead {...props}/></Suspense>; }
 /** @param {{company:string,agent:string,name:string}} props */
 export function AgentSaveBar(props:{company:string,agent:string,name:string}) { return <Suspense fallback={null}><LazySaveBar {...props}/></Suspense>; }

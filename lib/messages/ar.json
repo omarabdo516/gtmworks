@@ -1011,5 +1011,10 @@
   "settingsSkillOn": "شغالة",
   "settingsSkillOff": "مقفولة",
   "settingsSkillLearned": "اتعلّمها لوحده",
-  "settingsSkillsUnread": "مش قادرين نقرا المهارات دلوقتي."
+  "settingsSkillsUnread": "مش قادرين نقرا المهارات دلوقتي.",
+  "settingsHowFor": "تعليمات ثابتة لـ {0}",
+  "settingsHowHint": "تعليمات ثابتة {0} بيمشي عليها دايماً: اللهجة، الأولويات، والحاجات اللي يبعد عنها. وبيتعلّم كمان من المحادثات والذاكرة.",
+  "settingsHowEmpty": "مفيش تعليمات ثابتة.",
+  "settingsHowRO": "التعليمات الثابتة بيغيّرها المالك بس.",
+  "logFieldInstructions": "التعليمات"
 }

@@ -39,6 +39,14 @@ export function seedDraft(agent: string, values: Values) {
  if (changed) { state = { agent, saved, draft }; emit(); }
 }
 
+// The fields whose draft differs from what was saved, as the one object the save bar sends.
+/** @param {string} agent @returns {Values} */
+export function changedValues(agent: string) {
+ const current = state;
+ if (!current || current.agent !== agent) return {};
+ return Object.fromEntries(Object.keys(current.saved).filter(key => current.saved[key] !== current.draft[key]).map(key => [key, current.draft[key]]));
+}
+
 /** @param {string} field @param {string} value */
 export function setDraftValue(field: string, value: string) {
  if (!state) return;
@@ -58,10 +66,8 @@ export function restoreDraft() {
 /** @param {Values} saved */
 export function commitDraft(saved: Values) {
  if (!state) return;
- const next = { ...state.saved, ...saved };
- const draft = { ...state.draft };
- for (const key of Object.keys(saved)) draft[key] = saved[key];
- state = { agent: state.agent, saved: next, draft };
+ // A save may carry only the fields that changed: the others keep what they had.
+ state = { agent: state.agent, saved: { ...state.saved, ...saved }, draft: { ...state.draft, ...saved } };
  emit();
 }
 
