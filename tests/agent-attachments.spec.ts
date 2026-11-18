@@ -1,8 +1,11 @@
 import { test, expect, type Page } from './fresh-seed';
 import { chooseLanguageInSettings } from './choose-language';
 import { mkdir } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
 import { signIn } from './sign-in';
 import { appOrigin } from './lane.mjs';
+// Supabase CLI targets the local test database by default; never pass --remote.
+const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 // A real 1 x 1 PNG: the page must show it.
 const bytes=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII=','base64');
 const picture=(name:string)=>({name,mimeType:'image/png',buffer:bytes});
@@ -74,12 +77,11 @@ test('a card file of another company is not found, under its address or one\'s o
  const stamp=Date.now();
  await signIn(page,'omar@example.com','/c/rs-learning/work/board/1');
  const ownFile=Number((await reply(page,`File on an RS Learning card ${stamp}`)).split('/').pop());
- // Aleem has no agent granted yet, so its card comes from the board's stage form.
+ // A Card of Aleem's, filed straight into the seed's Ideas stage (Aleem has no agent to add one from the board).
  await page.goto('/c/aleem/work/board');
- await page.getByRole('button',{name:'+ Add card'}).first().click();
- await page.getByLabel('Card title').fill(`Aleem files ${stamp}`);
- await page.getByRole('button',{name:'Create card',exact:true}).click();
- await expect(page).toHaveURL(/\/c\/aleem\/work\/board\/\d+$/);
+ const [aleemCard]=JSON.parse(query(`insert into public.work_cards(company_id,stage_id,title) select '10000000-0000-0000-0000-000000000003',id,'Aleem files ${stamp}' from public.work_stages where company_id='10000000-0000-0000-0000-000000000003' and kind='ideas' returning id`));
+ await page.goto(`/c/aleem/work/board/${aleemCard.id}`);
+ await expect(page).toHaveURL(new RegExp(`/c/aleem/work/board/${aleemCard.id}$`));
  const aleemFile=await reply(page,`File in Aleem ${stamp}`);
  expect((await page.request.get(aleemFile)).status()).toBe(200);
  const outside=await browser.newContext({baseURL:appOrigin});

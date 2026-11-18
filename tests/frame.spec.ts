@@ -213,6 +213,7 @@ test('owner assigns a new Contributor agent through settings, Home follows renam
 
 test('recent cards record actual opens only, newest three per person and company, with persistent reopen order',async({page,context,browser})=>{
  await signIn(page,'multi@example.com','/c/rs-learning/work/board');
+ const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
  await idle(page);
  await expect(page.locator('.recent-cards')).toHaveCount(0); // Prefetched cards are not opened.
  for(const id of [1,2,3,4]) {
@@ -227,11 +228,10 @@ test('recent cards record actual opens only, newest three per person and company
  await chooseCompany(page,'aleem');
  await expect(page).toHaveURL(/\/c\/aleem\/work\/board$/);
  await expect(page.locator('.recent-cards')).toHaveCount(0);
- // Aleem has no agent granted yet, so its card comes from the board's stage form, not from a message to an agent.
- await page.getByRole('button',{name:'+ Add card'}).first().click();
- await page.getByLabel('Card title').fill(`بطاقة عليم ${Date.now()}`);
- await page.getByRole('button',{name:"Create card",exact:true}).click();
- await expect(page).toHaveURL(/\/c\/aleem\/work\/board\/\d+$/);
+ // A Card of Aleem's, filed straight into the seed's Ideas stage (Aleem has no agent to add one from the board).
+ const [aleemCard]=JSON.parse(query(`insert into public.work_cards(company_id,stage_id,title) select '10000000-0000-0000-0000-000000000003',id,${quote(`بطاقة عليم ${Date.now()}`)} from public.work_stages where company_id='10000000-0000-0000-0000-000000000003' and kind='ideas' returning id`));
+ await page.goto(`/c/aleem/work/board/${aleemCard.id}`);
+ await expect(page).toHaveURL(new RegExp(`/c/aleem/work/board/${aleemCard.id}$`));
  const otherCard=new URL(page.url()).pathname;
  await expect(page.locator('.recent-cards a')).toHaveAttribute('href',otherCard);
  await page.goto('/c/aleem/home');
