@@ -185,12 +185,15 @@ test('Forget this hides the note at once, gives the focus to the next Forget thi
  const send = responder({ forgotten: true });
  vi.stubGlobal('fetch', send);
  const screen = await drawn({ canEdit: true, canForget: true });
+ const forget = screen.getByRole('button', { name: /^Forget this: Prefers short/ }).element() as HTMLButtonElement;
  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
- await screen.getByRole('button', { name: /^Forget this: Prefers short/ }).click();
+ // The press and the clock are checked before any poll, and the press is the element's own click: a locator's click,
+ // expect.poll and expect.element advance fake timers while they retry, so on a slow machine they would carry the clock
+ // past the toast's end on their own.
+ forget.click();
+ await vi.advanceTimersByTimeAsync(0);
  expect([...screen.container.querySelectorAll('.mem-note__t')].map(node => node.textContent)).toEqual(['Omar works in Cairo.']);
  expect(screen.container.querySelector('.dp-label .num')?.textContent).toBe('1');
- // The clock is checked before any poll: expect.poll and expect.element advance fake timers on each retry, so on a slow
- // machine they would carry the clock past the toast's end on their own.
  expect(send).not.toHaveBeenCalled();
  await vi.advanceTimersByTimeAsync(5999);
  expect(send).not.toHaveBeenCalled();
