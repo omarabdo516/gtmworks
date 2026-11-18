@@ -12,7 +12,7 @@ const script = resolve('scripts/ci-verdict.mjs');
 const stages = ['DATABASE', 'INTEGRATION', 'INSTALL'];
 const fastSteps = 'discovery=success docs=success i18n=success openapi=success lint=success typecheck=success knip=success node=success components=success';
 const green = {
-  CHANGES_RESULT: 'success', FAST_RESULT: 'success', FAST_STEPS: fastSteps, COMPONENTS_RUN: 'true', DRAFT: 'false',
+  CHANGES_RESULT: 'success', FAST_RESULT: 'success', FAST_STEPS: fastSteps, COMPONENTS_RUN: 'true', DRAFT: 'false', LIVE_DRAFT: 'false',
   ...Object.fromEntries(stages.flatMap(stage => [[`${stage}_RUN`, 'true'], [`${stage}_RESULT`, 'success']])),
   INTEGRATION_SHARDS: 'success,success,success',
 };
@@ -48,17 +48,37 @@ for (const stage of stages) {
 }
 
 // A draft pull request runs only the fast job (#333): its heavy suites are skipped as not needed, whatever its files.
+// The draft is read twice: from the event that started the run and live from the pull request when check runs, so a
+// re-run of an old draft run after the pull request was marked ready cannot pass with its heavy suites skipped.
 test('a draft passes with every heavy suite skipped, even ones its files need', () => {
   const skipped = Object.fromEntries(stages.map(stage => [`${stage}_RESULT`, 'skipped']));
-  assert.equal(verdict({ DRAFT: 'true', ...skipped }), 0);
-  for (const draft of ['false', '', undefined]) assert.equal(verdict({ DRAFT: draft, ...skipped }), 1, String(draft));
+  assert.equal(verdict({ DRAFT: 'true', LIVE_DRAFT: 'true', ...skipped }), 0);
+  for (const draft of ['false', '', undefined]) assert.equal(verdict({ DRAFT: draft, LIVE_DRAFT: 'true', ...skipped }), 1, String(draft));
+});
+
+test('a re-run of a draft run is red once the pull request is ready, or when its live state is unknown', () => {
+  const skipped = Object.fromEntries(stages.map(stage => [`${stage}_RESULT`, 'skipped']));
+  for (const live of ['false', '', undefined]) assert.equal(verdict({ DRAFT: 'true', LIVE_DRAFT: live, ...skipped }), 1, String(live));
+});
+
+test('check reads the live draft state from the pull request, and an unreadable state counts as ready', async () => {
+  const { load } = await import('js-yaml');
+  const { readFileSync } = await import('node:fs');
+  const { check } = load(readFileSync('.github/workflows/ci.yml', 'utf8')).jobs;
+  assert.equal(check.permissions['pull-requests'], 'read');
+  const live = check.steps.find(step => step.id === 'live');
+  assert.equal(live.env.GH_TOKEN, '${{ github.token }}');
+  assert.equal(live.env.PR_NUMBER, '${{ github.event.pull_request.number }}');
+  assert.doesNotMatch(live.run, /\$\{\{/, 'no expression in the script itself');
+  assert.match(live.run, /\|\| draft=false/);
+  assert.equal(check.steps.at(-1).env.LIVE_DRAFT, '${{ steps.live.outputs.draft }}');
 });
 
 test('a draft is red when any stage that ran failed or was cancelled', () => {
   for (const result of ['failure', 'cancelled']) {
-    for (const stage of stages) assert.equal(verdict({ DRAFT: 'true', [`${stage}_RESULT`]: result }), 1, `${stage}=${result}`);
-    for (const key of ['CHANGES_RESULT', 'FAST_RESULT']) assert.equal(verdict({ DRAFT: 'true', [key]: result }), 1, `${key}=${result}`);
-    assert.equal(verdict({ DRAFT: 'true', FAST_STEPS: fastSteps.replace('lint=success', `lint=${result}`) }), 1, `lint=${result}`);
+    for (const stage of stages) assert.equal(verdict({ DRAFT: 'true', LIVE_DRAFT: 'true', [`${stage}_RESULT`]: result }), 1, `${stage}=${result}`);
+    for (const key of ['CHANGES_RESULT', 'FAST_RESULT']) assert.equal(verdict({ DRAFT: 'true', LIVE_DRAFT: 'true', [key]: result }), 1, `${key}=${result}`);
+    assert.equal(verdict({ DRAFT: 'true', LIVE_DRAFT: 'true', FAST_STEPS: fastSteps.replace('lint=success', `lint=${result}`) }), 1, `lint=${result}`);
   }
 });
 

@@ -838,14 +838,31 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # The pull request's live draft state, read below.
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
+      # The event's draft flag is the one the run started with: a re-run after the pull request was marked ready still
+      # says draft. check accepts a draft's skipped suites only when the pull request is a draft now too; a state it
+      # cannot read counts as ready.
+      - name: the pull request's live draft state
+        id: live
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          draft=false
+          if [[ $PR_NUMBER =~ ^[0-9]+$ ]]; then
+            draft=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .draft) || draft=false
+          fi
+          echo "draft=$draft" | tee -a "$GITHUB_OUTPUT"
       - name: all required stages green
         env:
           CHANGES_RESULT: ${{ needs.changes.result }}
           FAST_RESULT: ${{ needs.fast.result }}
           FAST_STEPS: ${{ needs.fast.outputs.steps }}
           DRAFT: ${{ github.event.pull_request.draft }}
+          LIVE_DRAFT: ${{ steps.live.outputs.draft }}
           COMPONENTS_RUN: ${{ needs.changes.outputs.components }}
           DATABASE_RUN: ${{ needs.changes.outputs.database }}
           DATABASE_RESULT: ${{ needs.database.result }}
