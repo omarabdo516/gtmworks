@@ -1,6 +1,6 @@
 'use client';
 import '@/app/log.css';
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent as KeyEvent, type ReactNode } from 'react';
+import { Suspense, memo, use, useCallback, useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent as KeyEvent, type ReactNode } from 'react';
 import { useI18n } from '@/lib/i18n-client';
 import Link from '@/lib/link';
 import { ShellIcon } from '@/components/shell-icon';
@@ -8,7 +8,7 @@ import { CompanyAgentFace } from '@/components/company-agent-face';
 import { MadeLine } from '@/app/agent-made';
 import type { Made } from '@/lib/agent-made';
 import { onComposerFocus } from '@/lib/composer-focus';
-import { statusKeys } from '@/lib/agent-details.mjs';
+import { pickTab, statusKeys, type DetailsTab } from '@/lib/agent-details.mjs';
 import { overlayHref } from '@/lib/settings-overlay.mjs';
 import { rememberOpener, takeReturnFocus } from '@/app/settings-opener';
 import type { AgentDetailsView } from '@/app/agent-details-server';
@@ -72,9 +72,12 @@ export function DetailsShell({panel,label,start,children}:{panel:DetailsPanel,la
  </>;
 }
 
-export function AgentDetails({panel,agent,details,slug}:{panel:DetailsPanel,agent:DetailsAgent,details:AgentDetailsView,slug:string}) {
+// `details` may still be on its way (the chat page streams it, decision 0042): the panel is drawn at once with the Agent,
+// and what its reads give (the state, the tab's lists) takes its place when they arrive. `tab` is then the open tab.
+type Details=AgentDetailsView|Promise<AgentDetailsView>;
+export function AgentDetails({panel,agent,details,tab:first,slug}:{panel:DetailsPanel,agent:DetailsAgent,details:Details,tab?:DetailsTab,slug:string}) {
  const {t,language}=useI18n();
- const [tab,setTab]=useState<Tab>(details.tab);
+ const [tab,setTab]=useState<Tab>(()=>pickTab(first??(details as AgentDetailsView).tab) as Tab);
  // Back from the Agent's settings the gear takes the focus again (reference: the overlay's close); over the chat the
  // panel starts closed, so it opens first. This runs after the panel's own focus on its close button. The first
  // hydrated render reads the window as wide (the server's answer), so it waits until the width is the real one.
@@ -95,16 +98,29 @@ export function AgentDetails({panel,agent,details,slug}:{panel:DetailsPanel,agen
  };
  return <DetailsShell panel={panel} label={t('chatDetailsOf',agent.name)} start={<Link className="circle-btn" id="dp-settings" href={overlayHref(slug,'agents',{agent:agent.id})} aria-haspopup="dialog" aria-label={t('chatAgentSettings',agent.name)} title={t('settings')} onClick={()=>rememberOpener('dp-settings')}><ShellIcon name="gear"/></Link>}>
   <div className="dp-id">
-   <span className="face-wrap face-wrap--lg" aria-hidden="true"><CompanyAgentFace agent={agent} size={64}/><span className={`dot dot--${details.status}`}/></span>
+   <span className="face-wrap face-wrap--lg" aria-hidden="true"><CompanyAgentFace agent={agent} size={64}/><Later details={details} part="dot"/></span>
    <div>
     <div className="dp-id__name"><bdi>{agent.name}</bdi>{agent.main&&<span className="badge dp-id__badge">{t('mainAgent')}</span>}</div>
-    <div className="dp-id__role">{agent.speciality&&<><bdi>{agent.speciality}</bdi>{'\u00a0'}</>}<span className="dp-id__state">{agent.speciality&&'·\u00a0'}{t(statusKeys[details.status])}</span></div>
+    <div className="dp-id__role">{agent.speciality&&<><bdi>{agent.speciality}</bdi>{'\u00a0'}</>}<span className="dp-id__state">{agent.speciality&&'·\u00a0'}<Later details={details} part="state"/></span></div>
     {agent.made&&<MadeLine made={agent.made} where="panel"/>}
    </div>
   </div>
   <div className="segmented dp-tabs" role="tablist" aria-label={t('chatDetailsOf',agent.name)}>{tabs.map(item=>'soon' in item
    ?<button key={item.key} type="button" role="tab" id={`dp-tab-${item.key}`} aria-selected="false" aria-disabled="true" tabIndex={-1} title={t('soon')}>{t(item.label)}<span className="sr-only"> · {t('soon')}</span></button>
    :<button key={item.key} type="button" role="tab" id={`dp-tab-${item.key}`} aria-selected={tab===item.key} aria-controls="dp-panel" tabIndex={tab===item.key?0:-1} onClick={()=>setTab(item.key)} onKeyDown={move}>{t(item.label)}</button>)}</div>
-  <div id="dp-panel" role="tabpanel" aria-labelledby={`dp-tab-${tab}`} className="dp-sections">{details.tabs[tab]}</div>
+  <div id="dp-panel" role="tabpanel" aria-labelledby={`dp-tab-${tab}`} className="dp-sections"><Later details={details} part={tab}/></div>
  </DetailsShell>;
+}
+
+// One part of the details once they are read; until then an idle state and an empty tab. Kept apart (memo), so the panel
+// drawn again while a part still streams in does not draw that part a second time beside its streamed copy (#172).
+const Later=memo(function Later({details,part}:{details:Details,part:'dot'|'state'|Tab}) {
+ return 'then' in details?<Suspense fallback={part==='dot'||part==='state'?<Part view={{status:'idle'}} part={part}/>:null}><Read details={details} part={part}/></Suspense>:<Part view={details} part={part}/>;
+});
+const Read=({details,part}:{details:Promise<AgentDetailsView>,part:'dot'|'state'|Tab})=><Part view={use(details)} part={part}/>;
+function Part({view,part}:{view:Pick<AgentDetailsView,'status'>&Partial<AgentDetailsView>,part:'dot'|'state'|Tab}) {
+ const {t}=useI18n();
+ if(part==='dot') return <span className={`dot dot--${view.status}`}/>;
+ if(part==='state') return <>{t(statusKeys[view.status])}</>;
+ return <>{view.tabs?.[part]}</>;
 }

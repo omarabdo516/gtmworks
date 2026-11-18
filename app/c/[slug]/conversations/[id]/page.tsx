@@ -1,7 +1,8 @@
 import { notFound, redirect } from 'next/navigation';
+import { after } from 'next/server';
 import { getI18n } from '@/lib/i18n-server';
 import { supabase } from '@/lib/supabase';
-import Shell from '@/app/shell';
+import Shell, { sidebarReads } from '@/app/shell';
 import { approvalQueue } from '@/lib/approval-queue';
 import ConversationView, { ConversationLoaded } from './conversation';
 import { conversationColumns, faceOf, uuid } from '@/lib/conversations';
@@ -9,11 +10,13 @@ import { conversationRecord, tiedCard } from '@/lib/conversation-record';
 import { agentAppStates, agentSessionTurns } from '@/lib/company-app-items';
 import { madeColumns, madeOf } from '@/lib/agent-made';
 import { agentDetails } from '@/app/agent-details-server';
+import { pickTab } from '@/lib/agent-details.mjs';
+import { logOpen, markOpen, startOpen } from '@/lib/chat-open-timing';
 
 // Only the person who started a conversation can read it; everyone else, in this company or another, gets not found.
 // ?tab=<key> opens the Agent's details on that tab.
 export default async function ConversationPage({params,searchParams}:{params:Promise<{slug:string,id:string}>,searchParams:Promise<{tab?:string}>}) {
- const {slug,id}=await params; const {tab}=await searchParams;
+ const timing=startOpen(); const {slug,id}=await params; const {tab}=await searchParams;
  const db=await supabase();
  // The person's own Companies and the Conversation are read beside the sign-in check (RLS reads nothing without one),
  // and the Conversation is then held to the Company in the address.
@@ -25,11 +28,18 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  if(!company||!uuid.test(id)) notFound();
  const conversation=found?.company_id===company.id?found:null;
  if(!conversation) notFound();
+ markOpen('frame',timing);
+ // The sidebar's reads and what waits on this person go out now, beside the page's own: the Shell and the Agent's details
+ // find them on their way (app/shell.tsx, lib/approval-queue.ts).
+ sidebarReads(company.id).catch(()=>{});
+ const waitingCount=approvalQueue(db,company.id,user.id).then(({count})=>count);
+ // Each step's time, written once the response has gone (docs/production-logs.md: chat_opened).
+ after(()=>logOpen(timing,company.id,id));
  // Messages, notes to a person and waiting turns, with who the Agent is working for (lib/conversation-record.ts). The
  // page is drawn without waiting for it; the chat shows its placeholder until it arrives (#172).
- const record=conversationRecord(db,user.id,company.id,conversation,agent=>agentAppStates(company.id,agent),(agent,session)=>agentSessionTurns(company.id,agent,session));
+ const record=conversationRecord(db,user.id,company.id,conversation,agent=>agentAppStates(company.id,agent),(agent,session)=>agentSessionTurns(company.id,agent,session).finally(()=>markOpen('session',timing)));
  // Awaited only by the transcript: a read of the frame that fails first must not leave its failure unhandled.
- record.catch(()=>{});
+ record.then(()=>markOpen('record',timing),()=>{});
  // Its Card on the board, in the corner from the start (design-reference: renderChat's corner pill): read beside the
  // frame's other reads, and handled the same way until the frame awaits it.
  const tiedRead=tiedCard(db,company.id,id);
@@ -46,17 +56,21 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
   // Any Member but a Viewer may write (#287); the database decides, as it does for every send.
   db.rpc('conversation_can_write',{c:company.id}),
  ]);
- const [{count:waitingCount},details]=await Promise.all([approvalQueue(db,company.id,user.id,membership?.role||''),
-  agent?agentDetails(db,{company:company.id,agent:agent.id,name:agent.name,slug,me:user.id,role:membership?.role||'',tab}):null]);
+ markOpen('reads',timing);
+ // The Agent's details (reads two deep) and the approvals count are handed over unread: the chat and its steps are drawn
+ // without waiting for them, and each takes its place when read (decision 0042).
+ const details=agent?agentDetails(db,{company:company.id,agent:agent.id,name:agent.name,slug,me:user.id,role:membership?.role||'',tab}).finally(()=>markOpen('details',timing)):null;
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  const title=(first?.body as string|undefined)?.split('\n')[0]||conversation.agent_name;
  const tied=await tiedRead;
  return <Shell company={company} companies={companies||[]} personId={user.id} section="conversations" title={title} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={waitingCount} agentId={conversation.agent_id||undefined} conversationId={id}>
-  <main className="convo-page h-full"><ConversationView slug={slug} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={details} company={company.id} conversation={{id:conversation.id,agent_id:conversation.agent_id,agent_name:conversation.agent_name,face:faceOf(conversation)}} title={title} writer={!!writer} board={tied&&{card:tied.card,column:tied.column}}><Loaded record={record} team={company.work_mode==='team'}/></ConversationView></main>
+  <main className="convo-page h-full"><ConversationView slug={slug} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={details} tab={pickTab(tab)} company={company.id} conversation={{id:conversation.id,agent_id:conversation.agent_id,agent_name:conversation.agent_name,face:faceOf(conversation)}} title={title} writer={!!writer} board={tied&&{card:tied.card,column:tied.column}}><Loaded record={record} team={company.work_mode==='team'}/></ConversationView></main>
  </Shell>;
 }
 
 // The chat once its record is read, streamed in place of the placeholder.
 async function Loaded({record,team}:{record:ReturnType<typeof conversationRecord>,team:boolean}) {
+ // Everything outside this boundary is drawn by now, so the page's first bytes leave next.
+ markOpen('firstByte');
  return <ConversationLoaded initial={await record} team={team}/>;
 }

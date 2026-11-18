@@ -33,7 +33,9 @@ const stored = {
 const replied = '2026-06-10T09:42:00Z';
 type TiedCard = { id: number, column: string, made?: string, wait?: { person: string, kind: 'question' | 'hand', title: string } };
 function database(card: TiedCard | null) {
- const rows: Record<string, unknown[]> = { ...stored, work_cards: card ? [{ id: card.id, created_at: card.made ?? replied, stage_id: 3, wait: card.wait ?? null, work_stages: { id: 3, board_column: card.column } }] : [] };
+ // The messages and how their runs ended are read through the Conversation, in one statement (lib/conversation-record.ts).
+ const { conversation_run_ends, conversation_messages, ...rest } = stored;
+ const rows: Record<string, unknown[]> = { ...rest, conversations: [{ conversation_run_ends, conversation_messages, conversation_queued_turns: [], lead_agent_requests: [], lead_made_agents: [] }], work_cards: card ? [{ id: card.id, created_at: card.made ?? replied, stage_id: 3, wait: card.wait ?? null, work_stages: { id: 3, board_column: card.column } }] : [] };
  const table = (name: string) => {
   const found = rows[name] ?? [];
   const query: Record<string, unknown> = { then: (resolve: (value: unknown) => unknown) => resolve({ data: found, error: null }), maybeSingle: async () => ({ data: found[0] ?? null, error: null }) };

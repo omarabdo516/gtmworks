@@ -5,6 +5,7 @@ import { useI18n } from '@/lib/i18n-client';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { AgentDetails, HeadPill, useDetailsPanel, type DetailsAgent } from '@/app/agent-details';
 import type { AgentDetailsView } from '@/app/agent-details-server';
+import type { DetailsTab } from '@/lib/agent-details.mjs';
 import { LeadWelcome } from '@/app/lead-welcome';
 import { PrivateLine } from '@/app/private-line';
 import { titleOf } from '@/lib/conversations';
@@ -26,7 +27,7 @@ type Live={record:ConversationRecord,asked:()=>void};
 // has its reply asked for once it is there. `children` is the transcript (ConversationLoaded), drawn by the server once
 // the record is read. `board` is the chat's Card on the board as the page read it, shown in the corner until the record
 // says where the Card is now.
-export default function ConversationView({slug,agent,details,company,conversation,title,writer,board,children}:{slug:string,agent:DetailsAgent|null,details:AgentDetailsView|null,company:string,conversation:ThreadConversation,title:string,writer:boolean,board?:ConversationRecord['board'],children:ReactNode}) {
+export default function ConversationView({slug,agent,details,tab,company,conversation,title,writer,board,children}:{slug:string,agent:DetailsAgent|null,details:Promise<AgentDetailsView>|null,tab?:DetailsTab,company:string,conversation:ThreadConversation,title:string,writer:boolean,board?:ConversationRecord['board'],children:ReactNode}) {
  const {c}=useConversationText(); const panel=useDetailsPanel();
  const composer=useRef<MessageBoxHandle>(null); const [early,setEarly]=useState(0); const [live,setLive]=useState<Live|null>(null);
  const record=live?.record; const corner=record?record.board:board;
@@ -40,7 +41,7 @@ export default function ConversationView({slug,agent,details,company,conversatio
   <HeadPill panel={panel} agent={agent?.name} face={<span aria-hidden="true"><CompanyAgentFace agent={{connection_id:conversation.face,name:conversation.agent_name}} size={24}/></span>} title={record?titleOf(record.messages,conversation.agent_name):title} titleDir="auto" corner={corner&&<CornerPill slug={slug} board={corner} writer={writer} fresh={fresh.has(corner.card)} c={c}/>}/>
   <Transcript>{children}</Transcript>
   <div className="composer-area"><ConversationComposer company={company} conversation={conversation} record={record??null} writer={writer} asked={live?.asked??(()=>setEarly(count=>count+1))} box={composer} usage/></div>
- </div>{agent&&details&&<AgentDetails panel={panel} agent={agent} details={details} slug={slug}/>}</div></ChatView>;
+ </div>{agent&&details&&<AgentDetails panel={panel} agent={agent} details={details} tab={tab} slug={slug}/>}</div></ChatView>;
 }
 
 // The transcript's boundary renders only when the transcript itself changes. This frame renders again while it

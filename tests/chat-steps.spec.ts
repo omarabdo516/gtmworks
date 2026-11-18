@@ -4,6 +4,8 @@ import { randomUUID } from 'node:crypto';
 import { fakeHermes } from './fake-hermes.mjs';
 import { laneHermes } from './lane-hermes';
 import { signIn } from './sign-in';
+import { readFile } from 'node:fs/promises';
+import { serverLogOf } from './lane.mjs';
 
 // #346: a reply's steps are read from the Agent's Hermes session when the chat opens, never kept by gtmworks. RS Learning
 // runs on its own profile in a fake Engine whose management listener serves a session's messages as the pinned release
@@ -57,6 +59,13 @@ test('a reply\'s steps on screen are its Hermes session\'s, and the chat shows t
  await expect(toggle).toHaveText('Used 2 tools · 41 sec');
  const took=Date.now()-opened;
  console.log(`chat open to steps visible: ${took} ms`);
+ // Where the time went, read after the clock stops: the browser's own timing of the page, and the server's chat_opened
+ // line for this open (docs/production-logs.md), written once its response has gone.
+ const nav=await page.evaluate(()=>{ const entry=performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming; return {firstByte:Math.round(entry.responseStart),domContentLoaded:Math.round(entry.domContentLoadedEventEnd),load:Math.round(entry.loadEventEnd)}; });
+ console.log(`  browser: ${JSON.stringify(nav)}`);
+ const line=async()=>(await readFile(serverLogOf(),'utf8').catch(()=>'')).split('\n').find(entry=>entry.includes('"chat_opened"')&&entry.includes(conversation));
+ await expect.poll(line,{timeout:5000}).toBeTruthy().catch(()=>{});
+ console.log(`  server: ${await line()??'no chat_opened line'}`);
  test.info().annotations.push({type:'open-to-steps-visible-ms',description:String(took)});
  expect(took,'the chat opens with its steps within one second').toBeLessThan(1000);
  await toggle.click();

@@ -27,24 +27,21 @@ export async function conversationRecord(db:Database,person:string,company:strin
  // The session is read beside the database, so the Engine adds no wait of its own to opening the chat.
  const read=session&&found.agent_id&&found.hermes_session_id?session(found.agent_id,found.hermes_session_id).catch(()=>null):Promise.resolve(null);
  // The record's reads go out together, each one round trip, so a busy machine adds one wait and not a chain of them to
- // opening the chat (decision 0042). Two pairs keep their order. Ends first: a run closed between the two reads then
- // shows its reply too (both are written in one transaction); the waiting turns after the messages, as they were read.
- // Requests first: an Owner's yes writes the request's state and the made Agent in one transaction, so a made request
- // read here always finds its Agent in the read after it.
+ // opening the chat (decision 0042). The messages with how their runs ended and the turns still waiting, and the requests
+ // for an Agent with the Agents made for them, are read in one statement (one snapshot): a run closed in one transaction
+ // with its reply shows both or neither, and an Owner's yes, which writes the request's state and the made Agent in one
+ // transaction, is never seen in half.
  type RequestRow={id:number,run_id:string,call_id:string,agent_name:string,job:string,apps:string[],asked_with:string,state:AgentRequestView['state'],answered_at:string|null,reason:string|null,created_at:string,answerer:{name:string}|null,asker:{name:string}|null};
+ type Message={id:number,author:'person'|'agent',author_name:string,body:string,run_id:string,hand_card:number|null,created_at:string};
  type MadeRow={run_id:string,call_id:string,created_at:string,hermes_agents:{id:string,connection_id:string,name:string,speciality:string,apps:string[]|null,is_default:boolean,requested_by:string|null,requester_opened_at:string|null}|null};
- const [{ends,messages,queued},{requestRows,madeRows},notes,replyRows,rows,{data:working},{data:me},card]=await Promise.all([
-  (async()=>{
-   const ends=((await db.from('conversation_run_ends').select('run_id,outcome').eq('conversation_id',conversation)).data||[]) as RunEnd[];
-   const messages=(await db.from('conversation_messages').select(messageColumns).eq('conversation_id',conversation).order('id')).data||[];
-   const queued=((await db.from('conversation_queued_turns').select(queuedColumns).eq('conversation_id',conversation).order('queued_at')).data||[]) as QueuedTurn[];
-   return {ends,messages,queued};
-  })(),
-  (async()=>{
-   const requestRows=((await db.from('lead_agent_requests').select('id,run_id,call_id,agent_name,job,apps,asked_with,state,answered_at,reason,created_at,answerer:people!answered_by(name),asker:people!asked_by(name)').eq('conversation_id',conversation).order('id')).data||[]) as unknown as RequestRow[];
-   const madeRows=((await db.from('lead_made_agents').select('run_id,call_id,created_at,hermes_agents(id,connection_id,name,speciality,apps,is_default,requested_by,requester_opened_at)').eq('conversation_id',conversation).order('created_at')).data||[]) as unknown as MadeRow[];
-   return {requestRows,madeRows};
-  })(),
+ const [{ends,messages,queued,requestRows,madeRows},notes,replyRows,rows,{data:working},{data:me},card]=await Promise.all([
+  db.from('conversations').select(`conversation_run_ends(run_id,outcome),conversation_messages(${messageColumns}),conversation_queued_turns(${queuedColumns}),`
+   +'lead_agent_requests(id,run_id,call_id,agent_name,job,apps,asked_with,state,answered_at,reason,created_at,answerer:people!answered_by(name),asker:people!asked_by(name)),'
+   +'lead_made_agents(run_id,call_id,created_at,hermes_agents(id,connection_id,name,speciality,apps,is_default,requested_by,requester_opened_at))')
+   .eq('id',conversation).order('id',{referencedTable:'conversation_messages'}).order('queued_at',{referencedTable:'conversation_queued_turns'})
+   .order('id',{referencedTable:'lead_agent_requests'}).order('created_at',{referencedTable:'lead_made_agents'}).maybeSingle()
+   .then(({data})=>{ const read=data as unknown as {conversation_run_ends:RunEnd[],conversation_messages:Message[],conversation_queued_turns:QueuedTurn[],lead_agent_requests:RequestRow[],lead_made_agents:MadeRow[]}|null;
+    return {ends:read?.conversation_run_ends||[],messages:read?.conversation_messages||[],queued:read?.conversation_queued_turns||[],requestRows:read?.lead_agent_requests||[],madeRows:read?.lead_made_agents||[]}; }),
   db.from('conversation_notes').select(noteColumns).eq('conversation_id',conversation).order('id').then(({data})=>(data||[]) as StoredNote[]),
   db.from('reply_cards').select(replyCardColumns).eq('conversation_id',conversation).order('id').then(({data})=>(data||[]) as ReplyCardRow[]),
   db.from('agent_rules').select('id,run_id,agent_id,removed_at,said_at,body,suggestion,decided_at,decider:people!decided_by(name)').eq('conversation_id',conversation).order('said_at').then(({data})=>(data||[]) as unknown as SavedRow[]),

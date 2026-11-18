@@ -253,6 +253,12 @@ test('a failed server action writes one structured log line with its name and no
  assert.deepEqual([returned.action,returned.outcome,returned.code,returned.message],['saveLanguage','returned','42501','permission denied']);
 });
 
+test('a chat open writes one line of each step\'s whole milliseconds, with ids only',async()=>{
+ const {chatOpenLine}=await import('../lib/diagnostics.mjs');
+ const entry=JSON.parse(chatOpenLine({company:'0B7E3A52-1c4d-4f6a-9b8e-2d5c7f1a3e90',conversation:'not an id; drop table',steps:{frame:12.4,sidebar:80.6,record:NaN,body:5,done:301}},{now:new Date('2026-11-18T10:00:00Z')}));
+ assert.deepEqual(entry,{event:'chat_opened',at:'2026-11-18T10:00:00.000Z',company:'0b7e3a52-1c4d-4f6a-9b8e-2d5c7f1a3e90',conversation:null,ms:{frame:12,sidebar:81,done:301}});
+});
+
 test('a redirect from a server action is not logged as a failure',async()=>{
  const {withActionLog}=await import('../lib/diagnostics.mjs');
  const lines=[]; const redirect=Object.assign(new Error('NEXT_REDIRECT'),{digest:'NEXT_REDIRECT;replace;/c/x;307;'});
