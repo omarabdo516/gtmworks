@@ -111,7 +111,7 @@ export default function FirstRunChoice({slug,company,companyName,personName,lead
     </div>
    </>:<>
     <div className="fr__head">
-     <button type="button" className="link-btn fr__back" id="fr-back" disabled={pending} onClick={back}><ShellIcon name={language==='ar'?'forward':'back'}/><span>{t('firstRunBack')}</span></button>
+     <button type="button" className="link-btn fr__back" id="fr-back" disabled={pending} onClick={back}><ShellIcon name={language==='ar'?'back':'forward'}/><span>{t('firstRunBack')}</span></button>
      <p className="fr__eyebrow">{t('firstRunStepTwo')}</p>
      <h1 className="fr__title" id="fr-title">{t('firstRunTeamTitle')}</h1>
      <p className="fr__sub">{t('firstRunTeamSub')}</p>

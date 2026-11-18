@@ -147,3 +147,16 @@ test('Enter in an email field opens the workspace with its invitations, never Sk
  await expect.poll(() => finish.mock.calls.length).toBe(1);
  expect(finish.mock.calls[0][1].get('choice')).toBe('open');
 });
+
+test('Back\'s chevron points the way the reference draws it: left in English', async () => {
+ const screen = await show();
+ await showStepTwo(screen);
+ expect(document.querySelector('#fr-back svg path')!.getAttribute('d'), 'English Back points left, as icon(\'chevronRight\') flips').toBe('M15 6l-6 6 6 6');
+});
+
+test('Back\'s chevron in Arabic points right, as the reference\'s chevronRight does', async () => {
+ const screen = await show('ar');
+ await screen.getByRole('radio', { name: 'مع تيم' }).click();
+ await screen.getByRole('button', { name: 'كمّل' }).click();
+ expect(document.querySelector('#fr-back svg path')!.getAttribute('d')).toBe('M9 6l6 6-6 6');
+});
