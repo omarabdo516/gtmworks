@@ -96,7 +96,9 @@ export function AgentMemory({company,agent,notes,main,canReset,canEdit,canForget
   return ()=>window.removeEventListener('pagehide',leave);
  },[]);
  const forget=(note:MemoryNote)=>{
-  if(forgetting.current) return;
+  // A second forget while a toast is up removes the first note at once, as its toast gives way to the new one.
+  const earlier=forgetting.current;
+  if(earlier) { forgetting.current=null; window.clearTimeout(earlier.timer); void removeLatest.current(earlier.note); }
   const shown=notes.filter(each=>!hidden.includes(each.id));
   const at=shown.findIndex(each=>each.id===note.id);
   const next=shown[at+1]??shown[at-1]??null;
