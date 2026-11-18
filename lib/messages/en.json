@@ -364,7 +364,7 @@
   "usageOutput": "Output tokens",
   "usageSessions": "Conversations",
   "usageUnknown": "Usage unknown",
-  "usageNone": "No usage to show. An Owner sees the usage of the companies they own.",
+  "usageNone": "No usage to show in this period.",
   "conversationUsage": "{0} tokens used ({1} in, {2} out)",
   "navigation": "Navigation",
   "mainMenu": "Main menu",
@@ -986,5 +986,8 @@
   "settingsSaveFailed": "Could not save the settings. Try again.",
   "logActSettingChanged": "changed {0} in the settings of {1}",
   "logFieldAbout": "the description",
-  "logEdited": "Edited"
+  "logEdited": "Edited",
+  "settingsPerModel": "Per model",
+  "usageModel": "Model",
+  "usageHeaviest": "Heaviest agent"
 }

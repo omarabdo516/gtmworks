@@ -22,7 +22,7 @@ import Work from './work';
 import { workAction } from './work-actions';
 import Projects from './projects';
 import Usage from './usage';
-import { ownedUsage } from '@/lib/company-app-items';
+import { managedUsage } from '@/lib/company-app-items';
 import { Approvals, ApprovalSettings } from './approvals';
 import { type WorkActivity, type WorkMember } from '@/lib/work-activity';
 
@@ -45,14 +45,16 @@ export default async function CompanyPage({params,searchParams}:{params:Promise<
   return <><div className="contents" inert><Shell company={company} companies={companies || []} personId={user.id} section={section} title={title} personName={person?.name || user.email || ''} role={roleName} owner={membership?.role==='owner'}><main className="content"/></Shell></div>
    <SettingsOverlay slug={slug} company={company} userId={user.id} role={membership?.role || ''} personName={person?.name || user.email || ''} workMode={company.work_mode} query={await searchParams}/></>; }
  const manage=['owner','manager'].includes(membership?.role || ''); const canOwner=membership?.role==='owner';
+ // Usage is the Owner's and the Managers' (#32), checked here for the page as the database checks each read.
+ if(section==='usage'&&!manage) notFound();
  const {data:members}=section==='settings/members'?await db.from('members').select('person_id,role,agent_role,grant_publishing,grant_money_figures,grant_customer_data,people(name)').eq('company_id',company.id).order('role'): {data:[]};
  const {data:companyHermesAgents}=section==='agents'?await db.from('hermes_agents').select('id,connection_id,name,speciality,is_default').eq('company_id',company.id).order('name'):{data:[]};
  const {data:accessAgents}=section==='agents'&&canOwner?await db.from('agents').select('id,role').order('role'):{data:[]};
  const {data:accessGrants}=section==='agents'&&canOwner?await db.from('agent_grants').select('agent_id,revoked_at').eq('company_id',company.id):{data:[]};
  const skillAgents=section==='skills'?await companySkillAgents(company.id):null;
  const {data:audit}=section==='settings/members'?await db.from('member_audit').select('id,actor_id,actor_name,person_id,person_name,action,created_at,before_data,after_data').eq('company_id',company.id).order('created_at',{ascending:false}):{data:[]};
- // Each owned Company's token use in the last 30 days, read from Hermes (#347).
- const usageRows=section==='usage'?await ownedUsage(user.id,30):[];
+ // Each managed Company's token use in the last 30 days, read from the bundled Engine (#347, #32).
+ const usageRows=section==='usage'?await managedUsage(user.id,30):[];
  const query=await searchParams; const message=query.message;
  const waitingFailures:Record<string,string>={rule:'waitingRuleFailed','request-engineNotReady':'waitingRequestNotReady','request-engineUnreachable':'waitingRequestUnreachable',
   'request-notMade':'waitingRequestNotMade','request-answered':'waitingRequestAnswered','request-notFound':'waitingRequestAnswered','request-reasonMissing':'waitingRequestReasonMissing'};

@@ -23,10 +23,11 @@ const helperRow={agent:helper,name:'Helper',connection:'f0000000-0000-0000-0000-
 
 // The person's own session as the database answers it: is_company_owner, company_engine_target, the three app
 // functions, and the sign-ins row-level security shows an Owner. The service role only reads the Connection's key.
-function sessions(fake,{person,isOwner,signIns,agents=[leadRow]}) {
+function sessions(fake,{person,isOwner,canManage=isOwner,signIns,agents=[leadRow]}) {
  const asked=[]; const logged=[];
  const db={rpc:async(name,args)=>{
    asked.push(name);
+   if(name==='can_manage_company') return {data:canManage,error:null};
    if(name==='is_company_owner') return {data:isOwner,error:null};
    if(name==='company_engine_target') return {data:[{profile:companyProfile(args.c)}],error:null};
    if(name==='company_app_agents') return {data:agents,error:null};
@@ -249,25 +250,29 @@ test('only an Agent whose profile is its own is changed: one on the main profile
  } finally { await fake.close(); }
 });
 
-// #347: the usage screen's numbers are each Agent's Hermes profile's own, read for an Owner only (the database checks
-// is_company_owner); a profile two Agents still share is one row with both names, so nothing is counted twice, and a
-// profile Hermes cannot answer for has unknown usage, never zero.
-test('an Owner reads each Agent\'s token use from its own profile, and anyone else reads none',async()=>{
+// #347: the usage screen's numbers are each Agent's Hermes profile's own, read for an Owner or a Manager (#32, the
+// database checks can_manage_company); a profile two Agents still share is one row with both names, so nothing is
+// counted twice, a profile Hermes cannot answer for has unknown usage, never zero, and the per-model rows come with
+// each profile and no price.
+test('an Owner or a Manager reads each Agent\'s token use from its own profile with its per-model rows, and anyone else reads none',async()=>{
  const fake=await fakeHermes();
  try {
   const now=Date.now()/1000;
-  fake.settings.sessions.set('s-lead',{profile:companyProfile(company),messages:[],input_tokens:1200,output_tokens:34,started_at:now-60});
-  fake.settings.sessions.set('s-writer',{profile:agentProfile(writer),messages:[],input_tokens:5000,output_tokens:60,started_at:now-60});
-  fake.settings.sessions.set('s-old',{profile:agentProfile(writer),messages:[],input_tokens:9,output_tokens:9,started_at:now-40*86400});
+  fake.settings.sessions.set('s-lead',{profile:companyProfile(company),messages:[],input_tokens:1200,output_tokens:34,model:'anthropic/claude-opus-4.6',started_at:now-60});
+  fake.settings.sessions.set('s-writer',{profile:agentProfile(writer),messages:[],input_tokens:5000,output_tokens:60,model:'openai/gpt-5.5',started_at:now-60});
+  fake.settings.sessions.set('s-old',{profile:agentProfile(writer),messages:[],input_tokens:9,output_tokens:9,model:'openai/gpt-5.5',started_at:now-40*86400});
   const driver={usage:(target,days)=>readUsage({...target,managementAddress:target.profile===agentProfile(analyst)?'http://8.8.8.8:2':fake.managementAddress},days)};
   const agents=[leadRow,writerRow,analystRow,helperRow];
   const owner_=sessions(fake,{person:owner,isOwner:true,signIns:[],agents});
-  assert.deepEqual(await readCompanyUsage(owner_.db,{company,days:30,driver}),[
-   {agents:[{id:lead,name:'Lead'},{id:helper,name:'Helper'}],input:1200,output:34,sessions:1},
-   {agents:[{id:writer,name:'Writer'}],input:5000,output:60,sessions:1},
-   {agents:[{id:analyst,name:'Analyst'}],input:null,output:null,sessions:null}]);
+  const expected=[
+   {agents:[{id:lead,name:'Lead'},{id:helper,name:'Helper'}],input:1200,output:34,sessions:1,models:[{model:'anthropic/claude-opus-4.6',input:1200,output:34,sessions:1}]},
+   {agents:[{id:writer,name:'Writer'}],input:5000,output:60,sessions:1,models:[{model:'openai/gpt-5.5',input:5000,output:60,sessions:1}]},
+   {agents:[{id:analyst,name:'Analyst'}],input:null,output:null,sessions:null,models:null}];
+  assert.deepEqual(await readCompanyUsage(owner_.db,{company,days:30,driver}),expected);
+  const manager=sessions(fake,{person:member,isOwner:false,canManage:true,signIns:[],agents});
+  assert.deepEqual(await readCompanyUsage(manager.db,{company,days:30,driver}),expected,'a Manager reads their Company\'s usage');
   const someone=sessions(fake,{person:member,isOwner:false,signIns:[],agents});
   assert.equal(await readCompanyUsage(someone.db,{company,days:30,driver}),null);
-  assert.ok(!someone.asked.includes('company_app_agents'),'nothing is read for someone who is not the Owner');
+  assert.ok(!someone.asked.includes('company_app_agents'),'nothing is read for someone who is neither Owner nor Manager');
  } finally { await fake.close(); }
 });
