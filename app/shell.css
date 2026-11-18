@@ -360,6 +360,18 @@
 .gw .suggest b { font-size: var(--gw-fs-base); font-weight: 600; }
 .gw .suggest span { font-size: var(--gw-fs-sm); color: var(--gw-text-3); text-wrap: pretty; }
 @media (hover: hover) { .gw .suggest button:hover { background: var(--gw-bg-elevated-hover); } }
+/* The picker of a known Agent's empty chat (#171; design-reference: .agent-picker, .chip): every Agent this Member sees,
+   its pressed chip the primary fill and a face inside it. */
+.gw .empty-chat .agent-picker { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 8px; }
+.gw .empty-chat .chip {
+  display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; padding-inline-start: 6px; border: 0;
+  border-radius: var(--gw-r-full); background: var(--gw-bg-pane); box-shadow: var(--gw-border-2) 0 0 0 0.5px inset;
+  font: inherit; font-size: var(--gw-fs-sm); font-weight: 400; color: var(--gw-text-1); white-space: nowrap; cursor: pointer;
+  transition: background-color var(--gw-dur-fast) var(--gw-ease-out);
+}
+.gw .empty-chat .chip__face { display: inline-flex; }
+.gw .empty-chat .chip[aria-pressed="true"] { background: var(--gw-primary); color: var(--gw-on-primary); box-shadow: none; }
+@media (hover: hover) { .gw .empty-chat .chip:hover:not([aria-pressed="true"]) { background: var(--gw-bg-elevated-hover); } }
 .gw .main-h { display: inline-flex; align-items: center; gap: 8px; }
 .gw .badge { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: var(--gw-r-full); font-size: var(--gw-fs-xs); font-weight: 400; line-height: 1.5; background: var(--gw-bg-tertiary); color: var(--gw-text-1); }
 .gw .main-badge { align-self: center; }
@@ -827,6 +839,9 @@
   .gw .new-hint__alt::before { content: ""; position: absolute; inset: -11px 0; }
   .gw .tpl-cats { padding-block: 5px; margin-block: -3px; }
   .gw .tpl-cats .chip::before { content: ""; position: absolute; inset: -5px 0; }
+  /* The picker's chips keep the reference's 34px, each with a 44px tap area. */
+  .gw .agent-picker .chip { position: relative; }
+  .gw .agent-picker .chip::before { content: ""; position: absolute; inset: -5px 0; }
   .gw.modal .btn::before { content: ""; position: absolute; inset: -4px 0; }
   .gw.modal .btn--sm::before { inset: -7px 0; }
   .gw .tpl-search { padding-block: 4px; margin-block: -4px; }
