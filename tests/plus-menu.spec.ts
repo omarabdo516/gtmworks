@@ -107,7 +107,7 @@ test('in a Conversation the Contributor\'s "Call an agent" lists exactly the Age
 
 test('in a Conversation the Commands name the Agent each role was given, after "/" and in the "+" menu',async({page})=>{
  await signIn(page,'omar@example.com',`/c/rs-learning/chat/${faye}`);
- const plus=page.getByRole('button',{name:'More: call someone, commands'});
+ const plus=page.getByRole('button',{name:/^More: call someone, new channel, commands/});
  await plus.click();
  // Reach is this Company's meta Agent and Sage its writer; no Agent was made from numbers or hook, so those two commands
  // are not listed. /agent comes last among the Commands and Connect apps after them (#159; design-reference: CMDS).

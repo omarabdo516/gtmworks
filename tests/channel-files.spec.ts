@@ -30,7 +30,7 @@ test('an image with a channel message shows under it for the writer and for the 
  const send=page.getByRole('button',{name:'Send',exact:true});
  await expect(send).toBeEnabled();
  await send.click();
- const turn=page.locator('.turn--user').filter({has:page.locator('.msg-files')});
+ const turn=page.locator('.turn--user').filter({has:page.locator('.msg-files')}).last();
  await expect(turn.locator('.msg-files .file-chip')).toHaveText(/cover\.png/);
  // An image alone shows no bubble.
  await expect(turn.locator('.bubble--user')).toHaveCount(0);
@@ -44,7 +44,7 @@ test('an image with a channel message shows under it for the writer and for the 
  expect(own.headers()['content-disposition']).toMatch(/^inline;/);
  expect([channelFiles(),storedChannelFiles()].every(count=>count>0)).toBe(true);
  await page.reload();
- await expect(page.locator('.turn--user .msg-files a.file-chip')).toHaveAttribute('href',href!);
+ await expect(page.locator('.turn--user .msg-files a.file-chip').last()).toHaveAttribute('href',href!);
  // The Viewer reads the chip on the start side, and opens the file; they have no composer to attach one.
  await page.context().clearCookies();
  await signIn(page,'viewer@example.com',general);
