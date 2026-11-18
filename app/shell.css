@@ -470,6 +470,12 @@
   .gw .details a.panel-row:hover { background: var(--gw-bg-hover); }
   .gw .details .link-btn:hover { background: var(--gw-bg-hover); color: var(--gw-text-1); }
 }
+/* An Agent's connected tools (#204; design-reference: activityHTML's toolsSec, .btn--sm, .btn--primary, .panel-row__meta). */
+.gw .details .dp-tools .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex: none; height: 30px; padding: 0 var(--s3); border-radius: var(--gw-r-full); font-size: var(--gw-fs-sm); font-weight: 600; white-space: nowrap; }
+.gw .details .dp-tools .btn--primary { background: var(--gw-primary); color: var(--gw-on-primary); }
+.gw .details .dp-tools .panel-row__meta .gw-icon { width: 14px; height: 14px; }
+.gw .details .dp-tools__err { margin: 0; padding-inline: var(--s3); font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-danger-text); text-wrap: pretty; }
+@media (hover: hover) { .gw .details .dp-tools .btn--primary:hover:not(:disabled) { background: var(--gw-primary-hover); color: var(--gw-on-primary); } }
 .gw .details .num { font-variant-numeric: tabular-nums; }
 .gw .details .muted { color: var(--gw-text-3); }
 .gw .details .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; display: inline-block; background: var(--gw-idle-dot); }

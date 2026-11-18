@@ -38,7 +38,7 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  // Any Member but a Viewer may write (#287); the database decides, as it does for every send.
  const {data:writer}=await db.rpc('conversation_can_write',{c:company.id});
  const {count:waitingCount}=await approvalQueue(db,company.id,user.id,membership?.role||'');
- const details=agent?await agentDetails(db,{company:company.id,agent:agent.id,slug,me:user.id,role:membership?.role||'',tab}):null;
+ const details=agent?await agentDetails(db,{company:company.id,agent:agent.id,name:agent.name,slug,me:user.id,role:membership?.role||'',tab}):null;
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  const title=(first?.body as string|undefined)?.split('\n')[0]||conversation.agent_name;
  const tied=await tiedRead;

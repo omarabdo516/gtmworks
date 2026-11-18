@@ -3,11 +3,12 @@ import { cache } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { supabaseConfig } from './supabase-config';
-import { readAgentApps, readCompanyApps } from './company-apps.mjs';
+import { readAgentApps, readAgentTools, readCompanyApps } from './company-apps.mjs';
 import type { Language } from './i18n.mjs';
 import en from './messages/apps.en.json';
 import ar from './messages/apps.ar.json';
 import type { AppItem } from '@/app/settings-apps-client';
+import type { AgentToolItem } from '@/app/connected-tools';
 import type { AppStates } from './conversations';
 
 type Text=Record<string,string>;
@@ -31,4 +32,14 @@ export const companyAppItems=cache(async(company:string,language:Language):Promi
 // One Agent's apps now, by key, for the connect cards of its Conversations (#203); null when they cannot be read.
 export const agentAppStates=cache(async(company:string,agent:string):Promise<AppStates>=>{
  try { return await readAgentApps(await supabase(),service(),{company,agent,encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY}); } catch { return null; }
+});
+
+// One Agent's connected tools now, each with what it is for in the reader's words, for its details (#204); null when
+// they cannot be read.
+export const agentToolItems=cache(async(company:string,agent:string,language:Language):Promise<AgentToolItem[]|null>=>{
+ try {
+  const tools=await readAgentTools(await supabase(),service(),{company,agent,encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY});
+  const text:Text=language==='ar'?ar:en;
+  return tools&&tools.map(tool=>({...tool,use:text[`use.${tool.key}`]}));
+ } catch { return null; }
 });
