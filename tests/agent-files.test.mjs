@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
-import { downloadAgentFile, listAgentFiles, workSegments } from '../lib/hermes.mjs';
+import { downloadAgentFile, listAgentFiles, readAgentFile, workSegments } from '../lib/hermes.mjs';
 import { agentFileDownload, agentLibrary } from '../lib/agent-files.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
@@ -112,6 +112,29 @@ test('a file that resolves outside the work folder, or a broken link, is not lis
   assert.deepEqual(await downloadAgentFile(at,{name:'passwd'}),{state:'missing'});
   assert.deepEqual(await downloadAgentFile(at,{name:'elsewhere'}),{state:'missing'});
   assert.equal(downloaded(fake).length,0,'no bytes were asked for');
+ } finally { await fake.close(); }
+});
+
+test('a folder that the Engine resolves outside the work folder is missing, for the list, the download and the preview', async () => {
+ const {fake,at}=await engine();
+ try {
+  fake.settings.files.set(work,[{name:'reports',isFolder:true},{name:'brief.md',size:2,mtime}]);
+  fake.settings.fileBytes.set(`${work}/brief.md`,{body:'Sell it',type:'text/markdown'});
+  // The work folder itself is a link out of the Agent's profile: what the Engine resolved is not what gtmworks asked for.
+  fake.settings.resolved.set(work,`/etc`);
+  assert.deepEqual(await listAgentFiles(at),{state:'missing',entries:null});
+  assert.deepEqual(await downloadAgentFile(at,{name:'brief.md'}),{state:'missing'});
+  assert.deepEqual(await readAgentFile(at,{name:'brief.md'}),{state:'missing'});
+  assert.equal(downloaded(fake).length,0,'no bytes were asked for');
+  assert.ok(!fake.settings.managementRequests.some(request=>String(request.path).startsWith('/api/fs/read-text')),'no text was asked for');
+  // A folder inside it that is a link somewhere else is refused the same way, and its entries are never used.
+  fake.settings.resolved.delete(work);
+  fake.settings.files.set(`${work}/reports`,[{name:'q3.csv',size:12,mtime}]);
+  fake.settings.resolved.set(`${work}/reports`,'/srv/reports');
+  assert.deepEqual(await listAgentFiles(at,'reports'),{state:'missing',entries:null});
+  assert.deepEqual(await downloadAgentFile(at,{folder:'reports',name:'q3.csv'}),{state:'missing'});
+  assert.deepEqual(await readAgentFile(at,{folder:'reports',name:'q3.csv'}),{state:'missing'});
+  assert.equal(downloaded(fake).length,0);
  } finally { await fake.close(); }
 });
 

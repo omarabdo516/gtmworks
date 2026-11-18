@@ -464,6 +464,7 @@
 .gw .details .lib-1l { display: block; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gw .details .lib-thumb { width: 36px; height: 36px; flex: none; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; border-radius: var(--gw-r-xs); background: var(--gw-bg-tertiary); color: var(--gw-text-2); }
 .gw .details .lib-thumb .gw-icon { width: 18px; height: 18px; }
+.gw .lib-thumb img { display: block; max-width: 100%; max-height: 100%; width: auto; height: auto; }
 .gw .details .lib-dl { width: 32px; height: 32px; margin-inline-end: 6px; }
 .gw .details .lib-dl .gw-icon { width: 16px; height: 16px; }
 .gw .details .lib-empty { display: grid; justify-items: center; gap: 6px; padding: var(--s5) var(--s3); text-align: center; color: var(--gw-text-3); }

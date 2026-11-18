@@ -98,6 +98,9 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   files:/** @type {Map<string,{name:string,isFolder?:boolean,size?:number,mtime?:number,resolves?:string,broken?:boolean}[]>} */(new Map()),
   fileBytes:/** @type {Map<string,{body:string|Uint8Array,type?:string}>} */(new Map()),
   filesUnreadable:/** @type {Set<string>} */(new Set()),
+  // The path `/api/files?path=` and `/api/fs/read-text?path=` answer with, when it is not the one asked for: a folder or
+  // a file that is a link somewhere else, which the Engine resolves and reports as its own `path`.
+  resolved:/** @type {Map<string,string>} */(new Map()),
   // Sessions by id (#346): the profile each belongs to and its messages as the listener returns them
   // (hermes_cli/web_routers/sessions.py get_session_messages), oldest first: role, content, tool_calls, tool_call_id,
   // tool_name and timestamp; and (#347) the session's token use as its detail reports it (get_session_detail), with the
@@ -261,7 +264,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     if(settings.filesUnreadable.has(path)) return send(response,500,{detail:'Could not read directory'});
     const entries=settings.files.get(path);
     if(!entries) return send(response,404,{detail:'Path not found'});
-    return send(response,200,{path,parent:null,root:'/opt/data',locked_root:'/opt/data',can_change_path:false,entries:entries.map(entry=>{
+    return send(response,200,{path:settings.resolved.get(path)??path,parent:null,root:'/opt/data',locked_root:'/opt/data',can_change_path:false,entries:entries.map(entry=>{
      const folder=entry.isFolder===true;
      const at=entry.broken?`${path}/${entry.name}`:entry.resolves??`${path}/${entry.name}`;
      return {name:entry.name,path:at,is_directory:folder,size:folder||entry.broken?null:entry.size??0,mtime:folder||entry.broken?null:entry.mtime??1763500000,
@@ -279,7 +282,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     if(entry.isFolder===true) return send(response,400,{detail:'Path points to a directory'});
     const file=settings.fileBytes.get(path)||{body:`the bytes of ${entry.name}`,type:mimeOf(entry.name)};
     const data=Buffer.from(file.body);
-    return send(response,200,{binary:data.includes(0),byteSize:data.length,language:'text',mimeType:file.type??mimeOf(entry.name),path,
+    return send(response,200,{binary:data.includes(0),byteSize:data.length,language:'text',mimeType:file.type??mimeOf(entry.name),path:settings.resolved.get(path)??path,
      text:data.subarray(0,512*1024).toString('utf8'),truncated:data.length>512*1024});
    }
    if(url.pathname==='/api/fs/download'&&['GET','HEAD'].includes(request.method)) {

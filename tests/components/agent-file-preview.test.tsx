@@ -92,7 +92,7 @@ test('a file\'s row opens the preview with the keyboard on Download, and the clo
  await closedBack(screen, 'brief.md');
 });
 
-test('a PNG is drawn as a picture from its download route, while a vector image is never drawn: its icon and Download only', async () => {
+test('a PNG is drawn as a picture from its download route, in the dialog and in its head, while a vector image is never drawn: its icon and Download only', async () => {
  engine();
  const screen = await drawn();
  await open(screen, 'shot.png');
@@ -100,12 +100,16 @@ test('a PNG is drawn as a picture from its download route, while a vector image 
  await expect.element(image).toBeVisible();
  expect(image.element().getAttribute('src')).toBe('/c/rs-learning/agent-files/ag-1?name=shot.png');
  expect(dialog()!.querySelector('pre, table')).toBeNull();
+ // The head draws the same picture, as the reference's libThumb does for a raster.
+ const head = dialog()!.querySelector<HTMLImageElement>('.modal__head .lib-thumb img');
+ expect(head?.getAttribute('src')).toBe('/c/rs-learning/agent-files/ag-1?name=shot.png');
  await screen.getByRole('button', { name: 'Close' }).click();
  await expect.poll(() => dialog()).toBeNull();
  // An SVG carries no content at all: no image, no text, just the icon and Download.
  await open(screen, 'logo.svg');
  await expect.poll(() => dialog()!.querySelector('.pv-none')?.textContent).toBe('logo.svg');
  expect(dialog()!.querySelector('img, pre, table, svg.pv-img')).toBeNull();
+ expect(dialog()!.querySelector('.modal__head .lib-thumb svg')).not.toBeNull();
  await expect.element(screen.getByRole('link', { name: 'Download' })).toBeVisible();
 });
 

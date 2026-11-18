@@ -10,6 +10,8 @@ import { ShellIcon } from '@/components/shell-icon';
 import { FileName } from '@/components/file-name';
 import { useI18n } from '@/lib/i18n-client';
 import { fileSize } from '@/lib/agent-details.mjs';
+import { isThumbnail } from '@/lib/attachments.mjs';
+import { pictureType } from '@/lib/file-preview.mjs';
 import { FeedWhen } from '@/app/c/[slug]/log/log-client';
 import { toast } from '@/app/toast';
 import { AgentFilePreview, type PreviewFile } from '@/app/agent-file-preview';
@@ -24,10 +26,9 @@ export function AgentLibrary({company,slug,agent,name}:{company:string,slug:stri
  const [path,setPath]=useState<string[]>([]);
  const [read,setRead]=useState<Read>({key:'',state:'loading'});
  const [preview,setPreview]=useState<PreviewFile|null>(null);
- const rootHeading=useRef<HTMLHeadingElement>(null); const folderHeading=useRef<HTMLHeadingElement>(null);
- const rows=useRef(new Map<string,HTMLButtonElement>());
- // A move the reader made takes the focus where the reference puts it: the opened folder's own name, and on the way
- // back the folder's row itself. Drawing the panel never takes the focus.
+ const rootCrumb=useRef<HTMLButtonElement>(null); const rows=useRef(new Map<string,HTMLButtonElement>());
+ // A move the reader made takes the focus where the reference puts it: the way back to the Library (lib-open focuses
+ // #lib-root), and on the way back the folder's row itself. Drawing the panel never takes the focus.
  const moving=useRef<'in'|'out'|null>(null); const backTo=useRef<string|null>(null);
 
  const key=path.join('/');
@@ -46,8 +47,8 @@ export function AgentLibrary({company,slug,agent,name}:{company:string,slug:stri
  // Once the folder is drawn, the move takes the focus; the first draw leaves it where it was.
  useEffect(()=>{
   if(read.key!==key||read.state!=='found'||!moving.current) return;
-  if(moving.current==='in') folderHeading.current?.focus();
-  else { const row=backTo.current?rows.current.get(backTo.current):null; if(row) row.focus(); else rootHeading.current?.focus(); }
+  if(moving.current==='in') rootCrumb.current?.focus();
+  else { const row=backTo.current?rows.current.get(backTo.current):null; if(row) row.focus(); else rootCrumb.current?.focus(); }
   moving.current=null;
  },[read,key]);
 
@@ -55,10 +56,16 @@ export function AgentLibrary({company,slug,agent,name}:{company:string,slug:stri
  const up=()=>{ backTo.current=path[path.length-1]??null; moving.current='out'; setPath(path.slice(0,-1)); };
 
  const entries=shown.state==='found'?shown.entries:null;
- // The root counts every file the Agent has here, as the reference's Library does; a folder counts the rows it shows.
- const count=path.length?entries?.length??0:(entries??[]).reduce((total,entry)=>total+(entry.isFolder?entry.files??0:1),0);
+ // The root counts every file the Agent has here, as the reference's Library does: a folder's own file count (its direct
+ // files, as the route reports it) plus the files beside it. A file inside a folder inside a folder is not counted here.
+ // shortcut: the reference's total is the same sum of what each folder holds at its top level, so a nested folder's
+ // files are counted once, when that folder is opened, and not in the root.
+ const count=path.length?(entries??[]).filter(entry=>!entry.isFolder).length:(entries??[]).reduce((total,entry)=>total+(entry.isFolder?entry.files??0:1),0);
  const filesWord=(n:number)=>n===1?t('agentLibraryFilesOne'):n===2?t('agentLibraryFilesTwo'):n<=10?t('agentLibraryFilesFew',n):t('agentLibraryFilesMany',n);
  const download=(entry:LibraryRow)=>`/c/${encodeURIComponent(slug)}/agent-files/${encodeURIComponent(agent)}?${new URLSearchParams({...(path.length?{folder:path.join('/')}:{}),name:entry.name})}`;
+ // A raster file's row is its picture, drawn through the download route as the reference's libThumb does; any other
+ // file keeps the icon.
+ const thumb=(entry:LibraryRow)=><span className="lib-thumb">{isThumbnail(pictureType(entry.name))?<img className="lib-thumb__img" src={download(entry)} alt=""/>:<ShellIcon name="file"/>}</span>;
  // A file's row opens the read-only preview (#195), and however the dialog closes the keyboard comes back to that row.
  const openFile=(entry:LibraryRow)=>setPreview({name:entry.name,folder:key,size:entry.size,time:entry.time});
  const closePreview=()=>{ const row=preview?rows.current.get(preview.name):null; setPreview(null); row?.focus(); };
@@ -74,7 +81,7 @@ export function AgentLibrary({company,slug,agent,name}:{company:string,slug:stri
   </button></li>
   :<li key={entry.name} className="panel-row lib-file">
    <button type="button" className="lib-file__main" aria-haspopup="dialog" ref={node=>{ if(node) rows.current.set(entry.name,node); else rows.current.delete(entry.name); }} onClick={()=>openFile(entry)}>
-    <span className="lib-thumb"><ShellIcon name="file"/></span>
+    {thumb(entry)}
     <span className="panel-row__text"><span className="panel-row__t lib-1l" title={entry.name}><FileName name={entry.name}/></span>
      <span className="panel-row__d lib-1l">{entry.size===null?null:<bdi dir="ltr">{fileSize(entry.size)}</bdi>}{entry.time?<>{entry.size===null?null:' · '}<FeedWhen value={entry.time}/></>:null}</span></span>
    </button>
@@ -87,7 +94,7 @@ export function AgentLibrary({company,slug,agent,name}:{company:string,slug:stri
   :null;
 
  if(!path.length) return <><section className="dp-sec dp-library" aria-labelledby="dp-lib-h">
-  <h3 className="dp-label" id="dp-lib-h" tabIndex={-1} ref={rootHeading}><span>{t('agentLibraryOf',name)} <span className="muted num">{count}</span></span></h3>
+  <h3 className="dp-label" id="dp-lib-h"><span>{t('agentLibraryOf',name)} <span className="muted num">{count}</span></span></h3>
   {list??blank}
   <p className="lib-hint">{t('agentLibraryHint',name)}</p>
  </section>{dialog}</>;
@@ -95,9 +102,9 @@ export function AgentLibrary({company,slug,agent,name}:{company:string,slug:stri
  const current=path[path.length-1];
  return <><section className="dp-sec dp-library" aria-labelledby="dp-lib-cur">
   <nav className="lib-crumbs" aria-label={t('agentLibraryPlace')}>
-   <button type="button" className="link-btn" onClick={up}>{t('agentLibraryOf',name)}</button>
+   <button type="button" className="link-btn" ref={rootCrumb} onClick={up}>{t('agentLibraryOf',name)}</button>
    <ShellIcon name="chevron"/>
-   <h3 className="lib-crumbs__cur" id="dp-lib-cur" tabIndex={-1} ref={folderHeading} aria-current="location">{current} <span className="muted num">{count}</span></h3>
+   <h3 className="lib-crumbs__cur" id="dp-lib-cur" aria-current="location">{current} <span className="muted num">{count}</span></h3>
   </nav>
   {list??blank}
  </section>{dialog}</>;

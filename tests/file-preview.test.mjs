@@ -111,6 +111,19 @@ test('a file\'s first part is read through the Engine, with its type, its whole 
  } finally { await fake.close(); }
 });
 
+test('a file the Engine read from a path other than the one asked for is missing, and its text is never handed on', async () => {
+ const {fake,at}=await engine();
+ try {
+  const text='# Brief\n\nSell more.\n';
+  await withFile(fake,'brief.md',text,'text/markdown');
+  // The link was swapped between the folder's listing and the read: the Engine says which file it actually read.
+  fake.settings.resolved.set(`${work}/brief.md`,'/etc/passwd');
+  assert.deepEqual(await readAgentFile(at,{name:'brief.md'}),{state:'missing'});
+  fake.settings.resolved.delete(`${work}/brief.md`);
+  assert.equal((await readAgentFile(at,{name:'brief.md'})).state,'found');
+ } finally { await fake.close(); }
+});
+
 test('a path or name that could leave the work folder is refused before the Engine is asked for its text', async () => {
  const {fake,at}=await engine();
  try {

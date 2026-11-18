@@ -1,5 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { runInNewContext } from 'node:vm';
+import ts from 'typescript';
 import { editMemoryNote, forgetMemoryNote, readMemoryNotes, resetMemory } from '../lib/hermes.mjs';
 import { editAgentMemory, forgetAgentMemory, readAgentMemory, resetAgentMemory } from '../lib/agent-memory.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
@@ -254,4 +258,49 @@ test('a note a refused Engine call left alone is not logged, and a hidden Agent 
   assert.deepEqual(owner.edited,[],'a stale note is not logged as edited');
   assert.deepEqual((await readMemoryNotes(at(fake,adsProfile))).notes.map(note=>note.text),['Changed under the reader.']);
  } finally { await fake.close(); }
+});
+
+// #191/#350: the route's own answers, with its permission check and its store replaced and no server or database (as
+// agent-files.test.mjs runs its routes).
+const require=createRequire(import.meta.url);
+const origin=await import('../lib/app-origin.mjs');
+function loadRoute(store) {
+ const exports={};
+ const {outputText}=ts.transpileModule(readFileSync('app/api/agent-memory/route.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ESNext,esModuleInterop:true}});
+ const imports={
+  '@/lib/supabase':{supabase:async()=>({auth:{getUser:async()=>({data:{user:{id:'9a000000-0000-0000-0000-000000000001'}}})}})},
+  '@/lib/app-origin.mjs':origin,
+  '@/lib/route-permissions.mjs':{routeAllowed:async()=>true},
+  '@/lib/agent-memory.mjs':store,
+ };
+ runInNewContext(outputText,{exports,require:name=>imports[name]??require(name),URL,URLSearchParams,Error,Response,Request,Headers,process});
+ return exports;
+}
+const put=(route,body)=>route.PUT(new (require('next/server').NextRequest)('http://app.test/api/agent-memory',{method:'PUT',headers:{'content-type':'application/json'},body}));
+
+test('a note too long for the memory is refused rather than invalid, so the screen shows its own line', async () => {
+ const calls=[];
+ const route=loadRoute({editAgentMemory:async(...args)=>{ calls.push(args); return {state:'edited'}; }});
+ const long=await put(route,JSON.stringify({company,agent:ads,note:'memory:memory:0:4d2c1b0a9f8e',text:'x'.repeat(12001)}));
+ assert.equal(long.status,400);
+ assert.deepEqual(await long.json(),{error:'agentMemoryRefused'},'the screen reads it as a note too long');
+ assert.deepEqual(calls,[],'nothing is sent to the Engine');
+ const short=await put(route,JSON.stringify({company,agent:ads,note:'memory:memory:0:4d2c1b0a9f8e',text:'x'.repeat(12000)}));
+ assert.equal(short.status,200);
+ assert.equal(calls.length,1);
+});
+
+test('a body that is not JSON is invalid, and a failure after it is a server error', async () => {
+ const {NextRequest}=require('next/server');
+ const route=loadRoute({editAgentMemory:async()=>{ throw new Error('the database is down'); },
+  readAgentMemory:async()=>{ throw new Error('the database is down'); }});
+ const notJson=await put(route,'{');
+ assert.equal(notJson.status,400);
+ assert.deepEqual(await notJson.json(),{error:'agentMemoryInvalid'},'a parse error stays invalid');
+ const failed=await put(route,JSON.stringify({company,agent:ads,note:'memory:memory:0:4d2c1b0a9f8e',text:'New.'}));
+ assert.equal(failed.status,500);
+ assert.deepEqual(await failed.json(),{error:'agentMemoryFailed'});
+ const read=await route.GET(new NextRequest(`http://app.test/api/agent-memory?company=${company}&agent=${ads}`));
+ assert.equal(read.status,500);
+ assert.deepEqual(await read.json(),{error:'agentMemoryFailed'});
 });

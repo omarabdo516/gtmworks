@@ -70,17 +70,20 @@ test('the Owner opens the Agent\'s Library above its files, a folder inside it, 
  await expect(briefRow.locator('time')).toHaveAttribute('datetime',new Date(at*1000).toISOString());
  await expect(library.locator('.lib-hint')).toHaveText('What Librarian makes is saved here automatically. You can view and download it, and ask for edits in the chat.');
 
- // A folder opens in place with the focus on its name, the way back puts the focus on that folder's row, and a folder
- // inside a folder opens the same way.
+ // A folder opens in place with its own count of files, the focus on the way back to the Library (the reference's
+ // lib-open focuses #lib-root), and the way back puts the focus on that folder's row; a folder inside a folder opens
+ // the same way.
  await library.getByRole('button',{name:/^reports/}).click();
- await expect(library.getByRole('heading',{name:'reports 2'})).toBeFocused();
+ await expect(library.getByRole('heading',{name:'reports 1'})).toBeVisible();
+ await expect(library.getByRole('button',{name:'Library of Librarian'})).toBeFocused();
  await expect(library.getByRole('button',{name:/^2026/})).toHaveAccessibleName(/^2026 One file · latest /);
  await expect(library.getByText('q3.csv')).toBeVisible();
  await library.getByRole('button',{name:'Library of Librarian'}).click();
  await expect(library.getByRole('button',{name:/^reports/})).toBeFocused();
  await library.getByRole('button',{name:/^reports/}).click();
  await library.getByRole('button',{name:/^2026/}).click();
- await expect(library.getByRole('heading',{name:'2026 1'})).toBeFocused();
+ await expect(library.getByRole('heading',{name:'2026 1'})).toBeVisible();
+ await expect(library.getByRole('button',{name:'Library of Librarian'})).toBeFocused();
  await library.getByRole('button',{name:'Library of Librarian'}).click();
  await expect(library.getByRole('button',{name:/^2026/})).toBeFocused();
  await library.getByRole('button',{name:'Library of Librarian'}).click();

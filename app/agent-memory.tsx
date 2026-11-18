@@ -28,8 +28,11 @@ export function AgentMemory({company,agent,notes,main,canReset,canEdit,canForget
  const [editing,setEditing]=useState<string|null>(null); const [draft,setDraft]=useState(''); const [editError,setEditError]=useState<'empty'|'tooLong'|'stale'|'failed'|null>(null); const [saving,setSaving]=useState(false);
  const [hidden,setHidden]=useState<string[]>([]); const [forgetError,setForgetError]=useState(false);
  const [query,setQuery]=useState('');
- // Where the focus goes after the next draw: back to a note's Edit, or to a note's Forget this (the search when none).
- const focusAfter=useRef<{edit?:string,forget?:string|'search'}|null>(null);
+ // Where the focus goes after the next draw: back to a note's Edit — by its id, or by its place in the list when the
+ // Engine gives it a new one (a note's id is a digest of its text, so a saved note comes back under another) — or to a
+ // note's Forget this (the search when none).
+ type FocusAfter={edit?:string,editAt?:{at:number,text:string},forget?:string|'search'};
+ const focusAfter=useRef<FocusAfter|null>(null);
  const resetButton=useRef<HTMLButtonElement>(null); const cancelButton=useRef<HTMLButtonElement>(null); const asked=useRef(false);
  const editor=useRef<HTMLTextAreaElement>(null); const search=useRef<HTMLInputElement>(null);
  const editButtons=useRef(new Map<string,HTMLButtonElement>()); const forgetButtons=useRef(new Map<string,HTMLButtonElement>());
@@ -50,6 +53,15 @@ export function AgentMemory({company,agent,notes,main,canReset,canEdit,canForget
  // list is drawn.
  useEffect(()=>{
   const request=focusAfter.current; if(!request) return;
+  // A saved note may come back under a new id, so the row is found by its place and the text the Engine now holds: the
+  // request waits until the changed list is drawn.
+  if(request.editAt) {
+   const note=notes[request.editAt.at];
+   if(note?.text!==request.editAt.text) return;
+   focusAfter.current=null;
+   editButtons.current.get(note.id)?.focus();
+   return;
+  }
   focusAfter.current=null;
   if(request.edit) editButtons.current.get(request.edit)?.focus();
   else if(request.forget==='search') search.current?.focus();
@@ -70,12 +82,19 @@ export function AgentMemory({company,agent,notes,main,canReset,canEdit,canForget
  const closeEdit=(note:MemoryNote)=>{ setEditing(null); setEditError(null); focusAfter.current={edit:note.id}; };
  const save=async(note:MemoryNote)=>{
   if(saving) return;
-  // An empty note is refused here, before the Engine, with the reference's line (a removal is "Forget this").
-  if(!draft.trim()) { setEditError('empty'); editor.current?.focus(); return; }
+  // The text is saved as the reference saves it, trimmed; an empty note is refused here, before the Engine, with the
+  // reference's line (a removal is "Forget this").
+  const text=draft.trim();
+  if(!text) { setEditError('empty'); editor.current?.focus(); return; }
   setSaving(true); setEditError(null);
   try {
-   const response=await fetch('/api/agent-memory',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({company,agent:agent.id,note:note.id,text:draft}),cache:'no-store'});
-   if(response.ok) { setEditing(null); setSaving(false); focusAfter.current={edit:note.id}; toast(t('memoryUpdated')); router.refresh(); return; }
+   const response=await fetch('/api/agent-memory',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({company,agent:agent.id,note:note.id,text}),cache:'no-store'});
+   if(response.ok) {
+    const at=matched.findIndex(each=>each.id===note.id);
+    setEditing(null); setSaving(false);
+    focusAfter.current=at<0?null:{editAt:{at,text}};
+    toast(t('memoryUpdated')); router.refresh(); return;
+   }
    const body=await response.json().catch(()=>null) as {error?:string}|null;
    setEditError(body?.error==='agentMemoryStale'?'stale':body?.error==='agentMemoryRefused'?'tooLong':'failed');
    setSaving(false); editor.current?.focus();
@@ -126,7 +145,7 @@ export function AgentMemory({company,agent,notes,main,canReset,canEdit,canForget
  return <section className="dp-sec" aria-labelledby="mem-h">
   <h3 className="dp-label" id="mem-h"><span>{t('memoryHeading',agent.name)} <span className="muted num">{visible.length}</span></span>
    {canReset&&!asking&&<button ref={resetButton} type="button" className="link-btn" aria-expanded={false} onClick={ask}>{t('memoryReset')}</button>}</h3>
-  <p className="mem-intro">{t('memoryIntro')} {t('memoryIntroAgent',agent.name)}{(canEdit||canForget)?` ${t('memoryIntroEdit')}`:''}</p>
+  <p className="mem-intro">{t('memoryIntro')} {t('memoryIntroAgent',agent.name)}{(canEdit&&canForget)?` ${t('memoryIntroEdit')}`:''}</p>
   <p className="mem-know"><ShellIcon name="book"/><span>{t('memoryKnow',agent.name)}</span>
    {knowledgeHref&&<Link className="link-btn" href={knowledgeHref}>{t('memoryOpenKnowledge')}</Link>}</p>
   {main&&<p className="mem-main">{t('memoryMain',agent.name)}</p>}

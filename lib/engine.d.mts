@@ -50,13 +50,6 @@ export type Engine={
  readKeys?(space:string):Promise<ProviderKeys>,
  models?():Promise<AgentModels>,
  apps?():Promise<ProfileApps>,
- // The Library of the Agent this Engine is bound to (#194): one folder of its profile's work folder, and one file.
- listFiles?(folder:unknown):Promise<import('./hermes.mjs').LibraryList>;
- downloadFile?(file:{folder?:unknown,name?:unknown}):Promise<import('./hermes.mjs').LibraryFile>;
- memory?():Promise<MemoryNotes>,
- resetMemory?():Promise<MemoryReset>,
- editMemory?(change:{note:string,text:string}):Promise<MemoryEdit>,
- forgetMemory?(change:{note:string}):Promise<MemoryForget>,
 };
 export function engineFor(connection:EngineConnection):Engine;
 export function outcomeOf(run:Pick<RunState,'state'|'reply'>):'completed'|'failed'|'stopped'|'lost'|null;

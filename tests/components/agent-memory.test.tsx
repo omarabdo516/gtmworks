@@ -25,12 +25,13 @@ const notes = [
 ];
 // Three notes, for the search (#192): a query keeps one of them, and the heading still counts all three.
 const three = [...notes, { id: 'memory:memory:2:9e8d7c6b5a4f', text: 'Never mention prices before the offer.' }];
-const drawn = (props: Partial<AgentMemoryProps> = {}, language: 'en' | 'ar' = 'en') => render(<LanguageProvider language={language}>
+const view = (props: Partial<AgentMemoryProps> = {}, language: 'en' | 'ar' = 'en') => <LanguageProvider language={language}>
  <div className="gw"><div className="details is-open" dir={language === 'ar' ? 'rtl' : 'ltr'}>
   <div className="dp-sections"><AgentMemory company="co-1" agent={{ id: 'ag-1', name: 'Ads' }} notes={notes} main={false} canReset={false} canEdit={false} canForget={false} {...props}/></div>
  </div></div>
  <ToastHost/>
-</LanguageProvider>);
+</LanguageProvider>;
+const drawn = (props: Partial<AgentMemoryProps> = {}, language: 'en' | 'ar' = 'en') => render(view(props, language));
 
 test('an Agent with notes shows each note as its own row, under the heading with their count', async () => {
  const screen = await drawn();
@@ -137,7 +138,24 @@ test('Edit opens a field with the cursor at its end; an empty note says so and s
  expect(screen.container.querySelectorAll('.mem-note__t')[0].textContent).toBe('Prefers short subject lines.');
 });
 
-test('Save rewrites the note by its Engine id, shows "Note updated", and gives the focus back to Edit', async () => {
+test('Save rewrites the note by its Engine id, trimmed, shows "Note updated", and gives the focus back to Edit', async () => {
+ const send = responder({ edited: true });
+ vi.stubGlobal('fetch', send);
+ const screen = await drawn({ canEdit: true });
+ await screen.getByRole('button', { name: /^Edit: Omar works/ }).click();
+ await userEvent.fill(screen.getByRole('textbox', { name: 'Edit note' }), '  Omar works in Cairo, Egypt.  ');
+ await screen.getByRole('button', { name: 'Save' }).click();
+ await expect.poll(() => send.mock.calls.length).toBe(1);
+ const [url, init] = send.mock.calls[0];
+ expect([url, init.method, String(init.body)]).toEqual(['/api/agent-memory', 'PUT', JSON.stringify({ company: 'co-1', agent: 'ag-1', note: 'memory:profile:1:7a1b2c3d4e5f', text: 'Omar works in Cairo, Egypt.' })]);
+ await expect.element(screen.getByRole('status')).toHaveTextContent('Note updated');
+ await expect.poll(() => refresh.mock.calls.length).toBe(1);
+ // The screen draws the note again from the server; the focus returns to its Edit once it does.
+ await screen.rerender(view({ canEdit: true, notes: [notes[0], { id: 'memory:profile:1:7a1b2c3d4e5f', text: 'Omar works in Cairo, Egypt.' }] }));
+ await expect.element(screen.getByRole('button', { name: /^Edit: Omar works/ })).toHaveFocus();
+});
+
+test('after a save the Engine gives the note a new id, and the focus returns to the Edit of that same row', async () => {
  const send = responder({ edited: true });
  vi.stubGlobal('fetch', send);
  const screen = await drawn({ canEdit: true });
@@ -145,11 +163,11 @@ test('Save rewrites the note by its Engine id, shows "Note updated", and gives t
  await userEvent.fill(screen.getByRole('textbox', { name: 'Edit note' }), 'Omar works in Cairo, Egypt.');
  await screen.getByRole('button', { name: 'Save' }).click();
  await expect.poll(() => send.mock.calls.length).toBe(1);
- const [url, init] = send.mock.calls[0];
- expect([url, init.method, String(init.body)]).toEqual(['/api/agent-memory', 'PUT', JSON.stringify({ company: 'co-1', agent: 'ag-1', note: 'memory:profile:1:7a1b2c3d4e5f', text: 'Omar works in Cairo, Egypt.' })]);
- await expect.element(screen.getByRole('status')).toHaveTextContent('Note updated');
- await expect.element(screen.getByRole('button', { name: /^Edit: Omar works/ })).toHaveFocus();
- await expect.poll(() => refresh.mock.calls.length).toBe(1);
+ expect(String(send.mock.calls[0][1].body)).toContain('"note":"memory:profile:1:7a1b2c3d4e5f"');
+ // The note's id is a digest of its text, so the note the server draws next carries a new one, in the same place.
+ const saved = [notes[0], { id: 'memory:profile:1:9f8e7d6c5b4a', text: 'Omar works in Cairo, Egypt.' }];
+ await screen.rerender(view({ canEdit: true, notes: saved }));
+ await expect.element(screen.getByRole('button', { name: /^Edit: Omar works in Cairo, Egypt\./ })).toHaveFocus();
 });
 
 test('a note the Engine refuses as too long shows one line saying so, and stays in the editor', async () => {
@@ -257,15 +275,16 @@ test('Escape in a filled search empties it as Clear search does, and in an empty
  await expect.element(field).toHaveFocus();
 });
 
-test('the intro names the Agent, and offers the edit line only to a person who may edit or forget a note', async () => {
+test('the intro names the Agent, and offers the edit line only to the Owner, who may both edit and forget a note', async () => {
  const reader = await drawn({ notes: three });
  await expect.element(reader.getByText(/Notes it comes back to on every job/)).toBeVisible();
  expect(reader.container.textContent).toContain('Ads is one agent for the whole company with one memory, so what anyone teaches it, it remembers for everyone.');
  expect(reader.container.textContent).not.toContain('You can edit or delete anything.');
+ // A Manager edits a note but cannot delete one: the line promises both, so it is not drawn for them.
  const manager = await drawn({ notes: three, canEdit: true });
- expect(manager.container.textContent).toContain('You can edit or delete anything.');
- const forgetter = await drawn({ notes: three, canForget: true });
- expect(forgetter.container.textContent).toContain('You can edit or delete anything.');
+ expect(manager.container.textContent).not.toContain('You can edit or delete anything.');
+ const owner = await drawn({ notes: three, canEdit: true, canForget: true });
+ expect(owner.container.textContent).toContain('You can edit or delete anything.');
 });
 
 test('Open company knowledge links to the Company knowledge section, and is absent for a Viewer', async () => {

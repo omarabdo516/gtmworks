@@ -72,7 +72,7 @@ export function AgentFilePreview({company,slug,agent,agentName,file,onClosed}:{c
   onClick={event=>{ if(event.target===event.currentTarget) close(); }}>
   <div className="pv__inner">
    <header className="modal__head">
-    <span className="lib-thumb lib-thumb--lg"><ShellIcon name={body?.kind==='image'?'image':'file'}/></span>
+    <span className="lib-thumb lib-thumb--lg">{body?.kind==='image'?<img className="lib-thumb__img" src={download} alt=""/>:<ShellIcon name="file"/>}</span>
     <div className="modal__titles">
      <h2 className="modal__title pv-title" id="preview-title"><FileName name={file.name}/></h2>
      <p className="modal__sub"><bdi>{agentName}</bdi>{file.time?<>{' · '}<FeedWhen value={file.time}/></>:null}{file.size===null?null:<>{' · '}<bdi dir="ltr">{fileSize(file.size)}</bdi></>}</p>

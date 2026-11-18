@@ -200,7 +200,10 @@ test('a forgotten note leaves the Engine when its toast ends, so a reload no lon
  const panel=memoryTab(details);
  await panel.getByRole('button',{name:/^Forget this: Runs the June campaign/}).click();
  await expect(panel.locator('.mem-note__t')).toHaveCount(0);
+ await expect(panel.getByRole('button',{name:/^Forget this: Runs the June campaign/})).toBeFocused();
  await expect(page.locator('.toast')).toBeHidden({timeout:8000});
+ // The removal is the contract's own call, made once when the toast ends.
+ await expect.poll(()=>fake.settings.managementRequests.filter(request=>request.method==='DELETE'&&String(request.path).startsWith('/api/learning/node')).length).toBe(1);
  await expect.poll(()=>fake.settings.memory.get(own(ads))?.memory).toEqual([]);
  await expect(panel.getByText('Nothing yet. What Ads learns from its work shows here.')).toBeVisible();
  await page.reload();

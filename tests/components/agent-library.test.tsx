@@ -65,13 +65,15 @@ test('the Library counts every file of the Agent, and each folder row says how m
  expect(asked).toEqual(['']);
 });
 
-test('a folder opens in place with its own count, the focus on its name, and the way back puts the focus on that folder\'s row', async () => {
+test('a folder opens in place with its own count of files, the focus on the Library crumb, and the way back puts the focus on that folder\'s row', async () => {
  const asked = folders(work);
  const screen = await drawn();
  await screen.getByRole('button', { name: /^reports/ }).click();
- const heading = screen.getByRole('heading', { name: 'reports 2' });
+ // The heading inside a folder counts its files, not the folder inside it.
+ const heading = screen.getByRole('heading', { name: 'reports 1' });
  await expect.element(heading).toBeVisible();
- await expect.element(heading).toHaveFocus();
+ // The reference puts the focus on the way back (lib-open focuses #lib-root), not on the folder's name.
+ await expect.element(screen.getByRole('button', { name: 'Library of Lead' })).toHaveFocus();
  await expect.element(screen.getByRole('button', { name: /^2026/ })).toHaveAccessibleName(/^2026 One file · latest /);
  await expect.element(screen.getByText('q3.csv')).toBeVisible();
  expect(asked).toEqual(['', 'reports']);
@@ -81,9 +83,25 @@ test('a folder opens in place with its own count, the focus on its name, and the
  // A folder inside a folder opens the same way, and the way back returns to its row too.
  await screen.getByRole('button', { name: /^reports/ }).click();
  await screen.getByRole('button', { name: /^2026/ }).click();
- await expect.element(screen.getByRole('heading', { name: '2026 1' })).toHaveFocus();
+ await expect.element(screen.getByRole('heading', { name: '2026 1' })).toBeVisible();
+ await expect.element(screen.getByRole('button', { name: 'Library of Lead' })).toHaveFocus();
  await screen.getByRole('button', { name: 'Library of Lead' }).click();
  await expect.element(screen.getByRole('button', { name: /^2026/ })).toHaveFocus();
+});
+
+test('a raster file\'s row is its own picture, drawn through its download route, and another file keeps the icon', async () => {
+ folders({ '': [
+  { name: 'shot.png', isFolder: false, size: 4096, time: at, files: null, latest: null },
+  { name: 'brief.pdf', isFolder: false, size: 2048, time: at, files: null, latest: null },
+ ] });
+ const screen = await drawn();
+ await expect.element(screen.getByText('shot.png')).toBeVisible();
+ const rows = [...screen.container.querySelectorAll('li.lib-file')];
+ const picture = rows[0].querySelector<HTMLImageElement>('.lib-thumb img');
+ expect(picture?.getAttribute('src')).toBe('/c/rs-learning/agent-files/ag-1?name=shot.png');
+ expect(picture?.getAttribute('alt')).toBe('');
+ expect(rows[1].querySelector('.lib-thumb img')).toBeNull();
+ expect(rows[1].querySelector('.lib-thumb svg')).not.toBeNull();
 });
 
 test('a download is the reference\'s toast and its own file, and an empty folder says it is empty', async () => {
@@ -111,7 +129,7 @@ test('in Arabic the Library reads as the reference words it, and the folder chev
  await expect.element(screen.getByRole('button', { name: /^reports/ })).toHaveAccessibleName(/^reports ملفين · آخر واحد/);
  await expect.element(screen.getByRole('link', { name: 'نزّل brief.md' })).toBeVisible();
  await screen.getByRole('button', { name: /^reports/ }).click();
- await expect.element(screen.getByRole('heading', { name: 'reports 2' })).toBeVisible();
+ await expect.element(screen.getByRole('heading', { name: 'reports 1' })).toBeVisible();
  const arrow = screen.container.querySelector<SVGElement>('.lib-crumbs .gw-icon');
  expect(arrow).not.toBeNull();
  expect(getComputedStyle(arrow!).transform).toContain('-1');
