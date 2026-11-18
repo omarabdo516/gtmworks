@@ -129,9 +129,7 @@ async function laneContext(browser: Browser) {
   return context;
 }
 
-// GTMWORKS_LANE_REVERSE=true declares the screens last to first: the lane proof draws one run that way (ci.sh lane-proof).
-const ordered = process.env.GTMWORKS_LANE_REVERSE === 'true' ? [...screens].reverse() : screens;
-for (const screen of ordered) {
+for (const screen of screens) {
   test.describe(screen.name, () => {
     let context: BrowserContext;
     let page: Page;

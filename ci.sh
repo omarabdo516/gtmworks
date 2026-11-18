@@ -5,9 +5,8 @@ cd "$(dirname "$0")"
 # every other check uses. Each lane starts in the background and leaves its exit status beside its log.
 lanes=${GTMWORKS_TEST_LANES:-1}
 [[ $lanes =~ ^[1-7]$ ]] || { echo 'GTMWORKS_TEST_LANES must be 1 to 7' >&2; exit 2; }
-# The self-hosted runner has no sudo for the system packages and keeps its browsers between runs.
 install_chromium() {
-  if [[ "${RUNNER_ENVIRONMENT:-}" == self-hosted ]]; then npx playwright install chromium; else npx playwright install --with-deps chromium; fi
+  npx playwright install --with-deps chromium
 }
 start_lanes() {
   mkdir -p playwright-report
@@ -38,7 +37,7 @@ images_loaded() {
   trap 'bash scripts/supabase-images.sh pulled "$images_before" || true; rm -f "$images_before"' EXIT
 }
 # Each stage writes its machine-readable test results under ci-ledger/ (Playwright empties test-results/ when it starts);
-# the ledger job reads them back (scripts/ci-ledger.mjs, #256). Prints the folder.
+# a failed visual job on main reads its own back (scripts/visual-regression.mjs). Prints the folder.
 ledger_dir() {
   local dir="ci-ledger/${GITHUB_JOB:-$1}${SHARD:+-${SHARD%%/*}}"
   rm -rf "$dir" && mkdir -p "$dir"
@@ -184,24 +183,5 @@ case "${1:-check}" in
   start_lane
   lane_test --update-snapshots=changed
   ;;
- lane-proof)
-  # Draws every lane image three times and keeps each run's hashes: CI compares them across runners. It rewrites the
-  # approved images in the checkout, so it runs in CI only.
-  [[ "${CI:-}" == "true" ]] || { echo 'lane-proof rewrites the approved lane images; it runs in CI only' >&2; exit 2; }
-  start_lane
-  mkdir -p test-results/lane-proof
-  # Each run's images are kept beside its hashes, so a difference can be looked at. The first run builds the app and the
-  # next two serve that build; the second declares the screens last to first, so
-  # the same bytes also prove that no screen depends on the ones drawn before it.
-  lane_test --update-snapshots=all
-  find tests/visual-lane -name '*.png' | sort | xargs -r sha256sum > test-results/lane-proof/run-1.sha256
-  cp -r tests/visual-lane/images test-results/lane-proof/run-1-images
-  GTMWORKS_WEB_PREBUILT=true GTMWORKS_LANE_REVERSE=true lane_test --update-snapshots=all
-  find tests/visual-lane -name '*.png' | sort | xargs -r sha256sum > test-results/lane-proof/run-2.sha256
-  cp -r tests/visual-lane/images test-results/lane-proof/run-2-images
-  GTMWORKS_WEB_PREBUILT=true lane_test --update-snapshots=all
-  find tests/visual-lane -name '*.png' | sort | xargs -r sha256sum > test-results/lane-proof/run-3.sha256
-  cp -r tests/visual-lane/images test-results/lane-proof/run-3-images
-  ;;
- *) echo 'usage: ./ci.sh check | fast | static | components | database | images | integration | visual | visual-update | lane-proof' >&2; exit 2;;
+ *) echo 'usage: ./ci.sh check | fast | static | components | database | images | integration | visual | visual-update' >&2; exit 2;;
 esac

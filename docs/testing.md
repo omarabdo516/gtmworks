@@ -10,18 +10,14 @@ English/Arabic direction checks are never removed.
 
 As Hermes and T3 Code run their CI (#76): a first job decides what runs, the fast layers run on every pull request, and
 the whole-app browser and install suites run only when their own area changed, on `main`, or when asked for by hand.
-`integration` runs on the runner the repo variable `CI_RUNNER` names, Omar's PC while ci-router keeps it there (#224);
-a pull request from a fork runs it on `ubuntu-latest`, where every other job runs. The one PC runner takes one job at a
-time, and `database` and `install` take as long or longer there, so they stay on `ubuntu-latest` instead of queueing
-`integration` behind them. The visual lane runs in its own `visual` job on `ubuntu-latest`, followed by the measured
-navigation budgets, which need a machine no other job shares (the PC also runs other repositories' CI); `ci.sh
+Every job runs on a GitHub-hosted `ubuntu-latest` runner (decision 0038, #334). The visual lane runs in its own `visual`
+job, followed by the measured navigation budgets, which need a machine no other job shares; `ci.sh
 integration` leaves the `measured` project empty (`GTMWORKS_HOSTED_ELSEWHERE`). The visual lane and the measured budgets
 run on a push to `main` and on a manual run only, never on a pull request, and `check` does not wait for them (Omar,
 2026-11-17, #257). When they fail on `main`, the `visual` job opens
 or updates one issue labelled `visual-regression` that names each failed screen and links the difference images
 (`scripts/visual-regression.mjs`); no pull request is blocked by it. A job that
-starts the local Supabase stack first reserves its ports on a GitHub-hosted runner (#225). On the PC the ports move to a
-block of their own, and `scripts/ci-runner.mjs cleanup` removes what this repository's runs start, before and after.
+starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs reserved-ports`, #225).
 
 - `changes` decides which suites a change needs (`scripts/ci-areas.mjs`, like Hermes `detect` and T3 Code `Changes`).
   A change to the CI definition itself (`ci.yml`, `ci.sh`, the area, verdict, runner and fast-runner scripts) or to `package.json`
@@ -35,8 +31,7 @@ block of their own, and `scripts/ci-runner.mjs cleanup` removes what this reposi
   the component tests and `./ci.sh components` is the component tests alone. The job restores `node_modules` by the
   lock file's hash and Chromium by Playwright's version, each saved straight after a fresh install, so the bundler's
   own cache (`node_modules/.vite`) is never restored and the component tests always start it cold.
-  Each step also writes its output as it runs to `ci-ledger/<job>/<step>.log`, uploaded with the ledger results, so a
-  step that hangs until the job's limit leaves its log; a red step's output is printed last, after the step list. A cache
+  Each step also writes its output as it runs to `ci-ledger/<job>/<step>.log`; a red step's output is printed last, after the step list. A cache
   miss installs the browser alone, as a hit restores it, so every run draws on the runner image's own system packages
   and fonts; the key also names the image. Outside CI the component step installs the browser itself, after the
   discovery gate. the pinned OpenAPI linter keeps an npm cache of its own (`NPX_CACHE`), restored by its version, so a hit lints offline.
@@ -69,7 +64,7 @@ block of their own, and `scripts/ci-runner.mjs cleanup` removes what this reposi
   and server actions, where the server checks permissions), `lib/` outside the catalogues, `worker/` and the root files
   the build and server read. Screens alone (the rest of `app/`, `components/`, the catalogues in `lib/messages/`, the
   visual lane's files) start no browser job on a pull request (#257). Its suite runs on `GTMWORKS_TEST_LANES`
-  lanes (four on a GitHub-hosted runner, as many as its CPUs and memory carry on the PC), one per Playwright worker:
+  lanes (four in CI), one per Playwright worker:
   each lane is a whole local Supabase stack and an app server of its own (`tests/lane.mjs`, `scripts/local-db.sh`,
   `scripts/web.sh`), so spec files run side by side and never share data.
   Each functional spec file starts from the seed (`tests/fresh-seed.ts`); tests inside one file still run in order.
@@ -86,10 +81,7 @@ block of their own, and `scripts/ci-runner.mjs cleanup` removes what this reposi
   machine; every dark picture keeps its text at 4.5:1, and the light Home, board and Card keep their quiet text at 4.5:1
   and weaker than the body text. Then the measured navigation budgets run. When a picture changes on purpose, one
   command refreshes the images: `./ci.sh visual-update` (Docker needed; without it, the `Visual baselines` workflow
-  uploads them as `visual-baselines`). On a manual run, `lane-proof` draws the lane three
-  times on `ubuntu-latest` and on the `CI_RUNNER` runner, building the app once and declaring the screens last to first
-  in its second run; `lane-proof-compare` fails unless all six sets of hashes match, so the same bytes also prove that
-  no screen depends on the ones drawn before it.
+  uploads them as `visual-baselines`).
 - Design parity is checked once, at delivery, outside CI (Omar, 2026-11-17, #257). The worker that delivers a screen
   compares it with its design in `design/` in T3's preview, motions included, at the widths and in the languages the
   design shows, and attaches the evidence (side-by-side images, and a recording for each motion) to the pull request
@@ -103,14 +95,6 @@ block of their own, and `scripts/ci-runner.mjs cleanup` removes what this reposi
 - `check` is the one required check (like Hermes `all-checks-pass`): a suite `changes` did not ask for passes only when
   it was skipped; one it asked for must succeed; a failed or cancelled stage is red; it lists each step of the fast job
   and every step must succeed (`scripts/ci-verdict.mjs`).
-- `ledger` runs after every stage, also when one failed, and decides nothing (`check` does not need it): it reads the
-  results each stage wrote under `ci-ledger/` and the run's jobs from the API, writes `ledger.jsonl` (one record for
-  the run, each job and each test, kept 90 days) and puts the layer table in the job summary: result, duration and
-  budget (reported, never enforced), queue, runner, test counts, why a layer was skipped and the label of a red job
-  (`scripts/ci-ledger.mjs`, `scripts/ci-classify.mjs`, #256).
-- The nightly `CI health` workflow (`ci-health.yml`, `scripts/ci-health.mjs`) reads the last 7 days of ledgers and
-  replaces the body of one tracking issue, `CI health report`: each layer's p50 and p90, the slowest tests, flaky and
-  failed tests, red jobs by label and the PC queue. A change to it runs it on its own pull request.
 - Every test runs offline (#266). `tests/offline.mjs` holds one table of what is local: `localhost`, the special-use
   names `.localhost`, `.test`, `.example` and `.invalid` (RFC 6761, never delegated), loopback and unspecified
   addresses, and Unix sockets; everything else is outside, `example.com` and private LAN addresses included. `npm test`
@@ -210,6 +194,23 @@ cause or closed with the repeat that did not reproduce it. No test was moved, re
 | #70, #86 | `team-work.spec.ts` queued turns | A claim read the next turn before taking the lock a start is recorded under, so meeting a record half done it reserved the started turn again; nothing cleared that reservation, later turns waited forever and the Connection could not be removed. | Fixed in the database: `claim_conversation_turn` takes that lock before it reads (migration `20261215000000`). |
 | #73 | `password.spec.ts` sign-in answers wrong and unknown alike | The seed restore met the lane's worker in a deadlock on the #69 branch before it merged; `main` restores in one transaction and repeats it after a deadlock. | Fixed by #69: 20 passed on `main`. |
 | #84 | `agent-attachments.spec.ts` a run key downloads the files of its own card | CI twice reset the request client's connection (ECONNRESET). An idle client between 4.9s and 5.1s, around the server's 5s keep-alive, was answered every time, so that was not it. | Left open: no repeat reset a connection; on a host at load above 30, some repeats waited past 5s for the reply's thumbnail. |
+
+## Setting a test aside (#336)
+
+A browser test that fails now and then may be set aside for 7 days at most, so one bad test does not block every pull
+request (decision 0036). To set it aside:
+
+1. Open an issue for the flaky test, or use the one that already names it.
+2. Skip it with Playwright's own skip, `test.fixme(...)` (or `test.skip(...)`), with a one-line comment naming the
+   issue. No rerun lane, report or automatic issue exists.
+3. Add it to `tests/set-aside.json`: its spec file, its full title as Playwright lists it, the issue number and the date
+   it was set aside (`"since": "YYYY-MM-DD"`).
+
+It must come back within 7 days of that date: fix it at its cause, take the skip off and remove its entry. If it cannot
+be fixed in time, remove the test in a pull request that names what guards its promise instead (Removed tests above).
+A sign-in or Company isolation test is never set aside: a spec whose file name says sign-in or isolation, or a case
+whose "stays" row below names sign-in or isolation. `set-aside.test.mjs` turns red when an entry is older than 7 days,
+names no issue or names such a test, and when a test Playwright skips is not listed or a listed test is not skipped.
 
 ## The browser suite, case by case (#218)
 
@@ -552,13 +553,11 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `channels.spec.ts` | A Contributor opens the general channel from the sidebar, reads the composer's hint and the intro's route tip, and posts a message that stays after a reload and starts no Run; the Viewer reads it with its writer's name and role and has no composer. (#23) | — | channel-runs.spec.ts (Runs), components/channel.test.tsx (the drawing, and the hint in Arabic) | keep 2 of its 3 cases; 1 moved (#218, case by case above) |
 | `choose-language.ts` | browser helper: choose the language in Settings | — | — | helper, kept |
 | `clock.mjs` | helper: the instant before a local day ends in a zone, read on its own wall clock and DST safe, the runner's zone and fixed ids (new, #266) | — | time-zones.test.mjs | helper, kept |
-| `ci-runners.test.mjs` | Every job runs on `ubuntu-latest` except `integration`, which runs where `CI_RUNNER` says and on `ubuntu-latest` for a fork's PR, read no secret and write nothing; the release workflows stay on `ubuntu-latest`; a PR reads no secret. A job that starts Supabase reserves its ports first, on GitHub-hosted runners only, and every lane's port lies in that range (#225); on the PC it clears an earlier run and moves the ports first and cleans up last. `scripts/ci-runner.mjs`: the moved port block, the lane count, and a cleanup that removes only this repository's Docker objects and checkout processes (#224). | 4.3 s | — | keep, extended |
+| `ci-runners.test.mjs` | Every job runs on `ubuntu-latest`; no ledger, CI health, lane-proof or PC-routing job or script is left (#334); the release workflows stay on `ubuntu-latest`; a PR reads no secret. A job that starts Supabase reserves its ports first, and every lane's port lies in that range (#225); `scripts/ci-runner.mjs` prints only that range. | 0.2 s | — | keep; its PC cases (moved port block, lane count, cleanup) removed with the PC routing (#334) |
 | `ci-areas.test.mjs` | Each suite runs only when its own files change; screens alone start no browser job (#257); main runs all unless the change is documents only; an unknown list runs all. (new, #76; replaces docs-only and install-related) | 3.1 s | — | new |
-| `ci-fast.test.mjs` | `./ci.sh fast` runs its steps at the same time; a failing step is red while the others finish green, its output is shown whole and stays open on GitHub with an error on the run; a skipped step does not run; each step writes its records and its log to the ledger folder while it runs; a red step's output is printed last; typecheck reads none of the sandbox files the tests write; the steps are the static checks, the node tests and the component tests in one run. (#258) | 1 s | — | new (#258) |
+| `ci-fast.test.mjs` | `./ci.sh fast` runs its steps at the same time; a failing step is red while the others finish green, its output is shown whole and stays open on GitHub with an error on the run; a skipped step does not run; each step writes its log to the ledger folder while it runs; a red step's output is printed last; typecheck reads none of the sandbox files the tests write; the steps are the static checks, the node tests and the component tests in one run. (#258) | 1 s | — | new (#258) |
 | `ci-verdict.test.mjs` | `check` counts a suite as passed only when it was skipped because nobody asked for it, is red on any failed or cancelled stage, lists each fast step and is red when one fails (a red lint beside the green rest), passes skipped component tests only when nobody asked for them, and the browser and install inputs default to off; the fast job restores its dependencies by the lock file's hash and the browser by version, saved before any test runs and never with `node_modules/.vite`; the suites that start a stack wait for the image cache job, which cannot fail a run. (#69, #76, #258, #259) | 3 s | — | keep, extended |
 | `ci-classify.test.mjs` | A red job is labelled infrastructure only by the known signature that ended it (a registry rate limit, a runner shutdown or a port in use where the job failed; a browser network change anywhere in the job), and every other red is "your change", over real failed job logs of 2026-11-16 in `ci-logs/`. (#256) | 0.1 s | — | new (#256) |
-| `ci-ledger.test.mjs` | The CI ledger keeps one record per test each layer ran (Playwright with a flaky test's retry and lane, Vitest per assertion, the node reporter run for real, each database check), names an unreadable results file, says why each skipped layer was skipped, and its job summary has a row per layer that marks one over budget and labels a red job. (#256) | 0.3 s | — | new (#256) |
-| `ci-health.test.mjs` | The nightly CI health report: per layer p50 and p90 by nearest rank and the jobs over budget, the slowest 20 tests, flaky and failed tests, red jobs by label, the PC queue and the integration jobs that fell back; it updates the one open tracking issue with its marker and otherwise creates exactly one. (#256) | 0.1 s | — | new (#256) |
 | `ci-logs/` | Excerpts of real failed CI jobs of 2026-11-16 and one constructed log, each named for its job, that `ci-classify.test.mjs` labels (`ci-logs/README.md` says what ended each job). | — | — | data, new (#256) |
 | `company-apps.test.mjs` | Only the Owner connects, follows or disconnects a Company's app, checked for every step; a Member reads the states; the browser gets the vendor's page and states, never the Engine's flow; the way back is handed on only for the person's own open sign-in, and each connect and disconnect is logged once. (#30) Per Agent (#30): each Agent's state is read from its own profile with the fake Engine (connected, needing attention, off, unreadable), each profile once, and an app connected in the Company's profile before the move is the main Agent's; the card's state is the Agents' merged; connecting and disconnecting for one Agent asks the Engine at that Agent's profile only and leaves the other profile's servers as they were, and a disconnect with no Agent turns it off for every Agent that has it, each logged with its Agent; an Agent on the main profile, one not listed, a bad id or a Member is refused before the Engine is asked. | 0.3 s | settings-apps.spec.ts; supabase/tests/company_apps.sql (every Role, per Agent, the log) | new |
 | `company-knowledge.spec.ts` | A Manager fills an empty part of the Company knowledge and sees it with who edited it, leaves the editor with Escape, saves with Ctrl+S (the same text changes nothing) and clears the part back to its empty state; each change is logged and named in the Activity log; a Contributor reads it with no Edit button and the server refuses their save. (#27) | — | company_knowledge.sql (who may read and edit each part, in the database) | keep (#218, case by case above) |
@@ -718,6 +717,8 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `run-steps.test.mjs` | A Run's steps with the fake engine (#141): a completed Run's tool calls are sealed once with its reply and its length, a failed call as failed, and a second closer changes nothing; the follower keeps what it read while the Run works and the closer reads only the events after it; a read again from an earlier number ends at the same steps; a call with no id ends the oldest started call of its tool; a Run whose events were never read and are gone stores none; a failed or stopped Run seals nothing; lost events or an unreachable Engine at the close seal the steps as broken and the Run still closes; the worker follows each open Run once and stops a closed Run's follower. | 0.1 s | hermes-steps.test.mjs (the driver), supabase/tests/run_steps.sql (the functions and who reads the steps) | new |
 | `rule-suggestions.spec.ts` | In a team a direct Conversation and an Agent's new chat say they are private, and worked alone they do not; a Contributor's rules show who they were sent to as suggestions and stay off the Agent's page; the Owner makes one team-wide and a Manager declines the other from "Waiting on you", Settings' Learning counts what waits; the Contributor reads each decision in their Conversation, and the Activity log names the suggestion for its teller and the deciders only and both decisions for everyone. (#25) | — | rule_suggestions.sql (the same decisions per Role in the database), engine-conversation.spec.ts (the suggest_rule call) | keep (#218, case by case above) |
 | `secret-text.test.mjs` | The note form and the database refuse the same secrets. | 0.2 s | team-work.spec.ts | keep |
+| `set-aside.json` | The browser tests set aside, each with its issue and the date it was set aside (#336). | — | set-aside.test.mjs | new |
+| `set-aside.test.mjs` | A set-aside browser test is skipped by Playwright's own skip and listed in `set-aside.json`, and every skipped one is listed; an entry older than 7 days, with no issue, or naming a sign-in or Company isolation test turns it red (#336). | 1.5 s | — | new |
 | `settings-apps.spec.ts` | Settings, Apps lists the Engine's apps in their real states (connected, needing attention, not connected, then all off), searches and filters them; the Owner connects one through the vendor's window, which returns through gtmworks, and disconnects it, both in the Activity log; a Manager reads the states with no button and is refused by the server; no screen names the Engine or shows a path. (#30) The Connect apps sheet over Home shows the same, with the sidebar's count, and walks to one app and back with no change of address; the Owner connects and disconnects from it into the same log; a Viewer reads it with no button; an Engine that does not answer leaves the count out; a page is drawn with no Engine read, the count arriving after it from `GET /api/company-apps`. (#201) | — | company-apps.test.mjs; supabase/tests/company_apps.sql | keep (#218, case by case above) |
 | `settings-overlay.spec.ts` | The Settings overlay opens over the page by pointer and by keyboard and closes back to it, lists the real Agents, shows each Role only what it allows, and lets only the Owner rename and move the main mark. | — | settings-overlay.test.mjs (sections per role), components/settings-overlay.test.tsx (the overlay on a phone) | keep 11 of its 12 cases; 1 moved (#218, case by case above) |
 | `settings-overlay.test.mjs` | The overlay lists the reference's sections, and a Viewer sees only theirs. | 0.3 s | settings-overlay.spec.ts | keep |
@@ -739,7 +740,7 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `team-channels.spec.ts` | The Manager makes a team channel with chosen Members and Agents from "+" and adds and takes out a Member; a Contributor has no "+" and is told who changes the channel; with two Members the unread count rises on each new message and clears when the channel is opened; a Contributor calls the channel's Agent hidden from them elsewhere, sees it marked, and its chat address and the send API are not found; a Member outside the channel finds no trace of it. (#24) | — | supabase/tests/team_channels.sql (every Role, read positions, who sees a channel), components/channel-list.test.tsx, components/new-channel-dialog.test.tsx | keep (#218, case by case above) |
 | `team-work.spec.ts` | Queued turns run in order, lost answers are retried once, stop and roles are enforced, authors come from the session, notes stay private. | 85.6 s | unknown-starts.test.mjs, hermes-runs.test.mjs (driver logic) | keep (#218, case by case above); flaky cause fixed (#83) |
 | `test-discovery.test.mjs` | npm test discovers a new nested test file and its failure. | 4.3 s | — | keep |
-| `testing-doc.test.mjs` | docs/testing.md keeps one row per file under tests/ (#69), and one decision per case of the `functional` project in "The browser suite, case by case", the cases as Playwright itself lists them (`--list`, no browser): every listed case has its own "stays" row (a `${...}` row stands for its template's cases), a moved or removed case is gone from its file, and a file Playwright refuses (two cases with one title) is reported with Playwright's error (#218). | — | — | keep, extended |
+| `testing-doc.test.mjs` | docs/testing.md keeps one row per file under tests/ (#69), and one decision per case of the `functional` project in "The browser suite, case by case", the cases as Playwright itself lists them (`--list`, no browser): every listed case has its own "stays" row (a `${...}` row stands for its template's cases), a moved or removed case is gone from its file, and a file Playwright refuses (two cases with one title) is reported with Playwright's error (#218); it has the section on setting a test aside (#336). | — | — | keep, extended |
 | `theme.spec.ts` | The device theme by default, and the saved choice across sessions and devices. | — | sidebar.test.mjs (the menu entries), components/account-menu.test.tsx (the sun/moon button) | keep 1 of its 2 cases; 1 moved (#218, case by case above) |
 | `ui-words.mjs` | test helper: the words no interface string or page may show, the Engine's name, an Agency and a reviewer, shared by engine-name.test.mjs, no-agency-strings.test.mjs and fresh-install-journey.spec.ts (#329) | — | — | helper, new |
 | `unit.test.mjs` | Glossary terms, Role-only access and other small rules across lib/; `public/` holds no font file, by its name or its first bytes (moved from app.spec.ts, #218). | 2 s | — | keep, extended (#218) |
