@@ -9,7 +9,11 @@
 .gw.modal.team-dlg::backdrop { background: var(--gw-bg-scrim); }
 .gw.modal.team-dlg:not([open]) { display: none; }
 .gw.modal.team-dlg :where(h2, h3, h4, p) { margin: 0; letter-spacing: normal; text-transform: none; }
-.gw.modal.team-dlg .modal__inner { grid-template-rows: auto minmax(0, 1fr) auto; }
+/* The dialog is only as tall as its rows, up to its cap; past it the rows scroll and the head and "Done" stay (a grid
+   inside a fit-content dialog grows past the cap and loses its foot). */
+.gw.modal.team-dlg .modal__inner { display: flex; flex-direction: column; max-height: inherit; }
+.gw.modal.team-dlg .modal__inner > * { flex: none; }
+.gw.modal.team-dlg .modal__inner > .modal__body { flex: 1 1 auto; }
 .gw.modal.team-dlg.is-closing { animation: gw-modal-out 190ms var(--gw-ease-in) forwards; }
 .gw.modal.team-dlg .modal__body { overflow-y: auto; min-height: 0; overscroll-behavior: contain; padding: 0 var(--s6) var(--s6); }
 .gw.modal.team-dlg .modal__foot--end { justify-content: flex-end; }

@@ -58,6 +58,8 @@
 .gw .fr-rows { display: grid; gap: 16px; }
 .gw .fr-row { display: grid; grid-template-columns: minmax(0, 1fr) 168px 36px; gap: 12px; align-items: start; }
 .gw .fr-row__rm { margin-top: 23px; }
+/* The Role keeps the select's own arrow, as the reference's plain select does. */
+.gw .fr-row select.set-input { appearance: auto; }
 .gw .fr-row__rm.od-spacer { display: block; width: 36px; height: 36px; }
 .gw .fr-add { margin-inline-start: -6px; }
 .gw .fr-roles { margin: 0; display: grid; gap: 4px; padding: 12px 16px; border-radius: var(--gw-r-md); background: var(--gw-bg-pane); border: 0.5px solid var(--gw-border-3); }

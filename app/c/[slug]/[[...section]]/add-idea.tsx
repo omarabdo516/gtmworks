@@ -30,7 +30,7 @@ export default function AddIdea({company,slug,stage,agents,preferred,workAction,
  return <form className="add-idea" id="add-idea" onSubmit={event=>{ event.preventDefault(); send(); }}
   onKeyDown={event=>{ if(event.key==='Escape') { event.preventDefault(); event.stopPropagation(); close(); } }}>
   <label htmlFor="idea-title">{t('ideaLabel')}</label>
-  <input ref={input} id="idea-title" type="text" autoComplete="off" dir="auto" placeholder={t('ideaPlaceholder')} aria-describedby="idea-err"
+  <input ref={input} id="idea-title" type="text" autoComplete="off" dir={title?'auto':undefined} placeholder={t('ideaPlaceholder')} aria-describedby="idea-err"
    aria-invalid={error||undefined} value={title} onChange={event=>{ setTitle(event.target.value); if(event.target.value.trim()) setError(false); }}
    onKeyDown={event=>{ if(event.key==='Enter') { event.preventDefault(); send(); } }}/>
   <span className="add-idea__err" id="idea-err" hidden={!error}>{t('ideaNeedsText')}</span>

@@ -155,7 +155,8 @@
 .gw :is(.sov, .modal.team-dlg) .ch-you { color: var(--gw-text-3); font-weight: 400; }
 .gw :is(.sov, .modal.team-dlg) .me__av.pp-av, .gw .sov .me__av.sov-av { width: 28px; height: 28px; font-size: var(--gw-fs-xs); }
 .gw .sov .me__av.sov-av { width: 40px; height: 40px; font-size: var(--gw-fs-base); }
-.gw :is(.sov, .modal.team-dlg) .sov-ta .table-wrap, .gw :is(.sov, .modal.team-dlg) .sov-ta > .panel { padding: var(--s1) var(--s3) var(--s2); border-radius: var(--gw-r-md); background: var(--gw-bg-pane); border: 0.5px solid var(--gw-border-3); margin: 0; }
+/* The overlay's table sits in a panel; the Team dialog's sits on the dialog itself (design-reference: teamDlgHTML). */
+.gw .sov .sov-ta .table-wrap, .gw .sov .sov-ta > .panel { padding: var(--s1) var(--s3) var(--s2); border-radius: var(--gw-r-md); background: var(--gw-bg-pane); border: 0.5px solid var(--gw-border-3); margin: 0; }
 .gw :is(.sov, .modal.team-dlg) .sov-ta .ta-hint { margin: var(--s2) 2px 0; }
 .gw :is(.sov, .modal.team-dlg) .inv-sec { display: grid; gap: var(--s2); }
 .gw :is(.sov, .modal.team-dlg) .ta .inv-sec { margin-top: var(--s5); }
