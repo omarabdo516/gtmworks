@@ -290,6 +290,42 @@
 .gw .sov .sov-password p { font-size: var(--gw-fs-sm); color: var(--gw-text-2); }
 .gw .sov .sov-password p[role="alert"] { color: var(--gw-danger-text); }
 
+/* Learning (#28; design-reference: .ln-sugg, .cr-kinds, .cr-kind, .ln-ag, .ln-seg, .ln-rules, .ln-rule, .ln-list,
+   .ln-row, .ln-ic, .ln-body, .ln-t, .ln-meta, .ln-acts, .sk-learned): the two mode cards, the per-Agent segmented
+   mode, and what each Agent learned. */
+.gw .sov .ln-sugg .set-hint { margin: 0; }
+.gw .sov .cr-kinds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s2); }
+.gw .sov .cr-kind {
+  position: relative; display: grid; gap: 2px; padding: var(--s3) var(--s4); padding-inline-end: 36px; border-radius: var(--gw-r-md); text-align: start;
+  background: var(--gw-bg-pane); box-shadow: var(--gw-border-2) 0 0 0 1px inset; transition: background-color var(--gw-dur-fast) var(--gw-ease-out);
+}
+@media (hover: hover) { .gw .sov .cr-kind:hover:not([aria-checked="true"]) { background: var(--gw-bg-elevated-hover); } }
+.gw .sov .cr-kind[aria-checked="true"] { box-shadow: var(--gw-text-1) 0 0 0 1px inset; }
+.gw .sov .cr-kind[aria-disabled="true"] { cursor: default; }
+.gw .sov .cr-kind__t { font-size: var(--gw-fs-base); font-weight: 600; line-height: 1.5; }
+.gw .sov .cr-kind__d { font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-2); }
+.gw .sov .cr-kind__check { position: absolute; top: 14px; inset-inline-end: 12px; display: inline-flex; color: var(--gw-text-1); --od-icon-size: 16px; }
+.gw .sov .ln-ag { flex-wrap: wrap; }
+.gw .sov .ln-seg { flex: none; width: 260px; }
+.gw .sov .ln-rules { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s3); }
+.gw .sov .ln-rule { padding: var(--s4); gap: var(--s2); }
+.gw .sov .ln-rule b { display: flex; align-items: center; gap: var(--s2); font-size: var(--gw-fs-base); --od-icon-size: 18px; }
+.gw .sov .ln-rule ul { margin: 0; padding-inline-start: var(--s5); font-size: var(--gw-fs-sm); line-height: 1.7; color: var(--gw-text-1); }
+.gw .sov .ln-rule .set-hint { margin: 0; }
+.gw .sov .ln-list { gap: 0; }
+.gw .sov .ln-row { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: var(--s3); padding: var(--s3) var(--s2); position: relative; border-radius: var(--gw-r-sm); }
+.gw .sov .ln-row + .ln-row::before { content: ""; position: absolute; top: 0; inset-inline: var(--s2); height: 0.5px; background: var(--gw-border-2); }
+.gw .sov .ln-ic { width: 32px; height: 32px; flex: none; border-radius: var(--gw-r-sm); background: var(--gw-bg-tertiary); display: inline-flex; align-items: center; justify-content: center; color: var(--gw-text-2); --od-icon-size: 16px; }
+.gw .sov .ln-body { display: grid; gap: 4px; min-width: 0; }
+.gw .sov .ln-t { margin: 0; font-size: var(--gw-fs-sm); line-height: 1.7; color: var(--gw-text-1); overflow-wrap: anywhere; }
+.gw .sov .ln-row.is-off .ln-t { color: var(--gw-text-3); text-decoration: line-through; }
+.gw .sov .ln-meta { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); }
+.gw .sov .ln-meta .badge { height: 20px; --od-icon-size: 12px; }
+.gw .sov .ln-who { display: inline-flex; align-items: center; gap: 4px; color: var(--gw-text-2); }
+.gw .sov .ln-acts { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); margin-top: 4px; }
+.gw .sov .ln-acts .link-btn { margin-inline-start: -6px; }
+.gw .sov .ln-meta .sk-learned { margin-top: 0; }
+
 /* Authored text inside the English interface takes its direction from its own words. */
 [dir="ltr"] .gw .sov :is(.panel-row__t, .panel-row__d, .dp-id__name, .set-input, .ta-name) { unicode-bidi: plaintext; }
 
@@ -302,6 +338,8 @@
   .gw .sov-page { padding: var(--s5) var(--s4) var(--s12); }
   .gw .sov__co { display: none; }
   .gw .sov .know-vs { grid-template-columns: minmax(0, 1fr); }
+  .gw .sov .ln-rules { grid-template-columns: minmax(0, 1fr); }
+  .gw .sov .ln-seg { width: 100%; }
   /* The part chips keep the reference's 34px, with a 44px tap area inside the rail's own padding. */
   .gw .sov .know-tabs { padding-block: 5px; margin-top: -3px; margin-bottom: calc(var(--s2) * -1 - 3px); }
   .gw .sov .kpis { grid-template-columns: minmax(0, 1fr); }
