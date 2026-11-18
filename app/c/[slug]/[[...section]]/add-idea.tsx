@@ -32,7 +32,7 @@ export default function AddIdea({company,slug,stage,agents,preferred,workAction,
   <label htmlFor="idea-title">{t('ideaLabel')}</label>
   <input ref={input} id="idea-title" type="text" autoComplete="off" dir={title?'auto':undefined} placeholder={t('ideaPlaceholder')} aria-describedby="idea-err"
    aria-invalid={error||undefined} value={title} onChange={event=>{ setTitle(event.target.value); if(event.target.value.trim()) setError(false); }}
-   onKeyDown={event=>{ if(event.key==='Enter') { event.preventDefault(); send(); } }}/>
+   onKeyDown={event=>{ if(event.key==='Enter'&&!event.nativeEvent.isComposing) { event.preventDefault(); send(); } }}/>
   <span className="add-idea__err" id="idea-err" hidden={!error}>{t('ideaNeedsText')}</span>
   <label htmlFor="idea-agent">{t('cardAgent')}</label>
   <select id="idea-agent" value={agent} onChange={event=>setAgent(event.target.value)} disabled={!agents.length}>{agents.map(choice=><option key={choice.id} value={choice.id}>{choice.name}</option>)}</select>

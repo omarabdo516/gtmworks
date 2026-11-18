@@ -47,7 +47,8 @@ export default function FirstRunChoice({slug,company,companyName,personName,lead
   {lead?<CompanyAgentFace agent={lead} size={32}/>:<span className="me__av"/>}
  </span>;
  const choices:[Mode,string,string][]=[['alone',t('firstRunAlone'),t('firstRunAloneHint',name)],['team',t('firstRunTeam'),t('firstRunTeamHint',name)]];
- const back=()=>{ focusTo.current='fr-mode-team'; setStep('mode'); };
+ // While the invitations are on their way the step stays: going back then would not stop the answer being saved (#186).
+ const back=()=>{ if(pending) return; focusTo.current='fr-mode-team'; setStep('mode'); };
  const addRow=()=>{ focusTo.current=`fr-email-${rows.length}`; setDismissed({}); setRows(current=>[...current,freshRow()]); };
  const removeRow=(index:number)=>{
   const left=rows.length-1;
@@ -110,15 +111,18 @@ export default function FirstRunChoice({slug,company,companyName,personName,lead
     </div>
    </>:<>
     <div className="fr__head">
-     <button type="button" className="link-btn fr__back" id="fr-back" onClick={back}><ShellIcon name={language==='ar'?'forward':'back'}/><span>{t('firstRunBack')}</span></button>
+     <button type="button" className="link-btn fr__back" id="fr-back" disabled={pending} onClick={back}><ShellIcon name={language==='ar'?'forward':'back'}/><span>{t('firstRunBack')}</span></button>
      <p className="fr__eyebrow">{t('firstRunStepTwo')}</p>
      <h1 className="fr__title" id="fr-title">{t('firstRunTeamTitle')}</h1>
      <p className="fr__sub">{t('firstRunTeamSub')}</p>
     </div>
     <div className="fr-rows" role="group" aria-labelledby="fr-title">{rows.map((row,index)=><div className="fr-row" key={index}>
      <div className="set-field"><label className="set-label" htmlFor={`fr-email-${index}`}>{t('settingsInviteEmail')} <span className="num">{index+1}</span></label>
+      {/* Enter in an email opens the workspace with its invitations: Skip, the form's first submit button, would otherwise
+          be its default and save the answer with none sent (#186). */}
       <input className="set-input" id={`fr-email-${index}`} type="email" dir="ltr" autoComplete="off" spellCheck={false} placeholder={t('settingsInviteEmailExample')} value={row.email}
-       aria-required="true" aria-describedby={`fr-email-err-${index}`} aria-invalid={errorOf(index)?true:undefined} onChange={event=>setEmail(index,event.target.value)}/>
+       aria-required="true" aria-describedby={`fr-email-err-${index}`} aria-invalid={errorOf(index)?true:undefined} onChange={event=>setEmail(index,event.target.value)}
+       onKeyDown={event=>{ if(event.key==='Enter'&&!event.nativeEvent.isComposing) { event.preventDefault(); document.getElementById('fr-open')?.click(); } }}/>
       <span className="set-err" id={`fr-email-err-${index}`} hidden={!errorOf(index)}>{errorOf(index)&&isolateEmails(t(errorOf(index)))}</span></div>
      <div className="set-field"><label className="set-label" htmlFor={`fr-role-${index}`}>{t('settingsRole')}</label>
       <select className="set-input" id={`fr-role-${index}`} value={row.role} onChange={event=>setRole(index,event.target.value)}>{roles.map(role=><option key={role.key} value={role.key}>{role.name}</option>)}</select></div>

@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(54);
+select plan(56);
 -- A Company of its own, with the ten stages a new one receives (ADR 0013): «كتابة» and «تصميم ومونتاج» are both In
 -- progress, and «بريف جاهز» is Planned, so a Card's stage and its column are told apart.
 insert into public.companies(id,slug,name) values ('10000000-0000-0000-0000-000000000097','undo-move','Undo move');
@@ -10,7 +10,7 @@ insert into public.members(company_id,person_id,role) values
  ('10000000-0000-0000-0000-000000000097','20000000-0000-0000-0000-000000000003','contributor'),
  ('10000000-0000-0000-0000-000000000097','20000000-0000-0000-0000-000000000004','viewer');
 insert into public.work_cards(company_id,stage_id,title) select '10000000-0000-0000-0000-000000000097',s.id,'Undo '||x.title
- from (values ('A','كتابة'),('B','تصميم ومونتاج'),('C','كتابة'),('D','كتابة'),('E','كتابة'),('F','كتابة'),('G','كتابة'),('H','كتابة'),('I','كتابة'),('K','كتابة'),('L','كتابة')) x(title,stage)
+ from (values ('A','كتابة'),('B','تصميم ومونتاج'),('C','كتابة'),('D','كتابة'),('E','كتابة'),('F','كتابة'),('G','كتابة'),('H','كتابة'),('I','كتابة'),('K','كتابة'),('L','كتابة'),('M','كتابة')) x(title,stage)
  join public.work_stages s on s.company_id='10000000-0000-0000-0000-000000000097' and s.name=x.stage order by x.title;
 -- A Card with a publishing date, so approving it schedules it: the decision writes its stage twice.
 update public.work_cards set go_live=now()+interval '3 days' where title='Undo L';
@@ -162,5 +162,16 @@ select is((select count(*)::int from public.work_card_moves where company_id='10
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select throws_ok($$select public.undo_work_card_move('10000000-0000-0000-0000-000000000099',(select id from public.work_cards where title='Undo A'))$$,'42501','not permitted','a Member puts no Card back in another Company');
 select is((select count(*)::int from public.work_card_moves where company_id='10000000-0000-0000-0000-000000000099'),0,'another Company''s moves are neither read nor written');
+-- A later move by someone else that lands the Card on the same stage and place is not the first mover's to undo
+-- (CodeRabbit on #364): the Owner moves M to Planned, the Manager moves it back and to Planned's end again.
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select public.place_work_card('10000000-0000-0000-0000-000000000097',(select id from public.work_cards where title='Undo M'),'planned',null);
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select public.place_work_card('10000000-0000-0000-0000-000000000097',(select id from public.work_cards where title='Undo M'),'progress',null);
+select public.place_work_card('10000000-0000-0000-0000-000000000097',(select id from public.work_cards where title='Undo M'),'planned',null);
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select throws_ok($$select public.undo_work_card_move('10000000-0000-0000-0000-000000000097',(select id from public.work_cards where title='Undo M'))$$,'P0001','the card moved on','the first mover cannot undo a later move that landed in the same place');
+select is((select s.board_column from public.work_cards w join public.work_stages s on s.id=w.stage_id where w.title='Undo M'),'planned','the Card stays where the later move put it');
+
 select * from finish();
 rollback;

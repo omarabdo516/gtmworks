@@ -138,3 +138,12 @@ test('in Arabic the second step keeps its words, its email field left to right a
  expect(screen.getByRole('button', { name: 'اتخطى' }).element()).toBeVisible();
  expect(screen.getByRole('button', { name: 'افتح المساحة' }).element()).toBeVisible();
 });
+
+test('Enter in an email field opens the workspace with its invitations, never Skip, the form\'s first submit button', async () => {
+ const screen = await show();
+ await showStepTwo(screen);
+ await userEvent.fill(fields()[0], 'nour@example.com');
+ await userEvent.keyboard('{Enter}');
+ await expect.poll(() => finish.mock.calls.length).toBe(1);
+ expect(finish.mock.calls[0][1].get('choice')).toBe('open');
+});

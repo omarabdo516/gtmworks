@@ -17,7 +17,7 @@ create table public.work_card_moves (
  to_stage_id bigint not null,
  to_place numeric,
  moved_at timestamptz not null default now(),
- foreign key(company_id,card_id) references public.work_cards(company_id,id)
+ foreign key(company_id,card_id) references public.work_cards(company_id,id) on delete cascade
 );
 -- Only the Card table writes a move. A Member reads only their own moves, on a Card they can see, which is all "Undo"
 -- needs: another person's moves, and the moves of a Card a chat's Agent hides from this Member, stay theirs.
@@ -109,6 +109,14 @@ end $$;
 revoke all on function public.place_work_card(uuid,bigint,text,bigint,text) from public,anon,service_role;
 grant execute on function public.place_work_card(uuid,bigint,text,bigint,text) to authenticated;
 
+-- The id of a Card's latest remembered move, whoever made it, for a Member of its Company: Undo puts back only a move that
+-- is still the Card's latest, and another person's moves are not the caller's to read (work_card_moves_read).
+create function public.work_card_latest_move(c uuid, card bigint) returns bigint language sql stable security definer set search_path='' as $$
+ select m.id from public.work_card_moves m where public.is_member(c) and m.company_id=c and m.card_id=card order by m.moved_at desc,m.id desc limit 1;
+$$;
+revoke all on function public.work_card_latest_move(uuid,bigint) from public,anon,service_role;
+grant execute on function public.work_card_latest_move(uuid,bigint) to authenticated;
+
 -- "Undo": the caller's own latest move of this Card, put back, as the caller (row-level security and every stage rule
 -- apply, as to any move). It refuses when the Card is not where that move put it any more (someone else moved it, or a
 -- decision did), when the caller made no move of it, when the stage it came from or went to is after review and the
@@ -118,14 +126,18 @@ language plpgsql security invoker set search_path='' as $$
 declare moved public.work_card_moves; current_stage bigint; current_place numeric; current_column text; current_kind text;
  from_column text; from_kind text; begin
  if not public.work_can_edit(c) then raise exception 'not permitted' using errcode='42501'; end if;
+ -- The Card is locked first, so no move commits between the checks and the way back.
+ select w.stage_id,w.board_order,s.board_column,s.kind into current_stage,current_place,current_column,current_kind
+  from public.work_cards w join public.work_stages s on s.company_id=w.company_id and s.id=w.stage_id
+  where w.company_id=c and w.id=card for update of w;
+ if not found then raise exception 'card not found or not permitted'; end if;
  select m.* into moved from public.work_card_moves m where m.company_id=c and m.card_id=card and m.person_id=auth.uid()
   order by m.moved_at desc,m.id desc limit 1;
  if not found then raise exception 'nothing to undo' using errcode='42501'; end if;
- select w.stage_id,w.board_order,s.board_column,s.kind into current_stage,current_place,current_column,current_kind
-  from public.work_cards w join public.work_stages s on s.company_id=w.company_id and s.id=w.stage_id
-  where w.company_id=c and w.id=card;
- if not found then raise exception 'card not found or not permitted'; end if;
- if current_stage is distinct from moved.to_stage_id or current_place is distinct from moved.to_place then
+ -- The caller's move must still be the Card's latest: a later move by anyone, even one that put it back on the same
+ -- stage and place, is not the caller's to undo.
+ if moved.id is distinct from public.work_card_latest_move(c,card)
+  or current_stage is distinct from moved.to_stage_id or current_place is distinct from moved.to_place then
   raise exception 'the card moved on' using errcode='P0001';
  end if;
  select s.board_column,s.kind into from_column,from_kind from public.work_stages s where s.company_id=c and s.id=moved.from_stage_id;

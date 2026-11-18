@@ -72,6 +72,18 @@ test('Enter in the Idea field sends one idea with the main Agent chosen first', 
  await expect.poll(() => sent(props)).toEqual([{ op: 'idea', company: 'co-1', slug: 'rs-learning', stage: '1', title: 'A short idea', agent: 'h-lead' }]);
 });
 
+test('Enter that confirms an input method\'s composition sends nothing; the idea stays to be finished', async () => {
+ const props = withAgents();
+ const screen = await showWork(props);
+ await screen.getByRole('button', { name: 'Add an idea' }).click();
+ await userEvent.fill(screen.getByLabelText('Idea'), 'فكرة لسه');
+ const field = document.querySelector<HTMLInputElement>('#idea-title')!;
+ field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', isComposing: true, bubbles: true, cancelable: true }));
+ await new Promise(resolve => setTimeout(resolve, 100));
+ expect(sent(props)).toEqual([]);
+ await expect.element(screen.getByLabelText('Idea')).toHaveValue('فكرة لسه');
+});
+
 test('the Agent list is the Company Agents the reader sees, the main Agent first and the board filter chosen when it is one of them', async () => {
  const screen = await showWork(withAgents());
  await screen.getByRole('button', { name: 'Add an idea' }).click();
