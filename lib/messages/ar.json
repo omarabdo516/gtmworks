@@ -470,6 +470,7 @@
   "logActMoved": "نقل البطاقة",
   "logActChanged": "غيّر {0}",
   "logActHandedOver": "سلّم البطاقة",
+  "logActHandedTo": "سلّم لـ {0}",
   "logActApproved": "وافق على البطاقة",
   "logActRejected": "رجّع البطاقة",
   "logActSkipped": "عدّى خطوة موافقة اتشالت",

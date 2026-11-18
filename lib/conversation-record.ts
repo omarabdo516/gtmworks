@@ -85,9 +85,15 @@ export async function conversationRecord(db:Database,person:string,company:strin
  const runner=(working as {person:string,name:string}[]|null)?.[0];
  const {data:manages}=runner&&runner.person!==person?await db.rpc('can_manage_company',{target:company}):{data:false};
  const board=card&&{card:card.card,column:card.column};
- // Only a Card the chat's first Run put on the board says so; a chat started from its Card (#145) found it there.
+ // Only a Card the chat put on the board says so; a chat started from its Card (#145) found it there. A chat with Lead
+ // gets its Card when Lead hands the work over (#147), so its line goes under the handover's answer: the follow-up reply
+ // of a Run no message of the person started.
  const first=messages.find(message=>message.author==='person');
- const firstReply=card&&first&&card.created_at>first.created_at?messages.find(message=>message.author==='agent'&&message.run_id===first.run_id)?.id:undefined;
+ const firstReply=card&&first&&card.created_at>first.created_at
+  ?(lead
+   ?messages.find(message=>message.author==='agent'&&!messages.some(own=>own.author==='person'&&own.run_id===message.run_id))
+   :messages.find(message=>message.author==='agent'&&message.run_id===first.run_id))?.id
+  :undefined;
  return {
   conversation:{id:found.id,agent_id:found.agent_id,agent_name:found.agent_name,face:faceOf(found)},
   messages:withBoardNote(withTeamWork(withDecisions(shown(messages,ends,cards,found.agent_name,saved,stepsOfReplies(messages,(await read)?.turns??null)),decisions,found.agent_name),notes,queued,me?.name||''),firstReply),
