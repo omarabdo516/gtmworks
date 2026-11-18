@@ -66,7 +66,7 @@ export default async function Shell({company,companies,section,title,crumbs,pers
  markOpen('sidebar');
  // A chat is named by the first line of its first message, or by its first file when it carries images alone (#155), as
  // its own page names it (lib/conversations titleOf).
- const chats=conversations.map(c=>{ const first=c.conversation_messages[0]; return {id:c.id,created_at:c.created_at,title:first?.body.split('\n')[0]||first?.conversation_attachments[0]?.name||c.agent_name}; });
+ const chats=conversations.map(c=>{ const first=c.conversation_messages[0]; return {id:c.id,created_at:c.created_at,title:first?.body.split('\n')[0]||first?.conversation_attachments?.[0]?.name||c.agent_name}; });
  const asksForAgents=writer&&!owner;
  const account=<><AccountMenu slug={slug} personName={personName} role={role} theme={theme} companyName={company?.name} settingsHref={slug?`/c/${slug}/settings`:undefined}/><ThemeToggle theme={theme}/></>;
  const active=(path:string)=>path==='chat'?chat:path==='work/board'?section.startsWith('work/'):section===path;

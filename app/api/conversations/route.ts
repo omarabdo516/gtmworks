@@ -198,7 +198,8 @@ async function respond(request:NextRequest) {
    const field=(name:string)=>{ const value=fields.get(name); return typeof value==='string'?value:undefined; };
    const card=field('card');
    body={company:field('company'),conversation:field('conversation'),sendKey:field('sendKey'),message:field('message'),agent:field('agent'),intent:field('intent'),...(card!==undefined?{card:Number(card)}:{})};
-   chosen=fields.getAll('files').filter((file):file is File=>file instanceof File&&file.size>0);
+   // Every file is passed to the check, an empty one included: it is refused with the line, never silently dropped.
+   chosen=fields.getAll('files').filter((file):file is File=>file instanceof File);
    if(chosen.length&&body.intent!==undefined) return refuse('conversationFailed',400);
   } else {
    const raw=await request.text(); if(raw.length>24000) return refuse('conversationFailed',400);
