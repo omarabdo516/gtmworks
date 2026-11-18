@@ -243,7 +243,7 @@ for(const [who,email,reads] of [['the Owner','omar@example.com',false],['a Manag
  await expect(page).toHaveURL(agentPage(lead));
  await expect(page.locator('#sov-tab-settings')).toBeFocused();
  await expect(page.locator('.sov-agent-id .dp-id__name')).toHaveText('LeadMain');
- await expect(page.locator('#sov-agent-panel .ro-note')).toHaveText(reads?['Agent settings are changed by the Owner only.']:[]);
+ await expect(page.locator('#sov-agent-panel .ro-note')).toHaveText(reads?['Agent settings are changed by the Owner and Managers only.']:[]);
 });
 
 for(const [where,path] of [['a Conversation',`/c/rs-learning/conversations/${conversation}`],['the Agent\'s empty chat',`/c/rs-learning/chat/${ads}`]] as const) test(`closing the Agent's settings opened from ${where} returns there with the focus on the gear, by the button and by Escape`,async({page})=>{

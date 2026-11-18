@@ -99,8 +99,9 @@ test('the Owner sees the company’s real Agents, main first, and makes another 
   await expect(rows.nth(1)).toContainText('Ads agent');
   await rows.nth(1).click();
   await expect(page).toHaveURL(new RegExp(`\\?agent=${ads}$`));
-  await expect(overlay.locator('#set-name')).toHaveValue('Ads');
-  await expect(overlay.locator('#set-role')).toHaveValue('Ads agent');
+  // Name and Role are the reference's read-only rows: the Engine writes neither on a named profile (#161).
+  await expect(overlay.locator('#set-name-val')).toHaveText('Ads · @ads');
+  await expect(overlay.locator('#set-role-val')).toHaveText('Ads agent');
   // The Memory tab is not built yet: drawn, disabled, saying Soon.
   await expect(overlay.locator('#sov-tab-memory')).toHaveAttribute('aria-disabled','true');
   await expect(overlay.locator('#sov-tab-memory')).toHaveAttribute('title','Soon');
@@ -237,7 +238,7 @@ for(const view of roleViews) test(`${view.role}: Settings shows only what the Ro
   await expect(overlay.locator('.sov-ag')).toHaveCount(2);
   await shows('agents',view.agents);
   await page.goto(`/c/rs-learning/settings?agent=${ads}`);
-  await expect(overlay.locator('#set-name')).toHaveValue('Ads');
+  await expect(overlay.locator('#set-name-val')).toHaveText('Ads · @ads');
   await shows('agent',view.agent);
   // The pinned Engine has no paused state for a profile, so Pause stays "Soon" and opens nothing (#177); force, as Playwright waits on aria-disabled.
   // Delete's confirm is drawn after the click on Pause, so a confirm Pause opened would be drawn by then too.

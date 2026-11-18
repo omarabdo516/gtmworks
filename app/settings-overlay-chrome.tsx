@@ -1,14 +1,14 @@
 import type { ReactNode } from 'react';
-import Link from '@/lib/link';
 import type { I18n } from '@/lib/i18n.mjs';
 import { visibleSections, overlayHref, type OverlaySection } from '@/lib/settings-overlay.mjs';
 import { OverlayFrame, CloseButton } from './settings-overlay-frame';
 import { SettingsIcon } from './settings-icons';
+import { GuardedSectionLink } from './settings-guard-link';
 
 // The overlay's bar, its section list and the place of the open section (reference: dialog#sov), around the section the
 // server drew. It imports no server code, so a component test renders the overlay as the server does (#218).
 export function OverlayChrome({t,slug,companyName,role,readOnly,section,learningWaiting,initialFocus,children}:{t:I18n['t'],slug:string,companyName:string,role:string,readOnly:boolean,section:OverlaySection,learningWaiting:number,initialFocus?:string,children:ReactNode}) {
- const item=([key,label,icon]:readonly [OverlaySection,string,Parameters<typeof SettingsIcon>[0]['name'],boolean,boolean])=><Link key={key} replace className="sb-item sov-nav__i" id={`sov-nav-${key}`} href={overlayHref(slug,key)} aria-current={key===section?'page':undefined}><SettingsIcon name={icon}/><span className="od-fill">{t(label)}</span>{key==='learning'&&learningWaiting>0&&<span className="sov-count"><span aria-hidden="true">{learningWaiting}</span><span className="sr-only">{t('settingsLearningWaiting',learningWaiting)}</span></span>}</Link>;
+ const item=([key,label,icon]:readonly [OverlaySection,string,Parameters<typeof SettingsIcon>[0]['name'],boolean,boolean])=><GuardedSectionLink key={key} className="sb-item sov-nav__i" id={`sov-nav-${key}`} href={overlayHref(slug,key)} current={key===section}><SettingsIcon name={icon}/><span className="od-fill">{t(label)}</span>{key==='learning'&&learningWaiting>0&&<span className="sov-count"><span aria-hidden="true">{learningWaiting}</span><span className="sr-only">{t('settingsLearningWaiting',learningWaiting)}</span></span>}</GuardedSectionLink>;
  const list=visibleSections(role);
  return <OverlayFrame slug={slug} initialFocus={initialFocus}>
   <header className="sov__bar">

@@ -13,11 +13,13 @@ import { OverlayChrome } from './settings-overlay-chrome';
 import { BackLink, FocusReturn } from './settings-overlay-frame';
 import { AccountChoices, MakeMain, DeleteAgent, CompanyName, Invite, AgentSwitch, RuleSaid, RemoveRule } from './settings-overlay-client';
 import { SettingsIcon } from './settings-icons';
+import { MemoryTab } from './settings-memory-tab';
 import PasswordSettings from './password-settings';
 import { UsageTable } from './c/[slug]/[[...section]]/usage';
 import { ownedUsage, type UsageRow } from '@/lib/company-app-items';
 import { readCompanySignIns } from '@/lib/company-sign-in.mjs';
-import { AgentLevel, CompanySubscriptions, MemberNote } from './settings-lazy';
+import { readAgentAbout, type AgentAbout } from '@/lib/agent-about.mjs';
+import { AgentLevel, CompanySubscriptions, MemberNote, AgentAbout as AgentAboutField, AgentSaveBar } from './settings-lazy';
 import { MadeLine, OpenedMark } from './agent-made';
 import { madeColumns, madeOf } from '@/lib/agent-made';
 import { isNewFor } from '@/lib/sidebar.mjs';
@@ -64,6 +66,9 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  // The person's own note for the Agents in this Company (RLS: nobody else reads it).
  const memberNote=section==='account'?(await db.from('member_notes').select('note').eq('company_id',company.id).eq('person_id',userId).maybeSingle()).data?.note||'':'';
  const agent=section==='agents'&&query.agent?agents.find(item=>item.id===query.agent):undefined;
+ // The Agent's own Engine profile: its name, About and title, and whether the profile is its own (#161). Read only on an
+ // Agent's page; another Agent on the Company's shared profile would change the main Agent too, so its About is read only.
+ const about=agent?await readAgentAbout(db,{company:company.id,agent:agent.id}):null;
  // Each Agent's state for this reader, read in one call as the sidebar reads it (#184).
  const stateOf=agentStates(section==='agents'?(await db.rpc('agent_states',{c:company.id})).data:null);
  // The Agent's rules in force for the team (#18), newest first as the reference lists them: a suggestion only once it is
@@ -74,7 +79,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  const ro=!canManage&&<p className="ro-note"><SettingsIcon name="shield"/><span>{t('settingsRO')}</span></p>;
  const page=section==='company'?<CompanySection t={t} company={company} solo={workMode==='alone'} members={members} invitations={invitations} agents={agents} allowed={allowed} invitedAllowed={invitedAllowed} userId={userId} slug={slug} owner={owner} canManage={canManage} sharedEngine={sharedEngine} agentLevel={agentLevel} roleNames={roleNames} ro={ro}/>
-  :section==='agents'?(agent?<AgentPage t={t} rtl={rtl} slug={slug} company={company.id} userId={userId} agent={agent} status={stateOf(agent.id)} main={agents[0]} rules={rules} owner={owner} canManage={canManage} canWrite={canWrite}/>:<AgentsSection t={t} rtl={rtl} slug={slug} agents={agents} stateOf={stateOf} canManage={canManage} canWrite={canWrite} owner={owner}/>)
+  :section==='agents'?(agent?<AgentPage t={t} rtl={rtl} slug={slug} company={company.id} userId={userId} agent={agent} about={about} status={stateOf(agent.id)} main={agents[0]} rules={rules} owner={owner} canManage={canManage} canWrite={canWrite}/>:<AgentsSection t={t} rtl={rtl} slug={slug} agents={agents} stateOf={stateOf} canManage={canManage} canWrite={canWrite} owner={owner}/>)
   :section==='apps'?<AppsSection slug={slug} company={company.id} owner={owner} rtl={rtl} app={query.app} failed={query.signin==='failed'}/>
   :section==='usage'?<UsageSection t={t} locale={locale} slug={slug} company={company.id} rows={usageRows} period={query.period==='30'?30:7}/>
   :section==='account'?<AccountSection t={t} theme={theme} personName={personName} role={role} roleName={roleNames[role]||''} companyName={company.name} company={company.id} memberNote={memberNote}/>
@@ -152,8 +157,13 @@ function AgentsSection({t,rtl,slug,agents,stateOf,canManage,canWrite,owner}:{t:T
    :<p className="panel-empty">{t('noAgentsYet')}</p>}</div><FocusReturn/></>;
 }
 
-function AgentPage({t,rtl,slug,company,userId,agent,status,main,rules,owner,canManage,canWrite}:{t:T,rtl:boolean,slug:string,company:string,userId:string,agent:Agent,status:AgentStatus,main?:Agent,rules:Rule[],owner:boolean,canManage:boolean,canWrite:boolean}) {
+function AgentPage({t,rtl,slug,company,userId,agent,about,status,main,rules,owner,canManage,canWrite}:{t:T,rtl:boolean,slug:string,company:string,userId:string,agent:Agent,about:AgentAbout|null,status:AgentStatus,main?:Agent,rules:Rule[],owner:boolean,canManage:boolean,canWrite:boolean}) {
  const isMain=agent.is_default; const made=madeOf(agent,userId,slug);
+ // The handle gtmworks calls the Agent by in messages, which a change of the Engine's name would not touch
+ // (lib/conversation-runs.mjs: @ and the name, lowercased).
+ const handle=`@${agent.name.trim().toLowerCase()}`;
+ // About is editable by the Owner and Managers who see the Agent, on the Agent's own Engine profile only.
+ const editable=canManage&&about!==null&&about.own;
  const mainSec=owner?<section className="dp-sec" id="set-main" aria-labelledby="set-h-main"><Label id="set-h-main">{t('settingsMainAgent')}</Label><ul className="panel-card">
    {isMain?<li className="panel-row"><span className="panel-row__icon"><SettingsIcon name="check"/></span><span className="panel-row__text"><span className="panel-row__t">{t('settingsIsMain',agent.name)}</span><span className="panel-row__d">{t('settingsIsMainD')}</span></span></li>
     :<MakeMain company={company} agent={agent} current={main?.name||''}/>}</ul></section>
@@ -164,10 +174,10 @@ function AgentPage({t,rtl,slug,company,userId,agent,status,main,rules,owner,canM
   <div className="sov-agent-id"><AgentFaceDot agent={face(agent)} size={48} status={status} lg/><div className="od-fill">
    <div className="dp-id__name"><bdi>{agent.name}</bdi>{isMain&&<span className="badge dp-id__badge">{t('mainAgent')}</span>}</div>
    <div className="dp-id__role"><span>{agent.speciality&&<><bdi>{agent.speciality}</bdi> · </>}</span>{t(statusKeys[status])}</div>{made&&<MadeLine made={made} where="sov"/>}</div></div>
-  {/* The Memory tab (#21) is not built yet. */}
+  {/* The Memory tab (#21) is not built yet; every way out of the page holds for a draft that differs. */}
   <div className="segmented sov-tabs" role="tablist" aria-label={agent.name}>
    <button type="button" role="tab" id="sov-tab-settings" aria-selected="true" aria-controls="sov-agent-panel" tabIndex={0}>{t('settings')}</button>
-   <button type="button" role="tab" id="sov-tab-memory" aria-selected="false" aria-disabled="true" tabIndex={-1} title={t('soon')}>{t('settingsTabMemory')}</button>
+   <MemoryTab label={t('settingsTabMemory')} soon={t('soon')}/>
   </div>
   <div id="sov-agent-panel" role="tabpanel" aria-labelledby="sov-tab-settings">
    <TalkTip t={t} rtl={rtl} text={t('settingsTalkTipAgent',agent.name)} talk={canWrite&&!isMain?{href:`/c/${slug}/chat/${agent.id}`,name:agent.name}:undefined}/>
@@ -175,18 +185,21 @@ function AgentPage({t,rtl,slug,company,userId,agent,status,main,rules,owner,canM
    <div className="dp-sections">
     {!canManage&&<p className="ro-note"><SettingsIcon name="shield"/><span>{t('settingsAgentsRO')}</span></p>}
     <section className="dp-sec" aria-labelledby="set-h-job"><Label id="set-h-job">{t('settingsJob')}</Label>
-     {/* Renaming an Agent or changing its role is not built yet: the fields show them read only. */}
-     <div className="panel-card set-card">
-      <div className="set-field"><label className="set-label" htmlFor="set-name">{t('settingsName')}</label><input className="set-input" id="set-name" type="text" dir="auto" readOnly aria-disabled="true" title={t('soon')} defaultValue={agent.name}/></div>
-      <div className="set-field"><label className="set-label" htmlFor="set-role">{t('settingsRole')}</label><input className="set-input" id="set-role" type="text" dir="auto" readOnly aria-disabled="true" title={t('soon')} defaultValue={agent.speciality} aria-describedby="set-role-hint"/>
-       <span className="set-hint" id="set-role-hint">{t('settingsRoleHint')}</span></div>
-     </div></section>
+     {/* The pinned Engine writes neither a name nor a role for a named profile from its management listener (#161), so
+         both are the reference's read-only rows, for every Role. */}
+     <ul className="panel-card">
+      <li className="panel-row"><span className="panel-row__text"><span className="panel-row__t">{t('settingsName')}</span><span className="panel-row__d ro-val" id="set-name-val"><bdi>{agent.name}</bdi> · <bdi dir="ltr">{handle}</bdi></span></span></li>
+      <li className="panel-row"><span className="panel-row__text"><span className="panel-row__t">{t('settingsRole')}</span><span className="panel-row__d ro-val" id="set-role-val">{agent.speciality?<bdi>{agent.speciality}</bdi>:'—'}</span></span></li>
+     </ul></section>
     {mainSec}
     {isMain&&<section className="dp-sec" aria-labelledby="set-h-ck"><Label id="set-h-ck">{t('settingsGoodMorning')}</Label><ul className="panel-card">
      <li className="panel-row"><span className="panel-row__text"><span className="panel-row__t" id="set-ck-t">{t('settingsCheckin')}</span><span className="panel-row__d">{t('settingsCheckinD')}</span></span>
       <button type="button" className="switch" role="switch" aria-checked="false" aria-disabled="true" aria-labelledby="set-ck-t" title={t('soon')}/></li></ul></section>}
-    {/* Model, tools and core instructions change only with the Owner's approval (#19); none of these is built yet. */}
-    {(['settingsAbout','settingsHow','settingsThinks','settingsVoice','settingsTools','settingsSkills'] as const).map(key=><SoonSec key={key} t={t} id={`set-h-${key}`} label={t(key)}/>)}
+    {/* About is the Agent's profile description (#161); the fields after it join its save bar later. */}
+    <section className="dp-sec" aria-labelledby="set-h-about"><Label id="set-h-about">{t('settingsAbout')}</Label>
+     {editable?<AgentAboutField agent={agent.id} name={agent.name} description={about?.description??''}/>
+      :<div className="panel-card"><p className="ro-text" id="set-about">{about?.description||'—'}</p></div>}</section>
+    {(['settingsHow','settingsThinks','settingsVoice','settingsTools','settingsSkills'] as const).map(key=><SoonSec key={key} t={t} id={`set-h-${key}`} label={t(key)}/>)}
     {owner&&<section className="dp-sec" aria-labelledby="set-h-danger"><Label id="set-h-danger">{t('settingsDanger')}</Label><ul className="panel-card">
      <li className="panel-row"><span className="panel-row__text"><span className="panel-row__t">{t('settingsPause')}</span><span className="panel-row__d">{t('settingsPauseD')}</span></span>
       <button type="button" id="danger-pause" className="btn btn--secondary btn--sm" aria-disabled="true" title={t('soon')}>{t('settingsPauseButton')}</button></li>
@@ -195,6 +208,8 @@ function AgentPage({t,rtl,slug,company,userId,agent,status,main,rules,owner,canM
     </ul></section>}
    </div>
   </div>
+  {/* design-reference: sovAgentHTML's bar, after the tab panel: hidden until the draft differs from what was saved. */}
+  {editable&&<AgentSaveBar company={company} agent={agent.id} name={agent.name}/>}
  </>;
 }
 

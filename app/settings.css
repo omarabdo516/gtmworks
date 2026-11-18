@@ -191,6 +191,22 @@
 .gw .sov .dp-id__role { display: flex; align-items: center; justify-content: flex-start; gap: 6px; font-size: var(--gw-fs-sm); line-height: 1.5; color: var(--gw-text-2); }
 .gw .sov .sov-tabs { justify-content: flex-start; padding: 0; margin-bottom: calc(var(--s2) * -1); }
 .gw .sov .sov-tabs [aria-disabled="true"] { color: var(--gw-text-3); }
+/* The read-only rows of an Agent's page (#161): the reference's value beside its label (index.html: .ro-val). */
+.gw .sov .ro-val { color: var(--gw-text-2); }
+/* The Agent page's save bar (#161; design-reference: .dp-savebar, .sov-savebar, barFlash): it rises in when the draft
+   starts to differ, flashes when a way out is tried, and sits at the bottom of the page. Its flash's frames keep the
+   reference's own token name, which this scope resolves to the app's colour. */
+.gw.sov-root { --text-1: var(--gw-text-1); }
+.gw .sov .dp-savebar {
+  display: flex; align-items: center; gap: var(--s2); padding: var(--s3) var(--s4);
+  background: var(--gw-bg-pane); border-top: 0.5px solid var(--gw-border-2); animation: gw-rise var(--gw-dur) var(--gw-ease-out);
+}
+.gw .sov .dp-savebar[hidden] { display: none; }
+.gw .sov .dp-savebar__t { flex: 1 1 0; min-width: 0; font-size: var(--gw-fs-sm); font-weight: 600; line-height: 1.5; color: var(--gw-text-1); }
+.gw .sov .dp-savebar__t .set-err { display: block; font-weight: 400; }
+.gw .sov .dp-savebar.is-flash { animation: barFlash 1.4s var(--gw-ease-out); }
+@keyframes barFlash { 0%, 40% { box-shadow: inset 0 0 0 2px var(--text-1); } 100% { box-shadow: inset 0 0 0 0 transparent; } }
+.gw .sov .sov-savebar { position: sticky; bottom: var(--s4); z-index: 1; border: 0.5px solid var(--gw-border-2); border-radius: var(--gw-r-lg); box-shadow: var(--gw-shadow-popover); }
 .gw .sov .sov-rules { margin-bottom: var(--s6); }
 .gw .sov .sov-soon .panel-empty { padding-block: 10px; }
 /* The rules an Agent was told in its chat (#18; design-reference: .rl-list, .rl-row), with an Owner's or a Manager's Remove */
