@@ -33,6 +33,26 @@ export async function fixClock(context: BrowserContext) {
   await context.clock.setFixedTime(FIXED);
 }
 
+// Text that follows the real calendar is replaced by fixed text, so the picture keeps its layout, font and colour but not
+// the day it was drawn: the log's day-group header (LogDays / useDayName, outside any <time>), the times, and the 14 day
+// chart labels. The pinned clock dates the client half of every page; the server half is drawn when it is asked, so the
+// header's text is fixed here rather than left to whichever day the run is on.
+export async function fixClockText(page: Page) {
+  await page.evaluate(() => {
+    (document.activeElement as HTMLElement | null)?.blur(); // no focus ring or open picker in the picture
+    const months = 'January|February|March|April|May|June|July|August|September|October|November|December|يناير|فبراير|مارس|أبريل|مايو|يونيو|يوليو|أغسطس|سبتمبر|أكتوبر|نوفمبر|ديسمبر';
+    const monthName = new RegExp(months);
+    const skipped = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE', 'TITLE']);
+    for (const element of Array.from(document.querySelectorAll('body *'))) {
+      if (element.children.length || skipped.has(element.tagName)) continue;
+      const text = (element.textContent ?? '').trim();
+      if (element.matches('.lg-day__h')) element.textContent = 'Day';
+      else if (element.closest('.chart-bars') && /\d/.test(text) && monthName.test(text)) element.textContent = 'Month 00';
+      else if (element.tagName === 'TIME' || /\d{1,2}:\d{2}/.test(text)) element.textContent = 'Date, 00:00';
+    }
+  });
+}
+
 export async function expectDeterministic(page: Page) {
   const problems: string[] = [];
   const fonts = await page.evaluate(async () => {

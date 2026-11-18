@@ -1,0 +1,1 @@
+| `engine-models.test.mjs` | The driver sends a Run's chosen provider and model and a Run with no choice as before, a refused model starts no Run, and an Agent's models are read from the Engine's list for its profile, without a provider that lost its sign-in (#158). | 0.1 s | plus-menu-items.spec.ts | new |
