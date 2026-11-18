@@ -102,6 +102,7 @@ test('a Conversation\'s file opens for its own person and for nobody else',async
   expect(own.headers()['content-disposition']).toMatch(/^inline;/);
   expect(own.headers()['x-content-type-options']).toBe('nosniff');
   // Another Member of the Company, and a visitor with no sign-in, find nothing.
+  await page.context().clearCookies();
   await signIn(page,'manager@example.com','/c/rs-learning/home');
   expect((await page.request.get(address)).status()).toBe(404);
   await page.context().clearCookies();
