@@ -30,6 +30,18 @@ async function storeFiles(db: Awaited<ReturnType<typeof supabase>>, company: str
  }
  return {files,error:null};
 }
+// "Undo" on a move (#168): the database puts the Card back in the stage and place it left, as the person, and decides
+// every refusal itself. The board says in a toast why it stayed, and changes nothing; no page changes.
+export const undoMove=withActionLog('undoMove',async function undoMove(form: FormData): Promise<{state:'undone',column:string}|{state:'gone'}|{state:'refused'}> {
+ const db=await supabase(); const company=String(form.get('company')); const card=Number(form.get('card'));
+ if(!await actionAllowed(db,'undoMove',company)) return {state:'refused'};
+ const {data,error}=await db.rpc('undo_work_card_move',{c:company,card});
+ if(!error) { revalidatePath(`/c/${String(form.get('slug'))}`,'layout'); return {state:'undone',column:String(data)}; }
+ // A Card moved or decided meanwhile is the one expected refusal; anything else is a failure worth the log.
+ if(String(error.message||'').includes('the card moved on')) return {state:'gone'};
+ logActionFailure('undoMove',error,{form});
+ return {state:'refused'};
+});
 export const workAction=withActionLog('workAction',async function workAction(form: FormData) { const {t}=await getI18n();
  const db=await supabase(); const company=String(form.get('company')); const slug=String(form.get('slug')); const op=String(form.get('op')); const card=Number(form.get('card')); const base=`/c/${slug}/work/board`; const evidence=String(form.get('evidence')||'').trim() || null;
  let error: {message:string}|null=null; let created: number|undefined;
