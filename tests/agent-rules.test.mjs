@@ -116,3 +116,22 @@ test('a rule given and removed appears in and leaves the profile\'s SOUL.md sect
   assert.equal(soulOf(hermes,ads),`${own}\nSign off as the team.\n`,'with no rules the section is gone and the rest is as it was');
  } finally { await hermes.close(); }
 });
+// #28: forgetting a rule is remove_agent_rule's row, and bringing it back is restore_agent_rule's: the worker's list is
+// what the two change, so the section loses the rule and then holds it again, with the text around it untouched.
+test('a rule forgotten and brought back leaves and returns to the SOUL.md section, and the text around it stays as it was',async()=>{
+ const hermes=await fakeHermes(); const ads='ag-a0000000000000000000000000000004'; const own='You are Ads.\nWrite short copy.\n';
+ try {
+  hermes.settings.profiles.set(ads,{soul:own,provider:'auto',model:'',key:'test-only-key',config:{},credentials:{}});
+  const work={[ads]:[rules[0],rules[1]]};
+  await keepAgentRules(rulesDatabase(work),{hermes:install(hermes)});
+  const both=soulOf(hermes,ads);
+  assert.ok(both.includes(`- ${rules[0]}`)&&both.includes(`- ${rules[1]}`));
+  work[ads]=[rules[1]];
+  await keepAgentRules(rulesDatabase(work),{hermes:install(hermes)});
+  assert.ok(!soulOf(hermes,ads).includes(rules[0]),'the forgotten rule leaves the section');
+  assert.ok(soulOf(hermes,ads).startsWith(own)&&soulOf(hermes,ads).includes(rules[1]),'the other rule and the text around the section stay');
+  work[ads]=[rules[0],rules[1]];
+  await keepAgentRules(rulesDatabase(work),{hermes:install(hermes)});
+  assert.equal(soulOf(hermes,ads),both,'the restored rule is written back exactly, and nothing else changed');
+ } finally { await hermes.close(); }
+});

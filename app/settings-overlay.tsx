@@ -10,6 +10,7 @@ import { AgentFaceDot } from './agent-face-dot';
 import { agentStates, statusKeys, type AgentStatus } from '@/lib/agent-details.mjs';
 import { pickSection, overlayHref, agentsMainFirst, usageTotals, usageModels, usageHeaviest, usageEmpty, type OverlaySection } from '@/lib/settings-overlay.mjs';
 import { OverlayChrome } from './settings-overlay-chrome';
+import { Head, Label } from './settings-overlay-parts';
 import { BackLink, FocusReturn } from './settings-overlay-frame';
 import { AccountChoices, MakeMain, DeleteAgent, CompanyName, Invite, AgentSwitch, RuleSaid, RemoveRule } from './settings-overlay-client';
 import { SettingsIcon } from './settings-icons';
@@ -20,6 +21,8 @@ import { managedUsage, type UsageRow } from '@/lib/company-app-items';
 import { readCompanySignIns } from '@/lib/company-sign-in.mjs';
 import { readAgentAbout, type AgentAbout } from '@/lib/agent-about.mjs';
 import { readAgentSkills } from '@/lib/company-skills.mjs';
+import { readCompanyLearning } from '@/lib/company-learning.mjs';
+import { LearningSection } from './settings-learning';
 import { AgentLevel, CompanySubscriptions, MemberNote, AgentAbout as AgentAboutField, AgentSkills, AgentSaveBar } from './settings-lazy';
 import { MadeLine, OpenedMark } from './agent-made';
 import { madeColumns, madeOf } from '@/lib/agent-made';
@@ -65,6 +68,10 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  // The token use of the period, read from each Company's Agents' profiles in the bundled Engine (#347, #32): the
  // Owner and the Managers see every Company they manage, the same read the database checks.
  const usageRows=section==='usage'?await managedUsage(userId,query.period==='30'?30:7):[];
+ // How each Agent learns, and what it learned (#28): its mode read from its own Engine profile, its rules from the
+ // database, the Skills the Engine's learning graph marks, and the Company's lessons. A read that fails leaves the
+ // service's own refusal on the page, never an empty mode.
+ const learning=section==='learning'?await readCompanyLearning(db,{company:company.id}).catch(()=>({state:'failed' as const,agents:null,rules:null,lessons:null})):null;
  // The person's own note for the Agents in this Company (RLS: nobody else reads it).
  const memberNote=section==='account'?(await db.from('member_notes').select('note').eq('company_id',company.id).eq('person_id',userId).maybeSingle()).data?.note||'':'';
  const agent=section==='agents'&&query.agent?agents.find(item=>item.id===query.agent):undefined;
@@ -85,14 +92,13 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
   :section==='agents'?(agent?<AgentPage t={t} rtl={rtl} slug={slug} company={company.id} userId={userId} agent={agent} about={about} skills={skills} status={stateOf(agent.id)} main={agents[0]} rules={rules} owner={owner} canManage={canManage} canWrite={canWrite}/>:<AgentsSection t={t} rtl={rtl} slug={slug} agents={agents} stateOf={stateOf} canManage={canManage} canWrite={canWrite} owner={owner}/>)
   :section==='apps'?<AppsSection slug={slug} company={company.id} owner={owner} rtl={rtl} app={query.app} failed={query.signin==='failed'}/>
   :section==='usage'?<UsageSection t={t} locale={locale} slug={slug} company={company.id} rows={usageRows} period={query.period==='30'?30:7}/>
+  :section==='learning'?<LearningSection t={t} company={company.id} canManage={canManage} owner={owner} data={learning}/>
   :section==='account'?<AccountSection t={t} theme={theme} personName={personName} role={role} roleName={roleNames[role]||''} companyName={company.name} company={company.id} memberNote={memberNote}/>
   :section==='knowledge'?<><Head title={t('settingsKnowledge')} sub={t('settingsKnowledgeSub')}/>{ro}<CompanyKnowledge slug={slug} company={company.id} canManage={canManage} part={query.part}/></>
   :<SoonSection t={t} section={section} ro={ro} models={<ModelsSubscriptions company={company.id} owner={owner} subscriptions={subscriptions}/>}/>;
  return <OverlayChrome t={t} slug={slug} companyName={company.name} role={role} readOnly={!canManage} section={section} learningWaiting={learningWaiting} initialFocus={agent?'sov-tab-settings':undefined}>{page}</OverlayChrome>;
 }
 
-const Head=({title,sub,extra}:{title:string,sub?:string,extra?:ReactNode})=><header className="sov-head"><div className="sov-head__t"><h3 className="sov-h" id="sov-h" tabIndex={-1}>{title}</h3>{sub&&<p className="sov-sub">{sub}</p>}</div>{extra}</header>;
-const Label=({id,children}:{id:string,children:ReactNode})=><h4 className="dp-label" id={id}><span>{children}</span></h4>;
 // A part of the reference whose feature is not built yet: drawn in its place, empty, and saying "Soon".
 const Soon=({t}:{t:T})=><div className="panel-card sov-soon" aria-disabled="true" title={t('soon')}><p className="panel-empty">{t('soon')}</p></div>;
 const SoonSec=({t,id,label}:{t:T,id:string,label:string})=><section className="dp-sec" aria-labelledby={id}><Label id={id}>{label}</Label><Soon t={t}/></section>;
@@ -263,11 +269,9 @@ function AccountSection({t,theme,personName,role,roleName,companyName,company,me
   <PasswordSettings variant="overlay"/></>;
 }
 
-// The company's sections whose features come later (#28–#33): each keeps the reference's heading, its explanation and
-// its parts in place, empty and marked "Soon", with no sample figures.
+// The company's sections whose features come later (#29–#33): each keeps the reference's heading, its explanation and
+// its parts in place, empty and marked "Soon", with no sample figures. Learning (#28) has its own section.
 function SoonSection({t,section,ro,models}:{t:T,section:OverlaySection,ro:ReactNode,models:ReactNode}) {
- if(section==='learning') return <><Head title={t('settingsLearning')} sub={t('settingsLearningSub')}/>{ro}
-  {(['settingsLearnSuggestions','settingsLearnCompany','settingsLearnPerAgent','settingsLearnRecent','settingsLearnRules'] as const).map(key=><SoonSec key={key} t={t} id={`ln-h-${key}`} label={t(key)}/>)}</>;
  if(section==='models') return <><Head title={t('settingsModels')} sub={t('settingsModelsSub')}/>{ro}
   {models}
   {(['settingsModelsDefault','settingsModelsEffort','settingsModelsEach'] as const).map(key=><SoonSec key={key} t={t} id={`md-h-${key}`} label={t(key)}/>)}</>;
