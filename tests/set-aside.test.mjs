@@ -30,6 +30,7 @@ export function setAsideProblems({ entries, skipped, doc, today }) {
     if (!Number.isInteger(entry.issue) || entry.issue <= 0) problems.push(`${name}: names no issue`);
     const since = Date.parse(`${entry.since}T00:00:00Z`);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(entry.since ?? '') || Number.isNaN(since)) problems.push(`${name}: no date it was set aside`);
+    else if (since > Date.parse(`${today}T00:00:00Z`)) problems.push(`${name}: set aside on ${entry.since}, a date still to come`);
     else if (Math.floor((Date.parse(`${today}T00:00:00Z`) - since) / day) > 7) problems.push(`${name}: set aside on ${entry.since}, more than 7 days ago`);
     if (protectedWords.test(entry.file ?? '') || sensitive.has(name)) problems.push(`${name}: a sign-in or Company isolation test is never set aside`);
     if (!skipped.includes(name)) problems.push(`${name}: listed but not skipped`);
@@ -48,6 +49,7 @@ test('an entry set aside 6 or 7 days ago passes, and one set aside 8 days ago tu
   assert.deepEqual(check([entry('2026-11-12')]), []);
   assert.deepEqual(check([entry('2026-11-11')]), []);
   assert.deepEqual(check([entry('2026-11-10')]), ['numbers.spec.ts › Numbers keeps its title: set aside on 2026-11-10, more than 7 days ago']);
+  assert.deepEqual(check([entry('2027-11-18')]), ['numbers.spec.ts › Numbers keeps its title: set aside on 2027-11-18, a date still to come']);
   assert.deepEqual(check([entry('soon')]), ['numbers.spec.ts › Numbers keeps its title: no date it was set aside']);
 });
 
@@ -73,4 +75,19 @@ test('the set-aside list matches the browser tests Playwright skips, each with a
     today: new Date().toISOString().slice(0, 10),
   });
   assert.deepEqual(problems, []);
+});
+
+// A skip called inside a running test is not seen by `--list`, so it could hide a test without an entry: only the
+// declared form (`test.fixme('title', …)`, `test.skip('title', …)`) is allowed in browser specs.
+export const runtimeSkips = source => [...source.matchAll(/\b(?:test|testInfo)\.(?:skip|fixme)\(\s*(?!['"`])/g)].length;
+
+test('a skip called inside a running test turns the guard red; the declared form does not', () => {
+  assert.equal(runtimeSkips("test.fixme('slow page', async ({ page }) => {});\ntest.skip(\"later\", () => {});"), 0);
+  for (const call of ['test.skip();', "test.skip(isMobile, 'no phone');", 'testInfo.fixme();', 'test.fixme(true)']) assert.equal(runtimeSkips(call), 1, call);
+});
+
+test('no browser spec skips a test from inside it', () => {
+  const specs = readdirSync('tests', { recursive: true }).filter(name => /\.(spec|install|proxy)\.ts$/.test(name) && !name.includes('node_modules'));
+  assert.ok(specs.length > 20);
+  assert.deepEqual(specs.filter(name => runtimeSkips(readFileSync(`tests/${name}`, 'utf8')) > 0), []);
 });

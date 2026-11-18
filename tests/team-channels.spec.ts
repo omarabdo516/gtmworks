@@ -118,3 +118,10 @@ test('a Member calls the channel\'s Agent hidden from them elsewhere, sees its m
  expect(refused.status()).toBe(404);
  expect(rows(`select count(*)::int n from public.conversations where agent_id='${seo}'`)[0].n).toBe(0);
 });
+
+// The database hides the channel (supabase/tests/team_channels.sql); this checks the page and the API answer not found (#338).
+test('a Member not in the channel gets not found from its page and its API',async({page})=>{
+ await signIn(page,'multi@example.com','/c/rs-learning/home');
+ expect((await page.goto(`/c/rs-learning/channels/${channel}`))!.status()).toBe(404);
+ expect((await page.request.get(`/api/channels?company=${company}&channel=${channel}`)).status()).toBe(404);
+});
