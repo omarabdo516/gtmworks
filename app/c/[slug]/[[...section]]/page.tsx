@@ -71,8 +71,10 @@ export default async function CompanyPage({params,searchParams}:{params:Promise<
  // A decided learning suggestion comes back to the board with its outcome and its Agent's name (#169): the address names
  // the waiting item, never the Agent, and the page reads its name here as the person reading the board.
  const decidedItem=section==='approvals'&&(query.decided==='approve'||query.decided==='reject')&&/^[1-9]\d{0,17}$/.test(query.item||'')?Number(query.item):null;
- const {data:decided}=decidedItem!=null?await db.from('waiting_items').select('body').eq('company_id',company.id).eq('id',decidedItem).maybeSingle():{data:null};
- const ruleDecision=decidedItem!=null?{approve:query.decided==='approve',agent:String(decided?.body||'')}:undefined;
+ const {data:decided}=decidedItem!=null?await db.from('waiting_items').select('body,agent_rules(hermes_agents(name))').eq('company_id',company.id).eq('id',decidedItem).maybeSingle():{data:null};
+ // The suggestion's Agent, through its rule; the item's own line only when the rule names none (as #169 read it).
+ const decidedRow=decided as {body?:string|null,agent_rules:{hermes_agents:{name:string}|null}|null}|null;
+ const ruleDecision=decidedItem!=null?{approve:query.decided==='approve',agent:decidedRow?.agent_rules?.hermes_agents?.name||String(decidedRow?.body||'')}:undefined;
  // The board reads its Cards through board_cards (#190): no Card of an Agent hidden from the reader, each with the
  // Company Agents that worked on it (crew). Other places list Cards as before.
  // Typed as the table read it stands in for, whose rows the untyped client leaves open.
