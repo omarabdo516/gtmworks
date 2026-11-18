@@ -36,3 +36,30 @@ test('a permission item\'s Conversation is read within the caller\'s Company onl
  await approvalQueue(db,'company-a','person','owner');
  expect(filters).toEqual([['eq company_id "company-a"','in id ["c1"]']]);
 });
+
+// #200: a mention in a channel is read from its message, which carries the channel it opens at, and the channel names
+// itself: a team channel by its name, the general one by no name at all, so the reader draws its own word.
+function mentionDb(channel:{id:string,kind:string,name:string|null}, seen?:string[]) {
+ const listed=[{kind:'channel_mention',id:11,title:'general',body:'@Sara شوفوا ده',asked_by:'Omar',card_id:null,conversation_id:null,created_at:'2026-06-01T00:00:00Z'}];
+ const from=(name:string)=>{
+  const rows=name==='waiting_items'?[{id:11,channel_message_id:42}]:name==='channel_messages'?[{id:42,channel_id:'ch-1'}]:name==='channels'?[channel]:[];
+  const query:Record<string,unknown>={then:(resolve:(value:unknown)=>unknown)=>resolve({data:rows,error:null})};
+  for(const method of ['select','is','order','in']) query[method]=()=>query;
+  query.eq=(column:string,value:unknown)=>{ if(seen&&name==='channels') seen.push(`${name}:${column}=${String(value)}`); return query; };
+  return query; };
+ return {from,rpc:async()=>({data:listed,error:null})} as unknown as Parameters<typeof approvalQueue>[0];
+}
+
+test('a mention in a channel opens that channel at the message it points at, named as the channel is',async()=>{
+ const {items}=await approvalQueue(mentionDb({id:'ch-1',kind:'team',name:'Launch week'}),'company','person','contributor');
+ expect(items.map(item=>({kind:item.kind,title:item.title,body:item.body,asked_by:item.asked_by,channel_id:item.channel_id,channel_message_id:item.channel_message_id})))
+  .toEqual([{kind:'channel_mention',title:'Launch week',body:'@Sara شوفوا ده',asked_by:'Omar',channel_id:'ch-1',channel_message_id:42}]);
+ const general=await approvalQueue(mentionDb({id:'ch-1',kind:'general',name:null}),'company','person','viewer');
+ expect(general.items.map(item=>({title:item.title,channel_id:item.channel_id}))).toEqual([{title:'',channel_id:'ch-1'}]);
+});
+
+test('the channel a mention opens is read within the caller\'s Company only',async()=>{
+ const seen:string[]=[];
+ await approvalQueue(mentionDb({id:'ch-1',kind:'team',name:'Launch week'},seen),'company-a','person','owner');
+ expect(seen).toEqual(['channels:company_id=company-a']);
+});

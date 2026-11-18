@@ -43,9 +43,12 @@ export default function ChannelView({person,initial}:{person:string,initial:Chan
   } catch {}
  },[channel.company,channel.id]);
  // Opening the channel reads it, and asks for it fresh: the page may be a prefetch drawn before the newest messages. The
- // answer replaces only that first drawing, never a newer one from a poll or a send.
+ // answer replaces only that first drawing, never a newer one from a poll or a send. Opened from a mention (#200), the
+ // read names the message the Member opened, so their own waiting item is done; the address is then the channel's again.
  useEffect(()=>{
-  void fetch(`/api/channels?company=${channel.company}&channel=${channel.id}`,{cache:'no-store'}).then(async response=>{
+  const mention=/^#mention-\d+$/.test(location.hash)?location.hash.slice('#mention-'.length):null;
+  void fetch(`/api/channels?company=${channel.company}&channel=${channel.id}${mention?`&mention=${mention}`:''}`,{cache:'no-store'}).then(async response=>{
+   if(mention) history.replaceState(history.state,'',location.pathname+location.search);
    if(response.ok) { const fresh=await response.json() as ChannelRecord; setRecord(current=>current===initial?fresh:current); } else await response.arrayBuffer();
   }).catch(()=>{});
  },[channel.company,channel.id,initial]);
@@ -79,14 +82,24 @@ export default function ChannelView({person,initial}:{person:string,initial:Chan
  const [drawnCards]=useState(()=>new Set(initial.messages.flatMap(message=>message.author==='person'?message.mention?.permissions.map(card=>card.id)??[]:message.author==='agent'?message.cards?.map(card=>card.id)??[]:[])));
  const transcript=useRef<HTMLDivElement>(null); const last=messages.at(-1)?.id;
  // Opened from "Waiting on you" at a request (#165, `#permission-<id>`): that card in view and focused, not the newest
- // message, on the first draw only; the address is then the channel's again.
+ // message, on the first draw only; the address is then the channel's again. Opened from a mention (#200,
+ // `#mention-<id>`): that message a third of the way down and ringed for 1.6 seconds, a still ring with reduced motion
+ // (design-reference: spotIn, openMention).
  const landed=useRef(false);
  useLayoutEffect(()=>{
   const card=/^#permission-\d+$/.test(location.hash)?transcript.current?.querySelector<HTMLElement>(location.hash):null;
-  if(!card) return;
+  if(card) {
+   landed.current=true;
+   card.scrollIntoView({block:'center'}); card.focus({preventScroll:true});
+   history.replaceState(history.state,'',location.pathname+location.search);
+   return;
+  }
+  const mention=/^#mention-(\d+)$/.exec(location.hash); const box=transcript.current;
+  const bubble=mention&&box?box.querySelector<HTMLElement>(`[data-msg="${mention[1]}"] .bubble`):null;
+  if(!bubble||!box) return;
   landed.current=true;
-  card.scrollIntoView({block:'center'}); card.focus({preventScroll:true});
-  history.replaceState(history.state,'',location.pathname+location.search);
+  box.scrollTop+=bubble.getBoundingClientRect().top-box.getBoundingClientRect().top-box.clientHeight/3;
+  bubble.classList.remove('is-spot'); void bubble.offsetWidth; bubble.classList.add('is-spot');
  },[]); // eslint-disable-line react-hooks/exhaustive-deps
  const seen=useRef(last);
  useEffect(()=>{ const box=transcript.current; if(landed.current&&seen.current===last) return; landed.current=false; seen.current=last; if(box) box.scrollTop=box.scrollHeight; },[last]);
@@ -99,6 +112,9 @@ export default function ChannelView({person,initial}:{person:string,initial:Chan
  const tip=agents[0]?<>{before}<bdi className="mention">@{agents[0].name}</bdi>{after}</>:c('channelRouteTipPlain');
  const only=agents.filter(agent=>agent.only);
  const [onlyBefore,onlyAfter]=own[only.length>1?'channelShownHereMany':'channelShownHereOne'].split('{0}');
+ // Every name a message can give a Member, full or first, so the channel marks it bold for every reader (#200) as it
+ // marks the called Agent's; an invited person has no @name yet (#207).
+ const memberNames=members.flatMap(member=>{ const name=member.person&&!member.invitation?member.name.trim():''; return name?[name,firstName(name)]:[]; });
  // The Agent working now: the first Run still open, since a message's Agents answer one after another (#152).
  const waiting=messages.find((message):message is Extract<ChannelMessage,{author:'person'}>=>message.author==='person'&&mentionsOf(message).some(mention=>mention.state==='open'));
  const workingNow=waiting?mentionsOf(waiting).find(mention=>mention.state==='open')??null:null;
@@ -113,7 +129,7 @@ export default function ChannelView({person,initial}:{person:string,initial:Chan
    </div>
    <ol className="turns" aria-label={c('channelMessages',name)}>{messages.map((message,index)=><Fragment key={message.id}>
     {(index===0||dayOf(messages[index-1].at,zone)!==dayOf(message.at,zone))&&<li className="divider"><time dateTime={message.at} data-utc={zone}>{dayLabel(message.at)}</time></li>}
-    <Turn message={message} time={time} c={c} name={name} cb={cb} drawnCards={drawnCards}/>
+    <Turn message={message} time={time} c={c} name={name} cb={cb} drawnCards={drawnCards} memberNames={memberNames}/>
     {message.author==='person'&&mentionsOf(message).filter(mention=>mention.permissions.length>0).map(mention=><li key={mention.agent} className="turn turn--agent msg" data-author="agent">
      <div className="sender"><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:mention.face,name:mention.agent}} size={20}/></span><bdi>{mention.agent}</bdi></div>
      {mention.permissions.map(card=><PermissionCard key={card.id} card={card} fresh={!drawnCards.has(card.id)} offered={offeredChoices(card,may)} decide={message.mine&&writer?permit:undefined}/>)}
@@ -131,7 +147,7 @@ export default function ChannelView({person,initial}:{person:string,initial:Chan
  </div><ChannelDetails panel={panel} name={name} person={person} record={record} tip={tip} c={c} refresh={refresh}/></div>;
 }
 
-function Turn({message,time,c,name,cb,drawnCards}:{message:ChannelMessage,time:(value:string)=>string,c:Say,name:string,cb:StepsBidiText,drawnCards:Set<number>}) {
+function Turn({message,time,c,name,cb,drawnCards,memberNames}:{message:ChannelMessage,time:(value:string)=>string,c:Say,name:string,cb:StepsBidiText,drawnCards:Set<number>,memberNames:string[]}) {
  const {t}=useI18n();
  // The quiet line an invitation adds (#207): not a message, and the channel's own name is the one it joined.
  if(message.author==='note') return <li className="note note--icon" data-kind={message.kind}>
@@ -143,15 +159,16 @@ function Turn({message,time,c,name,cb,drawnCards}:{message:ChannelMessage,time:(
   <div className="bubble bubble--agent" dir="auto">{message.body}</div>
   {message.cards?.map(card=><ReplyCard key={`reply${card.id}`} card={card} fresh={!drawnCards.has(card.id)}/>)}
  </li>;
- // Every name that called an Agent is marked, and each Agent that could not reply gets its own line (#152).
+ // Every name that called an Agent is marked, so is every Member's name a message gives (#200), and each Agent that could
+ // not reply gets its own line (#152).
  const called=mentionsOf(message);
- const body=withMention(message.body,called.map(mention=>mention.agent)).map((part,index)=>part.mention?<bdi key={index} className="mention">{part.text}</bdi>:<Fragment key={index}>{part.text}</Fragment>);
+ const body=withMention(message.body,[...called.map(mention=>mention.agent),...memberNames]).map((part,index)=>part.mention?<bdi key={index} className="mention">{part.text}</bdi>:<Fragment key={index}>{part.text}</Fragment>);
  const failed=called.filter(mention=>mention.state==='unanswered').map(mention=><p key={mention.agent} className="note" role="alert">{c('channelCouldNotReply',mention.agent)}</p>);
- if(message.mine) return <li className="turn turn--user msg" data-author="person">
+ if(message.mine) return <li className="turn turn--user msg" data-author="person" data-msg={message.id}>
   <div className="bubble-row"><time className="bubble__time" dateTime={message.at}>{time(message.at)}</time><div className="bubble bubble--user" dir="auto">{body}</div></div>
   {failed}
  </li>;
- return <li className="turn turn--peer msg" data-author="person">
+ return <li className="turn turn--peer msg" data-author="person" data-msg={message.id}>
   <div className="sender"><Initial name={message.name} size={20}/><bdi>{firstName(message.name)}</bdi>{message.role&&<span className="sender__role">{t(roleKeys[message.role])}</span>}<time className="sender__time" dateTime={message.at}>{time(message.at)}</time></div>
   <div className="bubble bubble--peer" dir="auto">{body}</div>
   {failed}

@@ -847,6 +847,7 @@
   "noteWorkingOn": "Working on the request from {0}…",
   "logActNoteReply": "replied in the log",
   "waitingMentionIn": "mentioned you in the log of “{0}”",
+  "waitingMentionInChannel": "mentioned you in {0}",
   "waitingMentions": "Mentions of you",
   "newAgentHintMember": "Tell {0} what you need an agent for, and it prepares the request for {1}.",
   "newAgentHintMemberAnyOwner": "Tell {0} what you need an agent for, and it prepares the request for the Owner.",
