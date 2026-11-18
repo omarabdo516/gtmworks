@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(51);
+select plan(54);
 -- A Company of its own, with the ten stages a new one receives (ADR 0013): «كتابة» and «تصميم ومونتاج» are both In
 -- progress, and «بريف جاهز» is Planned, so a Card's stage and its column are told apart.
 insert into public.companies(id,slug,name) values ('10000000-0000-0000-0000-000000000097','undo-move','Undo move');
@@ -130,6 +130,29 @@ select public.move_work_card('10000000-0000-0000-0000-000000000097',(select id f
 select is((select count(*)::int from public.work_card_moves m where m.card_id=(select id from public.work_cards where title='Undo K') and m.person_id='20000000-0000-0000-0000-000000000001'
  and (select name from public.work_stages where id=m.to_stage_id)='بريف جاهز' and m.to_place=(select board_order from public.work_cards where title='Undo K')),1,'a move by the card''s sheet is remembered with the place it arrived at');
 select is(public.undo_work_card_move('10000000-0000-0000-0000-000000000097',(select id from public.work_cards where title='Undo K')),'progress','a move by the card''s sheet is put back too');
+
+-- A remembered move follows the Card's own visibility (#168, security): a Card tied to a chat whose Agent is hidden from
+-- a Member is a Card they do not see, so the move they made of it is one they do not read.
+reset role;
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile)
+ values ('a0000000-0000-0000-0000-000000000097','10000000-0000-0000-0000-000000000097','c0000000-0000-0000-0000-000000000097','Undo Ads','Runs the Meta ads.',false,'undo-move-ads');
+insert into public.member_agent_access(company_id,person_id,agent_id)
+ values ('10000000-0000-0000-0000-000000000097','20000000-0000-0000-0000-000000000002','a0000000-0000-0000-0000-000000000097');
+insert into public.conversations(id,company_id,person_id,agent_id,agent_name)
+ values ('e0000000-0000-0000-0000-000000000097','10000000-0000-0000-0000-000000000097','20000000-0000-0000-0000-000000000002','a0000000-0000-0000-0000-000000000097','Undo Ads');
+insert into public.work_cards(company_id,stage_id,title,agent_id,conversation_id)
+ select '10000000-0000-0000-0000-000000000097',s.id,'Undo hidden','a0000000-0000-0000-0000-000000000097','e0000000-0000-0000-0000-000000000097'
+ from public.work_stages s where s.company_id='10000000-0000-0000-0000-000000000097' and s.name='كتابة';
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select lives_ok($$select public.place_work_card('10000000-0000-0000-0000-000000000097',(select id from public.work_cards where title='Undo hidden'),'planned',null)$$,'a Manager moves a Card whose Agent they see');
+select set_config('test.hidden',(select id::text from public.work_cards where title='Undo hidden'),true);
+select is((select count(*)::int from public.work_card_moves where card_id=current_setting('test.hidden')::bigint),1,'the mover reads that move');
+reset role;
+delete from public.member_agent_access where company_id='10000000-0000-0000-0000-000000000097' and person_id='20000000-0000-0000-0000-000000000002' and agent_id='a0000000-0000-0000-0000-000000000097';
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select is((select count(*)::int from public.work_card_moves where card_id=current_setting('test.hidden')::bigint),0,'and reads none of it once the Card''s Agent is hidden from them');
 
 -- No Member writes a move record, and a Member of another Company puts nothing back.
 select throws_ok($$insert into public.work_card_moves(company_id,card_id,from_stage_id,to_stage_id) values ('10000000-0000-0000-0000-000000000097',(select id from public.work_cards where title='Undo A'),1,2)$$,'42501','permission denied for table work_card_moves','a Member writes no move record of their own');
