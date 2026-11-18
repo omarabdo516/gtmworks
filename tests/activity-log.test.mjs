@@ -43,6 +43,11 @@ test('Card, Member and Agent rows say who changed what', () => {
  assert.deepEqual([instructions.act, instructions.obj, instructions.from, instructions.to], [['logActSettingChanged', { key: 'logFieldInstructions' }, { text: 'Ads' }], undefined, undefined, { key: 'logEdited' }]);
  assert.deepEqual(['en', 'ar'].map(language => { const { t } = i18n(language); const [key, ...args] = instructions.act; return t(key, ...args.map(value => 'key' in value ? t(value.key) : value.text)); }),
   ['changed the instructions in the settings of Ads', 'غيّر التعليمات في إعدادات Ads']);
+ // The Voice section saved on the Agent's page (#162): one row named by the section, with no value in it.
+ const voice = describeEntry({ subject: 'agent', action: 'agent_setting_changed', agent_id: lead, details: { agent_name: 'Ads', field: 'voice' } });
+ assert.deepEqual([voice.act, voice.obj, voice.from, voice.to], [['logActSettingChanged', { key: 'logFieldVoice' }, { text: 'Ads' }], undefined, undefined, undefined]);
+ assert.deepEqual(['en', 'ar'].map(language => { const { t } = i18n(language); const [key, ...args] = voice.act; return t(key, ...args.map(value => 'key' in value ? t(value.key) : value.text)); }),
+  ['changed the voice in the settings of Ads', 'غيّر الصوت في إعدادات Ads']);
  // A setting on an Agent's Engine profile (#125): its label, then the value before and after; a yes or no is a word.
  const engineSetting = describeEntry({ subject: 'agent', action: 'agent_setting_changed', agent_id: lead, details: { agent_name: 'Ads', setting: 'memory.memory_char_limit', old: 2200, new: 3000 } });
  assert.deepEqual([engineSetting.act, engineSetting.from, engineSetting.to], [['logActSettingChanged', { key: 'settingMemorySize' }, { text: 'Ads' }], { text: '2200' }, { text: '3000' }]);

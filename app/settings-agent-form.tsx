@@ -5,9 +5,9 @@ import { toast } from './toast';
 import { SettingsIcon } from './settings-icons';
 import { changedValues, commitDraft, registerFirstField, registerSave, restoreDraft, seedDraft, setDraftValue, useBarFlash, useDraftDirty, useDraftState, useDraftValue } from './settings-draft';
 
-// An Agent's page in Settings (#161, #176; design-reference: settingsHTML's About and How it works, and sovAgentHTML's
-// save bar). The fields hold a draft until Save, and the bar appears at the bottom of the page as soon as one differs
-// from what was saved. Later fields (#179, #180) join this same draft and bar.
+// An Agent's page in Settings (#161, #176, #180; design-reference: settingsHTML's About, How it works and Skills, and
+// sovAgentHTML's save bar). The fields hold a draft until Save, and the bar appears at the bottom of the page as soon as
+// one differs from what was saved. The Voice section (#162, settings-agent-voice.tsx) and later fields join this draft and bar.
 
 // About is the description of the Agent's own Engine profile, with the reference's placeholder and hint.
 export function AgentAbout({agent,name,description}:{agent:string,name:string,description:string}) {
@@ -90,10 +90,14 @@ export function AgentInstructionsReadOnly({instructions,empty}:{instructions:str
 }
 
 // The page's save bar: hidden until the draft differs. Cancel puts back what was saved and the focus on the first field;
-// Save sends every changed field in one request, then shows what the Engine kept. Every way out of the page asks the
-// shared store first, which flashes this bar and focuses Save.
+// Save sends every changed field in one request, then shows what the Engine kept. Every key of the draft is its own part
+// of `changes` (About, How it works, each Skill's switch), except the Voice section's keys, which go as one `voice` object
+// with the section's values. Every way out of the page asks the shared store first, which flashes this bar and focuses Save.
 export function AgentSaveBar({company,agent,name}:{company:string,agent:string,name:string}) {
  const {t}=useI18n();
+ const language=useDraftValue(agent,'voice.language','');
+ const speed=useDraftValue(agent,'voice.speed','1');
+ const voice=useDraftValue(agent,'voice.voice','');
  const dirty=useDraftDirty(agent);
  const flash=useBarFlash();
  const [saving,setSaving]=useState(false);
@@ -112,15 +116,30 @@ export function AgentSaveBar({company,agent,name}:{company:string,agent:string,n
  },[flash,dirty]);
  const discard=()=>{ setFailed(false); restoreDraft(); toast(t('settingsBackSaved'),{icon:'x'}); };
  const write=async()=>{
-  const changes=changedValues(agent);
+  const changed=changedValues(agent);
+  const changes:Record<string,unknown>=Object.fromEntries(Object.entries(changed).filter(([key])=>!key.startsWith('voice.')));
+  if(Object.keys(changed).some(key=>key.startsWith('voice.'))) changes.voice={language,speed,...(voice?{voice}:{})};
   if(!Object.keys(changes).length) return;
   setSaving(true); setFailed(false);
   try {
    const response=await fetch('/api/agent-page',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company,agent,changes})});
    const answer=await response.json().catch(()=>null);
-   const saved=answer?.saved&&typeof answer.saved==='object'?answer.saved as Record<string,unknown>:null;
-   if(!response.ok||!saved||!Object.keys(changes).every(key=>typeof saved[key]==='string')) { setFailed(true); return; }
-   commitDraft(Object.fromEntries(Object.keys(changes).map(key=>[key,saved[key] as string])));
+   const kept=answer?.saved&&typeof answer.saved==='object'?answer.saved as Record<string,unknown>:null;
+   if(!response.ok||!kept) { setFailed(true); return; }
+   const patch:Record<string,string>={};
+   for(const key of Object.keys(changes)) {
+    if(key==='voice') {
+     const keptVoice=kept.voice as {language?:unknown,speed?:unknown,voice?:unknown}|null|undefined;
+     if(!keptVoice||typeof keptVoice.language!=='string'||typeof keptVoice.speed!=='number') { setFailed(true); return; }
+     patch['voice.language']=keptVoice.language;
+     patch['voice.speed']=String(keptVoice.speed);
+     if(typeof keptVoice.voice==='string') patch['voice.voice']=keptVoice.voice;
+    } else {
+     if(typeof kept[key]!=='string') { setFailed(true); return; }
+     patch[key]=kept[key] as string;
+    }
+   }
+   commitDraft(patch);
    toast(t('settingsSaved',name));
   } catch { setFailed(true); } finally { setSaving(false); }
  };

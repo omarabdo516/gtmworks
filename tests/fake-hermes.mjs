@@ -52,6 +52,12 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   defaultConfig:/** @type {any} */({}),defaultCredentials:/** @type {Record<string,string>} */({}),
   configDefaults:/** @type {any} */({}),configSchema:/** @type {{fields:Record<string,any>,category_order:string[]}} */({fields:{},category_order:[]}),
   configWriteFail:/** @type {Set<string>} */(new Set()),
+  // Audio (#162; hermes_cli/web_routers/audio.py 223-352): the sound the speak route answers with, the provider's refusal
+  // text as a 400, an audio body past the driver's 4 MB cap (speakLarge), and the ElevenLabs list a profile's own key
+  // unlocks. `speakRefusal` is what the shipped image answers with no speech package installed.
+  speakDataUrl:'data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU5LjI3LjEwMAAAAAAAAAAAAAAA',
+  speakRefusal:'',speakLarge:false,
+  elevenLabsVoices:{available:true,voices:[{voice_id:'pNInz6obpgDQGcFmaJgB',name:'Rachel',label:'Rachel'},{voice_id:'21m00Tcm4TlvDq8ikWAM',name:'Bella',label:'Bella'}]},
   signInSessions:/** @type {Map<string,{provider:string,profile:string,status:string}>} */(new Map()),
   // Ignore the disabled list when reporting toolsets, as a Hermes that did not apply it would.
   ignoreDisabled:false,staleConfig:false,
@@ -348,6 +354,23 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
    }
    const scoped=url.searchParams.get('profile')||'default';
    const home=profileOf(scoped);
+   // Audio (#162): the list of voices only ElevenLabs offers, unlocked by the profile's own key, and one spoken sample
+   // with the profile's saved tts.* settings (hermes_cli/web_routers/audio.py 223-352). The sound is base64 inside the
+   // JSON answer, so it can pass the driver's 4 MB cap (speakLarge); a provider that cannot speak answers 400 with its own
+   // words, as the shipped image does with no speech package installed.
+   if(url.pathname==='/api/audio/elevenlabs/voices'&&request.method==='GET') {
+    if(!home) return send(response,404,{detail:`Profile '${scoped}' does not exist.`});
+    const env=(scoped==='default'?settings.defaultEnv:settings.profiles.get(scoped)?.env)||{};
+    if(!env.ELEVENLABS_API_KEY) return send(response,200,{available:false,voices:[]});
+    return send(response,200,settings.elevenLabsVoices);
+   }
+   if(url.pathname==='/api/audio/speak'&&request.method==='POST') {
+    if(!home) return send(response,404,{detail:`Profile '${scoped}' does not exist.`});
+    if(typeof body?.text!=='string'||!body.text.trim()) return send(response,400,{detail:'Text is required'});
+    if(settings.speakRefusal) return send(response,400,{detail:settings.speakRefusal});
+    if(settings.speakLarge) return send(response,200,{ok:true,data_url:`data:audio/mpeg;base64,${'A'.repeat(4*1024*1024+16)}`,mime_type:'audio/mpeg',provider:'edge'});
+    return send(response,200,{ok:true,data_url:settings.speakDataUrl,mime_type:'audio/mpeg',provider:(home.config?.tts?.provider)||'edge'});
+   }
    // The Engine's defaults take no profile and its schema is built from them (web_routers/config_env.py 95-110).
    if(url.pathname==='/api/config/defaults'&&request.method==='GET') return send(response,200,settings.configDefaults);
    if(url.pathname==='/api/config/schema'&&request.method==='GET') {
