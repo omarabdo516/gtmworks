@@ -19,7 +19,7 @@ The pinned Engine (Hermes v0.23.0) already sets all of these per profile. A prof
 
 Each Agent of a Company on the bundled Engine is one Engine profile. Its model, provider and model options, apps and toolsets, soul and personality, memory, Skills and Routines are set per Agent, through the Engine's own config and management listener. Sub-agents are set the same way once the `delegation` toolset is on for that Agent (see Open decisions). The reason is that the Engine already scopes every one of these to a profile, so an Agent that is a profile gets them with no gtmworks copy. This reverses ADR 0014's "Agents on the Company profile".
 
-An Agent's own instructions become its profile's soul (`PUT /api/profiles/<name>/soul`) instead of text gtmworks sends with each Run. Rules (#18) and Member notes (ADR 0015) still go with each Run as its `instructions`, because they depend on who writes.
+An Agent's own instructions become its profile's soul (`PUT /api/profiles/<name>/soul`) instead of text gtmworks sends with each Run. Member notes (ADR 0015) still go with each Run as its `instructions`, because they depend on who writes. Rules (#18) went with each Run too until #345: the team's rules are now written into a section of the Agent's profile `SOUL.md` that gtmworks owns (`lib/agent-rules.mjs`), and no Run carries them.
 
 ### Names
 

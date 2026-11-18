@@ -6,7 +6,7 @@ import { driveChannelRuns } from '../lib/channel-runs.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
 // An Agent on its own profile (ADR 0016) has its instructions as the profile's soul, so its Runs start on that profile
-// with the team's rules and the sender's note only, and a retry sends the same body: the fake
+// with the sender's note only (the team's rules are in the soul too, #345), and a retry sends the same body: the fake
 // Engine server, as the pinned release, refuses another body under the same idempotency key. No Run is told the Company
 // knowledge (#344): the profile auto-loads it as the shared Skill company-knowledge, so this database pins none.
 const encryptionKey=Buffer.alloc(32,5).toString('base64');
@@ -62,7 +62,8 @@ test('a message to an Agent on its own profile starts there without its instruct
   assert.equal(new Set(starts(fake).map(request=>request.idempotency)).size,1);
   assert.equal(fake.settings.runs.length,1,'the retry was the same run, so it sent the same body');
   const sent=fake.settings.runs[0].instructions;
-  assert.ok(inOrder(sent,[rule,note]),sent);
+  assert.ok(sent.includes(note),sent);
+  assert.ok(!sent.includes(rule),'the team\'s rules are in the profile\'s SOUL.md');
   assert.ok(!sent.includes('Brand voice')&&!sent.includes('knowledge'),'no Company knowledge');
   assert.ok(!sent.includes(role),'the profile\'s soul holds the Agent\'s instructions');
  } finally { await fake.close(); }
@@ -78,7 +79,8 @@ test('a waiting turn of an Agent on its own profile starts there the same way, a
   assert.deepEqual(starts(fake).map(request=>request.path),[`/p/${own}/v1/runs`,`/p/${own}/v1/runs`,`/p/${own}/v1/runs`]);
   assert.equal(fake.settings.runs.length,1);
   const sent=fake.settings.runs[0].instructions;
-  assert.ok(inOrder(sent,[rule,note]),sent);
+  assert.ok(sent.includes(note),sent);
+  assert.ok(!sent.includes(rule),'the team\'s rules are in the profile\'s SOUL.md');
   assert.ok(!sent.includes('Brand voice')&&!sent.includes('knowledge'),'no Company knowledge');
   assert.ok(!sent.includes(role));
  } finally { await fake.close(); }
@@ -94,9 +96,9 @@ test('a channel Run of an Agent on its own profile starts there without its inst
   assert.deepEqual(starts(fake).map(request=>request.path),[`/p/${own}/v1/runs`,`/p/${own}/v1/runs`,`/p/${own}/v1/runs`]);
   assert.equal(fake.settings.runs.length,1);
   const sent=fake.settings.runs[0].instructions;
-  assert.ok(inOrder(sent,[rule]),sent);
-  assert.ok(!sent.includes('Brand voice')&&!sent.includes('knowledge'),'no Company knowledge');
-  assert.ok(!sent.includes(role));
+  assert.ok(!sent?.includes(rule),'the team\'s rules are in the profile\'s SOUL.md');
+  assert.ok(!sent?.includes('Brand voice')&&!sent?.includes('knowledge'),'no Company knowledge');
+  assert.ok(!sent?.includes(role));
  } finally { await fake.close(); }
 });
 

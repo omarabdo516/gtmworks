@@ -245,6 +245,7 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
    const profile=profilePath&&settings.profiles.get(decodeURIComponent(profilePath[1]));
    if(profilePath&&!profile) return send(response,404,{detail:'Profile not found'});
    if(profilePath?.[2]==='soul'&&request.method==='GET') return send(response,200,{content:profile.soul,exists:true});
+   if(profilePath?.[2]==='soul'&&request.method==='PUT') { if(typeof body?.content!=='string') return send(response,422,{detail:'content'}); profile.soul=body.content; return send(response,200,{ok:true}); }
    if(profilePath?.[2]==='model'&&request.method==='PUT') {
     if(settings.failStep==='model') return send(response,500,{detail:'Internal Server Error'});
     // _write_profile_model checks a pick against the profile's own keys (profiles.py 124-150); modelNeedsKey turns it on.

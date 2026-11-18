@@ -28,6 +28,9 @@ export function cancelAppSignIn(connection:import('./engine.mjs').EngineConnecti
 export function finishAppSignIn(connection:import('./engine.mjs').EngineConnection,signIn:{key:string,flow:string,answer:Record<string,unknown>,settle?:number}):Promise<{state:'approved'|'waiting'|'expired'|'unreachable'|'failed'}>;
 export function disconnectApp(connection:import('./engine.mjs').EngineConnection,key:string):Promise<{state:'disconnected'|'refused'|'unreachable'|'failed'}>;
 export function provideSharedSpace(connection:import('./engine.mjs').EngineConnection,space:{name:string}):Promise<{state:'provided',folder:string}|{state:'refused'|'unreachable'|'failed',folder:null}>;
+export function writeSoulRules(connection:import('./engine.mjs').EngineConnection,change:{profile:string,rules:string[]}):Promise<{state:'unchanged'|'written'|'missing'|'refused'|'unreachable'|'failed'}>;
+export function readSkills(connection:import('./engine.mjs').EngineConnection):Promise<{state:'found',skills:{name:string,shared:boolean}[]}|{state:'refused'|'unreachable'|'failed',skills:null}>;
+export function writeSkill(connection:import('./engine.mjs').EngineConnection,skill:{name:string,content:string}):Promise<{state:'written'|'shared'|'refused'|'unreachable'|'failed'}>;
 export function writeSharedSkill(connection:import('./engine.mjs').EngineConnection,skill:{space:string,name:string,content:string}):Promise<{state:'unchanged'|'written'|'missing'|'refused'|'unreachable'|'failed'}>;
 export function shareSkills(connection:import('./engine.mjs').EngineConnection,sharing:{profile:string,folder:string,skill:string}):Promise<{state:'shared'|'shadowed'|'missing'|'refused'|'unreachable'|'failed'}>;
 export type ProviderKey={provider:string,label:string,set:boolean};

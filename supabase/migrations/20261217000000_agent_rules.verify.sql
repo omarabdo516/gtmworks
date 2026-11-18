@@ -19,7 +19,7 @@ select json_build_object(
    and not has_function_privilege(r,'public.run_tools(uuid,uuid,uuid)','execute') and not has_function_privilege(r,'public.agent_rules_in_force(uuid)','execute'))
   from unnest(array['anon','authenticated','service_role']) r),
  'offer_and_rules_pinned',position('run_tools' in pg_get_functiondef('public.pin_run(uuid,uuid,jsonb)'::regprocedure))>0
-  and position('agent_rules_in_force' in pg_get_functiondef('public.pin_run(uuid,uuid,jsonb)'::regprocedure))>0
+  -- Rules are no longer pinned (#345, 20270210000000).
   and position('run_tools' in pg_get_functiondef('public.pinned_run_note(uuid,uuid,uuid,uuid)'::regprocedure))=0,
  'rule_from_person',position('rule_words(m.body)=public.rule_words(said)' in pg_get_functiondef('public.agent_save_rule(uuid,text,text,text)'::regprocedure))>0
   and public.rule_words(E' @Ads From now on:  no emojis!\n')=public.rule_words('from now on: no emojis') and public.rule_words('Never send customer data')<>public.rule_words('send customer data'),
