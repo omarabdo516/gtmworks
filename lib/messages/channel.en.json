@@ -48,5 +48,16 @@
   "channelByOwner": "{0} (Owner)",
   "channelByManager": "{0} (Manager)",
   "channelNamesLast": " and ",
-  "channelChangeFailed": "Couldn’t change who is in the channel. Try again."
+  "channelChangeFailed": "Couldn’t change who is in the channel. Try again.",
+  "stepsUsedOne": "Used {0} tool",
+  "stepsUsedMany": "Used {0} tools",
+  "stepsSeconds": "{0} sec",
+  "stepsMinutes": "{0} min",
+  "stepsMinutesSeconds": "{0} {1}",
+  "stepsSecondsMany": "{0} sec",
+  "stepsMinutesMany": "{0} min",
+  "stepsUsedTook": "{0} · {1}",
+  "stepLine": "{0} · {1}",
+  "stepDone": "Done",
+  "stepSkipped": "Skipped"
 }

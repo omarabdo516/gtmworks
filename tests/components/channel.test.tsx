@@ -128,6 +128,46 @@ test('an Owner or a Manager takes a Member out and adds one the channel does not
  await expect.poll(() => vi.mocked(changeChannel).mock.calls.at(-1)).toEqual(['co-1', 'ch-1', { agent: 'a-2', present: false }]);
 });
 
+// #148: a channel reply carries its Run's steps above the bubble and the card it showed under it, drawn by the same
+// components a Conversation uses; every member reads them, a Viewer included.
+const replied: ChannelMessage = { id: 4, author: 'agent', name: 'Faye', face: 'c-1', body: 'Here are the three scripts.', at,
+ steps: { list: [{ tool: 'meta_ads', preview: 'October results', state: 'done' }, { tool: 'docs', preview: null, state: 'failed' }], seconds: 48 },
+ cards: [{ id: 21, kind: 'review', title: 'Script review', line: '3 scripts · Meta Ads', items: [
+  { text: 'من خريج تجارة لمحاسب شغال', fine: true, note: 'The promise is clear.' },
+  { text: 'أضمن طريق لأول وظيفة', fine: false, note: 'Swap “أضمن” for “أقصر”.' }], decision: '1 ready, 1 back to Ads' }] };
+
+test.each([
+ ['en', 'Used 2 tools · 48 sec', 'Done', 'Skipped', 'Fine', 'Needs an edit', 'Decision'],
+ ['ar', 'استخدم 2 أداة · 48 ثانية', 'تم', 'اتخطى', 'تمام', 'يتعدّل', 'القرار'],
+] as const)('in the %s interface a channel reply draws its steps above the bubble and its review card under it', async (language, used, done, skipped, fine, edit, decision) => {
+ vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
+ const screen = await render(<LanguageProvider language={language}><ChannelView person="p-1" initial={record([called('answered'), replied])}/></LanguageProvider>);
+ const turn = screen.getByRole('list', { name: language === 'ar' ? 'الرسايل في #عام' : 'Messages in #general' }).getByRole('listitem').nth(2);
+ const button = turn.getByRole('button', { name: used, exact: true });
+ await expect.element(button).toBeVisible();
+ const steps = button.element().closest('.steps')!;
+ expect(steps.previousElementSibling?.className, 'right after the sender line').toBe('sender');
+ expect(steps.nextElementSibling?.className, 'and before the bubble').toContain('bubble--agent');
+ await button.click();
+ expect([...document.getElementById(button.element().getAttribute('aria-controls') ?? '')!.querySelectorAll('.step__state')].map(state => state.textContent)).toEqual([done, skipped]);
+ const card = turn.getByRole('group', { name: new RegExp(`Script review$`) });
+ await expect.element(card).toBeVisible();
+ expect(card.element().className).toContain('reply-card--review');
+ expect(card.element().textContent).toContain('من خريج تجارة لمحاسب شغال');
+ await expect.element(card.getByText(fine, { exact: true })).toBeVisible();
+ await expect.element(card.getByText(edit, { exact: true })).toBeVisible();
+ await expect.element(card.getByText(decision, { exact: true })).toBeVisible();
+});
+
+test('a Viewer reads a channel reply\'s steps and its card, and the card has no action', async () => {
+ vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
+ const screen = await channel(record([replied], { writer: false, may: [] }));
+ await expect.element(screen.getByRole('button', { name: 'Used 2 tools · 48 sec', exact: true })).toBeVisible();
+ const card = screen.getByRole('group', { name: /Script review$/ });
+ await expect.element(card).toBeVisible();
+ expect(card.getByRole('button').elements()).toEqual([]);
+});
+
 // #165: an Agent called in a channel asks to be allowed an action. The card sits under the Agent's turn; the Member who
 // called it decides it, and everyone else reads the team's wait line.
 const asking = (mine: boolean): ChannelMessage => ({ ...called('open'), mine, mention: { agent: 'Lead', face: 'c-1', state: 'open', permissions: [

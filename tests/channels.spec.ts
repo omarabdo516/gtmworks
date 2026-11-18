@@ -1,14 +1,19 @@
 import { test, expect, freshSeed } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { laneHermes } from './lane-hermes';
 import { signIn } from './sign-in';
 
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const rows=(sql:string)=>{ const out=JSON.parse(query(sql)); return (Array.isArray(out)?out:out.rows) as Record<string,unknown>[]; };
 const general='/c/rs-learning/channels/69000000-0000-0000-0000-000000000001';
 const contributor='20000000-0000-0000-0000-000000000003';
+const company='10000000-0000-0000-0000-000000000001';
+let fake:Awaited<ReturnType<typeof laneHermes>>;
 
 test.describe.configure({mode:'serial'});
-test.beforeAll(({},testInfo)=>{ freshSeed(testInfo.file); });
+test.beforeAll(async({},testInfo)=>{ freshSeed(testInfo.file); fake=await laneHermes(); });
+test.afterAll(async()=>{ await fake?.close(); });
 
 test('a Member opens the general channel, reads that an Agent replies only when called, and posts a message that starts no Run',async({page})=>{
  await signIn(page,'reviewer@example.com','/c/rs-learning/home');
@@ -41,4 +46,43 @@ test('the Viewer reads the channel, with the writer and their role, and has no c
  await expect(peer.locator('.sender__role')).toHaveText('Contributor');
  await expect(page.locator('.composer')).toHaveCount(0);
  await expect(page.locator('.ro-line')).toContainText('Your account is view-only');
+});
+
+// #148: an Agent's channel reply carries its Run's steps, read live from its Hermes session when the channel opens, and
+// the review card it showed, drawn by the same components a Conversation uses; every member of the channel reads them,
+// a Viewer included. The session is the fake Hermes's, on the profile the Run was pinned to.
+test('a channel reply shows its Run\'s steps and its review card to the channel\'s members',async({page})=>{
+ const lead=String(rows(`select id from public.hermes_agents where company_id='${company}' and is_default order by id limit 1`)[0].id);
+ const session=`session-148-${randomUUID().slice(0,8)}`; const profile=`ag-148-${randomUUID().slice(0,8)}`; const run=`run-148-${randomUUID().slice(0,8)}`;
+ const sent=Date.parse('2026-11-16T10:12:00Z')/1000;
+ query(`do $$ declare asked bigint; begin
+  insert into public.channel_messages(company_id,channel_id,author,person_id,author_name,body,send_key,created_at)
+   values ('${company}','69000000-0000-0000-0000-000000000001','person','${contributor}','مراجع','@Lead review the December scripts','${randomUUID()}','2026-11-16T10:12:00Z') returning id into asked;
+  insert into public.channel_messages(company_id,channel_id,author,agent_id,author_name,body,reply_to,created_at)
+   values ('${company}','69000000-0000-0000-0000-000000000001','agent','${lead}','Lead','I reviewed the three scripts.',asked,'2026-11-16T10:14:00Z');
+  insert into public.channel_runs(message_id,company_id,channel_id,agent_id,agent_name,session,input,instructions,run_id,profile,attempts,attempted_at,outcome,closed_at)
+   values (asked,'${company}','69000000-0000-0000-0000-000000000001','${lead}','Lead','${session}','مراجع: @Lead review the December scripts',null,'${run}','${profile}',1,now(),'completed',now());
+  insert into public.reply_cards(company_id,channel_message_id,run_id,call_id,kind,title,content,state) values
+   ('${company}',asked,'${run}','call-1','review','December scripts review','{"line":"3 scripts · Meta Ads","items":[{"text":"من خريج تجارة لمحاسب شغال","fine":true,"note":"The promise is clear."},{"text":"أضمن طريق لأول وظيفة","fine":false,"note":"Swap the promise."}],"decision":"1 ready, 1 back to Ads"}','shown'),
+   ('${company}',asked,'${run}','call-2','draft','December scripts','{"line":"Draft · Meta Ads","rows":[{"label":"Scripts","value":"3"}]}','shown');
+ end $$;`);
+ const call=(id:string,name:string,args:object)=>({id,type:'function',function:{name,arguments:JSON.stringify(args)}});
+ fake.settings.sessions.set(session,{profile,messages:[
+  {role:'user',content:'@Lead review the December scripts',timestamp:sent+1},
+  {role:'assistant',content:'',tool_calls:[call('call_1','meta_ads',{query:'October results'}),call('call_2','docs',{path:'scripts.md'})],timestamp:sent+3},
+  {role:'tool',tool_call_id:'call_1',tool_name:'meta_ads',content:'{"results":[]}',timestamp:sent+10},
+  {role:'tool',tool_call_id:'call_2',tool_name:'docs',content:'{"success":false,"error":"not found"}',timestamp:sent+12},
+  {role:'assistant',content:'I reviewed the three scripts.',timestamp:sent+42}]});
+ await signIn(page,'reviewer@example.com',general);
+ const toggle=page.locator('.steps__toggle');
+ await expect(toggle).toHaveText('Used 2 tools · 41 sec');
+ await toggle.click();
+ await expect(page.locator('.steps__list .step')).toHaveText(['meta_ads · October resultsDone','docs · scripts.mdSkipped']);
+ const card=page.locator('.reply-card--review');
+ await expect(card).toBeVisible();
+ await expect(card.locator('.card__title')).toHaveText('December scripts review');
+ await expect(card.locator('.rv-item')).toHaveCount(2);
+ await expect(card.locator('.rv-decision__t')).toHaveText('1 ready, 1 back to Ads');
+ await page.reload();
+ await expect(page.locator('.reply-card--review')).toBeVisible();
 });

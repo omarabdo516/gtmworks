@@ -312,3 +312,19 @@ test('the tool texts a run may already be pinned with stay byte for byte as they
  assert.equal(sha(specs.show_review),'5370ac820042bd31ca7cb07dc9a1b7e7002a9e43427ed9ebb33fd6fd926dc9e1','show_review (#137)');
  assert.equal(sha(specs.hand_over),'ac501c0e535a035daad42a48657f74cd84e53800e73c720db040b2d3adb8518d','hand_over (#139)');
 });
+
+// #148: a channel Run's card calls are kept against its channel message, not a Conversation, so the channel reads them
+// under the Agent's reply.
+test('a channel Run\'s draft and review calls are shown to the database for its message, and the Engine is not asked',async()=>{
+ const fake=fakeEngine(); const rpcs=/** @type {[string,object][]} */([]);
+ const db={rpc:async(/** @type {string} */ name,/** @type {object} */ args)=>{ rpcs.push([name,args]); return {data:{state:'shown',card:12},error:null}; }};
+ const call=(/** @type {string} */ name,/** @type {unknown} */ args,/** @type {string} */ id='call_1')=>runToolCall({db,engine:fake.engineFor({}),profile:'profile-a',channel:{message:17},run:'char:17'},
+  {id,name,arguments:args});
+ assert.deepEqual(await call('show_draft',{title:'Plan',line:'Draft · Meta Ads',rows:[{label:'Goal',value:'Leads'}]}),{state:'shown',card:12});
+ assert.deepEqual(await call('show_review',{title:'Review',line:'3 texts',items:[{text:'A',fine:true,note:'Fine'}],decision:'Ready'},'call_2'),{state:'shown',card:12});
+ assert.deepEqual(rpcs,[
+  ['channel_show_card',{message:17,run:'char:17',call:'call_1',kind:'draft',title:'Plan',content:{line:'Draft · Meta Ads',rows:[{label:'Goal',value:'Leads'}]}}],
+  ['channel_show_card',{message:17,run:'char:17',call:'call_2',kind:'review',title:'Review',content:{line:'3 texts',items:[{text:'A',fine:true,note:'Fine'}],decision:'Ready'}}],
+ ]);
+ assert.deepEqual(fake.agentReads,[]);
+});
