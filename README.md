@@ -199,10 +199,12 @@ the update from them. One install runs at a time: install.sh holds a lock on
 was killed never blocks the next run, and one that is still running is never
 taken over. `gtmworks update`, `gtmworks install` and `gtmworks restore` hold one
 lock for the whole run, kept beside the record of the install folder
-(`~/.local/state/gtmworks/update.lock`): a second one by the same user stops
-and says another update is running. Another user's run on the same install
-folder is held back by install.sh's own lock on `.install.lock`, and refused when
-that folder's containers are already another folder's. An install
+(`$XDG_STATE_HOME/gtmworks/update.lock`, by default
+`~/.local/state/gtmworks/update.lock`): a second one with the same state folder
+stops and says another update is running. The whole command is serialized for
+one user only: a run by another user (or with another `XDG_STATE_HOME`) is held
+back only while install.sh itself runs, by its lock on `.install.lock`, so run
+updates of one install as one user. An install
 on the `main` channel updates to the newest main build; the update keeps the two
 files of the build it ran (`.gtmworks-main/`), so its go-back command names that
 exact build, `--version main@sha256:<digest>`. `gtmworks update` does not replace
