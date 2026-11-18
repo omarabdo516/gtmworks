@@ -55,7 +55,7 @@ select throws_ok($$select public.reserve_channel_files('69000000-0000-0000-0000-
 select is(public.reserve_channel_files('69000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d2400000-0000-0000-0000-000000000007',
  $json$[{"position":9,"name":"stray.png","content_type":"image/png","size":1,"path":"10000000-0000-0000-0000-000000000001/channels/69000000-0000-0000-0000-000000000002/d2400000-0000-0000-0000-000000000007-9"}]$json$::jsonb),
  1,'a caller''s own path is ignored');
-select is((select path from public.channel_attachments where send_key='d2400000-0000-0000-0000-000000000007'),
+select is((select path from public.channel_attachments where name='stray.png'),
  '10000000-0000-0000-0000-000000000001/channels/69000000-0000-0000-0000-000000000001/d2400000-0000-0000-0000-000000000007-9'::text,
  'and the database names it inside its own channel');
 -- The placeholder row above is a send that posted nothing: give it back before the counts below read the channel.
@@ -98,7 +98,7 @@ select is(public.reserve_channel_files('69000000-0000-0000-0000-000000000001','1
 select is((select public.discard_channel_files('69000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d2400000-0000-0000-0000-000000000004')),
  '10000000-0000-0000-0000-000000000001/channels/69000000-0000-0000-0000-000000000001/d2400000-0000-0000-0000-000000000004-0'::text,
  'a failed send gives its own file path back');
-select is((select count(*)::int from public.channel_attachments where send_key='d2400000-0000-0000-0000-000000000004'),0,
+select is((select count(*)::int from public.channel_attachments where name='refused.png'),0,
  'and leaves no row for it');
 
 -- A team channel's files are its own Members' only.
