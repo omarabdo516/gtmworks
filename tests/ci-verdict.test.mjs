@@ -178,7 +178,7 @@ test('a pull request starts no compared-screen job, and check needs none of them
   const { load } = await import('js-yaml');
   const { readFileSync } = await import('node:fs');
   const { jobs } = load(readFileSync('.github/workflows/ci.yml', 'utf8'));
-  const screenJobs = ['visual', 'lane-proof', 'lane-proof-compare'];
+  const screenJobs = ['visual'];
   for (const name of screenJobs) {
     assert.ok(jobs[name], name);
     const condition = jobs[name].if ?? '';
@@ -186,7 +186,7 @@ test('a pull request starts no compared-screen job, and check needs none of them
     assert.doesNotMatch(condition.replace(/github\.event_name == '(push|workflow_dispatch)'/g, ''), /event_name|pull_request/, `${name} has no other event test`);
     assert.doesNotMatch(condition, /\|\|\s*needs\.changes\.result/, `${name} cannot start because classification failed`);
   }
-  for (const [name, job] of Object.entries(jobs)) if (!screenJobs.includes(name) && name !== 'ledger') {
+  for (const [name, job] of Object.entries(jobs)) if (!screenJobs.includes(name)) {
     for (const need of [job.needs ?? []].flat()) assert.ok(!screenJobs.includes(need), `${name} waits for ${need}`);
   }
 });

@@ -7,21 +7,12 @@
 # opens or updates one issue labelled visual-regression. A push to main runs every suite unless every file is a document; a manual
 # run starts the browser and install suites only through inputs that default to off. Required `check`
 # (scripts/ci-verdict.mjs) counts a suite nobody asked for as passed when it was skipped, and is red on any failed or
-# cancelled stage. The `ledger` job records each run's timings, runners and test results and labels a red job
-# (scripts/ci-ledger.mjs, #256); it reports and never decides.
-# `integration` runs on the runner the repo variable CI_RUNNER names (#224): Omar's PC (`pc-ci`) while ci-router keeps
-# it there, else ubuntu-latest. A pull request from a fork runs it on ubuntu-latest, where every other job runs. The PC
-# runs one job at a time, so only the job it shortens goes there: `database` and `install` take as long or longer on it
-# and would queue `integration` behind them. The visual lane and the measured navigation budgets (`visual`) stay on
-# ubuntu-latest too: the budgets need a machine no other job shares. The stack's ports lie in Linux's range for outgoing connections, so on a
-# GitHub-hosted runner a job reserves them before it starts the stack (#225). The PC shares its Docker with other
-# repositories' CI: there the stack's ports move to a block of their own above that range, the job removes what this
-# repository's runs start before and after it (scripts/ci-runner.mjs), and ~/.npm, the browsers and the image layers
-# stay on the machine.
+# cancelled stage.
+# Every job runs on a GitHub-hosted ubuntu-latest runner (decision 0038, #334); the measured navigation budgets need a
+# machine no other job shares. The stack's ports lie in Linux's range for outgoing connections, so a job reserves them
+# before it starts the stack (#225).
 # The visual lane (#257) compares twelve key screens in Arabic, light and dark, drawn by one browser pinned by
-# digest (tests/visual-lane/renderer) so every runner makes the same bytes. On a manual run, `lane-proof` draws the lane
-# three times on ubuntu-latest and on the CI_RUNNER runner, and `lane-proof-compare` fails unless all six sets of hashes
-# match.
+# digest (tests/visual-lane/renderer) so every runner makes the same bytes.
 name: CI
 
 on:
@@ -182,17 +173,6 @@ jobs:
         with:
           path: ${{ runner.temp }}/npx-cache
           key: npx-${{ runner.os }}-node-${{ steps.node.outputs.node-version }}-redocly-2.76.0
-      - name: upload ledger results
-        if: always()
-        # The ledger only reports, so a failed upload leaves the job's result as its tests made it.
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: ledger-${{ github.job }}
-          path: ci-ledger/
-          if-no-files-found: ignore
-          retention-days: 3
-          include-hidden-files: false
 
   # The stack's images, one archive in the Actions cache keyed by the Supabase CLI's version and the configuration lines
   # that choose images (scripts/supabase-images.sh, #259). With the key cached it only looks the key up; after a key
@@ -274,17 +254,6 @@ jobs:
         env:
           SUPABASE_IMAGES_ARCHIVE: ${{ runner.temp }}/supabase-images/images.tar
         run: ./ci.sh database
-      - name: upload ledger results
-        if: always()
-        # The ledger only reports, so a failed upload leaves the job's result as its tests made it.
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: ledger-${{ github.job }}
-          path: ci-ledger/
-          if-no-files-found: ignore
-          retention-days: 3
-          include-hidden-files: false
 
   # The visual lane (#257): its twelve key screens against their approved images, drawn in the pinned renderer, and its
   # guard tests, then the measured navigation budgets on a machine no other job shares.
@@ -384,89 +353,12 @@ jobs:
           else
             gh issue create -R "$GITHUB_REPOSITORY" --label visual-regression --title "$title" --body "$body"
           fi
-      - name: upload ledger results
-        if: always()
-        # The ledger only reports, so a failed upload leaves the job's result as its tests made it.
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: ledger-${{ github.job }}
-          path: ci-ledger/
-          if-no-files-found: ignore
-          retention-days: 3
-          include-hidden-files: false
-
-  # The renderer draws the same bytes everywhere (#257): GitHub's runner and the CI_RUNNER runner each draw every lane
-  # image three times. It decides nothing for `check`; lane-proof-compare is its verdict.
-  lane-proof:
-    needs: [changes]
-    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' }}
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 20
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        runner: [ubuntu-latest, "${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.CI_RUNNER || 'ubuntu-latest' }}"]
-    steps:
-      - uses: actions/checkout@v4
-      - name: reserve the stack's ports
-        if: ${{ runner.environment == 'github-hosted' }}
-        run: |
-          sudo sysctl -w net.ipv4.ip_local_reserved_ports="$(node scripts/ci-runner.mjs reserved-ports)"
-          sysctl net.ipv4.ip_local_reserved_ports
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
-      - name: clear an earlier run and move the stack's ports
-        if: ${{ runner.environment != 'github-hosted' }}
-        # The PC's Docker daemon sees the checkout but not this job's /tmp (see `integration`).
-        run: |
-          node scripts/ci-runner.mjs cleanup
-          node scripts/ci-runner.mjs move-ports 640
-          mkdir -p "$GITHUB_WORKSPACE/.ci-tmp"
-          echo "TMPDIR=$GITHUB_WORKSPACE/.ci-tmp" >> "$GITHUB_ENV"
-      - name: draw the lane three times
-        run: ./ci.sh lane-proof
-      - name: upload the hashes
-        uses: actions/upload-artifact@v4
-        with:
-          name: lane-proof-${{ strategy.job-index }}
-          path: test-results/lane-proof/
-          retention-days: 14
-      - name: remove what this run started
-        if: ${{ always() }}
-        run: node scripts/ci-runner.mjs cleanup
-
-  lane-proof-compare:
-    needs: [lane-proof]
-    if: ${{ github.event_name == 'workflow_dispatch' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: lane-proof-*
-          path: lane-proof/
-      - name: every run on every runner drew the same bytes
-        run: |
-          lists=(lane-proof/*/run-*.sha256)
-          for list in "${lists[@]}"; do echo "$list: $(wc -l < "$list") images, $(sha256sum < "$list" | cut -c1-16)"; done
-          if (( ${#lists[@]} != 6 )); then echo "::error::6 lists of hashes expected, ${#lists[@]} found"; exit 1; fi
-          for list in "${lists[@]}"; do [[ -s $list ]] || { echo "::error::$list holds no image: nothing was compared"; exit 1; }; done
-          for list in "${lists[@]:1}"; do
-            diff "${lists[0]}" "$list" || { echo "::error::$list differs from ${lists[0]}"; exit 1; }
-          done
 
   # The rest of the whole-app browser suite: the production-shaped proxy suite in the image and the journeys.
   integration:
     needs: [changes]
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.integration != 'false') }}
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.CI_RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     # main's browser suite already took 24 of 25 minutes (run 43398274074); the board, settings, log and numbers specs
     # add to it.
     timeout-minutes: 40
@@ -482,34 +374,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
-      # The stack's images from the cache the supabase-images job keeps, on a GitHub-hosted runner; the PC keeps its own (#259).
+          cache: npm
+      # The stack's images from the cache the supabase-images job keeps (#259).
       - name: Supabase images cache key
-        if: ${{ runner.environment == 'github-hosted' }}
         id: images
         run: echo "key=$(bash scripts/supabase-images.sh key)" >> "$GITHUB_OUTPUT"
       - name: restore the Supabase images
-        if: ${{ runner.environment == 'github-hosted' }}
         uses: actions/cache/restore@v4
         with:
           path: ${{ runner.temp }}/supabase-images
           key: ${{ steps.images.outputs.key }}
-      - name: clear an earlier run and move the stack's ports
-        if: ${{ runner.environment != 'github-hosted' }}
-        # The PC's Docker daemon sees the checkout but not this job's /tmp, so every file a script hands to a container
-        # (mktemp, os.tmpdir()) is written inside the checkout; the next checkout's clean removes it.
-        run: |
-          node scripts/ci-runner.mjs cleanup
-          node scripts/ci-runner.mjs move-ports 640
-          mkdir -p "$GITHUB_WORKSPACE/.ci-tmp"
-          echo "TMPDIR=$GITHUB_WORKSPACE/.ci-tmp" >> "$GITHUB_ENV"
-      # One browser test lane per worker, each on a whole stack of its own (tests/lane.mjs, #69): four on a GitHub-hosted
-      # runner, and on the PC as many as its CPUs and free memory carry.
-      - name: choose the browser test lanes
-        run: node scripts/ci-runner.mjs lanes "$RUNNER_ENVIRONMENT" >> "$GITHUB_ENV"
-      # On the PC the image builds on its own Docker, whose layer cache stays between runs.
       - uses: docker/setup-buildx-action@v3
-        if: ${{ runner.environment == 'github-hosted' }}
       - name: build image (layer cache)
         uses: docker/build-push-action@v6
         with:
@@ -517,11 +392,13 @@ jobs:
           load: true
           push: false
           tags: gtmworks:ci
-          cache-from: ${{ runner.environment == 'github-hosted' && 'type=gha' || '' }}
-          cache-to: ${{ runner.environment == 'github-hosted' && 'type=gha,mode=max' || '' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
       - name: integration
         env:
           CI_IMAGE_PREBUILT: "true"
+          # One browser test lane per worker, each on a whole stack of its own (tests/lane.mjs, #69).
+          GTMWORKS_TEST_LANES: "4"
           SUPABASE_IMAGES_ARCHIVE: ${{ runner.temp }}/supabase-images/images.tar
         run: ./ci.sh integration
       # The screenshots the journeys write (card and phone checks) are uploaded so a review can see them.
@@ -552,27 +429,6 @@ jobs:
           path: playwright-report/*.log
           if-no-files-found: ignore
           retention-days: 14
-      # What the lanes used, so the lane count rests on a measurement: the job's own memory (app servers, workers,
-      # Chromium) and each lane's Supabase stack, which runs under the Docker daemon outside the job's memory limit.
-      - name: memory the lanes used
-        if: ${{ always() && runner.environment != 'github-hosted' }}
-        run: |
-          echo "the runner's memory group, peak since it started: $(( $(cat "/sys/fs/cgroup$(sed -n 's/^0:://p' /proc/self/cgroup)/memory.peak" 2> /dev/null || echo 0) / 1048576 )) MiB"
-          docker stats --no-stream --format '{{.Name}} {{.MemUsage}}' | grep -E '_repo(-lane-[0-9]+)? ' || true
-      - name: upload ledger results
-        if: always()
-        # The ledger only reports, so a failed upload leaves the job's result as its tests made it.
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: ledger-${{ github.job }}
-          path: ci-ledger/
-          if-no-files-found: ignore
-          retention-days: 3
-          include-hidden-files: false
-      - name: remove what this run started
-        if: ${{ always() }}
-        run: node scripts/ci-runner.mjs cleanup
 
   install:
     needs: [changes]
@@ -958,47 +814,6 @@ jobs:
       - name: remove the isolated Docker machine
         if: ${{ always() }}
         run: docker rm -fv install-docker || true
-
-  # The ledger (#256): every job's timings, queue, runner and test records, the layer table in the job summary, and a
-  # label on each red job (scripts/ci-ledger.mjs). It reports only: the verdict stays with `check`, which does not
-  # need it.
-  ledger:
-    needs: [changes, fast, database, visual, integration, install]
-    if: ${{ always() }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      actions: read
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: ledger-*
-          path: ci-ledger-in/
-      - name: record the run
-        env:
-          GH_TOKEN: ${{ github.token }}
-          EVENT_NAME: ${{ github.event_name }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          DECISIONS_DATABASE: ${{ needs.changes.outputs.database }}
-          DECISIONS_INTEGRATION: ${{ needs.changes.outputs.integration }}
-          DECISIONS_INSTALL: ${{ needs.changes.outputs.install }}
-        run: |
-          mkdir -p ci-ledger-in
-          set -o pipefail
-          # The table also goes to the job log, where the API and a terminal can read it.
-          node scripts/ci-ledger.mjs ci-ledger-in ci-ledger-out | tee -a "$GITHUB_STEP_SUMMARY"
-      - name: upload the ledger
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ledger
-          path: ci-ledger-out/ledger.jsonl
-          retention-days: 90
 
   check:
     needs: [changes, fast, database, integration, install]

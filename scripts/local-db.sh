@@ -27,7 +27,7 @@ for f in supabase/migrations/*.sql; do
 done
 if [[ $lane != 0 ]]; then
   config="$tmp_dir/supabase/config.toml"
-  # Every port moves from lane 0's, whichever block CI put lane 0 in (scripts/ci-runner.mjs move-ports).
+  # Every port moves from lane 0's.
   awk -v by=$((100 * lane)) '/^(port|shadow_port) = [0-9]+$/ { $3 += by } 1' "$config" > "$config.tmp"
   mv "$config.tmp" "$config"
   sed -i -e "s/^project_id = .*/project_id = \"repo-lane-$lane\"/" \

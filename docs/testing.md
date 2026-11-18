@@ -10,18 +10,14 @@ English/Arabic direction checks are never removed.
 
 As Hermes and T3 Code run their CI (#76): a first job decides what runs, the fast layers run on every pull request, and
 the whole-app browser and install suites run only when their own area changed, on `main`, or when asked for by hand.
-`integration` runs on the runner the repo variable `CI_RUNNER` names, Omar's PC while ci-router keeps it there (#224);
-a pull request from a fork runs it on `ubuntu-latest`, where every other job runs. The one PC runner takes one job at a
-time, and `database` and `install` take as long or longer there, so they stay on `ubuntu-latest` instead of queueing
-`integration` behind them. The visual lane runs in its own `visual` job on `ubuntu-latest`, followed by the measured
-navigation budgets, which need a machine no other job shares (the PC also runs other repositories' CI); `ci.sh
+Every job runs on a GitHub-hosted `ubuntu-latest` runner (decision 0038, #334). The visual lane runs in its own `visual`
+job, followed by the measured navigation budgets, which need a machine no other job shares; `ci.sh
 integration` leaves the `measured` project empty (`GTMWORKS_HOSTED_ELSEWHERE`). The visual lane and the measured budgets
 run on a push to `main` and on a manual run only, never on a pull request, and `check` does not wait for them (Omar,
 2026-11-17, #257). When they fail on `main`, the `visual` job opens
 or updates one issue labelled `visual-regression` that names each failed screen and links the difference images
 (`scripts/visual-regression.mjs`); no pull request is blocked by it. A job that
-starts the local Supabase stack first reserves its ports on a GitHub-hosted runner (#225). On the PC the ports move to a
-block of their own, and `scripts/ci-runner.mjs cleanup` removes what this repository's runs start, before and after.
+starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs reserved-ports`, #225).
 
 - `changes` decides which suites a change needs (`scripts/ci-areas.mjs`, like Hermes `detect` and T3 Code `Changes`).
   A change to the CI definition itself (`ci.yml`, `ci.sh`, the area, verdict, runner and fast-runner scripts) or to `package.json`
@@ -35,8 +31,7 @@ block of their own, and `scripts/ci-runner.mjs cleanup` removes what this reposi
   the component tests and `./ci.sh components` is the component tests alone. The job restores `node_modules` by the
   lock file's hash and Chromium by Playwright's version, each saved straight after a fresh install, so the bundler's
   own cache (`node_modules/.vite`) is never restored and the component tests always start it cold.
-  Each step also writes its output as it runs to `ci-ledger/<job>/<step>.log`, uploaded with the ledger results, so a
-  step that hangs until the job's limit leaves its log; a red step's output is printed last, after the step list. A cache
+  Each step also writes its output as it runs to `ci-ledger/<job>/<step>.log`; a red step's output is printed last, after the step list. A cache
   miss installs the browser alone, as a hit restores it, so every run draws on the runner image's own system packages
   and fonts; the key also names the image. Outside CI the component step installs the browser itself, after the
   discovery gate. the pinned OpenAPI linter keeps an npm cache of its own (`NPX_CACHE`), restored by its version, so a hit lints offline.
@@ -69,7 +64,7 @@ block of their own, and `scripts/ci-runner.mjs cleanup` removes what this reposi
   and server actions, where the server checks permissions), `lib/` outside the catalogues, `worker/` and the root files
   the build and server read. Screens alone (the rest of `app/`, `components/`, the catalogues in `lib/messages/`, the
   visual lane's files) start no browser job on a pull request (#257). Its suite runs on `GTMWORKS_TEST_LANES`
-  lanes (four on a GitHub-hosted runner, as many as its CPUs and memory carry on the PC), one per Playwright worker:
+  lanes (four in CI), one per Playwright worker:
   each lane is a whole local Supabase stack and an app server of its own (`tests/lane.mjs`, `scripts/local-db.sh`,
   `scripts/web.sh`), so spec files run side by side and never share data.
   Each functional spec file starts from the seed (`tests/fresh-seed.ts`); tests inside one file still run in order.
@@ -86,10 +81,7 @@ block of their own, and `scripts/ci-runner.mjs cleanup` removes what this reposi
   machine; every dark picture keeps its text at 4.5:1, and the light Home, board and Card keep their quiet text at 4.5:1
   and weaker than the body text. Then the measured navigation budgets run. When a picture changes on purpose, one
   command refreshes the images: `./ci.sh visual-update` (Docker needed; without it, the `Visual baselines` workflow
-  uploads them as `visual-baselines`). On a manual run, `lane-proof` draws the lane three
-  times on `ubuntu-latest` and on the `CI_RUNNER` runner, building the app once and declaring the screens last to first
-  in its second run; `lane-proof-compare` fails unless all six sets of hashes match, so the same bytes also prove that
-  no screen depends on the ones drawn before it.
+  uploads them as `visual-baselines`).
 - Design parity is checked once, at delivery, outside CI (Omar, 2026-11-17, #257). The worker that delivers a screen
   compares it with its design in `design/` in T3's preview, motions included, at the widths and in the languages the
   design shows, and attaches the evidence (side-by-side images, and a recording for each motion) to the pull request
@@ -103,14 +95,6 @@ block of their own, and `scripts/ci-runner.mjs cleanup` removes what this reposi
 - `check` is the one required check (like Hermes `all-checks-pass`): a suite `changes` did not ask for passes only when
   it was skipped; one it asked for must succeed; a failed or cancelled stage is red; it lists each step of the fast job
   and every step must succeed (`scripts/ci-verdict.mjs`).
-- `ledger` runs after every stage, also when one failed, and decides nothing (`check` does not need it): it reads the
-  results each stage wrote under `ci-ledger/` and the run's jobs from the API, writes `ledger.jsonl` (one record for
-  the run, each job and each test, kept 90 days) and puts the layer table in the job summary: result, duration and
-  budget (reported, never enforced), queue, runner, test counts, why a layer was skipped and the label of a red job
-  (`scripts/ci-ledger.mjs`, `scripts/ci-classify.mjs`, #256).
-- The nightly `CI health` workflow (`ci-health.yml`, `scripts/ci-health.mjs`) reads the last 7 days of ledgers and
-  replaces the body of one tracking issue, `CI health report`: each layer's p50 and p90, the slowest tests, flaky and
-  failed tests, red jobs by label and the PC queue. A change to it runs it on its own pull request.
 - Every test runs offline (#266). `tests/offline.mjs` holds one table of what is local: `localhost`, the special-use
   names `.localhost`, `.test`, `.example` and `.invalid` (RFC 6761, never delegated), loopback and unspecified
   addresses, and Unix sockets; everything else is outside, `example.com` and private LAN addresses included. `npm test`
@@ -552,13 +536,11 @@ are one local run per file. Helpers are imported by tests and guard nothing alon
 | `channels.spec.ts` | A Contributor opens the general channel from the sidebar, reads the composer's hint and the intro's route tip, and posts a message that stays after a reload and starts no Run; the Viewer reads it with its writer's name and role and has no composer. (#23) | — | channel-runs.spec.ts (Runs), components/channel.test.tsx (the drawing, and the hint in Arabic) | keep 2 of its 3 cases; 1 moved (#218, case by case above) |
 | `choose-language.ts` | browser helper: choose the language in Settings | — | — | helper, kept |
 | `clock.mjs` | helper: the instant before a local day ends in a zone, read on its own wall clock and DST safe, the runner's zone and fixed ids (new, #266) | — | time-zones.test.mjs | helper, kept |
-| `ci-runners.test.mjs` | Every job runs on `ubuntu-latest` except `integration`, which runs where `CI_RUNNER` says and on `ubuntu-latest` for a fork's PR, read no secret and write nothing; the release workflows stay on `ubuntu-latest`; a PR reads no secret. A job that starts Supabase reserves its ports first, on GitHub-hosted runners only, and every lane's port lies in that range (#225); on the PC it clears an earlier run and moves the ports first and cleans up last. `scripts/ci-runner.mjs`: the moved port block, the lane count, and a cleanup that removes only this repository's Docker objects and checkout processes (#224). | 4.3 s | — | keep, extended |
+| `ci-runners.test.mjs` | Every job runs on `ubuntu-latest`; no ledger, CI health, lane-proof or PC-routing job or script is left (#334); the release workflows stay on `ubuntu-latest`; a PR reads no secret. A job that starts Supabase reserves its ports first, and every lane's port lies in that range (#225); `scripts/ci-runner.mjs` prints only that range. | 0.2 s | — | keep; its PC cases (moved port block, lane count, cleanup) removed with the PC routing (#334) |
 | `ci-areas.test.mjs` | Each suite runs only when its own files change; screens alone start no browser job (#257); main runs all unless the change is documents only; an unknown list runs all. (new, #76; replaces docs-only and install-related) | 3.1 s | — | new |
-| `ci-fast.test.mjs` | `./ci.sh fast` runs its steps at the same time; a failing step is red while the others finish green, its output is shown whole and stays open on GitHub with an error on the run; a skipped step does not run; each step writes its records and its log to the ledger folder while it runs; a red step's output is printed last; typecheck reads none of the sandbox files the tests write; the steps are the static checks, the node tests and the component tests in one run. (#258) | 1 s | — | new (#258) |
+| `ci-fast.test.mjs` | `./ci.sh fast` runs its steps at the same time; a failing step is red while the others finish green, its output is shown whole and stays open on GitHub with an error on the run; a skipped step does not run; each step writes its log to the ledger folder while it runs; a red step's output is printed last; typecheck reads none of the sandbox files the tests write; the steps are the static checks, the node tests and the component tests in one run. (#258) | 1 s | — | new (#258) |
 | `ci-verdict.test.mjs` | `check` counts a suite as passed only when it was skipped because nobody asked for it, is red on any failed or cancelled stage, lists each fast step and is red when one fails (a red lint beside the green rest), passes skipped component tests only when nobody asked for them, and the browser and install inputs default to off; the fast job restores its dependencies by the lock file's hash and the browser by version, saved before any test runs and never with `node_modules/.vite`; the suites that start a stack wait for the image cache job, which cannot fail a run. (#69, #76, #258, #259) | 3 s | — | keep, extended |
 | `ci-classify.test.mjs` | A red job is labelled infrastructure only by the known signature that ended it (a registry rate limit, a runner shutdown or a port in use where the job failed; a browser network change anywhere in the job), and every other red is "your change", over real failed job logs of 2026-11-16 in `ci-logs/`. (#256) | 0.1 s | — | new (#256) |
-| `ci-ledger.test.mjs` | The CI ledger keeps one record per test each layer ran (Playwright with a flaky test's retry and lane, Vitest per assertion, the node reporter run for real, each database check), names an unreadable results file, says why each skipped layer was skipped, and its job summary has a row per layer that marks one over budget and labels a red job. (#256) | 0.3 s | — | new (#256) |
-| `ci-health.test.mjs` | The nightly CI health report: per layer p50 and p90 by nearest rank and the jobs over budget, the slowest 20 tests, flaky and failed tests, red jobs by label, the PC queue and the integration jobs that fell back; it updates the one open tracking issue with its marker and otherwise creates exactly one. (#256) | 0.1 s | — | new (#256) |
 | `ci-logs/` | Excerpts of real failed CI jobs of 2026-11-16 and one constructed log, each named for its job, that `ci-classify.test.mjs` labels (`ci-logs/README.md` says what ended each job). | — | — | data, new (#256) |
 | `company-apps.test.mjs` | Only the Owner connects, follows or disconnects a Company's app, checked for every step; a Member reads the states; the browser gets the vendor's page and states, never the Engine's flow; the way back is handed on only for the person's own open sign-in, and each connect and disconnect is logged once. (#30) Per Agent (#30): each Agent's state is read from its own profile with the fake Engine (connected, needing attention, off, unreadable), each profile once, and an app connected in the Company's profile before the move is the main Agent's; the card's state is the Agents' merged; connecting and disconnecting for one Agent asks the Engine at that Agent's profile only and leaves the other profile's servers as they were, and a disconnect with no Agent turns it off for every Agent that has it, each logged with its Agent; an Agent on the main profile, one not listed, a bad id or a Member is refused before the Engine is asked. | 0.3 s | settings-apps.spec.ts; supabase/tests/company_apps.sql (every Role, per Agent, the log) | new |
 | `company-knowledge.spec.ts` | A Manager fills an empty part of the Company knowledge and sees it with who edited it, leaves the editor with Escape, saves with Ctrl+S (the same text changes nothing) and clears the part back to its empty state; each change is logged and named in the Activity log; a Contributor reads it with no Edit button and the server refuses their save. (#27) | — | company_knowledge.sql (who may read and edit each part, in the database) | keep (#218, case by case above) |
