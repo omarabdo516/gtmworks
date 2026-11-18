@@ -5,7 +5,7 @@ import { sendMessage, startQueuedTurns } from '../lib/conversation-runs.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 
 // Every run of a Company's Agents is given the Company knowledge (#27) through the engine contract, after the Agent's
-// own instructions and before its rules and its sender's note, as the database pinned it at the run's first start.
+// own instructions and before its sender's note (the team's rules are in the profile's SOUL.md, #345), as the database pinned it at the run's first start.
 const encryptionKey=Buffer.alloc(32,7).toString('base64');
 const connection='f9000000-0000-0000-0000-000000000001';
 const role='You are the ad critic on RS Learning\'s marketing team.';
@@ -48,18 +48,19 @@ const send=(/** @type {ReturnType<typeof databases>} */ {db,service},/** @type {
 /** @param {string} sent @param {string[]} texts */
 const inOrder=(sent,texts)=>texts.every((text,n)=>sent.includes(text)&&(n===0||sent.indexOf(texts[n-1])<sent.indexOf(text)));
 
-test('a run carries the Company knowledge after the Agent\'s own instructions and before its rules and its sender\'s note',async()=>{
+test('a run carries the Company knowledge after the Agent\'s own instructions and before its sender\'s note, and no rules',async()=>{
  const fake=fakeEngine();
  assert.deepEqual(await send(databases({parts:[{part:'voice',body:voice},{part:'banned',body:banned}]}),'k',{engineFor:fake.engineFor}),{conversation:'c'});
  const sent=/** @type {string} */(fake.runs[0].instructions);
- assert.ok(inOrder(sent,[role,'Brand voice',voice,'Banned claims',banned,rule,note]),sent);
+ assert.ok(inOrder(sent,[role,'Brand voice',voice,'Banned claims',banned,note]),sent);
+ assert.ok(!sent.includes(rule));
  assert.ok(sent.endsWith(note));
 });
 
 test('a queued turn carries it too',async()=>{
  const fake=fakeEngine(); const {service}=databases({parts:[{part:'products',body:'Tax diploma: 1,800 EGP'}]});
  assert.equal(await startQueuedTurns(service,{encryptionKey,engineFor:fake.engineFor}),1);
- assert.ok(inOrder(/** @type {string} */(fake.runs[0].instructions),[role,'Products and prices','Tax diploma: 1,800 EGP',rule,note]));
+ assert.ok(inOrder(/** @type {string} */(fake.runs[0].instructions),[role,'Products and prices','Tax diploma: 1,800 EGP',note]));
 });
 
 test('after an edit the next run carries the new text, and a retry of an earlier run the text it first sent',async()=>{

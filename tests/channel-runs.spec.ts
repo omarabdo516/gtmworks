@@ -51,11 +51,10 @@ test('integration: ordinary talk starts no Run; a mention starts exactly one, an
   const sent=await postChannelMessage(person,service,mention) as {message:number};
   expect(fake.runs.map(run=>({key:run.key,input:run.input}))).toEqual([{key:`channel:${sent.message}`,input:'عمر: @Faye plan the launch week'}]);
   expect(fake.connections[0]).toMatchObject({address:'http://127.0.0.1:9',key:'fake-engine-key'});
-  expect(fake.runs[0].instructions).toContain('- Answer in English');
-  // The seeded Company knowledge (#27) comes before the Agent's rules.
+  // The seeded Company knowledge (#27) goes with the Run; the Agent's rules are in its profile's SOUL.md (#345).
   const instructions=fake.runs[0].instructions as string;
   expect(instructions.indexOf('## Brand voice')).toBeGreaterThan(-1);
-  expect(instructions.indexOf('## Brand voice')).toBeLessThan(instructions.indexOf('- Answer in English'));
+  expect(instructions).not.toContain('Answer in English');
   expect(await drive()).toEqual({started:0,closed:0});
   expect(await postChannelMessage(person,service,mention)).toEqual(sent);
   expect(fake.runs).toHaveLength(1);
