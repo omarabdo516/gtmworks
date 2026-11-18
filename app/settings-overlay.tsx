@@ -8,14 +8,14 @@ import { supabase } from '@/lib/supabase';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { AgentFaceDot } from './agent-face-dot';
 import { agentStates, statusKeys, type AgentStatus } from '@/lib/agent-details.mjs';
-import { pickSection, overlayHref, agentsMainFirst, usageTotals, type OverlaySection } from '@/lib/settings-overlay.mjs';
+import { pickSection, overlayHref, agentsMainFirst, usageTotals, usageModels, usageHeaviest, usageEmpty, type OverlaySection } from '@/lib/settings-overlay.mjs';
 import { OverlayChrome } from './settings-overlay-chrome';
 import { BackLink, FocusReturn } from './settings-overlay-frame';
 import { AccountChoices, MakeMain, DeleteAgent, CompanyName, Invite, AgentSwitch, RuleSaid, RemoveRule } from './settings-overlay-client';
 import { SettingsIcon } from './settings-icons';
 import PasswordSettings from './password-settings';
-import { UsageTable } from './c/[slug]/[[...section]]/usage';
-import { ownedUsage, type UsageRow } from '@/lib/company-app-items';
+import { UsageTable, UsageModels } from './c/[slug]/[[...section]]/usage';
+import { managedUsage, type UsageRow } from '@/lib/company-app-items';
 import { readCompanySignIns } from '@/lib/company-sign-in.mjs';
 import { AgentLevel, CompanySubscriptions, MemberNote } from './settings-lazy';
 import { MadeLine, OpenedMark } from './agent-made';
@@ -59,8 +59,9 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  // The Company's model sign-in, read from its own profile in the agent engine (#3), with the install's key, after the
  // database said the person is a member (company_engine_target).
  const subscriptions=section==='models'?await (async()=>{ try { return await readCompanySignIns(db,{company:company.id}); } catch { return {profile:null,oneCompany:false,signIns:null}; } })():null;
- // The token use of the period, read from each owned Company's Agents' Hermes profiles (#347).
- const usageRows=section==='usage'?await ownedUsage(userId,query.period==='30'?30:7):[];
+ // The token use of the period, read from each Company's Agents' profiles in the bundled Engine (#347, #32): the
+ // Owner and the Managers see every Company they manage, the same read the database checks.
+ const usageRows=section==='usage'?await managedUsage(userId,query.period==='30'?30:7):[];
  // The person's own note for the Agents in this Company (RLS: nobody else reads it).
  const memberNote=section==='account'?(await db.from('member_notes').select('note').eq('company_id',company.id).eq('person_id',userId).maybeSingle()).data?.note||'':'';
  const agent=section==='agents'&&query.agent?agents.find(item=>item.id===query.agent):undefined;
@@ -211,12 +212,22 @@ function AgentRules({t,company,userId,rules,canManage}:{t:T,company:string,userI
 
 function UsageSection({t,locale,slug,company,rows,period}:{t:T,locale:string,slug:string,company:string,rows:UsageRow[],period:7|30}) {
  const totals=usageTotals(rows,company);
+ const models=usageModels(rows,company);
+ const heaviest=usageHeaviest(rows,company);
+ const count=(value:number)=>new Intl.NumberFormat(locale).format(value);
+ // A profile two Agents share is one row with both names, as the reference names each Agent on the profile.
+ const heaviestName=heaviest?new Intl.ListFormat(locale,{type:'unit'}).format(heaviest.agents.map(agent=>agent.name)):'—';
  const seg=<div className="segmented use-seg" role="group" aria-label={t('settingsPeriod')}>{([[7,'settingsLast7'],[30,'settingsLast30']] as const).map(([days,label])=><Link key={days} replace href={overlayHref(slug,'usage',days===30?{period:'30'}:{})} aria-pressed={period===days} id={`use-p-${days}`}>{t(label)}</Link>)}</div>;
- const kpi=(label:string,value:number)=><div className="kpi"><span className="kpi__label">{label}</span><span className="kpi__val num">{new Intl.NumberFormat(locale).format(value)}</span></div>;
+ const kpi=(label:string,value:ReactNode)=><div className="kpi"><span className="kpi__label">{label}</span><span className="kpi__val num">{value}</span></div>;
  return <><Head title={t('usage')} sub={t('settingsUsageSub')} extra={seg}/>
-  <div className="kpis use-kpis">{kpi(t('settingsTokens'),totals.tokens)}{kpi(t('usageSessions'),totals.sessions)}{kpi(t('usageUnknown'),totals.unknown)}</div>
-  <section className="dp-sec" aria-labelledby="use-h"><Label id="use-h">{t('settingsPerAgent')}</Label>
-   {rows.length?<div className="sov-ta"><UsageTable rows={rows}/></div>:<div className="panel-card"><p className="panel-empty">{t('usageNone')}</p></div>}</section></>;
+  {usageEmpty(rows)?<div className="panel-card"><p className="panel-empty">{t('usageNone')}</p></div>:<>
+   <div className="kpis use-kpis">{kpi(t('settingsTokens'),count(totals.tokens))}{kpi(t('usageSessions'),count(totals.sessions))}{kpi(t('usageHeaviest'),<bdi>{heaviestName}</bdi>)}</div>
+   <section className="dp-sec" aria-labelledby="use-h"><Label id="use-h">{t('settingsPerAgent')}</Label>
+    <div className="sov-ta"><UsageTable rows={rows}/></div></section>
+   {/* Each model's own count, apart from the totals: Hermes merges auxiliary usage into these rows (#32). */}
+   {models.length>0&&<section className="dp-sec" aria-labelledby="use-h-model"><Label id="use-h-model">{t('settingsPerModel')}</Label>
+    <div className="sov-ta"><UsageModels models={models}/></div></section>}
+  </>}</>;
 }
 
 function AccountSection({t,theme,personName,role,roleName,companyName,company,memberNote}:{t:T,theme:string,personName:string,role:string,roleName:string,companyName:string,company:string,memberNote:string}) {

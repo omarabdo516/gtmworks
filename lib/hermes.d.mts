@@ -8,7 +8,8 @@ export function startRun(message:HermesConnection&{input:string,instructions?:st
 export type RunUsage={input:number,output:number};
 export function readRun(run:HermesConnection&{run:string}):Promise<{status:'running'|'completed'|'failed'|'cancelled'|'interrupted'|'lost'|'unreachable',output:string|null,session:string|null,usage:RunUsage|null,question?:import('./engine.mjs').RunQuestion}>;
 export function readSession(connection:import('./engine.mjs').EngineConnection,session:string):Promise<import('./engine.mjs').SessionRead>;
-export type ProfileUsage={state:'found',input:number,output:number,sessions:number}|{state:'refused'|'unreachable',input:null,output:null,sessions:null};
+export type UsageModel={model:string,input:number,output:number,sessions:number};
+export type ProfileUsage={state:'found',input:number,output:number,sessions:number,models:UsageModel[]}|{state:'refused'|'unreachable',input:null,output:null,sessions:null,models:null};
 export function readUsage(connection:import('./engine.mjs').EngineConnection,days:number):Promise<ProfileUsage>;
 export function hermesEngine(connection:import('./engine.mjs').EngineConnection):import('./engine.mjs').Engine;
 export type ProfileTools={state:'configured'|'missing'|'refused'|'unreachable'|'failed',toolsets:string[]|null};
