@@ -182,6 +182,14 @@ test.each(['en', 'ar'] as const)('in the %s interface a mention of the reader na
  expect(group.querySelector('.mn-h')!.textContent).toBe(language === 'ar' ? 'اتذكرت فيها 1' : 'Mentions of you 1');
 });
 
+// #200: a mention in the general channel names it in the reader's language, as the sidebar does.
+test.each([['en', 'Sara Adel mentioned you in #general'], ['ar', 'Sara Adel ذكرك في #عام']] as const)('in the %s interface a mention in the general channel names it in that language', async (language, line) => {
+ const mention = { kind: 'channel_mention', id: 62, title: 'general', body: 'يا @Omar', asked_by: 'Sara Adel', card_id: null, conversation_id: null,
+  channel_id: 'ch-0', channel_message_id: 43, created_at: '2026-06-10T09:00:00Z' };
+ await showWork(workProps({ waiting: [mention], members: [{ person_id: 'p-1', people: { name: 'Omar Abdo' } }] }), { language });
+ expect(document.querySelector('a.mcard[data-kind="channel_mention"] .mcard__who')!.textContent).toBe(line);
+});
+
 // #200: the Inbox ("Waiting on you" as its own list) draws the reader's mentions at the top, under "Mentions of you" with
 // their count, above what needs their reply, as the board's column does.
 test('the Inbox puts the reader\'s mentions under "Mentions of you", above what needs their reply', async () => {
