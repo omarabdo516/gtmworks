@@ -369,11 +369,6 @@ jobs:
       fail-fast: false
       matrix:
         shard: [1, 2, 3]
-    # Each shard names its own pass, so check reads all three and not only the matrix's one result (scripts/ci-verdict.mjs).
-    outputs:
-      shard1: ${{ steps.passed.outputs.shard1 }}
-      shard2: ${{ steps.passed.outputs.shard2 }}
-      shard3: ${{ steps.passed.outputs.shard3 }}
     # main's browser suite already took 24 of 25 minutes on one runner (run 43398274074); a shard takes about a third.
     timeout-minutes: 40
     permissions:
@@ -415,9 +410,6 @@ jobs:
           GTMWORKS_TEST_LANES: "4"
           SUPABASE_IMAGES_ARCHIVE: ${{ runner.temp }}/supabase-images/images.tar
         run: ./ci.sh integration --shard=${{ matrix.shard }}/3
-      - name: this shard passed
-        id: passed
-        run: echo "shard${{ matrix.shard }}=success" >> "$GITHUB_OUTPUT"
       # The screenshots the journeys write (card and phone checks) are uploaded so a review can see them.
       - name: upload journey screenshots
         if: always()
@@ -868,7 +860,6 @@ jobs:
           DATABASE_RESULT: ${{ needs.database.result }}
           INTEGRATION_RUN: ${{ needs.changes.outputs.integration }}
           INTEGRATION_RESULT: ${{ needs.integration.result }}
-          INTEGRATION_SHARDS: ${{ needs.integration.outputs.shard1 }},${{ needs.integration.outputs.shard2 }},${{ needs.integration.outputs.shard3 }}
           INSTALL_RUN: ${{ needs.changes.outputs.install }}
           INSTALL_RESULT: ${{ needs.install.result }}
         run: node scripts/ci-verdict.mjs

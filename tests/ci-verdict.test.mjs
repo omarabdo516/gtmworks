@@ -14,7 +14,6 @@ const fastSteps = 'discovery=success docs=success i18n=success openapi=success l
 const green = {
   CHANGES_RESULT: 'success', FAST_RESULT: 'success', FAST_STEPS: fastSteps, COMPONENTS_RUN: 'true', DRAFT: 'false', LIVE_DRAFT: 'false',
   ...Object.fromEntries(stages.flatMap(stage => [[`${stage}_RUN`, 'true'], [`${stage}_RESULT`, 'success']])),
-  INTEGRATION_SHARDS: 'success,success,success',
 };
 const run = overrides => {
   const env = { PATH: process.env.PATH, ...green, ...overrides };
@@ -82,22 +81,14 @@ test('a draft is red when any stage that ran failed or was cancelled', () => {
   }
 });
 
-// The browser suite runs in 3 shards (#335): each names its own pass, and an empty slot is a shard that failed, was
-// cancelled or never ran. GitHub's one result for the matrix is read too, so either one alone turns check red.
-test('integration is green only when all three shards passed', () => {
-  assert.equal(verdict({ INTEGRATION_SHARDS: 'success,success,success' }), 0);
-  for (const result of ['failure', 'cancelled']) {
-    for (const shards of [',success,success', 'success,,success', 'success,success,']) {
-      assert.equal(verdict({ INTEGRATION_RESULT: result, INTEGRATION_SHARDS: shards }), 1, `${result} ${shards}`);
-      assert.equal(verdict({ INTEGRATION_SHARDS: shards }), 1, `matrix success but ${shards}`);
-    }
-  }
-  for (const shards of ['', ',,', undefined]) assert.equal(verdict({ INTEGRATION_SHARDS: shards }), 1, String(shards));
-  assert.equal(verdict({ INTEGRATION_RUN: 'false', INTEGRATION_RESULT: 'skipped', INTEGRATION_SHARDS: ',,' }), 0);
-  assert.match(run({ INTEGRATION_SHARDS: 'success,,success' }).stdout, /^integration shards: 1=success 2=none 3=success$/m);
+// The browser suite runs in 3 shards (#335) with fail-fast off: GitHub's one result for the matrix is a failure or
+// cancelled when any shard is, so it alone judges them.
+test('integration is red when one shard failed or was cancelled, green when all passed', () => {
+  assert.equal(verdict({ INTEGRATION_RESULT: 'success' }), 0);
+  for (const result of ['failure', 'cancelled']) assert.equal(verdict({ INTEGRATION_RESULT: result }), 1, result);
 });
 
-test('the integration job runs as 3 shards, each naming its pass and uploading its own artifacts, and check reads them all (#335)', async () => {
+test('the integration job runs as 3 shards, each uploading its own artifacts, and check reads the matrix result (#335)', async () => {
   const { load } = await import('js-yaml');
   const { readFileSync } = await import('node:fs');
   const { jobs } = load(readFileSync('.github/workflows/ci.yml', 'utf8'));
@@ -106,14 +97,9 @@ test('the integration job runs as 3 shards, each naming its pass and uploading i
   const steps = integration.steps;
   const suite = steps.findIndex(step => step.name === 'integration');
   assert.equal(steps[suite].run, './ci.sh integration --shard=${{ matrix.shard }}/3');
-  const passed = steps[suite + 1];
-  assert.equal(passed.id, 'passed');
-  assert.equal(passed.if, undefined, 'written only when the shard passed');
-  assert.equal(passed.run, 'echo "shard${{ matrix.shard }}=success" >> "$GITHUB_OUTPUT"');
-  const shards = integration.strategy.matrix.shard;
-  assert.deepEqual(integration.outputs, Object.fromEntries(shards.map(n => [`shard${n}`, `\${{ steps.passed.outputs.shard${n} }}`])));
+  // Matrix legs share one outputs namespace, so per-shard outputs could overwrite each other: none are written.
+  assert.equal(integration.outputs, undefined);
   const env = check.steps.at(-1).env;
-  assert.equal(env.INTEGRATION_SHARDS, shards.map(n => `\${{ needs.integration.outputs.shard${n} }}`).join(','));
   assert.equal(env.INTEGRATION_RESULT, '${{ needs.integration.result }}');
   const uploads = steps.filter(step => step.uses?.startsWith('actions/upload-artifact@'));
   assert.ok(uploads.length >= 3);
