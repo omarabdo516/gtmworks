@@ -217,7 +217,7 @@ function AgentPage({t,rtl,slug,company,userId,agent,about,skills,status,main,rul
    </div>
   </div>
   {/* design-reference: sovAgentHTML's bar, after the tab panel: hidden until the draft differs from what was saved. */}
-  {editable&&<AgentSaveBar company={company} agent={agent.id} name={agent.name}/>}
+  {(editable||skillsEditable)&&<AgentSaveBar company={company} agent={agent.id} name={agent.name}/>}
  </>;
 }
 
