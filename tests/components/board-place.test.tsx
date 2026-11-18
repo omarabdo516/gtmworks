@@ -47,5 +47,5 @@ test('Shift with Left and Right still moves a Card to the next column, and that 
  link(2).focus();
  await userEvent.keyboard('{Shift>}{ArrowRight}{/Shift}');
  await expect.poll(() => sent(props)).toEqual([{ op: 'place', company: 'co-1', slug: 'rs-learning', card: '2', column: 'planned', before: '' }]);
- await expect.poll(() => toast).toHaveBeenCalledWith('Moved to “Planned”');
+ await expect.poll(() => toast).toHaveBeenCalledWith('Moved to “Planned”', { action: { label: 'Undo', run: expect.any(Function) } });
 });

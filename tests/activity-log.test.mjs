@@ -14,6 +14,10 @@ test('Card, Member and Agent rows say who changed what', () => {
  // An idea added in the Ideas column (#188) says so, in both languages.
  const idea = describeEntry({ subject: 'card', action: 'idea_added', details: {} });
  assert.deepEqual([idea.act, idea.to, i18n('en').t('logActIdeaAdded'), i18n('ar').t('logActIdeaAdded')], [['logActIdeaAdded'], { key: 'boardColIdeas' }, 'added an idea', 'ضاف فكرة'], 'with the column it landed in');
+ // "Undo" on a move (#168) is a row of its own, naming both stages as the move does.
+ const back = describeEntry({ subject: 'card', action: 'card_moved_back', details: { old_name: 'بريف جاهز', new_name: 'كتابة' } });
+ assert.deepEqual([back.act, back.from, back.to], [['logActMovedBack'], { text: 'بريف جاهز' }, { text: 'كتابة' }]);
+ assert.deepEqual(['en', 'ar'].map(language => i18n(language).t('logActMovedBack')), ['moved the card back', 'رجّع البطاقة مكانها']);
  const handed = describeEntry({ subject: 'card', action: 'card_changed', details: { field: 'next_actor', old: omar, new: writer } }, { name: id => ({ [omar]: 'عمر', [writer]: 'وكيل المحتوى' })[id] });
  assert.deepEqual([handed.act, handed.from, handed.to], [['logActHandedOver'], { text: 'عمر' }, { text: 'وكيل المحتوى' }]);
  const caption = describeEntry({ subject: 'card', action: 'card_changed', details: { field: 'caption', old: 'a', new: 'b' } });
@@ -46,7 +50,7 @@ test('Card, Member and Agent rows say who changed what', () => {
  const long = describeEntry({ subject: 'card', action: 'card_changed', details: { field: 'title', old: 'x'.repeat(200), new: 'y' } });
  assert.equal(long.from.text.length, 80);
  // Every act and value key is in both catalogues.
- const rows = [moved, note, idea, handed, caption, role, added, requested, saved, removed, suggested, approved, rejected, describeEntry({ subject: 'card', action: 'unknown' }), describeEntry({ subject: 'member', action: 'agent_granted', details: {} }), invited, ...['manager', 'viewer'].map(role => describeEntry({ subject: 'member', action: 'member_invited', details: { email: 'a@b.co', role } }))];
+ const rows = [moved, back, note, idea, handed, caption, role, added, requested, saved, removed, suggested, approved, rejected, describeEntry({ subject: 'card', action: 'unknown' }), describeEntry({ subject: 'member', action: 'agent_granted', details: {} }), invited, ...['manager', 'viewer'].map(role => describeEntry({ subject: 'member', action: 'member_invited', details: { email: 'a@b.co', role } }))];
  for (const language of ['en', 'ar']) for (const line of rows) {
   const { t } = i18n(language);
   t(line.act[0], ...line.act.slice(1).map(value => 'key' in value ? t(value.key) : value.text));

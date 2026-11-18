@@ -37,12 +37,15 @@ type Stage={id:number,name:string,position:number,board_column?:string|null}; ty
 type CardNotes={me:string,drawnAt:number,comments:EditableNote[],runs:{note_id:number,agent_id:string,agent_name:string,outcome:string|null}[],replies:{reply_to:number,actor_id:string,actor_name:string|null,body:string,created_at:string}[],agents:{id:string,name:string,connection_id:string}[]};
 // workAction is the board's server action (work-actions.ts), handed in so this client file never imports the server module.
 export type WorkAction=(form:FormData)=>Promise<void>;
-export type WorkProps={workAction:WorkAction,me:string,slug:string,company:string,section:string,cardId?:number,stages:Stage[],labels:Label[],cards:Card[],items:Item[],members:Person[],activity:Activity[],creatives:Creative[],versions:Version[],cardLabels:CL[],projects:Project[],assignees:{card_id:number,person_id:string}[],message?:string,approvableIds:number[],agents:{person_id:string,role:string,granted:boolean}[],canCreate:boolean,initialCreating:boolean,attachments:WorkAttachment[],waiting?:WaitingItem[],focus?:'waiting',alone?:boolean,notes?:CardNotes,sheet?:CardSheetData,show?:number,ideaAdded?:boolean,ruleDecision?:{approve:boolean,agent:string},cardAgents?:CardAgent[]};
+// "Undo" on a move (#168): the server's answer, and nothing else, decides whether the Card went back.
+type UndoResult={state:'undone',column:string}|{state:'gone'}|{state:'refused'};
+export type UndoMove=(form:FormData)=>Promise<UndoResult>;
+export type WorkProps={workAction:WorkAction,undoMove:UndoMove,me:string,slug:string,company:string,section:string,cardId?:number,stages:Stage[],labels:Label[],cards:Card[],items:Item[],members:Person[],activity:Activity[],creatives:Creative[],versions:Version[],cardLabels:CL[],projects:Project[],assignees:{card_id:number,person_id:string}[],message?:string,approvableIds:number[],agents:{person_id:string,role:string,granted:boolean}[],canCreate:boolean,initialCreating:boolean,attachments:WorkAttachment[],waiting?:WaitingItem[],focus?:'waiting',alone?:boolean,notes?:CardNotes,sheet?:CardSheetData,show?:number,ideaAdded?:boolean,ruleDecision?:{approve:boolean,agent:string},cardAgents?:CardAgent[]};
 const emptyKey:Record<string,[string,string]>={waiting:['boardEmptyWaiting','boardEmptyWaitingHint'],ideas:['boardEmptyIdeas','boardEmptyIdeasHint'],planned:['boardEmptyPlanned','boardEmptyPlannedHint'],progress:['boardEmptyProgress','boardEmptyProgressHint'],live:['boardEmptyLive','boardEmptyLiveHint'],done:['boardEmptyDone','']};
-export default function Work(p:WorkProps) { const {workAction}=p; const {t,locale,language}=useI18n(); const router=useRouter(); const identities=useAgentIdentities();
+export default function Work(p:WorkProps) { const {workAction,undoMove}=p; const {t,locale,language}=useI18n(); const router=useRouter(); const identities=useAgentIdentities();
  // A change-only form cannot submit before React attaches its handler.
  const hydrated=useSyncExternalStore(()=>()=>{},()=>true,()=>false);
- const [moving,setMoving]=useState(false); const focusCard=useRef({id:0,column:''}); const [agentFilter,setAgentFilter]=useState('all'); const [kind,setKind]=useState<'all'|'mkt'>('all'); const [month,setMonth]=useState(p.section==='work/calendar'?new Date().toISOString().slice(0,7):''); const [composing,setComposing]=useState(p.initialCreating && p.canCreate); const [addingIdea,setAddingIdea]=useState(false); const addButton=useRef<HTMLButtonElement>(null); const [project,setProject]=useState(''); const [sort,setSort]=useState('title'); const [direction,setDirection]=useState<'ascending'|'descending'>('ascending');
+ const [moving,setMoving]=useState(false); const focusCard=useRef<{id:number,column:string,landing?:boolean}>({id:0,column:''}); const [agentFilter,setAgentFilter]=useState('all'); const [kind,setKind]=useState<'all'|'mkt'>('all'); const [month,setMonth]=useState(p.section==='work/calendar'?new Date().toISOString().slice(0,7):''); const [composing,setComposing]=useState(p.initialCreating && p.canCreate); const [addingIdea,setAddingIdea]=useState(false); const addButton=useRef<HTMLButtonElement>(null); const [project,setProject]=useState(''); const [sort,setSort]=useState('title'); const [direction,setDirection]=useState<'ascending'|'descending'>('ascending');
  const base=`/c/${p.slug}/work`; const card=p.cards.find(c=>c.id===p.cardId); const shown=p.cards.filter(c=>!project||String(c.project_id)===project); const visible=shown.filter(c=>!month||!c.go_live||c.go_live.slice(0,7)===month); const hidden=(op:string)=><><input type="hidden" name="op" value={op}/><input type="hidden" name="slug" value={p.slug}/><input type="hidden" name="company" value={p.company}/></>;
  if(card&&composing) setComposing(false);
  // A card made from a message is marked with its mode, in the colour of the agent it was sent to.
@@ -82,8 +85,9 @@ export default function Work(p:WorkProps) { const {workAction}=p; const {t,local
  const waitingTotal=new Set((p.waiting||[]).filter(item=>asCard(item)&&waitingHere.has(item.card_id!)).map(item=>item.card_id)).size+items.length;
  const stagesIn=(column:string)=>p.stages.filter(s=>(s.board_column||'ideas')===column);
  const stageName=(c:Card)=>p.stages.find(s=>s.id===c.stage_id)?.name||'';
- // After a move the card is drawn again in its new column; the keyboard stays on it.
- useEffect(()=>{ const {id,column}=focusCard.current; if(!id) return; const link=document.querySelector<HTMLElement>(`#board-cols [data-column="${column}"] .kcard[data-card-id="${id}"] a`); if(link) { link.focus({preventScroll:true}); link.scrollIntoView({block:'nearest',inline:'nearest'}); focusCard.current={id:0,column:''}; } });
+ // After a move the card is drawn again in its new column; the keyboard stays on it. A Card put back by "Undo" (#168)
+ // lands in its old column with the reference's short motion (design-reference: undoMove's focus and land).
+ useEffect(()=>{ const {id,column,landing}=focusCard.current; if(!id) return; const link=document.querySelector<HTMLElement>(`#board-cols [data-column="${column}"] .kcard[data-card-id="${id}"] a`); if(link) { link.focus({preventScroll:true}); link.scrollIntoView({block:'nearest',inline:'nearest'}); if(landing) land(link.closest('.kcard')); focusCard.current={id:0,column:''}; } });
  // The Inbox opens the board on "Waiting on you".
  // While an Agent called in a note is still working, the Card reads itself again so its reply shows when it lands (#22).
  const agentWorking=!!p.notes?.runs.some(run=>!run.outcome);
@@ -102,6 +106,17 @@ export default function Work(p:WorkProps) { const {workAction}=p; const {t,local
  // A Card is placed where its person drops it, or one place up or down its column with Shift and Up or Down (#174): the
  // column's own order is kept in the database, and a change of place inside one column is not a move to announce.
  const inColumn=(column:string)=>orderColumn(drawnCards.filter(c=>columnOfCard(c)===column),column).map(id=>drawnCards.find(c=>c.id===id)!);
+ // "Undo" puts the Card back in the stage it left and the place it held (#168), as the person: the database decides every
+ // refusal, and the board says in a toast why the Card stayed where it is.
+ const undo=(id:number)=>{
+  const form=new FormData(); form.set('company',p.company); form.set('slug',p.slug); form.set('card',String(id));
+  void undoMove(form).then(result=>{
+   if(result.state!=='undone') { toast(result.state==='gone'?t('boardUndoGone'):t('boardUndoRefused'),{icon:'x'}); return; }
+   toast(t('boardBackIn',columnName(result.column)));
+   focusCard.current={id,column:result.column,landing:true};
+   router.refresh();
+  });
+ };
  const move=(id:number,to:string,before:number|null=null)=>{
   const c=p.cards.find(x=>x.id===id); if(!c||!p.canCreate) return;
   const from=columnOfCard(c);
@@ -114,7 +129,8 @@ export default function Work(p:WorkProps) { const {workAction}=p; const {t,local
   const form=new FormData(); form.set('op','place'); form.set('company',p.company); form.set('slug',p.slug); form.set('card',String(id)); form.set('column',to); form.set('before',before==null?'':String(before));
   focusCard.current={id,column:to}; setMoving(true);
   void workAction(form).then(()=>{
-   if(to!==from) toast(t('boardMoved',columnName(to)));
+   // A move to another column is told with "Undo" for six seconds; a place inside one column says nothing.
+   if(to!==from) toast(t('boardMoved',columnName(to)),{action:{label:t('boardUndo'),run:()=>undo(id)}});
    focusCard.current={id,column:to};
    requestAnimationFrame(()=>land(document.querySelector<HTMLElement>(`#board-cols .kcard[data-card-id="${id}"]`)));
   }).finally(()=>setMoving(false));

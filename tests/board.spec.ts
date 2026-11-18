@@ -61,13 +61,13 @@ test('a card moves by drag and by keyboard, and both moves are logged',async({pa
  await page.mouse.move(from.x+from.width/2+8,from.y+20,{steps:2});
  await page.mouse.move(to.x+to.width/2,to.y+40,{steps:10});
  await page.mouse.up();
- await expect(page.locator('.toast')).toHaveText('Moved to “Planned”');
+ await expect(page.locator('.toast')).toContainText('Moved to “Planned”');
  await expect(page.locator(`.col[data-column="planned"] .kcard[data-card-id="${card.id}"]`)).toBeVisible();
  await expect(page).toHaveURL(/\/work\/board$/);
  // Keyboard: Shift and the arrow toward the reading end is the next column; the card keeps the focus.
  await page.locator(`.kcard[data-card-id="${card.id}"] a`).focus();
  await page.keyboard.press('Shift+ArrowRight');
- await expect(page.locator('.toast')).toHaveText('Moved to “In progress”');
+ await expect(page.locator('.toast')).toContainText('Moved to “In progress”');
  await expect(page.locator(`.col[data-column="progress"] .kcard[data-card-id="${card.id}"]`)).toBeVisible();
  await expect(page.locator(`.col[data-column="progress"] .kcard[data-card-id="${card.id}"] a`)).toBeFocused();
  await page.reload();
@@ -133,10 +133,12 @@ test('a card waiting for a decision moves only by it: a drop on Live opens the c
  // The toast raised on the board is still there on the card the drop opened.
  await expect(page).toHaveURL(/\/work\/board\/5$/);
  await expect(page.locator('.toast')).toHaveText('It needs your OK first. Decide here and the card moves on its own');
+ await expect(page.getByRole('button',{name:'Undo'})).toHaveCount(0);
  await page.goto('/c/rs-learning/work/board');
  await page.locator('.kcard[data-card-id="5"] a').focus();
  await page.keyboard.press('Shift+ArrowRight');
  await expect(page.locator('.toast')).toHaveText('This card is waiting for your decision. Decide in the chat first');
+ await expect(page.getByRole('button',{name:'Undo'})).toHaveCount(0);
  await expect(page).toHaveURL(/\/work\/board\/5$/);
  await page.goto('/c/rs-learning/work/board');
  expect(await landedColumn(page,5)).toBe('waiting');
@@ -368,7 +370,7 @@ test('a Card is carried to the top, the middle and the end of its own column, an
  const planned=await orderIn(page,'planned');
  expect(planned[planned.length-1]).toBe(d);
  await carry(page,a,{column:'planned',before:d});
- await expect(page.locator('.toast')).toHaveText('Moved to “Planned”');
+ await expect(page.locator('.toast')).toContainText('Moved to “Planned”');
  await expect.poll(()=>orderIn(page,'planned')).toEqual(placed(planned,a,d));
  await expect.poll(()=>orderIn(page,'ideas')).toEqual(end.filter(id=>id!==a));
  await page.reload();
@@ -435,8 +437,48 @@ test('a second Member sees the same order; a place inside a column is not announ
  await page.goto('/c/rs-learning/work/board');
  const planned=await orderIn(page,'planned');
  await carry(page,b,{column:'planned',before:planned[0]});
- await expect(page.locator('.toast')).toHaveText('Moved to “Planned”');
+ await expect(page.locator('.toast')).toContainText('Moved to “Planned”');
  await expect.poll(()=>orderIn(page,'planned')).toEqual(placed(planned,b,planned[0]));
  await page.goto(`/c/rs-learning/work/board/${b}`);
  await expect(page.locator('.detail-row').filter({hasText:'Moved the card from أفكار to بريف جاهز'})).toHaveCount(1);
+});
+
+// #168: "Undo" on a move is offered for six seconds and puts the Card back in the stage it left, not only in its column;
+// the keyboard returns to it and the log keeps both rows. A move the board refuses offers no "Undo".
+test('a move to another column is offered as Undo, which puts the Card back in the stage and place it left, focused, with both log rows',async({page})=>{
+ await page.setViewportSize({width:2200,height:900});
+ await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ const stamp=Date.now();
+ // Two Cards in «كتابة», a stage of In progress: a Card put back returns to that stage, not to the column's first one.
+ const [a,b]=placeCards(stamp,2,'كتابة');
+ const writing=Number(rows(`select id from public.work_stages where company_id='${rs}' and name='كتابة'`)[0].id);
+ await page.reload();
+ const progress=await orderIn(page,'progress');
+ expect(progress.slice(-2)).toEqual([a,b]);
+ const planned=await orderIn(page,'planned');
+ // Drag: the move is told with "Undo", and the Card stays in Planned until it is pressed.
+ await carry(page,a,{column:'planned',before:planned[0]});
+ await expect(page.locator('.toast')).toContainText('Moved to “Planned”');
+ await expect(page.getByRole('button',{name:'Undo'})).toBeVisible();
+ // Undo: the Card is back in In progress and in the stage it left, its own place again, and it takes the keyboard.
+ await page.getByRole('button',{name:'Undo'}).click();
+ await expect(page.locator('.toast')).toHaveText('Back in “In progress”');
+ const back=page.locator(`.col[data-column="progress"] .kcard[data-card-id="${a}"]`);
+ await expect(back).toBeVisible();
+ expect(await back.evaluate(el=>el.closest('[data-stage-id]')?.getAttribute('data-stage-id'))).toBe(String(writing));
+ await expect(back.locator('a')).toBeFocused();
+ expect(await orderIn(page,'progress')).toEqual(progress);
+ // The log keeps one row for the move and one for the way back, each naming who and both stages.
+ await page.goto(`/c/rs-learning/work/board/${a}`);
+ await expect(page.locator('.detail-row').filter({hasText:'Moved the card from كتابة to بريف جاهز'})).toHaveCount(1);
+ await expect(page.locator('.detail-row').filter({hasText:'Moved the card back from بريف جاهز to كتابة'})).toHaveCount(1);
+ // The keyboard's move is told with "Undo" too, and its Undo brings the Card back again.
+ await page.goto('/c/rs-learning/work/board');
+ await page.locator(`.kcard[data-card-id="${a}"] a`).focus();
+ await page.keyboard.press('Shift+ArrowRight');
+ await expect(page.locator('.toast')).toContainText('Moved to “Planned”');
+ await expect(page.locator(`.col[data-column="planned"] .kcard[data-card-id="${a}"]`)).toBeVisible();
+ await page.getByRole('button',{name:'Undo'}).click();
+ await expect(page.locator('.toast')).toHaveText('Back in “In progress”');
+ await expect(page.locator(`.col[data-column="progress"] .kcard[data-card-id="${a}"] a`)).toBeFocused();
 });
