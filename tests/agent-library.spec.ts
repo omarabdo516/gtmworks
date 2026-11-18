@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { fakeHermes } from './fake-hermes.mjs';
 import { laneHermes } from './lane-hermes';
 import { signIn } from './sign-in';
+import { fileSize } from '../lib/agent-details.mjs';
 
 // #194: the Library of an Agent is the work folder of its own Engine profile, read through the Engine and never copied
 // into gtmworks. The Owner and Managers open it — each folder with how many files it holds and when the newest was saved,
@@ -33,6 +34,7 @@ test.beforeAll(async({},testInfo)=>{
  fake.settings.files.set(`${work}/empty`,[]);
  fake.settings.fileBytes.set(`${work}/brief.md`,{body:brief,type:'text/markdown'});
  query(`do $$ begin
+   insert into public.agent_profiles(agent_id,company_id) values ('${agent}','${company}');
    insert into public.hermes_agents(id,company_id,name,speciality,is_default,profile) values ('${agent}','${company}','Librarian','Keeps the files.',false,'${profile}');
    insert into public.company_profiles(company_id,profile,tools_level,tools_policy) select id,'${companyProfile}',agent_level,public.engine_tool_policy() from public.companies where id='${company}'
     on conflict (company_id) do update set profile=excluded.profile,tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false;
@@ -66,9 +68,9 @@ test('the Owner opens the Agent\'s Library above its files, a folder inside it, 
  await expect(library.getByRole('button',{name:/^empty/})).toHaveAccessibleName(/^empty Empty$/);
  await expect(library.getByRole('link',{name:'Download brief.md',exact:true})).toHaveAttribute('href',`/c/rs-learning/agent-files/${agent}?name=brief.md`);
  const briefRow=library.locator('li.lib-file').filter({hasText:'brief.md'});
- await expect(briefRow.locator('.panel-row__d')).toContainText('2 KB');
+ await expect(briefRow.locator('.panel-row__d')).toContainText(fileSize(Buffer.byteLength(brief)));
  await expect(briefRow.locator('time')).toHaveAttribute('datetime',new Date(at*1000).toISOString());
- await expect(library.locator('.lib-hint')).toHaveText('What Librarian makes is saved here automatically. You can view and download it, and ask for edits in the chat.');
+ await expect(library.locator('.lib-hint')).toHaveText('Files in Librarian’s work folder show here. You can view and download them, and ask for edits in the chat.');
 
  // A folder opens in place with its own count of files, the focus on the way back to the Library (the reference's
  // lib-open focuses #lib-root), and the way back puts the focus on that folder's row; a folder inside a folder opens

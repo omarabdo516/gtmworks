@@ -139,7 +139,7 @@ test('the Files tab lists the Agent\'s Card files and the reader\'s own Conversa
  await tab(details,'Files').click();
  const panel=details.getByRole('tabpanel');
  await expect(panel).toHaveAttribute('aria-labelledby','dp-tab-files');
- await expect(panel.locator('.dp-label > span')).toHaveText('Files 2');
+ await expect(panel.locator('#dp-files-h > span')).toHaveText('Files 2');
  const rows=panel.locator('.panel-row');
  await expect(rows.locator('.panel-row__t')).toHaveText(['audiences.csv','june-brief.pdf']);
  await expect(rows.locator('.panel-row__d')).toHaveText(['18 KB · Plan the June campaign','86 KB · June campaign']);
@@ -163,7 +163,7 @@ test('a Contributor sees the Card file and their own Conversation file, never an
  const details=await openDetails(page,'reviewer@example.com',ads,'Meta Ads');
  await tab(details,'Files').click();
  const panel=details.getByRole('tabpanel');
- await expect(panel.locator('.dp-label > span')).toHaveText('Files 2');
+ await expect(panel.locator('#dp-files-h > span')).toHaveText('Files 2');
  await expect(panel.locator('.panel-row__t')).toHaveText(['reviewer-notes.txt','june-brief.pdf']);
  await expect(panel).not.toContainText('audiences.csv');
  expect((await page.request.get(`/c/rs-learning/files/conversation/${fileId('reviewer-notes.txt')}`)).status()).toBe(200);
@@ -196,7 +196,7 @@ test('every file of the Agent is listed, past fifty, and the heading counts what
  const details=await openDetails(page,'omar@example.com',seo,'SEO');
  await tab(details,'Files').click();
  const panel=details.getByRole('tabpanel');
- await expect(panel.locator('.dp-label > span')).toHaveText('Files 51');
+ await expect(panel.locator('#dp-files-h > span')).toHaveText('Files 51');
  await expect(panel.locator('.panel-row')).toHaveCount(51);
  await expect(panel.locator('.panel-row__t').first()).toHaveText('file-51.txt');
  await expect(panel.locator('.panel-row__t').last()).toHaveText('file-1.txt');

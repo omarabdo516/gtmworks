@@ -30,6 +30,9 @@ async function chooseLanguage(page:Page,language:'en'|'ar') {
 }
 const openDetails=async(page:Page,email:string,agent:string,name:string)=>{
  await page.setViewportSize({width:1440,height:900});
+ // A test may open two Agents' details, and a second sign-in from a signed-in page lands on the chat rather than
+ // /sign-in (tests/sign-in.ts): sign out first, as the specs that sign in twice do.
+ await page.context().clearCookies();
  await signIn(page,email,`/c/rs-learning/chat/${agent}`);
  const details=page.getByRole('complementary',{name:`Details: ${name}`,exact:true});
  await expect(details).toBeVisible();
@@ -148,23 +151,24 @@ test('the Owner edits a note in place, cancels one, and a note too long is refus
  const details=await openDetails(page,'omar@example.com',ads,'Ads');
  await details.getByRole('tab',{name:'Memory',exact:true}).click();
  const panel=memoryTab(details);
- const edit=()=>panel.getByRole('button',{name:/^Edit: Runs the June campaign/});
- await edit().click();
+ // The action's name carries the note's current text, so each save or Cancel is found by the text it now holds.
+ const edit=(text:string)=>panel.getByRole('button',{name:new RegExp(`^Edit: ${text}`)});
+ await edit('Runs the June campaign').click();
  const field=panel.getByRole('textbox',{name:'Edit note'});
  await expect(field).toBeFocused();
  await field.fill('Runs the July campaign.');
  await panel.getByRole('button',{name:'Save',exact:true}).click();
  await expect(panel.locator('.mem-note__t')).toHaveText(['Runs the July campaign.']);
  await expect(page.locator('.toast')).toContainText('Note updated');
- await expect(edit()).toBeFocused();
+ await expect(edit('Runs the July campaign')).toBeFocused();
 
- await edit().click();
+ await edit('Runs the July campaign').click();
  await field.fill('Runs the August campaign.');
  await panel.getByRole('button',{name:'Cancel',exact:true}).click();
  await expect(panel.locator('.mem-note__t')).toHaveText(['Runs the July campaign.']);
- await expect(edit()).toBeFocused();
+ await expect(edit('Runs the July campaign')).toBeFocused();
 
- await edit().click();
+ await edit('Runs the July campaign').click();
  await field.fill('x'.repeat(3000));
  await panel.getByRole('button',{name:'Save',exact:true}).click();
  await expect(panel.getByText('That note is too long for the memory. Make it shorter.')).toBeVisible();
@@ -200,7 +204,8 @@ test('a forgotten note leaves the Engine when its toast ends, so a reload no lon
  const panel=memoryTab(details);
  await panel.getByRole('button',{name:/^Forget this: Runs the June campaign/}).click();
  await expect(panel.locator('.mem-note__t')).toHaveCount(0);
- await expect(panel.getByRole('button',{name:/^Forget this: Runs the June campaign/})).toBeFocused();
+ // With the only note gone, the search field takes the keyboard, where the reference puts it.
+ await expect(panel.getByRole('searchbox',{name:'Search memory',exact:true})).toBeFocused();
  await expect(page.locator('.toast')).toBeHidden({timeout:8000});
  // The removal is the contract's own call, made once when the toast ends.
  await expect.poll(()=>fake.settings.managementRequests.filter(request=>request.method==='DELETE'&&String(request.path).startsWith('/api/learning/node')).length).toBe(1);

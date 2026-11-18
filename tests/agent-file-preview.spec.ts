@@ -42,6 +42,7 @@ test.beforeAll(async({},testInfo)=>{
  fake.settings.fileBytes.set(`${work}/shot.png`,{body:png,type:'image/png'});
  fake.settings.fileBytes.set(`${work}/logo.svg`,{body:svg,type:'image/svg+xml'});
  query(`do $$ begin
+   insert into public.agent_profiles(agent_id,company_id) values ('${agent}','${company}');
    insert into public.hermes_agents(id,company_id,name,speciality,is_default,profile) values ('${agent}','${company}','Librarian','Keeps the files.',false,'${profile}');
    insert into public.company_profiles(company_id,profile,tools_level,tools_policy) select id,'${companyProfile}',agent_level,public.engine_tool_policy() from public.companies where id='${company}'
     on conflict (company_id) do update set profile=excluded.profile,tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false;

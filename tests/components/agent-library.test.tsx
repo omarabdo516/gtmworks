@@ -59,8 +59,8 @@ test('the Library counts every file of the Agent, and each folder row says how m
  // The file's time is the Engine's, drawn as the log draws one, and its download is the route beside it.
  expect(section.element().querySelector('time')?.getAttribute('datetime')).toBe(at);
  await expect.element(screen.getByRole('link', { name: 'Download brief.md' })).toHaveAttribute('href', '/c/rs-learning/agent-files/ag-1?name=brief.md');
- // The hint names the Agent, and the page holds the route's answer alone: no engine address, no path on its disk.
- expect(section.element().textContent).toContain('What Lead makes is saved here automatically.');
+ // The hint names the Agent and describes the folder, promising nothing the Engine does not do.
+ expect(section.element().textContent).toContain('Files in Lead’s work folder show here.');
  expect(screen.container.textContent).not.toContain('/opt/');
  expect(asked).toEqual(['']);
 });
@@ -104,6 +104,14 @@ test('a raster file\'s row is its own picture, drawn through its download route,
  expect(rows[1].querySelector('.lib-thumb svg')).not.toBeNull();
 });
 
+test('a file name\'s base takes its direction from its first strong character, and its extension stays left to right', async () => {
+ folders({ '': [{ name: '_draft.md', isFolder: false, size: 12, time: at, files: null, latest: null }] });
+ const screen = await drawn();
+ await expect.element(screen.getByRole('button', { name: /^_draft\.md/ })).toBeVisible();
+ const name = screen.container.querySelector('li.lib-file .panel-row__t');
+ expect([...name!.querySelectorAll('bdi')].map(part => [part.textContent, part.getAttribute('dir')])).toEqual([['_draft', 'auto'], ['.md', 'ltr']]);
+});
+
 test('a download is the reference\'s toast and its own file, and an empty folder says it is empty', async () => {
  folders(work);
  const screen = await drawn();
@@ -116,7 +124,7 @@ test('a download is the reference\'s toast and its own file, and an empty folder
 
 test('an empty Library and a Library that cannot be read each say so', async () => {
  folders({ '': [] });
- await expect.element((await drawn()).getByText('Nothing here yet. What Lead makes is saved in this folder, and you can download it.')).toBeVisible();
+ await expect.element((await drawn()).getByText('Nothing here yet. The files in Lead’s work folder will show here, and you can download them.')).toBeVisible();
  folders({ '': null });
  await expect.element((await drawn()).getByText('The Library can’t be read right now. Try again in a minute.')).toBeVisible();
 });
@@ -125,7 +133,7 @@ test('in Arabic the Library reads as the reference words it, and the folder chev
  folders(work);
  const screen = await drawn('ar');
  await expect.element(screen.getByRole('region', { name: 'مكتبة Lead 4' })).toBeVisible();
- expect(screen.container.textContent).toContain('اللي Lead بيعمله بيتحفظ هنا لوحده.');
+ expect(screen.container.textContent).toContain('ملفات Lead اللي في فولدر شغله بتظهر هنا.');
  await expect.element(screen.getByRole('button', { name: /^reports/ })).toHaveAccessibleName(/^reports ملفين · آخر واحد/);
  await expect.element(screen.getByRole('link', { name: 'نزّل brief.md' })).toBeVisible();
  await screen.getByRole('button', { name: /^reports/ }).click();

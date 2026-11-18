@@ -94,6 +94,6 @@ export async function agentDetails(db:Db,{company,agent,name:named,slug,me,role:
 
  return {status:agentStatus({waitingMine:waiting.some(item=>item.card_id!=null&&ids.includes(item.card_id)),running:!!run}),tab:pickTab(tab),
   tabs:detailsTabs({t,slug,agent,activity,tools:<ConnectedTools company={company} agent={agent} name={name} owner={role==='owner'}/>,tasks:tasksTab,files:filesList,library,fileCount:(cardFileCount??0)+(talkFileCount??0),
-   memory:memory.state==='found'?<AgentMemory company={company} agent={{id:agent,name}} notes={memory.notes} main={memory.main} canReset={role==='owner'} canEdit={role==='owner'||role==='manager'} canForget={role==='owner'} knowledgeHref={companyKnowledgeHref(slug,role)}/>:undefined,
+   memory:memory.state==='found'?<AgentMemory key={agent} company={company} agent={{id:agent,name}} notes={memory.notes} main={memory.main} canReset={role==='owner'} canEdit={role==='owner'||role==='manager'} canForget={role==='owner'} knowledgeHref={companyKnowledgeHref(slug,role)}/>:undefined,
    log,logCount:count??rows.length})};
 }

@@ -170,6 +170,30 @@ test('after a save the Engine gives the note a new id, and the focus returns to 
  await expect.element(screen.getByRole('button', { name: /^Edit: Omar works in Cairo, Egypt\./ })).toHaveFocus();
 });
 
+test('after a save from a search the focus returns to the saved note by its place in all the notes, or to the search when its text no longer matches', async () => {
+ const send = responder({ edited: true });
+ vi.stubGlobal('fetch', send);
+ const screen = await drawn({ canEdit: true, notes: three });
+ await userEvent.fill(screen.getByRole('searchbox', { name: 'Search memory' }), 'cairo');
+ expect([...screen.container.querySelectorAll('.mem-note__t')].map(node => node.textContent)).toEqual(['Omar works in Cairo.']);
+ await screen.getByRole('button', { name: /^Edit: Omar works/ }).click();
+ await userEvent.fill(screen.getByRole('textbox', { name: 'Edit note' }), 'Omar works in Cairo, Egypt.');
+ await screen.getByRole('button', { name: 'Save' }).click();
+ await expect.poll(() => send.mock.calls.length).toBe(1);
+ // The note is the second of all three, though it was the first (and only) the query kept.
+ const saved = [three[0], { id: 'memory:profile:1:9f8e7d6c5b4a', text: 'Omar works in Cairo, Egypt.' }, three[2]];
+ await screen.rerender(view({ canEdit: true, notes: saved }));
+ await expect.element(screen.getByRole('button', { name: /^Edit: Omar works in Cairo, Egypt\./ })).toHaveFocus();
+ // Saved again to a text the query does not hold, the note is not drawn: the search field takes the focus.
+ await screen.getByRole('button', { name: /^Edit: Omar works in Cairo, Egypt\./ }).click();
+ await userEvent.fill(screen.getByRole('textbox', { name: 'Edit note' }), 'Omar works in Giza.');
+ await screen.getByRole('button', { name: 'Save' }).click();
+ await expect.poll(() => send.mock.calls.length).toBe(2);
+ await screen.rerender(view({ canEdit: true, notes: [three[0], { id: 'memory:profile:1:1a2b3c4d5e6f', text: 'Omar works in Giza.' }, three[2]] }));
+ await expect.element(screen.getByRole('searchbox', { name: 'Search memory' })).toHaveFocus();
+ expect(screen.container.querySelectorAll('.mem-note')).toHaveLength(0);
+});
+
 test('a note the Engine refuses as too long shows one line saying so, and stays in the editor', async () => {
  vi.stubGlobal('fetch', responder({ error: 'agentMemoryRefused' }, 400));
  const screen = await drawn({ canEdit: true });
@@ -200,11 +224,27 @@ test('Forget this hides the note at once, gives the focus to the next Forget thi
  expect(document.querySelector('.toast')?.textContent).toContain('Ads forgot this note');
  expect(document.querySelector('.toast__act')?.textContent).toBe('Undo');
  await vi.advanceTimersByTimeAsync(1);
- await expect.poll(() => send.mock.calls.length).toBe(1);
+ // The timer calls fetch synchronously, so it is checked before any poll: a poll would advance the fake clock again.
+ expect(send).toHaveBeenCalledTimes(1);
  await expect.element(screen.getByRole('button', { name: /^Forget this: Omar works/ })).toHaveFocus();
  const [url, init] = send.mock.calls[0];
  expect([url, init.method, String(init.body)]).toEqual(['/api/agent-memory', 'DELETE', JSON.stringify({ company: 'co-1', agent: 'ag-1', note: 'memory:memory:0:4d2c1b0a9f8e' })]);
  await expect.poll(() => refresh.mock.calls.length).toBe(1);
+});
+
+test('a note forgotten for one Agent is removed from that Agent even if another Agent is drawn before the toast ends', async () => {
+ const send = responder({ forgotten: true });
+ vi.stubGlobal('fetch', send);
+ const screen = await drawn({ canForget: true });
+ vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+ // The panel stays mounted (as the details panel and Settings do) while Ads gives way to SEO.
+ (screen.getByRole('button', { name: /^Forget this: Prefers short/ }).element() as HTMLButtonElement).click();
+ await vi.advanceTimersByTimeAsync(0);
+ await screen.rerender(view({ canForget: true, agent: { id: 'ag-2', name: 'SEO' }, notes: [{ id: 'memory:memory:5:9a8b7c6d5e4f', text: 'Writes the blog.' }] }));
+ await vi.advanceTimersByTimeAsync(6000);
+ expect(send).toHaveBeenCalledTimes(1);
+ const [url, init] = send.mock.calls[0];
+ expect([url, init.method, String(init.body)]).toEqual(['/api/agent-memory', 'DELETE', JSON.stringify({ company: 'co-1', agent: 'ag-1', note: 'memory:memory:0:4d2c1b0a9f8e' })]);
 });
 
 test('Undo puts the note back in its place with "Note restored", and nothing is removed from the Engine', async () => {
@@ -278,17 +318,25 @@ test('a search with no match says so, and Clear search empties the field, gives 
  expect(screen.container.querySelectorAll('.mem-note')).toHaveLength(3);
 });
 
-test('Escape in a filled search empties it as Clear search does, and in an empty field changes nothing', async () => {
+test('Escape in a filled search empties it as Clear search does and stops there, and in an empty field reaches the panel', async () => {
  const screen = await drawn({ notes: three });
  const field = screen.getByRole('searchbox', { name: 'Search memory' });
- await userEvent.fill(field, 'cairo');
- expect(screen.container.querySelectorAll('.mem-note')).toHaveLength(1);
- await userEvent.keyboard('{Escape}');
- expect((field.element() as HTMLInputElement).value).toBe('');
- expect(screen.container.querySelectorAll('.mem-note')).toHaveLength(3);
- await userEvent.keyboard('{Escape}');
- expect(screen.container.querySelectorAll('.mem-note')).toHaveLength(3);
- await expect.element(field).toHaveFocus();
+ // A listener where the details panel keeps its own Escape (DetailsShell): the filled field must not reach it.
+ const seen: string[] = [];
+ const listener = (event: KeyboardEvent) => { if (event.key === 'Escape') seen.push(event.key); };
+ document.addEventListener('keydown', listener);
+ try {
+  await userEvent.fill(field, 'cairo');
+  expect(screen.container.querySelectorAll('.mem-note')).toHaveLength(1);
+  await userEvent.keyboard('{Escape}');
+  expect((field.element() as HTMLInputElement).value).toBe('');
+  expect(screen.container.querySelectorAll('.mem-note')).toHaveLength(3);
+  expect(seen, 'the filled field kept its Escape').toHaveLength(0);
+  await userEvent.keyboard('{Escape}');
+  expect(screen.container.querySelectorAll('.mem-note')).toHaveLength(3);
+  await expect.element(field).toHaveFocus();
+  await expect.poll(() => seen.length).toBe(1);
+ } finally { document.removeEventListener('keydown', listener); }
 });
 
 test('the intro names the Agent, and offers the edit line only to the Owner, who may both edit and forget a note', async () => {

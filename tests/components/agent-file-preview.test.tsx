@@ -92,6 +92,22 @@ test('a file\'s row opens the preview with the keyboard on Download, and the clo
  await closedBack(screen, 'brief.md');
 });
 
+test('Escape in the preview closes it without reaching the details panel behind it', async () => {
+ await page.viewport(1280, 900);
+ engine();
+ const screen = await drawn();
+ // A listener where the details panel keeps its own Escape (DetailsShell).
+ const seen: string[] = [];
+ const listener = (event: KeyboardEvent) => { if (event.key === 'Escape') seen.push(event.key); };
+ document.addEventListener('keydown', listener);
+ try {
+  await open(screen, 'brief.md');
+  await userEvent.keyboard('{Escape}');
+  await closedBack(screen, 'brief.md');
+  expect(seen, 'the dialog kept its Escape').toHaveLength(0);
+ } finally { document.removeEventListener('keydown', listener); }
+});
+
 test('a PNG is drawn as a picture from its download route, in the dialog and in its head, while a vector image is never drawn: its icon and Download only', async () => {
  engine();
  const screen = await drawn();

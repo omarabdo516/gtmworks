@@ -68,6 +68,9 @@ export function AgentFilePreview({company,slug,agent,agentName,file,onClosed}:{c
  else if(body?.kind==='none') content=<div className="pv-none"><ShellIcon name="file"/><span><FileName name={file.name}/></span></div>;
 
  return <dialog ref={box} className={`pv${leaving?' is-closing':''}`} aria-labelledby="preview-title"
+  // Escape belongs to this dialog first: it closes the preview and must not reach the details panel's own document-level
+  // Escape listener (DetailsShell), which would close the panel behind it too.
+  onKeyDown={event=>{ if(event.key==='Escape') event.stopPropagation(); }}
   onCancel={event=>{ if(event.cancelable) { event.preventDefault(); close(); } }} onClose={closed}
   onClick={event=>{ if(event.target===event.currentTarget) close(); }}>
   <div className="pv__inner">

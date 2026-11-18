@@ -28,16 +28,19 @@ export function AgentMemory({company,agent,notes,main,canReset,canEdit,canForget
  const [editing,setEditing]=useState<string|null>(null); const [draft,setDraft]=useState(''); const [editError,setEditError]=useState<'empty'|'tooLong'|'stale'|'failed'|null>(null); const [saving,setSaving]=useState(false);
  const [hidden,setHidden]=useState<string[]>([]); const [forgetError,setForgetError]=useState(false);
  const [query,setQuery]=useState('');
- // Where the focus goes after the next draw: back to a note's Edit — by its id, or by its place in the list when the
+ // Where the focus goes after the next draw: back to a note's Edit — by its id, or by its place in the notes when the
  // Engine gives it a new one (a note's id is a digest of its text, so a saved note comes back under another) — or to a
- // note's Forget this (the search when none).
- type FocusAfter={edit?:string,editAt?:{at:number,text:string},forget?:string|'search'};
+ // note's Forget this (the search when none), or to the search field when a saved note no longer matches the query.
+ type FocusAfter={edit?:string,editAt?:{at:number,text:string},forget?:string|'search',search?:true};
  const focusAfter=useRef<FocusAfter|null>(null);
  const resetButton=useRef<HTMLButtonElement>(null); const cancelButton=useRef<HTMLButtonElement>(null); const asked=useRef(false);
  const editor=useRef<HTMLTextAreaElement>(null); const search=useRef<HTMLInputElement>(null);
  const editButtons=useRef(new Map<string,HTMLButtonElement>()); const forgetButtons=useRef(new Map<string,HTMLButtonElement>());
- // The note waiting on its toast, and the clock that removes it from the Engine when the toast ends.
- const forgetting=useRef<{note:MemoryNote,timer:number}|null>(null);
+ // The note waiting on its toast, the Agent and Company it was forgotten for, and the clock that removes it from the
+ // Engine when the toast ends. The target is kept with the note, so a panel that stays mounted while another Agent is
+ // drawn removes the note from the Agent it was forgotten for, never from the Agent showing now.
+ type ForgetTarget={company:string,agent:string};
+ const forgetting=useRef<{note:MemoryNote,target:ForgetTarget,timer:number}|null>(null);
  // The question takes the focus, on Cancel (the harmless answer); closing it gives it back to "Reset memory".
  useEffect(()=>{
   if(asking) cancelButton.current?.focus();
@@ -63,7 +66,8 @@ export function AgentMemory({company,agent,notes,main,canReset,canEdit,canForget
    return;
   }
   focusAfter.current=null;
-  if(request.edit) editButtons.current.get(request.edit)?.focus();
+  if(request.search) search.current?.focus();
+  else if(request.edit) editButtons.current.get(request.edit)?.focus();
   else if(request.forget==='search') search.current?.focus();
   else if(request.forget) forgetButtons.current.get(request.forget)?.focus();
  },[editing,hidden,notes]);
@@ -90,9 +94,12 @@ export function AgentMemory({company,agent,notes,main,canReset,canEdit,canForget
   try {
    const response=await fetch('/api/agent-memory',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({company,agent:agent.id,note:note.id,text}),cache:'no-store'});
    if(response.ok) {
-    const at=matched.findIndex(each=>each.id===note.id);
+    // The note's place is its place in all the notes, not in the ones the query keeps, so a search that keeps one of
+    // several still finds the row it saved. A saved note the query no longer matches is not drawn: the search field,
+    // where the person can widen the query, takes the focus instead.
+    const at=notes.findIndex(each=>each.id===note.id);
     setEditing(null); setSaving(false);
-    focusAfter.current=at<0?null:{editAt:{at,text}};
+    focusAfter.current=found&&!text.toLowerCase().includes(found.toLowerCase())?{search:true}:at<0?null:{editAt:{at,text}};
     toast(t('memoryUpdated')); router.refresh(); return;
    }
    const body=await response.json().catch(()=>null) as {error?:string}|null;
@@ -101,9 +108,9 @@ export function AgentMemory({company,agent,notes,main,canReset,canEdit,canForget
   } catch { setEditError('failed'); setSaving(false); editor.current?.focus(); }
  };
  const reveal=(id:string)=>setHidden(shown=>shown.filter(each=>each!==id));
- const removeNote=async(note:MemoryNote,keepalive=false)=>{
+ const removeNote=async(target:ForgetTarget,note:MemoryNote,keepalive=false)=>{
   try {
-   const response=await fetch('/api/agent-memory',{method:'DELETE',headers:{'content-type':'application/json'},body:JSON.stringify({company,agent:agent.id,note:note.id}),cache:'no-store',keepalive});
+   const response=await fetch('/api/agent-memory',{method:'DELETE',headers:{'content-type':'application/json'},body:JSON.stringify({company:target.company,agent:target.agent,note:note.id}),cache:'no-store',keepalive});
    if(!response.ok) { reveal(note.id); setForgetError(true); return; }
    router.refresh();
   } catch { reveal(note.id); setForgetError(true); }
@@ -115,7 +122,7 @@ export function AgentMemory({company,agent,notes,main,canReset,canEdit,canForget
  useEffect(()=>{
   const leave=()=>{
    const waiting=forgetting.current; if(!waiting) return;
-   forgetting.current=null; window.clearTimeout(waiting.timer); void removeLatest.current(waiting.note,true);
+   forgetting.current=null; window.clearTimeout(waiting.timer); void removeLatest.current(waiting.target,waiting.note,true);
   };
   window.addEventListener('pagehide',leave);
   return ()=>{ window.removeEventListener('pagehide',leave); leave(); };
@@ -123,12 +130,13 @@ export function AgentMemory({company,agent,notes,main,canReset,canEdit,canForget
  const forget=(note:MemoryNote)=>{
   // A second forget while a toast is up removes the first note at once, as its toast gives way to the new one.
   const earlier=forgetting.current;
-  if(earlier) { forgetting.current=null; window.clearTimeout(earlier.timer); void removeLatest.current(earlier.note); }
+  if(earlier) { forgetting.current=null; window.clearTimeout(earlier.timer); void removeLatest.current(earlier.target,earlier.note); }
+  const target={company,agent:agent.id};
   const at=matched.findIndex(each=>each.id===note.id);
   const next=matched[at+1]??matched[at-1]??null;
   setHidden(ids=>[...ids,note.id]); setForgetError(false); focusAfter.current={forget:next?.id??'search'};
-  const timer=window.setTimeout(()=>{ forgetting.current=null; void removeLatest.current(note); },forgetDelay);
-  forgetting.current={note,timer};
+  const timer=window.setTimeout(()=>{ forgetting.current=null; void removeLatest.current(target,note); },forgetDelay);
+  forgetting.current={note,target,timer};
   toast(t('memoryForgot',agent.name),{action:{label:t('memoryUndo'),run:()=>undo()}});
  };
  const undo=()=>{
@@ -152,7 +160,7 @@ export function AgentMemory({company,agent,notes,main,canReset,canEdit,canForget
   {main&&<p className="mem-main">{t('memoryMain',agent.name)}</p>}
   <div className="mem-search"><label className="sr-only" htmlFor="mem-q">{t('memorySearch')}</label>
    <input type="search" id="mem-q" ref={search} autoComplete="off" placeholder={t('memorySearch')} value={query} onChange={event=>setQuery(event.target.value)}
-    onKeyDown={event=>{ if(event.key==='Escape'&&query) { event.preventDefault(); setQuery(''); } }}/></div>
+    onKeyDown={event=>{ if(event.key==='Escape'&&query) { event.preventDefault(); event.stopPropagation(); setQuery(''); } }}/></div>
   {asking&&<div className="panel-card mem-confirm">
    <p className="panel-empty">{t('memoryResetAsk',agent.name)}</p>
    <div className="panel-form__row panel-form__row--end">

@@ -153,11 +153,17 @@ test('the preview service reads one Agent\'s file for the Company that sees it, 
   assert.equal((await agentFilePreview(database().db,{company,agent,hermes:at,name:'q3.csv'})).preview?.kind,'table');
   await withFile(fake,'shot.png',new Uint8Array([137,80,78,71,0,1]),'image/png');
   assert.deepEqual((await agentFilePreview(database().db,{company,agent,hermes:at,name:'shot.png'})).preview,{name:'shot.png',kind:'image',type:'image/png',byteSize:6,truncated:false,text:null});
-  // A vector image and a page are never handed content, even though the Engine read them as text.
+  // A raster over the Engine's read ceiling is still drawn: its listed size answers, and no read-text is asked for it.
+  fake.settings.files.set(work,[{name:'big.png',size:700*1024,mtime}]);
+  const before=texts(fake).length;
+  assert.deepEqual((await agentFilePreview(database().db,{company,agent,hermes:at,name:'big.png'})).preview,{name:'big.png',kind:'image',type:'image/png',byteSize:700*1024,truncated:false,text:null});
+  assert.equal(texts(fake).length,before,'a picture is answered from the listing, with no read-text');
+  // A vector image and a page are never handed content; their answer is the listing's too, so no read-text is asked.
   await withFile(fake,'logo.svg','<svg onload="alert(1)"></svg>','image/svg+xml');
-  assert.deepEqual((await agentFilePreview(database().db,{company,agent,hermes:at,name:'logo.svg'})).preview,{name:'logo.svg',kind:'none',type:'image/svg+xml',byteSize:29,truncated:false,text:null});
+  assert.deepEqual((await agentFilePreview(database().db,{company,agent,hermes:at,name:'logo.svg'})).preview,{name:'logo.svg',kind:'none',type:'application/octet-stream',byteSize:29,truncated:false,text:null});
   await withFile(fake,'page.html','<script>alert(1)</script>','text/html');
-  assert.deepEqual((await agentFilePreview(database().db,{company,agent,hermes:at,name:'page.html'})).preview,{name:'page.html',kind:'none',type:'text/html',byteSize:25,truncated:false,text:null});
+  assert.deepEqual((await agentFilePreview(database().db,{company,agent,hermes:at,name:'page.html'})).preview,{name:'page.html',kind:'none',type:'application/octet-stream',byteSize:25,truncated:false,text:null});
+  assert.equal(texts(fake).length,before,'none of the three asks the Engine for text');
   // A hidden Agent, another Company's Agent and no Engine each find nothing.
   assert.deepEqual(await agentFilePreview(database({agents:[]}).db,{company,agent,hermes:at,name:'brief.md'}),{state:'missing',preview:null});
   assert.deepEqual(await agentFilePreview(database().db,{company:otherCompany,agent,hermes:at,name:'brief.md'}),{state:'missing',preview:null});
@@ -190,7 +196,7 @@ test('the read route answers an Owner and a Manager, and a Contributor, a Viewer
   await withFile(fake,'logo.svg','<svg onload="alert(1)"></svg>','image/svg+xml');
   const svg=await ask(route(database().db),{company,agent,name:'logo.svg'});
   assert.equal(svg.status,200);
-  assert.deepEqual(await svg.json(),{name:'logo.svg',kind:'none',type:'image/svg+xml',byteSize:29,truncated:false,text:null});
+  assert.deepEqual(await svg.json(),{name:'logo.svg',kind:'none',type:'application/octet-stream',byteSize:29,truncated:false,text:null});
   // A Contributor and a Viewer are refused before the Agent list is read.
   for(const role of ['contributor','viewer']) {
    const given=database({role});
