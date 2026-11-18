@@ -92,7 +92,7 @@ declare result bigint; begin
  if btrim(coalesce(card_title,''))='' then raise exception 'invalid idea' using errcode='22023'; end if;
  if not exists(select 1 from public.work_stages where company_id=c and id=s and kind='ideas') then raise exception 'no Ideas stage'; end if;
  if agent is null or not exists(select 1 from public.hermes_agents h where h.company_id=c and h.id=agent)
-  or not public.agent_visible_to(c,auth.uid(),agent) then raise exception 'agent not found'; end if;
+  or not public.can_see_agent(c,agent) then raise exception 'agent not found'; end if;
  perform set_config('work.idea','yes',true);
  insert into public.work_cards(company_id,stage_id,title,agent_id,board_order) values(c,s,card_title,agent,
   coalesce((select min(w.board_order) from public.work_cards w join public.work_stages t on t.company_id=w.company_id and t.id=w.stage_id
