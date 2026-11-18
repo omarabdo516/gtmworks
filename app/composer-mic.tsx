@@ -56,6 +56,9 @@ export function useComposerDictation({target,insert,field,onStart}:{target?:Dict
  const stream=useRef<MediaStream|null>(null);
  const audio=useRef<{context:AudioContext,analyser:AnalyserNode}|null>(null);
  const phase=useRef(0); const mounted=useRef(true);
+ // Each recording is its own session: a permission that comes back late, or a recorder's callback from a session the
+ // person already replaced, is let go instead of taking the live session's stream, audio or recorder.
+ const sessionNo=useRef(0);
  const insertNow=useRef(insert); insertNow.current=insert;
  const focusField=useRef(field); focusField.current=field;
  // The field was hidden while it recorded: the focus goes back once React has drawn it again.
@@ -104,6 +107,7 @@ export function useComposerDictation({target,insert,field,onStart}:{target?:Dict
  }
  async function start(mode:Mode) {
   if(live.current||!targetNow.current||unavailable) return;
+  const id=++sessionNo.current;
   finishing.current=false;
   setError(''); setSeconds(0); counted.current=0; put({mode,started:Date.now()});
   onStart?.();
@@ -118,8 +122,9 @@ export function useComposerDictation({target,insert,field,onStart}:{target?:Dict
   try {
    if(!navigator.mediaDevices?.getUserMedia) throw new Error('no microphone');
    const media=await navigator.mediaDevices.getUserMedia({audio:true});
-   // Cancelled while the browser was asking: its tracks are let go at once.
-   if(!live.current||!mounted.current) { for(const track of media.getTracks?.()??[]) { try { track.stop(); } catch {} } return; }
+   // Cancelled while the browser was asking, or replaced by a later session: its tracks are let go at once, and the
+   // live session's stream, audio and recorder are left alone.
+   if(id!==sessionNo.current||!live.current||!mounted.current) { for(const track of media.getTracks?.()??[]) { try { track.stop(); } catch {} } return; }
    stream.current=media;
    let context:AudioContext|undefined;
    try {
@@ -134,9 +139,10 @@ export function useComposerDictation({target,insert,field,onStart}:{target?:Dict
    let made:MediaRecorder;
    try { made=new Recorder(media,{mimeType:'audio/webm'}); } catch { made=new Recorder(media); }
    chunks.current=[];
-   made.ondataavailable=event=>{ if(event.data?.size) chunks.current.push(event.data); };
+   made.ondataavailable=event=>{ if(id!==sessionNo.current) return; if(event.data?.size) chunks.current.push(event.data); };
    recorder.current=made; made.start();
   } catch {
+   if(id!==sessionNo.current) return;
    clearTimers(); stopAudio(); put(null); setSeconds(0); setBars(baseBars()); focusAfterDraw();
    if(mounted.current) setError('chatDictationDenied');
   }
@@ -164,6 +170,7 @@ export function useComposerDictation({target,insert,field,onStart}:{target?:Dict
  function finish(keep:boolean) {
   if(!live.current||finishing.current) return;
   finishing.current=true;
+  const id=sessionNo.current;
   put(null); clearTimers(); stopWave(); setSeconds(0);
   const made=recorder.current; recorder.current=null;
   if(!keep) {
@@ -171,6 +178,7 @@ export function useComposerDictation({target,insert,field,onStart}:{target?:Dict
    stopAudio(); setBars(baseBars()); focusAfterDraw(); finishing.current=false; return;
   }
   const done=()=>{
+   if(id!==sessionNo.current) { finishing.current=false; return; }
    stopAudio();
    if(!chunks.current.length) { focusAfterDraw(); finishing.current=false; return; }
    void send(chunks.current[0]); finishing.current=false;

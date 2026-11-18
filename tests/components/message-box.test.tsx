@@ -481,6 +481,36 @@ test('a quick click starts and a second click finishes; Escape and the cross can
  expect(engine.calls).toEqual([]);
 });
 
+test('a permission that resolves after its session was cancelled starts no recorder and leaves the session that replaced it alone', async () => {
+ vi.useFakeTimers();
+ FakeRecorder.made = [];
+ const lateTrack = { stop: vi.fn() }; const nextTrack = { stop: vi.fn() };
+ const lateStream = { getTracks: () => [lateTrack], getAudioTracks: () => [lateTrack] };
+ const nextStream = { getTracks: () => [nextTrack], getAudioTracks: () => [nextTrack] };
+ let allow: (stream: MediaStream) => void = () => {};
+ vi.spyOn(navigator.mediaDevices, 'getUserMedia')
+  .mockImplementationOnce(() => new Promise<MediaStream>(resolve => { allow = resolve; }))
+  .mockImplementationOnce(async () => nextStream as unknown as MediaStream);
+ vi.stubGlobal('MediaRecorder', FakeRecorder);
+ const engine = dictate({ text: 'the second session' });
+ const screen = await voiced({ send: async () => null }); const button = boxOf(screen);
+ // A asks for the microphone and is cancelled while the browser still asks.
+ await pointer(button, 'pointerdown'); await flush();
+ act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); }); await flush();
+ // B starts and gets its stream.
+ await pointer(button, 'pointerdown'); await flush();
+ expect(FakeRecorder.made).toHaveLength(1);
+ // A's permission resolves late: its tracks are let go and B keeps recording.
+ await act(async () => { allow(lateStream as unknown as MediaStream); await Promise.resolve(); await Promise.resolve(); });
+ expect(lateTrack.stop).toHaveBeenCalled();
+ expect(FakeRecorder.made).toHaveLength(1);
+ await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+ await pointer(button, 'pointerup'); await flush();
+ await act(async () => { await vi.advanceTimersByTimeAsync(0); await Promise.resolve(); });
+ expect(nextTrack.stop, 'the recording that ended is the one that stops its microphone').toHaveBeenCalled();
+ expect(engine.calls).toHaveLength(1);
+});
+
 test('in Arabic the dictation hint names the listening language in Arabic (#160)', async () => {
  vi.useFakeTimers(); mic(); dictate({ language: 'ar-EG' });
  const screen = await voiced({ send: async () => null }, 'ar'); const button = boxOf(screen);
