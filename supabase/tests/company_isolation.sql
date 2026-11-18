@@ -7,7 +7,7 @@ create temp table isolation_matrix(name text primary key, fixed jsonb not null d
 insert into isolation_matrix(name) values
  ('agent_grants'),('agent_key_waits'),('agent_profile_leftovers'),('agent_profiles'),
  ('agent_requests'),('agent_rules'),('approval_steps'),
- ('channel_agents'),('channel_messages'),('channel_people'),('channel_permissions'),('channel_reads'),('channel_runs'),('channels'),
+ ('channel_agents'),('channel_invitees'),('channel_messages'),('channel_notes'),('channel_people'),('channel_permissions'),('channel_reads'),('channel_runs'),('channels'),
  ('company_app_sign_ins'),('company_audit'),('company_key_holds'),('company_key_unfinished'),('company_log'),
  ('company_profile_keepers'),('company_profiles'),('company_shared_spaces'),
  ('conversation_attachments'),('conversation_messages'),('conversation_notes'),('conversation_queued_turns'),
