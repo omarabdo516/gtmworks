@@ -5,6 +5,7 @@
   "channelMembers": "{0} members",
   "channelAgent": "{0} agent",
   "channelAgents": "{0} agents",
+  "channelWorking": "working",
   "channelNoAgents": "no agents",
   "channelRouteTip": "Agents read and reply only when someone calls them by name, like @{0}. Ordinary talk between members goes to no agent.",
   "channelRouteTipPlain": "Agents read and reply only when someone calls them by name. Ordinary talk between members goes to no agent.",

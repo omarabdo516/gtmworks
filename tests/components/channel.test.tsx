@@ -19,7 +19,7 @@ const reply: ChannelMessage = { id: 3, author: 'agent', name: 'Lead', face: 'c-1
 const record = (messages: ChannelMessage[], more: Partial<ChannelRecord> = {}): ChannelRecord => ({
  channel: { id: 'ch-1', company: 'co-1', kind: 'general' },
  members: [{ person: 'p-1', name: 'Omar', role: 'owner' }, { person: 'p-2', name: 'Sara Adel', role: 'manager' }],
- agents: [{ id: 'a-1', connection_id: 'c-1', name: 'Lead', speciality: 'General', main: true, only: false }],
+ agents: [{ id: 'a-1', connection_id: 'c-1', name: 'Lead', speciality: 'General', main: true, only: false, state: 'idle' }],
  writer: true, manage: false, managers: [], may: ['once', 'always', 'deny'], messages, open: messages.some(message => message.author === 'person' && message.mention?.state === 'open'), ...more,
 });
 const channel = (initial: ChannelRecord) => render(<LanguageProvider language="en"><ChannelView person="p-1" initial={initial}/></LanguageProvider>);
@@ -86,7 +86,7 @@ test('a Viewer reads the channel with no composer', async () => {
 const team = (more: Partial<ChannelRecord> = {}): ChannelRecord => record([peer], {
  channel: { id: 'ch-1', company: 'co-1', kind: 'team', name: 'Launch week' },
  members: [{ person: 'p-1', name: 'Omar', role: 'owner' }, { person: 'p-2', name: 'Sara Adel', role: 'manager' }, { person: 'p-3', name: 'Youssef', role: 'contributor' }],
- agents: [{ id: 'a-1', connection_id: 'c-1', name: 'Ads', speciality: 'Runs the ads.', main: false, only: false }, { id: 'a-2', connection_id: 'c-2', name: 'SEO', speciality: 'Writes the blog.', main: false, only: true }],
+ agents: [{ id: 'a-1', connection_id: 'c-1', name: 'Ads', speciality: 'Runs the ads.', main: false, only: false, state: 'idle' }, { id: 'a-2', connection_id: 'c-2', name: 'SEO', speciality: 'Writes the blog.', main: false, only: true, state: 'idle' }],
  managers: [{ name: 'Omar', role: 'owner' }, { name: 'Sara Adel', role: 'manager' }],
  ...more,
 });
@@ -100,10 +100,66 @@ test('a team channel\'s Agent hidden from the reader elsewhere is marked as show
  const details = screen.getByRole('complementary', { name: 'Channel details' });
  const rows = Array.from(details.element().querySelectorAll('.panel-row')).map(row => row.textContent);
  expect(rows).toContain('SEOShown to you in this channel only');
- expect(rows).toContain('AdsRuns the ads.');
+ expect(rows).toContain('AdsRuns the ads. · Idle');
  await expect.element(details.getByText('Members and agents are added and removed by Omar (Owner) and Sara Adel (Manager).')).toBeVisible();
  await expect.element(details.getByRole('button', { name: /^Remove/ })).not.toBeInTheDocument();
  await expect.element(details.getByRole('button', { name: 'Add a member' })).not.toBeInTheDocument();
+});
+
+// #206: each Agent in the channel's details carries its own state on its face and under its name, and the head counts
+// the ones working. Every Member sees it, a Viewer included, and only the state is drawn.
+test('each Agent in the channel\'s details shows its state on its face and under its name, and the head counts the ones working, for a Viewer too', async () => {
+ vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
+ const screen = await reader(team({
+  writer: false,
+  agents: [
+   { id: 'a-1', connection_id: 'c-1', name: 'Ads', speciality: 'Runs the ads.', main: false, only: false, state: 'working' },
+   { id: 'a-2', connection_id: 'c-2', name: 'SEO', speciality: '', main: false, only: false, state: 'waiting' },
+   { id: 'a-3', connection_id: 'c-3', name: 'Critic', speciality: 'Reads the copy.', main: false, only: false, state: 'idle' },
+  ],
+ }));
+ const details = screen.getByRole('complementary', { name: 'Channel details' });
+ const head = details.element().querySelector('.dp-id__role');
+ expect(head?.textContent).toBe('3 members · 3 agents · 1 working');
+ expect(head?.querySelector('.dot--working')).not.toBeNull();
+ const rows = Array.from(details.element().querySelectorAll('.panel-row')).filter(row => row.querySelector('.face-wrap'));
+ expect(rows.map(row => row.querySelector('.panel-row__d')?.textContent)).toEqual(['Runs the ads. · Working', 'Waiting on you', 'Reads the copy. · Idle']);
+ expect(rows.map(row => row.querySelector('.face-wrap .dot')?.className)).toEqual(['dot dot--working', 'dot dot--waiting', 'dot dot--idle']);
+});
+
+test('in Arabic the details name each Agent\'s state and count the working ones', async () => {
+ vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
+ const screen = await render(<LanguageProvider language="ar"><ChannelView person="p-3" initial={team({ agents: [{ id: 'a-1', connection_id: 'c-1', name: 'Ads', speciality: 'بيظبط الإعلانات.', main: false, only: false, state: 'working' }, { id: 'a-2', connection_id: 'c-2', name: 'SEO', speciality: '', main: false, only: false, state: 'waiting' }] })}/></LanguageProvider>);
+ const details = screen.getByRole('complementary', { name: 'تفاصيل القناة' });
+ expect(details.element().querySelector('.dp-id__role')?.textContent).toBe('3 أعضاء · 2 وكلاء · 1 شغال');
+ const rows = Array.from(details.element().querySelectorAll('.panel-row')).filter(row => row.querySelector('.face-wrap'));
+ expect(rows.map(row => row.querySelector('.panel-row__d')?.textContent)).toEqual(['بيظبط الإعلانات. · شغال', 'مستنيك']);
+});
+
+test('the head drops the working count when none of the channel\'s Agents is working', async () => {
+ vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
+ const screen = await reader(team());
+ const head = screen.getByRole('complementary', { name: 'Channel details' }).element().querySelector('.dp-id__role');
+ expect(head?.textContent).toBe('3 members · 2 agents');
+ expect(head?.querySelector('.dot')).toBeNull();
+});
+
+test('a call in the channel turns its Agent working in its row and in the head, and its reply turns them back, without a reload', { timeout: 15000 }, async () => {
+ const idle = { id: 'a-1', connection_id: 'c-1', name: 'Ads', speciality: 'Runs the ads.', main: false, only: false, state: 'idle' as const };
+ const calledOut = team({ agents: [idle], messages: [called('open')], open: true });
+ const working = team({ agents: [{ ...idle, state: 'working' as const }], messages: [called('open')], open: true });
+ const answered = team({ agents: [idle], messages: [called('answered'), reply] });
+ const answers = [working, answered]; let asked = 0;
+ vi.stubGlobal('fetch', async () => new Response(JSON.stringify(answers[Math.min(asked++, answers.length - 1)])));
+ const screen = await channel(calledOut);
+ const details = screen.getByRole('complementary', { name: 'Channel details' });
+ const row = () => Array.from(details.element().querySelectorAll('.panel-row')).find(node => node.textContent?.includes('Ads'));
+ const head = () => details.element().querySelector('.dp-id__role');
+ await expect.poll(() => row()?.textContent, { timeout: 5000 }).toContain('Working');
+ expect(head()?.textContent).toBe('3 members · 1 agent · 1 working');
+ await expect.poll(() => row()?.textContent, { timeout: 6000 }).toContain('Idle');
+ expect(head()?.textContent).toBe('3 members · 1 agent');
+ expect(head()?.querySelector('.dot')).toBeNull();
 });
 
 test('an Owner or a Manager takes a Member out and adds one the channel does not have, and the channel is read again', async () => {

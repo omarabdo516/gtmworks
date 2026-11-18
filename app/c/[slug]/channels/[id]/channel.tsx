@@ -6,6 +6,8 @@ import { useI18n } from '@/lib/i18n-client';
 import { localeFor } from '@/lib/i18n.mjs';
 import { dayOf } from '@/lib/activity-log.mjs';
 import { CompanyAgentFace } from '@/components/company-agent-face';
+import { AgentFaceDot } from '@/app/agent-face-dot';
+import { statusKeys } from '@/lib/agent-details.mjs';
 import { ShellIcon } from '@/components/shell-icon';
 import { DetailsShell, HeadPill, useDetailsPanel, type DetailsPanel } from '@/app/agent-details';
 import { MessageBox, postMessage } from '@/app/conversation-composer';
@@ -176,10 +178,11 @@ function ChannelDetails({panel,name,person,record,tip,c,refresh}:{panel:DetailsP
  const empty=(text:string)=><li className="panel-row"><span className="panel-row__text"><span className="panel-row__d">{text}</span></span></li>;
  const byName=managers.map(manager=>c(manager.role==='owner'?'channelByOwner':'channelByManager',manager.name));
  const managedBy=byName.length>1?`${byName.slice(0,-1).join(c('channelNamesJoin'))}${c('channelNamesLast')}${byName.at(-1)}`:byName[0]||'';
+ const working=agents.filter(agent=>agent.state==='working').length;
  return <DetailsShell panel={panel} label={c('channelDetails')} start={<span className="dp-top__l">{c('channelKind')}</span>}>
   <div className="dp-id">
    <span className="hp-hash hp-hash--xl" aria-hidden="true"><ShellIcon name="hash"/></span>
-   <div><div className="dp-id__name">#<bdi>{name}</bdi></div><div className="dp-id__role">{c(members.length===1?'channelMember':'channelMembers',count(members.length))} · {c(agents.length===1?'channelAgent':'channelAgents',count(agents.length))}</div></div>
+   <div><div className="dp-id__name">#<bdi>{name}</bdi></div><div className="dp-id__role">{c(members.length===1?'channelMember':'channelMembers',count(members.length))} · {c(agents.length===1?'channelAgent':'channelAgents',count(agents.length))}{working>0&&<> · <span className="dot dot--working" aria-hidden="true"/>{count(working)} {c('channelWorking')}</>}</div></div>
   </div>
   <div className="dp-sections">
    <section className="dp-sec" aria-labelledby="ch-h-p">
@@ -200,8 +203,8 @@ function ChannelDetails({panel,name,person,record,tip,c,refresh}:{panel:DetailsP
    <section className="dp-sec" aria-labelledby="ch-h-a">
     <h3 className="dp-label" id="ch-h-a"><span>{t('agents')} <span className="muted num">{count(agents.length)}</span></span></h3>
     <ul className="panel-card">
-     {agents.length?agents.map(agent=><li key={agent.id} className="panel-row"><span aria-hidden="true"><CompanyAgentFace agent={agent} size={28}/></span>
-      <span className="panel-row__text"><span className="panel-row__t"><bdi>{agent.name}</bdi></span>{agent.only?<span className="panel-row__d">{c('channelShownHere')}</span>:agent.speciality&&<span className="panel-row__d"><bdi>{agent.speciality}</bdi></span>}</span>
+     {agents.length?agents.map(agent=><li key={agent.id} className="panel-row"><AgentFaceDot agent={agent} size={28} status={agent.state}/>
+      <span className="panel-row__text"><span className="panel-row__t"><bdi>{agent.name}</bdi></span>{agent.only?<span className="panel-row__d">{c('channelShownHere')}</span>:<span className="panel-row__d">{agent.speciality&&<><bdi>{agent.speciality}</bdi>{' · '}</>}{t(statusKeys[agent.state])}</span>}</span>
       {manage&&remove(`tm-rm-${agent.id}`,agent.name,{agent:agent.id,present:false},'tm-add-open')}</li>)
      :empty(team?c('channelNoAgentsYet'):c('channelNoAgents'))}
      {manage&&addRow('tm-add-open',addingAgent,c('channelAddAgent'),()=>void pick(!addingAgent,setAddingAgent))}
