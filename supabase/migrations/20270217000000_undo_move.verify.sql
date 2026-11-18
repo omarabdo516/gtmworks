@@ -10,7 +10,7 @@ select json_build_object(
   and not has_table_privilege('authenticated','public.work_card_moves','UPDATE')
   and not has_table_privilege('authenticated','public.work_card_moves','DELETE')
   and not has_table_privilege('anon','public.work_card_moves','SELECT'),
- 'moves_follow_the_card',(select qual from pg_policies where schemaname='public' and tablename='work_card_moves' and policyname='work_card_moves_read') like '%public.work_cards%'
+ 'moves_follow_the_card',(select qual from pg_policies where schemaname='public' and tablename='work_card_moves' and policyname='work_card_moves_read') like '%work_cards%'
   and (select qual from pg_policies where schemaname='public' and tablename='work_card_moves' and policyname='work_card_moves_read') like '%auth.uid()%',
  'every_move_remembered',exists(select 1 from pg_trigger where tgrelid='public.work_cards'::regclass and tgname='work_card_moved' and tgenabled='O' and (tgtype&16)=16),
  'recorder_private',not has_function_privilege('authenticated','public.work_card_moved()','execute'),

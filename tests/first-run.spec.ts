@@ -298,7 +298,8 @@ test('"Open the workspace" with two filled rows makes two invitations with their
  await expect(page.locator('.toast')).toHaveText('Sent 2 invites · start with Lead and ask it for your first agent');
  await expect.poll(()=>new URL(page.url()).search).not.toContain('first=');
  expect(workspace(baseURL!)).toEqual([{work_mode:'team',agents:'Lead:true',conversations:1,cards:0}]);
- expect(invitations(baseURL!)).toEqual([{email:first,role:'manager'},{email:second,role:'viewer'}]);
+ // Ordered by email, as the query reads them: karim-… before nour-….
+ expect(invitations(baseURL!)).toEqual([{email:second,role:'viewer'},{email:first,role:'manager'}]);
  expect(invitedLog(baseURL!)).toEqual([{email:first,role:'manager'},{email:second,role:'viewer'}]);
  const mailbox=await (await page.request.get(inbox)).json();
  expect((mailbox.messages ?? []).map((message:{To:{Address:string}[]})=>message.To[0].Address).sort()).toEqual([first,second].sort());
