@@ -37,7 +37,7 @@ type Stage={id:number,name:string,position:number,board_column?:string|null}; ty
 type CardNotes={me:string,drawnAt:number,comments:EditableNote[],runs:{note_id:number,agent_id:string,agent_name:string,outcome:string|null}[],replies:{reply_to:number,actor_id:string,actor_name:string|null,body:string,created_at:string}[],agents:{id:string,name:string,connection_id:string}[]};
 // workAction is the board's server action (work-actions.ts), handed in so this client file never imports the server module.
 export type WorkAction=(form:FormData)=>Promise<void>;
-export type WorkProps={workAction:WorkAction,me:string,slug:string,company:string,section:string,cardId?:number,stages:Stage[],labels:Label[],cards:Card[],items:Item[],members:Person[],activity:Activity[],creatives:Creative[],versions:Version[],cardLabels:CL[],projects:Project[],assignees:{card_id:number,person_id:string}[],message?:string,approvableIds:number[],agents:{person_id:string,role:string,granted:boolean}[],canCreate:boolean,initialCreating:boolean,attachments:WorkAttachment[],waiting?:WaitingItem[],focus?:'waiting',alone?:boolean,notes?:CardNotes,sheet?:CardSheetData,show?:number,ideaAdded?:boolean,cardAgents?:CardAgent[]};
+export type WorkProps={workAction:WorkAction,me:string,slug:string,company:string,section:string,cardId?:number,stages:Stage[],labels:Label[],cards:Card[],items:Item[],members:Person[],activity:Activity[],creatives:Creative[],versions:Version[],cardLabels:CL[],projects:Project[],assignees:{card_id:number,person_id:string}[],message?:string,approvableIds:number[],agents:{person_id:string,role:string,granted:boolean}[],canCreate:boolean,initialCreating:boolean,attachments:WorkAttachment[],waiting?:WaitingItem[],focus?:'waiting',alone?:boolean,notes?:CardNotes,sheet?:CardSheetData,show?:number,ideaAdded?:boolean,ruleDecision?:{approve:boolean,agent:string},cardAgents?:CardAgent[]};
 const emptyKey:Record<string,[string,string]>={waiting:['boardEmptyWaiting','boardEmptyWaitingHint'],ideas:['boardEmptyIdeas','boardEmptyIdeasHint'],planned:['boardEmptyPlanned','boardEmptyPlannedHint'],progress:['boardEmptyProgress','boardEmptyProgressHint'],live:['boardEmptyLive','boardEmptyLiveHint'],done:['boardEmptyDone','']};
 export default function Work(p:WorkProps) { const {workAction}=p; const {t,locale,language}=useI18n(); const router=useRouter(); const identities=useAgentIdentities();
  // A change-only form cannot submit before React attaches its handler.
@@ -92,6 +92,13 @@ export default function Work(p:WorkProps) { const {workAction}=p; const {t,local
  // An idea just added comes back on the board with the card it made (#188): the reference confirms it with a toast,
  // while useShowCard flashes that Card and puts the focus on it.
  useEffect(()=>{ if(p.ideaAdded) toast(t('ideaAdded')); },[p.ideaAdded,t]);
+ // A decided learning suggestion comes back to the board with its outcome in the address (#169): the item has left the
+ // list, and the toast names the Agent it was for. Shown once; a reload does not say it again.
+ useEffect(()=>{ if(!p.ruleDecision) return;
+  toast(t(p.ruleDecision.approve?'waitingRuleDecidedTeamWide':'waitingRuleDecidedDeclined',p.ruleDecision.agent),{icon:p.ruleDecision.approve?'check':'x'});
+  const url=new URL(location.href); url.searchParams.delete('decided'); url.searchParams.delete('agent');
+  history.replaceState(history.state,'',url.pathname+url.search+url.hash);
+ },[p.ruleDecision,t]);
  const move=(id:number,to:string)=>{
   const c=p.cards.find(x=>x.id===id); if(!c||!p.canCreate) return;
   const why=blockReason(columnOfCard(c),to,!!c.wait&&columnOf({...c,wait:null},p.stages)!=='waiting');

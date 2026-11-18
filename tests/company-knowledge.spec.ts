@@ -65,13 +65,13 @@ test('a Manager fills an empty part, cancels and saves with the keyboard, then c
 
  const edit=part.getByRole('button',{name:'Edit',exact:true});
  const field=part.getByLabel('Edit “Audience”');
- const status=part.getByRole('status');
  await openEditor(part);
  await expect(field).toBeFocused();
  await expect(field).toHaveValue('');
  await field.fill('  Accounting graduates aged 22 to 30.\n• Cairo, Giza and Alexandria\n- Riyadh and Jeddah\n');
  await part.getByRole('button',{name:'Save',exact:true}).click();
- await expect(status).toHaveText('“Audience” is saved. Every agent reads the new version from its next job.');
+ await expect(page.locator('.toast')).toHaveText('“Audience” is saved. Every agent reads the new version from its next job.');
+ await expect(part.locator('#know-status')).toHaveCount(0);
  await expect(part.locator('.know-body > p')).toHaveText(['Accounting graduates aged 22 to 30.']);
  await expect(part.locator('.know-ul li')).toHaveText(['Cairo, Giza and Alexandria','Riyadh and Jeddah']);
  await expect(part.locator('.know-meta')).toContainText('Last edited by مدير');
@@ -79,9 +79,15 @@ test('a Manager fills an empty part, cancels and saves with the keyboard, then c
  expect(skill()).toBe(knowledgeSkill({voice,audience:'Accounting graduates aged 22 to 30.\n• Cairo, Giza and Alexandria\n- Riyadh and Jeddah'}));
  expect(lastEditor('audience')).toBe(manager);
 
- // Escape leaves the editor, not Settings, and keeps the saved text.
+ // A link that would leave the changed page keeps the person here, says so, and puts the focus on Save.
  await openEditor(part);
  await field.fill('Something else');
+ await overlay.locator('#know-tab-banned').click();
+ await expect(page.locator('.toast')).toHaveText('Save the page or cancel the edit first');
+ await expect(part.getByRole('button',{name:'Save',exact:true})).toBeFocused();
+ await expect(page).toHaveURL(/\/settings\?section=knowledge&part=audience$/);
+
+ // Escape leaves the editor, not Settings, and keeps the saved text.
  await page.keyboard.press('Escape');
  await expect(field).toHaveCount(0);
  await expect(page).toHaveURL(/\/settings\?section=knowledge&part=audience$/);
@@ -91,14 +97,14 @@ test('a Manager fills an empty part, cancels and saves with the keyboard, then c
  // Ctrl+S saves; the same text changes nothing and logs nothing.
  await openEditor(part);
  await page.keyboard.press('Control+s');
- await expect(status).toHaveText('Nothing changed.');
+ await expect(page.locator('.toast')).toHaveText('Nothing changed.');
  expect(logged('audience')).toEqual([{part:'audience',cleared:false}]);
 
  // Saved empty, the part is cleared and shows its empty state again.
  await openEditor(part);
  await field.fill('   ');
  await page.keyboard.press('Control+s');
- await expect(status).toHaveText('“Audience” is now empty. From their next job, the agents no longer read it.');
+ await expect(page.locator('.toast')).toHaveText('“Audience” is now empty. From their next job, the agents no longer read it.');
  await expect(part.locator('.know-empty')).toBeVisible();
  await expect(part.locator('.know-body')).toHaveCount(0);
  expect(skill()).toBe(knowledgeSkill({voice}));
@@ -134,7 +140,7 @@ test('a Contributor reads the knowledge with no Edit button, and the server refu
   await openEditor(managerPage.locator('.know-page'));
   const [request]=await Promise.all([managerPage.waitForRequest(request=>!!request.headers()['next-action']),managerPage.locator('#know-save').click()]);
   action={url:request.url(),headers:request.headers()};
-  await expect(managerPage.locator('#know-status')).toHaveText('Nothing changed.');
+  await expect(managerPage.locator('.toast')).toHaveText('Nothing changed.');
  } finally { await other.close(); }
  const refused=await page.request.post(action.url,{headers:action.headers,data:JSON.stringify([rsLearning,'voice','Taken over'])});
  expect(await refused.text()).toContain('companyKnowledgeNotAllowed');

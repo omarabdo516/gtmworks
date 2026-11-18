@@ -7,6 +7,7 @@ import { dateFormatter, dayOf } from '@/lib/activity-log.mjs';
 import { ShellIcon } from '@/components/shell-icon';
 import Link from '@/lib/link';
 import type { Made } from '@/lib/agent-made';
+import { dismissToast, toast } from './toast';
 
 // Opening an Agent Lead made at your request takes its "new" mark away (#13). It is asked once the page has mounted,
 // never while the page is rendered on the server or prefetched; the sidebar is then drawn again without the mark.
@@ -16,6 +17,22 @@ export function OpenedMark({company,agent}:{company:string,agent:string}) {
   void fetch('/api/agent-opened',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({company,agent}),cache:'no-store'})
    .then(response=>response.ok?response.json():null).then(result=>{if(result?.opened) router.refresh();}).catch(()=>{});
  },[company,agent,router]);
+ return null;
+}
+
+// A made Agent is told once to the Owner who asked for it, the first time it appears in their Conversation (#169): the
+// page asks, and only the first answer raises it. "Open {Agent}" goes to its chat and takes the toast away; the toast
+// itself waits six seconds, as the reference's action toast does. A reload asks again and is answered false.
+export function AgentMadeToast({company,slug,agent}:{company:string,slug:string,agent:{id:string,name:string}}) {
+ const {t}=useI18n(); const router=useRouter();
+ useEffect(()=>{
+  let current=true;
+  void fetch('/api/agent-toast',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({company,agent:agent.id}),cache:'no-store'})
+   .then(response=>response.ok?response.json() as Promise<{shown?:boolean}>:null)
+   .then(result=>{ if(current&&result?.shown===true) toast(t('agentMadeToast',agent.name),{action:{label:t('agentMadeOpen',agent.name),run:()=>{ dismissToast(); router.push(`/c/${slug}/chat/${agent.id}`); }}}); })
+   .catch(()=>{});
+  return ()=>{ current=false; };
+ },[company,slug,agent.id,agent.name,t,router]);
  return null;
 }
 

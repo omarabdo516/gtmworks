@@ -13,6 +13,7 @@ import { TeamTable, type TeamAgent, type TeamInvitation, type TeamMember } from 
 import { madeDay, useZone } from './agent-made';
 import { dateFormatter, dayOf } from '@/lib/activity-log.mjs';
 import { localeFor } from '@/lib/i18n.mjs';
+import { toast } from './toast';
 
 // "Your account": the look and the interface language, each saved as soon as it is chosen (account-choices-view.tsx).
 export function AccountChoices({theme}:{theme:string}) {
@@ -33,7 +34,7 @@ export function MakeMain({company,agent,current}:{company:string,agent:Agent,cur
  const {t}=useI18n(); const router=useRouter();
  const [pending,startTransition]=useTransition(); const [error,setError]=useState('');
  return <li className="panel-row"><span className="panel-row__text"><span className="panel-row__t">{t('settingsMakeMain')}</span><span className="panel-row__d">{t('settingsMakeMainD',current)}</span>{error&&<span className="set-err" role="alert">{t(error)}</span>}</span>
-  <button type="button" className="btn btn--secondary btn--sm" id="set-make-main" disabled={pending} onClick={()=>startTransition(async()=>{ const failure=await manage(company,'default',agent.id); setError(failure); if(!failure) router.refresh(); })}>{t('settingsMakeMain')}</button></li>;
+  <button type="button" className="btn btn--secondary btn--sm" id="set-make-main" disabled={pending} onClick={()=>startTransition(async()=>{ const failure=await manage(company,'default',agent.id); setError(failure); if(!failure) { toast(t('settingsMainToast',agent.name)); router.refresh(); } })}>{t('settingsMakeMain')}</button></li>;
 }
 
 // The danger zone's delete (reference: settingsHTML danger): the name typed again confirms it. It removes the Agent
@@ -61,20 +62,21 @@ export function DeleteAgent({company,slug,agent}:{company:string,slug:string,age
 // (/api/company-name, rename_company), so the field is only a convenience.
 export function CompanyName({company,name}:{company:string,name:string}) {
  const {t}=useI18n(); const router=useRouter();
- const [value,setValue]=useState(name); const [pending,startTransition]=useTransition(); const [state,setState]=useState<{error?:string,saved?:boolean}>({});
+ const [value,setValue]=useState(name); const [pending,startTransition]=useTransition(); const [error,setError]=useState('');
  const save=()=>startTransition(async()=>{
   try {
    const response=await fetch('/api/company-name',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company,name:value})});
    const body=await response.json() as {name?:string,error?:string};
-   if(!response.ok) { setState({error:body.error||'companyNameInvalid'}); return; }
-   setValue(body.name||value); setState({saved:true}); router.refresh();
-  } catch { setState({error:'companyNameInvalid'}); }
+   if(!response.ok) { setError(body.error||'companyNameInvalid'); return; }
+   const renamed=body.name||value;
+   setValue(renamed); setError(''); toast(t('settingsCompanyRenamed',renamed)); router.refresh();
+  } catch { setError('companyNameInvalid'); }
  });
  const trimmed=value.trim();
  return <form className="co-name-form" onSubmit={event=>{event.preventDefault(); save();}}>
-  <div className="co-name"><input className="set-input" id="co-name" name="name" type="text" dir="auto" maxLength={80} required autoComplete="organization" aria-describedby="co-name-status" value={value} onChange={event=>{setValue(event.target.value); setState({});}}/>
+  <div className="co-name"><input className="set-input" id="co-name" name="name" type="text" dir="auto" maxLength={80} required autoComplete="organization" aria-describedby={error?'co-name-status':undefined} value={value} onChange={event=>{setValue(event.target.value); setError('');}}/>
    <button type="submit" className="btn btn--primary btn--sm" disabled={pending||!trimmed||trimmed===name.trim()}>{t('save')}</button></div>
-  <p id="co-name-status" className={state.error?'set-err':'set-hint'} role={state.error?'alert':'status'}>{state.error?t(state.error):state.saved?t('companyNameSaved'):null}</p>
+  {error&&<p id="co-name-status" className="set-err" role="alert">{t(error)}</p>}
  </form>;
 }
 

@@ -44,6 +44,12 @@ export function toast(text:string,{icon='check',action}:{icon?:ShellIconName,act
  stop=()=>clearTimeout(timer);
 }
 
+// Take the toast away now, as an action on it does once it has taken the person where they were going.
+export function dismissToast() {
+ stop();
+ show(null);
+}
+
 export function ToastHost() {
  const {language}=useI18n();
  const state=useSyncExternalStore(subscribe,()=>shown,()=>null);

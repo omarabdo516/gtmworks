@@ -14,6 +14,7 @@ import { columnLabel } from '@/lib/board-columns.mjs';
 import { useNewlyWaiting } from '@/lib/newly-waiting';
 import type { MessageBoxHandle } from '@/app/conversation-composer';
 import { ChatPlaceholder, ConversationComposer, ConversationTurns, useConversationRecord, useConversationText, type ThreadConversation } from '@/app/conversation-thread';
+import { FirstRunToast } from '@/app/first-run-toast';
 
 // The record as the loaded transcript keeps it current, and how it asks for the reply after a send.
 type Live={record:ConversationRecord,asked:()=>void};
@@ -27,7 +28,7 @@ type Live={record:ConversationRecord,asked:()=>void};
 // has its reply asked for once it is there. `children` is the transcript (ConversationLoaded), drawn by the server once
 // the record is read. `board` is the chat's Card on the board as the page read it, shown in the corner until the record
 // says where the Card is now.
-export default function ConversationView({slug,agent,details,tab,company,conversation,title,writer,board,children}:{slug:string,agent:DetailsAgent|null,details:Promise<AgentDetailsView>|null,tab?:DetailsTab,company:string,conversation:ThreadConversation,title:string,writer:boolean,board?:ConversationRecord['board'],children:ReactNode}) {
+export default function ConversationView({slug,agent,details,tab,company,conversation,title,writer,board,first,children}:{slug:string,agent:DetailsAgent|null,details:Promise<AgentDetailsView>|null,tab?:DetailsTab,company:string,conversation:ThreadConversation,title:string,writer:boolean,board?:ConversationRecord['board'],first?:'alone'|'team',children:ReactNode}) {
  const {c}=useConversationText(); const panel=useDetailsPanel();
  const composer=useRef<MessageBoxHandle>(null); const [early,setEarly]=useState(0); const [live,setLive]=useState<Live|null>(null);
  const record=live?.record; const corner=record?record.board:board;
@@ -37,7 +38,7 @@ export default function ConversationView({slug,agent,details,tab,company,convers
  // make React draw it again in the browser and leave the streamed copy hidden in the page (#172), as a render of this
  // frame during hydration does (the details panel's media query).
  const view=useMemo(()=>({slug,agent,company,conversation,writer,suggest:(text:string)=>composer.current?.insert(text),early,setLive}),[slug,agent,company,conversation,writer,early]);
- return <ChatView value={view}><div className="convo"><div className="chat">
+ return <ChatView value={view}>{first&&<FirstRunToast mode={first} agent={conversation.agent_name}/>}<div className="convo"><div className="chat">
   <HeadPill panel={panel} agent={agent?.name} face={<span aria-hidden="true"><CompanyAgentFace agent={{connection_id:conversation.face,name:conversation.agent_name}} size={24}/></span>} title={record?titleOf(record.messages,conversation.agent_name):title} titleDir="auto" corner={corner&&<CornerPill slug={slug} board={corner} writer={writer} fresh={fresh.has(corner.card)} c={c}/>}/>
   <Transcript>{children}</Transcript>
   <div className="composer-area"><ConversationComposer company={company} conversation={conversation} record={record??null} writer={writer} asked={live?.asked??(()=>setEarly(count=>count+1))} box={composer} usage/></div>
