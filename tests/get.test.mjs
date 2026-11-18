@@ -81,7 +81,7 @@ case "$*" in
  'run --rm -i alpine:3.21 tar -tzf -')
   cat > /dev/null
   if [ -n "\${ARCHIVE_ENTRIES:-}" ]; then printf '%s\\n' "$ARCHIVE_ENTRIES"
-  else printf '%s\\n' var/lib/postgresql/data/ var/lib/postgresql/data/PG_VERSION etc/postgresql-custom/ var/lib/storage/ .env.install; fi; exit 0;;
+  else printf '%s\\n' var/lib/postgresql/data/ var/lib/postgresql/data/PG_VERSION etc/postgresql-custom/ var/lib/storage/ opt/data/ opt/data/config.yaml .env.install; fi; exit 0;;
  *'postgres --single'*)
   [ "$8" = supabase/postgres:17@sha256:${'f'.repeat(64)} ] || exit 8
   cat > /dev/null; [ -z "\${ARCHIVE_UNREADABLE:-}" ] || { echo 'ERROR:  relation "gtmworks_install.schema_migrations" does not exist'; exit 0; }
