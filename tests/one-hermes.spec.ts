@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { laneHermes } from './lane-hermes';
 import { signIn } from './sign-in';
+import { i18n } from '../lib/i18n.mjs';
 
 // #342: the bundled Hermes is the only Hermes. A conversation, a Card note and a channel message that call Lead each
 // start their Run on the Company's own profile of the Hermes the app and the worker are given (scripts/web.sh), with
@@ -28,11 +29,15 @@ test('a conversation, a Card note and a channel message each start their Run on 
   expect(talk.status()).toBe(200);
   const said=await page.request.post('/api/channels',{data:{company,channel,sendKey:randomUUID(),message:'@Lead plan the teaser posts'}});
   expect(said.status()).toBe(200);
-  // A note that calls Lead on a Card: the worker starts its Run.
-  query(`do $$ begin perform set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
-   perform public.change_work_card('${company}',4,'comment','{"body":"@Lead draft the caption"}'::jsonb); end $$;`);
+  // A note that calls Lead, written on the Card as a person writes it: sending it starts its Run (work-actions.ts). The
+  // worker's own pass picks up a note nobody started only a minute later (note_runs_due), which is no part of this.
+  await page.goto('/c/rs-learning/work/board/4');
+  const tr=await page.evaluate(()=>document.documentElement.lang).then(lang=>i18n(lang==='ar'?'ar':'en').t);
+  await page.getByLabel(tr('comment'),{exact:true}).fill('@Lead draft the caption');
+  await page.getByRole('button',{name:tr('send'),exact:true}).click();
+  await expect(page.locator('.comment-body').filter({hasText:'@Lead draft the caption'})).toBeVisible();
   const runs=()=>fake.settings.requests.filter(request=>request.method==='POST'&&/\/v1\/runs$/.test(request.path??'')).map(request=>request.path);
-  await expect.poll(()=>runs().length,{timeout:60000}).toBe(3);
+  await expect.poll(()=>runs().length,{timeout:30000}).toBe(3);
   expect(runs()).toEqual(Array(3).fill(`/p/${profile}/v1/runs`));
   const inputs=fake.settings.runs.map(run=>run.input);
   for(const asked of ['Plan the launch week','@Lead draft the caption','@Lead plan the teaser posts']) expect(inputs.filter(input=>input.includes(asked)),asked).toHaveLength(1);
