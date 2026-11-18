@@ -12,6 +12,7 @@ select json_build_object(
   and not has_table_privilege('anon','public.work_card_moves','SELECT'),
  'every_move_remembered',exists(select 1 from pg_trigger where tgrelid='public.work_cards'::regclass and tgname='work_card_moved' and tgenabled='O' and (tgtype&16)=16),
  'recorder_private',not has_function_privilege('authenticated','public.work_card_moved()','execute'),
+ 'decisions_not_undone',position('approval.internal' in pg_get_functiondef('public.work_card_moved()'::regprocedure))>0,
  'undo_for_members',has_function_privilege('authenticated','public.undo_work_card_move(uuid,bigint)','execute')
   and not has_function_privilege('anon','public.undo_work_card_move(uuid,bigint)','execute')
   and not has_function_privilege('service_role','public.undo_work_card_move(uuid,bigint)','execute'),

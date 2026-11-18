@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(46);
+select plan(51);
 -- A Company of its own, with the ten stages a new one receives (ADR 0013): «كتابة» and «تصميم ومونتاج» are both In
 -- progress, and «بريف جاهز» is Planned, so a Card's stage and its column are told apart.
 insert into public.companies(id,slug,name) values ('10000000-0000-0000-0000-000000000097','undo-move','Undo move');
@@ -10,8 +10,10 @@ insert into public.members(company_id,person_id,role) values
  ('10000000-0000-0000-0000-000000000097','20000000-0000-0000-0000-000000000003','contributor'),
  ('10000000-0000-0000-0000-000000000097','20000000-0000-0000-0000-000000000004','viewer');
 insert into public.work_cards(company_id,stage_id,title) select '10000000-0000-0000-0000-000000000097',s.id,'Undo '||x.title
- from (values ('A','كتابة'),('B','تصميم ومونتاج'),('C','كتابة'),('D','كتابة'),('E','كتابة'),('F','كتابة'),('G','كتابة'),('H','كتابة'),('I','كتابة'),('K','كتابة')) x(title,stage)
+ from (values ('A','كتابة'),('B','تصميم ومونتاج'),('C','كتابة'),('D','كتابة'),('E','كتابة'),('F','كتابة'),('G','كتابة'),('H','كتابة'),('I','كتابة'),('K','كتابة'),('L','كتابة')) x(title,stage)
  join public.work_stages s on s.company_id='10000000-0000-0000-0000-000000000097' and s.name=x.stage order by x.title;
+-- A Card with a publishing date, so approving it schedules it: the decision writes its stage twice.
+update public.work_cards set go_live=now()+interval '3 days' where title='Undo L';
 -- A Card after review, as an approval leaves one.
 select set_config('approval.internal','yes',true);
 insert into public.work_cards(company_id,stage_id,title) select '10000000-0000-0000-0000-000000000097',s.id,'Undo J'
@@ -70,6 +72,18 @@ select lives_ok($$select public.decide_approval('10000000-0000-0000-0000-0000000
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
 select throws_ok($$select public.undo_work_card_move('10000000-0000-0000-0000-000000000097',(select id from public.work_cards where title='Undo E'))$$,'P0001','the card moved on','a Card a decision moved is not put back');
 select is((select s.name from public.work_cards w join public.work_stages s on s.id=w.stage_id where w.title='Undo E'),'معتمد','the decided Card stays where the decision left it');
+
+-- A decision is the one move "Undo" never offers (#168, security): decide_approval's own stage change is not remembered,
+-- so an Owner who decides a Card they did not move has nothing of their own to put back, and the Card keeps what the
+-- decision gave it.
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select public.move_work_card('10000000-0000-0000-0000-000000000097',(select id from public.work_cards where title='Undo L'),(select id from public.work_stages where company_id='10000000-0000-0000-0000-000000000097' and kind='review'));
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select lives_ok($$select public.decide_approval('10000000-0000-0000-0000-000000000097',(select id from public.work_cards where title='Undo L'),'approve')$$,'the Owner approves a Card that carries a publishing date');
+select is((select s.name from public.work_cards w join public.work_stages s on s.id=w.stage_id where w.title='Undo L'),'مجدول للنشر','the decision scheduled the Card');
+select is((select count(*)::int from public.work_card_moves m where m.card_id=(select id from public.work_cards where title='Undo L') and m.person_id='20000000-0000-0000-0000-000000000001'),0,'the decision wrote no move of its own');
+select throws_ok($$select public.undo_work_card_move('10000000-0000-0000-0000-000000000097',(select id from public.work_cards where title='Undo L'))$$,'42501','nothing to undo','the approver has no move of their own to undo');
+select is((select s.name from public.work_cards w join public.work_stages s on s.id=w.stage_id where w.title='Undo L'),'مجدول للنشر','the Card keeps the stage the decision gave it');
 
 -- Nobody undoes another person's move.
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);

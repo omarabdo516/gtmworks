@@ -29,10 +29,13 @@ create index work_card_moves_seek on public.work_card_moves(company_id,card_id,p
 
 -- The stage and place a Card left, and the stage and place it arrived at. place_work_card settles a board move's place in
 -- the same update as its stage (below), so the row names the place the Card really took. A move back is not a move to
--- undo in turn, and it is logged as its own row by work_audit, so neither is remembered here.
+-- undo in turn, and it is logged as its own row by work_audit, so neither is remembered here. A decision is the one move
+-- a person cannot take back: decide_approval writes the stage it gives the Card with approval.internal marked, and that
+-- write is not remembered, so "Undo" never offers the approver their own decision (#168).
 create function public.work_card_moved() returns trigger language plpgsql security definer set search_path='' as $$
 begin
- if new.stage_id is distinct from old.stage_id and coalesce(current_setting('work.undo',true),'')<>'yes' then
+ if new.stage_id is distinct from old.stage_id and coalesce(current_setting('work.undo',true),'')<>'yes'
+  and coalesce(current_setting('approval.internal',true),'')<>'yes' then
   insert into public.work_card_moves(company_id,card_id,person_id,from_stage_id,from_place,to_stage_id,to_place)
    values(new.company_id,new.id,auth.uid(),old.stage_id,old.board_order,new.stage_id,new.board_order);
  end if;
