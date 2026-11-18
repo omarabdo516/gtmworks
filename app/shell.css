@@ -446,6 +446,29 @@
 .gw .details .od-truncate { display: block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .gw .details .dp-file { color: var(--gw-text-1); text-decoration: none; border-radius: var(--gw-r-xs); }
 @media (hover: hover) { .gw .details .dp-file:hover { text-decoration: underline; text-underline-offset: 3px; } }
+/* The Library of an Agent (#194; design-reference: .lib-chev, .lib-hint, .lib-crumbs, .lib-file, .lib-thumb, .lib-dl,
+   .lib-empty): a folder row that opens in place, a file row with its size, its time and its download, and the empty
+   state. The download is a link to the route that serves the bytes as an attachment. */
+.gw .details .lib-chev { color: var(--gw-text-3); width: 16px; height: 16px; }
+.gw .details .lib-hint { margin: 0; padding-inline: var(--s3); font-size: var(--gw-fs-xs); line-height: 1.6; color: var(--gw-text-3); text-wrap: pretty; }
+.gw .details .lib-crumbs { display: flex; align-items: center; gap: 2px; min-height: 22px; padding-inline: 6px; color: var(--gw-text-3); }
+.gw .details .lib-crumbs .gw-icon { width: 14px; height: 14px; }
+[dir="rtl"] .gw .details .lib-crumbs .gw-icon, .gw[dir="rtl"] .details .lib-crumbs .gw-icon { transform: scaleX(-1); }
+.gw .details .lib-crumbs .link-btn { margin-inline-start: -6px; }
+.gw .details .lib-crumbs__cur { margin: 0; padding: 2px 6px; font-size: var(--gw-fs-sm); font-weight: 600; color: var(--gw-text-1); }
+.gw .details .lib-crumbs__cur .muted { font-weight: 400; }
+.gw .details .panel-row.lib-file { gap: 4px; padding: 0; }
+.gw .details .lib-file__main { display: flex; align-items: center; gap: 10px; flex: 1 1 0; min-width: 0; min-height: 52px; padding: 6px var(--s2); border-radius: var(--gw-r-sm); text-align: start; }
+@media (hover: hover) { .gw .details :is(button, a).lib-file__main:hover { background: var(--gw-bg-hover); } }
+.gw .details .lib-file__main .panel-row__text { display: grid; min-width: 0; flex: 1 1 0; }
+.gw .details .lib-1l { display: block; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gw .details .lib-thumb { width: 36px; height: 36px; flex: none; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; border-radius: var(--gw-r-xs); background: var(--gw-bg-tertiary); color: var(--gw-text-2); }
+.gw .details .lib-thumb .gw-icon { width: 18px; height: 18px; }
+.gw .details .lib-dl { width: 32px; height: 32px; margin-inline-end: 6px; }
+.gw .details .lib-dl .gw-icon { width: 16px; height: 16px; }
+.gw .details .lib-empty { display: grid; justify-items: center; gap: 6px; padding: var(--s5) var(--s3); text-align: center; color: var(--gw-text-3); }
+.gw .details .lib-empty .gw-icon { width: 22px; height: 22px; }
+.gw .details .lib-empty p { margin: 0; font-size: var(--gw-fs-sm); line-height: 1.6; max-width: 32ch; text-wrap: pretty; }
 /* The Agent's memory (#350; design-reference: .mem-intro, .mem-know, .mem-main, .mem-note, .mem-confirm). Only the
    parts built are styled: the Add form, the search and the edit and forget controls arrive with #191 and #192. */
 .gw .details .mem-intro { margin: 0; padding-inline: var(--s3); font-size: var(--gw-fs-sm); line-height: 1.7; color: var(--gw-text-2); text-wrap: pretty; }

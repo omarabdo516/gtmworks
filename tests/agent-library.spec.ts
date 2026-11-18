@@ -1,0 +1,121 @@
+import { test, expect, freshSeed, type Page } from './fresh-seed';
+import { execFileSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { fakeHermes } from './fake-hermes.mjs';
+import { laneHermes } from './lane-hermes';
+import { signIn } from './sign-in';
+
+// #194: the Library of an Agent is the work folder of its own Engine profile, read through the Engine and never copied
+// into gtmworks. The Owner and Managers open it — each folder with how many files it holds and when the newest was saved,
+// a folder inside it, a file's download and the reference's toast — and a Contributor and a Viewer have none and are
+// refused by the server. No page and no answer names the Engine or a path on its disk.
+const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
+const company='10000000-0000-0000-0000-000000000001';
+const companyProfile=`co-${company.replaceAll('-','')}`;
+const agent=randomUUID();
+const profile=`ag-${agent.replaceAll('-','')}`;
+const work=`/opt/data/profiles/${profile}/workspace`;
+const at=Date.parse('2026-11-18T09:37:00Z')/1000;
+const brief='# Brief\n\nSell more.\n';
+let fake:Awaited<ReturnType<typeof fakeHermes>>;
+
+test.describe.configure({mode:'serial'});
+test.use({timezoneId:'UTC'});
+test.beforeAll(async({},testInfo)=>{
+ freshSeed(testInfo.file,testInfo.retry>0);
+ // The fake Engine holds the Agent's profile and the work folder the Engine makes in every profile, with two folders —
+ // one of them empty — a folder inside the first, and a file beside them.
+ fake=await laneHermes();
+ fake.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
+ fake.settings.files.set(work,[{name:'reports',isFolder:true},{name:'empty',isFolder:true},{name:'brief.md',size:Buffer.byteLength(brief),mtime:at}]);
+ fake.settings.files.set(`${work}/reports`,[{name:'2026',isFolder:true},{name:'q3.csv',size:12,mtime:at}]);
+ fake.settings.files.set(`${work}/reports/2026`,[{name:'q3.csv',size:12,mtime:at}]);
+ fake.settings.files.set(`${work}/empty`,[]);
+ fake.settings.fileBytes.set(`${work}/brief.md`,{body:brief,type:'text/markdown'});
+ query(`do $$ begin
+   insert into public.hermes_agents(id,company_id,name,speciality,is_default,profile) values ('${agent}','${company}','Librarian','Keeps the files.',false,'${profile}');
+   insert into public.company_profiles(company_id,profile,tools_level,tools_policy) select id,'${companyProfile}',agent_level,public.engine_tool_policy() from public.companies where id='${company}'
+    on conflict (company_id) do update set profile=excluded.profile,tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false;
+   insert into public.member_agent_access(company_id,person_id,agent_id) values
+    ('${company}','20000000-0000-0000-0000-000000000003','${agent}'),
+    ('${company}','20000000-0000-0000-0000-000000000004','${agent}');
+  end $$;`);
+});
+test.afterAll(async()=>{ await fake?.close(); });
+
+async function openFiles(page:Page,email:string) {
+ await page.setViewportSize({width:1440,height:900});
+ await signIn(page,email,`/c/rs-learning/chat/${agent}`);
+ const details=page.getByRole('complementary',{name:'Details: Librarian',exact:true});
+ await expect(details).toBeVisible();
+ await details.getByRole('tab',{name:'Files',exact:true}).click();
+ const panel=details.getByRole('tabpanel');
+ await expect(panel).toHaveAttribute('aria-labelledby','dp-tab-files');
+ return {details,panel};
+}
+
+test('the Owner opens the Agent\'s Library above its files, a folder inside it, and downloads a file from it',async({page})=>{
+ const {panel}=await openFiles(page,'omar@example.com');
+ // The Library is the Files tab's first section: its heading counts every file the Agent has here, each folder's row
+ // says how many it holds and when the newest was saved or Empty, and the Files of its Cards and the reader's own
+ // Conversations stay below it.
+ const library=panel.locator('.dp-library');
+ await expect(library.locator('.dp-label')).toHaveText('Library of Librarian 2');
+ await expect(panel.locator('.dp-label > span').nth(1)).toHaveText('Files 0');
+ await expect(library.getByRole('button',{name:/^reports/})).toHaveAccessibleName(/^reports One file · latest /);
+ await expect(library.getByRole('button',{name:/^empty/})).toHaveAccessibleName(/^empty Empty$/);
+ await expect(library.getByRole('link',{name:'Download brief.md',exact:true})).toHaveAttribute('href',`/c/rs-learning/agent-files/${agent}?name=brief.md`);
+ const briefRow=library.locator('li.lib-file').filter({hasText:'brief.md'});
+ await expect(briefRow.locator('.panel-row__d')).toContainText('2 KB');
+ await expect(briefRow.locator('time')).toHaveAttribute('datetime',new Date(at*1000).toISOString());
+ await expect(library.locator('.lib-hint')).toHaveText('What Librarian makes is saved here automatically. You can view and download it, and ask for edits in the chat.');
+
+ // A folder opens in place with the focus on its name, the way back puts the focus on that folder's row, and a folder
+ // inside a folder opens the same way.
+ await library.getByRole('button',{name:/^reports/}).click();
+ await expect(library.getByRole('heading',{name:'reports 2'})).toBeFocused();
+ await expect(library.getByRole('button',{name:/^2026/})).toHaveAccessibleName(/^2026 One file · latest /);
+ await expect(library.getByText('q3.csv')).toBeVisible();
+ await library.getByRole('button',{name:'Library of Librarian'}).click();
+ await expect(library.getByRole('button',{name:/^reports/})).toBeFocused();
+ await library.getByRole('button',{name:/^reports/}).click();
+ await library.getByRole('button',{name:/^2026/}).click();
+ await expect(library.getByRole('heading',{name:'2026 1'})).toBeFocused();
+ await library.getByRole('button',{name:'Library of Librarian'}).click();
+ await expect(library.getByRole('button',{name:/^2026/})).toBeFocused();
+ await library.getByRole('button',{name:'Library of Librarian'}).click();
+ await library.getByRole('button',{name:/^empty/}).click();
+ await expect(library.getByText('This folder is empty.')).toBeVisible();
+ await library.getByRole('button',{name:'Library of Librarian'}).click();
+
+ // "Download" saves the file under its own name, with the toast the reference shows, and the answer is the gtmworks
+ // route's as an attachment — never an Engine address, and no path on its disk.
+ const link=library.getByRole('link',{name:'Download brief.md',exact:true});
+ await link.click();
+ await expect(page.locator('.toast')).toContainText('Downloading “brief.md”');
+ const file=await page.request.get((await link.getAttribute('href'))!);
+ expect(file.status()).toBe(200);
+ expect(file.headers()['content-disposition']).toBe("attachment; filename*=UTF-8''brief.md");
+ expect(file.headers()['x-content-type-options']).toBe('nosniff');
+ expect(await file.text()).toBe(brief);
+ const answered=await page.request.get(`/api/agent-files?company=${company}&agent=${agent}`);
+ expect(answered.status()).toBe(200);
+ const body=await answered.text();
+ expect(body).not.toContain('/opt/');
+ expect(body).not.toContain(fake.address);
+ expect(body).not.toMatch(/hermes/i);
+ await expect(panel.locator('.dp-library')).not.toContainText(/hermes|\/opt\//i);
+});
+
+test('a Contributor and a Viewer have no Library, and the server refuses them',async({page})=>{
+ for(const email of ['reviewer@example.com','viewer@example.com']) {
+  await page.context().clearCookies();
+  const {panel}=await openFiles(page,email);
+  await expect(panel.locator('.dp-library')).toHaveCount(0);
+  await expect(panel.locator('.dp-label > span')).toHaveText('Files 0');
+  const listed=await page.request.get(`/api/agent-files?company=${company}&agent=${agent}&folder=reports`);
+  expect(listed.status(),email).toBe(403);
+  const file=await page.request.get(`/c/rs-learning/agent-files/${agent}?name=brief.md`);
+  expect(file.status(),email).toBe(403);
+ }
+});
