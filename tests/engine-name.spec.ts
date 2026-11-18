@@ -38,7 +38,7 @@ test('page titles, the sidebar, Agent pages and the settings overlay never name 
     await page.goto(path);
     await expect(page.locator('html')).toHaveAttribute('lang',language);
     if(path==='/c/aleem/agents') await expect(page.locator('.company-hermes-agents').getByText('Lead',{exact:true})).toBeVisible();
-    if(path===overlay[2]) await expect(page.locator('#set-name')).toHaveValue('Lead');
+    if(path===overlay[2]) await expect(page.locator('#set-name-val')).toContainText('Lead');
     const text=await readable(page);
     expect(text.length,`${language} ${path}`).toBeGreaterThan(0);
     expect(text,`${language} ${path}`).not.toMatch(/hermes|هيرمس|هرمس/i);

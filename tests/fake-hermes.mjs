@@ -43,7 +43,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   ending:'completed',usage:/** @type {object|undefined} */({input_tokens:14000,output_tokens:12}),
   // The management listener (Hermes's dashboard, a second port): its profiles, and the status it answers with when
   // not 200. A profile made through it has its own Run API key, none until /api/env sets it, as in the pinned release.
-  managementStatus:200,profiles:/** @type {Map<string,{soul:string,provider:string,model:string,key:string|null,config:any,credentials:Record<string,string>}>} */(new Map()),failStep:/** @type {''|'model'|'env'|'config'} */(''),
+  managementStatus:200,profiles:/** @type {Map<string,{soul:string,provider:string,model:string,key:string|null,config:any,credentials:Record<string,string>,display_name?:string|null,description?:string,description_auto?:boolean,bot_title?:string|null,env?:Record<string,string>}>} */(new Map()),failStep:/** @type {''|'model'|'env'|'config'} */(''),
   managementRequests:/** @type {{method?:string,path?:string,authorization?:string,body:any}[]} */([]),
   // The default profile's config and model sign-ins (a profile made through the listener keeps its own), and the
   // sign-in sessions Hermes runs: approve(session) finishes one as the person would in their browser.
@@ -264,10 +264,10 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     if(!found||found.profile!==(url.searchParams.get('profile')||'default')) return send(response,404,{detail:'Session not found'});
     return send(response,200,{id,profile:found.profile,started_at:found.started_at??Date.now()/1000,message_count:found.messages.length,input_tokens:found.input_tokens??0,output_tokens:found.output_tokens??0});
    }
-   if(url.pathname==='/api/profiles'&&request.method==='GET') return send(response,200,{profiles:[{name:'default',path:'/opt/data',is_default:true,model:'default-model',provider:'auto'},...[...settings.profiles].map(([name,profile])=>({name,path:`/opt/data/profiles/${name}`,is_default:false,model:profile.model,provider:profile.provider}))]});
+   if(url.pathname==='/api/profiles'&&request.method==='GET') return send(response,200,{profiles:[{name:'default',path:'/opt/data',is_default:true,model:'default-model',provider:'auto',display_name:null,description:'',description_auto:true,bot_title:null},...[...settings.profiles].map(([name,profile])=>({name,path:`/opt/data/profiles/${name}`,is_default:false,model:profile.model,provider:profile.provider,display_name:profile.display_name??null,description:profile.description??'',description_auto:profile.description_auto!==false,bot_title:profile.bot_title??null}))]});
    if(url.pathname==='/api/profiles'&&request.method==='POST') {
     if(body?.name==='default'||settings.profiles.has(body?.name)) return send(response,400,{detail:`A profile named '${body.name}' already exists. Choose another name.`});
-    settings.profiles.set(body.name,{soul:body.soul||'',provider:settings.seedModel?.provider||'auto',model:settings.seedModel?.model||'',key:null,config:{},credentials:{}});
+    settings.profiles.set(body.name,{soul:body.soul||'',provider:settings.seedModel?.provider||'auto',model:settings.seedModel?.model||'',key:null,config:{},credentials:{},display_name:null,description:typeof body.description==='string'?body.description:'',description_auto:true,bot_title:null});
     return send(response,200,{ok:true,name:body.name,path:`/opt/data/profiles/${body.name}`,model_set:false,model_error:'No provider given',soul_set:Boolean(body.soul)});
    }
    // As delete_profile_endpoint answers (hermes_cli/web_routers/profiles.py 984-1002).
@@ -280,11 +280,18 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     const path=`/opt/data/profiles/${name}`;
     return send(response,200,settings.settlementPending?{ok:true,path,identity_settled:false,settlement_pending:true,retry_command:`hermes profile delete ${name}`}:{ok:true,path});
    }
-   const profilePath=url.pathname.match(/^\/api\/profiles\/([^/]+)\/(soul|model)$/);
+   const profilePath=url.pathname.match(/^\/api\/profiles\/([^/]+)\/(soul|model|description)$/);
    const profile=profilePath&&settings.profiles.get(decodeURIComponent(profilePath[1]));
    if(profilePath&&!profile) return send(response,404,{detail:'Profile not found'});
    if(profilePath?.[2]==='soul'&&request.method==='GET') return send(response,200,{content:profile.soul,exists:true});
    if(profilePath?.[2]==='soul'&&request.method==='PUT') { if(typeof body?.content!=='string') return send(response,422,{detail:'content'}); profile.soul=body.content; return send(response,200,{ok:true}); }
+   // A person wrote the description (hermes_cli/web_routers/profiles.py 1042-1053): trimmed, stored, never auto again.
+   if(profilePath?.[2]==='description'&&request.method==='PUT') {
+    if(typeof body?.description!=='string') return send(response,422,{detail:'description'});
+    profile.description=body.description.trim();
+    profile.description_auto=false;
+    return send(response,200,{ok:true,description:profile.description,description_auto:false});
+   }
    if(profilePath?.[2]==='model'&&request.method==='PUT') {
     if(settings.failStep==='model') return send(response,500,{detail:'Internal Server Error'});
     // _write_profile_model checks a pick against the profile's own keys (profiles.py 124-150); modelNeedsKey turns it on.
