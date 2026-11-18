@@ -6,7 +6,7 @@ import { render } from 'vitest-browser-react';
 import { cdp, page, userEvent } from 'vitest/browser';
 // Gives cdp() Playwright's session type (its send), as the config's provider does at run time.
 import type {} from '@vitest/browser-playwright';
-import { MessageBox, postMessage, type MessageBoxHandle } from '@/app/conversation-composer';
+import { CallableAgentsProvider, MessageBox, postMessage, type Callable, type CallableAgent, type MessageBoxHandle } from '@/app/conversation-composer';
 import { LanguageProvider } from '@/lib/i18n-client';
 import type { Language } from '@/lib/i18n.mjs';
 import '@/app/tokens.css';
@@ -14,8 +14,13 @@ import '@/app/shell.css';
 
 afterEach(() => { vi.unstubAllGlobals(); });
 type Send = (text: string, sendKey: string) => Promise<string | null>;
-const box = (props: { send: Send, stop?: { label: string, run: () => Promise<string | null> }, ref?: Ref<MessageBoxHandle> }, language: Language = 'en') =>
- render(<LanguageProvider language={language}><MessageBox placeholder="Write" {...props}/></LanguageProvider>);
+const box = (props: { send: Send, stop?: { label: string, run: () => Promise<string | null> }, ref?: Ref<MessageBoxHandle>, call?: Callable, seen?: CallableAgent[] }, language: Language = 'en') =>
+ render(<LanguageProvider language={language}><CallableAgentsProvider agents={props.seen ?? []}><MessageBox placeholder="Write" {...props}/></CallableAgentsProvider></LanguageProvider>);
+
+// #154, the "@" and "/" suggestion list (design-reference: tokenAtCaret, updatePop, mentionMenu, the composer's keys).
+const agents: CallableAgent[] = [{ id: 'a1', connection_id: 'c1', name: 'Lead', speciality: 'General' }, { id: 'a2', connection_id: 'c2', name: 'Reach', speciality: 'Runs Meta ads' }];
+const list = (screen: Awaited<ReturnType<typeof box>>) => screen.getByRole('listbox', { name: 'Suggestions' });
+const marked = (field: HTMLTextAreaElement) => document.getElementById(field.getAttribute('aria-activedescendant') ?? '')?.textContent;
 
 test('Enter sends the typed text once and empties the box; Shift+Enter adds a line', async () => {
  const send = vi.fn<Send>(async () => null);
@@ -161,4 +166,114 @@ test('the stop square fades and gives to 94% while held, as the send arrow does'
  const stop = screen.getByRole('button', { name: 'Stop' }).element();
  expect(getComputedStyle(stop).transition).toBe(fades);
  expect(await held(stop)).toBe('matrix(0.94, 0, 0, 0.94, 0, 0)');
+});
+
+test('"@" at the start or after a space offers the Agents this Member sees, with each face, name and the line under it, and narrows with every letter', async () => {
+ const screen = await box({ send: async () => null, seen: agents });
+ const field = screen.getByRole('textbox', { name: 'Message' });
+ await expect.element(field).toHaveAttribute('aria-expanded', 'false');
+ await expect.element(field).not.toHaveAttribute('aria-activedescendant');
+ await userEvent.type(field, '@');
+ await expect.element(list(screen)).toBeVisible();
+ await expect.element(field).toHaveAttribute('aria-expanded', 'true');
+ expect(screen.getByRole('option').elements().map(option => option.textContent)).toEqual(['LeadGeneral', 'ReachRuns Meta ads']);
+ const markedOption = field.element().getAttribute('aria-activedescendant');
+ expect(document.getElementById(markedOption!)?.getAttribute('aria-selected')).toBe('true');
+ expect(document.getElementById(markedOption!)?.textContent).toBe('LeadGeneral');
+ await userEvent.type(field, 're');
+ expect(screen.getByRole('option').elements().map(option => option.textContent)).toEqual(['ReachRuns Meta ads']);
+ await userEvent.type(field, ' ');
+ await expect.element(list(screen)).not.toBeInTheDocument();
+ await expect.element(field).toHaveAttribute('aria-expanded', 'false');
+});
+
+test('"@" inside a word opens nothing, and an Arabic name narrows the list', async () => {
+ const screen = await box({ send: async () => null, seen: [...agents, { id: 'a3', connection_id: 'c3', name: 'محتوى', speciality: 'الكتابة' }] });
+ const field = screen.getByRole('textbox', { name: 'Message' });
+ await userEvent.type(field, 'omar@example');
+ await expect.element(list(screen)).not.toBeInTheDocument();
+ await userEvent.clear(field);
+ await userEvent.type(field, '@م');
+ await expect.element(list(screen)).toBeVisible();
+ expect(screen.getByRole('option').elements().map(option => option.textContent)).toEqual(['محتوىالكتابة']);
+});
+
+test('in a channel the list holds the other Members with their Role, a Viewer marked "reads only", before the channel\'s Agents', async () => {
+ const screen = await box({ send: async () => null, call: { people: [{ id: 'p1', name: 'Sara Hassan', role: 'manager' }, { id: 'p2', name: 'Mona Ali', role: 'viewer' }], agents: [agents[1]] } });
+ const field = screen.getByRole('textbox', { name: 'Message' });
+ await userEvent.type(field, '@');
+ const menu = list(screen).element();
+ expect([...menu.querySelectorAll('.menu__label')].map(label => label.textContent)).toEqual(['Someone on the team', 'Call an agent']);
+ expect(screen.getByRole('option').elements().map(option => option.textContent)).toEqual(['SSara HassanManager@Sara', 'MMona AliViewer · reads only@Mona', 'ReachRuns Meta ads']);
+});
+
+test('"/" offers the Commands, narrowed by what follows it', async () => {
+ const screen = await box({ send: async () => null, seen: agents });
+ const field = screen.getByRole('textbox', { name: 'Message' });
+ await userEvent.type(field, '/a');
+ await expect.element(list(screen)).toBeVisible();
+ expect(screen.getByRole('option').elements().map(option => option.textContent)).toEqual(['Ask for a new agent/agent']);
+ await userEvent.type(field, 'zz');
+ await expect.element(list(screen)).not.toBeInTheDocument();
+});
+
+test('Arrow Down and Up move the marked entry and wrap, Enter picks it with one space after, and Enter does not send while the list is open', async () => {
+ const send = vi.fn<Send>(async () => null);
+ const screen = await box({ send, seen: agents });
+ const field = screen.getByRole('textbox', { name: 'Message' });
+ await userEvent.type(field, 'hello @');
+ const area = field.element() as HTMLTextAreaElement;
+ expect(marked(area)).toBe('LeadGeneral');
+ await userEvent.keyboard('{ArrowDown}'); await expect.poll(() => marked(area)).toBe('ReachRuns Meta ads');
+ await userEvent.keyboard('{ArrowDown}'); await expect.poll(() => marked(area)).toBe('LeadGeneral');
+ await userEvent.keyboard('{ArrowUp}'); await expect.poll(() => marked(area)).toBe('ReachRuns Meta ads');
+ await userEvent.keyboard('{Enter}');
+ await expect.element(field).toHaveValue('hello @Reach ');
+ expect(send).not.toHaveBeenCalled();
+ await expect.element(list(screen)).not.toBeInTheDocument();
+ await expect.element(field).toHaveAttribute('aria-expanded', 'false');
+ await expect.element(field).toHaveFocus();
+ expect([area.selectionStart, area.selectionEnd]).toEqual([13, 13]);
+});
+
+test('Tab picks the marked entry too, Escape closes the list and keeps the text', async () => {
+ const screen = await box({ send: async () => null, seen: agents });
+ const field = screen.getByRole('textbox', { name: 'Message' });
+ await userEvent.type(field, '/a');
+ await userEvent.keyboard('{Tab}');
+ await expect.element(field).toHaveValue('/agent ');
+ await userEvent.type(field, 'hi @Re');
+ await expect.element(list(screen)).toBeVisible();
+ await userEvent.keyboard('{Escape}');
+ await expect.element(field).toHaveValue('/agent hi @Re');
+ await expect.element(list(screen)).not.toBeInTheDocument();
+ await expect.element(field).toHaveFocus();
+});
+
+test('opening the list closes the "+" menu, and opening the "+" menu closes the list', async () => {
+ const screen = await box({ send: async () => null, seen: agents });
+ const field = screen.getByRole('textbox', { name: 'Message' });
+ const plus = screen.getByRole('button', { name: 'More: call someone, commands' });
+ await userEvent.type(field, '@');
+ await expect.element(list(screen)).toBeVisible();
+ await plus.click();
+ await expect.element(list(screen)).not.toBeInTheDocument();
+ await expect.element(plus).toHaveAttribute('aria-expanded', 'true');
+ await expect.element(screen.getByRole('menu', { name: 'More' })).toBeVisible();
+ await plus.click();
+ await expect.element(plus).toHaveAttribute('aria-expanded', 'false');
+ await field.click();
+ await userEvent.keyboard(' @');
+ await expect.element(list(screen)).toBeVisible();
+ await expect.element(plus).toHaveAttribute('aria-expanded', 'false');
+});
+
+test('in Arabic the list speaks the reference\'s words', async () => {
+ const screen = await box({ send: async () => null, call: { people: [{ id: 'p1', name: 'سارة حسن', role: 'viewer' }], agents: [agents[1]] } }, 'ar');
+ const field = screen.getByRole('textbox', { name: 'الرسالة' });
+ await userEvent.type(field, '@');
+ await expect.element(screen.getByRole('listbox', { name: 'اقتراحات' })).toBeVisible();
+ const menu = screen.getByRole('listbox').element();
+ expect([...menu.querySelectorAll('.menu__label')].map(label => label.textContent)).toEqual(['حد من الفريق', 'نادي وكيل']);
+ expect(screen.getByRole('option').elements().map(option => option.textContent)).toEqual(['سسارة حسنمشاهد · بتقرا بس@سارة', 'ReachRuns Meta ads']);
 });
