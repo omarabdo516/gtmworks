@@ -75,7 +75,7 @@ export async function conversationRecord(db:Database,person:string,company:strin
  const cards=[...madeRows.flatMap(({run_id,call_id,created_at,hermes_agents:agent})=>agent&&!requested.has(`${run_id}:${call_id}`)?[{run_id,at:created_at,card:{kind:'made',agent:{id:agent.id,connection_id:agent.connection_id,name:agent.name,job:agent.speciality,apps:agent.apps||[],fresh:isNewFor(agent,person),created_at}}} satisfies {run_id:string,at:string,card:LeadCard}]:[]),
   ...requestRows.map(row=>({run_id:row.run_id,at:row.created_at,card:{kind:'request',request:requestView(row)}} satisfies {run_id:string,at:string,card:LeadCard})),
   ...handed,
-  ...replyRows.flatMap(row=>{ const card=handPickup(replyCardOf(row,states),queued,messages as {author:string,created_at:string}[]); return card?[{run_id:row.run_id,at:row.created_at,card:{kind:'reply',card},...questionParts(row,card,lead)} satisfies PlacedCard]:[]; })];
+  ...replyRows.flatMap(row=>{ const card=handPickup(replyCardOf(row,states),queued,messages as {author:string,created_at:string}[]); return card?[{run_id:row.run_id,at:row.created_at,card:{kind:'reply',card},...questionParts(row,card)} satisfies PlacedCard]:[]; })];
  type SavedRow={id:string,run_id:string,agent_id:string|null,removed_at:string|null,said_at:string,body:string,suggestion:'pending'|'approved'|'rejected'|null,decided_at:string|null,decider:{name:string}|null};
  const sentTo=rows.some(row=>row.suggestion)?new Map((((await db.rpc('rule_suggestions_sent_to',{conversation})).data||[]) as {rule:string,sent_to:string[]}[]).map(row=>[row.rule,row.sent_to])):new Map<string,string[]>();
  const saved=rows.map(row=>({run_id:row.run_id,rule:{id:row.id,agent:row.agent_id,removed:row.removed_at!==null,said_at:row.said_at,...(row.suggestion?{sentTo:sentTo.get(row.id)||[]}:{})} satisfies SavedRule}));
@@ -94,6 +94,7 @@ export async function conversationRecord(db:Database,person:string,company:strin
   usage:(await read)?.usage??null,
   pending:waiting(messages,ends).length>0||queuedWaiting(queued),
   ...(handedRows.some(row=>row.state!=='done'&&row.state!=='failed')?{handover:true as const}:{}),
+  ...(lead?{lead:true as const}:{}),
   ...(replyRows.some(row=>row.kind==='question'&&row.state==='open')?{asking:true as const}:{}),
   ...(permit?{permit:permit as PermissionChoice[]}:{}),
   ...(connect?{connect}:{}),

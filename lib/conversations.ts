@@ -101,16 +101,16 @@ type StoredMessage=ConversationMessage&{run_id:string,hand_card?:number|null};
 export const messageColumns='id,author,author_name,body,run_id,hand_card,created_at';
 export const conversationColumns='id,agent_id,agent_name,hermes_session_id,hermes_agents(connection_id,is_default)';
 // A card of a run as the record places it. A question (#138) also carries the answer its person gave, drawn as their
-// own message though none is stored, and the main Agent's question carries the plain words it is drawn as (`words`)
-// until #143 draws its own card.
-export type PlacedCard={run_id:string,card:LeadCard,at:string,answer?:{body:string,at:string,delivered:boolean},words?:string};
+// own message though none is stored; the main Agent's question is drawn as the reference's chip card by its Agent's
+// name (lib/conversation-record.ts), and any other Agent's as the lettered card (#143).
+export type PlacedCard={run_id:string,card:LeadCard,at:string,answer?:{body:string,at:string,delivered:boolean}};
 // What a question adds to its place in the record (#138): the answer its person gave, at the time they gave it, and
 // whether it reached the Engine (one claimed after the Engine stopped waiting, or as its Run ended, did not: its card
-// closed), and for the main Agent the plain words it is drawn as (the question, then each choice on its own line).
-export function questionParts(row:ReplyCardRow,card:ReplyCard,lead:boolean):Pick<PlacedCard,'answer'|'words'> {
+// closed).
+export function questionParts(row:ReplyCardRow,card:ReplyCard):Pick<PlacedCard,'answer'> {
  if(card.kind!=='question') return {};
  const {answer}=row.content as {answer?:string};
- return {...(answer!==undefined&&row.answered_at?{answer:{body:answer,at:row.answered_at,delivered:card.state!=='closed'}}:{}),...(lead?{words:[card.question,...card.choices.map(choice=>`- ${choice}`)].join('\n')}:{})};
+ return answer!==undefined&&row.answered_at?{answer:{body:answer,at:row.answered_at,delivered:card.state!=='closed'}}:{};
 }
 // What the Engine stops a Run for, a question (#138) or a request to allow an action (#163), is the Agent's own turn
 // after the message of that Run, before its reply.
@@ -128,7 +128,7 @@ export const shown=(messages:StoredMessage[],ends:RunEnd[]=[],leadCards:PlacedCa
  const rules=saved.filter(row=>row.run_id===message.run_id).map(row=>row.rule);
  const asked=message.author==='person'?leadCards.filter(row=>row.run_id===message.run_id&&isAsked(row)).flatMap((row):ConversationMessage[]=>{
   const id=row.card.kind==='reply'?row.card.card.id:0;
-  return [{id,author:'agent',author_name:agentName,body:row.words??'',created_at:row.at,kind:'asked',...(row.words===undefined?{cards:[row.card]}:{})},
+  return [{id,author:'agent',author_name:agentName,body:'',created_at:row.at,kind:'asked',cards:[row.card]},
    ...(row.answer?[{id,author:'person' as const,author_name:message.author_name,body:row.answer.body,created_at:row.answer.at,kind:'answer' as const,...(row.answer.delivered?{}:{failed:true})}]:[])];
  }):[];
   const own=handTurn(message)?[]:[plain];

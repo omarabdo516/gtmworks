@@ -866,6 +866,7 @@
   "questionLetters": "ABCD",
   "questionHint": "Pick one, or write your answer in the message",
   "questionHintWords": "Write your answer in the message",
+  "questionOrType": "or type the answer below",
   "questionAnswered": "Answered",
   "questionClosed": "This question can no longer be answered",
   "questionTaken": "This question was already answered",
