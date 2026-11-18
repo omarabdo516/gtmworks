@@ -152,7 +152,7 @@ test('a Company worked alone hears the alone wording: no team, and the coder han
  } finally { query(`update public.companies set work_mode='team' where id='${rs}'`); }
 });
 
-for(const [role,email] of [['Manager','manager@example.com'],['Contributor','reviewer@example.com'],['Viewer','viewer@example.com']]) {
+for(const [role,email] of [['Viewer','viewer@example.com']]) {
  test(`a ${role} sees no gallery link and no gallery, even at its address`,async({page})=>{
   await signIn(page,email,'/c/rs-learning/home');
   for(const path of ['/c/rs-learning/chat?new=agent','/c/rs-learning/chat?new=ready']) {
@@ -164,3 +164,71 @@ for(const [role,email] of [['Manager','manager@example.com'],['Contributor','rev
   }
  });
 }
+
+// #189: a Manager or a Contributor opens the same gallery from the hint line and asks Lead for a role. Lead prepares
+// the request their Owner answers (#17): one request is kept, no Agent is made, and the item waits in the Owner's
+// "Waiting on you". The Owner alone still adds a role (the first test above).
+const numbersRole='Numbers analyst';
+const asked='Make me a “Numbers analyst” agent like the ready-made one';
+const ownerName='عمر';
+const people:Record<string,string>={'manager@example.com':'20000000-0000-0000-0000-000000000002','reviewer@example.com':'20000000-0000-0000-0000-000000000003'};
+const agentsCount=()=>JSON.parse(query(`select count(*)::int as n from public.hermes_agents where company_id='${company}'`))[0].n;
+for(const [role,email,who] of [['Manager','manager@example.com','مدير'],['Contributor','reviewer@example.com','مراجع']]) {
+ test(`a ${role} asks from the ready-made gallery: Lead's request waits for the Owner, and no Agent is made`,async({page})=>{
+  test.setTimeout(120000);
+  const before=agentsCount();
+  const answer=fake.settings.reply;
+  fake.settings.reply=(input:string)=>input.toLowerCase().includes(numbersRole.toLowerCase())
+   ?`On it.\n\n\`\`\`gtmworks-tool\n${JSON.stringify({name:'request_agent',arguments:{template:'numbers'}})}\n\`\`\``:`Reply to: ${input}`;
+  try {
+   await signIn(page,email,'/c/rs-learning/home');
+   await page.goto('/c/rs-learning/chat?new=agent');
+   // Every Member who may write gets the hint line and its link; the Viewer above gets neither.
+   await expect(page.locator('.new-hint__t')).toHaveText(`Tell Lead what you need an agent for, and it prepares the request for ${ownerName}.`);
+   const link=page.locator('.new-hint').getByRole('link',{name:'or pick a ready-made one'});
+   await link.click();
+   await expect(page).toHaveURL(/\/c\/rs-learning\/chat\?new=ready$/);
+   const gallery=page.getByRole('dialog',{name:'Ready-made agents for RS Learning'});
+   await expect(gallery.locator('.modal__sub')).toHaveText(`Pick a role and ask Lead. It prepares a proposal, and the agent is only created when ${ownerName} approves. This list is private to the RS Learning workspace.`);
+   await expect(gallery.getByRole('button',{name:'Ask for SEO content writer'})).toHaveText('Ask for it');
+   await expect(gallery.getByRole('button',{name:'Add SEO content writer'})).toHaveCount(0);
+   await expect(gallery.locator('.modal__foot').getByRole('button',{name:'Ask Lead'})).toBeVisible();
+   await expect(gallery.locator('.modal__foot').getByRole('button',{name:'Start from scratch'})).toHaveCount(0);
+
+   await gallery.getByRole('button',{name:'Ask for Numbers analyst'}).click();
+   await expect(page).toHaveURL(/\/c\/rs-learning\/conversations\/[0-9a-f-]{36}$/);
+   const talked=conversationOf(page);
+   await expect(page.locator('.msg[data-author=person]')).toContainText(asked);
+   await expect(page.getByRole('group',{name:'Agent request: Numbers'})).toBeVisible({timeout:30000});
+   await expect(page.getByRole('group',{name:'Agent request: Numbers'}).locator('.badge--req')).toHaveText('Request · not made yet');
+   // One request, kept as Lead made it; no Agent was made.
+   expect(JSON.parse(query(`select asked_by,agent_name,template,state from public.lead_agent_requests where conversation_id='${talked}'`)))
+    .toEqual([{asked_by:people[email],agent_name:roleTemplates.numbers.name,template:'numbers',state:'waiting'}]);
+   expect(agentsCount()).toBe(before);
+   expect(JSON.parse(query(`select count(*)::int as n from public.lead_made_agents where conversation_id='${talked}'`))[0].n).toBe(0);
+   // The item waits in the Owner's "Waiting on you", and not in another Member's.
+   await page.context().clearCookies();
+   await signIn(page,'omar@example.com','/c/rs-learning/approvals');
+   await expect(page.getByRole('group',{name:'Agent request: Numbers'}).filter({hasText:`Agent request from ${who}`})).toBeVisible();
+  } finally { fake.settings.reply=answer; }
+ });
+}
+
+test('"Ask Lead" in the gallery foot closes it and puts the focus in Lead\'s composer, with the hint line shown',async({page})=>{
+ await signIn(page,'reviewer@example.com','/c/rs-learning/home');
+ await page.goto('/c/rs-learning/chat?new=ready');
+ const gallery=page.getByRole('dialog',{name:'Ready-made agents for RS Learning'});
+ await gallery.getByRole('button',{name:'Ask Lead'}).click();
+ await expect(page).toHaveURL(/\/c\/rs-learning\/chat\?new=agent$/);
+ await expect(page.getByRole('dialog')).toHaveCount(0);
+ await expect(page.locator('.new-hint__t')).toHaveText(`Tell Lead what you need an agent for, and it prepares the request for ${ownerName}.`);
+ await expect(page.locator('.new-hint__alt')).toHaveText('or pick a ready-made one');
+ await expect(page.getByRole('textbox',{name:'Message'})).toBeFocused();
+ // The same in an empty search.
+ await page.locator('.new-hint').getByRole('link',{name:'or pick a ready-made one'}).click();
+ await page.getByRole('searchbox',{name:'Search ready-made agents'}).fill('zzz');
+ await expect(page.getByRole('dialog',{name:'Ready-made agents for RS Learning'}).locator('.tpl-empty b')).toHaveText('No ready-made agent matches “zzz”');
+ await page.getByRole('dialog',{name:'Ready-made agents for RS Learning'}).getByRole('button',{name:'Ask Lead'}).first().click();
+ await expect(page).toHaveURL(/\/c\/rs-learning\/chat\?new=agent$/);
+ await expect(page.getByRole('textbox',{name:'Message'})).toBeFocused();
+});
