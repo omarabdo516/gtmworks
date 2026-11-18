@@ -14,6 +14,7 @@ import { AppTile } from '@/components/app-tile';
 import { knownApp } from '@/lib/app-catalogue.mjs';
 import { useI18n } from '@/lib/i18n-client';
 import { localeFor } from '@/lib/i18n.mjs';
+import { directionOf } from '@/lib/bidi';
 import { madeDay, useZone } from '@/app/agent-made';
 import { dayOf } from '@/lib/activity-log.mjs';
 import type { ReplyCard } from '@/lib/conversations';
@@ -27,9 +28,6 @@ const settling=900;
 
 // An app gtmworks does not know draws the reference's plain tile.
 const handApp=(name:string)=>knownApp(name)??{key:'',mark:'·'};
-// The direction of the title's first strong letter: the badge comes first on the card, so the frame cannot take it
-// from its own text.
-const rtl=(text:string)=>/^[^A-Za-zÀ-ɏͰ-ϿЀ-ӿ֐-ࣿיִ-﷿ﹰ-﻿]*[֐-ࣿיִ-﷿ﹰ-﻿]/.test(text);
 
 export function HandCard({card,fresh,done}:{card:Hand,fresh:boolean,done?:MarkHandDone}) {
  const {t,language}=useI18n(); const zone=useZone();
@@ -56,7 +54,7 @@ export function HandCard({card,fresh,done}:{card:Hand,fresh:boolean,done?:MarkHa
  const time=(value:string)=><time dateTime={value} data-utc={zone}>{when(value)}</time>;
  // The time is its own element inside the sentence, so the sentence is split where the time goes.
  const [before,after]=t('handDoneAt','{0}').split('{0}');
- return <div id={`hand-${card.id}`} tabIndex={-1} className={`reply-card reply-card--hand${at?' is-resolved':''}${just?' is-just':''}${fresh?' card-in':''}`} role="group" aria-label={t('handLabel',card.title)} dir={rtl(card.title)?'rtl':'ltr'}>
+ return <div id={`hand-${card.id}`} tabIndex={-1} className={`reply-card reply-card--hand${at?' is-resolved':''}${just?' is-just':''}${fresh?' card-in':''}`} role="group" aria-label={t('handLabel',card.title)} dir={directionOf(card.title,language==='ar'?'rtl':'ltr')}>
   <div className="hcard__top"><span className="badge ck-badge"><ShellIcon name="hand"/>{t('handBadge')}</span></div>
   <div className="card__head"><AppTile app={handApp(card.app)} size="lg"/>
    <div className="card__titles"><span className="card__title">{card.title}</span><span className="card__sub">{card.line}</span></div></div>
