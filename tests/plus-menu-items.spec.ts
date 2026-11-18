@@ -195,6 +195,8 @@ test('the Owner picks a model: the menu closes, the field has the focus, the toa
 test('a model the Engine refuses leaves the Conversation on its earlier model and says so in one line under the composer',async({page})=>{
  await signIn(page,'omar@example.com','/c/rs-learning/home');
  const conversation=await conversationWith(page,'Plan the launch');
+ // Lead is idle before the refused send, so it starts a Run at once rather than waiting as a queued turn.
+ await expect(page.locator('.msg').filter({hasText:'Reply to: Plan the launch'})).toBeVisible({timeout:20000});
  await plus(page).click();
  await menu(page).getByRole('menuitemradio',{name:/^openai\/gpt-5\.5/}).click();
  await expect(page.locator('.toast')).toHaveText('Lead will think with openai/gpt-5.5');
