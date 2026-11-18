@@ -97,8 +97,9 @@ test('prepared navigation and Paperclip motion inventory (production, warm-up + 
   await idle(page);
 });
 
-// Set aside so the new shell can match the approved design first; #55 restores it (Omar, 2026-11-12).
-test.fixme('unprepared links answer within 50ms and clear feedback when content arrives', async ({ page }, testInfo) => {
+// The approved sidebar (#8) lists Chats, Marketing board, Numbers and Activity log, so Numbers is the entry whose full
+// prefetch this holds back: the click has no prepared cache to open and must answer for itself.
+test('unprepared links answer within 50ms and clear feedback when content arrives', async ({ page }, testInfo) => {
   await signIn(page, 'manager@example.com', '/c/rs-learning/work/board');
   const answers: number[] = [];
   for (let run = 0; run < 4; run++) {
@@ -106,7 +107,7 @@ test.fixme('unprepared links answer within 50ms and clear feedback when content 
     const delayed = new Promise<void>(resolve => { release = resolve; });
     let requested!: () => void;
     const requestArrived = new Promise<void>(resolve => { requested = resolve; });
-    await page.route('**/c/rs-learning/library?*', async route => {
+    await page.route('**/c/rs-learning/numbers?*', async route => {
       requested();
       await delayed;
       await route.continue();
@@ -122,7 +123,7 @@ test.fixme('unprepared links answer within 50ms and clear feedback when content 
           const start = performance.now();
           const sample = () => {
             const bar = document.querySelector('.navigation-progress');
-            const link = document.querySelector('.nav a[href$="/library"]')!;
+            const link = document.querySelector('.nav a[href$="/numbers"]')!;
             const style = getComputedStyle(link);
             if (bar?.getBoundingClientRect().height === 3 && style.backgroundColor !== 'rgba(0, 0, 0, 0)') {
               state.answerMs = performance.now() - start;
@@ -132,18 +133,18 @@ test.fixme('unprepared links answer within 50ms and clear feedback when content 
         }, { once: true, capture: true });
       });
       await openNavigation(page);
-      await page.locator('.nav a[href$="/library"]').click();
+      await page.locator('.nav a[href$="/numbers"]').click();
       await page.waitForFunction(() => (window as typeof window & { answerMs?: number }).answerMs !== undefined);
       const answer = await page.evaluate(() => (window as typeof window & { answerMs: number }).answerMs);
       if (run) answers.push(answer);
       await expect(page.getByRole('progressbar', { name: "Opening page" })).toBeVisible();
       release();
-      await expect(page.locator('.heading h1')).toHaveText("Library");
+      await expect(page.locator('.heading h1')).toHaveText("Numbers");
       await expect(page.getByRole('progressbar')).toHaveCount(0);
       await expect(page.locator('.link-pending')).toHaveCount(0);
     } finally {
       release();
-      await page.unroute('**/c/rs-learning/library?*');
+      await page.unroute('**/c/rs-learning/numbers?*');
     }
   }
   console.log('INSTANT_ANSWER', JSON.stringify({ median: median(answers), runs: answers }));

@@ -1,0 +1,1 @@
+| `components/ready-made.test.tsx` | "Add it" in the ready-made gallery opens the Conversation once Lead got the message, and a send still on its way when the gallery closes never moves the page that took its place. (#14) | 0.8 s | ready-made-roles.spec.ts (the whole Owner journey with fake Hermes) | new |

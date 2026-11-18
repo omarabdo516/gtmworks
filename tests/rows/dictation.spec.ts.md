@@ -1,0 +1,6 @@
+| `dictation.spec.ts` | Voice dictation on the whole stack (#160): a fake microphone device records on a hold, the route sends that one recording to the Engine for the Agent's own profile, and its words land in the composer; a Contributor is answered not found for a hidden Agent and for another Company, and for the language read too. | 4 s | components/message-box.test.tsx (hold, click, Escape, the cross, 60 seconds, send, the waveform, reduced motion); dictation.test.mjs (the driver); supabase/tests/member_agent_visibility.sql (who reads which Agent) | new |
+
+## Cases
+
+| `dictation.spec.ts` "a Member holds the microphone and the Engine's words land in the composer" | stays | A real browser recording and a real request through the server (#160): a fake microphone device and a hold on the button make a recording, the route sends it to the fake Engine, and its words land in the composer. The component tests cover hold, click, Escape, the cross, 60 seconds, send, the waveform and reduced motion. |
+| `dictation.spec.ts` "a Contributor cannot transcribe for a hidden Agent or in another Company" | stays | Company isolation (#160, ADR 0004): the route answers not found for an Agent hidden from the Contributor and for another Company, and the language read follows the same rule; the Agent's row-level policies decide. |

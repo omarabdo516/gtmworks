@@ -1,0 +1,1 @@
+| `moved-tests.test.mjs` | Every case in `moved-tests.json` is gone from the browser suite as Playwright lists it, and each of its new homes is there and holds the test it names (#338). | 0.8 s | testing-doc.test.mjs (a moved case is out of its file) | new |

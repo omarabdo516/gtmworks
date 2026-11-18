@@ -1,0 +1,6 @@
+| `company-knowledge.spec.ts` | A Manager fills an empty part of the Company knowledge and sees it with who edited it, leaves the editor with Escape, saves with Ctrl+S (the same text changes nothing) and clears the part back to its empty state; each change is logged and named in the Activity log; a Contributor reads it with no Edit button and the server refuses their save. (#27) | — | company_knowledge.sql (who may read and edit each part, in the database) | keep (#218, case by case above) |
+
+## Cases
+
+| `company-knowledge.spec.ts` "a Manager fills an empty part, cancels and saves with the keyboard, then clears it back to its empty state; each change is logged" | stays | A real save through the server and a report: a Manager's saves, the unchanged save and the clearing are read back from the fake Engine's shared Skill (#344) with who edited them, each is one log row, and the Activity log names the part. |
+| `company-knowledge.spec.ts` "a Contributor reads the knowledge with no Edit button, and the server refuses their save" | stays | Permissions: a Contributor reads the knowledge with no Edit button, and the server action refuses their save, which stores and logs nothing. |

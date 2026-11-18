@@ -1,0 +1,1 @@
+| `install/rate-limit.install.ts` | On a real install behind the HTTPS proxy, repeated wrong passwords hit the auth rate limit and the page says so. (install job) | in install job | sign-in-rate-limit.test.mjs (the page and logs without an install) | keep (decision 0015 install checks) |
