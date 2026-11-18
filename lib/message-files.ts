@@ -38,23 +38,23 @@ export async function filesAsImages(service:SupabaseClient,rows:{content_type:st
 }
 
 // Keeps a send's images: the rows first, under the database's own checks (the place is the caller's, they may write, the
-// type is an image the Engine reads), then the bytes in the Company's folder. A failed upload gives the rows back, so
-// nothing is left of a send that kept nothing.
+// type is an image the Engine reads), then the bytes in the Company's folder. A failed upload gives the rows back: the
+// guarded discard names the paths of the rows it took, and only those are removed, so a stored message's file stays.
 /** @param {SupabaseClient} db @param {SupabaseClient} service @param {KeepFiles} kept @returns {Promise<{error?:string}>} */
 export async function keepMessageFiles(db:SupabaseClient,service:SupabaseClient,{place,files,reserve,reserveArgs,discard,discardArgs,words}:KeepFiles):Promise<{error?:string}> {
  const rows=files.map((file,index)=>({position:index,name:file.name.slice(0,255)||'image',content_type:file.type.slice(0,127),size:file.size}));
- const {error}=await db.rpc(reserve,{...reserveArgs(place),files:rows});
+ const {data,error}=await db.rpc(reserve,{...reserveArgs(place),files:rows});
  if(error) return {error:refusalOf(error.code,words)};
- const written:string[]=[];
+ // -1: the files of this send key are already a stored message's own, so there is nothing to write again; the send goes
+ // on to its message, which the send key answers with the one it stored.
+ if(typeof data==='number'&&data<0) return {};
  for(const [index,file] of files.entries()) {
   const path=messageFilePath(place,index);
   const stored=await service.storage.from(bucket).upload(path,Buffer.from(await file.arrayBuffer()),{contentType:rows[index].content_type,upsert:true});
   if(stored.error) {
-   if(written.length) await service.storage.from(bucket).remove(written);
    await discardMessageFiles(db,service,{place,discard,discardArgs});
    return {error:words.failed};
   }
-  written.push(path);
  }
  return {};
 }

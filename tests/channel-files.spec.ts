@@ -46,6 +46,7 @@ test('an image with a channel message shows under it for the writer and for the 
  await page.reload();
  await expect(page.locator('.turn--user .msg-files a.file-chip')).toHaveAttribute('href',href!);
  // The Viewer reads the chip on the start side, and opens the file; they have no composer to attach one.
+ await page.context().clearCookies();
  await signIn(page,'viewer@example.com',general);
  const peer=page.locator('.turn--peer').filter({has:page.locator('.msg-files')});
  await expect(peer.locator('.msg-files .file-chip')).toHaveText(/cover\.png/);

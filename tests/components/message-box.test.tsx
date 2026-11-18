@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from 'vitest';
-import { act, createRef, type Ref } from 'react';
+import { act, createRef, StrictMode, useState, type Ref } from 'react';
 import { hydrateRoot } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 import { render } from 'vitest-browser-react';
@@ -479,6 +479,81 @@ test('a quick click starts and a second click finishes; Escape and the cross can
  await screen.getByRole('button', { name: 'Cancel recording' }).click(); await flush();
  await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('');
  expect(engine.calls).toEqual([]);
+});
+
+test('a permission that resolves after its session was cancelled starts no recorder and leaves the session that replaced it alone', async () => {
+ vi.useFakeTimers();
+ FakeRecorder.made = [];
+ const lateTrack = { stop: vi.fn() }; const nextTrack = { stop: vi.fn() };
+ const lateStream = { getTracks: () => [lateTrack], getAudioTracks: () => [lateTrack] };
+ const nextStream = { getTracks: () => [nextTrack], getAudioTracks: () => [nextTrack] };
+ let allow: (stream: MediaStream) => void = () => {};
+ vi.spyOn(navigator.mediaDevices, 'getUserMedia')
+  .mockImplementationOnce(() => new Promise<MediaStream>(resolve => { allow = resolve; }))
+  .mockImplementationOnce(async () => nextStream as unknown as MediaStream);
+ vi.stubGlobal('MediaRecorder', FakeRecorder);
+ const engine = dictate({ text: 'the second session' });
+ const screen = await voiced({ send: async () => null }); const button = boxOf(screen);
+ // A asks for the microphone and is cancelled while the browser still asks.
+ await pointer(button, 'pointerdown'); await flush();
+ act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); }); await flush();
+ // B starts and gets its stream.
+ await pointer(button, 'pointerdown'); await flush();
+ expect(FakeRecorder.made).toHaveLength(1);
+ // A's permission resolves late: its tracks are let go and B keeps recording.
+ await act(async () => { allow(lateStream as unknown as MediaStream); await Promise.resolve(); await Promise.resolve(); });
+ expect(lateTrack.stop).toHaveBeenCalled();
+ expect(FakeRecorder.made).toHaveLength(1);
+ await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+ await pointer(button, 'pointerup'); await flush();
+ await act(async () => { await vi.advanceTimersByTimeAsync(0); await Promise.resolve(); });
+ expect(nextTrack.stop, 'the recording that ended is the one that stops its microphone').toHaveBeenCalled();
+ expect(engine.calls).toHaveLength(1);
+});
+
+test('a recording is sent for the Agent it started on, and an answer that arrives after the Agent changed inserts nothing', async () => {
+ vi.useFakeTimers(); mic(); const engine = dictate({ deferred: true });
+ let switchTarget: () => void = () => {};
+ function Switcher() {
+  const [target, setTarget] = useState(voice);
+  switchTarget = () => setTarget({ company: 'co-1', agent: 'ag-2' });
+  return <LanguageProvider language="en"><MessageBox placeholder="Write" voice={target} send={async () => null}/></LanguageProvider>;
+ }
+ const screen = await render(<Switcher/>);
+ await hold(boxOf(screen));
+ await expect.poll(() => engine.calls.length).toBe(1);
+ expect(engine.calls[0].body).toMatchObject({ company: 'co-1', agent: 'ag-1' });
+ await act(async () => { switchTarget(); });
+ await act(async () => { engine.finish(Response.json({ text: 'words for the other agent' })); await Promise.resolve(); await Promise.resolve(); });
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('');
+});
+
+test('changing the Agent while recording cancels it, sending nothing and inserting nothing', async () => {
+ vi.useFakeTimers(); mic(); const engine = dictate({ text: 'never inserted' });
+ let switchTarget: () => void = () => {};
+ function Switcher() {
+  const [target, setTarget] = useState(voice);
+  switchTarget = () => setTarget({ company: 'co-1', agent: 'ag-2' });
+  return <LanguageProvider language="en"><MessageBox placeholder="Write" voice={target} send={async () => null}/></LanguageProvider>;
+ }
+ const screen = await render(<Switcher/>); const button = boxOf(screen);
+ await pointer(button, 'pointerdown'); await flush();
+ await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+ await act(async () => { switchTarget(); }); await flush();
+ await expect.element(screen.getByRole('button', { name: 'Voice dictation: hold and talk, or click once to start' })).toBeVisible();
+ await pointer(button, 'pointerup'); await flush();
+ await act(async () => { await vi.advanceTimersByTimeAsync(0); await Promise.resolve(); });
+ expect(engine.calls).toEqual([]);
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('');
+});
+
+test('under React Strict Mode the microphone still records and puts its words in, after the effect runs twice', async () => {
+ vi.useFakeTimers(); mic(); const engine = dictate({ text: 'strict mode words' });
+ const screen = await render(<StrictMode><LanguageProvider language="en"><MessageBox placeholder="Write" voice={voice} send={async () => null}/></LanguageProvider></StrictMode>);
+ await hold(boxOf(screen));
+ await act(async () => { await vi.advanceTimersByTimeAsync(0); await Promise.resolve(); });
+ await expect.poll(() => engine.calls.length).toBe(1);
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('strict mode words');
 });
 
 test('in Arabic the dictation hint names the listening language in Arabic (#160)', async () => {

@@ -43,7 +43,8 @@ export function useComposerDictation({target,insert,field,onStart}:{target?:Dict
  const [error,setError]=useState('');
  const [unavailable,setUnavailable]=useState(false);
  // The language read with the Agent it was read for, so another Agent's language never shows here.
- const placeKey=target?`${target.company}:${target.agent??''}:${target.channel??''}`:'';
+ const placeKeyOf=(place?:DictationTarget)=>place?`${place.company}:${place.agent??''}:${place.channel??''}`:'';
+ const placeKey=placeKeyOf(target);
  const [spoken,setSpoken]=useState<{key:string,language:string}|null>(null);
  const listening=spoken?.key===placeKey?spoken.language:null;
  const live=useRef<Session|null>(null); const askedFor=useRef('');
@@ -56,11 +57,17 @@ export function useComposerDictation({target,insert,field,onStart}:{target?:Dict
  const stream=useRef<MediaStream|null>(null);
  const audio=useRef<{context:AudioContext,analyser:AnalyserNode}|null>(null);
  const phase=useRef(0); const mounted=useRef(true);
+ // Each recording is its own session: a permission that comes back late, or a recorder's callback from a session the
+ // person already replaced, is let go instead of taking the live session's stream, audio or recorder.
+ const sessionNo=useRef(0);
  const insertNow=useRef(insert); insertNow.current=insert;
  const focusField=useRef(field); focusField.current=field;
  // The field was hidden while it recorded: the focus goes back once React has drawn it again.
  const focusAfterDraw=()=>setTimeout(()=>focusField.current(),0);
  const targetNow=useRef(target); targetNow.current=target;
+ const placeKeyNow=useRef(placeKey); placeKeyNow.current=placeKey;
+ // What a recording was started for, and the insert of the composer it was started in: a later pick never redirects it.
+ const recordingFor=useRef<{key:string,target:DictationTarget,insert:(text:string)=>void}|null>(null);
  const finishing=useRef(false);
 
  const put=(next:Session|null)=>{ live.current=next; if(mounted.current) setSession(next); };
@@ -95,7 +102,7 @@ export function useComposerDictation({target,insert,field,onStart}:{target?:Dict
  }
  function askLanguage() {
   const place=targetNow.current; if(!place) return;
-  const key=`${place.company}:${place.agent??''}:${place.channel??''}`;
+  const key=placeKeyOf(place);
   if(askedFor.current===key) return;
   askedFor.current=key;
   const query=new URLSearchParams({company:place.company,...(place.agent?{agent:place.agent}:{}),...(place.channel?{channel:place.channel}:{})});
@@ -104,6 +111,10 @@ export function useComposerDictation({target,insert,field,onStart}:{target?:Dict
  }
  async function start(mode:Mode) {
   if(live.current||!targetNow.current||unavailable) return;
+  const id=++sessionNo.current;
+  const place=targetNow.current;
+  // The recording belongs to the Agent it started on, and its words to the composer it started in.
+  recordingFor.current={key:placeKeyOf(place),target:place,insert:insertNow.current};
   finishing.current=false;
   setError(''); setSeconds(0); counted.current=0; put({mode,started:Date.now()});
   onStart?.();
@@ -118,8 +129,9 @@ export function useComposerDictation({target,insert,field,onStart}:{target?:Dict
   try {
    if(!navigator.mediaDevices?.getUserMedia) throw new Error('no microphone');
    const media=await navigator.mediaDevices.getUserMedia({audio:true});
-   // Cancelled while the browser was asking: its tracks are let go at once.
-   if(!live.current||!mounted.current) { for(const track of media.getTracks?.()??[]) { try { track.stop(); } catch {} } return; }
+   // Cancelled while the browser was asking, or replaced by a later session: its tracks are let go at once, and the
+   // live session's stream, audio and recorder are left alone.
+   if(id!==sessionNo.current||!live.current||!mounted.current) { for(const track of media.getTracks?.()??[]) { try { track.stop(); } catch {} } return; }
    stream.current=media;
    let context:AudioContext|undefined;
    try {
@@ -134,9 +146,10 @@ export function useComposerDictation({target,insert,field,onStart}:{target?:Dict
    let made:MediaRecorder;
    try { made=new Recorder(media,{mimeType:'audio/webm'}); } catch { made=new Recorder(media); }
    chunks.current=[];
-   made.ondataavailable=event=>{ if(event.data?.size) chunks.current.push(event.data); };
+   made.ondataavailable=event=>{ if(id!==sessionNo.current) return; if(event.data?.size) chunks.current.push(event.data); };
    recorder.current=made; made.start();
   } catch {
+   if(id!==sessionNo.current) return;
    clearTimers(); stopAudio(); put(null); setSeconds(0); setBars(baseBars()); focusAfterDraw();
    if(mounted.current) setError('chatDictationDenied');
   }
@@ -147,23 +160,27 @@ export function useComposerDictation({target,insert,field,onStart}:{target?:Dict
   if(skipTimer.current) { clearTimeout(skipTimer.current); skipTimer.current=null; }
  }
  async function send(blob:Blob) {
-  const place=targetNow.current; if(!place) return;
+  const place=recordingFor.current; if(!place) return;
   if(!mounted.current) return;
+  const id=sessionNo.current;
   setWriting(true);
   try {
    const dataUrl=await audioUrl(blob);
-   const response=await fetch('/api/dictation',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...place,dataUrl,mimeType:blob.type||'audio/webm'})});
+   const response=await fetch('/api/dictation',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...place.target,dataUrl,mimeType:blob.type||'audio/webm'})});
    const body=await response.json().catch(()=>null);
-   if(!mounted.current) return;
-   if(response.ok&&typeof body?.text==='string') { const words=body.text.trim(); if(words) insertNow.current(words); return; }
+   // A newer recording, or another Agent picked while this one was being written, owns the box now: its answer is not
+   // this composer's to put in.
+   if(!mounted.current||id!==sessionNo.current||place.key!==placeKeyNow.current) return;
+   if(response.ok&&typeof body?.text==='string') { const words=body.text.trim(); if(words) place.insert(words); return; }
    if(response.ok&&body?.state==='unavailable') { setUnavailable(true); setError('chatDictationUnavailable'); return; }
    setError('chatDictationFailed');
-  } catch { if(mounted.current) setError('chatDictationFailed'); }
+  } catch { if(mounted.current&&id===sessionNo.current&&place.key===placeKeyNow.current) setError('chatDictationFailed'); }
   finally { if(mounted.current) setWriting(false); focusField.current(); }
  }
  function finish(keep:boolean) {
   if(!live.current||finishing.current) return;
   finishing.current=true;
+  const id=sessionNo.current;
   put(null); clearTimers(); stopWave(); setSeconds(0);
   const made=recorder.current; recorder.current=null;
   if(!keep) {
@@ -171,6 +188,7 @@ export function useComposerDictation({target,insert,field,onStart}:{target?:Dict
    stopAudio(); setBars(baseBars()); focusAfterDraw(); finishing.current=false; return;
   }
   const done=()=>{
+   if(id!==sessionNo.current) { finishing.current=false; return; }
    stopAudio();
    if(!chunks.current.length) { focusAfterDraw(); finishing.current=false; return; }
    void send(chunks.current[0]); finishing.current=false;
@@ -220,6 +238,13 @@ export function useComposerDictation({target,insert,field,onStart}:{target?:Dict
  const finishNow=useRef(finish); finishNow.current=finish;
  const upNow=useRef(onPointerUp); upNow.current=onPointerUp;
  const cancelNow=useRef(onPointerCancel); cancelNow.current=onPointerCancel;
+ // A pick changes the Agent without remounting this box: a recording started for the old one is cancelled, and a
+ // transcription still on its way inserts nothing, since it no longer belongs to the Agent on screen.
+ useEffect(()=>{
+  if(!recordingFor.current||recordingFor.current.key===placeKeyNow.current) return;
+  recordingFor.current=null;
+  if(live.current) finishNow.current(false);
+ },[placeKey]);
  useEffect(()=>{
   if(!session) return;
   const keys=(event:KeyboardEvent)=>{ if(event.key==='Escape') { event.preventDefault(); finishNow.current(false); } };
@@ -230,7 +255,7 @@ export function useComposerDictation({target,insert,field,onStart}:{target?:Dict
   document.addEventListener('pointercancel',cancelled);
   return ()=>{ document.removeEventListener('keydown',keys); document.removeEventListener('pointerup',up); document.removeEventListener('pointercancel',cancelled); };
  },[session]);
- useEffect(()=>()=>{ mounted.current=false; clearTimers(); stopAudio(); try { recorder.current?.stop(); } catch {} },[]); // eslint-disable-line react-hooks/exhaustive-deps
+ useEffect(()=>{ mounted.current=true; return ()=>{ mounted.current=false; clearTimers(); stopAudio(); try { recorder.current?.stop(); } catch {} }; },[]); // eslint-disable-line react-hooks/exhaustive-deps
 
  const mode=session?.mode;
  // The catalogue's "Listening ·" keeps its separator; the language and its own separator are left out when none was read,

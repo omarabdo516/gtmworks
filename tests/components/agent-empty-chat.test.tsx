@@ -300,6 +300,29 @@ test('a message sent after picking starts the Conversation with the picked Agent
  expect(String(push.mock.calls[0][0])).toMatch(/^\/c\/rs-learning\/conversations\/[0-9a-f-]{36}$/);
 });
 
+test('a send that failed for one Agent retries into the Agent picked after it, in a Conversation of its own, keeping the text', async () => {
+ let attempt = 0;
+ fetches.mockImplementation(async () => ++attempt === 1
+  ? new Response(JSON.stringify({ error: 'conversationFailed' }), { status: 500 })
+  : new Response('{}', { status: 200 }));
+ const screen = await chat({ agent: seo, empty: knownSeo, agents: seenKnown, details: detailsOf('SEO') });
+ const field = screen.getByRole('textbox', { name: 'Message' });
+ await field.fill('Plan next week');
+ await userEvent.keyboard('{Enter}');
+ await expect.poll(() => screen.container.querySelector('textarea')?.readOnly).toBe(false);
+ const first = JSON.parse(String(fetches.mock.calls[0][1].body));
+ expect(first.agent).toBe('ag-3');
+ await screen.getByRole('button', { name: 'Meta Ads', exact: true }).click();
+ await expect.element(field).toHaveValue('Plan next week');
+ await userEvent.click(field);
+ await userEvent.keyboard('{Enter}');
+ await expect.poll(() => fetches.mock.calls.length).toBe(2);
+ const second = JSON.parse(String(fetches.mock.calls[1][1].body));
+ expect(second.agent).toBe('ag-2');
+ expect(second.conversation).toMatch(/^[0-9a-f-]{36}$/);
+ expect(second.conversation).not.toBe(first.conversation);
+});
+
 test('in Arabic the known empty chat speaks Egyptian Arabic, its picker and its two suggestions read right to left', async () => {
  const screen = await chat({ agent: metaAds, empty: { state: 'known', example: 'خطط حملة ميتا للعرض الجاي، بميزانية تقترحها' }, agents: seen, details: detailsOf('Meta Ads'), language: 'ar' });
  await expect.element(screen.getByRole('heading', { level: 2 })).toHaveTextContent('تحب نشتغل على إيه النهارده؟');

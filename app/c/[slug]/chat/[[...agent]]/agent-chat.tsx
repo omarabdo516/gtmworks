@@ -33,7 +33,7 @@ export type ShownAgent={agent:DetailsAgent,empty:EmptyChat,details:AgentDetailsV
 // `askOf`: the Owners a Manager or a Contributor asks for an Agent instead (#17). In a team, a line at the top says the
 // chat is between this person and the Agent only (#25).
 export default function AgentChat({slug,company,agent,details,writer,team=false,empty={state:'known',example:null},newAgent=false,askOf=null,isNew=false,gallery=null,agents=[]}:{slug:string,company:string,agent:DetailsAgent|null,details:AgentDetailsView|null,writer:boolean,team?:boolean,empty?:EmptyChat,newAgent?:boolean,askOf?:string[]|null,isNew?:boolean,gallery?:{company:string,alone:boolean,roles:ReadyRole[]}|null,agents?:ShownAgent[]}) {
- const {t,language}=useI18n(); const router=useRouter(); const [conversation]=useState(newId); const panel=useDetailsPanel();
+ const {t,language}=useI18n(); const router=useRouter(); const [conversation,setConversation]=useState(newId); const panel=useDetailsPanel();
  const composer=useRef<HTMLDivElement>(null); const transcript=useRef<HTMLDivElement>(null); const picking=!!gallery; const wasPicking=useRef(picking);
  const box=useRef<MessageBoxHandle>(null);
  useEffect(()=>{ if(wasPicking.current&&!picking) composer.current?.querySelector('textarea')?.focus(); wasPicking.current=picking; },[picking]);
@@ -43,7 +43,7 @@ export default function AgentChat({slug,company,agent,details,writer,team=false,
  const shown=agents.find(choice=>choice.agent.id===picked)??{agent,empty,details};
  const current=shown.agent;
  const chip=useRef<HTMLButtonElement|null>(null); const pickingAgent=useRef(false);
- const pick=(id:string)=>{ if(id===current?.id) return; pickingAgent.current=true; setPicked(id); };
+ const pick=(id:string)=>{ if(id===current?.id) return; pickingAgent.current=true; setPicked(id); setConversation(newId()); };
  // The pressed chip keeps the focus where the state the pick shows still draws it. Where it does not (the main Agent's
  // chat, a new Agent's), the focus moves into the empty chat that took its place, never back to the page.
  useEffect(()=>{ if(!pickingAgent.current) return; pickingAgent.current=false;
