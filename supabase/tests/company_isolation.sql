@@ -16,7 +16,6 @@ insert into isolation_matrix(name) values
  ('invitation_agent_access'),('lead_agent_requests'),('lead_made_agents'),
  ('member_agent_access'),('member_audit'),('member_invitations'),('member_notes'),('members'),
  ('note_runs'),('reply_cards'),('role_permissions'),
- ('skill_enablements'),('skill_events'),('skill_lessons'),('skill_loads'),('skill_versions'),('skills'),
  ('waiting_items'),('webhook_deliveries'),
  ('work_activity'),('work_assignees'),('work_attachments'),('work_card_labels'),('work_card_visits'),('work_cards'),
  ('work_checklist'),('work_comments'),('work_creatives'),('work_labels'),('work_projects'),('work_stages'),('work_versions');
@@ -44,8 +43,6 @@ update isolation_matrix m set fixed = v.fixed::jsonb from (values
  ('hermes_connections', $${"state": "'connected'"}$$),
  ('members', $${"person_id": "'e3370000-0000-0000-0000-000000000002'", "role": "'contributor'"}$$),
  ('reply_cards', $${"kind": "'draft'", "state": "'shown'", "content": "'{\"line\": \"isolation\", \"rows\": []}'"}$$),
- ('skill_events', $${"action": "'install'"}$$),
- ('skills', $${"source": "'team'"}$$),
  ('waiting_items', $${"card_id": "1"}$$),
  ('work_attachments', $${"path": "'10000000-0000-0000-0000-000000000001/isolation'"}$$),
  ('work_stages', $${"board_column": "'ideas'"}$$),
