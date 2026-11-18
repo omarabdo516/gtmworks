@@ -172,6 +172,17 @@ test('integration: Lead makes the Agent the Owner asks for, and nothing for a Ma
  expect(JSON.parse(query(`select count(*)::int as n from public.conversation_messages where conversation_id='${conversation}' and author='agent' and run_id='${fake.runs[2].id}'`))[0].n).toBe(0);
  fake.settings.reply=answer;
 
+ // #169: an Agent the Owner was told about and left unopened is not told again on a reload; the page's own question is
+ // awaited, so that no toast is read as missing before a late answer could have raised it.
+ const firstAsk=page.waitForResponse(response=>response.url().includes('/api/agent-toast'));
+ await page.reload();
+ await expect(page.locator('.toast').locator('span').first()).toHaveText('SEO was made and shows in your agents');
+ await firstAsk;
+ const laterAsk=page.waitForResponse(response=>response.url().includes('/api/agent-toast'));
+ await page.reload();
+ await laterAsk;
+ await expect(page.locator('.toast')).toHaveCount(0);
+
  const manager=(await memberClient('manager@example.com')).person;
  const theirs=randomUUID();
  expect(await sendMessage(manager,service,{person:'20000000-0000-0000-0000-000000000002',company,conversation:theirs,sendKey:randomUUID(),agent:lead,message:'I want someone to handle Meta ads',hermes,engineFor:fake.engineFor})).toEqual({conversation:theirs});

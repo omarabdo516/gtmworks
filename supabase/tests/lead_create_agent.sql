@@ -40,10 +40,11 @@ select results_eq($$select l.run_id,a.name from public.lead_made_agents l join p
  $$values ('run-1','Meta Ads')$$,'the Owner reads the call''s record with its Agent');
 select is(public.open_hermes_agent((select id from public.hermes_agents where name='Meta Ads')),true,'its requester clears the new mark');
 select is(public.open_hermes_agent((select id from public.hermes_agents where name='Meta Ads')),false,'once');
-select is(public.mark_agent_toast_shown((select id from public.hermes_agents where name='Meta Ads')),true,'its requester is told it was made once (#169)');
-select is(public.mark_agent_toast_shown((select id from public.hermes_agents where name='Meta Ads')),false,'and not again');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
 select is(public.mark_agent_toast_shown((select id from public.hermes_agents where name='Meta Ads')),false,'another Member is not its requester');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select is(public.mark_agent_toast_shown((select id from public.hermes_agents where name='Meta Ads')),true,'its requester is told it was made once (#169)');
+select is(public.mark_agent_toast_shown((select id from public.hermes_agents where name='Meta Ads')),false,'and not again');
 
 reset role;
 set local role service_role;
