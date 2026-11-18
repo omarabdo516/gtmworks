@@ -163,8 +163,9 @@ function AgentPage({t,rtl,slug,company,userId,agent,about,status,main,rules,owne
  // The handle gtmworks calls the Agent by in messages, which a change of the Engine's name would not touch
  // (lib/conversation-runs.mjs: @ and the name, lowercased).
  const handle=`@${agent.name.trim().toLowerCase()}`;
- // About is editable by the Owner and Managers who see the Agent, on the Agent's own Engine profile only.
- const editable=canManage&&about!==null&&about.own;
+ // About is editable by the Owner and Managers who see the Agent, on the Agent's own Engine profile only, and only when
+ // the Engine was read: an unknown description is never drawn empty and saved over.
+ const editable=canManage&&about?.state==='found'&&about.own;
  const mainSec=owner?<section className="dp-sec" id="set-main" aria-labelledby="set-h-main"><Label id="set-h-main">{t('settingsMainAgent')}</Label><ul className="panel-card">
    {isMain?<li className="panel-row"><span className="panel-row__icon"><SettingsIcon name="check"/></span><span className="panel-row__text"><span className="panel-row__t">{t('settingsIsMain',agent.name)}</span><span className="panel-row__d">{t('settingsIsMainD')}</span></span></li>
     :<MakeMain company={company} agent={agent} current={main?.name||''}/>}</ul></section>
