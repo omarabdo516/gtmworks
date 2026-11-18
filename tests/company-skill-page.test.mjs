@@ -86,6 +86,7 @@ test('a Skill the profile does not have is absent, and a name that is not a Skil
   assert.deepEqual(page, { state: 'absent', agent: { id: lead, name: 'Lead', own: true }, skill: 'gone-skill', mode: 'auto', content: null });
   const before = fake.settings.managementRequests.length;
   assert.equal(await readCompanySkillPage(database(), { ...request, name: '../SKILL.md' }), null);
+  assert.equal(await readCompanySkillPage(database(), { ...request, name: 'hermes-agent' }), null, 'the Engine\'s essential skill has no page, and its name is never drawn');
   assert.equal(fake.settings.managementRequests.length, before);
  } finally { await fake.close(); }
 });
