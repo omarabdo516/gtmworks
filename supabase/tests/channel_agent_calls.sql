@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(59);
+select plan(60);
 -- #152. RS Learning's seeded Members: the Owner (1), the Manager (2), a Contributor (3) and the Viewer (4). Lead is the
 -- main Agent, seen by everyone; Faye is shown to the Manager and the Contributor, and SEO, Reach and Lead Writer to the
 -- Contributor only; Secret is shown to nobody but the Owner. The general channel is 69000000-0000-0000-0000-000000000001.
@@ -32,6 +32,8 @@ select is((select array_agg(h.name||':'||m.ordinal order by m.ordinal) from publ
  array['Lead Writer:1'],'at one place the longest name is the one called, not a second Agent too');
 select is((select array_agg(h.name||':'||m.ordinal order by m.ordinal) from public.channel_mentions_in('69000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','@Faye @SEO then @Faye again, @SEO too') m join public.hermes_agents h on h.id=m.agent),
  array['Faye:1','SEO:2'],'a name repeated in one message calls its Agent once');
+select is((select array_agg(h.name||':'||m.ordinal order by m.ordinal) from public.channel_mentions_in('69000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','@Lead Writer @Faye go, and @Lead too') m join public.hermes_agents h on h.id=m.agent),
+ array['Lead Writer:1','Faye:2','Lead:3'],'a shorter name the longer one covered at one place is still called where it stands on its own');
 select is((select count(*)::int from public.channel_mentions_in('69000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','@مدير شوف ده')),0,'a Member''s name calls nobody');
 select is((select count(*)::int from public.channel_mentions_in('69000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','Morning all')),0,'ordinary talk calls nobody');
 select is((select count(*)::int from public.channel_mentions_in('69000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','write to x@faye.com')),0,'an address calls nobody');

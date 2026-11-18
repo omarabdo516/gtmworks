@@ -7,8 +7,8 @@
 -- Additive only, widening what #23 built: channel_runs keeps one row per (message, Agent) instead of one per message,
 -- and a reply keeps one row per (message, Agent) instead of one per message. Each Agent's Run is started in the order
 -- named, and the next only once the one before it has ended, whatever its outcome. Every function #148 and #165 added is
--- redefined from its latest definition, per Run. No stored row is rewritten (the new columns default to the one Run and
--- reply each message had): every message and Run reads as before, the previous app version runs against this (it drives
+-- redefined from its latest definition, per Run. No stored row loses anything: the new columns answer the one Run and one
+-- reply each message had, so every message and Run reads as before, the previous app version runs against this (it drives
 -- the first Agent of a message; the second answers under this version), and no existing test loses a case.
 
 -- Two or three Agents per message: `ordinal` is the place the Agent was named in, 1 to 3. The pair is the Run's key, so a
@@ -36,22 +36,27 @@ alter table public.channel_permissions add constraint channel_permissions_ordina
 alter table public.channel_permissions drop constraint channel_permissions_message_id_request_id_key;
 alter table public.channel_permissions add constraint channel_permissions_run_request unique (run_id, request_id);
 
--- The Agents a message calls, up to three, each once, in the order they were named: every Agent the sender sees whose
--- name stands at its own place, ordered by that place, and at one place the longer name (then the main Agent, then its
--- id). A name at a place already taken is the shorter half of a longer one, or the second Agent of the same name, and is
--- not a second call. A Member's name is no Agent's name: it calls nobody.
+-- The Agents a message calls, up to three, each once, in the order they were named: the text is read from the start,
+-- each "@" between spaces, punctuation or the ends is a call, and at one place the longest name that fits there is the
+-- one called. A shorter name covered at one place is still called where it stands on its own, and the same Agent named
+-- twice is called once. A Member's name is no Agent's name: it calls nobody.
 create function public.channel_mentions(c uuid, person uuid, message text) returns table(agent uuid, ordinal smallint)
 language plpgsql stable security definer set search_path='' as $$
-declare a record; taken int[] := '{}'; called int := 0;
+declare a record; body text := coalesce(message,''); at int; from_at int := 1; taken uuid[] := '{}'; called int := 0;
 begin
- for a in select x.id, x.pos, x.len, x.is_default from (
-   select h.id, public.mention_at(message, btrim(h.name)) pos, length(lower(btrim(h.name))) len, h.is_default
-   from public.hermes_agents h
-   where h.company_id=c and btrim(h.name)<>'' and public.agent_visible_to(c, person, h.id)) x
-  where x.pos > 0
-  order by x.pos, x.len desc, x.is_default desc, x.id loop
-  continue when a.pos = any(taken);
-  taken := taken || a.pos; called := called + 1;
+ while from_at <= length(body) loop
+  at := position('@' in substr(body, from_at)); exit when at = 0; at := at + from_at - 1;
+  if not (at = 1 or substr(body, at-1, 1) ~ '[[:space:][:punct:]،؛؟]') then from_at := at + 1; continue; end if;
+  select x.id, x.handle into a from (
+    select h.id, h.is_default, lower('@'||btrim(h.name)) handle from public.hermes_agents h
+    where h.company_id=c and btrim(h.name)<>'' and public.agent_visible_to(c, person, h.id)) x
+   where strpos(lower(substr(body, at)), x.handle) = 1
+    and (at + length(x.handle) > length(body) or substr(body, at + length(x.handle), 1) ~ '[[:space:][:punct:]،؛؟]')
+   order by length(x.handle) desc, x.is_default desc, x.id limit 1;
+  if a.id is null then from_at := at + 1; continue; end if;
+  from_at := at + length(a.handle);
+  continue when a.id = any(taken);
+  taken := taken || a.id; called := called + 1;
   agent := a.id; ordinal := called::smallint; return next;
   exit when called = 3;
  end loop;
@@ -62,16 +67,22 @@ revoke all on function public.channel_mentions(uuid,uuid,text) from public,anon,
 -- a team channel's are its own. A team channel's Agent hidden from the sender elsewhere is called here, as before.
 create function public.channel_mentions_in(ch uuid, person uuid, message text) returns table(agent uuid, ordinal smallint)
 language plpgsql stable security definer set search_path='' as $$
-declare a record; taken int[] := '{}'; called int := 0;
+declare a record; body text := coalesce(message,''); at int; from_at int := 1; taken uuid[] := '{}'; called int := 0;
 begin
- for a in select x.id, x.pos, x.len, x.is_default from (
-   select h.id, public.mention_at(message, btrim(h.name)) pos, length(lower(btrim(h.name))) len, h.is_default
-   from public.channels k join public.hermes_agents h on h.company_id=k.company_id
-   where k.id=ch and btrim(h.name)<>'' and public.channel_agent(ch, person, h.id)) x
-  where x.pos > 0
-  order by x.pos, x.len desc, x.is_default desc, x.id loop
-  continue when a.pos = any(taken);
-  taken := taken || a.pos; called := called + 1;
+ while from_at <= length(body) loop
+  at := position('@' in substr(body, from_at)); exit when at = 0; at := at + from_at - 1;
+  if not (at = 1 or substr(body, at-1, 1) ~ '[[:space:][:punct:]،؛؟]') then from_at := at + 1; continue; end if;
+  select x.id, x.handle into a from (
+    select h.id, h.is_default, lower('@'||btrim(h.name)) handle
+    from public.channels k join public.hermes_agents h on h.company_id=k.company_id
+    where k.id=ch and btrim(h.name)<>'' and public.channel_agent(ch, person, h.id)) x
+   where strpos(lower(substr(body, at)), x.handle) = 1
+    and (at + length(x.handle) > length(body) or substr(body, at + length(x.handle), 1) ~ '[[:space:][:punct:]،؛؟]')
+   order by length(x.handle) desc, x.is_default desc, x.id limit 1;
+  if a.id is null then from_at := at + 1; continue; end if;
+  from_at := at + length(a.handle);
+  continue when a.id = any(taken);
+  taken := taken || a.id; called := called + 1;
   agent := a.id; ordinal := called::smallint; return next;
   exit when called = 3;
  end loop;
