@@ -8,6 +8,9 @@ import { pathToFileURL } from 'node:url';
 // A row lives with the test it names, so two pull requests that add different tests never edit one shared table. This
 // script writes both tables from those rows and checks they are current; `./ci.sh static` runs the check as a node test
 // (tests/testing-doc.test.mjs). A new test file writes its row beside it and runs `node scripts/testing-doc.mjs --write`.
+// shortcut: two branches whose new test files sort next to each other (no row between them) still conflict in the
+// generated table, as git sees two insertions at one place; regenerate with --write after the merge. Upgrade to a table
+// printed on demand (--print) if that starts to happen often.
 
 export const DOC = 'docs/testing.md';
 export const ROWS = 'tests/rows';
