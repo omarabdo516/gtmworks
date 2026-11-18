@@ -325,6 +325,16 @@
 .gw .sov .ln-acts { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); margin-top: 4px; }
 .gw .sov .ln-acts .link-btn { margin-inline-start: -6px; }
 .gw .sov .ln-meta .sk-learned { margin-top: 0; }
+/* One learned Skill's page (#181; design-reference: .sk-who, .sk-diff--one, .sk-col, .sk-col h4/ol/li, index.html
+   2012-2027): whose Skill it is under the heading, and the Engine's current text in one column under Steps. The
+   reference's two-column diff, tags and Why are not ported: the pinned Engine has no management route over the ledger. */
+.gw .sov .sk-who { display: flex; align-items: center; gap: var(--s2); margin-top: calc(var(--s3) * -1); font-size: var(--gw-fs-sm); color: var(--gw-text-2); }
+.gw .sov .sk-diff--one { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s3); }
+.gw .sov .sk-col { display: grid; gap: var(--s3); align-content: start; padding: var(--s4) var(--s5); border-radius: var(--gw-r-lg); background: var(--gw-bg-pane); border: 0.5px solid var(--gw-border-3); }
+.gw .sov .sk-col.is-cur { box-shadow: var(--gw-text-1) 0 0 0 1px inset; }
+.gw .sov .sk-col h4 { margin: 0; font-size: var(--gw-fs-sm); font-weight: 400; color: var(--gw-text-2); }
+.gw .sov .sk-col ol { margin: 0; padding-inline-start: var(--s5); display: grid; gap: var(--s3); font-size: var(--gw-fs-sm); line-height: 1.7; color: var(--gw-text-1); }
+.gw .sov .sk-col li { overflow-wrap: anywhere; }
 
 /* Authored text inside the English interface takes its direction from its own words. */
 [dir="ltr"] .gw .sov :is(.panel-row__t, .panel-row__d, .dp-id__name, .set-input, .ta-name) { unicode-bidi: plaintext; }

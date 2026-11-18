@@ -37,8 +37,8 @@ export function KnowledgeEditor(props:ComponentProps<typeof Knowledge>) { return
 export function KnowledgeEditedAt(props:{at:string}) { return <Suspense fallback={null}><LazyEditedAt {...props}/></Suspense>; }
 /** @param {{agent:string,name:string,description:string}} props */
 export function AgentAbout(props:{agent:string,name:string,description:string}) { return <Suspense fallback={null}><LazyAbout {...props}/></Suspense>; }
-/** @param {{agent:string,name:string,skills:import('./settings-agent-form').AgentSkillRow[]|null,editable:boolean}} props */
-export function AgentSkills(props:{agent:string,name:string,skills:import('./settings-agent-form').AgentSkillRow[]|null,editable:boolean}) { return <Suspense fallback={null}><LazySkills {...props}/></Suspense>; }
+/** @param {{agent:string,name:string,slug:string,learning:boolean,skills:import('./settings-agent-form').AgentSkillRow[]|null,editable:boolean}} props */
+export function AgentSkills(props:{agent:string,name:string,slug:string,learning:boolean,skills:import('./settings-agent-form').AgentSkillRow[]|null,editable:boolean}) { return <Suspense fallback={null}><LazySkills {...props}/></Suspense>; }
 /** @param {{agent:string,name:string,instructions:string,sectionChars:number,limit:number}} props */
 export function AgentInstructions(props:{agent:string,name:string,instructions:string,sectionChars:number,limit:number}) { return <Suspense fallback={null}><LazyInstructions {...props}/></Suspense>; }
 /** @param {{instructions:string,empty:string}} props */

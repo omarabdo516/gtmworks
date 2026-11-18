@@ -35,7 +35,7 @@ const agentPage = (description = 'Runs the Meta ads.', skills: AgentSkillRow[] =
   <OverlayChrome t={i18n('en').t} slug="rs-learning" companyName="RS Learning" role="owner" readOnly={false} section="agents" learningWaiting={0}>
    <BackLink className="link-btn sov-back" id="sov-back" slug="rs-learning" agent={agent}>All agents</BackLink>
    <div role="tablist"><button type="button" role="tab" id="sov-tab-settings" aria-selected="true">Settings</button><MemoryTab label="Memory" soon="Soon"/></div>
-   <div id="sov-agent-panel"><AgentAbout agent={agent} name="Lead" description={description}/><AgentSkills agent={agent} name="Lead" skills={skills} editable={editable}/></div>
+   <div id="sov-agent-panel"><AgentAbout agent={agent} name="Lead" description={description}/><AgentSkills agent={agent} name="Lead" slug="rs-learning" learning skills={skills} editable={editable}/></div>
    <AgentSaveBar company="10000000-0000-0000-0000-000000000001" agent={agent} name="Lead"/>
   </OverlayChrome>
  </LanguageProvider>);

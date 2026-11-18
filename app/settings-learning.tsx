@@ -1,6 +1,9 @@
 import type { i18n } from '@/lib/i18n.mjs';
 import type { CompanyLearning, LearningAgent } from '@/lib/company-learning.mjs';
+import Link from '@/lib/link';
+import { overlayHref } from '@/lib/settings-overlay.mjs';
 import { Head, Label } from './settings-overlay-parts';
+import { FocusReturn } from './settings-overlay-frame';
 import { CompanyLearningMode, AgentLearningMode, RuleActions } from './settings-lazy';
 import { SettingsIcon } from './settings-icons';
 
@@ -8,7 +11,8 @@ import { SettingsIcon } from './settings-icons';
 // Agent learned (its rules, with Forget this and Bring it back, and the Skills the Engine says it learned on its own),
 // the Company's shared lessons, and the two lists of what an Agent changes by itself and only with the Owner's OK. The
 // Owner changes the mode; the Owner and Managers forget and restore a rule; everyone who may open the section reads it.
-// No Skill shows a restore: the pinned Engine has no management route over its Skill ledger (the PR names the gap).
+// A learned Skill's row opens its own page (#181); it shows no restore, because the pinned Engine has no management route
+// over its Skill ledger (the PR names the gap).
 type T=ReturnType<typeof i18n>['t'];
 const modeKey={auto:'settingsLearnOnItsOwn',ask:'settingsLearnAsks',mixed:'settingsLearnMixed'} as const;
 
@@ -21,7 +25,7 @@ function companyModeOf(agents:LearningAgent[]|null):'auto'|'ask'|'mixed'|null {
  return modes.every(mode=>mode===modes[0])?modes[0]:'mixed';
 }
 
-export function LearningSection({t,company,canManage,owner,data}:{t:T,company:string,canManage:boolean,owner:boolean,data:CompanyLearning|null}) {
+export function LearningSection({t,slug,company,canManage,owner,data}:{t:T,slug:string,company:string,canManage:boolean,owner:boolean,data:CompanyLearning|null}) {
  const found=data?.state==='found'?data:null;
  const agents=found?.agents??null;
  const rules=found?.rules??[];
@@ -69,6 +73,7 @@ export function LearningSection({t,company,canManage,owner,data}:{t:T,company:st
         <span className="ln-who"><bdi>{agent.name}</bdi></span><span aria-hidden="true">·</span>
         <span className="sk-learned"><SettingsIcon name="spark"/><span>{t('settingsSkillLearned')}</span></span></p>
        {skill.description&&<p className="panel-row__d" dir="auto">{skill.description}</p>}
+       <div className="ln-acts"><Link className="link-btn" id={`ln-see-${agent.id}:${skill.name}`} href={overlayHref(slug,'learning',{agent:agent.id,skill:skill.name})}>{t('settingsSkillSeeSteps')}</Link></div>
       </div></li>)}
     </ol>}</section>
   <section className="dp-sec" aria-labelledby="ln-h-lessons"><Label id="ln-h-lessons">{t('settingsLearnLessons')}{lessons.length>0&&<> <span className="muted num">{lessons.length}</span></>}</Label>
@@ -88,5 +93,6 @@ export function LearningSection({t,company,canManage,owner,data}:{t:T,company:st
      <ul><li>{t('settingsLearnModel')}</li><li>{t('settingsLearnTools')}</li><li>{t('settingsLearnInstructions')}</li></ul>
      <p className="set-hint">{t('settingsLearnOwnerHint')}</p></div>
    </div></section>
+  <FocusReturn prefix="ln-see-"/>
  </>;
 }

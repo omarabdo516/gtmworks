@@ -47,8 +47,15 @@ export function BackLink({slug,agent,id,className,children}:{slug:string,agent:s
  return <Link className={className} id={id} href={overlayHref(slug,'agents')} replace onClick={event=>{ if(holdLeave(t('settingsSaveFirst'))) { event.preventDefault(); return; } returnFocusTo(`sov-ag-${agent}`); }}>{children}</Link>;
 }
 
-// Drawn in the Agents list: gives the focus to the row of the Agent whose page was just left.
-export function FocusReturn() {
- useEffect(()=>{ const id=takeReturnFocus(stored=>stored.startsWith('sov-ag-')); if(id) document.getElementById(id)?.focus(); },[]);
+// From a Skill's page back to Learning, where the learned Skill's own link takes the focus (reference: sov-skill-back,
+// design-reference/app.js 7585). The skill page's own Back is the first stop when it opens (OverlayFrame).
+export function SkillBack({slug,agent,skill,rtl}:{slug:string,agent:string,skill:string,rtl:boolean}) {
+ const {t}=useI18n();
+ return <Link className="link-btn sov-back" id="sov-skill-back" href={overlayHref(slug,'learning')} replace onClick={()=>returnFocusTo(`ln-see-${agent}:${skill}`)}><SettingsIcon name="back" rtl={rtl}/><span>{t('settingsLearning')}</span></Link>;
+}
+
+// Drawn in a list: gives the focus back to the row whose page was just left, when that row is on this page.
+export function FocusReturn({prefix='sov-ag-'}:{prefix?:string}={}) {
+ useEffect(()=>{ const id=takeReturnFocus(stored=>stored.startsWith(prefix)); if(id) document.getElementById(id)?.focus(); },[prefix]);
  return null;
 }

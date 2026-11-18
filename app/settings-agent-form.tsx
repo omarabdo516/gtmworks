@@ -1,8 +1,10 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { useI18n } from '@/lib/i18n-client';
+import { overlayHref } from '@/lib/settings-overlay.mjs';
 import { toast } from './toast';
 import { SettingsIcon } from './settings-icons';
+import { GuardedSectionLink } from './settings-guard-link';
 import { changedValues, commitDraft, registerFirstField, registerSave, restoreDraft, seedDraft, setDraftValue, useBarFlash, useDraftDirty, useDraftState, useDraftValue } from './settings-draft';
 
 // An Agent's page in Settings (#161, #176, #180; design-reference: settingsHTML's About, How it works and Skills, and
@@ -30,9 +32,10 @@ export function AgentAbout({agent,name,description}:{agent:string,name:string,de
 // and a skill the Engine says the Agent learned on its own carries the mark. Every switch is one key of the page's draft
 // (`skill:<name>` = on|off) and is saved with the bar; a person below Manager, or an Agent still on the Company's shared
 // profile, reads On and Off instead of a switch. The Engine's essential skill never reaches here (lib/hermes.mjs), and
-// the Company's shared skills stay on the team's page.
+// the Company's shared skills stay on the team's page. A learned Skill's mark carries "See the steps" (#181) for everyone
+// who has the Learning section: it opens that Skill's page there, and a draft that differs holds the page first.
 export type AgentSkillRow={name:string,description:string,enabled:boolean,learned:boolean};
-function SkillRow({agent,skill,editable,index}:{agent:string,skill:AgentSkillRow,editable:boolean,index:number}) {
+function SkillRow({agent,slug,learning,skill,editable,index}:{agent:string,slug:string,learning:boolean,skill:AgentSkillRow,editable:boolean,index:number}) {
  const {t}=useI18n();
  const field=`skill:${skill.name}`;
  const on=useDraftValue(agent,field,skill.enabled?'on':'off')==='on';
@@ -41,13 +44,15 @@ function SkillRow({agent,skill,editable,index}:{agent:string,skill:AgentSkillRow
   <span className="panel-row__text">
    <span className="panel-row__t" id={title} dir="auto">{skill.name}</span>
    {skill.description&&<span className="panel-row__d" dir="auto">{skill.description}</span>}
-   {skill.learned&&<span className="sk-learned"><SettingsIcon name="spark"/><span>{t('settingsSkillLearned')}</span></span>}
+   {skill.learned&&<span className="sk-learned"><SettingsIcon name="spark"/><span>{t('settingsSkillLearned')}</span>
+    {learning&&<GuardedSectionLink className="link-btn" id={`sk-see-${skill.name}`} href={overlayHref(slug,'learning',{agent,skill:skill.name})} current={false}>{t('settingsSkillSeeSteps')}</GuardedSectionLink>}
+   </span>}
   </span>
   {editable?<button type="button" className="switch" role="switch" aria-checked={on} aria-labelledby={title} onClick={()=>setDraftValue(field,on?'off':'on')}/>
    :<span className="panel-row__meta">{on?t('settingsSkillOn'):t('settingsSkillOff')}</span>}
  </li>;
 }
-export function AgentSkills({agent,name,skills,editable}:{agent:string,name:string,skills:AgentSkillRow[]|null,editable:boolean}) {
+export function AgentSkills({agent,name,slug,learning,skills,editable}:{agent:string,name:string,slug:string,learning:boolean,skills:AgentSkillRow[]|null,editable:boolean}) {
  const {t}=useI18n();
  const draftState=useDraftState(agent);
  // The draft starts from what the server read, and this section seeds only its own keys so a later field never wipes it.
@@ -60,7 +65,7 @@ export function AgentSkills({agent,name,skills,editable}:{agent:string,name:stri
   <h4 className="dp-label" id="set-h-skills"><span>{t('settingsSkills')}{skills&&<> <span className="muted num">{count}/{skills.length}</span></>}</span></h4>
   {!skills?<div className="panel-card"><p className="panel-empty">{t('settingsSkillsUnread')}</p></div>
    :skills.length===0?<div className="panel-card"><p className="panel-empty">{t('settingsSkillsEmpty',name)}</p></div>
-   :<ul className="panel-card">{skills.map((skill,index)=><SkillRow key={skill.name} agent={agent} skill={skill} editable={editable} index={index}/>)}</ul>}
+   :<ul className="panel-card">{skills.map((skill,index)=><SkillRow key={skill.name} agent={agent} slug={slug} learning={learning} skill={skill} editable={editable} index={index}/>)}</ul>}
  </section>;
 }
 
