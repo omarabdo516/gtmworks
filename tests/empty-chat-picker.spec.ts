@@ -23,7 +23,8 @@ const [lead,ads,seo,copy,analyst]=[11,12,13,14,15].map(n=>id(n));
 let fake:Awaited<ReturnType<typeof laneHermes>>;
 
 test.beforeAll(async({},testInfo)=>{
- freshSeed(testInfo.file);
+ // A retry starts from the seed again: the Agents and Conversations below are inserted once per run of this file.
+ freshSeed(testInfo.file,testInfo.retry>0);
  query(`do $$ begin
   update public.people set language='en' where id in ('${reviewer}','${viewer}');
   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,template,profile) values
@@ -43,7 +44,7 @@ test.beforeAll(async({},testInfo)=>{
   ('${chat(3)}','${company}','${viewer}','${ads}','Meta Ads','2026-06-10T09:00:00Z')`);
  fake=await laneHermes();
 });
-test.afterAll(async()=>{ await fake.close(); });
+test.afterAll(async()=>{ await fake?.close(); });
 
 const chips=(page:Page)=>page.locator('.agent-picker .chip');
 const field=(page:Page)=>page.getByRole('textbox',{name:'Message'});
@@ -75,9 +76,9 @@ test('picking a chip turns the page into that Agent\'s empty chat with no naviga
  await page.getByRole('button',{name:'Tell me what you can do',exact:false}).click();
  await expect(field(page)).toHaveValue('Tell me what you can do: and the tools you need');
  await expect(page).toHaveURL(`/c/rs-learning/chat/${ads}`);
- // The main Agent's chip shows its own state, with no picker.
+ // The main Agent's chip shows its own state, with no picker; the line names the Company's Owner, whom the seed calls عمر.
  await page.getByRole('button',{name:'Lead',exact:true}).click();
- await expect(page.getByText('The team’s main point of contact. Need a new agent? Tell it and it prepares the request for Omar.',{exact:true})).toBeVisible();
+ await expect(page.getByText('The team’s main point of contact. Need a new agent? Tell it and it prepares the request for عمر.',{exact:true})).toBeVisible();
  await expect(field(page)).toHaveAttribute('placeholder','Write to Lead…');
  await expect(page.locator('.empty-chat h2')).toBeFocused();
  await expect(page.locator('.agent-picker')).toHaveCount(0);
