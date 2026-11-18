@@ -67,10 +67,10 @@ export async function run(list, { skip = [], env = process.env, write = text => 
     child.stderr.on('data', keep);
     return new Promise(resolve => child.on('close', (code, signal) => {
       running.delete(child);
-      log?.end();
       const result = code === 0 ? 'success' : signal ? 'cancelled' : 'failure';
-      show(name, result, Buffer.concat(chunks).toString(), started, code ?? signal);
-      resolve({ name, result });
+      const settle = () => { show(name, result, Buffer.concat(chunks).toString(), started, code ?? signal); resolve({ name, result }); };
+      // A step is settled once its log file is closed, so nothing writes into the ledger folder after the run returns.
+      if (log) { log.once('close', settle); log.end(); } else settle();
     }));
   };
   const gates = new Map(list.filter(step => step.gate).map(step => [step.name, start(step)]));
