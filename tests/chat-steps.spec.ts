@@ -18,7 +18,7 @@ let fake:Awaited<ReturnType<typeof fakeHermes>>;
 
 test.describe.configure({mode:'serial'});
 test.beforeAll(async({browser},testInfo)=>{
- freshSeed(testInfo.file);
+ freshSeed(testInfo.file,testInfo.retry>0);
  fake=await laneHermes();
  fake.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
  query(`update public.people set language='en' where id='${omar}'`);

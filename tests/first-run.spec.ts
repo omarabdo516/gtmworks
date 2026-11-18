@@ -193,7 +193,7 @@ const workspace=(baseURL:string)=>localQuery(`select c.work_mode,
 // runs without the bundled engine, so the test does that step through the same database function.
 const workerAddsLead=(baseURL:string)=>{
  localQuery(`insert into public.company_profiles(company_id,profile,tools_level,tools_policy,tools_pending,skills_shared) select id,public.company_engine_profile(id),agent_level,public.engine_tool_policy(),false,true from public.companies returning company_id`,baseURL);
- return localQuery(`select public.attach_company_profile(id,'http://hermes:8642','encrypted','0.23.0','{run_submission}') attached from public.companies`,baseURL);
+ return localQuery(`select public.attach_company_profile(id) attached from public.companies`,baseURL);
 };
 
 for(const [mode,language] of [['alone','en'],['team','ar']] as const) test(`first run asks only alone or with a team; ${mode} is stored and opens one Conversation with Lead, in ${language} (#9)`,async({page,baseURL})=>{

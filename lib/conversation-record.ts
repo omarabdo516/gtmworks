@@ -26,18 +26,32 @@ export async function conversationRecord(db:Database,person:string,company:strin
  const conversation=found.id;
  // The session is read beside the database, so the Engine adds no wait of its own to opening the chat.
  const read=session&&found.agent_id&&found.hermes_session_id?session(found.agent_id,found.hermes_session_id).catch(()=>null):Promise.resolve(null);
- // Ends first: a run closed between the two reads then shows its reply too (both are written in one transaction).
- const ends=((await db.from('conversation_run_ends').select('run_id,outcome').eq('conversation_id',conversation)).data||[]) as RunEnd[];
- const messages=(await db.from('conversation_messages').select(messageColumns).eq('conversation_id',conversation).order('id')).data||[];
- const notes=((await db.from('conversation_notes').select(noteColumns).eq('conversation_id',conversation).order('id')).data||[]) as StoredNote[];
- const queued=((await db.from('conversation_queued_turns').select(queuedColumns).eq('conversation_id',conversation).order('queued_at')).data||[]) as QueuedTurn[];
+ // The record's reads go out together, each one round trip, so a busy machine adds one wait and not a chain of them to
+ // opening the chat (decision 0042). Two pairs keep their order. Ends first: a run closed between the two reads then
+ // shows its reply too (both are written in one transaction); the waiting turns after the messages, as they were read.
  // Requests first: an Owner's yes writes the request's state and the made Agent in one transaction, so a made request
  // read here always finds its Agent in the read after it.
  type RequestRow={id:number,run_id:string,call_id:string,agent_name:string,job:string,apps:string[],asked_with:string,state:AgentRequestView['state'],answered_at:string|null,reason:string|null,created_at:string,answerer:{name:string}|null,asker:{name:string}|null};
- const requestRows=((await db.from('lead_agent_requests').select('id,run_id,call_id,agent_name,job,apps,asked_with,state,answered_at,reason,created_at,answerer:people!answered_by(name),asker:people!asked_by(name)').eq('conversation_id',conversation).order('id')).data||[]) as unknown as RequestRow[];
  type MadeRow={run_id:string,call_id:string,created_at:string,hermes_agents:{id:string,connection_id:string,name:string,speciality:string,apps:string[]|null,is_default:boolean,requested_by:string|null,requester_opened_at:string|null}|null};
- const madeRows=((await db.from('lead_made_agents').select('run_id,call_id,created_at,hermes_agents(id,connection_id,name,speciality,apps,is_default,requested_by,requester_opened_at)').eq('conversation_id',conversation).order('created_at')).data||[]) as unknown as MadeRow[];
- const replyRows=((await db.from('reply_cards').select(replyCardColumns).eq('conversation_id',conversation).order('id')).data||[]) as ReplyCardRow[];
+ const [{ends,messages,queued},{requestRows,madeRows},notes,replyRows,rows,{data:working},{data:me},card]=await Promise.all([
+  (async()=>{
+   const ends=((await db.from('conversation_run_ends').select('run_id,outcome').eq('conversation_id',conversation)).data||[]) as RunEnd[];
+   const messages=(await db.from('conversation_messages').select(messageColumns).eq('conversation_id',conversation).order('id')).data||[];
+   const queued=((await db.from('conversation_queued_turns').select(queuedColumns).eq('conversation_id',conversation).order('queued_at')).data||[]) as QueuedTurn[];
+   return {ends,messages,queued};
+  })(),
+  (async()=>{
+   const requestRows=((await db.from('lead_agent_requests').select('id,run_id,call_id,agent_name,job,apps,asked_with,state,answered_at,reason,created_at,answerer:people!answered_by(name),asker:people!asked_by(name)').eq('conversation_id',conversation).order('id')).data||[]) as unknown as RequestRow[];
+   const madeRows=((await db.from('lead_made_agents').select('run_id,call_id,created_at,hermes_agents(id,connection_id,name,speciality,apps,is_default,requested_by,requester_opened_at)').eq('conversation_id',conversation).order('created_at')).data||[]) as unknown as MadeRow[];
+   return {requestRows,madeRows};
+  })(),
+  db.from('conversation_notes').select(noteColumns).eq('conversation_id',conversation).order('id').then(({data})=>(data||[]) as StoredNote[]),
+  db.from('reply_cards').select(replyCardColumns).eq('conversation_id',conversation).order('id').then(({data})=>(data||[]) as ReplyCardRow[]),
+  db.from('agent_rules').select('id,run_id,agent_id,removed_at,said_at,body,suggestion,decided_at,decider:people!decided_by(name)').eq('conversation_id',conversation).order('said_at').then(({data})=>(data||[]) as unknown as SavedRow[]),
+  db.rpc('conversation_working_for',{conversation}),
+  db.from('people').select('name').eq('id',person).maybeSingle(),
+  tiedCard(db,company,conversation),
+ ]);
  const lead=(found.hermes_agents as {is_default?:boolean}|null)?.is_default===true;
  const asksForApps=replyRows.some(row=>row.kind==='connect');
  const states=apps&&found.agent_id&&replyRows.some(row=>row.kind==='connect'&&row.state==='open')?await apps(found.agent_id):null;
@@ -59,17 +73,13 @@ export async function conversationRecord(db:Database,person:string,company:strin
   ...requestRows.map(row=>({run_id:row.run_id,at:row.created_at,card:{kind:'request',request:requestView(row)}} satisfies {run_id:string,at:string,card:LeadCard})),
   ...replyRows.flatMap(row=>{ const card=handPickup(replyCardOf(row,states),queued,messages as {author:string,created_at:string}[]); return card?[{run_id:row.run_id,at:row.created_at,card:{kind:'reply',card},...questionParts(row,card,lead)} satisfies PlacedCard]:[]; })];
  type SavedRow={id:string,run_id:string,agent_id:string|null,removed_at:string|null,said_at:string,body:string,suggestion:'pending'|'approved'|'rejected'|null,decided_at:string|null,decider:{name:string}|null};
- const rows=((await db.from('agent_rules').select('id,run_id,agent_id,removed_at,said_at,body,suggestion,decided_at,decider:people!decided_by(name)').eq('conversation_id',conversation).order('said_at')).data||[]) as unknown as SavedRow[];
  const sentTo=rows.some(row=>row.suggestion)?new Map((((await db.rpc('rule_suggestions_sent_to',{conversation})).data||[]) as {rule:string,sent_to:string[]}[]).map(row=>[row.rule,row.sent_to])):new Map<string,string[]>();
  const saved=rows.map(row=>({run_id:row.run_id,rule:{id:row.id,agent:row.agent_id,removed:row.removed_at!==null,said_at:row.said_at,...(row.suggestion?{sentTo:sentTo.get(row.id)||[]}:{})} satisfies SavedRule}));
  const decisions=[...rows.flatMap(row=>row.decided_at?[{kind:'rule',approved:row.suggestion==='approved',by:row.decider?.name||'',rule:row.body,at:row.decided_at} satisfies Decision]:[]),
   ...requestRows.flatMap(row=>row.state!=='waiting'&&row.answered_at?[{kind:'request',by:row.answerer?.name||'',name:row.agent_name,at:row.answered_at,...(row.state==='made'?{made:true as const}:{made:false as const,reason:row.reason||''})} satisfies Decision]:[])];
  const {data:permit}=replyRows.some(row=>row.kind==='permission'&&row.state==='open')?await db.rpc('permission_choices',{c:company}):{data:null};
- const {data:working}=await db.rpc('conversation_working_for',{conversation});
  const runner=(working as {person:string,name:string}[]|null)?.[0];
  const {data:manages}=runner&&runner.person!==person?await db.rpc('can_manage_company',{target:company}):{data:false};
- const {data:me}=await db.from('people').select('name').eq('id',person).maybeSingle();
- const card=await tiedCard(db,company,conversation);
  const board=card&&{card:card.card,column:card.column};
  // Only a Card the chat's first Run put on the board says so; a chat started from its Card (#145) found it there.
  const first=messages.find(message=>message.author==='person');

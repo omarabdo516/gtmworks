@@ -16,8 +16,10 @@ test('people and agents reply inside one card, in order, each labelled and in it
  await mkdir('test-results/screenshots',{recursive:true});
  const stamp=Date.now();
  const first=`Draft is ready مسودة جاهزة ${stamp}`;
- // A card with the Writer's message on it, as an Agent's reply is stored.
- const card=Number(rows(`with card as (insert into public.work_cards(company_id,stage_id,title) select company_id,id,'Conversation ${stamp}' from public.work_stages
+ // A card with the Writer's message on it, written as the Writer (seed.sql's way): the note's activity row takes its
+ // author from the signed-in id, auth.uid().
+ const card=Number(rows(`with writer as (select set_config('request.jwt.claim.sub','30000000-0000-0000-0000-000000000001',true)),
+ card as (insert into public.work_cards(company_id,stage_id,title) select company_id,id,'Conversation ${stamp}' from public.work_stages,writer
   where company_id='10000000-0000-0000-0000-000000000001' order by position limit 1 returning company_id,id),
  note as (insert into public.work_comments(company_id,card_id,body,author_id) select company_id,id,'${first}','30000000-0000-0000-0000-000000000001' from card returning card_id)
  select card_id from note`)[0].card_id);

@@ -20,8 +20,10 @@ test('revoking a grant keeps the agent face and name in a company-only member’
  const writer=page.getByRole('form',{name:'Writer',exact:true});
  try {
   const body=`Face history ${Date.now()}`;
-  // The Writer's note on card 1, as an Agent's reply is stored.
-  query(`insert into public.work_comments(company_id,card_id,body,author_id) values ('10000000-0000-0000-0000-000000000001',1,'${body}','30000000-0000-0000-0000-000000000001')`);
+  // The Writer's note on card 1, written as the Writer (seed.sql's way): the note's activity row takes its author from
+  // the signed-in id, auth.uid().
+  query(`do $$ begin perform set_config('request.jwt.claim.sub','30000000-0000-0000-0000-000000000001',true);
+   insert into public.work_comments(company_id,card_id,body,author_id) values ('10000000-0000-0000-0000-000000000001',1,'${body}','30000000-0000-0000-0000-000000000001'); end $$`);
   await signIn(member,'manager@example.com','/c/rs-learning/home');
   const before=await faceMarkup(member.locator('.home-agents').getByRole('img',{name:names[1],exact:true}),names[1]);
   await writer.getByRole('button',{name:'Revoke access from Writer'}).click();

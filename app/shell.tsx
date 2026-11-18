@@ -40,18 +40,23 @@ export default async function Shell({company,companies,section,title,crumbs,pers
  const slug=company?.slug;
  const chat=section==='chat'||section==='conversations'||section==='channels';
  const db=await supabase();
- // Every Agent's state for this reader (#184), read in one call beside the Agents themselves; a failed read leaves them idle.
- const [agents,stateOf]=company?.id?await Promise.all([companyAgents(db,company.id),db.rpc('agent_states',{c:company.id}).then(({data})=>agentStates(data))]):[[],agentStates(null)];
- const conversations=company?.id?(await db.from('conversations').select('id,agent_name,created_at').eq('company_id',company.id).order('created_at',{ascending:false}).limit(20)).data||[]:[];
+ // The sidebar's reads go out together, as the page's own do: each is one round trip (decision 0042). Every Agent's state
+ // for this reader (#184) is read in one call beside the Agents themselves; a failed read leaves them idle.
+ const id=company?.id;
+ const [[agents,stateOf],conversations,workMode,channels,manage,writer,ids]=await Promise.all([
+  id?Promise.all([companyAgents(db,id),db.rpc('agent_states',{c:id}).then(({data})=>agentStates(data))]):[[],agentStates(null)] as const,
+  id?db.from('conversations').select('id,agent_name,created_at').eq('company_id',id).order('created_at',{ascending:false}).limit(20).then(({data})=>data||[]):[],
+  id?db.from('companies').select('work_mode').eq('id',id).maybeSingle().then(({data})=>data?.work_mode as string|null|undefined):undefined,
+  id?channelSidebar(db,id):[],
+  id?db.rpc('can_manage_company',{target:id}).then(({data})=>!!data):false,
+  // Who can write a chat: "N" opens a new one for them (app/new-chat-key), and a Member asks Lead for an Agent.
+  !!id&&(owner||db.rpc('conversation_can_write',{c:id}).then(({data})=>data===true)),
+  agentIdentities(),
+ ]);
  // Each listed chat reads its own first message, so a long chat never crowds another out of the titles.
  const firsts=await Promise.all(conversations.map(async c=>(await db.from('conversation_messages').select('body').eq('conversation_id',c.id).eq('author','person').order('id').limit(1).maybeSingle()).data?.body as string|undefined));
  // A chat is named by the first line of its first message, as its own page names it (lib/conversations titleOf).
  const chats=conversations.map((c,index)=>({id:c.id,created_at:c.created_at,title:firsts[index]?.split('\n')[0]||c.agent_name}));
- const workMode=company?.id?(await db.from('companies').select('work_mode').eq('id',company.id).maybeSingle()).data?.work_mode as string|null|undefined:undefined;
- const channels=company?.id?await channelSidebar(db,company.id):[];
- const manage=company?.id?!!(await db.rpc('can_manage_company',{target:company.id})).data:false;
- // Who can write a chat: "N" opens a new one for them (app/new-chat-key), and a Member asks Lead for an Agent.
- const writer=!!company?.id&&(owner||(await db.rpc('conversation_can_write',{c:company.id})).data===true);
  const asksForAgents=writer&&!owner;
  const account=<><AccountMenu slug={slug} personName={personName} role={role} theme={theme} companyName={company?.name} settingsHref={slug?`/c/${slug}/settings`:undefined}/><ThemeToggle theme={theme}/></>;
  const active=(path:string)=>path==='chat'?chat:path==='work/board'?section.startsWith('work/'):section===path;
@@ -108,5 +113,5 @@ export default async function Shell({company,companies,section,title,crumbs,pers
  const callable=agents.map(({id,connection_id,name})=>({id,connection_id,name}));
  // Its New channel, Connect apps and Model (#158) read the Company and this reader's role.
  const place=company?.id?{slug:company.slug,company:company.id,person:personId,owner,manage,alone:workMode==='alone'}:null;
- return <AgentIdentitiesProvider agents={await agentIdentities()}><CallableAgentsProvider agents={callable}><ComposerPlaceProvider place={place}>{company?.id?<RecentCardsProvider key={company.id} company={company.id} cardId={cardId}>{shown}</RecentCardsProvider>:shown}</ComposerPlaceProvider></CallableAgentsProvider></AgentIdentitiesProvider>;
+ return <AgentIdentitiesProvider agents={ids}><CallableAgentsProvider agents={callable}><ComposerPlaceProvider place={place}>{company?.id?<RecentCardsProvider key={company.id} company={company.id} cardId={cardId}>{shown}</RecentCardsProvider>:shown}</ComposerPlaceProvider></CallableAgentsProvider></AgentIdentitiesProvider>;
 }

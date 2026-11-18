@@ -13,12 +13,17 @@ import { agentDetails } from '@/app/agent-details-server';
 // Only the person who started a conversation can read it; everyone else, in this company or another, gets not found.
 // ?tab=<key> opens the Agent's details on that tab.
 export default async function ConversationPage({params,searchParams}:{params:Promise<{slug:string,id:string}>,searchParams:Promise<{tab?:string}>}) {
- const {t}=await getI18n(); const {slug,id}=await params; const {tab}=await searchParams;
- const db=await supabase(); const {data:{user}}=await db.auth.getUser();
+ const {slug,id}=await params; const {tab}=await searchParams;
+ const db=await supabase();
+ // The person's own Companies and the Conversation are read beside the sign-in check (RLS reads nothing without one),
+ // and the Conversation is then held to the Company in the address.
+ const [{t},{data:{user}},{data:companies},{data:found}]=await Promise.all([getI18n(),db.auth.getUser(),
+  db.from('companies').select('id,slug,name,work_mode').order('name'),
+  uuid.test(id)?db.from('conversations').select(`${conversationColumns},company_id`).eq('id',id).maybeSingle():{data:null}]);
  if(!user) redirect(`/sign-in?next=${encodeURIComponent(`/c/${slug}/conversations/${id}`)}`);
- const {data:companies}=await db.from('companies').select('id,slug,name,work_mode').order('name'); const company=companies?.find(c=>c.slug===slug);
+ const company=companies?.find(c=>c.slug===slug);
  if(!company||!uuid.test(id)) notFound();
- const {data:conversation}=await db.from('conversations').select(conversationColumns).eq('id',id).eq('company_id',company.id).maybeSingle();
+ const conversation=found?.company_id===company.id?found:null;
  if(!conversation) notFound();
  // Messages, notes to a person and waiting turns, with who the Agent is working for (lib/conversation-record.ts). The
  // page is drawn without waiting for it; the chat shows its placeholder until it arrives (#172).
@@ -30,15 +35,19 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  const tiedRead=tiedCard(db,company.id,id);
  tiedRead.catch(()=>{});
  // Until then the chat is named as the sidebar names it (app/shell.tsx): the first line of its first message.
- const {data:first}=await db.from('conversation_messages').select('body').eq('conversation_id',id).eq('author','person').order('id').limit(1).maybeSingle();
- // The Agent's details beside the chat, while it is still attached to the company.
- const {data:agent}=conversation.agent_id?await db.from('hermes_agents').select(`id,connection_id,name,speciality,is_default,${madeColumns}`).eq('id',conversation.agent_id).eq('company_id',company.id).maybeSingle():{data:null};
- const {data:person}=await db.from('people').select('name').eq('id',user.id).single();
- const {data:membership}=await db.from('members').select('role').eq('company_id',company.id).eq('person_id',user.id).is('removed_at',null).maybeSingle();
- // Any Member but a Viewer may write (#287); the database decides, as it does for every send.
- const {data:writer}=await db.rpc('conversation_can_write',{c:company.id});
- const {count:waitingCount}=await approvalQueue(db,company.id,user.id,membership?.role||'');
- const details=agent?await agentDetails(db,{company:company.id,agent:agent.id,name:agent.name,slug,me:user.id,role:membership?.role||'',tab}):null;
+ // The frame's reads go out together: each is one round trip, and on a busy machine a chain of them is what makes the
+ // chat slow to open (decision 0042).
+ const [{data:first},{data:agent},{data:person},{data:membership},{data:writer}]=await Promise.all([
+  db.from('conversation_messages').select('body').eq('conversation_id',id).eq('author','person').order('id').limit(1).maybeSingle(),
+  // The Agent's details beside the chat, while it is still attached to the company.
+  conversation.agent_id?db.from('hermes_agents').select(`id,connection_id,name,speciality,is_default,${madeColumns}`).eq('id',conversation.agent_id).eq('company_id',company.id).maybeSingle():{data:null},
+  db.from('people').select('name').eq('id',user.id).single(),
+  db.from('members').select('role').eq('company_id',company.id).eq('person_id',user.id).is('removed_at',null).maybeSingle(),
+  // Any Member but a Viewer may write (#287); the database decides, as it does for every send.
+  db.rpc('conversation_can_write',{c:company.id}),
+ ]);
+ const [{count:waitingCount},details]=await Promise.all([approvalQueue(db,company.id,user.id,membership?.role||''),
+  agent?agentDetails(db,{company:company.id,agent:agent.id,name:agent.name,slug,me:user.id,role:membership?.role||'',tab}):null]);
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  const title=(first?.body as string|undefined)?.split('\n')[0]||conversation.agent_name;
  const tied=await tiedRead;
