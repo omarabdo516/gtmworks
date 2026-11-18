@@ -15,7 +15,7 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: 
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 
 const mona = { id: 'ag-1', connection_id: 'c-1', name: 'Mona', speciality: 'Marketing', main: true };
-const tabs = { activity: <p>Nothing yet</p>, tasks: <p>No cards</p>, files: <p>No files</p>, log: <p>No log</p> };
+const tabs = { activity: <p>Nothing yet</p>, tasks: <p>No cards</p>, files: <p>No files</p>, memory: <p>No notes</p>, log: <p>No log</p> };
 const panel = (screen: Awaited<ReturnType<typeof render>>) => screen.getByRole('complementary', { includeHidden: true, name: 'Details: Mona' });
 const chat = (width: number) => page.viewport(width, 900).then(() => render(<div className="gw"><LanguageProvider language="en">
  <AgentChat slug="rs-learning" company="co-1" agent={mona} details={{ status: 'idle', tab: 'activity', tabs }} writer/>
@@ -29,7 +29,8 @@ test('beside the chat the details start open, named for the Agent; the title pil
  await expect.element(pill).toHaveAttribute('aria-expanded', 'true');
  expect(details.element().textContent).toContain('MonaMainMarketing\u00a0·\u00a0Idle');
  await expect.element(details.getByRole('link', { name: 'Settings for Mona' })).toHaveAttribute('href', '/c/rs-learning/settings?agent=ag-1');
- await expect.element(details.getByRole('tab', { name: 'Memory · Soon' })).toHaveAttribute('aria-disabled', 'true');
+ // Memory opens now that it shows the Agent's own notes (#350).
+ await expect.element(details.getByRole('tab', { name: 'Memory', exact: true })).toHaveAttribute('aria-selected', 'false');
  await pill.click();
  await expect.element(details).not.toBeVisible();
  await expect.element(pill).toHaveAttribute('aria-expanded', 'false');
@@ -143,6 +144,8 @@ test('an Agent with nothing yet shows the reference\'s empty line on every tab',
  await details.getByRole('tab', { name: 'Files', exact: true }).click();
  await expect.element(panel.getByRole('heading', { name: 'Files 0' })).toBeVisible();
  await expect.element(panel.getByText('No files yet. Files from its cards and from your chats with it show here.')).toBeVisible();
+ await details.getByRole('tab', { name: 'Memory', exact: true }).click();
+ await expect.element(panel.getByText('Its memory can’t be read right now.')).toBeVisible();
  await details.getByRole('tab', { name: 'Log', exact: true }).click();
  await expect.element(panel.getByRole('heading', { name: /^Log 0/ })).toBeVisible();
  await expect.element(panel.getByText('Nothing in this agent’s log yet.')).toBeVisible();

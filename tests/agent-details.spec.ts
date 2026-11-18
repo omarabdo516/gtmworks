@@ -86,7 +86,7 @@ test('the Owner reads the Agent\'s state, what it is doing for them, its Cards a
  await expect(details.locator('.born')).toContainText('Made on Jun 10 at your request');
  await expect(details.locator('.born').getByRole('link',{name:'See the ask',exact:true})).toHaveAttribute('href',`/c/rs-learning/conversations/${id(9)}`);
  await expect(details.getByRole('link',{name:'Settings for Meta Ads',exact:true})).toBeVisible();
- await expect(details.getByRole('tab')).toHaveText(['Activity','Tasks','Files','Memory · Soon','Log']);
+ await expect(details.getByRole('tab')).toHaveText(['Activity','Tasks','Files','Memory','Log']);
  const panel=details.getByRole('tabpanel');
  await expect(panel).toHaveAttribute('aria-labelledby','dp-tab-activity');
 
@@ -114,12 +114,14 @@ test('the Owner reads the Agent\'s state, what it is doing for them, its Cards a
  await page.keyboard.press('ArrowRight');
  await expect(tab(details,'Files')).toBeFocused();
  await page.keyboard.press('ArrowRight');
+ await expect(tab(details,'Memory')).toBeFocused();
+ await page.keyboard.press('ArrowRight');
  await expect(tab(details,'Log')).toBeFocused();
  await expect(panel.locator('.dp-label > span')).toHaveText('Log 2');
  await expect(panel.locator('.lg-row .lg-line')).toHaveText(['عمر (you) added the agent “Meta Ads”','عمر (you) changed the agent “Meta Ads”']);
  await expect(panel.locator('.lg-forever')).toHaveText('Nothing in the log is ever deleted, not even by the Owner.');
  await page.keyboard.press('ArrowLeft');
- await expect(tab(details,'Files')).toHaveAttribute('aria-selected','true');
+ await expect(tab(details,'Memory')).toHaveAttribute('aria-selected','true');
  await tab(details,'Log').click();
  await panel.getByRole('link',{name:'Open the activity log',exact:true}).click();
  await expect(page).toHaveURL(new RegExp(`/c/rs-learning/log\\?who=a:${ads}$`));
