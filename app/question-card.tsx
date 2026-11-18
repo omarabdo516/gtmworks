@@ -12,6 +12,10 @@
 // answer shows with a check, the reference's outcome line. Any other Agent's question keeps the lettered card. The
 // reference's grey "why" line has no source in the Engine (it goes into the question's own words), and its offer card
 // is drawn with the "or type" line too, since the Engine always allows a free answer.
+//
+// In a channel (#149) the card is the team's: a Member who may not answer it (a Viewer, or anyone else when the main
+// Agent asked the Member whose message it answers) sees its options as plain rows under "Waiting for someone on the
+// team to pick", or the main Agent's card as its wait line "Waiting for <first name>". `waitingFor` names that Member.
 import { useLayoutEffect, useRef, useState } from 'react';
 import { ShellIcon } from '@/components/shell-icon';
 import { useI18n } from '@/lib/i18n-client';
@@ -25,7 +29,7 @@ export type AnswerQuestion=(card:number,choice:number,answerKey:string)=>Promise
 // design-reference: justCls. The answered card settles only on the page where it was answered, within this long.
 const settling=900;
 
-export function QuestionCard({card,fresh,answer,chips=false}:{card:Question,fresh:boolean,answer?:AnswerQuestion,chips?:boolean}) {
+export function QuestionCard({card,fresh,answer,chips=false,waitingFor=null}:{card:Question,fresh:boolean,answer?:AnswerQuestion,chips?:boolean,waitingFor?:string|null}) {
  const {t}=useI18n();
  // One letter per choice, in the interface's language (أ ب ج د, or A B C D). Only the lettered card draws them.
  const keys=Array.from(t('questionLetters'));
@@ -53,29 +57,46 @@ export function QuestionCard({card,fresh,answer,chips=false}:{card:Question,fres
  // line has no source here.
  const ask1Head=<div className="ask1__head"><span className="ask1__q">{card.question}</span></div>;
  const frame=`reply-card reply-card--question${chips?' reply-card--ask1':''}${fresh?' card-in':''}`;
- if(state==='closed') return <div className={`${frame} is-resolved`} role="group" aria-label={card.question} dir="auto">{chips
+ // The card's place in the channel, so "Waiting on you" opens it (#149).
+ const place={id:`question-${card.id}`,tabIndex:-1};
+ if(state==='closed') return <div className={frame} {...place} role="group" aria-label={card.question} dir="auto">{chips
   ?<div className="ask1__head"><span className="ask1__q">{card.question}</span><span className="qcard__hint">{t('questionClosed')}</span></div>
   :head(t('questionClosed'))}</div>;
  if(said!==null) {
-  if(chips) return <div className={`${frame} is-resolved${just?' is-just':''}`} role="group" aria-label={`${card.question}: ${t('questionAnswered')}`} dir="auto">
+  if(chips) return <div className={`${frame} is-resolved${just?' is-just':''}`} {...place} role="group" aria-label={`${card.question}: ${t('questionAnswered')}`} dir="auto">
    {ask1Head}
    <div className="card__outcome"><ShellIcon name="check"/><span dir="auto">{said}</span></div>
   </div>;
   const chosen=lettered?card.choices.findIndex(choice=>choice.trim()===said.trim()):-1;
-  return <div className={`${frame} is-resolved${just?' is-just':''}`} role="group" aria-label={`${card.question}: ${t('questionAnswered')}`} dir="auto">
+  return <div className={`${frame} is-resolved${just?' is-just':''}`} {...place} role="group" aria-label={`${card.question}: ${t('questionAnswered')}`} dir="auto">
    {head(t('questionAnswered'))}
    <div className="qcard__opts"><div className={`opt is-chosen${chosen<0?' opt--typed':''}`}>
     {chosen>=0&&<span className="opt__key" aria-hidden="true">{keys[chosen]}</span>}<span className="opt__t">{chosen>=0?card.choices[chosen]:said}</span><ShellIcon name="check" className="opt__check"/>
    </div></div>
   </div>;
  }
- if(chips) return <div className={frame} role="group" aria-label={card.question} dir="auto">
+ // The card is someone else's to answer (#149): the main Agent's waits for the Member it was asked of, and any other
+ // Agent's shows the team's wait line over its options as plain rows (design-reference: ask1HTML's wait line,
+ // cardHTML's `.opt--static`).
+ if(!answer) {
+  if(chips) return <div className={frame} {...place} role="group" aria-label={card.question} dir="auto">
+   {ask1Head}
+   <div className="card__outcome"><ShellIcon name="clock"/><span>{waitingFor?t('questionWaitFor',waitingFor):t('questionWaitTeam')}</span></div>
+  </div>;
+  return <div className={frame} {...place} role="group" aria-label={card.question} dir="auto">
+   {head(t('questionWaitTeam'))}
+   {lettered&&<div className="qcard__opts">{card.choices.map((choice,index)=><div key={index} className="opt opt--static">
+    <span className="opt__key" aria-hidden="true">{keys[index]}</span><span className="opt__t">{choice}</span>
+   </div>)}</div>}
+  </div>;
+ }
+ if(chips) return <div className={frame} {...place} role="group" aria-label={card.question} dir="auto">
   {ask1Head}
   {lettered&&<div className="ask1__opts">{card.choices.map((choice,index)=><button key={index} type="button" className="chip" onClick={()=>void pick(index)}>{choice}</button>)}</div>}
   <p className="ask1__or">{t(lettered?'questionOrType':'questionHintWords')}</p>
   {error&&<p className="qcard__error" role="alert">{t(error)}</p>}
  </div>;
- return <div className={frame} role="group" aria-label={card.question} dir="auto">
+ return <div className={frame} {...place} role="group" aria-label={card.question} dir="auto">
   {head(t(lettered?'questionHint':'questionHintWords'))}
   {lettered&&<div className="qcard__opts">{card.choices.map((choice,index)=><button key={index} type="button" className="opt" onClick={()=>void pick(index)}>
    <span className="opt__key" aria-hidden="true">{keys[index]}</span><span className="opt__t">{choice}</span>

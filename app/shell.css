@@ -708,6 +708,10 @@
 }
 .gw .opt.is-chosen { cursor: default; }
 .gw .opt.is-chosen:hover { background: none; }
+/* A question a Member may not answer (#149; design-reference: .opt--static): the same rows, never a button. */
+.gw .opt--static { cursor: default; }
+.gw .opt--static:hover { background: none; }
+.gw .opt--static:hover .opt__key { background: var(--gw-bg-tertiary); color: var(--gw-text-2); box-shadow: var(--gw-border-3) 0 0 0 0.5px inset; }
 .gw .opt.is-chosen .opt__key { background: var(--gw-primary); color: var(--gw-on-primary); box-shadow: none; }
 .gw .reply-card .opt--typed { grid-template-columns: minmax(0, 1fr) auto; }
 .gw .opt--typed .opt__t { white-space: pre-line; overflow-wrap: anywhere; }

@@ -11,7 +11,9 @@ import { boardCardColumns, visibleApprovals, waitingCount } from './board-column
 type RuleSuggestion={rule:string,agent:{connection_id:string,name:string}|null};
 type AgentRequest={apps:string[],asked_with:string};
 // A permission request (#165, kind permission in a Conversation, channel_permission in a channel: title what it asks,
-// asked_by its Agent's name) also carries its Agent's face, and a channel's its channel, so it opens there.
+// asked_by its Agent's name) also carries its Agent's face, and a channel's its channel, so it opens there. A channel's
+// question or handed step (#149, channel_question and channel_hand) does the same: one item per Member who may write, its
+// channel read from the card's message and its Agent's face from that message's Run.
 export type WaitingItem={kind:string,id:number,title:string,body:string,asked_by:string,card_id:number|null,conversation_id:string|null,created_at:string,suggestion?:RuleSuggestion,request?:AgentRequest|null,note_id?:number|null,agent?:{connection_id:string,name:string}|null,channel_id?:string|null};
 // "Waiting on you" is one list (#16), read once per request from waiting_list(company) as the signed-in person: the
 // approvals they hold (`cards`, for the card's decision), those the board shows them (`visible`: none of an Agent hidden
@@ -34,7 +36,9 @@ const queue=cache(async(db:Awaited<ReturnType<typeof supabase>>,company:string,p
  const mentionIds=listed.filter(item=>item.kind==='mention').map(item=>item.id);
  const chats=[...new Set(listed.filter(item=>item.kind==='permission'&&item.conversation_id).map(item=>item.conversation_id!))];
  const channelIds=listed.filter(item=>item.kind==='channel_permission').map(item=>item.id);
- const [cardResult,agentResult,ruleResult,requestResult,mentionResult,chatResult,channelResult]=await Promise.all([
+ // A channel's question or handed step (#149) is one item per Member who may write; it opens its channel at the card.
+ const channelCardIds=listed.filter(item=>item.kind==='channel_question'||item.kind==='channel_hand').map(item=>item.id);
+ const [cardResult,agentResult,ruleResult,requestResult,mentionResult,chatResult,channelResult,channelCardResult]=await Promise.all([
   ids.length?db.from('work_cards').select(boardCardColumns).eq('company_id',company).in('id',ids):{data:[],error:null},
   ids.length?db.from('hermes_agents').select('id').eq('company_id',company):{data:[],error:null},
   ruleIds.length?db.from('waiting_items').select('id,agent_rules(body,hermes_agents(connection_id,name))').in('id',ruleIds):{data:[],error:null},
@@ -42,11 +46,17 @@ const queue=cache(async(db:Awaited<ReturnType<typeof supabase>>,company:string,p
   mentionIds.length?db.from('waiting_items').select('id,note_id,work_comments(body)').in('id',mentionIds):{data:[],error:null},
   chats.length?db.from('conversations').select('id,agent_id').eq('company_id',company).in('id',chats):{data:[],error:null},
   channelIds.length?db.from('channel_permissions').select('id,channel_id,channel_runs(agent_id)').eq('company_id',company).in('id',channelIds):{data:[],error:null},
+  channelCardIds.length?db.from('reply_cards').select('id,channel_message_id,channel_messages(channel_id)').eq('company_id',company).in('id',channelCardIds):{data:[],error:null},
  ]);
  type ChatRow={id:string,agent_id:string}; type ChannelRow={id:number,channel_id:string,channel_runs:{agent_id:string|null}|null};
+ type ChannelCardRow={id:number,channel_message_id:number,channel_messages:{channel_id:string}|null};
  const chatAgents=new Map(((chatResult.data || []) as ChatRow[]).map(row=>[row.id,row.agent_id]));
  const channelRows=new Map(((channelResult.data || []) as unknown as ChannelRow[]).map(row=>[row.id,row]));
- const askingIds=[...new Set([...chatAgents.values(),...[...channelRows.values()].flatMap(row=>row.channel_runs?.agent_id??[])])];
+ const channelCards=new Map(((channelCardResult.data || []) as unknown as ChannelCardRow[]).map(row=>[row.id,row]));
+ const cardMessageIds=[...new Set([...channelCards.values()].map(row=>row.channel_message_id))];
+ const {data:cardRuns,error:cardRunError}=cardMessageIds.length?await db.from('channel_runs').select('message_id,agent_id').eq('company_id',company).in('message_id',cardMessageIds):{data:[],error:null};
+ const cardAgents=new Map(((cardRuns || []) as {message_id:number,agent_id:string|null}[]).map(row=>[row.message_id,row.agent_id]));
+ const askingIds=[...new Set([...chatAgents.values(),...[...channelRows.values()].flatMap(row=>row.channel_runs?.agent_id??[]),...[...cardAgents.values()].flatMap(agent=>agent??[])])];
  const {data:faces,error:faceError}=askingIds.length?await db.from('hermes_agents').select('id,connection_id,name').eq('company_id',company).in('id',askingIds):{data:[],error:null};
  const faceOf=(agent:string|null|undefined)=>((faces || []) as {id:string,connection_id:string,name:string}[]).find(row=>row.id===agent) ?? null;
  const cards=ids.map(id=>(cardResult.data || []).find(card=>card.id===id)).filter(Boolean) as (ApprovalCard&{agent_id:string|null})[];
@@ -61,10 +71,11 @@ const queue=cache(async(db:Awaited<ReturnType<typeof supabase>>,company:string,p
   if(item.kind==='agent_request') return {...item,request:requests.get(item.id)??null};
   if(item.kind==='permission') { const face=faceOf(chatAgents.get(item.conversation_id!)); return {...item,agent:face&&{connection_id:face.connection_id,name:face.name}}; }
   if(item.kind==='channel_permission') { const row=channelRows.get(item.id); const face=faceOf(row?.channel_runs?.agent_id); return {...item,channel_id:row?.channel_id??null,agent:face&&{connection_id:face.connection_id,name:face.name}}; }
+  if(item.kind==='channel_question'||item.kind==='channel_hand') { const row=channelCards.get(item.id); const face=faceOf(row?cardAgents.get(row.channel_message_id):null); return {...item,channel_id:row?.channel_messages?.channel_id??null,agent:face&&{connection_id:face.connection_id,name:face.name}}; }
   const rule=item.kind==='rule_suggestion'&&rules.get(item.id);
   if(rule) return {...item,suggestion:{rule:rule.body,agent:rule.hermes_agents}};
   const mention=item.kind==='mention'?mentions.get(item.id):undefined;
   return mention?{...item,note_id:mention.note_id,body:mention.work_comments?.body??item.body}:item;
  });
- return {steps:(stepResult.data || []) as Step[],cards,visible:visible.cards,items,count:waitingCount(visible.items),available:!stepResult.error&&!listResult.error&&!cardResult.error&&!agentResult.error&&!ruleResult.error&&!requestResult.error&&!mentionResult.error&&!chatResult.error&&!channelResult.error&&!faceError};
+ return {steps:(stepResult.data || []) as Step[],cards,visible:visible.cards,items,count:waitingCount(visible.items),available:!stepResult.error&&!listResult.error&&!cardResult.error&&!agentResult.error&&!ruleResult.error&&!requestResult.error&&!mentionResult.error&&!chatResult.error&&!channelResult.error&&!channelCardResult.error&&!cardRunError&&!faceError};
 });
