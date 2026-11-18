@@ -63,6 +63,14 @@ test('a waiting row opens its chat at its card: a handed step and a permission r
  assert.equal(chatPlace('rs', { kind: 'approval', id: 2, conversation_id: null }), null);
 });
 
+// #200: a Member mentioned in a channel opens that channel at the message, and the item counts alone, as any other row.
+test('a channel mention opens its channel at the message and counts on its own', () => {
+ assert.equal(chatPlace('rs', { kind: 'channel_mention', id: 11, conversation_id: null, channel_id: 'ch-1', channel_message_id: 42 }), '/c/rs/channels/ch-1#mention-42');
+ assert.equal(chatPlace('rs', { kind: 'channel_mention', id: 11, conversation_id: null }), null);
+ assert.equal(onCard({ kind: 'channel_mention', card_id: null, conversation_id: null }), false);
+ assert.equal(waitingCount([{ kind: 'channel_mention', card_id: null, conversation_id: null }]), 1);
+});
+
 test('Shift with an arrow moves to the next column in the reading direction', () => {
  assert.equal(keyboardTarget('ideas', 'ArrowLeft', true), 'planned');
  assert.equal(keyboardTarget('ideas', 'ArrowRight', true), 'waiting');

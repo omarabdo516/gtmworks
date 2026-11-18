@@ -868,6 +868,7 @@
   "noteWorkingOn": "شغال على طلب {0}…",
   "logActNoteReply": "ردّ في السجل",
   "waitingMentionIn": "ذكرك في سجل «{0}»",
+  "waitingMentionInChannel": "ذكرك في {0}",
   "waitingMentions": "اتذكرت فيها",
   "newAgentHintMember": "قول لـ {0} محتاج وكيل يعمل إيه، وهو يجهّز الطلب ويبعته لـ{1}.",
   "newAgentHintMemberAnyOwner": "قول لـ {0} محتاج وكيل يعمل إيه، وهو يجهّز الطلب ويبعته للمالك.",
