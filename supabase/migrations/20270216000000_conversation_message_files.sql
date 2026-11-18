@@ -134,6 +134,16 @@ begin
  return jsonb_build_object('state','reserved','connection',pinned,'profile',(select r.profile from public.conversation_run_reservations r where r.conversation_id=conversation and r.send_key=message_key),'note',public.pinned_run_note(conversation,message_key,c,auth.uid()));
 end $$;
 
+-- The Run a message of images alone reserves takes its empty text too: reserve_conversation_run, as
+-- 20270213000000_one_hermes.sql left it, with only its length check changed.
+do $$
+declare def text;
+begin
+ def:=pg_get_functiondef('public.reserve_conversation_run(uuid,uuid,uuid,uuid,text)'::regprocedure);
+ if position('length(message) not between 1 and 200000' in def)=0 then raise exception 'reserve_conversation_run changed: %',def; end if;
+ execute replace(def,'length(message) not between 1 and 200000','length(message) not between 0 and 200000');
+end $$;
+
 -- A claimed turn says whether it carries images, so the worker reads them from the Conversation's files only when it
 -- must: every turn without one starts exactly as before.
 drop function public.claim_conversation_turn(uuid);

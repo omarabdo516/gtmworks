@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(25);
+select plan(26);
 -- #155: an image a person attaches to a message in their Conversation is kept under the send key, linked to the message
 -- it was sent with, and only its sender writes it. A message may carry images alone, so its text may be empty.
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
@@ -94,5 +94,9 @@ select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003'
 select is((select jsonb_agg(name order by name) from public.conversation_attachments),jsonb_build_array('mine.png'),'a Contributor reads the file of their own Conversation');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
 select is((select count(*)::int from public.conversation_attachments),0,'a Manager reads no one else''s files');
+-- An Owner's first message of images alone, to an Agent that is free, reserves its Run like any other message.
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select is(public.reserve_conversation_turn('c2200000-0000-0000-0000-000000000009','10000000-0000-0000-0000-000000000001','a2200000-0000-0000-0000-000000000001','d2200000-0000-0000-0000-000000000011','')->>'state',
+ 'reserved','a message of images alone reserves its Run');
 select * from finish();
 rollback;
