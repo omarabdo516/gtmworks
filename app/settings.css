@@ -304,9 +304,11 @@
 
 /* Backup (#33): the reference's two columns of what a backup holds and leaves out (sovBackupHTML), and the host
    commands with their copy button. A command is an identifier: Paper Mono, kept left to right in both languages. */
-.gw .sov .bk-holds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s3); }
-.gw .sov .bk-holds .panel-card { align-self: start; }
+.gw .sov .ln-rules { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s3); }
+.gw .sov .ln-rule { padding: var(--s4); gap: var(--s2); }
+.gw .sov .ln-rule b { display: flex; align-items: center; gap: var(--s2); font-size: var(--gw-fs-base); --od-icon-size: 18px; }
+.gw .sov .ln-rule ul { margin: 0; padding-inline-start: var(--s5); font-size: var(--gw-fs-sm); line-height: 1.7; color: var(--gw-text-1); }
 .gw .sov .bk-cmd .panel-row__text { gap: 2px; }
 .gw .sov .bk-cmd .sub-code { margin-top: 2px; max-width: 100%; }
 .gw .sov .bk-copy { flex: none; }
-@media (max-width: 767px) { .gw .sov .bk-holds { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 767px) { .gw .sov .ln-rules { grid-template-columns: minmax(0, 1fr); } }

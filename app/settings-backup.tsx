@@ -13,15 +13,11 @@ export function BackupSection({t}:{t:I18n['t']}) {
   <header className="sov-head"><div className="sov-head__t"><h3 className="sov-h" id="sov-h" tabIndex={-1}>{t('settingsBackup')}</h3><p className="sov-sub">{t('settingsBackupSub')}</p></div></header>
   <section className="dp-sec" aria-labelledby="bk-h-in">
    {label('bk-h-in',t('settingsBackupHolds'))}
-   <div className="bk-holds">
-    <div className="panel-card">
-     <div className="panel-row"><span className="panel-row__icon"><SettingsIcon name="check"/></span><span className="panel-row__text"><span className="panel-row__t"><b>{t('settingsBackupIncluded')}</b></span></span></div>
-     {backupIncludes.map(item=><div className="panel-row" key={item.title}><span className="panel-row__text"><span className="panel-row__t">{t(item.title)}</span><span className="panel-row__d">{t(item.detail)}{item.file&&<> · <bdi dir="ltr">{item.file}</bdi></>}</span></span></div>)}
-    </div>
-    <div className="panel-card">
-     <div className="panel-row"><span className="panel-row__icon"><SettingsIcon name="x"/></span><span className="panel-row__text"><span className="panel-row__t"><b>{t('settingsBackupNotIncluded')}</b></span></span></div>
-     {backupExcludes.map(item=><div className="panel-row" key={item.title}><span className="panel-row__text"><span className="panel-row__t">{t(item.title)}</span>{item.detail&&<span className="panel-row__d">{t(item.detail)}</span>}</span></div>)}
-    </div>
+   <div className="ln-rules">
+    <div className="panel-card ln-rule"><b><SettingsIcon name="check"/>{t('settingsBackupIncluded')}</b>
+     <ul>{backupIncludes.map(item=><li key={item.title}>{t(item.title)}: {t(item.detail)}{item.file&&<> <bdi dir="ltr">{item.file}</bdi></>}</li>)}</ul></div>
+    <div className="panel-card ln-rule"><b><SettingsIcon name="x"/>{t('settingsBackupNotIncluded')}</b>
+     <ul>{backupExcludes.map(item=><li key={item.title}>{t(item.title)}{item.detail&&<>: {t(item.detail)}</>}</li>)}</ul></div>
    </div>
   </section>
   <section className="dp-sec" aria-labelledby="bk-h-cmd">
