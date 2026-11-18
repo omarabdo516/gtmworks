@@ -13,16 +13,16 @@ insert into public.conversation_messages(company_id,conversation_id,author,perso
 
 -- A run is pinned at its first start with the text of the tools its person is offered: show_draft goes beside the tools
 -- the run had, for an Owner, a Manager and a Contributor, and a Viewer is offered nothing.
-select set_config('test.specs','{"create_agent":"{\"name\":\"create_agent\"}","save_rule":"{\"name\":\"save_rule\"}","suggest_rule":"{\"name\":\"suggest_rule\"}","show_draft":"{\"name\":\"show_draft\"}"}',true);
+select set_config('test.specs','{"create_agent":"{\"name\":\"create_agent\"}","save_rule":"{\"name\":\"save_rule\"}","suggest_team_rule":"{\"name\":\"suggest_team_rule\"}","show_draft":"{\"name\":\"show_draft\"}"}',true);
 insert into public.conversation_run_reservations(conversation_id,send_key,company_id,connection_id,person_id,agent_id,message,profile)
  select ('e9000000-0000-0000-0000-00000000000'||n)::uuid,('ea000000-0000-0000-0000-00000000000'||n)::uuid,'10000000-0000-0000-0000-000000000001','e8000000-0000-0000-0000-000000000001',
   ('20000000-0000-0000-0000-00000000000'||n)::uuid,'e8000000-0000-0000-0000-000000000002','Plan the December campaign','cards-test' from generate_series(1,4) n;
 select public.pinned_run_note(('e9000000-0000-0000-0000-00000000000'||n)::uuid,('ea000000-0000-0000-0000-00000000000'||n)::uuid,'10000000-0000-0000-0000-000000000001',('20000000-0000-0000-0000-00000000000'||n)::uuid) from generate_series(1,4) n;
 set local role service_role;
 select results_eq($$select public.pin_run(('e9000000-0000-0000-0000-00000000000'||n)::uuid,('ea000000-0000-0000-0000-00000000000'||n)::uuid,current_setting('test.specs')::jsonb)->>'tools' from generate_series(1,4) n order by n$$,
- $$values ('[{"name":"save_rule"},{"name":"show_draft"}]'),('[{"name":"save_rule"},{"name":"show_draft"}]'),('[{"name":"suggest_rule"},{"name":"show_draft"}]'),(null)$$,
- 'the Owner''s and the Manager''s runs are offered show_draft after save_rule, the Contributor''s after suggest_rule, and the Viewer''s nothing');
-select is(public.pin_run('e9000000-0000-0000-0000-000000000003','ea000000-0000-0000-0000-000000000003','{"suggest_rule":"{\"name\":\"suggest_rule\"}"}')->>'tools','[{"name":"suggest_rule"},{"name":"show_draft"}]',
+ $$values ('[{"name":"save_rule"},{"name":"show_draft"}]'),('[{"name":"save_rule"},{"name":"show_draft"}]'),('[{"name":"suggest_team_rule"},{"name":"show_draft"}]'),(null)$$,
+ 'the Owner''s and the Manager''s runs are offered show_draft after save_rule, the Contributor''s after suggest_team_rule, and the Viewer''s nothing');
+select is(public.pin_run('e9000000-0000-0000-0000-000000000003','ea000000-0000-0000-0000-000000000003','{"suggest_team_rule":"{\"name\":\"suggest_team_rule\"}"}')->>'tools','[{"name":"suggest_team_rule"},{"name":"show_draft"}]',
  'a retry sends what was first pinned');
 reset role;
 

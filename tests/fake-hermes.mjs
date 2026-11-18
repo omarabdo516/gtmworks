@@ -63,7 +63,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   appTools:/** @type {Record<string,string[]>} */({}),appsUnreachable:/** @type {Set<string>} */(new Set()),appTokens:/** @type {Set<string>} */(new Set()),approveApps:true,
   appFlows:/** @type {Map<string,{server:string,profile:string,status:string,state:string,redirect:string}>} */(new Map()),appCallbacks:/** @type {string[]} */([]),
   // Each profile's own Skills by name (their SKILL.md text), and the Skills each profile locked, as `profile:name`.
-  skills:/** @type {Map<string,Map<string,string>>} */(new Map()),skillLocks:/** @type {Set<string>} */(new Set()),
+  skills:/** @type {Map<string,Map<string,string>>} */(new Map()),skillLocks:/** @type {Set<string>} */(new Set()),skillsOff:/** @type {Set<string>} */(new Set()),
   // The provider keys a profile's .env takes (hermes_cli/web_routers/config_env.py 264-330): each provider's primary
   // password row, and rows that are not one (an alias, a URL, a tool's key). Each profile keeps its own values in `env`;
   // the root's are defaultEnv. A provider listed in providerModels offers those models once its key is set. A profile in
@@ -328,7 +328,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
    }
    // Skills (hermes_cli/web_routers/skills.py): a profile sees its own and those of each folder its
    // skills.external_dirs names (a profile's folder is its home's `skills`), and keeps its own locks.
-   const skillsPath=url.pathname.match(/^\/api\/skills(?:\/(content|lock))?$/);
+   const skillsPath=url.pathname.match(/^\/api\/skills(?:\/(content|lock|toggle))?$/);
    if(skillsPath) {
     if(!home) return send(response,404,{detail:`Profile '${scoped}' does not exist.`});
     const owners=[scoped,...(home.config?.skills?.external_dirs||[]).map(folder=>/^\/opt\/data\/profiles\/([^/]+)\/skills$/.exec(folder)?.[1]).filter(owner=>settings.profiles.has(owner))];
@@ -336,7 +336,9 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     const name=skillsPath[1]==='content'&&request.method==='GET'?url.searchParams.get('name'):body?.name;
     const found=listed.find(skill=>skill.name===name);
     const missing=()=>send(response,404,{detail:`Skill '${name}' not found.`});
-    if(!skillsPath[1]&&request.method==='GET') return send(response,200,listed.map(skill=>({name:skill.name,description:'',category:null,locked:settings.skillLocks.has(`${scoped}:${skill.name}`),enabled:true,usage:0,provenance:skill.provenance})));
+    if(!skillsPath[1]&&request.method==='GET') return send(response,200,listed.map(skill=>({name:skill.name,description:'',category:null,locked:settings.skillLocks.has(`${scoped}:${skill.name}`),enabled:!settings.skillsOff.has(`${scoped}:${skill.name}`),usage:0,provenance:skill.provenance})));
+    // A switch is the profile's own (skills.disabled), on any name, listed or not.
+    if(skillsPath[1]==='toggle'&&request.method==='PUT') { settings.skillsOff[body.enabled?'delete':'add'](`${scoped}:${name}`); return send(response,200,{ok:true,name,enabled:body.enabled}); }
     if(!skillsPath[1]&&request.method==='POST') {
      if(found) return send(response,400,{detail:`A skill named '${name}' already exists.`});
      if(!settings.skills.has(scoped)) settings.skills.set(scoped,new Map());

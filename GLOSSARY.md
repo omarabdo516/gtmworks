@@ -25,7 +25,7 @@ A person's place in one company, carrying the role they hold there. One person c
 _Avoid_: user, seat, staff
 
 **Agent / وكيل**:
-A named worker running in Hermes, attached to a Company with a free name and speciality. On the bundled Engine an Agent is one Engine profile, with its own memory, Skills and settings (ADR 0016); the people who talk to the same Agent share its memory. Each Company has one default Agent for new conversations, its main Agent. A profile in the bundled Engine serves one Company only. On a pasted Hermes, a profile normally serves one Company because its memory belongs to that profile; an Owner must explicitly confirm the memory-sharing warning before attaching it to another Company. Legacy role agents retain their company grants during the transition. An Agent never approves, rejects, publishes or spends at this stage.
+A named worker running in Hermes, attached to a Company with a free name and speciality. On the bundled Engine an Agent is one Engine profile, with its own memory, Skills and settings (ADR 0016); the people who talk to the same Agent share its memory. Each Company has one default Agent for new conversations, its main Agent. A profile in the bundled Engine serves one Company only; the bundled Hermes is the only Hermes (ADR 0017). Legacy role agents retain their company grants during the transition. An Agent never approves, rejects, publishes or spends at this stage.
 
 **Main Agent / الوكيل الرئيسي**:
 The Company's default Agent, the one people talk to first. The bundled Engine names it Lead; a Company has one at a time, and an Owner may make another of its Agents the main one. The Agent that was main when its Company moved to a profile per Agent keeps the Company's first profile, `co-<company id>`, with everything in it; every other Agent gets `ag-<agent id>`.
@@ -112,7 +112,7 @@ What a new card asks its agent to do: plan first (write a plan and wait for appr
 _Avoid_: type, status, priority
 
 **Attachment / مرفق**:
-A file or reference image a person attaches to a card's first message or to a reply. It stays inside the company's storage; a person or an agent reads it by its number on the card, and the agent's run key reaches only its own card's attachments. A design version is not an attachment.
+A file or reference image a person attaches to a card's first message or to a reply. It stays inside the company's storage; a person reads it by its number on the card, and only members of that company reach it. A design version is not an attachment.
 _Avoid_: upload, evidence file
 
 **Version / نسخة**:
@@ -134,7 +134,7 @@ The cards of one company goal, with a name, goal, status (active, paused or done
 Recurring work specifying who, what and when; each occurrence creates an ordinary card. The team may pause or reschedule it; three untouched occurrences raise an alert.
 
 **Skill / مهارة**:
-Instructions in SKILL.md enabled per agent per company and loaded by its runtime. Any team member may install one; outside skills are scanned before enabling, and installs and enables are audited. Agent-written lessons retain their source edit or rejection and can be cancelled.
+Instructions in SKILL.md, kept only in the Engine (ADR 0017): in an Agent's own profile, or in the Company's shared Skills. An Owner or a Manager writes one into an Agent's own profile or switches it off or on for that Agent; each change is checked on the server and written in the company's log. The shared Skills' names (`team-lessons`, `company-knowledge`) are never taken by an Agent's own skill.
 
 **Company's shared Skills / مهارات الشركة المشتركة**:
 One folder of Skills per Company, kept in the Company's shared space (`cs-<company id>`), which every Agent of that Company reads. A lesson approved for the whole team lands there. No Run ever starts on the shared space.
@@ -145,7 +145,7 @@ A setting or sign-in that the Engine holds once for the whole install instead of
 _Avoid_: global, system-wide, default
 
 **Lesson / درس**:
-One thing an agent learned on a card, proposed as a single added line in one of its skills, with the reason and the card it was learned on. It waits in the Inbox of the people who manage the company; nothing reaches the skill until one approves it, and a rejected lesson never does.
+A lasting rule a Contributor taught an agent, suggested for the whole team. It waits in "Waiting on you" for the company's Owner and Managers; nothing reaches any agent until one approves it, when it lands in the shared Skill `team-lessons`, and a rejected lesson never does.
 _Avoid_: memory, note, feedback
 
 **Inbox / الوارد**:

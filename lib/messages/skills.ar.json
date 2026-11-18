@@ -14,5 +14,13 @@
   "skillsNotRead": "مش ممكن نقرا المهارات دي دلوقتي.",
   "skillProblemHeader": "لازم يكون ليها ترويسة اسمها من أحرف إنجليزية صغيرة وأرقام وشرطات بس، وحجمها أقل من 100 كيلوبايت",
   "skillProblemShared": "فيه مهارة مشتركة مع الفريق بنفس الاسم",
-  "skillProblemNotOwn": "الوكيل ده لسه ملوش ملف خاص بيه"
+  "skillProblemNotOwn": "الوكيل ده لسه ملوش ملف خاص بيه",
+  "skillEnabled": "مفعّلة",
+  "skillNotEnabled": "غير مفعّلة",
+  "enableSkill": "تفعيل",
+  "disableSkill": "تعطيل",
+  "enableSkillFor": "تفعيل {0} لـ{1}",
+  "disableSkillFor": "تعطيل {0} لـ{1}",
+  "skillProblemNotAllowed": "المالك أو المدير بس اللي يقدر يغيّر المهارات",
+  "skillProblemSecret": "شكلها فيها باسورد أو مفتاح أو توكن، والوكيل ده هيقراها في كل شغل"
 }

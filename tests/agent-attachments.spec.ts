@@ -2,6 +2,7 @@ import { test, expect, type Page } from './fresh-seed';
 import { chooseLanguageInSettings } from './choose-language';
 import { mkdir } from 'node:fs/promises';
 import { signIn } from './sign-in';
+import { appOrigin } from './lane.mjs';
 // A real 1 x 1 PNG: the page must show it.
 const bytes=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII=','base64');
 const picture=(name:string)=>({name,mimeType:'image/png',buffer:bytes});
@@ -65,4 +66,29 @@ test('a file attached in the composer and in a reply shows as a thumbnail, in bo
    for(const width of [1440,390]) { await page.setViewportSize({width,height:900}); await page.locator('.modal').first().screenshot({path:`test-results/screenshots/attachments-card-${language}-${width}.png`}); }
   }
  } finally { await chooseLanguage(page,'en'); }
+});
+
+// A card's file is reached only through its own Company (ADR 0004): a file of Aleem's is found by Aleem's members only,
+// under its own address or RS Learning's, and a signed-out visitor never gets it.
+test('a card file of another company is not found, under its address or one\'s own, and never signed out',async({page,request,browser})=>{
+ const stamp=Date.now();
+ await signIn(page,'omar@example.com','/c/rs-learning/work/board/1');
+ const ownFile=Number((await reply(page,`File on an RS Learning card ${stamp}`)).split('/').pop());
+ // Aleem has no agent granted yet, so its card comes from the board's stage form.
+ await page.goto('/c/aleem/work/board');
+ await page.getByRole('button',{name:'+ Add card'}).first().click();
+ await page.getByLabel('Card title').fill(`Aleem files ${stamp}`);
+ await page.getByRole('button',{name:'Create card',exact:true}).click();
+ await expect(page).toHaveURL(/\/c\/aleem\/work\/board\/\d+$/);
+ const aleemFile=await reply(page,`File in Aleem ${stamp}`);
+ expect((await page.request.get(aleemFile)).status()).toBe(200);
+ const outside=await browser.newContext({baseURL:appOrigin});
+ try {
+  const outsider=await outside.newPage();
+  await signIn(outsider,'reviewer@example.com','/c/rs-learning/home'); // A member of RS Learning only.
+  expect((await outsider.request.get(aleemFile)).status()).toBe(404);
+  expect((await outsider.request.get(aleemFile.replace('/c/aleem/','/c/rs-learning/'))).status()).toBe(404);
+  expect((await outsider.request.get(`/c/rs-learning/files/${ownFile}`)).status()).toBe(200);
+ } finally { await outside.close(); }
+ expect((await request.get(aleemFile,{maxRedirects:0})).status()).not.toBe(200); // Signed out: a redirect to sign-in or not found, never the file.
 });

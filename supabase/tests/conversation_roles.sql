@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(27);
+select plan(26);
 -- RS Learning: Omar is Owner, 2 Manager, 3 and 5 Contributors, 4 Viewer. Omar speaks as the company's Owner.
 update public.members set role='contributor' where company_id='10000000-0000-0000-0000-000000000001' and person_id='20000000-0000-0000-0000-000000000005';
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('e1000000-0000-0000-0000-000000000011','10000000-0000-0000-0000-000000000001','e0000000-0000-0000-0000-000000000011','Mona','Writing',true,'roles');
@@ -21,8 +21,7 @@ select throws_ok($$select public.send_conversation_message('e2000000-0000-0000-0
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000005',true);
 select is(public.conversation_agent('e2000000-0000-0000-0000-000000000103','10000000-0000-0000-0000-000000000001'),'e1000000-0000-0000-0000-000000000011'::uuid,'a Contributor reaches the agent of their conversation');
 select is(public.send_conversation_message('e2000000-0000-0000-0000-000000000103','10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000011','More','e3000000-0000-0000-0000-000000000012','run_2'),true,'a Contributor posts to their conversation');
-select throws_ok($$select public.record_conversation_run('e2000000-0000-0000-0000-000000000103','run_2','completed','Forged','session_1',10,2)$$,'42501','conversationNotAllowed','a Contributor cannot write a reply or usage');
-select throws_ok($$select public.record_conversation_reply('e2000000-0000-0000-0000-000000000103','run_2','Forged','session_1')$$,'42501','conversationNotAllowed','a Contributor cannot write a reply');
+select throws_ok($$select public.close_conversation_run('e2000000-0000-0000-0000-000000000103','run_2','completed','Forged','session_1',10,2,false)$$,'42501',null,'a Contributor cannot write a reply, its end or its session');
 select is((select count(*)::int from public.conversation_messages where conversation_id='e2000000-0000-0000-0000-000000000103'),2,'two messages and no reply');
 select throws_ok($$select public.conversation_agent('e2000000-0000-0000-0000-000000000101','10000000-0000-0000-0000-000000000001')$$,'P0002','conversationNotFound','a Contributor cannot reach the Owner''s conversation');
 select throws_ok($$select public.send_conversation_message('e2000000-0000-0000-0000-000000000101','10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000011','Mine now','e3000000-0000-0000-0000-000000000013','run_3')$$,'P0002','conversationNotFound','a Contributor cannot post to the Owner''s conversation');

@@ -13,14 +13,14 @@ insert into public.conversation_messages(company_id,conversation_id,author,perso
 
 -- A run is pinned at its first start with the text of the tools its person is offered: show_review goes after show_draft
 -- for an Owner, a Manager and a Contributor, and a Viewer is offered nothing.
-select set_config('test.specs','{"create_agent":"{\"name\":\"create_agent\"}","save_rule":"{\"name\":\"save_rule\"}","suggest_rule":"{\"name\":\"suggest_rule\"}","show_draft":"{\"name\":\"show_draft\"}","show_review":"{\"name\":\"show_review\"}"}',true);
+select set_config('test.specs','{"create_agent":"{\"name\":\"create_agent\"}","save_rule":"{\"name\":\"save_rule\"}","suggest_team_rule":"{\"name\":\"suggest_team_rule\"}","show_draft":"{\"name\":\"show_draft\"}","show_review":"{\"name\":\"show_review\"}"}',true);
 insert into public.conversation_run_reservations(conversation_id,send_key,company_id,connection_id,person_id,agent_id,message,profile)
  select ('f5000000-0000-0000-0000-00000000000'||n)::uuid,('f6000000-0000-0000-0000-00000000000'||n)::uuid,'10000000-0000-0000-0000-000000000001','f4000000-0000-0000-0000-000000000001',
   ('20000000-0000-0000-0000-00000000000'||n)::uuid,'f4000000-0000-0000-0000-000000000002','Review the December ad texts','review-test' from generate_series(1,4) n;
 select public.pinned_run_note(('f5000000-0000-0000-0000-00000000000'||n)::uuid,('f6000000-0000-0000-0000-00000000000'||n)::uuid,'10000000-0000-0000-0000-000000000001',('20000000-0000-0000-0000-00000000000'||n)::uuid) from generate_series(1,4) n;
 set local role service_role;
 select results_eq($$select public.pin_run(('f5000000-0000-0000-0000-00000000000'||n)::uuid,('f6000000-0000-0000-0000-00000000000'||n)::uuid,current_setting('test.specs')::jsonb)->>'tools' from generate_series(1,4) n order by n$$,
- $$values ('[{"name":"save_rule"},{"name":"show_draft"},{"name":"show_review"}]'),('[{"name":"save_rule"},{"name":"show_draft"},{"name":"show_review"}]'),('[{"name":"suggest_rule"},{"name":"show_draft"},{"name":"show_review"}]'),(null)$$,
+ $$values ('[{"name":"save_rule"},{"name":"show_draft"},{"name":"show_review"}]'),('[{"name":"save_rule"},{"name":"show_draft"},{"name":"show_review"}]'),('[{"name":"suggest_team_rule"},{"name":"show_draft"},{"name":"show_review"}]'),(null)$$,
  'the Owner''s, the Manager''s and the Contributor''s runs are offered show_review after show_draft, and the Viewer''s nothing');
 reset role;
 

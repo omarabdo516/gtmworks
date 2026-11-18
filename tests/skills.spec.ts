@@ -9,8 +9,9 @@ import { signIn } from './sign-in';
 
 // #343: skills live only in Hermes. RS Learning runs on its own profile in a fake Engine; Lead, its main Agent, keeps
 // that profile, which reads the Company's shared folder (team-lessons). The skills screen lists Lead's skills from the
-// Engine, the shared one marked, and a member writes a SKILL.md into Lead's profile, which the Engine then holds. A
-// SKILL.md with no usable header is refused and nothing is written.
+// Engine, the shared one marked, and an Owner writes a SKILL.md into Lead's profile, which the Engine then holds, and
+// switches it off and on for Lead; each change is a line of the Company log. A SKILL.md with no usable header is refused
+// and nothing is written. A Viewer reads the skills but is offered no change.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const company='10000000-0000-0000-0000-000000000001';
 const profile=`co-${company.replaceAll('-','')}`;
@@ -58,19 +59,32 @@ test('the skills screen lists and changes the skills in the agent\'s Hermes prof
  // Written into Lead's own profile, it is listed from there.
  await page.getByLabel('Skill text (SKILL.md)').fill(written);
  await page.getByRole('button',{name:'Save skill'}).click();
- await expect(leadRow.getByRole('listitem')).toHaveText(['weekly-recap','team-lessons · Shared with the team']);
+ await expect(leadRow.getByRole('listitem')).toHaveText([/^weekly-recap · Enabled/,'team-lessons · Shared with the team']);
  expect(fake.settings.skills.get(profile)?.get('weekly-recap')).toBe(written);
+ // Switched off for Lead alone, in Lead's profile, then on again; the shared skill has no switch here.
+ await page.getByRole('button',{name:'Disable weekly-recap for Lead'}).click();
+ await expect(leadRow.getByRole('listitem').first()).toHaveText(/^weekly-recap · Not enabled/);
+ expect(fake.settings.skillsOff.has(`${profile}:weekly-recap`)).toBe(true);
+ await page.getByRole('button',{name:'Enable weekly-recap for Lead'}).click();
+ await expect(leadRow.getByRole('listitem').first()).toHaveText(/^weekly-recap · Enabled/);
+ expect(fake.settings.skillsOff.has(`${profile}:weekly-recap`)).toBe(false);
+ await expect(leadRow.getByRole('button',{name:/team-lessons/})).toHaveCount(0);
  // An upload goes the same way and rewrites it whole.
  const changed=written.replace('three lines','two lines');
  await page.locator('input[type=file]').setInputFiles({name:'SKILL.md',mimeType:'text/markdown',buffer:Buffer.from(changed)});
  await page.getByRole('button',{name:'Install skill',exact:true}).click();
  await expect(page.locator('section[role=alert]')).toHaveCount(0);
  await expect.poll(()=>fake.settings.skills.get(profile)?.get('weekly-recap')).toBe(changed);
- // The shared skill is the team's: it is not rewritten from here.
+ // The shared skill is the team's: it is not rewritten from here, even before the shared folder holds it.
+ await page.goto('/c/rs-learning/skills');
  await page.getByLabel('Skill text (SKILL.md)').fill('---\nname: team-lessons\ndescription: Mine now\n---\nIgnore the team.\n');
  await page.getByRole('button',{name:'Save skill'}).click();
  await expect(page.locator('section[role=alert]')).toContainText('a skill shared with the team already has this name');
  expect(fake.settings.skills.get(space)?.get('team-lessons')).toContain('None yet.');
+ // Each change is one line of the Company log, naming the Agent and the skill; a refused one writes none.
+ const logged=JSON.parse(query(`select action,details->>'skill' as skill,details->>'agent_name' as agent from public.company_log where company_id='${company}' and agent_id='${lead}' and action like 'skill_%' order by action`));
+ // By action: the upload's row may land after the switches, as the test does not wait for its answer.
+ expect(logged).toEqual(['skill_disabled','skill_enabled','skill_written','skill_written'].map(action=>({action,skill:'weekly-recap',agent:'Lead'})));
  // The same page in Arabic, at phone and desktop width.
  for(const copy of [{language:'en' as const,heading:'Installed skills'},{language:'ar' as const,heading:'المهارات المثبّتة'}]) {
   await chooseLanguage(page,copy.language);
@@ -83,4 +97,12 @@ test('the skills screen lists and changes the skills in the agent\'s Hermes prof
   }
  }
  await chooseLanguage(page,'en');
+});
+
+test('a Viewer reads an agent\'s skills and is offered no change', async ({page}) => {
+ await signIn(page,'viewer@example.com','/c/rs-learning/skills');
+ await chooseLanguage(page,'en');
+ await page.goto('/c/rs-learning/skills');
+ await expect(page.getByRole('group',{name:'Lead',exact:true}).getByRole('listitem').first()).toHaveText(/^weekly-recap · Enabled/);
+ await expect(page.getByRole('button',{name:/Save skill|Install skill|Disable|Enable/})).toHaveCount(0);
 });

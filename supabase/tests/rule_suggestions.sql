@@ -45,12 +45,12 @@ insert into public.conversation_run_reservations(conversation_id,send_key,compan
  select ('e6000000-0000-0000-0000-00000000000'||n)::uuid,('e7000000-0000-0000-0000-00000000000'||n)::uuid,'10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000001',
   ('20000000-0000-0000-0000-00000000000'||n)::uuid,'e5000000-0000-0000-0000-000000000002','Draft the offer email','suggest-test' from unnest(array[3,5]) n;
 select public.pinned_run_note(('e6000000-0000-0000-0000-00000000000'||n)::uuid,('e7000000-0000-0000-0000-00000000000'||n)::uuid,'10000000-0000-0000-0000-000000000001',('20000000-0000-0000-0000-00000000000'||n)::uuid) from unnest(array[3,5]) n;
-select set_config('test.specs','{"save_rule":"{\"name\":\"save_rule\"}","suggest_rule":"{\"name\":\"suggest_rule\"}"}',true);
+select set_config('test.specs','{"save_rule":"{\"name\":\"save_rule\"}","suggest_team_rule":"{\"name\":\"suggest_team_rule\"}"}',true);
 set local role service_role;
 select is(public.pin_run('e6000000-0000-0000-0000-000000000005','e7000000-0000-0000-0000-000000000005',current_setting('test.specs')::jsonb),
- jsonb_build_object('tools','[{"name":"suggest_rule"}]','rules','[]'::jsonb),'another Member''s run starts without it, offered suggest_rule');
+ jsonb_build_object('tools','[{"name":"suggest_team_rule"}]','rules','[]'::jsonb),'another Member''s run starts without it, offered suggest_team_rule');
 select is(public.pin_run('e6000000-0000-0000-0000-000000000003','e7000000-0000-0000-0000-000000000003',current_setting('test.specs')::jsonb),
- jsonb_build_object('tools','[{"name":"suggest_rule"}]','rules','[]'::jsonb),'nor does the Contributor''s own run: no run is told rules (#345)');
+ jsonb_build_object('tools','[{"name":"suggest_team_rule"}]','rules','[]'::jsonb),'nor does the Contributor''s own run: no run is told rules (#345)');
 reset role;
 
 -- Who reads it: its teller, the Owner and the Manager; and who sees it waiting: the Owner and the Manager.

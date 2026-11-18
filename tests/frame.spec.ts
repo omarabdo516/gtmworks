@@ -79,7 +79,7 @@ test('a section not built yet says so at its address, and a settings page\'s tra
  await expect(cardCrumbs.first()).toHaveText(i18n().t('work'));
  await expect(cardCrumbs.first().locator('a')).toHaveAttribute('href','/c/rs-learning/work/board');
  await expect(cardCrumbs.last()).not.toHaveText('');
- for(const [path,leaf] of [['settings/members','members'],['settings/work','workSettings'],['settings/agents','agents']]) {
+ for(const [path,leaf] of [['settings/members','members'],['settings/work','workSettings']]) {
   await page.goto(`/c/rs-learning/${path}`);
   const crumbs=page.locator('.topbar [data-slot="breadcrumb"] li:not([role="presentation"])');
   await expect(crumbs,path).toHaveCount(3);
@@ -87,6 +87,9 @@ test('a section not built yet says so at its address, and a settings page\'s tra
   await expect(crumbs.nth(2),path).toHaveText(i18n().t(leaf));
   await expect(crumbs.nth(1).locator('a'),path).toHaveAttribute('href','/c/rs-learning/settings');
  }
+ // Settings > Agents went with the pasted Hermes (#342): its address is not found.
+ await page.goto('/c/rs-learning/settings/agents');
+ await expect(page.getByRole('heading',{name:'Page not found'})).toBeVisible();
 });
 
 test('Viewer has the same navigation, New chat included, without new card on every company section',async({page})=>{

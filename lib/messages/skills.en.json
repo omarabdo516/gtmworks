@@ -14,5 +14,13 @@
   "skillsNotRead": "These skills cannot be read right now.",
   "skillProblemHeader": "it needs a header whose name uses lowercase letters, digits and hyphens only, and it must be under 100 KB",
   "skillProblemShared": "a skill shared with the team already has this name",
-  "skillProblemNotOwn": "this agent has no profile of its own yet"
+  "skillProblemNotOwn": "this agent has no profile of its own yet",
+  "skillEnabled": "Enabled",
+  "skillNotEnabled": "Not enabled",
+  "enableSkill": "Enable",
+  "disableSkill": "Disable",
+  "enableSkillFor": "Enable {0} for {1}",
+  "disableSkillFor": "Disable {0} for {1}",
+  "skillProblemNotAllowed": "only the Owner or a Manager can change skills",
+  "skillProblemSecret": "it looks like it holds a password, key or token, and every Run on this agent would read it"
 }

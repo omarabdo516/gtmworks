@@ -16,8 +16,6 @@ import { SettingsIcon } from './settings-icons';
 import PasswordSettings from './password-settings';
 import { UsageTable } from './c/[slug]/[[...section]]/usage';
 import { ownedUsage, type UsageRow } from '@/lib/company-app-items';
-import { createClient } from '@supabase/supabase-js';
-import { supabaseConfig } from '@/lib/supabase-config';
 import { readCompanySignIns } from '@/lib/company-sign-in.mjs';
 import { AgentLevel, CompanySubscriptions, MemberNote } from './settings-lazy';
 import { MadeLine, OpenedMark } from './agent-made';
@@ -58,9 +56,9 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  const sharedEngine=section==='company'&&owner?(await db.rpc('bundled_engine_shared',{c:company.id})).data===true:false;
  // The Company's Agent level.
  const agentLevel=section==='company'?Number((await db.from('companies').select('agent_level').eq('id',company.id).maybeSingle()).data?.agent_level)||1:1;
- // The Company's model sign-in, read from its own profile in the agent engine (#3). The service role reads only the
- // key of that Company's bundled Connection, after the database said the person is a member (company_engine_target).
- const subscriptions=section==='models'?await (async()=>{ try { return await readCompanySignIns(db,createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false}}),{company:company.id}); } catch { return {profile:null,oneCompany:false,signIns:null}; } })():null;
+ // The Company's model sign-in, read from its own profile in the agent engine (#3), with the install's key, after the
+ // database said the person is a member (company_engine_target).
+ const subscriptions=section==='models'?await (async()=>{ try { return await readCompanySignIns(db,{company:company.id}); } catch { return {profile:null,oneCompany:false,signIns:null}; } })():null;
  // The token use of the period, read from each owned Company's Agents' Hermes profiles (#347).
  const usageRows=section==='usage'?await ownedUsage(userId,query.period==='30'?30:7):[];
  // The person's own note for the Agents in this Company (RLS: nobody else reads it).

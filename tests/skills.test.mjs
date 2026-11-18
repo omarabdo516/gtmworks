@@ -5,7 +5,7 @@ test('the Skills page strings exist in both languages and stay out of the browse
  const { readFileSync, readdirSync } = await import('node:fs');
  const en = JSON.parse(readFileSync('lib/messages/skills.en.json', 'utf8')), ar = JSON.parse(readFileSync('lib/messages/skills.ar.json', 'utf8'));
  const page = readFileSync('app/c/[slug]/[[...section]]/skills.tsx', 'utf8');
- for (const key of [...page.matchAll(/\bs\('([A-Za-z]+)'/g)].map(match => match[1]).concat(['skillProblemHeader', 'skillProblemShared', 'skillProblemNotOwn'])) {
+ for (const key of [...page.matchAll(/\bs\('([A-Za-z]+)'/g)].map(match => match[1]).concat(['skillProblemHeader', 'skillProblemShared', 'skillProblemNotOwn', 'skillProblemNotAllowed', 'skillProblemSecret'])) {
   assert.ok(en[key] && ar[key], `${key} in both languages`);
  }
  const walk = directory => readdirSync(directory, { withFileTypes: true }).flatMap(entry => entry.isDirectory() ? walk(`${directory}/${entry.name}`) : [`${directory}/${entry.name}`]);

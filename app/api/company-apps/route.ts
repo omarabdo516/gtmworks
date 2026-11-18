@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import { supabaseConfig } from '@/lib/supabase-config';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
 import { routeAllowed } from '@/lib/route-permissions.mjs';
 import { changeCompanyApp } from '@/lib/company-apps.mjs';
@@ -38,8 +36,7 @@ export async function POST(request:NextRequest) {
   if(typeof body?.company!=='string'||!uuid.test(body.company)) return reply({error:'appsInvalid'},400);
   if(body.agent!==undefined&&(typeof body.agent!=='string'||!uuid.test(body.agent))) return reply({error:'appsInvalid'},400);
   if(!await routeAllowed(db,'app/api/company-apps/route.ts','POST',body.company,user.id)) return reply({error:'appsNotAllowed'},403);
-  const service=createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false}});
-  const result=await changeCompanyApp(db,service,{company:body.company,agent:body.agent,person:user.id,app:body.app,action:body.action});
+  const result=await changeCompanyApp(db,{company:body.company,agent:body.agent,person:user.id,app:body.app,action:body.action});
   return reply(result.body,result.status);
  } catch { return reply({error:'appsFailed'},500); }
 }

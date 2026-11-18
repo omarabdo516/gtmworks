@@ -61,7 +61,7 @@ artifact into `tests/visual-lane/images/`. Commit the images with the change tha
 - Company data is reached only through the caller's own company (ADR 0004), and Owner-only actions are checked on the server. Flag a `service_role` query with no owner or company filter, and a permission check that exists only in the browser.
 
 ### Keys and secrets
-- Hermes keys and webhook secrets are stored encrypted, agent and run keys only as hashes; none is returned after saving or logged (ADR 0007, ADR 0008). Flag request bodies, headers or exception text written to logs on a route that receives a key.
+- The Hermes key comes only from the server's environment (`HERMES_API_KEY`), and a Company's model provider keys are kept in the Engine; none is returned to the browser or logged (ADR 0017). Flag request bodies, headers or exception text written to logs on a route that receives a key.
 
 ### Database changes
 - `install.sh update` applies migrations by itself, before the new app version starts. Flag a migration that drops or rewrites existing data when the issue does not say so, and one the previous app version cannot run against.
