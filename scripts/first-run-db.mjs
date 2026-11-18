@@ -39,14 +39,7 @@ export function resetFirstRun(baseURL,seed=false) {
  assertLocalTarget(baseURL);
  const project=readFileSync(join(root,'supabase/config.toml'),'utf8').match(/^project_id\s*=\s*"([a-zA-Z0-9_-]+)"/m)?.[1];
  if(!project) throw new Error('Local Supabase project_id is missing or invalid');
- // The truncate takes every table's exclusive lock itself, and a session of the app that reads one table while asking
- // for another deadlocks with it. The reset ends this database's other sessions that hold a lock or are asking for one
- // first, so no such cycle can form; any that starts afterwards only waits. An idle session of the app's own pool holds
- // nothing and is left alone, so the app keeps its connections; the reset's own connection and every other psql are
- // left alone too.
- const sql=`select pg_terminate_backend(pid,5000) from pg_stat_activity
- where datname=current_database() and backend_type='client backend' and pid<>pg_backend_pid() and application_name<>'psql' and state<>'idle';
- do $$ declare tables text; begin
+ const sql=`do $$ declare tables text; begin
   select string_agg(format('%I.%I',schemaname,tablename),',') into tables from pg_tables where schemaname='public';
   execute 'truncate '||tables||' restart identity cascade';
  end $$;

@@ -46,26 +46,6 @@ test('seed restore appends the unmodified seed after resetting to post-migration
  assert.doesNotMatch(restored,/update public\.setup_claim set closed=true/);
 });
 
-// #326: the truncate waits for every lock it needs, and a session of the lane's own app that holds one table while
-// asking for another made the two wait on each other. The reset ends those sessions first, so no cycle can form.
-test('first-run reset ends the lane app’s other sessions before it truncates',t=>{
- const command=stubExecution(t,()=> '');
- resetFirstRun(baseURL);
- const input=command.mock.calls[0].arguments[2].input;
- const ends=input.search(/select pg_terminate_backend\(pid, *\d+\) from pg_stat_activity/);
- const truncate=input.search(/do \$\$ declare tables/);
- assert.ok(ends>=0,'the reset ends the other sessions');
- assert.ok(truncate>ends,'the other sessions end before the truncate');
- const statement=input.slice(ends,input.indexOf(';',ends)+1);
- // Every client backend on this database that holds or asks for a lock; the reset's own, any other psql and the app's
- // idle pooled connections left alone.
- assert.match(statement,/datname *= *current_database\(\)/);
- assert.match(statement,/backend_type *= *'client backend'/);
- assert.match(statement,/pid *<> *pg_backend_pid\(\)/);
- assert.match(statement,/application_name *<> *'psql'/);
- assert.match(statement,/state *<> *'idle'/);
-});
-
 test('a reset that meets a deadlock runs its whole transaction again; any other failure is raised at once',t=>{
  const deadlock=Object.assign(new Error('Command failed'),{stderr:'psql:<stdin>:4: ERROR:  deadlock detected\nDETAIL:  Process 1231 waits for AccessExclusiveLock on relation 19537'});
  let calls=0;
