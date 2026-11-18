@@ -97,7 +97,10 @@ test('on a phone a board with a little room to spill downward does not scroll un
  const idle = { left: board.scrollLeft, top: board.scrollTop };
  await touch('touchStart', from.x, from.y);
  vi.advanceTimersByTime(300);
- for (let step = 1; step <= 10; step++) await touch('touchMove', from.x, from.y - step * 2);
+ for (let step = 1; step <= 10; step++) {
+  await touch('touchMove', from.x, from.y - step * 2);
+  await new Promise(requestAnimationFrame);
+ }
  expect(board.scrollTop, 'the board holds still up and down under the finger').toBe(idle.top);
  expect(board.scrollLeft, 'the board holds still sideways under the finger').toBe(idle.left);
  await touch('touchEnd');
