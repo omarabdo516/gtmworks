@@ -8,6 +8,7 @@ import { logActionFailure } from '@/lib/diagnostics.mjs';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
 import { routeAllowed } from '@/lib/route-permissions.mjs';
 import { channelRecord } from '@/lib/channels';
+import { channelSessionTurns } from '@/lib/company-app-items';
 import { uuid } from '@/lib/conversations';
 
 const reply=(body:object,status=200)=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store'}});
@@ -42,11 +43,11 @@ async function respond(request:NextRequest) {
    const sent=await postChannelMessage(db,service(),{channel:body.channel,sendKey:body.sendKey,message:body.message});
    return 'refused' in sent?refuse(sent.refused,sent.status):reply(sent);
   }
-  const record=await channelRecord(db,user.id,body.company,body.channel,true);
+  const record=await channelRecord(db,user.id,body.company,body.channel,true,(_agent,session,profile)=>channelSessionTurns(body.company,profile,session));
   if(!record) return refuse('channelNotFound',404);
   if(!record.open) return reply(record);
   await driveChannelRuns(service(),{channel:body.channel});
-  return reply(await channelRecord(db,user.id,body.company,body.channel,true)??record);
+  return reply(await channelRecord(db,user.id,body.company,body.channel,true,(_agent,session,profile)=>channelSessionTurns(body.company,profile,session))??record);
  } catch { logActionFailure('channel',new Error('Channel request failed')); return refuse('channelFailed',400); }
 }
 export const GET=respond;
