@@ -66,136 +66,16 @@ test('work list sorts stages by position and actors by name', async () => {
  assert.deepEqual(cards.map(c=>c.stage_id),[2,12]);
 });
 
-test('agent API contract lists the implemented operations and idempotency header', () => {
- const route=readFileSync('app/api/v1/companies/[slug]/[...path]/route.ts','utf8');
- const api=readFileSync('docs/api/openapi.yaml','utf8');
- for(const operation of ['move','actor','assignee','label','check','comment']) {
-  assert.ok(route.includes(`'${operation}'`));
-  assert.match(api,new RegExp(`\\b${operation}\\b`));
- }
- assert.match(api,/Idempotency-Key/);
- assert.match(route,/idempotency-key/);
-});
-
-test('key hashes and authenticated secret encryption', async () => {
- const {hashKey,encryptSecret,decryptSecret}=await import('../lib/agent-crypto.mjs');
- assert.equal(hashKey('abc'),'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+test('authenticated secret encryption', async () => {
+ const {encryptSecret,decryptSecret}=await import('../lib/agent-crypto.mjs');
  const key=Buffer.alloc(32,7).toString('base64'); const encrypted=encryptSecret('webhook-secret',key);
  assert.notEqual(encrypted,'webhook-secret'); assert.equal(decryptSecret(encrypted,key),'webhook-secret');
  assert.throws(()=>decryptSecret(encrypted,Buffer.alloc(32,8).toString('base64')));
-});
-test('agent and run keys carry a prefix, are shown once and are stored as a hash that is compared in constant time', async () => {
- const {newKey,hashKey,sameHash}=await import('../lib/agent-crypto.mjs');
- const agent=newKey('agent'); const run=newKey('run');
- assert.match(agent.key,/^gtmw_agt_[A-Za-z0-9_-]{43}$/); assert.match(run.key,/^gtmw_run_[A-Za-z0-9_-]{43}$/);
- assert.equal(agent.hash,hashKey(agent.key)); assert.match(run.hash,/^[0-9a-f]{64}$/); assert.notEqual(newKey('run').key,run.key);
- assert.ok(!JSON.stringify(Object.keys(agent)).includes('secret') && agent.hash!==agent.key);
- assert.equal(sameHash(agent.hash,hashKey(agent.key)),true); assert.equal(sameHash(agent.hash,run.hash),false);
- assert.equal(sameHash(agent.hash,agent.hash.slice(1)),false); assert.equal(sameHash(undefined,agent.hash),false);
- const auth=readFileSync('lib/agent-auth.ts','utf8');
- assert.match(auth,/sameHash\(hash, identity\.key_hash\)/); assert.doesNotMatch(auth,/identity\.kind !== kind\) return \{/);
-});
-test('HMAC signature signs the exact webhook bytes', async () => {
- const {signature}=await import('../lib/agent-crypto.mjs');
- assert.equal(signature('key','The quick brown fox jumps over the lazy dog'),'sha256=f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8');
- assert.notEqual(signature('key','{}'),signature('key','{ }'));
-});
-test('webhook retries back off and expire after 24 hours', async () => {
- const {retryAt}=await import('../lib/agent-crypto.mjs'); const now=Date.parse('2030-01-01T00:00:00Z');
- assert.equal(Date.parse(retryAt(new Date(now).toISOString(),1,now)),now+2000);
- assert.equal(Date.parse(retryAt(new Date(now).toISOString(),20,now)),now+3600000);
- assert.equal(retryAt(new Date(now).toISOString(),1,now+86400000-1000),null);
 });
 test('idempotency fingerprints distinguish method, path, and body', async () => {
  const {fingerprint}=await import('../lib/agent-crypto.mjs');
  const original=fingerprint('POST','cards','{}'); assert.equal(original,fingerprint('POST','cards','{}'));
  for(const other of [fingerprint('PATCH','cards','{}'),fingerprint('POST','cards/1','{}'),fingerprint('POST','cards','{"a":1}')]) assert.notEqual(original,other);
-});
-test('rate window permits 120 and resets after a minute', async () => {
- const {rateWindow}=await import('../lib/agent-crypto.mjs');
- assert.deepEqual(rateWindow(0,119,59999),{start:0,count:120,limited:false});
- assert.deepEqual(rateWindow(0,120,59999),{start:0,count:121,limited:true});
- assert.deepEqual(rateWindow(0,120,60000),{start:60000,count:1,limited:false});
-});
-test('revocation is checked during lookup and key material is hashed before persistence', () => {
- const schema=readFileSync('supabase/migrations/20261108000000_agents.sql','utf8');
- const action=readFileSync('app/c/[slug]/[[...section]]/agent-actions.ts','utf8');
- assert.match(schema,/k\.revoked_at is null/); assert.match(action,/newKey\('agent'\)/); assert.match(action,/key_hash:hash\b/);
-});
-
-test('webhook worker signs delivery and records retry on HTTP failure', async () => {
- const {deliverBatch}=await import('../worker/webhooks.mjs');
- const {encryptSecret,signature}=await import('../lib/agent-crypto.mjs');
- const encryptionKey=Buffer.alloc(32,9).toString('base64'); const updates=[];
- const job={id:7,company_id:'company',attempts:0,created_at:new Date().toISOString(),event:{card_path:'/c/test/work/board/1',event_type:'rejected',reason:'fix'}};
- const db={rpc:async()=>({data:[job]}),from(){return {select(){return {eq(){return {single:async()=>({data:{url:'http://receiver.test',secret_encrypted:encryptSecret('secret',encryptionKey)}})}}}},update(value){updates.push(value);return {eq(){return {eq:async()=>({error:null})}}}}}}};
- let request; await deliverBatch(db,{encryptionKey,origin:'https://example.test',fetch:async(url,options)=>{request={url,...options};return {ok:false,status:503}}});
- assert.equal(request.headers['X-GTMWorks-Signature'],signature('secret',request.body));
- assert.equal(JSON.parse(request.body).card_url,'https://example.test/c/test/work/board/1');
- assert.equal(updates[0].status,'pending'); assert.equal(updates[0].attempts,1); assert.equal(updates[0].last_status,503); assert.ok(updates[0].next_attempt_at);
-});
-
-test('webhook worker issues a run key for an assignment and sends it once, signed', async () => {
- const {deliverBatch}=await import('../worker/webhooks.mjs');
- const {encryptSecret,hashKey,signature}=await import('../lib/agent-crypto.mjs');
- const encryptionKey=Buffer.alloc(32,9).toString('base64'); const calls=[];
- const job={id:8,company_id:'company',card_id:5,attempts:0,created_at:new Date().toISOString(),event:{card_path:'/c/test/work/board/5',event_type:'assigned',agent:{id:'agent-1',name:'Writer'}}};
- const config={url:'https://receiver.test',secret_encrypted:encryptSecret('secret',encryptionKey)};
- const db={
-  rpc:async(name,args)=>{calls.push([name,args]);return name==='claim_webhook_deliveries'?{data:[job]}:{data:'2026-11-09T10:00:00Z'};},
-  from:()=>({select:()=>({eq:()=>({single:async()=>({data:config})})}),update:()=>({eq:()=>({eq:async()=>({error:null})})})}),
- };
- let request; await deliverBatch(db,{encryptionKey,origin:'https://example.test',fetch:async(url,options)=>{request={url,...options};return {ok:true,status:200}}});
- const sent=JSON.parse(request.body); const issue=calls.find(([name])=>name==='issue_run_key_for')[1];
- assert.match(sent.run_key.key,/^gtmw_run_/); assert.equal(sent.run_key.expires_at,'2026-11-09T10:00:00Z');
- assert.equal(issue.hash,hashKey(sent.run_key.key)); assert.equal(issue.agent,'agent-1'); assert.equal(issue.card,5); assert.equal(request.headers['X-GTMWorks-Signature'],signature('secret',request.body));
- assert.ok(!JSON.stringify(calls).includes(sent.run_key.key),'the key itself never reaches the database call');
-});
-
-test('webhook worker never sends a run key over plain HTTP', async () => {
- const {deliverBatch}=await import('../worker/webhooks.mjs');
- const {encryptSecret}=await import('../lib/agent-crypto.mjs');
- const encryptionKey=Buffer.alloc(32,9).toString('base64'); const calls=[]; const updates=[]; let sent=false;
- const job={id:9,company_id:'company',card_id:5,attempts:0,created_at:new Date().toISOString(),event:{card_path:'/c/test/work/board/5',event_type:'assigned',agent:{id:'agent-1',name:'Writer'}}};
- const config={url:'http://receiver.example',secret_encrypted:encryptSecret('secret',encryptionKey)};
- const db={
-  rpc:async(name,args)=>{calls.push(name);return name==='claim_webhook_deliveries'?{data:[job]}:{data:'2026-11-09T10:00:00Z'};},
-  from:()=>({select:()=>({eq:()=>({single:async()=>({data:config})})}),update:value=>{updates.push(value);return {eq:()=>({eq:async()=>({error:null})})};}}),
- };
- await deliverBatch(db,{encryptionKey,origin:'https://example.test',fetch:async()=>{sent=true;return {ok:true,status:200};}});
- assert.equal(sent,false); assert.ok(!calls.includes('issue_run_key_for')); assert.equal(updates[0].last_error,'runKeyHttpsOnly');
-});
-
-test('OpenAPI paths and methods match the exposed card routes', async () => {
- const {load}=await import('js-yaml');
- const spec=load(readFileSync('docs/api/openapi.yaml','utf8'));
- const route=readFileSync('app/api/v1/companies/[slug]/[...path]/route.ts','utf8');
- const implemented=Object.keys(spec.paths).filter(path=>spec.paths[path]['x-status']!=='planned');
- assert.deepEqual(implemented.sort(),['/cards','/cards/{card}','/cards/{card}/comment','/cards/{card}/files/{file}','/cards/{card}/run-keys','/cards/{card}/upload','/cards/{card}/{operation}','/skill-loads','/skills','/skills/{skill}/lessons'].sort());
- for(const [path,method] of [['/cards','get'],['/cards','post'],['/cards/{card}','patch'],['/cards/{card}/upload','post'],['/cards/{card}/comment','post'],['/cards/{card}/{operation}','post'],['/cards/{card}/files/{file}','get']]) assert.ok(spec.paths[path][method],`${method} ${path}`);
- assert.match(route,/path\[2\]==='files'/);
- const allowed=route.match(/\['create','edit',([^\]]+)\]\.includes\(op\)/)?.[1].match(/[a-z]+/g);
- const documented=spec.paths['/cards/{card}/{operation}'].parameters.find(p=>p.name==='operation').schema.enum;
- assert.deepEqual([...allowed].sort(),[...documented].sort());
- assert.match(route,/path\[2\]==='upload'/);
-});
-
-test('agent contract distinguishes planned run authority from current company keys', async () => {
- const {load}=await import('js-yaml');
- const spec=load(readFileSync('docs/api/openapi.yaml','utf8'));
- assert.equal(spec.info.version,'1.6.0');
- for(const path of ['/cards/{card}/runs','/runs/{run}/claim','/runs/{run}/heartbeat','/runs/{run}/complete']) {
-  const endpoint=spec.paths[path];
-  assert.equal(endpoint?.['x-status'],'planned',path);
-  assert.match(endpoint.post.description,/not implemented/i);
- }
- const [json,request]=spec.paths['/cards'].post.requestBody.content['application/json'].schema.oneOf;
- assert.deepEqual(json.required,['title','stage']);
- assert.deepEqual(request.required,['message','agent','mode']);
- assert.deepEqual(request.properties.mode.enum,['plan','do','answer']);
- assert.equal(json.properties.stage.type,'integer');
- assert.equal(spec.paths['/cards/{card}/comment'].post.requestBody.content['application/json'].schema.properties.evidence.format,undefined,'evidence is text, not URI-validated');
- assert.ok(spec.paths['/cards'].get.responses.default,'errors documented');
 });
 
 test('agent dates use western digits and UTC independent of the host time zone', async () => {

@@ -5,18 +5,18 @@ create extension if not exists pgtap with schema extensions;
 -- the first test red until it is added here.
 create temp table isolation_matrix(name text primary key, fixed jsonb not null default '{}');
 insert into isolation_matrix(name) values
- ('agent_grants'),('agent_key_waits'),('agent_keys'),('agent_profile_leftovers'),('agent_profiles'),('agent_rate_limits'),
- ('agent_refusals'),('agent_requests'),('agent_rules'),('agent_webhooks'),('approval_steps'),
+ ('agent_grants'),('agent_key_waits'),('agent_profile_leftovers'),('agent_profiles'),
+ ('agent_requests'),('agent_rules'),('approval_steps'),
  ('channel_agents'),('channel_messages'),('channel_people'),('channel_permissions'),('channel_reads'),('channel_runs'),('channels'),
- ('company_app_sign_ins'),('company_audit'),('company_key_holds'),('company_key_unfinished'),('company_knowledge'),('company_log'),
+ ('company_app_sign_ins'),('company_audit'),('company_key_holds'),('company_key_unfinished'),('company_log'),
  ('company_profile_keepers'),('company_profiles'),('company_shared_spaces'),
  ('conversation_attachments'),('conversation_messages'),('conversation_notes'),('conversation_queued_turns'),
  ('conversation_run_notes'),('conversation_run_reservations'),('conversation_run_ends'),('conversations'),
- ('engine_tool_checks'),('hermes_agent_audit'),('hermes_agents'),('hermes_connections'),
+ ('hermes_agent_audit'),('hermes_agents'),('hermes_connections'),
  ('invitation_agent_access'),('lead_agent_requests'),('lead_made_agents'),
  ('member_agent_access'),('member_audit'),('member_invitations'),('member_notes'),('members'),
  ('note_runs'),('reply_cards'),('role_permissions'),
- ('waiting_items'),('webhook_deliveries'),
+ ('waiting_items'),
  ('work_activity'),('work_assignees'),('work_attachments'),('work_card_labels'),('work_card_visits'),('work_cards'),
  ('work_checklist'),('work_comments'),('work_creatives'),('work_labels'),('work_projects'),('work_stages'),('work_versions');
 -- Values a table's own checks need, as SQL (RS Learning is 10000000-...-0001). The member row names a person of no
@@ -32,7 +32,6 @@ update isolation_matrix m set fixed = v.fixed::jsonb from (values
    "name": "'isolation'"}$$),
  ('company_audit', $${"action": "'company_renamed'", "old_name": "'isolation'", "new_name": "'isolation'"}$$),
  ('company_key_unfinished', $${"profiles": "array['co-' || md5('isolation')]"}$$),
- ('company_knowledge', $${"part": "'decisions'"}$$),
  ('company_log', $${"actor_kind": "'person'", "actor_id": "'e3370000-0000-0000-0000-000000000001'", "source": "'company_audit'",
    "subject": "'company'"}$$),
  ('company_profiles', $${"profile": "'co-' || md5('isolation')", "tools_level": "1"}$$),

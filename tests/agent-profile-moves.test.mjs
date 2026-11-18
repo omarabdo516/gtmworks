@@ -115,7 +115,6 @@ function runDatabases(fake,{history}) {
   if(name==='queued_conversations') return {data:[{conversation:'c'}],error:null};
   if(name==='claim_conversation_turn') return {data:[{company,agent:writer,person:'p',send_key:'q',message:'Next draft',connection:'f9000000-0000-0000-0000-000000000001',note:null,retry:false}],error:null};
   if(name==='pin_run') return {data:{tools:null,rules:[]},error:null};
-  if(name==='pin_run_knowledge') return {data:[],error:null};
   if(name==='pin_run_history') return {data:history,error:null};
   if(name==='pin_run_model') return {data:null,error:null};
   if(name==='begin_start') { attempts.set(given.message_key,(attempts.get(given.message_key)??0)+1); return {data:attempts.get(given.message_key),error:null}; }

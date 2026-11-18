@@ -197,7 +197,6 @@ test('Waiting on you lists an Agent question and an item of a new kind, each ope
   attachedAgent.id=(await attached.json()).agents.find((agent:{connection_id:string})=>agent.connection_id===attachedAgent.connection).id;
   await page.context().clearCookies();
   await signIn(page,'manager@example.com','/c/rs-learning/approvals');
-  const deliveries=Number(rows(`select count(*)::int as n from public.webhook_deliveries`)[0].n);
   // Mail sent by earlier tests (an invite) may already be in the local mailbox; only a change counts.
   const mailCount=async()=>{const mail=await (await page.request.get(inbox)).json(); return Number(mail.total ?? mail.messages?.length ?? 0);};
   const mailBefore=await mailCount();
@@ -205,8 +204,7 @@ test('Waiting on you lists an Agent question and an item of a new kind, each ope
   query(`select public.add_waiting_item('${rs}','${manager}','question','Which offer goes first ${stamp}?','',null,'${conversation}','Lead')`);
   query(`select public.add_waiting_item('${rs}','${manager}','test_kind','A new kind ${stamp}','Seeded by the test',1)`);
   query(`select public.add_waiting_item('${rs}','${omar}','test_kind','For Omar only ${stamp}','',1)`);
-  // Nothing leaves gtmworks: no webhook delivery and no mail.
-  expect(Number(rows(`select count(*)::int as n from public.webhook_deliveries`)[0].n)).toBe(deliveries);
+  // Nothing leaves gtmworks: no mail (there are no webhooks since #341).
   expect(await mailCount()).toBe(mailBefore);
   await page.goto('/c/rs-learning/approvals');
   const waiting=page.locator('.col[data-column="waiting"]');

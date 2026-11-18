@@ -1,8 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(28);
-insert into public.agent_keys(id,company_id,person_id,key_hash) values ('b0000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000001','grant-test-hash');
-select is((select count(*)::int from public.lookup_agent_key('grant-test-hash')),1,'a granted agent key resolves');
+select plan(21);
 select is((select count(*)::int from public.agent_grants where company_id='10000000-0000-0000-0000-000000000001' and revoked_at is null),4,'the fixture grants four role agents to RS');
 select is((select count(*)::int from public.agent_grants where company_id='10000000-0000-0000-0000-000000000003'),0,'Aleem has no grant rows yet');
 set local role authenticated;
@@ -21,12 +19,6 @@ select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001'
 select lives_ok($$select public.revoke_agent_access('10000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000001')$$,'the owner revokes the Writer from RS');
 reset role;
 select ok((select revoked_at is not null and revoked_by='20000000-0000-0000-0000-000000000001' from public.agent_grants where company_id='10000000-0000-0000-0000-000000000001' and agent_id='30000000-0000-0000-0000-000000000001'),'revoking keeps the row with who revoked it and when');
-select is((select count(*)::int from public.lookup_agent_key('grant-test-hash')),0,'a revoked grant stops the key');
-select is(public.agent_key_denied('grant-test-hash'),true,'a live key without a grant is denied, not unknown');
-select is(public.agent_key_denied('unknown-hash'),false,'an unknown key is not a denied grant');
-insert into public.agent_keys(id,company_id,person_id,key_hash) values ('b0000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000004','legacy-hash');
-select is((select count(*)::int from public.lookup_agent_key('legacy-hash')),1,'a key of a contributor that is not a role agent keeps working');
-select is(public.agent_key_denied('legacy-hash'),false,'that legacy key is not a denied grant');
 select throws_ok($$update public.members set removed_at=null where company_id='10000000-0000-0000-0000-000000000001' and person_id='30000000-0000-0000-0000-000000000001'$$,'42501',null,'a revoked agent cannot get its membership back without a grant, for example through an invitation claim');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','30000000-0000-0000-0000-000000000001',true);
@@ -36,7 +28,6 @@ select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001'
 select lives_ok($$select public.grant_agent_access('10000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000001')$$,'the owner grants the Writer to RS again');
 reset role;
 select ok((select revoked_at is null and revoked_by is null and granted_by='20000000-0000-0000-0000-000000000001' from public.agent_grants where company_id='10000000-0000-0000-0000-000000000001' and agent_id='30000000-0000-0000-0000-000000000001'),'a renewed grant is active');
-select is((select count(*)::int from public.lookup_agent_key('grant-test-hash')),1,'the key works again once the grant is back');
 select is((select agent_role::text||'/'||role::text from public.members where company_id='10000000-0000-0000-0000-000000000001' and person_id='30000000-0000-0000-0000-000000000001' and removed_at is null),'writer/contributor','the grant restores the Contributor membership with the role key');
 select is((select count(*)::int from public.member_audit where action='GRANT_AGENT' and actor_id='20000000-0000-0000-0000-000000000001' and person_id='30000000-0000-0000-0000-000000000001'),2,'both grants are recorded with the acting person');
 select is((select count(*)::int from public.member_audit where action='REVOKE_AGENT' and actor_id='20000000-0000-0000-0000-000000000001' and company_id='10000000-0000-0000-0000-000000000001' and person_id='30000000-0000-0000-0000-000000000001'),1,'the revoke is recorded with the acting person');

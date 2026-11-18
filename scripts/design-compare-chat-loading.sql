@@ -3,11 +3,11 @@
 -- table the waiting part reads for 7s, under the signed-in role's 8s statement timeout; a row filter is only weighed on
 -- rows a read finds, so the table holds a row the reader sees.
 begin;
--- Refuse every database but the seeded local one: it must hold the seed's Omar and its public test-only agent key,
+-- Refuse every database but the seeded local one: it must hold the seed's Omar and its RS Learning, by their fixed ids,
 -- which no real installation has. The whole file is one transaction, so a refusal writes nothing.
 do $$ begin
  if not exists(select 1 from auth.users where id='20000000-0000-0000-0000-000000000001' and email='omar@example.com')
-  or not exists(select 1 from public.agent_keys where key_hash='f0358ec2fdc223a1ac2213a6e4b2cec6efe6d175ec823cb2a574e15ecdcf8226') then
+  or not exists(select 1 from public.companies where id='10000000-0000-0000-0000-000000000001' and slug='rs-learning') then
   raise exception 'design-compare loading screen: only for the seeded local database (supabase/seed.sql)';
  end if;
 end $$;

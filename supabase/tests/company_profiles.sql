@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(37);
+select plan(31);
 -- Omar owns every company. R&S Consultations (2) has no Hermes; Aleem (3) is on the shared bundled `default` profile, as
 -- the previous worker left it, and has a Contributor (5); a new company (99) has no Hermes either.
 insert into public.companies(id,slug,name) values ('10000000-0000-0000-0000-000000000099','profiles-new','Profiles new');
@@ -78,18 +78,11 @@ reset role;
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 set local role service_role;
 select ok((select tools_level=1 and agent_level=2 and not attach and not move from public.company_profile_work() where company_id='10000000-0000-0000-0000-000000000003'),'the worker sees the profile''s tools lag behind the level');
--- Health: a reading with terminal tools on Aleem's Lead.
-select lives_ok($$select public.record_engine_tools((select connection_id from public.hermes_agents where company_id='10000000-0000-0000-0000-000000000003'),'{terminal,file}')$$,'the worker records a reading');
-select throws_ok($$select public.record_engine_tools((select connection_id from public.hermes_agents where company_id='10000000-0000-0000-0000-000000000003'),'{browser}')$$,'22023','engineToolsInvalid','only the three risky toolsets are recorded');
-select lives_ok($$select public.record_engine_tools((select connection_id from public.hermes_agents where company_id='10000000-0000-0000-0000-000000000002'),'{code_execution}')$$,'and one for the company of one');
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claims','{"role":"authenticated"}',true);
-select is((select string_agg(agent_name||':'||array_to_string(toolsets,'+'),',') from public.agent_tool_warning('10000000-0000-0000-0000-000000000003')),'Lead:terminal+file','the Owner of a company of two is warned');
-select is((select count(*)::int from public.agent_tool_warning('10000000-0000-0000-0000-000000000002')),0,'a company of one person is not');
 select is((select profile from public.company_engine_target('10000000-0000-0000-0000-000000000003')),'co-10000000000000000000000000000003','the sign-in target is the company''s own profile');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000005',true);
-select is((select count(*)::int from public.agent_tool_warning('10000000-0000-0000-0000-000000000003')),0,'a Contributor is not warned');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
 select is((select count(*)::int from public.company_engine_target('10000000-0000-0000-0000-000000000003')),0,'a person outside the company learns nothing');
 reset role;

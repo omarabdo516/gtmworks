@@ -7,7 +7,6 @@ import { answerQuestion, closeOpenRuns, noteInstructions, sendMessage } from '..
 import { conversationRecord } from '../lib/conversation-record';
 import { conversationColumns } from '../lib/conversations';
 import { instructionsOf, roleAppNames, roleTemplates } from '../lib/role-templates.mjs';
-import { knowledgeInstructions } from '../lib/company-knowledge.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 import { engineFor as driverFor } from '../lib/engine.mjs';
@@ -24,8 +23,6 @@ import { keepSharedSkills } from '../lib/shared-skills.mjs';
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const status=()=>{ const env=execFileSync('npx',['--no-install','supabase','status','-o','env'],{encoding:'utf8'}); return (name:string)=>env.match(new RegExp(`^${name}="(.*)"$`,'m'))![1]; };
 const company='10000000-0000-0000-0000-000000000001';
-// The seeded Company knowledge (#27) goes with every run of the Company's Agents.
-const knowledge=()=>knowledgeInstructions(JSON.parse(query(`select part,body from public.company_knowledge where company_id='${company}' and body<>'' order by array_position(array['voice','audience','products','banned','decisions'],part)`)));
 const omar='20000000-0000-0000-0000-000000000001';
 const encryptionKey=process.env.WEBHOOK_ENCRYPTION_KEY||'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
 
@@ -222,7 +219,8 @@ test('integration: an Agent saves the rule the Owner tells it, with its log row,
   const close=()=>closeOpenRuns(service,{encryptionKey,conversation,engineFor:fake.engineFor});
   expect(await send(rule)).toEqual({conversation});
   expect(fake.runs[0].tools.map(tool=>tool.name)).toEqual(['save_rule','show_draft','show_review','hand_over','ask_for_app']);
-  expect(fake.runs[0].instructions).toBe(knowledge());
+  // No Run is told the Company knowledge (#344): every profile auto-loads it as the shared Skill company-knowledge.
+  expect(fake.runs[0].instructions).toBeUndefined();
   // A reader and the worker close the run at once: the rule is saved once, before the reply is stored.
   const closed=await Promise.all([close(),close()]);
   expect(closed[0]+closed[1]).toBe(1);
@@ -864,7 +862,7 @@ test('integration: Lead makes an Agent from each ready-made role, fitted with th
   expect((await person.rpc('save_member_note',{c:company,note:'Answer in short points.'})).error).toBeNull();
   const theirs=randomUUID();
   expect(await sendMessage(person,service,{person:omar,company,conversation:theirs,sendKey:randomUUID(),agent:writer.id,message:'Write about the tax diploma',encryptionKey,engineFor:fake.engineFor})).toEqual({conversation:theirs});
-  expect(fake.runs.at(-1)).toMatchObject({conversation:theirs,instructions:`${writer.instructions}\n\n${knowledge()}\n\n${noteInstructions('Answer in short points.')}`});
+  expect(fake.runs.at(-1)).toMatchObject({conversation:theirs,instructions:`${writer.instructions}\n\n${noteInstructions('Answer in short points.')}`});
  } finally { query(`delete from public.member_notes where company_id='${company}'`); }
 });
 
@@ -932,7 +930,8 @@ test('integration: Lead\'s call makes the Agent one profile of its own, also whe
   const theirs=randomUUID();
   expect(await sendMessage(person,service,{person:omar,company,conversation:theirs,sendKey:randomUUID(),agent:agent.id,message:'Write about the tax diploma',encryptionKey,engineFor})).toEqual({conversation:theirs});
   expect(fake.connections.at(-1)).toMatchObject({profile:own,key:'fake-engine-key'});
-  expect(fake.runs.at(-1)).toMatchObject({conversation:theirs,instructions:knowledge()});
+  expect(fake.runs.at(-1)).toMatchObject({conversation:theirs});
+  expect(fake.runs.at(-1)!.instructions).toBeUndefined();
   expect(await closeOpenRuns(service,{encryptionKey,conversation:theirs,engineFor})).toBe(1);
   expect(agentRows(theirs)).toEqual([{body:'Reply to: Write about the tax diploma'}]);
  } finally { await hermes.close(); }
@@ -958,7 +957,7 @@ test('integration: a profile that cannot be made, still offers a toolset that mu
    expect(managed(hermes).filter(request=>request.startsWith('DELETE')),why).toEqual([]);
    const theirs=randomUUID();
    expect(await sendMessage(person,service,{person:omar,company,conversation:theirs,sendKey:randomUUID(),agent:agent.id,message:'Write about the tax diploma',encryptionKey,engineFor})).toEqual({conversation:theirs});
-   expect(fake.runs.at(-1)!.instructions,why).toBe(`${agent.instructions}\n\n${knowledge()}`);
+   expect(fake.runs.at(-1)!.instructions,why).toBe(agent.instructions);
    expect(await closeOpenRuns(service,{encryptionKey,conversation:theirs,engineFor})).toBe(1);
    expect(agentRows(theirs),why).toEqual([{body:'Reply to: Write about the tax diploma'}]);
   } finally { await hermes.close(); }

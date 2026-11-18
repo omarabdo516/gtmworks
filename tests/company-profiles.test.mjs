@@ -193,7 +193,7 @@ test('a company on the shared profile moves only once its own profile holds a si
  } finally { await fake.close(); }
 });
 
-test('the tool health check records which Agents can reach a terminal, files or code', async () => {
+test('the profile check has a lost company profile made again and records no tools (#341)', async () => {
  const fake=await fakeHermes();
  try {
   const name=companyProfile(two);
@@ -208,8 +208,8 @@ test('the tool health check records which Agents can reach a terminal, files or 
   fake.settings.unknownProfiles.push(companyProfile(three));
   assert.equal(await checkAgentTools(db,{encryptionKey}),2);
   assert.deepEqual(calls.filter(call=>call.rpc==='forget_company_profile').map(call=>call.args),[{connection:'lost'}]);
-  // A pasted profile with Hermes's default tools has a terminal, files and code; the company profile has none.
-  assert.deepEqual(calls.filter(call=>call.rpc==='record_engine_tools').map(call=>call.args),[{connection:'pasted',risky:['terminal','code_execution','file']},{connection:'own',risky:[]}]);
+  // The Owner's tool warning is gone with engine_tool_checks: nothing is recorded.
+  assert.deepEqual(calls.map(call=>call.rpc),['engine_tools_due','forget_company_profile']);
  } finally { await fake.close(); }
 });
 
@@ -463,7 +463,7 @@ test('a level change and a move read in the company log in both languages', () =
  const changed=describeEntry({subject:'company',action:'agent_level_changed',details:{old_level:1,new_level:3}});
  assert.deepEqual(changed,{act:['logActAgentLevel'],obj:undefined,from:{key:'agentLevel1'},to:{key:'agentLevel3'},note:undefined});
  assert.deepEqual(describeEntry({subject:'agent',action:'agent_own_profile',details:{agent_name:'Lead'}}).act,['logActAgentOwnProfile']);
- for(const language of ['en','ar']) for(const key of ['logActAgentLevel','logActAgentOwnProfile','agentLevel1','agentLevel3','agentToolWarning','signInTerminalOnly'])
+ for(const language of ['en','ar']) for(const key of ['logActAgentLevel','logActAgentOwnProfile','agentLevel1','agentLevel3','signInTerminalOnly'])
   assert.notEqual(i18n(language).t(key),key,`${language}:${key}`);
 });
 
@@ -498,7 +498,7 @@ function conversationDatabases({profile,reserve=null,record=null}) {
    return {data:null,error:{message:'unexpected'}}; },
   from:()=>{ const chain={select:()=>chain,eq:()=>chain,maybeSingle:async()=>({data:{id:'a9000000-0000-0000-0000-000000000001'},error:null})}; return chain; }};
  const key=encryptSecret('test-only-key',encryptionKey);
- const service={rpc:async(name)=>{ order.push(`service ${name}`); return name==='begin_start'?{data:1,error:null}:name==='pin_run'?{data:{tools:null,rules:[]},error:null}:name==='pin_run_knowledge'?{data:[],error:null}:name==='pin_run_history'?{data:null,error:null}:name==='pin_run_model'?{data:null,error:null}:{data:null,error:{message:'unexpected'}}; },from:table=>{ const filters={}; const chain={select:()=>chain,eq:(column,value)=>{filters[column]=value;return chain;},maybeSingle:async()=>{ order.push(`read ${table} ${filters.id||''}`);
+ const service={rpc:async(name)=>{ order.push(`service ${name}`); return name==='begin_start'?{data:1,error:null}:name==='pin_run'?{data:{tools:null,rules:[]},error:null}:name==='pin_run_history'?{data:null,error:null}:name==='pin_run_model'?{data:null,error:null}:{data:null,error:{message:'unexpected'}}; },from:table=>{ const filters={}; const chain={select:()=>chain,eq:(column,value)=>{filters[column]=value;return chain;},maybeSingle:async()=>{ order.push(`read ${table} ${filters.id||''}`);
    return table==='hermes_connections'?{data:{address:'http://hermes:8642',profile,state:'connected',features:['run_submission'],key_encrypted:key},error:null}:{data:{connection_id:'f9000000-0000-0000-0000-000000000099'},error:null}; }}; return chain; }};
  return {db,service,order};
 }
@@ -513,7 +513,7 @@ test('a run is reserved on its pinned Connection before Hermes is called, and re
  assert.equal(db.args.reserve_conversation_turn.message,'Hi');
  // The record names the Connection the run started on, the one the reservation pinned.
  assert.equal(db.args.send_conversation_message.started_on,'f9000000-0000-0000-0000-000000000001');
- assert.deepEqual(order,['conversation_agent','reserve_conversation_turn','read hermes_connections f9000000-0000-0000-0000-000000000001','service pin_run','service pin_run_knowledge','service pin_run_history','service pin_run_model','service begin_start',`start ${companyProfile(two)}`,'send_conversation_message']);
+ assert.deepEqual(order,['conversation_agent','reserve_conversation_turn','read hermes_connections f9000000-0000-0000-0000-000000000001','service pin_run','service pin_run_history','service pin_run_model','service begin_start',`start ${companyProfile(two)}`,'send_conversation_message']);
 });
 
 test('a run never starts on another company\'s profile, nor while the profile\'s tools lag behind the level', async () => {

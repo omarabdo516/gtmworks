@@ -16,8 +16,17 @@ create extension if not exists pgtap with schema extensions;
 select plan(19);
 create temporary table migration_history(name text primary key);
 -- The earlier shape: the role type with reviewer, the Agency flag and functions, and a policy that uses them.
-drop policy agent_keys_owner_read on public.agent_keys; drop policy agent_keys_owner_create on public.agent_keys; drop policy agent_keys_owner_update on public.agent_keys;
-drop policy agent_refusals_owner_read on public.agent_refusals; drop policy agent_webhooks_owner on public.agent_webhooks; drop policy webhook_deliveries_owner_read on public.webhook_deliveries;
+-- Tables dropped later stood then, and the migration rewrites their policies: the external-agent API's (#341) and the
+-- skills system's (#343). Each comes back as a stub with the policy the migration alters.
+create table public.skills(company_id uuid); create table public.skill_versions(company_id uuid); create table public.skill_enablements(company_id uuid);
+create table public.skill_events(company_id uuid); create table public.skill_loads(company_id uuid); create table public.skill_lessons(company_id uuid);
+create policy skills_read on public.skills for select using (true); create policy skill_versions_read on public.skill_versions for select using (true);
+create policy skill_enablements_read on public.skill_enablements for select using (true); create policy skill_events_read on public.skill_events for select using (true);
+create policy skill_loads_read on public.skill_loads for select using (true); create policy skill_lessons_read on public.skill_lessons for select using (true);
+create table public.agent_keys(company_id uuid, person_id uuid, kind text); create table public.agent_refusals(company_id uuid);
+create table public.agent_webhooks(company_id uuid); create table public.webhook_deliveries(company_id uuid);
+drop policy if exists agent_keys_owner_read on public.agent_keys; drop policy if exists agent_keys_owner_create on public.agent_keys; drop policy if exists agent_keys_owner_update on public.agent_keys;
+drop policy if exists agent_refusals_owner_read on public.agent_refusals; drop policy if exists agent_webhooks_owner on public.agent_webhooks; drop policy if exists webhook_deliveries_owner_read on public.webhook_deliveries;
 drop policy invitation_insert on public.member_invitations; drop policy invitation_update on public.member_invitations;
 alter table public.approval_steps drop constraint approval_steps_approver_role;
 -- A CHECK constraint naming the type in a literal is re-read with the renamed type, so these two go and come back.

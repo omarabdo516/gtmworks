@@ -50,8 +50,7 @@ export function unguarded(files, read) {
     const source = read(file);
     if (/\/route\.(ts|tsx|js|mjs)$/.test(file)) {
       const levels = new Set(Object.values(routePermissions[file] || { any: 'owner' }));
-      if (levels.has('agentKey')) { if (!/authenticateAgent\(/.test(source)) problems.push(file); }
-      else if (levels.has('setupCode')) { if (!/setupCodeMatches\(/.test(source)) problems.push(file); }
+      if (levels.has('setupCode')) { if (!/setupCodeMatches\(/.test(source)) problems.push(file); }
       else if (![...levels].every(level => level === 'public') && !(source.includes('routeAllowed(') && source.includes(`'${file}'`))) problems.push(file);
     } else for (const action of exportedActions(source)) if (requiredFor(actionPermissions, action) !== 'public' && !source.includes(`actionAllowed(db,'${action}'`)) problems.push(`${file} ${action}`);
   }

@@ -537,7 +537,7 @@ jobs:
           done
           [[ $(compose exec -T worker node -e 'console.log(process.pid>0)') == true ]] || fail 'worker process running'
           worker_logs=$(compose logs worker) || fail 'read worker logs'
-          if grep -q 'Webhook worker:' <<< "$worker_logs"; then fail 'worker must refuse missing webhook configuration'; fi
+          if grep -q 'Conversation runs worker:' <<< "$worker_logs"; then fail 'worker reaches the database'; fi
           lifecycle() { compose exec -T web node --input-type=module - "$1" < scripts/check-install.mjs; }
           lifecycle seed > data.before || fail 'create and read people, companies, cards and files through APIs'
           sh scripts/install.sh backup || fail 'backup'

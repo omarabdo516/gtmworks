@@ -1,6 +1,9 @@
 import { test, expect, type Locator } from './fresh-seed';
 import { signIn } from './sign-in';
 import { appOrigin } from './lane.mjs';
+import { execFileSync } from 'node:child_process';
+
+const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 
 const names=['Lead','وكيل المحتوى','المصمم','الناقد'];
 async function faceMarkup(face:Locator,name:string) {
@@ -17,8 +20,8 @@ test('revoking a grant keeps the agent face and name in a company-only member’
  const writer=page.getByRole('form',{name:'Writer',exact:true});
  try {
   const body=`Face history ${Date.now()}`;
-  const comment=await page.request.post('/api/v1/companies/rs-learning/cards/1/comment',{headers:{Authorization:'Bearer agt_local_fixture_for_tests_only','Idempotency-Key':body},data:{body}});
-  expect(comment.status()).toBe(200);
+  // The Writer's note on card 1, as an Agent's reply is stored.
+  query(`insert into public.work_comments(company_id,card_id,body,author_id) values ('10000000-0000-0000-0000-000000000001',1,'${body}','30000000-0000-0000-0000-000000000001')`);
   await signIn(member,'manager@example.com','/c/rs-learning/home');
   const before=await faceMarkup(member.locator('.home-agents').getByRole('img',{name:names[1],exact:true}),names[1]);
   await writer.getByRole('button',{name:'Revoke access from Writer'}).click();

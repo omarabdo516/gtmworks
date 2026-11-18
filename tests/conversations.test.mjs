@@ -225,7 +225,7 @@ test('the buttons are the choices the person\'s role may send that the Engine of
 
 test('a message whose run Hermes no longer knew is marked lost and waits no more, and the next message waits for its own reply', () => {
  const first=[{id:1,author:/** @type {const} */('person'),author_name:'Omar',body:'First try',run_id:'r1',created_at:at(1)}];
- const lost=[{run_id:'r1',outcome:/** @type {const} */('lost'),input_tokens:null,output_tokens:null}];
+ const lost=[{run_id:'r1',outcome:/** @type {const} */('lost')}];
  assert.deepEqual(shown(first,lost).map(message=>message.lost),[true]);
  assert.deepEqual(waiting(first,lost),[]);
  assert.equal(latestEnded(first,lost),true);

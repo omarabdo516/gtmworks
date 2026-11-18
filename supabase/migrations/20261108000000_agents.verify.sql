@@ -1,1 +1,3 @@
-select json_build_object('agent_keys_rls', (select relrowsecurity from pg_class where oid='public.agent_keys'::regclass), 'lookup_restricted', not has_function_privilege('authenticated','public.lookup_agent_key(text)','execute'), 'webhook_queue_rls', (select relrowsecurity from pg_class where oid='public.webhook_deliveries'::regclass), 'worker_claim_restricted', not has_function_privilege('authenticated','public.claim_webhook_deliveries()','execute'), 'webhook_trigger', exists(select 1 from pg_trigger where tgname='enqueue_person_webhook' and not tgisinternal));
+-- The agent keys and the webhook queue this migration made were dropped with the external-agent API (#341,
+-- 20270206000000_remove_external_agent_api).
+select json_build_object('dropped_by_20270206', to_regclass('public.agent_keys') is null and to_regclass('public.webhook_deliveries') is null);
