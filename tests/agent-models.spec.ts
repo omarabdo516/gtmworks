@@ -1,0 +1,100 @@
+import { test, expect, freshSeed, type Page } from './fresh-seed';
+import { execFileSync } from 'node:child_process';
+import { laneHermes } from './lane-hermes';
+import { signIn } from './sign-in';
+
+// #29, on the app: the Owner gives a provider key, chooses the Company's default model and one Agent's own, and turns
+// sub-agents on for that Agent; each Engine write names the profile it belongs to and is logged. A Manager and a Viewer
+// read every value with no control, and the server refuses them too.
+const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
+const company='10000000-0000-0000-0000-000000000001';
+const hex=company.replaceAll('-','');
+const space=`cs-${hex}`; const co=`co-${hex}`; const writer='e9100000-0000-0000-0000-000000000002'; const writerProfile=`ag-${writer.replaceAll('-','')}`;
+const key='sk-ant-playwright-never-drawn-0123456789abcdef';
+let fake:Awaited<ReturnType<typeof laneHermes>>;
+
+test.describe.configure({mode:'serial'});
+test.beforeAll(async({},testInfo)=>{
+ freshSeed(testInfo.file,testInfo.retry>0);
+ fake=await laneHermes();
+ const profile=(provider:string,model:string)=>({soul:'',provider,model,key:fake.settings.key,config:{},credentials:{},env:{OPENROUTER_API_KEY:key}});
+ fake.settings.profiles.set(space,profile('openrouter','openai/gpt-5.5'));
+ fake.settings.profiles.set(co,profile('openrouter','openai/gpt-5.5'));
+ fake.settings.profiles.set(writerProfile,profile('openrouter','openai/gpt-5.5'));
+ // The Engine's schema and defaults for the sub-agent settings, as the pinned release serves them (#125).
+ fake.settings.configDefaults={delegation:{model:'',provider:'',max_concurrent_children:10,reasoning_effort:'',max_spawn_depth:1}};
+ fake.settings.configSchema={fields:{
+  'delegation.model':{type:'string'},'delegation.provider':{type:'string'},
+  'delegation.max_concurrent_children':{type:'number'},'delegation.max_spawn_depth':{type:'number'},
+  'delegation.reasoning_effort':{type:'select',options:['','minimal','low','medium','high','xhigh','max','ultra']},
+ },category_order:[]};
+ query(`do $$ begin
+  insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
+   ('e9100000-0000-0000-0000-000000000001','${company}','e9100000-0000-0000-0000-000000000011','Lead','General',true,'${co}'),
+   ('${writer}','${company}','e9100000-0000-0000-0000-000000000012','Writer','Writing',false,'${writerProfile}');
+  insert into public.company_profiles(company_id,profile,tools_level,tools_policy,skills_shared) values ('${company}','${co}',1,public.engine_tool_policy(),true);
+  insert into public.company_shared_spaces(company_id,folder) values ('${company}','/opt/data/profiles/${space}/skills');
+  insert into public.agent_profiles(agent_id,company_id,tools_level,tools_policy) values ('${writer}','${company}',1,public.engine_tool_policy());
+ end $$;`);
+});
+test.afterAll(async()=>{ await fake?.close(); });
+
+const language=(sql:string)=>query(sql);
+const openModels=(page:Page,email:string)=>signIn(page,email,'/c/rs-learning/settings?section=models');
+
+test('the Owner gives a provider key and the Engine holds it; the page never draws it', async({page})=>{
+ language(`update public.people set language='en' where id='20000000-0000-0000-0000-000000000001'`);
+ await openModels(page,'omar@example.com');
+ const row=page.locator('#mdl-key-row-anthropic');
+ await expect(row.locator('#mdl-key-anthropic-state')).toHaveText('No key yet');
+ await row.getByRole('button',{name:'Give a key'}).click();
+ await page.locator('#mdl-key-anthropic-value').fill(key);
+ await row.getByRole('button',{name:'Save key'}).click();
+ await expect(row.locator('#mdl-key-anthropic-state')).toHaveText('A key is set');
+ await expect(page.locator('#mdl-key-anthropic-value')).toHaveCount(0);
+ expect(fake.settings.profiles.get(space)?.env?.ANTHROPIC_API_KEY).toBe(key);
+ expect(await page.content()).not.toContain(key);
+ expect(await page.content()).not.toContain(key.slice(-6));
+});
+
+test('the Owner chooses the Company default and one Agent\'s own model, each read back and logged', async({page})=>{
+ language(`update public.people set language='en' where id='20000000-0000-0000-0000-000000000001'`);
+ await openModels(page,'omar@example.com');
+ await page.getByRole('radio',{name:/claude-opus-4.6/}).first().click();
+ await expect.poll(()=>fake.settings.profiles.get(space)?.model).toBe('anthropic/claude-opus-4.6');
+ expect(fake.settings.profiles.get(co)?.model).toBe('anthropic/claude-opus-4.6');
+ await page.getByRole('combobox',{name:'Model for Writer'}).selectOption('anthropic/claude-opus-4.6');
+ await expect.poll(()=>fake.settings.profiles.get(writerProfile)?.model).toBe('anthropic/claude-opus-4.6');
+ expect(JSON.parse(query(`select coalesce(model_choice,'-') as choice from public.agent_profiles where agent_id='${writer}'`))[0].choice).toBe('openrouter/anthropic/claude-opus-4.6');
+ const rows=JSON.parse(query(`select details->>'setting' as setting from public.company_log where source='hermes_agent_audit' and action='agent_setting_changed' order by id`)) as {setting:string}[];
+ expect(rows.map(row=>row.setting)).toContain('model');
+});
+
+test('the Owner turns sub-agents on for one Agent; the profile waits for the toolset and a member reads the switch', async({page,browser})=>{
+ language(`update public.people set language='en' where id in ('20000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000004')`);
+ await openModels(page,'omar@example.com');
+ const toggle=page.getByRole('switch',{name:'Sub-agents'});
+ await expect(toggle).toHaveAttribute('aria-checked','false');
+ await toggle.click();
+ await expect(toggle).toHaveAttribute('aria-checked','true');
+ const state=JSON.parse(query(`select concat_ws('|',subagents,tools_pending) as state from public.agent_profiles where agent_id='${writer}'`))[0].state;
+ expect(state).toBe('true|true');
+ await expect(page.getByLabel('Sub-agent effort')).toBeVisible();
+ await expect(page.getByText('The agent engine’s default is 10 at once.')).toBeVisible();
+ // A Manager reads the switches and gets no control, and the server refuses the change.
+ const manager=await browser.newContext(); const reader=await manager.newPage();
+ await openModels(reader,'manager@example.com');
+ await expect(reader.getByRole('switch',{name:'Sub-agents'})).toHaveCount(0);
+ await expect(reader.locator('#mdl-sub-'+writer+'-state')).toHaveText('On');
+ const refused=await reader.request.post('/api/agent-settings',{data:{company,agent:writer,setting:'subagents',value:false}});
+ expect(refused.status()).toBe(403);
+ await manager.close();
+ // A Viewer reads the key states, the models and the switch, with no control.
+ const viewer=await browser.newContext(); const see=await viewer.newPage();
+ await openModels(see,'viewer@example.com');
+ await expect(see.locator('#mdl-key-row-anthropic-state')).toHaveText('A key is set');
+ await expect(see.getByRole('button',{name:'Save key'})).toHaveCount(0);
+ await expect(see.getByRole('combobox',{name:'Model for Writer'})).toHaveCount(0);
+ await expect(see.locator('#mdl-agent-'+writer+'-model')).toContainText('Its own choice');
+ await viewer.close();
+});

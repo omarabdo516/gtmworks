@@ -2,6 +2,7 @@
 import { lazy, Suspense, type ComponentProps } from 'react';
 import type { AgentLevel as Level, CompanySubscriptions as Subscriptions } from './company-engine-client';
 import type Knowledge from './company-knowledge-client';
+import type { ProviderKeys as Keys, DefaultModel as Default, EachAgent as Each, AgentModel as Model } from './settings-models';
 
 // Parts of the settings overlay that only one of its sections shows, loaded on demand so they stay out of the page chunk
 // every company route loads (page weight, #55): the Agent level and the company sign-in (Company section), the member's
@@ -15,6 +16,10 @@ const LazyKnowledge=lazy(()=>import('./company-knowledge-client'));
 const LazyEditedAt=lazy(()=>import('./company-knowledge-client').then(module=>({default:module.KnowledgeEditedAt})));
 const LazyAbout=lazy(()=>import('./settings-agent-form').then(module=>({default:module.AgentAbout})));
 const LazySaveBar=lazy(()=>import('./settings-agent-form').then(module=>({default:module.AgentSaveBar})));
+const LazyKeys=lazy(()=>import('./settings-models').then(module=>({default:module.ProviderKeys})));
+const LazyDefault=lazy(()=>import('./settings-models').then(module=>({default:module.DefaultModel})));
+const LazyEach=lazy(()=>import('./settings-models').then(module=>({default:module.EachAgent})));
+const LazyModel=lazy(()=>import('./settings-models').then(module=>({default:module.AgentModel})));
 export function AgentLevel(props:ComponentProps<typeof Level>) { return <Suspense fallback={null}><LazyLevel {...props}/></Suspense>; }
 export function CompanySubscriptions(props:ComponentProps<typeof Subscriptions>) { return <Suspense fallback={null}><LazySubscriptions {...props}/></Suspense>; }
 export function MemberNote(props:{company:string,note:string}) { return <Suspense fallback={null}><LazyNote {...props}/></Suspense>; }
@@ -24,3 +29,7 @@ export function KnowledgeEditedAt(props:{at:string}) { return <Suspense fallback
 export function AgentAbout(props:{agent:string,name:string,description:string}) { return <Suspense fallback={null}><LazyAbout {...props}/></Suspense>; }
 /** @param {{company:string,agent:string,name:string}} props */
 export function AgentSaveBar(props:{company:string,agent:string,name:string}) { return <Suspense fallback={null}><LazySaveBar {...props}/></Suspense>; }
+export function ProviderKeys(props:ComponentProps<typeof Keys>) { return <Suspense fallback={null}><LazyKeys {...props}/></Suspense>; }
+export function DefaultModel(props:ComponentProps<typeof Default>) { return <Suspense fallback={null}><LazyDefault {...props}/></Suspense>; }
+export function EachAgent(props:ComponentProps<typeof Each>) { return <Suspense fallback={null}><LazyEach {...props}/></Suspense>; }
+export function AgentModel(props:ComponentProps<typeof Model>) { return <Suspense fallback={null}><LazyModel {...props}/></Suspense>; }
