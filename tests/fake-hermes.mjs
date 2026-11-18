@@ -268,6 +268,20 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
       mime_type:folder||entry.broken?null:mimeOf(entry.name),...(entry.broken?{broken_link:true}:{})};
     })});
    }
+   // A text file's first part (#195): `/api/fs/read-text` answers the bytes up to 512 KB decoded as UTF-8, the whole
+   // size, the type, whether more follows and whether it reads as binary (hermes_cli/web_routers/files.py 1032-1079).
+   if(url.pathname==='/api/fs/read-text'&&request.method==='GET') {
+    const path=url.searchParams.get('path')||'';
+    if(!path.startsWith('/opt/data/')) return send(response,403,{detail:'Path outside managed files root'});
+    const cut=path.lastIndexOf('/');
+    const entry=(settings.files.get(path.slice(0,cut))||[]).find(item=>item.name===path.slice(cut+1));
+    if(!entry||entry.broken) return send(response,404,{detail:'File not found'});
+    if(entry.isFolder===true) return send(response,400,{detail:'Path points to a directory'});
+    const file=settings.fileBytes.get(path)||{body:`the bytes of ${entry.name}`,type:mimeOf(entry.name)};
+    const data=Buffer.from(file.body);
+    return send(response,200,{binary:data.includes(0),byteSize:data.length,language:'text',mimeType:file.type??mimeOf(entry.name),path,
+     text:data.subarray(0,512*1024).toString('utf8'),truncated:data.length>512*1024});
+   }
    if(url.pathname==='/api/fs/download'&&['GET','HEAD'].includes(request.method)) {
     const path=url.searchParams.get('path')||'';
     const cut=path.lastIndexOf('/');
