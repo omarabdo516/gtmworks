@@ -214,6 +214,7 @@ test('owner assigns a new Contributor agent through settings, Home follows renam
 test('recent cards record actual opens only, newest three per person and company, with persistent reopen order',async({page,context,browser})=>{
  await signIn(page,'multi@example.com','/c/rs-learning/work/board');
  const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
+ const rows=(sql:string)=>{ const out=JSON.parse(query(sql)); return (Array.isArray(out)?out:out.rows) as {id:number}[]; };
  await idle(page);
  await expect(page.locator('.recent-cards')).toHaveCount(0); // Prefetched cards are not opened.
  for(const id of [1,2,3,4]) {
@@ -229,7 +230,7 @@ test('recent cards record actual opens only, newest three per person and company
  await expect(page).toHaveURL(/\/c\/aleem\/work\/board$/);
  await expect(page.locator('.recent-cards')).toHaveCount(0);
  // A Card of Aleem's, filed straight into the seed's Ideas stage (Aleem has no agent to add one from the board).
- const [aleemCard]=JSON.parse(query(`insert into public.work_cards(company_id,stage_id,title) select '10000000-0000-0000-0000-000000000003',id,${quote(`بطاقة عليم ${Date.now()}`)} from public.work_stages where company_id='10000000-0000-0000-0000-000000000003' and kind='ideas' returning id`));
+ const [aleemCard]=rows(`insert into public.work_cards(company_id,stage_id,title) select '10000000-0000-0000-0000-000000000003',id,${quote(`بطاقة عليم ${Date.now()}`)} from public.work_stages where company_id='10000000-0000-0000-0000-000000000003' and kind='ideas' returning id`);
  await page.goto(`/c/aleem/work/board/${aleemCard.id}`);
  await expect(page).toHaveURL(new RegExp(`/c/aleem/work/board/${aleemCard.id}$`));
  const otherCard=new URL(page.url()).pathname;
