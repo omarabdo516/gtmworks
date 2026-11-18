@@ -33,14 +33,16 @@ test('a conversation, a Card note and a channel message each start their Run on 
   // worker's own pass picks up a note nobody started only a minute later (note_runs_due), which is no part of this.
   await page.goto('/c/rs-learning/work/board/4');
   const tr=await page.evaluate(()=>document.documentElement.lang).then(lang=>i18n(lang==='ar'?'ar':'en').t);
-  await page.getByLabel(tr('comment'),{exact:true}).fill('@Lead draft the caption');
+  // Its own words: a retry on the same lane keeps the file's data, so an earlier note may already be on the Card.
+  const note=`@Lead draft the caption ${randomUUID()}`;
+  await page.getByLabel(tr('comment'),{exact:true}).fill(note);
   await page.getByRole('button',{name:tr('send'),exact:true}).click();
-  await expect(page.locator('.comment-body').filter({hasText:'@Lead draft the caption'})).toBeVisible();
+  await expect(page.locator('.comment-body').filter({hasText:note})).toBeVisible();
   const runs=()=>fake.settings.requests.filter(request=>request.method==='POST'&&/\/v1\/runs$/.test(request.path??'')).map(request=>request.path);
   await expect.poll(()=>runs().length,{timeout:30000}).toBe(3);
   expect(runs()).toEqual(Array(3).fill(`/p/${profile}/v1/runs`));
   const inputs=fake.settings.runs.map(run=>run.input);
-  for(const asked of ['Plan the launch week','@Lead draft the caption','@Lead plan the teaser posts']) expect(inputs.filter(input=>input.includes(asked)),asked).toHaveLength(1);
+  for(const asked of ['Plan the launch week',note,'@Lead plan the teaser posts']) expect(inputs.filter(input=>input.includes(asked)),asked).toHaveLength(1);
  } finally {
   query(`delete from public.hermes_agents where id='${lead}'`);
   await fake.close();
