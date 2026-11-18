@@ -230,8 +230,8 @@ if(step==='prepare') {
   // Each of the four Agent profiles reads exactly its own Company's shared folder, and holds the shared Skill locked.
   for(const {entry,profile} of companies.flatMap(entry=>[{entry,profile:entry.profile},{entry,profile:entry.secondProfile}])) {
    const folder=`${homes[entry.space]}/skills`;
-   const config=await until(`${profile} reads ${folder} alone`,async()=>{ const found=await (await manage(`/api/config?profile=${encodeURIComponent(profile)}`)).json();
-    return JSON.stringify(found.external_dirs)===JSON.stringify([folder])?found:null; },180);
+   const config=await until(`${profile} reads ${folder} alone`,async()=>{ const found=(await (await manage(`/api/config?profile=${encodeURIComponent(profile)}`)).json()).skills;
+    return JSON.stringify(found?.external_dirs)===JSON.stringify([folder])?found:null; },180);
    const listed=(await (await manage(`/api/skills?profile=${encodeURIComponent(profile)}`)).json()).find(found=>found.name==='team-lessons');
    assert.deepEqual(config.external_dirs,[folder],`${profile} reads its own company's shared folder alone`);
    assert.ok(config.auto_load.includes('team-lessons')&&listed?.provenance==='external'&&listed.locked===true,`${profile} loads team-lessons and holds it locked`);
