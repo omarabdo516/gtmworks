@@ -159,3 +159,33 @@ for (const [language, line] of [['en', 'The agent could not finish this reply. S
  await expect.element(failed.getByRole('group', { name: 'Campaign plan' })).toBeVisible();
  await expect.element(failed.getByRole('alert').filter({ hasText: line })).toBeVisible();
 });
+
+// #317: a job Lead handed another Agent is a quiet row under Lead's reply, drawn from gtmworks's own record: both
+// faces, the arrow pointing the way the interface reads, the other Agent's name and the job.
+for (const [language, line, arrow] of [['en', 'Handed to', 'M5 12h14'], ['ar', 'سلّم الشغل لـ', 'M19 12H5']] as const) test(`in ${language} a job Lead handed another Agent reads under Lead's reply with both faces and the job`, async () => {
+ const record: ConversationRecord = talk([sent, { id: 2, author: 'agent', author_name: 'Lead', body: 'I handed the March intake to Ads.', created_at: at,
+  cards: [{ kind: 'handed', name: 'Ads', face: 'c-3', goal: 'Plan the Meta ads for the March intake' }] }]);
+ const screen = await render(view(record, language));
+ const row = screen.container.querySelector('.turn--agent [data-handover]');
+ expect(row).not.toBeNull();
+ expect(row?.textContent).toContain(line);
+ expect(row?.textContent).toContain('Ads');
+ expect(row?.textContent).toContain('Plan the Meta ads for the March intake');
+ expect(row?.querySelectorAll('.agent-face').length).toBe(2);
+ expect(row?.querySelector('.gw-icon path')?.getAttribute('d')).toBe(arrow);
+});
+
+// A handed job keeps the chat asking for Lead's follow-up reply, even though the Run that handed it over has ended.
+test('a handed job keeps the chat asking until Lead\'s follow-up reply is in the record', async () => {
+ vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+ const handed: ConversationRecord = { ...talk([sent, { id: 2, author: 'agent', author_name: 'Lead', body: 'I handed it to Ads.', created_at: at,
+  cards: [{ kind: 'handed', name: 'Ads', face: 'c-3', goal: 'Plan the Meta ads' }] }]), handover: true };
+ const replied: ConversationRecord = talk([...handed.messages, { id: 3, author: 'agent', author_name: 'Lead', body: 'Ads planned three ad sets.', created_at: at }]);
+ const asks = vi.fn(async () => Response.json(replied));
+ vi.stubGlobal('fetch', asks);
+ const screen = await render(view(handed));
+ await expect.element(screen.getByText('I handed it to Ads.')).toBeVisible();
+ await vi.advanceTimersByTimeAsync(500);
+ expect(asks).toHaveBeenCalledTimes(1);
+ await expect.element(screen.getByText('Ads planned three ad sets.')).toBeVisible();
+});
