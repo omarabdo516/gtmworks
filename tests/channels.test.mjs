@@ -112,3 +112,25 @@ test('a note is drawn in the order it was written, with no person and no Run', a
  assert.deepEqual(record?.messages[1], { id: -7, author: 'note', kind: 'invite', actor: 'Omar', name: 'Mona', at: at(9) });
  assert.equal(record?.open, false, 'a note starts no Run');
 });
+
+// #152: a message that called two Agents carries one turn per Agent, in the order they were named, the first still the
+// message's `mention` and each Agent's own request drawn under its own turn.
+test('a message that called two Agents carries both turns in the order named, each with its own state and requests', async () => {
+ const at = '2026-06-10T10:00:00Z';
+ const record = await channelRecord(database({
+  agents: [agent('a-1', 'Ads'), agent('a-2', 'SEO')],
+  open: [{ agent_id: 'a-2' }],
+  runs: [
+   { message_id: 2, ordinal: 2, agent_id: 'a-2', agent_name: 'SEO', outcome: null },
+   { message_id: 2, ordinal: 1, agent_id: 'a-1', agent_name: 'Ads', outcome: 'completed' },
+  ],
+  messages: [{ id: 2, author: 'person', person_id: 'p-1', agent_id: null, author_name: 'Omar', body: '@Ads @SEO two scripts', reply_to: null, created_at: at }],
+ }), 'p-1', 'co-1', 'ch-1');
+ const said = record?.messages[0];
+ assert.equal(said?.author, 'person');
+ const mentions = said?.author === 'person' ? said.mentions : undefined;
+ assert.deepEqual(mentions?.map(mention => [mention.agent, mention.state]), [['Ads', 'answered'], ['SEO', 'open']], 'both named Agents, in the order named');
+ assert.equal(said?.author === 'person' ? said.mention?.agent : null, 'Ads', 'the first Agent is still the message\'s one mention');
+ assert.equal(record?.open, true, 'the second Agent is still working');
+ assert.deepEqual(record?.agents.map(row => row.state), ['idle', 'working'], 'the Agent answering is working, the one that answered is idle');
+});

@@ -13,7 +13,7 @@ import { DetailsShell, HeadPill, useDetailsPanel, type DetailsPanel } from '@/ap
 import { MessageBox, postMessage } from '@/app/conversation-composer';
 import { madeDay, useZone } from '@/app/agent-made';
 import { changeChannel, channelChoices } from '@/app/channel-actions';
-import { channelTitle, firstName, withMention, type ChannelAgent, type ChannelMessage, type ChannelRecord } from '@/lib/channels';
+import { channelTitle, firstName, withMention, type ChannelAgent, type ChannelMention, type ChannelMessage, type ChannelRecord } from '@/lib/channels';
 import { PermissionCard, type DecidePermission, type PermissionOutcome } from '@/app/permission-card';
 import { ReplyCard } from '@/app/reply-card';
 import { StepsList, type StepsBidiText } from '@/app/run-steps';
@@ -22,6 +22,9 @@ import { offeredChoices } from '@/lib/conversations';
 type Say=(key:string,...values:unknown[])=>string;
 type Choices=NonNullable<Awaited<ReturnType<typeof channelChoices>>>;
 const roleKeys={owner:'owner',manager:'manager',contributor:'contributor',viewer:'viewer'} as const;
+// The Agents a message called (#152), in the order they were named. A message from an older drawing carries only the
+// first one, which is the one Agent it called.
+const mentionsOf=(message:ChannelMessage):ChannelMention[]=>message.author==='person'?message.mentions??(message.mention?[message.mention]:[]):[];
 
 // Agent names inside a sentence, each isolated so a name in the other script never flips the text around it.
 const Names=({agents,c}:{agents:ChannelAgent[],c:Say})=><>{agents.map((agent,index)=><Fragment key={agent.id}>{index>0&&c('channelNamesJoin')}<bdi>{agent.name}</bdi></Fragment>)}</>;
@@ -96,7 +99,9 @@ export default function ChannelView({person,initial}:{person:string,initial:Chan
  const tip=agents[0]?<>{before}<bdi className="mention">@{agents[0].name}</bdi>{after}</>:c('channelRouteTipPlain');
  const only=agents.filter(agent=>agent.only);
  const [onlyBefore,onlyAfter]=own[only.length>1?'channelShownHereMany':'channelShownHereOne'].split('{0}');
- const waiting=messages.find((message):message is Extract<ChannelMessage,{author:'person'}>=>message.author==='person'&&message.mention?.state==='open');
+ // The Agent working now: the first Run still open, since a message's Agents answer one after another (#152).
+ const waiting=messages.find((message):message is Extract<ChannelMessage,{author:'person'}>=>message.author==='person'&&mentionsOf(message).some(mention=>mention.state==='open'));
+ const workingNow=waiting?mentionsOf(waiting).find(mention=>mention.state==='open')??null:null;
  return <div className="convo"><div className="chat">
   <HeadPill panel={panel} details={c('channelDetails')} face={<span className="hp-hash" aria-hidden="true"><ShellIcon name="hash"/></span>} title={name}/>
   <div className="transcript" ref={transcript}><div className="transcript__col">
@@ -109,12 +114,12 @@ export default function ChannelView({person,initial}:{person:string,initial:Chan
    <ol className="turns" aria-label={c('channelMessages',name)}>{messages.map((message,index)=><Fragment key={message.id}>
     {(index===0||dayOf(messages[index-1].at,zone)!==dayOf(message.at,zone))&&<li className="divider"><time dateTime={message.at} data-utc={zone}>{dayLabel(message.at)}</time></li>}
     <Turn message={message} time={time} c={c} name={name} cb={cb} drawnCards={drawnCards}/>
-    {message.author==='person'&&!!message.mention?.permissions.length&&<li className="turn turn--agent msg" data-author="agent">
-     <div className="sender"><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:message.mention.face,name:message.mention.agent}} size={20}/></span><bdi>{message.mention.agent}</bdi></div>
-     {message.mention.permissions.map(card=><PermissionCard key={card.id} card={card} fresh={!drawnCards.has(card.id)} offered={offeredChoices(card,may)} decide={message.mine&&writer?permit:undefined}/>)}
-    </li>}
+    {message.author==='person'&&mentionsOf(message).filter(mention=>mention.permissions.length>0).map(mention=><li key={mention.agent} className="turn turn--agent msg" data-author="agent">
+     <div className="sender"><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:mention.face,name:mention.agent}} size={20}/></span><bdi>{mention.agent}</bdi></div>
+     {mention.permissions.map(card=><PermissionCard key={card.id} card={card} fresh={!drawnCards.has(card.id)} offered={offeredChoices(card,may)} decide={message.mine&&writer?permit:undefined}/>)}
+    </li>)}
    </Fragment>)}</ol>
-   {waiting?.mention&&<p className="thinking convo-status" role="status">{t('conversationWorking',waiting.mention.agent)}</p>}
+   {workingNow&&<p className="thinking convo-status" role="status">{t('conversationWorking',workingNow.agent)}</p>}
   </div></div>
   <div className="composer-area">
    {writer?<MessageBox label={c('channelMessageLabel')} placeholder={c('channelPlaceholder',name)} call={{people:members.flatMap(member=>member.person&&member.person!==person?[{id:member.person,name:member.name}]:[]),agents}} send={async(message,sendKey)=>{
@@ -138,8 +143,10 @@ function Turn({message,time,c,name,cb,drawnCards}:{message:ChannelMessage,time:(
   <div className="bubble bubble--agent" dir="auto">{message.body}</div>
   {message.cards?.map(card=><ReplyCard key={`reply${card.id}`} card={card} fresh={!drawnCards.has(card.id)}/>)}
  </li>;
- const body=withMention(message.body,message.mention?.agent).map((part,index)=>part.mention?<bdi key={index} className="mention">{part.text}</bdi>:<Fragment key={index}>{part.text}</Fragment>);
- const failed=message.mention?.state==='unanswered'&&<p className="note" role="alert">{c('channelCouldNotReply',message.mention.agent)}</p>;
+ // Every name that called an Agent is marked, and each Agent that could not reply gets its own line (#152).
+ const called=mentionsOf(message);
+ const body=withMention(message.body,called.map(mention=>mention.agent)).map((part,index)=>part.mention?<bdi key={index} className="mention">{part.text}</bdi>:<Fragment key={index}>{part.text}</Fragment>);
+ const failed=called.filter(mention=>mention.state==='unanswered').map(mention=><p key={mention.agent} className="note" role="alert">{c('channelCouldNotReply',mention.agent)}</p>);
  if(message.mine) return <li className="turn turn--user msg" data-author="person">
   <div className="bubble-row"><time className="bubble__time" dateTime={message.at}>{time(message.at)}</time><div className="bubble bubble--user" dir="auto">{body}</div></div>
   {failed}

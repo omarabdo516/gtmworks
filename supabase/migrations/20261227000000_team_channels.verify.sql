@@ -14,7 +14,7 @@ select json_build_object(
  'members_callable',(select bool_and(has_function_privilege('authenticated',f,'execute') and not has_function_privilege('anon',f,'execute') and not has_function_privilege('service_role',f,'execute'))
   from unnest(array['public.channel_agent_list(uuid)','public.channel_sidebar(uuid)','public.read_channel(uuid,bigint)','public.create_channel(uuid,uuid,text,uuid[],uuid[])',
    'public.set_channel_person(uuid,uuid,boolean)','public.set_channel_agent(uuid,uuid,boolean)','public.post_channel_message(uuid,uuid,text)']) f),
- 'post_calls_channel_agents',position('channel_mention_in(' in pg_get_functiondef('public.post_channel_message(uuid,uuid,text)'::regprocedure))>0,
+ 'post_calls_channel_agents',position('channel_mentions_in(' in pg_get_functiondef('public.post_channel_message(uuid,uuid,text)'::regprocedure))>0,
  'visibility_elsewhere_unchanged',position('channel' in pg_get_functiondef('public.agent_visible_to(uuid,uuid,uuid)'::regprocedure))=0
   and position('channel' in pg_get_functiondef('public.can_see_agent(uuid,uuid)'::regprocedure))=0,
  'joiners_start_read',exists(select 1 from pg_trigger where tgrelid='public.members'::regclass and tgname='members_general_read' and not tgisinternal),

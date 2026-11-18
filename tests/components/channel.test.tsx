@@ -277,6 +277,28 @@ test('a Viewer reads a channel reply\'s steps and its card, and the card has no 
  expect(card.getByRole('button').elements()).toEqual([]);
 });
 
+// #152: a message that calls two Agents marks both names, the working line names the Agent replying now, and an Agent
+// that could not reply gets its own line while the other Agent's reply still shows, in both languages.
+const two = (second: 'open' | 'unanswered'): ChannelMessage => ({ id: 5, author: 'person', mine: true, name: 'Omar', role: 'owner', body: '@Ads @SEO we need two scripts', at,
+ mention: { agent: 'Ads', face: 'c-1', state: 'answered', permissions: [] },
+ mentions: [{ agent: 'Ads', face: 'c-1', state: 'answered', permissions: [] }, { agent: 'SEO', face: 'c-2', state: second, permissions: [] }] });
+const adsReply: ChannelMessage = { id: 6, author: 'agent', name: 'Ads', face: 'c-1', body: 'Two scripts are in.', at };
+
+test.each([
+ ['en', 'SEO is working on a reply…', 'SEO couldn’t reply to this message.'],
+ ['ar', 'SEO يكتب الرد…', 'SEO مقدرش يرد على الرسالة دي.'],
+] as const)('in the %s interface a message that called two Agents marks both names, names the one working, and gives the one that failed its own line', async (language, working, failed) => {
+ vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
+ const screen = await render(<LanguageProvider language={language}><ChannelView person="p-1" initial={record([two('open'), adsReply])}/></LanguageProvider>);
+ await expect.element(screen.getByRole('status')).toHaveTextContent(working);
+ expect([...screen.container.querySelectorAll('.bubble .mention')].map(mark => mark.textContent)).toEqual(['@Ads', '@SEO']);
+ expect([...screen.container.querySelectorAll('.bubble--agent')].map(bubble => bubble.textContent)).toEqual(['Two scripts are in.']);
+ const stopped = await render(<LanguageProvider language={language}><ChannelView person="p-1" initial={record([two('unanswered'), adsReply])}/></LanguageProvider>);
+ await expect.element(stopped.getByRole('alert')).toHaveTextContent(failed);
+ expect([...stopped.container.querySelectorAll('.bubble--agent')].map(bubble => bubble.textContent)).toEqual(['Two scripts are in.']);
+ expect(stopped.container.querySelector('[role="status"]'), 'no Agent is working').toBeNull();
+});
+
 // #165: an Agent called in a channel asks to be allowed an action. The card sits under the Agent's turn; the Member who
 // called it decides it, and everyone else reads the team's wait line.
 const asking = (mine: boolean): ChannelMessage => ({ ...called('open'), mine, mention: { agent: 'Lead', face: 'c-1', state: 'open', permissions: [

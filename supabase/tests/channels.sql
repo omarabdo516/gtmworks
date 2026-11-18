@@ -118,8 +118,9 @@ insert into sent select x.label, public.post_channel_message((select id from gen
 reset role;
 select is((select count(*)::int from public.channel_runs r join sent s on s.id=r.message_id where s.label in ('plain','email','longer word','member','hidden')),0,
  'no Run for ordinary talk, an address, a longer word, a Member, or an Agent hidden from the sender');
-select is((select array_agg(s.label||':'||r.agent_name order by s.id) from public.channel_runs r join sent s on s.id=r.message_id),
- array['faye:Faye','first:Faye','longest:Lead Writer','arabic:Faye'],'a mention starts one Run for the earliest, longest name it calls');
+select is((select array_agg(s.label||':'||r.agent_name order by s.id,r.ordinal) from public.channel_runs r join sent s on s.id=r.message_id),
+ array['faye:Faye','first:Faye','first:Lead','longest:Lead Writer','arabic:Faye'],
+ 'a mention starts one Run for each name it calls, in the order named and the longest at one place (#152)');
 select is((select input from public.channel_runs r join sent s on s.id=r.message_id where s.label='faye'),'مراجع: @Faye plan the launch week','the Agent reads the message with its writer''s first name');
 select is((select instructions from public.channel_runs r join sent s on s.id=r.message_id where s.label='faye'),'Write short.','with its own instructions');
 set local role authenticated;
@@ -170,7 +171,7 @@ select is((select count(*)::int from public.channel_runs_due(null,null,0) where 
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
-select is((select count(*)::int from public.channel_runs where outcome is null),2,'a Viewer reads which Runs are still open');
+select is((select count(*)::int from public.channel_runs where outcome is null),3,'a Viewer reads which Runs are still open, both Agents of a message that called two included (#152)');
 
 reset role;
 set local role service_role;
