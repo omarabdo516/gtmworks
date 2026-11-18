@@ -7,7 +7,7 @@ create temp table isolation_matrix(name text primary key, fixed jsonb not null d
 insert into isolation_matrix(name) values
  ('agent_grants'),('agent_key_waits'),('agent_profile_leftovers'),('agent_profiles'),
  ('agent_requests'),('agent_rules'),('approval_steps'),
- ('channel_agents'),('channel_messages'),('channel_people'),('channel_permissions'),('channel_reads'),('channel_runs'),('channels'),
+ ('channel_agents'),('channel_attachments'),('channel_messages'),('channel_people'),('channel_permissions'),('channel_reads'),('channel_runs'),('channels'),
  ('company_app_sign_ins'),('company_audit'),('company_key_holds'),('company_key_unfinished'),('company_log'),
  ('company_profile_keepers'),('company_profiles'),('company_shared_spaces'),
  ('conversation_attachments'),('conversation_messages'),('conversation_notes'),('conversation_queued_turns'),
@@ -25,6 +25,8 @@ insert into isolation_matrix(name) values
 update isolation_matrix m set fixed = v.fixed::jsonb from (values
  ('agent_profile_leftovers', $${"profile": "'ag-' || md5('isolation')"}$$),
  ('approval_steps', $${"person_id": "'e3370000-0000-0000-0000-000000000001'", "role": "null"}$$),
+ ('channel_attachments', $${"channel_id": "'e3370000-0000-0000-0000-00000000000d'",
+   "path": "'10000000-0000-0000-0000-000000000001/channels/e3370000-0000-0000-0000-00000000000d/isolation'"}$$),
  ('channel_messages', $${"author": "'person'", "send_key": "gen_random_uuid()"}$$),
  ('channel_permissions', $${"state": "'open'",
    "content": "'{\"choices\": [\"once\", \"deny\"], \"command\": \"ls\", \"description\": \"isolation\"}'"}$$),
