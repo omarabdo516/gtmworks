@@ -539,6 +539,8 @@ jobs:
           worker_logs=$(compose logs worker) || fail 'read worker logs'
           if grep -q 'Conversation runs worker:' <<< "$worker_logs"; then fail 'worker reaches the database'; fi
           lifecycle() { compose exec -T web node --input-type=module - "$1" < scripts/check-install.mjs; }
+          # seed also writes an Agent's rule and each Company's knowledge through the engine contract, and verify reads
+          # both back after the restore: they live only in the Hermes volume the backup now holds (#349).
           lifecycle seed > data.before || fail 'create and read people, companies, cards and files through APIs'
           sh scripts/install.sh backup || fail 'backup'
           backup=$(find backups -name '*.tgz' -print -quit)
@@ -579,8 +581,13 @@ jobs:
           # with terminal, files and code execution off in its config and absent from its Runs' toolsets. A run on each
           # answers, and a memory written in the first company's profile reaches its run and never the second's. A lesson
           # its Owner approves reaches the runs of the first company's Agents only, which cannot change it (#122).
-          first=$(compose exec -T web node --input-type=module - prepare < scripts/check-install-profiles.mjs | tail -n 1) || fail 'two companies get two profiles with terminal, file and code tools off'
+          compose exec -T web node --input-type=module - prepare < scripts/check-install-profiles.mjs | tee prepare-profiles.log || fail 'two companies get two profiles with terminal, file and code tools off, each with one shared space'
+          first=$(tail -n 1 prepare-profiles.log)
           [[ $first =~ ^co-[0-9a-f]{32}$ ]] || fail "the first company's profile name"
+          # One Company cannot name another's profile (#126): the database refuses the row, whoever writes it.
+          company_b=$(db -c "select id from public.companies where name='Profile check B'") || fail 'the second profile company'
+          if db -c "insert into public.hermes_agents(company_id,profile,name,speciality) values ('$company_b','$first','Other company agent','Writes the install check.')" 2> profile-refusal.log; then fail 'the database refuses a profile of another company'; fi
+          grep -q hermesProfileNotShared profile-refusal.log || { cat profile-refusal.log >&2; fail 'the database refuses a profile of another company, by its guard'; }
           marker="memory-check-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
           compose exec -T hermes sh -ec 'mkdir -p "/opt/data/profiles/$1/memories"; printf "%s\n" "The company code word is $2." >> "/opt/data/profiles/$1/memories/MEMORY.md"; chown -R hermes:hermes "/opt/data/profiles/$1/memories"' sh "$first" "$marker" || fail "write a memory in the first company's profile"
           compose exec -T web node --input-type=module - verify "$marker" < scripts/check-install-profiles.mjs || fail "runs on each company profile answer, and a company's memory and approved lessons stay in its own runs"
@@ -588,6 +595,23 @@ jobs:
           # catalogue, connecting writes only an app's read tools and the way back to gtmworks, an unknown way back is
           # expired, and disconnecting turns the app off.
           compose exec -T web node --input-type=module - < scripts/check-install-apps.mjs || fail 'apps write only their read tools and come back through gtmworks'
+          # What an install holds (#126): twenty more Agent profiles in the first Company, ten with the Engine's bundled
+          # Skills and ten without. The script prints each profile's name and the seconds it took to be ready, then runs
+          # the first Agent once more; the job prints the Engine container's memory and the volume's disk around them.
+          capacity() { compose exec -T web node --input-type=module - capacity "$1" < scripts/check-install-profiles.mjs; }
+          hermes_id=$(compose ps -q hermes) || fail 'the Engine container'
+          engine_memory() { docker stats --no-stream --format '{{.MemUsage}}' "$hermes_id"; }
+          engine_disk() { docker run --rm --volumes-from "$hermes_id" --entrypoint sh "$(docker inspect -f '{{.Image}}' "$hermes_id")" -ec 'du -sk /opt/data | cut -f1'; }
+          memory_before=$(engine_memory) || fail 'the Engine memory before the capacity profiles'
+          disk_before=$(engine_disk) || fail 'the Engine disk before the capacity profiles'
+          capacity with-skills | tee capacity-with-skills.log || fail 'ten more Agent profiles with the bundled Skills'
+          disk_with=$(engine_disk) || fail 'the Engine disk after the capacity profiles'
+          capacity no-skills | tee capacity-no-skills.log || fail 'ten more Agent profiles without the bundled Skills'
+          disk_without=$(engine_disk) || fail 'the Engine disk after the profiles without Skills'
+          memory_after=$(engine_memory) || fail 'the Engine memory after the capacity profiles'
+          per_with=$(( (disk_with-disk_before)/10 )) || fail 'the disk one profile with Skills takes'
+          per_without=$(( (disk_without-disk_with)/10 )) || fail 'the disk one profile without Skills takes'
+          echo "capacity: engine memory $memory_before before and $memory_after after 20 agent profiles; $per_with KiB per profile with the bundled Skills, $per_without KiB without"
           # Hermes holds none of gtmworks's own keys and passwords (#2): its environment and every file its user can read
           # are scanned for the real values in .env.install, passed on stdin; only names and paths are printed.
           { grep -E '^(POSTGRES_PASSWORD|PGSODIUM_ROOT_KEY|SUPABASE_JWT_SECRET|SUPABASE_SERVICE_ROLE_KEY|WEBHOOK_ENCRYPTION_KEY|SETUP_CODE)=' .env.install | compose exec -T -u hermes hermes /opt/hermes/.venv/bin/python -c "$(cat scripts/check-hermes-keys.py)"; } || fail "the bundled Hermes holds none of gtmworks's keys and passwords"

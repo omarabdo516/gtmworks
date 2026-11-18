@@ -8,26 +8,22 @@ main() {
 release_image=
 if [ -n "$release_image" ]; then cd "$(dirname "$0")"; else cd "$(dirname "$0")/.."; fi
 umask 077
-# One install at a time. The lock names its owner (this boot, the process and the process's start time), so a lock left
-# by an install that stopped (a power cut, a killed process) is taken over once its owner is shown gone; a lock whose
-# owner cannot be shown gone is left alone.
-lock_owner() {
-  printf '%s %s %s\n' "$(cat /proc/sys/kernel/random/boot_id 2> /dev/null)" "$1" \
-    "$(sed 's/^.*) //' "/proc/$1/stat" 2> /dev/null | cut -d' ' -f20)"
+# One install at a time, held on a file descriptor of .install.lock: the kernel releases it when this process ends,
+# however it ends, so a lock file left by an install that was killed is held by no one and never blocks the next run,
+# and an install that is still running keeps it, so it is never taken over. `.install-lock/` is this run's scratch
+# folder, made under the lock and removed on exit; the lock file itself is never removed, so every run opens the same one.
+command -v flock > /dev/null 2>&1 || {
+  echo 'The installer needs flock to run one install at a time. It comes with util-linux, which nearly every Linux install has; install it, then run this again.' >&2
+  exit 1
 }
-if ! mkdir .install-lock 2> /dev/null; then
-  boot= pid= start=
-  if [ -f .install-lock/owner ]; then read -r boot pid start < .install-lock/owner || true; fi
-  case "$pid" in ''|*[!0-9]*) pid=;; esac
-  if [ -n "$boot" ] && [ -n "$pid" ] && [ -n "$start" ] && [ "$(lock_owner "$pid")" != "$boot $pid $start" ]; then
-    echo "Taking over .install-lock from an install that stopped (process $pid is gone)." >&2
-    rm -rf .install-lock
-    mkdir .install-lock || { echo 'Another install is running (or remove stale .install-lock).' >&2; exit 1; }
-  else
-    echo 'Another install is running (or remove stale .install-lock).' >&2; exit 1
-  fi
-fi
-lock_owner "$$" > .install-lock/owner
+exec 9>.install.lock
+flock -n 9 || { echo 'Another install is running: wait for it to finish, then run this again.' >&2; exit 1; }
+# shortcut: an installer from before #67 locks with the folder and its owner file, not flock; while one still runs it keeps
+# its folder. Remove this once no install can still run a pre-#67 installer.
+old_pid=; if [ -f .install-lock/owner ]; then read -r _ old_pid _ < .install-lock/owner || true; fi
+case "$old_pid" in ''|*[!0-9]*) ;; *) if kill -0 "$old_pid" 2> /dev/null; then echo 'Another install is running (or remove stale .install-lock).' >&2; exit 1; fi;; esac
+rm -rf .install-lock
+mkdir .install-lock
 resume=no
 worker_stopped=no
 cleanup() {
@@ -53,7 +49,8 @@ complete_env() {
   rm -f .install-lock/missing
 }
 volumes() {
-  docker run --rm --volumes-from "$(compose ps -aq db)" --volumes-from "$(compose ps -aq storage)" "$@"
+  docker run --rm --volumes-from "$(compose ps -aq db)" --volumes-from "$(compose ps -aq storage)" \
+    --volumes-from "$(compose ps -aq hermes)" "$@"
 }
 operation=${1:-install}
 if [ -n "$release_image" ]; then
@@ -77,9 +74,10 @@ if [ "$operation" = backup ]; then
   complete_env "$PWD/.env.install"
   resume=yes
   compose stop
-  # BusyBox tar applies the last -C to every entry, so keep all paths under one root.
+  # BusyBox tar applies the last -C to every entry, so keep all paths under one root. The Agents' profiles, rules,
+  # knowledge, skills, memory and history live only in the bundled Engine's volume (#349), so opt/data goes with them.
   volumes -v "$PWD/.env.install:/.env.install:ro" alpine:3.21 tar -czf - \
-    -C / var/lib/postgresql/data etc/postgresql-custom var/lib/storage .env.install > .install-lock/backup.tgz
+    -C / var/lib/postgresql/data etc/postgresql-custom var/lib/storage opt/data .env.install > .install-lock/backup.tgz
   archive="$destination/gtmworks-$(date -u +%Y%m%dT%H%M%SZ)-$$.tgz"
   mv .install-lock/backup.tgz "$archive"
   echo "Backup: $archive"
@@ -91,17 +89,20 @@ elif [ "$operation" = restore ]; then
     tar -tzf /backup/backup.tgz > .install-lock/entries
   while IFS= read -r entry; do
     case "$entry" in /*|*../*|../*|*/..) echo 'Unsafe backup path.' >&2; exit 1;; esac
-    case "$entry" in .env.install|var/lib/postgresql/data/*|etc/postgresql-custom/*|var/lib/storage/*) ;; *) echo 'Unrecognised backup.' >&2; exit 1;; esac
+    case "$entry" in .env.install|var/lib/postgresql/data/*|etc/postgresql-custom/*|var/lib/storage/*|opt/data|opt/data/*) ;; *) echo 'Unrecognised backup.' >&2; exit 1;; esac
   done < .install-lock/entries
   for entry in var/lib/postgresql/data/ etc/postgresql-custom/ var/lib/storage/ .env.install; do
     grep -Fx "$entry" .install-lock/entries >/dev/null || { echo 'Incomplete backup.' >&2; exit 1; }
   done
+  # An archive from before #349 holds no opt/data: the install restores as it did, and says what the backup left out.
+  hermes_data=no
+  if grep -Eq '^opt/data/?$' .install-lock/entries; then hermes_data=yes; fi
   docker run --rm -v "$PWD/.install-lock:/backup:ro" alpine:3.21 \
     tar -xOzf /backup/backup.tgz .env.install > .env.install.tmp
   complete_env "$PWD/.env.install.tmp"
   docker run --rm --env-file .env.install.tmp -v "$PWD/lib:/code:ro" "$node_image" node /code/install-env.mjs validate complete
   resume=yes
-  compose stop web worker gateway auth rest storage mail
+  compose stop web worker gateway auth rest storage mail hermes
   empty=$(compose exec -T db psql -X -U postgres -d postgres -At -v ON_ERROR_STOP=1 -c \
     'select not exists(select 1 from public.companies) and not exists(select 1 from auth.users) and not exists(select 1 from storage.objects);')
   test "$empty" = t || { echo 'Restore requires an empty install.' >&2; exit 1; }
@@ -109,12 +110,21 @@ elif [ "$operation" = restore ]; then
   # A failed extraction must stay offline, rather than start a partially restored database.
   resume=no
   volumes -v "$PWD/.install-lock:/backup:ro" alpine:3.21 sh -ec '
-    find /var/lib/postgresql/data /etc/postgresql-custom /var/lib/storage -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-    # Keep the image UIDs/GIDs and modes instead of resolving owners in this helper.
-    tar -xzpf /backup/backup.tgz --numeric-owner -C / var/lib/postgresql/data etc/postgresql-custom var/lib/storage
-  '
+    if [ "$1" = yes ]; then
+      find /var/lib/postgresql/data /etc/postgresql-custom /var/lib/storage /opt/data -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+      # Keep the image UIDs/GIDs and modes instead of resolving owners in this helper.
+      tar -xzpf /backup/backup.tgz --numeric-owner -C / var/lib/postgresql/data etc/postgresql-custom var/lib/storage opt/data
+    else
+      # An archive from before #349: the Engine volume of this empty install stays as it is.
+      find /var/lib/postgresql/data /etc/postgresql-custom /var/lib/storage -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+      tar -xzpf /backup/backup.tgz --numeric-owner -C / var/lib/postgresql/data etc/postgresql-custom var/lib/storage
+    fi
+  ' sh "$hermes_data"
   mv .env.install.tmp .env.install
   compose up -d --force-recreate --wait --wait-timeout 300
+  if [ "$hermes_data" = no ]; then
+    echo "The Agents' Hermes data was not in this backup: their knowledge, rules, skills and memory were not restored."
+  fi
   return
 elif [ "$operation" = update ] && [ -n "$release_image" ]; then
   test -f .env.install || { echo 'Install first.' >&2; exit 1; }
