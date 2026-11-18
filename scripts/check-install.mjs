@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 const {engineFor}=await import(`${process.cwd()}/lib/engine.mjs`);
-const {writeSoulRules,writeSharedSkill,readSharedSkill}=await import(`${process.cwd()}/lib/hermes.mjs`);
+const {writeSoulRules,provideSharedSpace,writeSharedSkill,readSharedSkill}=await import(`${process.cwd()}/lib/hermes.mjs`);
 const {knowledgeSkill}=await import(`${process.cwd()}/lib/company-knowledge-skill.mjs`);
 
 const seed=process.argv[2]==='seed';
@@ -44,12 +44,10 @@ if(seed) {
  const ruled=await writeSoulRules(engine,{profile:ruleProfile,rules:[rule]});
  assert.ok(['written','unchanged'].includes(ruled.state),`the Agent rule: ${ruled.state}`);
  for(const company of companies) {
-  // The worker makes each Company's shared space within a pass; the knowledge goes in once it is there.
-  let state='missing';
-  for(let left=60;left>0&&state==='missing';left--) {
-   state=(await writeSharedSkill(engine,{space:spaceOf(company),name:'company-knowledge',content:knowledgeSkill({voice:knowledge})})).state;
-   if(state==='missing') await new Promise(resolve=>setTimeout(resolve,1000));
-  }
+  // The worker makes a shared space only for a Company with a recorded profile, which these have not: the check makes it.
+  const space=await provideSharedSpace(engine,{name:spaceOf(company)});
+  assert.equal(space.state,'provided',`the shared space of ${company}`);
+  const {state}=await writeSharedSkill(engine,{space:spaceOf(company),name:'company-knowledge',content:knowledgeSkill({voice:knowledge})});
   assert.ok(['written','unchanged'].includes(state),`the Company knowledge of ${company}: ${state}`);
  }
 }
