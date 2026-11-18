@@ -44,27 +44,33 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  // frame's other reads, and handled the same way until the frame awaits it.
  const tiedRead=tiedCard(db,company.id,id);
  tiedRead.catch(()=>{});
+ // The Agent's details beside the chat, while it is still attached to the company, and the reader's role. The details'
+ // reads go out now with them, not after the frame's reads (decision 0042): they are the page's longest, and the page
+ // has loaded only once they are drawn.
+ const agentRead=conversation.agent_id?db.from('hermes_agents').select(`id,connection_id,name,speciality,is_default,${madeColumns}`).eq('id',conversation.agent_id).eq('company_id',company.id).maybeSingle():Promise.resolve({data:null});
+ const membershipRead=db.from('members').select('role').eq('company_id',company.id).eq('person_id',user.id).is('removed_at',null).maybeSingle();
+ const details=conversation.agent_id?agentDetails(db,{company:company.id,agent:conversation.agent_id,name:Promise.resolve(agentRead).then(({data})=>data?.name??''),slug,me:user.id,role:Promise.resolve(membershipRead).then(({data})=>data?.role||''),tab}).finally(()=>markOpen('details',timing)):null;
+ // Handed to the screen only while the Agent is attached; a detached Agent's details are read and dropped.
+ details?.catch(()=>{});
  // Until then the chat is named as the sidebar names it (app/shell.tsx): the first line of its first message.
  // The frame's reads go out together: each is one round trip, and on a busy machine a chain of them is what makes the
  // chat slow to open (decision 0042).
  const [{data:first},{data:agent},{data:person},{data:membership},{data:writer}]=await Promise.all([
   db.from('conversation_messages').select('body').eq('conversation_id',id).eq('author','person').order('id').limit(1).maybeSingle(),
-  // The Agent's details beside the chat, while it is still attached to the company.
-  conversation.agent_id?db.from('hermes_agents').select(`id,connection_id,name,speciality,is_default,${madeColumns}`).eq('id',conversation.agent_id).eq('company_id',company.id).maybeSingle():{data:null},
+  agentRead,
   db.from('people').select('name').eq('id',user.id).single(),
-  db.from('members').select('role').eq('company_id',company.id).eq('person_id',user.id).is('removed_at',null).maybeSingle(),
+  membershipRead,
   // Any Member but a Viewer may write (#287); the database decides, as it does for every send.
   db.rpc('conversation_can_write',{c:company.id}),
  ]);
  markOpen('reads',timing);
- // The Agent's details (reads two deep) and the approvals count are handed over unread: the chat and its steps are drawn
- // without waiting for them, and each takes its place when read (decision 0042).
- const details=agent?agentDetails(db,{company:company.id,agent:agent.id,name:agent.name,slug,me:user.id,role:membership?.role||'',tab}).finally(()=>markOpen('details',timing)):null;
+ // The Agent's details and the approvals count are handed over unread: the chat and its steps are drawn without waiting
+ // for them, and each takes its place when read (decision 0042).
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  const title=(first?.body as string|undefined)?.split('\n')[0]||conversation.agent_name;
  const tied=await tiedRead;
  return <Shell company={company} companies={companies||[]} personId={user.id} section="conversations" title={title} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={waitingCount} agentId={conversation.agent_id||undefined} conversationId={id}>
-  <main className="convo-page h-full"><ConversationView slug={slug} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={details} tab={pickTab(tab)} company={company.id} conversation={{id:conversation.id,agent_id:conversation.agent_id,agent_name:conversation.agent_name,face:faceOf(conversation)}} title={title} writer={!!writer} board={tied&&{card:tied.card,column:tied.column}}><Loaded record={record} team={company.work_mode==='team'}/></ConversationView></main>
+  <main className="convo-page h-full"><ConversationView slug={slug} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={agent?details:null} tab={pickTab(tab)} company={company.id} conversation={{id:conversation.id,agent_id:conversation.agent_id,agent_name:conversation.agent_name,face:faceOf(conversation)}} title={title} writer={!!writer} board={tied&&{card:tied.card,column:tied.column}}><Loaded record={record} team={company.work_mode==='team'}/></ConversationView></main>
  </Shell>;
 }
 

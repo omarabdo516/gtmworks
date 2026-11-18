@@ -18,17 +18,20 @@ type Db=Awaited<ReturnType<typeof supabase>>;
 export type AgentDetailsView={status:AgentStatus,tab:DetailsTab,tabs:Record<DetailsTab,ReactNode>};
 const logShown=50;
 
-export async function agentDetails(db:Db,{company,agent,name,slug,me,role,tab}:{company:string,agent:string,name:string,slug:string,me:string,role:string,tab?:string}):Promise<AgentDetailsView> {
- const {t,language}=await getI18n(); const writer=canCreateCard({role}); const drawn=drawnAt();
- const [{data:cardRows},{data:logRows,count},{data:runs},{items:waiting},{data:talkFileRows,count:talkFileCount}]=await Promise.all([
+// The Agent's name and the reader's role may still be on their way: a page can start the details' reads beside its own
+// (the chat does) and they are awaited with the first of them.
+export async function agentDetails(db:Db,{company,agent,name:named,slug,me,role:roled,tab}:{company:string,agent:string,name:string|PromiseLike<string>,slug:string,me:string,role:string|PromiseLike<string>,tab?:string}):Promise<AgentDetailsView> {
+ const drawn=drawnAt();
+ const [{t,language},name,role,{data:cardRows},{data:logRows,count},{data:runs},{items:waiting},{data:talkFileRows,count:talkFileCount}]=await Promise.all([getI18n(),named,roled,
   db.from('work_cards').select('id,title,stage_id,wait:card_wait').eq('company_id',company).eq('agent_id',agent).order('id'),
   db.from('company_log').select(logColumns,{count:'exact'}).eq('company_id',company).or(agentLogFilter(agent)).order('created_at',{ascending:false}).order('id',{ascending:false}).limit(logShown),
   db.rpc('agent_open_run',{c:company,agent}),
-  approvalQueue(db,company,me,role),
+  approvalQueue(db,company,me),
   // The files of the reader's own Conversations with the Agent (#21): row-level security shows a person only theirs.
   db.from('conversation_attachments').select('id,name,size,created_at,conversation_id,conversations!inner(agent_name)',{count:'exact'}).eq('company_id',company).eq('conversations.agent_id',agent)
    .order('created_at',{ascending:false}).order('id',{ascending:false}),
  ]);
+ const writer=canCreateCard({role});
  const cards=(cardRows||[]) as {id:number,title:string,stage_id:number,wait:CardWait|null}[]; const ids=cards.map(card=>card.id);
  const rows=(logRows||[]) as LogRow[];
  const run=(runs as {started_at:string,my_conversation:string|null}[]|null)?.[0];
