@@ -24,6 +24,8 @@ export const changeMember=withActionLog('changeMember',async function changeMemb
  if(error) logActionFailure('changeMember',error,{form});
  revalidatePath(`/c/${slug}/settings/members`);
  revalidatePath(`/c/${slug}/home`);
- const message=error ? (error.code==='23505' && error.message.includes('members_active_agent_role')?t('thisAgentRoleIsAssignedToAnotherActive'):error.message.includes('last owner')?t('theLastOwnerCannotBeRemovedOrHave'):t('couldNotSaveTheChangeCheckPermissionsAnd')) : (op==='invite'?t('anInvitationLinkWasSentByEmail'):t('changeSaved'));
+ // A sent invitation is confirmed by the toast the Team table raises (#169); an error stays on the page.
+ if(!error&&op==='invite') redirect(`/c/${slug}/settings/members?invited=${encodeURIComponent(String(form.get('email')).trim().toLowerCase())}`);
+ const message=error ? (error.code==='23505' && error.message.includes('members_active_agent_role')?t('thisAgentRoleIsAssignedToAnotherActive'):error.message.includes('last owner')?t('theLastOwnerCannotBeRemovedOrHave'):t('couldNotSaveTheChangeCheckPermissionsAnd')) : t('changeSaved');
  redirect(`/c/${slug}/settings/members?message=${encodeURIComponent(message)}`);
 });

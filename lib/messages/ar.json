@@ -237,7 +237,6 @@
   "chooseCompany": "اختيار الشركة",
   "thisAgentRoleIsAssignedToAnotherActive": "دور الوكيل هذا مُسنَد بالفعل إلى عضو نشط آخر في الشركة. أزل الدور من العضو الآخر أولًا.",
   "theLastOwnerCannotBeRemovedOrHave": "لا يمكن إزالة المالك الأخير أو تغيير دوره.",
-  "anInvitationLinkWasSentByEmail": "أُرسل رابط الدعوة إلى البريد الإلكتروني.",
   "changeSaved": "تم حفظ التغيير.",
   "approve": "موافقة",
   "rejectWithAReason": "رفض مع ذكر السبب",

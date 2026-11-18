@@ -115,7 +115,7 @@ test('members controls, the Role list, viewer access, and no all-companies list'
 test('invite link signs the new member into the company',async({page,context})=>{
  await signIn(page,'manager@example.com','/c/rs-learning/settings/members');
  await page.request.delete(inbox);
- await page.getByLabel("Email").fill('invited@example.com'); await page.getByRole('button',{name:"Send invitation"}).click(); await expect(page.getByRole('status').filter({hasText:'An invitation link was sent'})).toContainText('An invitation link was sent');
+ await page.getByLabel("Email").fill('invited@example.com'); await page.getByRole('button',{name:"Send invitation"}).click(); await expect(page.getByRole('status').filter({hasText:'Invite sent to'})).toContainText('Invite sent to');
  let link=''; for(let i=0;i<30&&!link;i++){const mailbox=await (await page.request.get(inbox)).json(); const item=mailbox.messages?.find((m:{To:{Address:string}[]})=>m.To.some(t=>t.Address==='invited@example.com')); if(item){const message=await (await page.request.get(`${mail}/api/v1/message/${item.ID}`)).json(); link=(message.HTML||message.Text).match(/https?:\/\/[^"\s<>]+/g)?.find((url:string)=>url.includes('/verify'))?.replaceAll('&amp;','&')||'';} if(!link) await page.waitForTimeout(1000);}
  expect(link).toBeTruthy(); await context.clearCookies(); await page.goto(link);
  // A new Member chooses a password before the Company opens (#41).

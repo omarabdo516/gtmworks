@@ -31,7 +31,7 @@ test('Send invitation shows its confirmation, the address gets the link and the 
   await page.request.delete(inbox);
   await page.getByLabel('Email').fill('proxy-invited@example.com');
   await page.getByRole('button', { name: 'Send invitation' }).click();
-  await expect(page.getByRole('status').filter({hasText:'An invitation link was sent'})).toContainText('An invitation link was sent', { timeout: 15000 });
+  await expect(page.getByRole('status').filter({hasText:'Invite sent to'})).toContainText('Invite sent to', { timeout: 15000 });
   let link = '';
   for (let i = 0; i < 30 && !link; i++) {
     const mailbox = await (await page.request.get(inbox)).json();
@@ -56,7 +56,7 @@ test('inviting someone who already has an account sends them a sign-in link', as
   await page.request.delete(inbox);
   await page.getByLabel('Email').fill('multi@example.com');
   await page.getByRole('button', { name: 'Send invitation' }).click();
-  await expect(page.getByRole('status').filter({hasText:'An invitation link was sent'})).toContainText('An invitation link was sent', { timeout: 15000 });
+  await expect(page.getByRole('status').filter({hasText:'Invite sent to'})).toContainText('Invite sent to', { timeout: 15000 });
   await expect(async () => {
     const mailbox = await (await page.request.get(inbox)).json();
     expect(mailbox.messages?.some((m: { To: { Address: string }[] }) => m.To.some(to => to.Address === 'multi@example.com'))).toBe(true);

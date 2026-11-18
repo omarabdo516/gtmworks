@@ -237,7 +237,6 @@
   "chooseCompany": "Choose company",
   "thisAgentRoleIsAssignedToAnotherActive": "This agent role is assigned to another active member in the company. Remove that assignment first.",
   "theLastOwnerCannotBeRemovedOrHave": "The last owner cannot be removed or have their role changed.",
-  "anInvitationLinkWasSentByEmail": "An invitation link was sent by email.",
   "changeSaved": "Change saved.",
   "approve": "Approve",
   "rejectWithAReason": "Reject with a reason",
