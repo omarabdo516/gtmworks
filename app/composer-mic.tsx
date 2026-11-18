@@ -53,9 +53,10 @@ export function useComposerDictation({target,insert,field,onStart}:{target?:Dict
  const modeTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
  const skipClick=useRef(false); const skipTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
  const press=useRef<Session|null>(null);
- const recorder=useRef<MediaRecorder|null>(null); const chunks=useRef<Blob[]>([]);
- const stream=useRef<MediaStream|null>(null);
- const audio=useRef<{context:AudioContext,analyser:AnalyserNode}|null>(null);
+ // Each recording owns its stream, audio, recorder and chunks, keyed by its session number: a later session, or an
+ // earlier one whose recorder stops late, never takes another's microphone.
+ type Assets={stream:MediaStream|null,audio:{context:AudioContext,analyser:AnalyserNode}|null,recorder:MediaRecorder|null,chunks:Blob[]};
+ const owned=useRef(new Map<number,Assets>());
  const phase=useRef(0); const mounted=useRef(true);
  // Each recording is its own session: a permission that comes back late, or a recorder's callback from a session the
  // person already replaced, is let go instead of taking the live session's stream, audio or recorder.
@@ -74,15 +75,17 @@ export function useComposerDictation({target,insert,field,onStart}:{target?:Dict
  const finishing=useRef(false);
 
  const put=(next:Session|null)=>{ live.current=next; if(mounted.current) setSession(next); };
+ const assetsOf=(id:number)=>{ let found=owned.current.get(id); if(!found) { found={stream:null,audio:null,recorder:null,chunks:[]}; owned.current.set(id,found); } return found; };
+ const currentAssets=()=>owned.current.get(sessionNo.current)??null;
  const stopClock=()=>{ if(clockTimer.current) { clearInterval(clockTimer.current); clockTimer.current=null; } };
  const stopWave=()=>{ if(waveTimer.current) { clearInterval(waveTimer.current); waveTimer.current=null; } };
- const stopAudio=()=>{
-  if(audio.current) { void audio.current.context.close().catch(()=>{}); audio.current=null; }
-  for(const track of stream.current?.getTracks?.()??[]) { try { track.stop(); } catch {} }
-  stream.current=null;
+ const stopAudio=(assets:Assets|null=currentAssets())=>{
+  if(assets?.audio) { void assets.audio.context.close().catch(()=>{}); assets.audio=null; }
+  for(const track of assets?.stream?.getTracks?.()??[]) { try { track.stop(); } catch {} }
+  if(assets) assets.stream=null;
  };
  const level=()=>{
-  const node=audio.current?.analyser; if(!node) return null;
+  const node=currentAssets()?.audio?.analyser; if(!node) return null;
   const values=new Uint8Array(node.frequencyBinCount); node.getByteFrequencyData(values);
   const sum=values.reduce((total,value)=>total+value,0);
   // A silent stream has no level to follow: the bars keep the reference's own motion rather than freezing.
@@ -115,6 +118,7 @@ export function useComposerDictation({target,insert,field,onStart}:{target?:Dict
  async function start(mode:Mode) {
   if(live.current||!targetNow.current||unavailable) return;
   const id=++sessionNo.current;
+  const assets=assetsOf(id);
   const place=targetNow.current;
   // The recording belongs to the Agent it started on, and its words to the composer it started in.
   recordingFor.current={key:placeKeyOf(place),target:place,insert:insertNow.current};
@@ -135,25 +139,25 @@ export function useComposerDictation({target,insert,field,onStart}:{target?:Dict
    // Cancelled while the browser was asking, or replaced by a later session: its tracks are let go at once, and the
    // live session's stream, audio and recorder are left alone.
    if(id!==sessionNo.current||!live.current||!mounted.current) { for(const track of media.getTracks?.()??[]) { try { track.stop(); } catch {} } return; }
-   stream.current=media;
+   assets.stream=media;
    let context:AudioContext|undefined;
    try {
     const Context=window.AudioContext;
     context=new Context();
     const source=context.createMediaStreamSource(media);
     const analyser=context.createAnalyser(); analyser.fftSize=256; source.connect(analyser);
-    audio.current={context,analyser};
-   } catch { void context?.close().catch(()=>{}); audio.current=null; }
+    assets.audio={context,analyser};
+   } catch { void context?.close().catch(()=>{}); assets.audio=null; }
    const Recorder=window.MediaRecorder;
    if(!Recorder) throw new Error('no recorder');
    let made:MediaRecorder;
    try { made=new Recorder(media,{mimeType:'audio/webm'}); } catch { made=new Recorder(media); }
-   chunks.current=[];
-   made.ondataavailable=event=>{ if(id!==sessionNo.current) return; if(event.data?.size) chunks.current.push(event.data); };
-   recorder.current=made; made.start();
+   assets.chunks=[];
+   made.ondataavailable=event=>{ if(id!==sessionNo.current) return; if(event.data?.size) assets.chunks.push(event.data); };
+   assets.recorder=made; made.start();
   } catch {
    if(id!==sessionNo.current) return;
-   clearTimers(); stopAudio(); put(null); setSeconds(0); setBars(baseBars()); focusAfterDraw();
+   clearTimers(); stopAudio(assets); owned.current.delete(id); put(null); setSeconds(0); setBars(baseBars()); focusAfterDraw();
    if(mounted.current) setError('chatDictationDenied');
   }
  }
@@ -184,17 +188,20 @@ export function useComposerDictation({target,insert,field,onStart}:{target?:Dict
   if(!live.current||finishing.current) return;
   finishing.current=true;
   const id=sessionNo.current;
+  const assets=currentAssets();
   put(null); clearTimers(); stopWave(); setSeconds(0);
-  const made=recorder.current; recorder.current=null;
+  const made=assets?.recorder??null; if(assets) assets.recorder=null;
   if(!keep) {
    try { made?.stop(); } catch {}
-   stopAudio(); setBars(baseBars()); focusAfterDraw(); finishing.current=false; return;
+   stopAudio(assets); owned.current.delete(id); setBars(baseBars()); focusAfterDraw(); finishing.current=false; return;
   }
   const done=()=>{
+   // This recording's own microphone goes whatever happened since: a later session's stream is not this one's to stop.
+   stopAudio(assets); owned.current.delete(id);
    if(id!==sessionNo.current) { finishing.current=false; return; }
-   stopAudio();
-   if(!chunks.current.length) { focusAfterDraw(); finishing.current=false; return; }
-   void send(chunks.current[0]); finishing.current=false;
+   const chunks=assets?.chunks??[];
+   if(!chunks.length) { focusAfterDraw(); finishing.current=false; return; }
+   void send(chunks[0]); finishing.current=false;
   };
   if(made&&made.state!=='inactive') { made.onstop=done; try { made.stop(); } catch { done(); } }
   else done();
@@ -261,7 +268,7 @@ export function useComposerDictation({target,insert,field,onStart}:{target?:Dict
   document.addEventListener('pointercancel',cancelled);
   return ()=>{ document.removeEventListener('keydown',keys); document.removeEventListener('pointerup',up); document.removeEventListener('pointercancel',cancelled); };
  },[session]);
- useEffect(()=>{ mounted.current=true; return ()=>{ mounted.current=false; clearTimers(); stopAudio(); try { recorder.current?.stop(); } catch {} }; },[]); // eslint-disable-line react-hooks/exhaustive-deps
+ useEffect(()=>{ mounted.current=true; return ()=>{ mounted.current=false; clearTimers(); for(const assets of owned.current.values()) { stopAudio(assets); try { assets.recorder?.stop(); } catch {} } owned.current.clear(); }; },[]); // eslint-disable-line react-hooks/exhaustive-deps
 
  const mode=session?.mode;
  // The catalogue's "Listening ·" keeps its separator; the language and its own separator are left out when none was read,
