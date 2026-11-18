@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
+import { effortDefault, effortHintKey, effortLabelKey } from '@/lib/engine-effort.mjs';
 import { toast } from './toast';
 
 // The "Subscription and models" section (#29) and an Agent's "Thinks with" rows: the Engine's model options for the
@@ -11,7 +12,7 @@ import { toast } from './toast';
 
 export type ModelOption={provider:string,providerName:string,model:string};
 type ModelSetting={key:string,type:'string'|'number'|'boolean'|'select',choices:string[]|null,default:unknown,value:unknown,limits:{min?:number,max?:number,integer?:boolean}|null,label:string};
-export type AgentModels={id:string,name:string,own:boolean,choosable:boolean,model:string|null,choice:string|null,subagents:boolean,options:ModelOption[],settings:ModelSetting[]};
+export type AgentModels={id:string,name:string,own:boolean,choosable:boolean,model:string|null,choice:string|null,subagents:boolean,options:ModelOption[],effort:string|null,settings:ModelSetting[]};
 export type ModelsData={default:{model:string|null,options:ModelOption[]},agents:AgentModels[]};
 type KeyRow={provider:string,label:string,set:boolean};
 export type Named={agent:string|null,name:string|null};
@@ -107,6 +108,19 @@ export function DefaultModel({company,owner,models}:{company:string,owner:boolea
  </section>;
 }
 
+// The thinking level every new Agent starts with (#179): the Engine has no setting that gives a new profile a level, so a
+// new profile has none and reads as the reference's Medium. The reference's read-only form for every Role: the level and
+// its line, with nothing to change (design-reference/app.js 7362-7366).
+export function DefaultEffort() {
+ const {t}=useI18n();
+ const hint=effortHintKey(effortDefault);
+ return <section className="dp-sec" aria-labelledby="md-h-eff"><h4 className="dp-label" id="md-h-eff"><span>{t('settingsModelsEffort')}</span></h4>
+  <div className="panel-card set-card"><div className="set-field">
+   <p className="ro-text" id="mdl-eff">{t(effortLabelKey(effortDefault))}</p>
+   {hint&&<span className="set-hint" aria-live="polite">{t(hint)}</span>}
+  </div></div></section>;
+}
+
 // One Agent's model rows, for its "Thinks with" section (#29): the Engine's choices for that Agent's own profile. An Agent
 // that runs on the Company profile has no model of its own and says so.
 export function AgentModel({company,agent,name,model,options,choosable,owner}:{company:string,agent:string,name:string,model:string|null,options:ModelOption[],choosable:boolean,owner:boolean}) {
@@ -163,7 +177,7 @@ function AgentRow({company,owner,agent,defaultModel}:{company:string,owner:boole
  return <div className="md-agent" id={`mdl-agent-${agent.id}`}>
   <div className="panel-row">
    <span className="panel-row__text"><span className="panel-row__t"><bdi>{agent.name}</bdi></span>
-    <span className="panel-row__d" id={`mdl-agent-${agent.id}-model`}>{agent.choice?<>{t('settingsModelsOwn')} · <bdi dir="ltr">{agent.model}</bdi></>:<>{t('settingsModelsFollows')} · <bdi dir="ltr">{label}</bdi></>}</span></span>
+    <span className="panel-row__d" id={`mdl-agent-${agent.id}-model`}>{agent.choice?<>{t('settingsModelsOwn')} · <bdi dir="ltr">{agent.model}</bdi></>:<>{t('settingsModelsFollows')} · <bdi dir="ltr">{label}</bdi></>}{agent.effort&&<> · {t(effortLabelKey(agent.effort))}</>}</span></span>
    {owner&&agent.choosable?<label className="md-agent__pick"><span className="set-label">{t('settingsModelsModelField',agent.name)}</span>
     <select className="set-input" value={chosen} disabled={busy} aria-label={t('settingsModelsModelField',agent.name)}
      onChange={event=>change({setting:'model',value:event.target.value||null},'settingsModelsSaved')}>
