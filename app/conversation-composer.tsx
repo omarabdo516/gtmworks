@@ -234,7 +234,7 @@ function PlusMenu({open,setOpen,callable,channel,model,attach,pickFile,insert,fi
   else if(event.key==='Tab') setOpen(false);
  };
  const {people,agents}=callable; const anyone=people.length>0||agents.length>0;
- // design-reference: plusLabel. Attach is not built, so it is not named.
+ // design-reference: plusLabel. It names only what the menu holds for this Member.
  const label=`${t('chatMore')}: ${[anyone&&t('plusPartCall'),team&&!channel&&t('plusPartChannel'),t('plusPartCommands'),attach&&t('plusPartAttach'),picks&&t('plusPartModel')].filter(Boolean).join(t('plusPartsJoin'))}`;
  // design-reference: plus-team, openTeamCreate(opener): closing the dialog gives the focus back to "+".
  const newChannel=()=>{ setOpen(false); setMaking(true); };
