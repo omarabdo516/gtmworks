@@ -4,7 +4,7 @@ import { DndContext, DragOverlay, MouseSensor, TouchSensor, useDraggable, useDro
 import { useI18n } from '@/lib/i18n-client';
 import { BoardIcon } from '@/components/board-icon';
 import { prefersReducedMotion } from '@/lib/motion';
-import { inEdgeBand } from '@/lib/board-columns.mjs';
+import { inEdgeBand, scrollAxes } from '@/lib/board-columns.mjs';
 import '@/app/board.css';
 
 // The approved design's board (design-reference: #board-cols, .col, .kcard). A card is carried to another column with
@@ -47,7 +47,10 @@ export function KanbanBoard({label,busy,cards,columnName,onMove,renderOverlay,ch
  const canScroll=(element:Element)=>{
   if(!finger.current) return true;
   const box=element===document.scrollingElement?{left:0,top:0,right:innerWidth,bottom:innerHeight,width:innerWidth,height:innerHeight}:element.getBoundingClientRect();
-  return inEdgeBand(box,finger.current,{x:element.scrollWidth>element.clientWidth,y:element.scrollHeight>element.clientHeight});
+  // A box scrolls by itself on the axis it has the most room to scroll: the board runs sideways even when a runner lays
+  // it a pixel shorter than its columns, and that spill must not hand a held Card the board's other axis (#249).
+  const axes=scrollAxes({x:element.scrollWidth-element.clientWidth,y:element.scrollHeight-element.clientHeight});
+  return inEdgeBand(box,finger.current,axes);
  };
  const columnFor=(id:string|number|undefined)=>id===undefined?undefined:String(id).startsWith('column:')?String(id).slice(7):cards.find(card=>card.id===Number(id))?.column;
  return <DndContext id="work-board" sensors={sensors} autoScroll={{canScroll}} onDragStart={({active})=>setActiveId(Number(active.id))} onDragCancel={()=>setActiveId(null)} onDragEnd={({active,over})=>{

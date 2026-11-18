@@ -6,12 +6,16 @@ import { AsciiArtAnimation } from '@/components/paperclip/AsciiArtAnimation';
 import '@/app/globals.css';
 
 const reducedMotion = (on: boolean) => cdp().send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: on ? 'reduce' : 'no-preference' }] });
-afterEach(async () => { vi.useRealTimers(); await cdp().send('Emulation.setEmulatedMedia', { features: [] }); });
+afterEach(async () => { vi.useRealTimers(); vi.restoreAllMocks(); await cdp().send('Emulation.setEmulatedMedia', { features: [] }); });
 
 // The sign-in page's artwork, at the size of its half of a wide window. Its frames are counted in animation frames, so
 // the page's clock for them is the test's.
 test('with reduced motion the sign-in artwork holds one frame of paperclips; without it the paperclips move, and they hold still again when reduced motion comes back', async () => {
  vi.useFakeTimers({ toFake: ['requestAnimationFrame', 'cancelAnimationFrame'] });
+ // The paperclips spawn at random outside the grid and the moving picture has no ambient glyphs between them, so
+ // whether one's vertical stroke is in view when a poll gives up is luck. Pin the spawn so the test's clock alone
+ // decides what each frame shows.
+ vi.spyOn(Math, 'random').mockReturnValue(0.5);
  const frames = (ms: number) => { vi.advanceTimersByTime(ms); return art.textContent; };
  await reducedMotion(true);
  await render(<div style={{ width: 720, height: 900 }}><AsciiArtAnimation/></div>);

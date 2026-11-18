@@ -89,11 +89,15 @@ export function AgentDetails({panel,agent,details,tab:first,slug}:{panel:Details
   if(overlay&&!expanded) { show(); return; }
   document.getElementById('dp-settings')?.focus(); back.current=false;
  },[overlay,expanded,show]);
- const move=(event:KeyEvent<HTMLButtonElement>)=>{
+ // The tab that has the focus decides where an arrow goes, not the tab the last draw holds: a press that lands as the
+ // tabs change still moves on from the one it was pressed on (#219).
+ const move=(event:KeyEvent<HTMLDivElement>)=>{
   if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight') return;
+  const from=open.findIndex(item=>`dp-tab-${item.key}`===(event.target as HTMLElement).closest('[role="tab"]')?.id);
+  if(from<0) return;
   event.preventDefault();
   const step=(event.key==='ArrowLeft')===(language==='ar')?1:-1;
-  const next=open[(open.findIndex(item=>item.key===tab)+step+open.length)%open.length].key;
+  const next=open[(from+step+open.length)%open.length].key;
   setTab(next); document.getElementById(`dp-tab-${next}`)?.focus();
  };
  return <DetailsShell panel={panel} label={t('chatDetailsOf',agent.name)} start={<Link className="circle-btn" id="dp-settings" href={overlayHref(slug,'agents',{agent:agent.id})} aria-haspopup="dialog" aria-label={t('chatAgentSettings',agent.name)} title={t('settings')} onClick={()=>rememberOpener('dp-settings')}><ShellIcon name="gear"/></Link>}>
@@ -105,9 +109,9 @@ export function AgentDetails({panel,agent,details,tab:first,slug}:{panel:Details
     {agent.made&&<MadeLine made={agent.made} where="panel"/>}
    </div>
   </div>
-  <div className="segmented dp-tabs" role="tablist" aria-label={t('chatDetailsOf',agent.name)}>{tabs.map(item=>'soon' in item
+  <div className="segmented dp-tabs" role="tablist" aria-label={t('chatDetailsOf',agent.name)} onKeyDown={move}>{tabs.map(item=>'soon' in item
    ?<button key={item.key} type="button" role="tab" id={`dp-tab-${item.key}`} aria-selected="false" aria-disabled="true" tabIndex={-1} title={t('soon')}>{t(item.label)}<span className="sr-only"> · {t('soon')}</span></button>
-   :<button key={item.key} type="button" role="tab" id={`dp-tab-${item.key}`} aria-selected={tab===item.key} aria-controls="dp-panel" tabIndex={tab===item.key?0:-1} onClick={()=>setTab(item.key)} onKeyDown={move}>{t(item.label)}</button>)}</div>
+   :<button key={item.key} type="button" role="tab" id={`dp-tab-${item.key}`} aria-selected={tab===item.key} aria-controls="dp-panel" tabIndex={tab===item.key?0:-1} onClick={()=>setTab(item.key)}>{t(item.label)}</button>)}</div>
   <div id="dp-panel" role="tabpanel" aria-labelledby={`dp-tab-${tab}`} className="dp-sections"><Later details={details} part={tab}/></div>
  </DetailsShell>;
 }
