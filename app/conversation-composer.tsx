@@ -2,7 +2,7 @@
 import { createContext, lazy, Suspense, useContext, useEffect, useImperativeHandle, useRef, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent, type ReactNode, type Ref } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { onComposerFocus, takeComposerFocus } from '@/lib/composer-focus';
-import { insertToken, tokenAtCaret } from '@/lib/composer-mentions.mjs';
+import { commandList, insertToken, tokenAtCaret } from '@/lib/composer-mentions.mjs';
 import { useI18n } from '@/lib/i18n-client';
 import { statusKeys } from '@/lib/agent-details.mjs';
 import { ShellIcon } from '@/components/shell-icon';
@@ -46,7 +46,7 @@ export const newId=()=>{const b=crypto.getRandomValues(new Uint8Array(16));b[6]=
 // closes the "+" menu and the other way round. A note field draws the same list without Commands (app/card-sheet.tsx).
 export type MessageBoxHandle={insert:(sentence:string)=>void};
 export type CallablePerson={id:string,name:string,role?:'owner'|'manager'|'contributor'|'viewer'};
-export type CallableAgent={id:string,connection_id:string,name:string,speciality?:string|null,status?:keyof typeof statusKeys};
+export type CallableAgent={id:string,connection_id:string,name:string,speciality?:string|null,status?:keyof typeof statusKeys,role?:string|null};
 export type Callable={people:CallablePerson[],agents:CallableAgent[]};
 const CallableAgents=createContext<CallableAgent[]>([]);
 export function CallableAgentsProvider({agents,children}:{agents:CallableAgent[],children:ReactNode}) {
@@ -58,16 +58,17 @@ const Place=createContext<ComposerPlace|null>(null);
 export function ComposerPlaceProvider({place,children}:{place:ComposerPlace|null,children:ReactNode}) {
  return <Place value={place}>{children}</Place>;
 }
-// The Commands "/" offers (design-reference: CMDS), the same list the "+" menu names.
-const commands=[{command:'/agent',label:'plusCommandAgent'}];
-type Command=(typeof commands)[number];
+// The Commands "/" offers (design-reference: CMDS), the same list the "+" menu names: each job command whose Agent this
+// Member sees, naming it, then "/agent" (#159; lib/composer-mentions.mjs commandList). A channel's Agents carry no role,
+// so a channel's Commands are "/agent" alone.
+type Command={command:string,label:string,agent?:string};
 export type Suggestion={kind:'people'|'agents'|'commands',insert:string,person?:CallablePerson,agent?:CallableAgent,command?:Command};
 // design-reference: mentionMenu. A channel's "@" offers its other Members, then its Agents; a note's the same without
 // Commands; a Conversation's the Agents the Member sees. Each name and command is narrowed by what follows the token.
 export function mentionSuggestions(callable:Callable,token:{type:string,q:string},withCommands:boolean):Suggestion[] {
  const people=token.type==='@'?callable.people.filter(person=>firstName(person.name).toLowerCase().includes(token.q)||person.name.toLowerCase().includes(token.q)):[];
  const agents=token.type==='@'?callable.agents.filter(agent=>agent.name.toLowerCase().includes(token.q)):[];
- const matches=token.type==='/'&&withCommands?commands.filter(item=>item.command.slice(1).toLowerCase().startsWith(token.q)):[];
+ const matches=token.type==='/'&&withCommands?commandList(callable.agents).filter(item=>item.command.slice(1).toLowerCase().startsWith(token.q)):[];
  return [
   ...people.map(person=>({kind:'people' as const,insert:`@${firstName(person.name)} `,person})),
   ...agents.map(agent=>({kind:'agents' as const,insert:`@${agent.name} `,agent})),
@@ -91,7 +92,7 @@ export function MentionPop({listId,label,items,index,pick}:{listId:string,label:
     <bdi className="menu__hint" dir="auto">@{firstName(item.person.name)}</bdi></>}
    {item.agent&&<><span aria-hidden="true"><CompanyAgentFace agent={item.agent} size={22}/></span>
     <span className="menu__t"><bdi>{item.agent.name}</bdi>{(item.agent.status||item.agent.speciality)&&<span className="menu__d">{item.agent.status&&t(statusKeys[item.agent.status])}{item.agent.status&&item.agent.speciality&&' · '}{item.agent.speciality&&<bdi>{item.agent.speciality}</bdi>}</span>}</span></>}
-   {item.command&&<><ShellIcon name="slash"/><span className="menu__t">{t(item.command.label)}</span><span className="menu__hint menu__code">{item.command.command}</span></>}
+   {item.command&&<><ShellIcon name="slash"/><span className="menu__t">{t(item.command.label,item.command.agent)}</span><span className="menu__hint menu__code">{item.command.command}</span></>}
   </button>);
  });
  return <div className="menu" role="listbox" aria-label={label}>{rows}</div>;
@@ -242,7 +243,7 @@ function PlusMenu({open,setOpen,callable,channel,model,attach,pickFile,insert,fi
   else if(event.key==='Escape') { event.preventDefault(); event.stopPropagation(); close(true); }
   else if(event.key==='Tab') setOpen(false);
  };
- const {people,agents}=callable; const anyone=people.length>0||agents.length>0;
+ const {people,agents}=callable; const anyone=people.length>0||agents.length>0; const commands=commandList(agents);
  // design-reference: plusLabel. It names only what the menu holds for this Member.
  const label=`${t('chatMore')}: ${[anyone&&t('plusPartCall'),team&&!channel&&t('plusPartChannel'),t('plusPartCommands'),attach&&t('plusPartAttach'),picks&&t('plusPartModel')].filter(Boolean).join(t('plusPartsJoin'))}`;
  // design-reference: plus-team, openTeamCreate(opener): closing the dialog gives the focus back to "+".
@@ -269,7 +270,7 @@ function PlusMenu({open,setOpen,callable,channel,model,attach,pickFile,insert,fi
    <div className="menu__sep" role="separator"/>
    <div className="menu__label">{t('plusCommands')}</div>
    {commands.map(command=><button key={command.command} type="button" className="menu__item" role="menuitem" onClick={()=>pick(`${command.command} `)}>
-    <ShellIcon name="slash"/><span className="menu__t">{t(command.label)}</span><span className="menu__hint menu__code">{command.command}</span></button>)}
+    <ShellIcon name="slash"/><span className="menu__t">{t(command.label,command.agent)}</span><span className="menu__hint menu__code">{command.command}</span></button>)}
    {attach&&<><div className="menu__sep" role="separator"/>
     <button type="button" className="menu__item" role="menuitem" onClick={()=>{ setOpen(false); pickFile(); }}>
      <ShellIcon name="clip"/><span className="menu__t">{t('plusAttach')}</span></button></>}
