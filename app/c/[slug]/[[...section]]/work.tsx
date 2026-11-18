@@ -14,6 +14,7 @@ import { CompanyAgentFace } from '@/components/company-agent-face';
 import { CardDialog } from '@/app/card-dialog';
 import { CardSheet, type CardSheetData } from '@/app/card-sheet';
 import { toast } from '@/app/toast';
+import { useFlagToast } from '@/app/use-flag-toast';
 import { roleAgents } from '@/lib/role-agents';
 import { useAgentIdentities } from '@/lib/agent-identities-client';
 const NewCard=lazy(()=>import('./new-card'));
@@ -100,12 +101,9 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
  // while useShowCard flashes that Card and puts the focus on it.
  useEffect(()=>{ if(p.ideaAdded) toast(t('ideaAdded')); },[p.ideaAdded,t]);
  // A decided learning suggestion comes back to the board with its outcome in the address (#169): the item has left the
- // list, and the toast names the Agent it was for. Shown once; a reload does not say it again.
- useEffect(()=>{ if(!p.ruleDecision) return;
-  toast(t(p.ruleDecision.approve?'waitingRuleDecidedTeamWide':'waitingRuleDecidedDeclined',p.ruleDecision.agent),{icon:p.ruleDecision.approve?'check':'x'});
-  const url=new URL(location.href); url.searchParams.delete('decided'); url.searchParams.delete('agent');
-  history.replaceState(history.state,'',url.pathname+url.search+url.hash);
- },[p.ruleDecision,t]);
+ // list, and the toast names the Agent it was for, read by the page from the item the address names. Shown once; a reload
+ // does not say it again.
+ useFlagToast(['decided','item'],p.ruleDecision?t(p.ruleDecision.approve?'waitingRuleDecidedTeamWide':'waitingRuleDecidedDeclined',p.ruleDecision.agent):null,p.ruleDecision?.approve?'check':'x');
  // A Card is placed where its person drops it, or one place up or down its column with Shift and Up or Down (#174): the
  // column's own order is kept in the database, and a change of place inside one column is not a move to announce.
  const inColumn=(column:string)=>orderColumn(drawnCards.filter(c=>columnOfCard(c)===column),column).map(id=>drawnCards.find(c=>c.id===id)!);

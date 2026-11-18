@@ -317,3 +317,21 @@ test('a Card that waits again soon after its first nudge keeps its second one fo
   await expect.poll(() => badge()!.className).toBe('badge badge--wait');
  } finally { vi.useRealTimers(); }
 });
+
+// #169: a decided learning suggestion comes back to the board in the address, which names the item and never its Agent:
+// the toast names the Agent the page read, and both flags leave the address so a reload does not say it again.
+test('a decided suggestion is said once with the Agent\'s name the page read, and its flags leave the address', async () => {
+ const start = location.pathname + location.search;
+ history.replaceState(history.state, '', '/c/rs-learning/approvals?decided=reject&item=7');
+ toast.mockClear();
+ try {
+  await showWork(workProps({ section: 'work/board', focus: 'waiting', waiting: [], ruleDecision: { approve: false, agent: 'Ads' } }));
+  await expect.poll(() => toast.mock.calls).toEqual([['Ads won’t save it', { icon: 'x' }]]);
+  await expect.poll(() => new URL(location.href).search).toBe('');
+  // A reload of the clean address says nothing, even while the page is drawn with an outcome again.
+  toast.mockClear();
+  await showWork(workProps({ section: 'work/board', focus: 'waiting', waiting: [] }));
+  await new Promise(resolve => setTimeout(resolve, 80));
+  expect(toast).not.toHaveBeenCalled();
+ } finally { history.replaceState(history.state, '', start); }
+});

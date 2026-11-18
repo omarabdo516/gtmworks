@@ -18,8 +18,8 @@ import type { EmptyChat } from '@/app/agent-empty-chat';
 // Contributor (#17). ?new=ready opens the ready-made gallery over it (#14), for every Member who may write (#189): a
 // Viewer gets the plain chat, with no gallery drawn. The server decides it, as the database decides who may write.
 // ?tab=<key> opens the details on that tab.
-export default async function AgentChatPage({params,searchParams}:{params:Promise<{slug:string,agent?:string[]}>,searchParams:Promise<{new?:string,tab?:string,first?:string}>}) {
- const {t,language}=await getI18n(); const {slug,agent:parts}=await params; const {new:mode,tab,first}=await searchParams;
+export default async function AgentChatPage({params,searchParams}:{params:Promise<{slug:string,agent?:string[]}>,searchParams:Promise<{new?:string,tab?:string,first?:string,invites?:string}>}) {
+ const {t,language}=await getI18n(); const {slug,agent:parts}=await params; const {new:mode,tab,first,invites}=await searchParams;
  const db=await supabase(); const {data:{user}}=await db.auth.getUser();
  if(!user) redirect(`/sign-in?next=${encodeURIComponent(`/c/${slug}/chat${parts?.length?`/${parts.join('/')}`:''}`)}`);
  const {data:companies}=await db.from('companies').select('id,slug,name,work_mode').order('name'); const company=companies?.find(c=>c.slug===slug);
@@ -49,7 +49,7 @@ export default async function AgentChatPage({params,searchParams}:{params:Promis
  const details=agent?await agentDetails(db,{company:company.id,agent:agent.id,name:agent.name,slug,me:user.id,role:membership?.role||'',tab}):null;
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  return <Shell company={company} companies={companies||[]} personId={user.id} section="chat" title={t('chats')} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={waitingCount} agentId={agent?.id}>
-  <main className="convo-page h-full"><AgentChat slug={slug} company={company.id} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={details} writer={!!writer} team={company.work_mode==='team'} empty={empty} newAgent={newAgent} askOf={askOf} gallery={gallery} isNew={!!agent&&isNewFor(agent,user.id)} first={first==='alone'||first==='team'?first:undefined}/></main>
+  <main className="convo-page h-full"><AgentChat slug={slug} company={company.id} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={details} writer={!!writer} team={company.work_mode==='team'} empty={empty} newAgent={newAgent} askOf={askOf} gallery={gallery} isNew={!!agent&&isNewFor(agent,user.id)} first={first==='alone'||first==='team'?first:undefined} invites={Number.parseInt(invites||'0',10)||0}/></main>
  </Shell>;
 }
 
