@@ -151,7 +151,8 @@ select results_eq($$select state,done_by from public.reply_cards where id=curren
 select is((select count(*)::int from public.channel_messages where hand_card=current_setting('test.handcard')::bigint),1,'one quiet message asks its Agent to pick up');
 select is((select count(*)::int from public.channel_runs r join public.channel_messages m on m.id=r.message_id
  where m.hand_card=current_setting('test.handcard')::bigint and r.outcome is null),1,'and one Run of that Agent waits in the channel');
-select is((select count(*)::int from public.company_log where source='reply_card_answers' and action='agent_hand_done'),1,'the press is logged once');
+select results_eq($$select actor_id,action from public.company_log where source='reply_card_answers' and action='agent_hand_done'$$,
+ $$values ('20000000-0000-0000-0000-000000000005'::uuid,'agent_hand_done')$$,'the press is logged once, as the Member who did it');
 
 -- What one Member acts on leaves every Member's list.
 set local role authenticated;
