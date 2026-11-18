@@ -31,7 +31,7 @@ select ok(public.company_profile_ready('10000000-0000-0000-0000-000000000002'),'
 set local role service_role;
 select is((select count(*)::int from public.queued_conversations(null,null)),500,'a page holds 500 Conversations');
 select ok(not exists(select 1 from public.queued_conversations(null,null) where conversation='d1000000-0000-0000-0000-000000000001'),'the 501 blocked ones fill the first page');
-select is((select array_agg(conversation order by conversation) from public.queued_conversations(null,(select max(conversation) from public.queued_conversations(null,null)))),
+select is((select array_agg(conversation order by conversation) from public.queued_conversations(null,(select conversation from public.queued_conversations(null,null) order by conversation desc limit 1))),
  array['b1000000-0000-0000-0000-000000000501','d1000000-0000-0000-0000-000000000001']::uuid[],'the next page, after the first page''s last, reaches the ready one');
 select is((select count(*)::int from public.queued_conversations('d1000000-0000-0000-0000-000000000001',null)),1,'a reader asking for one Conversation gets it');
 select is((select count(*)::int from public.queued_conversations(null,'d1000000-0000-0000-0000-000000000001')),0,'nothing follows the last one');
