@@ -11,7 +11,7 @@ import { useI18n } from '@/lib/i18n-client';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { ShellIcon } from '@/components/shell-icon';
 import { MessageBox, postMessage, type MessageBoxHandle } from '@/app/conversation-composer';
-import type { Decision, SavedRule } from '@/lib/conversations';
+import type { Decision, LeadCard, SavedRule } from '@/lib/conversations';
 import { StepsList } from '@/app/run-steps';
 import { MadeCard, RequestCard } from '@/app/agent-card';
 import { ReplyCard } from '@/app/reply-card';
@@ -42,7 +42,8 @@ export function useConversationText() {
 // The record of a Conversation kept current while it is open, on its page or in a Card's sheet. The reply is collected
 // by the server from Hermes; the record is asked for again until the reply is in it. Each send restarts the asking, so
 // an answer about an earlier run cannot stop it before the new reply arrives. An Owner answers a request for an Agent
-// from their own page, so while one waits it is also asked for again, less often (#17).
+// from their own page, so while one waits it is also asked for again, less often (#17). A job handed to another Agent
+// (#317) keeps it asking until Lead's follow-up reply is in the record (`handover`).
 export function useConversationRecord({company,initial}:{company:string,initial:ConversationRecord}) {
  const id=initial.conversation.id;
  const [record,setRecord]=useState(initial); const [sent,setSent]=useState(0);
@@ -58,7 +59,7 @@ export function useConversationRecord({company,initial}:{company:string,initial:
  // A queued turn keeps `pending` true from one run to the next; each run's start and reply add a message.
  const runKey=`${pending}:${messages.length}`; const drawnRun=useRef(runKey);
  useEffect(()=>{ if(drawnRun.current===runKey) return; drawnRun.current=runKey; router.refresh(); },[runKey,router]);
- const asking=pending||requestWaits(messages);
+ const asking=pending||requestWaits(messages)||record.handover===true;
  useEffect(()=>{
   if(!asking) return;
   let stopped=false; let every=1500;
@@ -68,8 +69,8 @@ export function useConversationRecord({company,initial}:{company:string,initial:
     if(response.ok&&!stopped) {
      const result=await response.json() as ConversationRecord; setRecord(result);
      const now=madeCount(result.messages); if(now>made.current) router.refresh(); made.current=now;
-     if(!result.pending&&!requestWaits(result.messages)) return;
-     every=result.pending?1500:5000;
+     if(!result.pending&&!requestWaits(result.messages)&&!result.handover) return;
+     every=result.pending||result.handover?1500:5000;
     }
    } catch { /* Hermes or the network is down: ask again. */ }
    if(!stopped) timer=setTimeout(poll,every);
@@ -182,6 +183,7 @@ export function ConversationTurns({slug,company,record,writer,asked}:{slug:strin
    {!!message.steps?.list.length&&<StepsList steps={message.steps} c={c} cb={cb}/>}
    {message.body&&<div className="bubble bubble--agent" dir="auto">{message.body}</div>}
    {message.cards?.map(card=>card.kind==='made'?<MadeCard key={card.agent.id} slug={slug} agent={card.agent}/>:card.kind==='request'?<RequestCard key={`request${card.request.id}`} slug={slug} request={card.request}/>
+    :card.kind==='handed'?<HandedRow key={`handed${message.id}`} from={{connection_id:conversation.face,name:conversation.agent_name}} to={card} cb={cb}/>
     :<ReplyCard key={`reply${card.card.id}`} card={card.card} fresh={!drawnCards.has(card.card.id)} answer={answer} done={writer?done:undefined} decide={writer?permit:undefined} may={record.permit} connect={connect}/>)}
   </li>)}</ol>
   {pending&&!record.asking&&<p className="thinking convo-status" role="status">{working?c('conversationWorkingFor',conversation.agent_name,working):t('conversationWorking',conversation.agent_name)}</p>}
@@ -217,6 +219,18 @@ export function ConversationComposer({company,conversation,record,writer,asked,b
 
 // The tool calls the Engine reported for the reply's Run (#141; design-reference: stepsHTML, toggle-steps) are drawn by
 // StepsList (app/run-steps.tsx), as a channel's are (#148).
+
+// A job Lead handed to another Agent in this chat (#317; design-reference: the handoff row, `.handoff`): a quiet line
+// under Lead's reply with both faces and an arrow, "Handed to {Agent}", and the job. It is drawn from gtmworks's own
+// record of the handover, never from the Engine's helper events, and it has nothing to press.
+function HandedRow({from,to,cb}:{from:{connection_id:string,name:string},to:Extract<LeadCard,{kind:'handed'}>,cb:BidiText}) {
+ const {language}=useI18n();
+ return <p className="handed" role="note" data-handover>
+  <span className="handed__faces"><CompanyAgentFace agent={from} size={18}/><ShellIcon name={language==='ar'?'arrow':'arrowLtr'} className="handed__arrow"/><CompanyAgentFace agent={{connection_id:to.face,name:to.name}} size={18}/></span>
+  <span className="handed__t">{cb('handedTo',to.name)}</span>
+  {to.goal&&<span className="handed__d"><bdi>{to.goal}</bdi></span>}
+ </p>;
+}
 
 // The line under the Agent's reply when it saved a lasting rule it was told (#18; design-reference: ruleTurn, the
 // note--saved message): "Saved", whose rule it is, that it is in the log, and the way to the Agent's page while the rule

@@ -8,7 +8,8 @@ export type { PermissionChoice };
 // What Lead's turn of a run holds besides its words is a card: an Agent Lead made in it (#13), or a Member's request for
 // an Agent kept in it (#17), which shows the Owner's answer once there is one. The card is in Lead's reply of that run;
 // when Lead wrote nothing but the call, it is Lead's whole turn (`kind` made) after the message that asked. A card any
-// Agent shows with its reply (#136) is placed the same way.
+// Agent shows with its reply (#136) is placed the same way. A job Lead handed another Agent (#317) is a quiet row under
+// that reply (`kind` handed), drawn from gtmworks's own record of the handover.
 // A lasting rule the Agent saved in a run (#18) shows as a saved line (`kind` saved) after the Agent's reply of that run,
 // or after the message that told it when the reply was nothing but the call. A rule since removed keeps its line, since
 // the Conversation is the record as people saw it; only its way to the Agent's page goes, with the Agent's.
@@ -73,7 +74,7 @@ const replyReaders:{[K in ReplyCard['kind']]:(row:ReplyCardRow,apps:AppStates)=>
 export const offeredChoices=(card:Extract<ReplyCard,{kind:'permission'}>,may:readonly PermissionChoice[]):PermissionChoice[]=>
  (['deny','always','once'] as const).filter(choice=>card.choices.includes(choice)&&may.includes(choice));
 export const replyCardOf=(row:ReplyCardRow,apps:AppStates=null):ReplyCard|null=>Object.hasOwn(replyReaders,row.kind)?replyReaders[row.kind as ReplyCard['kind']](row,apps):null;
-export type LeadCard={kind:'made',agent:MadeAgent}|{kind:'request',request:AgentRequestView}|{kind:'reply',card:ReplyCard};
+export type LeadCard={kind:'made',agent:MadeAgent}|{kind:'request',request:AgentRequestView}|{kind:'reply',card:ReplyCard}|{kind:'handed',name:string,face:string,goal:string};
 export type SavedRule={id:string,agent:string|null,removed:boolean,said_at:string,sentTo?:string[]};
 type RuleDecision={approved:boolean,by:string,rule:string,at:string};
 export type Decision=({kind:'rule'}&RuleDecision)|({kind:'request',by:string,name:string,at:string}&({made:true}|{made:false,reason:string}));
