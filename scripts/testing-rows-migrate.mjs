@@ -2,13 +2,13 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DOC, readRows, rowPath, writeTable } from './testing-doc.mjs';
 
-// The one-off migration for #229, kept runnable so it can run again after another branch adds rows: every row of
+// The one-off migration for #229, kept runnable so it can run again after another branch adds or edits rows: every row of
 // docs/testing.md's "Every file" table and of "The browser suite, case by case" moves, word for word, into
 // tests/rows/<path>.md (a folded folder's row into tests/rows/<folder>/index.md, a spec no longer in the tree into a
-// file of its case rows alone). It writes the missing files, writes both tables back from the rows, and compares the old
-// table with the new source: it prints no difference when every row was carried over unchanged. Run
-// `node scripts/testing-rows-migrate.mjs --write` to move new rows, then plain `node scripts/testing-rows-migrate.mjs`
-// to compare.
+// file of its case rows alone). It writes each row into its file, creating or updating it, writes both tables back from
+// the rows, and compares the old table with the new source: it prints no difference when every row was carried over
+// unchanged. Run `node scripts/testing-rows-migrate.mjs --write` to move new rows, then plain
+// `node scripts/testing-rows-migrate.mjs` to compare.
 
 const write = process.argv.includes('--write');
 const doc = readFileSync(DOC, 'utf8');
@@ -37,29 +37,28 @@ for (const { file, line } of caseRows) {
   byFile.get(file).cases.push(line);
 }
 
-let moved = 0;
+let moved = 0, updated = 0;
 for (const [path, { line, cases }] of byFile) {
   const file = rowPath(path);
   const parts = line ? [line] : [];
   if (cases.length) parts.push(...(line ? [''] : []), '## Cases', '', ...cases);
   const content = `${parts.join('\n')}\n`;
-  if (!existsSync(file)) {
+  const existed = existsSync(file);
+  if (!existed || readFileSync(file, 'utf8') !== content) {
     if (!write) {
-      console.error(`${file}: missing; run "node scripts/testing-rows-migrate.mjs --write"`);
+      console.error(`${file}: ${existed ? 'differs from' : 'is missing from'} ${DOC}'s row; run "node scripts/testing-rows-migrate.mjs --write"`);
       process.exitCode = 1;
       continue;
     }
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, content);
-    moved++;
-  } else if (readFileSync(file, 'utf8') !== content) {
-    console.error(`${file}: differs from ${DOC}'s row; the row file is the source now, so the difference is left standing`);
-    process.exitCode = 1;
+    if (existed) updated++;
+    else moved++;
   }
 }
 if (write) {
   writeTable();
-  console.log(`${DOC}: wrote both tables from tests/rows/ (${moved} new row file(s))`);
+  console.log(`${DOC}: wrote both tables from tests/rows/ (${moved} new and ${updated} updated row file(s))`);
 }
 
 // Every old row against the new source, in both directions, as sets: the old table's order was not sorted by path.
