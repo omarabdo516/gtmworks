@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(11);
+select plan(12);
 -- Review of spec #353 (#350): an Agent's memory is reset by an active Owner of its Company alone, and each reset is one
 -- row of the Company log naming the person and the Agent, with nothing of the notes. RS Learning: 1 Owner, 2 Manager,
 -- 3 Contributor, 4 Viewer. Ads is not the main Agent, so a Member without a grant for it does not see it (#15).
@@ -8,7 +8,7 @@ select plan(11);
 set local session_replication_role=replica;
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
  ('e1000000-0000-0000-0000-000000000081','10000000-0000-0000-0000-000000000001','e0000000-0000-0000-0000-000000000081','Lead','General',true,'co-10000000000000000000000000000001'),
- ('e1000000-0000-0000-0000-000000000082','10000000-0000-0000-0000-000000000001','e0000000-0000-0000-0000-000000000082','Ads','Meta ads',false,'ag-e100000000000000000000000000000082'),
+ ('e1000000-0000-0000-0000-000000000082','10000000-0000-0000-0000-000000000001','e0000000-0000-0000-0000-000000000082','Ads','Meta ads',false,'ag-e1000000000000000000000000000082'),
  ('e1000000-0000-0000-0000-000000000083','10000000-0000-0000-0000-000000000003','e0000000-0000-0000-0000-000000000083','Sara','Writing',true,'co-10000000000000000000000000000003');
 insert into public.company_profiles(company_id,profile,tools_level,tools_policy) values
  ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',1,public.engine_tool_policy()),
