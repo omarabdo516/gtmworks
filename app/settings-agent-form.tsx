@@ -96,8 +96,9 @@ export function AgentInstructionsReadOnly({instructions,empty}:{instructions:str
 
 // The page's save bar: hidden until the draft differs. Cancel puts back what was saved and the focus on the first field;
 // Save sends every changed field in one request, then shows what the Engine kept. Every key of the draft is its own part
-// of `changes` (About, How it works, each Skill's switch), except the Voice section's keys, which go as one `voice` object
-// with the section's values. Every way out of the page asks the shared store first, which flashes this bar and focuses Save.
+// of `changes` (About, How it works, the thinking level and each Skill's switch), except the Voice section's keys, which
+// go as one `voice` object with the section's values. Every way out of the page asks the shared store first, which
+// flashes this bar and focuses Save.
 export function AgentSaveBar({company,agent,name}:{company:string,agent:string,name:string}) {
  const {t}=useI18n();
  const language=useDraftValue(agent,'voice.language','');

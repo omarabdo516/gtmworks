@@ -1142,5 +1142,11 @@
   "settingsSkillSeeSteps": "See the steps",
   "settingsSkillPageOf": "A skill of {0}",
   "settingsSkillSteps": "Steps",
-  "settingsSkillPageUnread": "The steps cannot be read right now."
+  "settingsSkillPageUnread": "The steps cannot be read right now.",
+  "settingsEffort": "How much it thinks before replying",
+  "settingsEffortLowHint": "Faster and cheaper. Good for short replies and repeat tasks.",
+  "settingsEffortMediumHint": "A good balance for most daily work.",
+  "settingsEffortHighHint": "Takes longer and thinks deeper. Right for plans and budget splits.",
+  "settingsEffortMaxHint": "The slowest, most expensive level. For big calls like a full quarter plan.",
+  "settingsEffortUnknown": "Unrecognised level"
 }

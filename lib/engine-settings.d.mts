@@ -15,7 +15,7 @@ export function settingsSchemaProblems(list:EngineSetting[],schema:{fields?:Reco
 export function readSettings(connection:{address:string,profile:string,key:string,managementAddress?:string},request?:{list?:EngineSetting[],installProfile?:string,driver?:object}):Promise<SettingsRead>;
 export function writeSetting(connection:{address:string,profile:string,key:string,managementAddress?:string},request:{setting:unknown,value:unknown,list?:EngineSetting[],driver?:object}):Promise<SettingWrite>;
 export type ModelOption={provider:string,providerName:string,model:string};
-export type CompanyModelAgent={id:string,name:string,own:boolean,choosable:boolean,model:string|null,choice:string|null,subagents:boolean,options:ModelOption[],settings:ListedSetting[]};
+export type CompanyModelAgent={id:string,name:string,own:boolean,choosable:boolean,model:string|null,choice:string|null,subagents:boolean,options:ModelOption[],effort:string|null,settings:ListedSetting[]};
 export type CompanyModels={default:{model:string|null,options:ModelOption[]},agents:CompanyModelAgent[]};
 export function readCompanyModels(db:SupabaseClient,request:{company:string,agent?:string|null,owner?:boolean,hermes?:{address:string,key:string}|null,driver?:object}):Promise<{models:CompanyModels|null}>;
 export function readAgentSettings(db:SupabaseClient,request:{company:string,agent?:string|null,hermes?:{address:string,key:string}|null,driver?:object,list?:EngineSetting[]}):Promise<{agents:AgentSettings[]|null}>;

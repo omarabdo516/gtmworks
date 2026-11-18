@@ -21,10 +21,12 @@ const LazyInstructions=lazy(()=>import('./settings-agent-form').then(module=>({d
 const LazyInstructionsRead=lazy(()=>import('./settings-agent-form').then(module=>({default:module.AgentInstructionsReadOnly})));
 const LazySaveBar=lazy(()=>import('./settings-agent-form').then(module=>({default:module.AgentSaveBar})));
 const LazyVoice=lazy(()=>import('./settings-agent-voice').then(module=>({default:module.AgentVoice})));
+const LazyEffort=lazy(()=>import('./settings-agent-effort').then(module=>({default:module.AgentEffort})));
 const LazyKeys=lazy(()=>import('./settings-models').then(module=>({default:module.ProviderKeys})));
 const LazyDefault=lazy(()=>import('./settings-models').then(module=>({default:module.DefaultModel})));
 const LazyEach=lazy(()=>import('./settings-models').then(module=>({default:module.EachAgent})));
 const LazyModel=lazy(()=>import('./settings-models').then(module=>({default:module.AgentModel})));
+const LazyDefaultEffort=lazy(()=>import('./settings-models').then(module=>({default:module.DefaultEffort})));
 const LazyCompanyMode=lazy(()=>import('./settings-learning-client').then(module=>({default:module.CompanyLearningMode})));
 const LazyAgentMode=lazy(()=>import('./settings-learning-client').then(module=>({default:module.AgentLearningMode})));
 const LazyRuleActions=lazy(()=>import('./settings-learning-client').then(module=>({default:module.RuleActions})));
@@ -45,10 +47,13 @@ export function AgentInstructionsReadOnly(props:{instructions:string,empty:strin
 export function AgentSaveBar(props:{company:string,agent:string,name:string}) { return <Suspense fallback={null}><LazySaveBar {...props}/></Suspense>; }
 /** @param {{company:string,agent:string,personName:string,voice:import('@/lib/agent-voice.mjs').AgentVoice}} props */
 export function AgentVoice(props:{company:string,agent:string,personName:string,voice:import('@/lib/agent-voice.mjs').AgentVoice}) { return <Suspense fallback={null}><LazyVoice {...props}/></Suspense>; }
+/** @param {{agent:string,effort:string|null,editable:boolean}} props */
+export function AgentEffort(props:{agent:string,effort:string|null,editable:boolean}) { return <Suspense fallback={null}><LazyEffort {...props}/></Suspense>; }
 export function ProviderKeys(props:ComponentProps<typeof Keys>) { return <Suspense fallback={null}><LazyKeys {...props}/></Suspense>; }
 export function DefaultModel(props:ComponentProps<typeof Default>) { return <Suspense fallback={null}><LazyDefault {...props}/></Suspense>; }
 export function EachAgent(props:ComponentProps<typeof Each>) { return <Suspense fallback={null}><LazyEach {...props}/></Suspense>; }
 export function AgentModel(props:ComponentProps<typeof Model>) { return <Suspense fallback={null}><LazyModel {...props}/></Suspense>; }
+export function DefaultEffort() { return <Suspense fallback={null}><LazyDefaultEffort/></Suspense>; }
 // The Learning section's controls (#28): the mode cards and the per-Agent mode, and a rule's Forget this and Bring it back.
 export function CompanyLearningMode(props:ComponentProps<typeof CompanyMode>) { return <Suspense fallback={null}><LazyCompanyMode {...props}/></Suspense>; }
 export function AgentLearningMode(props:ComponentProps<typeof AgentMode>) { return <Suspense fallback={null}><LazyAgentMode {...props}/></Suspense>; }
