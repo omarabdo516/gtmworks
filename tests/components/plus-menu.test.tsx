@@ -121,6 +121,14 @@ test('Arrow Down and Up move through the entries and wrap, Home and End jump to 
  await expect.element(plus).toHaveAttribute('aria-expanded', 'false');
 });
 
+test('in a channel the Commands fill each Agent\'s role from the Agents this Member sees (#159)', async () => {
+ // A channel's Agents carry no role of their own; the Agents the shell lists this Member do, and Reach is its meta Agent.
+ const seen: CallableAgent[] = [{ id: 'a2', connection_id: 'c2', name: 'Reach', role: 'meta' }];
+ const screen = await composer({ seen, call: { people: [], agents: [{ id: 'a2', connection_id: 'c2', name: 'Reach' }] } });
+ await screen.getByRole('button', { name: 'More: call someone, commands, attach' }).click();
+ await expect.element(screen.getByRole('menuitem', { name: 'New campaign with Reach /campaign' })).toBeVisible();
+});
+
 test('in a channel "Call someone in the channel" lists its other Members before "Call an agent" lists its Agents', async () => {
  const screen = await composer({ call: { people: [{ id: 'p2', name: 'Sara Hassan' }], agents: [agents[1]] }, attach: false });
  await screen.getByRole('button', { name: 'More: call someone, commands' }).click();

@@ -29,8 +29,8 @@ export const newId=()=>{const b=crypto.getRandomValues(new Uint8Array(16));b[6]=
 // whose Runs the Owner's pick applies to.
 // Images go with a message (#155; design-reference: plusMenuHTML's attach, filesHTML, syncFiles): "Attach a file" in
 // the "+" menu opens the picker, each chosen image is a chip above the field with a cross that takes it off and gives
-// the focus back, and Send is on with a file and no text. `attach` names whether this composer may carry them: a
-// channel's does not, yet. What may be attached is decided once for the composer and the route
+// the focus back, and Send is on with a file and no text. `attach` names whether this composer may carry them. What may
+// be attached is decided once for the composer and the route
 // (lib/attachments.mjs, conversationFilesProblem), and a refused pick says why in one line under the box.
 // One send key per typed message, so a double click or a retry runs once; a new text gets a new key.
 // While the Agent works (design-reference: syncComposer), an empty box turns the send arrow into a stop square for a
@@ -59,8 +59,7 @@ export function ComposerPlaceProvider({place,children}:{place:ComposerPlace|null
  return <Place value={place}>{children}</Place>;
 }
 // The Commands "/" offers (design-reference: CMDS), the same list the "+" menu names: each job command whose Agent this
-// Member sees, naming it, then "/agent" (#159; lib/composer-mentions.mjs commandList). A channel's Agents carry no role,
-// so a channel's Commands are "/agent" alone.
+// Member sees, naming it, then "/agent" (#159; lib/composer-mentions.mjs commandList).
 type Command={command:string,label:string,agent?:string};
 export type Suggestion={kind:'people'|'agents'|'commands',insert:string,person?:CallablePerson,agent?:CallableAgent,command?:Command};
 // design-reference: mentionMenu. A channel's "@" offers its other Members, then its Agents; a note's the same without
@@ -104,7 +103,10 @@ export type ModelTarget={company:string,conversation:string,agent:string};
 const refusalOf=(problem:'type'|'count'|'size'|'request')=>problem==='type'?'attachTypeRefused':problem==='count'?'attachCountRefused':problem==='size'?'attachSizeRefused':'attachRequestRefused';
 export function MessageBox({placeholder,label,send,stop,focus=false,call,model,refused,attach=true,voice,ref}:{placeholder:string,label?:string,send:(text:string,sendKey:string,files:File[])=>Promise<string|null>,stop?:{label:string,run:()=>Promise<string|null>},focus?:boolean,call?:Callable,model?:ModelTarget,refused?:{key:string,text:string},attach?:boolean,voice?:DictationTarget,ref?:Ref<MessageBoxHandle>}) {
  const {t}=useI18n(); const [text,setText]=useState(''); const [files,setFiles]=useState<File[]>([]); const [key,setKey]=useState(newId); const [busy,setBusy]=useState(false); const [error,setError]=useState('');
- const seen=useContext(CallableAgents); const callable=call??{people:[],agents:seen};
+ const seen=useContext(CallableAgents);
+ // A channel's Agents carry no role of their own; the Agents this Member sees do, so each takes its role by id, and its
+ // Commands are listed as in a Conversation.
+ const callable=call?{people:call.people,agents:call.agents.map(agent=>({...agent,role:agent.role??seen.find(seenAgent=>seenAgent.id===agent.id)?.role??null}))}:{people:[],agents:seen};
  // The suggestion list's token, entries and marked entry (#154); the field keeps the keyboard and points at the entry.
  const [list,setList]=useState<SuggestionList|null>(null); const [listId]=useState(()=>`mention-${newId()}`); const [plusOpen,setPlusOpen]=useState(false);
  // Text typed into the server-drawn box before this code arrived is the person's own: it is kept, and Send sends it.
