@@ -32,7 +32,10 @@ export async function POST(request:NextRequest) {
   if(typeof body?.company!=='string'||!uuid.test(body.company)||typeof body?.setting!=='string'||body.setting.length>120||body.setting.length<1)
    return reply({error:'settingInvalid'},400);
   if(body.agent!==undefined&&(typeof body.agent!=='string'||!uuid.test(body.agent))) return reply({error:'settingInvalid'},400);
-  if(!['string','number','boolean'].includes(typeof body.value)) return reply({error:'settingInvalid'},400);
+  // A model of null is the Agent following the Company default again; every other setting takes a string, number or
+  // boolean. A model is written through the Engine's profile route, never PUT /api/config (lib/engine-settings.mjs).
+  const followsDefault=body.setting==='model'&&body.value===null;
+  if(!followsDefault&&!['string','number','boolean'].includes(typeof body.value)) return reply({error:'settingInvalid'},400);
   if(!await routeAllowed(db,'app/api/agent-settings/route.ts','POST',body.company,user.id)) return reply({error:'settingNotAllowed'},403);
   const result=await changeCompanySetting(db,{company:body.company,agent:body.agent,setting:body.setting,value:body.value});
   return reply(result.body,result.status);
