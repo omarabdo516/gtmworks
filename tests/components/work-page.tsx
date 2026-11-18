@@ -1,7 +1,7 @@
 import { render } from 'vitest-browser-react';
 import { page } from 'vitest/browser';
 import { onTestFinished, vi } from 'vitest';
-import Work, { type UndoMove, type WorkAction, type WorkProps } from '@/app/c/[slug]/[[...section]]/work';
+import Work, { type PlaceCard, type UndoMove, type WorkAction, type WorkProps } from '@/app/c/[slug]/[[...section]]/work';
 import { Frame } from '@/app/frame';
 import { LanguageProvider } from '@/lib/i18n-client';
 import type { Language } from '@/lib/i18n.mjs';
@@ -22,12 +22,14 @@ const stages = [
 export const card = (more: Partial<Card> = {}): Card => ({ id: 1, title: 'أفكار لمحتوى الشهر', stage_id: 1, channel: 'Instagram', format: '', go_live: '2026-06-04T12:00:00+00:00',
  offering: '', segment: '', hook: '', goal: '', caption: '', next_actor: null, mode: null, approval_step_id: null, rejection_reason: null, project_id: null, ...more });
 export const workProps = (more: Partial<WorkProps> = {}): WorkProps => ({
- workAction: vi.fn<WorkAction>(async () => {}), undoMove: vi.fn<UndoMove>(async () => ({ state: 'refused' })), me: 'p-1', slug: 'rs-learning', company: 'co-1', section: 'work/board', stages, labels: [{ id: 1, name: 'static', color: '#87bba2' }],
+ workAction: vi.fn<WorkAction>(async () => {}), placeMove: vi.fn<PlaceCard>(async () => ({ ok: true })), undoMove: vi.fn<UndoMove>(async () => ({ state: 'refused' })), me: 'p-1', slug: 'rs-learning', company: 'co-1', section: 'work/board', stages, labels: [{ id: 1, name: 'static', color: '#87bba2' }],
  cards: [card()], items: [{ id: 1, card_id: 1, title: 'Script Ready', done: false }], members: [{ person_id: 'p-1', people: { name: 'عمر' } }],
  activity: [], creatives: [], versions: [], cardLabels: [], projects: [], assignees: [], approvableIds: [], agents: [],
  canCreate: true, initialCreating: false, attachments: [], ...more,
 });
 export const sent = (props: WorkProps) => vi.mocked(props.workAction).mock.calls.map(([form]) => Object.fromEntries(form));
+// What the board asked the server to place, read as the form it sent (#174).
+export const placed = (props: WorkProps) => vi.mocked(props.placeMove).mock.calls.map(([form]) => Object.fromEntries(form));
 
 // As app/layout.tsx sets the page's language and direction.
 export async function showWork(props: WorkProps, { language = 'en', width = 1440 }: { language?: Language, width?: number } = {}) {

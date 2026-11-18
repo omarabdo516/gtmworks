@@ -10,6 +10,7 @@ import { filesProblem } from '@/lib/attachments.mjs';
 import { createClient } from '@supabase/supabase-js';
 import { supabaseConfig } from '@/lib/supabase-config';
 import { driveNoteRuns } from '@/lib/channel-runs.mjs';
+import type { PlaceResult } from './work';
 // A note that calls an Agent starts its one Run at once (#22), as a channel message does; the worker reads the reply. A
 // start that fails is left to the worker and logged without the note.
 async function startNoteRun(note:number) {
@@ -42,6 +43,19 @@ export const undoMove=withActionLog('undoMove',async function undoMove(form: For
  logActionFailure('undoMove',error,{form});
  return {state:'refused'};
 });
+// A Card placed where its person drops it, or one place up or down its column (#174): the database decides every refusal
+// and the board answers it in place, so a refused place neither leaves the board nor offers an "Undo" (#168).
+export const placeMove=withActionLog('placeMove',async function placeMove(form: FormData): Promise<PlaceResult> {
+ const {t}=await getI18n();
+ const db=await supabase(); const company=String(form.get('company')); const evidence=String(form.get('evidence')||'').trim() || null;
+ if(!await actionAllowed(db,'placeMove',company)) return {error:t('youCannotMoveTheCardToThisStage')};
+ const {error}=await db.rpc('place_work_card',{c:company,card:Number(form.get('card')),target:String(form.get('column')||''),before_card:Number(form.get('before'))||null,evidence});
+ if(!error) { revalidatePath(`/c/${String(form.get('slug'))}`,'layout'); return {ok:true}; }
+ logActionFailure('placeMove',error,{form});
+ // The refusals the board has words for; anything else is a failure worth its own log line.
+ const reason=String(error.message||'');
+ return {error:reason.includes('not permitted')||reason.includes('contributors cannot move')?t('youCannotMoveTheCardToThisStage'):reason.includes('approval required')?t('boardNeedsApproval'):reason.includes('decision required')?t('boardDecideFirst'):t('couldNotSaveTheChangeCheckPermissionsAnd')};
+});
 export const workAction=withActionLog('workAction',async function workAction(form: FormData) { const {t}=await getI18n();
  const db=await supabase(); const company=String(form.get('company')); const slug=String(form.get('slug')); const op=String(form.get('op')); const card=Number(form.get('card')); const base=`/c/${slug}/work/board`; const evidence=String(form.get('evidence')||'').trim() || null;
  let error: {message:string}|null=null; let created: number|undefined;
@@ -68,8 +82,6 @@ export const workAction=withActionLog('workAction',async function workAction(for
  else if(op==='move') ({error}=await db.rpc('move_work_card',{c:company,card,stage:Number(form.get('stage')),evidence}));
  // The board moves a card by column (ADR 0013); the database picks the column's stage and applies every stage rule.
  else if(op==='move-column') ({error}=await db.rpc('move_work_card_to_column',{c:company,card,target:String(form.get('column')||''),evidence}));
- // A card keeps its place inside its column (#174): above the card it was dropped on, or at the column's end.
- else if(op==='place') ({error}=await db.rpc('place_work_card',{c:company,card,target:String(form.get('column')||''),before_card:Number(form.get('before'))||null,evidence}));
  else if(op==='edit') { const fields=Object.fromEntries(['title','offering','segment','hook','channel','format','go_live','goal','caption'].map(k=>[k,String(form.get(k)||'')])); ({error}=await db.rpc('edit_work_card',{c:company,card,fields,evidence})); }
  else if(op==='comment') {
   const stored=await storeFiles(db,company,form,`${card}/${crypto.randomUUID()}`); error=stored.error;

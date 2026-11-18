@@ -3,7 +3,7 @@ import type { ComponentProps } from 'react';
 import { cdp, userEvent } from 'vitest/browser';
 import type {} from '@vitest/browser-playwright';
 import type { WorkProps } from '@/app/c/[slug]/[[...section]]/work';
-import { card, sent, showWork, workProps, workView } from './work-page';
+import { card, placed, sent, showWork, workProps, workView } from './work-page';
 
 const { push, toast } = vi.hoisted(() => ({ push: vi.fn(), toast: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push, refresh: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/work/board' }));
@@ -266,6 +266,7 @@ test('a Card whose chat waits leaves Waiting on you by its answer: a mouse drop 
  expect(toast).toHaveBeenCalledTimes(2);
  expect(push.mock.calls).toEqual([['/c/rs-learning/work/board/9'], ['/c/rs-learning/work/board/9']]);
  expect(sent(props)).toEqual([]);
+ expect(placed(props)).toEqual([]);
  expect(document.querySelector('.kcard[data-card-id="9"]')!.closest('.col')!.getAttribute('data-column')).toBe('waiting');
 });
 
