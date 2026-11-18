@@ -26,6 +26,10 @@ test('Card, Member and Agent rows say who changed what', () => {
  assert.deepEqual([saved.act, saved.obj, saved.to], [['logActRuleSaved', { text: 'Ads' }], rule, { key: 'logRuleInEffect' }], 'the rule is the object, said in the chat and in effect now');
  const removed = describeEntry({ subject: 'agent', action: 'agent_rule_removed', agent_id: lead, details: { rule: 'x'.repeat(200) } }, { agentName: id => id === lead ? 'Ads' : undefined });
  assert.deepEqual([removed.act, removed.obj.length, removed.to], [['logActRuleRemoved', { text: 'Ads' }], 80, undefined]);
+ // A skill written into an Agent's profile, or switched for it: the skill is the object, the Agent named in the act.
+ const skills = ['skill_written', 'skill_enabled', 'skill_disabled'].map(action => describeEntry({ subject: 'agent', action, agent_id: lead, details: { agent_name: 'Ads', skill: 'weekly-recap' } }));
+ assert.deepEqual(skills.map(entry => [entry.act, entry.obj]), [[['logActSkillWritten', { text: 'Ads' }], 'weekly-recap'], [['logActSkillEnabled', { text: 'Ads' }], 'weekly-recap'], [['logActSkillDisabled', { text: 'Ads' }], 'weekly-recap']]);
+ assert.equal(i18n('en').t('logActSkillDisabled', 'Ads'), 'switched off a skill for Ads');
  // A Contributor's rule suggested for the team, then approved or refused, naming who taught it (#25).
  const [suggested, approved, rejected] = ['agent_rule_suggested', 'agent_rule_approved', 'agent_rule_rejected'].map(action => describeEntry({ subject: 'agent', action, agent_id: lead, details: { agent_name: 'Ads', rule, ...(action === 'agent_rule_suggested' ? {} : { taught_by: 'يوسف' }) } }));
  assert.deepEqual([suggested.act, suggested.obj, suggested.to], [['logActRuleSuggested', { text: 'Ads' }, { text: '' }], rule, { key: 'logRuleWaiting' }]);

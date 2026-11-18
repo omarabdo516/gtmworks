@@ -10,6 +10,7 @@ import { readFileSync } from 'node:fs';
 // A start whose outcome was once unknown stays unknown until Hermes names the run (ADR 0015): no later answer can prove
 // it never started, so its reservation is never released or failed, and the worker asks again until Hermes says which.
 const encryptionKey=Buffer.alloc(32,7).toString('base64');
+const hermes={address:'http://hermes:8642',key:'test-only-key'};
 const failing=code=>Object.assign(new TypeError('fetch failed'),{cause:{code}});
 
 test('a retry of an unknown start is never read as not started', async () => {
@@ -27,7 +28,7 @@ test('a retry of an unknown start is never read as not started', async () => {
 });
 
 const connection='f9000000-0000-0000-0000-000000000001';
-function databases({reserve={state:'reserved',connection,note:null},claim=[],usable=true,attempt=1,kept=true,stored=false,instructions=null,runNote={offersTools:false},model=null,modelRefused=true}={}) {
+function databases({reserve={state:'reserved',connection,profile:'writer',note:null},claim=[],usable=true,attempt=1,kept=true,stored=false,instructions=null,runNote={offersTools:false},model=null,modelRefused=true}={}) {
  const order=[]; const args={}; const reads=[];
  const rpc=who=>async(name,given)=>{ order.push(`${who} ${name}`); args[name]=given;
   if(name==='conversation_agent') return {data:null,error:null};
@@ -42,7 +43,6 @@ function databases({reserve={state:'reserved',connection,note:null},claim=[],usa
    if(runNote.rules===undefined&&!runNote.started) { runNote.tools=runNote.offersTools?`[${given.specs.create_agent}]`:null; runNote.rules=[]; }
    return {data:{tools:runNote.tools??null,rules:runNote.rules??[]},error:null};
   }
-  if(name==='pin_run_knowledge') return {data:[],error:null};
   if(name==='pin_run_history') return {data:null,error:null};
   if(name==='pin_run_model') return {data:model,error:null};
   if(name==='keep_unknown_start') return {data:kept,error:null};
@@ -60,7 +60,7 @@ const engine=(order,outcome)=>({engineFor:()=>({start:async run=>{ order.push(`s
 
 test('a direct send whose start is unknown is kept as its sender\'s turn for the worker to ask again', async () => {
  const {db,service,order,args}=databases();
- const sent=await sendMessage(db,service,{company:'co',conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...engine(order,startUnknown)});
+ const sent=await sendMessage(db,service,{company:'co',conversation:'c',sendKey:'k',message:'Hi',hermes,...engine(order,startUnknown)});
  assert.deepEqual(sent,{conversation:'c',queued:true});
  assert.deepEqual(args.keep_unknown_start,{conversation:'c',message_key:'k'});
  assert.ok(order.includes('start retry=false'));
@@ -71,26 +71,26 @@ test('a direct send whose start is unknown is kept as its sender\'s turn for the
 });
 
 test('the worker asks again on a turn whose start was unknown, and never fails it', async () => {
- const turn={company:'co',agent:'a',person:'p',send_key:'k',message:'Hi',connection,note:null};
+ const turn={company:'co',agent:'a',person:'p',send_key:'k',message:'Hi',connection,profile:'writer',note:null};
  // A first start that is unknown is marked, so every later answer is read as unknown too.
  const first=databases({claim:[{...turn,retry:false}]});
- await startQueuedTurns(first.service,{encryptionKey,...engine(first.order,startUnknown)});
+ await startQueuedTurns(first.service,{hermes,...engine(first.order,startUnknown)});
  assert.deepEqual(first.args.keep_unknown_start,{conversation:'c',message_key:'k'});
  assert.ok(first.order.indexOf('service begin_start')>=0&&first.order.indexOf('service begin_start')<first.order.indexOf('start retry=false'),'the attempt is recorded first');
  assert.ok(!first.order.includes('service fail_conversation_turn'));
  // Its retry is sent as a retry; a refusal then is not a proof, so the turn stays.
  const again=databases({claim:[{...turn,retry:true}]});
- await startQueuedTurns(again.service,{encryptionKey,...engine(again.order,null)});
+ await startQueuedTurns(again.service,{hermes,...engine(again.order,null)});
  assert.ok(again.order.includes('start retry=true'));
  assert.ok(!again.order.includes('service fail_conversation_turn'));
  // Nor does a Connection that cannot be used now: the turn waits for it.
  const unusable=databases({claim:[{...turn,retry:true}],usable:false});
- await startQueuedTurns(unusable.service,{encryptionKey,...engine(unusable.order,'run_1')});
+ await startQueuedTurns(unusable.service,{hermes:null,...engine(unusable.order,'run_1')});
  assert.ok(!unusable.order.some(step=>step.startsWith('start')));
  assert.ok(!unusable.order.includes('service fail_conversation_turn'));
  // A first start that is refused still fails its turn, so the next one can go.
  const refused=databases({claim:[{...turn,retry:false}]});
- await startQueuedTurns(refused.service,{encryptionKey,...engine(refused.order,null)});
+ await startQueuedTurns(refused.service,{hermes,...engine(refused.order,null)});
  assert.ok(refused.order.includes('service fail_conversation_turn'));
 });
 
@@ -98,15 +98,15 @@ test('the worker asks again on a turn whose start was unknown, and never fails i
 // asked again with the same key, the same input and the same pinned tools, as a retry.
 test('a handed step\'s turn whose first start is unknown is asked again with the same request, as a retry', async () => {
  const message='Omar did the step you handed over, "Publish the article" in WordPress, and pressed "Done it" at 2026-11-17 07:05 UTC. Pick up from there.';
- const turn={company:'co',agent:'a',person:'p',send_key:'h',message,connection,note:null};
+ const turn={company:'co',agent:'a',person:'p',send_key:'h',message,connection,profile:'writer',note:null};
  const runNote={offersTools:true}; const runs=[];
  const asked=(order,outcome)=>({engineFor:()=>({start:async run=>{ order.push(`start retry=${run.retry===true}`); runs.push(run); return outcome; }})});
  const first=databases({claim:[{...turn,retry:false}],runNote});
- await startQueuedTurns(first.service,{encryptionKey,...asked(first.order,startUnknown)});
+ await startQueuedTurns(first.service,{hermes,...asked(first.order,startUnknown)});
  assert.deepEqual(first.args.keep_unknown_start,{conversation:'c',message_key:'h'});
  assert.ok(!first.order.includes('service fail_conversation_turn'));
  const again=databases({claim:[{...turn,retry:true}],attempt:2,runNote});
- assert.equal(await startQueuedTurns(again.service,{encryptionKey,...asked(again.order,'run_9')}),1);
+ assert.equal(await startQueuedTurns(again.service,{hermes,...asked(again.order,'run_9')}),1);
  assert.deepEqual(again.args.record_conversation_turn,{conversation:'c',message_key:'h',run:'run_9',started_on:connection});
  assert.deepEqual(runs.map(run=>[run.idempotencyKey,run.input,run.retry]),[['c:h',message,false],['c:h',message,true]]);
  assert.deepEqual(runs[1].tools,runs[0].tools,'the tools pinned at its first start');
@@ -116,31 +116,31 @@ test('a handed step\'s turn whose first start is unknown is asked again with the
 test('a second attempt of the same key is a retry, and is never released or failed', async () => {
  // The server stopped after the first attempt reached Hermes; the person sends again with the same key.
  const resend=databases({attempt:2});
- const sent=await sendMessage(resend.db,resend.service,{company:'co',conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...engine(resend.order,null)});
+ const sent=await sendMessage(resend.db,resend.service,{company:'co',conversation:'c',sendKey:'k',message:'Hi',hermes,...engine(resend.order,null)});
  assert.ok(resend.order.includes('start retry=true'));
  assert.ok(!resend.order.some(step=>step.endsWith('release_conversation_run')));
  assert.deepEqual(sent,{conversation:'c',queued:true});
  // A worker claims a turn another claimer (or a stopped worker) already attempted: its refusal fails nothing.
- const turn={company:'co',agent:'a',person:'p',send_key:'k',message:'Hi',connection,note:null,retry:false};
+ const turn={company:'co',agent:'a',person:'p',send_key:'k',message:'Hi',connection,profile:'writer',note:null,retry:false};
  const second=databases({claim:[turn],attempt:2});
- await startQueuedTurns(second.service,{encryptionKey,...engine(second.order,null)});
+ await startQueuedTurns(second.service,{hermes,...engine(second.order,null)});
  assert.ok(second.order.includes('start retry=true'));
  assert.ok(!second.order.includes('service fail_conversation_turn'));
  // Only the first attempt's refusal releases or fails, and it names that attempt, so the database keeps a start
  // another attempt made meanwhile.
  const first=databases();
- assert.deepEqual(await sendMessage(first.db,first.service,{company:'co',conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...engine(first.order,null)}),{error:'conversationHermesFailed',status:502});
+ assert.deepEqual(await sendMessage(first.db,first.service,{company:'co',conversation:'c',sendKey:'k',message:'Hi',hermes,...engine(first.order,null)}),{error:'conversationHermesFailed',status:502});
  assert.deepEqual(first.args.release_conversation_run,{conversation:'c',c:'co',message_key:'k',attempt:1});
  const failed=databases({claim:[turn]});
- await startQueuedTurns(failed.service,{encryptionKey,...engine(failed.order,null)});
+ await startQueuedTurns(failed.service,{hermes,...engine(failed.order,null)});
  assert.deepEqual(failed.args.fail_conversation_turn,{conversation:'c',message_key:'k',attempt:1});
 });
 
 // #158, review of #330: a waiting turn refused for its pinned model is settled in one database call that names its
 // attempt, so the revert and the turn's failure commit together, or neither does.
 test('a waiting turn the Engine refused for its model is refused and failed in one call, for its own attempt', async () => {
- const refused=databases({claim:[{company:'co',agent:'a',person:'p',send_key:'k',message:'Hi',connection,note:null,retry:false}],attempt:1,model:{provider:'openrouter',model:'openai/gpt-5.5'}});
- await startQueuedTurns(refused.service,{encryptionKey,...engine(refused.order,null)});
+ const refused=databases({claim:[{company:'co',agent:'a',person:'p',send_key:'k',message:'Hi',connection,profile:'writer',note:null,retry:false}],attempt:1,model:{provider:'openrouter',model:'openai/gpt-5.5'}});
+ await startQueuedTurns(refused.service,{hermes,...engine(refused.order,null)});
  assert.deepEqual(refused.args.refuse_run_model,{conversation:'c',message_key:'k',attempt:1});
  assert.ok(!refused.order.includes('service fail_conversation_turn'),'the turn is failed inside the refusal, not by a second call');
 });
@@ -150,33 +150,33 @@ test('a waiting turn the Engine refused for its model is refused and failed in o
 test('a sent Run the Engine refused for its model is released and refused in one call, for its own attempt', async () => {
  const model={provider:'openrouter',model:'openai/gpt-5.5'};
  const refused=databases({model});
- assert.deepEqual(await sendMessage(refused.db,refused.service,{company:'co',conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...engine(refused.order,null)}),{error:'conversationModelRefused',status:502});
+ assert.deepEqual(await sendMessage(refused.db,refused.service,{company:'co',conversation:'c',sendKey:'k',message:'Hi',hermes,...engine(refused.order,null)}),{error:'conversationModelRefused',status:502});
  assert.deepEqual(refused.args.refuse_conversation_run_model,{conversation:'c',c:'co',message_key:'k',attempt:1});
  assert.ok(refused.order.includes('person refuse_conversation_run_model'),'the sender makes it');
  assert.ok(!refused.order.some(step=>step.endsWith(' release_conversation_run')||step.endsWith(' refuse_run_model')),'and no second call');
  // A stale attempt, or one whose model was already changed, is told as a refused start.
  const stale=databases({model,modelRefused:false});
- assert.deepEqual(await sendMessage(stale.db,stale.service,{company:'co',conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...engine(stale.order,null)}),{error:'conversationHermesFailed',status:502});
+ assert.deepEqual(await sendMessage(stale.db,stale.service,{company:'co',conversation:'c',sendKey:'k',message:'Hi',hermes,...engine(stale.order,null)}),{error:'conversationHermesFailed',status:502});
 });
 
 test('a lost start whose reservation is gone answers by what was stored, never as waiting', async () => {
  // Another attempt's record landed meanwhile: the message was sent.
  const sent=databases({kept:false,stored:true});
- assert.deepEqual(await sendMessage(sent.db,sent.service,{company:'co',conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...engine(sent.order,startUnknown)}),{conversation:'c'});
+ assert.deepEqual(await sendMessage(sent.db,sent.service,{company:'co',conversation:'c',sendKey:'k',message:'Hi',hermes,...engine(sent.order,startUnknown)}),{conversation:'c'});
  // Nothing stored and nothing kept: the person is asked to send again.
  const lost=databases({kept:false});
- assert.deepEqual(await sendMessage(lost.db,lost.service,{company:'co',conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...engine(lost.order,startUnknown)}),{error:'conversationSendAgain',status:409});
+ assert.deepEqual(await sendMessage(lost.db,lost.service,{company:'co',conversation:'c',sendKey:'k',message:'Hi',hermes,...engine(lost.order,startUnknown)}),{error:'conversationSendAgain',status:409});
 });
 
 test('a run to an Agent with its own instructions carries them, then its sender\'s note, sent now or queued', async () => {
  const instructions='You are the ad critic on RS Learning\'s marketing team.';
  const sent=[]; const engine={engineFor:()=>({start:async run=>{ sent.push(run.instructions); return 'run_1'; }})};
- const now=databases({instructions,reserve:{state:'reserved',connection,note:'Answer in short points.'}});
- assert.deepEqual(await sendMessage(now.db,now.service,{company:'co',conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...engine}),{conversation:'c'});
- const queued=databases({instructions,claim:[{company:'co',agent:'a7',person:'p',send_key:'k',message:'Hi',connection,note:null,retry:false}]});
- await startQueuedTurns(queued.service,{encryptionKey,...engine});
- const plain=databases({claim:[{company:'co',agent:'a8',person:'p',send_key:'k',message:'Hi',connection,note:null,retry:false}]});
- await startQueuedTurns(plain.service,{encryptionKey,...engine});
+ const now=databases({instructions,reserve:{state:'reserved',connection,profile:'writer',note:'Answer in short points.'}});
+ assert.deepEqual(await sendMessage(now.db,now.service,{company:'co',conversation:'c',sendKey:'k',message:'Hi',hermes,...engine}),{conversation:'c'});
+ const queued=databases({instructions,claim:[{company:'co',agent:'a7',person:'p',send_key:'k',message:'Hi',connection,profile:'writer',note:null,retry:false}]});
+ await startQueuedTurns(queued.service,{hermes,...engine});
+ const plain=databases({claim:[{company:'co',agent:'a8',person:'p',send_key:'k',message:'Hi',connection,profile:'writer',note:null,retry:false}]});
+ await startQueuedTurns(plain.service,{hermes,...engine});
  assert.deepEqual(sent,[`${instructions}\n\n${noteInstructions('Answer in short points.')}`,instructions,undefined]);
  assert.ok(queued.reads.some(read=>read.table==='hermes_agents'&&read.id==='a7'&&read.company_id==='co'),'the claimed turn\'s Agent, in its Company');
 });
@@ -196,15 +196,15 @@ test('a retry of a Lead start sends the tools of its first attempt, though the t
  const runNote={offersTools:true}; const message='Find me someone to run our Meta ads';
  try {
   const first=databases({runNote});
-  assert.deepEqual(await sendMessage(first.db,first.service,{company:'co',conversation:'c',sendKey:'k',message,encryptionKey}),{conversation:'c',queued:true});
+  assert.deepEqual(await sendMessage(first.db,first.service,{company:'co',conversation:'c',sendKey:'k',message,hermes}),{conversation:'c',queued:true});
   assert.ok(bodies[0].includes(`- create_agent: ${offered}`),'the first start offers create_agent');
   spec.description='Adds an agent, as a later version words it.';
-  const again=databases({runNote,attempt:2,claim:[{company:'co',agent:'a',person:'p',send_key:'k',message,connection,note:null,retry:true}]});
-  assert.equal(await startQueuedTurns(again.service,{encryptionKey}),1);
+  const again=databases({runNote,attempt:2,claim:[{company:'co',agent:'a',person:'p',send_key:'k',message,connection,profile:'writer',note:null,retry:true}]});
+  assert.equal(await startQueuedTurns(again.service,{hermes}),1);
   assert.equal(again.args.record_conversation_turn.run,'run_1','the worker\'s retry finds the run');
   assert.equal(new Set(bodies).size,1,'every attempt sent the first body');
   const fresh=databases({runNote:{offersTools:true}});
-  assert.deepEqual(await sendMessage(fresh.db,fresh.service,{company:'co',conversation:'c',sendKey:'k2',message,encryptionKey}),{conversation:'c'});
+  assert.deepEqual(await sendMessage(fresh.db,fresh.service,{company:'co',conversation:'c',sendKey:'k2',message,hermes}),{conversation:'c'});
   assert.ok(bodies.at(-1).includes(`- create_agent: ${spec.description}`),'a new run offers the tools as they are now');
  } finally { restore(); spec.description=offered; }
 });
@@ -226,8 +226,8 @@ test('a Lead start the previous app version began is asked again with the body i
  try {
   const previous=engineFor({address:'http://hermes:8642',profile:'writer',key:'test-only-key'});
   assert.equal(await previous.start({conversation:'c',input:message,idempotencyKey:'c:k',tools:previousSpecs,retry:false}),startUnknown,'its answer is lost');
-  const again=databases({runNote:{offersTools:true,tools:pinned,started:true},attempt:2,claim:[{company:'co',agent:'a',person:'p',send_key:'k',message,connection,note:null,retry:true}]});
-  assert.equal(await startQueuedTurns(again.service,{encryptionKey}),1);
+  const again=databases({runNote:{offersTools:true,tools:pinned,started:true},attempt:2,claim:[{company:'co',agent:'a',person:'p',send_key:'k',message,connection,profile:'writer',note:null,retry:true}]});
+  assert.equal(await startQueuedTurns(again.service,{hermes}),1);
   assert.equal(bodies.length,3);
   assert.equal(new Set(bodies).size,1,'the new worker\'s retry sent the previous version\'s body, byte for byte');
   assert.equal(again.args.record_conversation_turn.run,'run_1','and its turn is recorded with the run Hermes named');

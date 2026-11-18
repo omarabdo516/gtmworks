@@ -71,7 +71,7 @@
       },
       {
         "file": "tests/conversation-runs-roles.test.mjs",
-        "test": "a Contributor's message goes through the Owner's pinned Connection, and a refused Viewer reaches no engine"
+        "test": "a Contributor's message goes to the agent's pinned profile, and a refused Viewer reaches no engine"
       }
     ]
   }

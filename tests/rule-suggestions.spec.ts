@@ -19,10 +19,7 @@ test.describe.configure({mode:'serial'});
 test.beforeAll(({},testInfo)=>{
  freshSeed(testInfo.file);
  query(`do $$ begin
-  insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values
-   ('${connection}','${rsLearning}','${omar}','http://127.0.0.1:9/p/suggest','suggest-ads','no-key','unreachable'),
-   ('${elsewhere}','${rsConsultations}','${omar}','http://127.0.0.1:9/p/suggest-alone','suggest-alone','no-key','unreachable');
-  insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('${ads}','${rsLearning}','${connection}','Ads','Runs the ads.'),('${alone}','${rsConsultations}','${elsewhere}','Ads','Runs the ads.');
+    insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile) values ('${ads}','${rsLearning}','${connection}','Ads','Runs the ads.','suggest-ads'),('${alone}','${rsConsultations}','${elsewhere}','Ads','Runs the ads.','suggest-alone');
   insert into public.member_agent_access(company_id,person_id,agent_id) select company_id,person_id,'${ads}' from public.members where company_id='${rsLearning}' and removed_at is null and role<>'owner';
   insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${theirs}','${rsLearning}','${reviewer}','${ads}','Ads'),('${omars}','${rsConsultations}','${omar}','${alone}','Ads');
   insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at) values
@@ -64,7 +61,7 @@ test('a Contributor\'s rules are sent as suggestions to the Owner and the Manage
  await expect(turns).toHaveCount(6);
  for(const n of [2,5]) {
   await expect(turns.nth(n)).toHaveAttribute('data-kind','suggested');
-  await expect(turns.nth(n)).toHaveText('Sent as a suggestion to عمر and مدير · in “Waiting on you”');
+  await expect(turns.nth(n)).toHaveText('Sent as a suggestion to عمر and مدير · in “Waiting on you” · the agent follows it once approved');
  }
  await page.goto(`/c/rs-learning/settings?agent=${ads}`);
  await expect(page.locator('.rl-row')).toHaveCount(0);
@@ -98,7 +95,7 @@ test('the Owner makes one team-wide from "Waiting on you"; the Contributor reads
  await expect(decided).toHaveText(`Savedعمر approved it, now for the whole team: «${saudi}»`);
 });
 
-test('a Manager declines the other; the Contributor reads that it stays in their own work, and the log names it',async({page})=>{
+test('a Manager declines the other; the Contributor reads that the agent won’t follow it, and the log names it',async({page})=>{
  await signIn(page,'manager@example.com','/c/rs-learning/approvals');
  await expect(suggestion(page,saudi)).toHaveCount(0);
  await suggestion(page,emojis).getByRole('button',{name:'Decline'}).click();
@@ -108,14 +105,14 @@ test('a Manager declines the other; the Contributor reads that it stays in their
  await page.goto('/c/rs-learning/log');
  const declined=page.locator('.lg-body').filter({hasText:'declined a rule مراجع suggested for Ads'});
  await expect(declined).toHaveCount(1);
- await expect(declined.locator('.lg-change')).toHaveText('Stays in their own work only');
+ await expect(declined.locator('.lg-change')).toHaveText('The agent won’t follow it');
  await page.context().clearCookies();
 
  await signIn(page,'reviewer@example.com',`/c/rs-learning/conversations/${theirs}`);
  const decided=page.locator('.turns > li[data-kind="decided"]');
  await expect(decided).toHaveCount(2);
  await expect(decided.last()).toHaveAttribute('data-decision','declined');
- await expect(decided.last()).toHaveText('مدير didn’t approve it for the team. It stays in your own work only.');
+ await expect(decided.last()).toHaveText('مدير didn’t approve it, so the agent won’t follow it. A rule reaches the agent only once it’s approved.');
  await page.goto('/c/rs-learning/log');
  await expect(page.locator('.lg-body').filter({hasText:'declined a rule مراجع suggested for Ads'})).toHaveCount(1);
  await page.context().clearCookies();

@@ -47,17 +47,16 @@ test('the Agents list puts the main Agent first and keeps the others in order', 
   assert.deepEqual(agentsMainFirst(agents).map(agent => agent.id), ['b', 'a', 'c']);
 });
 
-test('usage totals count only this company’s days inside the period, today included', () => {
-  const today = new Date('2026-11-13T15:00:00Z');
+// #347: the period is Hermes's (its usage analytics over the days asked); the totals add up this company's profiles.
+test('usage totals add up only this company’s profiles, and count the ones Hermes could not be asked about apart', () => {
   const rows = [
-    { company_id: 'rs', day: '2026-11-13', input_tokens: 100, output_tokens: 20, runs: 2, unknown_runs: 1 },
-    { company_id: 'rs', day: '2026-11-07', input_tokens: 10, output_tokens: 5, runs: 1, unknown_runs: 0 },
-    { company_id: 'rs', day: '2026-11-06', input_tokens: 1000, output_tokens: 0, runs: 4, unknown_runs: 0 },
-    { company_id: 'other', day: '2026-11-13', input_tokens: 5000, output_tokens: 0, runs: 9, unknown_runs: 0 },
+    { company_id: 'rs', input: 100, output: 20, sessions: 2 },
+    { company_id: 'rs', input: 10, output: 5, sessions: 1 },
+    { company_id: 'rs', input: null, output: null, sessions: null },
+    { company_id: 'other', input: 5000, output: 0, sessions: 9 },
   ];
-  assert.deepEqual(usageTotals(rows, 'rs', 7, today), { tokens: 135, runs: 3, unknown: 1 });
-  assert.deepEqual(usageTotals(rows, 'rs', 30, today), { tokens: 1135, runs: 7, unknown: 1 });
-  assert.deepEqual(usageTotals([], 'rs', 7, today), { tokens: 0, runs: 0, unknown: 0 });
+  assert.deepEqual(usageTotals(rows, 'rs'), { tokens: 135, sessions: 3, unknown: 1 });
+  assert.deepEqual(usageTotals([], 'rs'), { tokens: 0, sessions: 0, unknown: 0 });
 });
 
 test('the overlay shows no invented figures: no prices, no sample usage or backups', () => {

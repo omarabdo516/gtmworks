@@ -63,20 +63,6 @@ test('inviting someone who already has an account sends them a sign-in link', as
   }).toPass({ timeout: 30000 });
 });
 
-test('a key that cannot be revoked says so instead of staying silently active', async ({ page }) => {
-  watch(page);
-  await signIn(page, 'omar@example.com', '/c/rs-learning/settings/agents');
-  await page.locator('.agent-create-form').getByRole('button', { name: 'Member', exact: true }).click();
-  await page.getByRole('menuitemradio', { name: 'Lead', exact: true }).click();
-  await page.getByRole('button', { name: 'Create key' }).click();
-  await expect(page.locator('.agent-secret code')).toBeVisible({ timeout: 15000 });
-  await page.reload();
-  // The request names a company the person has no key in, so the database changes nothing.
-  await page.locator('.agent-key-row input[name=company]').first().evaluate(input => { (input as HTMLInputElement).value = '00000000-0000-0000-0000-000000000000'; });
-  await page.getByRole('button', { name: 'Revoke key Lead' }).first().click();
-  await expect(alerts(page).filter({ hasText: 'Could not save the change' })).toBeVisible({ timeout: 15000 });
-});
-
 test('the old all-companies address is not found through the proxy', async ({ page }) => {
   watch(page);
   // Omar is the Owner of every seeded company; there is no list of companies beyond his own.

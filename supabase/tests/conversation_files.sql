@@ -4,13 +4,10 @@ select plan(15);
 -- A Conversation's files (#21) are as private as the Conversation: its own person reads them while they see its Agent;
 -- another Member of the same Company, whatever their Role, and a Member of another Company read none, and nobody
 -- writes them by hand.
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state)
- select ('f2100000-0000-0000-0000-00000000000'||n)::uuid,case when n=3 then '10000000-0000-0000-0000-000000000003' else '10000000-0000-0000-0000-000000000001' end::uuid,
-  '20000000-0000-0000-0000-000000000001','http://localhost','files-'||n,'ciphertext','connected' from generate_series(1,3) n;
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values
- ('a2100000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','f2100000-0000-0000-0000-000000000001','Lead','General',true),
- ('a2100000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','f2100000-0000-0000-0000-000000000002','Ads','Ads',false),
- ('a2100000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000003','f2100000-0000-0000-0000-000000000003','Lead','General',true);
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
+ ('a2100000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','f2100000-0000-0000-0000-000000000001','Lead','General',true,'default'),
+ ('a2100000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','f2100000-0000-0000-0000-000000000002','Ads','Ads',false,'default'),
+ ('a2100000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000003','f2100000-0000-0000-0000-000000000003','Lead','General',true,'default');
 insert into public.member_agent_access(company_id,person_id,agent_id) values ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','a2100000-0000-0000-0000-000000000002');
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values
  ('c2100000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','a2100000-0000-0000-0000-000000000002','Ads'),

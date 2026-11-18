@@ -1,7 +1,7 @@
 import { test, expect } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { fakeHermes } from './fake-hermes.mjs';
+import { laneHermes } from './lane-hermes';
 import { signIn } from './sign-in';
 
 // A company connects its own ChatGPT subscription in its own Hermes profile (#3, ADR 0014). Against a fake Hermes,
@@ -14,21 +14,16 @@ const member='20000000-0000-0000-0000-000000000005';
 const profile='co-10000000000000000000000000000003';
 
 test('the Owner signs the company in to ChatGPT and out again; a member only sees whether it is connected',async({page,browser})=>{
- // The driver reaches the management listener on port 9119 of the Hermes address, as in the install.
- const fake=await fakeHermes({managementPort:9119});
+ // The driver reaches the management listener on port 9119 of the bundled Hermes address, as in the install.
+ const fake=await laneHermes();
  fake.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
  const languages=JSON.parse(query(`select id,language from public.people where id in ('${omar}','${member}')`)) as {id:string,language:string}[];
  const agent=randomUUID();
- let connection='';
  try {
   query(`update public.people set language='en' where id in ('${omar}','${member}')`);
   await signIn(page,'omar@example.com','/c/aleem/settings?section=models');
-  // The bundled Connection to the company's own profile, saved through the Owner's own route (its key encrypted), then
-  // marked as the worker's (its audit row) with the profile recorded, as the worker leaves them.
-  const saved=await page.request.post('/api/hermes-connections',{data:{company:aleem,intent:'save',address:fake.address,profile,key:fake.settings.key}});
-  expect(saved.status()).toBe(200); connection=(await saved.json()).connection.id;
-  query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('${agent}','${aleem}','${connection}','Lead','General')`);
-  query(`insert into public.hermes_agent_audit(company_id,actor_id,agent_id,action,details) values ('${aleem}','${omar}','${agent}','PROVIDE_BUNDLED_HERMES_AGENT',jsonb_build_object('connection_id','${connection}'))`);
+  // Lead on the company's own profile of the bundled Hermes, with the profile recorded, as the worker leaves them.
+  query(`insert into public.hermes_agents(id,company_id,name,speciality,profile) values ('${agent}','${aleem}','Lead','General','${profile}')`);
   query(`insert into public.company_profiles(company_id,profile,tools_level) values ('${aleem}','${profile}',1)`);
 
   // A member: the state, no button, and the server refuses a start.
@@ -65,9 +60,7 @@ test('the Owner signs the company in to ChatGPT and out again; a member only see
   expect(fake.settings.profiles.get(profile)!.credentials['openai-codex']).toBeUndefined();
  } finally {
   query(`delete from public.company_profiles where company_id='${aleem}'`);
-  query(`delete from public.hermes_agent_audit where agent_id='${agent}'`);
   query(`delete from public.hermes_agents where id='${agent}'`);
-  if(connection) query(`delete from public.hermes_connections where id='${connection}'`);
   for(const person of languages) query(`update public.people set language='${person.language}' where id='${person.id}'`);
   await fake.close();
  }

@@ -1,10 +1,9 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(16);
+select plan(17);
 -- A company Omar is not a member of: nothing lets him write there, even with two-step verification.
 insert into public.companies(id,slug,name) values ('10000000-0000-0000-0000-000000000099','conversation-outside','Test');
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('e0000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://localhost','writer','ciphertext','connected');
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('e1000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','e0000000-0000-0000-0000-000000000001','Mona','Writing',true);
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('e1000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','e0000000-0000-0000-0000-000000000001','Mona','Writing',true,'writer');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select set_config('request.jwt.claims','{"aal":"aal2"}',true);
@@ -14,10 +13,15 @@ select is(public.send_conversation_message('e2000000-0000-0000-0000-000000000001
 select is((select count(*)::int from public.conversation_messages where conversation_id='e2000000-0000-0000-0000-000000000001'),1,'one stored message');
 select is((select person_id::text||' '||author from public.conversation_messages),'20000000-0000-0000-0000-000000000001 person','the row names its author');
 select throws_ok($$select public.send_conversation_message('e2000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000002','e1000000-0000-0000-0000-000000000001','Hi','e3000000-0000-0000-0000-000000000002','run_2')$$,'P0002','conversationNotFound','a conversation stays in its company');
-select lives_ok($$select public.record_conversation_reply('e2000000-0000-0000-0000-000000000001','run_1','Hi Omar','session_1')$$,'the reply to a sent message is recorded');
-select lives_ok($$select public.record_conversation_reply('e2000000-0000-0000-0000-000000000001','run_1','Hi again','session_1')$$,'a second read of the same run is harmless');
+-- Only the worker records a reply (close_conversation_run); no Member may (20270214000000).
+select throws_ok($$select public.close_conversation_run('e2000000-0000-0000-0000-000000000001','run_1','completed','Mine','session_1',null,null,false)$$,'42501',null,'even the Owner cannot write the agent''s reply');
+reset role;
+select is(public.close_conversation_run('e2000000-0000-0000-0000-000000000001','run_1','completed','Hi Omar','session_1',null,null,false),true,'the reply to a sent message is recorded');
+select is(public.close_conversation_run('e2000000-0000-0000-0000-000000000001','run_1','completed','Hi again','session_1',null,null,false),false,'a second read of the same run is harmless');
+select throws_ok($$select public.close_conversation_run('e2000000-0000-0000-0000-000000000001','run_other','completed','Forged','session_1',null,null,false)$$,'P0002','conversationNotFound','a reply needs a run of one of the conversation''s messages');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select is((select string_agg(author||':'||body,',' order by id) from public.conversation_messages),'person:Hello,agent:Hi Omar','one reply per run, named for the agent');
-select throws_ok($$select public.record_conversation_reply('e2000000-0000-0000-0000-000000000001','run_other','Forged','session_1')$$,'P0002','conversationNotFound','a reply needs a run of one of the conversation''s messages');
 select throws_ok($$update public.conversation_messages set body='changed'$$,'42501',null,'a person cannot change a message');
 reset role;
 select throws_ok($$update public.conversation_messages set body='changed'$$,'42501','conversationAppendOnly','the database refuses an update');

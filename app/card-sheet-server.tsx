@@ -6,7 +6,7 @@ import { LogEntry, logAnchor, logColumns, logPeople } from '@/app/c/[slug]/log/e
 import { PageIcon } from '@/app/c/[slug]/log/icons';
 import { conversationColumns } from '@/lib/conversations';
 import { conversationRecord } from '@/lib/conversation-record';
-import { agentAppStates } from '@/lib/company-app-items';
+import { agentAppStates, agentSessionTurns } from '@/lib/company-app-items';
 import type { CardSheetData } from './card-sheet';
 import type { SheetChat } from './card-sheet-chat';
 
@@ -40,7 +40,7 @@ async function sheetChat(db:Db,company:string,card:number,me:string):Promise<She
  if(!row) return {kind:'none'};
  if(row.conversation_id) {
   const {data:found}=await db.from('conversations').select(conversationColumns).eq('id',row.conversation_id).eq('company_id',company).maybeSingle();
-  if(found) return {kind:'own',record:await conversationRecord(db,me,company,found,agent=>agentAppStates(company,agent))};
+  if(found) return {kind:'own',record:await conversationRecord(db,me,company,found,agent=>agentAppStates(company,agent),(agent,session)=>agentSessionTurns(company,agent,session))};
  }
  const {data:agent}=row.agent_id?await db.from('hermes_agents').select('id,name,connection_id').eq('company_id',company).eq('id',row.agent_id).maybeSingle():{data:null};
  if(!agent) return {kind:'none'};

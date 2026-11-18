@@ -13,7 +13,6 @@ import { uuid } from '@/lib/conversations';
 const reply=(body:object,status=200)=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store'}});
 const refuse=(error:string,status:number)=>reply({error},status);
 const service=()=>createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}});
-const encryptionKey=()=>process.env.WEBHOOK_ENCRYPTION_KEY;
 const permissionChoices:readonly unknown[]=['once','always','deny'] satisfies PermissionChoice[];
 const refusals:Record<string,[string,number]>={P0002:['channelNotFound',404],'42501':['channelNotAllowed',403],'22023':['channelFailed',400]};
 
@@ -22,7 +21,7 @@ const refusals:Record<string,[string,number]>={P0002:['channelNotFound',404],'42
 // the choice then goes to the waiting Run after the answer. Nothing of the request is logged.
 async function permit(db:Awaited<ReturnType<typeof supabase>>,body:Record<string,unknown>) {
  if(!(typeof body.request==='number'&&Number.isSafeInteger(body.request)&&body.request>0)||!permissionChoices.includes(body.choice)) return refuse('channelFailed',400);
- const decided=await decideChannelPermission(db,service(),{company:body.company as string,channel:body.channel as string,request:body.request,choice:body.choice as PermissionChoice,encryptionKey:encryptionKey(),later:after});
+ const decided=await decideChannelPermission(db,service(),{company:body.company as string,channel:body.channel as string,request:body.request,choice:body.choice as PermissionChoice,later:after});
  if('code' in decided) return refuse(...(refusals[decided.code||'']||['channelFailed',500]));
  return reply(decided);
 }
@@ -40,13 +39,13 @@ async function respond(request:NextRequest) {
   if(writing&&body.intent==='permit') return await permit(db,body);
   if(writing) {
    if(typeof body.sendKey!=='string'||!uuid.test(body.sendKey)||typeof body.message!=='string'||!body.message.trim()||body.message.length>20000) return refuse('channelFailed',400);
-   const sent=await postChannelMessage(db,service(),{channel:body.channel,sendKey:body.sendKey,message:body.message,encryptionKey:encryptionKey()});
+   const sent=await postChannelMessage(db,service(),{channel:body.channel,sendKey:body.sendKey,message:body.message});
    return 'refused' in sent?refuse(sent.refused,sent.status):reply(sent);
   }
   const record=await channelRecord(db,user.id,body.company,body.channel,true);
   if(!record) return refuse('channelNotFound',404);
   if(!record.open) return reply(record);
-  await driveChannelRuns(service(),{encryptionKey:encryptionKey(),channel:body.channel});
+  await driveChannelRuns(service(),{channel:body.channel});
   return reply(await channelRecord(db,user.id,body.company,body.channel,true)??record);
  } catch { logActionFailure('channel',new Error('Channel request failed')); return refuse('channelFailed',400); }
 }

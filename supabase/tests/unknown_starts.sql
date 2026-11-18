@@ -3,8 +3,7 @@ create extension if not exists pgtap with schema extensions;
 select plan(56);
 -- RS Learning: Omar (1) is Owner. A start whose answer was lost is kept as Omar's own waiting turn on its own
 -- reservation, asked again by the worker as a retry, and never abandoned to another Connection.
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('e0000000-0000-0000-0000-000000000411','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://localhost','unknown-starts','ciphertext','connected');
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('e1000000-0000-0000-0000-000000000411','10000000-0000-0000-0000-000000000001','e0000000-0000-0000-0000-000000000411','Nour','Writing',false);
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('e1000000-0000-0000-0000-000000000411','10000000-0000-0000-0000-000000000001','e0000000-0000-0000-0000-000000000411','Nour','Writing',false,'unknown-starts');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select is(public.reserve_conversation_turn('e2000000-0000-0000-0000-000000000401','10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000411','e3000000-0000-0000-0000-000000000401','First')->>'state','reserved','the first message reserves its run');

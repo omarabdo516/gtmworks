@@ -5,5 +5,5 @@ select json_build_object(
   and not has_function_privilege('service_role','public.answer_question(uuid,uuid,bigint,integer,text,uuid)','execute'),
  'tracked_by_worker_only',has_function_privilege('service_role','public.track_run_question(uuid,text,jsonb,boolean,timestamptz)','execute')
   and not has_function_privilege('authenticated','public.track_run_question(uuid,text,jsonb,boolean,timestamptz)','execute'),
- 'run_end_closes_questions',exists(select 1 from pg_trigger where tgname='conversation_usage_closes_questions' and tgrelid='public.conversation_usage'::regclass)
+ 'run_end_closes_questions',exists(select 1 from pg_trigger where tgname='conversation_run_ends_closes_questions' and tgrelid='public.conversation_run_ends'::regclass)
 );

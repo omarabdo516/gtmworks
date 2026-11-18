@@ -10,7 +10,6 @@ import { signIn } from './sign-in';
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const rows=(sql:string)=>{ const out=JSON.parse(query(sql)); return (Array.isArray(out)?out:out.rows) as Record<string,unknown>[]; };
 const company='10000000-0000-0000-0000-000000000001';
-const omar='20000000-0000-0000-0000-000000000001';
 const id=(n:number)=>`6b100000-0000-0000-0000-${String(n).padStart(12,'0')}`;
 const [lead,ads,seo]=[1,2,3].map(n=>id(10+n));
 let channel='';
@@ -20,14 +19,10 @@ test.beforeAll(({},testInfo)=>{
  freshSeed(testInfo.file,testInfo.retry>0);
  query(`do $$ begin
   update public.people set language='en' where id::text like '20000000-%';
-  insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values
-   ('${id(1)}','${company}','${omar}','http://127.0.0.1:9/p/lead','team-lead','no-key','unreachable'),
-   ('${id(2)}','${company}','${omar}','http://127.0.0.1:9/p/ads','team-ads','no-key','unreachable'),
-   ('${id(3)}','${company}','${omar}','http://127.0.0.1:9/p/seo','team-seo','no-key','unreachable');
-  insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values
-   ('${lead}','${company}','${id(1)}','Lead','General',true),
-   ('${ads}','${company}','${id(2)}','Meta Ads','Runs the Meta ads.',false),
-   ('${seo}','${company}','${id(3)}','SEO','Writes the blog.',false);
+    insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
+   ('${lead}','${company}','${id(1)}','Lead','General',true,'team-lead'),
+   ('${ads}','${company}','${id(2)}','Meta Ads','Runs the Meta ads.',false,'team-ads'),
+   ('${seo}','${company}','${id(3)}','SEO','Writes the blog.',false,'team-seo');
   insert into public.member_agent_access(company_id,person_id,agent_id) values
    ('${company}','20000000-0000-0000-0000-000000000002','${ads}'),('${company}','20000000-0000-0000-0000-000000000002','${seo}'),
    ('${company}','20000000-0000-0000-0000-000000000003','${ads}');

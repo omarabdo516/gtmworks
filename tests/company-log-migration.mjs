@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { testDb } from './pgtap.mjs';
+import { connectionsAsTheyStood, testDb } from './pgtap.mjs';
 
 // One log for the Company (#11): the earlier Card comments and Card activity land in the log with their original
 // author and time. Inside one rolled-back transaction the log is taken away again, a Card comment and a Card change
@@ -11,6 +11,8 @@ const rs='10000000-0000-0000-0000-000000000001', omar='20000000-0000-0000-0000-0
 const sql=`begin;
 create extension if not exists pgtap with schema extensions;
 select plan(8);
+-- The Connections and the Agent audit this replay's rows were written in, dropped since (#342).
+${connectionsAsTheyStood}
 drop table public.company_log;
 drop function public.refuse_log_change(), public.log_card_activity(), public.log_card_comment(), public.log_member_change(), public.log_agent_change() cascade;
 drop function public.log_actor_kind(uuid,uuid), public.log_member_details(text,jsonb,jsonb), public.log_member_action(text), public.log_agent_action(text);

@@ -3,9 +3,7 @@ create extension if not exists pgtap with schema extensions;
 select plan(19);
 -- #139. Writer in RS Learning, shown to the Manager (2), the Contributors (3, 5) and the Viewer (4); the Owner (1) sees
 -- every Agent. One Conversation with Writer each, and in it the message of one run.
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
- ('f7000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9','hand-test','ciphertext','connected','0.23.0','{run_submission}');
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('f7000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','f7000000-0000-0000-0000-000000000001','Writer','Articles');
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile) values ('f7000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','f7000000-0000-0000-0000-000000000001','Writer','Articles','hand-test');
 insert into public.member_agent_access(company_id,person_id,agent_id)
  select '10000000-0000-0000-0000-000000000001',('20000000-0000-0000-0000-00000000000'||n)::uuid,'f7000000-0000-0000-0000-000000000002' from generate_series(2,5) n;
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name)
@@ -15,7 +13,7 @@ insert into public.conversation_messages(company_id,conversation_id,author,perso
 
 -- A run is pinned at its first start with the text of the tools its person is offered: hand_over goes after show_review
 -- for an Owner, a Manager and a Contributor, and a Viewer is offered nothing.
-select set_config('test.specs','{"create_agent":"{\"name\":\"create_agent\"}","save_rule":"{\"name\":\"save_rule\"}","suggest_rule":"{\"name\":\"suggest_rule\"}","show_draft":"{\"name\":\"show_draft\"}","show_review":"{\"name\":\"show_review\"}","hand_over":"{\"name\":\"hand_over\"}"}',true);
+select set_config('test.specs','{"create_agent":"{\"name\":\"create_agent\"}","save_rule":"{\"name\":\"save_rule\"}","suggest_team_rule":"{\"name\":\"suggest_team_rule\"}","show_draft":"{\"name\":\"show_draft\"}","show_review":"{\"name\":\"show_review\"}","hand_over":"{\"name\":\"hand_over\"}"}',true);
 insert into public.conversation_run_reservations(conversation_id,send_key,company_id,connection_id,person_id,agent_id,message,profile)
  select ('f9000000-0000-0000-0000-00000000000'||n)::uuid,('fa000000-0000-0000-0000-00000000000'||n)::uuid,'10000000-0000-0000-0000-000000000001','f7000000-0000-0000-0000-000000000001',
   ('20000000-0000-0000-0000-00000000000'||n)::uuid,'f7000000-0000-0000-0000-000000000002','Get the article out','hand-test' from generate_series(1,4) n;
@@ -23,7 +21,7 @@ select public.pinned_run_note(('f9000000-0000-0000-0000-00000000000'||n)::uuid,(
 set local role service_role;
 select results_eq($$select public.pin_run(('f9000000-0000-0000-0000-00000000000'||n)::uuid,('fa000000-0000-0000-0000-00000000000'||n)::uuid,current_setting('test.specs')::jsonb)->>'tools' from generate_series(1,4) n order by n$$,
  $$values ('[{"name":"save_rule"},{"name":"show_draft"},{"name":"show_review"},{"name":"hand_over"}]'),('[{"name":"save_rule"},{"name":"show_draft"},{"name":"show_review"},{"name":"hand_over"}]'),
-  ('[{"name":"suggest_rule"},{"name":"show_draft"},{"name":"show_review"},{"name":"hand_over"}]'),(null)$$,
+  ('[{"name":"suggest_team_rule"},{"name":"show_draft"},{"name":"show_review"},{"name":"hand_over"}]'),(null)$$,
  'the Owner''s, the Manager''s and the Contributor''s runs are offered hand_over after show_review, and the Viewer''s nothing');
 reset role;
 

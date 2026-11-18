@@ -183,6 +183,19 @@ test('suggest_rule reads its rule as save_rule does, asks the database the same,
  assert.match(JSON.parse(specs.suggest_rule).description,/suggestion for the whole team/);
 });
 
+// The version a Contributor's new run is offered (review of #340): the rule waits for an OK before it reaches the Agent.
+test('suggest_team_rule keeps a rule as suggest_rule does, and says it reaches the Agent only once approved',async()=>{
+ const {rpcs,call}=harness({},{state:'suggested',rule:'rule-3'});
+ assert.deepEqual(await call('suggest_team_rule',{rule:' From now on, no emojis\n'}),{state:'suggested',rule:'rule-3'});
+ assert.deepEqual(rpcs,[['agent_save_rule',{conversation:'conversation-1',run:'run-1',call:'call-0',rule:'From now on, no emojis'}]]);
+ const specs=toolSpecTexts();
+ assert.deepEqual(JSON.parse(specs.suggest_team_rule).parameters,JSON.parse(specs.suggest_rule).parameters);
+ const {description}=JSON.parse(specs.suggest_team_rule);
+ assert.match(description,/suggestion for the whole team/);
+ assert.match(description,/once one of them approves it/);
+ assert.doesNotMatch(description,/at once/,'it never says the rule reaches the teller before it is approved');
+});
+
 test('request_agent reads its arguments as create_agent does, and asks the database to keep the request without asking the Engine',async()=>{
  const {fake,rpcs,call}=harness({},{state:'requested',request:7});
  for(const args of /** @type {unknown[]} */([null,{...asked,name:'x'.repeat(101)},{...asked,apps:Array(9).fill('Canva')},{name:'Meta Ads',job:'Runs ads.'},{template:'astrologer'}]))

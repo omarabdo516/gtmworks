@@ -10,9 +10,10 @@ export type RunPermission={id:string,description:string,command:string,choices:P
 export type RunState={state:'running'|'completed'|'failed'|'stopped'|'lost'|'unreachable',reply:string|null,session:string|null,usage:RunUsage|null,toolCalls:ToolCall[],question?:RunQuestion|null,permission?:RunPermission|null};
 export type AnsweredQuestion='answered'|'gone'|'unreachable';
 export type AnsweredPermission='answered'|'gone'|'unreachable';
-export type RunStep={call:string,tool:string,preview:string|null,state:'started'|'done'|'failed'};
-export type RunStepEvent={seq:number,step:(Omit<RunStep,'call'>&{call:string|null})|null,endedAt?:number|null};
-export type RunEvent=RunStepEvent|{lost:true}|{end:'ended'|'closed'|'gone'|'unreachable'};
+export type RunStep={tool:string,preview:string|null,state:'started'|'done'|'failed'};
+export type SessionTurn={at:number,seconds:number,steps:RunStep[]};
+export type SessionUsage={input:number,output:number};
+export type SessionRead={state:'found',turns:SessionTurn[],usage:SessionUsage|null}|{state:'missing'|'refused'|'unreachable',turns:null,usage:null};
 export type Agent={name:string,instructions:string,model:string|null,ready:boolean};
 export type AgentRequest={name:string,instructions:string,model?:string|null};
 export type CreatedAgent={state:'created',agent:Agent}|{state:'exists'|'refused'|'unreachable'|'failed',agent:null};
@@ -34,8 +35,7 @@ export type Engine={
  stop(run:string):Promise<boolean>,
  answer(run:string,question:string,text:string):Promise<AnsweredQuestion>,
  permit(run:string,permission:string,choice:PermissionChoice):Promise<AnsweredPermission>,
- steps(run:string,read?:{after?:number,signal?:AbortSignal}):AsyncIterable<RunEvent>,
- length(run:string,read?:{endedAt?:number|null,signal?:AbortSignal}):Promise<number|null>,
+ session(session:string):Promise<SessionRead>,
  createAgent(agent:AgentRequest):Promise<CreatedAgent>,
  readAgent(name:string):Promise<FoundAgent>,
  provideAgent(agent:{name:string,instructions:string,level:AgentLevel}):Promise<ProvidedAgent>,

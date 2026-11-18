@@ -17,14 +17,10 @@ test.use({timezoneId:'UTC'});
 test.beforeAll(({},testInfo)=>{
  freshSeed(testInfo.file);
  query(`do $$ begin
-  insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values
-   ('${leadConnection}','${company}','${omar}','http://127.0.0.1:9/p/lead','made-lead','no-key','unreachable'),
-   ('${adsConnection}','${company}','${omar}','http://127.0.0.1:9/p/ads','made-ads','no-key','unreachable'),
-   ('${seoConnection}','${company}','${omar}','http://127.0.0.1:9/p/seo','made-seo','no-key','unreachable');
-  insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,created_at,requested_by,apps) values
-   ('${lead}','${company}','${leadConnection}','Lead','General',true,null,null,null),
-   ('${ads}','${company}','${adsConnection}','Meta Ads','Runs the Meta ads.',false,'2026-06-10T09:01:00Z','${omar}',array['Meta Ads Manager','Canva']),
-   ('${seo}','${company}','${seoConnection}','SEO','Writes the blog.',false,'2026-06-11T09:01:00Z','${omar}','{}');
+    insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,created_at,requested_by,apps,profile) values
+   ('${lead}','${company}','${leadConnection}','Lead','General',true,null,null,null,'made-lead'),
+   ('${ads}','${company}','${adsConnection}','Meta Ads','Runs the Meta ads.',false,'2026-06-10T09:01:00Z','${omar}',array['Meta Ads Manager','Canva'],'made-ads'),
+   ('${seo}','${company}','${seoConnection}','SEO','Writes the blog.',false,'2026-06-11T09:01:00Z','${omar}','{}','made-seo');
   -- The Manager is shown both (#15), so the made line is checked from someone who did not ask.
   insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','20000000-0000-0000-0000-000000000002','${ads}'),('${company}','20000000-0000-0000-0000-000000000002','${seo}');
   insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${conversation}','${company}','${omar}','${lead}','Lead');
@@ -32,7 +28,7 @@ test.beforeAll(({},testInfo)=>{
    ('${company}','${conversation}','person','${omar}',null,'Omar','I want someone to handle Meta ads','${id(8)}','made-run-1'),
    ('${company}','${conversation}','agent',null,'${lead}','Lead','Done. Meta Ads runs your Meta ads from now on.',null,'made-run-1'),
    ('${company}','${conversation}','person','${omar}',null,'Omar','And someone for the blog','${id(9)}','made-run-2');
-  insert into public.conversation_usage(company_id,conversation_id,run_id,outcome) values ('${company}','${conversation}','made-run-2','completed');
+  insert into public.conversation_run_ends(company_id,conversation_id,run_id,outcome) values ('${company}','${conversation}','made-run-2','completed');
   insert into public.lead_made_agents(conversation_id,run_id,call_id,company_id,agent_id,created_at) values
    ('${conversation}','made-run-1','call-0','${company}','${ads}','2026-06-10T09:01:00Z'),
    ('${conversation}','made-run-2','call-0','${company}','${seo}','2026-06-11T09:01:00Z');
@@ -128,8 +124,7 @@ test('an Agent Lead makes while the Conversation is open shows in the sidebar, m
  await expect(tile).toHaveCount(0);
  // Lead's Connection never answers here, so the page keeps asking for the open run while Lead's call lands.
  query(`do $$ begin
-  insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('${analystConnection}','${company}','${omar}','http://127.0.0.1:9/p/analyst','made-analyst','no-key','unreachable');
-  insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,created_at,requested_by,apps) values ('${analyst}','${company}','${analystConnection}','Analyst','Reads the numbers.',false,now(),'${omar}','{}');
+    insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,created_at,requested_by,apps,profile) values ('${analyst}','${company}','${analystConnection}','Analyst','Reads the numbers.',false,now(),'${omar}','{}','made-analyst');
   insert into public.lead_made_agents(conversation_id,run_id,call_id,company_id,agent_id) values ('${conversation}','made-run-3','call-0','${company}','${analyst}');
  end $$;`);
  await expect(page.getByRole('group',{name:'Agent made: Analyst'})).toBeVisible();

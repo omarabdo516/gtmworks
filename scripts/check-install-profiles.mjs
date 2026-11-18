@@ -11,8 +11,8 @@
 //     Then a Contributor's suggestion the Owner approves lands in the first company's shared Skill "team-lessons"
 //     (#122): each of its Agent profiles reads only its company's shared folder and holds the Skill locked, the next run
 //     of each of its Agents carries the lesson and the second company's does not, and a run whose model tries to change
-//     the Skill is refused by the Engine and leaves it as it was; that Run's events show the call's start and end, and its
-//     one step is kept with the reply, failed, for the Conversation's person to read (#141). Then a fake key for a provider the Engine catalogues is
+//     the Skill is refused by the Engine and leaves it as it was; that Run's one step reads from the Conversation's Hermes
+//     session, failed, as the chat shows it (#141, #346). Then a fake key for a provider the Engine catalogues is
 //     set through the driver (#124): it is set in the first company's space and the moved Agent's profile, in none of
 //     the second company's, and removed from both again.
 // The companies and their Owners' sign-in are kept between the steps in a file of this container only.
@@ -60,7 +60,7 @@ if(step==='prepare') {
   const person=await signedIn(entry.credentials);
   entry.agent=(await until('company profile provided',async()=>(await checked(person.from('hermes_agents').select('id,is_default').eq('company_id',entry.company))).find(found=>found.is_default),120)).id;
   entry.profile=companyProfile(entry.company);
-  assert.deepEqual((await checked(person.from('hermes_connections').select('profile').eq('company_id',entry.company))).map(found=>found.profile),[entry.profile]);
+  assert.deepEqual((await checked(person.from('hermes_agents').select('profile').eq('company_id',entry.company))).map(found=>found.profile),[entry.profile]);
   // The profile's saved config turns the dangerous toolsets off, and its Run API offers none of them.
   const config=await (await manage(`/api/config?profile=${entry.profile}`)).json();
   for(const off of ['terminal','file','code_execution']) assert.ok(config.agent?.disabled_toolsets?.includes(off),`${entry.profile} disables ${off}`);
@@ -111,7 +111,7 @@ if(step==='prepare') {
    const conversation=randomUUID();
    // A profile the worker has not yet confirmed (its tools, its shared Skills folder) refuses the send as pending and
    // stores nothing, so the same send is made again until it is ready (#282).
-   const send={person:entry.person,company:entry.company,conversation,sendKey:randomUUID(),agent,message,encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY};
+   const send={person:entry.person,company:entry.company,conversation,sendKey:randomUUID(),agent,message};
    const sent=await until(`${label} ready for a run`,async()=>{ const result=await sendMessage(person,service,send); return result.error==='conversationAgentLevelPending'?null:result; },120);
    assert.deepEqual(sent,{conversation});
    const answer=await until(`reply on ${label}`,async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),180);
@@ -131,8 +131,8 @@ if(step==='prepare') {
   const [first]=companies;
   const person=await signedIn(first.credentials);
   const profileOf=async agent=>{
-   const [linked]=await checked(person.from('hermes_agents').select('connection_id').eq('id',agent));
-   return (await checked(person.from('hermes_connections').select('profile').eq('id',linked.connection_id)))[0].profile;
+   const [found]=await checked(person.from('hermes_agents').select('profile').eq('id',agent));
+   return found.profile;
   };
   const [{run_id:run}]=await checked(person.from('conversation_messages').select('run_id').eq('conversation_id',first.conversation).eq('author','person'));
   const made=await checked(service.rpc('lead_create_agent',{conversation:first.conversation,run,call:'install-check',agent_name:'Install writer',job:'Writes the install check.',apps:[]}));
@@ -182,21 +182,16 @@ if(step==='prepare') {
   const refused=await ask(first,person,made.agent,own,trigger);
   assert.ok(toolResults.some(result=>result.includes('"success": false')&&result.includes('locked')),JSON.stringify(toolResults));
   assert.equal(await skill(spaceOf(first)),written,'team-lessons is unchanged');
-  // That Run's events, as the pinned Engine streams them with the profile's key (#141), trimmed to the tool events, and
-  // its one tool call kept with the reply and read by the Conversation's person: skill_manage, failed (drawn Skipped).
-  const [{run_id:refusedRun}]=await checked(person.from('conversation_messages').select('run_id').eq('conversation_id',refused.conversation).eq('author','person'));
-  const streamed=await fetch(`http://hermes:8642/p/${own}/v1/runs/${encodeURIComponent(refusedRun)}/events`,{headers:{Authorization:`Bearer ${key}`,Accept:'text/event-stream'},signal:AbortSignal.timeout(10000)});
-  assert.equal(streamed.status,200,'the Run\'s events are read with the profile\'s key');
-  const frames=(await streamed.text()).split('\n\n');
-  console.log(`GET /p/<profile>/v1/runs/<run>/events -> ${streamed.status} ${streamed.headers.get('content-type')}`);
-  for(const frame of frames) if(/"event": ?"(tool\.|run\.)/.test(frame)||frame.startsWith(':')) console.log(frame.replace(/"(run_id|tool_call_id)": ?"[^"]*"/g,'"$1": "…"'));
-  assert.ok(frames.some(frame=>frame.includes('tool.started')&&frame.includes('skill_manage')),'the Engine streams the call\'s start');
-  assert.ok(frames.some(frame=>frame.includes('tool.completed')&&frame.includes('skill_manage')),'the Engine streams the call\'s end');
-  const [kept]=await checked(person.from('conversation_run_steps').select('steps,seconds,sealed_at,broken').eq('conversation_id',refused.conversation));
-  assert.ok(kept?.sealed_at&&!kept.broken,JSON.stringify(kept));
-  assert.deepEqual(kept.steps.map(({tool,state})=>({tool,state})),[{tool:'skill_manage',state:'failed'}],JSON.stringify(kept.steps));
-  assert.ok(Number.isInteger(kept.seconds)&&kept.seconds>=0,`the Run's length is known: ${kept.seconds}`);
-  console.log(JSON.stringify({steps:kept.steps.map(({tool,preview,state})=>({tool,preview,state})),seconds:kept.seconds}));
+  // That Run's one tool call, read from the Conversation's Hermes session on the Agent's own profile (#346), as the chat
+  // reads it when it opens: skill_manage, failed (drawn Skipped), with the turn's length. gtmworks keeps no copy.
+  const [{hermes_session_id:refusedSession}]=await checked(person.from('conversations').select('hermes_session_id').eq('id',refused.conversation));
+  const {readSession}=await import(`${process.cwd()}/lib/hermes.mjs`);
+  const read=await readSession({address:'http://hermes:8642',managementAddress:'http://hermes:9119',profile:own,key},refusedSession);
+  assert.equal(read.state,'found',JSON.stringify(read));
+  const turn=read.turns.at(-1);
+  assert.deepEqual(turn.steps.map(({tool,state})=>({tool,state})),[{tool:'skill_manage',state:'failed'}],JSON.stringify(turn.steps));
+  assert.ok(Number.isInteger(turn.seconds)&&turn.seconds>=0,`the Run's length is known: ${turn.seconds}`);
+  console.log(JSON.stringify(turn));
 
   // The model the key brings is not checked: the Engine's model catalogue may be offline.
   const {readProviderKeys,setProviderKey,removeProviderKey}=await import(`${process.cwd()}/lib/hermes.mjs`);

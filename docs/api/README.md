@@ -1,4 +1,6 @@
-# Agent API v1
+# Agent API v1 (removed)
+
+Removed with the external-agent API (#341, decision 0042): no route below is served, and every `/api/v1` path answers 404. This contract is kept only as the record of what was removed.
 
 [OpenAPI 3.1 contract](openapi.yaml), document version **1.6.0**, under `/api/v1/companies/{slug}`. This is runtime-neutral HTTP; Hermes is the first client, not the protocol. The implemented routes are card list/create, edit, comment, upload, move/actor/assignee/label/check operations and run-key issue and revoke (`/cards/{card}/run-keys`) attachment download (`/cards/{card}/files/{file}`) and, for a run key only, `GET /skills` and `GET /skill-loads` (both read-only) and `POST /skills/{skill}/lessons`. No run record, company-chat, message-history, single-card read or MCP endpoint is implemented today.
 

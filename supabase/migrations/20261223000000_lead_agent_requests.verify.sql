@@ -26,10 +26,9 @@ select json_build_object(
   and position('lead_create_agent' in pg_get_functiondef('public.answer_agent_request(uuid,bigint,boolean,text)'::regprocedure))>0,
  'waiting_derived',position('lead_agent_requests' in pg_get_functiondef('public.waiting_list(uuid)'::regprocedure))>0
   and pg_get_function_result('public.waiting_list(uuid)'::regprocedure)='TABLE(kind text, id bigint, title text, body text, asked_by text, card_id bigint, conversation_id uuid, created_at timestamp with time zone)',
- 'logged_for_asker_and_owners',position('''owners''' in (select qual from pg_policies where tablename='hermes_agent_audit' and policyname='hermes_agent_audit_read'))>0
-  and position('''owners''' in (select qual from pg_policies where tablename='company_log' and policyname='company_log_read'))>0
+ 'logged_for_asker_and_owners',position('''owners''' in (select qual from pg_policies where tablename='company_log' and policyname='company_log_read'))>0
   and public.log_agent_action('AGENT_REQUEST_SENT')='agent_request_sent' and public.log_agent_action('AGENT_REQUEST_MADE')='agent_request_made'
   and public.log_agent_action('AGENT_REQUEST_DECLINED')='agent_request_declined'
-  and position('asked_for' in pg_get_functiondef('public.log_agent_change()'::regprocedure))>0
-  and position('''reason''' in pg_get_functiondef('public.log_agent_change()'::regprocedure))>0
+  and position('asked_for' in pg_get_functiondef('public.log_agent_event(uuid,uuid,text,uuid,text,jsonb)'::regprocedure))>0
+  and position('''reason''' in pg_get_functiondef('public.log_agent_event(uuid,uuid,text,uuid,text,jsonb)'::regprocedure))>0
 );

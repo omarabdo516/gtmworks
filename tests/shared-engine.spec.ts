@@ -12,10 +12,8 @@ const english='Each agent gets its own agent engine profile, with its own memory
 // What provide_bundled_hermes leaves behind: the bundled Connection, its main agent and the audit row that marks it.
 function provideBundled(company:string) {
  const [connection,agent]=[randomUUID(),randomUUID()];
- query(`insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values ('${connection}','${company}','${omar}','http://hermes:8642','default','ciphertext','connected','0.23.0','{run_submission}')`);
- query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('${agent}','${company}','${connection}','Lead','General')`);
- query(`insert into public.hermes_agent_audit(company_id,actor_id,agent_id,action,details) values ('${company}','${omar}','${agent}','PROVIDE_BUNDLED_HERMES_AGENT',jsonb_build_object('connection_id','${connection}'))`);
- return ()=>{ query(`delete from public.hermes_agent_audit where agent_id='${agent}'`); query(`delete from public.hermes_agents where id='${agent}'`); query(`delete from public.hermes_connections where id='${connection}'`); };
+ query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile) values ('${agent}','${company}','${connection}','Lead','General','default')`);
+ return ()=>{ query(`delete from public.hermes_agents where id='${agent}'`); };
 }
 
 test('the Owner is warned while two companies share the bundled Engine profile, in English and Arabic',async({page})=>{

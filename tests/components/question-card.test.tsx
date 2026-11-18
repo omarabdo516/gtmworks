@@ -144,7 +144,7 @@ const record = (card: Question, answer?: string): ConversationRecord => ({
   { id: 42, author: 'agent', author_name: 'Ads', body: '', created_at: at, kind: 'asked', cards: [{ kind: 'reply', card }] },
   ...answer ? [{ id: 42, author: 'person' as const, author_name: 'Omar', body: answer, created_at: at, kind: 'answer' as const }] : [],
  ],
- usage: { input: 0, output: 0, unknown: 0 }, pending: true, ...answer ? {} : { asking: true as const }, failed: false, working: 'Omar', canStop: true,
+ usage: { input: 0, output: 0 }, pending: true, ...answer ? {} : { asking: true as const }, failed: false, working: 'Omar', canStop: true,
 });
 
 test('in the chat, a pick posts the answer, the record is read again, and the pick shows as the person\'s message after the answered card', async () => {
@@ -162,8 +162,11 @@ test('in the chat, a pick posts the answer, the record is read again, and the pi
  expect(screen.getByRole('status').elements().filter(line => line.matches('.convo-status')), 'the Agent waits on the person, not working').toEqual([]);
  expect(document.querySelector('.composer__send.is-stop'), 'the empty box keeps its send arrow, with no stop square').toBeNull();
 
- await screen.getByRole('button', { name: angles[0] }).click();
+ // A DOM click: under fake timers Vitest moves the clock 50 ms for every 50 ms a locator action takes, so a slow click on a
+ // busy runner fires the chat's first read of the record (500 ms) before the pick, and the card is answered under it.
+ (screen.getByRole('button', { name: angles[0] }).element() as HTMLButtonElement).click();
  // Answered on this page, the card settles, its letter pops and its check draws (design-reference: .card.is-just).
+ await expect.element(screen.getByRole('group', { name: `${open.question}: Answered` })).toBeInTheDocument();
  const settled = screen.getByRole('group', { name: `${open.question}: Answered` }).element();
  const motion = (part: Element) => { const style = getComputedStyle(part); return [style.animationName, style.animationDuration, style.animationDelay]; };
  expect([settled, settled.querySelector('.opt__key')!, settled.querySelector('.opt__check path')!].map(motion))
@@ -187,7 +190,9 @@ test('in the chat, a pick another tab answered first is not shown as this one\'s
   : Response.json(record({ ...open, state: 'answered', answer: angles[1] } as Question, angles[1])));
  vi.stubGlobal('fetch', calls);
  const screen = await render(<LanguageProvider language="en"><div className="gw"><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={conversation} title="" writer><Arrived record={arrived(record(open))}/></ConversationView></div></LanguageProvider>);
- await screen.getByRole('button', { name: angles[0] }).click();
+ // A DOM click, as above: the chat's first read of the record must not land before the pick.
+ await expect.element(screen.getByRole('group', { name: open.question })).toBeVisible();
+ (screen.getByRole('button', { name: angles[0] }).element() as HTMLButtonElement).click();
  await expect.element(screen.getByRole('alert')).toHaveTextContent('This question was already answered');
  await vi.advanceTimersByTimeAsync(500);
  expect(calls.mock.calls.filter(([, init]) => init?.method !== 'POST'), 'the record is read again').toHaveLength(1);

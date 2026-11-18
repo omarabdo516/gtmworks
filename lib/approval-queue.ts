@@ -18,8 +18,11 @@ export type WaitingItem={kind:string,id:number,title:string,body:string,asked_by
 // from them, #190), every item but a hidden Agent's approvals, newest first (`items`), so no count names a Card the
 // board leaves out, and how many things wait (`count`), a Card once with its approval and its chat's question or hand
 // (#146).
-export const approvalQueue=cache(async(db:Awaited<ReturnType<typeof supabase>>,company:string,person:string,role:string)=>{
- void person; void role; // the database reads both from the session
+// The role is no part of the read's key: the database reads it from the session, so a page may start the read before it
+// knows the role (the chat does) and its parts find the same read.
+export const approvalQueue=(db:Awaited<ReturnType<typeof supabase>>,company:string,person:string,role?:string)=>{ void role; return queue(db,company,person); };
+const queue=cache(async(db:Awaited<ReturnType<typeof supabase>>,company:string,person:string)=>{
+ void person; // the database reads it from the session
  const [stepResult,listResult]=await Promise.all([
   db.from('approval_steps').select('*').eq('company_id',company).is('removed_at',null).order('position').order('id'),
   db.rpc('waiting_list',{c:company}),

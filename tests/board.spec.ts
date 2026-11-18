@@ -2,7 +2,7 @@ import { test, expect, type Page } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { signIn } from './sign-in';
-import { fakeHermes } from './fake-hermes.mjs';
+import { laneHermes } from './lane-hermes';
 import { inbox } from './lane.mjs';
 
 // The board's six columns and "Waiting on you" (#34, #16; ADR 0013). The seeded accounts read English.
@@ -185,19 +185,16 @@ test('Waiting on you lists an Agent question and an item of a new kind, each ope
  // question for someone else that the Manager never sees.
  const manager='20000000-0000-0000-0000-000000000002', omar='20000000-0000-0000-0000-000000000001';
  const stamp=Date.now(), conversation=`62000000-0000-4000-8000-${String(stamp).slice(-12).padStart(12,'0')}`;
- // The Conversation runs on an Agent the Owner attaches on a fake engine, so the reply is sent as a person sends it.
- const fake=await fakeHermes(); fake.settings.key=`hermes-key-${randomUUID()}`;
- const attachedAgent={id:'',connection:''};
+ // The Conversation runs on an Agent on the lane's fake Hermes, so the reply is sent as a person sends it.
+ const fake=await laneHermes();
+ const attachedAgent={id:''};
  try {
   await signIn(page,'omar@example.com','/c/rs-learning/home');
-  const saved=await page.request.post('/api/hermes-connections',{data:{company:rs,intent:'save',address:fake.address,profile:`board-${stamp}`,key:fake.settings.key}});
-  expect(saved.status()).toBe(200); attachedAgent.connection=(await saved.json()).connection.id;
-  const attached=await page.request.post('/api/hermes-agents',{data:{company:rs,intent:'attach',connection:attachedAgent.connection,name:`Lead ${stamp}`,speciality:'Marketing',makeDefault:false}});
-  expect(attached.status()).toBe(200);
-  attachedAgent.id=(await attached.json()).agents.find((agent:{connection_id:string})=>agent.connection_id===attachedAgent.connection).id;
+  attachedAgent.id=randomUUID();
+  // As an Owner's attachment made it: the Company's first Agent is its main one.
+  query(`insert into public.hermes_agents(id,company_id,name,speciality,profile,is_default) select '${attachedAgent.id}','${rs}','Lead ${stamp}','Marketing','board-${stamp}',not exists(select 1 from public.hermes_agents where company_id='${rs}')`);
   await page.context().clearCookies();
   await signIn(page,'manager@example.com','/c/rs-learning/approvals');
-  const deliveries=Number(rows(`select count(*)::int as n from public.webhook_deliveries`)[0].n);
   // Mail sent by earlier tests (an invite) may already be in the local mailbox; only a change counts.
   const mailCount=async()=>{const mail=await (await page.request.get(inbox)).json(); return Number(mail.total ?? mail.messages?.length ?? 0);};
   const mailBefore=await mailCount();
@@ -205,8 +202,7 @@ test('Waiting on you lists an Agent question and an item of a new kind, each ope
   query(`select public.add_waiting_item('${rs}','${manager}','question','Which offer goes first ${stamp}?','',null,'${conversation}','Lead')`);
   query(`select public.add_waiting_item('${rs}','${manager}','test_kind','A new kind ${stamp}','Seeded by the test',1)`);
   query(`select public.add_waiting_item('${rs}','${omar}','test_kind','For Omar only ${stamp}','',1)`);
-  // Nothing leaves gtmworks: no webhook delivery and no mail.
-  expect(Number(rows(`select count(*)::int as n from public.webhook_deliveries`)[0].n)).toBe(deliveries);
+  // Nothing leaves gtmworks: no mail (there are no webhooks since #341).
   expect(await mailCount()).toBe(mailBefore);
   await page.goto('/c/rs-learning/approvals');
   const waiting=page.locator('.col[data-column="waiting"]');
@@ -275,7 +271,6 @@ test('Waiting on you lists an Agent question and an item of a new kind, each ope
  } finally {
   query(`update public.waiting_items set resolved_at=now() where resolved_at is null and title like '%${stamp}%'`);
   if(attachedAgent.id) query(`delete from public.hermes_agents where id='${attachedAgent.id}'`);
-  if(attachedAgent.connection) query(`delete from public.hermes_connections where id='${attachedAgent.connection}'`);
   await fake.close();
  }
 });

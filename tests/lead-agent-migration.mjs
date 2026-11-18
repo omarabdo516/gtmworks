@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { testDb } from './pgtap.mjs';
+import { connectionsAsTheyStood, testDb } from './pgtap.mjs';
 
 // A default agent still carrying the Engine's name becomes Lead (#286); the verify file then passes on that data.
 const migration=readFileSync('supabase/migrations/20261201000000_lead_agent.sql','utf8');
@@ -7,6 +7,8 @@ const verify=readFileSync('supabase/migrations/20261201000000_lead_agent.verify.
 const sql=`begin;
 create extension if not exists pgtap with schema extensions;
 select plan(8);
+-- The Connections and the Agent audit this replay's rows were written in, dropped since (#342).
+${connectionsAsTheyStood}
 -- The migration was written for the Agency shape that 20261204000000_remove_agency removed: people.agency_owner and
 -- hermes_connections.agency_owner_id. This rolled-back replay puts that shape back, with Omar as the Agency owner, so the
 -- migration runs as written.

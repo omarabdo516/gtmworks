@@ -27,33 +27,32 @@ where s.definer and (s.body ~ pattern.tables
 create temporary table decisions(fn text primary key, decision text not null check (decision in ('checks','exempt')), reason text not null check (btrim(reason)<>''));
 insert into decisions
  select fn,'checks','answers for a Card its Agent hides from the caller, or from the person it names, as for a Card that does not exist' from unnest(array[
-  'public.decide_approval(uuid,bigint,text,text,boolean,boolean)','public.decide_skill_lesson(uuid,bigint,boolean)','public.edit_card_note(uuid,bigint,text)',
-  'public.enqueue_assignment_webhook()','public.issue_run_key_for(uuid,bigint,uuid,text,integer)','public.lookup_agent_key(text)',
-  'public.propose_skill_lesson(uuid,uuid,text,text,text,text,text)','public.start_card_conversation(uuid,bigint,uuid)','public.card_chat_person(uuid,bigint)',
+  'public.decide_approval(uuid,bigint,text,text,boolean,boolean)','public.edit_card_note(uuid,bigint,text)',
+  'public.start_card_conversation(uuid,bigint,uuid)','public.card_chat_person(uuid,bigint)',
   'public.card_wait(public.work_cards)','public.reply_card_waits(public.reply_cards)']) fn
  union all select 'public.can_see_card_file(text)','checks','a stored file follows each Card it belongs to'
  union all select 'public.can_see_card(uuid,bigint)','exempt','the read rule itself'
  union all select fn,'exempt','a trigger: it runs on a write the table''s own rules admitted, answers no caller, and every row it writes is read under card_agent_visible' from unnest(array[
-  'public.approval_card_guard()','public.conversation_reply_card()','public.log_agent_change()','public.log_card_activity()','public.log_card_comment()',
-  'public.log_company_change()','public.log_member_change()','public.log_member_invitation()','public.log_note_edit()','public.note_mentions()','public.pin_channel_run_knowledge()',
+  'public.approval_card_guard()','public.conversation_reply_card()','public.log_card_activity()','public.log_card_comment()',
+  'public.log_company_change()','public.log_member_change()','public.log_member_invitation()','public.log_note_edit()','public.note_mentions()',
   'public.resolve_waiting_on_card()','public.resolve_waiting_on_reply()','public.schedule_approved_card()','public.work_audit()','public.work_guard()']) fn
- union all select 'public.enqueue_person_webhook()','exempt','a trigger whose delivery goes to the Company webhook, which only Owners set and read, and an Owner sees every Agent'
  union all select fn,'exempt','the worker''s, callable by the service role only: it answers the worker, never a Member, and the rows it writes are read under card_agent_visible' from unnest(array[
   'public.add_waiting_item(uuid,uuid,text,text,text,bigint,uuid,text)','public.agent_save_rule(uuid,text,text,text)','public.agent_show_card(uuid,text,text,text,text,jsonb)',
   'public.answer_note_start(bigint,integer,text)','public.begin_note_start(bigint)','public.close_note_run(bigint,text,text,text,bigint,bigint)',
-  'public.move_company_profile(uuid,text,text,text,text[])','public.note_run_knowledge(bigint)','public.note_runs_due(bigint,bigint)']) fn
+  'public.move_company_profile(uuid)','public.note_runs_due(bigint,bigint)']) fn
  union all select 'public.settle_question(bigint,text)','exempt','the worker''s, callable by the service role only: it settles a question card it was handed and writes its log row, on the chat''s Card when it has one (read under card_agent_visible), else private to the Conversation''s person; it answers no Member'
  union all select 'public.settle_permission(bigint,text)','exempt','the worker''s, callable by the service role only: it settles a permission request card it was handed and writes its log row, private to the Conversation''s person; it answers no Member'
  union all select 'public.settle_channel_permission(bigint,text)','exempt','the worker''s, callable by the service role only: it settles a channel''s permission request it was handed and writes its log row, private to the Member who decided it; it answers no Member'
  union all select 'public.mark_hand_done(uuid,uuid,bigint)','exempt','the Conversation''s own person marks a hand card of that Conversation done and writes its log row, on the chat''s Card when it has one (read under card_agent_visible), else private to that person; it answers no Card'
+ union all select 'public.log_agent_event(uuid,uuid,text,uuid,text,jsonb)','exempt','callable inside the database only; it writes an Agent''s log row, which names no Card'
+ union all select 'public.pin_run_history(uuid,uuid)','exempt','the worker''s, callable by the service role only: it reads when an Agent last moved from that Agent''s log rows, which name no Card, and answers the Conversation''s own messages'
  union all select 'public.agent_move_blocked(uuid)','exempt','callable inside the database only; it answers whether an Agent has running work, and names no Card'
  union all select fn,'exempt','reads only the waiting items of rule suggestions, which name no Card; the rule''s Agent is checked with can_see_agent' from unnest(array[
   'public.decide_agent_rule(uuid,bigint,boolean)','public.remove_agent_rule(uuid,uuid)','public.rule_suggestions_sent_to(uuid)']) fn
  union all select fn,'exempt','an Owner or a Manager changes an approval step: every Card on it moves with it so none is left on a removed step, and nothing about a Card is answered' from unnest(array[
-  'public.remove_approval_step(uuid,bigint)','public.save_approval_step(uuid,bigint,text,integer,uuid,public.member_role)']) fn
- union all select 'public.usage_by_day()','exempt','the Owner''s alone, and an Owner sees every Agent; it answers token sums by day, no Card';
+  'public.remove_approval_step(uuid,bigint)','public.save_approval_step(uuid,bigint,text,integer,uuid,public.member_role)']) fn;
 
-select is((select count(*)::int from card_tables),14,'the card tables are the 14 that carry #221''s rule, the Card itself among them');
+select is((select count(*)::int from card_tables),13,'the card tables are the 13 that carry #221''s rule, the Card itself among them');
 select ok(not exists(select 1 from pg_proc p where p.pronamespace='public'::regnamespace and p.prosecdef
   and (not coalesce(p.proconfig,'{}') && array['search_path=""'] or regexp_replace(regexp_replace(p.prosrc,'/\*.*?\*/',' ','g'),'--[^\n]*',' ','g') ~* '\yexecute\y')),
  'every function that runs as its owner has an empty search path and no dynamic SQL, so every table it reads is named with its schema in its body');

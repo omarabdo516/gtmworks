@@ -7,8 +7,7 @@ select is((select string_agg(distinct coalesce(work_mode,'none'),',') from publi
 -- A Company as first run leaves it: one Owner (the seeded Omar), no answer yet, its main Agent Lead on a Connection.
 insert into public.companies(id,slug,name,work_mode) values ('10000000-0000-0000-0000-000000000090','fresh-start','Fresh start',null),('10000000-0000-0000-0000-000000000091','no-lead-yet','No Lead yet',null);
 insert into public.members(company_id,person_id,role) values ('10000000-0000-0000-0000-000000000090','20000000-0000-0000-0000-000000000001','owner'),('10000000-0000-0000-0000-000000000090','20000000-0000-0000-0000-000000000002','manager'),('10000000-0000-0000-0000-000000000091','20000000-0000-0000-0000-000000000001','owner');
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('f0000000-0000-0000-0000-000000000090','10000000-0000-0000-0000-000000000090','20000000-0000-0000-0000-000000000001','http://localhost','fresh','ciphertext','connected');
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('a0000000-0000-0000-0000-000000000090','10000000-0000-0000-0000-000000000090','f0000000-0000-0000-0000-000000000090','Lead','General',true);
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('a0000000-0000-0000-0000-000000000090','10000000-0000-0000-0000-000000000090','f0000000-0000-0000-0000-000000000090','Lead','General',true,'fresh');
 select ok(not has_function_privilege('anon','public.choose_work_mode(uuid,text)','execute'),'an anonymous visitor cannot answer');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);

@@ -1,13 +1,11 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(86);
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state)
- select ('f2300000-0000-0000-0000-00000000000'||n)::uuid,'10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://localhost','channels-'||n,'ciphertext','connected' from generate_series(1,4) n;
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,instructions) values
- ('a2300000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','f2300000-0000-0000-0000-000000000001','Lead','General',true,null),
- ('a2300000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','f2300000-0000-0000-0000-000000000002','Faye','Marketing',false,'Write short.'),
- ('a2300000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','f2300000-0000-0000-0000-000000000003','Lead Writer','Copy',false,null),
- ('a2300000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000001','f2300000-0000-0000-0000-000000000004','Secret','Hidden',false,null);
+select plan(84);
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,instructions,profile) values
+ ('a2300000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','f2300000-0000-0000-0000-000000000001','Lead','General',true,null,'default'),
+ ('a2300000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','f2300000-0000-0000-0000-000000000002','Faye','Marketing',false,'Write short.','default'),
+ ('a2300000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','f2300000-0000-0000-0000-000000000003','Lead Writer','Copy',false,null,'default'),
+ ('a2300000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000001','f2300000-0000-0000-0000-000000000004','Secret','Hidden',false,null,'default');
 insert into public.member_agent_access(company_id,person_id,agent_id)
  select '10000000-0000-0000-0000-000000000001',p,a from unnest(array['20000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000003']::uuid[]) p,
   unnest(array['a2300000-0000-0000-0000-000000000002','a2300000-0000-0000-0000-000000000003']::uuid[]) a;
@@ -134,10 +132,10 @@ set local role service_role;
 select is((select array_agg(message order by message) from public.channel_runs_due(null,null,0)),null::bigint[],'a fresh Run belongs to its sender''s request for its first minute');
 select is((select array_agg(message) from public.channel_runs_due(null,(select id from sent where label='faye'),0)),array[(select id from sent where label='faye')],'which drives it at once');
 select is((select attempt from public.begin_channel_start((select id from sent where label='faye'))),1,'the first attempt');
-select is((select connection::text from public.channel_runs_due(null,(select id from sent where label='faye'),0)),'f2300000-0000-0000-0000-000000000002','pins the Agent''s Connection');
-select is((select key_encrypted from public.channel_runs_due(null,(select id from sent where label='faye'),0)),null,'and comes with no key before it started');
+select is((select profile from public.channel_runs_due(null,(select id from sent where label='faye'),0)),'default','pins the Agent''s profile');
+select is((select run from public.channel_runs_due(null,(select id from sent where label='faye'),0)),null,'and has no Run before it started');
 select ok(public.answer_channel_start((select id from sent where label='faye'),1,'run-faye'),'the run id is recorded');
-select ok((select key_encrypted from public.channel_runs_due(null,(select id from sent where label='faye'),0)) is not null,'a started Run comes with its pinned Connection''s key');
+select ok((select profile from public.channel_runs_due(null,(select id from sent where label='faye'),0)) is not null,'a started Run comes with its pinned profile');
 select is((select count(*)::int from public.channel_runs_due(null,null,(select id from sent where label='faye')) where message=(select id from sent where label='faye')),0,'a page starts after the message it is given');
 select ok(public.answer_channel_start((select id from sent where label='faye'),2,'run-faye'),'the same run named again by another attempt is the same');
 select is((select count(*)::int from public.begin_channel_start((select id from sent where label='faye'))),0,'a started Run is not started again');
@@ -145,7 +143,7 @@ select ok(public.close_channel_run((select id from sent where label='faye'),'run
 select ok(not public.close_channel_run((select id from sent where label='faye'),'run-faye','completed','Here is the week.',120,30),'a second close changes nothing');
 reset role;
 select is((select array_agg(author||':'||author_name||':'||body) from public.channel_messages where reply_to=(select id from sent where label='faye')),array['agent:Faye:Here is the week.'],'one reply, posted in the channel by the Agent');
-select is((select outcome||':'||input_tokens||':'||output_tokens from public.channel_runs where message_id=(select id from sent where label='faye')),'completed:120:30','with the Run''s outcome and usage');
+select is((select outcome from public.channel_runs where message_id=(select id from sent where label='faye')),'completed','with the Run''s outcome');
 set local role service_role;
 select is((select attempt from public.begin_channel_start((select id from sent where label='first'))),1,'one attempt');
 select is((select attempt from public.begin_channel_start((select id from sent where label='first'))),2,'and a second at the same time');
@@ -176,7 +174,12 @@ select is((select count(*)::int from public.channel_runs where outcome is null),
 
 reset role;
 set local role service_role;
-select cmp_ok(public.provide_bundled_hermes('http://hermes:8642','default','encrypted','0.23.0','{run_submission}'),'>=',1,'Aleem gets Lead on the shared profile');
+-- The previous version's provider put each Company with no Agent on the shared `default` profile (#342 dropped it).
+reset role;
+insert into public.hermes_agents(company_id,name,speciality,is_default,profile) select c.id,'Lead','General',true,'default' from public.companies c
+ where not exists(select 1 from public.hermes_agents a where a.company_id=c.id) and exists(select 1 from public.members m where m.company_id=c.id and m.role='owner' and m.removed_at is null);
+set local role service_role;
+select cmp_ok((select count(*)::int from public.hermes_agents where profile='default'),'>=',1,'Aleem gets Lead on the shared profile');
 select lives_ok($$select public.record_company_profile('10000000-0000-0000-0000-000000000003','co-10000000000000000000000000000003',1,public.engine_tool_policy())$$,'and its own profile is made');
 reset role;
 update public.company_profiles set skills_shared=true where company_id='10000000-0000-0000-0000-000000000003';
@@ -186,23 +189,13 @@ insert into sent values ('aleem',public.post_channel_message((select id from pub
 reset role;
 set local role service_role;
 select is((select attempt from public.begin_channel_start((select id from sent where label='aleem'))),1,'Aleem''s Lead is asked');
-select is(public.move_company_profile('10000000-0000-0000-0000-000000000003','http://hermes:8642','encrypted','0.23.0','{run_submission}'),0,'its open channel Run holds the move');
+select is(public.move_company_profile('10000000-0000-0000-0000-000000000003'),0,'its open channel Run holds the move');
 select ok(public.close_channel_run((select id from sent where label='aleem'),null,'lost',null,null,null),'once it ended');
-select is(public.move_company_profile('10000000-0000-0000-0000-000000000003','http://hermes:8642','encrypted','0.23.0','{run_submission}'),1,'the Company moves');
+select is(public.move_company_profile('10000000-0000-0000-0000-000000000003'),1,'the Company moves');
 reset role;
 set local role service_role;
 select ok(public.close_channel_run((select id from sent where label='first'),'run-first','completed',repeat('x',200005),null,null),'an over-long reply still ends its Run');
 reset role;
 select is((select length(body) from public.channel_messages where reply_to=(select id from sent where label='first')),200000,'kept to its first 200,000 characters');
-reset role;
-create temp table used_want as select coalesce(sum(input_tokens),0)::bigint input_tokens, count(*)::bigint runs, count(*) filter (where input_tokens is null)::bigint unknown_runs from (
- select input_tokens from public.conversation_usage where company_id='10000000-0000-0000-0000-000000000001'
- union all select input_tokens from public.channel_runs where company_id='10000000-0000-0000-0000-000000000001' and outcome is not null and run_id is not null) u;
-grant select on used_want to authenticated;
-set local role authenticated;
-select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
-select is((select array[sum(input_tokens),sum(runs),sum(unknown_runs)]::bigint[] from public.usage_by_day() where company_id='10000000-0000-0000-0000-000000000001'),
- (select array[input_tokens,runs,unknown_runs] from used_want),'the Owner''s usage counts the channel Runs that ran, their tokens and the ones of unknown usage');
-select ok((select input_tokens from used_want)>=120 and (select unknown_runs from used_want)>=1,'which here holds Faye''s 120 tokens and a Run of unknown usage');
 select * from finish();
 rollback;

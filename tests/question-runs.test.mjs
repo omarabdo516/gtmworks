@@ -8,6 +8,7 @@ import { fakeEngine } from './fake-engine.mjs';
 // close, and a Run waiting on its person counts as running. The database is a small stand-in for the three question
 // functions (supabase/tests/question_cards.sql proves the real ones) that records what the closer asked of it.
 const encryptionKey=Buffer.alloc(32,7).toString('base64');
+const hermes={address:'http://hermes:8642',key:'test-only-key'};
 const conversation='c1000000-0000-0000-0000-000000000001';
 const answerKey='a1000000-0000-0000-0000-000000000001';
 
@@ -54,7 +55,7 @@ const asking=()=>{
  return fake;
 };
 const start=async(/** @type {ReturnType<typeof fakeEngine>} */ fake)=>/** @type {string} */(await fake.engineFor({}).start({conversation,input:'Plan the ads',idempotencyKey:`${conversation}:k`}));
-const close=(/** @type {any} */ service,/** @type {ReturnType<typeof fakeEngine>} */ fake)=>closeOpenRuns(service,{encryptionKey,conversation,engineFor:fake.engineFor});
+const close=(/** @type {any} */ service,/** @type {ReturnType<typeof fakeEngine>} */ fake)=>closeOpenRuns(service,{hermes,conversation,engineFor:fake.engineFor});
 
 test('a pick: the question is kept once while its Run waits, the choice is delivered once, and the same Run then closes with its reply',async()=>{
  const fake=asking(); const {service,person,cards,calls,closed}=databases(fake);
@@ -62,10 +63,10 @@ test('a pick: the question is kept once while its Run waits, the choice is deliv
  assert.equal(await close(service,fake),0,'a Run waiting on its person is running');
  assert.equal(await close(service,fake),0);
  assert.deepEqual(cards.map(({run,question,content,state})=>({run,question,content,state})),[{run,question:`${run}_q1`,content:{question:'Which audience first?',choices:['Parents','Students','Teachers'],multiple:false},state:'open'}]);
- assert.deepEqual(await answerQuestion(person,service,{company:'co',conversation,card:1,choice:1,answerKey,encryptionKey,engineFor:fake.engineFor}),{state:'claimed'});
+ assert.deepEqual(await answerQuestion(person,service,{company:'co',conversation,card:1,choice:1,answerKey,hermes,engineFor:fake.engineFor}),{state:'claimed'});
  assert.deepEqual(fake.answers,[{run,question:`${run}_q1`,text:'Students'}]);
  assert.equal(cards[0].state,'answered');
- assert.deepEqual(await answerQuestion(person,service,{company:'co',conversation,card:1,choice:0,answerKey:'a1000000-0000-0000-0000-000000000002',encryptionKey,engineFor:fake.engineFor}),{state:'taken'},'a second click elsewhere');
+ assert.deepEqual(await answerQuestion(person,service,{company:'co',conversation,card:1,choice:0,answerKey:'a1000000-0000-0000-0000-000000000002',hermes,engineFor:fake.engineFor}),{state:'taken'},'a second click elsewhere');
  assert.equal(fake.answers.length,1,'and nothing more is sent');
  assert.equal(await close(service,fake),1);
  assert.equal(closed.get(run).reply,'Reply to: Plan the ads (Students)');
@@ -76,7 +77,7 @@ test('a pick: the question is kept once while its Run waits, the choice is deliv
 test('a free answer: a typed message while the question is open is its answer, starts no Run, and the same send key finds the same answer',async()=>{
  const fake=asking(); const {service,person,cards,calls}=databases(fake);
  const run=await start(fake); await close(service,fake);
- const send=()=>sendMessage(person,service,{company:'co',conversation,sendKey:answerKey,message:'Graduates, 22 to 30',encryptionKey,engineFor:fake.engineFor});
+ const send=()=>sendMessage(person,service,{company:'co',conversation,sendKey:answerKey,message:'Graduates, 22 to 30',hermes,engineFor:fake.engineFor});
  assert.deepEqual(await send(),{conversation,answered:true});
  assert.deepEqual(await send(),{conversation,answered:true});
  assert.deepEqual(fake.answers,[{run,question:`${run}_q1`,text:'Graduates, 22 to 30'}]);
@@ -94,7 +95,7 @@ test('a time limit: once the engine stops waiting the card closes, an answer cla
  assert.equal(await close(service,fake),1);
  assert.equal(cards[0].state,'closed');
  assert.equal(closed.get(run).reply,'Reply to: Plan the ads (unanswered)');
- assert.deepEqual(await answerQuestion(person,service,{company:'co',conversation,card:1,choice:0,answerKey,encryptionKey,engineFor:fake.engineFor}),{state:'closed'});
+ assert.deepEqual(await answerQuestion(person,service,{company:'co',conversation,card:1,choice:0,answerKey,hermes,engineFor:fake.engineFor}),{state:'closed'});
  assert.deepEqual(fake.answers,[]);
 });
 
@@ -103,7 +104,7 @@ test('a stop: the stopped Run closes its question and ends stopped; an answer cl
  const run=await start(fake); await close(service,fake);
  assert.equal(await fake.engineFor({}).stop(run),true);
  fake.settings.unreachableAnswers=1;
- assert.deepEqual(await answerQuestion(person,service,{company:'co',conversation,card:1,choice:2,answerKey,encryptionKey,engineFor:fake.engineFor}),{state:'claimed'});
+ assert.deepEqual(await answerQuestion(person,service,{company:'co',conversation,card:1,choice:2,answerKey,hermes,engineFor:fake.engineFor}),{state:'claimed'});
  assert.equal(cards[0].state,'sending','an engine that could not be asked holds the answer');
  assert.equal(closed.size,0,'and the Run with it');
  assert.equal(await close(service,fake),1);

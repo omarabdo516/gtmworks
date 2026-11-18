@@ -13,7 +13,7 @@ import { driveNoteRuns } from '@/lib/channel-runs.mjs';
 // A note that calls an Agent starts its one Run at once (#22), as a channel message does; the worker reads the reply. A
 // start that fails is left to the worker and logged without the note.
 async function startNoteRun(note:number) {
- try { await driveNoteRuns(createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}}),{encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY,message:note}); }
+ try { await driveNoteRuns(createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}}),{message:note}); }
  catch(failure) { console.error('Note run not started:',note,failure instanceof Error?failure.message:'unknown error'); }
 }
 // Files chosen in a form are stored in the company's folder first; the database then records them against a message.

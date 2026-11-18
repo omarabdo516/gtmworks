@@ -109,6 +109,19 @@ describe('the Playwright projects', { concurrency: 3 }, () => {
   assert.ok(ends(results, 'functional') <= starts(results, 'first-run'), output);
  });
 
+ test('the chat open time runs alone after every functional test, also where the budgets run elsewhere (#346)', async t => {
+  const dir = sandbox(t, { functional: true });
+  writeFileSync(join(dir, 'tests/chat-steps.spec.ts'), `import { test } from '@playwright/test';
+test('chat opens', async () => { await new Promise(r => setTimeout(r, 30)); });
+`);
+  const { status, results, output } = await run(dir, ['playwright', 'test'], { GTMWORKS_HOSTED_ELSEWHERE: 'true' });
+  assert.equal(status, 0, output);
+  assert.equal(count(results, 'alone'), 1, output);
+  assert.equal(count(results, 'functional'), 2, output);
+  assert.ok(ends(results, 'functional') <= starts(results, 'alone'), output);
+  assert.ok(ends(results, 'alone') <= starts(results, 'first-run'), output);
+ });
+
  test('the navigation time budgets run alone after every functional test and before first run, and hide no failure', async t => {
   for (const [functional, measured] of [[true, true], [false, true], [true, false]]) {
    const { status, results, output } = await run(sandbox(t, { functional, measured }), ['playwright', 'test']);

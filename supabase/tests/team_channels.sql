@@ -4,12 +4,10 @@ select plan(79);
 -- RS Learning's seeded Members: the Owner (عمر), the Manager (مدير), a Contributor (مراجع), the Viewer (مشاهد) and a
 -- second Contributor (عضو). Lead is the main Agent, Faye is shown to the Manager and the Contributor, Secret to nobody
 -- but the Owner.
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state)
- select ('f2400000-0000-0000-0000-00000000000'||n)::uuid,'10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://localhost','team-channels-'||n,'ciphertext','connected' from generate_series(1,3) n;
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values
- ('a2400000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','f2400000-0000-0000-0000-000000000001','Lead','General',true),
- ('a2400000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','f2400000-0000-0000-0000-000000000002','Faye','Marketing',false),
- ('a2400000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','f2400000-0000-0000-0000-000000000003','Secret','Hidden',false);
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
+ ('a2400000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','f2400000-0000-0000-0000-000000000001','Lead','General',true,'default'),
+ ('a2400000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','f2400000-0000-0000-0000-000000000002','Faye','Marketing',false,'default'),
+ ('a2400000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','f2400000-0000-0000-0000-000000000003','Secret','Hidden',false,'default');
 insert into public.member_agent_access(company_id,person_id,agent_id) values
  ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','a2400000-0000-0000-0000-000000000002'),
  ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','a2400000-0000-0000-0000-000000000002');

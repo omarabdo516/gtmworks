@@ -1,48 +1,39 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(31);
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values
- ('d0000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://localhost','writer','ciphertext','connected'),
- ('d0000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://localhost','designer','ciphertext','connected'),
- ('d0000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000001','HTTP://LOCALHOST:80/x/%2e%2e/','writer','ciphertext','connected'),
- ('d0000000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000001','http://%6cocalhost','writer','ciphertext','connected');
+select plan(20);
+-- An Owner makes an Agent the main one or removes it; Agents are no longer attached by hand (#342: one Hermes).
+insert into public.hermes_agents(company_id,name,speciality,is_default,profile) values
+ ('10000000-0000-0000-0000-000000000001','Mona','Writing',true,'co-10000000000000000000000000000001'),
+ ('10000000-0000-0000-0000-000000000001','Nour','Design',false,'co-10000000000000000000000000000001'),
+ ('10000000-0000-0000-0000-000000000002','Shared','Writing',true,'co-10000000000000000000000000000002');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
-select throws_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','attach','d0000000-0000-0000-0000-000000000001',agent_name=>'Mona',speciality=>'Writing')$$,'42501','hermesNotAllowed','a Manager cannot attach an agent');
+select throws_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','default',(select id from public.hermes_agents where name='Nour'))$$,'42501','hermesNotAllowed','a Manager cannot move the main mark');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
-select lives_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','attach','d0000000-0000-0000-0000-000000000001',agent_name=>'Mona',speciality=>'Writing')$$,'the Owner attaches a connected profile without two-step verification');
-select is((select name from public.hermes_agents where is_default),'Mona','first agent becomes the default');
-select throws_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000002','attach','d0000000-0000-0000-0000-000000000003',agent_name=>'Shared',speciality=>'Writing')$$,'P0001','hermesSharingWarning','a second Connection for the same profile cannot bypass confirmation');
-select throws_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000002','attach','d0000000-0000-0000-0000-000000000004',agent_name=>'Encoded host',speciality=>'Writing')$$,'P0001','hermesAgentFailed','raw encoded host spellings cannot bypass confirmation');
-select lives_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000002','attach','d0000000-0000-0000-0000-000000000001',agent_name=>'Shared',speciality=>'Writing',confirm_sharing=>true)$$,'explicit confirmation allows sharing the Connection');
-select is((select actor_id::text from public.hermes_agent_audit where action='ATTACH_HERMES_AGENT' and details->>'sharing_confirmed'='true'),'20000000-0000-0000-0000-000000000001','audit identifies the person who confirmed');
-select lives_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','attach','d0000000-0000-0000-0000-000000000002',agent_name=>'Nour',speciality=>'Design',make_default=>true)$$,'another agent can be marked default');
-select is((select count(*)::int from public.hermes_agents where company_id='10000000-0000-0000-0000-000000000001' and is_default),1,'company has exactly one default');
-select throws_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','remove',a=>(select id from public.hermes_agents where name='Nour'))$$,'P0001','hermesNextDefault','removing the default requires choosing its successor');
-select lives_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','remove',a=>(select id from public.hermes_agents where name='Nour'),replacement=>(select id from public.hermes_agents where name='Mona'))$$,'removal transfers the default atomically');
-select lives_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','default',connection=>'d0000000-0000-0000-0000-000000000002',a=>(select id from public.hermes_agents where name='Mona'))$$,'changing default resolves the affected assignment');
-select is((select details->>'connection_id' from public.hermes_agent_audit where action='DEFAULT_HERMES_AGENT'),'d0000000-0000-0000-0000-000000000001','audit uses actual Connection regardless of unrelated caller input');
-select lives_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','attach','d0000000-0000-0000-0000-000000000002',agent_name=>'Nour',speciality=>'Design')$$,'reattach a non-default agent');
-select lives_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','default',a=>(select id from public.hermes_agents where name='Nour'))$$,'the Owner moves the main mark to another agent');
+select lives_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','default',(select id from public.hermes_agents where name='Nour'))$$,'the Owner moves the main mark to another agent');
 select is((select array_agg(name) from public.hermes_agents where company_id='10000000-0000-0000-0000-000000000001' and is_default),array['Nour'],'exactly one agent is main after the move, the one just made main');
-select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
-select throws_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','default',a=>(select id from public.hermes_agents where name='Mona'))$$,'42501','hermesNotAllowed','a Manager cannot move the main mark');
-select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
-select lives_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','default',a=>(select id from public.hermes_agents where name='Mona'))$$,'the Owner moves the main mark back');
-select lives_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','remove',a=>(select id from public.hermes_agents where name='Nour'),replacement=>'ffffffff-ffff-ffff-ffff-ffffffffffff')$$,'removing a non-default agent ignores a bogus replacement');
-select is((select details->'replacement_id' from public.hermes_agent_audit where company_id='10000000-0000-0000-0000-000000000001' and action='REMOVE_HERMES_AGENT' order by id desc limit 1),'null'::jsonb,'audit records no replacement when no successor was applied');
-select throws_ok($$update public.hermes_connections set profile='changed' where id='d0000000-0000-0000-0000-000000000001'$$,'P0001','hermesProfileInUse','an attached Connection cannot be retargeted around the sharing check');
-select throws_ok($$delete from public.hermes_connections where id='d0000000-0000-0000-0000-000000000001'$$,'23503',null,'an attached Connection cannot be deleted');
+select is((select actor_id::text from public.company_log where action='agent_made_main' and agent_id=(select id from public.hermes_agents where name='Nour')),'20000000-0000-0000-0000-000000000001','the log names who made it main');
+select throws_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','remove',(select id from public.hermes_agents where name='Nour'))$$,'P0001','hermesNextDefault','removing the default requires choosing its successor');
+select lives_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','remove',(select id from public.hermes_agents where name='Nour'),(select id from public.hermes_agents where name='Mona'))$$,'removal transfers the default atomically');
+select is((select array_agg(name) from public.hermes_agents where company_id='10000000-0000-0000-0000-000000000001' and is_default),array['Mona'],'the successor is main');
+select is((select details->>'replacement_id' from public.company_log where company_id='10000000-0000-0000-0000-000000000001' and action='agent_removed' order by id desc limit 1),
+ (select id::text from public.hermes_agents where name='Mona'),'the log names the successor');
+reset role;
+insert into public.hermes_agents(company_id,name,speciality,profile) values ('10000000-0000-0000-0000-000000000001','Nour','Design','co-10000000000000000000000000000001');
+set local role authenticated;
+select lives_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','remove',(select id from public.hermes_agents where name='Nour'),'ffffffff-ffff-ffff-ffff-ffffffffffff')$$,'removing a non-default agent ignores a bogus replacement');
+select is((select details ? 'replacement_id' from public.company_log where company_id='10000000-0000-0000-0000-000000000001' and action='agent_removed' order by id desc limit 1),false,'the log records no replacement when no successor was applied');
+select throws_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','remove','ffffffff-ffff-ffff-ffff-ffffffffffff')$$,'P0002','hermesAgentNotFound','an unknown Agent is not found');
+select throws_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','attach',(select id from public.hermes_agents where name='Mona'))$$,'P0001','hermesAgentFailed','no Agent is attached by hand');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
 select is((select count(*)::int from public.hermes_agents),1,'member sees only their company agent');
 select is((select count(*)::int from public.hermes_agents where company_id='10000000-0000-0000-0000-000000000002'),0,'other company agents are hidden');
-select throws_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','attach','d0000000-0000-0000-0000-000000000002',agent_name=>'Forbidden',speciality=>'Design')$$,'42501',null,'member cannot attach');
-select is((select count(*)::int from public.hermes_agent_audit where company_id='10000000-0000-0000-0000-000000000002'),0,'other company audit records are hidden');
-select throws_ok($$delete from public.hermes_agent_audit$$,'42501',null,'audit records cannot be rewritten');
+select throws_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','default',(select id from public.hermes_agents where name='Mona'))$$,'42501',null,'member cannot change the main Agent');
 select throws_ok($$update public.hermes_agents set is_default=false$$,'42501',null,'direct writes cannot bypass default rules');
 reset role;
-select throws_ok($$insert into public.hermes_agents(company_id,connection_id,name,speciality,is_default) values ('10000000-0000-0000-0000-000000000001','d0000000-0000-0000-0000-000000000002','Other','Design',true)$$,'23505',null,'unique index independently forbids a second default');
+select throws_ok($$insert into public.hermes_agents(company_id,name,speciality,is_default,profile) values ('10000000-0000-0000-0000-000000000001','Other','Design',true,'co-10000000000000000000000000000001')$$,'23505',null,'unique index independently forbids a second default');
+select throws_ok($$insert into public.hermes_agents(company_id,name,speciality,profile) values ('10000000-0000-0000-0000-000000000001','Other','Design','co-10000000000000000000000000000002')$$,'42501','hermesProfileNotShared','an Agent never runs on another Company''s profile');
 select ok((select relrowsecurity from pg_class where oid='public.hermes_agents'::regclass),'RLS enabled');
-select ok(not has_function_privilege('anon','public.manage_hermes_agent(uuid,text,uuid,uuid,text,text,boolean,boolean,uuid)','execute'),'anonymous callers cannot manage agents');
+select ok(not has_function_privilege('anon','public.manage_hermes_agent(uuid,text,uuid,uuid)','execute'),'anonymous callers cannot manage agents');
 select * from finish();
 rollback;

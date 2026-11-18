@@ -77,16 +77,28 @@ export type LeadCard={kind:'made',agent:MadeAgent}|{kind:'request',request:Agent
 export type SavedRule={id:string,agent:string|null,removed:boolean,said_at:string,sentTo?:string[]};
 type RuleDecision={approved:boolean,by:string,rule:string,at:string};
 export type Decision=({kind:'rule'}&RuleDecision)|({kind:'request',by:string,name:string,at:string}&({made:true}|{made:false,reason:string}));
-// The tool calls the Engine reported for the Run of an Agent's reply (#141), in the Engine's order, and the Run's length
-// in seconds (null when the Engine's record gave none). A call that never reported its end is `started`.
+// The tool calls the Engine made for the Run of an Agent's reply (#141), in the Engine's order, and the Run's length in
+// seconds, read from the Agent's session when the chat opens (#346). A call whose result never came is `started`.
 export type RunStep={tool:string,preview:string|null,state:'started'|'done'|'failed'};
 export type RunSteps={list:RunStep[],seconds:number|null};
-export type RunStepsRow={run_id:string,steps:(RunStep&{call:string})[],seconds:number|null};
-export const runStepsColumns='run_id,steps,seconds';
+export type RunStepsRow={run_id:string,steps:RunStep[],seconds:number|null};
+type SessionTurn={at:number,seconds:number,steps:RunStep[]};
+// Each reply takes the last turn its session started after the reply before it and by the time the reply was written:
+// one turn is one Run, and a Run that ended with no reply leaves its turn to none. No turn, or none with a tool call,
+// no steps. The session's clock and the database's are the same machine's (the bundled Engine, ADR 0010).
+export function stepsOfReplies(messages:{author:string,run_id:string,created_at:string}[],turns:SessionTurn[]|null):RunStepsRow[] {
+ let after=-Infinity;
+ return turns?messages.flatMap(message=>{
+  if(message.author!=='agent') return [];
+  const from=after; const by=Date.parse(message.created_at)/1000; after=by;
+  const turn=turns.findLast(each=>each.at>from&&each.at<=by);
+  return turn?.steps.length?[{run_id:message.run_id,steps:turn.steps,seconds:turn.seconds}]:[];
+ }):[];
+}
 export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided'|'boarded'|'asked'|'answer',to?:string,failed?:boolean,model_refused?:boolean,cards?:LeadCard[],saved?:SavedRule[],decided?:Decision,steps?:RunSteps};
 type StoredMessage=ConversationMessage&{run_id:string,hand_card?:number|null};
 export const messageColumns='id,author,author_name,body,run_id,hand_card,created_at';
-export const conversationColumns='id,agent_id,agent_name,hermes_agents(connection_id,is_default)';
+export const conversationColumns='id,agent_id,agent_name,hermes_session_id,hermes_agents(connection_id,is_default)';
 // A card of a run as the record places it. A question (#138) also carries the answer its person gave, drawn as their
 // own message though none is stored, and the main Agent's question carries the plain words it is drawn as (`words`)
 // until #143 draws its own card.
@@ -103,12 +115,12 @@ export function questionParts(row:ReplyCardRow,card:ReplyCard,lead:boolean):Pick
 // after the message of that Run, before its reply.
 const isConnect=(row:PlacedCard)=>row.card.kind==='reply'&&row.card.card.kind==='connect';
 const isAsked=(row:PlacedCard)=>row.card.kind==='reply'&&(row.card.card.kind==='question'||row.card.card.kind==='permission');
-// A person's message whose run Hermes no longer knew is marked lost (#243), from the run's usage record. A run's
+// A person's message whose run Hermes no longer knew is marked lost (#243), from the record of how its run ended. A run's
 // questions follow its person's message, each with its answer, before the run's reply (#138), as its requests do (#163). The reply carries its
 // Run's steps when the Engine reported any (#141). The message of a turn "Done it" started (#140, `handTurn`) was
 // never written by the person: it draws no bubble, and what its run showed stays.
-export const shown=(messages:StoredMessage[],usage:{run_id:string,outcome:string}[]=[],leadCards:PlacedCard[]=[],agentName='',saved:{run_id:string,rule:SavedRule}[]=[],runSteps:RunStepsRow[]=[]):ConversationMessage[]=>messages.flatMap(message=>{
- const plain={id:message.id,author:message.author,author_name:message.author_name,body:message.body,lost:message.author==='person'&&usage.some(run=>run.run_id===message.run_id&&run.outcome==='lost'),created_at:message.created_at};
+export const shown=(messages:StoredMessage[],ends:RunEnd[]=[],leadCards:PlacedCard[]=[],agentName='',saved:{run_id:string,rule:SavedRule}[]=[],runSteps:RunStepsRow[]=[]):ConversationMessage[]=>messages.flatMap(message=>{
+ const plain={id:message.id,author:message.author,author_name:message.author_name,body:message.body,lost:message.author==='person'&&ends.some(run=>run.run_id===message.run_id&&run.outcome==='lost'),created_at:message.created_at};
  const replied=message.author==='agent'||messages.some(other=>other.author==='agent'&&other.run_id===message.run_id);
  // A connect card (#203) sits right under the reply's text, before the run's other cards (design-reference: msgHTML).
  const ofRun=leadCards.filter(row=>row.run_id===message.run_id&&!isAsked(row)).sort((a,b)=>Number(isConnect(b))-Number(isConnect(a))); const cards=ofRun.map(row=>row.card);
@@ -137,15 +149,12 @@ export const withDecisions=(record:ConversationMessage[],decisions:Decision[],ag
  for(const message of record) { while(left.length&&left[0].created_at<=message.created_at) merged.push(left.shift()!); merged.push(message); }
  return [...merged,...left];
 };
-// What each ended run used, as Hermes reported it; null tokens are unknown, never zero.
-export type RunUsage={run_id:string,outcome:'completed'|'stopped'|'lost'|'failed',input_tokens:number|null,output_tokens:number|null};
-export const usageColumns='run_id,outcome,input_tokens,output_tokens';
-export type UsageTotal={input:number,output:number,unknown:number};
-export const totalOf=(usage:RunUsage[]):UsageTotal=>usage.reduce((total,run)=>run.input_tokens===null||run.output_tokens===null?{...total,unknown:total.unknown+1}:{...total,input:total.input+Number(run.input_tokens),output:total.output+Number(run.output_tokens)},{input:0,output:0,unknown:0});
+// How each ended run ended (conversation_run_ends); its token use is Hermes's own (#347).
+export type RunEnd={run_id:string,outcome:'completed'|'stopped'|'lost'|'failed'};
 // A person's message whose run has no stored reply yet and has not been recorded as ended.
-export const waiting=(messages:StoredMessage[],usage:RunUsage[]=[])=>messages.filter(message=>message.author==='person'&&!messages.some(other=>other.author==='agent'&&other.run_id===message.run_id)&&!usage.some(run=>run.run_id===message.run_id));
+export const waiting=(messages:StoredMessage[],ends:RunEnd[]=[])=>messages.filter(message=>message.author==='person'&&!messages.some(other=>other.author==='agent'&&other.run_id===message.run_id)&&!ends.some(run=>run.run_id===message.run_id));
 // Whether the latest message's run was recorded as ended without a reply (stopped, lost or failed).
-export const latestEnded=(messages:StoredMessage[],usage:RunUsage[])=>{ const latest=messages.filter(message=>message.author==='person').at(-1); return !!latest&&usage.some(run=>run.run_id===latest.run_id&&run.outcome!=='completed'); };
+export const latestEnded=(messages:StoredMessage[],ends:RunEnd[])=>{ const latest=messages.filter(message=>message.author==='person').at(-1); return !!latest&&ends.some(run=>run.run_id===latest.run_id&&run.outcome!=='completed'); };
 export const titleOf=(messages:ConversationMessage[],agentName:string)=>messages[0]?.body.split('\n')[0]||agentName;
 // The agent's face is drawn from its Connection, as on the Agents page; a detached agent keeps a stable face from the conversation.
 export const faceOf=(conversation:{id:string,hermes_agents:unknown})=>(conversation.hermes_agents as {connection_id:string}|null)?.connection_id||conversation.id;

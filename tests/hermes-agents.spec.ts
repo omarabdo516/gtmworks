@@ -1,9 +1,10 @@
 import { test, expect, type Page } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { fakeHermes } from './fake-hermes.mjs';
 import { signIn } from './sign-in';
 
+// The Company's Agents on the bundled Hermes, the only Hermes (#342): an Owner chooses the main Agent and removes one,
+// naming its successor; nobody attaches an Agent or connects a Hermes by hand.
 const company='10000000-0000-0000-0000-000000000001';
 const other='10000000-0000-0000-0000-000000000002';
 const owner='20000000-0000-0000-0000-000000000001';
@@ -14,50 +15,28 @@ async function ownerSignIn(page:Page) {
  query(`update public.people set language='en' where id='${owner}'`);
  await signIn(page,'omar@example.com','/c/rs-learning/agents');
 }
-function fixtureConnection(id:string,profile:string,state='connected') {
- query(`insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('${id}','${company}','${owner}','http://localhost','${profile}','ciphertext','${state}')`);
+// Agents as the worker leaves them, on their Company's profile.
+function agents(...rows:{company:string,name:string,main?:boolean}[]) {
+ const made=rows.map(row=>({...row,id:randomUUID()}));
+ query(`insert into public.hermes_agents(id,company_id,name,speciality,is_default,profile) values ${made.map(row=>`('${row.id}','${row.company}','${row.name}','Marketing',${row.main===true},'co-${row.company.replaceAll('-','')}')`).join(',')}`);
+ return made;
 }
-function cleanup(ids:string[]) {
- const list=ids.map(id=>`'${id}'`).join(',');
- query(`delete from public.hermes_agents where connection_id in (${list})`);
- query(`delete from public.hermes_connections where id in (${list})`);
-}
+const cleanup=(rows:{id:string}[])=>query(`delete from public.hermes_agents where id in (${rows.map(row=>`'${row.id}'`).join(',')})`);
 
-test('the Owner connects, names and attaches an agent, confirms profile sharing and chooses a successor on removal',async({page})=>{
- const fake=await fakeHermes(); const ids:string[]=[];
+test('the Owner makes another Agent the main one and removes the main one only after choosing its successor; nothing is attached by hand',async({page})=>{
+ const made=agents({company,name:'Mona',main:true},{company,name:'Nour'});
+ const [mona,nour]=made;
  const post=(body:object)=>page.request.post(endpoint,{data:{company,...body}});
  try {
   await ownerSignIn(page);
-  const connected=await page.request.post('/api/hermes-connections',{data:{company,intent:'save',address:fake.address,profile:'writer',key:fake.settings.key}});
-  expect(connected.status()).toBe(200); const connection=(await connected.json()).connection.id; ids.push(connection);
-  await page.goto('/c/rs-learning/agents');
   const panel=page.getByRole('region',{name:'Connected agents'});
-  await expect(panel.getByRole('button',{name:'Attach agent',exact:true})).toBeDisabled();
-  await panel.getByRole('button',{name:'Connected engine profile'}).click();
-  await page.getByRole('menuitemradio').filter({hasText:`writer — ${fake.address}`}).click();
-  await expect(panel.getByRole('button',{name:'Attach agent',exact:true})).toBeEnabled();
-  await panel.getByLabel('Agent name').fill('Mona'); await panel.getByLabel('Speciality',{exact:true}).fill('Marketing strategy');
-  await panel.getByLabel('Make default',{exact:true}).check();
-  await panel.getByRole('button',{name:'Attach agent',exact:true}).click();
   await expect(panel.getByText('Mona',{exact:true})).toBeVisible();
-  await expect(panel.getByText('Marketing strategy',{exact:true})).toBeVisible();
   await expect(panel.getByText('Default agent',{exact:true})).toHaveCount(1);
-  await expect(panel.getByRole('button',{name:'Attach agent',exact:true})).toBeDisabled();
-  await page.reload(); await expect(panel.getByText('Mona',{exact:true})).toBeVisible();
-  const [mona]=(await (await page.request.get(`${endpoint}?company=${company}`)).json()).agents;
-  const shared={company:other,intent:'attach',connection,name:'Mona for R&S',speciality:'Writing'};
-  const refused=await post(shared); expect(refused.status()).toBe(409); expect((await refused.json()).error).toBe('hermesSharingWarning');
-  expect((await post({...shared,confirmSharing:'true'})).status()).toBe(409);
-  const confirmed=await post({...shared,confirmSharing:true}); expect(confirmed.status()).toBe(200);
-  const sharedAgent=(await confirmed.json()).agents[0];
-  const audit=JSON.parse(query(`select actor_id,actor_name,details from public.hermes_agent_audit where action='ATTACH_HERMES_AGENT' and agent_id='${sharedAgent.id}'`))[0];
-  expect(audit.actor_id).toBe(owner); expect(audit.actor_name).toBeTruthy(); expect(audit.details.sharing_confirmed).toBe(true);
-  const next=randomUUID(); ids.push(next); fixtureConnection(next,'designer');
-  const attached=await post({intent:'attach',connection:next,name:'Nour',speciality:'Design'}); expect(attached.status()).toBe(200);
-  const nour=(await attached.json()).agents.find((agent:{name:string})=>agent.name==='Nour');
+  // No form to attach an Agent, and no way to a Hermes connection.
+  await expect(panel.getByRole('button',{name:'Attach agent',exact:true})).toHaveCount(0);
+  await expect(panel.getByRole('textbox')).toHaveCount(0);
+  expect((await post({intent:'attach',name:'Pasted',speciality:'Writing'})).status()).toBe(400);
   expect((await post({intent:'remove',agent:mona.id})).status()).toBe(409);
-  expect((await post({intent:'remove',agent:mona.id,replacement:sharedAgent.id})).status()).toBe(409);
-  await page.reload();
   const monaRow=panel.locator('.detail-row').filter({has:page.getByText('Mona',{exact:true})});
   await expect(monaRow.getByLabel('Choose the next default agent before removing this one.')).toBeVisible();
   const noSuccessor=page.waitForResponse(response=>response.url().endsWith(endpoint)&&response.request().method()==='POST');
@@ -71,40 +50,28 @@ test('the Owner connects, names and attaches an agent, confirms profile sharing 
   await expect(panel.getByText('Mona',{exact:true})).toHaveCount(0);
   await expect(panel.getByText('Nour',{exact:true})).toBeVisible();
   await expect(panel.getByText('Default agent',{exact:true})).toHaveCount(1);
-  const removed=await post({intent:'remove',agent:nour.id}); expect(removed.status()).toBe(200); expect((await removed.json()).agents).toEqual([]);
- } finally { if(ids.length) cleanup(ids); await fake.close(); }
+  // The removal and its successor are in the company log.
+  expect(JSON.parse(query(`select actor_id,details->>'replacement_id' as next from public.company_log where agent_id='${mona.id}' and action='agent_removed'`))).toEqual([{actor_id:owner,next:nour.id}]);
+  const removed=await post({intent:'remove',agent:nour.id}); expect(removed.status()).toBe(200);
+  expect((await removed.json()).agents.map((agent:{id:string})=>agent.id)).not.toContain(nour.id);
+ } finally { cleanup(made); }
 });
 
-test('integration: concurrent default changes and first attachments serialize, and sharing cannot race confirmation',async({page})=>{
- const fake=await fakeHermes();
- const ids=[randomUUID(),randomUUID(),randomUUID()]; ids.forEach((id,index)=>fixtureConnection(id,`profile-${index}-${id}`));
+test('integration: concurrent default changes serialize, so the Company keeps exactly one main Agent',async({page})=>{
+ const made=agents({company,name:'Agent 0',main:true},{company,name:'Agent 1'});
  const post=(body:object)=>page.request.post(endpoint,{data:{company,...body}});
  try {
   await ownerSignIn(page);
-  const first=await Promise.all(ids.slice(0,2).map((connection,index)=>post({intent:'attach',connection,name:`Agent ${index}`,speciality:'Strategy'})));
-  expect(first.map(response=>response.status())).toEqual([200,200]);
-  let agents=(await (await page.request.get(`${endpoint}?company=${company}`)).json()).agents;
-  expect(agents.filter((agent:{is_default:boolean})=>agent.is_default)).toHaveLength(1);
-  const defaults=await Promise.all(agents.map((agent:{id:string})=>post({intent:'default',agent:agent.id})));
+  const defaults=await Promise.all(made.map(agent=>post({intent:'default',agent:agent.id})));
   expect(defaults.map(response=>response.status())).toEqual([200,200]);
-  agents=(await (await page.request.get(`${endpoint}?company=${company}`)).json()).agents;
-  expect(agents.filter((agent:{is_default:boolean})=>agent.is_default)).toHaveLength(1);
-  const shared=await Promise.all([company,other].map(company=>post({company,intent:'attach',connection:ids[2],name:'Shared profile',speciality:'Writing'})));
-  expect(shared.map(response=>response.status()).sort()).toEqual([200,409]);
-  const connected=await page.request.post('/api/hermes-connections',{data:{company,intent:'save',address:fake.address,profile:'initial',key:fake.settings.key}});
-  expect(connected.status()).toBe(200); const connection=(await connected.json()).connection.id; ids.push(connection);
-  const [attach,retarget]=await Promise.all([
-   post({intent:'attach',connection,name:'During edit',speciality:'Strategy'}),
-   page.request.post('/api/hermes-connections',{data:{company,intent:'save',id:connection,address:fake.address,profile:'changed',key:fake.settings.key}}),
-  ]);
-  expect(attach.status()).toBe(200); expect([200,409]).toContain(retarget.status());
- } finally { cleanup(ids); await fake.close(); }
+  const listed=(await (await page.request.get(`${endpoint}?company=${company}`)).json()).agents;
+  expect(listed.filter((agent:{is_default:boolean})=>agent.is_default)).toHaveLength(1);
+ } finally { cleanup(made); }
 });
 
 test('isolation: every company role sees only its own agents; only an Owner changes assignments, and never another company\'s',async({browser})=>{
  test.setTimeout(120000);
- const ids=[randomUUID(),randomUUID()]; ids.forEach(id=>fixtureConnection(id,id));
- query(`insert into public.hermes_agents(company_id,connection_id,name,speciality,is_default) values ('${company}','${ids[0]}','RS agent','Writing',true),('${other}','${ids[1]}','Other company agent','Strategy',true)`);
+ const made=agents({company,name:'RS agent',main:true},{company:other,name:'Other company agent',main:true});
  // The Owner comes last, so the roles before it see the seeded assignment unchanged.
  const roles=[['manager@example.com','20000000-0000-0000-0000-000000000002','manager'],['agent1@example.com','30000000-0000-0000-0000-000000000001','contributor'],['reviewer@example.com','20000000-0000-0000-0000-000000000003','contributor'],['viewer@example.com','20000000-0000-0000-0000-000000000004','viewer'],['manager@example.com','20000000-0000-0000-0000-000000000002','owner']];
  try {
@@ -115,28 +82,27 @@ test('isolation: every company role sees only its own agents; only an Owner chan
     await signIn(page,email,'/c/rs-learning/agents');
     const panel=page.getByRole('region',{name:'Connected agents'});
     await expect(panel.getByText('RS agent',{exact:true})).toBeVisible(); await expect(panel.getByText('Other company agent')).toHaveCount(0);
-    await expect(panel.getByRole('button',{name:'Attach agent',exact:true})).toHaveCount(role==='owner'?1:0);
+    await expect(panel.getByRole('button',{name:'Attach agent',exact:true})).toHaveCount(0);
     const own=await page.request.get(`${endpoint}?company=${company}`); expect(own.status()).toBe(200);
-    const agent=(await own.json()).agents[0]; expect(agent.name).toBe('RS agent');
+    const agent=(await own.json()).agents.find((row:{name:string})=>row.name==='RS agent'); expect(agent).toBeTruthy();
     expect((await page.request.get(`${endpoint}?company=${other}`)).status()).toBe(404);
-    for(const intent of ['attach','default','remove']) {
-     expect((await page.request.post(endpoint,{data:{company:other,intent,agent:agent.id,connection:ids[0],name:'Forbidden',speciality:'Writing'}})).status()).toBe(404);
+    for(const intent of ['default','remove']) {
+     expect((await page.request.post(endpoint,{data:{company:other,intent,agent:agent.id}})).status()).toBe(404);
      if(role==='owner') continue;
-     const refused=await page.request.post(endpoint,{data:{company,intent,agent:agent.id,connection:ids[0],name:'Forbidden',speciality:'Writing'}});
+     const refused=await page.request.post(endpoint,{data:{company,intent,agent:agent.id}});
      expect(refused.status()).toBe(403); expect((await refused.json()).error).toBe('hermesNotAllowed');
     }
     if(role==='owner') {
-     // An Owner who did not make the Connection still manages the company's agents.
+     // An Owner the seed did not make still manages the company's agents, and the change is logged under them.
      const kept=await page.request.post(endpoint,{data:{company,intent:'default',agent:agent.id}});
      expect(kept.status()).toBe(200);
-     const audit=JSON.parse(query(`select actor_id from public.hermes_agent_audit where action='DEFAULT_HERMES_AGENT' and agent_id='${agent.id}'`));
-     expect(audit).toEqual([{actor_id:person}]);
+     expect(JSON.parse(query(`select actor_id from public.company_log where action='agent_made_main' and agent_id='${agent.id}'`))).toEqual([{actor_id:person}]);
     }
-    expect(JSON.parse(query(`select name,is_default from public.hermes_agents where company_id='${company}' and connection_id in ('${ids[0]}','${ids[1]}')`))).toEqual([{name:'RS agent',is_default:true}]);
+    expect(JSON.parse(query(`select name,is_default from public.hermes_agents where id='${made[0].id}'`))).toEqual([{name:'RS agent',is_default:true}]);
    } finally { await context.close(); }
   }
  } finally {
-  cleanup(ids);
+  cleanup(made);
   query(`update public.members set role='manager' where company_id='${company}' and person_id='20000000-0000-0000-0000-000000000002'`);
  }
 });

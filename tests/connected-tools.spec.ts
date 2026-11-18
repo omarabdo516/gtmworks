@@ -2,9 +2,10 @@ import { test, expect, freshSeed, type Page } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { fakeHermes } from './fake-hermes.mjs';
+import { laneHermes } from './lane-hermes';
 import { signIn } from './sign-in';
 import { appByKey, appConfig } from '../lib/app-catalogue.mjs';
-import { appOrigin, lane } from './lane.mjs';
+import { appOrigin } from './lane.mjs';
 
 // #204, an Agent's "Connected tools" in its details. RS Learning runs on its own profile in a fake Engine whose MCP
 // catalogue and sign-ins answer as the pinned release's do: Lead keeps that profile, and Writer has a profile of its
@@ -25,7 +26,7 @@ test.describe.configure({mode:'serial'});
 test.use({actionTimeout:15000});
 test.beforeAll(async({browser},testInfo)=>{
  freshSeed(testInfo.file);
- fake=await fakeHermes({host:`127.0.0.${70+lane}`,managementPort:9119});
+ fake=await laneHermes();
  for(const name of [profile,own]) fake.settings.profiles.set(name,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
  fake.settings.profiles.get(profile)!.config.mcp_servers={canva:installed('canva')};
  fake.settings.appTokens.add(`${profile}:canva`);
@@ -35,20 +36,14 @@ test.beforeAll(async({browser},testInfo)=>{
  const page=await browser.newPage();
  try {
   await signIn(page,'omar@example.com','/c/rs-learning/home');
-  const saved=await page.request.post('/api/hermes-connections',{data:{company,intent:'save',address:fake.address,profile,key:fake.settings.key}});
-  expect(saved.status()).toBe(200);
-  const connection=(await saved.json()).connection.id; const second=randomUUID();
+  const [connection,second]=[randomUUID(),randomUUID()];
   query(`do $$ begin
-   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('${lead}','${company}','${connection}','Lead','General',true);
-   insert into public.hermes_agent_audit(company_id,actor_id,agent_id,action,details) values ('${company}','${omar}','${lead}','PROVIDE_BUNDLED_HERMES_AGENT',jsonb_build_object('connection_id','${connection}'));
-   insert into public.company_profiles(company_id,profile,tools_level,tools_policy) select id,'${profile}',agent_level,public.engine_tool_policy() from public.companies where id='${company}'
+   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${lead}','${company}','${connection}','Lead','General',true,'${profile}');
+      insert into public.company_profiles(company_id,profile,tools_level,tools_policy) select id,'${profile}',agent_level,public.engine_tool_policy() from public.companies where id='${company}'
     on conflict (company_id) do update set profile=excluded.profile,tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false;
    insert into public.agent_profiles(agent_id,company_id,tools_level,tools_policy) select '${writer}',id,agent_level,public.engine_tool_policy() from public.companies where id='${company}';
-   insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features)
-    select '${second}',company_id,owner_id,address,'${own}',key_encrypted,state,version,features from public.hermes_connections where id='${connection}';
-   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,apps) values ('${writer}','${company}','${second}','Writer','Content',false,'{Mixpanel}');
-   insert into public.hermes_agent_audit(company_id,actor_id,agent_id,action,details) values ('${company}','${omar}','${writer}','PROVIDE_BUNDLED_HERMES_AGENT',jsonb_build_object('connection_id','${second}'));
-   insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','20000000-0000-0000-0000-000000000002','${writer}'),('${company}','20000000-0000-0000-0000-000000000004','${writer}');
+      insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,apps,profile) values ('${writer}','${company}','${second}','Writer','Content',false,'{Mixpanel}','${own}');
+      insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','20000000-0000-0000-0000-000000000002','${writer}'),('${company}','20000000-0000-0000-0000-000000000004','${writer}');
   end $$;`);
  } finally { await page.close(); }
 });

@@ -1,9 +1,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 select plan(46);
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
- ('e2000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9','rules-test','ciphertext','connected','0.23.0','{run_submission}');
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('e2000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','e2000000-0000-0000-0000-000000000001','Ads','Ads');
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile) values ('e2000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','e2000000-0000-0000-0000-000000000001','Ads','Ads','rules-test');
 -- Ads is shown to the Manager (2), the Contributor (3) and the Viewer (4) (#15); the Owner sees every Agent.
 insert into public.member_agent_access(company_id,person_id,agent_id)
  select '10000000-0000-0000-0000-000000000001',('20000000-0000-0000-0000-00000000000'||n)::uuid,'e2000000-0000-0000-0000-000000000002' from generate_series(2,4) n;
@@ -62,7 +60,7 @@ update public.members set role='manager' where company_id='10000000-0000-0000-00
 -- A run is pinned at its first start with the text of the tools its person is offered and the Agent's rules in force,
 -- oldest first. The app gives every tool's spec as the text it sends.
 select set_config('test.spec89',public.lead_tools_spec_89(),true);
-select set_config('test.specs','{"create_agent":"{\"name\":\"create_agent\"}","save_rule":"{\"name\":\"save_rule\"}","suggest_rule":"{\"name\":\"suggest_rule\"}"}',true);
+select set_config('test.specs','{"create_agent":"{\"name\":\"create_agent\"}","save_rule":"{\"name\":\"save_rule\"}","suggest_team_rule":"{\"name\":\"suggest_team_rule\"}"}',true);
 update public.agent_rules set said_at=said_at+interval '1 minute' where run_id='rule-run-2';
 insert into public.conversation_run_reservations(conversation_id,send_key,company_id,connection_id,person_id,agent_id,message,profile)
  select ('e3000000-0000-0000-0000-00000000000'||n)::uuid,('e4000000-0000-0000-0000-00000000000'||n)::uuid,'10000000-0000-0000-0000-000000000001','e2000000-0000-0000-0000-000000000001',
@@ -77,11 +75,11 @@ select public.pinned_run_note('e3000000-0000-0000-0000-000000000001','e4000000-0
 insert into public.conversation_run_notes(conversation_id,send_key,company_id,offers_tools,tools) values ('e3000000-0000-0000-0000-000000000004','e4000000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000001',true,public.lead_tools_spec_89());
 set local role service_role;
 select results_eq($$select public.pin_run(('e3000000-0000-0000-0000-00000000000'||n)::uuid,('e4000000-0000-0000-0000-00000000000'||n)::uuid,current_setting('test.specs')::jsonb) from generate_series(1,4) n order by n$$,
- $$values (jsonb_build_object('tools','[{"name":"save_rule"}]','rules',jsonb_build_array(current_setting('test.rule'),'from now on: answer every comment within the day'))),
-  (jsonb_build_object('tools','[{"name":"save_rule"}]','rules',jsonb_build_array(current_setting('test.rule'),'from now on: answer every comment within the day'))),
-  (jsonb_build_object('tools','[{"name":"suggest_rule"}]','rules',jsonb_build_array(current_setting('test.rule'),'from now on: answer every comment within the day'))),
+ $$values (jsonb_build_object('tools','[{"name":"save_rule"}]','rules','[]'::jsonb)),
+  (jsonb_build_object('tools','[{"name":"save_rule"}]','rules','[]'::jsonb)),
+  (jsonb_build_object('tools','[{"name":"suggest_team_rule"}]','rules','[]'::jsonb)),
   (jsonb_build_object('tools',current_setting('test.spec89'),'rules','[]'::jsonb))$$,
- 'the Owner''s and the Manager''s runs are offered save_rule, the Contributor''s suggest_rule instead (#25), every run of Ads is told its rules, and a run pinned before keeps what it had');
+ 'the Owner''s and the Manager''s runs are offered save_rule, the Contributor''s suggest_team_rule instead (#25), no run is told its rules any more (#345: they are in its SOUL.md), and a run pinned before keeps what it had');
 select is(public.pin_run('e3000000-0000-0000-0000-000000000001','e4000000-0000-0000-0000-000000000005',current_setting('test.specs')::jsonb),'{"tools":null,"rules":[]}'::jsonb,
  'a run the previous app version already tried to start keeps the request it sent: its tools as that version pinned them (none here) and no rules');
 reset role;
@@ -90,7 +88,7 @@ update public.agent_rules set removed_at=now(),removed_by='20000000-0000-0000-00
 set local role service_role;
 select is(public.pin_run('e3000000-0000-0000-0000-000000000001','e4000000-0000-0000-0000-000000000005',current_setting('test.specs')::jsonb),'{"tools":null,"rules":[]}'::jsonb,'and its retry reads the same');
 select is(public.pin_run('e3000000-0000-0000-0000-000000000001','e4000000-0000-0000-0000-000000000001',current_setting('test.specs')::jsonb),
- jsonb_build_object('tools','[{"name":"save_rule"}]','rules',jsonb_build_array(current_setting('test.rule'),'from now on: answer every comment within the day')),
+ jsonb_build_object('tools','[{"name":"save_rule"}]','rules','[]'::jsonb),
  'a retry of a run this version pinned sends what it first sent, even after a rule changed');
 reset role;
 update public.agent_rules set removed_at=null,removed_by=null where run_id='rule-run-2';
@@ -151,7 +149,7 @@ select ok((select bool_and(removed_at is not null) from public.agent_rules),'and
 select results_eq($$select actor_id,details->>'agent_name',details->>'rule' from public.company_log where action='agent_rule_removed' order by id$$,
  $$values ('20000000-0000-0000-0000-000000000001'::uuid,'Ads',current_setting('test.rule')),('20000000-0000-0000-0000-000000000002'::uuid,'Ads','from now on: answer every comment within the day')$$,
  'the log has one row per removal: who removed it, the Agent and the rule');
-select is(public.agent_rules_in_force('e2000000-0000-0000-0000-000000000002'),'{}'::text[],'a later run of Ads is told neither');
+select is(public.agent_rules_in_force('e2000000-0000-0000-0000-000000000002'),'{}'::text[],'no run of Ads is told rules');
 
 set local role service_role;
 select is(public.agent_save_rule('e3000000-0000-0000-0000-000000000001','rule-run-1','call-0','x')->>'rule',current_setting('test.first_rule'),'closing the saving run again after the removal brings nothing back');

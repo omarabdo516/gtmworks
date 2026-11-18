@@ -43,10 +43,9 @@ test('every button on the Conversation, the board and the settings overlay moves
  // The seed attaches no Agent, so the Conversation would show no head pill, composer or details: RS Learning gets a Lead
  // on an Engine nobody answers at, which draws them all, and loses it again after.
  const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
- const [company,omar,connection,lead]=['10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001',randomUUID(),randomUUID()];
+ const [company,connection,lead]=['10000000-0000-0000-0000-000000000001',randomUUID(),randomUUID()];
  query(`do $$ begin
-  insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values (${quote(connection)},${quote(company)},${quote(omar)},'http://127.0.0.1:9/p/sweep-lead','sweep-lead','no-key','unreachable');
-  insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values (${quote(lead)},${quote(company)},${quote(connection)},'Lead','General',true);
+    insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values (${quote(lead)},${quote(company)},${quote(connection)},'Lead','General',true,'sweep-lead');
  end $$;`);
  try {
   await signIn(page,'omar@example.com','/c/rs-learning/chat');
@@ -62,7 +61,7 @@ test('every button on the Conversation, the board and the settings overlay moves
   await expect(page.locator('.sov')).toBeVisible();
   await sweep('the settings overlay');
  } finally {
-  query(`do $$ begin delete from public.hermes_agents where id=${quote(lead)}; delete from public.hermes_connections where id=${quote(connection)}; end $$;`);
+  query(`do $$ begin delete from public.hermes_agents where id=${quote(lead)}; end $$;`);
  }
 });
 
@@ -80,7 +79,7 @@ test('a section not built yet says so at its address, and a settings page\'s tra
  await expect(cardCrumbs.first()).toHaveText(i18n().t('work'));
  await expect(cardCrumbs.first().locator('a')).toHaveAttribute('href','/c/rs-learning/work/board');
  await expect(cardCrumbs.last()).not.toHaveText('');
- for(const [path,leaf] of [['settings/members','members'],['settings/work','workSettings'],['settings/agents','agents']]) {
+ for(const [path,leaf] of [['settings/members','members'],['settings/work','workSettings']]) {
   await page.goto(`/c/rs-learning/${path}`);
   const crumbs=page.locator('.topbar [data-slot="breadcrumb"] li:not([role="presentation"])');
   await expect(crumbs,path).toHaveCount(3);
@@ -88,6 +87,9 @@ test('a section not built yet says so at its address, and a settings page\'s tra
   await expect(crumbs.nth(2),path).toHaveText(i18n().t(leaf));
   await expect(crumbs.nth(1).locator('a'),path).toHaveAttribute('href','/c/rs-learning/settings');
  }
+ // Settings > Agents went with the pasted Hermes (#342): its address is not found.
+ await page.goto('/c/rs-learning/settings/agents');
+ await expect(page.getByRole('heading',{name:'Page not found'})).toBeVisible();
 });
 
 test('Viewer has the same navigation, New chat included, without new card on every company section',async({page})=>{
@@ -407,8 +409,7 @@ test('"N" opens a new chat with its composer focused from the board, Numbers, th
  // RS Learning gets a main Agent, so the new chat has a composer, and a Conversation with it to press "N" in.
  const rs='10000000-0000-0000-0000-000000000001', omar='20000000-0000-0000-0000-000000000001', connection=randomUUID(), agent=randomUUID(), conversation=randomUUID();
  const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
- query(`insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('${connection}','${rs}','${omar}','http://127.0.0.1:9/p/new-chat-key','new-chat-key','no-key','unreachable')`);
- query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('${agent}','${rs}','${connection}','Lead','General',true)`);
+ query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${agent}','${rs}','${connection}','Lead','General',true,'new-chat-key')`);
  query(`insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${conversation}','${rs}','${omar}','${agent}','Lead')`);
  try {
   await page.setViewportSize({width:1440,height:900});
@@ -429,6 +430,5 @@ test('"N" opens a new chat with its composer focused from the board, Numbers, th
  } finally {
   query(`delete from public.conversations where id='${conversation}'`);
   query(`delete from public.hermes_agents where id='${agent}'`);
-  query(`delete from public.hermes_connections where id='${connection}'`);
  }
 });

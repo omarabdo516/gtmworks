@@ -209,7 +209,7 @@ export function ConversationComposer({company,conversation,record,writer,asked,b
    if(!failure) asked();
    return failure;
   }}/>:<p className="ro-line" role="note"><ShellIcon name="eye"/><span>{t('viewOnly')}</span></p>}
-  {usage&&(record?<p className="chat-usage" data-usage>{t('conversationUsage',count(record.usage.input+record.usage.output),count(record.usage.input),count(record.usage.output))}{record.usage.unknown>0&&<> · {t('usageUnknownRuns',count(record.usage.unknown))}</>}</p>
+  {usage&&(record?.usage?<p className="chat-usage" data-usage>{t('conversationUsage',count(record.usage.input+record.usage.output),count(record.usage.input),count(record.usage.output))}</p>
    :<p className="chat-usage" aria-hidden="true">{'\u00a0'}</p>)}
  </>;
 }

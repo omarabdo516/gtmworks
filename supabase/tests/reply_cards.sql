@@ -3,9 +3,7 @@ create extension if not exists pgtap with schema extensions;
 select plan(29);
 -- #136. Ads in RS Learning, shown to the Manager (2), the Contributors (3, 5) and the Viewer (4); the Owner (1) sees every
 -- Agent. One Conversation with Ads each, and in it the message of one run.
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
- ('e8000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9','cards-test','ciphertext','connected','0.23.0','{run_submission}');
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('e8000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','e8000000-0000-0000-0000-000000000001','Ads','Ads');
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile) values ('e8000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','e8000000-0000-0000-0000-000000000001','Ads','Ads','cards-test');
 insert into public.member_agent_access(company_id,person_id,agent_id)
  select '10000000-0000-0000-0000-000000000001',('20000000-0000-0000-0000-00000000000'||n)::uuid,'e8000000-0000-0000-0000-000000000002' from generate_series(2,5) n;
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name)
@@ -15,16 +13,16 @@ insert into public.conversation_messages(company_id,conversation_id,author,perso
 
 -- A run is pinned at its first start with the text of the tools its person is offered: show_draft goes beside the tools
 -- the run had, for an Owner, a Manager and a Contributor, and a Viewer is offered nothing.
-select set_config('test.specs','{"create_agent":"{\"name\":\"create_agent\"}","save_rule":"{\"name\":\"save_rule\"}","suggest_rule":"{\"name\":\"suggest_rule\"}","show_draft":"{\"name\":\"show_draft\"}"}',true);
+select set_config('test.specs','{"create_agent":"{\"name\":\"create_agent\"}","save_rule":"{\"name\":\"save_rule\"}","suggest_team_rule":"{\"name\":\"suggest_team_rule\"}","show_draft":"{\"name\":\"show_draft\"}"}',true);
 insert into public.conversation_run_reservations(conversation_id,send_key,company_id,connection_id,person_id,agent_id,message,profile)
  select ('e9000000-0000-0000-0000-00000000000'||n)::uuid,('ea000000-0000-0000-0000-00000000000'||n)::uuid,'10000000-0000-0000-0000-000000000001','e8000000-0000-0000-0000-000000000001',
   ('20000000-0000-0000-0000-00000000000'||n)::uuid,'e8000000-0000-0000-0000-000000000002','Plan the December campaign','cards-test' from generate_series(1,4) n;
 select public.pinned_run_note(('e9000000-0000-0000-0000-00000000000'||n)::uuid,('ea000000-0000-0000-0000-00000000000'||n)::uuid,'10000000-0000-0000-0000-000000000001',('20000000-0000-0000-0000-00000000000'||n)::uuid) from generate_series(1,4) n;
 set local role service_role;
 select results_eq($$select public.pin_run(('e9000000-0000-0000-0000-00000000000'||n)::uuid,('ea000000-0000-0000-0000-00000000000'||n)::uuid,current_setting('test.specs')::jsonb)->>'tools' from generate_series(1,4) n order by n$$,
- $$values ('[{"name":"save_rule"},{"name":"show_draft"}]'),('[{"name":"save_rule"},{"name":"show_draft"}]'),('[{"name":"suggest_rule"},{"name":"show_draft"}]'),(null)$$,
- 'the Owner''s and the Manager''s runs are offered show_draft after save_rule, the Contributor''s after suggest_rule, and the Viewer''s nothing');
-select is(public.pin_run('e9000000-0000-0000-0000-000000000003','ea000000-0000-0000-0000-000000000003','{"suggest_rule":"{\"name\":\"suggest_rule\"}"}')->>'tools','[{"name":"suggest_rule"},{"name":"show_draft"}]',
+ $$values ('[{"name":"save_rule"},{"name":"show_draft"}]'),('[{"name":"save_rule"},{"name":"show_draft"}]'),('[{"name":"suggest_team_rule"},{"name":"show_draft"}]'),(null)$$,
+ 'the Owner''s and the Manager''s runs are offered show_draft after save_rule, the Contributor''s after suggest_team_rule, and the Viewer''s nothing');
+select is(public.pin_run('e9000000-0000-0000-0000-000000000003','ea000000-0000-0000-0000-000000000003','{"suggest_team_rule":"{\"name\":\"suggest_team_rule\"}"}')->>'tools','[{"name":"suggest_team_rule"},{"name":"show_draft"}]',
  'a retry sends what was first pinned');
 reset role;
 
@@ -127,8 +125,8 @@ select is(public.close_conversation_run('e9000000-0000-0000-0000-000000000004','
 select is(public.close_conversation_run('e9000000-0000-0000-0000-000000000001','partial-run','failed',null,null,null,null,false),true,'and one with a draft card whose closer did not read it completed');
 select is(public.close_conversation_run('e9000000-0000-0000-0000-000000000001','old-app-run','failed',null,null,null,null),true,'and one with a draft card closed by the previous app version');
 reset role;
-select results_eq($$select run_id,outcome,input_tokens from public.conversation_usage where run_id in ('card-run-3','made-run','asked-run','rule-run','question-run','card-run-4','card-run-5','partial-run','old-app-run') order by run_id$$,
- $$values ('asked-run','completed',null::bigint),('card-run-3','completed',10::bigint),('card-run-4','failed',null),('card-run-5','failed',null),('made-run','completed',null),('old-app-run','failed',null),('partial-run','failed',null),('question-run','failed',null),('rule-run','completed',null)$$,
+select results_eq($$select run_id,outcome from public.conversation_run_ends where run_id in ('card-run-3','made-run','asked-run','rule-run','question-run','card-run-4','card-run-5','partial-run','old-app-run') order by run_id$$,
+ $$values ('asked-run','completed'),('card-run-3','completed'),('card-run-4','failed'),('card-run-5','failed'),('made-run','completed'),('old-app-run','failed'),('partial-run','failed'),('question-run','failed'),('rule-run','completed')$$,
  'a reply read completed that is only a draft card, a made Agent, a request or a saved rule is recorded as done, once; one with only a question card, malformed calls or no card, or not read completed, as failed');
 select is((select count(*)::int from public.conversation_messages where author='agent' and run_id in ('card-run-3','made-run','asked-run','rule-run','question-run','card-run-4','card-run-5','partial-run','old-app-run')),0,'no reply is stored for any of them');
 select results_eq($$select id,hermes_session_id from public.conversations where id in ('e9000000-0000-0000-0000-000000000002','e9000000-0000-0000-0000-000000000003','e9000000-0000-0000-0000-000000000005') order by id$$,

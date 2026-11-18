@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { handTurn, latestEnded, offeredChoices, queuedWaiting, questionParts, replyCardOf, shown, waiting, withDecisions, withTeamWork } from '../lib/conversations.ts';
+import { handTurn, latestEnded, offeredChoices, queuedWaiting, questionParts, replyCardOf, shown, stepsOfReplies, waiting, withDecisions, withTeamWork } from '../lib/conversations.ts';
 
 // A Contributor's Conversation in a team (#25): the line under the Agent's reply says who their rule was sent to as a
 // suggestion, and the Owner's or a Manager's decision on it shows where it happened among the messages.
@@ -225,7 +225,7 @@ test('the buttons are the choices the person\'s role may send that the Engine of
 
 test('a message whose run Hermes no longer knew is marked lost and waits no more, and the next message waits for its own reply', () => {
  const first=[{id:1,author:/** @type {const} */('person'),author_name:'Omar',body:'First try',run_id:'r1',created_at:at(1)}];
- const lost=[{run_id:'r1',outcome:/** @type {const} */('lost'),input_tokens:null,output_tokens:null}];
+ const lost=[{run_id:'r1',outcome:/** @type {const} */('lost')}];
  assert.deepEqual(shown(first,lost).map(message=>message.lost),[true]);
  assert.deepEqual(waiting(first,lost),[]);
  assert.equal(latestEnded(first,lost),true);
@@ -234,4 +234,27 @@ test('a message whose run Hermes no longer knew is marked lost and waits no more
  assert.deepEqual(shown(again,lost).map(message=>message.lost),[true,false]);
  assert.deepEqual(waiting(again,lost).map(message=>message.id),[2]);
  assert.equal(latestEnded(again,lost),false);
+});
+
+// #346: a reply's steps are read from the Agent's Hermes session, never kept: each reply takes the last turn the session
+// started after the reply before it and by the time the reply was written, so a run that failed before it keeps its
+// steps to itself, and a reply with no turn of its own, or a turn with no tool calls, shows none.
+test('each reply carries the steps of its own turn in the session, and a turn of a failed run goes to no reply',()=>{
+ const time=(/** @type {number} */ minute)=>Date.parse(at(minute))/1000;
+ const chat=[
+  {id:1,author:/** @type {const} */('person'),author_name:'Youssef',body:'Plan the ads',run_id:'r1',created_at:at(1)},
+  {id:2,author:/** @type {const} */('agent'),author_name:'Ads',body:'Here is the plan.',run_id:'r1',created_at:at(3)},
+  {id:3,author:/** @type {const} */('person'),author_name:'Youssef',body:'Try again',run_id:'r2',created_at:at(10)},
+  {id:4,author:/** @type {const} */('person'),author_name:'Youssef',body:'And the budget?',run_id:'r3',created_at:at(20)},
+  {id:5,author:/** @type {const} */('agent'),author_name:'Ads',body:'15,000 a month.',run_id:'r3',created_at:at(22)},
+  {id:6,author:/** @type {const} */('person'),author_name:'Youssef',body:'Thanks',run_id:'r4',created_at:at(30)},
+  {id:7,author:/** @type {const} */('agent'),author_name:'Ads',body:'Any time.',run_id:'r4',created_at:at(31)}];
+ const search={tool:'web_search',preview:'audiences',state:/** @type {const} */('done')};
+ const failed={tool:'read_file',preview:null,state:/** @type {const} */('failed')};
+ const sheet={tool:'sheets',preview:'budget',state:/** @type {const} */('done')};
+ const turns=[{at:time(1)+2,seconds:41,steps:[search]},{at:time(10)+1,seconds:5,steps:[failed]},{at:time(20)+1,seconds:7,steps:[sheet]},{at:time(30)+1,seconds:2,steps:[]}];
+ const steps=stepsOfReplies(chat,turns);
+ assert.deepEqual(steps,[{run_id:'r1',steps:[search],seconds:41},{run_id:'r3',steps:[sheet],seconds:7}]);
+ assert.deepEqual(shown(chat,[],[],'Ads',[],steps).filter(message=>message.steps).map(message=>[message.id,message.steps]),[[2,{list:[search],seconds:41}],[5,{list:[sheet],seconds:7}]]);
+ assert.deepEqual(stepsOfReplies(chat,null),[],'a session that cannot be read shows no steps');
 });

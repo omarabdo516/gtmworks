@@ -1,6 +1,6 @@
 import { test, expect, type Page, type Request } from './fresh-seed';
 import { randomUUID } from 'node:crypto';
-import { fakeHermes } from './fake-hermes.mjs';
+import { laneHermes } from './lane-hermes';
 import { execFileSync } from 'node:child_process';
 import { signIn } from './sign-in';
 import { asAdmin, holdPages, watchPlaceholders, whileSlow, wholePages } from './slow-reads';
@@ -15,18 +15,15 @@ async function ownerSignIn(page:Page) {
 const company='10000000-0000-0000-0000-000000000001';
 const other='10000000-0000-0000-0000-000000000002';
 const manager='20000000-0000-0000-0000-000000000002';
-type Fake=Awaited<ReturnType<typeof fakeHermes>>;
 
-// Two agents on two Hermes profiles of one fake Hermes: Mona is the company's default.
-async function attachAgents(page:Page,fake:Fake) {
+// Two agents on two profiles of the lane's fake Hermes, the install's one Hermes (#342): Mona is the company's default.
+function attachAgents() {
  const stamp=randomUUID().slice(0,8); const agents:Record<string,{id:string,profile:string,connection:string}>={};
+ query(`update public.hermes_agents set is_default=false where company_id='${company}' and is_default`);
  for(const [name,makeDefault] of [['Mona',true],['Nour',false]] as const) {
-  const profile=`${name.toLowerCase()}-${stamp}`;
-  const saved=await page.request.post('/api/hermes-connections',{data:{company,intent:'save',address:fake.address,profile,key:fake.settings.key}});
-  expect(saved.status()).toBe(200); const connection=(await saved.json()).connection.id;
-  const attached=await page.request.post('/api/hermes-agents',{data:{company,intent:'attach',connection,name,speciality:'Marketing',makeDefault}});
-  expect(attached.status()).toBe(200);
-  agents[name]={id:(await attached.json()).agents.find((agent:{connection_id:string})=>agent.connection_id===connection).id,profile,connection};
+  const [profile,id,connection]=[`${name.toLowerCase()}-${stamp}`,randomUUID(),randomUUID()];
+  query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${id}','${company}','${connection}','${name}','Marketing',${makeDefault},'${profile}')`);
+  agents[name]={id,profile,connection};
  }
  return agents;
 }
@@ -34,7 +31,6 @@ function detach(agents:Record<string,{id:string,connection:string}>) {
  const list=(key:'id'|'connection')=>Object.values(agents).map(agent=>`'${agent[key]}'`).join(',');
  if(!Object.keys(agents).length) return;
  query(`delete from public.hermes_agents where id in (${list('id')})`);
- query(`delete from public.hermes_connections where id in (${list('connection')})`);
 }
 // A stuck click fails with its locator instead of running into the test timeout.
 test.use({actionTimeout:15000});
@@ -42,13 +38,13 @@ const send=(page:Page,data:object)=>page.request.post('/api/conversations',{data
 
 test('The Owner starts a private conversation from the board and from Home, and the reply arrives without a reload',async({page})=>{
  test.setTimeout(120000);
- const fake=await fakeHermes(); fake.settings.key=`hermes-key-${randomUUID()}`; fake.settings.pendingReads=2;
+ const fake=await laneHermes(); fake.settings.pendingReads=2;
  let agents={};
  const responses:Promise<string>[]=[];
  const placeholders=await watchPlaceholders(page);
  await wholePages(page,url=>url.pathname.startsWith('/c/rs-learning/conversations/'));
  try {
-  await ownerSignIn(page); agents=await attachAgents(page,fake);
+  await ownerSignIn(page); agents=attachAgents();
   const {Nour,Mona}=agents as Record<string,{profile:string}>;
   // Only finished requests: a still-open stream (the dev server's or a prefetch) has no complete body to read.
   const record=(request:Request)=>{responses.push(request.response().then(response=>response?response.text():'').catch(()=>''));};
@@ -144,9 +140,9 @@ test('Connect apps opens its sheet from the sidebar and the account menu, and it
 
 test('isolation: another member and another company get not found, and a company Owner cannot read or write in another person\'s conversation',async({page,browser})=>{
  test.setTimeout(120000);
- const fake=await fakeHermes(); let agents={};
+ const fake=await laneHermes(); let agents={};
  try {
-  await ownerSignIn(page); agents=await attachAgents(page,fake);
+  await ownerSignIn(page); agents=attachAgents();
   const conversation=randomUUID();
   expect((await send(page,{conversation,message:'Private plan',sendKey:randomUUID()})).status()).toBe(200);
   expect((await page.request.get(`/api/conversations?company=${other}&conversation=${conversation}`)).status()).toBe(404);
@@ -168,11 +164,11 @@ test('isolation: another member and another company get not found, and a company
 // #287: a Contributor talks to the company's agent, whose Connection the company's Owner attached.
 test('A Contributor starts a conversation and gets the reply; nobody else reads it',async({page,browser})=>{
  test.setTimeout(120000);
- const fake=await fakeHermes(); fake.settings.key=`hermes-key-${randomUUID()}`; let agents={};
+ const fake=await laneHermes(); let agents={};
  const contributor='20000000-0000-0000-0000-000000000005';
  query(`update public.members set role='contributor' where company_id='${company}' and person_id='${contributor}'`);
  try {
-  await ownerSignIn(page); agents=await attachAgents(page,fake);
+  await ownerSignIn(page); agents=attachAgents();
   const {Mona}=agents as Record<string,{profile:string}>;
   const context=await browser.newContext(); const member=await context.newPage();
   try {
@@ -198,9 +194,9 @@ test('A Contributor starts a conversation and gets the reply; nobody else reads 
 
 test('A Viewer has no composer and the server refuses their message',async({page,browser})=>{
  test.setTimeout(120000);
- const fake=await fakeHermes(); let agents={};
+ const fake=await laneHermes(); let agents={};
  try {
-  await ownerSignIn(page); agents=await attachAgents(page,fake);
+  await ownerSignIn(page); agents=attachAgents();
   const context=await browser.newContext(); const viewer=await context.newPage();
   try {
    await signIn(viewer,'viewer@example.com','/c/rs-learning/home');
@@ -217,12 +213,12 @@ test('A Viewer has no composer and the server refuses their message',async({page
 });
 
 const agentRows=(conversation:string)=>JSON.parse(query(`select body from public.conversation_messages where conversation_id='${conversation}' and author='agent' order by id`));
-const usageRows=(conversation:string)=>JSON.parse(query(`select outcome,input_tokens,output_tokens from public.conversation_usage where conversation_id='${conversation}' order by run_id`));
+const endRows=(conversation:string)=>JSON.parse(query(`select outcome from public.conversation_run_ends where conversation_id='${conversation}' order by run_id`));
 
 test('integration: a run unknown to Hermes is recorded as lost and the conversation accepts a new message',async({page})=>{
- const fake=await fakeHermes(); fake.settings.pendingReads=1e9; let agents={};
+ const fake=await laneHermes(); fake.settings.pendingReads=1e9; let agents={};
  try {
-  await ownerSignIn(page); agents=await attachAgents(page,fake);
+  await ownerSignIn(page); agents=attachAgents();
   const conversation=randomUUID();
   expect((await send(page,{conversation,message:'First try',sendKey:randomUUID()})).status()).toBe(200);
   // Hermes forgets the run: it now answers not found for it.
@@ -233,7 +229,7 @@ test('integration: a run unknown to Hermes is recorded as lost and the conversat
   expect(lost.failed).toBe(true);
   expect(lost.messages.map((row:{author:string,lost:boolean})=>[row.author,row.lost])).toEqual([['person',true]]);
   expect(agentRows(conversation)).toEqual([]);
-  expect(usageRows(conversation)).toEqual([{outcome:'lost',input_tokens:null,output_tokens:null}]);
+  expect(endRows(conversation)).toEqual([{outcome:'lost'}]);
   await page.goto(`/c/rs-learning/conversations/${conversation}`);
   await expect(page.locator('[data-outcome=lost]')).toContainText('Lost');
   fake.settings.pendingReads=0;
@@ -249,13 +245,13 @@ test('integration: a run unknown to Hermes is recorded as lost and the conversat
 // gets no composer and the view-only line.
 test('A Contributor starts a Card\'s chat from its sheet; the Owner, another Contributor and a Viewer get the lock and no message',async({page,browser})=>{
  test.setTimeout(240000);
- const fake=await fakeHermes(); let agents={};
+ const fake=await laneHermes(); let agents={};
  const reviewer='20000000-0000-0000-0000-000000000003';
  const people=`'${reviewer}','20000000-0000-0000-0000-000000000004','20000000-0000-0000-0000-000000000005'`;
  query(`update public.people set language='en' where id in (${people})`);
  const member=async(email:string,path:string)=>{ const context=await browser.newContext(); const opened=await context.newPage(); await signIn(opened,email,path); return {context,page:opened}; };
  try {
-  await ownerSignIn(page); agents=await attachAgents(page,fake);
+  await ownerSignIn(page); agents=attachAgents();
   const {Nour}=agents as Record<string,{id:string,profile:string}>;
   query(`insert into public.member_agent_access(company_id,person_id,agent_id) select company_id,person_id,'${Nour.id}' from public.members where company_id='${company}' and removed_at is null and role<>'owner' on conflict do nothing`);
   const [{id:card}]=JSON.parse(query(`insert into public.work_cards(company_id,stage_id,title,agent_id) select '${company}',id,'Ideas for the June course','${Nour.id}' from public.work_stages where company_id='${company}' and board_column='ideas' order by position,id limit 1 returning id`)) as {id:number}[];
@@ -322,40 +318,38 @@ test('A Contributor starts a Card\'s chat from its sheet; the Owner, another Con
  } finally { detach(agents); await fake.close(); }
 });
 
-// Omar's Conversation with Ads, six turns long, each with its usage, as the engine leaves them; written with triggers off
+// Omar's Conversation with Ads, six turns long, each with its end, as the engine leaves them; written with triggers off
 // and taken away after (#172).
 const slowChat=(n:number)=>`6f000000-0000-0000-0000-00000000000${n}`;
 const omar='20000000-0000-0000-0000-000000000001';
 const slowChatPath=`/c/rs-learning/conversations/${slowChat(3)}`;
 const slowChatRows={
- set:`insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('${slowChat(1)}','${company}','${omar}','http://127.0.0.1:9/p/slow-chat','slow-chat','slow-chat-no-key','unreachable');
-  insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('${slowChat(2)}','${company}','${slowChat(1)}','Ads','Runs the ads.');
+ set:`  insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile) values ('${slowChat(2)}','${company}','${slowChat(1)}','Ads','Runs the ads.','slow-chat');
   insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${slowChat(3)}','${company}','${omar}','${slowChat(2)}','Ads');
   insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at)
    select '${company}','${slowChat(3)}',author,case when author='person' then '${omar}'::uuid end,case when author='agent' then '${slowChat(2)}'::uuid end,
     case when author='person' then 'Omar' else 'Ads' end,'Turn '||n||E'\\n'||repeat('About the launch week. ',30),case when author='person' then gen_random_uuid() end,
     'slow-chat-'||n,now()-interval '1 hour'+n*interval '2 minutes'+case when author='agent' then interval '1 minute' else interval '0' end
    from generate_series(1,6) n cross join unnest(array['person','agent']) author;
-  insert into public.conversation_usage(company_id,conversation_id,run_id,outcome,input_tokens,output_tokens,recorded_at)
-   select '${company}','${slowChat(3)}','slow-chat-'||n,'completed',120,80,now()-interval '1 hour'+n*interval '2 minutes'+interval '1 minute' from generate_series(1,6) n;`,
- unset:`delete from public.conversation_usage where conversation_id='${slowChat(3)}';
+  insert into public.conversation_run_ends(company_id,conversation_id,run_id,outcome,recorded_at)
+   select '${company}','${slowChat(3)}','slow-chat-'||n,'completed',now()-interval '1 hour'+n*interval '2 minutes'+interval '1 minute' from generate_series(1,6) n;`,
+ unset:`delete from public.conversation_run_ends where conversation_id='${slowChat(3)}';
   delete from public.conversation_messages where conversation_id='${slowChat(3)}';
   delete from public.conversations where id='${slowChat(3)}';
-  delete from public.hermes_agents where id='${slowChat(2)}';
-  delete from public.hermes_connections where id='${slowChat(1)}';`,
+  delete from public.hermes_agents where id='${slowChat(2)}';`,
 };
 const where=async(page:Page,selector:string)=>{ const box=(await page.locator(selector).boundingBox())!; return {x:Math.round(box.x),y:Math.round(box.y),width:Math.round(box.width),height:Math.round(box.height)}; };
 
 test('a Conversation whose record is slow shows the placeholder in its transcript, under its title and over its composer, then its messages at the newest',async({page})=>{
  const placeholders=await watchPlaceholders(page);
- // Only the record reads the usage (lib/conversation-record.ts); the page's frame and the sidebar never do.
+ // Only the record reads the Run ends (lib/conversation-record.ts); the page's frame and the sidebar never do.
  const held=await holdPages(page,url=>url.pathname===slowChatPath);
  asAdmin(slowChatRows.unset); asAdmin(slowChatRows.set);
  try {
   await ownerSignIn(page);
   const link=page.locator(`#sb-recent a[href="${slowChatPath}"]`);
   await expect(link).toBeVisible();
-  await whileSlow('conversation_usage',3,async()=>{
+  await whileSlow('conversation_run_ends',3,async()=>{
    await link.click(); held.letGo();
    const placeholder=page.locator('.chat .transcript[aria-busy="true"]');
    await expect(placeholder).toBeVisible();

@@ -3,13 +3,11 @@ create extension if not exists pgtap with schema extensions;
 select plan(26);
 -- #185: RS Learning with Lead (main), Ads, SEO and Coder. The Owner invites a Member from the Team table, switches two
 -- Agents on for the invitation, and the invited person joins seeing those and no other.
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state)
- select ('f1850000-0000-0000-0000-00000000000'||n)::uuid,'10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://localhost','invites-'||n,'ciphertext','connected' from generate_series(1,4) n;
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values
- ('a1850000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','f1850000-0000-0000-0000-000000000001','Lead','General',true),
- ('a1850000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','f1850000-0000-0000-0000-000000000002','Ads','Ads',false),
- ('a1850000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','f1850000-0000-0000-0000-000000000003','SEO','SEO',false),
- ('a1850000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000001','f1850000-0000-0000-0000-000000000004','Coder','Code',false);
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
+ ('a1850000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','f1850000-0000-0000-0000-000000000001','Lead','General',true,'default'),
+ ('a1850000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','f1850000-0000-0000-0000-000000000002','Ads','Ads',false,'default'),
+ ('a1850000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','f1850000-0000-0000-0000-000000000003','SEO','SEO',false,'default'),
+ ('a1850000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000001','f1850000-0000-0000-0000-000000000004','Coder','Code',false,'default');
 insert into auth.users(id,email) values ('a1850000-0000-0000-0000-000000000010','nour@example.test');
 -- The Manager works with SEO, so it is one of the Agents whose switch they may turn.
 insert into public.member_agent_access(company_id,person_id,agent_id) values ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','a1850000-0000-0000-0000-000000000003');

@@ -4,9 +4,7 @@ select plan(21);
 -- #146. Ads in RS Learning, shown to the first Contributor (3, whose two chats these are), the second Contributor (5) and
 -- the Viewer (4), and hidden from the Manager (2). Chat T has a Card In progress, tied as conversation_reply_card ties
 -- one; chat U has none. Someone outside RS Learning, a Contributor of R&S Consultations only, tries the same reads.
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
- ('c1460000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9','card-waits-test','ciphertext','connected','0.23.0','{run_submission}');
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('c1460000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','c1460000-0000-0000-0000-000000000001','Ads','Ads');
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile) values ('c1460000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','c1460000-0000-0000-0000-000000000001','Ads','Ads','card-waits-test');
 insert into public.member_agent_access(company_id,person_id,agent_id)
  select '10000000-0000-0000-0000-000000000001',p,'c1460000-0000-0000-0000-000000000002'
  from unnest(array['20000000-0000-0000-0000-000000000003','20000000-0000-0000-0000-000000000004','20000000-0000-0000-0000-000000000005']::uuid[]) p;

@@ -28,7 +28,10 @@ if [[ "${1:-dev}" == "production" || "${1:-dev}" == "build" ]]; then
 fi
 # `web.sh build` only builds, with the same settings, so CI can build while other checks run (ci.sh integration).
 if [[ "${1:-dev}" == "build" ]]; then exec npm run build; fi
-node worker/index.mjs &
+# The bundled Hermes is the only Hermes (#342): a lane's app and worker are given its address and key, where a browser
+# spec starts its fake Hermes (tests/lane.mjs hermesHostOf). The worker keeps no profiles here, as a hosted one keeps none.
+export BUNDLED_HERMES_URL=${BUNDLED_HERMES_URL:-http://127.0.0.$((110 + lane)):8642} HERMES_API_KEY=${HERMES_API_KEY:-test-only-key}
+GTMWORKS_SELF_HOSTED= node worker/index.mjs &
 worker_pid=$!
 trap 'kill "$worker_pid" 2>/dev/null || true' EXIT INT TERM
 if [[ "${1:-dev}" == "production" ]]; then

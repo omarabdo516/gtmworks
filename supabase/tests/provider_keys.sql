@@ -5,15 +5,9 @@ select plan(34);
 -- profile, and the Company's shared space. R&S Consultations (2), where the Manager (2) is no member, has the same.
 -- The Contributor (5) of RS Learning is made a removed Owner. Only an active Owner records a key change, once, by the
 -- provider's name, in company_audit and in the log.
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
- ('e1260000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9','co-10000000000000000000000000000001','ciphertext','connected','0.23.0','{run_submission}'),
- ('e1260000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9','co-10000000000000000000000000000002','ciphertext','connected','0.23.0','{run_submission}');
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values
- ('e1260000-0000-0000-0000-000000000011','10000000-0000-0000-0000-000000000001','e1260000-0000-0000-0000-000000000001','Lead','General',true),
- ('e1260000-0000-0000-0000-000000000012','10000000-0000-0000-0000-000000000002','e1260000-0000-0000-0000-000000000002','Lead two','General',true);
-insert into public.hermes_agent_audit(company_id,actor_id,agent_id,action,details) values
- ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','e1260000-0000-0000-0000-000000000011','PROVIDE_BUNDLED_HERMES_AGENT',jsonb_build_object('connection_id','e1260000-0000-0000-0000-000000000001')),
- ('10000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000001','e1260000-0000-0000-0000-000000000012','PROVIDE_BUNDLED_HERMES_AGENT',jsonb_build_object('connection_id','e1260000-0000-0000-0000-000000000002'));
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
+ ('e1260000-0000-0000-0000-000000000011','10000000-0000-0000-0000-000000000001','e1260000-0000-0000-0000-000000000001','Lead','General',true,'co-10000000000000000000000000000001'),
+ ('e1260000-0000-0000-0000-000000000012','10000000-0000-0000-0000-000000000002','e1260000-0000-0000-0000-000000000002','Lead two','General',true,'co-10000000000000000000000000000002');
 insert into public.company_profiles(company_id,profile,tools_level,tools_policy) values
  ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',1,public.engine_tool_policy()),
  ('10000000-0000-0000-0000-000000000002','co-10000000000000000000000000000002',1,public.engine_tool_policy());
@@ -22,12 +16,9 @@ insert into public.company_shared_spaces(company_id,folder) values
  ('10000000-0000-0000-0000-000000000002','/opt/data/profiles/cs-10000000000000000000000000000002/skills');
 -- Each Writer on its own profile, written without the guards: the function reads only which profile is whose.
 set local session_replication_role=replica;
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
- ('e1260000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9','ag-e1260000000000000000000000000021','ciphertext','connected','0.23.0','{run_submission}'),
- ('e1260000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9','ag-e1260000000000000000000000000022','ciphertext','connected','0.23.0','{run_submission}');
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values
- ('e1260000-0000-0000-0000-000000000021','10000000-0000-0000-0000-000000000001','e1260000-0000-0000-0000-000000000003','Writer','Writes'),
- ('e1260000-0000-0000-0000-000000000022','10000000-0000-0000-0000-000000000002','e1260000-0000-0000-0000-000000000004','Writer two','Writes');
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile) values
+ ('e1260000-0000-0000-0000-000000000021','10000000-0000-0000-0000-000000000001','e1260000-0000-0000-0000-000000000003','Writer','Writes','ag-e1260000000000000000000000000021'),
+ ('e1260000-0000-0000-0000-000000000022','10000000-0000-0000-0000-000000000002','e1260000-0000-0000-0000-000000000004','Writer two','Writes','ag-e1260000000000000000000000000022');
 insert into public.agent_profiles(agent_id,company_id) values
  ('e1260000-0000-0000-0000-000000000021','10000000-0000-0000-0000-000000000001'),
  ('e1260000-0000-0000-0000-000000000022','10000000-0000-0000-0000-000000000002');

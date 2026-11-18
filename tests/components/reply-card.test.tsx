@@ -107,7 +107,7 @@ const turns = (cards: Card[], pending: boolean): ConversationRecord => ({
   { id: index * 2 + 1, author: 'person' as const, author_name: 'Omar', body: 'Prepare the draft', created_at: at },
   { id: index * 2 + 2, author: 'agent' as const, author_name: 'Ads', body: 'Here it is.', created_at: at, cards: [{ kind: 'reply' as const, card }] },
  ]).concat(pending ? [{ id: 9, author: 'person' as const, author_name: 'Omar', body: 'And the plan', created_at: at }] : []),
- usage: { input: 0, output: 0, unknown: 0 }, pending, failed: false, working: null, canStop: false,
+ usage: { input: 0, output: 0 }, pending, failed: false, working: null, canStop: false,
 });
 
 test('a card that arrives while the Conversation is open rises in once; the cards it opened with do not', async () => {

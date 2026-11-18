@@ -5,10 +5,8 @@ select plan(25);
 -- Agent. Each of them has one Conversation with Ads, and in it the message of one Run that asks to be allowed an action.
 -- Contributor 3's chat has a Card on the board. Karim is a Manager of Aleem only. In the general channel Contributor 3
 -- calls Ads, and its Run asks too.
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
- ('e1650000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9','permission-waits-test','ciphertext','connected','0.23.0','{run_submission}');
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values
- ('e1650000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','e1650000-0000-0000-0000-000000000001','Ads','Ads');
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile) values
+ ('e1650000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','e1650000-0000-0000-0000-000000000001','Ads','Ads','permission-waits-test');
 insert into public.member_agent_access(company_id,person_id,agent_id)
  select '10000000-0000-0000-0000-000000000001',('20000000-0000-0000-0000-00000000000'||n)::uuid,'e1650000-0000-0000-0000-000000000002' from generate_series(2,5) n;
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name)
@@ -87,8 +85,8 @@ reset role;
 set local role service_role;
 select public.track_run_permission('e2650000-0000-0000-0000-000000000001','w-run-1',null,false,'2026-06-10T10:16:00Z');
 reset role;
-insert into public.conversation_usage(company_id,conversation_id,run_id,outcome,input_tokens,output_tokens)
- values ('10000000-0000-0000-0000-000000000001','e2650000-0000-0000-0000-000000000005','w-run-5','completed',1,1);
+insert into public.conversation_run_ends(company_id,conversation_id,run_id,outcome)
+ values ('10000000-0000-0000-0000-000000000001','e2650000-0000-0000-0000-000000000005','w-run-5','completed');
 set local role authenticated;
 select pg_temp.read_all();
 reset role;

@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { testDb } from './pgtap.mjs';
+import { connectionsAsTheyStood, testDb } from './pgtap.mjs';
 import { topLevelStatements } from './sql-statements.mjs';
 
 // An install updated to #299 holds each provider's key its log last says was set, and none its log says was removed,
@@ -17,6 +17,8 @@ const seed=insertsInto('company_key_holds'); const leftovers=insertsInto('agent_
 const sql=`begin;
 create extension if not exists pgtap with schema extensions;
 select plan(5);
+-- The Connections and the Agent audit this replay's rows were written in, dropped since (#342).
+${connectionsAsTheyStood}
 -- RS Learning (1) set an OpenRouter key and removed it in one transaction, and set an Anthropic key. R&S Consultations
 -- (2) removed a DeepSeek key after its set, as dated, though the set was written later. The third Company changed none.
 insert into public.company_audit(company_id,actor_id,action,provider,created_at) values

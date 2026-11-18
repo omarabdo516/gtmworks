@@ -3,7 +3,6 @@ import type { Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { createClient } from '@supabase/supabase-js';
-import { encryptSecret } from '../lib/agent-crypto.mjs';
 import { closeOpenRuns, sendMessage } from '../lib/conversation-runs.mjs';
 import { driveChannelRuns, postChannelMessage } from '../lib/channel-runs.mjs';
 import { fakeEngine } from './fake-engine.mjs';
@@ -16,17 +15,16 @@ import { signIn } from './sign-in';
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const status=()=>{ const env=execFileSync('npx',['--no-install','supabase','status','-o','env'],{encoding:'utf8'}); return (name:string)=>env.match(new RegExp(`^${name}="(.*)"$`,'m'))![1]; };
 const company='10000000-0000-0000-0000-000000000001';
-const omar='20000000-0000-0000-0000-000000000001';
 const reviewer='20000000-0000-0000-0000-000000000003';
 const general='69000000-0000-0000-0000-000000000001';
-const encryptionKey=process.env.WEBHOOK_ENCRYPTION_KEY||'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
+// The install's Hermes as these runs are given it: the fake engine answers in its place (#342).
+const hermes={address:'http://127.0.0.1:9',key:'fake-engine-key'};
 
 function attachAgent() {
  const [connection,agent]=[randomUUID(),randomUUID()];
- query(`insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values ('${connection}','${company}','${omar}','http://127.0.0.1:9','fake-${connection.slice(0,8)}','${encryptSecret('fake-engine-key',encryptionKey)}','connected','0.23.0','{run_submission}')`);
- query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('${agent}','${company}','${connection}','Faye','Marketing')`);
+ query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile) values ('${agent}','${company}','${connection}','Faye','Marketing','fake-${connection.slice(0,8)}')`);
  query(`insert into public.member_agent_access(company_id,person_id,agent_id) select company_id,person_id,'${agent}' from public.members where company_id='${company}' and removed_at is null and role<>'owner'`);
- return {agent,detach:()=>{ query(`delete from public.hermes_agents where id='${agent}'`); query(`delete from public.hermes_connections where id='${connection}'`); }};
+ return {agent,detach:()=>{ query(`delete from public.hermes_agents where id='${agent}'`); }};
 }
 async function memberClient(email:string) {
  const value=status();
@@ -56,9 +54,9 @@ test('integration: a pending request is one item with its Agent and what it asks
  try {
   const {service,person}=await memberClient('reviewer@example.com');
   const conversation=randomUUID();
-  const close=()=>closeOpenRuns(service,{encryptionKey,conversation,engineFor:fake.engineFor});
+  const close=()=>closeOpenRuns(service,{hermes,conversation,engineFor:fake.engineFor});
   const send=async(word:string)=>{
-   expect(await sendMessage(person,service,{person:reviewer,company,conversation,sendKey:randomUUID(),agent,message:`Clean up the ${word}`,encryptionKey,engineFor:fake.engineFor})).toEqual({conversation});
+   expect(await sendMessage(person,service,{person:reviewer,company,conversation,sendKey:randomUUID(),agent,message:`Clean up the ${word}`,hermes,engineFor:fake.engineFor})).toEqual({conversation});
    expect(await close()).toBe(0);
    // A chat with no Card: its request is an item of its own (one with a Card is drawn as that Card, #146).
    query(`update public.work_cards set conversation_id=null where conversation_id='${conversation}'`);
@@ -144,8 +142,8 @@ test('integration: in a channel the request sits under the Agent\'s turn; the Me
  try {
   const caller=await memberClient('reviewer@example.com');
   const manager=await memberClient('manager@example.com');
-  const drive=()=>driveChannelRuns(caller.service,{encryptionKey,channel:general,engineFor:fake.engineFor});
-  const sent=await postChannelMessage(caller.person,caller.service,{channel:general,sendKey:randomUUID(),message:'@Faye Clean up the exports',encryptionKey,engineFor:fake.engineFor}) as {message:number};
+  const drive=()=>driveChannelRuns(caller.service,{hermes,channel:general,engineFor:fake.engineFor});
+  const sent=await postChannelMessage(caller.person,caller.service,{channel:general,sendKey:randomUUID(),message:'@Faye Clean up the exports',hermes,engineFor:fake.engineFor}) as {message:number};
   expect(await drive()).toEqual({started:0,closed:0});
   const [{id:request}]=JSON.parse(query(`select id from public.channel_permissions where message_id=${sent.message}`)) as {id:number}[];
 

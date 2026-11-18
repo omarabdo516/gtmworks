@@ -28,7 +28,7 @@ const record = (steps?: RunSteps): ConversationRecord => ({
   { id: 1, author: 'person', author_name: 'Omar', body: 'Plan the December campaign', created_at: at },
   { id: 2, author: 'agent', author_name: 'Ads', body: 'I read the last three campaigns.', created_at: at, ...(steps ? { steps } : {}) },
  ],
- usage: { input: 0, output: 0, unknown: 0 }, pending: false, failed: false, working: null, canStop: false,
+ usage: { input: 0, output: 0 }, pending: false, failed: false, working: null, canStop: false,
 });
 const drawn = (language: 'en' | 'ar', steps?: RunSteps) => render(<LanguageProvider language={language}><div dir={language === 'ar' ? 'rtl' : 'ltr'}><div className="gw"><div className="chat">
  <ConversationTurns slug="rs-learning" company="co-1" record={record(steps)} writer asked={() => {}}/></div></div></div></LanguageProvider>);

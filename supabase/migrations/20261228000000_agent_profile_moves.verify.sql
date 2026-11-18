@@ -17,10 +17,10 @@ select json_build_object(
   from unnest(array['agent_move_blocked','agent_may_move','company_profile_ready','engine_tool_policy','tools_pending']) t)
   and position('agent_move_blocked' in pg_get_functiondef('public.agent_move_work()'::regprocedure))>0,
  'every_blocker',(select bool_and(position(t in pg_get_functiondef('public.agent_move_blocked(uuid)'::regprocedure))>0)
-  from unnest(array['conversation_usage','conversation_run_reservations','channel_runs','note_runs','5 minutes']) t),
+  from unnest(array['conversation_run_ends','conversation_run_reservations','channel_runs','note_runs','5 minutes']) t),
  'keeper_never_moves',position('company_profile_keeper' in pg_get_functiondef('public.agent_may_move(uuid)'::regprocedure))>0,
- 'moved_connection_bundled',(select bool_and(position(a in pg_get_functiondef('public.is_bundled_connection(uuid)'::regprocedure))>0)
-  from unnest(array['PROVIDE_BUNDLED_HERMES_AGENT','MOVE_COMPANY_PROFILE','REQUEST_HERMES_AGENT','MOVE_AGENT_PROFILE']) a),
+ -- One Hermes (#342): a move sets the Agent's own profile.
+ 'moved_profile_named',position('agent_engine_profile(agent)' in pg_get_functiondef('public.move_agent_profile(uuid)'::regprocedure))>0,
  'logged_as_own_space',public.log_agent_action('MOVE_AGENT_PROFILE')='agent_own_space'
   and public.log_agent_action('MOVE_COMPANY_PROFILE')='agent_own_profile' and public.log_agent_action('REQUEST_HERMES_AGENT')='agent_requested'
   and public.log_agent_action('DEFAULT_HERMES_AGENT')='agent_made_main',

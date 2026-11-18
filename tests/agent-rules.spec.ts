@@ -20,15 +20,14 @@ test.use({timezoneId:'UTC'});
 test.beforeAll(({},testInfo)=>{
  freshSeed(testInfo.file);
  query(`do $$ begin
-  insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('${connection}','${company}','${omar}','http://127.0.0.1:9/p/ads','rules-ads','no-key','unreachable');
-  insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('${ads}','${company}','${connection}','Ads','Runs the ads.');
+    insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile) values ('${ads}','${company}','${connection}','Ads','Runs the ads.','rules-ads');
   insert into public.member_agent_access(company_id,person_id,agent_id) select company_id,person_id,'${ads}' from public.members where company_id='${company}' and removed_at is null and role<>'owner';
   insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${conversation}','${company}','${omar}','${ads}','Ads');
   insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id) values
    ('${company}','${conversation}','person','${omar}',null,'Omar','${rule}','${id(4)}','rule-run-1'),
    ('${company}','${conversation}','agent',null,'${ads}','Ads','تمام يا عمر. من دلوقتي أي حاجة رايحة لعميل هجهّزها وأستناك تشوفها الأول.',null,'rule-run-1'),
    ('${company}','${conversation}','person','${omar}',null,'Omar','${later}','${id(5)}','rule-run-2');
-  insert into public.conversation_usage(company_id,conversation_id,run_id,outcome) values ('${company}','${conversation}','rule-run-2','failed');
+  insert into public.conversation_run_ends(company_id,conversation_id,run_id,outcome) values ('${company}','${conversation}','rule-run-2','failed');
   perform public.agent_save_rule('${conversation}','rule-run-1','call-0','${rule}');
   perform public.agent_save_rule('${conversation}','rule-run-2','call-0','${later}');
   update public.agent_rules set said_at=said_at+interval '1 minute' where run_id='rule-run-2';

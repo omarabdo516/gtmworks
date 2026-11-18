@@ -4,12 +4,9 @@ select plan(30);
 -- RS Learning with Lead (main) and Ads. Ads is shown to the Manager, the first Contributor (…03) and the Viewer, and
 -- hidden from the second Contributor (…05). Each Card below has Ads but one, and none has a chat yet.
 set constraints public.conversation_reply_card immediate;
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values
- ('c1450000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://localhost','sheet-lead','ciphertext','connected'),
- ('c1450000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://localhost','sheet-ads','ciphertext','connected');
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values
- ('a1450000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','c1450000-0000-0000-0000-000000000001','Lead','General',true),
- ('a1450000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','c1450000-0000-0000-0000-000000000002','Ads','Runs the Meta ads.',false);
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
+ ('a1450000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','c1450000-0000-0000-0000-000000000001','Lead','General',true,'sheet-lead'),
+ ('a1450000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','c1450000-0000-0000-0000-000000000002','Ads','Runs the Meta ads.',false,'sheet-ads');
 insert into public.member_agent_access(company_id,person_id,agent_id)
  select '10000000-0000-0000-0000-000000000001',p,'a1450000-0000-0000-0000-000000000002'
  from unnest(array['20000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000003','20000000-0000-0000-0000-000000000004']::uuid[]) p;

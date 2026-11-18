@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { readProviderKeys, setProviderKey, removeProviderKey, readHeldKeys, hermesEngine } from '../lib/hermes.mjs';
 import { changeCompanyKey, readCompanyKeys } from '../lib/provider-keys.mjs';
 import { runToolCall } from '../lib/agent-tools.mjs';
-import { encryptSecret } from '../lib/agent-crypto.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
 // #299: once a Company holds a provider key, a later Agent waits on its own profile for the key instead of running on
@@ -13,7 +12,6 @@ const company='10000000-0000-0000-0000-000000000001';
 const space=`cs-1${tail}`; const main=`co-1${tail}`; const writer=`ag-a${tail}`; const later=`ag-c${tail}`; const gone=`ag-d${tail}`;
 const agentId=profile=>`${profile.slice(3,11)}-${profile.slice(11,15)}-${profile.slice(15,19)}-${profile.slice(19,23)}-${profile.slice(23)}`;
 const known='sk-or-v1-known-0123456789abcdef0123456789abcdef';
-const encryptionKey=Buffer.alloc(32,9).toString('base64');
 const made=(fake,...names)=>{ for(const name of names) fake.settings.profiles.set(name,{soul:'',provider:'auto',model:'',key:'test-only-key',config:{},credentials:{}}); };
 const envOf=(fake,name)=>fake.settings.profiles.get(name).env||{};
 const profileOf=path=>new URL(path,'http://engine').searchParams.get('profile')??/^\/api\/profiles\/([^/]+)(?:\/model)?$/.exec(new URL(path,'http://engine').pathname)?.[1]??null;
@@ -31,14 +29,15 @@ function sessions(fake,{owner=true,extra=[],waits=[],failing=[],failingOnce=[],f
  const asked=[]; const unfinished=new Map(); const waiting=new Set(waits); const failedOnce=new Set();
  const db={rpc:async(name,args)=>{ asked.push({name,args});
   if(name==='is_company_owner') return {data:owner,error:null};
-  if(name==='company_engine_target') return {data:[{connection:'f0000000-0000-0000-0000-000000000002',address:fake.address,profile:main,one_company:false,profiles:[]}],error:null};
+  if(name==='company_engine_target') return {data:[{profile:main,one_company:false,profiles:[]}],error:null};
   if(name==='company_key_profiles') return {data:rowsOf(asked.filter(call=>call.name===name).length>1?[...extra,...joined]:extra),error:null};
   if(name==='record_provider_key_change') return {data:null,error:null};
   if(name==='record_unfinished_provider_key') { if(args.missed.length) unfinished.set(args.key_provider,args.missed); else unfinished.delete(args.key_provider); return {data:null,error:null}; }
   if(name==='company_key_unfinished_profiles') return {data:owner?[...unfinished].map(([provider,profiles])=>({provider,profiles})):[],error:null};
   return {data:null,error:{message:'unexpected'}}; }};
- const key=encryptSecret('test-only-key',encryptionKey);
- const service={from:(...args)=>{ asked.push({name:'from',args}); return {select:()=>({eq:()=>({eq:()=>({maybeSingle:async()=>({data:{key_encrypted:key},error:null})})})})}; },
+ // The install's Hermes is the fake (#342): the code reaches it as it reaches the bundled one.
+ process.env.BUNDLED_HERMES_URL=fake.address; process.env.HERMES_API_KEY='test-only-key';
+ const service={
   rpc:async(name,args)=>{ asked.push({name,args,engineAsked:fake.settings.managementRequests.length});
    const second=failingSecond.includes(name)&&asked.filter(call=>call.name===name).length===2;
    if(second||failing.includes(name)||failingOnce.includes(name)&&!failedOnce.has(name)&&failedOnce.add(name)) return {data:null,error:{code:'XX000',message:'the database is down'}};
@@ -52,8 +51,8 @@ function sessions(fake,{owner=true,extra=[],waits=[],failing=[],failingOnce=[],f
 const pointedAt=fake=>{ const at=target=>({...target,managementAddress:fake.managementAddress});
  return {read:(target,keys)=>readProviderKeys(at(target),keys),held:(target,keys)=>readHeldKeys(at(target),keys),
   set:(target,key)=>setProviderKey(at(target),key),remove:(target,key)=>removeProviderKey(at(target),key)}; };
-const change=(person,fake,request)=>changeCompanyKey(person.db,person.service,{company,provider:'openrouter',encryptionKey,driver:pointedAt(fake),...request});
-const read=(person,fake)=>readCompanyKeys(person.db,person.service,{company,encryptionKey,driver:pointedAt(fake)});
+const change=(person,fake,request)=>changeCompanyKey(person.db,person.service,{company,provider:'openrouter',driver:pointedAt(fake),...request});
+const read=(person,fake)=>readCompanyKeys(person.db,person.service,{company,driver:pointedAt(fake)});
 const engineOn=(fake,profile)=>hermesEngine({address:fake.address,managementAddress:fake.managementAddress,profile,key:'test-only-key'});
 
 // Lead's create_agent call on Lead's profile, with the database's answers for a Company whose level is 1, and `answers`
@@ -205,7 +204,7 @@ test('only the Owner\'s read settles the holds to what the space holds, naming o
   await read(owner,fake);
   assert.deepEqual(owner.calls('settle_provider_key_holds').at(-1),{c:company,held:[]});
   const odd={...pointedAt(fake),read:async()=>({state:'found',keys:[{provider:'openrouter',label:'OpenRouter',set:true},{provider:'Not a provider',label:'Odd',set:true},{provider:'deepseek',label:'DeepSeek',set:false}],lacking:[],leftover:[],unread:[]})};
-  await readCompanyKeys(owner.db,owner.service,{company,encryptionKey,driver:odd});
+  await readCompanyKeys(owner.db,owner.service,{company,driver:odd});
   assert.deepEqual(owner.calls('settle_provider_key_holds').at(-1),{c:company,held:['openrouter']},'a provider name that does not read is never sent');
  } finally { await fake.close(); }
 });
@@ -312,7 +311,7 @@ test('the Owner\'s read during a key change answers at once and settles nothing,
   const owner=sessions(fake,{extra:[removedRow(gone,'Old writer'),removedRow(other,'Old ads'),removedRow(missing,'Old SEO'),removedRow(unread,'Old design')]});
   let open; const gate=new Promise(resolve=>{ open=resolve; });
   const gated={...pointedAt(fake),set:async(target,key)=>{ await gate; return pointedAt(fake).set(target,key); }};
-  const changing=changeCompanyKey(owner.db,owner.service,{company,provider:'openrouter',intent:'set',value:known,encryptionKey,driver:gated});
+  const changing=changeCompanyKey(owner.db,owner.service,{company,provider:'openrouter',intent:'set',value:known,driver:gated});
   let timer; const late=new Promise(resolve=>{ timer=setTimeout(()=>resolve('waited'),1000); });
   const during=await Promise.race([read(owner,fake),late]); clearTimeout(timer);
   assert.notEqual(during,'waited','the read never waits on the change under way');

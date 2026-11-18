@@ -4,36 +4,28 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { actionAllowed } from '@/lib/route-permissions.mjs';
-import { skillLibrary } from '@/lib/skill-library.mjs';
+import { changeCompanySkill, changeCompanySkillEnabled, skillProblems } from '@/lib/company-skills.mjs';
 import { answerRequest } from '@/lib/agent-requests.mjs';
-import { createClient } from '@supabase/supabase-js';
-import { supabaseConfig } from '@/lib/supabase-config';
-// The stored copy is the only source of a skill's instructions: a library skill is read from the code, never from the form.
-export const installSkill=withActionLog('installSkill',async function installSkill(form:FormData) {
- const db=await supabase(); const slug=String(form.get('slug')); const path=`/c/${slug}/skills`; const kind=String(form.get('source'));
- let body='';
- if(kind==='library') body=skillLibrary.find(entry=>entry.name===String(form.get('entry')))?.content || '';
- else if(kind==='team') body=String(form.get('content') || '');
- else { const file=form.get('file'); if(file instanceof File && file.size>64*1024) redirect(`${path}?refused=too_large`); if(file instanceof File && file.size>0) body=await file.text(); }
- const {data,error}=!await actionAllowed(db,'installSkill',String(form.get('company')))?{data:null,error:{message:'not permitted'}}:body?await db.rpc('install_skill',{c:String(form.get('company')),src:kind,body}):{data:null,error:{message:'empty'}};
+// Back to the skills screen: done, a refusal it names, or a failure, which is logged by its state only.
+function skillsScreen(action:string,path:string,state:string,done:string) {
  revalidatePath(path);
- if(error) logActionFailure('installSkill',error,{form});
- redirect(error?`${path}?failed=1`:Array.isArray(data?.refused)?`${path}?refused=${data.refused.join(',')}`:path);
+ const refused=Object.hasOwn(skillProblems,state);
+ if(state!==done&&!refused) logActionFailure(action,{message:state},{});
+ redirect(state===done?path:refused?`${path}?refused=${state}`:`${path}?failed=1`);
+}
+// A SKILL.md, uploaded or written, goes into the chosen Agent's own profile in the Engine (#343); lib/company-skills.mjs
+// refuses anything else, and the database checks the Role and the text again and logs the write. The text is never logged.
+export const writeSkill=withActionLog('writeSkill',async function writeSkill(form:FormData) {
+ const db=await supabase(); const company=String(form.get('company')); const path=`/c/${String(form.get('slug'))}/skills`;
+ const file=form.get('file'); const content=file instanceof File?(file.size>128*1024?'':await file.text()):String(form.get('content')||'');
+ const {state}=!await actionAllowed(db,'writeSkill',company)?{state:'notAllowed'}:await changeCompanySkill(db,{company,agent:form.get('agent'),content});
+ skillsScreen('writeSkill',path,state,'written');
 });
+// One of an Agent's own skills switched on or off for that Agent alone, checked and logged as a write is.
 export const setSkillEnabled=withActionLog('setSkillEnabled',async function setSkillEnabled(form:FormData) {
- const db=await supabase(); const path=`/c/${String(form.get('slug'))}/skills`;
- const {error}=!await actionAllowed(db,'setSkillEnabled',String(form.get('company')))?{error:{message:'not permitted'}}:await db.rpc('set_skill_enabled',{c:String(form.get('company')),s:String(form.get('skill')),a:String(form.get('agent')),enable:form.get('intent')==='enable'});
- revalidatePath(path);
- if(error) logActionFailure('setSkillEnabled',error,{form});
- redirect(error?`${path}?failed=1`:path);
-});
-// Only a person who manages the company decides on a lesson; the database refuses anyone else, and an agent has no way to reach this action.
-export const decideSkillLesson=withActionLog('decideSkillLesson',async function decideSkillLesson(form:FormData) {
- const db=await supabase(); const path=`/c/${String(form.get('slug'))}/approvals`;
- const {error}=!await actionAllowed(db,'decideSkillLesson',String(form.get('company')))?{error:{message:'not permitted'}}:await db.rpc('decide_skill_lesson',{c:String(form.get('company')),l:Number(form.get('lesson')),approve:form.get('intent')==='approve'});
- revalidatePath(path); revalidatePath(path.replace('/approvals','/skills'));
- if(error) logActionFailure('decideSkillLesson',error,{form});
- redirect(error?`${path}?failed=1`:path);
+ const db=await supabase(); const company=String(form.get('company')); const path=`/c/${String(form.get('slug'))}/skills`;
+ const {state}=!await actionAllowed(db,'setSkillEnabled',company)?{state:'notAllowed'}:await changeCompanySkillEnabled(db,{company,agent:form.get('agent'),name:form.get('skill'),enabled:form.get('intent')==='enable'});
+ skillsScreen('setSkillEnabled',path,state,'changed');
 });
 // Only an Owner or a Manager decides a learning suggestion (#25), from their own item in "Waiting on you"; the database
 // checks again, and an agent has no way to reach this action.
@@ -47,7 +39,7 @@ export const decideAgentRule=withActionLog('decideAgentRule',async function deci
 // The reason is never logged: a failure line names only the action, the Company and the answer's state.
 export const answerAgentRequest=withActionLog('answerAgentRequest',async function answerAgentRequest(form:FormData) {
  const db=await supabase(); const company=String(form.get('company')); const path=`/c/${String(form.get('slug'))}/approvals`;
- const state=!await actionAllowed(db,'answerAgentRequest',company)?'notAllowed':await answerRequest(db,createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}}),{company,request:Number(form.get('request')),make:form.get('intent')==='make',reason:String(form.get('reason')||''),encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY});
+ const state=!await actionAllowed(db,'answerAgentRequest',company)?'notAllowed':await answerRequest(db,{company,request:Number(form.get('request')),make:form.get('intent')==='make',reason:String(form.get('reason')||'')});
  revalidatePath(path);
  if(state!=='made'&&state!=='declined') logActionFailure('answerAgentRequest',{message:state},{form});
  redirect(state==='made'||state==='declined'?path:`${path}?failed=request-${state}`);

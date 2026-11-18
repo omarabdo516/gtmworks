@@ -17,7 +17,8 @@ select json_build_object(
  'opened_by_people',has_function_privilege('authenticated','public.open_hermes_agent(uuid)','execute')
   and not has_function_privilege('anon','public.open_hermes_agent(uuid)','execute') and not has_function_privilege('service_role','public.open_hermes_agent(uuid)','execute'),
  'offer_pinned',position('may_use_lead_tools' in pg_get_functiondef('public.pinned_run_note(uuid,uuid,uuid,uuid)'::regprocedure))>0,
- 'lead_connection_bundled',position('REQUEST_HERMES_AGENT' in pg_get_functiondef('public.is_bundled_connection(uuid)'::regprocedure))>0,
+ -- One Hermes (#342): an Agent Lead makes runs on its own or its Company's profile.
+ 'lead_profile_own',position('agent_engine_profile(agent)' in pg_get_functiondef('public.lead_create_agent'::regproc))>0,
  'logged_with_job',public.log_agent_action('REQUEST_HERMES_AGENT')='agent_requested'
-  and position('''job''' in pg_get_functiondef('public.log_agent_change()'::regprocedure))>0
+  and position('''job''' in pg_get_functiondef('public.log_agent_event(uuid,uuid,text,uuid,text,jsonb)'::regprocedure))>0
 );

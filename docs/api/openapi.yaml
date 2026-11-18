@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: gtmworks agent API
   version: 1.6.0
-  description: Runtime-neutral HTTP API; Hermes is the first client. Planned paths are not implemented. See README.md for version policy and current authentication.
+  description: Removed (#341). No path below is served; every /api/v1 path answers 404. Kept as the record of what was removed; see README.md.
 servers:
   - url: /api/v1/companies/{slug}
     variables:

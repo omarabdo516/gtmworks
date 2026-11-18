@@ -1,8 +1,9 @@
 import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 // `host` is the loopback address both listeners take: a spec that needs the management listener on its fixed port 9119
-// (the driver's default beside the Hermes address) takes an address of its own, so lanes never share that port.
-export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
+// (the driver's default beside the Hermes address) takes an address of its own, so lanes never share that port. `port`
+// fixes the gateway's (tests/lane.mjs laneHermes: the address the app under test is given).
+export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) {
  // Run ids are unique across fakes, as Hermes's are: the database refuses a Member's run already used elsewhere (#287).
  const instance=randomUUID().slice(0,8);
  // Each run's event stream (#141; api_server_runs.py _RunStream): its numbered events in memory, the last `backlogLimit`
@@ -62,7 +63,7 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
   appTools:/** @type {Record<string,string[]>} */({}),appsUnreachable:/** @type {Set<string>} */(new Set()),appTokens:/** @type {Set<string>} */(new Set()),approveApps:true,
   appFlows:/** @type {Map<string,{server:string,profile:string,status:string,state:string,redirect:string}>} */(new Map()),appCallbacks:/** @type {string[]} */([]),
   // Each profile's own Skills by name (their SKILL.md text), and the Skills each profile locked, as `profile:name`.
-  skills:/** @type {Map<string,Map<string,string>>} */(new Map()),skillLocks:/** @type {Set<string>} */(new Set()),
+  skills:/** @type {Map<string,Map<string,string>>} */(new Map()),skillLocks:/** @type {Set<string>} */(new Set()),skillsOff:/** @type {Set<string>} */(new Set()),
   // The provider keys a profile's .env takes (hermes_cli/web_routers/config_env.py 264-330): each provider's primary
   // password row, and rows that are not one (an alias, a URL, a tool's key). Each profile keeps its own values in `env`;
   // the root's are defaultEnv. A provider listed in providerModels offers those models once its key is set. A profile in
@@ -87,6 +88,11 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
   forget(/** @type {string} */ run,/** @type {number} */ count) { streams.get(run)?.backlog.splice(0,count); },
   sweep(/** @type {string} */ run) { const stream=streams.get(run); streams.delete(run); for(const reader of stream?.readers||[]) reader.end(); },
   backlogLimit:1000,runSeconds:41,
+  // Sessions by id (#346): the profile each belongs to and its messages as the listener returns them
+  // (hermes_cli/web_routers/sessions.py get_session_messages), oldest first: role, content, tool_calls, tool_call_id,
+  // tool_name and timestamp; and (#347) the session's token use as its detail reports it (get_session_detail), with the
+  // time it started in seconds, which the profile's usage analytics count from.
+  sessions:/** @type {Map<string,{profile:string,messages:any[],input_tokens?:unknown,output_tokens?:unknown,started_at?:number}>} */(new Map()),
   approve(session) { const found=settings.signInSessions.get(session); if(!found) return; found.status='approved'; credentialsOf(found.profile)[found.provider]=`codex-token-${randomUUID()}`; }};
  const profileOf=name=>name==='default'?{config:settings.defaultConfig,credentials:settings.defaultCredentials}:settings.profiles.get(name);
  const credentialsOf=name=>profileOf(name)?.credentials||{};
@@ -225,6 +231,29 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
    }
    if(request.headers.authorization!==`Bearer ${settings.key}`) return send(response,401,{error:'session_expired',message:request.headers.authorization});
    if(settings.managementStatus!==200) return send(response,settings.managementStatus,{detail:request.headers.authorization});
+   // A session answers only under its own profile; a page holds at most 500 messages, from `offset`.
+   const sessionMessages=url.pathname.match(/^\/api\/sessions\/([^/]+)\/messages$/);
+   if(sessionMessages&&request.method==='GET') {
+    const id=decodeURIComponent(sessionMessages[1]); const found=settings.sessions.get(id);
+    if(!found||found.profile!==(url.searchParams.get('profile')||'default')) return send(response,404,{detail:'Session not found'});
+    const limit=Math.min(Number(url.searchParams.get('limit')??500),500); const offset=Number(url.searchParams.get('offset')??0);
+    const page=found.messages.slice(offset,offset+limit);
+    return send(response,200,{session_id:id,profile:found.profile,messages:page,pagination:{limit,offset,order:url.searchParams.get('order')||'oldest',returned:page.length}});
+   }
+   // A profile's usage over the last `days` (#347): the sums of its sessions started since then, null with none, as
+   // the pinned release's SQL sums are.
+   if(url.pathname==='/api/analytics/usage'&&request.method==='GET') {
+    const since=Date.now()/1000-Number(url.searchParams.get('days')??30)*86400; const profile=url.searchParams.get('profile')||'default';
+    const counted=[...settings.sessions.values()].filter(found=>found.profile===profile&&(found.started_at??Date.now()/1000)>since);
+    const sum=(/** @type {'input_tokens'|'output_tokens'} */ key)=>counted.length?counted.reduce((total,found)=>total+Number(found[key]??0),0):null;
+    return send(response,200,{daily:[],by_model:[],by_task:[],totals:{total_input:sum('input_tokens'),total_output:sum('output_tokens'),total_sessions:counted.length},period_days:Number(url.searchParams.get('days')??30),skills:[],tools:[]});
+   }
+   const sessionDetail=url.pathname.match(/^\/api\/sessions\/([^/]+)$/);
+   if(sessionDetail&&request.method==='GET') {
+    const id=decodeURIComponent(sessionDetail[1]); const found=settings.sessions.get(id);
+    if(!found||found.profile!==(url.searchParams.get('profile')||'default')) return send(response,404,{detail:'Session not found'});
+    return send(response,200,{id,profile:found.profile,started_at:found.started_at??Date.now()/1000,message_count:found.messages.length,input_tokens:found.input_tokens??0,output_tokens:found.output_tokens??0});
+   }
    if(url.pathname==='/api/profiles'&&request.method==='GET') return send(response,200,{profiles:[{name:'default',path:'/opt/data',is_default:true,model:'default-model',provider:'auto'},...[...settings.profiles].map(([name,profile])=>({name,path:`/opt/data/profiles/${name}`,is_default:false,model:profile.model,provider:profile.provider}))]});
    if(url.pathname==='/api/profiles'&&request.method==='POST') {
     if(body?.name==='default'||settings.profiles.has(body?.name)) return send(response,400,{detail:`A profile named '${body.name}' already exists. Choose another name.`});
@@ -245,6 +274,7 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
    const profile=profilePath&&settings.profiles.get(decodeURIComponent(profilePath[1]));
    if(profilePath&&!profile) return send(response,404,{detail:'Profile not found'});
    if(profilePath?.[2]==='soul'&&request.method==='GET') return send(response,200,{content:profile.soul,exists:true});
+   if(profilePath?.[2]==='soul'&&request.method==='PUT') { if(typeof body?.content!=='string') return send(response,422,{detail:'content'}); profile.soul=body.content; return send(response,200,{ok:true}); }
    if(profilePath?.[2]==='model'&&request.method==='PUT') {
     if(settings.failStep==='model') return send(response,500,{detail:'Internal Server Error'});
     // _write_profile_model checks a pick against the profile's own keys (profiles.py 124-150); modelNeedsKey turns it on.
@@ -298,7 +328,7 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
    }
    // Skills (hermes_cli/web_routers/skills.py): a profile sees its own and those of each folder its
    // skills.external_dirs names (a profile's folder is its home's `skills`), and keeps its own locks.
-   const skillsPath=url.pathname.match(/^\/api\/skills(?:\/(content|lock))?$/);
+   const skillsPath=url.pathname.match(/^\/api\/skills(?:\/(content|lock|toggle))?$/);
    if(skillsPath) {
     if(!home) return send(response,404,{detail:`Profile '${scoped}' does not exist.`});
     const owners=[scoped,...(home.config?.skills?.external_dirs||[]).map(folder=>/^\/opt\/data\/profiles\/([^/]+)\/skills$/.exec(folder)?.[1]).filter(owner=>settings.profiles.has(owner))];
@@ -306,7 +336,9 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
     const name=skillsPath[1]==='content'&&request.method==='GET'?url.searchParams.get('name'):body?.name;
     const found=listed.find(skill=>skill.name===name);
     const missing=()=>send(response,404,{detail:`Skill '${name}' not found.`});
-    if(!skillsPath[1]&&request.method==='GET') return send(response,200,listed.map(skill=>({name:skill.name,description:'',category:null,locked:settings.skillLocks.has(`${scoped}:${skill.name}`),enabled:true,usage:0,provenance:skill.provenance})));
+    if(!skillsPath[1]&&request.method==='GET') return send(response,200,listed.map(skill=>({name:skill.name,description:'',category:null,locked:settings.skillLocks.has(`${scoped}:${skill.name}`),enabled:!settings.skillsOff.has(`${scoped}:${skill.name}`),usage:0,provenance:skill.provenance})));
+    // A switch is the profile's own (skills.disabled), on any name, listed or not.
+    if(skillsPath[1]==='toggle'&&request.method==='PUT') { settings.skillsOff[body.enabled?'delete':'add'](`${scoped}:${name}`); return send(response,200,{ok:true,name,enabled:body.enabled}); }
     if(!skillsPath[1]&&request.method==='POST') {
      if(found) return send(response,400,{detail:`A skill named '${name}' already exists.`});
      if(!settings.skills.has(scoped)) settings.skills.set(scoped,new Map());
@@ -413,7 +445,7 @@ export async function fakeHermes({managementPort=0,host='127.0.0.1'}={}) {
    send(response,404,{detail:'Not Found'});
   });
  });
- await new Promise(resolve=>server.listen(0,host,resolve));
+ await new Promise(resolve=>server.listen(port,host,resolve));
  await new Promise(resolve=>management.listen(managementPort,host,resolve));
  const closing=listener=>new Promise(resolve=>{listener.close(resolve);listener.closeAllConnections();});
  return {settings,address:`http://${host}:${server.address().port}`,managementAddress:`http://${host}:${management.address().port}`,close:()=>Promise.all([closing(server),closing(management)]).then(()=>{})};

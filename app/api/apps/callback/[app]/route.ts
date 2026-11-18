@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import { supabaseConfig } from '@/lib/supabase-config';
 import { appUrl } from '@/lib/app-origin.mjs';
 import { overlayHref } from '@/lib/settings-overlay.mjs';
 import { routeAllowed } from '@/lib/route-permissions.mjs';
@@ -21,8 +19,7 @@ export async function GET(request:NextRequest,{params}:{params:Promise<{app:stri
   if(!user||!await routeAllowed(db,'app/api/apps/callback/[app]/route.ts','GET',undefined,user.id)) return go('/');
   const search=request.nextUrl.searchParams;
   const answer=Object.fromEntries(['code','state','error','iss'].flatMap(name=>{ const value=search.get(name); return value===null?[]:[[name,value]]; }));
-  const service=createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false}});
-  ({slug,outcome}=await finishCompanyAppSignIn(db,service,{person:user.id,app,answer,encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY}));
+  ({slug,outcome}=await finishCompanyAppSignIn(db,{person:user.id,app,answer}));
  } catch { outcome='failed'; }
  return go(slug?overlayHref(slug,'apps',{app,...(outcome==='failed'?{signin:'failed'}:{})}):'/');
 }

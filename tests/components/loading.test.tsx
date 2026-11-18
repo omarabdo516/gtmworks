@@ -87,7 +87,7 @@ const at = '2026-06-10T09:41:00Z';
 const asked = { id: 1, author: 'person' as const, author_name: 'Omar', body: 'Draft the long launch plan', created_at: at };
 const reply = { id: 2, author: 'agent' as const, author_name: 'Mona', body: 'On it.', created_at: at };
 const talk = (messages: ConversationRecord['messages'], more: Partial<ConversationRecord> = {}): ConversationRecord => ({
- conversation: { id: 'cv-2', agent_id: null, agent_name: 'Mona', face: 'c-2' }, messages, usage: { input: 0, output: 0, unknown: 0 }, pending: false, failed: false, working: null, canStop: false, ...more,
+ conversation: { id: 'cv-2', agent_id: null, agent_name: 'Mona', face: 'c-2' }, messages, usage: { input: 0, output: 0 }, pending: false, failed: false, working: null, canStop: false, ...more,
 });
 function held() {
  let arrive!: (record: ConversationRecord) => void;

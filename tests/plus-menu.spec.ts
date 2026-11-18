@@ -2,7 +2,6 @@ import { test, expect, freshSeed, type Page } from './fresh-seed';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { createClient } from '@supabase/supabase-js';
-import { encryptSecret } from '../lib/agent-crypto.mjs';
 import { closeOpenRuns, sendMessage } from '../lib/conversation-runs.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 import { signIn } from './sign-in';
@@ -16,7 +15,8 @@ const company='10000000-0000-0000-0000-000000000001';
 const omar='20000000-0000-0000-0000-000000000001';
 const contributor='20000000-0000-0000-0000-000000000003';
 const general='/c/rs-learning/channels/69000000-0000-0000-0000-000000000001';
-const encryptionKey=process.env.WEBHOOK_ENCRYPTION_KEY||'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
+// The install's Hermes as these runs are given it: the fake engine answers in its place (#342).
+const hermes={address:'http://127.0.0.1:9',key:'fake-engine-key'};
 const id=(n:number)=>`68153000-0000-0000-0000-${String(n).padStart(12,'0')}`;
 // Faye's empty chat is the one open; Reach is the Agent called. Reach is hidden from the Contributor (مراجع).
 const [faye,reach]=[id(11),id(12)];
@@ -28,11 +28,8 @@ test.beforeAll(({},testInfo)=>{
  // Connections that are never called: every run goes to the fake engine.
  query(`do $$ begin
   update public.people set language='en' where id in ('${omar}','${contributor}');
-  insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
-   ('${id(1)}','${company}','${omar}','http://127.0.0.1:9','fake-plus-faye','${encryptSecret('fake-engine-key',encryptionKey)}','connected','0.23.0','{run_submission}'),
-   ('${id(2)}','${company}','${omar}','http://127.0.0.1:9','fake-plus-reach','${encryptSecret('fake-engine-key',encryptionKey)}','connected','0.23.0','{run_submission}');
-  insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values
-   ('${faye}','${company}','${id(1)}','Faye','Marketing'),('${reach}','${company}','${id(2)}','Reach','Outreach');
+    insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile) values
+   ('${faye}','${company}','${id(1)}','Faye','Marketing','fake-plus-faye'),('${reach}','${company}','${id(2)}','Reach','Outreach','fake-plus-reach');
   insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','${contributor}','${faye}');
  end $$;`);
 });
@@ -61,7 +58,7 @@ const conversations:Record<string,string>={};
 test('integration: on the fake engine a first message from Faye\'s empty chat that calls @Reach starts the Conversation with Reach',async()=>{
  const fake=fakeEngine(); const {service,person}=await session('omar@example.com');
  const conversation=randomUUID();
- expect(await sendMessage(person,service,{company,conversation,sendKey:randomUUID(),agent:faye,message:'@Reach plan the outreach week',encryptionKey,engineFor:fake.engineFor})).toEqual({conversation});
+ expect(await sendMessage(person,service,{company,conversation,sendKey:randomUUID(),agent:faye,message:'@Reach plan the outreach week',hermes,engineFor:fake.engineFor})).toEqual({conversation});
  expect(agentOf(conversation)).toBe(reach);
  expect(fake.runs.map(run=>({conversation:run.conversation,input:run.input}))).toEqual([{conversation,input:'@Reach plan the outreach week'}]);
 });
@@ -69,20 +66,20 @@ test('integration: on the fake engine a first message from Faye\'s empty chat th
 test('integration: on the fake engine a call of an Agent hidden from the Contributor changes nothing: the Conversation is Faye\'s',async()=>{
  const fake=fakeEngine(); const {service,person}=await session('reviewer@example.com');
  const conversation=randomUUID();
- expect(await sendMessage(person,service,{company,conversation,sendKey:randomUUID(),agent:faye,message:'@Reach plan the outreach week',encryptionKey,engineFor:fake.engineFor})).toEqual({conversation});
+ expect(await sendMessage(person,service,{company,conversation,sendKey:randomUUID(),agent:faye,message:'@Reach plan the outreach week',hermes,engineFor:fake.engineFor})).toEqual({conversation});
  expect(agentOf(conversation)).toBe(faye);
  expect(fake.runs.map(run=>run.input)).toEqual(['@Reach plan the outreach week']);
  conversations.contributor=conversation;
- await closeOpenRuns(service,{encryptionKey,conversation,engineFor:fake.engineFor});
+ await closeOpenRuns(service,{hermes,conversation,engineFor:fake.engineFor});
 });
 
 test('integration: on the fake engine an open Conversation keeps its Agent: a message that calls @Reach goes, as typed, to Faye',async()=>{
  const fake=fakeEngine(); const {service,person}=await session('omar@example.com');
  const conversation=randomUUID();
- expect(await sendMessage(person,service,{company,conversation,sendKey:randomUUID(),agent:faye,message:'Plan the launch',encryptionKey,engineFor:fake.engineFor})).toEqual({conversation});
- expect(await closeOpenRuns(service,{encryptionKey,conversation,engineFor:fake.engineFor})).toBe(1);
+ expect(await sendMessage(person,service,{company,conversation,sendKey:randomUUID(),agent:faye,message:'Plan the launch',hermes,engineFor:fake.engineFor})).toEqual({conversation});
+ expect(await closeOpenRuns(service,{hermes,conversation,engineFor:fake.engineFor})).toBe(1);
  // The open Conversation's composer names no Agent (app/conversation-thread.tsx).
- expect(await sendMessage(person,service,{company,conversation,sendKey:randomUUID(),message:'@Reach take over the outreach',encryptionKey,engineFor:fake.engineFor})).toEqual({conversation});
+ expect(await sendMessage(person,service,{company,conversation,sendKey:randomUUID(),message:'@Reach take over the outreach',hermes,engineFor:fake.engineFor})).toEqual({conversation});
  expect(agentOf(conversation)).toBe(faye);
  expect(fake.runs.map(run=>({conversation:run.conversation,input:run.input}))).toEqual([{conversation,input:'Plan the launch'},{conversation,input:'@Reach take over the outreach'}]);
  expect(rows(`select body from public.conversation_messages where conversation_id='${conversation}' and author='person' order by id`).map(row=>row.body)).toEqual(['Plan the launch','@Reach take over the outreach']);

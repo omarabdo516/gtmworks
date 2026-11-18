@@ -1,11 +1,8 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(74);
+select plan(65);
 -- RS Learning (1): Lead on the Company's own profile, an Owner's (Omar's) and a Manager's Conversation with Lead.
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) values
- ('a7000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://127.0.0.1:9','co-10000000000000000000000000000001','ciphertext','connected','0.23.0','{run_submission}');
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('a7000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','a7000000-0000-0000-0000-000000000001','Lead','General',true);
-insert into public.hermes_agent_audit(company_id,actor_id,agent_id,action,details) values ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','a7000000-0000-0000-0000-000000000002','PROVIDE_BUNDLED_HERMES_AGENT',jsonb_build_object('connection_id','a7000000-0000-0000-0000-000000000001'));
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('a7000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','a7000000-0000-0000-0000-000000000001','Lead','General',true,'co-10000000000000000000000000000001');
 insert into public.company_profiles(company_id,profile,tools_level,tools_policy,skills_shared) values ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',1,public.engine_tool_policy(),true);
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values
  ('a7100000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','a7000000-0000-0000-0000-000000000002','Lead'),
@@ -41,13 +38,12 @@ select is((select tools_pending from public.agent_profiles where agent_id=(selec
  'and the other level''s tools it wrote send the profile back to the worker, so no Run starts on it until its read-back is recorded');
 update public.agent_profiles set tools_pending=false,skills_shared=true where agent_id=(select agent from made where name='own');
 select is((select count(*)::int from public.hermes_agents where company_id='10000000-0000-0000-0000-000000000001' and not is_default),1,'one Agent is made');
-select ok(exists(select 1 from public.hermes_agents a join public.hermes_connections h on h.id=a.connection_id join made m on m.agent=a.id and m.name='own'
-  where h.profile=m.profile and h.key_encrypted='ciphertext' and h.owner_id='20000000-0000-0000-0000-000000000001' and h.address='http://127.0.0.1:9' and public.is_bundled_connection(h.id)
-   and a.instructions='You write for RS Learning.' and a.name='Writer'),
- 'its Connection names its own profile, with Lead''s address and encrypted key, and its instructions are the soul the profile was given');
+select ok(exists(select 1 from public.hermes_agents a join made m on m.agent=a.id and m.name='own'
+  where a.profile=m.profile and a.instructions='You write for RS Learning.' and a.name='Writer'),
+ 'it runs on its own profile, and its instructions are the soul the profile was given');
 select results_eq($$select p.profile,p.company_id,p.tools_level::int,p.tools_policy,p.tools_pending from public.agent_profiles p$$,
  $$select profile,'10000000-0000-0000-0000-000000000001'::uuid,1,public.engine_tool_policy(),false from made where name='own'$$,'one owner record, with the level and policy its tools were read back under');
-select is((select count(*)::int from public.hermes_connections where profile like 'ag-%'),1,'and one Connection naming the profile');
+select is((select count(*)::int from public.hermes_agents where profile like 'ag-%'),1,'and one Agent on the profile');
 select lives_ok($$set constraints all immediate$$,'the record written before its Agent belongs to it');
 select results_eq($$select actor_id,action,details->>'agent_name',details->>'job' from public.company_log where agent_id=(select agent from made where name='own')$$,
  $$values ('20000000-0000-0000-0000-000000000001'::uuid,'agent_requested','Writer','Writes the blog.')$$,'the log has its one "requested an Agent" row, as before');
@@ -58,55 +54,35 @@ select is(public.lead_create_agent('a7100000-0000-0000-0000-000000000001','run-1
 select is(public.lead_create_agent(conversation=>'a7100000-0000-0000-0000-000000000001',run=>'run-1',call=>'call-2',agent_name=>'SEO',job=>'Writes.',apps=>'{}',own_level=>1)->>'state','invalid','a level without its policy makes nothing');
 select is(public.lead_create_agent(conversation=>'a7100000-0000-0000-0000-000000000001',run=>'run-1',call=>'call-2',agent_name=>'SEO',job=>'Writes.',apps=>'{}',own_level=>4,own_policy=>public.engine_tool_policy())->>'state','invalid','nor a level that does not exist');
 reset role;
-select ok(exists(select 1 from public.hermes_agents a join public.hermes_connections h on h.id=a.connection_id join made m on m.agent=a.id and m.name='lead' where h.profile='co-10000000000000000000000000000001'),
- 'the Agent on Lead''s profile has a Connection to the Company''s profile');
+select ok(exists(select 1 from public.hermes_agents a join made m on m.agent=a.id and m.name='lead' where a.profile='co-10000000000000000000000000000001'),
+ 'the Agent on Lead''s profile runs on the Company''s profile');
 select is((select count(*)::int from public.agent_profiles),1,'and no owner record');
 select is((select count(*)::int from public.hermes_agents where company_id='10000000-0000-0000-0000-000000000001'),3,'the refused calls made no Agent');
 
 set local role service_role;
 select ok(not exists(select 1 from public.company_profile_work() where company_id='10000000-0000-0000-0000-000000000001' and move),'the Company has no move to make');
-select is(public.move_company_profile('10000000-0000-0000-0000-000000000001','http://hermes:8642','encrypted','0.23.0','{run_submission}'),0,'a move moves nothing');
+select is(public.move_company_profile('10000000-0000-0000-0000-000000000001'),0,'a move moves nothing');
 reset role;
-select is((select h.profile from public.hermes_agents a join public.hermes_connections h on h.id=a.connection_id where a.id=(select agent from made where name='own')),(select profile from made where name='own'),
+select is((select a.profile from public.hermes_agents a where a.id=(select agent from made where name='own')),(select profile from made where name='own'),
  'the Agent stays on its own profile');
 create temporary table own as select a.id as agent,a.connection_id as connection from public.hermes_agents a join made m on m.agent=a.id and m.name='own';
 grant select on own to authenticated,service_role;
 
-set local role authenticated;
-select set_config('request.jwt.claims','{"role":"authenticated"}',true);
-select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
-select throws_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000002','attach',(select connection from own),null,'Borrowed','General',false,true)$$,'42501','hermesProfileNotShared',
- 'an Owner of two Companies cannot attach it to the other Company''s Agent, even after the sharing warning');
-select throws_ok($$insert into public.hermes_connections(company_id,owner_id,address,profile,key_encrypted,state) select '10000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000001','http://hermes:8642',profile,'x','connected' from made where name='own'$$,
- '42501','hermesProfileNotShared','nor save a Connection to it in the other Company');
-select throws_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','attach',(select connection from own),null,'Second','General',false,false)$$,'42501','hermesProfileNotShared',
- 'nor attach another Agent to it in its own Company');
-select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
-select throws_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','attach',(select connection from own),null,'Second','General',false,true)$$,'42501',null,'a Manager attaches nothing');
-select throws_ok($$insert into public.hermes_connections(company_id,owner_id,address,profile,key_encrypted,state) select '10000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000002','http://hermes:8642',profile,'x','connected' from made where name='own'$$,
- '42501',null,'nor saves a Connection to it');
-select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
-select throws_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','attach',(select connection from own),null,'Second','General',false,true)$$,'42501',null,'a Contributor attaches nothing');
-select throws_ok($$insert into public.hermes_connections(company_id,owner_id,address,profile,key_encrypted,state) select '10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','http://hermes:8642',profile,'x','connected' from made where name='own'$$,
- '42501',null,'nor saves a Connection to it');
-select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
-select throws_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','attach',(select connection from own),null,'Second','General',false,true)$$,'42501',null,'a Viewer attaches nothing');
-select throws_ok($$insert into public.hermes_connections(company_id,owner_id,address,profile,key_encrypted,state) select '10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000004','http://hermes:8642',profile,'x','connected' from made where name='own'$$,
- '42501',null,'nor saves a Connection to it');
+-- No person attaches an Agent or saves a Connection any more (#342); the table's own rules and guards stand below.
 reset role;
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 set local role service_role;
-select throws_ok($$insert into public.hermes_connections(company_id,owner_id,address,profile,key_encrypted,state) select '10000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000001','http://hermes:8642',profile,'x','connected' from made where name='own'$$,
- '42501',null,'the service role saves no Connection to it');
-select throws_ok($$insert into public.hermes_agents(company_id,connection_id,name,speciality) select '10000000-0000-0000-0000-000000000001',connection,'Second','General' from own$$,'42501',null,'nor puts another Agent on it');
+select throws_ok($$insert into public.hermes_agents(company_id,name,speciality,profile) select '10000000-0000-0000-0000-000000000002','Borrowed','General',profile from made where name='own'$$,
+ '42501',null,'the service role puts no Agent of another Company on it');
+select throws_ok($$insert into public.hermes_agents(company_id,name,speciality,profile) select '10000000-0000-0000-0000-000000000001','Second','General',profile from made where name='own'$$,'42501',null,'nor puts another Agent on it');
 reset role;
--- The tables' owner, which no grant or policy holds back: only the guards stand.
-select throws_ok($$insert into public.hermes_connections(company_id,owner_id,address,profile,key_encrypted,state) select '10000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000001','http://hermes:8642',profile,'x','connected' from made where name='own'$$,
- '42501','hermesProfileNotShared','no writer saves a Connection to it in another Company');
-select throws_ok($$insert into public.hermes_agents(company_id,connection_id,name,speciality) select '10000000-0000-0000-0000-000000000001',connection,'Second','General' from own$$,'42501','hermesProfileNotShared','nor puts another Agent on it');
+-- The table's owner, which no grant or policy holds back: only the guards stand.
+select throws_ok($$insert into public.hermes_agents(company_id,name,speciality,profile) select '10000000-0000-0000-0000-000000000002','Borrowed','General',profile from made where name='own'$$,
+ '42501','hermesProfileNotShared','no writer puts an Agent of another Company on it');
+select throws_ok($$insert into public.hermes_agents(company_id,name,speciality,profile) select '10000000-0000-0000-0000-000000000001','Second','General',profile from made where name='own'$$,'42501','hermesProfileNotShared','nor puts another Agent on it');
 select throws_ok($$update public.hermes_agents set company_id='10000000-0000-0000-0000-000000000002' where id=(select agent from own)$$,'42501','hermesProfileNotShared','nor moves its Agent to another Company');
 select throws_ok($$update public.hermes_agents set id=gen_random_uuid() where id=(select agent from own)$$,'42501','hermesProfileNotShared','nor gives its Agent another id');
-select throws_ok($$update public.hermes_connections set company_id='10000000-0000-0000-0000-000000000002' where id=(select connection from own)$$,'42501','hermesProfileNotShared','nor moves its Connection to another Company');
+select throws_ok($$update public.hermes_agents set profile=(select profile from made where name='own') where id=(select agent from made where name='lead')$$,'42501','hermesProfileNotShared','nor moves another Agent onto it');
 
 create temporary table reserve(key uuid primary key, conversation uuid);
 grant select on reserve to authenticated;
@@ -162,13 +138,9 @@ select is(public.reserve_conversation_run('a7200000-0000-0000-0000-000000000001'
 reset role;
 
 set local session_replication_role=replica;
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) select 'a7000000-0000-0000-0000-000000000011','10000000-0000-0000-0000-000000000001',
- '20000000-0000-0000-0000-000000000001','http://127.0.0.1:9',profile,'ciphertext','connected','0.23.0','{run_submission}' from made where name='own';
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) select 'a7000000-0000-0000-0000-000000000012','10000000-0000-0000-0000-000000000002',
- '20000000-0000-0000-0000-000000000001','http://127.0.0.1:9',profile,'ciphertext','connected','0.23.0','{run_submission}' from made where name='own';
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values
- ('a7000000-0000-0000-0000-000000000021','10000000-0000-0000-0000-000000000001','a7000000-0000-0000-0000-000000000011','Copy','General'),
- ('a7000000-0000-0000-0000-000000000022','10000000-0000-0000-0000-000000000002','a7000000-0000-0000-0000-000000000012','Borrowed','General');
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile) values
+ ('a7000000-0000-0000-0000-000000000021','10000000-0000-0000-0000-000000000001','a7000000-0000-0000-0000-000000000011','Copy','General',(select profile from made where name='own')),
+ ('a7000000-0000-0000-0000-000000000022','10000000-0000-0000-0000-000000000002','a7000000-0000-0000-0000-000000000012','Borrowed','General',(select profile from made where name='own'));
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values
  ('a7200000-0000-0000-0000-000000000021','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','a7000000-0000-0000-0000-000000000021','Copy'),
  ('a7200000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001',(select agent from own),'Writer');
@@ -211,10 +183,10 @@ select ok((select failed_at is null from public.conversation_queued_turns where 
 set local role service_role;
 select public.record_agent_profile((select agent from own),(select profile from made where name='own'),3,public.engine_tool_policy());
 select results_eq($$select connection from public.claim_conversation_turn('a7200000-0000-0000-0000-000000000002')$$,$$select connection from own$$,'then its turn starts on its own profile');
-select results_eq($$select connection from public.begin_channel_start(-2)$$,$$select connection from own$$,'and its channel Run');
-select results_eq($$select connection from public.begin_note_start(-2)$$,$$select connection from own$$,'and its note Run');
+select results_eq($$select profile from public.begin_channel_start(-2)$$,$$select profile from made where name='own'$$,'and its channel Run');
+select results_eq($$select profile from public.begin_note_start(-2)$$,$$select profile from made where name='own'$$,'and its note Run');
 
-select ok(public.forget_company_profile((select connection from own)),'tool health forgets the lost profile');
+select ok(public.forget_company_profile((select profile from made where name='own')),'tool health forgets the lost profile');
 reset role;
 select results_eq($$select tools_level,tools_policy,tools_pending from public.agent_profiles$$,$$values (null::smallint,null::integer,false)$$,'its record stays, with no tool state');
 set local role authenticated;
@@ -243,7 +215,7 @@ set local role service_role;
 select is(public.lead_create_agent(conversation=>'a7100000-0000-0000-0000-000000000009',run=>'run-9',call=>'call-0',agent_name=>'Ads',job=>'Runs the ads.',apps=>'{}')->>'state','created',
  'that Lead makes Agents');
 reset role;
-select is((select h.profile from public.lead_made_agents m join public.hermes_agents a on a.id=m.agent_id join public.hermes_connections h on h.id=a.connection_id
+select is((select a.profile from public.lead_made_agents m join public.hermes_agents a on a.id=m.agent_id
   where m.conversation_id='a7100000-0000-0000-0000-000000000009'),'co-10000000000000000000000000000001',
  'and one made without a profile of its own goes on the Company''s profile, never on the main Agent''s own');
 update public.hermes_agents set is_default=false where id=(select agent from made where name='own');
@@ -252,7 +224,7 @@ update public.hermes_agents set is_default=true where id='a7000000-0000-0000-000
 set local role authenticated;
 select set_config('request.jwt.claims','{"role":"authenticated"}',true);
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
-select lives_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','remove',null,(select agent from own))$$,'the Owner removes the Agent');
+select lives_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','remove',(select agent from own))$$,'the Owner removes the Agent');
 reset role;
 select is((select count(*)::int from public.agent_profiles),0,'and its owner record goes with it');
 select * from finish();

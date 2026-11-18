@@ -5,12 +5,9 @@ select plan(46);
 -- Contributor (…03) starts every Conversation below. The Card is made when the reply's transaction ends, so here it is
 -- judged at once, as a Run closed in its own transaction is; the deferral itself is checked near the end.
 set constraints public.conversation_reply_card immediate;
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values
- ('c1440000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://localhost','cards-lead','ciphertext','connected'),
- ('c1440000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','http://localhost','cards-ads','ciphertext','connected');
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values
- ('a1440000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','c1440000-0000-0000-0000-000000000001','Lead','General',true),
- ('a1440000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','c1440000-0000-0000-0000-000000000002','Ads','Runs the Meta ads.',false);
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
+ ('a1440000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','c1440000-0000-0000-0000-000000000001','Lead','General',true,'cards-lead'),
+ ('a1440000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','c1440000-0000-0000-0000-000000000002','Ads','Runs the Meta ads.',false,'cards-ads');
 insert into public.member_agent_access(company_id,person_id,agent_id)
  select '10000000-0000-0000-0000-000000000001',p,'a1440000-0000-0000-0000-000000000002'
  from unnest(array['20000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000003','20000000-0000-0000-0000-000000000004','20000000-0000-0000-0000-000000000005']::uuid[]) p;

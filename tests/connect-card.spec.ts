@@ -2,9 +2,10 @@ import { test, expect, freshSeed, type Page } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { fakeHermes } from './fake-hermes.mjs';
+import { laneHermes } from './lane-hermes';
 import { signIn } from './sign-in';
 import { appByKey, appConfig } from '../lib/app-catalogue.mjs';
-import { appOrigin, lane } from './lane.mjs';
+import { appOrigin } from './lane.mjs';
 
 // #203, an Agent's connect card. RS Learning runs on its own profile in a fake Engine whose MCP catalogue and sign-ins
 // answer as the pinned release's do; Lead, its main Agent, keeps that profile. Each Conversation holds the person's
@@ -26,18 +27,15 @@ test.describe.configure({mode:'serial'});
 test.use({actionTimeout:15000});
 test.beforeAll(async({browser},testInfo)=>{
  freshSeed(testInfo.file);
- fake=await fakeHermes({host:`127.0.0.${50+lane}`,managementPort:9119});
+ fake=await laneHermes();
  fake.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
  query(`update public.people set language='en' where id in ('${omar}','${contributor}')`);
  const page=await browser.newPage();
  try {
   await signIn(page,'omar@example.com','/c/rs-learning/home');
-  const saved=await page.request.post('/api/hermes-connections',{data:{company,intent:'save',address:fake.address,profile,key:fake.settings.key}});
-  expect(saved.status()).toBe(200);
-  const connection=(await saved.json()).connection.id;
+  const connection=randomUUID();
   query(`do $$ begin
-   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('${lead}','${company}','${connection}','Lead','General',true);
-   insert into public.hermes_agent_audit(company_id,actor_id,agent_id,action,details) values ('${company}','${omar}','${lead}','PROVIDE_BUNDLED_HERMES_AGENT',jsonb_build_object('connection_id','${connection}'));
+   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${lead}','${company}','${connection}','Lead','General',true,'${profile}');
    insert into public.company_profiles(company_id,profile,tools_level,tools_policy) select id,'${profile}',agent_level,public.engine_tool_policy() from public.companies where id='${company}'
     on conflict (company_id) do update set profile=excluded.profile,tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false;
   end $$;`);

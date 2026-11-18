@@ -8,12 +8,10 @@ import { provideProfile, configureProfile, readToolsets, readSignIns, startSignI
 import { keepCompanyProfiles, keepAgentProfiles, checkAgentTools } from '../lib/company-profiles.mjs';
 import { engineFor } from '../lib/engine.mjs';
 import { changeCompanySignIn, readCompanySignIns } from '../lib/company-sign-in.mjs';
-import { encryptSecret, decryptSecret } from '../lib/agent-crypto.mjs';
 import { describeEntry } from '../lib/activity-log.mjs';
 import { i18n } from '../lib/i18n.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
-const encryptionKey=Buffer.alloc(32,9).toString('base64');
 const install=fake=>({address:fake.address,managementAddress:fake.managementAddress,profile:'default',key:'test-only-key'});
 const [two,three]=['10000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000003'];
 
@@ -126,7 +124,7 @@ test('two companies get two different profiles, each with terminal, files and co
  const fake=await fakeHermes();
  try {
   const db=workerDatabase([row(two),row(three)]);
-  const done=await keepCompanyProfiles(db,{hermes:install(fake),encryptionKey});
+  const done=await keepCompanyProfiles(db,{hermes:install(fake)});
   assert.deepEqual(done,{provided:2,configured:0,attached:2,moved:0});
   const profiles=[companyProfile(two),companyProfile(three)];
   assert.deepEqual([...fake.settings.profiles.keys()].sort(),profiles.sort());
@@ -140,15 +138,12 @@ test('two companies get two different profiles, each with terminal, files and co
   assert.deepEqual(names,['company_profile_work','record_company_profile','attach_company_profile','record_company_profile','attach_company_profile']);
   const attached=db.calls.filter(call=>call.name==='attach_company_profile');
   assert.deepEqual(attached.map(call=>call.args.c),[two,three]);
-  for(const call of attached) {
-   assert.doesNotMatch(call.args.bundled_key,/test-only-key/);
-   assert.equal(decryptSecret(call.args.bundled_key,encryptionKey),'test-only-key');
-   assert.ok(call.args.bundled_features.includes('run_submission'));
-  }
+  // The attach names the Company only: the key stays in the install's environment (#342).
+  for(const call of attached) assert.deepEqual(Object.keys(call.args),['c']);
   // Each company's Runs use its own profile: the attach tested that profile's Run API, not the shared one.
   assert.deepEqual(fake.settings.requests.filter(request=>request.path.endsWith('/health')).map(request=>request.path),profiles.map(name=>`/p/${name}/health`));
   // Nothing is left to do: asking again makes nothing.
-  assert.equal(await keepCompanyProfiles(db,{hermes:install(fake),encryptionKey}).then(result=>result.provided),0);
+  assert.equal(await keepCompanyProfiles(db,{hermes:install(fake)}).then(result=>result.provided),0);
  } finally { await fake.close(); }
 });
 
@@ -157,7 +152,7 @@ test('a company on the shared profile moves only once its own profile holds a si
  try {
   let clock=0; const waiting=new Map();
   const db=workerDatabase([row(three,{attach:false,move:true})]);
-  const options={hermes:install(fake),encryptionKey,waiting,now:()=>clock};
+  const options={hermes:install(fake),waiting,now:()=>clock};
   assert.deepEqual(await keepCompanyProfiles(db,options),{provided:1,configured:0,attached:0,moved:0});
   assert.ok(!db.calls.some(call=>call.name==='move_company_profile'),'no model sign-in yet: the company keeps running where it was');
   // A sign-in on the default profile, which Hermes would lend to the company profile, does not count as the company's.
@@ -193,23 +188,22 @@ test('a company on the shared profile moves only once its own profile holds a si
  } finally { await fake.close(); }
 });
 
-test('the tool health check records which Agents can reach a terminal, files or code', async () => {
+test('the profile check has a lost company profile made again and records no tools (#341)', async () => {
  const fake=await fakeHermes();
  try {
   const name=companyProfile(two);
   await provideProfile(install(fake),{name,soul:'',config:levelConfig(1),forbidden:alwaysOff});
   const calls=[];
-  const key=encryptSecret('test-only-key',encryptionKey);
   const db={rpc:async(rpc,args)=>{ calls.push({rpc,args});
-   return rpc==='engine_tools_due'?{data:[{connection:'pasted',address:fake.address,profile:'writer',key_encrypted:key},{connection:'own',address:fake.address,profile:name,key_encrypted:key},
-    {connection:'unreadable',address:fake.address,profile:'writer',key_encrypted:encryptSecret('wrong',encryptionKey)},
-    {connection:'lost',address:fake.address,profile:companyProfile(three),key_encrypted:key}],error:null}:{data:null,error:null}; }};
+   return rpc==='engine_tools_due'?{data:[{profile:name},{profile:companyProfile(three)}],error:null}:{data:null,error:null}; }};
   // The Engine lost one company profile (its data was not restored with a backup): the worker has it made again.
   fake.settings.unknownProfiles.push(companyProfile(three));
-  assert.equal(await checkAgentTools(db,{encryptionKey}),2);
-  assert.deepEqual(calls.filter(call=>call.rpc==='forget_company_profile').map(call=>call.args),[{connection:'lost'}]);
-  // A pasted profile with Hermes's default tools has a terminal, files and code; the company profile has none.
-  assert.deepEqual(calls.filter(call=>call.rpc==='record_engine_tools').map(call=>call.args),[{connection:'pasted',risky:['terminal','code_execution','file']},{connection:'own',risky:[]}]);
+  assert.equal(await checkAgentTools(db,{hermes:install(fake)}),1);
+  assert.deepEqual(calls.filter(call=>call.rpc==='forget_company_profile').map(call=>call.args),[{engine_profile:companyProfile(three)}]);
+  // With no bundled Hermes (a hosted install) nothing is read.
+  assert.equal(await checkAgentTools(db,{hermes:null}),0);
+  // The Owner's tool warning is gone with engine_tool_checks: nothing is recorded.
+  assert.deepEqual(calls.map(call=>call.rpc),['engine_tools_due','forget_company_profile']);
  } finally { await fake.close(); }
 });
 
@@ -282,18 +276,18 @@ function sessions(fake,{owner,oneCompany=false,agents=[],logFails=false}) {
  const asked=[]; const logged=[];
  const db={rpc:async(name,args)=>{ asked.push({name,args});
   if(name==='is_company_owner') return {data:owner,error:null};
-  if(name==='company_engine_target') return {data:[{connection:'f0000000-0000-0000-0000-000000000002',address:fake.address,profile:companyProfile(args.c),one_company:oneCompany,profiles:[companyProfile(args.c),...agents]}],error:null};
+  if(name==='company_engine_target') return {data:[{profile:companyProfile(args.c),one_company:oneCompany,profiles:[companyProfile(args.c),...agents]}],error:null};
   if(name==='record_subscription_change') { logged.push(args); return logFails?{data:null,error:{code:'XX000',message:'the database is down'}}:{data:null,error:null}; }
   return {data:null,error:{message:'unexpected'}}; }};
- const key=encryptSecret('test-only-key',encryptionKey);
- const service={from:()=>({select:()=>({eq:()=>({eq:()=>({maybeSingle:async()=>({data:{key_encrypted:key},error:null})})})})})};
- return {db,service,asked,logged};
+ // The install's Hermes is the fake (#342): the code reaches it as it reaches the bundled one.
+ process.env.BUNDLED_HERMES_URL=fake.address; process.env.HERMES_API_KEY='test-only-key';
+ return {db,service:{},asked,logged};
 }
 // The fake's management listener is not on port 9119 of the run address, so the driver is pointed at it.
 const pointedAt=fake=>{ const at=target=>({...target,managementAddress:fake.managementAddress});
  return {start:(target,provider)=>startSignIn(at(target),provider),poll:(target,provider,session)=>pollSignIn(at(target),provider,session),
   cancel:(target,session)=>cancelSignIn(at(target),session),disconnect:(target,provider)=>disconnectSignIn(at(target),provider),read:target=>readSignIns(at(target))}; };
-const ask=(person,driver,change)=>changeCompanySignIn(person.db,person.service,{company:two,provider:'openai-codex',encryptionKey,driver,...change});
+const ask=(person,driver,change)=>changeCompanySignIn(person.db,{company:two,provider:'openai-codex',driver,...change});
 const states=read=>read.signIns&&Object.fromEntries(Object.entries(read.signIns).map(([id,found])=>[id,found.state]));
 const signInPaths=fake=>fake.settings.managementRequests.filter(request=>request.path.startsWith('/api/providers/oauth/')).map(request=>`${request.method} ${request.path}`);
 
@@ -310,7 +304,7 @@ test('only an Owner starts, follows or removes a company sign-in, checked on the
   assert.equal(fake.settings.signInSessions.size,0,'a member never reaches Hermes');
   // A member still reads whether the company is connected.
   const member=sessions(fake,{owner:false});
-  assert.deepEqual(await readCompanySignIns(member.db,member.service,{company:two,encryptionKey,driver}),{profile:companyProfile(two),oneCompany:false,signIns:{'openai-codex':{state:'notConnected',flow:'device_code'},anthropic:{state:'notConnected',flow:'external'}}});
+  assert.deepEqual(await readCompanySignIns(member.db,{company:two,driver}),{profile:companyProfile(two),oneCompany:false,signIns:{'openai-codex':{state:'notConnected',flow:'device_code'},anthropic:{state:'notConnected',flow:'external'}}});
   const owner=sessions(fake,{owner:true});
   const started=await ask(owner,driver,{intent:'start'});
   assert.equal(started.status,200);
@@ -338,7 +332,7 @@ test('on an install with one Company the Owner signs in once on the root profile
   const provideWriter=()=>engine.provideAgent({name:agentProfile,instructions:'Write.',level:1});
   assert.deepEqual(await provideWriter(),{state:'noModel'},'no sign-in yet');
   const owner=sessions(fake,{owner:true,oneCompany:true,agents:[agentProfile]});
-  const read=()=>readCompanySignIns(owner.db,owner.service,{company:two,encryptionKey,driver});
+  const read=()=>readCompanySignIns(owner.db,{company:two,driver});
   assert.deepEqual(await read(),{profile:companyProfile(two),oneCompany:true,signIns:{'openai-codex':{state:'notConnected',flow:'device_code'},anthropic:{state:'notConnected',flow:'external'}}});
   fake.settings.managementRequests.length=0;
   const started=await ask(owner,driver,{intent:'start'});
@@ -374,7 +368,7 @@ test('on one Company an older sign-in in the Company profile serves the main Age
   credentials(agentProfile)['openai-codex']='agent-codex-token';
   credentials(companyProfile(three))['openai-codex']='other-company-token';
   const owner=sessions(fake,{owner:true,oneCompany:true,agents:[agentProfile]});
-  const read=()=>readCompanySignIns(owner.db,owner.service,{company:two,encryptionKey,driver});
+  const read=()=>readCompanySignIns(owner.db,{company:two,driver});
   assert.deepEqual(states(await read()),{'openai-codex':'mainAgentOnly',anthropic:'notConnected'});
   const started=await ask(owner,driver,{intent:'start'});
   fake.settings.approve(started.body.session);
@@ -413,7 +407,7 @@ test('on an install with several Companies a sign-in on the root profile shows a
   await provideProfile(install(fake),{name:companyProfile(two),soul:'',config:levelConfig(1),forbidden:alwaysOff});
   fake.settings.defaultCredentials['openai-codex']='root-codex-token';
   const owner=sessions(fake,{owner:true,agents:[agentProfile]});
-  const read=()=>readCompanySignIns(owner.db,owner.service,{company:two,encryptionKey,driver});
+  const read=()=>readCompanySignIns(owner.db,{company:two,driver});
   assert.deepEqual(states(await read()),{'openai-codex':'shared',anthropic:'notConnected'});
   fake.settings.managementRequests.length=0;
   const started=await ask(owner,driver,{intent:'start'});
@@ -440,13 +434,13 @@ test('no credential reaches an answer, a log row or the console, and a log that 
   fake.settings.defaultCredentials['openai-codex']=token;
   fake.settings.profiles.get(companyProfile(two)).credentials['openai-codex']=token;
   const owner=sessions(fake,{owner:true,oneCompany:true,logFails:true});
-  const answers=[await readCompanySignIns(owner.db,owner.service,{company:two,encryptionKey,driver})];
+  const answers=[await readCompanySignIns(owner.db,{company:two,driver})];
   const started=await ask(owner,driver,{intent:'start'});
   fake.settings.approve(started.body.session);
   answers.push(started,await ask(owner,driver,{intent:'poll',session:started.body.session}));
   const approved=fake.settings.defaultCredentials['openai-codex'];
-  answers.push(await readCompanySignIns(owner.db,owner.service,{company:two,encryptionKey,driver}),await ask(owner,driver,{intent:'disconnect'}),
-   await readCompanySignIns(owner.db,owner.service,{company:two,encryptionKey,driver}));
+  answers.push(await readCompanySignIns(owner.db,{company:two,driver}),await ask(owner,driver,{intent:'disconnect'}),
+   await readCompanySignIns(owner.db,{company:two,driver}));
   assert.deepEqual(answers.slice(1,3).map(answer=>answer.status),[200,200]);
   assert.deepEqual(answers[4],{status:200,body:{status:'disconnected'}});
   assert.equal(owner.logged.length,2,'both changes were asked to be logged');
@@ -463,7 +457,7 @@ test('a level change and a move read in the company log in both languages', () =
  const changed=describeEntry({subject:'company',action:'agent_level_changed',details:{old_level:1,new_level:3}});
  assert.deepEqual(changed,{act:['logActAgentLevel'],obj:undefined,from:{key:'agentLevel1'},to:{key:'agentLevel3'},note:undefined});
  assert.deepEqual(describeEntry({subject:'agent',action:'agent_own_profile',details:{agent_name:'Lead'}}).act,['logActAgentOwnProfile']);
- for(const language of ['en','ar']) for(const key of ['logActAgentLevel','logActAgentOwnProfile','agentLevel1','agentLevel3','agentToolWarning','signInTerminalOnly'])
+ for(const language of ['en','ar']) for(const key of ['logActAgentLevel','logActAgentOwnProfile','agentLevel1','agentLevel3','signInTerminalOnly'])
   assert.notEqual(i18n(language).t(key),key,`${language}:${key}`);
 });
 
@@ -492,37 +486,35 @@ function conversationDatabases({profile,reserve=null,record=null}) {
  const db={order,args:{},rpc:async(name,args)=>{ order.push(name); db.args[name]=args;
    if(name==='conversation_agent') return {data:null,error:null};
    // The sender's one entry point reserves the run when the Agent is free (reserve_conversation_turn, #team-work).
-   if(name==='reserve_conversation_turn') return reserve||{data:{state:'reserved',connection:'f9000000-0000-0000-0000-000000000001',note:null},error:null};
+   if(name==='reserve_conversation_turn') return reserve||{data:{state:'reserved',connection:'f9000000-0000-0000-0000-000000000001',profile,note:null},error:null};
    if(name==='send_conversation_message') return record||{data:true,error:null};
    if(name==='release_conversation_run') return {data:true,error:null};
    return {data:null,error:{message:'unexpected'}}; },
   from:()=>{ const chain={select:()=>chain,eq:()=>chain,maybeSingle:async()=>({data:{id:'a9000000-0000-0000-0000-000000000001'},error:null})}; return chain; }};
- const key=encryptSecret('test-only-key',encryptionKey);
- const service={rpc:async(name)=>{ order.push(`service ${name}`); return name==='begin_start'?{data:1,error:null}:name==='pin_run'?{data:{tools:null,rules:[]},error:null}:name==='pin_run_knowledge'?{data:[],error:null}:name==='pin_run_history'?{data:null,error:null}:name==='pin_run_model'?{data:null,error:null}:{data:null,error:{message:'unexpected'}}; },from:table=>{ const filters={}; const chain={select:()=>chain,eq:(column,value)=>{filters[column]=value;return chain;},maybeSingle:async()=>{ order.push(`read ${table} ${filters.id||''}`);
-   return table==='hermes_connections'?{data:{address:'http://hermes:8642',profile,state:'connected',features:['run_submission'],key_encrypted:key},error:null}:{data:{connection_id:'f9000000-0000-0000-0000-000000000099'},error:null}; }}; return chain; }};
+ const service={rpc:async(name)=>{ order.push(`service ${name}`); return name==='begin_start'?{data:1,error:null}:name==='pin_run'?{data:{tools:null,rules:[]},error:null}:name==='pin_run_history'?{data:null,error:null}:name==='pin_run_model'?{data:null,error:null}:{data:null,error:{message:'unexpected'}}; }};
  return {db,service,order};
 }
 const engine=order=>({engineFor:connection=>({start:async()=>{ order.push(`start ${connection.profile}`); return 'run_1'; }})});
 
-test('a run is reserved on its pinned Connection before Hermes is called, and recorded after', async () => {
+test('a run is reserved on its pinned profile before Hermes is called, and recorded after', async () => {
  const {sendMessage}=await import('../lib/conversation-runs.mjs');
  const {db,service,order}=conversationDatabases({profile:companyProfile(two)});
- const sent=await sendMessage(db,service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...engine(order)});
+ const sent=await sendMessage(db,service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',hermes:{address:'http://hermes:8642',key:'test-only-key'},...engine(order)});
  assert.deepEqual(sent,{conversation:'c'});
  // The reservation keeps the message for the record.
  assert.equal(db.args.reserve_conversation_turn.message,'Hi');
- // The record names the Connection the run started on, the one the reservation pinned.
+ // The record names the pin the run started on, the one the reservation made.
  assert.equal(db.args.send_conversation_message.started_on,'f9000000-0000-0000-0000-000000000001');
- assert.deepEqual(order,['conversation_agent','reserve_conversation_turn','read hermes_connections f9000000-0000-0000-0000-000000000001','service pin_run','service pin_run_knowledge','service pin_run_history','service pin_run_model','service begin_start',`start ${companyProfile(two)}`,'send_conversation_message']);
+ assert.deepEqual(order,['conversation_agent','reserve_conversation_turn','service pin_run','service pin_run_history','service pin_run_model','service begin_start',`start ${companyProfile(two)}`,'send_conversation_message']);
 });
 
 test('a run never starts on another company\'s profile, nor while the profile\'s tools lag behind the level', async () => {
  const {sendMessage}=await import('../lib/conversation-runs.mjs');
  const borrowed=conversationDatabases({profile:companyProfile(three)});
- assert.deepEqual(await sendMessage(borrowed.db,borrowed.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...engine(borrowed.order)}),{error:'conversationNotFound',status:404});
+ assert.deepEqual(await sendMessage(borrowed.db,borrowed.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',hermes:{address:'http://hermes:8642',key:'test-only-key'},...engine(borrowed.order)}),{error:'conversationNotFound',status:404});
  assert.ok(!borrowed.order.some(step=>step.startsWith('start')));
  const pending=conversationDatabases({profile:companyProfile(two),reserve:{data:null,error:{code:'55000',message:'agentLevelPending'}}});
- assert.deepEqual(await sendMessage(pending.db,pending.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...engine(pending.order)}),{error:'conversationAgentLevelPending',status:409});
+ assert.deepEqual(await sendMessage(pending.db,pending.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',hermes:{address:'http://hermes:8642',key:'test-only-key'},...engine(pending.order)}),{error:'conversationAgentLevelPending',status:409});
  assert.ok(!pending.order.some(step=>step.startsWith('start')));
 });
 
@@ -542,7 +534,7 @@ test('a profile applied under an older policy is applied again at the same level
   const name=companyProfile(two);
   await provideProfile(install(fake),{name,soul:'',config:{platform_toolsets:{api_server:['web','connections']},agent:{disabled_toolsets:[]}},forbidden:[]});
   const db=workerDatabase([row(two,{attach:false,agent_level:2,tools_level:2,tools_policy:1})]);
-  assert.deepEqual(await keepCompanyProfiles(db,{hermes:install(fake),encryptionKey}),{provided:0,configured:1,attached:0,moved:0});
+  assert.deepEqual(await keepCompanyProfiles(db,{hermes:install(fake)}),{provided:0,configured:1,attached:0,moved:0});
   assert.deepEqual(db.calls.map(call=>call.name),['company_profile_work','begin_company_tools','record_company_profile']);
   assert.equal(db.calls[2].args.policy,toolPolicy);
   assert.ok(!(await readToolsets({address:fake.address,profile:name,key:'test-only-key'})).toolsets.includes('connections'),'the old policy\'s connectors are gone');
@@ -555,13 +547,13 @@ test('raised, written, not recorded, then lowered: the profile stays pending unt
   const name=companyProfile(two);
   await provideProfile(install(fake),{name,soul:'',config:levelConfig(1),forbidden:alwaysOff});
   const failing=workerDatabase([row(two,{attach:false,agent_level:3,tools_level:1,tools_policy:toolPolicy})],{failRecord:true});
-  await keepCompanyProfiles(failing,{hermes:install(fake),encryptionKey});
+  await keepCompanyProfiles(failing,{hermes:install(fake)});
   assert.ok(fake.settings.profiles.get(name).config.platform_toolsets.api_server.includes('cronjob'),'Hermes has level 3');
   assert.equal(failing.rows[0].tools_pending,true,'marked before writing, never cleared');
   // The Owner lowers to 1: the levels agree, but the pending mark keeps it work and runs refused until the read-back.
   failing.rows[0].agent_level=1;
   const db=workerDatabase(failing.rows);
-  assert.equal((await keepCompanyProfiles(db,{hermes:install(fake),encryptionKey})).configured,1);
+  assert.equal((await keepCompanyProfiles(db,{hermes:install(fake)})).configured,1);
   assert.deepEqual(db.calls.map(call=>call.name),['company_profile_work','begin_company_tools','record_company_profile']);
   assert.equal(db.rows[0].tools_pending,false);
   assert.ok(!(await readToolsets({address:fake.address,profile:name,key:'test-only-key'})).toolsets.includes('cronjob'));
@@ -581,7 +573,7 @@ test('the worker abandons unrecorded reservations in one database update and nev
 test('a late record of an abandoned reservation asks the person to send again', async () => {
  const {sendMessage}=await import('../lib/conversation-runs.mjs');
  const late=conversationDatabases({profile:companyProfile(two),record:{data:null,error:{code:'55000',message:'conversationSendAgain'}}});
- assert.deepEqual(await sendMessage(late.db,late.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...engine(late.order)}),{error:'conversationSendAgain',status:409});
+ assert.deepEqual(await sendMessage(late.db,late.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',hermes:{address:'http://hermes:8642',key:'test-only-key'},...engine(late.order)}),{error:'conversationSendAgain',status:409});
  for(const language of ['en','ar']) assert.notEqual(i18n(language).t('conversationSendAgain'),'conversationSendAgain');
 });
 
@@ -589,16 +581,16 @@ test('a run that never started releases its reservation at once; a started one l
  const {sendMessage}=await import('../lib/conversation-runs.mjs');
  const refused=conversationDatabases({profile:companyProfile(two)});
  const refusing={engineFor:connection=>({start:async()=>{ refused.order.push(`start ${connection.profile}`); return null; }})};
- assert.deepEqual(await sendMessage(refused.db,refused.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...refusing}),{error:'conversationHermesFailed',status:502});
+ assert.deepEqual(await sendMessage(refused.db,refused.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',hermes:{address:'http://hermes:8642',key:'test-only-key'},...refusing}),{error:'conversationHermesFailed',status:502});
  assert.deepEqual(refused.order.slice(-2),[`start ${companyProfile(two)}`,'release_conversation_run']);
  assert.deepEqual(refused.db.args.release_conversation_run,{conversation:'c',c:two,message_key:'k',attempt:1});
  // A Connection that cannot be used never reaches the engine, and its reservation is released too.
  const borrowed=conversationDatabases({profile:companyProfile(three)});
- assert.deepEqual(await sendMessage(borrowed.db,borrowed.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...engine(borrowed.order)}),{error:'conversationNotFound',status:404});
+ assert.deepEqual(await sendMessage(borrowed.db,borrowed.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',hermes:{address:'http://hermes:8642',key:'test-only-key'},...engine(borrowed.order)}),{error:'conversationNotFound',status:404});
  assert.equal(borrowed.order.at(-1),'release_conversation_run');
  // A run that started is recorded, never released: the record ends its reservation.
  const started=conversationDatabases({profile:companyProfile(two)});
- assert.deepEqual(await sendMessage(started.db,started.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',encryptionKey,...engine(started.order)}),{conversation:'c'});
+ assert.deepEqual(await sendMessage(started.db,started.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',hermes:{address:'http://hermes:8642',key:'test-only-key'},...engine(started.order)}),{conversation:'c'});
  assert.ok(!started.order.includes('release_conversation_run'));
 });
 
@@ -616,7 +608,7 @@ function agentWorkerDatabase(rows,{log=[],failRecord=false}={}) {
    if(failRecord||args.engine_profile!==row.profile||args.policy!==toolPolicy) return {data:null,error:{message:'agentProfileInvalid'}};
    Object.assign(row,{tools_level:args.level,tools_policy:args.policy,tools_pending:false}); return {data:null,error:null};
   }
-  if(name==='forget_company_profile') { const lost=rows.find(found=>found.connection===args.connection); Object.assign(lost,{tools_level:null,tools_policy:null,tools_pending:false}); return {data:true,error:null}; }
+  if(name==='forget_company_profile') { const lost=rows.find(found=>found.profile===args.engine_profile); Object.assign(lost,{tools_level:null,tools_policy:null,tools_pending:false}); return {data:true,error:null}; }
   return {data:null,error:{message:`unexpected ${name}`}};
  }};
 }
@@ -676,16 +668,16 @@ test('an Agent profile the Engine no longer serves is forgotten by tool health a
   await provideProfile(install(fake),{name,soul:'You are the writer.',config:levelConfig(1),forbidden:alwaysOff});
   fake.settings.profiles.get(name).credentials['openai-codex']='its-own-sign-in';
   assert.deepEqual(await engineFor(install(fake)).removeAgent(name),{state:'removed'});
-  const db=agentWorkerDatabase([agentRow(writer,{connection:'own',instructions:'You are the writer.'})]);
-  const tools={rpc:async(rpc,args)=>rpc==='engine_tools_due'?{data:[{connection:'own',address:fake.address,profile:name,key_encrypted:encryptSecret('test-only-key',encryptionKey)}],error:null}:db.rpc(rpc,args)};
-  assert.equal(await checkAgentTools(tools,{encryptionKey}),0);
-  assert.deepEqual(db.log.map(({name:called,args})=>[called,args]),[['forget_company_profile',{connection:'own'}]]);
+  const db=agentWorkerDatabase([agentRow(writer,{instructions:'You are the writer.'})]);
+  const tools={rpc:async(rpc,args)=>rpc==='engine_tools_due'?{data:[{profile:name}],error:null}:db.rpc(rpc,args)};
+  assert.equal(await checkAgentTools(tools,{hermes:install(fake)}),0);
+  assert.deepEqual(db.log.map(({name:called,args})=>[called,args]),[['forget_company_profile',{engine_profile:name}]]);
   fake.settings.managementRequests.length=0;
   assert.deepEqual(await keepAgentProfiles(db,{hermes:install(fake)}),{provided:1,configured:0});
   const created=fake.settings.managementRequests.find(request=>request.method==='POST'&&request.path==='/api/profiles');
   assert.deepEqual(created.body,{name,soul:'You are the writer.'},'made, never cloned from another profile');
   const profile=fake.settings.profiles.get(name);
   assert.deepEqual([profile.key,profile.credentials,profile.config],['test-only-key',{},levelConfig(1)]);
-  assert.deepEqual(db.rows[0],{...agentRow(writer,{connection:'own',instructions:'You are the writer.'})});
+  assert.deepEqual(db.rows[0],{...agentRow(writer,{instructions:'You are the writer.'})});
  } finally { await fake.close(); }
 });

@@ -18,23 +18,28 @@ type Db=Awaited<ReturnType<typeof supabase>>;
 export type AgentDetailsView={status:AgentStatus,tab:DetailsTab,tabs:Record<DetailsTab,ReactNode>};
 const logShown=50;
 
-export async function agentDetails(db:Db,{company,agent,name,slug,me,role,tab}:{company:string,agent:string,name:string,slug:string,me:string,role:string,tab?:string}):Promise<AgentDetailsView> {
- const {t,language}=await getI18n(); const writer=canCreateCard({role}); const drawn=drawnAt();
- const [{data:cardRows},{data:logRows,count},{data:runs},{items:waiting},{data:talkFileRows,count:talkFileCount}]=await Promise.all([
+// The Agent's name and the reader's role may still be on their way: a page can start the details' reads beside its own
+// (the chat does) and they are awaited with the first of them.
+export async function agentDetails(db:Db,{company,agent,name:named,slug,me,role:roled,tab}:{company:string,agent:string,name:string|PromiseLike<string>,slug:string,me:string,role:string|PromiseLike<string>,tab?:string}):Promise<AgentDetailsView> {
+ const drawn=drawnAt();
+ // What waits on the reader is two reads deep and needed only to draw: the reads that depend on the first ones go out
+ // without waiting for it.
+ const waitingRead=approvalQueue(db,company,me);
+ const [{t,language},name,role,{data:cardRows},{data:logRows,count},{data:runs},{data:talkFileRows,count:talkFileCount}]=await Promise.all([getI18n(),named,roled,
   db.from('work_cards').select('id,title,stage_id,wait:card_wait').eq('company_id',company).eq('agent_id',agent).order('id'),
   db.from('company_log').select(logColumns,{count:'exact'}).eq('company_id',company).or(agentLogFilter(agent)).order('created_at',{ascending:false}).order('id',{ascending:false}).limit(logShown),
   db.rpc('agent_open_run',{c:company,agent}),
-  approvalQueue(db,company,me,role),
   // The files of the reader's own Conversations with the Agent (#21): row-level security shows a person only theirs.
   db.from('conversation_attachments').select('id,name,size,created_at,conversation_id,conversations!inner(agent_name)',{count:'exact'}).eq('company_id',company).eq('conversations.agent_id',agent)
    .order('created_at',{ascending:false}).order('id',{ascending:false}),
  ]);
+ const writer=canCreateCard({role});
  const cards=(cardRows||[]) as {id:number,title:string,stage_id:number,wait:CardWait|null}[]; const ids=cards.map(card=>card.id);
  const rows=(logRows||[]) as LogRow[];
  const run=(runs as {started_at:string,my_conversation:string|null}[]|null)?.[0];
  const talkFiles=((talkFileRows||[]) as unknown as {id:number,name:string,size:number,created_at:string,conversation_id:string,conversations:{agent_name:string}}[]).map(file=>({...file,agent_name:file.conversations.agent_name}));
  const talks=[...new Set(talkFiles.map(file=>file.conversation_id))];
- const [{data:stages},{data:checklist},{data:ask},people,{data:cardFileRows,count:cardFileCount},firsts]=await Promise.all([
+ const [{items:waiting},{data:stages},{data:checklist},{data:ask},people,{data:cardFileRows,count:cardFileCount},firsts]=await Promise.all([waitingRead,
   ids.length?db.from('work_stages').select('id,name,board_column').eq('company_id',company):Promise.resolve({data:[]}),
   ids.length?db.from('work_checklist').select('card_id,title,done').eq('company_id',company).in('card_id',ids).order('id'):Promise.resolve({data:[]}),
   run?.my_conversation?db.from('conversation_messages').select('body,reply_cards(title)').eq('conversation_id',run.my_conversation).eq('author','person').eq('created_at',run.started_at).order('id',{ascending:false}).limit(1).maybeSingle():Promise.resolve({data:null}),

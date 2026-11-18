@@ -3,7 +3,6 @@ import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { createClient } from '@supabase/supabase-js';
 import { signIn } from './sign-in';
-import { encryptSecret } from '../lib/agent-crypto.mjs';
 import { driveNoteRuns } from '../lib/channel-runs.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 import { dbContainerOf } from './lane.mjs';
@@ -17,8 +16,8 @@ const asAdmin=(sql:string)=>execFileSync('docker',['exec','-i',dbContainerOf(),'
  { input:`set session_replication_role = replica;\n${sql}`,stdio:['pipe','ignore','pipe'],encoding:'utf8' });
 const status=()=>{ const env=execFileSync('npx',['--no-install','supabase','status','-o','env'],{encoding:'utf8'}); return (name:string)=>env.match(new RegExp(`^${name}="(.*)"$`,'m'))![1]; };
 const company='10000000-0000-0000-0000-000000000001';
-const omar='20000000-0000-0000-0000-000000000001';
-const encryptionKey=process.env.WEBHOOK_ENCRYPTION_KEY||'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
+// The install's Hermes as these runs are given it: the fake engine answers in its place (#342).
+const hermes={address:'http://127.0.0.1:9',key:'fake-engine-key'};
 const noteOf=(body:string)=>Number(rows(`select id from public.work_comments where body='${body}'`)[0].id);
 
 test('the writer edits a note from its Card and again from the Activity log; both show its latest text, marked edited, until it locks',async({page})=>{
@@ -98,8 +97,7 @@ test('integration: a note that calls an Agent starts one Run on the fake engine,
  const {data:link}=await service.auth.admin.generateLink({type:'magiclink',email:'manager@example.com'});
  expect((await person.auth.verifyOtp({type:'email',token_hash:link.properties!.hashed_token})).error).toBeNull();
  const [connections,faye,secret]=[[randomUUID(),randomUUID()],randomUUID(),randomUUID()];
- query(`insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features) select id,'${company}','${omar}','http://127.0.0.1:9','fake-'||left(id::text,8),'${encryptSecret('fake-engine-key',encryptionKey)}','connected','0.23.0','{run_submission}' from unnest(array['${connections.join("','")}']::uuid[]) id`);
- query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality) values ('${faye}','${company}','${connections[0]}','Faye','Marketing'),('${secret}','${company}','${connections[1]}','Secret','Hidden')`);
+ query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile) values ('${faye}','${company}','${connections[0]}','Faye','Marketing','fake-${connections[0].slice(0,8)}'),('${secret}','${company}','${connections[1]}','Secret','Hidden','fake-${connections[1].slice(0,8)}')`);
  query(`insert into public.member_agent_access(company_id,person_id,agent_id) select company_id,person_id,'${faye}' from public.members where company_id='${company}' and removed_at is null and role<>'owner'`);
  try {
   const write=async(body:string)=>{ const {data,error}=await person.rpc('change_work_card',{c:company,card:4,operation:'comment',payload:{body}}); expect(error).toBeNull(); return data as number; };
@@ -107,7 +105,7 @@ test('integration: a note that calls an Agent starts one Run on the fake engine,
   const hidden=await write('@Secret look at this');
   const note=await write('@Faye draft the teaser');
   expect(rows(`select note_id,agent_name from public.note_runs where note_id in (${hidden},${note}) order by note_id`)).toEqual([{note_id:note,agent_name:'Faye'}]);
-  const drive=()=>driveNoteRuns(service,{encryptionKey,engineFor:fake.engineFor,message:note});
+  const drive=()=>driveNoteRuns(service,{hermes,engineFor:fake.engineFor,message:note});
   await Promise.all([drive(),drive()]);
   expect(fake.runs.map(run=>({key:run.key,input:run.input}))).toEqual([{key:`note:${note}`,input:'مدير: @Faye draft the teaser'}]);
   // The writer keeps the Card open while Faye works; her reply shows there without a reload.
@@ -131,7 +129,7 @@ test('integration: a note that calls an Agent starts one Run on the fake engine,
   await expect(replyRow.locator('.lg-name')).toHaveText('Faye');
   await expect(replyRow.locator('.lg-act')).toHaveText('replied in the log');
  } finally {
-  query(`delete from public.hermes_agents where id in ('${faye}','${secret}')`); query(`delete from public.hermes_connections where id in ('${connections.join("','")}')`);
+  query(`delete from public.hermes_agents where id in ('${faye}','${secret}')`);
  }
 });
 

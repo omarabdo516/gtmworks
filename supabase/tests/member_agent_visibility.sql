@@ -3,15 +3,12 @@ create extension if not exists pgtap with schema extensions;
 select plan(35);
 -- RS Learning with four Agents: Lead (main), Ads, SEO and Coder; Aleem's Lead is another Company's. The Contributor
 -- (…03) has a Conversation with each, a message in two, and every Agent has a row in the log.
-insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state)
- select ('f1500000-0000-0000-0000-00000000000'||n)::uuid,case when n=5 then '10000000-0000-0000-0000-000000000003' else '10000000-0000-0000-0000-000000000001' end::uuid,
-  '20000000-0000-0000-0000-000000000001','http://localhost','visibility-'||n,'ciphertext','connected' from generate_series(1,5) n;
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values
- ('a1500000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','f1500000-0000-0000-0000-000000000001','Lead','General',true),
- ('a1500000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','f1500000-0000-0000-0000-000000000002','Ads','Ads',false),
- ('a1500000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','f1500000-0000-0000-0000-000000000003','SEO','SEO',false),
- ('a1500000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000001','f1500000-0000-0000-0000-000000000004','Coder','Code',false),
- ('a1500000-0000-0000-0000-000000000005','10000000-0000-0000-0000-000000000003','f1500000-0000-0000-0000-000000000005','Lead','General',true);
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
+ ('a1500000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','f1500000-0000-0000-0000-000000000001','Lead','General',true,'default'),
+ ('a1500000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','f1500000-0000-0000-0000-000000000002','Ads','Ads',false,'default'),
+ ('a1500000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','f1500000-0000-0000-0000-000000000003','SEO','SEO',false,'default'),
+ ('a1500000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000001','f1500000-0000-0000-0000-000000000004','Coder','Code',false,'default'),
+ ('a1500000-0000-0000-0000-000000000005','10000000-0000-0000-0000-000000000003','f1500000-0000-0000-0000-000000000005','Lead','General',true,'default');
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name)
  select ('c1500000-0000-0000-0000-00000000000'||n)::uuid,'10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003',('a1500000-0000-0000-0000-00000000000'||n)::uuid,name
  from public.hermes_agents, generate_series(1,4) n where id=('a1500000-0000-0000-0000-00000000000'||n)::uuid;
@@ -20,8 +17,7 @@ insert into public.conversation_messages(company_id,conversation_id,author,perso
 insert into public.waiting_items(company_id,person_id,kind,title,conversation_id) values
  ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','question','From Coder','c1500000-0000-0000-0000-000000000004'),
  ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','question','From SEO','c1500000-0000-0000-0000-000000000003');
-insert into public.hermes_agent_audit(company_id,actor_id,agent_id,action,details)
- select '10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001',('a1500000-0000-0000-0000-00000000000'||n)::uuid,'attach','{}' from generate_series(1,4) n;
+select public.log_agent_event('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001',null,('a1500000-0000-0000-0000-00000000000'||n)::uuid,'attach','{}') from generate_series(1,4) n;
 set local role authenticated;
 select set_config('request.jwt.claims','{"aal":"aal1"}',true);
 
@@ -52,7 +48,7 @@ select is((select string_agg(agent_name,',' order by agent_name) from public.con
 select is((select count(*)::int from public.conversation_messages where conversation_id='c1500000-0000-0000-0000-000000000004'),0,'not a message with the hidden Agent');
 select is((select count(*)::int from public.conversation_messages where conversation_id='c1500000-0000-0000-0000-000000000002'),1,'while an allowed Agent''s messages read as before');
 select is((select string_agg(details->>'agent_name',',' order by details->>'agent_name') from public.company_log where subject='agent'),'Ads,Lead,SEO','the log leaves out the hidden Agent');
-select is((select count(*)::int from public.hermes_agent_audit where agent_id='a1500000-0000-0000-0000-000000000004'),0,'and so does the Agent record');
+select is((select count(*)::int from public.company_log where agent_id='a1500000-0000-0000-0000-000000000004'),0,'and so does the Agent record');
 select is((select count(*)::int from public.member_agent_access),2,'a Member reads their own switches only');
 select throws_ok($$select public.agent_visible_to('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000005','a1500000-0000-0000-0000-000000000002')$$,'42501',null,'a Member cannot ask whether another person sees an Agent');
 select is(public.can_see_agent('10000000-0000-0000-0000-000000000003','a1500000-0000-0000-0000-000000000005'),false,'nor learn anything of a Company they are not in');

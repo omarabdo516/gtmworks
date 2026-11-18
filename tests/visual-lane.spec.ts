@@ -44,9 +44,7 @@ const busy = (n: number) => `69100000-0000-0000-0000-00000000000${n}`;
 const screenStates: Record<string, { set: string, unset: string }> = {
   // The general channel (#24): the Manager's note, Omar asking Lead, and Lead's answer.
   channel: {
-    set: `insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values
-       ('${talk(10)}','${rsLearning}','${omar}','http://127.0.0.1:9/p/visual-channel','visual-channel-lead','visual-no-key','unreachable');
-      insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('${talk(11)}','${rsLearning}','${talk(10)}','Lead','General',true);
+    set: `      insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${talk(11)}','${rsLearning}','${talk(10)}','Lead','General',true,'visual-channel-lead');
       insert into public.channel_messages(company_id,channel_id,author,person_id,author_name,body,send_key,created_at) values
        ('${rsLearning}','${general}','person','20000000-0000-0000-0000-000000000002','مدير','صباح الخير يا جماعة. الدفعة الجديدة من «المحاسب الشامل» بتبدأ 1 ديسمبر، فكل حملات التسجيل لازم تبقى جاهزة قبل 20 نوفمبر.','${talk(12)}','2026-06-10T09:05:00Z'),
        ('${rsLearning}','${general}','person','${omar}','عمر','@Lead لخّصلنا مين مستني إيه النهارده.','${talk(13)}','2026-06-10T09:15:00Z');
@@ -60,17 +58,13 @@ const screenStates: Record<string, { set: string, unset: string }> = {
 الباقي ماشي لوحده، وهقولكم هنا لو حاجة وقفت.',id,'2026-06-10T09:15:40Z' from public.channel_messages where send_key='${talk(13)}';`,
     unset: `delete from public.channel_runs where channel_id='${general}';
       delete from public.channel_messages where channel_id='${general}';
-      delete from public.hermes_agents where id='${talk(11)}';
-      delete from public.hermes_connections where id='${talk(10)}';`,
+      delete from public.hermes_agents where id='${talk(11)}';`,
   },
   // Omar's chat with Meta Ads, the Agent Lead made for him (#21), with its details open beside it.
   'agent-details': {
-    set: `insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values
-       ('${busy(1)}','${rsLearning}','${omar}','http://127.0.0.1:9/p/visual-busy-lead','visual-busy-lead','visual-no-key','unreachable'),
-       ('${busy(2)}','${rsLearning}','${omar}','http://127.0.0.1:9/p/visual-busy-ads','visual-busy-ads','visual-no-key','unreachable');
-      insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,created_at,requested_by,apps,requester_opened_at) values
-       ('${busy(4)}','${rsLearning}','${busy(1)}','Lead','General',true,null,null,null,null),
-       ('${busy(5)}','${rsLearning}','${busy(2)}','Meta Ads','Runs the Meta ads and asks before it publishes or spends.',false,'2026-06-10T09:01:00Z','${omar}',array['Meta Ads Manager'],'2026-06-10T09:05:00Z');
+    set: `      insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,created_at,requested_by,apps,requester_opened_at,profile) values
+       ('${busy(4)}','${rsLearning}','${busy(1)}','Lead','General',true,null,null,null,null,'visual-busy-lead'),
+       ('${busy(5)}','${rsLearning}','${busy(2)}','Meta Ads','Runs the Meta ads and asks before it publishes or spends.',false,'2026-06-10T09:01:00Z','${omar}',array['Meta Ads Manager'],'2026-06-10T09:05:00Z','visual-busy-ads');
       insert into public.conversations(id,company_id,person_id,agent_id,agent_name,created_at) values ('${busy(8)}','${rsLearning}','${omar}','${busy(4)}','Lead','2026-06-10T09:00:00Z');
       insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at) values
        ('${rsLearning}','${busy(8)}','person','${omar}',null,'Omar','I want someone to handle our Meta ads','${busy(9)}','visual-busy-made','2026-06-10T09:00:00Z'),
@@ -86,8 +80,7 @@ const screenStates: Record<string, { set: string, unset: string }> = {
       delete from public.lead_made_agents where conversation_id='${busy(8)}';
       delete from public.conversation_messages where conversation_id in ('${busy(6)}','${busy(8)}');
       delete from public.conversations where id in ('${busy(6)}','${busy(8)}');
-      delete from public.hermes_agents where id in ('${busy(4)}','${busy(5)}');
-      delete from public.hermes_connections where id in ('${busy(1)}','${busy(2)}');`,
+      delete from public.hermes_agents where id in ('${busy(4)}','${busy(5)}');`,
   },
 };
 for (const screen of screens) if (screen.state && !screenStates[screen.state]) throw new Error(`${screen.name}: no state "${screen.state}"`);
