@@ -4,6 +4,7 @@ import { crossSiteWrite } from '@/lib/app-origin.mjs';
 import { routeAllowed } from '@/lib/route-permissions.mjs';
 import { onProfile } from '@/lib/bundled-hermes.mjs';
 import { engineFor } from '@/lib/engine.mjs';
+import { bodyLengthRefused } from '@/lib/attachments.mjs';
 
 // Voice dictation (#160): one recording becomes text on the Engine, for the Agent the Member is writing to, on that
 // Agent's own profile. In a channel it is the Company's main Agent. The recording is the only thing this route receives
@@ -36,6 +37,9 @@ async function respond(request:NextRequest) {
   if(!user) return reply({error:'dictationNotAllowed'},401);
   const writing=request.method==='POST';
   if(writing&&(!request.headers.get('content-type')?.startsWith('application/json')||crossSiteWrite(request.headers))) return reply({error:'dictationNotAllowed'},403);
+  // The recording is refused before its bytes are read when the request declares no length, or one past the limit:
+  // reading first would take whatever a chunked body streams.
+  if(writing&&bodyLengthRefused(request.headers.get('content-length'),maxBody)) return reply({error:'dictationTooLarge'},413);
   const raw=writing?await request.text():'';
   if(raw.length>maxBody) return reply({error:'dictationTooLarge'},413);
   const body=writing?JSON.parse(raw):Object.fromEntries(request.nextUrl.searchParams);

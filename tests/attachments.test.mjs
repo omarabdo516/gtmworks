@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { attachmentHeaders, conversationFilesProblem, filesProblem, isThumbnail, maxBytes, maxFiles, maxRequestBytes } from '../lib/attachments.mjs';
+import { attachmentHeaders, bodyLengthRefused, conversationFilesProblem, filesProblem, isThumbnail, maxBytes, maxFiles, maxRequestBytes } from '../lib/attachments.mjs';
 
 test('a raster image is shown in the page; any other type is downloaded as opaque bytes', () => {
  for(const type of ['image/png','image/jpeg','image/gif','image/webp']) {
@@ -37,6 +37,20 @@ test('a message carries at most five files of at most 20 MiB, none empty', () =>
  assert.equal(filesProblem(Array.from({length:6},()=>({size:1}))),'count');
  assert.equal(filesProblem([{size:maxBytes+1}]),'size');
  assert.equal(filesProblem([{size:0}]),'size');
+});
+
+// #355: a request's body is refused before it is read when the request declares no length (a chunked multipart form
+// never does) or a length past the limit, so reading the parts can never stream past the limit. The routes ask this
+// same function before `formData()` or `text()`, for a multipart form and for dictation's recording.
+test('a request with no content length, or one past the limit, is refused before its body is read', () => {
+ assert.equal(bodyLengthRefused(String(maxRequestBytes), maxRequestBytes), false, 'exactly the limit is read');
+ assert.equal(bodyLengthRefused('0', maxRequestBytes), false, 'an empty body is read');
+ assert.equal(bodyLengthRefused(String(maxRequestBytes + 1), maxRequestBytes), true, 'one byte past it is refused');
+ assert.equal(bodyLengthRefused(null, maxRequestBytes), true, 'a chunked form has no length');
+ assert.equal(bodyLengthRefused(undefined, maxRequestBytes), true, 'nor does a request without the header');
+ assert.equal(bodyLengthRefused('', maxRequestBytes), true, 'an empty header says nothing about the length');
+ assert.equal(bodyLengthRefused('  ', maxRequestBytes), true, 'and neither does spaces');
+ for(const value of ['12.5', 'ten', '-1', '1e3', 'Infinity', '0x10']) assert.equal(bodyLengthRefused(value, maxRequestBytes), true, value);
 });
 
 // #155: what a Conversation's message may carry is narrower than a Card's, because the Engine reads images only and one
