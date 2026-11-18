@@ -53,6 +53,13 @@
   "strategyAndLearning": "Strategy and learning",
   "team": "Team",
   "teamAgents": "Agents",
+  "teamMenuDescription": "Who works with which agents",
+  "teamMenuSoloDescription": "Just you for now · invite a member",
+  "teamSub": "The company has one set of agents and one memory for everyone. Choose which agents each member works with: an agent they aren’t allowed is never shown to them. The main agent is shown to everyone.",
+  "teamSoloSub": "It’s just you in this workspace for now: you and the agents. When you want someone to work with you, invite them here.",
+  "teamSoloMembers": "Workspace members",
+  "teamSoloOwnerD": "You see every agent and approve everything",
+  "teamDone": "Done",
   "skills": "Skills",
   "connections": "Connections",
   "activityLog": "Activity log",
@@ -972,5 +979,13 @@
   "connectBy": "Apps are connected by {0}",
   "connectByOwner": "Apps are connected by the Owner",
   "connectFailed": "The sign-in didn’t finish. Try again.",
-  "connectBlocked": "Your browser blocked the sign-in window. Allow pop-ups for this site and try again."
+  "connectBlocked": "Your browser blocked the sign-in window. Allow pop-ups for this site and try again.",
+  "ideaAdd": "Add",
+  "ideaLabel": "Idea",
+  "ideaPlaceholder": "e.g. a LinkedIn post about the new cohort",
+  "ideaNeedsText": "Write the idea first, even a short sentence.",
+  "ideaAdded": "Idea added",
+  "boardNewIdeaFrom": "New idea from {0}",
+  "logActIdeaAdded": "added an idea",
+  "addedAnIdea": "Added an idea"
 }

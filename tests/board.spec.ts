@@ -87,6 +87,37 @@ test('a card moves by drag and by keyboard, and both moves are logged',async({pa
  expect(await columnOf(page,card.id)).toBe('ideas');
 });
 
+test('+ on Ideas adds an idea with its Agent, flashes and focuses the Card, raises the count and writes the log row',async({page})=>{
+ const stamp=Date.now();
+ const lead=randomUUID(), ads=randomUUID();
+ try {
+  query(`insert into public.hermes_agents(id,company_id,name,speciality,profile,is_default) values ('${lead}','${rs}','Lead','General','idea-lead-${stamp}',true),('${ads}','${rs}','Ads','Meta ads','idea-ads-${stamp}',false)`);
+  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+  const ideas=page.locator('.col[data-column="ideas"]');
+  const before=Number(await ideas.locator('.col__count').textContent());
+  await ideas.getByRole('button',{name:'Add an idea'}).click();
+  await expect(ideas.getByLabel('Idea',{exact:true})).toBeFocused();
+  const title=`Idea ${stamp}`;
+  await ideas.getByLabel('Idea',{exact:true}).fill(title);
+  await ideas.getByLabel('Agent',{exact:true}).selectOption({label:'Ads'});
+  await ideas.getByRole('button',{name:'Add',exact:true}).click();
+  await expect(page.locator('.toast')).toHaveText('Idea added');
+  const card=ideas.locator('.kcard').filter({hasText:title});
+  await expect(card).toBeVisible();
+  await expect(card.locator('.kcard__foot')).toContainText('Ads');
+  await expect(card.locator('.kcard__t')).toHaveText('New idea from Omar');
+  await expect(card.locator('a')).toBeFocused();
+  await expect(ideas.locator('.col__count')).toHaveText(String(before+1));
+  // The new idea is the first Card in the column.
+  await expect(ideas.locator('.kcard').first().locator('.kcard__title')).toHaveText(title);
+  // The column's own row in the Company log says it was an idea.
+  await page.goto('/c/rs-learning/log');
+  await expect(page.locator('.lgp-body .lg-row').filter({hasText:'added an idea'}).filter({hasText:title})).toBeVisible();
+ } finally {
+  query(`delete from public.hermes_agents where id in ('${lead}','${ads}')`);
+ }
+});
+
 test('a card waiting for a decision moves only by it: a drop on Live opens the card, a drop elsewhere says to decide in the chat',async({page})=>{
  // Wide enough to show Waiting on you and Live together, so the card is carried from one to the other.
  await page.setViewportSize({width:2200,height:900});
@@ -126,7 +157,7 @@ test('a Viewer cannot move a card',async({page})=>{
  await page.keyboard.press('Shift+ArrowRight');
  await page.reload();
  expect(await columnOf(page,1)).toBe(before);
- await expect(page.getByRole('button',{name:'+ Add card'})).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'Add an idea'})).toHaveCount(0);
 });
 
 test('a card waiting for my approval is in Waiting on you and leaves it when I approve its version',async({page})=>{

@@ -2,6 +2,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
+import { localeFor } from '@/lib/i18n.mjs';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/paperclip/ui/dialog';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { ShellIcon } from '@/components/shell-icon';
@@ -15,15 +16,19 @@ type Category=ReadyRole['category'];
 // The reference's order of categories (TPL_CATS); one with no role is not offered.
 const order:Category[]=['ads','content','numbers','code'];
 
-// The ready-made gallery (#14; design-reference: galleryHTML, tplCardHTML, tplGridHTML), at ?new=ready over Lead's
-// chat, for the Owner only (the server decides, page.tsx). The cards come from the server (lib/ready-roles.ts). Adding
-// a role sends Lead the message that asks for it, as if typed, so the Agent made is the one asking Lead makes. Leaving
+// The ready-made gallery (#14, #189; design-reference: galleryHTML, tplCardHTML, tplGridHTML), at ?new=ready over Lead's
+// chat. The cards come from the server (lib/ready-roles.ts). The Owner adds a role: it sends Lead the message that asks
+// for it, as if typed, so the Agent made is the one asking Lead makes. A Manager or a Contributor asks for it instead
+// (#17): the same message asks Lead to prepare the request their Owner answers, and no Agent is made until then. Leaving
 // returns to ?new=agent, where the composer takes the focus. It loads in its own chunk with its strings
 // (ready-made.en.json and ready-made.ar.json).
-export default function ReadyMade({slug,company,agent,companyName,alone,lead,roles}:{slug:string,company:string,agent:string,companyName:string,alone:boolean,lead:string,roles:ReadyRole[]}) {
+export default function ReadyMade({slug,company,agent,companyName,alone,lead,roles,owner,owners}:{slug:string,company:string,agent:string,companyName:string,alone:boolean,lead:string,roles:ReadyRole[],owner:boolean,owners:string[]}) {
  const {t:say,language}=useI18n(); const text:Record<string,string>=language==='ar'?arText:enText;
- const t=(key:string,value='')=>text[key].replace('{0}',()=>value);
+ const t=(key:string,...values:string[])=>text[key].replace(/\{(\d+)\}/g,(whole,index:string)=>values[Number(index)]??whole);
  const router=useRouter(); const search=useRef<HTMLInputElement>(null);
+ // A Member who is not the Owner asks Lead for the role: the Owner alone adds one (design-reference: tplCardHTML).
+ const ask=!owner;
+ const ownerNames=owners.length?new Intl.ListFormat(localeFor(language),{type:'disjunction'}).format(owners):'';
  const [open,setOpen]=useState(true); const [query,setQuery]=useState(''); const [category,setCategory]=useState<Category|'all'>('all');
  const [sending,setSending]=useState(false); const [failure,setFailure]=useState('');
  // One Conversation and send key per role picked, kept for a retry or a second click, so it is asked once.
@@ -32,6 +37,8 @@ export default function ReadyMade({slug,company,agent,companyName,alone,lead,rol
  const active=useRef(true);
  useEffect(()=>{ active.current=true; return ()=>{ active.current=false; }; },[]);
  const leave=()=>{ active.current=false; setOpen(false); router.replace(`/c/${slug}/chat?new=agent`); };
+ // "Add it" for the Owner and "Ask for it" for a Member send the same message; Lead makes the Agent or prepares the
+ // request, by the role the database gives the sender (lib/agent-tools.mjs, run_tools).
  async function add(role:ReadyRole) {
   if(sending) return;
   setSending(true); setFailure('');
@@ -48,7 +55,7 @@ export default function ReadyMade({slug,company,agent,companyName,alone,lead,rol
    <div className="modal__inner">
     <header className="modal__head">
      <div className="modal__titles"><DialogTitle className="modal__title">{t('title')} <bdi>{companyName}</bdi></DialogTitle>
-      <DialogDescription className="modal__sub">{alone?t('subAlone',lead):t('subTeam',companyName)}</DialogDescription></div>
+      <DialogDescription className="modal__sub">{owner?(alone?t('subAlone',lead):t('subTeam',companyName)):ownerNames?t('subMember',lead,ownerNames,companyName):t('subMemberAnyOwner',lead,companyName)}</DialogDescription></div>
      <button type="button" className="circle-btn" aria-label={t('close')} onClick={leave}><ShellIcon name="x"/></button>
     </header>
     <div className="modal__tools">
@@ -65,12 +72,12 @@ export default function ReadyMade({slug,company,agent,companyName,alone,lead,rol
      <div className="tpl__foot">
       {/* The tiles draw the apps (design-reference: tplCardHTML); a screen reader reads their names. */}
       <span className="tpl__tools">{role.apps.length?<>{role.apps.map(app=><AppTile key={app.key} app={app}/>)}<span className="tpl__apps sr-only">{role.apps.map((app,index)=><Fragment key={app.key}>{index>0&&' · '}<bdi>{app.name}</bdi></Fragment>)}</span></>:<span className="tpl__none">{t('noApps')}</span>}</span>
-      <button type="button" className="btn btn--secondary btn--sm" aria-label={t('addLabel',role.role)} disabled={sending} onClick={()=>void add(role)}>{t('add')}</button>
+      <button type="button" className="btn btn--secondary btn--sm" aria-label={ask?t('askLabel',role.role):t('addLabel',role.role)} disabled={sending} onClick={()=>void add(role)}>{ask?t('askIt'):t('add')}</button>
      </div>
     </article>):<div className="tpl-empty"><b>{needle?t('noMatch',query.trim()):t('noneHere')}</b><span>{t('emptyHint')}</span>
      <div className="tpl-empty__acts">{needle&&<button type="button" className="btn btn--secondary btn--sm" onClick={()=>{setQuery('');search.current?.focus();}}>{t('clear')}</button>}
-      <button type="button" className="btn btn--secondary btn--sm" onClick={leave}>{t('scratch')}</button></div></div>}</div>
-    <footer className="modal__foot"><span className="modal__foot-t">{t('notFound')}</span><button type="button" className="btn btn--secondary" onClick={leave}>{t('scratch')}</button></footer>
+      <button type="button" className="btn btn--secondary btn--sm" onClick={leave}>{ask?t('askLead',lead):t('scratch')}</button></div></div>}</div>
+    <footer className="modal__foot"><span className="modal__foot-t">{t('notFound')}</span><button type="button" className="btn btn--secondary" onClick={leave}>{ask?t('askLead',lead):t('scratch')}</button></footer>
    </div>
   </DialogContent>
  </Dialog>;

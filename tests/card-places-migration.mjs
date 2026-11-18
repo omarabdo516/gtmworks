@@ -4,8 +4,8 @@ import { testDb } from './pgtap.mjs';
 // #174 replays its migration on the Card table as the previous app version left it: no place, and Cards the board drew
 // in stage order. The migration keeps the order the board showed, a Card the old version makes without a place takes the
 // end of its column, and its reads and moves then run as before.
-const migration = readFileSync('supabase/migrations/20270215000000_card_places.sql', 'utf8');
-const verify = readFileSync('supabase/migrations/20270215000000_card_places.verify.sql', 'utf8').trim().replace(/;$/, '');
+const migration = readFileSync('supabase/migrations/20270216000000_card_places.sql', 'utf8');
+const verify = readFileSync('supabase/migrations/20270216000000_card_places.verify.sql', 'utf8').trim().replace(/;$/, '');
 const sql = `begin;
 create extension if not exists pgtap with schema extensions;
 select plan(8);

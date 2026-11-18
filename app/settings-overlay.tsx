@@ -5,13 +5,12 @@ import type { ReactNode } from 'react';
 import Link from '@/lib/link';
 import { getI18n } from '@/lib/i18n-server';
 import { supabase } from '@/lib/supabase';
-import { CompanyAgentFace } from '@/components/company-agent-face';
 import { AgentFaceDot } from './agent-face-dot';
 import { agentStates, statusKeys, type AgentStatus } from '@/lib/agent-details.mjs';
 import { pickSection, overlayHref, agentsMainFirst, usageTotals, type OverlaySection } from '@/lib/settings-overlay.mjs';
 import { OverlayChrome } from './settings-overlay-chrome';
 import { BackLink, FocusReturn } from './settings-overlay-frame';
-import { AccountChoices, MakeMain, DeleteAgent, CompanyName, Invite, AgentSwitch, RuleSaid, RemoveRule } from './settings-overlay-client';
+import { AccountChoices, MakeMain, DeleteAgent, CompanyName, Invite, SettingsTeamTable, RuleSaid, RemoveRule } from './settings-overlay-client';
 import { SettingsIcon } from './settings-icons';
 import PasswordSettings from './password-settings';
 import { UsageTable } from './c/[slug]/[[...section]]/usage';
@@ -22,7 +21,7 @@ import { MadeLine, OpenedMark } from './agent-made';
 import { madeColumns, madeOf } from '@/lib/agent-made';
 import { isNewFor } from '@/lib/sidebar.mjs';
 import { isolate } from '@/lib/bidi';
-import { inviteeName } from '@/lib/invite.mjs';
+import { inviteRoles as teamInviteRoles, roleDescription, orderMembers } from '@/lib/member-roles.mjs';
 import AppsSection from './settings-apps';
 import { CompanyKnowledge } from './company-knowledge';
 
@@ -31,8 +30,6 @@ type Member={person_id:string,role:string,people:{name:string|null}|null};
 type Invitation={id:string,email:string,role:string};
 type Rule={id:string,body:string,said_by:string,said_at:string,teller:{name:string|null}|null};
 type T=Awaited<ReturnType<typeof getI18n>>['t'];
-const roleRank:Record<string,number>={owner:0,manager:1,contributor:2,viewer:3};
-const roleDescription:Record<string,string>={owner:'settingsRoleOwnerD',manager:'settingsRoleManagerD',contributor:'settingsRoleContributorD',viewer:'settingsRoleViewerD'};
 
 // The settings overlay (#26; reference: dialog#sov in design-reference/app.js, renderSov). It is route-backed:
 // /c/<slug>/settings opens it on the person's first section and ?section=…&agent=… opens any other state, so the
@@ -47,7 +44,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  const owner=role==='owner', canManage=owner||role==='manager', canWrite=role!=='viewer';
  const needAgents=['company','agents'].includes(section);
  const agents:Agent[]=needAgents?agentsMainFirst((await db.from('hermes_agents').select(`id,connection_id,name,speciality,is_default,${madeColumns}`).eq('company_id',company.id).order('name')).data||[]):[];
- const members:Member[]=section==='company'?(((await db.from('members').select('person_id,role,people(name)').eq('company_id',company.id).is('removed_at',null)).data||[]) as unknown as Member[]).sort((a,b)=>(roleRank[a.role]??9)-(roleRank[b.role]??9)||(a.people?.name||'').localeCompare(b.people?.name||'')):[];
+ const members:Member[]=section==='company'?orderMembers(((await db.from('members').select('person_id,role,people(name)').eq('company_id',company.id).is('removed_at',null)).data||[]) as unknown as Member[]):[];
  // Which Agents each Member sees (#15): every Member's switches, read by an Owner or a Manager.
  const allowed=new Set(section==='company'&&canManage?((await db.from('member_agent_access').select('person_id,agent_id').eq('company_id',company.id)).data||[]).map(row=>`${row.person_id}:${row.agent_id}`):[]);
  // Open invitations are rows of the same table (#185), with their own switches, until the person joins.
@@ -100,24 +97,9 @@ function CompanySection({t,company,solo,members,invitations,agents,allowed,invit
  const mode=<section className="dp-sec" aria-labelledby="co-h-mode"><Label id="co-h-mode">{t('settingsMode')}</Label>
   <div className="panel-card"><div className="panel-row"><span className="panel-row__icon"><SettingsIcon name={solo?'user':'team'}/></span><span className="panel-row__text">
    <span className="panel-row__t">{solo?t('settingsModeAlone'):t('settingsModeTeam',count)}</span><span className="panel-row__d">{solo?t('settingsModeAloneD'):t('settingsModeTeamD')}</span></span></div></div></section>;
- const others=agents.filter(agent=>!agent.is_default);
- const inviteRoles=(['manager','contributor','viewer'] as const).map(key=>({key,name:roleNames[key],description:t(roleDescription[key])}));
- const who=(member:Member)=>{const label=member.people?.name||t('member'); return <span className="ta-who"><span className="me__av pp-av" aria-hidden="true">{initial(label)}</span><span className="od-field"><span className="ta-name"><bdi>{label}</bdi>{member.person_id===userId&&<> <span className="ch-you">{t('settingsYouMark')}</span></>}</span><span className="ta-role">{roleNames[member.role]||''}</span></span></span>;};
+ const inviteRoles=teamInviteRoles(t);
  const table=<section className="dp-sec" aria-labelledby="co-h-mem"><Label id="co-h-mem">{t('settingsMembersAgents')}</Label><div className="ta sov-ta">
-  <div className="table-wrap"><table className="table ta-table">
-   <thead><tr><th scope="col">{t('settingsMember')}</th>{agents.map(agent=><th scope="col" key={agent.id}><span className="ta-ag"><CompanyAgentFace agent={agent} size={24}/><bdi>{agent.name}</bdi></span></th>)}</tr></thead>
-   <tbody>{members.map(member=><tr key={member.person_id}><th scope="row">{who(member)}</th>
-    {agents.length>0&&<td><span className="ta-all">{t('settingsShownToAll')}</span></td>}
-    {member.role==='owner'?(others.length>0&&<td colSpan={others.length}><span className="ta-all">{t('settingsOwnerSeesAll')}</span></td>)
-     :others.map(agent=><td key={agent.id}><AgentSwitch company={company.id} target={{member:member.person_id}} agent={agent.id} on={allowed.has(`${member.person_id}:${agent.id}`)} label={`${member.people?.name||t('member')} · ${agent.name}`}/></td>)}
-   </tr>)}
-   {/* An invited person, drawn as the reference draws a pending one (teamTableHTML: Q.pending). */}
-   {invitations.map(invitation=>{const name=inviteeName(invitation.email); return <tr key={invitation.id}><th scope="row"><span className="ta-who"><span className="me__av pp-av" aria-hidden="true">{initial(name)}</span><span className="od-field"><span className="ta-name"><bdi>{name}</bdi></span><span className="ta-role">{roleNames[invitation.role]||''} · <bdi dir="ltr">{invitation.email}</bdi></span><span className="badge ta-pending"><SettingsIcon name="clock"/>{t('settingsInvitePending')}</span></span></span></th>
-    {agents.length>0&&<td><span className="ta-all">{t('settingsShownToAll')}</span></td>}
-    {others.map(agent=><td key={agent.id}><AgentSwitch company={company.id} target={{invitation:invitation.id}} agent={agent.id} on={invitedAllowed.has(`${invitation.id}:${agent.id}`)} label={`${name} · ${agent.name}`}/></td>)}
-   </tr>;})}</tbody></table></div>
-  <p className="set-hint ta-hint">{t('settingsTeamHint')}</p>
-  {owner&&<Invite mode="table" company={company.id} slug={slug} roles={inviteRoles}/>}
+  <SettingsTeamTable company={company.id} slug={slug} members={members} invitations={invitations} agents={agents} allowed={allowed} invitedAllowed={invitedAllowed} userId={userId} owner={owner}/>
  </div></section>;
  // Alone (#10): no members, no per-member Agents; the Owner invites the first Member here, and the Company becomes a
  // team when that Member accepts.

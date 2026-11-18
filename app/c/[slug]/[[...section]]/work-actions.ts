@@ -40,6 +40,8 @@ export const workAction=withActionLog('workAction',async function workAction(for
  else if(op==='save-step') { const [kind,value]=String(form.get('approver')).split(':'); ({error}=await db.rpc('save_approval_step',{c:company,step:Number(form.get('step'))||null,step_name:String(form.get('name')),step_position:Number(form.get('position')),member:kind==='person'?value:null,member_role:kind==='role'?value:null})); }
  else if(op==='remove-step') ({error}=await db.rpc('remove_approval_step',{c:company,step:Number(form.get('step'))}));
  else if(op==='create') { const result=await db.rpc('create_work_card',{c:company,s:Number(form.get('stage')),card_title:String(form.get('title')),template:String(form.get('template')||''),evidence}); error=result.error; created=result.data; }
+ // An idea from the Ideas column (#188): the one overload that names its Agent, and comes back to the board on it.
+ else if(op==='idea') { const result=await db.rpc('create_work_card',{c:company,s:Number(form.get('stage')),card_title:String(form.get('title')||''),agent:String(form.get('agent')||'')}); error=result.error; created=result.data; }
  else if(op==='request') {
   // One card, its first message and its assignment, once per key: a double click or a retry returns the same card.
   const key=String(form.get('key')||''); const stored=await storeFiles(db,company,form,/^[0-9a-f-]{36}$/.test(key)?key:crypto.randomUUID()); error=stored.error;
@@ -85,5 +87,5 @@ export const workAction=withActionLog('workAction',async function workAction(for
  else error={message:'unknown operation'};
  revalidatePath(`/c/${slug}`,'layout');
  if(error) { logActionFailure(`workAction:${op}`,error,{form}); const path=op==='request'?`/c/${slug}/work/new`:(op.endsWith('settings')||op.endsWith('step'))?`/c/${slug}/settings/work`:card&&form.get('view')==='sheet'?`${base}?card=${card}`:card&&(!['move','move-column'].includes(op)||form.get('view')==='card')?`${base}/${card}`:base; redirect(`${path}${path.includes('?')?'&':'?'}message=${encodeURIComponent(error.message.includes('contributors cannot move')?t('youCannotMoveTheCardToThisStage'):error.message.includes('approval required')?t('boardNeedsApproval'):error.message.includes('decision required')?t('boardDecideFirst'):t('couldNotSaveTheChangeCheckPermissionsAnd'))}`); }
- if(created) redirect(`${base}/${created}`);
+ if(created) redirect(op==='idea'?`${base}?show=${created}&idea=1`:`${base}/${created}`);
 });

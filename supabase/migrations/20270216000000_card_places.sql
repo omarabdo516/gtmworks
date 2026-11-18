@@ -83,3 +83,20 @@ declare current_kind text; current_column text; stage bigint; arrived text; befo
 end $$;
 revoke all on function public.place_work_card(uuid,bigint,text,bigint,text) from public,anon,service_role;
 grant execute on function public.place_work_card(uuid,bigint,text,bigint,text) to authenticated;
+
+-- An idea added in the Ideas column (#188) goes to the top of Ideas, as the reference's saveIdea puts it first; every
+-- other Card made without a place still takes its column's end. The same checks as 20270215000000_add_idea, with the place.
+create or replace function public.create_work_card(c uuid, s bigint, card_title text, agent uuid) returns bigint language plpgsql security invoker set search_path='' as $$
+declare result bigint; begin
+ if not public.work_can_edit(c) then raise exception 'not permitted'; end if;
+ if btrim(coalesce(card_title,''))='' then raise exception 'invalid idea' using errcode='22023'; end if;
+ if not exists(select 1 from public.work_stages where company_id=c and id=s and kind='ideas') then raise exception 'no Ideas stage'; end if;
+ if agent is null or not exists(select 1 from public.hermes_agents h where h.company_id=c and h.id=agent)
+  or not public.agent_visible_to(c,auth.uid(),agent) then raise exception 'agent not found'; end if;
+ perform set_config('work.idea','yes',true);
+ insert into public.work_cards(company_id,stage_id,title,agent_id,board_order) values(c,s,card_title,agent,
+  coalesce((select min(w.board_order) from public.work_cards w join public.work_stages t on t.company_id=w.company_id and t.id=w.stage_id
+   where w.company_id=c and t.board_column='ideas'),1)-1) returning id into result;
+ perform set_config('work.idea','',true);
+ return result;
+end $$;

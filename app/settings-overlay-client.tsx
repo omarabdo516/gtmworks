@@ -9,6 +9,7 @@ import AccountChoicesView from './account-choices-view';
 import { setAgentVisible, setInvitationAgentVisible } from './agent-visibility-actions';
 import { inviteMember } from './invite-actions';
 import { InviteSection, type InviteRole } from './invite-section';
+import { TeamTable, type TeamAgent, type TeamInvitation, type TeamMember } from './team-table';
 import { madeDay, useZone } from './agent-made';
 import { dateFormatter, dayOf } from '@/lib/activity-log.mjs';
 import { localeFor } from '@/lib/i18n.mjs';
@@ -82,16 +83,12 @@ export function Invite({mode,company,slug,roles}:{mode:'table'|'alone',company:s
  return <InviteSection mode={mode} roles={roles} send={(email,role)=>inviteMember(company,slug,email,role)}/>;
 }
 
-// One Member × Agent switch (#15; reference: ta-toggle), or one on an invited row (#185), kept with the invitation until
-// the person joins. It turns at once and goes back, with the reason, when the database refuses.
-export function AgentSwitch({company,target,agent,on,label}:{company:string,target:{member:string}|{invitation:string},agent:string,on:boolean,label:string}) {
- const {t}=useI18n(); const router=useRouter();
- const [checked,setChecked]=useState(on); const [pending,startTransition]=useTransition(); const [error,setError]=useState('');
- return <><button type="button" className="switch" role="switch" aria-checked={checked} aria-label={label} disabled={pending} onClick={()=>startTransition(async()=>{
-  const next=!checked; setChecked(next); setError('');
-  const failure='member' in target?await setAgentVisible(company,target.member,agent,next):await setInvitationAgentVisible(company,target.invitation,agent,next);
-  if(failure) { setChecked(!next); setError(failure); } else router.refresh();
- })}/>{error&&<span className="set-err" role="alert">{t(error)}</span>}</>;
+// The Team table (#187), with its switches and its Owner invite bound to the server actions that check the Role again.
+// The same table is drawn by the Team dialog in the account menu (app/team-dialog.tsx).
+export function SettingsTeamTable({company,slug,members,invitations,agents,allowed,invitedAllowed,userId,owner}:{company:string,slug:string,members:TeamMember[],invitations:TeamInvitation[],agents:TeamAgent[],allowed:ReadonlySet<string>,invitedAllowed:ReadonlySet<string>,userId:string,owner:boolean}) {
+ const save=(c:string,target:{member:string}|{invitation:string},agent:string,visible:boolean)=>'member' in target?setAgentVisible(c,target.member,agent,visible):setInvitationAgentVisible(c,target.invitation,agent,visible);
+ return <TeamTable company={company} members={members} invitations={invitations} agents={agents} allowed={allowed} invitedAllowed={invitedAllowed} userId={userId} owner={owner}
+  save={save} saveInvitation={save} send={(email,role)=>inviteMember(company,slug,email,role)}/>;
 }
 
 // Who told the Agent a rule and when (#18; design-reference: rulesHTML, "Said by Omar · Yesterday · 6:40 PM"), in the
