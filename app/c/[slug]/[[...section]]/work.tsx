@@ -38,8 +38,9 @@ type Stage={id:number,name:string,position:number,board_column?:string|null}; ty
 type CardNotes={me:string,drawnAt:number,comments:EditableNote[],runs:{note_id:number,agent_id:string,agent_name:string,outcome:string|null}[],replies:{reply_to:number,actor_id:string,actor_name:string|null,body:string,created_at:string}[],agents:{id:string,name:string,connection_id:string}[]};
 // workAction is the board's server action (work-actions.ts), handed in so this client file never imports the server module.
 export type WorkAction=(form:FormData)=>Promise<void>;
-// "Undo" on a move (#168): the server's answer, and nothing else, decides whether the Card went back.
-type UndoResult={state:'undone',column:string}|{state:'gone'}|{state:'refused'};
+// "Undo" on a move (#168): the server's answer, and nothing else, decides whether the Card went back. The shape lives here
+// and work-actions.ts answers with it, so the two cannot drift.
+export type UndoResult={state:'undone',column:string}|{state:'gone'}|{state:'refused'};
 export type UndoMove=(form:FormData)=>Promise<UndoResult>;
 // A place (#174) is answered in place: the board keeps its Cards and says in words why the Card stayed where it is.
 export type PlaceResult={ok:true}|{error:string};

@@ -529,7 +529,7 @@
   "numbersNoAppNote": "Connect an ads or analytics app and its numbers show here, each with its source and period.",
   "numbersConnect": "Connect an app",
   "boardSubtitle": "Everything the agents are working on, and what’s waiting for your OK",
-  "boardDragHint": "Drag a card to another column, or use Shift with the arrow keys",
+  "boardDragHint": "Drag a card to another column, or use Shift with the arrow keys: Left and Right move it between columns, Up and Down inside its column",
   "boardFilterByAgent": "Filter by agent",
   "boardNamesJoin": ", ",
   "boardWorkedOn": "Worked on it:",
