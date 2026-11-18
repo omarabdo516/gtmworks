@@ -481,7 +481,8 @@
 .gw .details .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; display: inline-block; background: var(--gw-idle-dot); }
 .gw .details .dot--working { background: var(--gw-accent); }
 .gw .details .dot--waiting { background: var(--gw-wait); }
-.gw .details .face-wrap .dot { position: absolute; bottom: 2px; inset-inline-end: 2px; width: 12px; height: 12px; box-shadow: 0 0 0 3px var(--gw-bg-chrome); }
+.gw .details .face-wrap .dot { position: absolute; bottom: 1px; inset-inline-end: 1px; width: 8px; height: 8px; box-shadow: 0 0 0 2.5px var(--gw-bg-sidebar); }
+.gw .details .face-wrap--lg .dot { bottom: 2px; inset-inline-end: 2px; width: 12px; height: 12px; box-shadow: 0 0 0 3px var(--gw-bg-chrome); }
 .gw .dp-scrim { display: none; }
 
 /* "New agent": one hint line above Lead's composer (design-reference: .new-hint) */
