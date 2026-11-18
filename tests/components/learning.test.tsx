@@ -25,8 +25,8 @@ const forgotten = 'c0000000-0000-0000-0000-000000000002';
 const data: CompanyLearning = {
  state: 'found',
  agents: [
-  { id: lead, name: 'Lead', own: true, shared: false, mode: 'ask', learned: [{ name: 'weekly-recap', description: 'Writes the Friday recap.' }] },
-  { id: writer, name: 'Writer', own: true, shared: false, mode: 'auto', learned: null },
+  { id: lead, name: 'Lead', own: true, shared: false, follow: true, mode: 'ask', learned: [{ name: 'weekly-recap', description: 'Writes the Friday recap.' }] },
+  { id: writer, name: 'Writer', own: true, shared: false, follow: false, mode: 'auto', learned: null },
  ],
  rules: [
   { id: active, agent: lead, body: rule, saidBy: null, saidByName: 'Omar', saidAt: '2026-11-18T10:00:00Z', removed: false, shared: false },
@@ -80,8 +80,14 @@ test('a rule can be forgotten and a forgotten one brought back, each through its
 test('the Owner picks the Company mode and one Agent\'s, each written through the settings route', async () => {
  const owner = await screen();
  await expect.element(companyModes(owner).getByRole('radio', { name: /^Asks first/ })).toBeVisible();
- expect(owner.getByRole('radio').elements().map(element => element.getAttribute('aria-checked'))).toEqual(['false', 'false', 'false', 'true', 'true', 'false']);
  expect(companyModes(owner).getByRole('radio', { name: /^Asks first/ }).element().getAttribute('aria-disabled')).toBeNull();
+ expect(companyModes(owner).getByRole('radio', { name: /^Learns on its own/ }).element().getAttribute('aria-checked')).toBe('false');
+ expect(companyModes(owner).getByRole('radio', { name: /^Asks first/ }).element().getAttribute('aria-checked')).toBe('false');
+ const leadModes = owner.getByRole('radiogroup', { name: 'Lead' });
+ expect(leadModes.getByRole('radio', { name: 'Follow the company' }).element().getAttribute('aria-checked')).toBe('true');
+ const writerModes = owner.getByRole('radiogroup', { name: 'Writer' });
+ expect(writerModes.getByRole('radio', { name: 'Learns on its own', exact: true }).element().getAttribute('aria-checked')).toBe('true');
+ expect(writerModes.getByRole('radio', { name: 'Follow the company' }).element().getAttribute('aria-checked')).toBe('false');
  await companyModes(owner).getByRole('radio', { name: /^Learns on its own/ }).click();
  await expect.poll(() => fetchMock.mock.calls.length).toBe(1);
  expect(fetchMock.mock.calls[0][0]).toBe('/api/agent-settings');
@@ -89,6 +95,10 @@ test('the Owner picks the Company mode and one Agent\'s, each written through th
  await owner.getByRole('radiogroup', { name: 'Writer' }).getByRole('radio', { name: 'Asks first', exact: true }).click();
  await expect.poll(() => fetchMock.mock.calls.length).toBe(2);
  expect(await bodyOf(1)).toEqual({ company, agent: writer, mode: 'ask' });
+ // An Agent that chose its own mode can be given back to the Company's.
+ await owner.getByRole('radiogroup', { name: 'Writer' }).getByRole('radio', { name: 'Follow the company' }).click();
+ await expect.poll(() => fetchMock.mock.calls.length).toBe(3);
+ expect(await bodyOf(2)).toEqual({ company, agent: writer, mode: 'follow' });
 });
 
 test('a reader below Owner sees the Company mode and each Agent\'s with no choice', async () => {
@@ -101,8 +111,8 @@ test('a reader below Owner sees the Company mode and each Agent\'s with no choic
 
 test('a Company whose Agents disagree reads as mixed, and an Agent whose profile cannot be read says so', async () => {
  const view = await screen('ar', { value: { ...data, agents: [
-  { id: lead, name: 'Lead', own: true, shared: false, mode: 'ask', learned: null },
-  { id: writer, name: 'Writer', own: true, shared: false, mode: null, learned: null },
+  { id: lead, name: 'Lead', own: true, shared: false, follow: false, mode: 'ask', learned: null },
+  { id: writer, name: 'Writer', own: true, shared: false, follow: true, mode: null, learned: null },
  ] } });
  expect(view.getByText('مش قادرين نقرا وضع التعلّم دلوقتي.').elements().length).toBeGreaterThan(0);
  await expect.element(view.getByRole('radiogroup', { name: 'Lead' }).getByRole('radio', { name: 'يستأذن الأول' })).toBeVisible();

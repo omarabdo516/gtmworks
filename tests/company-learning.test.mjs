@@ -33,12 +33,14 @@ const ruleRows=[
  {id:'c0000000-0000-0000-0000-000000000002',agent_id:writer,body:'No emojis',said_by:omar,said_at:'2026-11-17T10:00:00Z',removed_at:'2026-11-18T11:00:00Z',suggestion:'approved',teller:{name:'Omar'}},
  {id:'c0000000-0000-0000-0000-000000000003',agent_id:writer,body:'Send the price list only when asked',said_by:omar,said_at:'2026-11-16T10:00:00Z',removed_at:null,suggestion:'approved',teller:{name:'Omar'}},
 ];
-function database({owner=true,agents=rows,rules=ruleRows}={}) {
+function database({owner=true,agents=rows,rules=ruleRows,modes=new Map()}={}) {
  const logged=[];
  const db={rpc:async(name,args)=>{
   if(name==='is_company_owner') return {data:owner,error:null};
   if(name==='company_engine_target') return {data:[{profile:companyProfile(args.c),one_company:false,profiles:[]}],error:null};
   if(name==='company_app_agents') return {data:agents,error:null};
+  if(name==='company_learning_modes') return {data:agents.map(row=>({agent:row.agent,learning_mode_choice:modes.get(row.agent)??null})),error:null};
+  if(name==='set_agent_learning_mode') { if(args.mode===null) modes.delete(args.agent); else modes.set(args.agent,args.mode); return {data:null,error:null}; }
   if(name==='log_engine_setting') { logged.push(args); return {data:null,error:null}; }
   return {data:null,error:{message:`unexpected ${name}`}};
  },from:(table)=>{
@@ -107,6 +109,19 @@ test('the Company\'s mode reaches every Agent profile and the shared space, and 
   assert.deepEqual(reread.agents.map(agent=>[agent.name,learningModeOf(agent.settings)]),[['Lead','ask'],['Writer','auto'],['Helper','ask']]);
   const overridePaths=requestsOf(fake,'PUT').slice(beforeOverride).map(request=>request.path);
   assert.deepEqual(overridePaths,[`/api/config?profile=${agentProfile(writer)}`,`/api/config?profile=${agentProfile(writer)}`],'the override writes that Agent\'s own profile alone, once per setting');
+  // A Company-wide change leaves an Agent that chose its own mode alone: the Writer asks first while the Company turns
+  // by itself, and its own profile keeps the choice.
+  await changeLearningMode(db,{company,agent:writer,mode:'ask',hermes:{address:fake.address,key:fake.settings.key},driver:settingsDriver(fake)});
+  const companyAuto=await changeLearningMode(db,{company,mode:'auto',hermes:{address:fake.address,key:fake.settings.key},driver:settingsDriver(fake)});
+  assert.equal(companyAuto.status,200,JSON.stringify(companyAuto.body));
+  assert.deepEqual([at(fake.settings.profiles.get(agentProfile(writer)).config,'memory.write_approval'),at(fake.settings.profiles.get(agentProfile(writer)).config,'skills.write_approval')],[true,true],'the Writer keeps its own ask first');
+  for(const name of [companyProfile(company),space]) assert.deepEqual([at(fake.settings.profiles.get(name).config,'memory.write_approval'),at(fake.settings.profiles.get(name).config,'skills.write_approval')],[false,false],`${name} follows the Company by itself`);
+  // Following the Company again writes the Company's own mode to that Agent and forgets its choice.
+  const follow=await changeLearningMode(db,{company,agent:writer,mode:'follow',hermes:{address:fake.address,key:fake.settings.key},driver:settingsDriver(fake)});
+  assert.equal(follow.status,200,JSON.stringify(follow.body));
+  assert.deepEqual([at(fake.settings.profiles.get(agentProfile(writer)).config,'memory.write_approval'),at(fake.settings.profiles.get(agentProfile(writer)).config,'skills.write_approval')],[false,false],'the Writer takes the Company\'s by itself');
+  const afterFollow=await readCompanyLearning(db,{company,hermes:{address:fake.address,key:fake.settings.key},driver:driverAt(fake)});
+  assert.deepEqual(afterFollow.agents.map(agent=>[agent.name,agent.mode,agent.follow]),[['Lead','auto',true],['Writer','auto',true],['Helper','auto',true]],'the Writer follows the Company again');
  } finally { await fake.close(); }
 });
 

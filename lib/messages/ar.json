@@ -1148,5 +1148,6 @@
   "settingsEffortMediumHint": "توازن كويس لمعظم الشغل اليومي.",
   "settingsEffortHighHint": "بياخد وقت أطول ويفكر أعمق. مناسب للخطط وتوزيع الميزانيات.",
   "settingsEffortMaxHint": "أبطأ وأغلى مستوى. للقرارات الكبيرة زي خطة الربع كله.",
-  "settingsEffortUnknown": "مستوى مش معروف"
+  "settingsEffortUnknown": "مستوى مش معروف",
+  "settingsLearnFollowCompany": "زي الشركة"
 }

@@ -40,3 +40,39 @@ language sql stable security definer set search_path='' as $$
 $$;
 revoke all on function public.company_agent_models(uuid) from public,anon,service_role;
 grant execute on function public.company_agent_models(uuid) to authenticated;
+
+-- #28: an Agent's own learning mode is remembered here, as #29 remembers its model choice. null means the Agent follows
+-- whatever the Company chooses (the Company's write then reaches its profile); "auto" or "ask" means its Owner chose
+-- for this Agent alone, and a Company-wide change leaves its profile alone. Additive: no existing row is rewritten.
+alter table public.agent_profiles add column learning_mode_choice text;
+alter table public.agent_profiles add constraint agent_profiles_learning_mode_choice_shape
+ check (learning_mode_choice is null or learning_mode_choice in ('auto','ask'));
+
+-- What the Learning section reads with each Agent's mode: whether it chose its own, or follows the Company.
+create function public.company_learning_modes(c uuid)
+returns table(agent uuid, learning_mode_choice text)
+language sql stable security definer set search_path='' as $$
+ select a.id,g.learning_mode_choice
+ from public.hermes_agents a
+  left join public.agent_profiles g on g.agent_id=a.id and g.company_id=c
+ where a.company_id=c and public.can_see_agent(c,a.id)
+ order by a.is_default desc,a.name,a.id;
+$$;
+revoke all on function public.company_learning_modes(uuid) from public,anon,service_role;
+grant execute on function public.company_learning_modes(uuid) to authenticated;
+
+-- An Owner remembers one Agent's own mode, or null to follow the Company again. The Engine's two approvals are written
+-- by the app; this row only keeps the choice.
+create function public.set_agent_learning_mode(agent uuid, mode text) returns void
+language plpgsql security definer set search_path='' as $$
+declare c uuid;
+begin
+ if mode is not null and mode not in ('auto','ask') then raise exception 'learningModeInvalid' using errcode='22023'; end if;
+ select a.company_id into c from public.hermes_agents a where a.id=set_agent_learning_mode.agent;
+ if c is null then raise exception 'settingAgentUnknown' using errcode='P0002'; end if;
+ if not public.is_company_owner(c) then raise exception 'settingNotAllowed' using errcode='42501'; end if;
+ update public.agent_profiles p set learning_mode_choice=set_agent_learning_mode.mode where p.agent_id=set_agent_learning_mode.agent and p.company_id=c;
+ if not found then raise exception 'settingAgentShared' using errcode='42501'; end if;
+end $$;
+revoke all on function public.set_agent_learning_mode(uuid,text) from public,anon,service_role;
+grant execute on function public.set_agent_learning_mode(uuid,text) to authenticated;

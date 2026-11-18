@@ -82,6 +82,22 @@ test('the Owner switches the Company\'s mode and one Agent\'s, and each profile 
  expect(fake.settings.profiles.get(profile)!.config.skills?.write_approval).toBe(true);
  await expect(overlay.locator('.ln-ag').filter({hasText:'Writer'})).toContainText('Learns on its own');
  await expect(overlay.locator('.ln-ag').filter({hasText:'Lead'})).toContainText('Asks first');
+ expect(JSON.parse(query(`select learning_mode_choice as choice from public.agent_profiles where agent_id='${writer}'`))[0].choice).toBe('auto');
+ // The Writer pins "Asks first", then the Company turns by itself: the Writer's own choice stands.
+ await writerModes.getByRole('radio',{name:'Asks first',exact:true}).click();
+ await expect(writerModes.getByRole('radio',{name:'Asks first',exact:true})).toHaveAttribute('aria-checked','true');
+ await group(page,'For the whole company').getByRole('radio',{name:/^Learns on its own/}).click();
+ await expect(group(page,'For the whole company').getByRole('radio',{name:/^Learns on its own/})).toHaveAttribute('aria-checked','false');
+ expect(fake.settings.profiles.get(writerProfile)!.config.memory?.write_approval).toBe(true);
+ expect(fake.settings.profiles.get(profile)!.config.memory?.write_approval).toBe(false);
+ expect(fake.settings.profiles.get(space)!.config.memory?.write_approval).toBe(false);
+ // "Follow the company" gives the Writer back: the Company's mode is written to its profile and its choice forgotten.
+ const following=group(page,'Writer');
+ await following.getByRole('radio',{name:'Follow the company'}).click();
+ await expect(following.getByRole('radio',{name:'Follow the company'})).toHaveAttribute('aria-checked','true');
+ expect(fake.settings.profiles.get(writerProfile)!.config.memory?.write_approval).toBe(false);
+ expect(fake.settings.profiles.get(writerProfile)!.config.skills?.write_approval).toBe(false);
+ expect(JSON.parse(query(`select learning_mode_choice as choice from public.agent_profiles where agent_id='${writer}'`))[0].choice).toBe(null);
 });
 
 test('the Owner forgets a rule and brings it back, both written in the log, and a learned Skill has no restore', async ({page}) => {

@@ -1148,5 +1148,6 @@
   "settingsEffortMediumHint": "A good balance for most daily work.",
   "settingsEffortHighHint": "Takes longer and thinks deeper. Right for plans and budget splits.",
   "settingsEffortMaxHint": "The slowest, most expensive level. For big calls like a full quarter plan.",
-  "settingsEffortUnknown": "Unrecognised level"
+  "settingsEffortUnknown": "Unrecognised level",
+  "settingsLearnFollowCompany": "Follow the company"
 }

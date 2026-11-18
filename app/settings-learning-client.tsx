@@ -35,14 +35,17 @@ export function CompanyLearningMode({company,mode,canChange}:{company:string,mod
 }
 
 // One Agent's mode, as its own profile reads: the reference's segmented control, or a word alone for a reader below
-// Owner. An Agent on another Agent's shared profile has no switch, since a write there would change both.
-export function AgentLearningMode({company,agent,labelId,mode}:{company:string,agent:string,labelId:string,mode:'auto'|'ask'|'mixed'|null}) {
+// Owner. An Agent on another Agent's shared profile has no switch, since a write there would change both. "Follow the
+// company" is there for an Agent that chose its own mode, and gives it back to the Company's (#28).
+export function AgentLearningMode({company,agent,labelId,mode,follows}:{company:string,agent:string,labelId:string,mode:'auto'|'ask'|'mixed'|null,follows:boolean|null}) {
  const {t}=useI18n(); const router=useRouter(); const [pending,startTransition]=useTransition(); const [failed,setFailed]=useState(false);
- const choose=(next:'auto'|'ask')=>{ if(pending||mode===next) return; setFailed(false);
+ const choose=(next:'auto'|'ask'|'follow')=>{ if(pending||(next==='follow'?follows:!follows&&mode===next)) return; setFailed(false);
   startTransition(async()=>{ if(await send('/api/agent-settings','POST',{company,agent,mode:next})) router.refresh(); else setFailed(true); }); };
  return <>
   <div className="segmented segmented--field ln-seg" role="radiogroup" aria-labelledby={labelId}>{modeLabels.map(key=>
-   <button type="button" key={key} role="radio" id={`ln-${agent}-${key}`} aria-checked={mode===key} tabIndex={mode===key?0:-1} disabled={pending} onClick={()=>choose(key)}>{t(modeName[key])}</button>)}</div>
+   <button type="button" key={key} role="radio" id={`ln-${agent}-${key}`} aria-checked={!follows&&mode===key} tabIndex={!follows&&mode===key?0:-1} disabled={pending} onClick={()=>choose(key)}>{t(modeName[key])}</button>)}
+   {follows!==null&&<button type="button" role="radio" id={`ln-${agent}-follow`} aria-checked={follows} tabIndex={follows?0:-1} disabled={pending} onClick={()=>choose('follow')}>{t('settingsLearnFollowCompany')}</button>}
+  </div>
   {failed&&<p className="set-err" role="alert">{t('settingsLearnModeFailed')}</p>}
  </>;
 }
