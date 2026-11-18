@@ -283,8 +283,8 @@ function SoonSection({t,section,ro,subscriptions,keys,defaultModel,eachAgent}:{t
  if(section==='learning') return <><Head title={t('settingsLearning')} sub={t('settingsLearningSub')}/>{ro}
   {(['settingsLearnSuggestions','settingsLearnCompany','settingsLearnPerAgent','settingsLearnRecent','settingsLearnRules'] as const).map(key=><SoonSec key={key} t={t} id={`ln-h-${key}`} label={t(key)}/>)}</>;
  if(section==='models') return <><Head title={t('settingsModels')} sub={t('settingsModelsSub')}/>{ro}
-  {subscriptions}{keys}{defaultModel??<div className="panel-card"><p className="panel-empty">{t('settingsModelsUnread')}</p></div>}{eachAgent}
-  <SoonSec t={t} id="md-h-settingsModelsEffort" label={t('settingsModelsEffort')}/></>;
+  {subscriptions}{keys}{defaultModel??<div className="panel-card"><p className="panel-empty">{t('settingsModelsUnread')}</p></div>}
+  <SoonSec t={t} id="md-h-settingsModelsEffort" label={t('settingsModelsEffort')}/>{eachAgent}</>;
  if(section==='routines') return <><Head title={t('settingsRoutines')} sub={t('settingsRoutinesSub')}/><Soon t={t}/></>;
  return <><Head title={t('settingsBackup')} sub={t('settingsBackupSub')}/>{ro}
   <SoonSec t={t} id="bk-h-list" label={t('settingsBackupList')}/><SoonSec t={t} id="bk-h-in" label={t('settingsBackupHolds')}/></>;
