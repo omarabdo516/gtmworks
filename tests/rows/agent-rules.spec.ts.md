@@ -1,0 +1,8 @@
+| `agent-rules.spec.ts` | The Conversation shows the saved line under the Agent's reply, or alone when the reply was only the call; the Agent's page lists each rule with who said it; the Activity log names each save and removal; an Owner or a Manager removes a rule, and a Contributor or a Viewer sees no Remove. (#18) | — | agent_rules.sql (the same rules per Role in the database), engine-conversation.spec.ts (the call that saves the rule) | keep (#218, case by case above) |
+
+## Cases
+
+| `agent-rules.spec.ts` "the Conversation shows the saved line under the reply, and alone after a reply that was only the call" | stays | A journey across pages through the server: the saved rule's line under the reply, and alone after a reply that was only the call, leads to the Agent's page in Settings, which lists both rules with who said them. `conversations.test.mjs` places the lines without a browser. |
+| `agent-rules.spec.ts` "the Activity log says who told Ads each rule" | stays | A report through the server and the database: each rule `agent_save_rule` saved is a log row the Activity log page draws with who told it and that it is in effect now. `supabase/tests/agent_rules.sql` checks the row and `activity-log.test.mjs` the wording, neither on the page. |
+| `agent-rules.spec.ts` "a Contributor and a Viewer read the rules with no Remove" | stays | Permissions: a signed-in Contributor and Viewer read the rules with no Remove. |
+| `agent-rules.spec.ts` "an Owner removes a rule and a Manager the other; both removals are logged and the saved lines stay" | stays | Permissions and a real save: an Owner removes one rule and a Manager the other, both are logged, and the saved lines in the Conversation stay. |

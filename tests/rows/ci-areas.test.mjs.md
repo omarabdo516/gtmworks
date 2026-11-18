@@ -1,0 +1,1 @@
+| `ci-areas.test.mjs` | Each suite runs only when its own files change; screens alone start no browser job (#257); main runs all unless the change is documents only; an unknown list runs all. (new, #76; replaces docs-only and install-related) | 3.1 s | — | new |

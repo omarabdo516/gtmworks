@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { boardColumns, chatWait, columnOf, keyboardTarget, blockReason, cardAgent, inEdgeBand, onCard, visibleApprovals, waitingCount, chatPlace, orderColumn, placeByOne, placeOrder, placeChanges } from '../lib/board-columns.mjs';
+import { boardColumns, chatWait, columnOf, keyboardTarget, blockReason, cardAgent, inEdgeBand, scrollAxes, onCard, visibleApprovals, waitingCount, chatPlace, orderColumn, placeByOne, placeOrder, placeChanges } from '../lib/board-columns.mjs';
 
 test('the six columns keep the approved order, Waiting on you first', () => {
  assert.deepEqual(boardColumns, ['waiting', 'ideas', 'planned', 'progress', 'live', 'done']);
@@ -143,6 +143,20 @@ test('a drag scrolls a box by itself only while the finger is in the box\'s own 
  assert.equal(inEdgeBand(board, { x: 330, y: 450 }, { x: true, y: false }), true);
  assert.equal(inEdgeBand(board, { x: 20, y: 650 }, { x: false, y: true }), false);
  assert.equal(inEdgeBand(board, { x: 20, y: 850 }, { x: false, y: true }), true);
+});
+
+test('a box scrolls by itself on the axis it has room to scroll, not on the axis it merely spills over', () => {
+ // The board runs sideways; a pixel of spill downward must not hand a held Card the downward axis (#249).
+ const sideways = scrollAxes({ x: 1286, y: 1 });
+ assert.deepEqual(sideways, { x: true, y: false });
+ const board = { left: 0, right: 390, top: 400, bottom: 900, width: 390, height: 500 };
+ assert.equal(inEdgeBand(board, { x: 200, y: 499 }, sideways), false, 'the top band of a box that scrolls sideways');
+ assert.equal(inEdgeBand(board, { x: 330, y: 650 }, sideways), true, 'its own side band');
+ assert.deepEqual(scrollAxes({ x: 0, y: 360 }), { x: false, y: true });
+ assert.deepEqual(scrollAxes({ x: 240, y: 360 }), { x: false, y: true });
+ assert.deepEqual(scrollAxes({ x: 0, y: 0 }), { x: false, y: false });
+ assert.deepEqual(scrollAxes({ x: -2, y: 0 }), { x: false, y: false }, 'past the edge is no room');
+ assert.deepEqual(scrollAxes({ x: 40, y: 40 }), { x: true, y: true }, 'equal room on both axes scrolls on both');
 });
 
 test('an approval on a Card of an Agent hidden from the reader is not counted, nor its waiting item', () => {

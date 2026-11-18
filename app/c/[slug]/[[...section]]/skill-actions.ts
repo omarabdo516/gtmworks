@@ -41,9 +41,11 @@ export const decideAgentRule=withActionLog('decideAgentRule',async function deci
 });
 // The reason is never logged: a failure line names only the action, the Company and the answer's state.
 export const answerAgentRequest=withActionLog('answerAgentRequest',async function answerAgentRequest(form:FormData) {
- const db=await supabase(); const company=String(form.get('company')); const path=`/c/${String(form.get('slug'))}/approvals`;
+ const db=await supabase(); const company=String(form.get('company')); const slug=String(form.get('slug')); const path=`/c/${slug}/approvals`;
  const state=!await actionAllowed(db,'answerAgentRequest',company)?'notAllowed':await answerRequest(db,{company,request:Number(form.get('request')),make:form.get('intent')==='make',reason:String(form.get('reason')||'')});
- revalidatePath(path);
+ // An answer that makes an Agent changes the sidebar, which the Company's frame draws on every page: the frame is
+ // refreshed, not only the page that answered, so the new Agent's tile is there wherever the person goes next (#298).
+ revalidatePath(`/c/${slug}`,'layout');
  if(state!=='made'&&state!=='declined') logActionFailure('answerAgentRequest',{message:state},{form});
  redirect(state==='made'||state==='declined'?path:`${path}?failed=request-${state}`);
 });

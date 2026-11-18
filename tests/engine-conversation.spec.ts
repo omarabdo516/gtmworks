@@ -1047,6 +1047,13 @@ test('a new chat with an Agent puts its Card on the board, and the chat\'s line 
   await signIn(page,'omar@example.com',`/c/rs-learning/conversations/${conversation}`);
   const kinds=()=>page.locator('.turns > li').evaluateAll(rows=>rows.map(row=>row.getAttribute('data-author')||row.getAttribute('data-kind')));
   const line=page.locator('.turns > li[data-kind="boarded"]'), pill=page.locator('.chat__corner .corner-pill');
+  // #297: the chat shows one boarded line, in the transcript the reader sees. A page that has just reloaded can hold a
+  // second, hidden copy of the transcript in the block it streamed in until React reveals it (#172); the case asks for
+  // the drawn page, and there is no hidden copy left once it is there.
+  const boardedOnce=()=>expect.poll(()=>page.evaluate(()=>[...document.querySelectorAll('li[data-kind="boarded"]')].map(node=>({
+    streamed:node.closest('div[id^="S:"]')?.id??null,hidden:!!node.closest('[hidden]'),shown:node.getBoundingClientRect().height>0,
+  })))).toEqual([{streamed:null,hidden:false,shown:true}]);
+  await boardedOnce();
   await expect(line).toHaveText('This card was added to the board under “In progress”');
   expect(await kinds()).toEqual(['person','agent','boarded']);
   await expect(pill).toHaveAccessibleName('On the board: In progress');
@@ -1054,6 +1061,7 @@ test('a new chat with an Agent puts its Card on the board, and the chat\'s line 
   await send('Add a teaser');
   expect(cards()).toHaveLength(1);
   await page.reload();
+  await boardedOnce();
   await expect(page.locator('.msg[data-author=agent]')).toHaveCount(2);
   expect(await kinds()).toEqual(['person','agent','boarded','person','agent']);
 
@@ -1067,6 +1075,7 @@ test('a new chat with an Agent puts its Card on the board, and the chat\'s line 
   for(const width of [390,1440]) {
    await page.setViewportSize({width,height:900});
    await page.reload();
+   await boardedOnce();
    await expect(pill).toHaveAccessibleName('على اللوحة: متخطط');
    await expect(pill.locator('.corner-pill__lbl')).toBeVisible({visible:width===1440});
    await expect(line).toHaveText('البطاقة دي اتضافت للوحة في «شغالين عليه»');
@@ -1074,6 +1083,7 @@ test('a new chat with an Agent puts its Card on the board, and the chat\'s line 
 
   language('en');
   await page.reload();
+  await boardedOnce();
   await pill.click();
   await expect(page).toHaveURL(/\/c\/rs-learning\/work\/board$/);
   const shown=page.locator(`#board-cols .kcard[data-card-id="${card.id}"]`);

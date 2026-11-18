@@ -1,0 +1,1 @@
+| `components/backup-section.test.tsx` | Settings › Backup for the Owner alone: what a backup holds and leaves out, the four host commands, each copied with one press, copy the only button, and the Arabic wording; Manager, Contributor and Viewer get no Backup section from the server. (#33) | 1 s | settings-overlay.spec.ts (the Roles' sections) | new |
