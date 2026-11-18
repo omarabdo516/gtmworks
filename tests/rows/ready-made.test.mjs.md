@@ -1,0 +1,1 @@
+| `ready-made.test.mjs` | Every ready-made role has its words and its sentence to try in both catalogues, and an Agent without one has the general sentence (#170); its English line is the job the Agent gets, and its English name is the one create_agent's template description gives. (#14) | 0.1 s | ready-made-roles.spec.ts | new |

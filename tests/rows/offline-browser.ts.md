@@ -1,0 +1,1 @@
+| `offline-browser.ts` | browser helper: Chromium runs behind a proxy nothing answers, which local names bypass, so every outside request fails in every context; the test fails naming the hosts, and a hook's fail the worker (new, #266) | — | offline.spec.ts | helper, kept |

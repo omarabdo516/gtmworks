@@ -1,0 +1,1 @@
+| `ci-logs/` | Excerpts of real failed CI jobs of 2026-11-16 and one constructed log, each named for its job, that `ci-classify.test.mjs` labels (`ci-logs/README.md` says what ended each job). | — | — | data, new (#256) |
