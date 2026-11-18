@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(14);
+select plan(16);
 -- #9: a Company stores whether its Owner works alone or with a team. Companies that existed before stay a team; a
 -- Company made by first run starts unanswered, and only its Owner answers, once.
 select is((select string_agg(distinct coalesce(work_mode,'none'),',') from public.companies),'team','companies made before the question are a team');
@@ -12,6 +12,10 @@ select ok(not has_function_privilege('anon','public.choose_work_mode(uuid,text)'
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
 select throws_ok($$select public.choose_work_mode('10000000-0000-0000-0000-000000000090','team')$$,'42501','workModeOwnerOnly','a Manager cannot answer for the Company');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+select throws_ok($$select public.choose_work_mode('10000000-0000-0000-0000-000000000090','team')$$,'42501','workModeOwnerOnly','nor a Contributor');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
+select throws_ok($$select public.choose_work_mode('10000000-0000-0000-0000-000000000090','team')$$,'42501','workModeOwnerOnly','nor a Viewer');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select throws_ok($$select public.choose_work_mode('10000000-0000-0000-0000-000000000090','agency')$$,'22023','workModeInvalid','only alone or team is an answer');
 select throws_ok($$select public.choose_work_mode('10000000-0000-0000-0000-000000000001','alone')$$,'P0001','workModeChosen','a Company that has its answer is not asked again');
