@@ -45,11 +45,20 @@ test.each([
  expect(question.getByRole('button').elements().map(button => button.querySelector('.opt__t')?.textContent)).toEqual(['Graduates', 'Parents']);
  await question.getByRole('button', { name: 'Parents' }).click();
  await expect.poll(() => sent.find(body => body.intent === 'answer')).toEqual({ company: 'co-1', channel: 'ch-1', intent: 'answer', card: 31, choice: 1, answerKey: expect.stringMatching(/^[0-9a-f-]{36}$/) });
+ // The first answer closes the card for everyone: it shows the choice, with a check.
+ const answered = screen.getByRole('group', { name: `Which angle first?: ${language === 'ar' ? 'اتجاوب' : 'Answered'}` });
+ await expect.element(answered).toBeVisible();
+ expect(answered.getByRole('button').elements()).toEqual([]);
+ expect(answered.element().textContent).toContain('Parents');
  const hand = screen.getByRole('group', { name: language === 'ar' ? 'اتسلّمتلك: Publish the article' : 'Handed to you: Publish the article' });
  const done = hand.getByRole('button', { name: language === 'ar' ? 'عملتها' : 'Done it' });
  await expect.element(done).toBeVisible();
  await done.click();
  await expect.poll(() => sent.find(body => body.intent === 'done')).toEqual({ company: 'co-1', channel: 'ch-1', intent: 'done', card: 41 });
+ // And the step reads done, with its time, and nothing left to press.
+ await expect.element(hand).toHaveClass(/is-resolved/);
+ expect(hand.element().querySelector('.card__outcome')).not.toBeNull();
+ expect(hand.getByRole('button').elements()).toEqual([]);
 });
 
 test.each([
