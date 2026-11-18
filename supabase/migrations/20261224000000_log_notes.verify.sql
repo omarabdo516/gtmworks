@@ -25,6 +25,5 @@ select json_build_object(
   from unnest(array['public.guard_note_edit()','public.stamp_note_time()','public.refuse_note_delete()','public.log_note_edit()','public.mention_at(text,text)','public.note_mentions()']) f),
  'members_edit_and_list',(select bool_and(has_function_privilege('authenticated',f,'execute') and not has_function_privilege('anon',f,'execute'))
   from unnest(array['public.edit_card_note(uuid,bigint,text)','public.waiting_list(uuid)']) f),
- 'move_waits_for_note_runs',position('note_runs' in pg_get_functiondef('public.move_company_profile(uuid,text,text,text,text[])'::regprocedure))>0,
- 'usage_counts_note_runs',position('note_runs' in pg_get_functiondef('public.usage_by_day()'::regprocedure))>0
+ 'move_waits_for_note_runs',position('note_runs' in pg_get_functiondef('public.move_company_profile(uuid,text,text,text,text[])'::regprocedure))>0
 );

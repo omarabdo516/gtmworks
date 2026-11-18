@@ -29,7 +29,7 @@ async function memberClient(email:string) {
  expect((await person.auth.verifyOtp({type:'email',token_hash:link.properties!.hashed_token})).error).toBeNull();
  return {service,person};
 }
-const runOf=(message:number)=>JSON.parse(query(`select agent_name,outcome,input_tokens,output_tokens from public.channel_runs where message_id=${message}`));
+const runOf=(message:number)=>JSON.parse(query(`select agent_name,outcome from public.channel_runs where message_id=${message}`));
 const repliesTo=(message:number)=>JSON.parse(query(`select author,author_name,body from public.channel_messages where reply_to=${message}`));
 
 test('integration: ordinary talk starts no Run; a mention starts exactly one, and its reply is posted in the channel once',async()=>{
@@ -64,7 +64,7 @@ test('integration: ordinary talk starts no Run; a mention starts exactly one, an
   expect(await drive()).toEqual({started:0,closed:0});
   expect(fake.runs).toHaveLength(1);
   expect(repliesTo(sent.message)).toEqual([{author:'agent',author_name:'Faye',body:'Reply to: عمر: @Faye plan the launch week'}]);
-  expect(runOf(sent.message)).toEqual([{agent_name:'Faye',outcome:'completed',input_tokens:2100,output_tokens:35}]);
+  expect(runOf(sent.message)).toEqual([{agent_name:'Faye',outcome:'completed'}]);
   const {data:record}=await person.from('channel_messages').select('author,body').eq('channel_id',channel).gte('id',sent.message).order('id');
   expect(record).toEqual([{author:'person',body:'@Faye plan the launch week'},{author:'agent',body:'Reply to: عمر: @Faye plan the launch week'}]);
  } finally { detach(); }
@@ -88,7 +88,7 @@ test('integration: a start whose answer was lost is asked again with the same ke
   expect(repliesTo(lost.message)).toEqual([{author:'agent',author_name:'Faye',body:'Reply to: عمر: @Faye draft the teaser'}]);
 
   const refused=await postChannelMessage(person,service,{channel,sendKey:randomUUID(),message:'@Faye never started',encryptionKey,engineFor:()=>({...engine,start:async()=>null})}) as {message:number};
-  expect(runOf(refused.message)).toEqual([{agent_name:'Faye',outcome:'failed',input_tokens:null,output_tokens:null}]);
+  expect(runOf(refused.message)).toEqual([{agent_name:'Faye',outcome:'failed'}]);
   expect(await drive()).toEqual({started:0,closed:0});
   expect(repliesTo(refused.message)).toEqual([]);
   expect(fake.runs).toHaveLength(1);

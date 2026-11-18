@@ -42,13 +42,14 @@ test.beforeAll(async({browser},testInfo)=>{
  try {
   await signIn(page,'omar@example.com','/c/rs-learning/home');
   await bundled(page,rs,rsLead); await bundled(page,aleem,aleemLead);
-  // Writer moved to its own profile (ADR 0016).
+  // Writer moved to its own profile (ADR 0016), as connected-tools.spec.ts sets it up: its profile's record first.
   const own=randomUUID();
   query(`do $$ begin
-   insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state) values ('${own}','${rs}','${omar}','${fake.address}','${writerProfile}','unused','connected');
+   insert into public.agent_profiles(agent_id,company_id,tools_level,tools_policy) select '${writer}',id,agent_level,public.engine_tool_policy() from public.companies where id='${rs}';
+   insert into public.hermes_connections(id,company_id,owner_id,address,profile,key_encrypted,state,version,features)
+    select '${own}',company_id,owner_id,address,'${writerProfile}',key_encrypted,state,version,features from public.hermes_connections where company_id='${rs}' and profile='${profileOf(rs)}';
    insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default) values ('${writer}','${rs}','${own}','Writer','Writing',false);
-   insert into public.hermes_agent_audit(company_id,actor_id,agent_id,action,details) values ('${rs}','${omar}','${writer}','MOVE_AGENT_PROFILE',jsonb_build_object('connection_id','${own}'));
-   insert into public.agent_profiles(agent_id,company_id) values ('${writer}','${rs}');
+   insert into public.hermes_agent_audit(company_id,actor_id,agent_id,action,details) values ('${rs}','${omar}','${writer}','PROVIDE_BUNDLED_HERMES_AGENT',jsonb_build_object('connection_id','${own}'));
   end $$;`);
  } finally { await page.close(); }
 });
@@ -61,7 +62,8 @@ test('a chat shows its Hermes session\'s token use, and none while Hermes does n
   insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id) values ('${rs}','${conversation}','person','${omar}','Omar','Plan the launch week','${randomUUID()}','run-${conversation.slice(0,8)}');
   insert into public.conversation_messages(company_id,conversation_id,author,agent_id,author_name,body,run_id) values ('${rs}','${conversation}','agent','${rsLead}','Lead','Here is the week.','run-${conversation.slice(0,8)}');
  end $$;`);
- fake.settings.sessions.set(session,{profile:profileOf(rs),messages:[],input_tokens:29000,output_tokens:32});
+ // Started long ago, so the usage screens' periods below do not count it.
+ fake.settings.sessions.set(session,{profile:profileOf(rs),messages:[],input_tokens:29000,output_tokens:32,started_at:Date.now()/1000-100*86400});
  await signIn(page,'omar@example.com','/c/rs-learning/home');
  await page.goto(`/c/rs-learning/conversations/${known}`);
  await expect(page.locator('[data-usage]')).toHaveText('29,032 tokens used (29,000 in, 32 out)');
