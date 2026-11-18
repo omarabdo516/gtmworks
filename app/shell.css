@@ -446,6 +446,21 @@
 .gw .details .od-truncate { display: block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .gw .details .dp-file { color: var(--gw-text-1); text-decoration: none; border-radius: var(--gw-r-xs); }
 @media (hover: hover) { .gw .details .dp-file:hover { text-decoration: underline; text-underline-offset: 3px; } }
+/* The Agent's memory (#350; design-reference: .mem-intro, .mem-know, .mem-main, .mem-note, .mem-confirm). Only the
+   parts built are styled: the Add form, the search and the edit and forget controls arrive with #191 and #192. */
+.gw .details .mem-intro { margin: 0; padding-inline: var(--s3); font-size: var(--gw-fs-sm); line-height: 1.7; color: var(--gw-text-2); text-wrap: pretty; }
+.gw .details .mem-know, .gw .details .mem-main { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px; margin: 0; padding-inline: var(--s3); font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-2); text-wrap: pretty; }
+.gw .details .mem-know > .gw-icon { flex: none; width: 16px; height: 16px; margin-top: 3px; color: var(--gw-text-3); }
+.gw .details .mem-main { color: var(--gw-text-3); }
+.gw .details .panel-row.mem-note { flex-direction: column; align-items: stretch; gap: 6px; padding: 10px var(--s2); }
+.gw .details .mem-note__t { font-size: var(--gw-fs-sm); line-height: 1.7; color: var(--gw-text-1); overflow-wrap: anywhere; }
+.gw .details .mem-confirm { display: grid; gap: var(--s2); padding: var(--s2) var(--s1) var(--s1); }
+.gw .details .mem-confirm .panel-empty { padding: 0 var(--s2); }
+.gw .details .panel-form__row { display: flex; gap: var(--s2); }
+.gw .details .panel-form__row--end { justify-content: flex-end; }
+.gw .details .btn--primary { background: var(--gw-primary); color: var(--gw-on-primary); }
+@media (hover: hover) { .gw .details .btn--primary:hover:not(:disabled) { background: var(--gw-primary-hover); } }
+.gw .details .btn:disabled { opacity: .55; }
 /* The Agent's screen (design-reference: .scr, .scr__off, .scr-card, .scr-thumb), drawn in code from tokens so it follows
    the theme. Sizes inside are container units, as the reference's are; only the empty frame is built (#21). */
 .gw .details .scr {

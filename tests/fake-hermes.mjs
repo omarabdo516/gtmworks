@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 // `host` is the loopback address both listeners take: a spec that needs the management listener on its fixed port 9119
 // (the driver's default beside the Hermes address) takes an address of its own, so lanes never share that port. `port`
 // fixes the gateway's (tests/lane.mjs laneHermes: the address the app under test is given).
@@ -64,6 +64,9 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   appFlows:/** @type {Map<string,{server:string,profile:string,status:string,state:string,redirect:string}>} */(new Map()),appCallbacks:/** @type {string[]} */([]),
   // Each profile's own Skills by name (their SKILL.md text), and the Skills each profile locked, as `profile:name`.
   skills:/** @type {Map<string,Map<string,string>>} */(new Map()),skillLocks:/** @type {Set<string>} */(new Set()),skillsOff:/** @type {Set<string>} */(new Set()),
+  // Each profile's memory (#350): the entries of its MEMORY.md and its USER.md, as the memory tool parses them (the
+  // learning graph lists one node per entry, its id carrying the entry's position and a digest of its text).
+  memory:/** @type {Map<string,{memory:string[],profile:string[]}>} */(new Map()),
   // The provider keys a profile's .env takes (hermes_cli/web_routers/config_env.py 264-330): each provider's primary
   // password row, and rows that are not one (an alias, a URL, a tool's key). Each profile keeps its own values in `env`;
   // the root's are defaultEnv. A provider listed in providerModels offers those models once its key is set. A profile in
@@ -106,6 +109,14 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
  };
  const merge=(base,over)=>{ const out={...base}; for(const [key,value] of Object.entries(over||{})) out[key]=value&&typeof value==='object'&&!Array.isArray(value)&&base?.[key]&&typeof base[key]==='object'?merge(base[key],value):value; return out; };
  const send=(response,code,body)=>{response.writeHead(code,{'Content-Type':'application/json',Location:'/must-not-follow'});response.end(JSON.stringify(body));};
+ // The memory an Agent's profile holds (#350): MEMORY.md's entries first, then USER.md's, each named by its position in
+ // the combined list and a digest of its text (agent/learning_graph.py memory_node_id, memory_fingerprint).
+ const memoryCards=name=>{
+  const files=settings.memory.get(name)||{memory:[],profile:[]}; const cards=[];
+  for(const source of ['memory','profile']) for(const text of files[source]) cards.push({source,text});
+  return cards.map((card,index)=>({...card,index,id:`memory:${card.source}:${index}:${createHash('sha256').update(card.text.trim(),'utf8').digest('hex').slice(0,12)}`}));
+ };
+ const memoryTitle=text=>{ const first=text.split('\n')[0].trim().replace(/^#+\s*/,''); return first.length>80?`${first.slice(0,80)}…`:first; };
  const server=createServer((request,response)=>{
   let raw=''; request.on('data',chunk=>{raw+=chunk;}); request.on('end',()=>{
    settings.requests.push({method:request.method,path:request.url,authorization:request.headers.authorization,session:request.headers['x-hermes-session-key'],idempotency:request.headers['idempotency-key']});
@@ -326,7 +337,44 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     if(scoped==='default') settings.defaultConfig=home.config;
     return send(response,200,{ok:true});
    }
-   // Skills (hermes_cli/web_routers/skills.py): a profile sees its own and those of each folder its
+   // Learning (hermes_cli/web_routers/status.py 746-800, agent/learning_graph.py): the graph lists a profile's skills and
+ // its memory entries side by side, and one node's text is read on its own. A skill's name resolves to its SKILL.md
+ // here too, so what keeps a skill out of memory is the contract's own guard, not this fake.
+ if(url.pathname==='/api/learning/graph'&&request.method==='GET') {
+  const named=url.searchParams.get('profile')||'default';
+  if(!profileOf(named)) return send(response,404,{detail:`Profile '${named}' does not exist.`});
+  const cards=memoryCards(named); const skillNames=[...(settings.skills.get(named)||new Map()).keys()];
+  return send(response,200,{
+   nodes:[...skillNames.map(name=>({id:name,label:name,kind:'skill',timestamp:null,category:null,useCount:3,state:'active',createdBy:'agent',pinned:false})),
+    ...cards.map(card=>({id:card.id,label:memoryTitle(card.text),kind:'memory',memorySource:card.source,timestamp:null,category:'memory',useCount:0,state:'active',createdBy:'memory',pinned:false}))],
+   edges:[],clusters:[],
+   memory:cards.map(card=>({source:card.source,title:memoryTitle(card.text),body:card.text,fingerprint:card.id.split(':')[3]})),
+   stats:{memory_nodes:cards.length,memory_skill_edges:0,learned_skills:skillNames.length}});
+ }
+ if(url.pathname==='/api/learning/node'&&request.method==='GET') {
+  const named=url.searchParams.get('profile')||'default';
+  if(!profileOf(named)) return send(response,404,{detail:`Profile '${named}' does not exist.`});
+  const id=url.searchParams.get('id')||'';
+  const card=memoryCards(named).find(found=>found.id===id);
+  if(card) return send(response,200,{ok:true,kind:'memory',id,label:memoryTitle(card.text),content:card.text});
+  const skill=settings.skills.get(named)?.get(id);
+  return skill?send(response,200,{ok:true,kind:'skill',id,label:id,content:skill}):send(response,404,{detail:'not found'});
+ }
+ // A reset deletes that profile's MEMORY.md and USER.md only, and is refused without a profile while the backend serves
+ // several (ops.py 535-553, _common.py destructive_profile).
+ if(url.pathname==='/api/memory/reset'&&request.method==='POST') {
+  const named=url.searchParams.get('profile');
+  if(!named) return send(response,400,{detail:'POST /api/memory/reset requires an explicit profile: this backend serves several profiles'});
+  if(!profileOf(named)) return send(response,404,{detail:`Profile '${named}' does not exist.`});
+  const target=body?.target??'all';
+  if(!['all','memory','user'].includes(target)) return send(response,400,{detail:'target must be all, memory, or user'});
+  const files=settings.memory.get(named)||{memory:[],profile:[]}; const deleted=[];
+  if(['all','memory'].includes(target)&&files.memory.length) { files.memory=[]; deleted.push('MEMORY.md'); }
+  if(['all','user'].includes(target)&&files.profile.length) { files.profile=[]; deleted.push('USER.md'); }
+  settings.memory.set(named,files);
+  return send(response,200,{ok:true,deleted});
+ }
+ // Skills (hermes_cli/web_routers/skills.py): a profile sees its own and those of each folder its
    // skills.external_dirs names (a profile's folder is its home's `skills`), and keeps its own locks.
    const skillsPath=url.pathname.match(/^\/api\/skills(?:\/(content|lock|toggle))?$/);
    if(skillsPath) {

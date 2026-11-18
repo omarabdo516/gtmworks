@@ -36,6 +36,8 @@ export function readSkills(connection:import('./engine.mjs').EngineConnection):P
 export function writeSkill(connection:import('./engine.mjs').EngineConnection,skill:{name:string,content:string}):Promise<{state:'written'|'shared'|'refused'|'unreachable'|'failed'}>;
 export function writeSharedSkill(connection:import('./engine.mjs').EngineConnection,skill:{space:string,name:string,content:string}):Promise<{state:'unchanged'|'written'|'missing'|'refused'|'unreachable'|'failed'}>;
 export function shareSkills(connection:import('./engine.mjs').EngineConnection,sharing:{profile:string,folder:string,skill:string}):Promise<{state:'shared'|'shadowed'|'missing'|'refused'|'unreachable'|'failed'}>;
+export function readMemoryNotes(connection:import('./engine.mjs').EngineConnection):Promise<import('./engine.mjs').MemoryNotes>;
+export function resetMemory(connection:import('./engine.mjs').EngineConnection):Promise<import('./engine.mjs').MemoryReset>;
 export type ProviderKey={provider:string,label:string,set:boolean};
 export function readProviderKeys(connection:import('./engine.mjs').EngineConnection,target:{space:string,profiles:string[]}):Promise<{state:'found',keys:ProviderKey[],lacking:string[],leftover:string[],unread:string[]}|{state:'refused'|'unreachable'|'failed',keys:null,lacking:null,leftover:null,unread:null}>;
 export function readHeldKeys(connection:import('./engine.mjs').EngineConnection,target:{space:string,profiles:string[]}):Promise<{state:'found',held:Record<string,string[]>,unread:string[]}|{state:'refused'|'unreachable'|'failed',held:null,unread:null}>;

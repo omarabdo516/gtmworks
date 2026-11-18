@@ -9,7 +9,7 @@ const Empty=({text}:{text:string})=><div className="panel-card"><p className="pa
 
 // The details panel's tabs around the lists the server read (agent-details-server.tsx): a list left out is empty and
 // shows the reference's empty line. It imports no server code, so a component test draws the tabs as the server does.
-export function detailsTabs({t,slug,agent,activity,tools,tasks,files,fileCount,log,logCount}:{t:I18n['t'],slug:string,agent:string,activity?:ReactNode,tools?:ReactNode,tasks?:ReactNode,files?:ReactNode,fileCount:number,log?:ReactNode,logCount:number}):Record<DetailsTab,ReactNode> {
+export function detailsTabs({t,slug,agent,activity,tools,tasks,files,fileCount,memory,log,logCount}:{t:I18n['t'],slug:string,agent:string,activity?:ReactNode,tools?:ReactNode,tasks?:ReactNode,files?:ReactNode,fileCount:number,memory?:ReactNode,log?:ReactNode,logCount:number}):Record<DetailsTab,ReactNode> {
  // design-reference: screenSecHTML. The pinned Engine shows no Agent's screen, and gtmworks keeps the browser and
  // computer tools off (lib/agent-levels.mjs), so the screen is always the reference's asleep frame: not a button.
  const screen=<section className="dp-sec" aria-labelledby="scr-h"><h3 className="dp-label"><span id="scr-h">{t('agentScreen')}</span></h3>
@@ -23,6 +23,8 @@ export function detailsTabs({t,slug,agent,activity,tools,tasks,files,fileCount,l
   // design-reference: filesTabHTML, without its Add button and its library, which are not built.
   files:<section className="dp-sec" aria-labelledby="dp-files-h"><h3 className="dp-label" id="dp-files-h"><span>{t('agentFiles')} <span className="muted num">{fileCount}</span></span></h3>
    {files??<Empty text={t('agentFilesEmpty')}/>}</section>,
+  // design-reference: memoryHTML, without its Add button, search, edit and forget (#191, #192).
+  memory:memory??<section className="dp-sec"><Empty text={t('agentMemoryUnread')}/></section>,
   log:<section className="dp-sec"><h3 className="dp-label"><span>{t('chatTabLog')} <span className="muted num">{logCount}</span></span><Link className="link-btn" href={`/c/${slug}/log?who=a:${agent}`}>{t('agentOpenLog')}</Link></h3>
    {log??<Empty text={t('agentLogEmpty')}/>}
    <p className="lg-forever"><PageIcon name="lock"/><span>{t('logForever')}</span></p>

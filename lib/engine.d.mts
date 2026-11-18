@@ -27,6 +27,10 @@ export type RemovedAgent={state:'removed'|'missing'|'refused'|'unreachable'};
 // The apps of the profile an Engine is bound to (#203): each listed app the Engine offers it, with its state there.
 export type ProfileApps={state:'found',apps:{key:string,state:import('./app-catalogue.mjs').AppState}[]}|{state:'refused'|'unreachable'|'failed',apps:null};
 export type ProviderKeys={state:'found',keys:import('./hermes.mjs').ProviderKey[]}|{state:'refused'|'unreachable'|'failed',keys:null};
+// An Agent's memory (#350), read from its own profile: its notes, each with the Engine's id and its text, never a skill.
+export type MemoryNote={id:string,text:string};
+export type MemoryNotes={state:'found',notes:MemoryNote[]}|{state:'refused'|'unreachable'|'failed',notes:null};
+export type MemoryReset={state:'reset'|'refused'|'unreachable'|'failed'};
 export type StartUnknown={readonly state:'unknown'};
 export function startOutcomeUnknown(result:unknown):result is StartUnknown;
 export type Engine={
@@ -43,6 +47,8 @@ export type Engine={
  readKeys?(space:string):Promise<ProviderKeys>,
  models?():Promise<AgentModels>,
  apps?():Promise<ProfileApps>,
+ memory?():Promise<MemoryNotes>,
+ resetMemory?():Promise<MemoryReset>,
 };
 export function engineFor(connection:EngineConnection):Engine;
 export function outcomeOf(run:Pick<RunState,'state'|'reply'>):'completed'|'failed'|'stopped'|'lost'|null;

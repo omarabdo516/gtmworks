@@ -88,9 +88,9 @@ test('a column\'s name and a Card\'s progress are the board\'s', () => {
  assert.equal(progressOf({ id: 3 }, []), null);
 });
 
-test('the panel opens on the tab its address names, and on Activity for anything else, Memory included while it waits', () => {
- assert.deepEqual(['activity', 'tasks', 'files', 'log'].map(pickTab), ['activity', 'tasks', 'files', 'log']);
- for (const other of ['memory', 'Files', '', undefined, ['files']]) assert.equal(pickTab(other), 'activity');
+test('the panel opens on the tab its address names, Memory included since it opens (#350), and on Activity for anything else', () => {
+ assert.deepEqual(['activity', 'tasks', 'files', 'memory', 'log'].map(pickTab), ['activity', 'tasks', 'files', 'memory', 'log']);
+ for (const other of ['Files', '', undefined, ['files']]) assert.equal(pickTab(other), 'activity');
 });
 
 test('a file\'s size reads as the reference writes it, in Latin digits', () => {

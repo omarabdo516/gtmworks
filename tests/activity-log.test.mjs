@@ -30,6 +30,10 @@ test('Card, Member and Agent rows say who changed what', () => {
  const skills = ['skill_written', 'skill_enabled', 'skill_disabled'].map(action => describeEntry({ subject: 'agent', action, agent_id: lead, details: { agent_name: 'Ads', skill: 'weekly-recap' } }));
  assert.deepEqual(skills.map(entry => [entry.act, entry.obj]), [[['logActSkillWritten', { text: 'Ads' }], 'weekly-recap'], [['logActSkillEnabled', { text: 'Ads' }], 'weekly-recap'], [['logActSkillDisabled', { text: 'Ads' }], 'weekly-recap']]);
  assert.equal(i18n('en').t('logActSkillDisabled', 'Ads'), 'switched off a skill for Ads');
+ // An Agent's memory cleared by the Owner (#350): the Agent is named, and no note text is ever in the row.
+ const cleared = describeEntry({ subject: 'agent', action: 'memory_reset', agent_id: lead, details: { agent_name: 'Ads' } });
+ assert.deepEqual([cleared.act, cleared.obj], [['logActMemoryReset', { text: 'Ads' }], undefined]);
+ assert.equal(i18n('en').t('logActMemoryReset', 'Ads'), 'reset the memory of Ads');
  // A Contributor's rule suggested for the team, then approved or refused, naming who taught it (#25).
  const [suggested, approved, rejected] = ['agent_rule_suggested', 'agent_rule_approved', 'agent_rule_rejected'].map(action => describeEntry({ subject: 'agent', action, agent_id: lead, details: { agent_name: 'Ads', rule, ...(action === 'agent_rule_suggested' ? {} : { taught_by: 'يوسف' }) } }));
  assert.deepEqual([suggested.act, suggested.obj, suggested.to], [['logActRuleSuggested', { text: 'Ads' }, { text: '' }], rule, { key: 'logRuleWaiting' }]);
