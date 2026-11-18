@@ -46,8 +46,12 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   managementStatus:200,profiles:/** @type {Map<string,{soul:string,provider:string,model:string,key:string|null,config:any,credentials:Record<string,string>}>} */(new Map()),failStep:/** @type {''|'model'|'env'|'config'} */(''),
   managementRequests:/** @type {{method?:string,path?:string,authorization?:string,body:any}[]} */([]),
   // The default profile's config and model sign-ins (a profile made through the listener keeps its own), and the
-  // sign-in sessions Hermes runs: approve(session) finishes one as the person would in their browser.
+  // sign-in sessions Hermes runs: approve(session) finishes one as the person would in their browser. The Engine's own
+  // config defaults and schema are what its config routes serve (#125); configWriteFail is a profile whose next config
+  // write answers 500, as a profile home that cannot be written does.
   defaultConfig:/** @type {any} */({}),defaultCredentials:/** @type {Record<string,string>} */({}),
+  configDefaults:/** @type {any} */({}),configSchema:/** @type {{fields:Record<string,any>,category_order:string[]}} */({fields:{},category_order:[]}),
+  configWriteFail:/** @type {Set<string>} */(new Set()),
   signInSessions:/** @type {Map<string,{provider:string,profile:string,status:string}>} */(new Map()),
   // Ignore the disabled list when reporting toolsets, as a Hermes that did not apply it would.
   ignoreDisabled:false,staleConfig:false,
@@ -317,10 +321,24 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
    }
    const scoped=url.searchParams.get('profile')||'default';
    const home=profileOf(scoped);
+   // The Engine's defaults take no profile and its schema is built from them (web_routers/config_env.py 95-110).
+   if(url.pathname==='/api/config/defaults'&&request.method==='GET') return send(response,200,settings.configDefaults);
+   if(url.pathname==='/api/config/schema'&&request.method==='GET') {
+    if(!home) return send(response,404,{detail:`Profile '${scoped}' does not exist.`});
+    return send(response,200,settings.configSchema);
+   }
    if(url.pathname==='/api/config'&&['GET','PUT'].includes(request.method)) {
     if(!home) return send(response,404,{detail:`Profile '${scoped}' does not exist.`});
-    if(request.method==='GET') return send(response,200,home.config);
-    if(settings.failStep==='config'||!body?.config||typeof body.config!=='object') return send(response,500,{detail:'Internal server error'});
+    if(request.method==='GET') {
+     // As get_config answers: saved values over the Engine's defaults, or the saved values alone with
+     // include_defaults=false; a dict-form model is flattened and its context length surfaced (web_server_config.py 587-599).
+     const merged=url.searchParams.get('include_defaults')==='false'?structuredClone(home.config):merge(settings.configDefaults,home.config);
+     const model=merged?.model;
+     if(model&&typeof model==='object') merged.model=model.default??model.name??'';
+     merged.model_context_length=model&&typeof model==='object'&&Number.isInteger(model.context_length)?model.context_length:0;
+     return send(response,200,merged);
+    }
+    if(settings.failStep==='config'||settings.configWriteFail.has(scoped)||!body?.config||typeof body.config!=='object') return send(response,500,{detail:'Internal server error'});
     // A stale Hermes answers the write and keeps the old config.
     if(!settings.staleConfig) home.config=merge(home.config,body.config);
     if(scoped==='default') settings.defaultConfig=home.config;
