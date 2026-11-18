@@ -38,6 +38,14 @@ test('Card, Member and Agent rows say who changed what', () => {
   [['changed the description in the settings of Ads', 'Edited'], ['غيّر الوصف في إعدادات Ads', 'اتعدّل']]);
  const unknownField = describeEntry({ subject: 'agent', action: 'agent_setting_changed', agent_id: lead, details: { agent_name: 'Ads', field: 'thinking' } }, { agentName: () => 'Ads' });
  assert.deepEqual([unknownField.act, unknownField.to], [['logActAgentChanged'], undefined], 'a field with no words is never guessed');
+ // A setting on an Agent's Engine profile (#125): its label, then the value before and after; a yes or no is a word.
+ const engineSetting = describeEntry({ subject: 'agent', action: 'agent_setting_changed', agent_id: lead, details: { agent_name: 'Ads', setting: 'memory.memory_char_limit', old: 2200, new: 3000 } });
+ assert.deepEqual([engineSetting.act, engineSetting.from, engineSetting.to], [['logActSettingChanged', { key: 'settingMemorySize' }, { text: 'Ads' }], { text: '2200' }, { text: '3000' }]);
+ assert.equal(i18n('en').t('logActSettingChanged', 'Memory size', 'Ads'), 'changed Memory size in the settings of Ads');
+ const toggled = describeEntry({ subject: 'agent', action: 'agent_setting_changed', agent_id: lead, details: { agent_name: 'Ads', setting: 'memory.memory_enabled', old: true, new: false } });
+ assert.deepEqual([toggled.from, toggled.to], [{ key: 'logOn' }, { key: 'logOff' }]);
+ const unknown = describeEntry({ subject: 'agent', action: 'agent_setting_changed', agent_id: lead, details: { agent_name: 'Ads', setting: 'gone.away', old: 'a', new: 'b' } });
+ assert.equal(unknown.act[1].key, 'settingUnknown', 'a setting this version does not list is never its raw key');
  // A Contributor's rule suggested for the team, then approved or refused, naming who taught it (#25).
  const [suggested, approved, rejected] = ['agent_rule_suggested', 'agent_rule_approved', 'agent_rule_rejected'].map(action => describeEntry({ subject: 'agent', action, agent_id: lead, details: { agent_name: 'Ads', rule, ...(action === 'agent_rule_suggested' ? {} : { taught_by: 'يوسف' }) } }));
  assert.deepEqual([suggested.act, suggested.obj, suggested.to], [['logActRuleSuggested', { text: 'Ads' }, { text: '' }], rule, { key: 'logRuleWaiting' }]);
