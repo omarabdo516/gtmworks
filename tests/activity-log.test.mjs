@@ -30,6 +30,14 @@ test('Card, Member and Agent rows say who changed what', () => {
  const skills = ['skill_written', 'skill_enabled', 'skill_disabled'].map(action => describeEntry({ subject: 'agent', action, agent_id: lead, details: { agent_name: 'Ads', skill: 'weekly-recap' } }));
  assert.deepEqual(skills.map(entry => [entry.act, entry.obj]), [[['logActSkillWritten', { text: 'Ads' }], 'weekly-recap'], [['logActSkillEnabled', { text: 'Ads' }], 'weekly-recap'], [['logActSkillDisabled', { text: 'Ads' }], 'weekly-recap']]);
  assert.equal(i18n('en').t('logActSkillDisabled', 'Ads'), 'switched off a skill for Ads');
+ // A field saved from an Agent's page (#161): the Agent is named in the act and the field is what changed. About keeps
+ // no text, so it reads Edited; a field this version has no words for reads as a change to the Agent.
+ const setting = describeEntry({ subject: 'agent', action: 'agent_setting_changed', agent_id: lead, details: { agent_name: 'Ads', field: 'about' } });
+ assert.deepEqual([setting.act, setting.obj, setting.from, setting.to], [['logActSettingChanged', { key: 'logFieldAbout' }, { text: 'Ads' }], undefined, undefined, { key: 'logEdited' }]);
+ assert.deepEqual(['en', 'ar'].map(language => { const { t } = i18n(language); const [key, ...args] = setting.act; return [t(key, ...args.map(value => 'key' in value ? t(value.key) : value.text)), t('logEdited')]; }),
+  [['changed the description in the settings of Ads', 'Edited'], ['غيّر الوصف في إعدادات Ads', 'اتعدّل']]);
+ const unknownField = describeEntry({ subject: 'agent', action: 'agent_setting_changed', agent_id: lead, details: { agent_name: 'Ads', field: 'thinking' } }, { agentName: () => 'Ads' });
+ assert.deepEqual([unknownField.act, unknownField.to], [['logActAgentChanged'], undefined], 'a field with no words is never guessed');
  // A Contributor's rule suggested for the team, then approved or refused, naming who taught it (#25).
  const [suggested, approved, rejected] = ['agent_rule_suggested', 'agent_rule_approved', 'agent_rule_rejected'].map(action => describeEntry({ subject: 'agent', action, agent_id: lead, details: { agent_name: 'Ads', rule, ...(action === 'agent_rule_suggested' ? {} : { taught_by: 'يوسف' }) } }));
  assert.deepEqual([suggested.act, suggested.obj, suggested.to], [['logActRuleSuggested', { text: 'Ads' }, { text: '' }], rule, { key: 'logRuleWaiting' }]);
