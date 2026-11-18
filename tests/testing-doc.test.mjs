@@ -25,7 +25,7 @@ test('docs/testing.md has exactly one row per file under tests/', () => {
 // Playwright refuses some files outright (two cases with the same title in one file, a syntax error): it lists nothing
 // then, and its own error is the problem to report.
 function listCases(config, project) {
-  const run = spawnSync(process.execPath, ['node_modules/@playwright/test/cli.js', 'test', '-c', config, '--list', '--reporter=json', `--project=${project}`], { encoding: 'utf8' });
+  const run = spawnSync(process.execPath, ['node_modules/@playwright/test/cli.js', 'test', '-c', config, '--list', '--reporter=json', ...[project].flat().map(name => `--project=${name}`)], { encoding: 'utf8' });
   const list = JSON.parse(run.stdout);
   const cases = [], errors = (list.errors ?? []).map(error => error.message);
   if (run.status !== 0 && errors.length === 0) errors.push(`playwright --list exited ${run.status}: ${run.stderr}`);
@@ -116,8 +116,9 @@ test('cases in any form are listed by Playwright and each needs its own row', ()
   }
 });
 
+// The chat's open time runs in a project of its own, `alone` (#346); its case keeps its row like a functional one.
 test('every case of the functional project has its decision, and only kept cases are still in their file', () => {
-  const listed = listCases('playwright.config.ts', 'functional');
+  const listed = listCases('playwright.config.ts', ['functional', 'alone']);
   assert.ok(new Set(listed.cases.map(item => item.file)).size > 30, 'Playwright lists the functional project\'s spec files');
   for (const file of ['visual-lane.spec.ts', 'first-run.spec.ts', 'navigation.spec.ts', 'proxy/production-shape.spec.ts']) assert.ok(!listed.cases.some(item => item.file === file), `${file} is not in the functional project`);
   assert.deepEqual(decisionProblems(readFileSync('docs/testing.md', 'utf8'), listed), []);

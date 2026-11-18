@@ -75,7 +75,8 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   each lane is a whole local Supabase stack and an app server of its own (`tests/lane.mjs`, `scripts/local-db.sh`,
   `scripts/web.sh`), so spec files run side by side and never share data.
   Each functional spec file starts from the seed (`tests/fresh-seed.ts`); tests inside one file still run in order.
-  The order is functional, then the navigation time budgets (project `measured`, empty here: they run in `visual`)
+  The order is functional, then the chat's open time (project `alone`, `chat-steps.spec.ts`, one worker and no other
+  browser beside it, #346), then the navigation time budgets (project `measured`, empty here: they run in `visual`)
   with the machine to themselves, then first run last; a failure in one group skips none of the next.
 - `visual` is the visual lane (#257), on `main` and on a manual run only: the twelve key screens in
   `tests/visual-lane/screens.json` (sign-in, first run, Home, the board, a Card, the chat, a channel, Agents, an
