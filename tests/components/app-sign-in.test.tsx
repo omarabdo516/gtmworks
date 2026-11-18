@@ -57,3 +57,37 @@ test('a sign-in that connects after waiting settles as connected, with nothing c
  expect(actions(fetch.mock.calls)).toEqual(['connect', 'poll', 'poll']);
  expect(opened.close).not.toHaveBeenCalled();
 });
+
+test('a caller that has already stopped settles at once: no request waits out its own deadline', async () => {
+ vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+ const opened = vendor();
+ const fetch = vi.fn((_url: string, init: RequestInit) => JSON.parse(String(init.body)).action === 'connect' ? stalled() : answer({ status: 'cancelled' }));
+ vi.stubGlobal('fetch', fetch);
+ const stopped = new AbortController(); stopped.abort();
+ let settled = false;
+ const outcome = signInToApp({ ...given, signal: stopped.signal }).finally(() => { settled = true; });
+ await vi.advanceTimersByTimeAsync(0);
+ expect(settled).toBe(true);
+ await expect(outcome).resolves.toEqual({ error: 'connectFailed' });
+ expect(opened.close).toHaveBeenCalled();
+});
+
+test('a sign-in still waiting at fifteen minutes settles then: the last wait and poll are cut to the time left', async () => {
+ vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+ const opened = vendor();
+ const fetch = vi.fn((_url: string, init: RequestInit) => {
+  const { action } = JSON.parse(String(init.body));
+  if (action === 'connect') return answer({ url: 'https://vendor.example/sign-in' });
+  // Waiting until the last poll, which never answers.
+  if (action === 'poll') return Date.now() < 15 * 60 * 1000 - 1000 ? answer({ status: 'waiting' }) : stalled();
+  return answer({ status: 'cancelled' });
+ });
+ vi.setSystemTime(0);
+ vi.stubGlobal('fetch', fetch);
+ let settled = false;
+ const outcome = signInToApp(given).finally(() => { settled = true; });
+ await vi.advanceTimersByTimeAsync(15 * 60 * 1000 + 100);
+ expect(settled).toBe(true);
+ await expect(outcome).resolves.toEqual({ error: 'connectFailed' });
+ expect(opened.close).toHaveBeenCalled();
+});
