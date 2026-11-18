@@ -102,8 +102,8 @@ declare current_kind text; current_column text; stage bigint; arrived text; befo
  perform set_config('work.evidence',coalesce(evidence,''),true);
  perform set_config('work.place_exact','yes',true);
  update public.work_cards w set stage_id=coalesce(stage,w.stage_id),board_order=place where w.company_id=c and w.id=card;
+ if not found then perform set_config('work.place_exact','',true); raise exception 'card not found or not permitted'; end if;
  perform set_config('work.place_exact','',true);
- if not found then raise exception 'card not found or not permitted'; end if;
  return stage;
 end $$;
 revoke all on function public.place_work_card(uuid,bigint,text,bigint,text) from public,anon,service_role;
@@ -136,9 +136,9 @@ declare moved public.work_card_moves; current_stage bigint; current_place numeri
  perform set_config('work.undo','yes',true);
  perform set_config('work.place_exact','yes',true);
  update public.work_cards w set stage_id=moved.from_stage_id,board_order=moved.from_place where w.company_id=c and w.id=card;
+ if not found then perform set_config('work.place_exact','',true); perform set_config('work.undo','',true); raise exception 'card not found or not permitted'; end if;
  perform set_config('work.place_exact','',true);
  perform set_config('work.undo','',true);
- if not found then raise exception 'card not found or not permitted'; end if;
  return from_column;
 end $$;
 revoke all on function public.undo_work_card_move(uuid,bigint) from public,anon,service_role;
