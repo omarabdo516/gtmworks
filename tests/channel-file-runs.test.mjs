@@ -19,8 +19,8 @@ const stored=[
 ];
 const imagePart=(type,base64)=>({type:'image_url',image_url:{url:`data:${type};base64,${base64}`}});
 
-/** @param {{mention?:boolean,attachments?:{content_type:string,path:string,bytes:string}[],refusePost?:boolean,failUpload?:boolean,failUploadAt?:number|null,discard?:string[]}} [options] */
-function databases({mention=false,attachments=stored,refusePost=false,failUpload=false,failUploadAt=null,discard=[]}={}) {
+/** @param {{mention?:boolean,attachments?:{content_type:string,path:string,bytes:string}[],refusePost?:boolean,failUpload?:boolean,failUploadAt?:number|null,discard?:string[],alreadyStored?:boolean}} [options] */
+function databases({mention=false,attachments=stored,refusePost=false,failUpload=false,failUploadAt=null,discard=[],alreadyStored=false}={}) {
  const calls=/** @type {[string,any][]} */([]);
  const uploads=/** @type {string[]} */([]);
  const removals=/** @type {string[][]} */([]);
@@ -31,7 +31,7 @@ function databases({mention=false,attachments=stored,refusePost=false,failUpload
  const rpc=async(/** @type {string} */ name,/** @type {any} */ args)=>{ calls.push([name,args]);
   // The message is stored only once the images are there, as the trigger that links them runs as it is inserted.
   if(name==='post_channel_message') { postedAfterUploads=uploads.length; return refusePost?{data:null,error:{code:'22023'}}:ok(7); }
-  if(name==='reserve_channel_files') return ok(attachments.length);
+  if(name==='reserve_channel_files') return ok(alreadyStored?-1:attachments.length);
   if(name==='discard_channel_files') return ok(discard);
   if(name==='channel_runs_due') return ok(due);
   if(name==='begin_channel_start') return ok([{attempt:1,company,profile:'default',connection:'conn',session:'sess',input:'مراجع: Look at these',instructions:null,rules:[],has_files:true}]);
@@ -90,6 +90,15 @@ test('a failed upload posts nothing and gives its rows back',async()=>{
  assert.deepEqual(sent,{refused:'channelFailed',status:400});
  assert.deepEqual(stand.calls.map(([name])=>name),['reserve_channel_files','discard_channel_files'],'nothing is stored when its bytes cannot be');
  assert.equal(fake.runs.length,0);
+});
+
+test('a retry of a send whose files a stored message already took keeps nothing again and posts the same message',async()=>{
+ const fake=fakeEngine(); const stand=databases({alreadyStored:true});
+ const sent=await postChannelMessage(stand.db,stand.service,{company,channel,sendKey:'q',message:'@Faye look',files,hermes,engineFor:fake.engineFor});
+ assert.deepEqual(sent,{message:7},'the send goes on to its message, which the send key already stored');
+ assert.deepEqual(stand.uploads,[],'a stored send uploads nothing a second time');
+ assert.deepEqual(stand.calls.map(([name])=>name).slice(0,2),['reserve_channel_files','post_channel_message']);
+ assert.equal(fake.runs.length,0,'the stored message starts no second Run');
 });
 
 test('a failed upload leaves removal to the guarded discard, never to a path it wrote itself',async()=>{

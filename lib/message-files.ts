@@ -43,8 +43,11 @@ export async function filesAsImages(service:SupabaseClient,rows:{content_type:st
 /** @param {SupabaseClient} db @param {SupabaseClient} service @param {KeepFiles} kept @returns {Promise<{error?:string}>} */
 export async function keepMessageFiles(db:SupabaseClient,service:SupabaseClient,{place,files,reserve,reserveArgs,discard,discardArgs,words}:KeepFiles):Promise<{error?:string}> {
  const rows=files.map((file,index)=>({position:index,name:file.name.slice(0,255)||'image',content_type:file.type.slice(0,127),size:file.size}));
- const {error}=await db.rpc(reserve,{...reserveArgs(place),files:rows});
+ const {data,error}=await db.rpc(reserve,{...reserveArgs(place),files:rows});
  if(error) return {error:refusalOf(error.code,words)};
+ // -1: the files of this send key are already a stored message's own, so there is nothing to write again; the send goes
+ // on to its message, which the send key answers with the one it stored.
+ if(typeof data==='number'&&data<0) return {};
  for(const [index,file] of files.entries()) {
   const path=messageFilePath(place,index);
   const stored=await service.storage.from(bucket).upload(path,Buffer.from(await file.arrayBuffer()),{contentType:rows[index].content_type,upsert:true});
