@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, symlinkSync, cpSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, spawn } from 'node:child_process';
 import { load } from 'js-yaml';
 
 // The one line (#51) and the gtmworks command it leaves (#52), run with docker and curl replaced: GitHub Releases is a
@@ -34,16 +34,19 @@ for(const folder of ['/usr/local/bin','/usr/bin','/bin']) {
  }
 }
 
-// The stand-in takes install.sh's own lock, as install.sh does, so a run cut off leaves the lock a real one leaves.
+// The stand-in takes install.sh's own lock, as install.sh does, so a run cut off leaves the lock file a real one leaves.
 const installText=readFileSync('scripts/install.sh','utf8');
-const lockStart=installText.indexOf('lock_owner() {'), lockEnd='lock_owner "$$" > .install-lock/owner\n';
-assert.ok(lockStart>0&&installText.indexOf(lockEnd)>lockStart,'install.sh takes its lock with lock_owner');
+const lockStart=installText.indexOf('exec 9>.install.lock');
+const lockEnd="flock -n 9 || { echo 'Another install is running: wait for it to finish, then run this again.' >&2; exit 1; }\n";
+assert.ok(lockStart>0&&installText.indexOf(lockEnd)>lockStart,'install.sh takes its lock with flock on .install.lock');
 const lockBlock=installText.slice(lockStart,installText.indexOf(lockEnd)+lockEnd.length);
+// get.sh tells a release that restores the Agents' data (#349) by this pattern in its install.sh.
+assert.ok(installText.includes('opt/data/*'),'install.sh restores opt/data/* entries, as get.sh looks for');
 const installerTemplate=`#!/bin/sh
 release_image=@REF@
+# restore accepts opt/data/* (the Agents' data, #349)
 op=\${1:-install}
-${lockBlock}trap 'rm -rf .install-lock' EXIT
-printf '%s %s\\n' "\${release_image##*:}" "$*" >> "$INSTALLER_LOG"
+${lockBlock}printf '%s %s\\n' "\${release_image##*:}" "$*" >> "$INSTALLER_LOG"
 case "$op" in
  backup) mkdir -p "$2"; : > "$2/gtmworks-test.tgz"; echo 'Stopping...'; echo "Backup: $2/gtmworks-test.tgz"; exit 0;;
  restore) exit 0;;
@@ -81,7 +84,7 @@ case "$*" in
  'run --rm -i alpine:3.21 tar -tzf -')
   cat > /dev/null
   if [ -n "\${ARCHIVE_ENTRIES:-}" ]; then printf '%s\\n' "$ARCHIVE_ENTRIES"
-  else printf '%s\\n' var/lib/postgresql/data/ var/lib/postgresql/data/PG_VERSION etc/postgresql-custom/ var/lib/storage/ .env.install; fi; exit 0;;
+  else printf '%s\\n' var/lib/postgresql/data/ var/lib/postgresql/data/PG_VERSION etc/postgresql-custom/ var/lib/storage/ opt/data/ opt/data/config.yaml .env.install; fi; exit 0;;
  *'postgres --single'*)
   [ "$8" = supabase/postgres:17@sha256:${'f'.repeat(64)} ] || exit 8
   cat > /dev/null; [ -z "\${ARCHIVE_UNREADABLE:-}" ] || { echo 'ERROR:  relation "gtmworks_install.schema_migrations" does not exist'; exit 0; }
@@ -129,15 +132,16 @@ if [ -n "$out" ]; then cp "$src" "$out"; else cat "$src"; fi
 `;
 
 // A machine with fake docker and curl, an empty home, and GitHub Releases served from a fixture folder.
-function machine(t,{list=['v1.2.3','nightly','v1.10.0','v2.0.0-rc1','v1.3.0','v1.3.1'],docker=true}={}) {
+function machine(t,{list=['v1.2.3','nightly','v1.10.0','v2.0.0-rc1','v1.3.0','v1.3.1'],prerelease=[],docker=true}={}) {
  const root=mkdtempSync(join(tmpdir(),'gtmworks-get-'));
  t.after(()=>rmSync(root,{recursive:true,force:true}));
  const [home,fixture,bin,work]=['home','fixture','bin','work'].map(name=>join(root,name));
  for(const folder of [home,join(fixture,'migrations'),bin,work]) mkdirSync(folder,{recursive:true});
  writeFileSync(join(fixture,'template-install.sh'),installerTemplate);
  writeFileSync(join(fixture,'template-compose.yml'),composeTemplate);
- // The API answers pretty-printed objects with many fields; only tag_name names a release.
- writeFileSync(join(fixture,'releases.json'),JSON.stringify(list.map(tag=>({url:'x',name:`Release ${tag}`,tag_name:tag,body:'notes, "tag_name": "v9.9.9"'})),null,2));
+ // The API answers pretty-printed objects with many fields; only tag_name names a release, and a release GitHub marks
+ // prerelease says so in a field of its own.
+ writeFileSync(join(fixture,'releases.json'),JSON.stringify(list.map(tag=>({url:'x',name:`Release ${tag}`,tag_name:tag,draft:false,immutable:false,prerelease:prerelease.includes(tag),body:'notes, "tag_name": "v9.9.9", "prerelease": true'})),null,2));
  for(const [tag,release] of Object.entries(releases)) {
   mkdirSync(join(fixture,tag));
   writeFileSync(join(fixture,tag,'install.sh'),installerTemplate.replaceAll('@REF@',ref(tag)));
@@ -271,6 +275,17 @@ test('missing Docker, or Docker Compose older than v2.20: a plain message naming
  assert.equal(unreachable.status,1);
  assert.match(unreachable.stderr,/cannot reach it/);
  assert.deepEqual(readdirSync(m.home),[]);
+ // flock is how one update at a time on this machine is kept: a machine without it is told what to install.
+ const withoutFlock=join(m.root,'tools-without-flock');
+ mkdirSync(withoutFlock);
+ for(const name of readdirSync(tools)) if(name!=='flock') symlinkSync(join(tools,name),join(withoutFlock,name));
+ m.clear();
+ const noFlock=m.line([],{extra:{PATH:`${join(m.root,'bin')}:${withoutFlock}`}});
+ assert.equal(noFlock.status,1);
+ assert.match(noFlock.stderr,/needs flock/);
+ assert.match(noFlock.stderr,/Nothing was changed\./);
+ assert.deepEqual(readdirSync(m.home),[]);
+ assert.equal(m.curl(),'');
  // Versions that pass reach the next check: there is no install to report on yet.
  for(const version of ['2.20.0','v2.20.0','2.29.1-desktop.1','3.0.0']) {
   const passed=m.line(['status'],{extra:{COMPOSE_VERSION:version}});
@@ -364,6 +379,37 @@ test('gtmworks update --no-backup with no new migration goes back with an update
  assert.equal(updated.stdout.trim().split('\n').at(-1),'To go back to v1.3.0: gtmworks update --version v1.3.0');
 });
 
+test('a second gtmworks update on this machine exits non-zero, says another update is running and changes nothing', async t => {
+ const m=machine(t);
+ ok(m.line(['--version','v1.2.3']));
+ const files=['install.sh','docker-compose.install.yml','.env.install','.install-release','.gtmworks-version'];
+ const before=files.map(name=>m.file(name));
+ const archive=join(m.home,'backups/old.tgz');
+ mkdirSync(join(m.home,'backups'),{recursive:true});
+ writeFileSync(archive,'archive');
+ // One update holds the machine's lock: the next one stops before it changes anything, whichever command it is.
+ const lockFile=join(m.home,'.local/state/gtmworks/update.lock');
+ const holder=spawn('sh',['-c',`exec 9>'${lockFile}'; flock -n 9 || exit 1; echo held; exec sleep 60`]);
+ t.after(()=>holder.kill('SIGKILL'));
+ await new Promise(resolve=>holder.stdout.once('data',resolve));
+ for(const args of [['update'],['update','--no-backup'],['install'],['restore',archive,'--version','v1.3.0','--yes']]) {
+  m.clear();
+  const refused=m.gtmworks(args);
+  assert.equal(refused.status,1,args.join(' '));
+  assert.match(refused.stderr,/^Another gtmworks update is running on this machine: wait for it to finish, then run this again\. Nothing was changed\.$/m,args.join(' '));
+  assert.deepEqual(m.installer(),[],args.join(' '));
+  assert.doesNotMatch(m.docker(),/^pull /m,args.join(' '));
+  assert.deepEqual(files.map(name=>m.file(name)),before,args.join(' '));
+ }
+ // Once its holder is gone the lock is free, and the update it held up goes through.
+ holder.kill('SIGKILL');
+ await new Promise(resolve=>holder.once('exit',resolve));
+ m.clear();
+ const updated=m.gtmworks(['update','--version','v1.3.1']);
+ ok(updated);
+ assert.deepEqual(m.installer(),[`${hex('a')} backup ${join(m.dir,'backups')}`,`${hex('d')} update`]);
+});
+
 test('gtmworks update refuses a release older than the data and changes nothing', t => {
  const m=machine(t);
  ok(m.line());
@@ -448,8 +494,8 @@ test('an update the machine stopped right after its migrations is finished by gt
  // The record still names v1.2.3; the data is v1.10.0's; .install-release is gone.
  assert.equal(m.file('.gtmworks-version'),'v1.2.3\n');
  assert.equal(m.file('.install-release'),'');
- // The installer was cut off too: its lock stays, naming a process that is gone.
- assert.match(m.file('.install-lock/owner'),/^\S+ \d+ \d+\n$/);
+ // The installer was cut off too: its lock file stays, held by no process, so it cannot block the next run.
+ assert.equal(existsSync(join(m.dir,'.install.lock')),true,'the killed installer left its lock file');
  const update=m.gtmworks(['update']);
  assert.equal(update.status,1);
  assert.match(update.stderr,/Repair it first with: gtmworks install/);
@@ -459,12 +505,33 @@ test('an update the machine stopped right after its migrations is finished by gt
  const finished=m.gtmworks(['install']);
  ok(finished);
  assert.match(finished.stdout,/^Finishing the update of .* to gtmworks v1\.10\.0, which did not finish; its keys and data are kept\.$/m);
- assert.match(finished.stderr,/Taking over \.install-lock from an install that stopped \(process \d+ is gone\)\./);
+ assert.doesNotMatch(finished.stderr,/Another install is running|Taking over/);
  assert.equal(existsSync(join(m.dir,'.install-lock')),false);
  assert.deepEqual(m.installer(),[`${hex('c')} `]);
  assert.equal(m.file('.install-release'),`${ref('v1.10.0')}\n`);
  assert.equal(m.file('.gtmworks-version'),'v1.10.0\n');
  assert.equal(existsSync(join(m.dir,'.gtmworks-pending')),false);
+});
+
+test('a first install the machine stopped in is finished with the build it began with, not one chosen again now', t => {
+ const m=machine(t);
+ // The target and its two files are recorded before the installer runs, so a first install cut off after its migrations
+ // is finished from them, even after main has moved on.
+ const stopped=m.line(['--channel','main'],{extra:{DIE_REF:mainRef}});
+ assert.equal(stopped.signal,'SIGKILL',stopped.stderr);
+ assert.equal(m.file('.gtmworks-version'),'','the installer stopped before it could be recorded after the run');
+ assert.equal(m.file('.gtmworks-pending'),`main@sha256:${mainHex}\n`);
+ assert.equal(m.file('.gtmworks-pending.d/install.sh'),readFileSync(join(m.env.FIXTURE,'template-install.sh'),'utf8').replaceAll('@REF@',mainRef));
+ const newer=hex('9');
+ writeFileSync(join(m.env.FIXTURE,'migrations',newer),'001.sql\n002.sql\n003.sql\n004.sql\n');
+ m.clear();
+ const finished=m.line([],{extra:{MAIN_HEX:newer}});
+ ok(finished);
+ assert.match(finished.stdout,/^Finishing the update of .* to gtmworks main@sha256:/m);
+ assert.deepEqual(m.installer(),[`${mainHex} `],'the build it began with ran, not the one main names now');
+ assert.equal(m.file('.install-release'),`${mainRef}\n`);
+ assert.equal(m.file('.gtmworks-version'),'main\n');
+ assert.equal(existsSync(join(m.dir,'.gtmworks-pending'))||existsSync(join(m.dir,'.gtmworks-pending.d')),false);
 });
 
 test('an update to a main build cut off before or between the swap of its two files is finished with that build', t => {
@@ -651,7 +718,8 @@ test('a second install folder is refused while another folder runs gtmworks on t
  assert.match(refused.stderr,new RegExp(`gtmworks already runs from ${other} on this machine.*Nothing was changed\\.`));
  assert.equal(existsSync(join(m.root,'second')),false);
  assert.equal(m.curl(),'');
- assert.deepEqual(readdirSync(m.home),[]);
+ // The one thing a refusal leaves is the lock file the next update contends on.
+ assert.deepEqual(readdirSync(m.home),['.local']);
  // Its own folder, and no other: a repair goes on.
  ok(m.line());
  m.clear();
@@ -690,6 +758,33 @@ test('the latest release is read from every page of GitHub Releases, not only th
  ok(latest);
  assert.match(latest.stdout,/^Installing gtmworks v1\.10\.0 into /m);
  assert.deepEqual(m.curl().split('\n').filter(url=>/api\.github\.com/.test(url)),[1,2].map(page=>`https://api.github.com/repos/${repo}/releases?per_page=100&page=${page}`));
+});
+
+test('a release GitHub marks prerelease is never the latest stable one, also when it has the highest version', t => {
+ // v2.0.0 has the highest version of all, but GitHub marks it a prerelease: the rule of --exclude-pre-releases.
+ const m=machine(t,{list:['v1.2.3','v1.10.0','v2.0.0'],prerelease:['v2.0.0']});
+ const installed=m.line();
+ ok(installed);
+ assert.match(installed.stdout,/^Installing gtmworks v1\.10\.0 into /m);
+ assert.equal(m.file('.gtmworks-version'),'v1.10.0\n');
+ // An update does not jump to it either.
+ const older=machine(t,{list:['v1.2.3','v1.10.0','v2.0.0'],prerelease:['v2.0.0']});
+ ok(older.line(['--version','v1.2.3']));
+ older.clear();
+ const updated=older.gtmworks(['update']);
+ ok(updated);
+ assert.match(updated.stdout,/^gtmworks v1\.10\.0 is running: /m);
+ // Prereleases alone: no stable release to install, and no guess at one.
+ const none=machine(t,{list:['v2.0.0'],prerelease:['v2.0.0']});
+ const refused=none.line();
+ assert.equal(refused.status,1);
+ assert.match(refused.stderr,/No gtmworks release is published yet/);
+ assert.equal(none.file('.gtmworks-version'),'');
+ // A list written on one line, as a fixture folder may hold it, is read the same way.
+ const oneLine=machine(t);
+ writeFileSync(join(oneLine.env.FIXTURE,'releases.json'),JSON.stringify([{tag_name:'v1.2.3',prerelease:false},{tag_name:'v1.10.0',prerelease:false},{tag_name:'v2.0.0',prerelease:true}]));
+ ok(oneLine.line());
+ assert.equal(oneLine.file('.gtmworks-version'),'v1.10.0\n');
 });
 
 test('gtmworks restore --version goes back: backs up the current data, makes the install anew and restores the archive', t => {
@@ -745,11 +840,38 @@ test('gtmworks restore --version checks the archive and asks before it replaces 
   assert.match(refused.stderr,message,JSON.stringify(extra));
   nothingChanged(refused,JSON.stringify(extra));
  }
+ // A release from before #349 would refuse the Agents' data only after the volumes are removed: it is asked first.
+ const targetInstaller=join(m.env.FIXTURE,'v1.2.3','install.sh');
+ const withAgents=readFileSync(targetInstaller,'utf8');
+ writeFileSync(targetInstaller,withAgents.replace(/^# restore accepts opt\/data.*\n/m,''));
+ m.clear();
+ const older=m.gtmworks(['restore',archive,'--version','v1.2.3','--yes'],{extra:{ARCHIVE_ENTRIES:'var/lib/postgresql/data/\netc/postgresql-custom/\nvar/lib/storage/\n.env.install\nopt/data/'}});
+ assert.match(older.stderr,/gtmworks v1\.2\.3 cannot restore .*old\.tgz: it holds the Agents' data, which releases before it cannot restore\./);
+ nothingChanged(older,'a release before the Agents\' data');
+ writeFileSync(targetInstaller,withAgents);
  // An archive whose migrations cannot be read is not taken for one with none.
  m.clear();
  const unread=m.gtmworks(['restore',archive,'--version','v1.2.3','--yes'],{extra:{ARCHIVE_UNREADABLE:'1'}});
  assert.match(unread.stderr,/Could not read the migrations in .*old\.tgz\./);
  nothingChanged(unread,'unreadable');
+});
+
+test('gtmworks backup takes an optional destination and keeps backups/ in the install folder as the default', t => {
+ const m=machine(t);
+ ok(m.line());
+ m.clear();
+ ok(m.gtmworks(['backup']));
+ assert.deepEqual(m.installer(),[`${hex('c')} backup ${join(m.dir,'backups')}`]);
+ const elsewhere=join(m.root,'elsewhere');
+ m.clear();
+ ok(m.gtmworks(['backup',elsewhere]));
+ assert.deepEqual(m.installer(),[`${hex('c')} backup ${elsewhere}`]);
+ // One destination, and nothing more.
+ m.clear();
+ const extra=m.gtmworks(['backup',elsewhere,'another']);
+ assert.equal(extra.status,2);
+ assert.match(extra.stderr,/Unexpected argument: another/);
+ assert.deepEqual(m.installer(),[]);
 });
 
 test('gtmworks restore finds backups/<name> in the install folder when the current folder has none', t => {

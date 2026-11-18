@@ -16,6 +16,8 @@ import { changeChannel, channelChoices } from '@/app/channel-actions';
 import { channelTitle, firstName, withMention, type ChannelAgent, type ChannelMention, type ChannelMessage, type ChannelRecord } from '@/lib/channels';
 import { PermissionCard, type DecidePermission, type PermissionOutcome } from '@/app/permission-card';
 import { ReplyCard } from '@/app/reply-card';
+import type { AnswerQuestion } from '@/app/question-card';
+import type { MarkHandDone } from '@/app/hand-card';
 import { StepsList, type StepsBidiText } from '@/app/run-steps';
 import { offeredChoices } from '@/lib/conversations';
 
@@ -77,17 +79,41 @@ export default function ChannelView({person,initial}:{person:string,initial:Chan
    return body.state==='decided'&&body.choice&&body.at?{state:'decided',choice:body.choice,at:body.at,first:body.first===true}:{state:'closed',first:body.first===true};
   } catch { return {error:'conversationFailed'}; }
  };
+ // A Member of the channel picks an option on the question its Agent waits on (#149): the answer is kept once for the
+ // whole team, then the channel is read again. Another Member may have picked first, and the card says so.
+ const answer:AnswerQuestion=async(card,choice,answerKey)=>{
+  try {
+   const response=await fetch('/api/channels',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company:channel.company,channel:channel.id,intent:'answer',card,choice,answerKey})});
+   const body=await response.json() as {state?:string,error?:string};
+   if(!response.ok||!body.state) return body.error==='channelNotAllowed'?body.error:body.error==='questionTaken'?'questionTaken':body.error==='questionClosed'?'questionClosed':'conversationFailed';
+   setSent(value=>value+1);
+   return null;
+  } catch { return 'conversationFailed'; }
+ };
+ // "Done it" on a step an Agent handed the team (#149): the record keeps who did it and when, the first press starts the
+ // Agent's Run that picks up, and the channel is read again. A press another Member made first starts nothing here.
+ const done:MarkHandDone=async(card)=>{
+  try {
+   const response=await fetch('/api/channels',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company:channel.company,channel:channel.id,intent:'done',card})});
+   const body=await response.json() as {at?:string,first?:boolean,error?:string};
+   if(!response.ok||!body.at) return {error:body.error||'conversationFailed'};
+   if(body.first===true) setSent(value=>value+1);
+   return {at:body.at,first:body.first===true};
+  } catch { return {error:'conversationFailed'}; }
+ };
  // A card an Agent's Run shows while the channel is open rises in once (design-reference: card-in); those already there
- // do not.
- const [drawnCards]=useState(()=>new Set(initial.messages.flatMap(message=>message.author==='person'?message.mention?.permissions.map(card=>card.id)??[]:message.author==='agent'?message.cards?.map(card=>card.id)??[]:[])));
+ // do not. A question is drawn under the message, a reply's cards under the Agent's reply.
+ const [drawnCards]=useState(()=>new Set(initial.messages.flatMap(message=>message.author==='person'
+  ?mentionsOf(message).flatMap(mention=>[...mention.questions.map(card=>card.id),...mention.permissions.map(card=>card.id)])
+  :message.author==='agent'?message.cards?.map(card=>card.id)??[]:[])));
  const transcript=useRef<HTMLDivElement>(null); const last=messages.at(-1)?.id;
- // Opened from "Waiting on you" at a request (#165, `#permission-<id>`): that card in view and focused, not the newest
- // message, on the first draw only; the address is then the channel's again. Opened from a mention (#200,
- // `#mention-<id>`): that message a third of the way down and ringed for 1.6 seconds, a still ring with reduced motion
- // (design-reference: spotIn, openMention).
+ // Opened from "Waiting on you" at a card (#165, #149: `#permission-<id>`, `#question-<id>` or `#hand-<id>`): that card
+ // in view and focused, not the newest message, on the first draw only; the address is then the channel's again. Opened
+ // from a mention (#200, `#mention-<id>`): that message a third of the way down and ringed for 1.6 seconds, a still ring
+ // with reduced motion (design-reference: spotIn, openMention).
  const landed=useRef(false);
  useLayoutEffect(()=>{
-  const card=/^#permission-\d+$/.test(location.hash)?transcript.current?.querySelector<HTMLElement>(location.hash):null;
+  const card=/^#(permission|question|hand)-\d+$/.test(location.hash)?transcript.current?.querySelector<HTMLElement>(location.hash):null;
   if(card) {
    landed.current=true;
    card.scrollIntoView({block:'center'}); card.focus({preventScroll:true});
@@ -129,9 +155,12 @@ export default function ChannelView({person,initial}:{person:string,initial:Chan
    </div>
    <ol className="turns" aria-label={c('channelMessages',name)}>{messages.map((message,index)=><Fragment key={message.id}>
     {(index===0||dayOf(messages[index-1].at,zone)!==dayOf(message.at,zone))&&<li className="divider"><time dateTime={message.at} data-utc={zone}>{dayLabel(message.at)}</time></li>}
-    <Turn message={message} time={time} c={c} name={name} cb={cb} drawnCards={drawnCards} memberNames={memberNames}/>
-    {message.author==='person'&&mentionsOf(message).filter(mention=>mention.permissions.length>0).map(mention=><li key={mention.agent} className="turn turn--agent msg" data-author="agent">
+    <Turn message={message} time={time} c={c} name={name} cb={cb} drawnCards={drawnCards} memberNames={memberNames} done={writer?done:undefined}/>
+    {message.author==='person'&&mentionsOf(message).some(mention=>mention.questions.length>0||mention.permissions.length>0)&&mentionsOf(message).filter(mention=>mention.questions.length>0||mention.permissions.length>0).map(mention=><li key={mention.agent} className="turn turn--agent msg" data-author="agent">
      <div className="sender"><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:mention.face,name:mention.agent}} size={20}/></span><bdi>{mention.agent}</bdi></div>
+     {mention.questions.map(card=><ReplyCard key={`question${card.id}`} card={card} fresh={!drawnCards.has(card.id)} chips={card.chips}
+       answer={writer&&(!card.chips||message.mine)?answer:undefined}
+       waitingFor={card.chips&&!message.mine?firstName(message.name):null}/>)}
      {mention.permissions.map(card=><PermissionCard key={card.id} card={card} fresh={!drawnCards.has(card.id)} offered={offeredChoices(card,may)} decide={message.mine&&writer?permit:undefined}/>)}
     </li>)}
    </Fragment>)}</ol>
@@ -147,8 +176,10 @@ export default function ChannelView({person,initial}:{person:string,initial:Chan
  </div><ChannelDetails panel={panel} name={name} person={person} record={record} tip={tip} c={c} refresh={refresh}/></div>;
 }
 
-function Turn({message,time,c,name,cb,drawnCards,memberNames}:{message:ChannelMessage,time:(value:string)=>string,c:Say,name:string,cb:StepsBidiText,drawnCards:Set<number>,memberNames:string[]}) {
+function Turn({message,time,c,name,cb,drawnCards,memberNames,done}:{message:ChannelMessage,time:(value:string)=>string,c:Say,name:string,cb:StepsBidiText,drawnCards:Set<number>,memberNames:string[],done?:MarkHandDone}) {
  const {t}=useI18n();
+ // The quiet message "Done it" wrote asks its Agent to pick up (#149): the card shows the press, never a bubble of it.
+ if(message.author==='person'&&message.handDone) return null;
  // The quiet line an invitation adds (#207): not a message, and the channel's own name is the one it joined.
  if(message.author==='note') return <li className="note note--icon" data-kind={message.kind}>
   <ShellIcon name="team" className="note__icon"/><span>{c('channelInviteNote',firstName(message.actor),message.name,name)}</span>
@@ -157,7 +188,7 @@ function Turn({message,time,c,name,cb,drawnCards,memberNames}:{message:ChannelMe
   <div className="sender"><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:message.face,name:message.name}} size={20}/></span><bdi>{message.name}</bdi><time className="sender__time" dateTime={message.at}>{time(message.at)}</time></div>
   {!!message.steps?.list.length&&<StepsList steps={message.steps} c={c} cb={cb}/>}
   <div className="bubble bubble--agent" dir="auto">{message.body}</div>
-  {message.cards?.map(card=><ReplyCard key={`reply${card.id}`} card={card} fresh={!drawnCards.has(card.id)}/>)}
+  {message.cards?.map(card=><ReplyCard key={`reply${card.id}`} card={card} fresh={!drawnCards.has(card.id)} done={done} team/>)}
  </li>;
  // Every name that called an Agent is marked, so is every Member's name a message gives (#200), and each Agent that could
  // not reply gets its own line (#152).

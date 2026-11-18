@@ -34,7 +34,7 @@ export function NoApp({t,slug}:{t:T,slug:string}) {
 // gives its reason and opens "Waiting on you", where its card says how the wait ends. A mention in a channel (#200) opens
 // that channel at its message, and a general channel has no name of its own to store, so the reader draws its word.
 export function WaitingRow({t,slug,writer,item,face}:{t:T,slug:string,writer:boolean,item:WaitingItem,face:ReactNode}) {
- const href=(item.kind==='permission'||item.kind==='channel_permission'||item.kind==='channel_mention')&&chatPlace(slug,item)||(item.card_id!=null?`/c/${slug}/work/board/${item.card_id}`:item.conversation_id?`/c/${slug}/conversations/${item.conversation_id}`:`/c/${slug}/approvals`);
+ const href=(item.kind==='permission'||item.kind==='channel_permission'||item.kind==='channel_mention'||item.kind==='channel_question'||item.kind==='channel_hand')&&chatPlace(slug,item)||(item.card_id!=null?`/c/${slug}/work/board/${item.card_id}`:item.conversation_id?`/c/${slug}/conversations/${item.conversation_id}`:`/c/${slug}/approvals`);
  const detail=item.kind==='approval'?t('numbersWaitingStep',item.body):item.kind==='agent_key'?t('waitingAgentKeyReason'):<bdi>{item.body||item.asked_by}</bdi>;
  return <Link className="panel-row" href={href}>{face}
   <span className="panel-row__text"><bdi className="panel-row__t">{item.title||t('shellGeneralChannel')}</bdi><span className="panel-row__d">{detail}</span></span>

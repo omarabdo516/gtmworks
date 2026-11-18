@@ -1,6 +1,7 @@
 -- #148: a channel reply's card is a reply_cards row linked to a channel message, its tools are pinned on channel_runs,
 -- and its steps are read live through channel_run_sessions. Grants are kept: only the worker shows a card or pins a Run,
 -- only a channel member reads a reply's session, and the helpers stay private.
+-- (#149 offers hand_over on a channel Run too, so the pinner's list grew by that tool.)
 select json_build_object(
  'card_link',exists(select 1 from information_schema.columns where table_schema='public' and table_name='reply_cards' and column_name='channel_message_id' and is_nullable='YES')
   and exists(select 1 from information_schema.columns where table_schema='public' and table_name='reply_cards' and column_name='conversation_id' and is_nullable='YES'),
@@ -24,5 +25,5 @@ select json_build_object(
   and position('reply_cards' in (select qual from pg_policies where schemaname='public' and tablename='company_log' and policyname='company_log_read'))>0,
  'card_offers_two',position('''show_draft''' in pg_get_functiondef('public.pin_channel_run(bigint,jsonb)'::regprocedure))>0
   and position('''show_review''' in pg_get_functiondef('public.pin_channel_run(bigint,jsonb)'::regprocedure))>0
-  and position('''hand_over''' in pg_get_functiondef('public.pin_channel_run(bigint,jsonb)'::regprocedure))=0
+  and position('''hand_over''' in pg_get_functiondef('public.pin_channel_run(bigint,jsonb)'::regprocedure))>0
 );

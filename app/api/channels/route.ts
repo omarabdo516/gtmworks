@@ -2,7 +2,7 @@ import { NextRequest, NextResponse, after } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { supabaseConfig } from '@/lib/supabase-config';
-import { decideChannelPermission, driveChannelRuns, postChannelMessage } from '@/lib/channel-runs.mjs';
+import { decideChannelPermission, driveChannelRuns, postChannelMessage, answerChannelQuestion, markChannelHandDone } from '@/lib/channel-runs.mjs';
 import type { PermissionChoice } from '@/lib/engine.mjs';
 import { logActionFailure } from '@/lib/diagnostics.mjs';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
@@ -27,6 +27,31 @@ async function permit(db:Awaited<ReturnType<typeof supabase>>,body:Record<string
  return reply(decided);
 }
 
+// A pick on the question a channel's Agent waits on (#149): the card and the choice's index, never its text, and one key
+// per card on the page, so a second click is the same claim. Any Member of the channel who may write claims it, except
+// the main Agent's own question, which only the Member it was addressed to may answer (answer_channel_question). The
+// answer then goes to the waiting Run.
+async function answer(db:Awaited<ReturnType<typeof supabase>>,body:Record<string,unknown>) {
+ if(!(typeof body.card==='number'&&Number.isSafeInteger(body.card)&&body.card>0)) return refuse('channelFailed',400);
+ if(!(typeof body.choice==='number'&&Number.isSafeInteger(body.choice)&&body.choice>=0&&body.choice<4)) return refuse('channelFailed',400);
+ if(typeof body.answerKey!=='string'||!uuid.test(body.answerKey)) return refuse('channelFailed',400);
+ const answered=await answerChannelQuestion(db,service(),{company:body.company as string,channel:body.channel as string,card:body.card,choice:body.choice,answerKey:body.answerKey,later:after});
+ if('code' in answered) return refuse(...(refusals[answered.code||'']||['channelFailed',500]));
+ // Another Member or another tab was first: the pick is not recorded, so the card says so and reads the channel again.
+ if(answered.state==='taken'||answered.state==='closed') return refuse(answered.state==='taken'?'questionTaken':'questionClosed',409);
+ return reply({state:answered.state});
+}
+
+// "Done it" on a step a channel's Agent handed the team (#149): the Member's own word, recorded once by the database with
+// who and when (mark_channel_hand_done), under the Member's own session. The first press also writes the message that asks
+// that Agent to pick up (#140), as a Run of the channel. gtmworks does not do the step and checks nothing outside.
+async function done(db:Awaited<ReturnType<typeof supabase>>,body:Record<string,unknown>) {
+ if(!(typeof body.card==='number'&&Number.isSafeInteger(body.card)&&body.card>0)) return refuse('channelFailed',400);
+ const made=await markChannelHandDone(db,service(),{company:body.company as string,channel:body.channel as string,card:body.card,later:after});
+ if('code' in made) return refuse(...(refusals[made.code||'']||['channelFailed',500]));
+ return reply({state:'done',at:made.at,first:made.first});
+}
+
 async function respond(request:NextRequest) {
  try {
   const db=await supabase(); const {data:{user}}=await db.auth.getUser();
@@ -38,6 +63,8 @@ async function respond(request:NextRequest) {
   if(![body.company,body.channel].every(value=>typeof value==='string'&&uuid.test(value))) return refuse('channelFailed',400);
   if(!await routeAllowed(db,'app/api/channels/route.ts',request.method,body.company,user.id)) return refuse(writing?'channelNotAllowed':'channelNotFound',writing?403:404);
   if(writing&&body.intent==='permit') return await permit(db,body);
+ if(writing&&body.intent==='answer') return await answer(db,body);
+ if(writing&&body.intent==='done') return await done(db,body);
   if(writing) {
    if(typeof body.sendKey!=='string'||!uuid.test(body.sendKey)||typeof body.message!=='string'||!body.message.trim()||body.message.length>20000) return refuse('channelFailed',400);
    const sent=await postChannelMessage(db,service(),{channel:body.channel,sendKey:body.sendKey,message:body.message});
