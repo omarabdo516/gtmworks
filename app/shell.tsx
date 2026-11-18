@@ -67,7 +67,7 @@ export default async function Shell({company,companies,section,title,crumbs,pers
  // A chat is named by the first line of its first message, as its own page names it (lib/conversations titleOf).
  const chats=conversations.map(c=>({id:c.id,created_at:c.created_at,title:c.conversation_messages[0]?.body.split('\n')[0]||c.agent_name}));
  const asksForAgents=writer&&!owner;
- const account=<><AccountMenu slug={slug} personName={personName} role={role} theme={theme} companyName={company?.name} settingsHref={slug?`/c/${slug}/settings`:undefined}/><ThemeToggle theme={theme}/></>;
+ const account=<><AccountMenu slug={slug} company={company?.id} personId={personId} canManage={manage} owner={owner} alone={workMode==='alone'} personName={personName} role={role} theme={theme} companyName={company?.name} settingsHref={slug?`/c/${slug}/settings`:undefined}/><ThemeToggle theme={theme}/></>;
  const active=(path:string)=>path==='chat'?chat:path==='work/board'?section.startsWith('work/'):section===path;
  const sidebar=<SidebarSearchProvider>
   <div className="sb-top">

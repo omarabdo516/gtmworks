@@ -7,6 +7,7 @@ import { ShellIcon } from '@/components/shell-icon';
 import { moreSections, themeChoices } from '@/lib/sidebar.mjs';
 import { rememberOpener } from './settings-opener';
 import { AppsCount, useAppsSheet } from './apps-sheet';
+import TeamDialog, { type TeamActions } from './team-dialog';
 
 const themeIcons={light:'sun',dark:'moon',device:'monitor'} as const;
 
@@ -19,6 +20,8 @@ const languages=[{key:'en',name:'languageNameEnglish',description:'languageEngli
 // opens the apps sheet (app/apps-sheet.tsx), which gives the keyboard back to the account button. "More sections"
 // reaches the company's existing sections that the reference has no place for. Settings opens the full-window settings
 // overlay (app/settings-overlay.tsx), which closes back to the page it was opened from.
+// "Team" (#187) is the reference's own item, for an Owner and a Manager: it closes the menu and opens the Team dialog
+// over the page (app/team-dialog.tsx). Its data is read by the server, which refuses it to anyone else.
 // Every page draws its own shell, so a page landing (closing a card, a refresh after a save) draws a new account
 // menu. Whether it is open is kept here, outside the shell, for the page it was opened on: that page, or the page the
 // person had already set out to open through a link (lib/link pageBeingOpened; never a prefetch). A menu opened while
@@ -36,15 +39,16 @@ const closeMenu=()=>{ if(menuState.open) setMenuState(closedMenu); };
 const moves:Record<string,(index:number,count:number)=>number>={ArrowDown:(i,n)=>(i+1)%n,ArrowUp:(i,n)=>(i-1+n)%n,Home:()=>0,End:(_,n)=>n-1};
 const subscribeMenu=(listener:()=>void)=>{ menuListeners.add(listener); return ()=>{ menuListeners.delete(listener); }; };
 
-export type AccountMenuProps={slug?:string,personName:string,role:string,theme:string,companyName?:string,settingsHref?:string};
+export type AccountMenuProps={slug?:string,company?:string,personId?:string,personName:string,role:string,owner?:boolean,canManage?:boolean,alone?:boolean,theme:string,companyName?:string,settingsHref?:string,team?:TeamActions};
 type Save=(state:string,form:FormData)=>Promise<string>;
 
 // The menu takes its two saves as props, so its component test renders it with no server action imported (#218).
-export default function AccountMenuView({slug,personName,role,theme,companyName,settingsHref,saveLanguage,saveTheme}:AccountMenuProps&{saveLanguage:Save,saveTheme:Save}) {
+export default function AccountMenuView({slug,company,personId,personName,role,owner=false,canManage=false,alone=false,theme,companyName,settingsHref,team,saveLanguage,saveTheme}:AccountMenuProps&{saveLanguage:Save,saveTheme:Save}) {
  const {t,language}=useI18n();
  const pathname=usePathname();
  const openApps=useAppsSheet();
  const state=useSyncExternalStore(subscribeMenu,()=>menuState,()=>closedMenu);
+ const [teamOpen,setTeamOpen]=useState(false);
  const open=state.open&&state.company===slug&&state.paths.includes(pathname);
  const toggle=()=>open?closeMenu():setMenuState({open:true,company:slug,paths:[pathname,...(pageBeingOpened()?[pageBeingOpened()!]:[])],focus:null,fresh:true});
  // Kept open for another page or company: it is closed there. Once the page being opened has landed, the menu belongs
@@ -54,6 +58,9 @@ export default function AccountMenuView({slug,personName,role,theme,companyName,
  const [error,setError]=useState('');
  const [pending,startTransition]=useTransition();
  const box=useRef<HTMLDivElement>(null); const button=useRef<HTMLButtonElement>(null);
+ // However the Team dialog closed, the keyboard goes back to the account button, as the reference's close handler does.
+ const teamWasOpen=useRef(false);
+ useEffect(()=>{ if(teamWasOpen.current&&!teamOpen) button.current?.focus(); teamWasOpen.current=teamOpen; },[teamOpen]);
  useEffect(()=>{
   if(!open) return;
   const outside=(event:PointerEvent)=>{if(!box.current?.contains(event.target as Node)) closeMenu();};
@@ -90,6 +97,8 @@ export default function AccountMenuView({slug,personName,role,theme,companyName,
    <div className="me-menu__head"><span className="me__av" aria-hidden="true">{initial}</span><span className="me__text"><span className="me__name"><bdi>{personName}</bdi></span><span className="me__role">{role}{companyName&&<> · <bdi>{companyName}</bdi></>}</span></span></div>
    {settingsHref&&<><div className="menu__sep" role="separator"/>
     <Link className="menu__item" role="menuitem" href={settingsHref} onClick={()=>{rememberOpener();closeMenu();}}><ShellIcon name="gear"/><span className="menu__t">{t('settings')}<span className="menu__d">{t('settingsMenuDescription')}</span></span></Link></>}
+   {canManage&&company&&team&&<><div className="menu__sep" role="separator"/>
+    <button type="button" className="menu__item" role="menuitem" onClick={()=>{ closeMenu(); setTeamOpen(true); }}><ShellIcon name="team"/><span className="menu__t">{t('team')}<span className="menu__d">{t(alone?'teamMenuSoloDescription':'teamMenuDescription')}</span></span></button></>}
    <div className="menu__sep" role="separator"/>
    <div className="menu__label" id="me-lang-lbl">{t('interfaceLanguage')}</div>
    <div role="group" aria-labelledby="me-lang-lbl">{languages.map(item=><button key={item.key} type="button" className="menu__item" role="menuitemradio" aria-checked={item.key===language} disabled={pending} onClick={()=>choose(item.key)}>
@@ -107,6 +116,7 @@ export default function AccountMenuView({slug,personName,role,theme,companyName,
     <div role="group" aria-labelledby="me-more-lbl">{moreSections.map(([path,label,icon])=><Link key={path} className="menu__item" role="menuitem" href={`/c/${slug}/${path}`} onClick={()=>closeMenu()}><ShellIcon name={icon}/><span className="menu__t">{t(label)}</span></Link>)}</div>
    </>}
   </div>}
+  {teamOpen&&company&&team&&<TeamDialog company={company} alone={alone} userId={personId||''} owner={owner} role={role} personName={personName} actions={team} close={()=>setTeamOpen(false)}/>}
   <button ref={button} type="button" className="me" id="btn-me" aria-haspopup="menu" aria-expanded={open} aria-controls="me-menu" aria-label={t('accountMenu')} onClick={toggle}>
    <span className="me__av" aria-hidden="true">{initial}</span>
    <span className="me__text"><span className="me__name"><bdi>{personName}</bdi></span><span className="me__role">{role}</span></span>
