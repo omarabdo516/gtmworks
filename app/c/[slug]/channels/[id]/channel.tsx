@@ -111,7 +111,7 @@ export default function ChannelView({person,initial}:{person:string,initial:Chan
    {waiting?.mention&&<p className="thinking convo-status" role="status">{t('conversationWorking',waiting.mention.agent)}</p>}
   </div></div>
   <div className="composer-area">
-   {writer?<MessageBox label={c('channelMessageLabel')} placeholder={c('channelPlaceholder',name)} attach={false} call={{people:members.filter(member=>member.person!==person).map(member=>({id:member.person,name:member.name,role:member.role})),agents}} send={async(message,sendKey)=>{
+   {writer?<MessageBox label={c('channelMessageLabel')} placeholder={c('channelPlaceholder',name)} attach={false} voice={{company:channel.company,channel:channel.id}} call={{people:members.filter(member=>member.person!==person).map(member=>({id:member.person,name:member.name,role:member.role})),agents}} send={async(message,sendKey)=>{
     const failure=await postMessage({company:channel.company,channel:channel.id,message,sendKey},'/api/channels');
     if(!failure) setSent(value=>value+1);
     return failure;

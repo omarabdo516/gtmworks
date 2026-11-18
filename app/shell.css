@@ -402,7 +402,20 @@
 }
 .gw .composer__btn .gw-icon { width: 16px; height: 16px; }
 .gw .composer__mic { background: transparent; box-shadow: none; color: var(--gw-text-2); }
+/* A recording microphone is pressed, and a microphone the Engine cannot use is quiet (design-reference: .composer__mic). */
+.gw .composer__mic[aria-pressed="true"] { background: var(--gw-bg-secondary-hover); color: var(--gw-text-1); }
+.gw .composer__mic[aria-disabled="true"] { color: var(--gw-text-4); }
 @media (hover: hover) { .gw .composer__btn:hover:not([aria-disabled="true"]) { background: var(--gw-bg-secondary-hover); } }
+/* While it records, a waveform takes the place of the field, with the dot and the clock beside it (design-reference:
+   .composer.is-rec, .wave, .composer__rec, .rec-dot; #160). */
+.gw .composer.is-rec .composer__input { display: none; }
+.gw .wave { flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 12px; min-height: 44px; }
+.gw .wave__bars { display: flex; align-items: center; gap: 2px; height: 24px; flex: none; direction: ltr; }
+.gw .wave__bar { display: block; width: 2px; height: 22px; border-radius: var(--gw-r-full); background: var(--gw-text-2); transform: scaleY(.2); transition: transform 140ms var(--gw-ease-out); }
+.gw .wave__hint { flex: 1 1 0; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--gw-fs-xs); color: var(--gw-text-3); }
+.gw .composer__rec { display: inline-flex; align-items: center; gap: 6px; height: 28px; margin: 8px 0; flex: none; font-size: var(--gw-fs-xs); color: var(--gw-text-2); white-space: nowrap; }
+.gw .rec-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gw-text-1); animation: gw-breathe 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .gw .rec-dot { animation: none; } .gw .wave__bar { transition: none; } }
 /* The "+" button while its menu is open (#153; design-reference: .composer__btn[aria-expanded]): its plus turns to a cross. */
 .gw .composer__btn[aria-expanded="true"] { background: var(--gw-bg-secondary-hover); }
 .gw .composer__btn .gw-icon { transition: transform var(--gw-dur-fast) var(--gw-ease-out); }

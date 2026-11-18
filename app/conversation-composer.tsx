@@ -10,6 +10,7 @@ import { CompanyAgentFace } from '@/components/company-agent-face';
 import { firstName } from '@/lib/channels';
 import { AppTile } from '@/components/app-tile';
 import { conversationFilesProblem, imageTypes, maxFiles } from '@/lib/attachments.mjs';
+import { useComposerDictation, type DictationTarget } from './composer-mic';
 import { toast } from './toast';
 
 // Loaded when drawn, so a composer outside a Company's pages loads neither.
@@ -19,7 +20,8 @@ const ConnectApps=lazy(()=>import('./plus-menu-apps'));
 export const newId=()=>{const b=crypto.getRandomValues(new Uint8Array(16));b[6]=(b[6]&15)|64;b[8]=(b[8]&63)|128;const h=[...b].map(x=>x.toString(16).padStart(2,'0')).join('');return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;};
 
 // The reference's composer (design-reference: composerHTML): one rounded box with the "+" button, the text, the
-// microphone and the send arrow. Dictation is not built yet, so its button is drawn but says "Soon".
+// microphone and the send arrow. The microphone dictates (#160, app/composer-mic.tsx) for the Agent named by `voice`; a
+// box drawn without one (outside a Company) keeps the button, marked "Soon".
 // The "+" menu (#153; design-reference: plusMenuHTML): `call` names whom a channel's composer calls (its other Members,
 // then its Agents); every other composer calls the Agents this Member sees, as the sidebar lists them
 // (CallableAgentsProvider). New channel, Connect apps and Model (#158) read the page's Company and the reader's role
@@ -99,7 +101,7 @@ export type ModelTarget={company:string,conversation:string,agent:string};
 // Why a chosen image, or a set of them, cannot go with this message: the one line under the box (design-reference has
 // no such line, since it takes any file; the Engine reads images only).
 const refusalOf=(problem:'type'|'count'|'size'|'request')=>problem==='type'?'attachTypeRefused':problem==='count'?'attachCountRefused':problem==='size'?'attachSizeRefused':'attachRequestRefused';
-export function MessageBox({placeholder,label,send,stop,focus=false,call,model,refused,attach=true,ref}:{placeholder:string,label?:string,send:(text:string,sendKey:string,files:File[])=>Promise<string|null>,stop?:{label:string,run:()=>Promise<string|null>},focus?:boolean,call?:Callable,model?:ModelTarget,refused?:{key:string,text:string},attach?:boolean,ref?:Ref<MessageBoxHandle>}) {
+export function MessageBox({placeholder,label,send,stop,focus=false,call,model,refused,attach=true,voice,ref}:{placeholder:string,label?:string,send:(text:string,sendKey:string,files:File[])=>Promise<string|null>,stop?:{label:string,run:()=>Promise<string|null>},focus?:boolean,call?:Callable,model?:ModelTarget,refused?:{key:string,text:string},attach?:boolean,voice?:DictationTarget,ref?:Ref<MessageBoxHandle>}) {
  const {t}=useI18n(); const [text,setText]=useState(''); const [files,setFiles]=useState<File[]>([]); const [key,setKey]=useState(newId); const [busy,setBusy]=useState(false); const [error,setError]=useState('');
  const seen=useContext(CallableAgents); const callable=call??{people:[],agents:seen};
  // The suggestion list's token, entries and marked entry (#154); the field keeps the keyboard and points at the entry.
@@ -155,6 +157,9 @@ export function MessageBox({placeholder,label,send,stop,focus=false,call,model,r
   if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing) { event.preventDefault(); void submit(); }
  }
  useEffect(()=>{ const box=field.current; if(caret.current===null||!box) return; box.focus(); box.setSelectionRange(caret.current,caret.current); caret.current=null; },[text]);
+ // Recording takes the field's place, so the suggestion list and the "+" menu close as it starts (design-reference:
+ // startMic calls closePlus and closePop).
+ const dictation=useComposerDictation({target:voice,insert:insertAtCaret,field:()=>field.current?.focus(),onStart:()=>{ setList(null); setPlusOpen(false); }});
  const pathname=usePathname()??''; const search=useSearchParams()?.toString()??'';
  // design-reference: the file input's change handler, with the check the route makes again: nothing is added that could
  // not be sent, and the line says why.
@@ -172,6 +177,7 @@ export function MessageBox({placeholder,label,send,stop,focus=false,call,model,r
  // An inert box (behind the phone drawer) leaves the request to the frame, which focuses it once the drawer has closed.
  useEffect(()=>{ const take=()=>{ if(field.current&&!field.current.closest('[inert]')&&takeComposerFocus(search?`${pathname}?${search}`:pathname)) field.current.focus(); }; take(); return onComposerFocus(take); },[pathname,search]);
  async function submit() {
+  if(dictation.recording) dictation.finish(false);
   if(!canSend||busy) return;
   const problem=conversationFilesProblem(files,text);
   if(problem) { setError(refusalOf(problem)); return; }
@@ -186,19 +192,22 @@ export function MessageBox({placeholder,label,send,stop,focus=false,call,model,r
   setBusy(false);
   if(failure) setError(failure);
  }
- return <div className="composer">
+ return <div className={`composer${dictation.recording?' is-rec':''}`}>
   {files.length>0&&<div className="composer__files">{files.map((file,index)=><span key={`${file.name}:${index}`} className="file-chip"><ShellIcon name="clip"/><bdi dir="auto">{file.name}</bdi><button type="button" onClick={()=>remove(index)} aria-label={t('attachRemove',file.name)}><ShellIcon name="x"/></button></span>)}</div>}
   <input ref={picker} type="file" className="composer__file-input" accept={imageTypes.join(',')} multiple hidden tabIndex={-1} aria-hidden="true" onChange={chose}/>
-  {list&&<MentionPop listId={listId} label={t('mentionSuggestions')} items={list.items} index={list.index} pick={pickEntry}/>}
+  {list&&!dictation.recording&&<MentionPop listId={listId} label={t('mentionSuggestions')} items={list.items} index={list.index} pick={pickEntry}/>}
   <div className="composer__row">
-   <PlusMenu open={plusOpen} setOpen={next=>{ if(next) setList(null); setPlusOpen(next); }} callable={callable} channel={!!call} model={model} attach={attach} pickFile={()=>picker.current?.click()} insert={insertAtCaret} field={()=>field.current?.focus()} fail={setError}/>
-   <textarea ref={field} className="composer__input" dir="auto" rows={1} autoFocus={focus} readOnly={busy} aria-busy={busy} aria-label={label??t('conversationMessage')} placeholder={placeholder} value={text} aria-autocomplete="list" aria-expanded={!!list} aria-activedescendant={list?`${listId}-${list.index}`:undefined}
+   {dictation.recording?dictation.cancel:<PlusMenu open={plusOpen} setOpen={next=>{ if(next) setList(null); setPlusOpen(next); }} callable={callable} channel={!!call} model={model} attach={attach} pickFile={()=>picker.current?.click()} insert={insertAtCaret} field={()=>field.current?.focus()} fail={setError}/>}
+   <textarea ref={field} className="composer__input" dir="auto" rows={1} autoFocus={focus} readOnly={busy} aria-busy={busy} aria-label={label??t('conversationMessage')} placeholder={dictation.writing?t('chatDictationWriting'):placeholder} value={text} aria-autocomplete="list" aria-expanded={!!list&&!dictation.recording} aria-activedescendant={list&&!dictation.recording?`${listId}-${list.index}`:undefined}
     onChange={event=>{ const value=event.target.value; setText(value); setKey(newId()); updateList(value,event.target.selectionStart??value.length); }} onKeyDown={typeKeys}/>
-   <button type="button" className="composer__btn composer__mic" aria-disabled="true" aria-label={`${t('chatDictation')} · ${t('soon')}`} title={t('soon')}><ShellIcon name="mic"/></button>
+   {dictation.recording&&dictation.wave}
+   {dictation.recording&&dictation.clock}
+   {voice?dictation.button:<button type="button" className="composer__btn composer__mic" aria-disabled="true" aria-label={`${t('chatDictation')} · ${t('soon')}`} title={t('soon')}><ShellIcon name="mic"/></button>}
    {stop&&!canSend?<button type="button" className="composer__send is-stop" aria-label={stop.label} title={stop.label} disabled={busy} onClick={()=>void halt(stop)}><svg className="gw-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/></svg></button>
    :<button type="button" className="composer__send" aria-label={t('conversationSend')} disabled={!canSend||busy} onClick={()=>void submit()}><ShellIcon name="send"/></button>}
   </div>
   {error&&<p role="alert" className="composer-error">{t(error,maxFiles)}</p>}
+  {dictation.error&&<p role="alert" className="composer-error">{t(dictation.error)}</p>}
  </div>;
 }
 
