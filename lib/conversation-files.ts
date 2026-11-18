@@ -7,7 +7,7 @@ const bucket='creatives';
 export type ChosenImage={content_type:string,base64:string};
 
 // Where one image of a message is stored: the Company's folder for one Conversation, by its send key.
-export const conversationFilePath=(company:string,conversation:string,messageKey:string,index:number)=>`${company}/conversations/${conversation}/${messageKey}-${index}`;
+const conversationFilePath=(company:string,conversation:string,messageKey:string,index:number)=>`${company}/conversations/${conversation}/${messageKey}-${index}`;
 
 // The images as the Engine reads them: the file's own type and its bytes in base64 for the image part of the Run. Read
 // before the Agent is asked, so a retry of the same send sends the same body.

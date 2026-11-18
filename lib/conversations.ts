@@ -96,7 +96,7 @@ export function stepsOfReplies(messages:{author:string,run_id:string,created_at:
  }):[];
 }
 // A file a person sent with a message (#155; design-reference: filesHTML): its name, and the id its own route serves it by.
-export type MessageFile={id:number,name:string};
+type MessageFile={id:number,name:string};
 export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided'|'boarded'|'asked'|'answer',to?:string,failed?:boolean,model_refused?:boolean,cards?:LeadCard[],saved?:SavedRule[],decided?:Decision,steps?:RunSteps,files?:MessageFile[]};
 type StoredMessage=ConversationMessage&{run_id:string,hand_card?:number|null};
 export const messageColumns='id,author,author_name,body,run_id,hand_card,created_at';

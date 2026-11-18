@@ -2,11 +2,10 @@
 -- Conversations whose Company profile was not ready yet (claim_conversation_turn leaves them waiting) could keep a ready
 -- one off the worker's page for good. This one orders by Conversation id behind a cursor, so the worker reads every page.
 --
--- Additive: the previous app version's `queued_conversations(just)` call still answers, because `after` defaults, and
--- the result is still the one `conversation` column. Only the service role may run it.
+-- Additive: the one-argument `queued_conversations(just)` stays as it was for the previous app version; this overload
+-- takes both arguments with no defaults, so a call names one of the two without doubt. Only the service role may run it.
 
-drop function public.queued_conversations(uuid);
-create function public.queued_conversations(just uuid default null, after uuid default null)
+create function public.queued_conversations(just uuid, after uuid)
 returns table(conversation uuid) language sql stable security definer set search_path='' as $$
  select distinct q.conversation_id from public.conversation_queued_turns q
  where q.started_at is null and q.failed_at is null and (just is null or q.conversation_id=just)
