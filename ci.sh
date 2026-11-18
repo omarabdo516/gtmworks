@@ -123,6 +123,10 @@ case "${1:-check}" in
   DB_LEDGER="$PWD/$dir/database.jsonl" npm run test:db
   ;;
  integration)
+  # Any further arguments go to the browser suite; CI passes --shard=<i>/3 (#335), and the proxy suite runs in shard 1 only.
+  shift
+  proxy=true
+  [[ " $* " == *' --shard='* && " $* " != *' --shard=1/'* ]] && proxy=false
   load_images
   if [[ "${CI:-}" == "true" ]]; then
     npm ci
@@ -140,11 +144,11 @@ case "${1:-check}" in
   build_pid=$!
   # The production-shaped stack (proxy, https, public-looking host) runs on the database exactly as the seed builds it and
   # changes it (an enrolled authenticator, an invited member), so the seed is rebuilt before the main browser suite.
-  PLAYWRIGHT_JSON_OUTPUT_FILE="$dir/proxy.json" npm run test:e2e:proxy
+  if [[ $proxy == true ]]; then PLAYWRIGHT_JSON_OUTPUT_FILE="$dir/proxy.json" npm run test:e2e:proxy; fi
   bash scripts/local-db.sh
   wait "$build_pid" || { cat playwright-report/build.log >&2; echo 'the browser suite build failed' >&2; exit 1; }
   # The measured budgets run on their own (`ci.sh visual`), on a GitHub-hosted runner.
-  GTMWORKS_WEB_PREBUILT=true GTMWORKS_TEST_LANES=$lanes GTMWORKS_HOSTED_ELSEWHERE=true PLAYWRIGHT_JSON_OUTPUT_FILE="$dir/e2e.json" npm run test:e2e
+  GTMWORKS_WEB_PREBUILT=true GTMWORKS_TEST_LANES=$lanes GTMWORKS_HOSTED_ELSEWHERE=true PLAYWRIGHT_JSON_OUTPUT_FILE="$dir/e2e.json" npm run test:e2e -- "$@"
   ;;
  images)
   # Every Supabase image the jobs use, pulled once and archived for the Actions cache (the supabase-images job, #259).

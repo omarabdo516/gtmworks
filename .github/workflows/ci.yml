@@ -354,13 +354,24 @@ jobs:
             gh issue create -R "$GITHUB_REPOSITORY" --label visual-regression --title "$title" --body "$body"
           fi
 
-  # The rest of the whole-app browser suite: the production-shaped proxy suite in the image and the journeys.
+  # The rest of the whole-app browser suite: the production-shaped proxy suite in the image and the journeys, in 3
+  # shards at the same time (Playwright's --shard, #335), each on a runner and stacks of its own. The proxy suite runs in
+  # shard 1 only (ci.sh).
   integration:
     needs: [changes]
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.integration != 'false') }}
     runs-on: ubuntu-latest
-    # main's browser suite already took 24 of 25 minutes (run 43398274074); the board, settings, log and numbers specs
-    # add to it.
+    strategy:
+      # Every shard runs to the end, so one red shard still shows the others' failures.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    # Each shard names its own pass, so check reads all three and not only the matrix's one result (scripts/ci-verdict.mjs).
+    outputs:
+      shard1: ${{ steps.passed.outputs.shard1 }}
+      shard2: ${{ steps.passed.outputs.shard2 }}
+      shard3: ${{ steps.passed.outputs.shard3 }}
+    # main's browser suite already took 24 of 25 minutes on one runner (run 43398274074); a shard takes about a third.
     timeout-minutes: 40
     permissions:
       contents: read
@@ -400,13 +411,16 @@ jobs:
           # One browser test lane per worker, each on a whole stack of its own (tests/lane.mjs, #69).
           GTMWORKS_TEST_LANES: "4"
           SUPABASE_IMAGES_ARCHIVE: ${{ runner.temp }}/supabase-images/images.tar
-        run: ./ci.sh integration
+        run: ./ci.sh integration --shard=${{ matrix.shard }}/3
+      - name: this shard passed
+        id: passed
+        run: echo "shard${{ matrix.shard }}=success" >> "$GITHUB_OUTPUT"
       # The screenshots the journeys write (card and phone checks) are uploaded so a review can see them.
       - name: upload journey screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: journey-screenshots
+          name: journey-screenshots-${{ matrix.shard }}
           path: test-results/screenshots/
           if-no-files-found: ignore
           retention-days: 14
@@ -415,7 +429,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.shard }}
           path: playwright-report/html/
           if-no-files-found: ignore
           retention-days: 30
@@ -425,7 +439,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: lane-server-logs
+          name: lane-server-logs-${{ matrix.shard }}
           path: playwright-report/*.log
           if-no-files-found: ignore
           retention-days: 14
@@ -833,6 +847,7 @@ jobs:
           DATABASE_RESULT: ${{ needs.database.result }}
           INTEGRATION_RUN: ${{ needs.changes.outputs.integration }}
           INTEGRATION_RESULT: ${{ needs.integration.result }}
+          INTEGRATION_SHARDS: ${{ needs.integration.outputs.shard1 }},${{ needs.integration.outputs.shard2 }},${{ needs.integration.outputs.shard3 }}
           INSTALL_RUN: ${{ needs.changes.outputs.install }}
           INSTALL_RESULT: ${{ needs.install.result }}
         run: node scripts/ci-verdict.mjs

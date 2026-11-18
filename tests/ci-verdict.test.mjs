@@ -14,6 +14,7 @@ const fastSteps = 'discovery=success docs=success i18n=success openapi=success l
 const green = {
   CHANGES_RESULT: 'success', FAST_RESULT: 'success', FAST_STEPS: fastSteps, COMPONENTS_RUN: 'true',
   ...Object.fromEntries(stages.flatMap(stage => [[`${stage}_RUN`, 'true'], [`${stage}_RESULT`, 'success']])),
+  INTEGRATION_SHARDS: 'success,success,success',
 };
 const run = overrides => {
   const env = { PATH: process.env.PATH, ...green, ...overrides };
@@ -45,6 +46,49 @@ for (const stage of stages) {
     }
   });
 }
+
+// The browser suite runs in 3 shards (#335): each names its own pass, and an empty slot is a shard that failed, was
+// cancelled or never ran. GitHub's one result for the matrix is read too, so either one alone turns check red.
+test('integration is green only when all three shards passed', () => {
+  assert.equal(verdict({ INTEGRATION_SHARDS: 'success,success,success' }), 0);
+  for (const result of ['failure', 'cancelled']) {
+    for (const shards of [',success,success', 'success,,success', 'success,success,']) {
+      assert.equal(verdict({ INTEGRATION_RESULT: result, INTEGRATION_SHARDS: shards }), 1, `${result} ${shards}`);
+      assert.equal(verdict({ INTEGRATION_SHARDS: shards }), 1, `matrix success but ${shards}`);
+    }
+  }
+  for (const shards of ['', ',,', undefined]) assert.equal(verdict({ INTEGRATION_SHARDS: shards }), 1, String(shards));
+  assert.equal(verdict({ INTEGRATION_RUN: 'false', INTEGRATION_RESULT: 'skipped', INTEGRATION_SHARDS: ',,' }), 0);
+  assert.match(run({ INTEGRATION_SHARDS: 'success,,success' }).stdout, /^integration shards: 1=success 2=none 3=success$/m);
+});
+
+test('the integration job runs as 3 shards, each naming its pass and uploading its own artifacts, and check reads them all (#335)', async () => {
+  const { load } = await import('js-yaml');
+  const { readFileSync } = await import('node:fs');
+  const { jobs } = load(readFileSync('.github/workflows/ci.yml', 'utf8'));
+  const { integration, check } = jobs;
+  assert.deepEqual(integration.strategy, { 'fail-fast': false, matrix: { shard: [1, 2, 3] } });
+  const steps = integration.steps;
+  const suite = steps.findIndex(step => step.name === 'integration');
+  assert.equal(steps[suite].run, './ci.sh integration --shard=${{ matrix.shard }}/3');
+  const passed = steps[suite + 1];
+  assert.equal(passed.id, 'passed');
+  assert.equal(passed.if, undefined, 'written only when the shard passed');
+  assert.equal(passed.run, 'echo "shard${{ matrix.shard }}=success" >> "$GITHUB_OUTPUT"');
+  const shards = integration.strategy.matrix.shard;
+  assert.deepEqual(integration.outputs, Object.fromEntries(shards.map(n => [`shard${n}`, `\${{ steps.passed.outputs.shard${n} }}`])));
+  const env = check.steps.at(-1).env;
+  assert.equal(env.INTEGRATION_SHARDS, shards.map(n => `\${{ needs.integration.outputs.shard${n} }}`).join(','));
+  assert.equal(env.INTEGRATION_RESULT, '${{ needs.integration.result }}');
+  const uploads = steps.filter(step => step.uses?.startsWith('actions/upload-artifact@'));
+  assert.ok(uploads.length >= 3);
+  for (const upload of uploads) assert.match(upload.with.name, /-\$\{\{ matrix\.shard \}\}$/, upload.with.name);
+  // The proxy suite runs once, in shard 1; every argument after `integration` reaches the browser suite.
+  const ci = readFileSync('ci.sh', 'utf8');
+  assert.match(ci, /\[\[ " \$\* " == \*' --shard='\* && " \$\* " != \*' --shard=1\/'\* \]\] && proxy=false/);
+  assert.match(ci, /if \[\[ \$proxy == true \]\]; then PLAYWRIGHT_JSON_OUTPUT_FILE="\$dir\/proxy\.json" npm run test:e2e:proxy; fi/);
+  assert.match(ci, /npm run test:e2e -- "\$@"\n/);
+});
 
 test('check passes with no compared screens at all: a pull request never runs them (#257)', () => {
   assert.equal(verdict({ VISUAL_RUN: undefined, VISUAL_RESULT: undefined, LANE_RUN: undefined, LANE_RESULT: undefined }), 0);
