@@ -78,15 +78,19 @@ test('a sign-in still waiting at fifteen minutes settles then: the last wait and
  const fetch = vi.fn((_url: string, init: RequestInit) => {
   const { action } = JSON.parse(String(init.body));
   if (action === 'connect') return answer({ url: 'https://vendor.example/sign-in' });
-  // Waiting until the last poll, which never answers.
-  if (action === 'poll') return Date.now() < 15 * 60 * 1000 - 1000 ? answer({ status: 'waiting' }) : stalled();
+  // Waiting until a poll that starts with 20 s left, under its own 30 s deadline, which never answers: it is cut to the
+  // time left, so the caller settles at fifteen minutes and not ten seconds later.
+  if (action === 'poll') return Date.now() < 15 * 60 * 1000 - 20_000 ? answer({ status: 'waiting' }) : stalled();
   return answer({ status: 'cancelled' });
  });
  vi.setSystemTime(0);
  vi.stubGlobal('fetch', fetch);
  let settled = false;
  const outcome = signInToApp(given).finally(() => { settled = true; });
- await vi.advanceTimersByTimeAsync(15 * 60 * 1000 + 100);
+ await vi.advanceTimersByTimeAsync(15 * 60 * 1000 - 20_000);
+ expect(settled).toBe(false);
+ expect(actions(fetch.mock.calls).at(-1)).toBe('poll');
+ await vi.advanceTimersByTimeAsync(20_100);
  expect(settled).toBe(true);
  await expect(outcome).resolves.toEqual({ error: 'connectFailed' });
  expect(opened.close).toHaveBeenCalled();
