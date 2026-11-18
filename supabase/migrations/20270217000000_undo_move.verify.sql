@@ -22,5 +22,7 @@ select json_build_object(
  'undo_refuses_waiting',position('waiting is not placed by hand' in pg_get_functiondef('public.undo_work_card_move(uuid,bigint)'::regprocedure))>0,
  'undo_checks_after_review',position('can_manage_company' in pg_get_functiondef('public.undo_work_card_move(uuid,bigint)'::regprocedure))>0,
  'one_place_per_move',position('work.place_exact' in pg_get_functiondef('public.place_work_card(uuid,bigint,text,bigint,text)'::regprocedure))>0,
- 'moved_back_logged',position('''card_moved_back''' in pg_get_functiondef('public.work_audit()'::regprocedure))>0
+ 'moved_back_logged',position('''card_moved_back''' in pg_get_functiondef('public.work_audit()'::regprocedure))>0,
+ 'moved_back_names_columns',position('old_column' in pg_get_functiondef('public.work_audit()'::regprocedure))>0
+  and position('new_column' in pg_get_functiondef('public.work_audit()'::regprocedure))>0
 );

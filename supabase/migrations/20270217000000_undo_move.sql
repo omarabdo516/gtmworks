@@ -141,7 +141,7 @@ revoke all on function public.undo_work_card_move(uuid,bigint) from public,anon,
 grant execute on function public.undo_work_card_move(uuid,bigint) to authenticated;
 
 -- The way back is one row of its own, "moved the card back" (design-reference: undoMove's log line), with who made it and
--- the stage it left and returned to (20270215000000_add_idea's work_audit, unchanged else).
+-- the board column it left and returned to (20270215000000_add_idea's work_audit, unchanged else).
 create or replace function public.work_audit() returns trigger language plpgsql security definer set search_path='' as $$
 declare rowdata jsonb; previous jsonb; cid bigint; company uuid; field text; ev text; details jsonb; action_name text; begin
  rowdata=case when tg_op='DELETE' then to_jsonb(old) else to_jsonb(new) end;
@@ -152,7 +152,9 @@ declare rowdata jsonb; previous jsonb; cid bigint; company uuid; field text; ev 
   foreach field in array array['title','stage_id','offering','segment','hook','channel','format','go_live','goal','caption','next_actor','project_id'] loop
    if rowdata->field is distinct from previous->field then
     details=jsonb_build_object('field',field,'old',previous->field,'new',rowdata->field);
-    if field='stage_id' then details=details || jsonb_build_object('old_name',(select name from public.work_stages where id=(previous->>'stage_id')::bigint),'new_name',(select name from public.work_stages where id=(rowdata->>'stage_id')::bigint)); end if;
+    if field='stage_id' then details=details || jsonb_build_object('old_name',(select name from public.work_stages where id=(previous->>'stage_id')::bigint),'new_name',(select name from public.work_stages where id=(rowdata->>'stage_id')::bigint));
+     -- The way back (#168) is told by the board's columns, not the stages: it is the board's own "Undo".
+     if coalesce(current_setting('work.undo',true),'')='yes' then details=details || jsonb_build_object('old_column',(select board_column from public.work_stages where id=(previous->>'stage_id')::bigint),'new_column',(select board_column from public.work_stages where id=(rowdata->>'stage_id')::bigint)); end if; end if;
     if field='project_id' then details=details || jsonb_build_object('old_name',(select name from public.work_projects where id=(previous->>'project_id')::bigint),'new_name',(select name from public.work_projects where id=(rowdata->>'project_id')::bigint)); end if;
     insert into public.work_activity(company_id,card_id,actor_id,action,details,evidence) values(company,cid,auth.uid(),
      case when field='stage_id' and coalesce(current_setting('work.undo',true),'')='yes' then 'card_moved_back' else 'card_changed' end,details,ev);

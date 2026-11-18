@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(45);
+select plan(46);
 -- A Company of its own, with the ten stages a new one receives (ADR 0013): «كتابة» and «تصميم ومونتاج» are both In
 -- progress, and «بريف جاهز» is Planned, so a Card's stage and its column are told apart.
 insert into public.companies(id,slug,name) values ('10000000-0000-0000-0000-000000000097','undo-move','Undo move');
@@ -35,6 +35,8 @@ select is((select count(*)::int from public.work_activity a where a.card_id=(sel
  and a.actor_id='20000000-0000-0000-0000-000000000001' and a.details->>'old_name'='كتابة' and a.details->>'new_name'='بريف جاهز'),1,'the move has one row, naming who moved it and both stages');
 select is((select count(*)::int from public.work_activity a where a.card_id=(select id from public.work_cards where title='Undo A') and a.action='card_moved_back'
  and a.actor_id='20000000-0000-0000-0000-000000000001' and a.details->>'old_name'='بريف جاهز' and a.details->>'new_name'='كتابة'),1,'the way back has one row of its own, naming who made it and both stages');
+select is((select count(*)::int from public.work_activity a where a.card_id=(select id from public.work_cards where title='Undo A') and a.action='card_moved_back'
+ and a.details->>'old_column'='planned' and a.details->>'new_column'='progress'),1,'and the two board columns the Card left and returned to');
 select is((select count(*)::int from public.work_activity a where a.card_id=(select id from public.work_cards where title='Undo A') and a.action in ('card_changed','card_moved_back')),2,'two rows in all: the move and the way back');
 select is((select count(*)::int from public.work_activity a where a.card_id=(select id from public.work_cards where title='Undo A') and a.details->>'field'='board_order'),0,'a place inside one column is still no log row');
 

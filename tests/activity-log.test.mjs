@@ -14,9 +14,9 @@ test('Card, Member and Agent rows say who changed what', () => {
  // An idea added in the Ideas column (#188) says so, in both languages.
  const idea = describeEntry({ subject: 'card', action: 'idea_added', details: {} });
  assert.deepEqual([idea.act, idea.to, i18n('en').t('logActIdeaAdded'), i18n('ar').t('logActIdeaAdded')], [['logActIdeaAdded'], { key: 'boardColIdeas' }, 'added an idea', 'ضاف فكرة'], 'with the column it landed in');
- // "Undo" on a move (#168) is a row of its own, naming both stages as the move does.
- const back = describeEntry({ subject: 'card', action: 'card_moved_back', details: { old_name: 'بريف جاهز', new_name: 'كتابة' } });
- assert.deepEqual([back.act, back.from, back.to], [['logActMovedBack'], { text: 'بريف جاهز' }, { text: 'كتابة' }]);
+ // "Undo" on a move (#168) is a row of its own, naming the two board columns the Card left and returned to.
+ const back = describeEntry({ subject: 'card', action: 'card_moved_back', details: { old_column: 'planned', new_column: 'progress' } });
+ assert.deepEqual([back.act, back.from, back.to], [['logActMovedBack'], { key: 'boardColPlanned' }, { key: 'boardColProgress' }]);
  assert.deepEqual(['en', 'ar'].map(language => i18n(language).t('logActMovedBack')), ['moved the card back', 'رجّع البطاقة مكانها']);
  const handed = describeEntry({ subject: 'card', action: 'card_changed', details: { field: 'next_actor', old: omar, new: writer } }, { name: id => ({ [omar]: 'عمر', [writer]: 'وكيل المحتوى' })[id] });
  assert.deepEqual([handed.act, handed.from, handed.to], [['logActHandedOver'], { text: 'عمر' }, { text: 'وكيل المحتوى' }]);

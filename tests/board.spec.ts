@@ -492,7 +492,7 @@ test('a move to another column is offered as Undo, which puts the Card back in t
  // The log keeps one row for the move and one for the way back, each naming who and both stages.
  await page.goto(`/c/rs-learning/work/board/${a}`);
  await expect(page.locator('.detail-row').filter({hasText:'Moved the card from كتابة to بريف جاهز'})).toHaveCount(1);
- await expect(page.locator('.detail-row').filter({hasText:'Moved the card back from بريف جاهز to كتابة'})).toHaveCount(1);
+ await expect(page.locator('.detail-row').filter({hasText:'Moved the card back from Planned to In progress'})).toHaveCount(1);
  // The keyboard's move is told with "Undo" too, and its Undo brings the Card back again.
  await page.goto('/c/rs-learning/work/board');
  await page.locator(`.kcard[data-card-id="${a}"] a`).focus();
