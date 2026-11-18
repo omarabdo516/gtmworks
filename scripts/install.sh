@@ -8,26 +8,18 @@ main() {
 release_image=
 if [ -n "$release_image" ]; then cd "$(dirname "$0")"; else cd "$(dirname "$0")/.."; fi
 umask 077
-# One install at a time. The lock names its owner (this boot, the process and the process's start time), so a lock left
-# by an install that stopped (a power cut, a killed process) is taken over once its owner is shown gone; a lock whose
-# owner cannot be shown gone is left alone.
-lock_owner() {
-  printf '%s %s %s\n' "$(cat /proc/sys/kernel/random/boot_id 2> /dev/null)" "$1" \
-    "$(sed 's/^.*) //' "/proc/$1/stat" 2> /dev/null | cut -d' ' -f20)"
+# One install at a time, held on a file descriptor of .install.lock: the kernel releases it when this process ends,
+# however it ends, so a lock file left by an install that was killed is held by no one and never blocks the next run,
+# and an install that is still running keeps it, so it is never taken over. `.install-lock/` is this run's scratch
+# folder, made under the lock and removed on exit; the lock file itself is never removed, so every run opens the same one.
+command -v flock > /dev/null 2>&1 || {
+  echo 'The installer needs flock to run one install at a time. It comes with util-linux, which nearly every Linux install has; install it, then run this again.' >&2
+  exit 1
 }
-if ! mkdir .install-lock 2> /dev/null; then
-  boot= pid= start=
-  if [ -f .install-lock/owner ]; then read -r boot pid start < .install-lock/owner || true; fi
-  case "$pid" in ''|*[!0-9]*) pid=;; esac
-  if [ -n "$boot" ] && [ -n "$pid" ] && [ -n "$start" ] && [ "$(lock_owner "$pid")" != "$boot $pid $start" ]; then
-    echo "Taking over .install-lock from an install that stopped (process $pid is gone)." >&2
-    rm -rf .install-lock
-    mkdir .install-lock || { echo 'Another install is running (or remove stale .install-lock).' >&2; exit 1; }
-  else
-    echo 'Another install is running (or remove stale .install-lock).' >&2; exit 1
-  fi
-fi
-lock_owner "$$" > .install-lock/owner
+exec 9>.install.lock
+flock -n 9 || { echo 'Another install is running: wait for it to finish, then run this again.' >&2; exit 1; }
+rm -rf .install-lock
+mkdir .install-lock
 resume=no
 worker_stopped=no
 cleanup() {

@@ -45,7 +45,8 @@ by hand from its two release files), the line checks the release against the dat
 first, and moving to another release is an update, backup first.
 
 Requirements: Docker Engine with Docker Compose v2.20+ (`docker compose`), POSIX
-`sh`, `curl`, internet access to pull images, 2 CPU cores, **8 GB RAM** and **20 GB
+`sh`, `curl`, `flock` (from util-linux, present on nearly every Linux install),
+internet access to pull images, 2 CPU cores, **8 GB RAM** and **20 GB
 free disk**, plus room for your data. No host Node.js, Git, Supabase CLI, cloud
 project or external account is required. These are initial sizing
 recommendations, not measured capacity guarantees.
@@ -186,9 +187,13 @@ stays on the new release: `gtmworks install` finishes it. The same holds when th
 machine stops in the middle of an update: the two files of the release it was
 moving to are saved and that release recorded first (`.gtmworks-pending.d`,
 `.gtmworks-pending`; a main build by its digest), and `gtmworks install` finishes
-the update from them. An install that stopped leaves `.install-lock` behind, with
-the process that held it; the next run takes the lock over once that process is
-gone, and leaves a lock it cannot show abandoned. An install
+the update from them. One install runs at a time: install.sh holds a lock on
+`.install.lock` that the kernel drops when its process ends, so an install that
+was killed never blocks the next run, and one that is still running is never
+taken over. `gtmworks update`, `gtmworks install` and `gtmworks restore` hold one
+lock for the whole run, kept beside the record of the install folder
+(`~/.local/state/gtmworks/update.lock`): a second one on the same machine stops
+and says another update is running. An install
 on the `main` channel updates to the newest main build; the update keeps the two
 files of the build it ran (`.gtmworks-main/`), so its go-back command names that
 exact build, `--version main@sha256:<digest>`. `gtmworks update` does not replace
