@@ -51,8 +51,8 @@ export function MessageBox({placeholder,label,send,stop,focus=false,call,model,r
  useEffect(()=>{ const typed=field.current?.value; if(typed) setText(current=>current||typed); },[]);
  const caret=useRef<number|null>(null);
  // A waiting message the Engine refused for its model comes back to an empty box with the model line, as a sent one stays.
- const refusedKey=refused?.key; const refusedText=refused?.text;
- useEffect(()=>{ if(refusedKey===undefined) return; setText(current=>current||(refusedText??'')); setError('conversationModelRefused'); },[refusedKey,refusedText]);
+ const [shownRefusal,setShownRefusal]=useState<string>();
+ if(refused&&refused.key!==shownRefusal) { setShownRefusal(refused.key); setText(current=>current||refused.text); setError('conversationModelRefused'); }
  useImperativeHandle(ref,()=>({insert(sentence) {
   if(busy) return;
   const next=text.trim()?`${text.trimEnd()}\n${sentence}`:sentence;
