@@ -21,9 +21,12 @@ test('a changed publishing date reads as the day it moved to, and a changed Offe
  const screen = await render(<>
   {row({ action: 'card_changed', details: { field: 'go_live', old: '2032-11-10T12:00:00+00:00', new: '2032-11-12T12:00:00+00:00' } })}
   {row({ id: 2, action: 'card_changed', details: { field: 'offering', old: '', new: 'عرض للاختبار' } })}
+  {/* "Undo" on a move (#168) reads as the way back, naming both stages. */}
+  {row({ id: 3, action: 'card_moved_back', details: { old_name: 'بريف جاهز', new_name: 'كتابة' } })}
  </>);
  await expect.element(screen.getByText('Updated publishing date: November 12', { exact: true })).toBeVisible();
  await expect.element(screen.getByText('Updated Offering: عرض للاختبار', { exact: true })).toBeVisible();
+ await expect.element(screen.getByText('Moved the card back from بريف جاهز to كتابة', { exact: true })).toBeVisible();
 });
 
 // The server runs in UTC; the viewer is in Cairo, two hours ahead in November, where 22:30 UTC is already the next day.
