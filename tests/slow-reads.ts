@@ -72,6 +72,21 @@ export async function holdReads(table: string) {
   };
 }
 
+// A page that reports no link as seen, so no link prefetches: Next prefetches a link it sees whole, and a click then
+// waits for that prefetch and draws the page whole, never its placeholder (#305). A link the person activates still
+// opens, so the page's frame streams while its own reads wait. `hydrated` waits for the shell's fetch tracking
+// (lib/link.tsx, app/layout.tsx), so the activation is the router's and not the browser's own document load.
+export async function unprefetched(page: Page) {
+  await page.addInitScript(() => {
+    const native = window as unknown as { nativeFetch: typeof fetch };
+    native.nativeFetch = window.fetch;
+    (window as unknown as { IntersectionObserver: unknown }).IntersectionObserver = class {
+      observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    };
+  });
+  return { hydrated: () => page.waitForFunction(() => window.fetch !== (window as unknown as { nativeFetch?: typeof fetch }).nativeFetch) };
+}
+
 // Holds the page's own requests for the pages `matches` names until `letGo`. Every link prefetches its page whole and
 // keeps it for five minutes (lib/link.tsx, next.config.mjs), so a page opened from a link the browser has already
 // seen shows what was read then. Held, the prefetch reaches the server only when the test lets it go.
