@@ -25,7 +25,7 @@ export default function NewChannelDialog({slug,company,person,close,opener}:{slu
  const router=useRouter(); const field=useRef<HTMLInputElement>(null); const key=useRef(newId());
  const [choices,setChoices]=useState<Choices|null>(null);
  const [name,setName]=useState(''); const [error,setError]=useState<NameError>('');
- const [people,setPeople]=useState<string[]>([]); const [agents,setAgents]=useState<string[]>([]);
+ const [people,setPeople]=useState<string[]>([]); const [invitees,setInvitees]=useState<string[]>([]); const [agents,setAgents]=useState<string[]>([]);
  const [saving,setSaving]=useState(false);
  useEffect(()=>{ let live=true; void channelChoices(company).then(found=>{ if(live) setChoices(found); }); return ()=>{live=false;}; },[company]);
  const toggle=(list:string[],id:string)=>list.includes(id)?list.filter(item=>item!==id):[...list,id];
@@ -35,7 +35,7 @@ export default function NewChannelDialog({slug,company,person,close,opener}:{slu
   if(!bare(name)) { setError('channelNameMissing'); field.current?.focus(); return; }
   setSaving(true); setError('');
   let made:Awaited<ReturnType<typeof createChannel>>;
-  try { made=await createChannel(company,{key:key.current,name,people,agents}); }
+  try { made=await createChannel(company,{key:key.current,name,people,agents,invitees}); }
   catch { setSaving(false); setError('channelCreateFailed'); return; }
   if('channel' in made) { close(); router.push(`/c/${slug}/channels/${made.channel}`); return; }
   setSaving(false);
@@ -43,7 +43,7 @@ export default function NewChannelDialog({slug,company,person,close,opener}:{slu
   if(refused==='channelNameTaken'||refused==='channelNameMissing') { setError(refused); field.current?.focus(); }
   else setError('channelCreateFailed');
  }
- const chosen=new Set([person,...people]);
+ const chosen=new Set([person,...people,...invitees]);
  const pool=choices?.agents||[];
  const [before,after]=own.channelCreateTip.split('@{0}');
  return <Dialog open onOpenChange={next=>{if(!next) close();}}>
@@ -66,12 +66,12 @@ export default function NewChannelDialog({slug,company,person,close,opener}:{slu
       <span className="set-hint" id="tm-name-hint">{c('channelNameShows',bare(name)||c('channelNameSample'))}</span></div>
      <div className="set-field"><span className="set-label" id="ch-pick-l">{t('members')} <span className="num">{chosen.size}</span></span>
       <div className="panel-card" role="group" aria-labelledby="ch-pick-l">{(choices?.people||[]).map(member=>{
-       const self=member.person===person; const on=chosen.has(member.person);
-       return <button key={member.person} type="button" className="panel-row tm-pick" role="checkbox" id={`ch-pick-${member.person}`} aria-checked={on} aria-disabled={self||undefined}
-        onClick={()=>{if(!self) setPeople(list=>toggle(list,member.person));}}>
+       const id=member.person??member.invitation??member.name; const self=member.person===person; const on=self||chosen.has(id);
+       return <button key={id} type="button" className="panel-row tm-pick" role="checkbox" id={`ch-pick-${id}`} aria-checked={on} aria-disabled={self||undefined}
+        onClick={()=>{if(self) return; if(member.person) setPeople(list=>toggle(list,member.person!)); else setInvitees(list=>toggle(list,member.invitation!));}}>
         <Initial name={member.name}/>
         <span className="panel-row__text"><span className="panel-row__t"><bdi>{member.name}</bdi>{self&&<> <span className="ch-you">{c('channelYou')}</span></>}</span>
-         <span className="panel-row__d">{self?c('channelCreatorIn'):<>{t(member.role)}{member.role==='viewer'&&` · ${c('channelWillOnlyRead')}`}</>}</span></span>
+         <span className="panel-row__d">{self?c('channelCreatorIn'):<>{t(member.role)}{member.email&&<> · <bdi dir="ltr">{member.email}</bdi></>}{member.role==='viewer'&&` · ${c('channelWillOnlyRead')}`}</>}</span></span>
         <span className="tm-check" aria-hidden="true">{on&&<ShellIcon name="check"/>}</span></button>;
       })}</div></div>
      <div className="set-field"><span className="set-label" id="tm-pick-l">{c('channelAgentsIn')} <span className="num">{agents.length}</span></span>

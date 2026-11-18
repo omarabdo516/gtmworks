@@ -16,13 +16,14 @@ const { channelRecord } = await import('../lib/channels.ts');
 
 // The channel's reads as the page makes them. `runs` are the channel's closed Runs, newest first; `open` are the Runs
 // still open, and `states` is the one agent_states call. `states` rows carry more than the record may keep: the state is
-// all a channel's reader gets.
-function database({ agents, runs = [], open = [], states = [], messages = [] }) {
+// all a channel's reader gets. `notes` are the quiet lines the channel got, and `members` what channel_members answered.
+function database({ agents, runs = [], open = [], states = [], messages = [], notes = [], members = [{ person: 'p-1', name: 'Omar', role: 'owner', invitation: null, email: null }, { person: 'p-2', name: 'Sara Adel', role: 'viewer', invitation: null, email: null }] }) {
  const rows = select => String(select).includes('message_id') ? runs : select === 'agent_id' ? open : [];
  const chain = table => {
   const data = table === 'channels' ? { id: 'ch-1', company_id: 'co-1', kind: 'team', name: 'Launch week' }
    : table === 'channel_runs' ? rows(selectOf.get(table))
    : table === 'channel_messages' ? messages
+   : table === 'channel_notes' ? notes
    : [];
   const link = {
    select: () => link, eq: () => link, is: () => link, gte: () => link, order: () => link, limit: () => link,
@@ -33,7 +34,7 @@ function database({ agents, runs = [], open = [], states = [], messages = [] }) 
  };
  const selectOf = new Map();
  const rpc = async name => {
-  if (name === 'channel_members') return { data: [{ person: 'p-1', name: 'Omar', role: 'owner' }, { person: 'p-2', name: 'Sara Adel', role: 'viewer' }], error: null };
+  if (name === 'channel_members') return { data: members, error: null };
   if (name === 'channel_agent_list') return { data: agents, error: null };
   if (name === 'conversation_can_write') return { data: false, error: null };
   if (name === 'can_manage_company') return { data: false, error: null };
@@ -81,4 +82,33 @@ test('an Agent waiting on the reader stays waiting while it also has a Run open,
  const answered = await channelRecord(database({ agents, states }), 'p-1', 'co-1', 'ch-1');
  assert.deepEqual(answered?.agents.map(row => row.state), ['idle', 'waiting']);
  assert.equal(answered?.open, false);
+});
+
+// #207: an invited person is a Member row with no person, and the email is only what the server sent: a Contributor's
+// answer carries none, and the record keeps none.
+test('an invited person is a Member row with no person, and the record keeps only the email the server sent', async () => {
+ const invited = { person: null, name: 'Mona', role: 'viewer', invitation: 'i-1', email: null };
+ const record = await channelRecord(database({ agents: [agent('a-1', 'Ads')], members: [{ person: 'p-1', name: 'Omar', role: 'owner', invitation: null, email: null }, invited] }), 'p-1', 'co-1', 'ch-1');
+ assert.deepEqual(record?.members, [{ person: 'p-1', name: 'Omar', role: 'owner', invitation: null, email: null }, invited]);
+ assert.ok(!JSON.stringify(record?.members).includes('@'), 'no emailed person reaches a Contributor');
+ // An invited person is nobody's person: they are named in no channel manager, and no message of theirs has a Role.
+ assert.deepEqual(record?.managers, [{ name: 'Omar', role: 'owner' }]);
+ const owner = await channelRecord(database({ agents: [], members: [{ person: 'p-1', name: 'Omar', role: 'owner', invitation: null, email: null }, { ...invited, email: 'mona@example.test' }] }), 'p-1', 'co-1', 'ch-1');
+ assert.equal(owner?.members[1].email, 'mona@example.test', 'the Owner reads the email the server sent');
+});
+
+// #207: a note is drawn where it was written: not a message, and never a Run.
+test('a note is drawn in the order it was written, with no person and no Run', async () => {
+ const at = (hour) => `2026-06-10T${String(hour).padStart(2, '0')}:00:00Z`;
+ const record = await channelRecord(database({
+  agents: [],
+  messages: [
+   { id: 2, author: 'person', person_id: 'p-1', agent_id: null, author_name: 'Omar', body: 'Morning all', created_at: at(10) },
+   { id: 1, author: 'person', person_id: 'p-1', agent_id: null, author_name: 'Omar', body: 'Before the invite', created_at: at(8) },
+  ],
+  notes: [{ id: 7, kind: 'invite', invitee_name: 'Mona', actor_name: 'Omar', created_at: at(9) }],
+ }), 'p-1', 'co-1', 'ch-1');
+ assert.deepEqual(record?.messages.map(message => message.author === 'note' ? `note:${message.name}` : message.body), ['Before the invite', 'note:Mona', 'Morning all']);
+ assert.deepEqual(record?.messages[1], { id: -7, author: 'note', kind: 'invite', actor: 'Omar', name: 'Mona', at: at(9) });
+ assert.equal(record?.open, false, 'a note starts no Run');
 });
