@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readProfileModels, writeProfileModel, readModels, readConfig, readSavedConfig, readConfigSchema, readConfigDefaults, writeConfig } from '../lib/hermes.mjs';
-import { readSettings, writeSetting, readCompanyModels, changeCompanySetting } from '../lib/engine-settings.mjs';
+import { readSettings, writeSetting, readCompanyModels, changeCompanySetting, changeCompanySettings } from '../lib/engine-settings.mjs';
 import { readCompanyKeys } from '../lib/provider-keys.mjs';
 import { companyProfile } from '../lib/agent-levels.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
@@ -245,5 +245,23 @@ test('no key, its preview or a token reaches the models page payload or a log li
   await changeCompanySetting(db,{company,setting:'model',value:'openrouter/openai/gpt-5.5',hermes:install(fake),driver:driver(fake)});
   const loggedValues=JSON.stringify([...logged(),...requestsTo(fake,'/model').map(request=>request.body)]);
   for(const value of [secret,secret.slice(-6)]) assert.ok(!loggedValues.includes(value),value);
+ } finally { await fake.close(); }
+});
+
+test('a sub-agent\'s model is one save of the provider and the bare model id the Engine reads apart', async () => {
+ const fake=await fakeHermes();
+ try {
+  seed(fake); schema(fake);
+  enabled: {
+   const on=rows(); on[1]={...on[1],subagents:true};
+   const {db}=database({rowsFor:on});
+   const saved=await changeCompanySettings(db,{company,agent:writer,settings:{'delegation.provider':'openrouter','delegation.model':'anthropic/claude-opus-4.6'},hermes:install(fake),driver:driver(fake)});
+   assert.equal(saved.status,200,JSON.stringify(saved));
+   assert.deepEqual(fake.settings.profiles.get(own(writer)).config.delegation,{provider:'openrouter',model:'anthropic/claude-opus-4.6'},'the Engine gets the provider and the model id, never provider/model in one key');
+   assert.deepEqual(fake.settings.managementRequests.filter(request=>request.method==='PUT'&&request.path.includes('/api/config')).map(request=>request.body),[
+    {config:{delegation:{provider:'openrouter'}}},
+    {config:{delegation:{model:'anthropic/claude-opus-4.6'}}},
+   ]);
+  }
  } finally { await fake.close(); }
 });
