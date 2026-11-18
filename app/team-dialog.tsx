@@ -40,6 +40,9 @@ export default function TeamDialog({company,alone,userId,owner,role,personName,a
  useEffect(()=>()=>stop.current(),[]);
  const finish=()=>{ stop.current(); const dialog=box.current; if(dialog?.open) dialog.close(); };
  const requestClose=()=>{ if(closing) return; setClosing(true); stop.current=leave(leaveMs,()=>{},finish); };
+ // A press on the dialog's own surface (the space around the panel) closes it, but only when it starts and ends there: a
+ // selection dragged out of the panel ends on that same surface, and the browser aims the click at the dialog they share.
+ const pressed=useRef(false);
  const allowed=new Set(data?.allowed||[]); const invitedAllowed=new Set(data?.invitedAllowed||[]);
  // An invitation sent from the dialog joins the table at once, as the reference redraws its own (sendInvite).
  const invite:SendInvite=async(email,role)=>{
@@ -49,7 +52,8 @@ export default function TeamDialog({company,alone,userId,owner,role,personName,a
  };
  return <dialog ref={box} className={`gw modal team-dlg${alone?' team-dlg--solo':''}${closing?' is-closing':''}`} id="team" aria-labelledby="team-title" aria-describedby="team-sub"
   onCancel={event=>{ if(event.cancelable) { event.preventDefault(); requestClose(); } }}
-  onClick={event=>{ if(event.target===event.currentTarget) requestClose(); }}
+  onMouseDown={event=>{ pressed.current=event.target===event.currentTarget; }}
+  onMouseUp={event=>{ const onSurface=pressed.current&&event.target===event.currentTarget; pressed.current=false; if(onSurface) requestClose(); }}
   onClose={()=>{ stop.current(); close(); }}>
   <div className="modal__inner">
    <header className="modal__head">
