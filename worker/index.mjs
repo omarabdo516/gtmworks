@@ -2,6 +2,7 @@ import { checkSettings } from '../lib/settings.mjs';
 import { createClient } from '@supabase/supabase-js';
 import { closeOpenRuns, startQueuedTurns } from '../lib/conversation-runs.mjs';
 import { driveChannelRuns, driveNoteRuns } from '../lib/channel-runs.mjs';
+import { driveHandovers } from '../lib/handovers.mjs';
 import { bundledHermes } from '../lib/bundled-hermes.mjs';
 import { keepCompanyProfiles, keepAgentProfiles, moveAgentProfiles, checkAgentTools, abandonConversationReservations } from '../lib/company-profiles.mjs';
 import { keepSharedSkills } from '../lib/shared-skills.mjs';
@@ -12,7 +13,8 @@ checkSettings();
 const db=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL,process.env.SUPABASE_SERVICE_ROLE_KEY,{auth:{persistSession:false}});
 let stopping=false;
 process.on('SIGTERM',()=>{stopping=true}); process.on('SIGINT',()=>{stopping=true});
-// Conversation runs, queued turns, channel Runs (#23) and note Runs (#22) keep separate loops, so a start that waits on an engine never delays closing other conversations' runs; a
+// Conversation runs, queued turns, channel Runs (#23), note Runs (#22) and a job Lead handed another Agent (#317) keep
+// separate loops, so a start that waits on an engine never delays closing other conversations' runs; a
 // turn starts once its conversation's run was closed (lib/conversation-runs.mjs). A loop waits `every`
 // milliseconds between passes, and stops waiting as soon as the worker is asked to stop.
 const pause=every=>new Promise(resolve=>{ const end=Date.now()+every; const tick=()=>stopping||Date.now()>=end?resolve():setTimeout(tick,Math.min(1000,end-Date.now())); tick(); });
@@ -28,6 +30,7 @@ const waiting=new Map(); const moving=new Map();
 await Promise.all([loop('Conversation runs',()=>closeOpenRuns(db,{})),loop('Queued turns',()=>startQueuedTurns(db,{})),
  loop('Channel runs',()=>driveChannelRuns(db,{})),
  loop('Note runs',()=>driveNoteRuns(db,{})),
+ loop('Handovers',()=>driveHandovers(db,{})),
  hermes&&loop('Hermes',()=>keepCompanyProfiles(db,{hermes,waiting}),2000),
  hermes&&loop('Agent profiles',async()=>{ await keepAgentProfiles(db,{hermes}); await keepSharedSkills(db,{hermes}); await keepAgentRules(db,{hermes}); await moveAgentProfiles(db,{hermes,waiting:moving,driver:engineFor(hermes)}); },2000),
  hermes&&loop('Agent tools',()=>checkAgentTools(db,{hermes}),300000),

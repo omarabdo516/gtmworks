@@ -26,5 +26,6 @@
   "stepsUsedTook": "{0} · {1}",
   "stepLine": "{0} · {1}",
   "stepsSecondsMany": "{0} sec",
-  "stepsMinutesMany": "{0} min"
+  "stepsMinutesMany": "{0} min",
+  "handedTo": "Handed to {0}"
 }
