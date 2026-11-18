@@ -5,7 +5,7 @@ import Link from '@/lib/link';
 import { AuthoredTitle } from '@/lib/authored-title';
 import { Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { BoardPager, KanbanBoard, KanbanCard, KanbanColumn } from '@/components/paperclip/KanbanBoard';
+import { BoardPager, KanbanBoard, KanbanCard, KanbanColumn, land } from '@/components/paperclip/KanbanBoard';
 import { TaskList, TaskListRow } from '@/components/paperclip/TaskList';
 import { BoardIcon } from '@/components/board-icon';
 import { ShellIcon } from '@/components/shell-icon';
@@ -26,11 +26,11 @@ import { ActivityRow, Avatar, isMessage, MessageRow, NoteReplyRow, type WorkActi
 import { NoteText, type EditableNote } from '@/app/note-edit';
 import { workDate as date } from '@/lib/work-date.mjs';
 import { sortWorkCards } from '@/lib/work-sort.mjs';
-import { boardColumns, blockReason, cardAgent, chatPlace, chatWait, columnLabel, columnOf, keyboardTarget, onCard, progressOf, type CardWait } from '@/lib/board-columns.mjs';
+import { boardColumns, blockReason, cardAgent, chatPlace, chatWait, columnLabel, columnOf, keyboardTarget, onCard, orderColumn, placeByOne, progressOf, type CardWait } from '@/lib/board-columns.mjs';
 import { useNewlyWaiting } from '@/lib/newly-waiting';
 import type { WaitingItem } from '@/lib/approval-queue';
 import '@/app/board.css';
-type Stage={id:number,name:string,position:number,board_column?:string|null}; type Label={id:number,name:string,color:string}; type Card={id:number,title:string,stage_id:number,channel:string,format:string,go_live:string|null,offering:string,segment:string,hook:string,goal:string,caption:string,next_actor:string|null,mode:string|null,approval_step_id:number|null,rejection_reason:string|null,project_id:number|null,agent_id?:string|null,crew?:string[],wait?:CardWait|null}; type Project={id:number,name:string}; type Item={id:number,card_id:number,title:string,done:boolean}; type Person=WorkMember & {agent_role?:string|null}; type Activity=WorkActivity; type Creative={id:number,card_id:number,name:string}; type Version={id:number,creative_id:number,path:string,url:string|null}; type CL={card_id:number,label_id:number};
+type Stage={id:number,name:string,position:number,board_column?:string|null}; type Label={id:number,name:string,color:string}; type Card={id:number,title:string,stage_id:number,channel:string,format:string,go_live:string|null,offering:string,segment:string,hook:string,goal:string,caption:string,next_actor:string|null,mode:string|null,approval_step_id:number|null,rejection_reason:string|null,project_id:number|null,agent_id?:string|null,crew?:string[],wait?:CardWait|null,board_order?:number|null,created_at?:string|null}; type Project={id:number,name:string}; type Item={id:number,card_id:number,title:string,done:boolean}; type Person=WorkMember & {agent_role?:string|null}; type Activity=WorkActivity; type Creative={id:number,card_id:number,name:string}; type Version={id:number,creative_id:number,path:string,url:string|null}; type CL={card_id:number,label_id:number};
 // An open Card's notes (#22): each note's current text, the Runs its Agent mentions started and their replies in the
 // log, the Agents those are drawn with, the reader and the moment the page was drawn (for the edit countdown).
 type CardNotes={me:string,drawnAt:number,comments:EditableNote[],runs:{note_id:number,agent_id:string,agent_name:string,outcome:string|null}[],replies:{reply_to:number,actor_id:string,actor_name:string|null,body:string,created_at:string}[],agents:{id:string,name:string,connection_id:string}[]};
@@ -88,18 +88,40 @@ export default function Work(p:WorkProps) { const {workAction}=p; const {t,local
  const agentWorking=!!p.notes?.runs.some(run=>!run.outcome);
  useEffect(()=>{ if(!agentWorking) return; const timer=setInterval(()=>router.refresh(),3000); return ()=>clearInterval(timer); },[agentWorking,router]);
  useEffect(()=>{ if(p.focus==='waiting') document.querySelector('#board-cols > [data-column="waiting"]')?.scrollIntoView({block:'nearest',inline:'nearest'}); },[p.focus]);
- const move=(id:number,to:string)=>{
+ // A Card is placed where its person drops it, or one place up or down its column with Shift and Up or Down (#174): the
+ // column's own order is kept in the database, and a change of place inside one column is not a move to announce.
+ const inColumn=(column:string)=>orderColumn(drawnCards.filter(c=>columnOfCard(c)===column),column).map(id=>drawnCards.find(c=>c.id===id)!);
+ const move=(id:number,to:string,before:number|null=null)=>{
   const c=p.cards.find(x=>x.id===id); if(!c||!p.canCreate) return;
-  const why=blockReason(columnOfCard(c),to,!!c.wait&&columnOf({...c,wait:null},p.stages)!=='waiting');
-  if(why==='same') return;
+  const from=columnOfCard(c);
+  // "Waiting on you" keeps its own order, newest first, and takes no place by hand (ADR 0013).
+  if(from==='waiting'&&to==='waiting') return;
+  const why=blockReason(from,to,!!c.wait&&columnOf({...c,wait:null},p.stages)!=='waiting');
   if(why==='waiting') { toast(t('boardWaitingFillsItself'),{icon:'clock'}); return; }
   if(why==='chat') { toast(t('boardWaitingOnChat'),{icon:'hand'}); router.push(`${base}/board/${c.id}`); return; }
   if(why==='decide') { toast(t(to==='live'||to==='done'?'boardDecideFirst':'boardWaitingForDecision'),{icon:'hand'}); router.push(`${base}/board/${c.id}`); return; }
-  const form=new FormData(); form.set('op','move-column'); form.set('company',p.company); form.set('slug',p.slug); form.set('card',String(id)); form.set('column',to);
+  const form=new FormData(); form.set('op','place'); form.set('company',p.company); form.set('slug',p.slug); form.set('card',String(id)); form.set('column',to); form.set('before',before==null?'':String(before));
   focusCard.current={id,column:to}; setMoving(true);
-  void workAction(form).then(()=>{toast(t('boardMoved',columnName(to))); focusCard.current={id,column:to};}).finally(()=>setMoving(false));
+  void workAction(form).then(()=>{
+   if(to!==from) toast(t('boardMoved',columnName(to)));
+   focusCard.current={id,column:to};
+   requestAnimationFrame(()=>land(document.querySelector<HTMLElement>(`#board-cols .kcard[data-card-id="${id}"]`)));
+  }).finally(()=>setMoving(false));
  };
- const keys=(c:Card)=>(event:KeyboardEvent)=>{ if(!event.shiftKey||!p.canCreate) return; const to=keyboardTarget(columnOfCard(c),event.key,rtl); if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight') return; event.preventDefault(); if(to) move(c.id,to); };
+ const keys=(c:Card)=>(event:KeyboardEvent)=>{
+  if(!event.shiftKey||!p.canCreate) return;
+  const column=columnOfCard(c);
+  if(event.key==='ArrowUp'||event.key==='ArrowDown') {
+   event.preventDefault();
+   if(column==='waiting') return;
+   const before=placeByOne(inColumn(column).map(card=>card.id),c.id,event.key);
+   if(before!==undefined) move(c.id,column,before);
+   return;
+  }
+  if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight') return;
+  event.preventDefault();
+  const to=keyboardTarget(column,event.key,rtl); if(to) move(c.id,to);
+ };
  const due=(c:Card)=>c.go_live?date(c.go_live,language,{month:'short'}):'';
  const waitingOn=(person:string|null)=>{ const owner=person?p.members.find(m=>m.person_id===person)?.people?.name?.split(' ')[0]:undefined; return owner?t('boardWaitingOn',owner):t('boardWaitingTeam'); };
  // The chat's wait on a Card, as this reader reads it (design-reference: kcardHTML's waiting branch).
@@ -113,7 +135,7 @@ export default function Work(p:WorkProps) { const {workAction}=p; const {t,local
   const brief=stagesIn(column).length>1?stageName(c):[c.hook,c.offering,c.goal].find(Boolean)||'';
   return <KanbanCard id={c.id} column={column} isOverlay={isOverlay} key={c.id} disabled={!p.canCreate} className={mine?'approval-card':''} data-mine={mine||undefined} data-stage-id={c.stage_id} data-stage-name={stageName(c)}>
    {c.mode&&<span className="kcard__kind">{modeChip(c)}</span>}
-   <Link className="authored-title kcard__title" dir="auto" href={p.focus?`${base}/board/${c.id}`:`${base}/board?card=${c.id}`} scroll={!!p.focus} draggable={false} tabIndex={isOverlay?-1:undefined} aria-label={crew.length>1?t('boardWorkedOnCard',c.title,names.join(t('boardNamesJoin'))):undefined} aria-describedby="board-drag-hint" aria-keyshortcuts={p.canCreate?'Shift+ArrowLeft Shift+ArrowRight':undefined} onKeyDown={isOverlay?undefined:keys(c)}><strong>{c.title}</strong></Link>
+   <Link className="authored-title kcard__title" dir="auto" href={p.focus?`${base}/board/${c.id}`:`${base}/board?card=${c.id}`} scroll={!!p.focus} draggable={false} tabIndex={isOverlay?-1:undefined} aria-label={crew.length>1?t('boardWorkedOnCard',c.title,names.join(t('boardNamesJoin'))):undefined} aria-describedby="board-drag-hint" aria-keyshortcuts={p.canCreate?'Shift+ArrowLeft Shift+ArrowRight Shift+ArrowUp Shift+ArrowDown':undefined} onKeyDown={isOverlay?undefined:keys(c)}><strong>{c.title}</strong></Link>
    {column==='waiting'&&chat?<>
     {chat.kind==='hand'&&<span className="wtag wtag--hand"><ShellIcon name="hand"/>{t('handBadge')}</span>}
     <span className={`badge${chat.mine?' badge--wait':''}${chat.mine&&fresh.has(c.id)?' is-new':''}`}>{chat.mine?<span className="dot dot--waiting" aria-hidden="true"/>:<BoardIcon name="clock"/>}{chatBadge(chat)}</span>
@@ -194,8 +216,8 @@ export default function Work(p:WorkProps) { const {workAction}=p; const {t,local
   </div>
   {moving&&<p role="status" className="board-status">{t('movingCard')}</p>}
   {!p.cards.length&&!items.length&&<div className="board-bare" role="note"><p>{t('boardEmpty',identities.find(a=>a.role==='account_manager')?.name||'Lead')}</p>{p.canCreate&&<Link className="btn btn--secondary btn--sm" href={`/c/${p.slug}/chat`}><BoardIcon name="chat"/><span>{t('boardTalkTo',identities.find(a=>a.role==='account_manager')?.name||'Lead')}</span></Link>}</div>}
-  <KanbanBoard label={t('workBoard')} busy={moving} cards={drawnCards.map(c=>({id:c.id,title:c.title,column:columnOfCard(c)}))} columnName={columnName} renderOverlay={id=>cardView(p.cards.find(card=>card.id===id)!,true)} onMove={move}>
-   {boardColumns.map(column=>{ const list=drawnCards.filter(c=>columnOfCard(c)===column); const extra=column==='waiting'&&!ownList?items:[]; const stages=stagesIn(column);
+  <KanbanBoard label={t('workBoard')} busy={moving} cards={boardColumns.flatMap(column=>inColumn(column)).map(c=>({id:c.id,title:c.title,column:columnOfCard(c)}))} columnName={columnName} renderOverlay={id=>cardView(p.cards.find(card=>card.id===id)!,true)} onMove={move}>
+   {boardColumns.map(column=>{ const list=inColumn(column); const extra=column==='waiting'&&!ownList?items:[]; const stages=stagesIn(column);
     // Mentions of the reader (#22) wait apart from what needs their reply.
     const groups=[{id:'mn-h-mentions',label:'waitingMentions',items:extra.filter(item=>item.kind==='mention')},{id:'mn-h',label:'waitingNeedsReply',items:extra.filter(item=>item.kind!=='mention'&&!answeredHere(item))}].filter(group=>group.items.length);
     if(column==='waiting'&&ownList) return <KanbanColumn key={column} column={column} id={`col-${column}-section`} name={columnName(column)} count={ownEntries.length} waiting head={null}>
@@ -206,8 +228,7 @@ export default function Work(p:WorkProps) { const {workAction}=p; const {t,local
     return <KanbanColumn key={column} column={column} id={`col-${column}-section`} name={columnName(column)} count={list.length+extra.length} waiting={column==='waiting'} head={add} data-stage-name={stages.length===1?stages[0].name:undefined}>
      {extra.filter(answeredHere).map(itemView)}
      {groups.map((group,n)=><div key={group.id} className="mn-group" role="group" aria-labelledby={group.id}><h3 className="mn-h" id={group.id}><BoardIcon name="at"/><span>{t(group.label)}</span> <span className="num">{group.items.length}</span></h3>{group.items.map(itemView)}{(list.length>0||n<groups.length-1)&&<div className="mn-sep" role="separator"/>}</div>)}
-     {list.filter(c=>!stages.some(stage=>stage.id===c.stage_id)).map(c=><div key={`chat:${c.id}`} className="column" data-stage-id={c.stage_id} data-stage-name={stageName(c)}>{cardView(c)}</div>)}
-     {stages.map(stage=>{ const here=list.filter(c=>c.stage_id===stage.id); return here.length?<div key={stage.id} className="column" data-stage-id={stage.id} data-stage-name={stage.name}>{here.map(c=>cardView(c))}</div>:null; })}
+     {list.map(c=><div key={c.id} className="column" data-stage-id={c.stage_id} data-stage-name={stageName(c)}>{cardView(c)}</div>)}
      {!list.length&&!extra.length&&<div className="col-empty"><b>{t(emptyKey[column][0])}</b>{emptyKey[column][1]&&<span>{t(emptyKey[column][1])}</span>}</div>}
     </KanbanColumn>; })}
   </KanbanBoard>

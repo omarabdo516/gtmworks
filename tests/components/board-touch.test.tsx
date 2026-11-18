@@ -56,6 +56,6 @@ test('on a phone a card held for a moment is carried to the next list and moved 
  for (let step = 1; step <= 15; step++) { const to = aim(); await touch('touchMove', from.x + (to.x - from.x) * step / 15, from.y + (to.y - from.y) * step / 15); }
  expect(board.scrollLeft, 'the board holds still under the finger').toBe(scrolled);
  await touch('touchEnd');
- await expect.poll(() => sent(props)).toEqual([{ op: 'move-column', company: 'co-1', slug: 'rs-learning', card: '1', column: 'planned' }]);
+ await expect.poll(() => sent(props)).toEqual([{ op: 'place', company: 'co-1', slug: 'rs-learning', card: '1', column: 'planned', before: '' }]);
  expect(cancels, 'no pointercancel ends the drag').toBe(0);
 });
