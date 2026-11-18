@@ -10,9 +10,10 @@
 # gtmworks.sh and puts a `gtmworks` command in ~/.local/bin that runs it:
 #   gtmworks status | update | backup | restore <archive> | install
 #
-# The latest stable release is the highest published vX.Y.Z, the release the stable image tag follows. `--channel main`
-# installs the newest main image instead: main publishes no GitHub Release, so its two files are written by
-# scripts/release-assets.mjs from inside that image (Dockerfile, /app/release-source), for the digest just pulled.
+# The latest stable release is the highest published vX.Y.Z that GitHub does not mark as a prerelease, the release the
+# stable image tag follows. `--channel main` installs the newest main image instead: main publishes no GitHub Release, so
+# its two files are written by scripts/release-assets.mjs from inside that image (Dockerfile, /app/release-source), for
+# the digest just pulled.
 #
 # Tests only: GTMWORKS_RELEASES replaces GitHub Releases with a base URL (file:// in CI) that holds releases.json (a list
 # of {"tag_name": "vX.Y.Z"}) and <tag>/<file> for each release; GTMWORKS_GET replaces the address this script copies
@@ -27,6 +28,9 @@ marker='# gtmworks get.sh: the one-line installer, and the gtmworks command it l
 releases=${GTMWORKS_RELEASES:-}
 # The folder of the last install the line made on this machine, named when another folder finds its data.
 owner_record=${XDG_STATE_HOME:-${HOME:-/nonexistent}/.local/state}/gtmworks/install-dir
+# One update at a time on this machine: the folder the install record lives in, so two folders that share this machine's
+# Docker project wait for each other. install.sh has a lock of its own for its run; this one covers the whole update.
+update_lock=${owner_record%/*}/update.lock
 get_url=${GTMWORKS_GET:-https://raw.githubusercontent.com/$repository/main/scripts/get.sh}
 line="curl -fsSL https://raw.githubusercontent.com/$repository/main/scripts/get.sh | sh"
 # This script's own file, when it runs from one (the gtmworks command, or sh get.sh); a pipe has none.
@@ -41,7 +45,7 @@ Usage:
   $line -s -- [--version vX.Y.Z | --channel main] [--dir <folder>]
   gtmworks status
   gtmworks update [--version vX.Y.Z | --version main@sha256:<digest> | --channel main] [--no-backup]
-  gtmworks backup
+  gtmworks backup [directory]
   gtmworks restore <archive> [--version vX.Y.Z | --version main@sha256:<digest> [--yes]]
   gtmworks install          (repair: the same as running the line again)
 USAGE
@@ -50,6 +54,7 @@ USAGE
 wrong() { printf '%s\n' "$*" >&2; usage; }
 
 command_mode=no operation= archive= version= channel= dir= backup=yes yes=no
+destination=
 while [ $# -gt 0 ]; do
   case "$1" in
     --command) command_mode=yes;;
@@ -64,6 +69,7 @@ while [ $# -gt 0 ]; do
     -*) wrong "Unknown option: $1";;
     *) if [ -z "$operation" ]; then operation=$1
        elif [ "$operation" = restore ] && [ -z "$archive" ]; then archive=$1
+       elif [ "$operation" = backup ] && [ -z "$destination" ]; then destination=$1
        else wrong "Unexpected argument: $1"; fi;;
   esac
   shift
@@ -104,6 +110,16 @@ check_prerequisites() {
   esac
   [ "$recent" = yes ] || fail "gtmworks needs Docker Compose v2.20 or newer (the docker compose plugin); this machine has ${found:-none}. Install or update it (https://docs.docker.com/compose/install/linux/), then run this again. Nothing was changed."
   docker info > /dev/null 2>&1 || fail "Docker is installed, but this user cannot reach it. Start Docker, or add this user to the docker group (sudo usermod -aG docker \$USER) and sign in again, then run this again. Nothing was changed."
+  command -v flock > /dev/null 2>&1 || fail "gtmworks needs flock to run one update at a time on this machine. It comes with util-linux, which nearly every Linux install has; install it (Debian and Ubuntu: apt install util-linux), then run this again. Nothing was changed."
+}
+# Held by flock from the ownership and compatibility checks through placing the release's files and recording the target:
+# a second update on this machine stops here and changes nothing. flock drops the lock when this process ends, however it
+# ends, so an update that was killed leaves no lock for the next one. Nothing is removed: every run opens the same file.
+lock_update() {
+  mkdir -p "${update_lock%/*}" 2> /dev/null \
+    || fail "Could not make the folder for gtmworks's update lock (${update_lock%/*}): set HOME or XDG_STATE_HOME to a folder this user can write, then run this again. Nothing was changed."
+  exec 9>"$update_lock"
+  flock -n 9 || fail "Another gtmworks update is running on this machine: wait for it to finish, then run this again. Nothing was changed."
 }
 need_curl() {
   command -v curl > /dev/null 2>&1 || fail "gtmworks needs curl to download its release files. Install curl, then run this again. Nothing was changed."
@@ -121,13 +137,14 @@ record_target() {
   drop_pending
 }
 drop_pending() { rm -f .gtmworks-pending; rm -rf .gtmworks-pending.d; }
-# The target's two files are saved before the update is recorded as pending, so an update the machine stopped in is
-# finished from them (a main build pinned by its digest), whichever of the install's own files were swapped already.
+# The target's two files are saved before the run is recorded as pending, so an update or a first install the machine
+# stopped in is finished from them (a main build pinned by its digest), whichever of the install's own files were
+# swapped already. $1 is the target it records, $2 the folder holding that target's two files.
 save_pending() {
   drop_pending
   rm -rf .gtmworks-pending.tmp.d
   mkdir .gtmworks-pending.tmp.d
-  cp "$stage/install.sh" "$stage/docker-compose.install.yml" .gtmworks-pending.tmp.d/
+  cp "$2/install.sh" "$2/docker-compose.install.yml" .gtmworks-pending.tmp.d/
   mv .gtmworks-pending.tmp.d .gtmworks-pending.d
   printf '%s\n' "$1" > .gtmworks-pending.tmp
   mv .gtmworks-pending.tmp .gtmworks-pending
@@ -206,6 +223,16 @@ new_stage() { stage=$(mktemp -d "$dir/.gtmworks-download.XXXXXX"); }
 
 fetch() { curl -fsSL --retry 3 -o "$2" "$1" || fail "Could not download $1. Check this machine's internet access, then run this again."; }
 tag_names() { printf '%s\n' "$1" | tr ',' '\n' | grep '"tag_name"[[:space:]]*:' || true; }
+# The tag names of the releases GitHub does not mark as a prerelease: the rule of --exclude-pre-releases in the release
+# workflow that moves stable and latest, so a vX.Y.Z release marked prerelease is never installed or updated to. A
+# release's fields come over several lines, so its object is read whole; a body that names fields is still one string.
+stable_tags() {
+  printf '%s\n' "$1" | sed 's/[{}]/\n&\n/g' | awk '
+    /"tag_name"[[:space:]]*:/ && tag == "" { tag = $0 }
+    /"prerelease"[[:space:]]*:[[:space:]]*true/ { pre = 1 }
+    /^\}[,]*$/ { if (tag != "" && !pre) print tag; tag = ""; pre = 0 }
+  '
+}
 latest_release() {
   # GitHub lists 100 releases a page: every page is read, up to one with fewer.
   page=1 list=
@@ -217,7 +244,7 @@ $one"
     [ -z "$releases" ] && [ "$(tag_names "$one" | wc -l)" -ge 100 ] || break
     page=$((page + 1))
   done
-  latest=$(tag_names "$list" \
+  latest=$(stable_tags "$list" \
     | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"v\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)".*/\1/p' \
     | sort -t. -k1,1n -k2,2n -k3,3n | tail -n 1)
   [ -n "$latest" ] || fail "No gtmworks release is published yet ($list_url). Use --channel main for the newest main build."
@@ -309,6 +336,7 @@ op_install() {
   [ -n "${HOME:-}" ] || fail 'HOME is not set, so the gtmworks command has no ~/.local/bin to go in.'
   check_prerequisites
   need_curl
+  lock_update
   check_project_owner
   current=$(pending) interrupted=yes
   [ -n "$current" ] || current=$(recorded) interrupted=no
@@ -341,6 +369,8 @@ op_install() {
   else
     target=${requested:-$(latest_release)}
     [ "$target" != stable ] || target=$(latest_release)
+    # A first install the machine stopped in is finished with the target it began with, not one chosen again now.
+    if [ "$interrupted" = yes ]; then target=$current; fi
     say "Installing gtmworks $target into $dir."
     mkdir -p "$dir"
     cd "$dir"
@@ -375,6 +405,12 @@ op_install() {
   [ "$keep" = yes ] || place_release "$stage"
   install_command
   data_created > /dev/null || claim_data
+  # The target and its two files (now in place) are recorded before the installer runs, so an install that stops in the
+  # middle is finished with the build it began with: a first install's version is recorded even when it stops after
+  # migrations, and a main build by its digest.
+  pin=$target
+  [ "$target" != main ] || pin=main@${release_ref##*@}
+  save_pending "$pin" .
   run_installer
   record_target "$target"
   own_data
@@ -384,6 +420,7 @@ op_update() {
   check_prerequisites
   need_curl
   in_install
+  lock_update
   check_project_owner
   previous=$(recorded)
   running=$(cat .install-release 2> /dev/null || true)
@@ -427,7 +464,7 @@ update_to() {
   esac
   pin=$target
   [ "$target" != main ] || pin=main@${release_ref##*@}
-  save_pending "$pin"
+  save_pending "$pin" "$stage"
   place_release "$stage"
   if run_installer update; then :; else
     status=$?
@@ -469,12 +506,13 @@ update_to() {
 }
 
 # The checks install.sh restore makes of an archive, made before anything changes: only the backup's own entries, none
-# outside it, and each of them present.
+# outside it, and each of them present. The Agents' data (opt/data, #349) is accepted when the archive holds it and not
+# required: an archive the installer made before #349 restores, and install.sh says what it lacks.
 check_archive() {
   entries=$(docker run --rm -i alpine:3.21 tar -tzf - < "$archive") || fail "$archive cannot be read as a gtmworks backup archive. Nothing was changed."
   bad=$(printf '%s\n' "$entries" | while IFS= read -r entry; do
     case "$entry" in /*|*../*|../*|*/..|..) printf 'an unsafe path: %s\n' "$entry"; break;; esac
-    case "$entry" in .env.install|var/lib/postgresql/data/*|etc/postgresql-custom/*|var/lib/storage/*) ;; *) printf 'an entry no backup holds: %s\n' "$entry"; break;; esac
+    case "$entry" in .env.install|var/lib/postgresql/data/*|etc/postgresql-custom/*|var/lib/storage/*|opt/data|opt/data/*) ;; *) printf 'an entry no backup holds: %s\n' "$entry"; break;; esac
   done)
   [ -z "$bad" ] || fail "$archive is not a gtmworks backup: it holds $bad. Nothing was changed."
   for entry in var/lib/postgresql/data/ etc/postgresql-custom/ var/lib/storage/ .env.install; do
@@ -526,6 +564,7 @@ op_restore() {
   esac
   [ -f "$archive" ] || fail "There is no backup archive at $archive."
   in_install
+  lock_update
   check_project_owner
   if [ -z "$version" ]; then run_installer restore "$archive"; return; fi
   # Going back to a release: the archive is checked, and the current data backed up, before this install is made anew
@@ -557,7 +596,7 @@ op_restore() {
   say "gtmworks $version is running with the data of $archive. The data from before is in $archive_made."
 }
 
-op_backup() { check_prerequisites; in_install; check_project_owner; run_installer backup "$dir/backups"; }
+op_backup() { check_prerequisites; in_install; check_project_owner; run_installer backup "${destination:-$dir/backups}"; }
 
 op_status() {
   check_prerequisites

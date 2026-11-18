@@ -45,7 +45,8 @@ by hand from its two release files), the line checks the release against the dat
 first, and moving to another release is an update, backup first.
 
 Requirements: Docker Engine with Docker Compose v2.20+ (`docker compose`), POSIX
-`sh`, `curl`, internet access to pull images, 2 CPU cores, **8 GB RAM** and **20 GB
+`sh`, `curl`, `flock` (from util-linux, present on nearly every Linux install),
+internet access to pull images, 2 CPU cores, **8 GB RAM** and **20 GB
 free disk**, plus room for your data. No host Node.js, Git, Supabase CLI, cloud
 project or external account is required. These are initial sizing
 recommendations, not measured capacity guarantees.
@@ -110,8 +111,10 @@ from before ADR 0014 keeps its companies running on the shared `default` profile
 until a company's own profile holds a sign-in; the worker then moves it there.
 Memory already written on `default` stays there and is not split between companies,
 and earlier conversations do not carry their Hermes context to the new profile.
-`install.sh backup` does not include Hermes's data yet: after a restore, the
-worker makes each company's profile again, empty, and the company signs in again.
+A backup includes the agent engine's data: every Agent's profile, its rules and
+memory, its skills, the Company knowledge, and its conversations' history. A backup
+made before this was included holds none of it; restoring one says so in a line, and
+the worker makes each company's profile again, empty, so the company signs in again.
 Realtime, Studio, analytics and edge functions are not installed. Service settings
 follow the [official Supabase self-hosted stack](https://github.com/supabase/supabase/blob/master/docker/docker-compose.yml).
 
@@ -177,7 +180,8 @@ migration `<previous>` does not carry, or whose `.env.install` that release's ow
 check refuses; then it names what it replaces and asks you
 to type `yes` (`--yes` answers for a script). It then backs up the current data,
 makes the install anew with that release, restores the archive and applies that
-release's migrations the archive predates (the agent engine's volume is kept).
+release's migrations the archive predates (the agent engine's data, now in the
+archive, goes back with it).
 
 It refuses a release older than the data: when the database has applied a
 migration the chosen release does not carry, a later release migrated it, and
@@ -190,9 +194,13 @@ stays on the new release: `gtmworks install` finishes it. The same holds when th
 machine stops in the middle of an update: the two files of the release it was
 moving to are saved and that release recorded first (`.gtmworks-pending.d`,
 `.gtmworks-pending`; a main build by its digest), and `gtmworks install` finishes
-the update from them. An install that stopped leaves `.install-lock` behind, with
-the process that held it; the next run takes the lock over once that process is
-gone, and leaves a lock it cannot show abandoned. An install
+the update from them. One install runs at a time: install.sh holds a lock on
+`.install.lock` that the kernel drops when its process ends, so an install that
+was killed never blocks the next run, and one that is still running is never
+taken over. `gtmworks update`, `gtmworks install` and `gtmworks restore` hold one
+lock for the whole run, kept beside the record of the install folder
+(`~/.local/state/gtmworks/update.lock`): a second one on the same machine stops
+and says another update is running. An install
 on the `main` channel updates to the newest main build; the update keeps the two
 files of the build it ran (`.gtmworks-main/`), so its go-back command names that
 exact build, `--version main@sha256:<digest>`. `gtmworks update` does not replace
@@ -204,8 +212,11 @@ the `gtmworks` command itself; run the line again for a newer one.
 gtmworks backup                              # dated archive in backups/
 ```
 
-Backup briefly stops the stack for a consistent copy of the first three volumes, then
-starts it again. An optional directory after `backup` changes the destination.
+Backup briefly stops the stack — the bundled Hermes included — for a consistent copy of
+the database and its configuration, the Storage files, the agent engine's data volume
+and `.env.install`, then starts it again. The engine's data holds every Agent's profile,
+rules, memory, skills and history, so a restore brings them back as they were. An
+optional directory after `backup` changes the destination.
 **A backup holds every company's data and the encryption key. Keep it private.**
 Archives have owner-only permissions (600); copy them to private storage on another
 machine. The default `backups/` directory is excluded from Git and image builds.
@@ -220,8 +231,11 @@ Restore only accepts an empty install: install the same release as the backup
 first, then restore the trusted archive (or, on a running install, use
 `gtmworks restore <archive> --version vX.Y.Z` as Update describes). It replaces that
 empty install's volumes and `.env.install`, including its keys and origin settings,
-and restarts the stack. This is a full-install backup, not a company export; it
-does not back up the agent engine's data volume. Do not use it to change the pinned Postgres version.
+and restarts the stack. This is a full-install backup, not a company export, and it
+includes the agent engine's data, so every Agent comes back with its knowledge, rules,
+skills and memory. An archive made before that data was included still restores: the
+command says in one line that the Agents' Hermes data was not in it, and the worker
+makes each company's profile again, empty. Do not use it to change the pinned Postgres version.
 A relative archive path the current folder does not hold is read from the install
 folder, so `gtmworks restore backups/<name>` works from any folder.
 
