@@ -70,7 +70,7 @@ test('every listed setting is in the pinned Engine schema, or names the source l
   }
   // Two settings the Engine reads but its schema does not carry: the list says so and names the source that decides them.
   assert.ok(typeof entry.source==='string'&&entry.source,`${entry.key} names the source line the schema lacks`);
-  assert.ok(!entry.default===false||entry.default!==undefined,`${entry.key} states its default`);
+  assert.notEqual(entry.default,undefined,`${entry.key} states its default`);
  }
  const reasoning=engineSettings.find(entry=>entry.key==='agent.reasoning_effort');
  assert.deepEqual(reasoning.choices,[fixture.source.reasoning.off,...fixture.source.reasoning.choices],'reasoning effort is off plus the Engine\'s own choices');
