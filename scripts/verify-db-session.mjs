@@ -1,13 +1,12 @@
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { codeOutsideQuotes, leavesOpen, topLevelStatements } from '../tests/sql-statements.mjs';
 import { verifyResult } from './verify-db.mjs';
 
 // Every verify file in one psql session in the lane's database container (#259), where a CLI process per file cost
 // about a second each. psql runs as the install job runs it, as postgres with each file's output read as rows. A marker
 // (the file's place in the list) starts each file's output; a failed query does not end the session, so every file is
-// reported by name. Usage: node scripts/verify-db-session.mjs <database container> <file>... (DB_LEDGER adds one
-// ledger line per file.)
+// reported by name. Usage: node scripts/verify-db-session.mjs <database container> <file>...
 const [container, ...files] = process.argv.slice(2);
 // A verify file is one statement, as it was for the CLI's prepared statement, and psql never sees a command of its own
 // in one: a backslash outside quoted text would be one.
@@ -30,11 +29,9 @@ const script = files.flatMap((file, index) => refused.has(index) ? [] : [[
  "\\set LAST_ERROR_SQLSTATE '00000'",
  'begin transaction read only;',
  `\\echo '@verify ${index}'`,
- '\\timing on',
  sql[index],
  ...codeOutsideQuotes(sql[index]).trimEnd().endsWith(';') ? [] : [';'],
  "\\echo '@rows' :ROW_COUNT",
- '\\timing off',
  'rollback;',
  "select :'LAST_ERROR_SQLSTATE' <> '00000' as verify_failed \\gset",
  '\\if :verify_failed',
@@ -51,11 +48,9 @@ const blocks = new Map();
 let current = null;
 for (const line of (psql.stdout ?? '').split('\n')) {
  const started = line.match(/^@verify (\d+)$/);
- if (started) { current = { lines: [], ms: 0, error: null, rows: null }; blocks.set(Number(started[1]), current); continue; }
+ if (started) { current = { lines: [], error: null, rows: null }; blocks.set(Number(started[1]), current); continue; }
  if (!current) continue;
- const timing = line.match(/^Time: ([\d.]+) ms/);
- if (timing) current.ms += Number(timing[1]);
- else if (line.startsWith('@failed ')) current.error = line.slice('@failed '.length);
+ if (line.startsWith('@failed ')) current.error = line.slice('@failed '.length);
  else if (/^@rows \d+$/.test(line)) current.rows = Number(line.slice('@rows '.length));
  else current.lines.push(line);
 }
@@ -76,11 +71,6 @@ for (const [index, file] of files.entries()) {
   } catch (error) { message = error instanceof SyntaxError ? `${file}: Database verification did not return one JSON value (a verify file selects one json value in one row)` : error.message; }
  }
  if (message) { failed++; console.error(message); } else console.log(`${file}: Database verification passed`);
- if (process.env.DB_LEDGER) {
-  appendFileSync(process.env.DB_LEDGER, JSON.stringify({
-   suite: 'database', file, name: 'verify', duration_ms: Math.round(block?.ms ?? 0), outcome: message ? 'failed' : 'passed', retries: 0,
-  }) + '\n');
- }
 }
 console.log(`${files.length} verify files: ${files.length - failed} passed, ${failed} failed`);
 process.exitCode = failed || psql.status !== 0 ? 1 : 0;

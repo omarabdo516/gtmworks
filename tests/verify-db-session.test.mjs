@@ -15,41 +15,43 @@ function session(t, files, psqlOutput, psqlStatus = 0, sql = {}) {
  writeFileSync(join(dir, 'psql.out'), psqlOutput);
  writeFileSync(join(dir, 'docker'), `#!/bin/sh\necho "$@" > "${dir}/psql.args"\ncat > "${dir}/psql.in"\ncat "${dir}/psql.out"\nexit ${psqlStatus}\n`);
  chmodSync(join(dir, 'docker'), 0o755);
- const ledger = join(dir, 'database.jsonl');
  const run = spawnSync(process.execPath, [join(process.cwd(), 'scripts/verify-db-session.mjs'), 'supabase_db_repo', ...files], {
-  cwd: dir, encoding: 'utf8', env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, DB_LEDGER: ledger },
+  cwd: dir, encoding: 'utf8', env: { ...process.env, PATH: `${dir}:${process.env.PATH}` },
  });
- const records = (() => { try { return readFileSync(ledger, 'utf8').trim().split('\n').map(line => JSON.parse(line)); } catch { return []; } })();
- return { ...run, records, input: readFileSync(join(dir, 'psql.in'), 'utf8'), args: readFileSync(join(dir, 'psql.args'), 'utf8') };
+ // Each file's outcome as the session reports it by name: a pass on stdout, a failure on stderr.
+ const outcomes = names => names.map(file => {
+  const named = new RegExp(`^${escape(file)}: `, 'm');
+  return [file, new RegExp(`^${escape(file)}: Database verification passed$`, 'm').test(run.stdout) ? 'passed' : named.test(run.stderr) ? 'failed' : 'unreported'];
+ });
+ return { ...run, outcomes, input: readFileSync(join(dir, 'psql.in'), 'utf8'), args: readFileSync(join(dir, 'psql.args'), 'utf8') };
 }
 const lines = (...rows) => rows.join('\n') + '\n';
 const escape = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const files = ['a.verify.sql', 'b.verify.sql', 'c.verify.sql', 'd.verify.sql'];
 
-test('every verify file passes in one session and is reported by name, with its own ledger line', t => {
+test('every verify file passes in one session and is reported by name, each with its own outcome', t => {
  const output = lines(
-  '@verify 0', '{"rls" : [{"table" : "companies", "rls" : true}], "ok" : true}', 'Time: 1.750 ms', '@rows 1',
+  '@verify 0', '{"rls" : [{"table" : "companies", "rls" : true}], "ok" : true}', '@rows 1',
   // json_agg puts a line break between elements: one result can span lines.
-  '@verify 1', '{"grants" : [true, ', ' true]}', 'Time: 0.400 ms', '@rows 1',
-  '@verify 2', '{"c" : true}', 'Time: 2.000 ms', '@rows 1',
-  '@verify 3', '{"d" : true}', 'Time: 0.100 ms', '@rows 1',
+  '@verify 1', '{"grants" : [true, ', ' true]}', '@rows 1',
+  '@verify 2', '{"c" : true}', '@rows 1',
+  '@verify 3', '{"d" : true}', '@rows 1',
  );
  const run = session(t, files, output);
  assert.equal(run.status, 0, run.stderr);
  for (const file of files) assert.match(run.stdout, new RegExp(`^${escape(file)}: Database verification passed$`, 'm'));
  assert.match(run.args, /(^| )-P null=null( |$)/, 'psql prints a SQL NULL as null, never as an empty line');
- assert.deepEqual(run.records.map(record => [record.file, record.name, record.outcome]), files.map(file => [file, 'verify', 'passed']));
- assert.deepEqual(run.records.map(record => record.duration_ms), [2, 0, 2, 0]);
+ assert.deepEqual(run.outcomes(files), files.map(file => [file, 'passed']));
  assert.deepEqual(files.map((_, index) => run.input.indexOf(`'file ${index}'`) > run.input.indexOf(`@verify ${index}'`)), [true, true, true, true]);
  assert.ok(run.input.indexOf("@verify 1'") > run.input.indexOf("'file 0'"), 'the files run in order');
 });
 
 test('a false check, a failed query, an empty result and a file the session never reached each fail the run by name', t => {
  const output = lines(
-  '@verify 0', '{"ok" : false, "rls" : true}', 'Time: 1.000 ms', '@rows 1',
-  '@verify 1', 'Time: 0.300 ms', '@rows 0', '@failed relation "public.missing" does not exist',
-  '@verify 2', 'Time: 0.200 ms', '@rows 0',
+  '@verify 0', '{"ok" : false, "rls" : true}', '@rows 1',
+  '@verify 1', '@rows 0', '@failed relation "public.missing" does not exist',
+  '@verify 2', '@rows 0',
  );
  const run = session(t, files, output);
  assert.equal(run.status, 1);
@@ -58,19 +60,19 @@ test('a false check, a failed query, an empty result and a file the session neve
  assert.match(run.stderr, /^c\.verify\.sql: Database verification returned 0 rows \(a verify file selects one json value in one row\)$/m);
  assert.match(run.stderr, /^d\.verify\.sql: the session ended before this file ran$/m);
  assert.match(run.stdout, /^4 verify files: 0 passed, 4 failed$/m);
- assert.deepEqual(run.records.map(record => [record.file, record.outcome]), files.map(file => [file, 'failed']));
+ assert.deepEqual(run.outcomes(files), files.map(file => [file, 'failed']));
 });
 
 test('one broken file fails the session while the files around it still pass', t => {
  const output = lines(
-  '@verify 0', '{"a" : true}', 'Time: 1.000 ms', '@rows 1',
-  '@verify 1', 'Time: 0.300 ms', '@rows 0', '@failed syntax error at or near "selec"',
-  '@verify 2', '{"c" : true}', 'Time: 1.000 ms', '@rows 1',
-  '@verify 3', '{"d" : true}', 'Time: 1.000 ms', '@rows 1',
+  '@verify 0', '{"a" : true}', '@rows 1',
+  '@verify 1', '@rows 0', '@failed syntax error at or near "selec"',
+  '@verify 2', '{"c" : true}', '@rows 1',
+  '@verify 3', '{"d" : true}', '@rows 1',
  );
  const run = session(t, files, output);
  assert.equal(run.status, 1);
- assert.deepEqual(run.records.map(record => record.outcome), ['passed', 'failed', 'passed', 'passed']);
+ assert.deepEqual(run.outcomes(files).map(([, outcome]) => outcome), ['passed', 'failed', 'passed', 'passed']);
  assert.match(run.stdout, /^4 verify files: 3 passed, 1 failed$/m);
 });
 
@@ -111,7 +113,7 @@ test('a file of more or fewer than one statement, or with a psql command, fails 
  assert.match(run.stderr, /^c\.verify\.sql: a verify file is one statement, this one has 0$/m);
  assert.match(run.stderr, /^d\.verify\.sql: a verify file is one statement, this one has 2$/m);
  assert.match(run.stderr, /^e\.verify\.sql: a verify file holds no psql command \(a backslash outside a string\)$/m);
- assert.deepEqual(run.records.map(record => [record.file, record.outcome]), named.map(file => [file, file === 'b.verify.sql' ? 'passed' : 'failed']));
+ assert.deepEqual(run.outcomes(named), named.map(file => [file, file === 'b.verify.sql' ? 'passed' : 'failed']));
  assert.equal(run.input.match(/@verify \d+'/g).join(), "@verify 1'", 'only the good file is sent to psql');
  assert.ok(!/nobody_at_all|1\/0|touch escaped/.test(run.input), 'nothing of a refused file is sent');
 });

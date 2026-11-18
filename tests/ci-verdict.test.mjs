@@ -107,7 +107,7 @@ test('the integration job runs as 3 shards, each uploading its own artifacts, an
   // The proxy suite runs once, in shard 1; every argument after `integration` reaches the browser suite.
   const ci = readFileSync('ci.sh', 'utf8');
   assert.match(ci, /\[\[ " \$\* " == \*' --shard='\* && " \$\* " != \*' --shard=1\/'\* \]\] && proxy=false/);
-  assert.match(ci, /if \[\[ \$proxy == true \]\]; then PLAYWRIGHT_JSON_OUTPUT_FILE="\$dir\/proxy\.json" npm run test:e2e:proxy; fi/);
+  assert.match(ci, /if \[\[ \$proxy == true \]\]; then npm run test:e2e:proxy; fi/);
   assert.match(ci, /npm run test:e2e -- "\$@"\n/);
 });
 

@@ -41,7 +41,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const [folder, sha, runUrl, artifactUrl = ''] = titleOnly ? args.slice(1) : args;
   const found = { screens: [], checks: [], budgets: [] };
   // A run that stopped before its tests (the renderer, the stack) wrote no report, and still gets its issue.
-  for (const name of (existsSync(folder) ? readdirSync(folder) : []).filter(name => name.endsWith('.json') && name !== 'meta.json')) {
+  for (const name of (existsSync(folder) ? readdirSync(folder) : []).filter(name => name.endsWith('.json'))) {
     let failed = [];
     try { failed = failures(JSON.parse(readFileSync(join(folder, name), 'utf8'))); } catch { /* an unreadable report names nothing */ }
     // ci.sh visual writes the navigation budgets to measured.json beside the lane's report.
