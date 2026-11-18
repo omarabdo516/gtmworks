@@ -4,6 +4,7 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { onComposerFocus, takeComposerFocus } from '@/lib/composer-focus';
 import { insertToken, tokenAtCaret } from '@/lib/composer-mentions.mjs';
 import { useI18n } from '@/lib/i18n-client';
+import { statusKeys } from '@/lib/agent-details.mjs';
 import { ShellIcon } from '@/components/shell-icon';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { firstName } from '@/lib/channels';
@@ -37,7 +38,7 @@ export const newId=()=>{const b=crypto.getRandomValues(new Uint8Array(16));b[6]=
 // closes the "+" menu and the other way round. A note field draws the same list without Commands (app/card-sheet.tsx).
 export type MessageBoxHandle={insert:(sentence:string)=>void};
 export type CallablePerson={id:string,name:string,role?:'owner'|'manager'|'contributor'|'viewer'};
-export type CallableAgent={id:string,connection_id:string,name:string,speciality?:string};
+export type CallableAgent={id:string,connection_id:string,name:string,speciality?:string|null,status?:keyof typeof statusKeys};
 export type Callable={people:CallablePerson[],agents:CallableAgent[]};
 const CallableAgents=createContext<CallableAgent[]>([]);
 export function CallableAgentsProvider({agents,children}:{agents:CallableAgent[],children:ReactNode}) {
@@ -81,7 +82,7 @@ export function MentionPop({listId,label,items,index,pick}:{listId:string,label:
     <span className="menu__t">{item.person.name}{item.person.role&&<span className="menu__d">{t(roleLabels[item.person.role])}{item.person.role==='viewer'&&` · ${t('mentionReadsOnly')}`}</span>}</span>
     <bdi className="menu__hint" dir="auto">@{firstName(item.person.name)}</bdi></>}
    {item.agent&&<><span aria-hidden="true"><CompanyAgentFace agent={item.agent} size={22}/></span>
-    <span className="menu__t"><bdi>{item.agent.name}</bdi>{item.agent.speciality&&<span className="menu__d"><bdi>{item.agent.speciality}</bdi></span>}</span></>}
+    <span className="menu__t"><bdi>{item.agent.name}</bdi>{(item.agent.status||item.agent.speciality)&&<span className="menu__d">{item.agent.status&&t(statusKeys[item.agent.status])}{item.agent.status&&item.agent.speciality&&' · '}{item.agent.speciality&&<bdi>{item.agent.speciality}</bdi>}</span>}</span></>}
    {item.command&&<><ShellIcon name="slash"/><span className="menu__t">{t(item.command.label)}</span><span className="menu__hint menu__code">{item.command.command}</span></>}
   </button>);
  });

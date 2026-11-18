@@ -18,7 +18,7 @@ const box = (props: { send: Send, stop?: { label: string, run: () => Promise<str
  render(<LanguageProvider language={language}><CallableAgentsProvider agents={props.seen ?? []}><MessageBox placeholder="Write" {...props}/></CallableAgentsProvider></LanguageProvider>);
 
 // #154, the "@" and "/" suggestion list (design-reference: tokenAtCaret, updatePop, mentionMenu, the composer's keys).
-const agents: CallableAgent[] = [{ id: 'a1', connection_id: 'c1', name: 'Lead', speciality: 'General' }, { id: 'a2', connection_id: 'c2', name: 'Reach', speciality: 'Runs Meta ads' }];
+const agents: CallableAgent[] = [{ id: 'a1', connection_id: 'c1', name: 'Lead', speciality: 'General' }, { id: 'a2', connection_id: 'c2', name: 'Reach', speciality: 'Runs Meta ads', status: 'working' }];
 const list = (screen: Awaited<ReturnType<typeof box>>) => screen.getByRole('listbox', { name: 'Suggestions' });
 const marked = (field: HTMLTextAreaElement) => document.getElementById(field.getAttribute('aria-activedescendant') ?? '')?.textContent;
 
@@ -176,12 +176,12 @@ test('"@" at the start or after a space offers the Agents this Member sees, with
  await userEvent.type(field, '@');
  await expect.element(list(screen)).toBeVisible();
  await expect.element(field).toHaveAttribute('aria-expanded', 'true');
- expect(screen.getByRole('option').elements().map(option => option.textContent)).toEqual(['LeadGeneral', 'ReachRuns Meta ads']);
+ expect(screen.getByRole('option').elements().map(option => option.textContent)).toEqual(['LeadGeneral', 'ReachWorking · Runs Meta ads']);
  const markedOption = field.element().getAttribute('aria-activedescendant');
  expect(document.getElementById(markedOption!)?.getAttribute('aria-selected')).toBe('true');
  expect(document.getElementById(markedOption!)?.textContent).toBe('LeadGeneral');
  await userEvent.type(field, 're');
- expect(screen.getByRole('option').elements().map(option => option.textContent)).toEqual(['ReachRuns Meta ads']);
+ expect(screen.getByRole('option').elements().map(option => option.textContent)).toEqual(['ReachWorking · Runs Meta ads']);
  await userEvent.type(field, ' ');
  await expect.element(list(screen)).not.toBeInTheDocument();
  await expect.element(field).toHaveAttribute('aria-expanded', 'false');
@@ -204,7 +204,7 @@ test('in a channel the list holds the other Members with their Role, a Viewer ma
  await userEvent.type(field, '@');
  const menu = list(screen).element();
  expect([...menu.querySelectorAll('.menu__label')].map(label => label.textContent)).toEqual(['Someone on the team', 'Call an agent']);
- expect(screen.getByRole('option').elements().map(option => option.textContent)).toEqual(['SSara HassanManager@Sara', 'MMona AliViewer · reads only@Mona', 'ReachRuns Meta ads']);
+ expect(screen.getByRole('option').elements().map(option => option.textContent)).toEqual(['SSara HassanManager@Sara', 'MMona AliViewer · reads only@Mona', 'ReachWorking · Runs Meta ads']);
 });
 
 test('"/" offers the Commands, narrowed by what follows it', async () => {
@@ -224,9 +224,9 @@ test('Arrow Down and Up move the marked entry and wrap, Enter picks it with one 
  await userEvent.type(field, 'hello @');
  const area = field.element() as HTMLTextAreaElement;
  expect(marked(area)).toBe('LeadGeneral');
- await userEvent.keyboard('{ArrowDown}'); await expect.poll(() => marked(area)).toBe('ReachRuns Meta ads');
+ await userEvent.keyboard('{ArrowDown}'); await expect.poll(() => marked(area)).toBe('ReachWorking · Runs Meta ads');
  await userEvent.keyboard('{ArrowDown}'); await expect.poll(() => marked(area)).toBe('LeadGeneral');
- await userEvent.keyboard('{ArrowUp}'); await expect.poll(() => marked(area)).toBe('ReachRuns Meta ads');
+ await userEvent.keyboard('{ArrowUp}'); await expect.poll(() => marked(area)).toBe('ReachWorking · Runs Meta ads');
  await userEvent.keyboard('{Enter}');
  await expect.element(field).toHaveValue('hello @Reach ');
  expect(send).not.toHaveBeenCalled();
@@ -275,5 +275,5 @@ test('in Arabic the list speaks the reference\'s words', async () => {
  await expect.element(screen.getByRole('listbox', { name: 'اقتراحات' })).toBeVisible();
  const menu = screen.getByRole('listbox').element();
  expect([...menu.querySelectorAll('.menu__label')].map(label => label.textContent)).toEqual(['حد من الفريق', 'نادي وكيل']);
- expect(screen.getByRole('option').elements().map(option => option.textContent)).toEqual(['سسارة حسنمشاهد · بتقرا بس@سارة', 'ReachRuns Meta ads']);
+ expect(screen.getByRole('option').elements().map(option => option.textContent)).toEqual(['سسارة حسنمشاهد · بتقرا بس@سارة', 'Reachشغال · Runs Meta ads']);
 });

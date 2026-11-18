@@ -119,8 +119,8 @@ export default async function Shell({company,companies,section,title,crumbs,pers
  const framed=company?.id?<AppsSheetProvider company={company.id} owner={owner} rtl={language==='ar'}>{frame}</AppsSheetProvider>:frame;
  const shown=question?<><div style={{display:'contents'}} inert>{framed}</div>{question}</>:framed;
  // The composer's "+" menu calls the Agents this Member sees, as the sidebar lists them (#153); the "@" list offers the
- // same Agents with the line under each name (#154).
- const callable=agents.map(({id,connection_id,name,speciality})=>({id,connection_id,name,speciality}));
+ // same Agents with the line under each name, their state and role (#154; design-reference: mentionMenu).
+ const callable=agents.map(({id,connection_id,name,speciality})=>({id,connection_id,name,speciality,status:stateOf(id)}));
  // Its New channel, Connect apps and Model (#158) read the Company and this reader's role.
  const place=company?.id?{slug:company.slug,company:company.id,person:personId,owner,manage,alone:workMode==='alone'}:null;
  return <AgentIdentitiesProvider agents={ids}><CallableAgentsProvider agents={callable}><ComposerPlaceProvider place={place}>{company?.id?<RecentCardsProvider key={company.id} company={company.id} cardId={cardId}>{shown}</RecentCardsProvider>:shown}</ComposerPlaceProvider></CallableAgentsProvider></AgentIdentitiesProvider>;
