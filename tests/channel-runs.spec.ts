@@ -52,10 +52,8 @@ test('integration: ordinary talk starts no Run; a mention starts exactly one, an
   expect(fake.runs.map(run=>({key:run.key,input:run.input}))).toEqual([{key:`channel:${sent.message}`,input:'عمر: @Faye plan the launch week'}]);
   expect(fake.connections[0]).toMatchObject({address:'http://127.0.0.1:9',key:'fake-engine-key'});
   expect(fake.runs[0].instructions).toContain('- Answer in English');
-  // The seeded Company knowledge (#27) comes before the Agent's rules.
-  const instructions=fake.runs[0].instructions as string;
-  expect(instructions.indexOf('## Brand voice')).toBeGreaterThan(-1);
-  expect(instructions.indexOf('## Brand voice')).toBeLessThan(instructions.indexOf('- Answer in English'));
+  // No channel Run is told the Company knowledge (#344): the profile auto-loads it as the shared Skill.
+  expect(fake.runs[0].instructions).not.toContain('## Brand voice');
   expect(await drive()).toEqual({started:0,closed:0});
   expect(await postChannelMessage(person,service,mention)).toEqual(sent);
   expect(fake.runs).toHaveLength(1);

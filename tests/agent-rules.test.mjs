@@ -21,7 +21,6 @@ function databases({pinned,attempt=1,address='http://hermes:8642'}) {
   if(name==='claim_conversation_turn') return {data:[{company:'co',agent:'a',person:'p',send_key:'k',message:'Draft the offer email',connection,note,retry:false}],error:null};
   // pin_run answers the text of the offered tools' specs, as the app gave them, in the database's order.
   if(name==='pin_run') return {data:pinned&&{tools:pinned.tools.length?`[${pinned.tools.map((/** @type {string} */ tool)=>given.specs[tool]).join(',')}]`:null,rules:pinned.rules},error:null};
-  if(name==='pin_run_knowledge') return {data:[],error:null};
   if(name==='pin_run_history') return {data:null,error:null};
   if(name==='pin_run_model') return {data:null,error:null};
   if(name==='begin_start') return {data:attempt,error:null};

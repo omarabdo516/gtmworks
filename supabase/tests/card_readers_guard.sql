@@ -35,13 +35,13 @@ insert into decisions
  union all select 'public.can_see_card(uuid,bigint)','exempt','the read rule itself'
  union all select fn,'exempt','a trigger: it runs on a write the table''s own rules admitted, answers no caller, and every row it writes is read under card_agent_visible' from unnest(array[
   'public.approval_card_guard()','public.conversation_reply_card()','public.log_agent_change()','public.log_card_activity()','public.log_card_comment()',
-  'public.log_company_change()','public.log_member_change()','public.log_member_invitation()','public.log_note_edit()','public.note_mentions()','public.pin_channel_run_knowledge()',
+  'public.log_company_change()','public.log_member_change()','public.log_member_invitation()','public.log_note_edit()','public.note_mentions()',
   'public.resolve_waiting_on_card()','public.resolve_waiting_on_reply()','public.schedule_approved_card()','public.work_audit()','public.work_guard()']) fn
  union all select 'public.enqueue_person_webhook()','exempt','a trigger whose delivery goes to the Company webhook, which only Owners set and read, and an Owner sees every Agent'
  union all select fn,'exempt','the worker''s, callable by the service role only: it answers the worker, never a Member, and the rows it writes are read under card_agent_visible' from unnest(array[
   'public.add_waiting_item(uuid,uuid,text,text,text,bigint,uuid,text)','public.agent_save_rule(uuid,text,text,text)','public.agent_show_card(uuid,text,text,text,text,jsonb)',
   'public.answer_note_start(bigint,integer,text)','public.begin_note_start(bigint)','public.close_note_run(bigint,text,text,text,bigint,bigint)',
-  'public.move_company_profile(uuid,text,text,text,text[])','public.note_run_knowledge(bigint)','public.note_runs_due(bigint,bigint)']) fn
+  'public.move_company_profile(uuid,text,text,text,text[])','public.note_runs_due(bigint,bigint)']) fn
  union all select 'public.settle_question(bigint,text)','exempt','the worker''s, callable by the service role only: it settles a question card it was handed and writes its log row, on the chat''s Card when it has one (read under card_agent_visible), else private to the Conversation''s person; it answers no Member'
  union all select 'public.settle_permission(bigint,text)','exempt','the worker''s, callable by the service role only: it settles a permission request card it was handed and writes its log row, private to the Conversation''s person; it answers no Member'
  union all select 'public.settle_channel_permission(bigint,text)','exempt','the worker''s, callable by the service role only: it settles a channel''s permission request it was handed and writes its log row, private to the Member who decided it; it answers no Member'

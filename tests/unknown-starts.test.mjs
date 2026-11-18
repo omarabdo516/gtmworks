@@ -42,7 +42,6 @@ function databases({reserve={state:'reserved',connection,note:null},claim=[],usa
    if(runNote.rules===undefined&&!runNote.started) { runNote.tools=runNote.offersTools?`[${given.specs.create_agent}]`:null; runNote.rules=[]; }
    return {data:{tools:runNote.tools??null,rules:runNote.rules??[]},error:null};
   }
-  if(name==='pin_run_knowledge') return {data:[],error:null};
   if(name==='pin_run_history') return {data:null,error:null};
   if(name==='pin_run_model') return {data:model,error:null};
   if(name==='keep_unknown_start') return {data:kept,error:null};
