@@ -26,7 +26,9 @@ import { readCompanyKeys } from '@/lib/provider-keys.mjs';
 import { readAgentAbout, type AgentAbout } from '@/lib/agent-about.mjs';
 import { readAgentSkills } from '@/lib/company-skills.mjs';
 import { readCompanyLearning } from '@/lib/company-learning.mjs';
+import { readCompanySkillPage } from '@/lib/company-skill-page.mjs';
 import { LearningSection } from './settings-learning';
+import { SkillPage } from './settings-skill-page';
 import { readAgentInstructions } from '@/lib/agent-instructions.mjs';
 import { readAgentVoice, type AgentVoice as AgentVoiceRead } from '@/lib/agent-voice.mjs';
 import { AgentLevel, CompanySubscriptions, MemberNote, AgentAbout as AgentAboutField, AgentInstructions as AgentInstructionsField, AgentInstructionsReadOnly as AgentInstructionsRead, AgentSkills, AgentSaveBar, AgentVoice as AgentVoiceField, ProviderKeys, DefaultModel, EachAgent, AgentModel } from './settings-lazy';
@@ -54,7 +56,7 @@ const roleDescription:Record<string,string>={owner:'settingsRoleOwnerD',manager:
 // account menu, links and tests all reach the same screen. It covers the whole window like the reference's dialog,
 // so no page is drawn behind it; closing returns to the page it was opened from. Data is read with the signed-in
 // person's session (RLS); every change goes through an existing server action or route that checks the role again.
-export default async function SettingsOverlay({slug,company,userId,role,personName,workMode,query}:{slug:string,company:{id:string,name:string},userId:string,role:string,personName:string,workMode?:string|null,query:{section?:string,agent?:string,period?:string,message?:string,part?:string,app?:string,signin?:string}}) {
+export default async function SettingsOverlay({slug,company,userId,role,personName,workMode,query}:{slug:string,company:{id:string,name:string},userId:string,role:string,personName:string,workMode?:string|null,query:{section?:string,agent?:string,period?:string,message?:string,part?:string,app?:string,signin?:string,skill?:string}}) {
  const {t,language,locale,theme}=await getI18n(); const rtl=language==='ar';
  const db=await supabase();
  // ?agent=<id> alone opens that Agent's page.
@@ -84,7 +86,8 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  // How each Agent learns, and what it learned (#28): its mode read from its own Engine profile, its rules from the
  // database, the Skills the Engine's learning graph marks, and the Company's lessons. A read that fails leaves the
  // service's own refusal on the page, never an empty mode.
- const learning=section==='learning'?await readCompanyLearning(db,{company:company.id}).catch(()=>({state:'failed' as const,agents:null,rules:null,lessons:null})):null;
+ const skillPage=section==='learning'&&query.agent&&query.skill?await readCompanySkillPage(db,{company:company.id,agent:query.agent,name:query.skill,person:userId}).catch(()=>null):null;
+ const learning=section==='learning'&&!skillPage?await readCompanyLearning(db,{company:company.id}).catch(()=>({state:'failed' as const,agents:null,rules:null,lessons:null})):null;
  // The person's own note for the Agents in this Company (RLS: nobody else reads it).
  const memberNote=section==='account'?(await db.from('member_notes').select('note').eq('company_id',company.id).eq('person_id',userId).maybeSingle()).data?.note||'':'';
  const agent=section==='agents'&&query.agent?agents.find(item=>item.id===query.agent):undefined;
@@ -107,10 +110,10 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  const ro=!canManage&&<p className="ro-note"><SettingsIcon name="shield"/><span>{t('settingsRO')}</span></p>;
  const page=section==='company'?<CompanySection t={t} company={company} solo={workMode==='alone'} members={members} invitations={invitations} agents={agents} allowed={allowed} invitedAllowed={invitedAllowed} userId={userId} slug={slug} owner={owner} canManage={canManage} sharedEngine={sharedEngine} agentLevel={agentLevel} roleNames={roleNames} ro={ro}/>
-  :section==='agents'?(agent?<AgentPage t={t} rtl={rtl} slug={slug} company={company.id} userId={userId} personName={personName} agent={agent} about={about} skills={skills} how={how} voice={voice} status={stateOf(agent.id)} main={agents[0]} rules={rules} agentModel={agentModel} owner={owner} canManage={canManage} canWrite={canWrite}/>:<AgentsSection t={t} rtl={rtl} slug={slug} agents={agents} stateOf={stateOf} canManage={canManage} canWrite={canWrite} owner={owner}/>)
+  :section==='agents'?(agent?<AgentPage t={t} rtl={rtl} slug={slug} company={company.id} userId={userId} personName={personName} agent={agent} about={about} skills={skills} how={how} voice={voice} status={stateOf(agent.id)} main={agents[0]} rules={rules} agentModel={agentModel} owner={owner} canManage={canManage} canWrite={canWrite} learning={role!=='viewer'}/>:<AgentsSection t={t} rtl={rtl} slug={slug} agents={agents} stateOf={stateOf} canManage={canManage} canWrite={canWrite} owner={owner}/>)
   :section==='apps'?<AppsSection slug={slug} company={company.id} owner={owner} rtl={rtl} app={query.app} failed={query.signin==='failed'}/>
   :section==='usage'?<UsageSection t={t} locale={locale} slug={slug} company={company.id} rows={usageRows} period={query.period==='30'?30:7}/>
-  :section==='learning'?<LearningSection t={t} company={company.id} canManage={canManage} owner={owner} data={learning}/>
+  :section==='learning'?(skillPage?<SkillPage t={t} slug={slug} rtl={rtl} data={skillPage}/>:<LearningSection t={t} slug={slug} company={company.id} canManage={canManage} owner={owner} data={learning}/>)
   :section==='account'?<AccountSection t={t} theme={theme} personName={personName} role={role} roleName={roleNames[role]||''} companyName={company.name} company={company.id} memberNote={memberNote}/>
   :section==='knowledge'?<><Head title={t('settingsKnowledge')} sub={t('settingsKnowledgeSub')}/>{ro}<CompanyKnowledge slug={slug} company={company.id} canManage={canManage} part={query.part}/></>
   // Backup is the Owner's alone (#33): pickSection never opens it for another Role, and the server renders it only here.
@@ -119,7 +122,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
     keys={<ProviderKeys company={company.id} owner={owner} data={keys}/>}
     defaultModel={models?.models?<DefaultModel company={company.id} owner={owner} models={models.models.default}/>:null}
     eachAgent={models?.models?<EachAgent company={company.id} owner={owner} models={models.models}/>:null}/>;
- return <OverlayChrome t={t} slug={slug} companyName={company.name} role={role} readOnly={!canManage} section={section} learningWaiting={learningWaiting} initialFocus={agent?'sov-tab-settings':undefined}>{page}</OverlayChrome>;
+ return <OverlayChrome t={t} slug={slug} companyName={company.name} role={role} readOnly={!canManage} section={section} learningWaiting={learningWaiting} initialFocus={skillPage?'sov-skill-back':agent?'sov-tab-settings':undefined}>{page}</OverlayChrome>;
 }
 
 // A part of the reference whose feature is not built yet: drawn in its place, empty, and saying "Soon".
@@ -189,7 +192,7 @@ function AgentsSection({t,rtl,slug,agents,stateOf,canManage,canWrite,owner}:{t:T
    :<p className="panel-empty">{t('noAgentsYet')}</p>}</div><FocusReturn/></>;
 }
 
-function AgentPage({t,rtl,slug,company,userId,personName,agent,about,skills,how,voice,status,main,rules,agentModel,owner,canManage,canWrite}:{t:T,rtl:boolean,slug:string,company:string,userId:string,personName:string,agent:Agent,about:AgentAbout|null,skills:Awaited<ReturnType<typeof readAgentSkills>>,how:Awaited<ReturnType<typeof readAgentInstructions>>,voice:AgentVoiceRead|null,status:AgentStatus,main?:Agent,rules:Rule[],agentModel:{models:{agents:{model:string|null,choosable:boolean,options:{provider:string,providerName:string,model:string}[]}[]}|null}|null,owner:boolean,canManage:boolean,canWrite:boolean}) {
+function AgentPage({t,rtl,slug,company,userId,personName,agent,about,skills,how,voice,status,main,rules,agentModel,owner,canManage,canWrite,learning}:{t:T,rtl:boolean,slug:string,company:string,userId:string,personName:string,agent:Agent,about:AgentAbout|null,skills:Awaited<ReturnType<typeof readAgentSkills>>,how:Awaited<ReturnType<typeof readAgentInstructions>>,voice:AgentVoiceRead|null,status:AgentStatus,main?:Agent,rules:Rule[],agentModel:{models:{agents:{model:string|null,choosable:boolean,options:{provider:string,providerName:string,model:string}[]}[]}|null}|null,owner:boolean,canManage:boolean,canWrite:boolean,learning:boolean}) {
  const isMain=agent.is_default; const made=madeOf(agent,userId,slug);
  // The handle gtmworks calls the Agent by in messages, which a change of the Engine's name would not touch
  // (lib/conversation-runs.mjs: @ and the name, lowercased).
@@ -263,7 +266,7 @@ function AgentPage({t,rtl,slug,company,userId,personName,agent,about,skills,how,
     </section>
     <SoonSec t={t} id="set-h-settingsTools" label={t('settingsTools')}/>
     {/* The Agent's own Skills and their switches (#180); the Company's shared skills stay on the team's Skills page. */}
-    <AgentSkills agent={agent.id} name={agent.name} skills={skills?.state==='found'?skills.skills:null} editable={skillsEditable}/>
+    <AgentSkills agent={agent.id} name={agent.name} slug={slug} learning={learning} skills={skills?.state==='found'?skills.skills:null} editable={skillsEditable}/>
     {owner&&<section className="dp-sec" aria-labelledby="set-h-danger"><Label id="set-h-danger">{t('settingsDanger')}</Label><ul className="panel-card">
      <li className="panel-row"><span className="panel-row__text"><span className="panel-row__t">{t('settingsPause')}</span><span className="panel-row__d">{t('settingsPauseD')}</span></span>
       <button type="button" id="danger-pause" className="btn btn--secondary btn--sm" aria-disabled="true" title={t('soon')}>{t('settingsPauseButton')}</button></li>

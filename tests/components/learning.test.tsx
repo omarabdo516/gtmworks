@@ -1,5 +1,6 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
+import type { ComponentProps } from 'react';
 import { LanguageProvider } from '@/lib/i18n-client';
 import { i18n } from '@/lib/i18n.mjs';
 import { LearningSection } from '@/app/settings-learning';
@@ -11,6 +12,7 @@ import '@/app/settings.css';
 
 const refresh = vi.hoisted(() => vi.fn());
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh, replace: vi.fn(), prefetch: vi.fn() }) }));
+vi.mock('@/lib/link', () => ({ default: ({ onClick, ...props }: ComponentProps<'a'> & { replace?: boolean }) => <a {...Object.fromEntries(Object.entries(props).filter(([name]) => name !== 'replace'))} onClick={event => { onClick?.(event); event.preventDefault(); }}/> }));
 const fetchMock = vi.fn(async (_input:string|URL|Request, _init?:RequestInit) => new Response('{}', { status: 200 }));
 afterEach(() => { fetchMock.mockClear(); refresh.mockReset(); vi.unstubAllGlobals(); });
 
@@ -35,7 +37,7 @@ const data: CompanyLearning = {
 const screen = (language:'en'|'ar' = 'en', { canManage = true, owner = true, value = data }: { canManage?: boolean, owner?: boolean, value?: CompanyLearning } = {}) => {
  vi.stubGlobal('fetch', fetchMock);
  return render(<LanguageProvider language={language}>
-  <LearningSection t={i18n(language).t} company={company} canManage={canManage} owner={owner} data={value}/>
+  <LearningSection t={i18n(language).t} slug="rs-learning" company={company} canManage={canManage} owner={owner} data={value}/>
  </LanguageProvider>);
 };
 const bodyOf = async (call:number) => JSON.parse((fetchMock.mock.calls[call][1] as RequestInit).body as string);
@@ -51,6 +53,10 @@ test('a Skill an Agent learned shows no restore and no forget: the pinned Engine
  expect(skill.textContent).toContain('A skill it learned');
  expect(skill.textContent).toContain('Learned on its own');
  expect(skill.querySelectorAll('button')).toHaveLength(0);
+ // Its row opens the Skill's own page (#181); the address names the Agent and the Skill.
+ const see = skill.querySelector('a')!;
+ expect(see.textContent).toBe('See the steps');
+ expect(see.getAttribute('href')).toBe(`/c/rs-learning/settings?section=learning&agent=${lead}&skill=weekly-recap`);
  // Only the two rule rows carry a control: one to forget and one to bring back.
  expect(button(view, /^(Forget the rule:|Bring back the rule:)/).map(control => control.getAttribute('aria-label'))).toEqual([`Forget the rule: ${rule.length>40?`${rule.slice(0,40)}…`:rule}`, 'Bring back the rule: No emojis']);
 });

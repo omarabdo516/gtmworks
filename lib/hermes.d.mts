@@ -54,6 +54,7 @@ export function provideSharedSpace(connection:import('./engine.mjs').EngineConne
 export function writeSoulRules(connection:import('./engine.mjs').EngineConnection,change:{profile:string,rules:string[]}):Promise<{state:'unchanged'|'written'|'missing'|'refused'|'unreachable'|'failed'}>;
 export function readSkills(connection:import('./engine.mjs').EngineConnection):Promise<{state:'found',skills:{name:string,description:string,category:string|null,locked:boolean,provenance:string,shared:boolean,enabled:boolean}[]}|{state:'refused'|'unreachable'|'failed',skills:null}>;
 export function readLearningGraph(connection:import('./engine.mjs').EngineConnection):Promise<{state:'found',learned:string[]}|{state:'refused'|'unreachable'|'failed',learned:null}>;
+export function readOwnSkill(connection:import('./engine.mjs').EngineConnection,skill:{name:string}):Promise<{state:'found',content:string}|{state:'absent'|'refused'|'unreachable'|'failed',content:null}>;
 export function setSkillEnabled(connection:import('./engine.mjs').EngineConnection,skill:{name:string,enabled:boolean}):Promise<{state:'changed'|'essential'|'shared'|'failed'|'refused'|'unreachable'}>;
 export function writeSkill(connection:import('./engine.mjs').EngineConnection,skill:{name:string,content:string}):Promise<{state:'written'|'shared'|'refused'|'unreachable'|'failed'}>;
 export function writeSharedSkill(connection:import('./engine.mjs').EngineConnection,skill:{space:string,name:string,content:string}):Promise<{state:'unchanged'|'written'|'missing'|'refused'|'unreachable'|'failed'}>;
