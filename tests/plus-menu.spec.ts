@@ -142,14 +142,14 @@ test('in the general channel "Call someone in the channel" lists the other Membe
  const others=record.members.filter(member=>member.person!==omar).map(member=>member.name);
  expect(others.length).toBeGreaterThan(1);
  // New channel follows the Agents for the Owner of a Company worked as a team (#158; design-reference: plus-team), and
- // Connect apps is drawn once its code arrives. The Commands name no Agent here: the channel's Agents carry no role yet
- // (#159), so only /agent is listed.
- await expect.poll(async()=>(await groups(page)).Commands).toEqual(['Ask for a new agent','Connect apps']);
+ // Connect apps is drawn once its code arrives. Reach was made from the meta role, so the channel's Commands name it too
+ // (#159); Sage's writer command is there as well.
+ await expect.poll(async()=>(await groups(page)).Commands).toEqual(['New campaign with Reach','New SEO article from Sage','Ask for a new agent','Connect apps']);
  const found=await groups(page);
  expect(Object.keys(found)).toEqual(['Call someone in the channel','Call an agent','Commands']);
  expect([...found['Call someone in the channel']].sort()).toEqual([...others].sort());
  expect(found['Call someone in the channel']).not.toContain('عمر');
- expect(found['Call an agent']).toEqual([...record.agents.map(agent=>agent.name),'New channel']);
+ expect(found['Call an agent']).toEqual(['Faye','Reach','Sage','New channel']);
  await page.getByRole('menuitem',{name:'Reach @Reach'}).click();
  const box=page.getByRole('textbox',{name:'Write your message in the channel',exact:true});
  await expect(box).toHaveValue('@Reach ');

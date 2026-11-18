@@ -481,6 +481,22 @@ test('a quick click starts and a second click finishes; Escape and the cross can
  expect(engine.calls).toEqual([]);
 });
 
+test('in Arabic the dictation hint names the listening language in Arabic (#160)', async () => {
+ vi.useFakeTimers(); mic(); dictate({ language: 'ar-EG' });
+ const screen = await voiced({ send: async () => null }, 'ar'); const button = boxOf(screen);
+ await pointer(button, 'pointerdown'); await flush(); await pointer(button, 'pointerup'); await flush();
+ const spoken = new Intl.DisplayNames(['ar'], { type: 'language' }).of('ar-EG');
+ await expect.element(screen.getByText(`بسمعك · ${spoken} · دوس تاني لما تخلّص، أو Esc للإلغاء`)).toBeVisible();
+});
+
+test('with no listening language read the dictation hint leaves it and its separator out (#160)', async () => {
+ vi.useFakeTimers(); mic(); dictate({ language: null });
+ const screen = await voiced({ send: async () => null }); const button = boxOf(screen);
+ await pointer(button, 'pointerdown'); await flush(); await pointer(button, 'pointerup'); await flush();
+ await expect.element(screen.getByText('Listening · click again when you’re done, or Esc to cancel')).toBeVisible();
+ expect(screen.container.querySelector('.wave__hint')?.textContent).not.toContain('· ·');
+});
+
 test('recording stops by itself at 60 seconds and keeps the words', async () => {
  vi.useFakeTimers(); mic(); const engine = dictate({ text: 'the long thought' });
  const screen = await voiced({ send: async () => null }); const button = boxOf(screen);

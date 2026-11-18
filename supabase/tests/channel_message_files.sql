@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(26);
+select plan(29);
 -- #156: a channel message keeps its images, every Member of the channel reads them (a Viewer included), and only a
 -- Member of the channel who may write keeps them. A message of images alone is stored and starts no Run; a text of
 -- spaces only is still refused, as before.
@@ -24,22 +24,26 @@ set local role authenticated;
 select set_config('request.jwt.claims','{"aal":"aal1"}',true);
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 
--- The Owner writes a message of images alone in the general channel and keeps both images with it.
-select lives_ok($$insert into sent select 'images', public.post_channel_message('69000000-0000-0000-0000-000000000001','d2400000-0000-0000-0000-000000000001','')$$,
- 'a channel message may carry images alone');
+-- The Owner keeps both images under the send key before the message is stored, then writes a message of images alone in
+-- the general channel: storing it links them.
 select is(public.reserve_channel_files('69000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d2400000-0000-0000-0000-000000000001',
  $json$[{"position":0,"name":"cover.png","content_type":"image/png","size":90,"path":"10000000-0000-0000-0000-000000000001/channels/69000000-0000-0000-0000-000000000001/d2400000-0000-0000-0000-000000000001-0"},
         {"position":1,"name":"logo.jpeg","content_type":"image/jpeg","size":20,"path":"10000000-0000-0000-0000-000000000001/channels/69000000-0000-0000-0000-000000000001/d2400000-0000-0000-0000-000000000001-1"}]$json$::jsonb),
- 2,'its writer keeps two images with it');
+ 2,'its writer keeps two images under its send key');
+select lives_ok($$insert into sent select 'images', public.post_channel_message('69000000-0000-0000-0000-000000000001','d2400000-0000-0000-0000-000000000001','')$$,
+ 'a channel message may carry images alone');
 select is((select count(*)::int from public.channel_attachments where message_id=(select id from sent where label='images')),2,
  'and both belong to the message it was sent with');
 select is((select body from public.channel_messages where id=(select id from sent where label='images')),'','the message is stored with no text');
 select is((select count(*)::int from public.channel_runs where message_id=(select id from sent where label='images')),0,
  'a message of images that calls no Agent starts no Run');
+select throws_ok($$select public.post_channel_message('69000000-0000-0000-0000-000000000001','d2400000-0000-0000-0000-000000000002','')$$,
+ '22023','channelFailed','a message of no text at all needs files to carry');
 select throws_ok($$select public.post_channel_message('69000000-0000-0000-0000-000000000001','d2400000-0000-0000-0000-000000000002','   ')$$,
  '22023','channelFailed','a text of spaces only is still refused');
 
--- Rules on what may be kept: one to five, a path inside the channel, and never by hand.
+-- Rules on what may be kept: one to five, the image kinds the Engine reads, a path the database builds itself, never by
+-- hand, and never over a stored message's own files.
 select throws_ok($$select public.reserve_channel_files('69000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d2400000-0000-0000-0000-000000000001',
  $json$[{"position":0,"name":"a.png","content_type":"image/png","size":1,"path":"10000000-0000-0000-0000-000000000001/channels/69000000-0000-0000-0000-000000000001/d-0"},
         {"position":1,"name":"b.png","content_type":"image/png","size":1,"path":"10000000-0000-0000-0000-000000000001/channels/69000000-0000-0000-0000-000000000001/d-1"},
@@ -48,9 +52,20 @@ select throws_ok($$select public.reserve_channel_files('69000000-0000-0000-0000-
         {"position":4,"name":"e.png","content_type":"image/png","size":1,"path":"10000000-0000-0000-0000-000000000001/channels/69000000-0000-0000-0000-000000000001/d-4"},
         {"position":5,"name":"f.png","content_type":"image/png","size":1,"path":"10000000-0000-0000-0000-000000000001/channels/69000000-0000-0000-0000-000000000001/d-5"}]$json$::jsonb)$$,
  '22023','channelFilesInvalid','six files are more than a message carries');
+select is(public.reserve_channel_files('69000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d2400000-0000-0000-0000-000000000007',
+ $json$[{"position":9,"name":"stray.png","content_type":"image/png","size":1,"path":"10000000-0000-0000-0000-000000000001/channels/69000000-0000-0000-0000-000000000002/d2400000-0000-0000-0000-000000000007-9"}]$json$::jsonb),
+ 1,'a caller''s own path is ignored');
+select is((select path from public.channel_attachments where send_key='d2400000-0000-0000-0000-000000000007'),
+ '10000000-0000-0000-0000-000000000001/channels/69000000-0000-0000-0000-000000000001/d2400000-0000-0000-0000-000000000007-9'::text,
+ 'and the database names it inside its own channel');
+-- The placeholder row above is a send that posted nothing: give it back before the counts below read the channel.
+select public.discard_channel_files('69000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d2400000-0000-0000-0000-000000000007');
+select throws_ok($$select public.reserve_channel_files('69000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d2400000-0000-0000-0000-000000000007',
+ $json$[{"position":1,"name":"page.html","content_type":"text/html","size":1,"path":"anywhere"}]$json$::jsonb)$$,
+ '22023','channelFilesInvalid','only the image kinds the Engine reads are kept');
 select throws_ok($$select public.reserve_channel_files('69000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d2400000-0000-0000-0000-000000000001',
- $json$[{"position":9,"name":"stray.png","content_type":"image/png","size":1,"path":"10000000-0000-0000-0000-000000000001/channels/69000000-0000-0000-0000-000000000002/d2400000-0000-0000-0000-000000000001-9"}]$json$::jsonb)$$,
- '23514',null,'a file stays in the channel its message is in');
+ $json$[{"position":2,"name":"again.png","content_type":"image/png","size":1,"path":"anywhere"}]$json$::jsonb)$$,
+ 'P0002','channelNotFound','a stored message''s images can never be replaced');
 select throws_ok($$insert into public.channel_attachments(company_id,channel_id,send_key,message_id,name,content_type,size,path)
  values ('10000000-0000-0000-0000-000000000001','69000000-0000-0000-0000-000000000001','d2400000-0000-0000-0000-000000000003',(select id from sent where label='images'),'hand.png','image/png',1,
   '10000000-0000-0000-0000-000000000001/channels/69000000-0000-0000-0000-000000000001/hand.png')$$,
@@ -68,32 +83,30 @@ select throws_ok($$select public.reserve_channel_files('69000000-0000-0000-0000-
 
 -- A Contributor keeps images with their own message, and a failed send gives its own back.
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
-select lives_ok($$insert into sent select 'contributor', public.post_channel_message('69000000-0000-0000-0000-000000000001','d2400000-0000-0000-0000-000000000003','Two pictures')$$,
- 'a Contributor writes in the general channel');
 select is(public.reserve_channel_files('69000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d2400000-0000-0000-0000-000000000003',
  $json$[{"position":0,"name":"mine.png","content_type":"image/png","size":1,"path":"10000000-0000-0000-0000-000000000001/channels/69000000-0000-0000-0000-000000000001/d2400000-0000-0000-0000-000000000003-0"}]$json$::jsonb),
- 1,'a Contributor keeps an image with their own message');
+ 1,'a Contributor keeps an image before posting their message');
+select lives_ok($$insert into sent select 'contributor', public.post_channel_message('69000000-0000-0000-0000-000000000001','d2400000-0000-0000-0000-000000000003','Two pictures')$$,
+ 'a Contributor writes in the general channel');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select throws_ok($$select public.reserve_channel_files('69000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d2400000-0000-0000-0000-000000000003',
  $json$[{"position":1,"name":"theirs.png","content_type":"image/png","size":1,"path":"10000000-0000-0000-0000-000000000001/channels/69000000-0000-0000-0000-000000000001/d2400000-0000-0000-0000-000000000003-1"}]$json$::jsonb)$$,
- 'P0002','channelNotFound','an Owner attaches nothing to another Member''s message');
-select lives_ok($$insert into sent select 'refused', public.post_channel_message('69000000-0000-0000-0000-000000000001','d2400000-0000-0000-0000-000000000004','Refused')$$,
- 'a message is stored before its bytes');
+ 'P0002','channelNotFound','another Member cannot replace a stored message''s image');
 select is(public.reserve_channel_files('69000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d2400000-0000-0000-0000-000000000004',
  $json$[{"position":0,"name":"refused.png","content_type":"image/png","size":1,"path":"10000000-0000-0000-0000-000000000001/channels/69000000-0000-0000-0000-000000000001/d2400000-0000-0000-0000-000000000004-0"}]$json$::jsonb),
- 1,'and keeps an image for a send being written');
+ 1,'a sender keeps an image before its message is posted');
 select is((select public.discard_channel_files('69000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d2400000-0000-0000-0000-000000000004')),
  '10000000-0000-0000-0000-000000000001/channels/69000000-0000-0000-0000-000000000001/d2400000-0000-0000-0000-000000000004-0'::text,
- 'a send whose bytes failed gives its own file path back');
-select is((select count(*)::int from public.channel_attachments where message_id=(select id from sent where label='refused')),0,
- 'and keeps no row for it');
+ 'a failed send gives its own file path back');
+select is((select count(*)::int from public.channel_attachments where send_key='d2400000-0000-0000-0000-000000000004'),0,
+ 'and leaves no row for it');
 
 -- A team channel's files are its own Members' only.
-select lives_ok($$insert into sent select 'team', public.post_channel_message('69000000-0000-0000-0000-000000000002','d2400000-0000-0000-0000-000000000005','Only us')$$,
- 'the Owner writes in a team channel');
 select is(public.reserve_channel_files('69000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','d2400000-0000-0000-0000-000000000005',
  $json$[{"position":0,"name":"team.png","content_type":"image/png","size":1,"path":"10000000-0000-0000-0000-000000000001/channels/69000000-0000-0000-0000-000000000002/d2400000-0000-0000-0000-000000000005-0"}]$json$::jsonb),
- 1,'and keeps an image in it');
+ 1,'the Owner keeps an image in it');
+select lives_ok($$insert into sent select 'team', public.post_channel_message('69000000-0000-0000-0000-000000000002','d2400000-0000-0000-0000-000000000005','Only us')$$,
+ 'and writes in it');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
 select is((select count(*)::int from public.channel_attachments where channel_id='69000000-0000-0000-0000-000000000002'),0,
  'a Member outside the channel reads none of its files');

@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { supabaseConfig } from '@/lib/supabase-config';
 import { decideChannelPermission, driveChannelRuns, postChannelMessage } from '@/lib/channel-runs.mjs';
-import { conversationFilesProblem, maxRequestBytes } from '@/lib/attachments.mjs';
+import { bodyLengthRefused, conversationFilesProblem, fileRefusal, maxRequestBytes } from '@/lib/attachments.mjs';
 import type { PermissionChoice } from '@/lib/engine.mjs';
 import { logActionFailure } from '@/lib/diagnostics.mjs';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
@@ -16,8 +16,6 @@ const refuse=(error:string,status:number)=>reply({error},status);
 const service=()=>createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}});
 const permissionChoices:readonly unknown[]=['once','always','deny'] satisfies PermissionChoice[];
 const refusals:Record<string,[string,number]>={P0002:['channelNotFound',404],'42501':['channelNotAllowed',403],'22023':['channelFailed',400]};
-// Why a chosen image, or a set of them, cannot go with this message (#156): the same line as a Conversation's (#155).
-const fileRefusal=(problem:'type'|'count'|'size'|'request')=>problem==='type'?'attachTypeRefused':problem==='count'?'attachCountRefused':problem==='size'?'attachSizeRefused':'attachRequestRefused';
 
 // A choice on the request an Agent's Run in this channel waits on (#165): one of three fixed words, never text. Only the
 // Member who called the Agent decides (decide_channel_permission); the press is answered once the choice is kept, and
@@ -42,8 +40,9 @@ async function respond(request:NextRequest) {
   let body:Record<string,unknown>; let chosen:File[]=[];
   if(!writing) body=Object.fromEntries(request.nextUrl.searchParams);
   else if(form) {
-   // A message the Engine could never take is refused before its bytes are read: one request is at most 10 MB.
-   if(Number(request.headers.get('content-length')||0)>maxRequestBytes) return refuse('attachRequestRefused',413);
+   // A message the Engine could never take is refused before its bytes are read: one request is at most 10 MB, and a
+   // chunked form, which declares no length, is refused too rather than read without a bound.
+   if(bodyLengthRefused(request.headers.get('content-length'),maxRequestBytes)) return refuse('attachRequestRefused',413);
    const fields=await request.formData();
    const field=(name:string)=>{ const value=fields.get(name); return typeof value==='string'?value:undefined; };
    body={company:field('company'),channel:field('channel'),sendKey:field('sendKey'),message:field('message'),intent:field('intent')};

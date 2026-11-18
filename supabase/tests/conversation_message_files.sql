@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(26);
+select plan(29);
 -- #155: an image a person attaches to a message in their Conversation is kept under the send key, linked to the message
 -- it was sent with, and only its sender writes it. A message may carry images alone, so its text may be empty.
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
@@ -45,7 +45,8 @@ select is((select public.discard_conversation_files('c2200000-0000-0000-0000-000
 select is((select count(*)::int from public.conversation_attachments where send_key='d2200000-0000-0000-0000-000000000003'),0,'and keeps no row for it');
 select is((select count(*)::int from public.discard_conversation_files('c2200000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d2200000-0000-0000-0000-000000000001')),0,'a message''s own files are not a refused send''s to remove');
 
--- Rules on what may be kept: one to five, a path inside the sender's Conversation, and never by hand.
+-- Rules on what may be kept: one to five, the image kinds the Engine reads, a path the database builds itself, never by
+-- hand, and never over a stored message's own files.
 select throws_ok($$select public.reserve_conversation_files('c2200000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d2200000-0000-0000-0000-000000000004',
  $json$[{"position":0,"name":"a.png","content_type":"image/png","size":1,"path":"10000000-0000-0000-0000-000000000001/conversations/c2200000-0000-0000-0000-000000000001/d-0"},
         {"position":1,"name":"b.png","content_type":"image/png","size":1,"path":"10000000-0000-0000-0000-000000000001/conversations/c2200000-0000-0000-0000-000000000001/d-1"},
@@ -54,9 +55,18 @@ select throws_ok($$select public.reserve_conversation_files('c2200000-0000-0000-
         {"position":4,"name":"e.png","content_type":"image/png","size":1,"path":"10000000-0000-0000-0000-000000000001/conversations/c2200000-0000-0000-0000-000000000001/d-4"},
         {"position":5,"name":"f.png","content_type":"image/png","size":1,"path":"10000000-0000-0000-0000-000000000001/conversations/c2200000-0000-0000-0000-000000000001/d-5"}]$json$::jsonb)$$,
  '22023','conversationFilesInvalid','six files are more than a message carries');
+select is(public.reserve_conversation_files('c2200000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d2200000-0000-0000-0000-000000000004',
+ $json$[{"position":0,"name":"stray.png","content_type":"image/png","size":1,"path":"10000000-0000-0000-0000-000000000001/conversations/c2200000-0000-0000-0000-000000000002/stray.png"}]$json$::jsonb),
+ 1,'a caller''s own path is ignored');
+select is((select path from public.conversation_attachments where send_key='d2200000-0000-0000-0000-000000000004'),
+ '10000000-0000-0000-0000-000000000001/conversations/c2200000-0000-0000-0000-000000000001/d2200000-0000-0000-0000-000000000004-0'::text,
+ 'and the database names it inside its own Conversation');
 select throws_ok($$select public.reserve_conversation_files('c2200000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d2200000-0000-0000-0000-000000000004',
- $json$[{"position":0,"name":"stray.png","content_type":"image/png","size":1,"path":"10000000-0000-0000-0000-000000000001/conversations/c2200000-0000-0000-0000-000000000002/stray.png"}]$json$::jsonb)$$,
- '23514',null,'a file stays in the Conversation its message is in');
+ $json$[{"position":1,"name":"page.html","content_type":"text/html","size":1,"path":"anywhere"}]$json$::jsonb)$$,
+ '22023','conversationFilesInvalid','only the image kinds the Engine reads are kept');
+select throws_ok($$select public.reserve_conversation_files('c2200000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d2200000-0000-0000-0000-000000000001',
+ $json$[{"position":0,"name":"again.png","content_type":"image/png","size":1,"path":"anywhere"}]$json$::jsonb)$$,
+ 'P0002','conversationNotFound','a stored message''s images can never be replaced');
 select throws_ok($$insert into public.conversation_attachments(company_id,conversation_id,name,content_type,size,path)
  values('10000000-0000-0000-0000-000000000001','c2200000-0000-0000-0000-000000000001','hand.png','image/png',1,'10000000-0000-0000-0000-000000000001/conversations/c2200000-0000-0000-0000-000000000001/hand.png')$$,
  '42501',null,'nobody adds a file by hand');
