@@ -6,9 +6,10 @@ type MemberRole='owner'|'manager'|'contributor'|'viewer';
 type MentionState='open'|'answered'|'unanswered';
 type ChannelPermission=Extract<ReplyCard,{kind:'permission'}>;
 // A message that calls an Agent carries what its Run asked to be allowed (#165), drawn as the Agent's turn under it;
-// `face` is the Agent's, for that turn.
+// `face` is the Agent's, for that turn. A message may carry images (#156), drawn as chips under it for every Member.
+type ChannelFile={id:number,name:string};
 export type ChannelMessage=
- | {id:number,author:'person',mine:boolean,name:string,role:MemberRole|null,body:string,at:string,mention:{agent:string,face:string,state:MentionState,permissions:ChannelPermission[]}|null}
+ | {id:number,author:'person',mine:boolean,name:string,role:MemberRole|null,body:string,at:string,files:ChannelFile[],mention:{agent:string,face:string,state:MentionState,permissions:ChannelPermission[]}|null}
  | {id:number,author:'agent',name:string,face:string,body:string,at:string};
 export type ChannelName={kind:'general'}|{kind:'team',name:string};
 export type ChannelSummary=ChannelName&{id:string,unread:number};
@@ -29,6 +30,7 @@ export type ChannelRecord={
  may:PermissionChoice[],
 };
 type StoredMessage={id:number,author:'person'|'agent',person_id:string|null,agent_id:string|null,author_name:string,body:string,created_at:string};
+type StoredFile={id:number,message_id:number,name:string};
 type StoredRun={message_id:number,agent_id:string|null,agent_name:string,outcome:string|null};
 type StoredPermission={id:number,message_id:number,title:string,content:unknown,state:string,decided_at:string|null,created_at:string};
 type StoredAgent={id:string,connection_id:string,name:string,speciality:string,main:boolean,here_only:boolean};
@@ -54,6 +56,9 @@ export async function channelRecord(db:Database,person:string,company:string,cha
  const runs=((await db.from('channel_runs').select('message_id,agent_id,agent_name,outcome').eq('channel_id',channel).order('message_id',{ascending:false}).limit(shownMessages)).data||[]) as StoredRun[];
  const {count:waiting}=await db.from('channel_runs').select('message_id',{count:'exact',head:true}).eq('channel_id',channel).is('outcome',null);
  const latest=((await db.from('channel_messages').select('id,author,person_id,agent_id,author_name,body,created_at').eq('channel_id',channel).order('id',{ascending:false}).limit(shownMessages)).data||[]) as StoredMessage[];
+ // The images of the messages shown (#156). The table's own policy shows only this channel's to a Member of it.
+ const shown=latest.map(message=>message.id);
+ const attached=(shown.length?((await db.from('channel_attachments').select('id,message_id,name').in('message_id',shown).order('position')).data||[]):[]) as StoredFile[];
  const {data:members}=await db.rpc('channel_members',{ch:channel});
  // A team channel's Agents come with it, also one hidden from the reader elsewhere, so its replies keep their face.
  const {data:agents}=await db.rpc('channel_agent_list',{ch:channel});
@@ -73,6 +78,7 @@ export async function channelRecord(db:Database,person:string,company:string,cha
   const run=runOf.get(message.id);
   const permissions=asked.filter(row=>row.message_id===message.id).flatMap(row=>replyCardOf({...row,run_id:'',kind:'permission',answered_at:null,done_at:null})??[]) as ChannelPermission[];
   return {id:message.id,author:'person',mine:message.person_id===person,name:message.author_name,role:people.find(member=>member.person===message.person_id)?.role??null,body:message.body,at:message.created_at,
+   files:attached.filter(file=>file.message_id===message.id).map(file=>({id:file.id,name:file.name})),
    mention:run?{agent:run.agent_name,face:seen.find(agent=>agent.id===run.agent_id)?.connection_id||run.agent_id||run.agent_name,state:stateOf(run.outcome),permissions}:null};
  });
  if(read&&newest!==undefined) await db.rpc('read_channel',{ch:channel,through:newest});
