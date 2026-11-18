@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(24);
+select plan(25);
 -- #155: an image a person attaches to a message in their Conversation is kept under the send key, linked to the message
 -- it was sent with, and only its sender writes it. A message may carry images alone, so its text may be empty.
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
@@ -60,6 +60,9 @@ select throws_ok($$select public.reserve_conversation_files('c2200000-0000-0000-
 select throws_ok($$insert into public.conversation_attachments(company_id,conversation_id,name,content_type,size,path)
  values('10000000-0000-0000-0000-000000000001','c2200000-0000-0000-0000-000000000001','hand.png','image/png',1,'10000000-0000-0000-0000-000000000001/conversations/c2200000-0000-0000-0000-000000000001/hand.png')$$,
  '42501',null,'nobody adds a file by hand');
+select throws_ok($$select public.reserve_conversation_files('c2200000-0000-0000-0000-0000000000ff','10000000-0000-0000-0000-000000000001','d2200000-0000-0000-0000-000000000004',
+ $json$[{"position":0,"name":"loose.png","content_type":"image/png","size":1,"path":"10000000-0000-0000-0000-000000000001/conversations/c2200000-0000-0000-0000-0000000000ff/loose.png"}]$json$::jsonb)$$,
+ 'P0002','conversationNotFound','a file belongs to a Conversation already there');
 
 -- Who may keep them: anyone who may write in their own Conversation, and no one else's.
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);

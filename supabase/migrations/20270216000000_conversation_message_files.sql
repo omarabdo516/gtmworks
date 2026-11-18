@@ -5,8 +5,9 @@
 -- Additive: the previous app version reads every row it read before, and a message it writes is still a message with
 -- text. What changes for it is only that a stored message's body may now be empty: a message may carry images alone.
 
--- The message a send key becomes, and the files' place in it (chosen order). A file's row is written before the message
--- exists, so `message_id` is filled by the trigger below; a send that waits behind a Run gets its message later.
+-- The message a send key becomes, and the files' place in it (chosen order). A file's row is written by its send under
+-- that key, and the message may be stored later (a turn that waits behind a Run), so `message_id` is filled by the
+-- trigger below.
 alter table public.conversation_attachments
  add column send_key uuid,
  add column message_id bigint references public.conversation_messages(id),
@@ -30,11 +31,11 @@ $$;
 revoke all on function public.link_conversation_files() from public,anon,authenticated,service_role;
 create trigger conversation_messages_link_files after insert on public.conversation_messages for each row execute function public.link_conversation_files();
 
--- The sender's files, kept before the Agent is asked and under the send key, so a retry of the same send finds the same
--- ones. The caller is the person sending, so the database checks the Conversation is theirs, or is the one they are
--- starting, and that they may write in the Company (conversation_can_write). Another person's Conversation refuses, as
--- it does everywhere else. The bytes are put in the Company's `conversations/<conversation>/` folder for these paths by
--- the server; the table's own check keeps every path inside it.
+-- The sender's files, kept under the send key before or just after the Agent is asked, so a retry of the same send
+-- finds the same ones. The caller is the person sending, so the database checks the Conversation is theirs and that they
+-- may write in the Company (conversation_can_write). Another person's Conversation, or one not there, refuses as it does
+-- everywhere else. The bytes are put in the Company's `conversations/<conversation>/` folder for these paths by the
+-- server; the table's own check keeps every path inside it.
 create function public.reserve_conversation_files(conversation uuid, c uuid, message_key uuid, files jsonb)
 returns integer language plpgsql security definer set search_path='' as $$
 declare existing public.conversations;
@@ -44,7 +45,7 @@ begin
   or jsonb_array_length(files) not between 1 and 5 then
   raise exception 'conversationFilesInvalid' using errcode='22023'; end if;
  select * into existing from public.conversations where id=conversation;
- if found and (existing.person_id<>auth.uid() or existing.company_id<>c) then
+ if not found or existing.person_id<>auth.uid() or existing.company_id<>c then
   raise exception 'conversationNotFound' using errcode='P0002'; end if;
  insert into public.conversation_attachments(company_id,conversation_id,send_key,position,message_id,name,content_type,size,path)
   select c,conversation,message_key,
