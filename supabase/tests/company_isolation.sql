@@ -5,7 +5,8 @@ create extension if not exists pgtap with schema extensions;
 -- the first test red until it is added here.
 create temp table isolation_matrix(name text primary key, fixed jsonb not null default '{}');
 insert into isolation_matrix(name) values
- ('agent_grants'),('agent_key_waits'),('agent_profile_leftovers'),('agent_profiles'),
+ ('agent_grants'),('agent_key_waits'),('agent_profile_leftovers'),('agent_profiles'),('agent_rate_limits'),
+ ('agent_refusals'),
  ('agent_requests'),('agent_rules'),('approval_steps'),
  ('channel_agents'),('channel_messages'),('channel_people'),('channel_permissions'),('channel_reads'),('channel_runs'),('channels'),
  ('company_app_sign_ins'),('company_audit'),('company_key_holds'),('company_key_unfinished'),('company_log'),
