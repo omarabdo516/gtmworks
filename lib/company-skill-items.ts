@@ -8,6 +8,6 @@ import { readCompanySkills, type SkillAgent } from './company-skills.mjs';
 // null when the Engine or the database cannot be read; it never rejects.
 const skillService=()=>createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false}});
 export async function companySkillAgents(company:string):Promise<SkillAgent[]|null> {
- try { return await readCompanySkills(await supabase(),skillService(),{company,encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY}); }
+ try { return await readCompanySkills(await supabase(),skillService(),{company}); }
  catch { return null; }
 }

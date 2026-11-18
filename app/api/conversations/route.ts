@@ -2,7 +2,8 @@ import { after, NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { supabaseConfig } from '@/lib/supabase-config';
-import { answerQuestion, closeOpenRuns, decidePermission, sendingConnection, sendMessage, startQueuedTurns, stopConversationRun } from '@/lib/conversation-runs.mjs';
+import { answerQuestion, closeOpenRuns, decidePermission, sendMessage, startQueuedTurns, stopConversationRun } from '@/lib/conversation-runs.mjs';
+import { onProfile } from '@/lib/bundled-hermes.mjs';
 import { engineFor } from '@/lib/engine.mjs';
 import { logActionFailure } from '@/lib/diagnostics.mjs';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
@@ -18,7 +19,6 @@ const refusals:Record<string,[string,number]>={P0002:['conversationNotFound',404
 const refuse=(error:string,status:number)=>reply({error},status);
 const service=()=>createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}});
 const refuseFor=(code:string|undefined)=>refuse(...(refusals[code||'']||['conversationFailed',500]));
-const encryptionKey=()=>process.env.WEBHOOK_ENCRYPTION_KEY;
 const permissionChoices:readonly unknown[]=['once','always','deny'] satisfies PermissionChoice[];
 
 // A message is checked, sent to the agent's engine and stored by lib/conversation-runs.mjs (through the engine
@@ -36,7 +36,7 @@ async function send(db:Database,body:Record<string,unknown>) {
   if(error) return error.message==='cardChatTaken'?refuse('sheetChatTaken',409):refuseFor(error.code);
   conversation=started as string;
  }
- const sent=await sendMessage(db,service(),{company:body.company as string,conversation,sendKey:body.sendKey as string,agent:body.card===undefined?body.agent as string|undefined:undefined,message:body.message,encryptionKey:encryptionKey()});
+ const sent=await sendMessage(db,service(),{company:body.company as string,conversation,sendKey:body.sendKey as string,agent:body.card===undefined?body.agent as string|undefined:undefined,message:body.message});
  if('code' in sent) return refuseFor(sent.code);
  if('error' in sent) return refuse(sent.error,sent.status);
  return reply(sent);
@@ -45,12 +45,12 @@ async function send(db:Database,body:Record<string,unknown>) {
 // Stop works for the person who started the open run, or a Manager or Owner of the Company (the database decides).
 async function stop(db:Database,body:Record<string,unknown>) {
  if(typeof body.conversation!=='string'||!uuid.test(body.conversation)) return refuse('conversationFailed',400);
- const stopped=await stopConversationRun(db,service(),{company:body.company as string,conversation:body.conversation,encryptionKey:encryptionKey()});
+ const stopped=await stopConversationRun(db,{company:body.company as string,conversation:body.conversation});
  if('code' in stopped) return stopped.message==='conversationNothingToStop'?reply({stopped:false}):refuseFor(stopped.code);
  if('error' in stopped) return refuse(stopped.error,stopped.status);
  // The stopped run is closed now, and a turn waiting behind it may start.
- await closeOpenRuns(service(),{encryptionKey:encryptionKey(),conversation:body.conversation});
- await startQueuedTurns(service(),{encryptionKey:encryptionKey(),conversation:body.conversation});
+ await closeOpenRuns(service(),{conversation:body.conversation});
+ await startQueuedTurns(service(),{conversation:body.conversation});
  return reply(stopped);
 }
 
@@ -60,7 +60,7 @@ async function stop(db:Database,body:Record<string,unknown>) {
 async function answer(db:Database,body:Record<string,unknown>) {
  if(![body.conversation,body.answerKey].every(value=>typeof value==='string'&&uuid.test(value))) return refuse('conversationFailed',400);
  if(!(typeof body.card==='number'&&Number.isSafeInteger(body.card)&&body.card>0)||!(typeof body.choice==='number'&&Number.isSafeInteger(body.choice)&&body.choice>=0&&body.choice<4)) return refuse('conversationFailed',400);
- const answered=await answerQuestion(db,service(),{company:body.company as string,conversation:body.conversation as string,card:body.card,choice:body.choice,answerKey:body.answerKey as string,encryptionKey:encryptionKey()});
+ const answered=await answerQuestion(db,service(),{company:body.company as string,conversation:body.conversation as string,card:body.card,choice:body.choice,answerKey:body.answerKey as string});
  if('code' in answered) return answered.code==='22023'?refuse('conversationFailed',400):refuseFor(answered.code);
  // Another tab or the Engine was first: the pick is not recorded, so the card says so and reads the record again.
  if(answered.state==='taken'||answered.state==='closed') return refuse(answered.state==='taken'?'questionTaken':'questionClosed',409);
@@ -81,8 +81,8 @@ async function done(db:Database,body:Record<string,unknown>) {
   const conversation=body.conversation;
   after(async()=>{
    try {
-    await closeOpenRuns(service(),{encryptionKey:encryptionKey(),conversation});
-    await startQueuedTurns(service(),{encryptionKey:encryptionKey(),conversation});
+    await closeOpenRuns(service(),{conversation});
+    await startQueuedTurns(service(),{conversation});
    } catch { logActionFailure('conversation',new Error('Handed step turn not started')); }
   });
  }
@@ -97,7 +97,7 @@ async function done(db:Database,body:Record<string,unknown>) {
 async function permit(db:Database,body:Record<string,unknown>) {
  if(typeof body.conversation!=='string'||!uuid.test(body.conversation)||!(typeof body.card==='number'&&Number.isSafeInteger(body.card)&&body.card>0)) return refuse('conversationFailed',400);
  if(!permissionChoices.includes(body.choice)) return refuse('conversationFailed',400);
- const decided=await decidePermission(db,service(),{company:body.company as string,conversation:body.conversation,card:body.card,choice:body.choice as PermissionChoice,encryptionKey:encryptionKey(),later:after});
+ const decided=await decidePermission(db,service(),{company:body.company as string,conversation:body.conversation,card:body.card,choice:body.choice as PermissionChoice,later:after});
  if('code' in decided) return decided.code==='22023'?refuse('conversationFailed',400):refuseFor(decided.code);
  return reply(decided);
 }
@@ -126,10 +126,10 @@ async function pickModel(db:Database,body:Record<string,unknown>) {
 // one in use, the Conversation's choice or else the profile's own. Anyone else is answered as the database refuses them.
 async function models(db:Database,person:string,company:string,conversation:string) {
  if((await db.rpc('is_company_owner',{c:company})).data!==true) return refuse('conversationNotAllowed',403);
- const {data:found}=await db.from('conversations').select('model,hermes_agents(connection_id)').eq('id',conversation).eq('company_id',company).eq('person_id',person).maybeSingle();
- const pinned=(found?.hermes_agents as {connection_id?:string}|null)?.connection_id;
+ const {data:found}=await db.from('conversations').select('model,hermes_agents(profile)').eq('id',conversation).eq('company_id',company).eq('person_id',person).maybeSingle();
+ const pinned=(found?.hermes_agents as {profile?:string}|null)?.profile;
  if(!found||!pinned) return refuse('conversationNotFound',404);
- const connection=await sendingConnection(service(),company,pinned,encryptionKey());
+ const connection=onProfile(pinned,company);
  const read=connection&&await engineFor(connection).models?.()||{state:'unreachable',current:null,models:[]};
  return reply({state:read.state,models:read.models,current:found.model??read.current});
 }
@@ -140,8 +140,8 @@ async function models(db:Database,person:string,company:string,conversation:stri
 async function read(db:Database,person:string,company:string,conversation:string) {
  const {data:found}=await db.from('conversations').select(conversationColumns).eq('id',conversation).eq('company_id',company).maybeSingle();
  if(!found) return refuse('conversationNotFound',404);
- await closeOpenRuns(service(),{encryptionKey:encryptionKey(),conversation,owner:person});
- await startQueuedTurns(service(),{encryptionKey:encryptionKey(),conversation});
+ await closeOpenRuns(service(),{conversation,owner:person});
+ await startQueuedTurns(service(),{conversation});
  return reply(await conversationRecord(db,person,company,found,agent=>agentAppStates(company,agent),(agent,session)=>agentSessionTurns(company,agent,session)));
 }
 

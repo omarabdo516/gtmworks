@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { readProviderKeys, setProviderKey, removeProviderKey, hermesEngine } from '../lib/hermes.mjs';
 import { changeCompanyKey, readCompanyKeys } from '../lib/provider-keys.mjs';
-import { encryptSecret } from '../lib/agent-crypto.mjs';
 import { describeEntry } from '../lib/activity-log.mjs';
 import { i18n } from '../lib/i18n.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
@@ -127,7 +126,6 @@ const companies={
 };
 const [first,second]=Object.keys(companies);
 const agentId=profile=>`${profile.slice(3,11)}-${profile.slice(11,15)}-${profile.slice(15,19)}-${profile.slice(19,23)}-${profile.slice(23)}`;
-const encryptionKey=Buffer.alloc(32,9).toString('base64');
 const keyRows=(company,extra=[])=>{ const found=companies[company];
  return [{profile:found.space,kind:'space',agent:null,name:null},...[found.main,...found.agents,...extra].map(profile=>({profile,kind:profile.startsWith('co-')?'company':'agent',agent:agentId(profile),name:found.names[profile]||null}))]; };
 // The person's own session and the service role, as the route hands them over; every call is recorded.
@@ -138,20 +136,21 @@ function sessions(fake,{owner,space=true,extra=[],logFails=false,unfinishedFails
   if(name==='record_unfinished_provider_key') { if(owner) args.missed.length?unfinished.set(args.key_provider,args.missed):unfinished.delete(args.key_provider); return owner?{data:null,error:null}:{data:null,error:{code:'42501'}}; }
   if(name==='company_key_unfinished_profiles') return {data:owner?[...unfinished].map(([provider,profiles])=>({provider,profiles})):[],error:null};
   if(name==='is_company_owner') return {data:owner,error:null};
-  if(name==='company_engine_target') return {data:[{connection:'f0000000-0000-0000-0000-000000000002',address:fake.address,profile:companies[args.c].main,one_company:false,profiles:[]}],error:null};
+  if(name==='company_engine_target') return {data:[{profile:companies[args.c].main,one_company:false,profiles:[]}],error:null};
   if(name==='company_key_profiles') return {data:keyRows(args.c,extra).filter(row=>space||row.kind!=='space').map(row=>noKeeper&&row.kind==='company'?{...row,agent:null,name:null}:row),error:null};
   if(name==='record_provider_key_change') { logged.push(args); return logFails?{data:null,error:{code:'XX000',message:'the database is down'}}:{data:null,error:null}; }
   return {data:null,error:{message:'unexpected'}}; }};
- const key=encryptSecret('test-only-key',encryptionKey);
- const service={from:(...args)=>{ asked.push({name:'from',args}); return {select:()=>({eq:()=>({eq:()=>({maybeSingle:async()=>({data:{key_encrypted:key},error:null})})})})}; },
+ // The install's Hermes is the fake (#342): the code reaches it as it reaches the bundled one.
+ process.env.BUNDLED_HERMES_URL=fake.address; process.env.HERMES_API_KEY='test-only-key';
+ const service={
   rpc:async(name,args)=>{ asked.push({name,args}); return {data:name==='finish_provider_key_change'?[]:null,error:null}; }};
  return {db,service,asked,logged};
 }
 // The fake's management listener is not on port 9119 of the run address, so the driver is pointed at it.
 const pointedAt=fake=>{ const at=target=>({...target,managementAddress:fake.managementAddress});
  return {read:(target,keys)=>readProviderKeys(at(target),keys),set:(target,key)=>setProviderKey(at(target),key),remove:(target,key)=>removeProviderKey(at(target),key)}; };
-const change=(person,fake,request)=>changeCompanyKey(person.db,person.service,{company:first,provider:'openrouter',encryptionKey,driver:pointedAt(fake),...request});
-const read=(person,fake,company=first)=>readCompanyKeys(person.db,person.service,{company,encryptionKey,driver:pointedAt(fake)});
+const change=(person,fake,request)=>changeCompanyKey(person.db,person.service,{company:first,provider:'openrouter',driver:pointedAt(fake),...request});
+const read=(person,fake,company=first)=>readCompanyKeys(person.db,person.service,{company,driver:pointedAt(fake)});
 const profileOf=path=>new URL(path,'http://engine').searchParams.get('profile')??/^\/api\/profiles\/([^/]+)\/model$/.exec(new URL(path,'http://engine').pathname)?.[1]??null;
 
 test('a set reaches the Company\'s space and its Agent profiles only, key before model, and names each Agent and whether it was written', async () => {
@@ -282,14 +281,14 @@ test('two changes of one Company\'s key run one after the other, and another Com
   const owner=sessions(fake,{owner:true});
   const steps=[]; let open; const gate=new Promise(resolve=>{ open=resolve; });
   const held=name=>({set:async()=>{ steps.push(`${name} starts`); if(name==='A') await gate; steps.push(`${name} ends`); return {state:'written',model:null,profiles:{}}; }});
-  const changeAs=(name,company)=>changeCompanyKey(owner.db,owner.service,{company,provider:'openrouter',intent:'set',value:known,encryptionKey,driver:held(name)});
+  const changeAs=(name,company)=>changeCompanyKey(owner.db,owner.service,{company,provider:'openrouter',intent:'set',value:known,driver:held(name)});
   const a=changeAs('A',first); const b=changeAs('B',first); const other=changeAs('C',second);
   assert.equal((await other).status,200);
   assert.deepEqual(steps,['A starts','C starts','C ends'],'the second change of the first Company waits; the other Company does not');
   open();
   assert.deepEqual([(await a).status,(await b).status],[200,200]);
   assert.deepEqual(steps.slice(3),['A ends','B starts','B ends']);
-  const failing=changeCompanyKey(owner.db,owner.service,{company:first,provider:'openrouter',intent:'set',value:known,encryptionKey,driver:{set:async()=>{ throw new Error('down'); }}});
+  const failing=changeCompanyKey(owner.db,owner.service,{company:first,provider:'openrouter',intent:'set',value:known,driver:{set:async()=>{ throw new Error('down'); }}});
   await assert.rejects(failing);
   assert.equal((await changeAs('D',first)).status,200,'a change that threw does not hold the next');
  } finally { await fake.close(); }

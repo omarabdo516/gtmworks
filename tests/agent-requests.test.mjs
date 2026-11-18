@@ -1,26 +1,21 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { answerRequest } from '../lib/agent-requests.mjs';
-import { encryptSecret } from '../lib/agent-crypto.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 
 const company='10000000-0000-0000-0000-000000000001';
 const profile='co-10000000000000000000000000000001';
-const encryptionKey='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
-function harness(/** @type {{error?:{code:string,message:string}|null,data?:unknown,target?:unknown}} */ {error=null,data='made',target={connection:'connection-1',address:'http://127.0.0.1:9',profile}}={}) {
- const fake=fakeEngine(); const rpcs=/** @type {[string,object][]} */([]); const keys=/** @type {object[]} */([]);
+function harness(/** @type {{error?:{code:string,message:string}|null,data?:unknown,target?:unknown}} */ {error=null,data='made',target={profile}}={}) {
+ const fake=fakeEngine(); const rpcs=/** @type {[string,object][]} */([]);
  const db={rpc:async(/** @type {string} */ name,/** @type {object} */ args)=>{ rpcs.push([name,args]); return name==='company_engine_target'?{data:target?[target]:[],error:null}:{data:error?null:data,error}; }};
- const where=/** @type {Record<string,string>} */({});
- const service={from:()=>({select:()=>{ const chain={eq:(/** @type {string} */ column,/** @type {string} */ value)=>{ where[column]=value; return chain; },maybeSingle:async()=>{ keys.push({...where}); return {data:{key_encrypted:encryptSecret('install-key',encryptionKey)},error:null}; }}; return chain; }})};
- const answer=(/** @type {{make:boolean,reason?:string|null}} */ given)=>answerRequest(db,service,{company,request:7,encryptionKey,engineFor:connection=>fake.engineFor(connection),...given});
- return {fake,rpcs,keys,answer};
+ const answer=(/** @type {{make:boolean,reason?:string|null}} */ given)=>answerRequest(db,{company,request:7,hermes:{address:'http://127.0.0.1:9',key:'install-key'},engineFor:connection=>fake.engineFor(connection),...given});
+ return {fake,rpcs,answer};
 }
 
 test('«Make it» answers that the Engine is not ready, and asks the database nothing, until it has the Company\'s profile',async()=>{
- const {fake,rpcs,keys,answer}=harness();
+ const {fake,rpcs,answer}=harness();
  assert.equal(await answer({make:true}),'engineNotReady');
  assert.deepEqual(rpcs.map(([name])=>name),['company_engine_target']);
- assert.deepEqual(keys,[{id:'connection-1',company_id:company}],'only the Company\'s bundled Connection key is read');
  assert.deepEqual(fake.connections,[{address:'http://127.0.0.1:9',profile,key:'install-key'}]);
  await fake.engineFor({}).createAgent({name:profile,instructions:''});
  assert.equal(await answer({make:true}),'made');

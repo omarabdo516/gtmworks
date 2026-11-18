@@ -10,7 +10,6 @@ import { engineFor } from '../lib/engine.mjs';
 checkSettings();
 // The worker's elevated database client; lib/conversation-runs.mjs and lib/channel-runs.mjs use it.
 const db=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL,process.env.SUPABASE_SERVICE_ROLE_KEY,{auth:{persistSession:false}});
-const options={encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY};
 let stopping=false;
 process.on('SIGTERM',()=>{stopping=true}); process.on('SIGINT',()=>{stopping=true});
 // Conversation runs, queued turns, channel Runs (#23) and note Runs (#22) keep separate loops, so a start that waits on an engine never delays closing other conversations' runs; a
@@ -22,13 +21,14 @@ const loop=async(name,work,every=1000)=>{ while(!stopping) { try { await work();
 // Agent's own profile, in step with the company's Agent level (ADR 0014, ADR 0016), gives each company one shared Skills
 // folder that every one of its Agent profiles reads, holding the lessons its team approved (#122), writes each Agent's team rules into its profile's SOUL.md (#345), and moves each Agent
 // still on its company's profile to its own once that profile reads the folder (#121); a hosted one has none. Every
-// Connection's profile is read, so one the Engine lost is made again.
+// Company and Agent profile is read, so one the Engine lost is made again. Runs go to the bundled Hermes on each Agent's
+// profile (#342).
 const hermes=bundledHermes();
 const waiting=new Map(); const moving=new Map();
-await Promise.all([loop('Conversation runs',()=>closeOpenRuns(db,options)),loop('Queued turns',()=>startQueuedTurns(db,options)),
- loop('Channel runs',()=>driveChannelRuns(db,options)),
- loop('Note runs',()=>driveNoteRuns(db,options)),
- hermes&&loop('Hermes',()=>keepCompanyProfiles(db,{hermes,encryptionKey:options.encryptionKey,waiting}),2000),
+await Promise.all([loop('Conversation runs',()=>closeOpenRuns(db,{})),loop('Queued turns',()=>startQueuedTurns(db,{})),
+ loop('Channel runs',()=>driveChannelRuns(db,{})),
+ loop('Note runs',()=>driveNoteRuns(db,{})),
+ hermes&&loop('Hermes',()=>keepCompanyProfiles(db,{hermes,waiting}),2000),
  hermes&&loop('Agent profiles',async()=>{ await keepAgentProfiles(db,{hermes}); await keepSharedSkills(db,{hermes}); await keepAgentRules(db,{hermes}); await moveAgentProfiles(db,{hermes,waiting:moving,driver:engineFor(hermes)}); },2000),
- loop('Agent tools',()=>checkAgentTools(db,{encryptionKey:options.encryptionKey}),300000),
+ hermes&&loop('Agent tools',()=>checkAgentTools(db,{hermes}),300000),
  loop('Reserved runs',()=>abandonConversationReservations(db),60000)]);

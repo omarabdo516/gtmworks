@@ -22,7 +22,7 @@ export async function GET(request:NextRequest,{params}:{params:Promise<{app:stri
   const search=request.nextUrl.searchParams;
   const answer=Object.fromEntries(['code','state','error','iss'].flatMap(name=>{ const value=search.get(name); return value===null?[]:[[name,value]]; }));
   const service=createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false}});
-  ({slug,outcome}=await finishCompanyAppSignIn(db,service,{person:user.id,app,answer,encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY}));
+  ({slug,outcome}=await finishCompanyAppSignIn(db,service,{person:user.id,app,answer}));
  } catch { outcome='failed'; }
  return go(slug?overlayHref(slug,'apps',{app,...(outcome==='failed'?{signin:'failed'}:{})}):'/');
 }

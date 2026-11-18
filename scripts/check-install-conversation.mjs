@@ -55,16 +55,16 @@ try {
  };
  // Nobody connects anything: the worker gives the new company its bundled Hermes agent.
  const agent=await until('bundled Hermes agent provided',async()=>(await checked(person.from('hermes_agents').select('id,is_default').eq('company_id',company))).find(found=>found.is_default),120);
- // Its Connection names the company's own profile, never the shared `default` one.
+ // It runs on the company's own profile, never the shared `default` one.
  const profile=companyProfile(company);
- assert.deepEqual((await checked(person.from('hermes_connections').select('profile').eq('company_id',company))).map(found=>found.profile),[profile]);
+ assert.deepEqual((await checked(person.from('hermes_agents').select('profile').eq('company_id',company))).map(found=>found.profile),[profile]);
  const configured=await fetch(`http://hermes:9119/api/config?profile=${profile}`,{method:'PUT',headers:{Authorization:`Bearer ${process.env.HERMES_API_KEY}`,'Content-Type':'application/json'},
   body:JSON.stringify({config:{model:{provider:'custom',default:'fake-model',base_url:'http://web:8080/v1',api_key:'fake-model-key',context_length:128000}}})});
  assert.equal(configured.status,200,'the company profile points at the fake model');
  const conversation=randomUUID();
  // The worker confirms the new profile (its tools, then its shared Skills folder) in its own loops; until then a send is
  // refused as pending and nothing is stored, so the same send is made again until the profile is ready (#282).
- const send={person:user.id,company,conversation,sendKey:randomUUID(),message:'مرحباً، اكتب لي عنواناً لمنشور عن إطلاق الدورة.',encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY};
+ const send={person:user.id,company,conversation,sendKey:randomUUID(),message:'مرحباً، اكتب لي عنواناً لمنشور عن إطلاق الدورة.'};
  const sent=await until('the company profile ready for a run',async()=>{ const result=await sendMessage(person,service,send); return result.error==='conversationAgentLevelPending'?null:result; },120);
  assert.deepEqual(sent,{conversation});
  // The worker closes the run from Hermes's own record and stores the reply.

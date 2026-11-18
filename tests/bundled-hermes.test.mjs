@@ -7,8 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { load } from 'js-yaml';
 import { generateInstallEnv, validateInstallEnv, missingInstallEnv } from '../lib/install-env.mjs';
 import { hermesVersion, isHermesAddressAllowed } from '../lib/hermes.mjs';
-import { bundledHermes, provideBundledHermes } from '../lib/bundled-hermes.mjs';
-import { decryptSecret } from '../lib/agent-crypto.mjs';
+import { bundledHermes, hermesAt, onProfile } from '../lib/bundled-hermes.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
 // Hermes ships inside the install (ADR 0010): one release, pinned by tag and digest, reachable only on the compose network.
@@ -50,12 +49,13 @@ test('the Hermes API publishes no host port and receives none of the gtmworks se
  for(const [name,service] of Object.entries(compose.services)) for(const port of service.ports||[]) assert.match(port,/^127\.0\.0\.1:/,name);
 });
 
-test('the worker reaches the bundled Hermes by service name and waits for it', () => {
+test('the web app and the worker reach the bundled Hermes by service name, and the worker waits for it', () => {
  const worker=compose.services.worker;
  assert.deepEqual(worker.depends_on.hermes,{condition:'service_healthy'});
  assert.equal(worker.environment.BUNDLED_HERMES_URL,'http://hermes:8642');
  assert.equal(isHermesAddressAllowed(worker.environment.BUNDLED_HERMES_URL),true);
- assert.equal(compose.services.web.environment.BUNDLED_HERMES_URL,undefined);
+ // The web app starts Runs and reads sign-ins on it too (#342: it is the only Hermes).
+ assert.equal(compose.services.web.environment.BUNDLED_HERMES_URL,'http://hermes:8642');
 });
 
 test('the Hermes key is install-generated, validated, and an older install gains it on update', () => {
@@ -179,13 +179,6 @@ test('update recreates the auth service with its password settings and waits unt
  assert.deepEqual([compose.services.auth.environment.GOTRUE_PASSWORD_MIN_LENGTH,compose.services.auth.environment.GOTRUE_MAILER_OTP_EXP,compose.services.auth.environment.GOTRUE_SESSIONS_TIMEBOX],['10','86400','720h']);
 });
 
-// A service-role client stand-in: records the RPCs the worker calls and answers them.
-function database({waiting=true,provided=1}={}) {
- const calls=[];
- return {calls,rpc:async(name,args)=>{ calls.push({name,args}); return name==='bundled_hermes_waiting'?{data:waiting,error:null}:{data:provided,error:null}; }};
-}
-const encryptionKey=Buffer.alloc(32,7).toString('base64');
-
 test('the bundled Hermes is used only on a self-hosted install that has its address and key', () => {
  const env={GTMWORKS_SELF_HOSTED:'true',BUNDLED_HERMES_URL:'http://hermes:8642',HERMES_API_KEY:'k'.repeat(64)};
  assert.deepEqual(bundledHermes(env),{address:'http://hermes:8642',profile:'default',key:'k'.repeat(64)});
@@ -194,61 +187,24 @@ test('the bundled Hermes is used only on a self-hosted install that has its addr
  assert.equal(bundledHermes({...env,HERMES_API_KEY:''}),null);
 });
 
-test('a company with no Hermes gets the bundled one, tested first and its key stored encrypted', async () => {
- const fake=await fakeHermes();
- try {
-  const hermes={address:fake.address,profile:'default',key:'test-only-key'};
-  const db=database();
-  assert.equal(await provideBundledHermes(db,{hermes,encryptionKey}),1);
-  assert.deepEqual(fake.settings.requests.map(request=>request.path),['/p/default/v1/capabilities','/p/default/health']);
-  const [{name:asked},{name,args}]=db.calls;
-  assert.equal(asked,'bundled_hermes_waiting');
-  assert.equal(name,'provide_bundled_hermes');
-  assert.deepEqual({...args,bundled_key:undefined},{bundled_address:fake.address,bundled_profile:'default',bundled_key:undefined,bundled_version:'0.23.0',bundled_features:['run_submission','run_events_sse']});
-  assert.doesNotMatch(args.bundled_key,/test-only-key/);
-  assert.equal(decryptSecret(args.bundled_key,encryptionKey),'test-only-key');
- } finally { await fake.close(); }
-});
-
-test('nothing is provided when every company has Hermes, on a hosted install, or when the bundled Hermes fails its test', async () => {
- const fake=await fakeHermes();
- try {
-  const hermes={address:fake.address,profile:'default',key:'test-only-key'};
-  const settled=database({waiting:false});
-  assert.equal(await provideBundledHermes(settled,{hermes,encryptionKey}),0);
-  assert.deepEqual(settled.calls.map(call=>call.name),['bundled_hermes_waiting']);
-  assert.equal(fake.settings.requests.length,0);
-  const hosted=database();
-  assert.equal(await provideBundledHermes(hosted,{hermes:null,encryptionKey}),0);
-  assert.equal(hosted.calls.length,0);
-  for(const change of [()=>{fake.settings.version='0.24.0';},()=>{fake.settings.key='other';},()=>{fake.settings.status=503;}]) {
-   change();
-   const db=database();
-   assert.equal(await provideBundledHermes(db,{hermes,encryptionKey}),0);
-   assert.deepEqual(db.calls.map(call=>call.name),['bundled_hermes_waiting']);
-   Object.assign(fake.settings,{version:'0.23.0',key:'test-only-key',status:200});
-  }
- } finally { await fake.close(); }
-});
-
 test('the bundled Engine gives a company one main agent named Lead, never the Engine name', () => {
  // The newest migration that defines the function is the one the database runs.
  const latest=readdirSync('supabase/migrations').filter(file=>file.endsWith('.sql')&&!file.endsWith('.verify.sql')).sort()
-  .map(file=>readFileSync(`supabase/migrations/${file}`,'utf8')).filter(sql=>/function public\.provide_bundled_hermes\(/.test(sql)).at(-1);
- const inserts=[...latest.matchAll(/insert into public\.hermes_agents\(([^)]*)\) values\(([^)]*)\)/g)];
- assert.equal(inserts.length,1);
- const [,columns,values]=inserts[0];
- const row=Object.fromEntries(columns.split(',').map((column,index)=>[column.trim(),values.split(',')[index].trim()]));
- assert.equal(row.name,"'Lead'");
- assert.equal(row.is_default,'true');
+  .map(file=>readFileSync(`supabase/migrations/${file}`,'utf8')).filter(sql=>/function public\.attach_company_profile\(/.test(sql)).at(-1);
+ const body=latest.slice(latest.search(/function public\.attach_company_profile\(/));
+ assert.match(body.slice(0,body.indexOf('$function$;')),/insert into public\.hermes_agents\(company_id,profile,name,speciality,is_default\) values\(c,public\.company_engine_profile\(c\),'Lead','General',true\)/);
 });
 
-test('a database refusal is raised without the key in it', async () => {
- const fake=await fakeHermes();
- try {
-  const db={rpc:async name=>name==='bundled_hermes_waiting'?{data:true,error:null}:{data:null,error:{message:'hermesAgentFailed'}}};
-  await assert.rejects(provideBundledHermes(db,{hermes:{address:fake.address,profile:'default',key:'test-only-key'},encryptionKey}),error=>!String(error?.message).includes('test-only-key'));
- } finally { await fake.close(); }
+test('every Run goes to the bundled Hermes on the profile it was pinned to, and a Company profile serves its own Company only', () => {
+ const hermes=hermesAt({BUNDLED_HERMES_URL:'http://hermes:8642',HERMES_API_KEY:'k'.repeat(64)});
+ assert.deepEqual(hermes,{address:'http://hermes:8642',key:'k'.repeat(64)});
+ assert.equal(hermesAt({BUNDLED_HERMES_URL:'http://hermes:8642'}),null);
+ const company='10000000-0000-0000-0000-000000000001';
+ assert.deepEqual(onProfile('co-10000000000000000000000000000001',company,hermes),{...hermes,profile:'co-10000000000000000000000000000001'});
+ assert.equal(onProfile('co-10000000000000000000000000000002',company,hermes),null,'another Company\'s profile');
+ assert.deepEqual(onProfile('ag-a0000000000000000000000000000001',company,hermes)?.profile,'ag-a0000000000000000000000000000001');
+ assert.equal(onProfile(null,company,hermes),null);
+ assert.equal(onProfile('default',company,null),null,'no Hermes to reach');
 });
 
 test('the Engine management listener is on for web and worker with the install key, and never public', () => {

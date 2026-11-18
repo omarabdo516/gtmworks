@@ -60,7 +60,7 @@ if(step==='prepare') {
   const person=await signedIn(entry.credentials);
   entry.agent=(await until('company profile provided',async()=>(await checked(person.from('hermes_agents').select('id,is_default').eq('company_id',entry.company))).find(found=>found.is_default),120)).id;
   entry.profile=companyProfile(entry.company);
-  assert.deepEqual((await checked(person.from('hermes_connections').select('profile').eq('company_id',entry.company))).map(found=>found.profile),[entry.profile]);
+  assert.deepEqual((await checked(person.from('hermes_agents').select('profile').eq('company_id',entry.company))).map(found=>found.profile),[entry.profile]);
   // The profile's saved config turns the dangerous toolsets off, and its Run API offers none of them.
   const config=await (await manage(`/api/config?profile=${entry.profile}`)).json();
   for(const off of ['terminal','file','code_execution']) assert.ok(config.agent?.disabled_toolsets?.includes(off),`${entry.profile} disables ${off}`);
@@ -111,7 +111,7 @@ if(step==='prepare') {
    const conversation=randomUUID();
    // A profile the worker has not yet confirmed (its tools, its shared Skills folder) refuses the send as pending and
    // stores nothing, so the same send is made again until it is ready (#282).
-   const send={person:entry.person,company:entry.company,conversation,sendKey:randomUUID(),agent,message,encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY};
+   const send={person:entry.person,company:entry.company,conversation,sendKey:randomUUID(),agent,message};
    const sent=await until(`${label} ready for a run`,async()=>{ const result=await sendMessage(person,service,send); return result.error==='conversationAgentLevelPending'?null:result; },120);
    assert.deepEqual(sent,{conversation});
    const answer=await until(`reply on ${label}`,async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),180);
@@ -131,8 +131,8 @@ if(step==='prepare') {
   const [first]=companies;
   const person=await signedIn(first.credentials);
   const profileOf=async agent=>{
-   const [linked]=await checked(person.from('hermes_agents').select('connection_id').eq('id',agent));
-   return (await checked(person.from('hermes_connections').select('profile').eq('id',linked.connection_id)))[0].profile;
+   const [found]=await checked(person.from('hermes_agents').select('profile').eq('id',agent));
+   return found.profile;
   };
   const [{run_id:run}]=await checked(person.from('conversation_messages').select('run_id').eq('conversation_id',first.conversation).eq('author','person'));
   const made=await checked(service.rpc('lead_create_agent',{conversation:first.conversation,run,call:'install-check',agent_name:'Install writer',job:'Writes the install check.',apps:[]}));

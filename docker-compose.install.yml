@@ -150,6 +150,7 @@ services:
     env_file: .env.install
     environment:
       GTMWORKS_SELF_HOSTED: "true"
+      BUNDLED_HERMES_URL: http://hermes:8642
     command: [sh, -c, "node lib/install-env.mjs validate && exec node server.js"]
     healthcheck:
       test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/api/health').then(response=>process.exit(response.ok?0:1)).catch(()=>process.exit(1))"]

@@ -39,7 +39,7 @@ export async function POST(request:NextRequest) {
   if(body.agent!==undefined&&(typeof body.agent!=='string'||!uuid.test(body.agent))) return reply({error:'appsInvalid'},400);
   if(!await routeAllowed(db,'app/api/company-apps/route.ts','POST',body.company,user.id)) return reply({error:'appsNotAllowed'},403);
   const service=createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false}});
-  const result=await changeCompanyApp(db,service,{company:body.company,agent:body.agent,person:user.id,app:body.app,action:body.action,encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY});
+  const result=await changeCompanyApp(db,service,{company:body.company,agent:body.agent,person:user.id,app:body.app,action:body.action});
   return reply(result.body,result.status);
  } catch { return reply({error:'appsFailed'},500); }
 }

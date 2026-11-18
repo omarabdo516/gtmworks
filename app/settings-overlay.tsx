@@ -60,7 +60,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  const agentLevel=section==='company'?Number((await db.from('companies').select('agent_level').eq('id',company.id).maybeSingle()).data?.agent_level)||1:1;
  // The Company's model sign-in, read from its own profile in the agent engine (#3). The service role reads only the
  // key of that Company's bundled Connection, after the database said the person is a member (company_engine_target).
- const subscriptions=section==='models'?await (async()=>{ try { return await readCompanySignIns(db,createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false}}),{company:company.id,encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY}); } catch { return {profile:null,oneCompany:false,signIns:null}; } })():null;
+ const subscriptions=section==='models'?await (async()=>{ try { return await readCompanySignIns(db,createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false}}),{company:company.id}); } catch { return {profile:null,oneCompany:false,signIns:null}; } })():null;
  // The token use of the period, read from each owned Company's Agents' Hermes profiles (#347).
  const usageRows=section==='usage'?await ownedUsage(userId,query.period==='30'?30:7):[];
  // The person's own note for the Agents in this Company (RLS: nobody else reads it).

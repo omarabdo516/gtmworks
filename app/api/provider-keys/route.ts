@@ -19,7 +19,7 @@ export async function GET(request:NextRequest) {
   const company=request.nextUrl.searchParams.get('company');
   if(typeof company!=='string'||!uuid.test(company)) return reply({error:'keyInvalid'},400);
   if(!await routeAllowed(db,'app/api/provider-keys/route.ts','GET',company,user.id)) return reply({error:'keyNotAllowed'},403);
-  return reply(await readCompanyKeys(db,service(),{company,encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY}));
+  return reply(await readCompanyKeys(db,service(),{company}));
  } catch { return reply({error:'keyFailed'},502); }
 }
 export async function POST(request:NextRequest) {
@@ -31,7 +31,7 @@ export async function POST(request:NextRequest) {
   const body=JSON.parse(raw);
   if(typeof body?.company!=='string'||!uuid.test(body.company)) return reply({error:'keyInvalid'},400);
   if(!await routeAllowed(db,'app/api/provider-keys/route.ts','POST',body.company,user.id)) return reply({error:'keyNotAllowed'},403);
-  const result=await changeCompanyKey(db,service(),{company:body.company,provider:body.provider,intent:body.intent,value:body.value,encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY});
+  const result=await changeCompanyKey(db,service(),{company:body.company,provider:body.provider,intent:body.intent,value:body.value});
   return reply(result.body,result.status);
  } catch { return reply({error:'keyInvalid'},400); }
 }

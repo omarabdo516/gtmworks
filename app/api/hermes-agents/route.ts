@@ -19,12 +19,11 @@ async function respond(request:NextRequest) {
   if(!company) return reply({error:'hermesAgentNotFound'},404);
   if(!await routeAllowed(db,'app/api/hermes-agents/route.ts',request.method,body.company,user.id)) return reply({error:'hermesNotAllowed'},403);
   if(writing) {
-   if(!['attach','default','remove'].includes(body.intent)||['connection','agent','replacement'].some(key=>body[key]!==undefined&&(typeof body[key]!=='string'||!uuid.test(body[key])))) return reply({error:'hermesAgentFailed'},400);
-   if(body.intent==='attach'&&(!body.connection||typeof body.name!=='string'||!body.name.trim()||body.name.length>100||typeof body.speciality!=='string'||!body.speciality.trim()||body.speciality.length>200)||body.intent!=='attach'&&!body.agent) return reply({error:'hermesAgentFailed'},400);
-   const {error}=await db.rpc('manage_hermes_agent',{c:body.company,intent:body.intent,connection:body.connection??null,a:body.agent??null,agent_name:body.name??null,speciality:body.speciality??null,make_default:body.makeDefault===true,confirm_sharing:body.confirmSharing===true,replacement:body.replacement??null});
+   if(!['default','remove'].includes(body.intent)||!body.agent||['agent','replacement'].some(key=>body[key]!==undefined&&(typeof body[key]!=='string'||!uuid.test(body[key])))) return reply({error:'hermesAgentFailed'},400);
+   const {error}=await db.rpc('manage_hermes_agent',{c:body.company,intent:body.intent,a:body.agent,replacement:body.replacement??null});
    if(error) {
-    const key=['hermesSharingWarning','hermesNextDefault','hermesAgentNotFound','hermesNotAllowed'].includes(error.message)?error.message:'hermesAgentFailed';
-    return reply({error:key},error.code==='42501'?403:error.code==='P0002'?404:key==='hermesSharingWarning'||key==='hermesNextDefault'?409:400);
+    const key=['hermesNextDefault','hermesAgentNotFound','hermesNotAllowed'].includes(error.message)?error.message:'hermesAgentFailed';
+    return reply({error:key},error.code==='42501'?403:error.code==='P0002'?404:key==='hermesNextDefault'?409:400);
    }
   }
   const {data:agents,error}=await db.from('hermes_agents').select(columns).eq('company_id',body.company).order('name');

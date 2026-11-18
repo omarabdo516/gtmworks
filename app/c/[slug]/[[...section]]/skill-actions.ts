@@ -13,7 +13,7 @@ import { supabaseConfig } from '@/lib/supabase-config';
 export const writeSkill=withActionLog('writeSkill',async function writeSkill(form:FormData) {
  const db=await supabase(); const company=String(form.get('company')); const path=`/c/${String(form.get('slug'))}/skills`;
  const file=form.get('file'); const content=file instanceof File?(file.size>128*1024?'':await file.text()):String(form.get('content')||'');
- const {state}=!await actionAllowed(db,'writeSkill',company)?{state:'refused'}:await changeCompanySkill(db,createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}}),{company,agent:form.get('agent'),content,encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY});
+ const {state}=!await actionAllowed(db,'writeSkill',company)?{state:'refused'}:await changeCompanySkill(db,createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}}),{company,agent:form.get('agent'),content});
  revalidatePath(path);
  if(state!=='written'&&!['invalid','shared','notOwn'].includes(state)) logActionFailure('writeSkill',{message:state},{});
  redirect(state==='written'?path:['invalid','shared','notOwn'].includes(state)?`${path}?refused=${state}`:`${path}?failed=1`);
@@ -30,7 +30,7 @@ export const decideAgentRule=withActionLog('decideAgentRule',async function deci
 // The reason is never logged: a failure line names only the action, the Company and the answer's state.
 export const answerAgentRequest=withActionLog('answerAgentRequest',async function answerAgentRequest(form:FormData) {
  const db=await supabase(); const company=String(form.get('company')); const path=`/c/${String(form.get('slug'))}/approvals`;
- const state=!await actionAllowed(db,'answerAgentRequest',company)?'notAllowed':await answerRequest(db,createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}}),{company,request:Number(form.get('request')),make:form.get('intent')==='make',reason:String(form.get('reason')||''),encryptionKey:process.env.WEBHOOK_ENCRYPTION_KEY});
+ const state=!await actionAllowed(db,'answerAgentRequest',company)?'notAllowed':await answerRequest(db,{company,request:Number(form.get('request')),make:form.get('intent')==='make',reason:String(form.get('reason')||'')});
  revalidatePath(path);
  if(state!=='made'&&state!=='declined') logActionFailure('answerAgentRequest',{message:state},{form});
  redirect(state==='made'||state==='declined'?path:`${path}?failed=request-${state}`);
