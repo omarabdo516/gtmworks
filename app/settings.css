@@ -284,6 +284,16 @@
   .gw :is(.sov, .apps-sheet) .btn--sm::before { content: ""; position: absolute; inset: -7px 0; }
   .gw .sov .inv-go { position: relative; }
   .gw .sov .inv-go::before { content: ""; position: absolute; inset: -4px 0; }
+  /* The invitation form's fields keep the reference's size, with the log's 5px transparent band above and below (taken
+     back by a negative margin) so each reaches 44px under a finger (#313); its "Invite a member" keeps its 36px inside a
+     ring of the same kind. */
+  .gw .sov .inv .set-input {
+    height: 44px; margin-block: -5px; border-width: 5px 0; border-color: transparent; border-radius: 8px / 13px; background-clip: padding-box;
+    box-shadow: var(--gw-border-2) 0 0 0 0.5px inset;
+  }
+  .gw .sov .inv .set-input:focus { border-color: transparent; box-shadow: var(--gw-border-1) 0 0 0 1px inset; }
+  .gw .sov .inv-open { position: relative; }
+  .gw .sov .inv-open::before { content: ""; position: absolute; inset: -4px 0; }
   .gw .sov .segmented :is(button, a)::before { content: ""; position: absolute; inset: -8px 0; }
   .gw :is(.sov, .apps-sheet) .link-btn::before { content: ""; position: absolute; inset: -11px 0; }
   .gw .sov .switch::before { content: ""; position: absolute; inset: -12px -6px; }
