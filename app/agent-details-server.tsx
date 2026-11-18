@@ -15,6 +15,7 @@ import { detailsTabs } from '@/app/agent-details-tabs';
 import { ConnectedTools } from '@/app/connected-tools';
 import { AgentLibrary } from '@/app/agent-library';
 import { AgentMemory } from '@/app/agent-memory';
+import { companyKnowledgeHref } from '@/lib/settings-overlay.mjs';
 import { readAgentMemory } from '@/lib/agent-memory.mjs';
 
 type Db=Awaited<ReturnType<typeof supabase>>;
@@ -93,6 +94,6 @@ export async function agentDetails(db:Db,{company,agent,name:named,slug,me,role:
 
  return {status:agentStatus({waitingMine:waiting.some(item=>item.card_id!=null&&ids.includes(item.card_id)),running:!!run}),tab:pickTab(tab),
   tabs:detailsTabs({t,slug,agent,activity,tools:<ConnectedTools company={company} agent={agent} name={name} owner={role==='owner'}/>,tasks:tasksTab,files:filesList,library,fileCount:(cardFileCount??0)+(talkFileCount??0),
-   memory:memory.state==='found'?<AgentMemory company={company} agent={{id:agent,name}} notes={memory.notes} main={memory.main} canReset={role==='owner'} canEdit={role==='owner'||role==='manager'} canForget={role==='owner'}/>:undefined,
+   memory:memory.state==='found'?<AgentMemory company={company} agent={{id:agent,name}} notes={memory.notes} main={memory.main} canReset={role==='owner'} canEdit={role==='owner'||role==='manager'} canForget={role==='owner'} knowledgeHref={companyKnowledgeHref(slug,role)}/>:undefined,
    log,logCount:count??rows.length})};
 }

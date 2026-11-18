@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { overlaySections, visibleSections, pickSection, overlayHref, closeTarget, agentsMainFirst, usageTotals } from '../lib/settings-overlay.mjs';
+import { overlaySections, visibleSections, pickSection, overlayHref, closeTarget, agentsMainFirst, usageTotals, companyKnowledgeHref } from '../lib/settings-overlay.mjs';
 import { messages } from '../lib/i18n.mjs';
 
 test('the overlay lists the reference’s ten sections in its order, Your account under “You”', () => {
@@ -23,6 +23,12 @@ test('a request opens the section asked for only when the person may see it, els
   assert.equal(pickSection('company', 'viewer'), 'agents');
   assert.equal(pickSection('usage', 'viewer'), 'agents');
   assert.equal(pickSection('account', 'viewer'), 'account');
+});
+
+// #192: "Open company knowledge" in an Agent's memory is the Company knowledge section, which a Viewer may not open.
+test('Company knowledge has an address for everyone but a Viewer', () => {
+  for (const role of ['owner', 'manager', 'contributor']) assert.equal(companyKnowledgeHref('rs', role), '/c/rs/settings?section=knowledge', role);
+  assert.equal(companyKnowledgeHref('rs', 'viewer'), undefined);
 });
 
 test('every overlay state has one address', () => {

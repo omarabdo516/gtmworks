@@ -11,6 +11,8 @@ import { signIn } from './sign-in';
 // and the Agent with nothing of the notes, and a skill beside the notes is never shown or touched. RS Learning: Lead,
 // the main Agent, on the Company's profile with three notes and a skill; Ads on its own profile with one; SEO with none.
 // The database side is proven in supabase/tests/memory_reset.sql and the route's Roles in tests/agent-memory.test.mjs.
+// #192 adds the search over the notes with the heading's whole count, "Clear search" and Escape, the intro's lines per
+// Role, and the way to Company knowledge, which a Viewer is not given.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const company='10000000-0000-0000-0000-000000000001';
 const omar='20000000-0000-0000-0000-000000000001';
@@ -205,4 +207,47 @@ test('a forgotten note leaves the Engine when its toast ends, so a reload no lon
  const reloaded=page.getByRole('complementary',{name:'Details: Ads',exact:true});
  await reloaded.getByRole('tab',{name:'Memory',exact:true}).click();
  await expect(reloaded.getByRole('tabpanel').getByText('Nothing yet. What Ads learns from its work shows here.')).toBeVisible();
+});
+
+// #192: the search narrows the notes as a person types, the heading keeps the whole count, and a search that finds
+// nothing says so with "Clear search", which Escape in a filled field does too. The intro's second line names the
+// Agent, the edit line shows only to a Role that may act, and "Open company knowledge" reaches the Company knowledge
+// section of Settings for everyone but a Viewer.
+test('the Owner searches the notes, clears the search, and opens Company knowledge from the intro',async({page})=>{
+ fake.settings.memory.set(own(ads),{memory:['Runs the June campaign.','Prefers short subject lines.','Never mention prices before the offer.'],profile:[]});
+ const details=await openDetails(page,'omar@example.com',ads,'Ads');
+ await details.getByRole('tab',{name:'Memory',exact:true}).click();
+ const panel=memoryTab(details);
+ await expect(panel.locator('.mem-note__t')).toHaveCount(3);
+ await expect(panel).toContainText('Ads is one agent for the whole company with one memory, so what anyone teaches it, it remembers for everyone.');
+ await expect(panel).toContainText('You can edit or delete anything.');
+ await expect(panel.getByRole('link',{name:'Open company knowledge',exact:true})).toHaveAttribute('href','/c/rs-learning/settings?section=knowledge');
+ const search=panel.getByRole('searchbox',{name:'Search memory',exact:true});
+ await search.fill('june');
+ await expect(panel.locator('.mem-note__t')).toHaveText(['Runs the June campaign.']);
+ await expect(panel.getByRole('heading',{name:/^What Ads remembers/})).toContainText('3');
+ await search.fill('cairo');
+ await expect(panel.getByText('Nothing in the Ads memory matches “cairo”.')).toBeVisible();
+ await expect(panel.locator('.mem-note')).toHaveCount(0);
+ await panel.getByRole('button',{name:'Clear search',exact:true}).click();
+ await expect(search).toHaveValue('');
+ await expect(search).toBeFocused();
+ await expect(panel.locator('.mem-note__t')).toHaveCount(3);
+ await search.fill('june');
+ await expect(panel.locator('.mem-note__t')).toHaveCount(1);
+ await search.press('Escape');
+ await expect(search).toHaveValue('');
+ await expect(panel.locator('.mem-note__t')).toHaveCount(3);
+});
+
+test('a Viewer reads an Agent\'s memory without the edit line and without the way to Company knowledge',async({page})=>{
+ fake.settings.memory.set(profile,{memory:['Prefers short subject lines.'],profile:[]});
+ const details=await openDetails(page,'viewer@example.com',lead,'Lead');
+ await details.getByRole('tab',{name:'Memory',exact:true}).click();
+ const panel=memoryTab(details);
+ await expect(panel.locator('.mem-note__t')).toHaveText(['Prefers short subject lines.']);
+ await expect(panel.getByRole('searchbox',{name:'Search memory',exact:true})).toBeVisible();
+ await expect(panel).toContainText('Lead is one agent for the whole company with one memory, so what anyone teaches it, it remembers for everyone.');
+ await expect(panel).not.toContainText('You can edit or delete anything.');
+ await expect(panel.getByRole('link',{name:'Open company knowledge',exact:true})).toHaveCount(0);
 });

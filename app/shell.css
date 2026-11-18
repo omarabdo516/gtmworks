@@ -469,12 +469,23 @@
 .gw .details .lib-empty { display: grid; justify-items: center; gap: 6px; padding: var(--s5) var(--s3); text-align: center; color: var(--gw-text-3); }
 .gw .details .lib-empty .gw-icon { width: 22px; height: 22px; }
 .gw .details .lib-empty p { margin: 0; font-size: var(--gw-fs-sm); line-height: 1.6; max-width: 32ch; text-wrap: pretty; }
-/* The Agent's memory (#350; design-reference: .mem-intro, .mem-know, .mem-main, .mem-note, .mem-confirm). Only the
-   parts built are styled: the Add form, the search and the edit and forget controls arrive with #191 and #192. */
+/* The Agent's memory (#350; design-reference: .mem-intro, .mem-know, .mem-main, .mem-note, .mem-search, .mem-empty,
+   .mem-confirm). The Add form is not built (the Engine has no route that adds a note). */
 .gw .details .mem-intro { margin: 0; padding-inline: var(--s3); font-size: var(--gw-fs-sm); line-height: 1.7; color: var(--gw-text-2); text-wrap: pretty; }
 .gw .details .mem-know, .gw .details .mem-main { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px; margin: 0; padding-inline: var(--s3); font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-2); text-wrap: pretty; }
 .gw .details .mem-know > .gw-icon { flex: none; width: 16px; height: 16px; margin-top: 3px; color: var(--gw-text-3); }
+.gw .details .mem-know > span { flex: 1 1 200px; min-width: 0; }
+.gw .details .mem-know .link-btn { margin-inline-start: -6px; }
 .gw .details .mem-main { color: var(--gw-text-3); }
+.gw .details .mem-search { padding-inline: var(--s3); }
+.gw .details .mem-search input {
+  width: 100%; height: 36px; padding: 0 var(--s3); border-radius: var(--gw-r-full); border: 0.5px solid var(--gw-border-2);
+  background: var(--gw-bg-pane); color: var(--gw-text-1); font-size: var(--gw-fs-sm); outline: none;
+}
+.gw .details .mem-search input:focus { border-color: var(--gw-border-1); box-shadow: 0 0 0 3px var(--gw-bg-active); }
+.gw .details .mem-search input::placeholder { color: var(--gw-text-4); opacity: 1; }
+.gw .details .mem-empty { display: grid; justify-items: start; gap: var(--s1); padding: var(--s2) var(--s1); }
+.gw .details .mem-empty .panel-empty { margin: 0; padding: 0 var(--s2); }
 .gw .details .panel-row.mem-note { flex-direction: column; align-items: stretch; gap: 6px; padding: 10px var(--s2); }
 .gw .details .mem-note__t { font-size: var(--gw-fs-sm); line-height: 1.7; color: var(--gw-text-1); overflow-wrap: anywhere; }
 .gw .details .mem-confirm { display: grid; gap: var(--s2); padding: var(--s2) var(--s1) var(--s1); }
