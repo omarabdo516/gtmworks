@@ -56,7 +56,7 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  // The frame's reads go out together: each is one round trip, and on a busy machine a chain of them is what makes the
  // chat slow to open (decision 0042).
  const [{data:first},{data:agent},{data:person},{data:membership},{data:writer}]=await Promise.all([
-  db.from('conversation_messages').select('body').eq('conversation_id',id).eq('author','person').order('id').limit(1).maybeSingle(),
+  db.from('conversation_messages').select('body,conversation_attachments(name)').eq('conversation_id',id).eq('author','person').order('id').limit(1).maybeSingle(),
   agentRead,
   db.from('people').select('name').eq('id',user.id).single(),
   membershipRead,
@@ -67,7 +67,7 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  // The Agent's details and the approvals count are handed over unread: the chat and its steps are drawn without waiting
  // for them, and each takes its place when read (decision 0042).
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
- const title=(first?.body as string|undefined)?.split('\n')[0]||conversation.agent_name;
+ const title=(first?.body as string|undefined)?.split('\n')[0]||(first?.conversation_attachments as {name:string}[]|undefined)?.[0]?.name||conversation.agent_name;
  const tied=await tiedRead;
  return <Shell company={company} companies={companies||[]} personId={user.id} section="conversations" title={title} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={waitingCount} agentId={conversation.agent_id||undefined} conversationId={id}>
   <main className="convo-page h-full"><ConversationView slug={slug} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={agent?details:null} tab={pickTab(tab)} company={company.id} conversation={{id:conversation.id,agent_id:conversation.agent_id,agent_name:conversation.agent_name,face:faceOf(conversation)}} title={title} writer={!!writer} board={tied&&{card:tied.card,column:tied.column}}><Loaded record={record} team={company.work_mode==='team'}/></ConversationView></main>

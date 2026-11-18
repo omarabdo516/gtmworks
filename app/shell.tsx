@@ -37,9 +37,9 @@ export const sidebarReads=cache(async(id:string|undefined)=>{
  return Promise.all([
   id?Promise.all([companyAgents(db,id),db.rpc('agent_states',{c:id}).then(({data})=>agentStates(data))]):[[],agentStates(null)] as const,
   // Each listed chat with its own first message (a limit per chat), so a long chat never crowds another out of the titles.
-  id?db.from('conversations').select('id,agent_name,created_at,conversation_messages(body)').eq('company_id',id).eq('conversation_messages.author','person')
+  id?db.from('conversations').select('id,agent_name,created_at,conversation_messages(body,conversation_attachments(name))').eq('company_id',id).eq('conversation_messages.author','person')
    .order('created_at',{ascending:false}).order('id',{referencedTable:'conversation_messages'}).limit(1,{referencedTable:'conversation_messages'}).limit(20)
-   .then(({data})=>(data||[]) as {id:string,agent_name:string,created_at:string,conversation_messages:{body:string}[]}[]):[],
+   .then(({data})=>(data||[]) as {id:string,agent_name:string,created_at:string,conversation_messages:{body:string,conversation_attachments:{name:string}[]}[]}[]):[],
   id?db.from('companies').select('work_mode').eq('id',id).maybeSingle().then(({data})=>data?.work_mode as string|null|undefined):undefined,
   id?channelSidebar(db,id):[],
   id?db.rpc('can_manage_company',{target:id}).then(({data})=>!!data):false,
@@ -64,8 +64,9 @@ export default async function Shell({company,companies,section,title,crumbs,pers
  const [[agents,stateOf],conversations,workMode,channels,manage,canWrite,ids]=await sidebarReads(id);
  const writer=!!id&&(owner||canWrite);
  markOpen('sidebar');
- // A chat is named by the first line of its first message, as its own page names it (lib/conversations titleOf).
- const chats=conversations.map(c=>({id:c.id,created_at:c.created_at,title:c.conversation_messages[0]?.body.split('\n')[0]||c.agent_name}));
+ // A chat is named by the first line of its first message, or by its first file when it carries images alone (#155), as
+ // its own page names it (lib/conversations titleOf).
+ const chats=conversations.map(c=>{ const first=c.conversation_messages[0]; return {id:c.id,created_at:c.created_at,title:first?.body.split('\n')[0]||first?.conversation_attachments?.[0]?.name||c.agent_name}; });
  const asksForAgents=writer&&!owner;
  const account=<><AccountMenu slug={slug} personName={personName} role={role} theme={theme} companyName={company?.name} settingsHref={slug?`/c/${slug}/settings`:undefined}/><ThemeToggle theme={theme}/></>;
  const active=(path:string)=>path==='chat'?chat:path==='work/board'?section.startsWith('work/'):section===path;

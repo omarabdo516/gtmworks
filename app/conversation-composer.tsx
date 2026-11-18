@@ -1,5 +1,5 @@
 'use client';
-import { createContext, lazy, Suspense, useContext, useEffect, useImperativeHandle, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode, type Ref } from 'react';
+import { createContext, lazy, Suspense, useContext, useEffect, useImperativeHandle, useRef, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent, type ReactNode, type Ref } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { onComposerFocus, takeComposerFocus } from '@/lib/composer-focus';
 import { insertToken, tokenAtCaret } from '@/lib/composer-mentions.mjs';
@@ -9,6 +9,7 @@ import { ShellIcon } from '@/components/shell-icon';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { firstName } from '@/lib/channels';
 import { AppTile } from '@/components/app-tile';
+import { conversationFilesProblem, imageTypes, maxFiles } from '@/lib/attachments.mjs';
 import { toast } from './toast';
 
 // Loaded when drawn, so a composer outside a Company's pages loads neither.
@@ -23,7 +24,12 @@ export const newId=()=>{const b=crypto.getRandomValues(new Uint8Array(16));b[6]=
 // then its Agents); every other composer calls the Agents this Member sees, as the sidebar lists them
 // (CallableAgentsProvider). New channel, Connect apps and Model (#158) read the page's Company and the reader's role
 // (ComposerPlaceProvider, from the Shell); a composer drawn outside it has none of them. `model` names the Conversation
-// whose Runs the Owner's pick applies to. Attach (#155) is not built yet.
+// whose Runs the Owner's pick applies to.
+// Images go with a message (#155; design-reference: plusMenuHTML's attach, filesHTML, syncFiles): "Attach a file" in
+// the "+" menu opens the picker, each chosen image is a chip above the field with a cross that takes it off and gives
+// the focus back, and Send is on with a file and no text. `attach` names whether this composer may carry them: a
+// channel's does not, yet. What may be attached is decided once for the composer and the route
+// (lib/attachments.mjs, conversationFilesProblem), and a refused pick says why in one line under the box.
 // One send key per typed message, so a double click or a retry runs once; a new text gets a new key.
 // While the Agent works (design-reference: syncComposer), an empty box turns the send arrow into a stop square for a
 // person allowed to stop the run (`stop`); typed text is still sent, and waits for the current reply.
@@ -90,13 +96,19 @@ export function MentionPop({listId,label,items,index,pick}:{listId:string,label:
 }
 type SuggestionList={token:{type:string,q:string,start:number,end:number},items:Suggestion[],index:number};
 export type ModelTarget={company:string,conversation:string,agent:string};
-export function MessageBox({placeholder,label,send,stop,focus=false,call,model,refused,ref}:{placeholder:string,label?:string,send:(text:string,sendKey:string)=>Promise<string|null>,stop?:{label:string,run:()=>Promise<string|null>},focus?:boolean,call?:Callable,model?:ModelTarget,refused?:{key:string,text:string},ref?:Ref<MessageBoxHandle>}) {
- const {t}=useI18n(); const [text,setText]=useState(''); const [key,setKey]=useState(newId); const [busy,setBusy]=useState(false); const [error,setError]=useState('');
+// Why a chosen image, or a set of them, cannot go with this message: the one line under the box (design-reference has
+// no such line, since it takes any file; the Engine reads images only).
+const refusalOf=(problem:'type'|'count'|'size'|'request')=>problem==='type'?'attachTypeRefused':problem==='count'?'attachCountRefused':problem==='size'?'attachSizeRefused':'attachRequestRefused';
+export function MessageBox({placeholder,label,send,stop,focus=false,call,model,refused,attach=true,ref}:{placeholder:string,label?:string,send:(text:string,sendKey:string,files:File[])=>Promise<string|null>,stop?:{label:string,run:()=>Promise<string|null>},focus?:boolean,call?:Callable,model?:ModelTarget,refused?:{key:string,text:string},attach?:boolean,ref?:Ref<MessageBoxHandle>}) {
+ const {t}=useI18n(); const [text,setText]=useState(''); const [files,setFiles]=useState<File[]>([]); const [key,setKey]=useState(newId); const [busy,setBusy]=useState(false); const [error,setError]=useState('');
  const seen=useContext(CallableAgents); const callable=call??{people:[],agents:seen};
  // The suggestion list's token, entries and marked entry (#154); the field keeps the keyboard and points at the entry.
  const [list,setList]=useState<SuggestionList|null>(null); const [listId]=useState(()=>`mention-${newId()}`); const [plusOpen,setPlusOpen]=useState(false);
  // Text typed into the server-drawn box before this code arrived is the person's own: it is kept, and Send sends it.
  const field=useRef<HTMLTextAreaElement>(null);
+ // The reference's one picker (#file-input): opened from the menu, it appends to what is already chosen.
+ const picker=useRef<HTMLInputElement>(null);
+ const canSend=!!text.trim()||files.length>0;
  useEffect(()=>{ const typed=field.current?.value; if(typed) setText(current=>current||typed); },[]);
  const caret=useRef<number|null>(null);
  // A waiting message the Engine refused for its model comes back to an empty box with the model line, as a sent one stays.
@@ -144,14 +156,29 @@ export function MessageBox({placeholder,label,send,stop,focus=false,call,model,r
  }
  useEffect(()=>{ const box=field.current; if(caret.current===null||!box) return; box.focus(); box.setSelectionRange(caret.current,caret.current); caret.current=null; },[text]);
  const pathname=usePathname()??''; const search=useSearchParams()?.toString()??'';
+ // design-reference: the file input's change handler, with the check the route makes again: nothing is added that could
+ // not be sent, and the line says why.
+ function chose(event:ChangeEvent<HTMLInputElement>) {
+  const picked=Array.from(event.target.files??[]); event.target.value='';
+  if(!picked.length) return;
+  const next=[...files,...picked]; const problem=conversationFilesProblem(next,text);
+  if(problem) setError(refusalOf(problem)); else { setError(''); setFiles(next); }
+  field.current?.focus();
+ }
+ // design-reference: unattach. The cross takes one off and gives the focus back to the field.
+ function remove(index:number) {
+  setFiles(current=>current.filter((_,at)=>at!==index)); field.current?.focus();
+ }
  // An inert box (behind the phone drawer) leaves the request to the frame, which focuses it once the drawer has closed.
  useEffect(()=>{ const take=()=>{ if(field.current&&!field.current.closest('[inert]')&&takeComposerFocus(search?`${pathname}?${search}`:pathname)) field.current.focus(); }; take(); return onComposerFocus(take); },[pathname,search]);
  async function submit() {
-  if(!text.trim()||busy) return;
+  if(!canSend||busy) return;
+  const problem=conversationFilesProblem(files,text);
+  if(problem) { setError(refusalOf(problem)); return; }
   setBusy(true); setError(''); setRefusalLine(false); setList(null);
-  const failure=await send(text,key);
+  const failure=await send(text,key,files);
   setBusy(false);
-  if(failure) setError(failure); else { setText(''); setKey(newId()); }
+  if(failure) setError(failure); else { setText(''); setFiles([]); setKey(newId()); }
  }
  async function halt({run}:{run:()=>Promise<string|null>}) {
   setBusy(true); setError(''); setRefusalLine(false);
@@ -160,16 +187,18 @@ export function MessageBox({placeholder,label,send,stop,focus=false,call,model,r
   if(failure) setError(failure);
  }
  return <div className="composer">
+  {files.length>0&&<div className="composer__files">{files.map((file,index)=><span key={`${file.name}:${index}`} className="file-chip"><ShellIcon name="clip"/><bdi dir="auto">{file.name}</bdi><button type="button" onClick={()=>remove(index)} aria-label={t('attachRemove',file.name)}><ShellIcon name="x"/></button></span>)}</div>}
+  <input ref={picker} type="file" className="composer__file-input" accept={imageTypes.join(',')} multiple hidden tabIndex={-1} aria-hidden="true" onChange={chose}/>
   {list&&<MentionPop listId={listId} label={t('mentionSuggestions')} items={list.items} index={list.index} pick={pickEntry}/>}
   <div className="composer__row">
-   <PlusMenu open={plusOpen} setOpen={next=>{ if(next) setList(null); setPlusOpen(next); }} callable={callable} channel={!!call} model={model} insert={insertAtCaret} field={()=>field.current?.focus()} fail={setError}/>
+   <PlusMenu open={plusOpen} setOpen={next=>{ if(next) setList(null); setPlusOpen(next); }} callable={callable} channel={!!call} model={model} attach={attach} pickFile={()=>picker.current?.click()} insert={insertAtCaret} field={()=>field.current?.focus()} fail={setError}/>
    <textarea ref={field} className="composer__input" dir="auto" rows={1} autoFocus={focus} readOnly={busy} aria-busy={busy} aria-label={label??t('conversationMessage')} placeholder={placeholder} value={text} aria-autocomplete="list" aria-expanded={!!list} aria-activedescendant={list?`${listId}-${list.index}`:undefined}
     onChange={event=>{ const value=event.target.value; setText(value); setKey(newId()); updateList(value,event.target.selectionStart??value.length); }} onKeyDown={typeKeys}/>
    <button type="button" className="composer__btn composer__mic" aria-disabled="true" aria-label={`${t('chatDictation')} · ${t('soon')}`} title={t('soon')}><ShellIcon name="mic"/></button>
-   {stop&&!text.trim()?<button type="button" className="composer__send is-stop" aria-label={stop.label} title={stop.label} disabled={busy} onClick={()=>void halt(stop)}><svg className="gw-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/></svg></button>
-   :<button type="button" className="composer__send" aria-label={t('conversationSend')} disabled={!text.trim()||busy} onClick={()=>void submit()}><ShellIcon name="send"/></button>}
+   {stop&&!canSend?<button type="button" className="composer__send is-stop" aria-label={stop.label} title={stop.label} disabled={busy} onClick={()=>void halt(stop)}><svg className="gw-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/></svg></button>
+   :<button type="button" className="composer__send" aria-label={t('conversationSend')} disabled={!canSend||busy} onClick={()=>void submit()}><ShellIcon name="send"/></button>}
   </div>
-  {error&&<p role="alert" className="composer-error">{t(error)}</p>}
+  {error&&<p role="alert" className="composer-error">{t(error,maxFiles)}</p>}
  </div>;
 }
 
@@ -177,7 +206,7 @@ export function MessageBox({placeholder,label,send,stop,focus=false,call,model,r
 // Escape and a second press give the focus back to "+"; Tab and a click outside only close it. The label names only
 // what the menu holds for this Member (design-reference: plusLabel). Its open state is the composer's, so opening the
 // suggestion list closes it (#154).
-function PlusMenu({open,setOpen,callable,channel,model,insert,field,fail}:{open:boolean,setOpen:(open:boolean)=>void,callable:Callable,channel:boolean,model?:ModelTarget,insert:(text:string)=>void,field:()=>void,fail:(error:string)=>void}) {
+function PlusMenu({open,setOpen,callable,channel,model,attach,pickFile,insert,field,fail}:{open:boolean,setOpen:(open:boolean)=>void,callable:Callable,channel:boolean,model?:ModelTarget,attach:boolean,pickFile:()=>void,insert:(text:string)=>void,field:()=>void,fail:(error:string)=>void}) {
  const {t}=useI18n();
  const place=useContext(Place); const [making,setMaking]=useState(false);
  // design-reference: plusMenuHTML's canManage() && !isSolo(), and the Model part for the Owner alone (#158's safe default).
@@ -205,8 +234,8 @@ function PlusMenu({open,setOpen,callable,channel,model,insert,field,fail}:{open:
   else if(event.key==='Tab') setOpen(false);
  };
  const {people,agents}=callable; const anyone=people.length>0||agents.length>0;
- // design-reference: plusLabel. Attach is not built, so it is not named.
- const label=`${t('chatMore')}: ${[anyone&&t('plusPartCall'),team&&!channel&&t('plusPartChannel'),t('plusPartCommands'),picks&&t('plusPartModel')].filter(Boolean).join(t('plusPartsJoin'))}`;
+ // design-reference: plusLabel. It names only what the menu holds for this Member.
+ const label=`${t('chatMore')}: ${[anyone&&t('plusPartCall'),team&&!channel&&t('plusPartChannel'),t('plusPartCommands'),attach&&t('plusPartAttach'),picks&&t('plusPartModel')].filter(Boolean).join(t('plusPartsJoin'))}`;
  // design-reference: plus-team, openTeamCreate(opener): closing the dialog gives the focus back to "+".
  const newChannel=()=>{ setOpen(false); setMaking(true); };
  // design-reference: pick-model. The choice is kept on the Conversation only; the Agent's own model is left as it is.
@@ -232,6 +261,9 @@ function PlusMenu({open,setOpen,callable,channel,model,insert,field,fail}:{open:
    <div className="menu__label">{t('plusCommands')}</div>
    {commands.map(command=><button key={command.command} type="button" className="menu__item" role="menuitem" onClick={()=>pick(`${command.command} `)}>
     <ShellIcon name="slash"/><span className="menu__t">{t(command.label)}</span><span className="menu__hint menu__code">{command.command}</span></button>)}
+   {attach&&<><div className="menu__sep" role="separator"/>
+    <button type="button" className="menu__item" role="menuitem" onClick={()=>{ setOpen(false); pickFile(); }}>
+     <ShellIcon name="clip"/><span className="menu__t">{t('plusAttach')}</span></button></>}
    {place&&<><div className="menu__sep" role="separator"/><Suspense fallback={null}><ConnectApps place={place} close={()=>setOpen(false)} opener={()=>button.current}/></Suspense></>}
    {picks&&models&&models.list.length>0&&<><div className="menu__sep" role="separator"/>
     <div className="menu__label">{t('plusModel')}</div>
@@ -267,6 +299,18 @@ const modelMark=({provider,model}:ModelRow)=>makers.find(([pattern])=>pattern.te
 export async function postMessage(body:object,path='/api/conversations') {
  try {
   const response=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  return response.ok?null:((await response.json()).error as string)||'conversationFailed';
+ } catch { return 'conversationFailed'; }
+}
+
+// A message that carries images goes as a form, the images themselves beside the fields a text-only send posts (#155):
+// the route refuses what the Engine cannot read before anything is stored. Every other field is the same.
+export async function postMessageWithFiles(fields:Record<string,unknown>,files:File[],path='/api/conversations') {
+ const form=new FormData();
+ for(const [key,value] of Object.entries(fields)) if(value!==undefined) form.append(key,String(value));
+ for(const file of files) form.append('files',file);
+ try {
+  const response=await fetch(path,{method:'POST',body:form});
   return response.ok?null:((await response.json()).error as string)||'conversationFailed';
  } catch { return 'conversationFailed'; }
 }

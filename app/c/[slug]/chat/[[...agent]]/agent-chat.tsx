@@ -5,7 +5,7 @@ import { useI18n } from '@/lib/i18n-client';
 import { localeFor } from '@/lib/i18n.mjs';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { ShellIcon } from '@/components/shell-icon';
-import { MessageBox, newId, postMessage, type MessageBoxHandle } from '@/app/conversation-composer';
+import { MessageBox, newId, postMessage, postMessageWithFiles, type MessageBoxHandle } from '@/app/conversation-composer';
 import { AgentEmptyChat, type EmptyChat } from '@/app/agent-empty-chat';
 import { PrivateLine } from '@/app/private-line';
 import { AgentDetails, HeadPill, useDetailsPanel, type DetailsAgent } from '@/app/agent-details';
@@ -60,8 +60,8 @@ export default function AgentChat({slug,company,agent,details,writer,team=false,
    <div className="composer-area" ref={composer}>{current&&writer&&opening&&<div className="new-hint" role="note"><ShellIcon name="userPlus" className="new-hint__ic"/><p className="new-hint__t">{!askOf?t('newAgentHint',current.name):askOf.length?t('newAgentHintMember',current.name,new Intl.ListFormat(localeFor(language),{type:'conjunction'}).format(askOf)):t('newAgentHintMemberAnyOwner',current.name)}</p>
     {!askOf&&<Link className="link-btn new-hint__alt" href={`/c/${slug}/chat?new=ready`}>{t('newAgentReadyMade')}</Link>}</div>}
     {current&&gallery&&<Suspense fallback={null}><ReadyMade slug={slug} company={company} agent={current.id} companyName={gallery.company} alone={gallery.alone} lead={current.name} roles={gallery.roles}/></Suspense>}
-    {current&&(writer?<MessageBox key={`${opening}`} ref={box} focus={opening&&!gallery} placeholder={opening?t('newAgentExample'):t('writeTo',current.name)} send={async(message,sendKey)=>{
-    const failure=await postMessage({company,conversation,agent:current.id,message,sendKey});
+    {current&&(writer?<MessageBox key={`${opening}`} ref={box} focus={opening&&!gallery} placeholder={opening?t('newAgentExample'):t('writeTo',current.name)} send={async(message,sendKey,files)=>{
+    const failure=files.length?await postMessageWithFiles({company,conversation,agent:current.id,message,sendKey},files):await postMessage({company,conversation,agent:current.id,message,sendKey});
     if(failure) return failure;
     // The page moves to the Conversation just started; until it has, the box stays busy, so neither a suggestion nor a
     // second Enter can start another one.

@@ -45,7 +45,7 @@ const composer = (place: ComposerPlace, language: Language = 'en') => render(<di
 test('the Owner of a team Company gets New channel, Connect apps with its count and the Engine\'s models, the one in use checked', async () => {
  const place = { ...role(true, true), company: '10000000-0000-0000-0000-0000000000a1' }; engine(place.company);
  const screen = await composer(place);
- await screen.getByRole('button', { name: 'More: call someone, new channel, commands, model' }).click();
+ await screen.getByRole('button', { name: 'More: call someone, new channel, commands, attach, model' }).click();
  await expect.element(screen.getByRole('menuitem', { name: 'New channel For the team and agents in one conversation' })).toBeVisible();
  await expect.element(screen.getByRole('menuitem', { name: 'Connect apps Connect a new tool to an agent · 1 connected' })).toBeVisible();
  await expect.element(screen.getByText('Model', { exact: true })).toBeVisible();
@@ -65,9 +65,9 @@ test('picking a model closes the menu, gives the field the focus, sends the choi
 });
 
 const roles = [
- { who: 'a Manager has New channel, only the count, and no Model', place: role(false, true), id: 'b1', label: 'More: call someone, new channel, commands', sub: '1 connected' },
- { who: 'a Contributor has no New channel, only the count, and no Model', place: role(false, false), id: 'b2', label: 'More: call someone, commands', sub: '1 connected' },
- { who: 'the Owner of a Company worked alone has no New channel', place: role(true, true, true), id: 'b3', label: 'More: call someone, commands, model', sub: 'Connect a new tool to an agent · 1 connected' },
+ { who: 'a Manager has New channel, only the count, and no Model', place: role(false, true), id: 'b1', label: 'More: call someone, new channel, commands, attach', sub: '1 connected' },
+ { who: 'a Contributor has no New channel, only the count, and no Model', place: role(false, false), id: 'b2', label: 'More: call someone, commands, attach', sub: '1 connected' },
+ { who: 'the Owner of a Company worked alone has no New channel', place: role(true, true, true), id: 'b3', label: 'More: call someone, commands, attach, model', sub: 'Connect a new tool to an agent · 1 connected' },
 ];
 test.each(roles)('$who', async ({ place, id, label, sub }) => {
  const company = `10000000-0000-0000-0000-0000000000${id}`; engine(company);
@@ -82,7 +82,7 @@ test.each(roles)('$who', async ({ place, id, label, sub }) => {
 test('in Arabic the lines speak the reference\'s words', async () => {
  const place = { ...role(true, true), company: '10000000-0000-0000-0000-0000000000a4' }; engine(place.company);
  const screen = await composer(place, 'ar');
- await screen.getByRole('button', { name: 'إضافات: نادي حد، قناة جديدة، الأوامر، الموديل' }).click();
+ await screen.getByRole('button', { name: 'إضافات: نادي حد، قناة جديدة، الأوامر، إرفاق، الموديل' }).click();
  await expect.element(screen.getByRole('menuitem', { name: 'قناة جديدة للفريق والوكلاء في محادثة واحدة' })).toBeVisible();
  await expect.element(screen.getByRole('menuitem', { name: 'ربط التطبيقات وصّل أداة جديدة لوكيل · 1 متوصل' })).toBeVisible();
  await expect.element(screen.getByText('الموديل', { exact: true })).toBeVisible();

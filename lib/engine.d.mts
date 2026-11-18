@@ -4,6 +4,12 @@ export type JsonSchemaObject={type:'object',properties:Record<string,unknown>,re
 export type ToolSpec={name:string,description:string,parameters:JsonSchemaObject};
 export type ToolCall={id:string,name:string,arguments:unknown};
 export type HistoryEntry={role:'user'|'assistant',content:string};
+// What a Run is given to read (#155): a message's text, or, when it carries images, messages whose last one holds the
+// text and then one image part per file, as the pinned Engine's `/v1/runs` reads them. A file or document part is
+// refused by the Engine, so gtmworks sends none.
+export type RunInputPart={type:'text',text:string}|{type:'image_url',image_url:{url:string}};
+export type RunInputMessage={role:'user',content:RunInputPart[]};
+export type RunInput=string|RunInputMessage[];
 export type RunQuestion={id:string,text:string,choices:string[],multiple:boolean};
 export type PermissionChoice='once'|'always'|'deny';
 export type RunPermission={id:string,description:string,command:string,choices:PermissionChoice[]};
@@ -30,7 +36,7 @@ export type ProviderKeys={state:'found',keys:import('./hermes.mjs').ProviderKey[
 export type StartUnknown={readonly state:'unknown'};
 export function startOutcomeUnknown(result:unknown):result is StartUnknown;
 export type Engine={
- start(run:{conversation:string,input:string,idempotencyKey:string,instructions?:string,tools?:ToolSpec[],history?:HistoryEntry[],model?:ModelChoice,retry?:boolean}):Promise<string|null|StartUnknown>,
+ start(run:{conversation:string,input:RunInput,idempotencyKey:string,instructions?:string,tools?:ToolSpec[],history?:HistoryEntry[],model?:ModelChoice,retry?:boolean}):Promise<string|null|StartUnknown>,
  read(run:string):Promise<RunState>,
  stop(run:string):Promise<boolean>,
  answer(run:string,question:string,text:string):Promise<AnsweredQuestion>,

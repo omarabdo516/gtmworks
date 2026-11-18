@@ -13,7 +13,7 @@ import '@/app/tokens.css';
 import '@/app/shell.css';
 
 afterEach(() => { vi.unstubAllGlobals(); });
-type Send = (text: string, sendKey: string) => Promise<string | null>;
+type Send = (text: string, sendKey: string, files: File[]) => Promise<string | null>;
 const box = (props: { send: Send, stop?: { label: string, run: () => Promise<string | null> }, ref?: Ref<MessageBoxHandle>, call?: Callable, seen?: CallableAgent[] }, language: Language = 'en') =>
  render(<LanguageProvider language={language}><CallableAgentsProvider agents={props.seen ?? []}><MessageBox placeholder="Write" {...props}/></CallableAgentsProvider></LanguageProvider>);
 
@@ -168,6 +168,68 @@ test('the stop square fades and gives to 94% while held, as the send arrow does'
  expect(await held(stop)).toBe('matrix(0.94, 0, 0, 0.94, 0, 0)');
 });
 
+// #155: images go with a message. The "+" menu's "Attach a file" opens the picker; each chosen image is a chip above
+// the field with a cross that takes it off and gives the focus back; Send is on with a file and no text; and a file the
+// Agent cannot read is refused with one line under the box and never becomes a chip.
+const image = (name: string) => new File([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])], name, { type: 'image/png' });
+const picked = async (files: File[]) => {
+ const input = document.querySelector<HTMLInputElement>('input[type=file]')!;
+ const carried = new DataTransfer();
+ files.forEach(file => carried.items.add(file));
+ await act(async () => { input.files = carried.files; input.dispatchEvent(new Event('change', { bubbles: true })); });
+};
+const menu = async (screen: Awaited<ReturnType<typeof box>>) => {
+ await screen.getByRole('button', { name: /^More:/ }).click();
+ return screen.getByRole('menuitem', { name: 'Attach a file' });
+};
+
+test('the "+" menu attaches a file: two images become chips, one cross takes one off, and Send is on with no text', async () => {
+ const send = vi.fn<Send>(async () => null);
+ const screen = await box({ send });
+ const attach = await menu(screen);
+ await expect.element(attach).toBeVisible();
+ // The picker is the reference's one hidden input (#file-input), for image kinds only.
+ const input = document.querySelector<HTMLInputElement>('input[type=file]')!;
+ expect(input.accept).toBe('image/png,image/jpeg,image/gif,image/webp');
+ expect(input.multiple).toBe(true);
+ const opening = vi.spyOn(HTMLInputElement.prototype, 'click');
+ await attach.click();
+ expect(opening).toHaveBeenCalledTimes(1);
+ opening.mockRestore();
+ await picked([image('cover.png'), image('logo.png')]);
+ await expect.element(screen.getByText('cover.png')).toBeVisible();
+ await expect.element(screen.getByText('logo.png')).toBeVisible();
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveFocus();
+ await expect.element(screen.getByRole('button', { name: 'Send' })).toBeEnabled();
+ await screen.getByRole('button', { name: 'Remove logo.png' }).click();
+ await expect.element(screen.getByText('logo.png')).not.toBeInTheDocument();
+ await expect.element(screen.getByText('cover.png')).toBeVisible();
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveFocus();
+ await screen.getByRole('button', { name: 'Send' }).click();
+ await expect.poll(() => send.mock.calls.length).toBe(1);
+ expect(send.mock.calls[0][0]).toBe('');
+ expect(send.mock.calls[0][2].map(file => file.name)).toEqual(['cover.png']);
+ await expect.element(screen.getByText('cover.png')).not.toBeInTheDocument();
+});
+
+test('a file the Agent cannot read is refused before anything is added, and the line says why', async () => {
+ const send = vi.fn<Send>(async () => null);
+ const screen = await box({ send });
+ await picked([new File(['a page'], 'brief.pdf', { type: 'application/pdf' })]);
+ await expect.element(screen.getByRole('alert')).toHaveTextContent('The agent can’t read that kind of file yet. Attach a PNG, JPEG, GIF or WebP image.');
+ await expect.element(screen.getByText('brief.pdf')).not.toBeInTheDocument();
+ await expect.element(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveFocus();
+});
+
+test('in Arabic the chips’ crosses are labelled in Arabic, and a refused pick speaks Arabic', async () => {
+ const screen = await box({ send: async () => null }, 'ar');
+ await picked([image('غلاف.png')]);
+ await expect.element(screen.getByRole('button', { name: 'شيل غلاف.png' })).toBeVisible();
+ await picked([new File(['a page'], 'brief.pdf', { type: 'application/pdf' })]);
+ await expect.element(screen.getByRole('alert')).toHaveTextContent('الوكيل لسه مابيعرفش يقرا النوع ده من الملفات. ارفق صورة PNG أو JPEG أو GIF أو WebP.');
+});
+
 test('"@" at the start or after a space offers the Agents this Member sees, with each face, name and the line under it, and narrows with every letter', async () => {
  const screen = await box({ send: async () => null, seen: agents });
  const field = screen.getByRole('textbox', { name: 'Message' });
@@ -253,7 +315,7 @@ test('Tab picks the marked entry too, Escape closes the list and keeps the text'
 test('opening the list closes the "+" menu, and opening the "+" menu closes the list', async () => {
  const screen = await box({ send: async () => null, seen: agents });
  const field = screen.getByRole('textbox', { name: 'Message' });
- const plus = screen.getByRole('button', { name: 'More: call someone, commands' });
+ const plus = screen.getByRole('button', { name: 'More: call someone, commands, attach' });
  await userEvent.type(field, '@');
  await expect.element(list(screen)).toBeVisible();
  await plus.click();
