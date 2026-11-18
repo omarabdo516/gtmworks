@@ -475,7 +475,8 @@ test('a move to another column is offered as Undo, which puts the Card back in t
  // The keyboard's move is told with "Undo" too, and its Undo brings the Card back again.
  await page.goto('/c/rs-learning/work/board');
  await page.locator(`.kcard[data-card-id="${a}"] a`).focus();
- await page.keyboard.press('Shift+ArrowRight');
+ // In English the board reads left to right, so Planned is the column to the left of In progress.
+ await page.keyboard.press('Shift+ArrowLeft');
  await expect(page.locator('.toast')).toContainText('Moved to “Planned”');
  await expect(page.locator(`.col[data-column="planned"] .kcard[data-card-id="${a}"]`)).toBeVisible();
  await page.getByRole('button',{name:'Undo'}).click();
