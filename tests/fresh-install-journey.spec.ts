@@ -201,5 +201,18 @@ test('a fresh install walks from the setup link to sign-in, Lead, the board, Age
    await page.goto(path);
    await wordsAreOwn(page,language,path);
   }
+  // What opens over a page is read too: Lead's details panel, the "+" menu, and the apps sheet it opens.
+  await page.goto(conversation);
+  await page.locator('.sidebar .agent-tile:not(.agent-tile--new)').click();
+  await expect(page.getByRole('complementary',{name:language==='en'?'Details: Lead':'تفاصيل Lead',exact:true})).toBeVisible();
+  await wordsAreOwn(page,language,`${conversation} (Lead's details)`);
+  await page.goto(conversation);
+  await plus(page).click();
+  const menu=page.getByRole('menu');
+  await expect(menu.getByRole('menuitem',{name:language==='en'?/^Connect apps/:/^ربط التطبيقات/})).toBeVisible();
+  await wordsAreOwn(page,language,`${conversation} (the "+" menu)`);
+  await menu.getByRole('menuitem',{name:language==='en'?/^Connect apps/:/^ربط التطبيقات/}).click();
+  await expect(page.locator('dialog.apps-sheet')).toBeVisible();
+  await wordsAreOwn(page,language,`${conversation} (the apps sheet)`);
  }
 });
