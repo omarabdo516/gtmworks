@@ -36,7 +36,7 @@ export function AgentMemory({company,agent,notes,main,canReset}:AgentMemoryProps
   <h3 className="dp-label" id="mem-h"><span>{t('memoryHeading',agent.name)} <span className="muted num">{notes.length}</span></span>
    {canReset&&!asking&&<button ref={resetButton} type="button" className="link-btn" aria-expanded={false} onClick={ask}>{t('memoryReset')}</button>}</h3>
   <p className="mem-intro">{t('memoryIntro')}</p>
-  <p className="mem-know"><ShellIcon name="bulb"/><span>{t('memoryKnow',agent.name)}</span></p>
+  <p className="mem-know"><ShellIcon name="book"/><span>{t('memoryKnow',agent.name)}</span></p>
   {main&&<p className="mem-main">{t('memoryMain',agent.name)}</p>}
   {asking&&<div className="panel-card mem-confirm">
    <p className="panel-empty">{t('memoryResetAsk',agent.name)}</p>

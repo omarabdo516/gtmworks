@@ -412,7 +412,7 @@
   "chatTabMemory": "Memory",
   "memoryHeading": "What {0} remembers",
   "memoryIntro": "Notes it comes back to on every job: what the team told it, and what it learned on its own from campaigns and reviews.",
-  "memoryKnow": "Brand voice, audience, prices, banned claims and decisions for the whole company live in Company knowledge, read by every agent. Here is what {0} remembers on its own.",
+  "memoryKnow": "Brand voice, audience, prices, banned claims and decisions for the whole company live in “Company knowledge”, read by every agent. Here is what {0} remembers on its own.",
   "memoryMain": "This is the main agent. Its memory also holds what the company’s agents remembered before each agent got its own profile.",
   "memoryEmpty": "Nothing yet. What {0} learns from its work shows here.",
   "memoryReset": "Reset memory",
