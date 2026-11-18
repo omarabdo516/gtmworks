@@ -133,7 +133,8 @@ for (const [how, close] of [['the x', 'x'], ['Escape', 'escape'], ['a press outs
  await openTeam(screen);
  if (close === 'x') await screen.getByRole('button', { name: 'Close' }).click();
  else if (close === 'escape') await userEvent.keyboard('{Escape}');
- else document.querySelector<HTMLDialogElement>('dialog.team-dlg')!.click();
+ // A press that starts and ends on the dialog's own surface, around its panel, as a pointer makes it.
+ else { const dialog = document.querySelector<HTMLDialogElement>('dialog.team-dlg')!; for (const type of ['mousedown', 'mouseup', 'click']) dialog.dispatchEvent(new MouseEvent(type, { bubbles: true })); }
  await expect.element(screen.getByRole('dialog')).not.toBeInTheDocument();
  await expect.element(accountButton(screen)).toHaveFocus();
 });

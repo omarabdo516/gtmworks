@@ -26,8 +26,9 @@ export default function FirstRunChoice({slug,company,companyName,personName,lead
  const {t,language}=useI18n();
  const [mode,setMode]=useState<Mode|null>(null);
  const [step,setStep]=useState<'mode'|'invite'>('mode');
- const nextRow=useRef(0);
- const [rows,setRows]=useState<Row[]>(()=>[freshRow(nextRow.current++)]);
+ // The first row is 0; each row added takes the next id.
+ const nextRow=useRef(1);
+ const [rows,setRows]=useState<Row[]>(()=>[freshRow(0)]);
  // A server refusal leaves its row once the person writes a good email there (design-reference: the fr-email handler).
  // Both it and the row's own check are kept by the row's id.
  const [dismissed,setDismissed]=useState<Record<number,boolean>>({});
