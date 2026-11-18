@@ -77,15 +77,17 @@ export function KanbanBoard({label,busy,cards,columnName,onMove,renderOverlay,ch
   return {column:column.getAttribute('data-column'),before:next?Number(next.dataset.cardId):null};
  };
  useEffect(()=>{
-  const follow=(event:TouchEvent|MouseEvent)=>{ const at='touches' in event?event.touches[0]:event; if(!at) return; finger.current={x:at.clientX,y:at.clientY};
-   if(carrying.current===null) return;
-   const next=placeAt(at.clientX,at.clientY,carrying.current);
+  // The place under the pointer, read again on every move of the mouse or the finger, and when the board or a column
+  // scrolls under a resting pointer: the Cards move without a pointer move, and the line and the drop follow them.
+  const read=()=>{ const at=finger.current; if(carrying.current===null||!at) return;
+   const next=placeAt(at.x,at.y,carrying.current);
    if(next.column===shown.current.column&&next.before===shown.current.before) return;
    shown.current=next; dropped.current=next; setPlace(next);
   };
+  const follow=(event:TouchEvent|MouseEvent)=>{ const at='touches' in event?event.touches[0]:event; if(!at) return; finger.current={x:at.clientX,y:at.clientY}; read(); };
   const options={capture:true,passive:true};
-  window.addEventListener('touchstart',follow,options); window.addEventListener('touchmove',follow,options); window.addEventListener('mousedown',follow,options); window.addEventListener('mousemove',follow,options);
-  return ()=>{ window.removeEventListener('touchstart',follow,options); window.removeEventListener('touchmove',follow,options); window.removeEventListener('mousedown',follow,options); window.removeEventListener('mousemove',follow,options); };
+  window.addEventListener('touchstart',follow,options); window.addEventListener('touchmove',follow,options); window.addEventListener('mousedown',follow,options); window.addEventListener('mousemove',follow,options); window.addEventListener('scroll',read,options);
+  return ()=>{ window.removeEventListener('touchstart',follow,options); window.removeEventListener('touchmove',follow,options); window.removeEventListener('mousedown',follow,options); window.removeEventListener('mousemove',follow,options); window.removeEventListener('scroll',read,options); };
  },[]);
  const canScroll=(element:Element)=>{
   if(!finger.current) return true;
@@ -95,7 +97,10 @@ export function KanbanBoard({label,busy,cards,columnName,onMove,renderOverlay,ch
  const columnFor=(id:string|number|undefined)=>id===undefined?undefined:String(id).startsWith('column:')?String(id).slice(7):cards.find(card=>card.id===Number(id))?.column;
  const putAway=()=>{ carrying.current=null; dropped.current=nowhere; shown.current=nowhere; setActiveId(null); setPlace(nowhere); };
  return <DndContext id="work-board" sensors={sensors} autoScroll={{canScroll}} onDragStart={({active})=>{ carrying.current=Number(active.id); setActiveId(Number(active.id)); }} onDragCancel={putAway} onDragEnd={({active,over})=>{
-  const id=Number(active.id); const card=cards.find(item=>item.id===id); const at=dropped.current; const was=active.rect.current.translated;
+  const id=Number(active.id); const card=cards.find(item=>item.id===id); const was=active.rect.current.translated;
+  // The place under the pointer now, not the one the last pointer move named: a column or the board may have scrolled
+  // since, moving the Cards under a resting finger (design-reference: dragEnd's card under the pointer).
+  const at=finger.current?placeAt(finger.current.x,finger.current.y,id):dropped.current;
   putAway();
   if(!card||!over||!at.column) return;
   // A drop on the Card's own place changes nothing (design-reference: dragEnd's sameSpot).
