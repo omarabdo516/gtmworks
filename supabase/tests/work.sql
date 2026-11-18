@@ -77,7 +77,10 @@ select throws_ok($$select public.place_work_card('10000000-0000-0000-0000-000000
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
 select lives_ok($$select public.place_work_card('10000000-0000-0000-0000-000000000001',(select id from public.work_cards where company_id='10000000-0000-0000-0000-000000000001' and title='Place 3'),'planned',null)$$,'a Contributor places a card before review');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+-- Set up a Card past review the way an approval does (decide_approval's internal flag), so the refusal is the placing's own.
+select set_config('approval.internal','yes',true);
 select public.move_work_card_to_column('10000000-0000-0000-0000-000000000001',(select id from public.work_cards where company_id='10000000-0000-0000-0000-000000000001' and title='Place 3'),'live');
+select set_config('approval.internal','',true);
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
 select throws_ok($$select public.place_work_card('10000000-0000-0000-0000-000000000001',(select id from public.work_cards where company_id='10000000-0000-0000-0000-000000000001' and title='Place 3'),'live',null)$$,'42501','not permitted','a Contributor places no card after review');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
