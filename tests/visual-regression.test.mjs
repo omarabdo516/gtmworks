@@ -53,7 +53,7 @@ test('with no screen that differs, the title says the visual job failed', () => 
 });
 
 test('the command line reads the lane and the budgets from the ledger folder, and prints the title on its own when asked', t => {
-  const folder = folderOf(t, { 'lane.json': lane, 'measured.json': budgets, 'meta.json': { layer: 'visual' } });
+  const folder = folderOf(t, { 'lane.json': lane, 'measured.json': budgets });
   const body = cli(folder);
   assert.match(body, /These screens differ from their approved images:\n- home › home 1440 light/);
   assert.match(body, /These lane checks failed \(guards, contrast\):\n- card › card 1440 light/);

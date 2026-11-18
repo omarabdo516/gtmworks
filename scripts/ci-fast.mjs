@@ -6,7 +6,7 @@ import { rules } from './ci-classify.mjs';
 
 // The fast layer (#258, spec #255 D1): the static checks, the node tests and the component tests, run at the same time
 // as one command that CI, an agent and a person run alike. Each step keeps its own output and result, so a red step is
-// shown whole and the others stay green. Each command may write its test records to $LEDGER (scripts/ci-ledger.mjs).
+// shown whole and the others stay green. Each step's output is also written to $LEDGER/<step>.log as it runs.
 // The steps share the runner's four cores: one that `yields` runs at a lower CPU priority, so the one-thread checks
 // (lint, types) keep a core each and the test runners, which spread over every core, fill what is left.
 export const steps = [
@@ -19,14 +19,13 @@ export const steps = [
   { name: 'typecheck', command: 'npm run typecheck' },
   // Unused files, exports and dependencies (knip.json), as T3 Code checks them (#81).
   { name: 'knip', command: 'npx --no-install knip --no-progress' },
-  // `npm test`'s files, offline as `npm test` runs them (#266), with the ledger reporter beside the usual one; the flags
-  // must come before the glob.
-  { name: 'node', command: 'node --import ./tests/offline.mjs --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=./scripts/ci-ledger-node.mjs --test-reporter-destination="$LEDGER/node.jsonl" \'tests/**/*.test.mjs\'', yields: true },
+  // `npm test`'s files, offline as `npm test` runs them (#266); the flags must come before the glob.
+  { name: 'node', command: 'node --import ./tests/offline.mjs --test --test-reporter=spec \'tests/**/*.test.mjs\'', yields: true },
   // Screens as components in headless Chromium (#81), in one run: the tests take seconds, so shards would only repeat
   // the install and the browser (spec #255 D2). Naming the reporters replaces Vitest's own choice, so the GitHub one that
   // marks failures on the pull request is named too when it runs there. CI's workflow brings the browser; elsewhere the
   // step installs it, after the discovery gate.
-  { name: 'components', command: '{ [ "${CI:-}" = true ] || npx playwright install chromium; } && npm run test:components -- --reporter=default ${GITHUB_ACTIONS:+--reporter=github-actions} --reporter=json --outputFile.json="$LEDGER/vitest.json"', yields: true },
+  { name: 'components', command: '{ [ "${CI:-}" = true ] || npx playwright install chromium; } && npm run test:components -- --reporter=default ${GITHUB_ACTIONS:+--reporter=github-actions}', yields: true },
 ];
 
 const fatal = rules.filter(rule => rule.scope === 'fatal');

@@ -134,13 +134,12 @@ test('a step sees the ledger folder it writes its test records to', async t => {
   assert.equal(readFileSync(join(dir, 'node.jsonl'), 'utf8'), '{}\n');
 });
 
-test('the fast layer is the static checks, the node tests and the component tests, each writing its ledger records', () => {
+test('the fast layer is the static checks, the node tests and the component tests', () => {
   assert.deepEqual(steps.map(step => step.name), ['discovery', 'docs', 'i18n', 'openapi', 'lint', 'typecheck', 'knip', 'node', 'components']);
   const command = name => steps.find(step => step.name === name).command;
-  assert.match(command('node'), /--test-reporter-destination="\$LEDGER\/node\.jsonl" 'tests\/\*\*\/\*\.test\.mjs'$/);
+  assert.match(command('node'), / 'tests\/\*\*\/\*\.test\.mjs'$/);
   // Offline, as `npm test` runs them (#266).
   assert.match(command('node'), /^node --import \.\/tests\/offline\.mjs --test /);
-  assert.match(command('components'), /npm run test:components -- .*--outputFile\.json="\$LEDGER\/vitest\.json"/);
   assert.doesNotMatch(command('components'), /shard/i);
   // In CI the workflow restores or installs the browser; elsewhere the step installs it, behind the discovery gate.
   assert.match(command('components'), /^\{ \[ "\$\{CI:-\}" = true \] \|\| npx playwright install chromium; \} && npm run test:components /);

@@ -28,7 +28,7 @@ export default defineConfig({
   // Lane 0 builds the app and serves it; every other lane serves that build on its own port (scripts/web.sh).
   webServer: Array.from({ length: lanes }, (_, n) => ({ command: `mkdir -p playwright-report && LANE=${n} bash scripts/web.sh production > ${serverLogOf(n)} 2>&1`, url: `${originOf(n)}/sign-in`, reuseExistingServer: false, timeout: 240000, env: { GTMWORKS_BUILD_NODE_OPTIONS: nodeOptionsBefore } })),
   // Playwright's own reporters only: CI uploads the HTML report, the GitHub reporter marks failures and flaky tests on
-  // the run, and ci.sh asks for the JSON one for the CI ledger (#256). The report keeps a folder of its own, since the
+  // the run, and ci.sh asks for the JSON one for the measured budgets the visual job reads back (#257). The report keeps a folder of its own, since the
   // servers write their logs to playwright-report/.
   reporter: [['list'], ['html', { outputFolder: 'playwright-report/html', open: 'never' }], ...(process.env.CI ? [['github'] as const] : []), ...(process.env.PLAYWRIGHT_JSON_OUTPUT_FILE ? [['json'] as const] : [])],
   projects: [

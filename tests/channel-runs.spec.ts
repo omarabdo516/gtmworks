@@ -95,17 +95,3 @@ test('integration: a start whose answer was lost is asked again with the same ke
   expect(fake.runs).toHaveLength(1);
  } finally { detach(); }
 });
-
-test('integration: a Viewer cannot write in the channel, and calling a Member starts no Run',async()=>{
- test.setTimeout(120000);
- const fake=fakeEngine();
- const {service,person}=await memberClient('viewer@example.com'); const {detach}=attachAgent();
- try {
-  expect(await postChannelMessage(person,service,{channel,sendKey:randomUUID(),message:'@Faye hello',encryptionKey,engineFor:fake.engineFor})).toEqual({refused:'channelNotAllowed',status:403});
-  const contributor=(await memberClient('multi@example.com')).person;
-  const sent=await postChannelMessage(contributor,service,{channel,sendKey:randomUUID(),message:'@عمر can you look at this?',encryptionKey,engineFor:fake.engineFor}) as {message:number};
-  expect(sent).toEqual({message:expect.any(Number)});
-  expect(runOf(sent.message)).toEqual([]);
-  expect(fake.runs).toEqual([]);
- } finally { detach(); }
-});

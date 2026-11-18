@@ -137,9 +137,3 @@ test('older rows are reached page by page in a stable order, each row once',asyn
   query(`update public.members set removed_at=now() where company_id='${company}' and person_id='${viewer}'`);
  }
 });
-
-test('a Member reads only the log of their own Company',async({page})=>{
- await signIn(page,'viewer@example.com','/c/rs-learning/log');
- await expect(page.locator('.lgp-body .lg-row').first()).toBeVisible();
- expect((await page.goto('/c/rs-consultations/log'))!.status()).toBe(404);
-});

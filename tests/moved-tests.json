@@ -1,0 +1,78 @@
+[
+  {
+    "file": "activity-log.spec.ts",
+    "title": "a Member reads only the log of their own Company",
+    "issue": 338,
+    "homes": [
+      {
+        "file": "supabase/tests/company_log.sql",
+        "test": "a Viewer reads the log of their own Company"
+      },
+      {
+        "file": "supabase/tests/company_log.sql",
+        "test": "a Viewer of RS Learning reads nothing of R&S Consultations"
+      }
+    ]
+  },
+  {
+    "file": "team-channels.spec.ts",
+    "title": "a Member not in the channel cannot see that it exists",
+    "issue": 338,
+    "homes": [
+      {
+        "file": "supabase/tests/team_channels.sql",
+        "test": "a Member outside a channel does not find it"
+      },
+      {
+        "file": "supabase/tests/team_channels.sql",
+        "test": "nor its messages, Runs, people or Agents"
+      },
+      {
+        "file": "supabase/tests/team_channels.sql",
+        "test": "their channel list has the general channel only"
+      }
+    ]
+  },
+  {
+    "file": "channel-runs.spec.ts",
+    "title": "integration: a Viewer cannot write in the channel, and calling a Member starts no Run",
+    "issue": 338,
+    "homes": [
+      {
+        "file": "supabase/tests/channels.sql",
+        "test": "a Viewer cannot write"
+      },
+      {
+        "file": "supabase/tests/channels.sql",
+        "test": "no Run for ordinary talk, an address, a longer word, a Member, or an Agent hidden from the sender"
+      },
+      {
+        "file": "tests/channel-runs.test.mjs",
+        "test": "a post the database refuses is answered as not allowed or not found, and starts no Run"
+      }
+    ]
+  },
+  {
+    "file": "engine-conversation.spec.ts",
+    "title": "integration: a Contributor gets a reply on the fake engine and a Viewer is refused",
+    "issue": 338,
+    "homes": [
+      {
+        "file": "supabase/tests/conversation_roles.sql",
+        "test": "a Viewer cannot start a conversation"
+      },
+      {
+        "file": "supabase/tests/conversation_roles.sql",
+        "test": "a Viewer reaches no agent"
+      },
+      {
+        "file": "tests/conversations.spec.ts",
+        "test": "A Contributor starts a conversation and gets the reply; nobody else reads it"
+      },
+      {
+        "file": "tests/conversation-runs-roles.test.mjs",
+        "test": "a Contributor's message goes through the Owner's pinned Connection, and a refused Viewer reaches no engine"
+      }
+    ]
+  }
+]

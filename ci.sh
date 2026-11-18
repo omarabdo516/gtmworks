@@ -5,9 +5,8 @@ cd "$(dirname "$0")"
 # every other check uses. Each lane starts in the background and leaves its exit status beside its log.
 lanes=${GTMWORKS_TEST_LANES:-1}
 [[ $lanes =~ ^[1-7]$ ]] || { echo 'GTMWORKS_TEST_LANES must be 1 to 7' >&2; exit 2; }
-# The self-hosted runner has no sudo for the system packages and keeps its browsers between runs.
 install_chromium() {
-  if [[ "${RUNNER_ENVIRONMENT:-}" == self-hosted ]]; then npx playwright install chromium; else npx playwright install --with-deps chromium; fi
+  npx playwright install --with-deps chromium
 }
 start_lanes() {
   mkdir -p playwright-report
@@ -37,12 +36,11 @@ images_loaded() {
   bash scripts/supabase-images.sh list > "$images_before"
   trap 'bash scripts/supabase-images.sh pulled "$images_before" || true; rm -f "$images_before"' EXIT
 }
-# Each stage writes its machine-readable test results under ci-ledger/ (Playwright empties test-results/ when it starts);
-# the ledger job reads them back (scripts/ci-ledger.mjs, #256). Prints the folder.
+# The fast steps' logs and the visual job's test results go under ci-ledger/<job> (Playwright empties test-results/ when
+# it starts); a failed visual job on main reads its results back (scripts/visual-regression.mjs). Prints the folder.
 ledger_dir() {
-  local dir="ci-ledger/${GITHUB_JOB:-$1}${SHARD:+-${SHARD%%/*}}"
+  local dir="ci-ledger/${GITHUB_JOB:-$1}"
   rm -rf "$dir" && mkdir -p "$dir"
-  LAYER=$1 node -e 'const env = process.env; console.log(JSON.stringify({ layer: env.LAYER, shard: env.SHARD ?? "", runner: env.RUNNER_NAME ?? "local", environment: env.RUNNER_ENVIRONMENT ?? "local", root: process.cwd() }))' > "$dir/meta.json"
   echo "$dir"
 }
 # The visual lane (#257) is drawn by one pinned browser in its container, through Playwright's own server (the checkout's
@@ -110,27 +108,28 @@ case "${1:-check}" in
   fi
   images_loaded
   bash scripts/local-db.sh
-  dir=$(ledger_dir database)
-  # Every verify file in one psql session, each reported by name with its own ledger line (#259).
+  # Every verify file in one psql session, each reported by name (#259).
   container=$(< supabase/.temp/lanes/0/db-container)
-  DB_LEDGER="$PWD/$dir/database.jsonl" node scripts/verify-db-session.mjs "$container" supabase/migrations/*.verify.sql scripts/check-rls.sql
+  node scripts/verify-db-session.mjs "$container" supabase/migrations/*.verify.sql scripts/check-rls.sql
   # The session itself, on real psql: a file whose statement fails must fail with that statement's error.
   if canary=$(node scripts/verify-db-session.mjs "$container" tests/verify-db-session-canary.sql 2>&1) \
     || [[ $canary != *'tests/verify-db-session-canary.sql: division by zero'* ]]; then
     echo "$canary" >&2; echo 'the verify session did not fail its canary with its error' >&2; exit 1
   fi
   echo 'verify session canary: a failed statement failed its file with its error, as it must'
-  # tests/db.sh writes one line per step of its own.
-  DB_LEDGER="$PWD/$dir/database.jsonl" npm run test:db
+  npm run test:db
   ;;
  integration)
+  # Any further arguments go to the browser suite; CI passes --shard=<i>/3 (#335), and the proxy suite runs in shard 1 only.
+  shift
+  proxy=true
+  [[ " $* " == *' --shard='* && " $* " != *' --shard=1/'* ]] && proxy=false
   load_images
   if [[ "${CI:-}" == "true" ]]; then
     npm ci
     install_chromium
   fi
   images_loaded
-  dir=$(ledger_dir integration)
   start_lanes
   wait_lanes
   if [[ "${CI:-}" == "true" ]]; then
@@ -141,11 +140,11 @@ case "${1:-check}" in
   build_pid=$!
   # The production-shaped stack (proxy, https, public-looking host) runs on the database exactly as the seed builds it and
   # changes it (an enrolled authenticator, an invited member), so the seed is rebuilt before the main browser suite.
-  PLAYWRIGHT_JSON_OUTPUT_FILE="$dir/proxy.json" npm run test:e2e:proxy
+  if [[ $proxy == true ]]; then npm run test:e2e:proxy; fi
   bash scripts/local-db.sh
   wait "$build_pid" || { cat playwright-report/build.log >&2; echo 'the browser suite build failed' >&2; exit 1; }
   # The measured budgets run on their own (`ci.sh visual`), on a GitHub-hosted runner.
-  GTMWORKS_WEB_PREBUILT=true GTMWORKS_TEST_LANES=$lanes GTMWORKS_HOSTED_ELSEWHERE=true PLAYWRIGHT_JSON_OUTPUT_FILE="$dir/e2e.json" npm run test:e2e
+  GTMWORKS_WEB_PREBUILT=true GTMWORKS_TEST_LANES=$lanes GTMWORKS_HOSTED_ELSEWHERE=true npm run test:e2e -- "$@"
   ;;
  images)
   # Every Supabase image the jobs use, pulled once and archived for the Actions cache (the supabase-images job, #259).
@@ -184,24 +183,5 @@ case "${1:-check}" in
   start_lane
   lane_test --update-snapshots=changed
   ;;
- lane-proof)
-  # Draws every lane image three times and keeps each run's hashes: CI compares them across runners. It rewrites the
-  # approved images in the checkout, so it runs in CI only.
-  [[ "${CI:-}" == "true" ]] || { echo 'lane-proof rewrites the approved lane images; it runs in CI only' >&2; exit 2; }
-  start_lane
-  mkdir -p test-results/lane-proof
-  # Each run's images are kept beside its hashes, so a difference can be looked at. The first run builds the app and the
-  # next two serve that build; the second declares the screens last to first, so
-  # the same bytes also prove that no screen depends on the ones drawn before it.
-  lane_test --update-snapshots=all
-  find tests/visual-lane -name '*.png' | sort | xargs -r sha256sum > test-results/lane-proof/run-1.sha256
-  cp -r tests/visual-lane/images test-results/lane-proof/run-1-images
-  GTMWORKS_WEB_PREBUILT=true GTMWORKS_LANE_REVERSE=true lane_test --update-snapshots=all
-  find tests/visual-lane -name '*.png' | sort | xargs -r sha256sum > test-results/lane-proof/run-2.sha256
-  cp -r tests/visual-lane/images test-results/lane-proof/run-2-images
-  GTMWORKS_WEB_PREBUILT=true lane_test --update-snapshots=all
-  find tests/visual-lane -name '*.png' | sort | xargs -r sha256sum > test-results/lane-proof/run-3.sha256
-  cp -r tests/visual-lane/images test-results/lane-proof/run-3-images
-  ;;
- *) echo 'usage: ./ci.sh check | fast | static | components | database | images | integration | visual | visual-update | lane-proof' >&2; exit 2;;
+ *) echo 'usage: ./ci.sh check | fast | static | components | database | images | integration | visual | visual-update' >&2; exit 2;;
 esac

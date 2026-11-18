@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 
 // These are imported browser helpers, not standalone tests.
-const helpers = new Set(['tests/sign-in.ts', 'tests/navigation-measure.ts', 'tests/fake-hermes.mjs', 'tests/fake-engine.mjs', 'tests/sql-statements.mjs', 'tests/pgtap.mjs', 'tests/verify-db-session-canary.sql', 'tests/choose-language.ts', 'tests/tap-overlaps.ts', 'tests/lane.mjs', 'tests/fresh-seed.ts', 'tests/slow-reads.ts', 'tests/motion-table.mjs', 'tests/motion-css.mjs', 'tests/components/work-page.tsx', 'tests/visual-lane-guards.ts', 'tests/visual-lane.mjs', 'tests/offline.mjs', 'tests/offline-browser.ts', 'tests/offline-teardown.ts', 'tests/components/offline-setup.ts', 'tests/clock.mjs', 'tests/ui-words.mjs']);
+const helpers = new Set(['tests/sign-in.ts', 'tests/navigation-measure.ts', 'tests/fake-hermes.mjs', 'tests/fake-engine.mjs', 'tests/sql-statements.mjs', 'tests/pgtap.mjs', 'tests/verify-db-session-canary.sql', 'tests/choose-language.ts', 'tests/tap-overlaps.ts', 'tests/lane.mjs', 'tests/fresh-seed.ts', 'tests/slow-reads.ts', 'tests/motion-table.mjs', 'tests/motion-css.mjs', 'tests/components/work-page.tsx', 'tests/visual-lane-guards.ts', 'tests/visual-lane.mjs', 'tests/offline.mjs', 'tests/offline-browser.ts', 'tests/offline-teardown.ts', 'tests/components/offline-setup.ts', 'tests/clock.mjs', 'tests/ui-words.mjs', 'tests/set-aside.json', 'tests/moved-tests.json', 'tests/playwright-list.mjs']);
 const generated = new Set(['.git', 'node_modules', '.next', 'test-results', 'playwright-report', '.temp']);
 function files(directory = '.') {
  return readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
@@ -27,10 +27,10 @@ const covered = new Set([
  ...globSync('supabase/migrations/*.verify.sql'),
  'tests/db.sh',
  // tests/db.sh writes each migration replay (`replay tests/<file>.mjs`) and runs them in one pgTAP session (#259).
- ...(/^step tests\/db\.sh 'migration replays' /m.test(database)
+ ...(/^npx --no-install supabase test db "\$replays" /m.test(database)
   ? [...database.matchAll(/^replay (tests\/[^\s]+\.mjs)$/gm)].map(match => match[1]) : []),
 ]);
-if (/^step supabase\/tests pgTAP npx supabase test db$/m.test(database)) {
+if (/^npx supabase test db$/m.test(database)) {
  // Supabase's pg_prove invocation searches recursively for both extensions.
  for (const path of [...globSync('supabase/tests/**/*.sql'), ...globSync('supabase/tests/**/*.pg')]) covered.add(path);
 }
