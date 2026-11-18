@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { attachmentHeaders, bodyLengthRefused, conversationFilesProblem, filesProblem, isThumbnail, maxBytes, maxFiles, maxRequestBytes } from '../lib/attachments.mjs';
+import { attachmentHeaders, bodyLengthRefused, conversationFilesProblem, fileRefusal, filesProblem, isThumbnail, maxBytes, maxFiles, maxRequestBytes } from '../lib/attachments.mjs';
 
 test('a raster image is shown in the page; any other type is downloaded as opaque bytes', () => {
  for(const type of ['image/png','image/jpeg','image/gif','image/webp']) {
@@ -66,6 +66,11 @@ test('a message carries only the image kinds the Agent reads, at most five, of a
  assert.equal(conversationFilesProblem(Array.from({length:maxFiles+1},()=>image())),'count','more files than maxFiles');
  assert.equal(conversationFilesProblem([image(0)]),'size','an empty file');
  assert.equal(conversationFilesProblem([image(maxBytes+1)]),'size','a file past the per-file size');
+});
+
+// #155, #156: the one line a Conversation's route and a channel's answer says the same words for the same problem.
+test('each file problem has one catalogue line, shared by a Conversation and a channel', () => {
+ assert.deepEqual(['type','count','size','request'].map(fileRefusal),['attachTypeRefused','attachCountRefused','attachSizeRefused','attachRequestRefused']);
 });
 
 test('the message is refused when its text and base64 images would pass the Engine request limit', () => {

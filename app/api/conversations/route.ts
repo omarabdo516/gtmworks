@@ -9,7 +9,7 @@ import { logActionFailure } from '@/lib/diagnostics.mjs';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
 import { routeAllowed } from '@/lib/route-permissions.mjs';
 import { conversationColumns, uuid } from '@/lib/conversations';
-import { bodyLengthRefused, conversationFilesProblem, maxRequestBytes } from '@/lib/attachments.mjs';
+import { bodyLengthRefused, conversationFilesProblem, fileRefusal, maxRequestBytes } from '@/lib/attachments.mjs';
 import { conversationExists, discardConversationFiles, imagesOf, keepConversationFiles } from '@/lib/conversation-files';
 import type { PermissionChoice } from '@/lib/engine.mjs';
 import { conversationRecord } from '@/lib/conversation-record';
@@ -21,8 +21,6 @@ const refusals:Record<string,[string,number]>={P0002:['conversationNotFound',404
 const refuse=(error:string,status:number)=>reply({error},status);
 const service=()=>createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}});
 const refuseFor=(code:string|undefined)=>refuse(...(refusals[code||'']||['conversationFailed',500]));
-// Why a chosen image, or a set of them, cannot go with this message (#155), in the catalogue's words.
-const fileRefusal=(problem:'type'|'count'|'size'|'request')=>problem==='type'?'attachTypeRefused':problem==='count'?'attachCountRefused':problem==='size'?'attachSizeRefused':'attachRequestRefused';
 const permissionChoices:readonly unknown[]=['once','always','deny'] satisfies PermissionChoice[];
 
 // A message is checked, sent to the agent's engine and stored by lib/conversation-runs.mjs (through the engine

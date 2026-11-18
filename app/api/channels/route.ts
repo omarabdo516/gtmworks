@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { supabaseConfig } from '@/lib/supabase-config';
 import { decideChannelPermission, driveChannelRuns, postChannelMessage } from '@/lib/channel-runs.mjs';
-import { bodyLengthRefused, conversationFilesProblem, maxRequestBytes } from '@/lib/attachments.mjs';
+import { bodyLengthRefused, conversationFilesProblem, fileRefusal, maxRequestBytes } from '@/lib/attachments.mjs';
 import type { PermissionChoice } from '@/lib/engine.mjs';
 import { logActionFailure } from '@/lib/diagnostics.mjs';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
@@ -16,8 +16,6 @@ const refuse=(error:string,status:number)=>reply({error},status);
 const service=()=>createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}});
 const permissionChoices:readonly unknown[]=['once','always','deny'] satisfies PermissionChoice[];
 const refusals:Record<string,[string,number]>={P0002:['channelNotFound',404],'42501':['channelNotAllowed',403],'22023':['channelFailed',400]};
-// Why a chosen image, or a set of them, cannot go with this message (#156): the same line as a Conversation's (#155).
-const fileRefusal=(problem:'type'|'count'|'size'|'request')=>problem==='type'?'attachTypeRefused':problem==='count'?'attachCountRefused':problem==='size'?'attachSizeRefused':'attachRequestRefused';
 
 // A choice on the request an Agent's Run in this channel waits on (#165): one of three fixed words, never text. Only the
 // Member who called the Agent decides (decide_channel_permission); the press is answered once the choice is kept, and
