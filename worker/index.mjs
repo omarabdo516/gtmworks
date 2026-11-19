@@ -18,6 +18,9 @@ process.on('SIGTERM',()=>{stopping=true}); process.on('SIGINT',()=>{stopping=tru
 // turn starts once its conversation's run was closed (lib/conversation-runs.mjs). A loop waits `every`
 // milliseconds between passes, and stops waiting as soon as the worker is asked to stop.
 const pause=every=>new Promise(resolve=>{ const end=Date.now()+every; const tick=()=>stopping||Date.now()>=end?resolve():setTimeout(tick,Math.min(1000,end-Date.now())); tick(); });
+// The stack starts the worker beside the gateway and PostgREST (after a backup, an update), so the database may not answer
+// yet: wait up to a minute for one answer before the first pass. A database that never answers still fails every pass.
+for(let tries=60;tries>0&&!stopping;tries--) { const {error}=await db.rpc('setup_is_open').then(answer=>answer,error=>({error})); if(!error) break; await pause(1000); }
 const loop=async(name,work,every=1000)=>{ while(!stopping) { try { await work(); } catch(error) { console.error(`${name} worker:`,error.message); } await pause(every); } };
 // A self-hosted install gives each company its own profile in the bundled Hermes and keeps its tools, and those of each
 // Agent's own profile, in step with the company's Agent level (ADR 0014, ADR 0016), gives each company one shared Skills
