@@ -7,6 +7,8 @@ date: 2026-11-18
 
 Spec #340, decisions 0040 and 0042 (Omar, 2026-11-18): gtmworks is Hermes itself plus the team layer and the UI, and stores nothing Hermes already keeps. It supersedes [ADR 0006](0006-agent-identities-company-grants-and-card-scoped-runs.md) and [ADR 0007](0007-run-keys-are-pushed-by-webhook-or-pulled-by-the-assigned-agent.md) where they describe the external-agent API, and [ADR 0008](0008-gtmworks-connects-to-hermes-with-encrypted-profile-keys.md) where it describes pasted Hermes connections. Everything else in ADR 0009 to 0016 still holds.
 
+[ADR 0018](0018-an-engine-and-a-work-sandbox-per-company.md): "One Hermes" below now means the bundled Hermes is the only kind of Engine; each Company has its own.
+
 ## Context
 
 Hermes ships inside the install and is the Engine (ADR 0010). Each Agent is an Engine profile (ADR 0016), and Hermes already keeps that profile's skills, soul, sessions, tool steps and token use. gtmworks also kept its own copy of each, so every one was built, tested and fixed twice.
