@@ -248,9 +248,10 @@ function AgentPage({t,rtl,slug,company,userId,personName,agent,about,skills,how,
      {editable?<AgentAboutField agent={agent.id} name={agent.name} description={about?.description??''}/>
       :<div className="panel-card"><p className="ro-text" id="set-about">{about?.description||'—'}</p></div>}</section>
     {/* How it works is the profile SOUL.md outside the team's rules section (#176): the Owner edits it, every other Role
-        reads it with its line breaks; an Engine that could not be read shows no text at all. */}
+        reads it with its line breaks; an Engine that could not be read shows no text at all. A Manager reads the section
+        read-only, and its own line says why, apart from the page's one read-only note (the reference's settingsReadHTML). */}
     <section className="dp-sec" aria-labelledby="set-h-how"><Label id="set-h-how">{t('settingsHow')}</Label>
-     {!owner&&<p className="ro-note"><SettingsIcon name="shield"/><span>{t('settingsHowRO')}</span></p>}
+     {!owner&&<p className="set-hint">{t('settingsHowRO')}</p>}
      {howEditable?<AgentInstructionsField agent={agent.id} name={agent.name} instructions={how?.instructions??''} sectionChars={how?.sectionChars??0} limit={how?.limit??20000}/>
       :<AgentInstructionsRead instructions={how?.state==='found'?how.instructions:''} empty={how?.state==='found'?t('settingsHowEmpty'):'—'}/>}</section>
     {/* Thinks with: the Agent's own Engine profile's model (#29), written there and read back, then its thinking level
