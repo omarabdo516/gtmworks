@@ -35,7 +35,8 @@ Settings shows the Engine's real settings and writes a value back through the En
 
 - The Engine has no Company level. A Company-wide setting is the same value written to each of the Company's Agent profiles.
 - A setting the Engine holds once for the whole install is shown as install-wide.
-- A setting that a rule of this record or of ADR 0014 owns is shown and never written from Settings: the toolsets of an Agent level (`agent.disabled_toolsets`, `platform_toolsets.api_server`), `delegation`, `skills.external_dirs`, `skills.create_dir` and the profile's Run API key. The reason is that a write there would undo an Agent level or the Company's shared Skills.
+- A setting that a rule of this record or of ADR 0014 owns is shown and never written from Settings: the toolsets of an Agent level (`agent.disabled_toolsets`, `platform_toolsets.api_server`), `skills.external_dirs`, `skills.create_dir` and the profile's Run API key. The reason is that a write there would undo an Agent level or the Company's shared Skills.
+- The sub-agent settings on the list (`delegation.model`, `delegation.provider`, `delegation.max_concurrent_children`, `delegation.reasoning_effort`, `delegation.max_spawn_depth`) are written from Settings by the Owner, for one Agent whose sub-agents the Owner turned on (#29). The `delegation` toolset itself stays policy-owned: the tool policy (`lib/agent-levels.mjs`, `public.engine_tool_policy()`) offers it only for an Agent whose Owner turned sub-agents on, and its children inherit the profile's disabled list, so terminal, files and code execution stay off for them (`tools/delegate_tool_toolsets.py` lines 14-22 and 107-115).
 
 ### What the team shares
 
@@ -83,11 +84,11 @@ Each gap below is in the pinned Engine's source at tag `v0.23.0`.
 
 ## Open decisions
 
-These three are Omar's. Until he decides, each safe default holds.
+These two are Omar's, and the third is decided below. Until he decides, each safe default holds.
 
 - Decision for Omar: when an Owner removes an Agent, is its Engine profile (memory, Skills, sessions) deleted? Safe default: the profile is kept. The Engine can delete it (`hermes_cli/profiles.py` lines 1694 to 1795, `DELETE /api/profiles/{name}`), and nothing brings a deleted profile back.
 - Decision for Omar: on an install with several Companies, may one Company's Owner connect or disconnect the install-wide subscription from Settings? Safe default: no, it stays the install's command.
-- Decision for Omar: sub-agents need the Engine's `delegation` toolset (`toolsets.py` line 153, settings in `hermes_cli/config_defaults.py` lines 1313 to 1380), which ADR 0014 keeps off at every level. Safe default: it stays off until #29 turns it on per Agent by the Owner's choice.
+- Sub-agents need the Engine's `delegation` toolset (`toolsets.py` line 153, settings in `hermes_cli/config_defaults.py` lines 1313 to 1380), which ADR 0014 kept off at every level. Decided (Omar, 2026-11-18, #29): sub-agents are off for every Agent until its Owner turns them on, one Agent at a time; the setting is kept per Agent, the worker writes the tool policy's sub-agent variant into that Agent's own profile, and terminal, files and code execution stay off for it and its children.
 
 ## Consequences
 

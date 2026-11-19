@@ -5,6 +5,10 @@ import { appOrigin, inbox, mail } from './lane.mjs';
 // Every page here is read in both languages at 1440, and the List and the Agents page also at 390. At 390 the visual
 // lane checks the Arabic faces on its screens; the English ones are read by the next case (#257).
 test('Paperclip Inter and Arabic-only Vazirmatn load locally',async({page,context})=>{
+ // Twenty whole pages, each read in two languages, is the longest sweep in the suite; the browser shard runs four lanes
+ // on four cores, where it once passed the minute before the last page (and finished in 42 s on its retry). The budget
+ // is the time this test may take; every face, page and width is still read as below.
+ test.setTimeout(120000);
  const fontRequests:string[]=[];
  const externalFonts:string[]=[];
  context.on('request',request=>{

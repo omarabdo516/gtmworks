@@ -1,0 +1,27 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
+export type EngineSettingWhere='profile'|'install';
+export type EngineSettingType='string'|'number'|'boolean'|'select';
+export type EngineSettingLimits={min?:number,max?:number,integer?:boolean,source:string};
+export type EngineSetting={key:string,where:EngineSettingWhere,type:EngineSettingType,label:string,source?:string,choices?:string[],default?:unknown,limits?:EngineSettingLimits};
+export type ListedSetting={key:string,where:EngineSettingWhere,type:EngineSettingType,choices:string[]|null,default:unknown,value:unknown,limits:EngineSettingLimits|null,label:string};
+export type SettingsRead={state:'found',settings:ListedSetting[]}|{state:'refused'|'unreachable'|'failed',settings:null};
+export type SettingWrite={state:'saved'|'unchanged',old:unknown,new:unknown}|{state:'invalid',problem:'type'|'choice'|'limit'}|{state:'unknown'|'owned'|'installOnly'|'profileOnly'|'refused'|'unreachable'|'failed'|'mismatch',old?:unknown};
+export type AgentSettings={id:string,name:string,own:boolean,settings:ListedSetting[]|null};
+export const engineSettings:Readonly<EngineSetting[]>;
+export type LearningMode='auto'|'ask'|'mixed';
+export function learningModeOf(settings:{key:string,value:unknown}[]|null|undefined):LearningMode|null;
+export function engineOwnsSetting(key:unknown):boolean;
+export function settingsSchemaProblems(list:EngineSetting[],schema:{fields?:Record<string,{type?:string}>},defaults:Record<string,unknown>):string[];
+export function readSettings(connection:{address:string,profile:string,key:string,managementAddress?:string},request?:{list?:EngineSetting[],installProfile?:string,driver?:object}):Promise<SettingsRead>;
+export function writeSetting(connection:{address:string,profile:string,key:string,managementAddress?:string},request:{setting:unknown,value:unknown,list?:EngineSetting[],driver?:object}):Promise<SettingWrite>;
+export type ModelOption={provider:string,providerName:string,model:string};
+export type CompanyModelAgent={id:string,name:string,own:boolean,choosable:boolean,model:string|null,choice:string|null,subagents:boolean,options:ModelOption[],effort:string|null,settings:ListedSetting[]};
+export type CompanyModels={default:{model:string|null,options:ModelOption[]},agents:CompanyModelAgent[]};
+export function readCompanyModels(db:SupabaseClient,request:{company:string,agent?:string|null,owner?:boolean,hermes?:{address:string,key:string}|null,driver?:object}):Promise<{models:CompanyModels|null}>;
+export function readAgentSettings(db:SupabaseClient,request:{company:string,agent?:string|null,hermes?:{address:string,key:string}|null,driver?:object,list?:EngineSetting[]}):Promise<{agents:AgentSettings[]|null}>;
+export type CompanySettingOutcome={state:'written',[key:string]:unknown}
+ |{state:'invalid',problem?:string}
+ |{state:'notAllowed'|'unknown'|'installOnly'|'noEngine'|'shared'|'subagentsOff'|'noDefault'|'agentUnknown'|'refused'|'unreachable'|'failed'|'mismatch'};
+export function changeCompanySetting(db:SupabaseClient,request:{company:string,agent?:string|null,setting:unknown,value:unknown,hermes?:{address:string,key:string}|null,driver?:object,list?:EngineSetting[]}):Promise<CompanySettingOutcome>;
+export function changeCompanySettings(db:SupabaseClient,request:{company:string,agent?:string|null,settings:Record<string,unknown>,hermes?:{address:string,key:string}|null,driver?:object,list?:EngineSetting[]}):Promise<CompanySettingOutcome>;
+export function changeLearningMode(db:SupabaseClient,request:{company:string,agent?:string|null,mode:unknown,hermes?:{address:string,key:string}|null,driver?:object,list?:EngineSetting[]}):Promise<CompanySettingOutcome>;

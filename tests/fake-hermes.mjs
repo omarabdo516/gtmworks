@@ -46,11 +46,21 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   ending:'completed',usage:/** @type {object|undefined} */({input_tokens:14000,output_tokens:12}),
   // The management listener (Hermes's dashboard, a second port): its profiles, and the status it answers with when
   // not 200. A profile made through it has its own Run API key, none until /api/env sets it, as in the pinned release.
-  managementStatus:200,profiles:/** @type {Map<string,{soul:string,provider:string,model:string,key:string|null,config:any,credentials:Record<string,string>}>} */(new Map()),failStep:/** @type {''|'model'|'env'|'config'} */(''),
+  managementStatus:200,profiles:/** @type {Map<string,{soul:string,provider:string,model:string,key:string|null,config:any,credentials:Record<string,string>,display_name?:string|null,description?:string,description_auto?:boolean,bot_title?:string|null,env?:Record<string,string>}>} */(new Map()),failStep:/** @type {''|'model'|'env'|'config'} */(''),
   managementRequests:/** @type {{method?:string,path?:string,authorization?:string,body:any}[]} */([]),
   // The default profile's config and model sign-ins (a profile made through the listener keeps its own), and the
-  // sign-in sessions Hermes runs: approve(session) finishes one as the person would in their browser.
+  // sign-in sessions Hermes runs: approve(session) finishes one as the person would in their browser. The Engine's own
+  // config defaults and schema are what its config routes serve (#125); configWriteFail is a profile whose next config
+  // write answers 500, as a profile home that cannot be written does.
   defaultConfig:/** @type {any} */({}),defaultCredentials:/** @type {Record<string,string>} */({}),
+  configDefaults:/** @type {any} */({}),configSchema:/** @type {{fields:Record<string,any>,category_order:string[]}} */({fields:{},category_order:[]}),
+  configWriteFail:/** @type {Set<string>} */(new Set()),
+  // Audio (#162; hermes_cli/web_routers/audio.py 223-352): the sound the speak route answers with, the provider's refusal
+  // text as a 400, an audio body past the driver's 4 MB cap (speakLarge), and the ElevenLabs list a profile's own key
+  // unlocks. `speakRefusal` is what the shipped image answers with no speech package installed.
+  speakDataUrl:'data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU5LjI3LjEwMAAAAAAAAAAAAAAA',
+  speakRefusal:'',speakLarge:false,
+  elevenLabsVoices:{available:true,voices:[{voice_id:'pNInz6obpgDQGcFmaJgB',name:'Rachel',label:'Rachel'},{voice_id:'21m00Tcm4TlvDq8ikWAM',name:'Bella',label:'Bella'}]},
   signInSessions:/** @type {Map<string,{provider:string,profile:string,status:string}>} */(new Map()),
   // Ignore the disabled list when reporting toolsets, as a Hermes that did not apply it would.
   ignoreDisabled:false,staleConfig:false,
@@ -67,6 +77,10 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   appFlows:/** @type {Map<string,{server:string,profile:string,status:string,state:string,redirect:string}>} */(new Map()),appCallbacks:/** @type {string[]} */([]),
   // Each profile's own Skills by name (their SKILL.md text), and the Skills each profile locked, as `profile:name`.
   skills:/** @type {Map<string,Map<string,string>>} */(new Map()),skillLocks:/** @type {Set<string>} */(new Set()),skillsOff:/** @type {Set<string>} */(new Set()),
+  // The provenance `GET /api/skills` reports for a profile's own Skill (`hub`, `bundled` or `agent`), as `profile:name`;
+  // the shared folder's are always external. The Skills a profile learned on its own, whose learning graph node says
+  // `createdBy:"agent"` (#180).
+  skillProvenance:/** @type {Map<string,string>} */(new Map()),learnedSkills:/** @type {Map<string,Set<string>>} */(new Map()),
   // Each profile's memory (#350): the entries of its MEMORY.md and its USER.md, as the memory tool parses them (the
   // learning graph lists one node per entry, its id carrying the entry's position and a digest of its text).
   memory:/** @type {Map<string,{memory:string[],profile:string[]}>} */(new Map()),
@@ -116,8 +130,9 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   // Sessions by id (#346): the profile each belongs to and its messages as the listener returns them
   // (hermes_cli/web_routers/sessions.py get_session_messages), oldest first: role, content, tool_calls, tool_call_id,
   // tool_name and timestamp; and (#347) the session's token use as its detail reports it (get_session_detail), with the
-  // time it started in seconds, which the profile's usage analytics count from.
-  sessions:/** @type {Map<string,{profile:string,messages:any[],input_tokens?:unknown,output_tokens?:unknown,started_at?:number}>} */(new Map()),
+  // time it started in seconds, which the profile's usage analytics count from, and the model it ran on (#32), which
+  // the analytics group into by_model.
+  sessions:/** @type {Map<string,{profile:string,messages:any[],input_tokens?:unknown,output_tokens?:unknown,model?:string,started_at?:number}>} */(new Map()),
   approve(session) { const found=settings.signInSessions.get(session); if(!found) return; found.status='approved'; credentialsOf(found.profile)[found.provider]=`codex-token-${randomUUID()}`; }};
  const profileOf=name=>name==='default'?{config:settings.defaultConfig,credentials:settings.defaultCredentials}:settings.profiles.get(name);
  const credentialsOf=name=>profileOf(name)?.credentials||{};
@@ -130,6 +145,12 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   return configurable.filter(name=>listed.includes(name)&&!disabled.includes(name));
  };
  const merge=(base,over)=>{ const out={...base}; for(const [key,value] of Object.entries(over||{})) out[key]=value&&typeof value==='object'&&!Array.isArray(value)&&base?.[key]&&typeof base[key]==='object'?merge(base[key],value):value; return out; };
+ // The description and category a SKILL.md's front matter gives it, as the Engine lists them.
+ const skillHeader=content=>{
+  const header=/^---\r?\n([\s\S]*?)\r?\n---/.exec(content||'')?.[1]||'';
+  const field=name=>(new RegExp(`(?:^|\\n)${name}:[ \\t]*["']?([^\\n"']*)["']?[ \\t]*(?:\\r?\\n|$)`).exec(header)?.[1]||'').trim();
+  return {description:field('description'),category:field('category')||null};
+ };
  const send=(response,code,body)=>{response.writeHead(code,{'Content-Type':'application/json',Location:'/must-not-follow'});response.end(JSON.stringify(body));};
  // The type the pinned release gives a managed file (mimetypes.guess_type, files.py _fs_mime_type).
  const mimeOf=name=>{const ext=(/\.([a-z0-9]+)$/i.exec(name)?.[1]||'').toLowerCase();
@@ -331,12 +352,21 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     return send(response,200,{session_id:id,profile:found.profile,messages:page,pagination:{limit,offset,order:url.searchParams.get('order')||'oldest',returned:page.length}});
    }
    // A profile's usage over the last `days` (#347): the sums of its sessions started since then, null with none, as
-   // the pinned release's SQL sums are.
+   // the pinned release's SQL sums are. #32: by_model groups the sessions that named a model, tokens descending, with
+   // the price the pinned release answers beside them so a reader can prove it drops it; the release also merges
+   // auxiliary usage in, which this fake does not keep.
    if(url.pathname==='/api/analytics/usage'&&request.method==='GET') {
     const since=Date.now()/1000-Number(url.searchParams.get('days')??30)*86400; const profile=url.searchParams.get('profile')||'default';
     const counted=[...settings.sessions.values()].filter(found=>found.profile===profile&&(found.started_at??Date.now()/1000)>since);
     const sum=(/** @type {'input_tokens'|'output_tokens'} */ key)=>counted.length?counted.reduce((total,found)=>total+Number(found[key]??0),0):null;
-    return send(response,200,{daily:[],by_model:[],by_task:[],totals:{total_input:sum('input_tokens'),total_output:sum('output_tokens'),total_sessions:counted.length},period_days:Number(url.searchParams.get('days')??30),skills:[],tools:[]});
+    const byModel=[...counted.reduce((grouped,found)=>{
+     if(typeof found.model!=='string'||!found.model) return grouped;
+     const row=grouped.get(found.model)||{model:found.model,input_tokens:0,output_tokens:0,estimated_cost:0,sessions:0,api_calls:0};
+     row.input_tokens+=Number(found.input_tokens??0); row.output_tokens+=Number(found.output_tokens??0); row.sessions+=1; row.api_calls+=1;
+     return grouped.set(found.model,row);
+    },new Map()).values()].map(row=>({...row,estimated_cost:Math.round((row.input_tokens+row.output_tokens)/1000*0.62*100)/100}))
+     .sort((a,b)=>(b.input_tokens+b.output_tokens)-(a.input_tokens+a.output_tokens));
+    return send(response,200,{daily:[],by_model:byModel,by_task:[],totals:{total_input:sum('input_tokens'),total_output:sum('output_tokens'),total_sessions:counted.length},period_days:Number(url.searchParams.get('days')??30),skills:[],tools:[]});
    }
    const sessionDetail=url.pathname.match(/^\/api\/sessions\/([^/]+)$/);
    if(sessionDetail&&request.method==='GET') {
@@ -344,10 +374,10 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     if(!found||found.profile!==(url.searchParams.get('profile')||'default')) return send(response,404,{detail:'Session not found'});
     return send(response,200,{id,profile:found.profile,started_at:found.started_at??Date.now()/1000,message_count:found.messages.length,input_tokens:found.input_tokens??0,output_tokens:found.output_tokens??0});
    }
-   if(url.pathname==='/api/profiles'&&request.method==='GET') return send(response,200,{profiles:[{name:'default',path:'/opt/data',is_default:true,model:'default-model',provider:'auto'},...[...settings.profiles].map(([name,profile])=>({name,path:`/opt/data/profiles/${name}`,is_default:false,model:profile.model,provider:profile.provider}))]});
+   if(url.pathname==='/api/profiles'&&request.method==='GET') return send(response,200,{profiles:[{name:'default',path:'/opt/data',is_default:true,model:'default-model',provider:'auto',display_name:null,description:'',description_auto:true,bot_title:null},...[...settings.profiles].map(([name,profile])=>({name,path:`/opt/data/profiles/${name}`,is_default:false,model:profile.model,provider:profile.provider,display_name:profile.display_name??null,description:profile.description??'',description_auto:profile.description_auto!==false,bot_title:profile.bot_title??null}))]});
    if(url.pathname==='/api/profiles'&&request.method==='POST') {
     if(body?.name==='default'||settings.profiles.has(body?.name)) return send(response,400,{detail:`A profile named '${body.name}' already exists. Choose another name.`});
-    settings.profiles.set(body.name,{soul:body.soul||'',provider:settings.seedModel?.provider||'auto',model:settings.seedModel?.model||'',key:null,config:{},credentials:{}});
+    settings.profiles.set(body.name,{soul:body.soul||'',provider:settings.seedModel?.provider||'auto',model:settings.seedModel?.model||'',key:null,config:{},credentials:{},display_name:null,description:typeof body.description==='string'?body.description:'',description_auto:true,bot_title:null});
     return send(response,200,{ok:true,name:body.name,path:`/opt/data/profiles/${body.name}`,model_set:false,model_error:'No provider given',soul_set:Boolean(body.soul)});
    }
    // As delete_profile_endpoint answers (hermes_cli/web_routers/profiles.py 984-1002).
@@ -360,11 +390,18 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     const path=`/opt/data/profiles/${name}`;
     return send(response,200,settings.settlementPending?{ok:true,path,identity_settled:false,settlement_pending:true,retry_command:`hermes profile delete ${name}`}:{ok:true,path});
    }
-   const profilePath=url.pathname.match(/^\/api\/profiles\/([^/]+)\/(soul|model)$/);
+   const profilePath=url.pathname.match(/^\/api\/profiles\/([^/]+)\/(soul|model|description)$/);
    const profile=profilePath&&settings.profiles.get(decodeURIComponent(profilePath[1]));
    if(profilePath&&!profile) return send(response,404,{detail:'Profile not found'});
    if(profilePath?.[2]==='soul'&&request.method==='GET') return send(response,200,{content:profile.soul,exists:true});
    if(profilePath?.[2]==='soul'&&request.method==='PUT') { if(typeof body?.content!=='string') return send(response,422,{detail:'content'}); profile.soul=body.content; return send(response,200,{ok:true}); }
+   // A person wrote the description (hermes_cli/web_routers/profiles.py 1042-1053): trimmed, stored, never auto again.
+   if(profilePath?.[2]==='description'&&request.method==='PUT') {
+    if(typeof body?.description!=='string') return send(response,422,{detail:'description'});
+    profile.description=body.description.trim();
+    profile.description_auto=false;
+    return send(response,200,{ok:true,description:profile.description,description_auto:false});
+   }
    if(profilePath?.[2]==='model'&&request.method==='PUT') {
     if(settings.failStep==='model') return send(response,500,{detail:'Internal Server Error'});
     // _write_profile_model checks a pick against the profile's own keys (profiles.py 124-150); modelNeedsKey turns it on.
@@ -407,10 +444,41 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
    }
    const scoped=url.searchParams.get('profile')||'default';
    const home=profileOf(scoped);
+   // Audio (#162): the list of voices only ElevenLabs offers, unlocked by the profile's own key, and one spoken sample
+   // with the profile's saved tts.* settings (hermes_cli/web_routers/audio.py 223-352). The sound is base64 inside the
+   // JSON answer, so it can pass the driver's 4 MB cap (speakLarge); a provider that cannot speak answers 400 with its own
+   // words, as the shipped image does with no speech package installed.
+   if(url.pathname==='/api/audio/elevenlabs/voices'&&request.method==='GET') {
+    if(!home) return send(response,404,{detail:`Profile '${scoped}' does not exist.`});
+    const env=(scoped==='default'?settings.defaultEnv:settings.profiles.get(scoped)?.env)||{};
+    if(!env.ELEVENLABS_API_KEY) return send(response,200,{available:false,voices:[]});
+    return send(response,200,settings.elevenLabsVoices);
+   }
+   if(url.pathname==='/api/audio/speak'&&request.method==='POST') {
+    if(!home) return send(response,404,{detail:`Profile '${scoped}' does not exist.`});
+    if(typeof body?.text!=='string'||!body.text.trim()) return send(response,400,{detail:'Text is required'});
+    if(settings.speakRefusal) return send(response,400,{detail:settings.speakRefusal});
+    if(settings.speakLarge) return send(response,200,{ok:true,data_url:`data:audio/mpeg;base64,${'A'.repeat(4*1024*1024+16)}`,mime_type:'audio/mpeg',provider:'edge'});
+    return send(response,200,{ok:true,data_url:settings.speakDataUrl,mime_type:'audio/mpeg',provider:(home.config?.tts?.provider)||'edge'});
+   }
+   // The Engine's defaults take no profile and its schema is built from them (web_routers/config_env.py 95-110).
+   if(url.pathname==='/api/config/defaults'&&request.method==='GET') return send(response,200,settings.configDefaults);
+   if(url.pathname==='/api/config/schema'&&request.method==='GET') {
+    if(!home) return send(response,404,{detail:`Profile '${scoped}' does not exist.`});
+    return send(response,200,settings.configSchema);
+   }
    if(url.pathname==='/api/config'&&['GET','PUT'].includes(request.method)) {
     if(!home) return send(response,404,{detail:`Profile '${scoped}' does not exist.`});
-    if(request.method==='GET') return send(response,200,home.config);
-    if(settings.failStep==='config'||!body?.config||typeof body.config!=='object') return send(response,500,{detail:'Internal server error'});
+    if(request.method==='GET') {
+     // As get_config answers: saved values over the Engine's defaults, or the saved values alone with
+     // include_defaults=false; a dict-form model is flattened and its context length surfaced (web_server_config.py 587-599).
+     const merged=url.searchParams.get('include_defaults')==='false'?structuredClone(home.config):merge(settings.configDefaults,home.config);
+     const model=merged?.model;
+     if(model&&typeof model==='object') merged.model=model.default??model.name??'';
+     merged.model_context_length=model&&typeof model==='object'&&Number.isInteger(model.context_length)?model.context_length:0;
+     return send(response,200,merged);
+    }
+    if(settings.failStep==='config'||settings.configWriteFail.has(scoped)||!body?.config||typeof body.config!=='object') return send(response,500,{detail:'Internal server error'});
     // A stale Hermes answers the write and keeps the old config.
     if(!settings.staleConfig) home.config=merge(home.config,body.config);
     if(scoped==='default') settings.defaultConfig=home.config;
@@ -422,9 +490,11 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
  if(url.pathname==='/api/learning/graph'&&request.method==='GET') {
   const named=url.searchParams.get('profile')||'default';
   if(!profileOf(named)) return send(response,404,{detail:`Profile '${named}' does not exist.`});
-  const cards=memoryCards(named); const skillNames=[...(settings.skills.get(named)||new Map()).keys()];
+  // A skill node says `createdBy:"agent"` only for what the profile learned on its own (#180: settings.learnedSkills).
+  const learned=settings.learnedSkills.get(named)||new Set();
+  const cards=memoryCards(named); const skillNames=[...new Set([...(settings.skills.get(named)||new Map()).keys(),...learned])];
   return send(response,200,{
-   nodes:[...skillNames.map(name=>({id:name,label:name,kind:'skill',timestamp:null,category:null,useCount:3,state:'active',createdBy:'agent',pinned:false})),
+   nodes:[...skillNames.map(name=>({id:name,label:name,kind:'skill',timestamp:null,category:null,useCount:3,state:'active',createdBy:learned.has(name)?'agent':'user',pinned:false})),
     ...cards.map(card=>({id:card.id,label:memoryTitle(card.text),kind:'memory',memorySource:card.source,timestamp:null,category:'memory',useCount:0,state:'active',createdBy:'memory',pinned:false}))],
    edges:[],clusters:[],
    memory:cards.map(card=>({source:card.source,title:memoryTitle(card.text),body:card.text,fingerprint:card.id.split(':')[3]})),
@@ -484,13 +554,17 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
    if(skillsPath) {
     if(!home) return send(response,404,{detail:`Profile '${scoped}' does not exist.`});
     const owners=[scoped,...(home.config?.skills?.external_dirs||[]).map(folder=>/^\/opt\/data\/profiles\/([^/]+)\/skills$/.exec(folder)?.[1]).filter(owner=>settings.profiles.has(owner))];
-    const listed=owners.flatMap((owner,at)=>[...(settings.skills.get(owner)||new Map()).keys()].map(name=>({name,owner,provenance:at?'external':'agent'})));
+    const listed=[
+     {name:'hermes-agent',owner:scoped,provenance:'bundled',description:'',category:null},
+     ...owners.flatMap((owner,at)=>[...(settings.skills.get(owner)||new Map())].filter(([name])=>name!=='hermes-agent').map(([name,content])=>({
+      name,owner,content,provenance:at?'external':settings.skillProvenance.get(`${scoped}:${name}`)||'agent',...skillHeader(content)})))];
     const name=skillsPath[1]==='content'&&request.method==='GET'?url.searchParams.get('name'):body?.name;
     const found=listed.find(skill=>skill.name===name);
     const missing=()=>send(response,404,{detail:`Skill '${name}' not found.`});
-    if(!skillsPath[1]&&request.method==='GET') return send(response,200,listed.map(skill=>({name:skill.name,description:'',category:null,locked:settings.skillLocks.has(`${scoped}:${skill.name}`),enabled:!settings.skillsOff.has(`${scoped}:${skill.name}`),usage:0,provenance:skill.provenance})));
-    // A switch is the profile's own (skills.disabled), on any name, listed or not.
-    if(skillsPath[1]==='toggle'&&request.method==='PUT') { settings.skillsOff[body.enabled?'delete':'add'](`${scoped}:${name}`); return send(response,200,{ok:true,name,enabled:body.enabled}); }
+    if(!skillsPath[1]&&request.method==='GET') return send(response,200,listed.map(skill=>({name:skill.name,description:skill.description,category:skill.category,locked:settings.skillLocks.has(`${scoped}:${skill.name}`),enabled:skill.name==='hermes-agent'||!settings.skillsOff.has(`${scoped}:${skill.name}`),usage:0,provenance:skill.provenance})));
+    // A switch is the profile's own (skills.disabled), on any name, listed or not. The essential skill answers ok but
+    // stays on, as the Engine drops it from the disabled list (#180).
+    if(skillsPath[1]==='toggle'&&request.method==='PUT') { if(name!=='hermes-agent') settings.skillsOff[body.enabled?'delete':'add'](`${scoped}:${name}`); return send(response,200,{ok:true,name,enabled:body.enabled}); }
     if(!skillsPath[1]&&request.method==='POST') {
      if(found) return send(response,400,{detail:`A skill named '${name}' already exists.`});
      if(!settings.skills.has(scoped)) settings.skills.set(scoped,new Map());

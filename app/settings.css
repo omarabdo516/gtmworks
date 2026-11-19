@@ -95,6 +95,8 @@
 .gw :is(.sov, .apps-sheet) .ro-note { display: flex; align-items: flex-start; gap: 6px; padding: 0; font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-2); --od-icon-size: 16px; }
 .gw :is(.sov, .apps-sheet) .ro-note .sov-icon { margin-top: 3px; color: var(--gw-text-3); }
 .gw .sov .ro-text { padding: 10px var(--s2); font-size: var(--gw-fs-sm); line-height: 1.7; color: var(--gw-text-1); overflow-wrap: anywhere; }
+/* The standing instructions keep their line breaks, as the reference draws them one line per `<br>` (#176). */
+.gw .sov .ro-text--lines { white-space: pre-line; }
 .gw .sov .set-card { gap: var(--s4); padding: var(--s3); }
 .gw :is(.sov, .modal.team-dlg) .set-field { display: grid; gap: 6px; }
 .gw :is(.sov, .modal.team-dlg) .set-label { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-2); }
@@ -108,7 +110,8 @@
 .gw :is(.sov, .modal.team-dlg) .set-input[readonly] { cursor: default; }
 .gw :is(.sov, .apps-sheet, .modal.team-dlg) .set-hint { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); }
 .gw :is(.sov, .apps-sheet, .modal.team-dlg) .set-err { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-danger-text); }
-.gw .sov .set-textarea { height: auto; min-height: 136px; padding: var(--s2) 10px; line-height: 1.7; resize: vertical; }
+.gw .sov .set-textarea { height: auto; min-height: 88px; padding: var(--s2) 10px; line-height: 1.7; resize: vertical; }
+.gw .sov .set-textarea--tall { min-height: 136px; }
 .gw .sov .set-hint-row { display: flex; align-items: flex-start; gap: var(--s2); }
 .gw .sov .set-count { flex: none; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); white-space: nowrap; }
 .gw .sov .set-actions { display: flex; justify-content: flex-end; }
@@ -128,6 +131,9 @@
 .gw :is(.sov, .modal.team-dlg) .switch[aria-checked="true"]::after { transform: translateX(-12px); background: var(--gw-bg-pane); }
 [dir="ltr"] .gw :is(.sov, .modal.team-dlg) .switch[aria-checked="true"]::after { transform: translateX(12px); }
 :root[data-theme="dark"] .gw :is(.sov, .modal.team-dlg) .switch[aria-checked="true"]::after { background: #121212; }
+/* A skill the Engine says the Agent learned on its own (#180; design-reference: .sk-learned). No version: the Engine
+   numbers none. Its link to the steps comes with #181. */
+.gw .sov .sk-learned { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 2px; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-2); --od-icon-size: 12px; }
 /* Not built yet: the reference's control, quieter, saying "Soon". */
 .gw :is(.sov, .modal.team-dlg) .switch[aria-disabled="true"] { opacity: .55; }
 .gw .sov .danger-confirm { display: grid; gap: var(--s2); padding: var(--s2); }
@@ -192,6 +198,30 @@
 .gw .sov .dp-id__role { display: flex; align-items: center; justify-content: flex-start; gap: 6px; font-size: var(--gw-fs-sm); line-height: 1.5; color: var(--gw-text-2); }
 .gw .sov .sov-tabs { justify-content: flex-start; padding: 0; margin-bottom: calc(var(--s2) * -1); }
 .gw .sov .sov-tabs [aria-disabled="true"] { color: var(--gw-text-3); }
+/* The read-only rows of an Agent's page (#161): the reference's value beside its label (index.html: .ro-val). */
+.gw .sov .ro-val { color: var(--gw-text-2); }
+/* The Agent page's save bar (#161; design-reference: .dp-savebar, .sov-savebar, barFlash): it rises in when the draft
+   starts to differ, flashes when a way out is tried, and sits at the bottom of the page. Its flash's frames keep the
+   reference's own token name, which this scope resolves to the app's colour. */
+.gw.sov-root { --text-1: var(--gw-text-1); }
+.gw .sov .dp-savebar {
+  display: flex; align-items: center; gap: var(--s2); padding: var(--s3) var(--s4);
+  background: var(--gw-bg-pane); border-top: 0.5px solid var(--gw-border-2); animation: gw-rise var(--gw-dur) var(--gw-ease-out);
+}
+.gw .sov .dp-savebar[hidden] { display: none; }
+.gw .sov .dp-savebar__t { flex: 1 1 0; min-width: 0; font-size: var(--gw-fs-sm); font-weight: 600; line-height: 1.5; color: var(--gw-text-1); }
+.gw .sov .dp-savebar__t .set-err { display: block; font-weight: 400; }
+.gw .sov .dp-savebar.is-flash { animation: barFlash 1.4s var(--gw-ease-out); }
+@keyframes barFlash { 0%, 40% { box-shadow: inset 0 0 0 2px var(--text-1); } 100% { box-shadow: inset 0 0 0 0 transparent; } }
+.gw .sov .sov-savebar { position: sticky; bottom: var(--s4); z-index: 1; border: 0.5px solid var(--gw-border-2); border-radius: var(--gw-r-lg); box-shadow: var(--gw-shadow-popover); }
+/* The Voice section's row (#162; design-reference: .vc-row, .vc-select, .vc-play, .vc-quote): the voice select fills the
+   row, Listen keeps its own size beside it, and the playing hint takes the reference's quieter colour. */
+.gw .sov .vc-row { display: flex; align-items: center; gap: var(--s2); }
+.gw .sov .vc-row .vc-select { flex: 1 1 0; min-width: 0; }
+.gw .sov .vc-select { cursor: pointer; }
+.gw .sov .vc-select:disabled { cursor: default; }
+.gw .sov .vc-play { flex: none; --od-icon-size: 14px; }
+.gw .sov .vc-quote { color: var(--gw-text-2); }
 .gw .sov .sov-rules { margin-bottom: var(--s6); }
 .gw .sov .sov-soon .panel-empty { padding-block: 10px; }
 /* The rules an Agent was told in its chat (#18; design-reference: .rl-list, .rl-row), with an Owner's or a Manager's Remove */
@@ -211,7 +241,11 @@
 .gw .sov .kpi > * { display: block; min-width: 0; }
 .gw .sov .kpi__label { font-size: var(--gw-fs-sm); color: var(--gw-text-2); }
 .gw .sov .kpi__val { font-size: clamp(24px, 2.1vw, var(--sov-fs-2xl)); font-weight: 600; line-height: 1.25; white-space: nowrap; color: var(--gw-text-1); }
+.gw .sov .use-kpis .kpi__val bdi { font-size: inherit; }
 .gw .sov .usage-table td:first-child { min-width: 0; }
+.gw .sov .usage-models :is(th[scope="row"], td:first-child) { color: var(--gw-text-2); white-space: nowrap; }
+/* The model names its row, so it is a row header and reads as body text, as the members table's does. */
+.gw .sov .usage-models th[scope="row"] { padding: var(--s3) var(--s2); border-bottom: 0.5px solid var(--gw-border-3); font-weight: 400; }
 
 /* company knowledge */
 .gw .sov .know-vs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s3); }
@@ -258,6 +292,52 @@
 .gw .sov .sov-password p { font-size: var(--gw-fs-sm); color: var(--gw-text-2); }
 .gw .sov .sov-password p[role="alert"] { color: var(--gw-danger-text); }
 
+/* Learning (#28; design-reference: .ln-sugg, .cr-kinds, .cr-kind, .ln-ag, .ln-seg, .ln-rules, .ln-rule, .ln-list,
+   .ln-row, .ln-ic, .ln-body, .ln-t, .ln-meta, .ln-acts, .sk-learned): the two mode cards, the per-Agent segmented
+   mode, and what each Agent learned. */
+.gw .sov .ln-sugg .set-hint { margin: 0; }
+.gw .sov .cr-kinds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s2); }
+.gw .sov .cr-kind {
+  position: relative; display: grid; gap: 2px; padding: var(--s3) var(--s4); padding-inline-end: 36px; border-radius: var(--gw-r-md); text-align: start;
+  background: var(--gw-bg-pane); box-shadow: var(--gw-border-2) 0 0 0 1px inset; transition: background-color var(--gw-dur-fast) var(--gw-ease-out);
+}
+@media (hover: hover) { .gw .sov .cr-kind:hover:not([aria-checked="true"]) { background: var(--gw-bg-elevated-hover); } }
+.gw .sov .cr-kind[aria-checked="true"] { box-shadow: var(--gw-text-1) 0 0 0 1px inset; }
+.gw .sov .cr-kind[aria-disabled="true"] { cursor: default; }
+.gw .sov .cr-kind__t { font-size: var(--gw-fs-base); font-weight: 600; line-height: 1.5; }
+.gw .sov .cr-kind__d { font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-2); }
+.gw .sov .cr-kind__check { position: absolute; top: 14px; inset-inline-end: 12px; display: inline-flex; color: var(--gw-text-1); --od-icon-size: 16px; }
+.gw .sov .ln-ag { flex-wrap: wrap; }
+.gw .sov .ln-seg { flex: none; width: 260px; }
+.gw .sov .ln-rules { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s3); }
+.gw .sov .ln-rule { padding: var(--s4); gap: var(--s2); }
+.gw .sov .ln-rule b { display: flex; align-items: center; gap: var(--s2); font-size: var(--gw-fs-base); --od-icon-size: 18px; }
+.gw .sov .ln-rule ul { margin: 0; padding-inline-start: var(--s5); font-size: var(--gw-fs-sm); line-height: 1.7; color: var(--gw-text-1); }
+.gw .sov .ln-rule .set-hint { margin: 0; }
+.gw .sov .ln-list { gap: 0; }
+.gw .sov .ln-row { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: var(--s3); padding: var(--s3) var(--s2); position: relative; border-radius: var(--gw-r-sm); }
+.gw .sov .ln-row + .ln-row::before { content: ""; position: absolute; top: 0; inset-inline: var(--s2); height: 0.5px; background: var(--gw-border-2); }
+.gw .sov .ln-ic { width: 32px; height: 32px; flex: none; border-radius: var(--gw-r-sm); background: var(--gw-bg-tertiary); display: inline-flex; align-items: center; justify-content: center; color: var(--gw-text-2); --od-icon-size: 16px; }
+.gw .sov .ln-body { display: grid; gap: 4px; min-width: 0; }
+.gw .sov .ln-t { margin: 0; font-size: var(--gw-fs-sm); line-height: 1.7; color: var(--gw-text-1); overflow-wrap: anywhere; }
+.gw .sov .ln-row.is-off .ln-t { color: var(--gw-text-3); text-decoration: line-through; }
+.gw .sov .ln-meta { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); }
+.gw .sov .ln-meta .badge { height: 20px; --od-icon-size: 12px; }
+.gw .sov .ln-who { display: inline-flex; align-items: center; gap: 4px; color: var(--gw-text-2); }
+.gw .sov .ln-acts { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); margin-top: 4px; }
+.gw .sov .ln-acts .link-btn { margin-inline-start: -6px; }
+.gw .sov .ln-meta .sk-learned { margin-top: 0; }
+/* One learned Skill's page (#181; design-reference: .sk-who, .sk-diff--one, .sk-col, .sk-col h4/ol/li, index.html
+   2012-2027): whose Skill it is under the heading, and the Engine's current text in one column under Steps. The
+   reference's two-column diff, tags and Why are not ported: the pinned Engine has no management route over the ledger. */
+.gw .sov .sk-who { display: flex; align-items: center; gap: var(--s2); margin-top: calc(var(--s3) * -1); font-size: var(--gw-fs-sm); color: var(--gw-text-2); }
+.gw .sov .sk-diff--one { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s3); }
+.gw .sov .sk-col { display: grid; gap: var(--s3); align-content: start; padding: var(--s4) var(--s5); border-radius: var(--gw-r-lg); background: var(--gw-bg-pane); border: 0.5px solid var(--gw-border-3); }
+.gw .sov .sk-col.is-cur { box-shadow: var(--gw-text-1) 0 0 0 1px inset; }
+.gw .sov .sk-col h4 { margin: 0; font-size: var(--gw-fs-sm); font-weight: 400; color: var(--gw-text-2); }
+.gw .sov .sk-col ol { margin: 0; padding-inline-start: var(--s5); display: grid; gap: var(--s3); font-size: var(--gw-fs-sm); line-height: 1.7; color: var(--gw-text-1); }
+.gw .sov .sk-col li { overflow-wrap: anywhere; }
+
 /* Authored text inside the English interface takes its direction from its own words. */
 [dir="ltr"] .gw .sov :is(.panel-row__t, .panel-row__d, .dp-id__name, .set-input, .ta-name) { unicode-bidi: plaintext; }
 
@@ -270,6 +350,8 @@
   .gw .sov-page { padding: var(--s5) var(--s4) var(--s12); }
   .gw .sov__co { display: none; }
   .gw .sov .know-vs { grid-template-columns: minmax(0, 1fr); }
+  .gw .sov .ln-rules { grid-template-columns: minmax(0, 1fr); }
+  .gw .sov .ln-seg { width: 100%; }
   /* The part chips keep the reference's 34px, with a 44px tap area inside the rail's own padding. */
   .gw .sov .know-tabs { padding-block: 5px; margin-top: -3px; margin-bottom: calc(var(--s2) * -1 - 3px); }
   .gw .sov .kpis { grid-template-columns: minmax(0, 1fr); }
@@ -312,13 +394,25 @@
 .gw .sov .sub-code--cmd { align-self: stretch; font-size: var(--gw-fs-xs); letter-spacing: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
 .gw .sov .sub-row > .set-hint, .gw .sov .sub-row > .set-err { margin: 0; padding: 0 var(--s3) var(--s2); }
 
+/* Subscription and models (#29): the providers' keys, the default model and each Agent's own, and sub-agents. */
+.gw .sov .md-key + .md-key { border-top: 0.5px solid var(--gw-border-2); }
+.gw .sov .md-key .sub-step { padding-inline: var(--s2); }
+.gw .sov .md-keys .md-key .panel-row { padding-inline: var(--s3); }
+.gw .sov .md-waiting { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.gw .sov .md-agent + .md-agent { border-top: 0.5px solid var(--gw-border-2); }
+.gw .sov .md-agent__pick { display: grid; gap: 4px; flex: none; width: min(220px, 46%); }
+.gw .sov .md-agent__pick .set-input { height: 34px; }
+.gw .sov .md-subagent { border-radius: var(--gw-r-sm); background: var(--gw-bg-secondary, var(--gw-bg-pane)); margin: 0 var(--s2) var(--s2); }
+.gw .sov .md-subagent .ro-text { padding: 0; }
+.gw .sov .md-agent-model .panel-card { margin: 0; }
+@media (max-width: 560px) {
+  .gw .sov .md-agent .panel-row { flex-wrap: wrap; }
+  .gw .sov .md-agent__pick { width: 100%; }
+}
+
 /* Backup (#33): the reference's two columns of what a backup holds and leaves out (sovBackupHTML), and the host
-   commands with their copy button. A command is an identifier: Paper Mono, kept left to right in both languages. */
-.gw .sov .ln-rules { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s3); }
-.gw .sov .ln-rule { padding: var(--s4); gap: var(--s2); }
-.gw .sov .ln-rule b { display: flex; align-items: center; gap: var(--s2); font-size: var(--gw-fs-base); --od-icon-size: 18px; }
-.gw .sov .ln-rule ul { margin: 0; padding-inline-start: var(--s5); font-size: var(--gw-fs-sm); line-height: 1.7; color: var(--gw-text-1); }
+   commands with their copy button. A command is an identifier: Paper Mono, kept left to right in both languages. The two
+   columns are Learning's .ln-rules and .ln-rule, above. */
 .gw .sov .bk-cmd .panel-row__text { gap: 2px; }
 .gw .sov .bk-cmd .sub-code { margin-top: 2px; max-width: 100%; }
 .gw .sov .bk-copy { flex: none; }
-@media (max-width: 767px) { .gw .sov .ln-rules { grid-template-columns: minmax(0, 1fr); } }
