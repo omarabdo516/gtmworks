@@ -1,0 +1,1 @@
+| `components/offline.test.tsx` | A fetch from the component tests' browser to an outside host, one made while the file loads, and an outside WebSocket are refused and their hosts reported, and a test that leaves one fails. (#266) | 0.1 s | offline.test.mjs (node), offline.spec.ts (Playwright) | new (#266) |

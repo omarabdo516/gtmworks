@@ -34,3 +34,9 @@ export function roleStart(language:Language,alone:boolean,template:string|null|u
  if(!template||!Object.hasOwn(roleTemplates,template)) return {line:null,handoff:null,example:text.exampleGeneral};
  return {line:text[`line.${template}`]||null,handoff:(alone&&text[`handAlone.${template}`])||text[`hand.${template}`]||null,example:text[`example.${template}`]||text.exampleGeneral};
 }
+
+// The first sentence an Agent with a ready-made role tries (#171; design-reference: AGENTS[ag].example): null when it has
+// no role of its own, so the picker's second suggestion says "Write it what you need" instead.
+export function roleSentence(language:Language,template:string|null|undefined):string|null {
+ return template&&Object.hasOwn(roleTemplates,template)?catalogues[language][`example.${template}`]||null:null;
+}

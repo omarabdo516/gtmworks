@@ -27,7 +27,7 @@ const handoff = (id: number, goal: string, minute: string): ChannelHandoff => ({
 
 test('a channel with no handover draws no Handoffs section', async () => {
  vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
- const screen = await view(record([{ id: 1, author: 'person', mine: true, name: 'Omar', role: 'owner', body: 'Morning all', at, mention: null }]), 'en');
+ const screen = await view(record([{ id: 1, author: 'person', mine: true, name: 'Omar', role: 'owner', body: 'Morning all', at, files: [], mention: null }]), 'en');
  const details = screen.getByRole('complementary', { name: 'Channel details' });
  await expect.element(details.getByRole('heading', { name: /Members/ })).toBeVisible();
  expect(screen.container.querySelector('#ch-h-h')).toBeNull();
@@ -76,7 +76,7 @@ test('in Arabic the details read التسليمات with the same count and rows
 test('the transcript draws the row, then the other Agent\'s answer marked "to Lead", then Lead\'s reply, in that order', async () => {
  vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
  const messages: ChannelMessage[] = [
-  { id: 1, author: 'person', mine: true, name: 'Omar', role: 'owner', body: '@Lead plan the March ads', at: '2026-06-10T09:05:00Z', mention: { agent: 'Lead', face: 'c-1', state: 'answered', permissions: [], questions: [] } },
+  { id: 1, author: 'person', mine: true, name: 'Omar', role: 'owner', body: '@Lead plan the March ads', at: '2026-06-10T09:05:00Z', files: [], mention: { agent: 'Lead', face: 'c-1', state: 'answered', permissions: [], questions: [] } },
   { id: 2, author: 'agent', name: 'Lead', face: 'c-1', body: 'On it: I handed the job to Ads.', at: '2026-06-10T09:05:30Z' },
   { id: 'handover-7', author: 'handoff', from: { name: 'Lead', face: 'c-1' }, to: { name: 'Ads', face: 'c-2' }, goal: 'Plan the Meta ads for the March intake', at: '2026-06-10T09:06:00Z' },
   { id: 'handover-7-answer', author: 'agent', name: 'Ads', face: 'c-2', body: 'Three ad sets, 30 days, EGP 9,000.', at: '2026-06-10T09:08:00Z', to: 'Lead' },
@@ -99,7 +99,7 @@ test('the transcript draws the row, then the other Agent\'s answer marked "to Le
 test('in Arabic the row and the sender line read in the interface\'s own words', async () => {
  vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
  const messages: ChannelMessage[] = [
-  { id: 1, author: 'person', mine: true, name: 'عمر', role: 'owner', body: 'يا Lead ظبط إعلانات مارس', at: '2026-06-10T09:05:00Z', mention: { agent: 'Lead', face: 'c-1', state: 'answered', permissions: [], questions: [] } },
+  { id: 1, author: 'person', mine: true, name: 'عمر', role: 'owner', body: 'يا Lead ظبط إعلانات مارس', at: '2026-06-10T09:05:00Z', files: [], mention: { agent: 'Lead', face: 'c-1', state: 'answered', permissions: [], questions: [] } },
   { id: 'handover-7', author: 'handoff', from: { name: 'Lead', face: 'c-1' }, to: { name: 'Ads', face: 'c-2' }, goal: 'خطة إعلانات مارس', at: '2026-06-10T09:06:00Z' },
   { id: 'handover-7-answer', author: 'agent', name: 'Ads', face: 'c-2', body: 'تلات مجموعات إعلانية، 30 يوم.', at: '2026-06-10T09:08:00Z', to: 'Lead' },
  ];

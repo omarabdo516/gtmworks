@@ -23,9 +23,11 @@ export type ChannelMention={agent:string,face:string,state:MentionState,permissi
 // pick up (#149) is `handDone`: nothing draws a bubble of it, and the card shows the press instead.
 // A handover in the channel (#150) is a quiet row between turns, with its own id: the two Agents and their faces, the
 // other Agent's answer marked `to` the Agent that handed it over, and then that Agent's own reply.
+// A message may carry images (#156), drawn as chips under it for every Member.
+type ChannelFile={id:number,name:string};
 type ChannelFace={name:string,face:string};
 export type ChannelMessage=
- | {id:number,author:'person',mine:boolean,name:string,role:MemberRole|null,body:string,at:string,mention:ChannelMention|null,mentions?:ChannelMention[],handDone?:true}
+ | {id:number,author:'person',mine:boolean,name:string,role:MemberRole|null,body:string,at:string,files:ChannelFile[],mention:ChannelMention|null,mentions?:ChannelMention[],handDone?:true}
  | {id:number|string,author:'agent',name:string,face:string,body:string,at:string,to?:string,steps?:RunSteps,cards?:ReplyCard[]}
  | {id:number,author:'note',kind:'invite',actor:string,name:string,at:string}
  | {id:number,author:'note',kind:'card',at:string}
@@ -68,6 +70,7 @@ type StoredMessage={id:number,author:'person'|'agent',person_id:string|null,agen
 type StoredNote={id:number,kind:'invite'|'card',invitee_name:string|null,actor_name:string,created_at:string};
 type StoredRun={message_id:number,ordinal:number|null,agent_id:string|null,agent_name:string,outcome:string|null};
 type StoredPermission={id:number,message_id:number,ordinal:number|null,title:string,content:unknown,state:string,decided_at:string|null,created_at:string};
+type StoredFile={id:number,message_id:number,name:string};
 type StoredAgent={id:string,connection_id:string,name:string,speciality:string,main:boolean,here_only:boolean};
 type StoredCard=ReplyCardRow&{channel_message_id:number,channel_ordinal:number|null,addressed_to:string|null};
 type StoredSession={message_id:number,agent_id:string,profile:string,session:string,reply:number};
@@ -108,6 +111,9 @@ export async function channelRecord(db:Database,person:string,company:string,cha
  // Run. Only the ones inside the messages shown are drawn.
  const notes=((await db.from('channel_notes').select('id,kind,invitee_name,actor_name,created_at').eq('channel_id',channel).order('id',{ascending:false}).limit(shownMessages)).data||[]) as StoredNote[];
  const ordered=[...latest].reverse();
+ // The images of the messages shown (#156). The table's own policy shows only this channel's to a Member of it.
+ const shown=latest.map(message=>message.id);
+ const attached=(shown.length?((await db.from('channel_attachments').select('id,message_id,name').in('message_id',shown).order('position')).data||[]):[]) as StoredFile[];
  const {data:members}=await db.rpc('channel_members',{ch:channel});
  // A team channel's Agents come with it, also one hidden from the reader elsewhere, so its replies keep their face.
  const {data:agents}=await db.rpc('channel_agent_list',{ch:channel});
@@ -180,6 +186,7 @@ export async function channelRecord(db:Database,person:string,company:string,cha
     ...(stepsOf.has(message.id)?{steps:stepsOf.get(message.id)}:{}),...(message.reply_to!==null&&cardsOf.has(`${message.reply_to}:${message.reply_ordinal??1}`)?{cards:cardsOf.get(`${message.reply_to}:${message.reply_ordinal??1}`)}:{})};
    const mentions=(runsOf.get(message.id)??[]).map(mentionOf);
    return {id:message.id,author:'person',mine:message.person_id===person,name:message.author_name,role:people.find(member=>member.person===message.person_id)?.role??null,body:message.body,at:message.created_at,
+    files:attached.filter(file=>file.message_id===message.id).map(file=>({id:file.id,name:file.name})),
     mention:mentions[0]??null,mentions,...(message.hand_card?{handDone:true as const}:{})};
   }),
   notes.filter(note=>oldest===undefined||note.created_at>=oldest).map((note):ChannelMessage=>note.kind==='card'

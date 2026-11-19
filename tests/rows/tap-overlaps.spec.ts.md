@@ -1,0 +1,6 @@
+## Cases
+
+| `tap-overlaps.spec.ts` "a fixed footer over a list item overlaps it, even inside a box that clips its other children" | moved | `components/tap-overlaps.test.tsx` "a fixed footer over a list item overlaps it, even inside a box that clips its other children" (the same page, measured by the same function `navigation.spec.ts` calls through `tapOverlaps`). |
+| `tap-overlaps.spec.ts` "an absolute child escaping a non-positioned clipping parent overlaps what lies under it" | moved | `components/tap-overlaps.test.tsx` "an absolute child escaping a non-positioned clipping parent overlaps what lies under it" (the same page, measured by the same function `navigation.spec.ts` calls through `tapOverlaps`). |
+| `tap-overlaps.spec.ts` "overflow-x:clip with a visible y overflow lets a target overlap vertically" | moved | `components/tap-overlaps.test.tsx` "overflow-x:clip with a visible y overflow lets a target overlap vertically" (the same page, measured by the same function `navigation.spec.ts` calls through `tapOverlaps`). |
+| `tap-overlaps.spec.ts` "a list item scrolled under the footer is cut off by its list and overlaps nothing" | moved | `components/tap-overlaps.test.tsx` "a list item scrolled under the footer is cut off by its list and overlaps nothing" (the same page, measured by the same function `navigation.spec.ts` calls through `tapOverlaps`). |

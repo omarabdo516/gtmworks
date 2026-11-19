@@ -1,0 +1,1 @@
+| `first-run-db.test.mjs` | The first-run reset and seed restore run in fail-fast transactions; a reset that meets a deadlock is run again whole, five tries at most, and any other failure is raised at once (#326). | 0.6 s | — | keep |

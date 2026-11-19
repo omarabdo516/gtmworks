@@ -1,0 +1,6 @@
+| `theme.spec.ts` | The device theme by default, and the saved choice across sessions and devices. | — | sidebar.test.mjs (the menu entries), components/account-menu.test.tsx (the sun/moon button) | keep 1 of its 2 cases; 1 moved (#218, case by case above) |
+
+## Cases
+
+| `theme.spec.ts` "device default, server-rendered theme and saved choice across sessions and devices" | stays | Sign-in and the account across sessions and devices: the server draws the saved theme before any script runs, Device follows the system, and a look chosen in the account menu stays after signing in again and on another device. |
+| `theme.spec.ts` "the sun/moon button flips the shown theme and saves it; Device follows the system again" | moved | `components/account-menu.test.tsx` "the sun/moon button shows the look shown now, Device following the system, and each press saves the other look". Guarded already: the saved look drawn by the server, after signing in again and on another device, with the light and dark backgrounds and Device following the system, by `theme.spec.ts` "device default, server-rendered theme and saved choice across sessions and devices" (the same save, from the account menu); the dark colours by the compared dark screens. |

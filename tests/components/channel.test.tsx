@@ -13,8 +13,8 @@ vi.mock('@/app/channel-actions', () => ({ changeChannel: vi.fn(), channelChoices
 afterEach(() => { vi.unstubAllGlobals(); });
 
 const at = '2026-06-10T09:05:00Z';
-const peer: ChannelMessage = { id: 1, author: 'person', mine: false, name: 'Sara Adel', role: 'manager', body: 'Morning all', at, mention: null };
-const called = (state: 'open' | 'answered' | 'unanswered'): ChannelMessage => ({ id: 2, author: 'person', mine: true, name: 'Omar', role: 'owner', body: 'Hey @lead, what is due today?', at, mention: { agent: 'Lead', face: 'c-1', state, permissions: [], questions: [] } });
+const peer: ChannelMessage = { id: 1, author: 'person', mine: false, name: 'Sara Adel', role: 'manager', body: 'Morning all', at, files: [], mention: null };
+const called = (state: 'open' | 'answered' | 'unanswered'): ChannelMessage => ({ id: 2, author: 'person', mine: true, name: 'Omar', role: 'owner', body: 'Hey @lead, what is due today?', at, files: [], mention: { agent: 'Lead', face: 'c-1', state, permissions: [], questions: [] } });
 const reply: ChannelMessage = { id: 3, author: 'agent', name: 'Lead', face: 'c-1', body: 'Two things are due.', at };
 const record = (messages: ChannelMessage[], more: Partial<ChannelRecord> = {}): ChannelRecord => ({
  channel: { id: 'ch-1', company: 'co-1', kind: 'general' },
@@ -73,6 +73,20 @@ test('a message is posted to the channel with its own send key', async () => {
  const [url, body] = posted.mock.calls[0];
  expect(url).toBe('/api/channels');
  expect(body).toEqual({ company: 'co-1', channel: 'ch-1', message: 'Morning, team', sendKey: expect.stringMatching(/^[0-9a-f-]{36}$/) });
+});
+
+test('the images of a message sit under it as chips, on the writer\'s side and on the start side', async () => {
+ vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
+ const theirs: ChannelMessage = { ...peer, files: [{ id: 12, name: 'logo.jpeg' }] };
+ const mine: ChannelMessage = { id: 4, author: 'person', mine: true, name: 'Omar', role: 'owner', body: 'Here it is', at, files: [{ id: 11, name: 'cover.png' }], mention: null };
+ const screen = await channel(record([theirs, mine]));
+ const peerChip = screen.container.querySelector('.turn--peer .msg-files a.file-chip');
+ expect(peerChip?.textContent).toBe('logo.jpeg');
+ expect(peerChip?.getAttribute('href')).toBe('/c/rs-learning/files/channel/12');
+ expect(peerChip?.getAttribute('aria-label')).toBe('Open logo.jpeg');
+ const ownChip = screen.container.querySelector('.turn--user .msg-files a.file-chip');
+ expect(ownChip?.textContent).toBe('cover.png');
+ expect(ownChip?.getAttribute('href')).toBe('/c/rs-learning/files/channel/11');
 });
 
 test('a Viewer reads the channel with no composer', async () => {
@@ -279,7 +293,7 @@ test('a Viewer reads a channel reply\'s steps and its card, and the card has no 
 
 // #152: a message that calls two Agents marks both names, the working line names the Agent replying now, and an Agent
 // that could not reply gets its own line while the other Agent's reply still shows, in both languages.
-const two = (second: 'open' | 'unanswered'): ChannelMessage => ({ id: 5, author: 'person', mine: true, name: 'Omar', role: 'owner', body: '@Ads @SEO we need two scripts', at,
+const two = (second: 'open' | 'unanswered'): ChannelMessage => ({ id: 5, author: 'person', mine: true, name: 'Omar', role: 'owner', body: '@Ads @SEO we need two scripts', at, files: [],
  mention: { agent: 'Ads', face: 'c-1', state: 'answered', permissions: [], questions: [] },
  mentions: [{ agent: 'Ads', face: 'c-1', state: 'answered', permissions: [], questions: [] }, { agent: 'SEO', face: 'c-2', state: second, permissions: [], questions: [] }] });
 const adsReply: ChannelMessage = { id: 6, author: 'agent', name: 'Ads', face: 'c-1', body: 'Two scripts are in.', at };
@@ -334,7 +348,7 @@ test('another Member, and a Viewer, read the team\'s wait line on the request an
 });
 
 // #200: a Member named with @ in a message is marked as bold as the called Agent's name is, for every reader.
-const namedBoth: ChannelMessage = { id: 8, author: 'person', mine: false, name: 'Omar', role: 'owner', body: '@Sara Adel شوفي الخطة و @Ads راجعها', at,
+const namedBoth: ChannelMessage = { id: 8, author: 'person', mine: false, name: 'Omar', role: 'owner', body: '@Sara Adel شوفي الخطة و @Ads راجعها', at, files: [],
  mention: { agent: 'Ads', face: 'c-1', state: 'answered', permissions: [], questions: [] } };
 
 test.each(['en', 'ar'] as const)('in the %s interface a Member\'s name in a message is marked as the called Agent\'s name is', async (language) => {

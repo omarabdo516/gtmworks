@@ -1,0 +1,1 @@
+| `offline.mjs` | helper: the one table of what counts as local, the browsers' dead proxy, and the node guard every test process loads: a connection to an outside host is refused naming it, a `node --test` file that made one fails, and a Playwright run whose process made one fails at teardown (new, #266) | — | offline.test.mjs | helper, kept |

@@ -18,9 +18,9 @@ afterEach(() => { vi.useRealTimers(); push.mockReset(); refresh.mockReset(); sen
 
 const sheet = (more: Partial<CardSheetData> = {}): CardSheetData => ({ id: 7, log: <p>Omar moved the card</p>, count: 3, working: false, chat: { kind: 'none' }, ...more });
 // The board behind the sheet holds the Card's link, where the keyboard goes back when the sheet closes.
-const show = (value: CardSheetData, canWrite = true) => render(<LanguageProvider language="en">
+const show = (value: CardSheetData, canWrite = true, more: Pick<ComponentProps<typeof CardSheet>, 'people' | 'agents'> = {}) => render(<LanguageProvider language="en">
  <div id="board-cols"><div className="kcard" data-card-id="7"><a href="#card-7">Launch post</a></div></div>
- <CardSheet slug="rs-learning" company="co-1" title="Launch post" face={null} who={<bdi>Ads</bdi>} badge={<span className="badge">Ideas</span>} sheet={value} canWrite={canWrite} alone={false} send={sent}/>
+ <CardSheet slug="rs-learning" company="co-1" title="Launch post" face={null} who={<bdi>Ads</bdi>} badge={<span className="badge">Ideas</span>} sheet={value} canWrite={canWrite} alone={false} send={sent} {...more}/>
 </LanguageProvider>);
 const dialog = () => document.querySelector('dialog')!;
 const fakeClock = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
@@ -84,6 +84,35 @@ test('a note is sent from the Log tab with Enter, then the field is empty again'
  expect(Object.fromEntries(form)).toEqual({ op: 'comment', slug: 'rs-learning', company: 'co-1', card: '7', view: 'sheet', body: 'Ready for review' });
  await expect.element(field).toHaveValue('');
  await expect.element(send).toBeDisabled();
+});
+
+test('the note field offers the team and the Agents with "@", never Commands, and Enter picks instead of sending the note', async () => {
+ const people = [{ id: 'p-2', name: 'Sara Hassan', role: 'manager' as const }, { id: 'p-4', name: 'Mona Ali', role: 'viewer' as const }];
+ const agents = [{ id: 'a-1', connection_id: 'c-1', name: 'Ads', speciality: 'Marketing' }];
+ const screen = await show(sheet(), true, { people, agents });
+ const field = screen.getByRole('textbox', { name: 'Write a note in the card’s log' });
+ await expect.element(field).toHaveAttribute('aria-expanded', 'false');
+ await userEvent.type(field, '@');
+ await expect.element(screen.getByRole('listbox', { name: 'Call someone' })).toBeVisible();
+ await expect.element(field).toHaveAttribute('aria-expanded', 'true');
+ expect(screen.getByRole('option').elements().map(option => option.textContent)).toEqual(['SSara HassanManager@Sara', 'MMona AliViewer · reads only@Mona', 'AdsMarketing']);
+ await userEvent.keyboard('{Enter}');
+ await expect.element(field).toHaveValue('@Sara ');
+ expect(sent).not.toHaveBeenCalled();
+ await userEvent.type(field, '/a');
+ await expect.element(screen.getByRole('listbox')).not.toBeInTheDocument();
+ await userEvent.type(field, '{Backspace}{Backspace}@Mo');
+ await expect.element(screen.getByRole('listbox', { name: 'Call someone' })).toBeVisible();
+ expect(screen.getByRole('option').elements().map(option => option.textContent)).toEqual(['MMona AliViewer · reads only@Mona']);
+ await userEvent.keyboard('{Tab}');
+ await expect.element(field).toHaveValue('@Sara @Mona ');
+ expect(sent).not.toHaveBeenCalled();
+ await userEvent.type(field, '@');
+ await expect.element(screen.getByRole('listbox')).toBeVisible();
+ await userEvent.keyboard('{Escape}');
+ await expect.element(screen.getByRole('listbox')).not.toBeInTheDocument();
+ await expect.element(field).toHaveValue('@Sara @Mona @');
+ expect(dialog().open, 'Escape closes the list, not the sheet').toBe(true);
 });
 
 test('a Viewer reads the log with no note field', async () => {
@@ -233,7 +262,7 @@ const inChannel = (more: Partial<ChannelRecord> = {}): ChannelRecord => ({
  channel: { id: 'ch-1', company: 'co-1', kind: 'team', name: 'Launch week' },
  members: [], agents: [], writer: true, manage: false, managers: [], may: [], open: false, handoffs: [], handover: false,
  messages: [
-  { id: 1, author: 'person', mine: false, name: 'Sara Adel', role: 'manager', body: 'Morning all', at, mention: null },
+  { id: 1, author: 'person', mine: false, name: 'Sara Adel', role: 'manager', body: 'Morning all', at, files: [], mention: null },
   { id: 2, author: 'agent', name: 'Ads', face: 'c-1', body: 'Plan is ready.', at },
  ], ...more });
 

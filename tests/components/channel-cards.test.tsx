@@ -23,7 +23,7 @@ const record = (messages: ChannelMessage[], more: Partial<ChannelRecord> = {}): 
 const channel = (initial: ChannelRecord, language: 'en' | 'ar') => render(<LanguageProvider language={language}><ChannelView slug="rs-learning" person="p-1" initial={initial}/></LanguageProvider>);
 
 const asked = (chips: boolean): ChannelQuestion => ({ id: 31, kind: 'question', title: 'Which angle first?', question: 'Which angle first?', choices: ['Graduates', 'Parents'], multiple: false, state: 'open', chips });
-const questionFrom = (agent: string, mine: boolean, name: string, chips: boolean): ChannelMessage => ({ id: 10, author: 'person', mine, name, role: 'owner', body: `@${agent} take a look`, at,
+const questionFrom = (agent: string, mine: boolean, name: string, chips: boolean): ChannelMessage => ({ id: 10, author: 'person', mine, name, role: 'owner', body: `@${agent} take a look`, at, files: [],
  mention: { agent, face: chips ? 'c-2' : 'c-1', state: 'open', permissions: [], questions: [asked(chips)] } });
 const handedReply: ChannelMessage = { id: 11, author: 'agent', name: 'SEO', face: 'c-2', body: 'The article is ready except publishing.', at,
  cards: [{ id: 41, kind: 'hand', title: 'Publish the article', line: 'The draft is ready in WordPress', app: 'WordPress', rows: [], url: null, note: null, state: 'open' }] };

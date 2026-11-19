@@ -3,11 +3,12 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
 import { listedSpecs } from './playwright-list.mjs';
+import { caseDecisions, caseRow, readRows } from '../scripts/testing-doc.mjs';
 
 // A flaky browser test may be set aside for 7 days at most, with an issue (#336, decision 0036). It is skipped with
 // Playwright's own skip (test.fixme or test.skip) and named in tests/set-aside.json; a sign-in or Company isolation
-// test is never set aside. Those are the cases whose "stays" row in docs/testing.md's case by case table names
-// sign-in or isolation, and any case of a spec whose file name does.
+// test is never set aside. Those are the cases whose "stays" row in tests/rows/ names sign-in or isolation, and any
+// case of a spec whose file name does.
 const day = 24 * 60 * 60 * 1000;
 const protectedWords = /sign-in|isolation/i;
 
@@ -19,11 +20,11 @@ function skippedCases(config) {
   return listedSpecs(list).filter(({ spec }) => spec.tests.some(item => item.expectedStatus === 'skipped')).map(({ name }) => name);
 }
 
-export function setAsideProblems({ entries, skipped, doc, today }) {
+export function setAsideProblems({ entries, skipped, rows, today }) {
   const problems = [];
-  const sensitive = new Set([...doc.matchAll(/^\| `([\w/-]+\.spec\.ts)` "(.+)" \| stays \| ([^\n]*)$/gm)]
-    .filter(([, , , why]) => protectedWords.test(why))
-    .map(([, file, title]) => `${file} › ${title.replaceAll('\\|', '|')}`));
+  const sensitive = new Set(rows
+    .filter(row => row.decision === 'stays' && protectedWords.test(row.why))
+    .map(row => `${row.file} › ${row.title}`));
   const listed = entries.map(entry => `${entry.file} › ${entry.title}`);
   for (const [index, entry] of entries.entries()) {
     const name = listed[index];
@@ -39,11 +40,13 @@ export function setAsideProblems({ entries, skipped, doc, today }) {
   return problems;
 }
 
-const doc = '| `password.spec.ts` "a wrong password is refused" | stays | Sign-in: the server refuses it. |\n'
-  + '| `channels.spec.ts` "a Member of another Company sees no channel" | stays | Company isolation through the server. |\n'
-  + '| `numbers.spec.ts` "Numbers keeps its title" | stays | Only the page itself. |\n';
+const rows = [
+  '| `password.spec.ts` "a wrong password is refused" | stays | Sign-in: the server refuses it. |',
+  '| `channels.spec.ts` "a Member of another Company sees no channel" | stays | Company isolation through the server. |',
+  '| `numbers.spec.ts` "Numbers keeps its title" | stays | Only the page itself. |',
+].map(line => caseRow(line));
 const entry = (since, more = {}) => ({ file: 'numbers.spec.ts', title: 'Numbers keeps its title', issue: 305, since, ...more });
-const check = (entries, skipped = entries.map(item => `${item.file} › ${item.title}`)) => setAsideProblems({ entries, skipped, doc, today: '2026-11-18' });
+const check = (entries, skipped = entries.map(item => `${item.file} › ${item.title}`)) => setAsideProblems({ entries, skipped, rows, today: '2026-11-18' });
 
 test('an entry set aside 6 or 7 days ago passes, and one set aside 8 days ago turns the guard red', () => {
   assert.deepEqual(check([entry('2026-11-12')]), []);
@@ -71,7 +74,7 @@ test('the set-aside list matches the browser tests Playwright skips, each with a
   const problems = setAsideProblems({
     entries: JSON.parse(readFileSync('tests/set-aside.json', 'utf8')),
     skipped,
-    doc: readFileSync('docs/testing.md', 'utf8'),
+    rows: caseDecisions(readRows()),
     today: new Date().toISOString().slice(0, 10),
   });
   assert.deepEqual(problems, []);

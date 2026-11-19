@@ -9,6 +9,7 @@
 // channel (`team`) a card nobody may act on shows the team's wait line instead of a disabled button (#149).
 import { ShellIcon } from '@/components/shell-icon';
 import { useI18n } from '@/lib/i18n-client';
+import { directionOf } from '@/lib/bidi';
 import { QuestionCard, type AnswerQuestion } from '@/app/question-card';
 import { HandCard, type MarkHandDone } from '@/app/hand-card';
 import { PermissionCard, type DecidePermission } from '@/app/permission-card';
@@ -27,17 +28,17 @@ export function ReplyCard({card,fresh,answer,chips=false,done,decide,may=[],conn
 }
 
 function Shown({card,fresh}:{card:Extract<Card,{kind:'draft'|'review'}>,fresh:boolean}) {
- const {t}=useI18n();
+ const {t,language}=useI18n();
  const label=card.kind==='review'?t('replyReviewLabel',card.title):card.title;
- return <div className={`reply-card reply-card--${card.kind}${fresh?' card-in':''}`} role="group" aria-label={label} dir="auto">{card.kind==='draft'?<DraftBody card={card}/>:<ReviewBody card={card}/>}</div>;
+ return <div className={`reply-card reply-card--${card.kind}${fresh?' card-in':''}`} role="group" aria-label={label} dir={directionOf(card.title,language==='ar'?'rtl':'ltr')}>{card.kind==='draft'?<DraftBody card={card}/>:<ReviewBody card={card}/>}</div>;
 }
 
 // A draft (design-reference: the plan card): the ink tile with the file icon, the title, the line under it and its rows.
 function DraftBody({card}:{card:Extract<Card,{kind:'draft'}>}) {
  return <>
   <div className="card__head"><span className="tool-tile tool-tile--lg tool-tile--ink" aria-hidden="true"><ShellIcon name="file"/></span>
-   <div className="card__titles"><span className="card__title">{card.title}</span><span className="card__sub" dir="auto">{card.line}</span></div></div>
-  {card.rows.length>0&&<dl className="kv">{card.rows.map((row,index)=><div key={index} className="kv__row"><dt dir="auto">{row.label}</dt><dd dir="auto">{row.value}</dd></div>)}</dl>}
+   <div className="card__titles"><span className="card__title">{card.title}</span><span className="card__sub">{card.line}</span></div></div>
+  {card.rows.length>0&&<dl className="kv">{card.rows.map((row,index)=><div key={index} className="kv__row"><dt>{row.label}</dt><dd>{row.value}</dd></div>)}</dl>}
  </>;
 }
 
@@ -47,7 +48,7 @@ function ReviewBody({card}:{card:Extract<Card,{kind:'review'}>}) {
  const {t}=useI18n();
  return <>
   <div className="card__head"><span className="tool-tile tool-tile--lg tool-tile--ink" aria-hidden="true"><ShellIcon name="review"/></span>
-   <div className="card__titles"><span className="card__title">{card.title}</span><span className="card__sub" dir="auto">{card.line}</span></div></div>
+   <div className="card__titles"><span className="card__title">{card.title}</span><span className="card__sub">{card.line}</span></div></div>
   <ol className="rv-list">{card.items.map((item,index)=><li key={index} className="rv-item">
    <div className="rv-item__top"><span className="rv-n num">{index+1}</span><span className="rv-q">«{item.text}»</span>
     <span className={`badge rv-badge${item.fine?'':' is-fix'}`}><ShellIcon name={item.fine?'check':'pencil'}/>{t(item.fine?'replyReviewFine':'replyReviewEdit')}</span></div>

@@ -6,7 +6,7 @@ import channelEn from '@/lib/messages/channel.en.json';
 import channelAr from '@/lib/messages/channel.ar.json';
 import { ShellIcon } from '@/components/shell-icon';
 import { CompanyAgentFace } from '@/components/company-agent-face';
-import { MessageBox, newId, postMessage } from '@/app/conversation-composer';
+import { MessageBox, newId, postMessage, postMessageWithFiles } from '@/app/conversation-composer';
 import { ConversationComposer, ConversationTurns, useConversationRecord } from '@/app/conversation-thread';
 import { firstName, type ChannelRecord } from '@/lib/channels';
 import { named } from '@/lib/bidi';
@@ -68,8 +68,8 @@ export function CardSheetChat({slug,company,card,chat,writer,shown,openLog}:{slu
    <h2>{t('sheetChatEmpty')}</h2>
    <p>{before}<bdi>{chat.agent.name}</bdi>{after}</p>
   </div></div></div>
-  <div className="composer-area">{writer?<MessageBox placeholder={t('writeTo',chat.agent.name)} send={async(message,sendKey)=>{
-   const failure=await postMessage({company,conversation:id,card,message,sendKey});
+  <div className="composer-area">{writer?<MessageBox placeholder={t('writeTo',chat.agent.name)} voice={{company,agent:chat.agent.id}} send={async(message,sendKey,files)=>{
+   const failure=files.length?await postMessageWithFiles({company,conversation:id,card,message,sendKey},files):await postMessage({company,conversation:id,card,message,sendKey});
    if(failure==='sheetChatTaken') router.refresh();
    if(failure) return failure;
    setStarted({conversation:{id,agent_id:chat.agent.id,agent_name:chat.agent.name,face:chat.agent.connection_id},messages:[{id:0,author:'person',author_name:'',body:message,created_at:new Date().toISOString()}],

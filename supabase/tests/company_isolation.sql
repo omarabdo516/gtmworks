@@ -7,7 +7,7 @@ create temp table isolation_matrix(name text primary key, fixed jsonb not null d
 insert into isolation_matrix(name) values
  ('agent_grants'),('agent_handovers'),('agent_key_waits'),('agent_profile_leftovers'),('agent_profiles'),
  ('agent_requests'),('agent_rules'),('approval_steps'),
- ('channel_agents'),('channel_invitees'),('channel_messages'),('channel_notes'),('channel_people'),('channel_permissions'),('channel_reads'),('channel_runs'),('channels'),
+ ('channel_agents'),('channel_attachments'),('channel_invitees'),('channel_messages'),('channel_notes'),('channel_people'),('channel_permissions'),('channel_reads'),('channel_runs'),('channels'),
  ('company_app_sign_ins'),('company_audit'),('company_key_holds'),('company_key_unfinished'),('company_log'),
  ('company_profile_keepers'),('company_profiles'),('company_shared_spaces'),
  ('conversation_attachments'),('conversation_messages'),('conversation_notes'),('conversation_queued_turns'),
@@ -17,7 +17,7 @@ insert into isolation_matrix(name) values
  ('member_agent_access'),('member_audit'),('member_invitations'),('member_notes'),('members'),
  ('note_runs'),('reply_cards'),('role_permissions'),
  ('waiting_items'),
- ('work_activity'),('work_assignees'),('work_attachments'),('work_card_labels'),('work_card_visits'),('work_cards'),
+ ('work_activity'),('work_assignees'),('work_attachments'),('work_card_labels'),('work_card_moves'),('work_card_visits'),('work_cards'),
  ('work_checklist'),('work_comments'),('work_creatives'),('work_labels'),('work_projects'),('work_stages'),('work_versions');
 -- Values a table's own checks need, as SQL (RS Learning is 10000000-...-0001). The member row names a person of no
 -- Company, as naming the caller would make them a member of RS Learning, and a Contributor, so the Owner-only guard
@@ -27,6 +27,8 @@ update isolation_matrix m set fixed = v.fixed::jsonb from (values
  ('agent_handovers', $${"conversation_id": "gen_random_uuid()"}$$),
  ('agent_profile_leftovers', $${"profile": "'ag-' || md5('isolation')"}$$),
  ('approval_steps', $${"person_id": "'e3370000-0000-0000-0000-000000000001'", "role": "null"}$$),
+ ('channel_attachments', $${"channel_id": "'e3370000-0000-0000-0000-00000000000d'",
+   "path": "'10000000-0000-0000-0000-000000000001/channels/e3370000-0000-0000-0000-00000000000d/isolation'"}$$),
  ('channel_messages', $${"author": "'person'", "send_key": "gen_random_uuid()"}$$),
  -- A channel's quiet line names its invited person or its Card (#207, #151); this row is an invitation's.
  ('channel_notes', $${"kind": "'invite'", "invitee_name": "'Mona'"}$$),

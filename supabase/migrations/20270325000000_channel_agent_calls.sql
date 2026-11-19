@@ -109,7 +109,8 @@ $$;
 revoke all on function public.channel_mention_in(uuid,uuid,text) from public,anon,authenticated,service_role;
 
 -- 20261227000000's post_channel_message; a message now starts one Run per Agent it calls, in the order named, each with
--- the same message and the Agent's own session, instructions and rules.
+-- the same message and the Agent's own session, instructions and rules. A message may be images alone, as
+-- 20270224000000_message_files_retry_sends.sql left the blank-text check (#156, #355).
 create or replace function public.post_channel_message(ch uuid, message_key uuid, message text) returns bigint
 language plpgsql security definer set search_path='' as $$
 declare k public.channels; saved bigint; writer text; chosen record;
@@ -117,7 +118,7 @@ begin
  select * into k from public.channels where id=ch;
  if k.id is null or not public.in_channel(ch) then raise exception 'channelNotFound' using errcode='P0002'; end if;
  if not public.conversation_can_write(k.company_id) then raise exception 'channelNotAllowed' using errcode='42501'; end if;
- if message_key is null or message is null or btrim(message)='' or length(message) > 20000 then raise exception 'channelFailed' using errcode='22023'; end if;
+ if message_key is null or message is null or (btrim(message)='' and not exists(select 1 from public.channel_attachments a left join public.channel_messages m on m.id=a.message_id where a.channel_id=ch and a.send_key=message_key and a.person_id=auth.uid() and (a.message_id is null or (m.channel_id=ch and m.send_key=message_key and m.person_id=auth.uid() and m.author='person')))) or length(message) > 20000 then raise exception 'channelFailed' using errcode='22023'; end if;
  select coalesce(btrim(name),'') into writer from public.people where id=auth.uid();
  insert into public.channel_messages(company_id, channel_id, author, person_id, author_name, body, send_key)
   values (k.company_id, ch, 'person', auth.uid(), coalesce(writer,''), message, message_key)
@@ -159,10 +160,10 @@ grant execute on function public.channel_runs_due(uuid,bigint,bigint) to service
 -- 20270213000000's begin_channel_start, on the first Run of the message still open: the Run the caller was given. It
 -- answers the place of that Run too, so the caller's idempotency key names the Run it really began, not one that closed
 -- between the read and this call. The lock a profile move takes is still taken first, so no move passes between pinning a
--- profile and the move's check.
+-- profile and the move's check. It still says whether the message carries images (has_files, 20270221000000, #156).
 drop function public.begin_channel_start(bigint);
 create function public.begin_channel_start(message bigint)
- returns table(attempt integer, company uuid, profile text, session uuid, input text, instructions text, rules text[], ordinal smallint)
+ returns table(attempt integer, company uuid, profile text, session uuid, input text, instructions text, rules text[], ordinal smallint, has_files boolean)
  language plpgsql security definer set search_path='' as $function$
 declare r public.channel_runs;
 begin
@@ -186,7 +187,8 @@ begin
  if public.agent_profile_refusal(r.profile,r.company_id,r.agent_id) is not null then return; end if;
  update public.channel_runs set attempts=attempts+1, attempted_at=now(), connection_id=r.connection_id, profile=r.profile
   where message_id=message and public.channel_runs.ordinal=r.ordinal returning attempts into r.attempts;
- return query select r.attempts, r.company_id, r.profile, r.session, r.input, r.instructions, r.rules, r.ordinal;
+ return query select r.attempts, r.company_id, r.profile, r.session, r.input, r.instructions, r.rules, r.ordinal,
+  exists(select 1 from public.channel_attachments a where a.message_id=message);
 end $function$;
 revoke all on function public.begin_channel_start(bigint) from public,anon,authenticated;
 grant execute on function public.begin_channel_start(bigint) to service_role;

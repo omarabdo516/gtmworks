@@ -13,7 +13,7 @@ import { AgentFaceDot } from '@/app/agent-face-dot';
 import { statusKeys } from '@/lib/agent-details.mjs';
 import { ShellIcon } from '@/components/shell-icon';
 import { DetailsShell, HeadPill, useDetailsPanel, type DetailsPanel } from '@/app/agent-details';
-import { MessageBox, postMessage } from '@/app/conversation-composer';
+import { MessageBox, postMessage, postMessageWithFiles } from '@/app/conversation-composer';
 import { madeDay, useZone } from '@/app/agent-made';
 import { changeChannel, channelChoices } from '@/app/channel-actions';
 import { channelTitle, firstName, withMention, type ChannelAgent, type ChannelMention, type ChannelMessage, type ChannelRecord } from '@/lib/channels';
@@ -162,7 +162,7 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
    </div>
    <ol className="turns" aria-label={c('channelMessages',name)}>{messages.map((message,index)=><Fragment key={message.id}>
     {(index===0||dayOf(messages[index-1].at,zone)!==dayOf(message.at,zone))&&<li className="divider"><time dateTime={message.at} data-utc={zone}>{dayLabel(message.at)}</time></li>}
-    <Turn message={message} time={time} c={c} name={name} cb={cb} drawnCards={drawnCards} memberNames={memberNames} done={writer?done:undefined}/>
+    <Turn message={message} time={time} c={c} slug={slug} name={name} cb={cb} drawnCards={drawnCards} memberNames={memberNames} done={writer?done:undefined}/>
     {message.author==='person'&&mentionsOf(message).some(mention=>mention.questions.length>0||mention.permissions.length>0)&&mentionsOf(message).filter(mention=>mention.questions.length>0||mention.permissions.length>0).map(mention=><li key={mention.agent} className="turn turn--agent msg" data-author="agent">
      <div className="sender"><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:mention.face,name:mention.agent}} size={20}/></span><bdi>{mention.agent}</bdi></div>
      {mention.questions.map(card=><ReplyCard key={`question${card.id}`} card={card} fresh={!drawnCards.has(card.id)} chips={card.chips}
@@ -174,8 +174,9 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
    {workingNow&&<p className="thinking convo-status" role="status">{t('conversationWorking',workingNow.agent)}</p>}
   </div></div>
   <div className="composer-area">
-   {writer?<MessageBox label={c('channelMessageLabel')} placeholder={c('channelPlaceholder',name)} call={{people:members.flatMap(member=>member.person&&member.person!==person?[{id:member.person,name:member.name}]:[]),agents}} send={async(message,sendKey)=>{
-    const failure=await postMessage({company:channel.company,channel:channel.id,message,sendKey},'/api/channels');
+   {writer?<MessageBox label={c('channelMessageLabel')} placeholder={c('channelPlaceholder',name)} voice={{company:channel.company,channel:channel.id}} call={{people:members.flatMap(member=>member.person&&member.person!==person?[{id:member.person,name:member.name,role:member.role}]:[]),agents}} send={async(message,sendKey,files)=>{
+    const fields={company:channel.company,channel:channel.id,message,sendKey};
+    const failure=files.length?await postMessageWithFiles(fields,files,'/api/channels'):await postMessage(fields,'/api/channels');
     if(!failure) setSent(value=>value+1);
     return failure;
    }}/>:<p className="ro-line" role="note"><ShellIcon name="eye"/><span>{t('viewOnly')}</span></p>}
@@ -183,7 +184,7 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
  </div><ChannelDetails panel={panel} slug={slug} name={name} person={person} record={record} tip={tip} c={c} time={time} refresh={refresh}/></div>;
 }
 
-function Turn({message,time,c,name,cb,drawnCards,memberNames,done}:{message:ChannelMessage,time:(value:string)=>string,c:Say,name:string,cb:StepsBidiText,drawnCards:Set<number>,memberNames:string[],done?:MarkHandDone}) {
+function Turn({message,time,c,slug,name,cb,drawnCards,memberNames,done}:{message:ChannelMessage,time:(value:string)=>string,c:Say,slug:string,name:string,cb:StepsBidiText,drawnCards:Set<number>,memberNames:string[],done?:MarkHandDone}) {
  const {t,language}=useI18n();
  // The quiet message "Done it" wrote asks its Agent to pick up (#149): the card shows the press, never a bubble of it.
  if(message.author==='person'&&message.handDone) return null;
@@ -210,13 +211,18 @@ function Turn({message,time,c,name,cb,drawnCards,memberNames,done}:{message:Chan
  const called=mentionsOf(message);
  const body=withMention(message.body,[...called.map(mention=>mention.agent),...memberNames]).map((part,index)=>part.mention?<bdi key={index} className="mention">{part.text}</bdi>:<Fragment key={index}>{part.text}</Fragment>);
  const failed=called.filter(mention=>mention.state==='unanswered').map(mention=><p key={mention.agent} className="note" role="alert">{c('channelCouldNotReply',mention.agent)}</p>);
+ // The images the message carries (#156), under its bubble on the writer's side for the writer and on the start side for
+ // every other Member (design-reference: filesHTML; `.turn--user` and `.turn--peer` put them on their own side).
+ const files=!!message.files.length&&<div className="msg-files">{message.files.map(file=><a key={file.id} className="file-chip" href={`/c/${slug}/files/channel/${file.id}`} target="_blank" rel="noreferrer" aria-label={t('attachOpen',file.name)}><ShellIcon name="clip"/><bdi dir="auto">{file.name}</bdi></a>)}</div>;
  if(message.mine) return <li className="turn turn--user msg" data-author="person" data-msg={message.id}>
-  <div className="bubble-row"><time className="bubble__time" dateTime={message.at}>{time(message.at)}</time><div className="bubble bubble--user" dir="auto">{body}</div></div>
+  {!!message.body.trim()&&<div className="bubble-row"><time className="bubble__time" dateTime={message.at}>{time(message.at)}</time><div className="bubble bubble--user" dir="auto">{body}</div></div>}
+  {files}
   {failed}
  </li>;
  return <li className="turn turn--peer msg" data-author="person" data-msg={message.id}>
   <div className="sender"><Initial name={message.name} size={20}/><bdi>{firstName(message.name)}</bdi>{message.role&&<span className="sender__role">{t(roleKeys[message.role])}</span>}<time className="sender__time" dateTime={message.at}>{time(message.at)}</time></div>
-  <div className="bubble bubble--peer" dir="auto">{body}</div>
+  {!!message.body.trim()&&<div className="bubble bubble--peer" dir="auto">{body}</div>}
+  {files}
   {failed}
  </li>;
 }

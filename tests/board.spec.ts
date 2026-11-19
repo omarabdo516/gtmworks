@@ -22,6 +22,31 @@ async function newCard(page:Page,label:string) {
 const columnOf=(page:Page,id:number)=>page.locator(`.kcard[data-card-id="${id}"]`).evaluate(el=>el.closest('[data-column]')?.getAttribute('data-column') ?? null);
 const landedColumn=async(page:Page,id:number)=>{ let column:string|null=null; await expect.poll(async()=>column=await columnOf(page,id)).not.toBeNull(); return column; };
 
+// #174: a Card keeps its place inside its column. Cards made for one test sit at their column's end, in the order made.
+const placeCards=(stamp:number,n:number,stage='أفكار')=>rows(`with made as (insert into public.work_cards(company_id,stage_id,title)
+ select '${rs}',s.id,'Place ${stamp} '||x from public.work_stages s, generate_series(1,${n}) x where s.company_id='${rs}' and s.name='${stage}' returning id)
+ select id from made order by id`).map(row=>Number(row.id));
+// The order a column is drawn in.
+const orderIn=(page:Page,column:string)=>page.locator(`#board-cols .col[data-column="${column}"] .kcard[data-card-id]`).evaluateAll(nodes=>nodes.map(node=>Number(node.getAttribute('data-card-id'))));
+// The point just above a Card's middle: a Card dropped there lands above it.
+const pointAbove=async(page:Page,column:string,id:number)=>{ const box=(await page.locator(`#board-cols .col[data-column="${column}"] .kcard[data-card-id="${id}"]`).boundingBox())!; return {x:box.x+box.width/2,y:box.y+4}; };
+// The column's own end, under its last Card.
+const columnEnd=async(page:Page,column:string)=>{ const box=(await page.locator(`#board-cols .col[data-column="${column}"] .col__body`).boundingBox())!; return {x:box.x+box.width/2,y:box.y+box.height-6}; };
+// Carry a Card with the mouse to a place in a column and drop it there (design-reference: pointerdown, dragMove,
+// pointerup). The place is read once the Card is in view, so the aim is where the board stands when the drag starts.
+async function carry(page:Page,id:number,to:{column:string,before?:number,end?:boolean}) {
+ const source=page.locator(`#board-cols .kcard[data-card-id="${id}"]`);
+ await expect(source).toBeVisible();
+ await source.scrollIntoViewIfNeeded();
+ const from=(await source.boundingBox())!;
+ const aim=to.end?await columnEnd(page,to.column):await pointAbove(page,to.column,to.before!);
+ await page.mouse.move(from.x+from.width/2,from.y+20);
+ await page.mouse.down();
+ await page.mouse.move(from.x+from.width/2+8,from.y+20,{steps:2});
+ await page.mouse.move(aim.x,aim.y,{steps:12});
+ await page.mouse.up();
+}
+
 test('a card moves by drag and by keyboard, and both moves are logged',async({page})=>{
  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
  const card=await newCard(page,'Board move');
@@ -36,13 +61,13 @@ test('a card moves by drag and by keyboard, and both moves are logged',async({pa
  await page.mouse.move(from.x+from.width/2+8,from.y+20,{steps:2});
  await page.mouse.move(to.x+to.width/2,to.y+40,{steps:10});
  await page.mouse.up();
- await expect(page.locator('.toast')).toHaveText('Moved to “Planned”');
+ await expect(page.locator('.toast')).toContainText('Moved to “Planned”');
  await expect(page.locator(`.col[data-column="planned"] .kcard[data-card-id="${card.id}"]`)).toBeVisible();
  await expect(page).toHaveURL(/\/work\/board$/);
  // Keyboard: Shift and the arrow toward the reading end is the next column; the card keeps the focus.
  await page.locator(`.kcard[data-card-id="${card.id}"] a`).focus();
  await page.keyboard.press('Shift+ArrowRight');
- await expect(page.locator('.toast')).toHaveText('Moved to “In progress”');
+ await expect(page.locator('.toast')).toContainText('Moved to “In progress”');
  await expect(page.locator(`.col[data-column="progress"] .kcard[data-card-id="${card.id}"]`)).toBeVisible();
  await expect(page.locator(`.col[data-column="progress"] .kcard[data-card-id="${card.id}"] a`)).toBeFocused();
  await page.reload();
@@ -62,6 +87,37 @@ test('a card moves by drag and by keyboard, and both moves are logged',async({pa
  expect(await columnOf(page,card.id)).toBe('ideas');
 });
 
+test('+ on Ideas adds an idea with its Agent, flashes and focuses the Card, raises the count and writes the log row',async({page})=>{
+ const stamp=Date.now();
+ const lead=randomUUID(), ads=randomUUID();
+ try {
+  query(`insert into public.hermes_agents(id,company_id,name,speciality,profile,is_default) values ('${lead}','${rs}','Lead','General','idea-lead-${stamp}',true),('${ads}','${rs}','Ads','Meta ads','idea-ads-${stamp}',false)`);
+  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+  const ideas=page.locator('.col[data-column="ideas"]');
+  const before=Number(await ideas.locator('.col__count').textContent());
+  await ideas.getByRole('button',{name:'Add an idea'}).click();
+  await expect(ideas.getByLabel('Idea',{exact:true})).toBeFocused();
+  const title=`Idea ${stamp}`;
+  await ideas.getByLabel('Idea',{exact:true}).fill(title);
+  await ideas.getByLabel('Agent',{exact:true}).selectOption({label:'Ads'});
+  await ideas.getByRole('button',{name:'Add',exact:true}).click();
+  await expect(page.locator('.toast')).toHaveText('Idea added');
+  const card=ideas.locator('.kcard').filter({hasText:title});
+  await expect(card).toBeVisible();
+  await expect(card.locator('.kcard__foot')).toContainText('Ads');
+  await expect(card.locator('.kcard__t')).toHaveText('New idea from عمر');
+  await expect(card.locator('a')).toBeFocused();
+  await expect(ideas.locator('.col__count')).toHaveText(String(before+1));
+  // The new idea is the first Card in the column.
+  await expect(ideas.locator('.kcard').first().locator('.kcard__title')).toHaveText(title);
+  // The column's own row in the Company log says it was an idea.
+  await page.goto('/c/rs-learning/log');
+  await expect(page.locator('.lgp-body .lg-row').filter({hasText:'added an idea'}).filter({hasText:title})).toBeVisible();
+ } finally {
+  query(`delete from public.hermes_agents where id in ('${lead}','${ads}')`);
+ }
+});
+
 test('a card waiting for a decision moves only by it: a drop on Live opens the card, a drop elsewhere says to decide in the chat',async({page})=>{
  // Wide enough to show Waiting on you and Live together, so the card is carried from one to the other.
  await page.setViewportSize({width:2200,height:900});
@@ -77,10 +133,12 @@ test('a card waiting for a decision moves only by it: a drop on Live opens the c
  // The toast raised on the board is still there on the card the drop opened.
  await expect(page).toHaveURL(/\/work\/board\/5$/);
  await expect(page.locator('.toast')).toHaveText('It needs your OK first. Decide here and the card moves on its own');
+ await expect(page.getByRole('button',{name:'Undo'})).toHaveCount(0);
  await page.goto('/c/rs-learning/work/board');
  await page.locator('.kcard[data-card-id="5"] a').focus();
  await page.keyboard.press('Shift+ArrowRight');
  await expect(page.locator('.toast')).toHaveText('This card is waiting for your decision. Decide in the chat first');
+ await expect(page.getByRole('button',{name:'Undo'})).toHaveCount(0);
  await expect(page).toHaveURL(/\/work\/board\/5$/);
  await page.goto('/c/rs-learning/work/board');
  expect(await landedColumn(page,5)).toBe('waiting');
@@ -101,7 +159,7 @@ test('a Viewer cannot move a card',async({page})=>{
  await page.keyboard.press('Shift+ArrowRight');
  await page.reload();
  expect(await columnOf(page,1)).toBe(before);
- await expect(page.getByRole('button',{name:'+ Add card'})).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'Add an idea'})).toHaveCount(0);
 });
 
 test('a card waiting for my approval is in Waiting on you and leaves it when I approve its version',async({page})=>{
@@ -275,4 +333,176 @@ test('Waiting on you lists an Agent question and an item of a new kind, each ope
   if(attachedAgent.id) query(`delete from public.hermes_agents where id='${attachedAgent.id}'`);
   await fake.close();
  }
+});
+
+// #174: a Card is carried anywhere in a column: above another Card or at the column's end, in its own column or another.
+// The order a column's Cards take once one is placed above `before` (null: at the end).
+const placed=(order:number[],id:number,before:number|null)=>{ const rest=order.filter(other=>other!==id); const at=before==null?rest.length:rest.indexOf(before); rest.splice(at<0?rest.length:at,0,id); return rest; };
+
+test('a Card is carried to the top, the middle and the end of its own column, and into another, kept after a reload',async({page})=>{
+ await page.setViewportSize({width:2200,height:900});
+ await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ const stamp=Date.now();
+ const [a,b,c]=placeCards(stamp,3);
+ await page.reload();
+ // The three Cards made now sit at their column's end, in the order they were made.
+ const start=await orderIn(page,'ideas');
+ expect(start.slice(-3)).toEqual([a,b,c]);
+ // To the top.
+ await carry(page,c,{column:'ideas',before:start[0]});
+ const top=placed(start,c,start[0]);
+ await expect.poll(()=>orderIn(page,'ideas')).toEqual(top);
+ await page.reload();
+ expect(await orderIn(page,'ideas')).toEqual(top);
+ // To the middle, above the Card made before the last one.
+ await carry(page,c,{column:'ideas',before:b});
+ const middle=placed(top,c,b);
+ await expect.poll(()=>orderIn(page,'ideas')).toEqual(middle);
+ await page.reload();
+ expect(await orderIn(page,'ideas')).toEqual(middle);
+ // To the end.
+ await carry(page,c,{column:'ideas',end:true});
+ const end=placed(middle,c,null);
+ await expect.poll(()=>orderIn(page,'ideas')).toEqual(end);
+ await page.reload();
+ expect(await orderIn(page,'ideas')).toEqual(end);
+ // Into the middle of another column: above the Card made there last.
+ const [d]=placeCards(stamp,1,'بريف جاهز');
+ await page.reload();
+ const planned=await orderIn(page,'planned');
+ expect(planned[planned.length-1]).toBe(d);
+ await carry(page,a,{column:'planned',before:d});
+ await expect(page.locator('.toast')).toContainText('Moved to “Planned”');
+ await expect.poll(()=>orderIn(page,'planned')).toEqual(placed(planned,a,d));
+ await expect.poll(()=>orderIn(page,'ideas')).toEqual(end.filter(id=>id!==a));
+ await page.reload();
+ expect(await orderIn(page,'planned')).toEqual(placed(planned,a,d));
+});
+
+// #174: Shift with Up or Down moves the focused Card one place, and nothing happens at either end.
+test('Shift with Up or Down moves the focused Card one place in its column, and at the ends nothing happens',async({page})=>{
+ await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ const stamp=Date.now();
+ const [,b]=placeCards(stamp,3);
+ await page.reload();
+ const start=await orderIn(page,'ideas');
+ const focus=(id:number)=>page.locator(`#board-cols .kcard[data-card-id="${id}"] a`).focus();
+ // Up: above the Card before it, with the focus kept and no toast.
+ await focus(b);
+ await page.keyboard.press('Shift+ArrowUp');
+ const up=placed(start,b,start[start.indexOf(b)-1]);
+ await expect.poll(()=>orderIn(page,'ideas')).toEqual(up);
+ await expect(page.locator(`#board-cols .kcard[data-card-id="${b}"] a`)).toBeFocused();
+ await expect(page.locator('.toast')).toHaveCount(0);
+ // Down: above the Card after the next one.
+ await focus(b);
+ await page.keyboard.press('Shift+ArrowDown');
+ const down=placed(up,b,up[up.indexOf(b)+2]??null);
+ await expect.poll(()=>orderIn(page,'ideas')).toEqual(down);
+ await expect(page.locator(`#board-cols .kcard[data-card-id="${b}"] a`)).toBeFocused();
+ // At the top and at the bottom nothing happens.
+ await focus(down[0]);
+ await page.keyboard.press('Shift+ArrowUp');
+ await expect(page.locator('.board-status')).toHaveCount(0);
+ expect(await orderIn(page,'ideas')).toEqual(down);
+ await focus(down[down.length-1]);
+ await page.keyboard.press('Shift+ArrowDown');
+ await expect(page.locator('.board-status')).toHaveCount(0);
+ await page.reload();
+ expect(await orderIn(page,'ideas')).toEqual(down);
+});
+
+// #174: the order is every Member's; a place inside one column is not announced and writes no log row, and a move to
+// another column is both.
+test('a second Member sees the same order; a place inside a column is not announced or logged, a move to another column is',async({page,browser})=>{
+ // A tall window keeps the whole Ideas column on screen: the cases before this one leave about ten Cards in it.
+ await page.setViewportSize({width:2200,height:2000});
+ await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ const stamp=Date.now();
+ const [a,b]=placeCards(stamp,2);
+ await page.reload();
+ const start=await orderIn(page,'ideas');
+ await carry(page,a,{column:'ideas',before:start[0]});
+ const shown=placed(start,a,start[0]);
+ await expect.poll(()=>orderIn(page,'ideas')).toEqual(shown);
+ await expect(page.locator('.toast')).toHaveCount(0);
+ await page.goto(`/c/rs-learning/work/board/${a}`);
+ await expect(page.locator('.detail-row').filter({hasText:'Moved the card from'})).toHaveCount(0);
+ // The Manager, in a window of their own, reads the same order.
+ const other=await browser.newContext(); const managerPage=await other.newPage();
+ try {
+  await managerPage.setViewportSize({width:2200,height:2000});
+  await signIn(managerPage,'manager@example.com','/c/rs-learning/work/board');
+  await expect.poll(()=>orderIn(managerPage,'ideas')).toEqual(shown);
+ } finally { await other.close(); }
+ // A move to another column is announced and logged.
+ await page.goto('/c/rs-learning/work/board');
+ const planned=await orderIn(page,'planned');
+ await carry(page,b,{column:'planned',before:planned[0]});
+ await expect(page.locator('.toast')).toContainText('Moved to “Planned”');
+ await expect.poll(()=>orderIn(page,'planned')).toEqual(placed(planned,b,planned[0]));
+ await page.goto(`/c/rs-learning/work/board/${b}`);
+ await expect(page.locator('.detail-row').filter({hasText:'Moved the card from أفكار to بريف جاهز'})).toHaveCount(1);
+});
+
+// #168, #174: a place the server refuses keeps the board as it was: the Contributor is told in the page, stays on the
+// board and is offered no "Undo", and a reload shows the Card where it stood.
+test('a Contributor dropping a Card on Live is told it cannot move it, stays on the board with no Undo, and the Card stays put',async({page})=>{
+ await page.setViewportSize({width:2200,height:900});
+ await signIn(page,'reviewer@example.com','/c/rs-learning/work/board');
+ // Card 1 is seeded in Ideas; a Contributor moves Cards, but not into Live, which only the people who manage the Company do.
+ await expect(page.locator('.col[data-column="ideas"] .kcard[data-card-id="1"]')).toBeVisible();
+ const from=(await page.locator('.kcard[data-card-id="1"]').boundingBox())!,to=(await page.locator('.col[data-column="live"] .col__body').boundingBox())!;
+ await page.mouse.move(from.x+from.width/2,from.y+20);
+ await page.mouse.down();
+ await page.mouse.move(from.x+from.width/2+8,from.y+20,{steps:2});
+ await page.mouse.move(to.x+to.width/2,to.y+40,{steps:10});
+ await page.mouse.up();
+ await expect(page.locator('.work-error')).toHaveText('You cannot move the card to this stage.');
+ await expect(page).toHaveURL(/\/work\/board$/);
+ await expect(page.getByRole('button',{name:'Undo'})).toHaveCount(0);
+ await expect(page.locator('.col[data-column="ideas"] .kcard[data-card-id="1"]')).toBeVisible();
+ await page.reload();
+ expect(await columnOf(page,1)).toBe('ideas');
+});
+
+// #168: "Undo" on a move is offered for six seconds and puts the Card back in the stage it left, not only in its column;
+// the keyboard returns to it and the log keeps both rows. A move the board refuses offers no "Undo".
+test('a move to another column is offered as Undo, which puts the Card back in the stage and place it left, focused, with both log rows',async({page})=>{
+ await page.setViewportSize({width:2200,height:900});
+ await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ const stamp=Date.now();
+ // Two Cards in «كتابة», a stage of In progress: a Card put back returns to that stage, not to the column's first one.
+ const [a,b]=placeCards(stamp,2,'كتابة');
+ const writing=Number(rows(`select id from public.work_stages where company_id='${rs}' and name='كتابة'`)[0].id);
+ await page.reload();
+ const progress=await orderIn(page,'progress');
+ expect(progress.slice(-2)).toEqual([a,b]);
+ const planned=await orderIn(page,'planned');
+ // Drag: the move is told with "Undo", and the Card stays in Planned until it is pressed.
+ await carry(page,a,{column:'planned',before:planned[0]});
+ await expect(page.locator('.toast')).toContainText('Moved to “Planned”');
+ await expect(page.getByRole('button',{name:'Undo'})).toBeVisible();
+ // Undo: the Card is back in In progress and in the stage it left, its own place again, and it takes the keyboard.
+ await page.getByRole('button',{name:'Undo'}).click();
+ await expect(page.locator('.toast')).toHaveText('Back in “In progress”');
+ const back=page.locator(`.col[data-column="progress"] .kcard[data-card-id="${a}"]`);
+ await expect(back).toBeVisible();
+ expect(await back.evaluate(el=>el.closest('[data-stage-id]')?.getAttribute('data-stage-id'))).toBe(String(writing));
+ await expect(back.locator('a')).toBeFocused();
+ expect(await orderIn(page,'progress')).toEqual(progress);
+ // The log keeps one row for the move and one for the way back, each naming who and both stages.
+ await page.goto(`/c/rs-learning/work/board/${a}`);
+ await expect(page.locator('.detail-row').filter({hasText:'Moved the card from كتابة to بريف جاهز'})).toHaveCount(1);
+ await expect(page.locator('.detail-row').filter({hasText:'Moved the card back from Planned to In progress'})).toHaveCount(1);
+ // The keyboard's move is told with "Undo" too, and its Undo brings the Card back again.
+ await page.goto('/c/rs-learning/work/board');
+ await page.locator(`.kcard[data-card-id="${a}"] a`).focus();
+ // In English the board reads left to right, so Planned is the column to the left of In progress.
+ await page.keyboard.press('Shift+ArrowLeft');
+ await expect(page.locator('.toast')).toContainText('Moved to “Planned”');
+ await expect(page.locator(`.col[data-column="planned"] .kcard[data-card-id="${a}"]`)).toBeVisible();
+ await page.getByRole('button',{name:'Undo'}).click();
+ await expect(page.locator('.toast')).toHaveText('Back in “In progress”');
+ await expect(page.locator(`.col[data-column="progress"] .kcard[data-card-id="${a}"] a`)).toBeFocused();
 });

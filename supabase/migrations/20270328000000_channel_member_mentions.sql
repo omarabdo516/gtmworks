@@ -56,7 +56,7 @@ begin
  select * into k from public.channels where id=ch;
  if k.id is null or not public.in_channel(ch) then raise exception 'channelNotFound' using errcode='P0002'; end if;
  if not public.conversation_can_write(k.company_id) then raise exception 'channelNotAllowed' using errcode='42501'; end if;
- if message_key is null or message is null or btrim(message)='' or length(message) > 20000 then raise exception 'channelFailed' using errcode='22023'; end if;
+ if message_key is null or message is null or (btrim(message)='' and not exists(select 1 from public.channel_attachments a left join public.channel_messages m on m.id=a.message_id where a.channel_id=ch and a.send_key=message_key and a.person_id=auth.uid() and (a.message_id is null or (m.channel_id=ch and m.send_key=message_key and m.person_id=auth.uid() and m.author='person')))) or length(message) > 20000 then raise exception 'channelFailed' using errcode='22023'; end if;
  select coalesce(btrim(name),'') into writer from public.people where id=auth.uid();
  insert into public.channel_messages(company_id, channel_id, author, person_id, author_name, body, send_key)
   values (k.company_id, ch, 'person', auth.uid(), coalesce(writer,''), message, message_key)

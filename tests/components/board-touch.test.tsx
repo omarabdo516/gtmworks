@@ -2,7 +2,7 @@ import { afterEach, expect, test, vi } from 'vitest';
 import type { ComponentProps } from 'react';
 import { cdp } from 'vitest/browser';
 import type {} from '@vitest/browser-playwright';
-import { sent, showWork, workProps } from './work-page';
+import { placed, showWork, workProps } from './work-page';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/work/board' }));
 vi.mock('@/lib/link', () => ({ default: ({ prefetch: _prefetch, scroll: _scroll, ...props }: ComponentProps<'a'> & { prefetch?: unknown, scroll?: unknown }) => <a {...props}/> }));
@@ -18,7 +18,7 @@ const props = workProps();
 const phoneBoard = async () => {
  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
  await cdp().send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
- vi.mocked(props.workAction).mockClear();
+ vi.mocked(props.placeMove).mockClear();
  await showWork(props, { width: 390 });
  return document.querySelector<HTMLElement>('.board')!;
 };
@@ -34,7 +34,7 @@ test('on a phone a swipe that starts on a card scrolls the board and moves no ca
  for (let step = 1; step <= 12; step++) { vi.advanceTimersByTime(16); await touch('touchMove', x - step * 14, y); }
  await touch('touchEnd');
  await expect.poll(() => board.scrollLeft, { message: 'the board scrolled under the swipe' }).toBeGreaterThan(0);
- expect(sent(props)).toEqual([]);
+ expect(placed(props)).toEqual([]);
  expect(document.querySelector('.board-status')).toBeNull();
 });
 
@@ -56,6 +56,52 @@ test('on a phone a card held for a moment is carried to the next list and moved 
  for (let step = 1; step <= 15; step++) { const to = aim(); await touch('touchMove', from.x + (to.x - from.x) * step / 15, from.y + (to.y - from.y) * step / 15); }
  expect(board.scrollLeft, 'the board holds still under the finger').toBe(scrolled);
  await touch('touchEnd');
- await expect.poll(() => sent(props)).toEqual([{ op: 'move-column', company: 'co-1', slug: 'rs-learning', card: '1', column: 'planned' }]);
+ await expect.poll(() => placed(props)).toEqual([{ company: 'co-1', slug: 'rs-learning', card: '1', column: 'planned', before: '' }]);
  expect(cancels, 'no pointercancel ends the drag').toBe(0);
+});
+
+test('on a phone a Card held at the board\'s sideways edge scrolls the board by itself', async () => {
+ const board = await phoneBoard();
+ const edge = board.getBoundingClientRect(), band = edge.width * 0.2 + 12;
+ board.scrollLeft += column('planned').left - (edge.right - band - 48);
+ const scrolled = await settled(board);
+ const card = document.querySelector('.kcard[data-card-id="1"]')!.getBoundingClientRect();
+ const from = { x: Math.max(card.left, edge.left + band) + 10, y: card.top + 12 };
+ // Held just inside the right band, the board follows the Card: carrying a Card to a column out of view still works.
+ const to = { x: edge.right - 20, y: from.y };
+ await touch('touchStart', from.x, from.y);
+ vi.advanceTimersByTime(300);
+ for (let step = 1; step <= 10; step++) {
+  await touch('touchMove', from.x + (to.x - from.x) * step / 10, to.y);
+  await new Promise(requestAnimationFrame);
+ }
+ // dnd-kit's auto-scroll runs on a real interval, so the frames above are what let it move the board.
+ expect(board.scrollLeft, 'the board scrolls by itself at its edge').toBeGreaterThan(scrolled);
+ await touch('touchEnd');
+});
+
+test('on a phone a board with a little room to spill downward does not scroll under a Card held in that spill', async () => {
+ const board = await phoneBoard();
+ const edge = board.getBoundingClientRect(), band = edge.width * 0.2 + 12;
+ board.scrollLeft += column('planned').left - (edge.right - band - 48);
+ await settled(board);
+ // A runner can lay the board a fraction shorter than the columns it holds, which gives it room to scroll down too.
+ // It is still the box that scrolls sideways: a held Card must not scroll it up or down, and the sideways edge still
+ // scrolls it (the test above). Before #249 a finger in this spill's top band let the drag scroll the board.
+ document.querySelector<HTMLElement>('.col[data-column="ideas"]')!.style.minHeight = `${board.clientHeight + 80}px`;
+ board.scrollTop = 40;
+ await new Promise(requestAnimationFrame);
+ const box = board.getBoundingClientRect();
+ const card = document.querySelector('.kcard[data-card-id="1"]')!.getBoundingClientRect();
+ const from = { x: Math.max(card.left, box.left + band) + 10, y: box.top + 24 };
+ const idle = { left: board.scrollLeft, top: board.scrollTop };
+ await touch('touchStart', from.x, from.y);
+ vi.advanceTimersByTime(300);
+ for (let step = 1; step <= 10; step++) {
+  await touch('touchMove', from.x, from.y - step * 2);
+  await new Promise(requestAnimationFrame);
+ }
+ expect(board.scrollTop, 'the board holds still up and down under the finger').toBe(idle.top);
+ expect(board.scrollLeft, 'the board holds still sideways under the finger').toBe(idle.left);
+ await touch('touchEnd');
 });
