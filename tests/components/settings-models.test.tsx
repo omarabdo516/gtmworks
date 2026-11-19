@@ -3,6 +3,7 @@ import { render } from 'vitest-browser-react';
 import { page, userEvent } from 'vitest/browser';
 import { ProviderKeys, DefaultModel, EachAgent, AgentModel, DefaultEffort, type AgentModels, type ModelOption } from '@/app/settings-models';
 import { LanguageProvider } from '@/lib/i18n-client';
+import { ToastHost } from '@/app/toast';
 import en from '@/lib/messages/en.json';
 import ar from '@/lib/messages/ar.json';
 import '@/app/tokens.css';
@@ -119,6 +120,24 @@ test('a member below Owner reads every model and the sub-agents state with no co
   await expect.element(page.getByText(en.settingsModelsOwn)).not.toBeInTheDocument();
   expect(document.body.textContent).toContain('4');
   expect(document.body.textContent).not.toContain(key);
+});
+
+test('the default names the Agents it did not reach and the Owner can send it again, with no success toast until it lands', async () => {
+ const bodies: object[] = [];
+ vi.stubGlobal('fetch', (_url: string, init: RequestInit) => {
+  bodies.push(JSON.parse(String(init.body)) as object);
+  const failed = bodies.length === 1 ? [{ agent: 'a-2', name: 'Critic' }] : [];
+  return Promise.resolve(new Response(JSON.stringify({ agents: [{ agent: 'a-1', name: 'Writer', written: failed.length === 0 }], failed }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+ });
+ const screen = await renderNode(<><ToastHost/><DefaultModel company={company} owner models={{ model: 'openrouter/openai/gpt-5.5', options }}/></>);
+ await screen.getByRole('radio', { name: /claude-opus-4-6/ }).click();
+ await expect.element(screen.getByText(en.settingsModelsNotReached.replace('{0}', 'Critic'))).toBeVisible();
+ expect(document.querySelector('.toast')?.textContent ?? '').not.toContain(en.settingsModelsSaved);
+ await screen.getByRole('button', { name: en.settingsModelsRetry }).click();
+ await expect.poll(() => bodies.length).toBe(2);
+ expect(bodies[1]).toEqual(bodies[0]);
+ await expect.poll(() => document.querySelector('.toast')?.textContent ?? '').toContain(en.settingsModelsSaved);
+ await expect.element(screen.getByText(en.settingsModelsNotReached.replace('{0}', 'Critic'))).not.toBeInTheDocument();
 });
 
 test('an Agent\'s "Thinks with" rows change its own profile\'s model, and an Agent on the Company profile only reads', async () => {

@@ -181,6 +181,30 @@ test('the default model is written to the shared space before any Agent, so a sp
  } finally { await fake.close(); }
 });
 
+test('a default that reaches the Company but not an Agent names it, and sending it again lands on that Agent', async () => {
+ const fake=await fakeHermes();
+ try {
+  seed(fake); schema(fake);
+  // The Engine no longer serves Writer's own profile, so its write fails after the shared space and Lead took the model.
+  fake.settings.profiles.delete(own(writer));
+  const {db,logged}=database();
+  const partial=await changeCompanySetting(db,{company,setting:'model',value:'openrouter/anthropic/claude-opus-4.6',hermes:install(fake),driver:driver(fake)});
+  assert.equal(partial.state,'written',JSON.stringify(partial));
+  assert.equal(partial.space,true);
+  assert.deepEqual(partial.failed,[{agent:writer,name:'Writer'}],'the Agent the default did not reach is named');
+  assert.deepEqual(partial.agents.map(agent=>[agent.name,agent.written]),[['Lead',true],['Writer',false],['Critic',false]]);
+  assert.equal(fake.settings.profiles.get(companyProfileName).model,'anthropic/claude-opus-4.6');
+  assert.deepEqual(logged().map(row=>row.agent),[lead],'only the Agent that changed is logged');
+  // The Owner sends the same default again once the profile is back: it reaches Writer and names no failure.
+  profileOn(fake,own(writer),{provider:'openrouter',model:'openai/gpt-5.5'});
+  const retried=await changeCompanySetting(db,{company,setting:'model',value:'openrouter/anthropic/claude-opus-4.6',hermes:install(fake),driver:driver(fake)});
+  assert.equal(retried.state,'written',JSON.stringify(retried));
+  assert.deepEqual(retried.failed,[]);
+  assert.equal(fake.settings.profiles.get(own(writer)).model,'anthropic/claude-opus-4.6');
+  assert.deepEqual(logged().map(row=>row.agent),[lead,writer]);
+ } finally { await fake.close(); }
+});
+
 test('one Agent\'s model is written to its own profile and remembered as its choice; following the default clears it', async () => {
  const fake=await fakeHermes();
  try {

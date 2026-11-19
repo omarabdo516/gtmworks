@@ -18,13 +18,13 @@ type KeyRow={provider:string,label:string,set:boolean};
 export type Named={agent:string|null,name:string|null};
 export type ProviderKeysData={keys:KeyRow[]|null,waiting:Named[]|null,leftover:Named[]|null,unknown:Named[]|null};
 
-type Answer={ok:boolean,error:string};
+type Answer={ok:boolean,error:string,data:Record<string,unknown>|null};
 async function send(path:string,body:object):Promise<Answer> {
  try {
   const response=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-  const answer=await response.json().catch(()=>({}));
-  return {ok:response.ok,error:response.ok?'':String(answer.error||'')};
- } catch { return {ok:false,error:''}; }
+  const answer=await response.json().catch(()=>null);
+  return {ok:response.ok,error:response.ok?'':String((answer as {error?:unknown}|null)?.error||''),data:answer&&typeof answer==='object'?answer as Record<string,unknown>:null};
+ } catch { return {ok:false,error:'',data:null}; }
 }
 const modelOf=(option:ModelOption)=>`${option.provider}/${option.model}`;
 // The arrow keys move through a list of model choices as the reference's other radio groups do: down or right forward in
@@ -93,12 +93,18 @@ export function ProviderKeys({company,owner,data}:{company:string,owner:boolean,
 export function DefaultModel({company,owner,models}:{company:string,owner:boolean,models:ModelsData['default']}) {
  const {t,language}=useI18n(); const rtl=language==='ar'; const router=useRouter();
  const [busy,setBusy]=useState(false); const [error,setError]=useState('');
+ // The Agents a default did not reach, and the value to send them again: the shared space takes it but an Agent's profile
+ // can refuse, so the Owner sees which Agents stayed on the old model and can retry the same default.
+ const [missed,setMissed]=useState<string[]>([]); const [retry,setRetry]=useState('');
  const choose=async(value:string)=>{
   if(busy) return;
   setBusy(true); setError('');
   const answer=await send('/api/agent-settings',{company,setting:'model',value});
   setBusy(false);
   if(!answer.ok) { setError(answer.error||'settingFailed'); return; }
+  const failed=Array.isArray(answer.data?.failed)?(answer.data.failed as {name?:unknown}[]).map(entry=>String(entry?.name||'')).filter(Boolean):[];
+  if(failed.length) { setMissed(failed); setRetry(value); router.refresh(); return; }
+  setMissed([]); setRetry('');
   toast(t('settingsModelsSaved')); router.refresh();
  };
  const idOf=(option:ModelOption)=>`mdl-def-${option.provider}-${option.model}`;
@@ -120,6 +126,10 @@ export function DefaultModel({company,owner,models}:{company:string,owner:boolea
   {models.options.length?<div className="panel-card" role={owner?'radiogroup':undefined} aria-labelledby="md-h-default">{models.options.map(row)}</div>
    :<div className="panel-card"><p className="panel-empty">{t('settingsModelsNoChoice')}</p></div>}
   {error&&<p className="set-err" role="alert">{t(reasonKey(error))}</p>}
+  {missed.length>0&&<div className="set-err" role="alert">
+   <p>{t('settingsModelsNotReached',missed.join(', '))}</p>
+   <button type="button" className="btn btn--secondary btn--sm" disabled={busy} onClick={()=>choose(retry)}>{t('settingsModelsRetry')}</button>
+  </div>}
   {!owner&&<p className="set-hint">{t('settingsModelsOwnerOnly')}</p>}
   <p className="set-hint">{t('settingsModelsDefaultHint')}</p>
  </section>;
