@@ -188,6 +188,9 @@ case "${1:-check}" in
   # checkout of HEAD: the job writes into the checkout it runs in, as it does on a CI runner. Commit first: uncommitted
   # changes are not run. The work folder sits under the git directory: the Docker machine hides /tmp, so a checkout there
   # reaches its containers empty.
+  # The job updates an install from HEAD's source, which an update downloads from GitHub: HEAD must be pushed to some branch.
+  git fetch -q origin "$(git rev-parse HEAD)" 2> /dev/null \
+    || { echo "Push HEAD to a branch on GitHub first: the install job downloads it ($(git rev-parse --short HEAD))." >&2; exit 2; }
   work=$(mktemp -d "$(git rev-parse --absolute-git-dir)/install-lane.XXXXXX"); dind=gtmworks-install-lane; port=${INSTALL_DOCKER_PORT:-2375}; here=$PWD
   git worktree add -q --detach "$work/src" HEAD
   trap 'docker rm -fv "$dind" > /dev/null 2>&1 || true; git -C "$here" worktree remove --force "$work/src" > /dev/null 2>&1 || true; rm -rf "$work" 2> /dev/null || true' EXIT
