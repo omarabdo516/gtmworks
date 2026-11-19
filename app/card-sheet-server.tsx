@@ -5,6 +5,7 @@ import { LogDays } from '@/app/c/[slug]/log/log-client';
 import { LogEntry, logAnchor, logColumns, logPeople } from '@/app/c/[slug]/log/entries';
 import { PageIcon } from '@/app/c/[slug]/log/icons';
 import { conversationColumns } from '@/lib/conversations';
+import { channelRecord } from '@/lib/channels';
 import { conversationRecord } from '@/lib/conversation-record';
 import { agentAppStates, agentSessionTurns } from '@/lib/company-app-items';
 import type { CardSheetData } from './card-sheet';
@@ -32,12 +33,18 @@ export async function cardSheet(db:Db,{company,card,slug,me,canWrite,t,language}
  return {id:card,log,count:total,working:!!open?.length,chat};
 }
 
-// The Card's Chat tab (#145). Its Conversation reads only for its own person (RLS), who gets the record the
+// The Card's Chat tab (#145, #151). A chat's Conversation reads only for its own person (RLS), who gets the record the
 // Conversation's page draws; anyone else who sees the Card gets the Agent and the person's first name, and no message.
-// A Card with no chat gets its Agent when the reader sees it, to start one with.
+// A Card with no chat gets its Agent when the reader sees it, to start one with. A Card a channel put on the board shows
+// that channel to its members; a Member outside it gets the lock, the channel's name and no message.
 async function sheetChat(db:Db,company:string,card:number,me:string):Promise<SheetChat> {
- const {data:row}=await db.from('work_cards').select('agent_id,conversation_id').eq('company_id',company).eq('id',card).maybeSingle();
+ const {data:row}=await db.from('work_cards').select('agent_id,conversation_id,channel_id,title').eq('company_id',company).eq('id',card).maybeSingle();
  if(!row) return {kind:'none'};
+ if(row.channel_id) {
+  const channel=await channelRecord(db,me,company,row.channel_id);
+  if(channel) return {kind:'channel',record:channel};
+  return {kind:'channel-locked',name:typeof row.title==='string'?row.title:''};
+ }
  if(row.conversation_id) {
   const {data:found}=await db.from('conversations').select(conversationColumns).eq('id',row.conversation_id).eq('company_id',company).maybeSingle();
   if(found) return {kind:'own',record:await conversationRecord(db,me,company,found,agent=>agentAppStates(company,agent),(agent,session)=>agentSessionTurns(company,agent,session))};

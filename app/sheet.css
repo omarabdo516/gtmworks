@@ -11,6 +11,10 @@
   font-family: var(--gw-font); font-size: var(--gw-fs-msg); line-height: 1.6;
 }
 .gw .sheet::backdrop { background: var(--gw-bg-scrim); }
+/* A Card a channel put on the board (#151) opens on the channel's mark (design-reference: renderSheetHead's hp-hash). */
+.gw .sheet .hp-hash { width: 24px; height: 24px; flex: none; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--gw-bg-tertiary); color: var(--gw-text-2); }
+.gw .sheet .hp-hash .gw-icon { width: 14px; height: 14px; }
+.gw .sheet .hp-hash--lg { width: 28px; height: 28px; margin-top: 2px; }
 .gw .sheet[open] { animation: sheetIn var(--gw-dur-slow) var(--gw-ease-out); }
 .gw .sheet.is-closing { animation: sheetOut 190ms var(--gw-ease-in) forwards; }
 @keyframes sheetIn { from { transform: translateX(-24px); opacity: 0; } to { transform: none; opacity: 1; } }

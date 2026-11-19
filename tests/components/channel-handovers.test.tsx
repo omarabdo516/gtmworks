@@ -22,7 +22,7 @@ const record = (messages: ChannelMessage[], handoffs: ChannelHandoff[] = [], mor
  agents: [lead, ads], writer: true, manage: false, managers: [], may: ['once', 'always', 'deny'],
  messages, handoffs, open: false, handover: false, ...more,
 });
-const view = (initial: ChannelRecord, language: 'en' | 'ar') => render(<LanguageProvider language={language}><ChannelView person="p-1" initial={initial}/></LanguageProvider>);
+const view = (initial: ChannelRecord, language: 'en' | 'ar') => render(<LanguageProvider language={language}><ChannelView slug="rs-learning" person="p-1" initial={initial}/></LanguageProvider>);
 const handoff = (id: number, goal: string, minute: string): ChannelHandoff => ({ id, from: { name: 'Lead', face: 'c-1' }, to: { name: 'Ads', face: 'c-2' }, goal, at: `2026-06-10T09:${minute}:00Z` });
 
 test('a channel with no handover draws no Handoffs section', async () => {

@@ -20,7 +20,7 @@ const record = (messages: ChannelMessage[], more: Partial<ChannelRecord> = {}): 
  agents: [{ id: 'a-1', connection_id: 'c-1', name: 'Ads', speciality: 'Runs the ads.', main: false, only: false, state: 'idle' }, { id: 'a-2', connection_id: 'c-2', name: 'Lead', speciality: 'General', main: true, only: false, state: 'idle' }],
  writer: true, manage: false, managers: [], may: ['once', 'always', 'deny'], messages, handoffs: [], open: messages.some(message => message.author === 'person' && message.mention?.state === 'open'), handover: false, ...more,
 });
-const channel = (initial: ChannelRecord, language: 'en' | 'ar') => render(<LanguageProvider language={language}><ChannelView person="p-1" initial={initial}/></LanguageProvider>);
+const channel = (initial: ChannelRecord, language: 'en' | 'ar') => render(<LanguageProvider language={language}><ChannelView slug="rs-learning" person="p-1" initial={initial}/></LanguageProvider>);
 
 const asked = (chips: boolean): ChannelQuestion => ({ id: 31, kind: 'question', title: 'Which angle first?', question: 'Which angle first?', choices: ['Graduates', 'Parents'], multiple: false, state: 'open', chips });
 const questionFrom = (agent: string, mine: boolean, name: string, chips: boolean): ChannelMessage => ({ id: 10, author: 'person', mine, name, role: 'owner', body: `@${agent} take a look`, at,

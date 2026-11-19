@@ -4,6 +4,7 @@ import { userEvent } from 'vitest/browser';
 import type { ComponentProps } from 'react';
 import { CardSheet, type CardSheetData } from '@/app/card-sheet';
 import type { ConversationRecord } from '@/lib/conversation-record';
+import type { ChannelRecord } from '@/lib/channels';
 import { LanguageProvider } from '@/lib/i18n-client';
 import '@/app/tokens.css';
 import '@/app/shell.css';
@@ -224,4 +225,57 @@ for (const [dir, language, title] of [['ltr', 'en', 'أفكار لمحتوى ا�
  if (dir === 'ltr') { expect(Math.abs(text.left - box.left)).toBeLessThan(1); expect(box.left).toBeGreaterThanOrEqual(face.right); }
  else { expect(Math.abs(text.right - box.right)).toBeLessThan(1); expect(box.right).toBeLessThanOrEqual(face.left); }
  document.documentElement.dir = '';
+});
+
+// #151: a Card a channel put on the board shows the channel under its Chat tab to the channel's members, with the
+// channel's own send when they may write; a Member outside the channel gets the lock, the channel's name and the log.
+const inChannel = (more: Partial<ChannelRecord> = {}): ChannelRecord => ({
+ channel: { id: 'ch-1', company: 'co-1', kind: 'team', name: 'Launch week' },
+ members: [], agents: [], writer: true, manage: false, managers: [], may: [], open: false, handoffs: [], handover: false,
+ messages: [
+  { id: 1, author: 'person', mine: false, name: 'Sara Adel', role: 'manager', body: 'Morning all', at, mention: null },
+  { id: 2, author: 'agent', name: 'Ads', face: 'c-1', body: 'Plan is ready.', at },
+ ], ...more });
+
+test('a channel\'s Card opens on the channel under Chat, with its messages and the channel\'s composer', async () => {
+ vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
+ const screen = await show(sheet({ chat: { kind: 'channel', record: inChannel() } }));
+ await expect.element(screen.getByRole('tab', { name: 'Chat' })).toHaveAttribute('aria-selected', 'true');
+ await expect.element(chatPanel(screen).getByText('Morning all')).toBeVisible();
+ await expect.element(chatPanel(screen).getByText('Plan is ready.')).toBeVisible();
+ const field = screen.getByRole('textbox', { name: 'Write your message in the channel' });
+ await expect.element(field).toHaveAttribute('placeholder', 'Write in #Launch week… an agent replies only when called by name');
+ await expect.element(field).toHaveFocus();
+});
+
+test('a message written in the channel\'s Card under Chat goes to that channel', async () => {
+ const asks = vi.fn(async (_: string, init?: RequestInit) => init?.method === 'POST' ? Response.json({ message: 3 }) : Response.json(inChannel()));
+ vi.stubGlobal('fetch', asks);
+ const screen = await show(sheet({ chat: { kind: 'channel', record: inChannel() } }));
+ await userEvent.type(screen.getByRole('textbox', { name: 'Write your message in the channel' }), 'Morning, team{Enter}');
+ await expect.poll(() => asks.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(true);
+ const posted = JSON.parse(String(asks.mock.calls.find(([, init]) => init?.method === 'POST')![1]!.body));
+ expect(posted).toMatchObject({ company: 'co-1', channel: 'ch-1', message: 'Morning, team' });
+ expect(posted.sendKey).toMatch(/^[0-9a-f-]{36}$/);
+});
+
+test('a Viewer in the channel reads its Card under Chat with no composer', async () => {
+ vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
+ const screen = await show(sheet({ chat: { kind: 'channel', record: inChannel({ writer: false }) } }));
+ await expect.element(chatPanel(screen).getByText('Morning all')).toBeVisible();
+ await expect.element(screen.getByRole('textbox')).not.toBeInTheDocument();
+ await expect.element(screen.getByText('Your account is view-only: you can read everything you’re allowed to, without writing, approving or changing anything.')).toBeVisible();
+});
+
+test('a Member outside the channel opens the Card on its log; its Chat tab is a lock with the channel\'s name and nothing of it', async () => {
+ const screen = await show(sheet({ chat: { kind: 'channel-locked', name: 'Launch week' } }));
+ await expect.element(screen.getByRole('tab', { name: 'Log 3' })).toHaveAttribute('aria-selected', 'true');
+ await expect.element(screen.getByRole('textbox', { name: 'Write a note in the card’s log' })).toHaveFocus();
+ await screen.getByRole('tab', { name: 'Chat' }).click();
+ await expect.element(chatPanel(screen).getByRole('heading', { name: '#Launch week' })).toBeVisible();
+ await expect.element(chatPanel(screen).getByText('This card came from a channel. Its members read and write there; you can read the card’s log.')).toBeVisible();
+ await expect.element(screen.getByRole('textbox')).not.toBeInTheDocument();
+ expect(document.querySelector('.turns')).toBeNull();
+ await chatPanel(screen).getByRole('button', { name: 'Open the log' }).click();
+ await expect.element(screen.getByRole('tab', { name: 'Log 3' })).toHaveAttribute('aria-selected', 'true');
 });

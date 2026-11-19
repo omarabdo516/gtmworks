@@ -31,7 +31,7 @@ import { useNewlyWaiting } from '@/lib/newly-waiting';
 import { withMention } from '@/lib/channels';
 import type { WaitingItem } from '@/lib/approval-queue';
 import '@/app/board.css';
-type Stage={id:number,name:string,position:number,board_column?:string|null}; type Label={id:number,name:string,color:string}; type Card={id:number,title:string,stage_id:number,channel:string,format:string,go_live:string|null,offering:string,segment:string,hook:string,goal:string,caption:string,next_actor:string|null,mode:string|null,approval_step_id:number|null,rejection_reason:string|null,project_id:number|null,agent_id?:string|null,crew?:string[],wait?:CardWait|null}; type Project={id:number,name:string}; type Item={id:number,card_id:number,title:string,done:boolean}; type Person=WorkMember & {agent_role?:string|null}; type Activity=WorkActivity; type Creative={id:number,card_id:number,name:string}; type Version={id:number,creative_id:number,path:string,url:string|null}; type CL={card_id:number,label_id:number};
+type Stage={id:number,name:string,position:number,board_column?:string|null}; type Label={id:number,name:string,color:string}; type Card={id:number,title:string,stage_id:number,channel:string,format:string,go_live:string|null,offering:string,segment:string,hook:string,goal:string,caption:string,next_actor:string|null,mode:string|null,approval_step_id:number|null,rejection_reason:string|null,project_id:number|null,agent_id?:string|null,channel_id?:string|null,crew?:string[],wait?:CardWait|null}; type Project={id:number,name:string}; type Item={id:number,card_id:number,title:string,done:boolean}; type Person=WorkMember & {agent_role?:string|null}; type Activity=WorkActivity; type Creative={id:number,card_id:number,name:string}; type Version={id:number,creative_id:number,path:string,url:string|null}; type CL={card_id:number,label_id:number};
 // An open Card's notes (#22): each note's current text, the Runs its Agent mentions started and their replies in the
 // log, the Agents those are drawn with, the reader and the moment the page was drawn (for the edit countdown).
 type CardNotes={me:string,drawnAt:number,comments:EditableNote[],runs:{note_id:number,agent_id:string,agent_name:string,outcome:string|null}[],replies:{reply_to:number,actor_id:string,actor_name:string|null,body:string,created_at:string}[],agents:{id:string,name:string,connection_id:string}[]};
@@ -110,7 +110,7 @@ export default function Work(p:WorkProps) { const {workAction}=p; const {t,local
  const yours=(c:Card)=>chatOf(c)?.mine??p.approvableIds.includes(c.id);
  // Read from every Card, not the drawn ones, so a filter that brings a waiting Card back does not shake it again.
  const fresh=useNewlyWaiting(p.cards.filter(c=>columnOfCard(c)==='waiting'&&yours(c)).map(c=>c.id));
- const cardView=(c:Card,isOverlay=false)=>{ const column=columnOfCard(c); const agent=agentOfCard(c); const own=cardAgentOf(c); const crew=(c.crew||[]).flatMap(id=>agentById.get(id)??[]); const names=crew.map(a=>a.name); const job=c.channel||own?.speciality||''; const mine=p.approvableIds.includes(c.id); const chat=chatOf(c); const step=(p.waiting||[]).find(item=>item.kind==='approval'&&item.id===c.id)?.body; const progress=column==='progress'?progressOf(c,p.items):null;
+ const cardView=(c:Card,isOverlay=false)=>{ const column=columnOfCard(c); const agent=agentOfCard(c); const own=cardAgentOf(c); const crew=(c.crew||[]).flatMap(id=>agentById.get(id)??[]); const names=crew.map(a=>a.name); const job=c.channel_id?t('boardCardChannel'):c.channel||own?.speciality||''; const mine=p.approvableIds.includes(c.id); const chat=chatOf(c); const step=(p.waiting||[]).find(item=>item.kind==='approval'&&item.id===c.id)?.body; const progress=column==='progress'?progressOf(c,p.items):null;
   const brief=stagesIn(column).length>1?stageName(c):[c.hook,c.offering,c.goal].find(Boolean)||'';
   return <KanbanCard id={c.id} column={column} isOverlay={isOverlay} key={c.id} disabled={!p.canCreate} className={mine?'approval-card':''} data-mine={mine||undefined} data-stage-id={c.stage_id} data-stage-name={stageName(c)}>
    {c.mode&&<span className="kcard__kind">{modeChip(c)}</span>}
@@ -173,11 +173,11 @@ export default function Work(p:WorkProps) { const {workAction}=p; const {t,local
    {reply?<NoteReplyRow name={agentOf(reply.actor_id)?.name||reply.actor_name||''} face={agentOf(reply.actor_id)?.connection_id||null} body={reply.body} at={reply.created_at}/>
     :run&&!run.outcome?<NoteReplyRow name={agentOf(run.agent_id)?.name||run.agent_name} face={agentOf(run.agent_id)?.connection_id||null} working={p.members.find(m=>m.person_id===a.actor_id)?.people?.name?.split(' ')[0]||''}/>:null}
   </Fragment>; };
- // A Card opened over the board (#116; design-reference: renderSheetHead): its Agent, else its channel, and where it stands.
+ // A Card opened over the board (#116; design-reference: renderSheetHead): its channel's mark, else its Agent, and where it stands.
  const sheetView=(c:Card,sheet:CardSheetData)=>{ const agent=agentOfCard(c); const own=cardAgentOf(c); const column=columnOfCard(c); const chat=chatOf(c);
   return <CardSheet key={c.id} send={workAction} slug={p.slug} company={p.company} title={c.title} sheet={sheet} canWrite={p.canCreate} alone={!!p.alone} message={p.message}
-   face={own?<span aria-hidden="true"><CompanyAgentFace agent={own} size={28}/></span>:agent?<span aria-hidden="true"><AgentFace id={agent} role={agentRole(agent)} name={agentName(agent)} size={28}/></span>:null}
-   who={own?<bdi>{own.name}</bdi>:agent?<bdi>{agentName(agent)}</bdi>:c.channel?<bdi>{c.channel}</bdi>:null}
+   face={c.channel_id?<span className="hp-hash hp-hash--lg" aria-hidden="true"><ShellIcon name="hash"/></span>:own?<span aria-hidden="true"><CompanyAgentFace agent={own} size={28}/></span>:agent?<span aria-hidden="true"><AgentFace id={agent} role={agentRole(agent)} name={agentName(agent)} size={28}/></span>:null}
+   who={c.channel_id?<>{t('boardCardChannel')} <bdi>#{c.title}</bdi></>:own?<bdi>{own.name}</bdi>:agent?<bdi>{agentName(agent)}</bdi>:c.channel?<bdi>{c.channel}</bdi>:null}
    badge={column==='waiting'?<span className="badge badge--wait"><span className="dot dot--waiting" aria-hidden="true"/>{chat?chatBadge(chat):p.approvableIds.includes(c.id)?t('boardWaitingYou'):p.canCreate?waitingOn(c.next_actor):t('boardWaitingTeam')}</span>:<span className="badge">{columnName(column)}</span>}/>; };
  const sheet=p.sheet; const sheetCard=sheet&&p.cards.find(c=>c.id===sheet.id);
  const ideasStage=stagesIn('ideas')[0]?.id;
