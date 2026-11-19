@@ -81,7 +81,7 @@ test('only the proxy area installs the test packages: its browser check is the o
 test('a job on a GitHub-hosted runner does not wait for its Docker machine to be removed', () => {
   const remove = job.steps.at(-1);
   assert.match(remove.run, /docker rm -fv install-docker/);
-  assert.equal(remove.if, "${{ runner.environment != 'github-hosted' }}", 'the removal stays for a runner that is reused');
+  assert.equal(remove.if, "${{ always() && runner.environment != 'github-hosted' }}", 'the removal stays for a runner that is reused, also after a failure');
 });
 
 // The helpers the areas share are written once, in the lib or the script, never in both (#402).

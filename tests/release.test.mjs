@@ -377,7 +377,7 @@ test('the install proof runs on one Docker machine per area and a GitHub-hosted 
  assert.match(steps[start].run,/docker --host tcp:\/\/127\.0\.0\.1:2375 info/,'the start step waits for the daemon');
  assert.equal(steps[proof].env?.DOCKER_HOST,'tcp://127.0.0.1:2375','the proof runs on that daemon');
  assert.deepEqual(removes,[steps.length-1],'only the last step removes the daemon');
- assert.equal(steps.at(-1).if,"${{ runner.environment != 'github-hosted' }}");
+ assert.equal(steps.at(-1).if,"${{ always() && runner.environment != 'github-hosted' }}");
  for(const step of steps.slice(0,-1)) assert.doesNotMatch(step.run||'',/trap .*install-docker/,step.name);
 });
 

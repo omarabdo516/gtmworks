@@ -588,7 +588,7 @@ jobs:
           GTMWORKS_IMAGE_PREBUILT: "true"
         run: bash scripts/ci-install-check.sh ${{ matrix.area }}
       - name: remove the isolated Docker machine
-        if: ${{ runner.environment != 'github-hosted' }}
+        if: ${{ always() && runner.environment != 'github-hosted' }}
         run: docker rm -fv install-docker || true
 
   check:
