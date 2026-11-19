@@ -166,7 +166,9 @@ test('an update moves the Engine key a previous release left in .env.install int
  assert.ok(run.indexOf('install-env.mjs validate complete')<run.indexOf('engine-template.yml up'));
  // The first Engine is its own Compose project, made from the shipped template with its own key, volume and network.
  assert.match(run,/compose --project-name gtmworks-engine-first --env-file \.engines\/first\/\.env -f scripts\/engine-template\.yml up -d --wait --wait-timeout 300/);
- assert.match(run,/network connect gtmworks-engine-first web-id/);
+ // The app is named `web` on the Engine's network, where the install's own checks and the fake model reach it; the
+ // worker joins under its container name only.
+ assert.match(run,/network connect --alias web gtmworks-engine-first web-id/);
  assert.match(run,/network connect gtmworks-engine-first worker-id/);
  assert.equal(install.engineEnv(),`ENGINE_NAME=gtmworks-engine-first\nENGINE_KEY=${previous.HERMES_API_KEY}\nENGINE_VOLUME=gtmworks-install_hermes\nENGINE_NETWORK=gtmworks-engine-first\n`);
  // The address and key reach the registration script, and no line of the app or the worker carries them.
