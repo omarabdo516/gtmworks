@@ -5,10 +5,11 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { load } from 'js-yaml';
 
-// Which CI jobs an event starts (#333, spec #332): a draft pull request runs only the fast job; marking it ready, and
-// every later push to it, starts the heavy suites its files need; a push to main runs every suite unless the change is
-// documents only. The real workflow's job conditions are evaluated against the real area script's answer. The app image
-// is built by one job and loaded by the browser suite (#403), which the guard tests below read from the same file.
+// Which CI jobs an event starts (#405, replacing the draft rule of #333): a draft pull request runs the suites its files
+// need, exactly as a ready one does, and marking it ready starts nothing by itself; a push to main runs every suite
+// unless the change is documents only. The real workflow's job conditions are evaluated against the real area script's
+// answer. The app image is built by one job and loaded by the browser suite (#403), which the guard tests below read
+// from the same file.
 const ci = load(readFileSync(resolve('.github/workflows/ci.yml'), 'utf8'));
 const areas = (files, main) => Object.fromEntries(
   execFileSync(process.execPath, [resolve('scripts/ci-areas.mjs'), ...(main ? ['--main'] : []), ...files], { encoding: 'utf8' })
@@ -56,9 +57,11 @@ const configFor = value => JSON.parse(spawnSync(process.execPath, [
 
 const heavyFiles = ['supabase/migrations/0001_example.sql', 'app/api/health/route.ts', 'scripts/install.sh'];
 const heavy = ['database', 'integration', 'install'];
+const screenFiles = ['app/c/[slug]/[[...section]]/home.tsx'];
+const documentFiles = ['docs/testing.md', 'README.md'];
 
-test('the pull request events include ready_for_review, so marking a PR ready starts a run', () => {
-  assert.ok(ci.on.pull_request.types.includes('ready_for_review'));
+test('marking a pull request ready starts no run by itself: the pull request event types leave out ready_for_review', () => {
+  assert.equal(ci.on.pull_request.types.includes('ready_for_review'), false);
   for (const type of ['opened', 'synchronize', 'reopened']) assert.ok(ci.on.pull_request.types.includes(type), type);
 });
 
@@ -67,27 +70,37 @@ test('the change touches database, app and install files', () => {
   for (const suite of heavy) assert.equal(outputs[suite], 'true', suite);
 });
 
-test('a draft pull request that changes database, app and install files starts only changes, fast and check', () => {
-  assert.deepEqual(started({ event: 'pull_request', draft: true, files: heavyFiles }), ['changes', 'check', 'fast']);
+test('a draft that changes database, app and install files starts the image, database, integration and install jobs', () => {
+  assert.deepEqual(started({ event: 'pull_request', draft: true, files: heavyFiles }),
+    ['changes', 'check', 'database', 'fast', 'image', 'install', 'integration', 'supabase-images']);
 });
 
-test('marking that pull request ready, and a later push to it, starts the image build, the database, integration and install jobs', () => {
-  const jobs = started({ event: 'pull_request', draft: false, files: heavyFiles });
-  for (const job of ['changes', 'fast', 'check', 'image', ...heavy]) assert.ok(jobs.includes(job), job);
-  assert.equal(jobs.includes('visual'), false);
+test('a draft that changes only screens starts only changes, fast and check', () => {
+  const outputs = areas(screenFiles, false);
+  assert.equal(outputs.components, 'true');
+  for (const suite of heavy) assert.equal(outputs[suite], 'false', suite);
+  assert.deepEqual(started({ event: 'pull_request', draft: true, files: screenFiles }), ['changes', 'check', 'fast']);
 });
 
-test('a later push to a ready pull request starts only the suites its files need', () => {
-  const jobs = started({ event: 'pull_request', draft: false, files: ['tests/db.sh'] });
-  assert.ok(jobs.includes('database'));
-  assert.equal(jobs.includes('integration'), false);
-  assert.equal(jobs.includes('install'), false);
+test('a draft that changes only documents starts no heavy suite', () => {
+  for (const suite of heavy) assert.equal(areas(documentFiles, false)[suite], 'false', suite);
+  assert.deepEqual(started({ event: 'pull_request', draft: true, files: documentFiles }), ['changes', 'check', 'fast']);
+});
+
+test('a draft and a ready pull request start the same jobs for the same files', () => {
+  for (const files of [heavyFiles, screenFiles, documentFiles]) {
+    assert.deepEqual(
+      started({ event: 'pull_request', draft: true, files }),
+      started({ event: 'pull_request', draft: false, files }),
+      files.join(', '),
+    );
+  }
 });
 
 test('a push to main runs every suite for a code change, and none of the heavy ones for documents only', () => {
   const code = started({ event: 'push', files: ['scripts/ci-fast.mjs'] });
-  for (const job of ['changes', 'fast', 'check', 'visual', ...heavy]) assert.ok(code.includes(job), job);
-  assert.deepEqual(started({ event: 'push', files: ['docs/testing.md', 'README.md'] }), ['changes', 'check', 'fast']);
+  for (const job of ['changes', 'fast', 'check', 'visual', 'image', ...heavy]) assert.ok(code.includes(job), job);
+  assert.deepEqual(started({ event: 'push', files: documentFiles }), ['changes', 'check', 'fast']);
 });
 
 // #403: the app image is built once per run, with its layer cache, and the browser suite loads that build: no shard
@@ -123,11 +136,13 @@ test('exactly one job builds the app image, and the browser suite loads that bui
 });
 
 test('the image job runs only when the browser suite is asked for, and the suite waits for it (#403)', () => {
-  const journeys = started({ event: 'pull_request', draft: false, files: ['tests/frame.spec.ts'] });
-  assert.ok(journeys.includes('image') && journeys.includes('integration'));
-  assert.equal(started({ event: 'pull_request', draft: false, files: ['tests/db.sh'] }).includes('image'), false);
-  assert.equal(started({ event: 'pull_request', draft: true, files: ['tests/frame.spec.ts'] }).includes('image'), false);
-  assert.equal(started({ event: 'push', files: ['docs/testing.md'] }).includes('image'), false);
+  for (const draft of [true, false]) {
+    const journeys = started({ event: 'pull_request', draft, files: ['tests/frame.spec.ts'] });
+    assert.ok(journeys.includes('image') && journeys.includes('integration'), `a draft=${draft} pull request`);
+    assert.equal(started({ event: 'pull_request', draft, files: ['tests/db.sh'] }).includes('image'), false, `a draft=${draft} pull request`);
+    assert.equal(started({ event: 'pull_request', draft, files: documentFiles }).includes('image'), false, `a draft=${draft} pull request`);
+  }
+  assert.equal(started({ event: 'push', files: documentFiles }).includes('image'), false);
 });
 
 // The fast job already linted and type-checked, so the image build does neither; a release or local build keeps both.
