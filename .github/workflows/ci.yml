@@ -1,14 +1,14 @@
 # As Hermes and T3 Code run CI (#76): the first job (`changes`, scripts/ci-areas.mjs) decides which suites a change
 # needs. The fast job (lint, types, catalogues, unit tests and the screen component tests, #258) runs on every change;
 # its component tests run when the app, its components or its library change. The database tests, the whole-app browser
-# suite (`integration`) and the Docker install run on a pull request only when their own files change, and never on a
-# draft: marking it ready (ready_for_review) starts them, and every later push runs them again (#333). The visual
-# lane's key screens and the measured navigation budgets (`visual`) run on a push to main and on a
-# manual run only, never on a pull request, and `check` does not wait for them (Omar, 2026-11-17, #257): a failure on main
-# opens or updates one issue labelled visual-regression. A push to main runs every suite unless every file is a document; a manual
-# run starts the browser and install suites only through inputs that default to off. Required `check`
-# (scripts/ci-verdict.mjs) counts a suite nobody asked for, or a draft's heavy suite, as passed when it was skipped, and is red on any failed or
-# cancelled stage.
+# suite (`integration`) and the Docker install run on a pull request only when their own files change, and a draft runs
+# what a ready pull request runs (Omar, 2026-11-19, #405): the suites start on a draft as on a ready one, and marking a
+# draft ready starts nothing by itself. The visual lane's key screens and the measured navigation budgets (`visual`) run
+# on a push to main and on a manual run only, never on a pull request, and `check` does not wait for them (Omar,
+# 2026-11-17, #257): a failure on main opens or updates one issue labelled visual-regression. A push to main runs every
+# suite unless every file is a document; a manual run starts the browser and install suites only through inputs that
+# default to off. Required `check` (scripts/ci-verdict.mjs) counts a suite nobody asked for as passed when it was
+# skipped, and is red on any failed or cancelled stage.
 # Every job runs on a GitHub-hosted ubuntu-latest runner (decision 0038, #334); the measured navigation budgets need a
 # machine no other job shares. The stack's ports lie in Linux's range for outgoing connections, so a job reserves them
 # before it starts the stack (#225).
@@ -18,8 +18,8 @@ name: CI
 
 on:
   pull_request:
-    # ready_for_review: marking a draft ready starts the heavy suites it skipped (#333).
-    types: [opened, synchronize, reopened, ready_for_review]
+    # A draft runs what a ready pull request runs (#405): marking one ready starts nothing, so no ready_for_review type.
+    types: [opened, synchronize, reopened]
   push:
     branches: [main]
   workflow_dispatch:
@@ -184,7 +184,7 @@ jobs:
   # own runner. `visual`, on main only, waits for it. It never fails a run.
   supabase-images:
     needs: [changes]
-    if: ${{ !cancelled() && github.event.pull_request.draft != true && (needs.changes.result != 'success' || needs.changes.outputs.database != 'false' || needs.changes.outputs.integration != 'false') }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.database != 'false' || needs.changes.outputs.integration != 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     continue-on-error: true
@@ -227,7 +227,7 @@ jobs:
   # Migrations replayed and verified, row-level security and grants, on one local stack (tests/db.sh).
   database:
     needs: [changes]
-    if: ${{ !cancelled() && github.event.pull_request.draft != true && (needs.changes.result != 'success' || needs.changes.outputs.database != 'false') }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.database != 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -363,7 +363,7 @@ jobs:
   # downloads a browser or a system package during a run.
   integration:
     needs: [changes]
-    if: ${{ !cancelled() && github.event.pull_request.draft != true && (needs.changes.result != 'success' || needs.changes.outputs.integration != 'false') }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.integration != 'false') }}
     runs-on: ubuntu-latest
     strategy:
       # Every shard runs to the end, so one red shard still shows the others' failures.
@@ -487,7 +487,7 @@ jobs:
 
   install:
     needs: [changes]
-    if: ${{ !cancelled() && github.event.pull_request.draft != true && (needs.changes.result != 'success' || needs.changes.outputs.install != 'false') }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.install != 'false') }}
     runs-on: ubuntu-latest
     # The release install and update below add a fresh stack and an update to the source install checks, and the one-line
     # install adds another, an update, a failed update and a return to an older release from a backup.
@@ -900,31 +900,13 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      # The pull request's live draft state, read below.
-      pull-requests: read
     steps:
       - uses: actions/checkout@v4
-      # The event's draft flag is the one the run started with: a re-run after the pull request was marked ready still
-      # says draft. check accepts a draft's skipped suites only when the pull request is a draft now too; a state it
-      # cannot read counts as ready.
-      - name: the pull request's live draft state
-        id: live
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          draft=false
-          if [[ $PR_NUMBER =~ ^[0-9]+$ ]]; then
-            draft=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .draft) || draft=false
-          fi
-          echo "draft=$draft" | tee -a "$GITHUB_OUTPUT"
       - name: all required stages green
         env:
           CHANGES_RESULT: ${{ needs.changes.result }}
           FAST_RESULT: ${{ needs.fast.result }}
           FAST_STEPS: ${{ needs.fast.outputs.steps }}
-          DRAFT: ${{ github.event.pull_request.draft }}
-          LIVE_DRAFT: ${{ steps.live.outputs.draft }}
           COMPONENTS_RUN: ${{ needs.changes.outputs.components }}
           DATABASE_RUN: ${{ needs.changes.outputs.database }}
           DATABASE_RESULT: ${{ needs.database.result }}

@@ -25,10 +25,10 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   A change to the CI definition itself (`ci.yml`, `ci.sh`, the area, verdict, runner and fast-runner scripts) or to `package.json`
   and its lock runs every suite; an empty, malformed or unreadable change list runs every suite; a push to `main` runs
   every suite unless every changed file is a document.
-- A draft pull request runs only `changes`, `fast` and `check` (#333): the database, browser and install suites are
-  skipped as not needed, whatever its files, and `check` counts them passed only when they were skipped. Marking it
-  ready (`ready_for_review`) starts the suites its files need, and every later push to the ready pull request runs them
-  again. `tests/ci-draft.test.mjs` evaluates the real workflow and area script for each of these events.
+- A draft pull request runs what a ready pull request runs (#405, replacing the draft rule of #333): the database,
+  browser and install suites start when their own files change, on a draft as on a ready one, and `check` is red when
+  one of them failed or was skipped while its files needed it. Marking a draft ready starts nothing by itself.
+  `tests/ci-draft.test.mjs` evaluates the real workflow and area script for each of these events.
 - `fast` runs on every change, as one job (#258): the `node --test` files, lint, types, the unused-code check (`knip`,
   `knip.json`, as T3 Code runs it, #81), the catalogue and OpenAPI checks, and the screens as components in headless
   Chromium (Vitest browser mode, `vitest.config.mts`, `tests/components/`, in one run, no shards). `./ci.sh fast`
@@ -199,6 +199,7 @@ the parts are timed from run 43642299138.
 | `playwright-journal.test.mjs`, the journal reporter and `docs/ci-test-journal.md` (#81) | They kept our own record of a Playwright run killed before its report, including the tests it never started. #81 removes that record. | Nothing lists the tests a killed run never started; Playwright's list reporter prints in the job log each test that ended. A killed run still fails `check` (`ci-verdict.test.mjs`). |
 | `app.spec.ts` "screenshots for unit routes" | It checked nothing beyond signing in, which every test does; it wrote unchecked screenshots. | `visual-lane.spec.ts` compares the members and agents settings screens exactly, in Arabic (#257). |
 | `touch-diagnostics.test.mjs` and `touch-diagnostics.mjs` (#218) | They recorded and printed what the page saw during `app.spec.ts`'s touch drag on CI, which keeps no trace of a functional test. The drag now runs as a component test on the test's own clock. | `components/board-touch.test.tsx` (the swipe and the held drag). Nothing replaces the recorder. |
+| `ci-verdict.test.mjs` "a draft is red when any stage that ran failed or was cancelled" (#405) | Its only distinct input was the draft flag; the verdict reads no draft state now, so it repeated the per-stage failure checks. | `ci-verdict.test.mjs` "DATABASE: a failed or cancelled run is red, even where it could have been skipped" (and the same for INTEGRATION and INSTALL), "classification and the fast job must succeed", and "a fast step that failed is red even when the job reports success". |
 
 ## Flaky tests (#83)
 
