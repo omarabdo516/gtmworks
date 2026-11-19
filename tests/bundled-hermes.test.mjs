@@ -17,10 +17,10 @@ const compose=load(readFileSync('docker-compose.install.yml','utf8'));
 const pinned=image=>/^[a-z0-9./-]+:v(\d+\.\d+\.\d+)@sha256:[a-f0-9]{64}$/.exec(image||'')?.[1]||null;
 
 test('the Engine template runs the pinned Hermes release, by tag and digest, the one the driver accepts', () => {
- // The pin is the template's default image; ENGINE_IMAGE overrides it only for the install job's forced-failure proof.
- const image=template.services.engine.image.replace(/^\$\{ENGINE_IMAGE:-/,'').replace(/\}$/,'');
+ const image=template.services.engine.image;
  assert.equal(pinned(image),hermesVersion);
- assert.equal(template.services.engine.image.startsWith('${ENGINE_IMAGE:-'+image+'}'),true);
+ // Nothing overrides the pin: the image line names no variable.
+ assert.doesNotMatch(image,/\$/);
  // A tag alone could move under the install; the check fails without the digest.
  assert.equal(pinned(image.split('@')[0]),null);
  assert.equal(pinned(`${image.split(':')[0]}@${image.split('@')[1]}`),null);
