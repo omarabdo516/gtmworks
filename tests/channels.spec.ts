@@ -59,40 +59,47 @@ test('the Viewer reads the channel, with the writer and their role, and has no c
 // #148: an Agent's channel reply carries its Run's steps, read live from its Hermes session when the channel opens, and
 // the review card it showed, drawn by the same components a Conversation uses; every member of the channel reads them,
 // a Viewer included. The session is the fake Hermes's, on the profile the Run was pinned to.
-test('a channel reply shows its Run\'s steps and its review card to the channel\'s members',async({page})=>{
- const lead=String(rows(`select id from public.hermes_agents where company_id='${company}' and is_default order by id limit 1`)[0].id);
+ test('a channel reply shows its Run\'s steps and its review card to the channel\'s members',async({page})=>{
+ // The seed starts no Agent and no Company profile, so the channel's main one is attached here, as an Owner's attachment
+ // makes it (#147); the profile is what the app reads a reply's Hermes session on.
+ const lead=randomUUID(); const companyProfile=`co-${company.replaceAll('-','')}`;
+ query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile,is_default) values ('${lead}','${company}','${randomUUID()}','Lead','Runs the launch.','${companyProfile}',true)`);
+ query(`insert into public.member_agent_access(company_id,person_id,agent_id) select company_id,person_id,'${lead}' from public.members where company_id='${company}' and removed_at is null and role<>'owner'`);
+ query(`insert into public.company_profiles(company_id,profile,tools_level,tools_policy,skills_shared) select id,'${companyProfile}',agent_level,public.engine_tool_policy(),true from public.companies where id='${company}' on conflict (company_id) do update set tools_pending=false,skills_shared=true`);
  const session=randomUUID(); const profile=`ag-148-${randomUUID().slice(0,8)}`; const run=`run-148-${randomUUID().slice(0,8)}`;
  const sent=Date.parse('2026-11-16T10:12:00Z')/1000;
- query(`do $$ declare asked bigint; begin
-  insert into public.channel_messages(company_id,channel_id,author,person_id,author_name,body,send_key,created_at)
-   values ('${company}','69000000-0000-0000-0000-000000000001','person','${contributor}','مراجع','@Lead review the December scripts','${randomUUID()}','2026-11-16T10:12:00Z') returning id into asked;
-  insert into public.channel_messages(company_id,channel_id,author,agent_id,author_name,body,reply_to,created_at)
-   values ('${company}','69000000-0000-0000-0000-000000000001','agent','${lead}','Lead','I reviewed the three scripts.',asked,'2026-11-16T10:14:00Z');
-  insert into public.channel_runs(message_id,company_id,channel_id,agent_id,agent_name,session,input,instructions,run_id,profile,attempts,attempted_at,outcome,closed_at)
-   values (asked,'${company}','69000000-0000-0000-0000-000000000001','${lead}','Lead','${session}','مراجع: @Lead review the December scripts',null,'${run}','${profile}',1,now(),'completed',now());
-  insert into public.reply_cards(company_id,channel_message_id,run_id,call_id,kind,title,content,state) values
-   ('${company}',asked,'${run}','call-1','review','December scripts review','{"line":"3 scripts · Meta Ads","items":[{"text":"من خريج تجارة لمحاسب شغال","fine":true,"note":"The promise is clear."},{"text":"أضمن طريق لأول وظيفة","fine":false,"note":"Swap the promise."}],"decision":"1 ready, 1 back to Ads"}','shown'),
-   ('${company}',asked,'${run}','call-2','draft','December scripts','{"line":"Draft · Meta Ads","rows":[{"label":"Scripts","value":"3"}]}','shown');
- end $$;`);
- const call=(id:string,name:string,args:object)=>({id,type:'function',function:{name,arguments:JSON.stringify(args)}});
- fake.settings.sessions.set(session,{profile,messages:[
-  {role:'user',content:'@Lead review the December scripts',timestamp:sent+1},
-  {role:'assistant',content:'',tool_calls:[call('call_1','meta_ads',{query:'October results'}),call('call_2','docs',{path:'scripts.md'})],timestamp:sent+3},
-  {role:'tool',tool_call_id:'call_1',tool_name:'meta_ads',content:'{"results":[]}',timestamp:sent+10},
-  {role:'tool',tool_call_id:'call_2',tool_name:'docs',content:'{"success":false,"error":"not found"}',timestamp:sent+12},
-  {role:'assistant',content:'I reviewed the three scripts.',timestamp:sent+42}]});
- await signIn(page,'reviewer@example.com',general);
- const toggle=page.locator('.steps__toggle');
- await expect(toggle).toHaveText('Used 2 tools · 41 sec');
- await toggle.click();
- await expect(page.locator('.steps__list .step')).toHaveText(['meta_ads · October resultsDone','docs · scripts.mdSkipped']);
- const card=page.locator('.reply-card--review');
- await expect(card).toBeVisible();
- await expect(card.locator('.card__title')).toHaveText('December scripts review');
- await expect(card.locator('.rv-item')).toHaveCount(2);
- await expect(card.locator('.rv-decision__t')).toHaveText('1 ready, 1 back to Ads');
- await page.reload();
- await expect(page.locator('.reply-card--review')).toBeVisible();
+ try {
+  query(`do $$ declare asked bigint; begin
+   insert into public.channel_messages(company_id,channel_id,author,person_id,author_name,body,send_key,created_at)
+    values ('${company}','69000000-0000-0000-0000-000000000001','person','${contributor}','مراجع','@Lead review the December scripts','${randomUUID()}','2026-11-16T10:12:00Z') returning id into asked;
+   insert into public.channel_messages(company_id,channel_id,author,agent_id,author_name,body,reply_to,created_at)
+    values ('${company}','69000000-0000-0000-0000-000000000001','agent','${lead}','Lead','I reviewed the three scripts.',asked,'2026-11-16T10:14:00Z');
+   insert into public.channel_runs(message_id,company_id,channel_id,agent_id,agent_name,session,input,instructions,run_id,profile,attempts,attempted_at,outcome,closed_at)
+    values (asked,'${company}','69000000-0000-0000-0000-000000000001','${lead}','Lead','${session}','مراجع: @Lead review the December scripts',null,'${run}','${profile}',1,now(),'completed',now());
+   insert into public.reply_cards(company_id,channel_message_id,run_id,call_id,kind,title,content,state) values
+    ('${company}',asked,'${run}','call-1','review','December scripts review','{"line":"3 scripts · Meta Ads","items":[{"text":"من خريج تجارة لمحاسب شغال","fine":true,"note":"The promise is clear."},{"text":"أضمن طريق لأول وظيفة","fine":false,"note":"Swap the promise."}],"decision":"1 ready, 1 back to Ads"}','shown'),
+    ('${company}',asked,'${run}','call-2','draft','December scripts','{"line":"Draft · Meta Ads","rows":[{"label":"Scripts","value":"3"}]}','shown');
+  end $$;`);
+  const call=(id:string,name:string,args:object)=>({id,type:'function',function:{name,arguments:JSON.stringify(args)}});
+  fake.settings.sessions.set(session,{profile,messages:[
+   {role:'user',content:'@Lead review the December scripts',timestamp:sent+1},
+   {role:'assistant',content:'',tool_calls:[call('call_1','meta_ads',{query:'October results'}),call('call_2','docs',{path:'scripts.md'})],timestamp:sent+3},
+   {role:'tool',tool_call_id:'call_1',tool_name:'meta_ads',content:'{"results":[]}',timestamp:sent+10},
+   {role:'tool',tool_call_id:'call_2',tool_name:'docs',content:'{"success":false,"error":"not found"}',timestamp:sent+12},
+   {role:'assistant',content:'I reviewed the three scripts.',timestamp:sent+42}]});
+  await signIn(page,'reviewer@example.com',general);
+  const toggle=page.locator('.steps__toggle');
+  await expect(toggle).toHaveText('Used 2 tools · 41 sec');
+  await toggle.click();
+  await expect(page.locator('.steps__list .step')).toHaveText(['meta_ads · October resultsDone','docs · scripts.mdSkipped']);
+  const card=page.locator('.reply-card--review');
+  await expect(card).toBeVisible();
+  await expect(card.locator('.card__title')).toHaveText('December scripts review');
+  await expect(card.locator('.rv-item')).toHaveCount(2);
+  await expect(card.locator('.rv-decision__t')).toHaveText('1 ready, 1 back to Ads');
+  await page.reload();
+  await expect(page.locator('.reply-card--review')).toBeVisible();
+ } finally { query(`delete from public.hermes_agents where id='${lead}'`); query(`delete from public.company_profiles where company_id='${company}'`); }
 });
 
 // #200: a Member named with @ in a channel message finds it at the top of "Waiting on you" under "Mentions of you", with
@@ -131,7 +138,7 @@ test('a Member mentioned in a channel finds it under "Mentions of you", and pres
  expect(await count()).toBe(viewerBefore+1);
  // Pressing it opens the channel at that message, ringed for a moment.
  await card.click();
- await expect(page).toHaveURL(new RegExp(`^${general}`));
+ await expect(page).toHaveURL(new RegExp(general));
  const bubble=page.locator('.bubble--peer').filter({hasText:'@مشاهد شوف الخطة'});
  await expect(bubble).toBeInViewport();
  await expect(bubble).toHaveClass(/is-spot/);
@@ -148,7 +155,7 @@ test('a Member mentioned in a channel finds it under "Mentions of you", and pres
  await expect(managerCard).toHaveCount(1);
  await expect(managerCard.locator('.mcard__q .mention')).toHaveText('@مدير');
  await managerCard.click();
- await expect(page).toHaveURL(new RegExp(`^${general}`));
+ await expect(page).toHaveURL(new RegExp(general));
  await expect(page.locator('.bubble--peer').filter({hasText:'@مدير شوف الخطة'})).toBeInViewport();
  await page.goto('/c/rs-learning/approvals');
  await expect(managerCard).toHaveCount(0);
@@ -160,6 +167,12 @@ test('a Member mentioned in a channel finds it under "Mentions of you", and pres
 // lock to a Member outside it. The database rules per Role are in supabase/tests/channel_card.sql.
 test('a channel\'s first Agent call puts one Card on the board, and its sheet shows the channel to its members and the lock to a Member outside it',async({page,browser})=>{
  const key=randomUUID();
+ // The seed starts no Agent: this channel's main one is attached here, as an Owner's attachment makes it (#147). A retry
+ // of this file clears its own before adding another, since a Company keeps exactly one main Agent.
+ query(`delete from public.hermes_agents where company_id='${company}' and is_default`);
+ const lead=randomUUID();
+ query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile,is_default) values ('${lead}','${company}','${randomUUID()}','Lead','Runs the launch.','fake-${lead.slice(0,8)}',true)`);
+ query(`insert into public.member_agent_access(company_id,person_id,agent_id) select company_id,person_id,'${lead}' from public.members where company_id='${company}' and removed_at is null and role<>'owner'`);
  query(`do $$ declare ch uuid; msg bigint; agent uuid; begin
   select id into agent from public.hermes_agents where company_id='${company}' and is_default order by id limit 1;
   insert into public.channels(company_id,kind,name,created_by,create_key) values('${company}','team','Board week','${contributor}','${key}') returning id into ch;
@@ -189,8 +202,10 @@ test('a channel\'s first Agent call puts one Card on the board, and its sheet sh
  await expect(page.locator('#details')).toContainText('On the board');
  await expect(page.locator('#details .panel-row').filter({hasText:'Board week'})).toContainText('In progress');
  await pill.click();
- await expect(page).toHaveURL(new RegExp(`/c/rs-learning/work/board\\?show=${cardId}$`));
- await expect(page.locator(`.kcard[data-card-id="${cardId}"]`)).toContainText('Board week');
+ // The address loses `show` once the Card came into view (board-show.tsx), so the board itself and the Card it focused say so.
+ await expect(page).toHaveURL(/\/c\/rs-learning\/work\/board$/);
+ await expect(page.locator(`.kcard[data-card-id="${cardId}"] a`).first()).toBeFocused();
+ await expect(page.locator(`.kcard[data-card-id="${cardId}"]`)).toBeInViewport();
  await expect(page.locator(`.kcard[data-card-id="${cardId}"] .kcard__job`)).toContainText('Channel');
 
  // The Card's sheet, as a Member of the channel: the channel under Chat, and a message written there saves.
@@ -238,4 +253,5 @@ test('a channel\'s first Agent call puts one Card on the board, and its sheet sh
   await expect(locked.getByText('Here is the plan.')).toHaveCount(0);
   await expect(locked.getByRole('textbox')).toHaveCount(0);
  } finally { await owner.close(); }
+ query(`delete from public.hermes_agents where id='${lead}'`);
 });

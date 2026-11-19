@@ -72,14 +72,14 @@ test('the Owner adds the invited person to a new channel, and when they accept t
   await expect(dialog.getByRole('textbox',{name:'Channel name'})).toBeVisible({timeout:2000});
  }).toPass({timeout:30000});
  await dialog.getByRole('textbox',{name:'Channel name'}).fill('Invite launch');
- await dialog.getByRole('checkbox',{name:new RegExp(`^${name}Contributor · ${email.replace(/[.+]/g,'\\$&')}`)}).click();
+ await dialog.getByRole('checkbox',{name:new RegExp(`^${name}\\s+Contributor · ${email.replace(/[.+]/g,'\\$&')}`)}).click();
  await expect(dialog.getByRole('group',{name:/^Members/})).toHaveAccessibleName('Members 2');
  await dialog.getByRole('button',{name:'Create the channel'}).click();
  await expect(page).toHaveURL(/\/c\/rs-learning\/channels\/[0-9a-f-]{36}$/);
  channel=page.url().split('/').at(-1)!;
  await expect(page.locator('.ch-intro')).toContainText('2 members');
  const details=page.getByRole('complementary',{name:'Channel details'});
- await expect(details.locator('.panel-row').filter({hasText:name}).locator('.panel-row__d')).toHaveText(`Contributor · ${email} · Invite sent`);
+ await expect(details.locator('.panel-row').filter({hasText:email}).locator('.panel-row__d')).toHaveText(`Contributor · ${email} · Invite sent`);
  expect(rows(`select count(*)::int n from public.channel_invitees where channel_id='${channel}'`)[0].n).toBe(1);
 
  // The invited person accepts the invitation from the email, and reads both channels.

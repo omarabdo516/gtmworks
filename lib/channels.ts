@@ -148,7 +148,8 @@ export async function channelRecord(db:Database,person:string,company:string,cha
  const stepsOf=new Map<number,RunSteps>();
  const replies=ordered.filter(message=>message.author==='agent'&&message.reply_to!==null);
  if(session&&replies.length) {
-  const {data:runsRead}=await db.rpc('channel_run_sessions',{ch:channel,after:askedIds[0]??0});
+  // The page asks from the oldest message shown, so its own reply's Run is included: `after` is a message id, exclusive.
+  const {data:runsRead}=await db.rpc('channel_run_sessions',{ch:channel,after:(latest.at(-1)?.id??1)-1});
   const runOfReply=new Map(((runsRead||[]) as StoredSession[]).map(row=>[row.reply,row]));
   const groups=new Map<string,{agent:string,profile:string,session:string,replies:StoredMessage[]}>();
   for(const reply of replies) {

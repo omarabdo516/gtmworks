@@ -311,7 +311,8 @@ test('Waiting on you lists an Agent question and an item of a new kind, each ope
   await expect(card).toBeVisible();
   await expect(card.locator('.ask1__opts .chip')).toHaveText(['Graduates','Excel and Odoo']);
   await expect(card).toContainText('or type the answer below');
-  await expect(page.locator('.msg[data-author=agent]').filter({hasText:`Which angle first ${stamp}?`}),'the main Agent asks with its card, not plain words').toHaveCount(0);
+  // The card is the Agent's turn, and its words are the card's own: no plain bubble repeats the question (#143).
+ await expect(page.locator('.msg[data-author=agent] .bubble--agent').filter({hasText:`Which angle first ${stamp}?`}),'the main Agent asks with its card, not plain words').toHaveCount(0);
   await page.goto('/c/rs-learning/approvals');
   const asked=waiting.locator('.mcard').filter({hasText:`Which angle first ${stamp}?`});
   await expect(asked).toContainText('Question from Lead');
