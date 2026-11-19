@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
 import { routeAllowed } from '@/lib/route-permissions.mjs';
-import { onProfile } from '@/lib/bundled-hermes.mjs';
+import { engineOf, onProfile } from '@/lib/bundled-hermes.mjs';
 import { engineFor } from '@/lib/engine.mjs';
 import { bodyLengthRefused } from '@/lib/attachments.mjs';
 
@@ -49,7 +49,7 @@ async function respond(request:NextRequest) {
   const agent=await spokenFor(db,body.company,body);
   if(!agent) return reply({error:'dictationNotFound'},404);
   if(!await routeAllowed(db,file,request.method,body.company,user.id)) return reply({error:'dictationNotAllowed'},403);
-  const connection=onProfile(agent.profile,body.company);
+  const connection=onProfile(agent.profile,body.company,engineOf(body.company));
   if(!connection) return reply({error:'dictationNotFound'},404);
   const engine=engineFor(connection);
   if(!writing) {
