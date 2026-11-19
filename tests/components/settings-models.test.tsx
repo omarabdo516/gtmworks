@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
-import { page } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
 import { ProviderKeys, DefaultModel, EachAgent, AgentModel, DefaultEffort, type AgentModels, type ModelOption } from '@/app/settings-models';
 import { LanguageProvider } from '@/lib/i18n-client';
 import en from '@/lib/messages/en.json';
@@ -131,6 +131,58 @@ test('an Agent\'s "Thinks with" rows change its own profile\'s model, and an Age
   await renderNode(<AgentModel company={company} agent="lead" name="Lead" model="openrouter/openai/gpt-5.5" options={[]} choosable={false} owner/>);
   expect(document.querySelectorAll('[role=radio]')).toHaveLength(0);
   expect(document.getElementById('set-model')?.textContent).toContain('gpt-5.5');
+});
+
+test('the model choices are one Tab stop and the arrow keys move and select them, left in Arabic', async () => {
+ const sent = stub();
+ const screen = await renderNode(<DefaultModel company={company} owner models={{ model: 'openrouter/openai/gpt-5.5', options }}/>);
+ const first = screen.getByRole('radio', { name: /gpt-5.5/ });
+ const second = screen.getByRole('radio', { name: /claude-opus-4-6/ });
+ await expect.element(first).toHaveAttribute('aria-checked', 'true');
+ expect(first.element().tabIndex).toBe(0);
+ expect(second.element().tabIndex).toBe(-1);
+ first.element().focus();
+ await userEvent.keyboard('{ArrowDown}');
+ await expect.poll(() => sent.length).toBe(1);
+ expect(sent[0]).toEqual({ url: '/api/agent-settings', body: { company, setting: 'model', value: 'anthropic/claude-opus-4-6' } });
+ expect(document.activeElement?.textContent).toContain('claude-opus-4-6');
+ await screen.unmount();
+ const arabic = await renderNode(<DefaultModel company={company} owner models={{ model: 'openrouter/openai/gpt-5.5', options }}/>, 'ar');
+ arabic.getByRole('radio', { name: /gpt-5.5/ }).element().focus();
+ await userEvent.keyboard('{ArrowLeft}');
+ await expect.poll(() => sent.length).toBe(2);
+ expect(sent[1].body).toEqual({ company, setting: 'model', value: 'anthropic/claude-opus-4-6' });
+ await arabic.unmount();
+ const agent = await renderNode(<AgentModel company={company} agent="a-1" name="Writer" model="openrouter/openai/gpt-5.5" options={options} choosable owner/>);
+ const agentFirst = agent.getByRole('radio', { name: /gpt-5.5/ });
+ const agentSecond = agent.getByRole('radio', { name: /claude-opus-4-6/ });
+ expect(agentFirst.element().tabIndex).toBe(0);
+ expect(agentSecond.element().tabIndex).toBe(-1);
+ agentFirst.element().focus();
+ await userEvent.keyboard('{ArrowRight}');
+ await expect.poll(() => sent.length).toBe(3);
+ expect(sent[2].body).toEqual({ company, agent: 'a-1', setting: 'model', value: 'anthropic/claude-opus-4-6' });
+ expect(document.activeElement?.textContent).toContain('claude-opus-4-6');
+});
+
+test('a group with no model marked still gives its first choice the Tab stop and the keyboard can pick it', async () => {
+ const sent = stub();
+ const screen = await renderNode(<DefaultModel company={company} owner models={{ model: null, options }}/>);
+ const first = screen.getByRole('radio', { name: /gpt-5.5/ });
+ expect(first.element().tabIndex).toBe(0);
+ expect(screen.getByRole('radio', { name: /claude-opus-4-6/ }).element().tabIndex).toBe(-1);
+ first.element().focus();
+ await userEvent.keyboard('{ArrowDown}');
+ await expect.poll(() => sent.length).toBe(1);
+ expect(sent[0].body).toEqual({ company, setting: 'model', value: 'openrouter/openai/gpt-5.5' });
+ await screen.unmount();
+ const agent = await renderNode(<AgentModel company={company} agent="a-1" name="Writer" model={null} options={options} choosable owner/>);
+ const agentFirst = agent.getByRole('radio', { name: /gpt-5.5/ });
+ expect(agentFirst.element().tabIndex).toBe(0);
+ agentFirst.element().focus();
+ await userEvent.keyboard('{ArrowDown}');
+ await expect.poll(() => sent.length).toBe(2);
+ expect(sent[1].body).toEqual({ company, agent: 'a-1', setting: 'model', value: 'openrouter/openai/gpt-5.5' });
 });
 
 test('each Agent in "Each agent" reads its model and its own thinking level', async () => {

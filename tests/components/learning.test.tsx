@@ -114,7 +114,7 @@ test('a reader below Owner sees the Company mode and each Agent\'s with no choic
 });
 
 test('the mode choices are one Tab stop and the arrow keys move and select them, left in Arabic', async () => {
- const view = await screen('en', { value: { ...data, agents: data.agents.map(agent => ({ ...agent, follow: false, mode: 'auto' as const })) } });
+ const view = await screen('en', { value: { ...data, agents: (data.agents ?? []).map(agent => ({ ...agent, follow: false, mode: 'auto' as const })) } });
  const auto = companyModes(view).getByRole('radio', { name: /^Learns on its own/ });
  const ask = companyModes(view).getByRole('radio', { name: /^Asks first/ });
  await expect.element(auto).toHaveAttribute('aria-checked', 'true');
@@ -126,7 +126,7 @@ test('the mode choices are one Tab stop and the arrow keys move and select them,
  expect(await bodyOf(0)).toEqual({ company, mode: 'ask' });
  expect(document.activeElement?.id).toBe(`ln-co-ask`);
  await view.unmount();
- const arabic = await screen('ar', { value: { ...data, agents: data.agents.map(agent => ({ ...agent, follow: false, mode: 'auto' as const })) } });
+ const arabic = await screen('ar', { value: { ...data, agents: (data.agents ?? []).map(agent => ({ ...agent, follow: false, mode: 'auto' as const })) } });
  const arabicAuto = arabic.getByRole('radiogroup', { name: 'للشركة كلها' }).getByRole('radio', { name: /^يتعلّم لوحده/ });
  await expect.element(arabicAuto).toHaveAttribute('aria-checked', 'true');
  arabicAuto.element().focus();

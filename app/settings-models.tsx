@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, type KeyboardEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
 import { effortDefault, effortHintKey, effortLabelKey } from '@/lib/engine-effort.mjs';
@@ -27,6 +27,15 @@ async function send(path:string,body:object):Promise<Answer> {
  } catch { return {ok:false,error:''}; }
 }
 const modelOf=(option:ModelOption)=>`${option.provider}/${option.model}`;
+// The arrow keys move through a list of model choices as the reference's other radio groups do: down or right forward in
+// English, down or left forward in Arabic; the first and last stop the arrow, and a group with no choice marked starts
+// from the focused row. Moving selects, as the effort control does (#179).
+function moveChoice(event:KeyboardEvent<HTMLButtonElement>,rtl:boolean) {
+ const key=event.key;
+ if(key!=='ArrowLeft'&&key!=='ArrowRight'&&key!=='ArrowUp'&&key!=='ArrowDown') return null;
+ event.preventDefault();
+ return key==='ArrowDown'?1:key==='ArrowUp'?-1:(key==='ArrowLeft')===rtl?1:-1;
+}
 // The route's error code, as the line under the control that made the change: a refusal is the Owner's line, an Agent
 // that keeps the Company profile says why, and anything else is that control's own retry line.
 function reasonKey(code:string,scope:'key'|'model'='model') {
@@ -82,7 +91,7 @@ export function ProviderKeys({company,owner,data}:{company:string,owner:boolean,
 // The Company's default model: the Engine's list for the Company's shared space. The Owner chooses one; every other
 // member reads the choice with the default marked.
 export function DefaultModel({company,owner,models}:{company:string,owner:boolean,models:ModelsData['default']}) {
- const {t}=useI18n(); const router=useRouter();
+ const {t,language}=useI18n(); const rtl=language==='ar'; const router=useRouter();
  const [busy,setBusy]=useState(false); const [error,setError]=useState('');
  const choose=async(value:string)=>{
   if(busy) return;
@@ -92,12 +101,20 @@ export function DefaultModel({company,owner,models}:{company:string,owner:boolea
   if(!answer.ok) { setError(answer.error||'settingFailed'); return; }
   toast(t('settingsModelsSaved')); router.refresh();
  };
- const row=(option:ModelOption)=>{
+ const idOf=(option:ModelOption)=>`mdl-def-${option.provider}-${option.model}`;
+ const chosenIndex=owner?models.options.findIndex(option=>modelOf(option)===models.model):-1;
+ const move=(event:KeyboardEvent<HTMLButtonElement>,index:number)=>{
+  const step=moveChoice(event,rtl); if(step===null) return;
+  const next=chosenIndex<0?index:Math.max(0,Math.min(models.options.length-1,index+step));
+  if(next!==chosenIndex) choose(modelOf(models.options[next]));
+  document.getElementById(idOf(models.options[next]))?.focus();
+ };
+ const row=(option:ModelOption,index:number)=>{
   const choice=modelOf(option); const on=choice===models.model; const text=<span className="panel-row__text"><span className="panel-row__t"><bdi>{option.model}</bdi></span><span className="panel-row__d"><bdi>{option.providerName}</bdi></span></span>;
   const meta=on?<span className="panel-row__meta"><span aria-hidden="true">✓</span>{t('settingsModelsDefaultMark')}</span>:null;
   return owner
-   ? <button type="button" className="panel-row" role="radio" id={`mdl-def-${option.provider}-${option.model}`} aria-checked={on} tabIndex={on?0:-1} disabled={busy} onClick={()=>{ if(!on) choose(choice); }}>{text}{meta}</button>
-   : <div className="panel-row" aria-current={on?'true':undefined}>{text}{meta}</div>;
+   ? <button type="button" className="panel-row" role="radio" id={idOf(option)} key={choice} aria-checked={on} tabIndex={on||(chosenIndex<0&&index===0)?0:-1} disabled={busy} onClick={()=>{ if(!on) choose(choice); }} onKeyDown={event=>move(event,index)}>{text}{meta}</button>
+   : <div className="panel-row" key={choice} aria-current={on?'true':undefined}>{text}{meta}</div>;
  };
  return <section className="dp-sec" aria-labelledby="md-h-default"><h4 className="dp-label" id="md-h-default"><span>{t('settingsModelsDefault')}</span></h4>
   {models.options.length?<div className="panel-card" role={owner?'radiogroup':undefined} aria-labelledby="md-h-default">{models.options.map(row)}</div>
@@ -124,7 +141,7 @@ export function DefaultEffort() {
 // One Agent's model rows, for its "Thinks with" section (#29): the Engine's choices for that Agent's own profile. An Agent
 // that runs on the Company profile has no model of its own and says so.
 export function AgentModel({company,agent,name,model,options,choosable,owner}:{company:string,agent:string,name:string,model:string|null,options:ModelOption[],choosable:boolean,owner:boolean}) {
- const {t}=useI18n(); const router=useRouter();
+ const {t,language}=useI18n(); const rtl=language==='ar'; const router=useRouter();
  const [busy,setBusy]=useState(false); const [error,setError]=useState('');
  const choose=async(value:string|null)=>{
   if(busy) return;
@@ -137,11 +154,19 @@ export function AgentModel({company,agent,name,model,options,choosable,owner}:{c
  if(!choosable) return <div className="panel-card"><p className="ro-text" id="set-model">{model||t('settingsModelsNoModel')}</p></div>;
  if(!owner) return <div className="panel-card"><p className="ro-text" id="set-model">{model||t('settingsModelsNoModel')}</p></div>;
  if(!options.length) return <div className="panel-card"><p className="panel-empty">{t('settingsModelsNoChoice')}</p></div>;
- const row=(option:ModelOption)=>{
+ const idOf=(option:ModelOption)=>`set-model-${option.provider}-${option.model}`;
+ const chosenIndex=options.findIndex(option=>modelOf(option)===model);
+ const move=(event:KeyboardEvent<HTMLButtonElement>,index:number)=>{
+  const step=moveChoice(event,rtl); if(step===null) return;
+  const next=chosenIndex<0?index:Math.max(0,Math.min(options.length-1,index+step));
+  if(next!==chosenIndex) choose(modelOf(options[next]));
+  document.getElementById(idOf(options[next]))?.focus();
+ };
+ const row=(option:ModelOption,index:number)=>{
   const choice=modelOf(option); const on=choice===model; const text=<span className="panel-row__text"><span className="panel-row__t"><bdi>{option.model}</bdi></span><span className="panel-row__d"><bdi>{option.providerName}</bdi></span></span>;
   return owner
-   ? <button type="button" className="panel-row" role="radio" id={`set-model-${option.provider}-${option.model}`} aria-checked={on} tabIndex={on?0:-1} disabled={busy} onClick={()=>{ if(!on) choose(choice); }}>{text}{on&&<span className="panel-row__meta" aria-hidden="true">✓</span>}</button>
-   : <div className="panel-row" aria-current={on?'true':undefined}>{text}{on&&<span className="panel-row__meta" aria-hidden="true">✓</span>}</div>;
+   ? <button type="button" className="panel-row" role="radio" id={idOf(option)} key={choice} aria-checked={on} tabIndex={on||(chosenIndex<0&&index===0)?0:-1} disabled={busy} onClick={()=>{ if(!on) choose(choice); }} onKeyDown={event=>move(event,index)}>{text}{on&&<span className="panel-row__meta" aria-hidden="true">✓</span>}</button>
+   : <div className="panel-row" key={choice} aria-current={on?'true':undefined}>{text}{on&&<span className="panel-row__meta" aria-hidden="true">✓</span>}</div>;
  };
  return <div className="md-agent-model" id="set-model">
   <div className="panel-card" role={owner?'radiogroup':undefined} aria-label={t('settingsModelsChoose',name)}>{options.map(row)}</div>
