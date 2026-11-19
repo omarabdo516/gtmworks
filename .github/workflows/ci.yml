@@ -509,8 +509,18 @@ jobs:
           if grep -qF "$code" <<< "$gateway_logs"; then fail 'the setup code must not appear in the gateway access log'; fi
           logs=$(compose logs 2>&1) || fail 'read container logs'
           if grep -qF "$code" <<< "$logs"; then fail 'the setup code must not appear in a container log'; fi
+          # The first Company's Engine is answered from its record, not the app's environment (#380), and the key is kept
+          # encrypted only: a node call with the install's environment pointing elsewhere still reaches the record's Engine.
+          company_id=$(db -c "select id from public.companies where name='Proxy Company'") || fail 'read the first Company'
+          [[ -n $company_id ]] || fail 'first run made the first Company'
+          engine_key=$(sed -n 's/^HERMES_API_KEY=//p' .env.install)
+          [[ $(db -c "select key_encrypted from public.company_engines where company_id='$company_id'") != "$engine_key" ]] || fail 'the Engine key is stored in plaintext'
+          compose exec -T -e BUNDLED_HERMES_URL=http://127.0.0.1:9 -e HERMES_API_KEY=wrong -e EXPECTED_KEY="$engine_key" web \
+            node --input-type=module -e "const {engineOf}=await import('/app/lib/bundled-hermes.mjs'); const at=await engineOf('$company_id'); console.log(at?.address==='http://hermes:8642'&&at?.key===process.env.EXPECTED_KEY?'record':'no');" \
+            | grep -qx record || fail "the first Company's Engine is answered from its record"
+          if grep -qF "$engine_key" <<< "$logs"; then fail 'the Engine key must not appear in a container log'; fi
           cp .env.install .env.install.before
-          db -c "insert into public.companies (id,slug,name) values ('00000000-0000-4000-8000-000000000237','install-probe','Keep me');" || fail 'insert persistence probe'
+          db -c "insert into public.company_engines (address,key_encrypted) values ('http://hermes:8642','install-probe'); insert into public.companies (id,slug,name) values ('00000000-0000-4000-8000-000000000237','install-probe','Keep me');" || fail 'insert persistence probe'
           db -c 'select name from gtmworks_install.schema_migrations order by name' > before || fail 'read initial migrations'
           find supabase/migrations -name '*.sql' ! -name '*.verify.sql' -printf '%f\n' | sort > expected
           diff -u expected before || fail 'applied migrations match migration files'
@@ -668,6 +678,7 @@ jobs:
         run: |
           fail() { echo "release install check failed: $1" >&2; exit 1; }
           compose() { docker compose --env-file .env.install -f docker-compose.install.yml "$@"; }
+          root=$PWD
           compose down -v || fail 'remove the source install'
           docker run -d --name install-registry -p 127.0.0.1:5000:5000 registry:2.8.3 > /dev/null || fail 'local registry'
           for attempt in $(seq 1 30); do docker run --rm --network host curlimages/curl:8.12.1 -sf http://127.0.0.1:5000/v2/ > /dev/null && break; sleep 1; done
@@ -686,9 +697,21 @@ jobs:
           mkdir "$dir" && cp release-first/docker-compose.install.yml release-first/install.sh "$dir/" || fail 'release install directory'
           [[ $(ls -A "$dir" | wc -l) == 2 ]] || fail 'the release install directory holds only the two release files'
           sh "$dir/install.sh" || fail 'release install'
-          cp release-next/docker-compose.install.yml release-next/install.sh "$dir/" || fail 'next release files in place'
-          sh "$dir/install.sh" update || fail 'release update'
           cd "$dir"
+          # An install made by the previous release keeps its Engine record across the update (#380): make one Company on
+          # the waiting record the installer registered, and prove after the update that its Engine still answers.
+          compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 -At \
+            -c "insert into public.companies (id,slug,name) values ('00000000-0000-4000-8000-000000000239','release-probe','Release probe');" \
+            || fail 'the release install makes a Company on its Engine record'
+          release_probe=00000000-0000-4000-8000-000000000239
+          compose exec -T web node --input-type=module -e "const {engineOf}=await import('/app/lib/bundled-hermes.mjs'); const at=await engineOf('$release_probe'); console.log(at?.address==='http://hermes:8642'?'record':'no');" \
+            | grep -qx record || fail "the release install's Company answers from its Engine record"
+          cp "$root/release-next/docker-compose.install.yml" "$root/release-next/install.sh" "$dir/" || fail 'next release files in place'
+          sh "$dir/install.sh" update || fail 'release update'
+          compose exec -T web node --input-type=module -e "const {engineOf}=await import('/app/lib/bundled-hermes.mjs'); const at=await engineOf('$release_probe'); console.log(at?.address==='http://hermes:8642'?'record':'no');" \
+            | grep -qx record || fail "the updated install's Company still answers from its Engine record"
+          [[ $(compose exec -T db psql -X -U postgres -d postgres -At -c "select count(*) from public.company_engines e join public.companies c on c.id=e.company_id where c.slug='release-probe'") == 1 ]] \
+            || fail 'the updated install keeps the Company Engine record'
           [[ $(compose exec -T db psql -X -U postgres -d postgres -At -c "select to_regclass('gtmworks_install.release_update_probe') is not null") == t ]] \
             || fail 'the next release migration applied through the running bind mount'
           compose exec -T db ls /migrations | sort > "$RUNNER_TEMP/seen" || fail 'list the migrations the database sees'

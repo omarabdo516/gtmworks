@@ -8,7 +8,7 @@ insert into isolation_matrix(name) values
  ('agent_grants'),('agent_handovers'),('agent_key_waits'),('agent_profile_leftovers'),('agent_profiles'),
  ('agent_requests'),('agent_rules'),('approval_steps'),
  ('channel_agents'),('channel_attachments'),('channel_invitees'),('channel_messages'),('channel_notes'),('channel_people'),('channel_permissions'),('channel_reads'),('channel_runs'),('channels'),
- ('company_app_sign_ins'),('company_audit'),('company_key_holds'),('company_key_unfinished'),('company_log'),
+ ('company_app_sign_ins'),('company_audit'),('company_engines'),('company_key_holds'),('company_key_unfinished'),('company_log'),
  ('company_profile_keepers'),('company_profiles'),('company_shared_spaces'),
  ('conversation_attachments'),('conversation_messages'),('conversation_notes'),('conversation_queued_turns'),
  ('conversation_run_notes'),('conversation_run_reservations'),('conversation_run_ends'),('conversations'),
@@ -37,6 +37,9 @@ update isolation_matrix m set fixed = v.fixed::jsonb from (values
  ('channels', $${"kind": "'team'", "created_by": "'e3370000-0000-0000-0000-000000000001'", "create_key": "gen_random_uuid()",
    "name": "'isolation'"}$$),
  ('company_audit', $${"action": "'company_renamed'", "old_name": "'isolation'", "new_name": "'isolation'"}$$),
+ -- The seed already gives RS Learning its Engine record (#380): a random Company id keeps the row unique, and the
+ -- Owner's insert is still refused for want of a grant.
+ ('company_engines', $${"company_id": "gen_random_uuid()"}$$),
  ('company_key_unfinished', $${"profiles": "array['co-' || md5('isolation')]"}$$),
  ('company_log', $${"actor_kind": "'person'", "actor_id": "'e3370000-0000-0000-0000-000000000001'", "source": "'company_audit'",
    "subject": "'company'"}$$),
@@ -85,7 +88,7 @@ begin
   where att.attrelid = format('public.%I', t)::regclass and att.attnum > 0 and not att.attisdropped
   order by att.attnum
  loop
-  if a.name = 'company_id' then v := quote_literal(company);
+  if a.name = 'company_id' then v := coalesce(fixed->>'company_id', quote_literal(company));
   elsif fixed ? a.name then v := fixed->>a.name;
   elsif a.person and a.type = 'uuid' then v := quote_literal(person);
   elsif a.needed then v := case

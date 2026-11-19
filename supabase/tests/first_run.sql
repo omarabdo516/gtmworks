@@ -8,6 +8,8 @@ do $$ declare tables text; begin
 end $$;
 truncate auth.users cascade;
 insert into public.setup_claim(closed) values(false);
+-- The installer registers the install's Engine before first run, which attaches the first Company to it (#380).
+insert into public.company_engines(address,key_encrypted) values ('http://hermes:8642','cipher');
 insert into auth.users(id,email) values('90000000-0000-0000-0000-000000000238','setup@example.test');
 select set_config('request.jwt.claim.sub','',true);
 select set_config('request.jwt.claims','{"role":"service_role"}',true);

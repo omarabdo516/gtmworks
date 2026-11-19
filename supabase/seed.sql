@@ -1,3 +1,8 @@
+-- Each Company is made only onto a waiting Engine record (#380); the seed makes the three Companies below and keeps spare
+-- records for the Companies a test makes. scripts/local-db.sh then points every record at the lane's fake Hermes and
+-- encrypts its key, so the record is the only place the app and worker read them.
+insert into public.company_engines (address,key_encrypted)
+select 'http://127.0.0.1:8642','seed' from generate_series(1,23);
 insert into public.companies (id,slug,name) values
 ('10000000-0000-0000-0000-000000000001','rs-learning','RS Learning'),
 ('10000000-0000-0000-0000-000000000002','rs-consultations','R&S Consultations'),

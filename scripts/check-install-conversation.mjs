@@ -1,8 +1,10 @@
 // CI runs this on stdin inside /app in the installed web container. It proves the bundled Hermes (ADR 0010) answers
-// /health on the compose network, and that a company Owner's Arabic message gets its reply with no manual connection
-// step: the worker gives the company its own Hermes profile (ADR 0014) by itself, and closes the run with the reply.
-// The company's profile is pointed at the fake model provider this script serves on http://web:8080/v1, standing in for
-// the company's own subscription sign-in (#3), so CI needs no subscription.
+// /health on the compose network, and that the first-run Company's Owner's Arabic message gets its reply with no manual
+// connection step: the worker gives the Company its own Hermes profile (ADR 0014) by itself, and closes the run with the
+// reply. The Company's Engine comes from the Engine record the installer wrote and first run attached (#380), so this also
+// proves a Run on the first Company answers through the record. The profile is pointed at the fake model provider this
+// script serves on http://web:8080/v1, standing in for the Company's own subscription sign-in (#3), so CI needs no
+// subscription.
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
@@ -38,16 +40,16 @@ try {
  const options={auth:{persistSession:false,autoRefreshToken:false}};
  const service=createClient(origin,process.env.SUPABASE_SERVICE_ROLE_KEY,options);
  const checked=async query=>{const {data,error}=await query; assert.equal(error,null,JSON.stringify(error)); return data;};
- const credentials={email:'bundled-hermes@example.com',password:`Bundled-${randomUUID()}`};
- const {user}=await checked(service.auth.admin.createUser({...credentials,email_confirm:true}));
- await checked(service.from('people').insert({id:user.id,name:'Bundled Hermes Check'}));
- const company=randomUUID();
- await checked(service.from('companies').insert({id:company,slug:`bundled-${company.slice(0,8)}`,name:'Bundled Hermes'}));
- await checked(service.from('members').insert({company_id:company,person_id:user.id,role:'owner'}));
-
- // The Owner's own session, as the conversation route receives it.
+ // The Owner and Company first run made, whose Engine record the installer registered and first run attached (#380).
+ const credentials={email:'proxy-owner@example.com',password:'proxy-owner-password'};
  const person=createClient(origin,process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,options);
- await checked(person.auth.signInWithPassword(credentials));
+ const {data:{user}}=await person.auth.signInWithPassword(credentials);
+ assert.ok(user,'the first-run Owner signs in');
+ const [{company_id:company}]=await checked(service.from('members').select('company_id').eq('person_id',user.id).eq('role','owner').limit(1));
+ assert.ok(company,'the first-run Owner owns a Company');
+ // The record, not the install's environment, is where its Engine comes from.
+ const record=await checked(service.from('company_engines').select('address').eq('company_id',company).single());
+ assert.equal(record.address,'http://hermes:8642','the first Company has the install Engine record');
 
  const until=async(what,read,seconds)=>{
   for(let left=seconds;left>0;left--) { const found=await read(); if(found) return found; await new Promise(resolve=>setTimeout(resolve,1000)); }

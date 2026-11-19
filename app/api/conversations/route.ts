@@ -158,7 +158,7 @@ async function models(db:Database,person:string,company:string,conversation:stri
  const {data:found}=await db.from('conversations').select('model,hermes_agents(profile)').eq('id',conversation).eq('company_id',company).eq('person_id',person).maybeSingle();
  const pinned=(found?.hermes_agents as {profile?:string}|null)?.profile;
  if(!found||!pinned) return refuse('conversationNotFound',404);
- const connection=onProfile(pinned,company,engineOf(company));
+ const connection=onProfile(pinned,company,await engineOf(company,service()));
  const read=connection&&await engineFor(connection).models?.()||{state:'unreachable',current:null,models:[]};
  return reply({state:read.state,models:read.models,current:found.model??read.current});
 }

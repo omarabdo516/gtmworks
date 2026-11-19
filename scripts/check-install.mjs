@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 const {engineFor}=await import(`${process.cwd()}/lib/engine.mjs`);
+const {registerEngine}=await import(`${process.cwd()}/lib/engine-record.mjs`);
 const {writeSoulRules,provideSharedSpace,writeSharedSkill,readSharedSkill}=await import(`${process.cwd()}/lib/hermes.mjs`);
 const {knowledgeSkill}=await import(`${process.cwd()}/lib/company-knowledge-skill.mjs`);
 
@@ -26,17 +27,20 @@ if(seed) {
  await checked(admin.from('people').insert({id:user.id,name:'Restore Person'}));
  const companies=[];
  for(const slug of ['restore-one','restore-two']) {
-  // Like bootstrap-owner and the test seed, supply the UUID; companies.id has no default.
-  const company=await checked(admin.from('companies').insert({id:randomUUID(),slug,name:slug}).select().single());
-  companies.push(company.id);
-  await checked(admin.from('members').insert({company_id:company.id,person_id:user.id,role:'contributor'}));
+  // Like bootstrap-owner and the test seed, supply the UUID; companies.id has no default. A Company is made only onto a
+  // waiting Engine record (#380), so the install's Engine is registered first.
+  const company=randomUUID();
+  await registerEngine(admin,{address:engine.address,key:engine.key});
+  const created=await checked(admin.from('companies').insert({id:company,slug,name:slug}).select().single());
+  companies.push(created.id);
+  await checked(admin.from('members').insert({company_id:company,person_id:user.id,role:'contributor'}));
   // A card waiting on the person, with one stored file, written by the server (the external-agent API is gone, #341).
-  const stage=await checked(admin.from('work_stages').select('id').eq('company_id',company.id).eq('kind','ideas').single());
-  const card=await checked(admin.from('work_cards').insert({company_id:company.id,stage_id:stage.id,title:`Keep ${slug}`,next_actor:user.id}).select('id').single());
-  const path=`${company.id}/${card.id}/keep.txt`;
+  const stage=await checked(admin.from('work_stages').select('id').eq('company_id',company).eq('kind','ideas').single());
+  const card=await checked(admin.from('work_cards').insert({company_id:company,stage_id:stage.id,title:`Keep ${slug}`,next_actor:user.id}).select('id').single());
+  const path=`${company}/${card.id}/keep.txt`;
   await checked(admin.storage.from('creatives').upload(path,new Blob([`File for ${slug}`],{type:'text/plain'})));
-  const creative=await checked(admin.from('work_creatives').insert({company_id:company.id,card_id:card.id,name:'keep.txt'}).select('id').single());
-  await checked(admin.from('work_versions').insert({company_id:company.id,card_id:card.id,creative_id:creative.id,path}));
+  const creative=await checked(admin.from('work_creatives').insert({company_id:company,card_id:card.id,name:'keep.txt'}).select('id').single());
+  await checked(admin.from('work_versions').insert({company_id:company,card_id:card.id,creative_id:creative.id,path}));
  }
  // An Agent with a rule in its SOUL.md, and each Company's knowledge in its shared space (ADR 0016, #344).
  const agent=await engineFor(engine).createAgent({name:ruleProfile,instructions:'You are the install check Agent.'});

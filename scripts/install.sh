@@ -218,6 +218,10 @@ fi
 worker_stopped=no
 # The extraction replaced the gateway configuration in place; Nginx reads it again without dropping connections.
 if [ "$operation" = update ] && [ -n "$release_image" ]; then compose exec -T gateway nginx -s reload; fi
+# The install's Engine record (#380, ADR 0018): its address and key, the key encrypted with WEBHOOK_ENCRYPTION_KEY, kept in
+# the database for the app and the worker to answer from. A fresh install leaves one record waiting for first run's first
+# Company; an install made before it attaches every Company it already has, so nothing stops working.
+compose exec -T web node scripts/install-engine.mjs
 # Each address must answer 200. Right after the migrations PostgREST reloads its schema cache (and the gateway its
 # configuration), and the app's health answers 503 meanwhile: the probes try again once a second, 60 tries in all, and
 # fail naming the address and its last answer when 200 never comes.

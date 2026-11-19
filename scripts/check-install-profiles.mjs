@@ -26,6 +26,7 @@ const {companyProfile,levelConfig,alwaysOff,riskyToolsets,toolPolicy}=await impo
 const {agentSoul}=await import(`${process.cwd()}/lib/company-profiles.mjs`);
 const {provideProfile}=await import(`${process.cwd()}/lib/hermes.mjs`);
 const {writeProof,writeName}=await import(`${process.cwd()}/lib/install-proof.mjs`);
+const {registerEngine}=await import(`${process.cwd()}/lib/engine-record.mjs`);
 
 const [step,marker]=process.argv.slice(2);
 // A message holding this makes the fake model ask the Engine to rewrite the shared Skill.
@@ -93,6 +94,8 @@ if(step==='prepare') {
   const {user}=await checked(service.auth.admin.createUser({...credentials,email_confirm:true}));
   await checked(service.from('people').insert({id:user.id,name}));
   const company=randomUUID();
+  // A Company is made only onto a waiting Engine record (#380); each check Company gets the install's Engine.
+  await registerEngine(service,{address:'http://hermes:8642',key});
   await checked(service.from('companies').insert({id:company,slug:`profiles-${company.slice(0,8)}`,name}));
   await checked(service.from('members').insert({company_id:company,person_id:user.id,role:'owner'}));
   companies.push({company,person:user.id,credentials});
