@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { load } from 'js-yaml';
 import { generateInstallEnv, generateEngineKey, validateInstallEnv, missingInstallEnv } from '../lib/install-env.mjs';
 import { hermesVersion, isHermesAddressAllowed } from '../lib/hermes.mjs';
-import { bundledHermes, hermesAt, onProfile } from '../lib/bundled-hermes.mjs';
+import { hermesAt, onProfile, selfHosted } from '../lib/bundled-hermes.mjs';
 
 // Each Company's Engine is made from the template shipped with the release (ADR 0018): one release of the official Hermes
 // image, pinned by tag and digest, on its own network with its own volume and key. scripts/install.sh makes the first
@@ -216,8 +216,8 @@ test('an install updated by the installer before ADR 0010 keeps running without 
  assert.match(run,/install-env\.mjs validate\n/);
  assert.match(run,/up -d --no-deps --wait --wait-timeout 300 web worker\n/);
  assert.doesNotMatch(run,/hermes web worker/);
- // The worker that update started finds no Engine record or install-wide address, so it never waits on one.
- assert.equal(bundledHermes({...older,GTMWORKS_SELF_HOSTED:'true',BUNDLED_HERMES_URL:'http://gtmworks-engine-first:8642'}),null);
+ // The worker that update started keeps no profiles until each Company's own Engine record answers one (#380).
+ assert.equal(selfHosted({...older,GTMWORKS_SELF_HOSTED:'true'}),true);
  // A backup taken before the next update starts the whole stack again; the install has no Engine key, and the file
  // keeps none.
  const backup=install.run('backup');
@@ -245,12 +245,13 @@ test('update recreates the auth service with its password settings and waits unt
  assert.deepEqual([compose.services.auth.environment.GOTRUE_PASSWORD_MIN_LENGTH,compose.services.auth.environment.GOTRUE_MAILER_OTP_EXP,compose.services.auth.environment.GOTRUE_SESSIONS_TIMEBOX],['10','86400','720h']);
 });
 
-test('the Engine address and key are used only on a self-hosted install, and a module with no database still answers from them', () => {
+test('only a self-hosted install keeps Company and Agent profiles, and no install-wide Engine names one', () => {
  const env={GTMWORKS_SELF_HOSTED:'true',BUNDLED_HERMES_URL:'http://gtmworks-engine-first:8642',HERMES_API_KEY:'k'.repeat(64)};
- assert.deepEqual(bundledHermes(env),{address:'http://gtmworks-engine-first:8642',profile:'default',key:'k'.repeat(64)});
- assert.equal(bundledHermes({...env,GTMWORKS_SELF_HOSTED:undefined}),null);
- assert.equal(bundledHermes({...env,BUNDLED_HERMES_URL:''}),null);
- assert.equal(bundledHermes({...env,HERMES_API_KEY:''}),null);
+ assert.equal(selfHosted(env),true);
+ assert.equal(selfHosted({...env,GTMWORKS_SELF_HOSTED:undefined}),false);
+ assert.equal(selfHosted({...env,GTMWORKS_SELF_HOSTED:''}),false);
+ // The install-wide address and key are an Engine's own for a module with no database, never a Company's Engine.
+ assert.deepEqual(hermesAt(env),{address:'http://gtmworks-engine-first:8642',key:'k'.repeat(64)});
 });
 
 test('the Engine gives a company one main agent named Lead, never the Engine name', () => {

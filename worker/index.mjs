@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { closeOpenRuns, startQueuedTurns } from '../lib/conversation-runs.mjs';
 import { driveChannelRuns, driveNoteRuns } from '../lib/channel-runs.mjs';
 import { driveHandovers } from '../lib/handovers.mjs';
-import { bundledHermes } from '../lib/bundled-hermes.mjs';
+import { selfHosted } from '../lib/bundled-hermes.mjs';
 import { engineFor } from '../lib/engine.mjs';
 import { keepCompanyProfiles, keepAgentProfiles, moveAgentProfiles, checkAgentTools, abandonConversationReservations } from '../lib/company-profiles.mjs';
 import { keepSharedSkills } from '../lib/shared-skills.mjs';
@@ -25,7 +25,7 @@ const loop=async(name,work,every=1000)=>{ while(!stopping) { try { await work();
 // still on its company's profile to its own once that profile reads the folder (#121); a hosted one has none. Every
 // Company and Agent profile is read, so one the Engine lost is made again. Each call asks the one module for the Engine
 // of the Company it serves (lib/bundled-hermes.mjs), and Runs go to that Engine on each Agent's profile (#342, ADR 0018).
-const selfHostedEngine=bundledHermes();
+const selfHostedEngine=selfHosted();
 const waiting=new Map(); const moving=new Map();
 await Promise.all([loop('Conversation runs',()=>closeOpenRuns(db,{})),loop('Queued turns',()=>startQueuedTurns(db,{})),
  loop('Channel runs',()=>driveChannelRuns(db,{})),
