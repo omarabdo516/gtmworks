@@ -18,13 +18,21 @@ test('CI prints the captured update log on every failed-update assertion', t => 
  const step=install.steps.find(step=>step.env?.INSTALL_REF);
  assert.equal(install.permissions.contents,'read');
  assert.equal(step.env.GH_TOKEN,'${{ github.token }}');
- const script=`${step.run.split('\n')[0]}
+ // The proof's fail() and fail_update() are its lib's; the fixture stands the installer and psql in, and runs the
+ // failed-update block itself.
+ const lines=step.run.split('\n');
+ const definitions=lines.filter(line=>/^fail\(\) \{|^fail_update\(\) \{/.test(line));
+ const start=lines.findIndex(line=>line.startsWith('if sh scripts/install.sh update'));
+ const end=lines.findIndex(line=>line.startsWith('trap - EXIT'));
+ assert.ok(start>=0&&start<end,'the proof has the failed-update block');
+ const script=`${definitions.join('\n')}
+fail_prefix='install check failed: '
 sh() { cat "$UPDATE_FIXTURE"; return "$UPDATE_STATUS"; }
 compose() { echo "$WEB_CONTAINER"; }
 db() { echo "$ROLLED_BACK"; }
 docker() { printf '%s' "$HEALTH_STATUS"; return "$HEALTH_EXIT"; }
 old_web=original
-${step.run.slice(step.run.indexOf('fail_update()'))}`;
+${lines.slice(start,end).join('\n')}`;
  const fixture=join(directory,'update.fixture');
  const env={...process.env,UPDATE_FIXTURE:fixture,UPDATE_STATUS:'3',WEB_CONTAINER:'original',ROLLED_BACK:'t',HEALTH_STATUS:'200',HEALTH_EXIT:'0'};
  for(const [failure,reason] of [
@@ -271,7 +279,7 @@ test('a restore --version asks the target release the same archive check a resto
 });
 
 test('the install job updates a real previous-release install with one Company, and refuses one with two', () => {
- const step=installJob().steps.find(step=>/release install and update/.test(step.name||''));
+ const step=installJob().steps.find(step=>step.env?.INSTALL_REF);
  const run=step.run;
  const lines=run.split('\n');
  const at=text=>lines.findIndex(line=>line.includes(text));
@@ -296,7 +304,7 @@ test('the install job updates a real previous-release install with one Company, 
  assert.ok(memory<update&&signIn<update,'both are written before the update');
  // After it: the adopted Engine (its key, its volume, its own network and container), the memory and the sign-in.
  const adopted=[
-  "[[ $(engine_key) == \"$key\" ]] || fail 'the update adopted the Engine key'",
+  "[[ $(first_engine_key) == \"$key\" ]] || fail 'the update adopted the Engine key'",
   "if grep -q '^HERMES_API_KEY=' .env.install; then fail 'the update left no Engine key in .env.install'; fi",
   "== gtmworks-install_hermes ]] || fail 'the Engine keeps the volume the previous release used'",
   "== gtmworks-engine-first ]] || fail \"the Engine joins its own network only\"",
@@ -421,7 +429,7 @@ test('the install job backs up and restores every Company Engine, refuses an inc
 
 // #386: a release that pins another Engine image recreates every Company's Engine, and a Run on each answers.
 test('the install job updates two Companies to a release pinning another Engine image and proves a Run on each', () => {
- const run=installJob().steps.find(step=>/release install and update/.test(step.name||'')).run;
+ const run=installJob().steps.find(step=>step.env?.INSTALL_REF).run;
  const lines=run.split('\n');
  const add=lines.findIndex(line=>line.includes("sh install.sh company add --name 'Second Company' --owner proxy-owner@example.com || fail 'company add before the update'"));
  const update=lines.findIndex(line=>line.includes("sh install.sh update || fail 'update every Company Engine'"));
@@ -481,7 +489,7 @@ test('the install job writes an Agent rule and the Company knowledge before the 
  const lines=run.split('\n');
  const at=pattern=>lines.findIndex(line=>pattern.test(line));
  const seed=at(/^lifecycle seed/),backup=at(/^sh scripts\/install\.sh backup \|\| fail 'backup'$/);
- const restore=at(/sh scripts\/install\.sh restore "\$backup" \|\|/),verify=at(/^lifecycle verify/);
+ const restore=at(/sh scripts\/install\.sh restore "\$first_archive" \|\|/),verify=at(/^lifecycle verify/);
  for(const [index,name] of [[seed,'seed'],[backup,'backup'],[restore,'restore'],[verify,'verify']]) assert.ok(index>=0,`the job runs ${name}`);
  assert.ok(seed<backup&&backup<restore&&restore<verify,lines.join('\n'));
  const script=readFileSync('scripts/check-install.mjs','utf8');

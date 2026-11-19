@@ -144,7 +144,7 @@ test('the install job runs first run and sign-in through an HTTPS proxy whose or
  assert.match(run,/-e NODE_EXTRA_CA_CERTS=\/ca\.crt -e APP_ORIGIN="\$public" -e MAIL_URL=http:\/\/127\.0\.0\.1:8025/);
  assert.ok(at('node --input-type=module - < scripts/check-install-proxy.mjs') < at('old_web=$(compose ps -q web)'),'before the update check, which the update-log test runs alone');
  // The local install on http://localhost:3000 is checked first, as before.
- assert.ok(at("sh scripts/install.sh || fail 'first install'") < at('compose down -v'));
+ assert.ok(at("sh scripts/install.sh || fail 'first install'") < at("remove_install || fail 'remove restored install'"));
  // The same links check runs on that local install first, while first run is still open, straight to the gateway.
  const checks=[...run.matchAll(/docker run [^\n]*(?:\\\n[^\n]*)*node --input-type=module - < scripts\/check-install-proxy\.mjs/g)];
  assert.equal(checks.length,2,'the links check runs on the local and on the proxied install');

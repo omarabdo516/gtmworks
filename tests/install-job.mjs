@@ -1,18 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { load } from 'js-yaml';
 
-// The CI `install` job with each step's script read in: a step that runs a part of scripts/ci-install-check.sh gets that
-// part's text as its `run`, so tests read the job as CI runs it, wherever its script lives.
+// The CI `install` job with its proof step's script read in: the step that runs scripts/ci-install-check.sh gets what it
+// runs — the check with scripts/ci-install-lib.sh read in where it is sourced (#402) — so tests read the job as CI runs
+// it, wherever the proof lives.
 export function installJob() {
  const job=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install;
+ const lib=readFileSync('scripts/ci-install-lib.sh','utf8');
  const script=readFileSync('scripts/ci-install-check.sh','utf8');
- const part=name=>{
-  const lines=script.split('\n'); const start=lines.indexOf(`${name})`);
-  if(start<0) throw new Error(`no part ${name} in scripts/ci-install-check.sh`);
-  return lines.slice(start+1,lines.indexOf(';;',start)).join('\n');
- };
- return {...job,steps:job.steps.map(step=>{
-  const named=/^bash scripts\/ci-install-check\.sh ([a-z-]+)$/.exec(step.run||'');
-  return named?{...step,run:part(named[1])}:step;
- })};
+ const run=script.replace(/^\. "\$\(dirname "\$0"\)\/ci-install-lib\.sh"\n/m,()=>lib);
+ return {...job,steps:job.steps.map(step=>step.run==='bash scripts/ci-install-check.sh'?{...step,run}:step)};
 }

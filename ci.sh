@@ -186,10 +186,12 @@ case "${1:-check}" in
   lane_test --update-snapshots=changed
   ;;
  install)
-  # The CI `install` job (scripts/ci-install-check.sh, #378) on an isolated Docker machine of its own, in a throwaway
-  # checkout of HEAD: the job writes into the checkout it runs in, as it does on a CI runner. Commit first: uncommitted
+  # The whole install proof (scripts/ci-install-check.sh, #402) on an isolated Docker machine of its own, in a throwaway
+  # checkout of HEAD: the proof writes into the checkout it runs in, as it does on a CI runner. Commit first: uncommitted
   # changes are not run. The work folder sits under the git directory: the Docker machine hides /tmp, so a checkout there
   # reaches its containers empty.
+  # The proof is Docker only, so without a daemon say what is missing in one line, before a machine is started.
+  docker info > /dev/null 2>&1 || { echo 'the install proof needs Docker: docker info cannot reach a daemon' >&2; exit 1; }
   work=$(mktemp -d "$(git rev-parse --absolute-git-dir)/install-lane.XXXXXX"); dind=gtmworks-install-lane; port=${INSTALL_DOCKER_PORT:-2375}; here=$PWD
   git worktree add -q --detach "$work/src" HEAD
   trap 'docker rm -fv "$dind" > /dev/null 2>&1 || true; git -C "$here" worktree remove --force "$work/src" > /dev/null 2>&1 || true; rm -rf "$work" 2> /dev/null || true' EXIT
@@ -214,7 +216,7 @@ case "${1:-check}" in
   # Under rootless Docker this machine's root is the invoking user and its `--user $(id -u)` is another one, unlike a CI
   # runner or a server: files the job makes are left writable to every user, so a container run as the user can write them.
   umask 0000
-  for part in install release one-line; do bash scripts/ci-install-check.sh "$part"; done
+  bash scripts/ci-install-check.sh
   ;;
  *) echo 'usage: ./ci.sh check | fast | static | components | database | images | integration | visual | visual-update | install' >&2; exit 2;;
 esac

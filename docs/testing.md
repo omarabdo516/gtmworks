@@ -108,10 +108,14 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   compares it with its design in `design/` in T3's preview, motions included, at the widths and in the languages the
   design shows, and attaches the evidence (side-by-side images, and a recording for each motion) to the pull request
   that delivers it. No CI job compares a screen with `design/`, and no animation frame is sampled in CI.
-- `install` is the Docker install, update, backup, restore, release and one-line install. It runs when the image, its
-  build inputs, the install and release files, the migrations it applies or its own checks change, and when `lib/`
-  outside the catalogues, `worker/`, `next.config.mjs` or `server.js` change: only the install drives that code against
-  the real bundled Hermes. Its profile proof (#126) runs on the pinned Engine: two Companies with a main and a second
+- `install` is the Docker install, update, backup, restore, release and one-line install. The job runs the whole proof
+  as one command of the repo — `./ci.sh install` on a machine with Docker (`docs/agents/checks.md`) — and the proof is
+  seven areas one after another, each on the state the one before it left: the first install and its repeat, Companies
+  and their Engines, Agents on their Engines, backup and restore, the public address behind a proxy, the update between
+  releases, and the one-line install (#402). It runs when the image, its build inputs, the install and release files, the
+  migrations it applies or its own checks change, and when `lib/` outside the catalogues, `worker/`, `next.config.mjs` or
+  `server.js` change: only the install drives that code against the real bundled Hermes. Its profile proof (#126) runs on
+  the pinned Engine: two Companies with a main and a second
   Agent each, every Agent on its own profile and every Company on its one shared space, the tools off and a Run on a
   shared space refused, memory and a shared Skill reaching only the first Company's Agents, a key set for one Company
   only, and the database refusing a row of one Company that names the other's profile. It then makes twenty more Agent

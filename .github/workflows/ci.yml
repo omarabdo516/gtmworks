@@ -525,19 +525,19 @@ jobs:
     needs: [changes]
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.install != 'false') }}
     runs-on: ubuntu-latest
-    # The release install and update below add a fresh stack, a real install of origin/main's code and an update of it to
-    # this release, and the one-line install adds another, an update, a failed update and a return to an older release
-    # from a backup.
+    # The proof's own areas add a fresh stack, a real install of origin/main's code and its update to this release, and
+    # the one-line install adds another, an update, a failed update and a return to an older release from a backup, all
+    # on one isolated Docker machine (#402).
     timeout-minutes: 90
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
-        # The release step builds and installs the previous release from this pull request's base (#378, S2).
+        # The update area builds and installs the previous release from this pull request's base (#378, S2).
         with:
           fetch-depth: 0
-      # One isolated Docker machine for both install steps below: the release step reuses the source install's image.
-      # The last step removes it, also after a failure.
+      # One isolated Docker machine for the whole proof: the areas of scripts/ci-install-check.sh run one after another on
+      # it, and the last step removes it, also after a failure.
       - name: start the isolated Docker machine
         run: |
           docker run -d --privileged --name install-docker \
@@ -553,30 +553,17 @@ jobs:
           cache: npm
       - name: test packages for the install browser check
         run: npm ci --ignore-scripts
-      - name: isolated Docker-only install, repeat and verify
+      # The whole proof is one command of the repo (#402): the first install and its repeat, Companies and their Engines,
+      # Agents on their Engines, backup and restore, the public address behind a proxy, the update between releases, and
+      # the one-line install (#49, #51, #52, #378). The job holds no check of its own, so the same command proves the
+      # install here and on a machine with Docker. Its failure sentences are the job's.
+      - name: the install proof
         env:
           DOCKER_HOST: tcp://127.0.0.1:2375
           INSTALL_REF: ${{ github.event.pull_request.head.sha || github.sha }}
-          GH_TOKEN: ${{ github.token }}
-        run: bash scripts/ci-install-check.sh install
-      # A release install of the release before this one, from origin/main's own code, then its update to this release on
-      # a real database (#49, #378 S1, S2). A previous-release install has no Engine record and its one Company names no
-      # Engine; the update must adopt the Engine it already runs, keeping the Agent's memory and the Company's sign-in,
-      # and an install with two Companies on main's schema must be refused before it changes anything. The images come by
-      # digest from a local registry; the next release adds a migration, which psql must read through the running
-      # database's /migrations bind mount after the update replaced the install files in place.
-      - name: release install and update from the two release files
-        env:
-          DOCKER_HOST: tcp://127.0.0.1:2375
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: bash scripts/ci-install-check.sh release
-
-      # releases.json lists the tags and <tag>/ holds each release's two files. GTMWORKS_RELEASES and GTMWORKS_GET are
-      # read only by tests (scripts/get.sh). HOME is inside the checkout, the one folder the Docker machine mounts.
-      - name: one-line install, gtmworks status and gtmworks update between test releases
-        env:
-          DOCKER_HOST: tcp://127.0.0.1:2375
-        run: bash scripts/ci-install-check.sh one-line
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/ci-install-check.sh
       - name: remove the isolated Docker machine
         if: ${{ always() }}
         run: docker rm -fv install-docker || true

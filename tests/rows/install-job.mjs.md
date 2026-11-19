@@ -1,1 +1,1 @@
-| `install-job.mjs` | helper: the CI install job with each step's part of `scripts/ci-install-check.sh` read in as its `run` | — | — | helper, kept |
+| `install-job.mjs` | helper: the CI install job with its one proof step read in as its `run` — `scripts/ci-install-check.sh` with `scripts/ci-install-lib.sh` read in where it is sourced (#402) | — | — | helper, kept |

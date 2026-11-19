@@ -333,10 +333,10 @@ test('a release update replaces the mounted install files in place, so the runni
 
 test('CI updates a release install on a real database, applying a new migration through the running bind mount', () => {
  const install=installJob();
- const source=install.steps.findIndex(step=>step.env?.INSTALL_REF);
- const index=install.steps.findIndex(step=>/release install and update/.test(step.name||''));
- assert.ok(source>=0&&index>source,'runs after the source install checks, which it leaves unchanged');
- const step=install.steps[index];
+ const step=install.steps.find(step=>step.env?.INSTALL_REF);
+ assert.ok(step,'the job runs the install proof');
+ // The proof keeps the source install's checks before the release install's, which it leaves unchanged (#402).
+ assert.ok(step.run.indexOf("fail 'first install'")<step.run.indexOf("fail 'the previous release install'"));
  assert.equal(step.env.DOCKER_HOST,'tcp://127.0.0.1:2375');
  const run=step.run;
  for(const pattern of [
@@ -363,18 +363,18 @@ test('CI updates a release install on a real database, applying a new migration 
  assert.ok(run.indexOf("update || fail 'release update'")>run.indexOf("|| fail 'the previous release install'"));
 });
 
-test('the install job keeps one Docker daemon for both install steps and removes it only after the last', () => {
- // The release step reuses the source install's daemon and its built image; an EXIT trap in a step fires when that
+test('the install job runs the whole proof on one Docker daemon and removes it only after the last step', () => {
+ // The proof's areas share the source install's daemon and its built image (#402); an EXIT trap in a step fires when that
  // step ends, so a step that removes the daemon must be the job's last and run even after a failure.
  const steps=installJob().steps;
  const at=test=>steps.findIndex(test);
  const start=at(step=>/run -d --privileged --name install-docker/.test(step.run||''));
- const source=at(step=>step.env?.INSTALL_REF);
- const release=at(step=>/release install and update/.test(step.name||''));
+ const proof=at(step=>step.env?.INSTALL_REF);
  const removes=steps.flatMap((step,index)=>/rm -fv install-docker/.test(step.run||'')?[index]:[]);
- assert.ok(start>=0&&start<source&&source<release,'the daemon starts in its own step before the source install');
+ assert.ok(start>=0&&start<proof,'the daemon starts in its own step before the proof');
  assert.equal(steps[start].env?.DOCKER_HOST,undefined,'the start step talks to the runner Docker');
  assert.match(steps[start].run,/docker --host tcp:\/\/127\.0\.0\.1:2375 info/,'the start step waits for the daemon');
+ assert.equal(steps[proof].env?.DOCKER_HOST,'tcp://127.0.0.1:2375','the proof runs on that daemon');
  assert.deepEqual(removes,[steps.length-1],'only the last step removes the daemon');
  assert.equal(steps.at(-1).if,'${{ always() }}');
  for(const step of steps.slice(0,-1)) assert.doesNotMatch(step.run||'',/trap .*install-docker/,step.name);
