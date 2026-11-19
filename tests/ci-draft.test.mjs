@@ -8,7 +8,7 @@ import { load } from 'js-yaml';
 // Which CI jobs an event starts (#405, replacing the draft rule of #333): a draft pull request runs the suites its files
 // need, exactly as a ready one does, and marking it ready starts nothing by itself; a push to main runs every suite
 // unless the change is documents only. The real workflow's job conditions are evaluated against the real area script's
-// answer. The app image is built by one job and loaded by the browser suite (#403) and by the four install jobs (#406),
+// answer. The app image is built by one job and loaded by the browser suite (#403) and by the install proof (#406),
 // which the guard tests below read from the same file.
 const ci = load(readFileSync(resolve('.github/workflows/ci.yml'), 'utf8'));
 const areas = (files, main) => Object.fromEntries(
@@ -57,8 +57,8 @@ const configFor = value => JSON.parse(spawnSync(process.execPath, [
 
 const heavyFiles = ['supabase/migrations/0001_example.sql', 'app/api/health/route.ts', 'scripts/install.sh'];
 const heavy = ['database', 'integration', 'install'];
-// The install proof is four jobs, each named for its area (#406).
-const installJobs = ['install-first', 'install-proxy', 'install-update', 'install-one-line'];
+// The install proof is one job, one matrix entry per area (#406), named `install-<area>`.
+const installJobs = ['install'];
 const screenFiles = ['app/c/[slug]/[[...section]]/home.tsx'];
 const documentFiles = ['docs/testing.md', 'README.md'];
 
@@ -74,7 +74,7 @@ test('the change touches database, app and install files', () => {
 
 test('a draft that changes database, app and install files starts the image, database, integration and install jobs', () => {
   assert.deepEqual(started({ event: 'pull_request', draft: true, files: heavyFiles }),
-    ['changes', 'check', 'database', 'fast', 'image', 'install-first', 'install-one-line', 'install-proxy', 'install-update', 'integration', 'supabase-images']);
+    ['changes', 'check', 'database', 'fast', 'image', 'install', 'integration', 'supabase-images']);
 });
 
 test('a draft that changes only screens starts only changes, fast and check', () => {
@@ -150,11 +150,12 @@ test('the image job runs when the browser suite or the install proof is asked fo
   assert.equal(started({ event: 'push', files: documentFiles }).includes('image'), false);
 });
 
-test('a pull request that changes install files starts all four install areas, each on its own', () => {
+test('a pull request that changes install files starts the install proof as one job of four areas, each on its own', () => {
   const run = started({ event: 'pull_request', draft: false, files: ['scripts/install.sh'] });
   for (const job of installJobs) assert.ok(run.includes(job), job);
-  // One job per area, not one matrix: each job's name is the area that failed.
-  for (const job of installJobs) assert.equal(ci.jobs[job].strategy, undefined, `${job} is one job`);
+  // One matrix job: each entry's name is the area that failed, and one area's fault leaves the rest running.
+  assert.deepEqual(ci.jobs.install.strategy, { 'fail-fast': false, matrix: { area: ['first-install', 'proxy', 'update', 'one-line'] } });
+  assert.equal(ci.jobs.install.name, 'install-${{ matrix.area }}');
 });
 
 // The fast job already linted and type-checked, so the image build does neither; a release or local build keeps both.

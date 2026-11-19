@@ -66,8 +66,8 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   with its layers kept between runs (`cache-from: type=gha`, `cache-to: type=gha,mode=max`), so a change that leaves the
   dependencies alone restores them. It passes `NEXT_SKIP_CHECKS=true`, so `next build` repeats no lint and no type check
   `fast` already ran (`next.config.mjs`); a release image and a local build keep both. It uploads the image as the
-  `gtmworks-image` artifact, kept for a day and stored uncompressed. `integration` and the four install jobs wait for it
-  and load that image from the artifact: no shard and no install job builds an image of its own, and `check` is red when
+  `gtmworks-image` artifact, kept for a day and stored uncompressed. `integration` and the install job wait for it
+  and load that image from the artifact: no shard and no install step builds an image of its own, and `check` is red when
   the build failed or was cancelled.
 - `integration` is the whole-app browser suite: the production-shaped proxy suite, then the functional journeys and
   first run, on the image the `image` job built, loaded from its artifact (a shard builds nothing, #403). Its dependencies and its browser come from the caches the `fast` job keeps, restored by the same keys (the
@@ -109,20 +109,22 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   compares it with its design in `design/` in T3's preview, motions included, at the widths and in the languages the
   design shows, and attaches the evidence (side-by-side images, and a recording for each motion) to the pull request
   that delivers it. No CI job compares a screen with `design/`, and no animation frame is sampled in CI.
-- `install` is the Docker install, update, backup, restore, release and one-line install. The proof is four jobs side
-  by side, one per area of the repo's proof, each on a fresh isolated Docker machine of its own (#406): `install-first`
-  (the first install and its repeat, Companies and their Engines, Agents on their Engines, backup and restore),
-  `install-proxy`, `install-update` and `install-one-line`. Each job is one command of the repo — `bash
-  scripts/ci-install-check.sh first-install|proxy|update|one-line`; `./ci.sh install` runs the whole proof here and
-  `./ci.sh install proxy` one area (`docs/agents/checks.md`) — and holds no check of its own, so a red job's name is the
-  area that failed and one red area leaves the others running to their end. The three areas that already started from a
-  fresh install are independent: each makes the install, its local registry and its release files itself, so no area
-  needs another to have run. Every install job loads the one image the `image` job built, tagged as the source install's
+- `install` is the Docker install, update, backup, restore, release and one-line install. The proof is one job of one
+  matrix entry per area of the repo's proof, each on a fresh isolated Docker machine of its own and named for its area
+  (#406): `install-first-install` (the first install and its repeat, Companies and their Engines, Agents on their
+  Engines, backup and restore), `install-proxy`, `install-update` and `install-one-line`. Each entry is one command of the
+  repo — `bash scripts/ci-install-check.sh first-install|proxy|update|one-line`; `./ci.sh install` runs the whole proof
+  here and `./ci.sh install proxy` one area (`docs/agents/checks.md`) — and holds no check of its own, so a red entry's
+  name is the area that failed and fail-fast is off: one red area leaves the others running to their end. A later area
+  of spec #401 is one more matrix entry and one more case of the script (#407–#409). The three areas that already started
+  from a fresh install are independent: each makes the install, its local registry and its release files itself, so no
+  area needs another to have run. Every entry loads the one image the `image` job built, tagged as the source install's
   own (`gtmworks-local:237`), and the installer skips its build for it (`GTMWORKS_IMAGE_PREBUILT`, tests only); the
-  update area still builds the previous release from the pull request's base, which is a different image (#378). A job on
-  a GitHub-hosted runner does not wait for its Docker machine's removal. It runs when the image, its build inputs, the
-  install and release files, the migrations it applies or its own checks change, and when `lib/` outside the catalogues,
-  `worker/`, `next.config.mjs` or `server.js` change: only the install drives that code against the real bundled Hermes.
+  update area still builds the previous release from the pull request's base, which is a different image (#378), so only
+  it checks the history out in full. A job on a GitHub-hosted runner does not wait for its Docker machine's removal. It
+  runs when the image, its build inputs, the install and release files, the migrations it applies or its own checks
+  change, and when `lib/` outside the catalogues, `worker/`, `next.config.mjs` or `server.js` change: only the install
+  drives that code against the real bundled Hermes.
   Its profile proof (#126) runs on the pinned Engine: two Companies with a main and a second
   Agent each, every Agent on its own profile and every Company on its one shared space, the tools off and a Run on a
   shared space refused, memory and a shared Skill reaching only the first Company's Agents, a key set for one Company
@@ -134,8 +136,8 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   run only with `-f e2e=true` and `-f install=true`, both off by default (like Hermes `e2e` and `e2e_upgrade`).
 - `check` is the one required check (like Hermes `all-checks-pass`): a suite `changes` did not ask for passes only when
   it was skipped; one it asked for must succeed; a failed or cancelled stage is red; it lists each step of the fast job
-  and every step must succeed (`scripts/ci-verdict.mjs`). The install proof is four stages, one per area (#406), so a
-  failed or cancelled area keeps `check` red and a skipped one passes only when the install proof was not asked for.
+  and every step must succeed (`scripts/ci-verdict.mjs`). The install proof is one stage (#406): its matrix is red when
+  any area failed or was cancelled, and it passes skipped only when the install proof was not asked for.
 - Every test runs offline (#266). `tests/offline.mjs` holds one table of what is local: `localhost`, the special-use
   names `.localhost`, `.test`, `.example` and `.invalid` (RFC 6761, never delegated), loopback and unspecified
   addresses, and Unix sockets; everything else is outside, `example.com` and private LAN addresses included. `npm test`

@@ -4,8 +4,8 @@
 # suite (`integration`) and the Docker install run on a pull request only when their own files change, and a draft runs
 # what a ready pull request runs (Omar, 2026-11-19, #405): the suites start on a draft as on a ready one, and marking a
 # draft ready starts nothing by itself. The app image is built once per run by its own job, and the browser suite and the
-# install proof load that build instead of building their own (#403, #406). The install proof is four jobs side by side,
-# one per area, each on a fresh isolated Docker machine of its own (#406). The visual lane's key screens and the measured
+# install proof load that build instead of building their own (#403, #406). The install proof is one job, one matrix
+# entry per area, each on a fresh isolated Docker machine of its own (#406). The visual lane's key screens and the measured
 # navigation budgets (`visual`) run on a push to main and on a manual run only, never on a pull request, and `check` does
 # not wait for them
 # (Omar, 2026-11-17, #257): a failure on main opens or updates one issue labelled visual-regression. A push to main runs
@@ -360,8 +360,8 @@ jobs:
             gh issue create -R "$GITHUB_REPOSITORY" --label visual-regression --title "$title" --body "$body"
           fi
 
-  # The app image, built once per run with its own layer cache (#403). The browser suite's shards and the four install
-  # jobs load this archive instead of each building the image again, so one run pays for one build; a change that leaves
+  # The app image, built once per run with its own layer cache (#403). The browser suite's shards and the install job
+  # load this archive instead of each building the image again, so one run pays for one build; a change that leaves
   # the dependencies alone restores them from the cache. Next's build repeats no lint and no type check the fast job
   # already ran (NEXT_SKIP_CHECKS, next.config.mjs). It follows the answers of the suites that load it — the browser suite
   # and the install proof — so no job ever waits for an image it did not ask for (#406).
@@ -523,26 +523,35 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-  # The install proof is four jobs, side by side, each one area of the repo's proof and each on a fresh isolated Docker
-  # machine of its own (#406): the first install and its repeat with Companies, Agents, backup and restore; the public
-  # address behind a proxy; the update between releases; and the one-line install. A fault in one area cannot hide or
-  # cause another's, one red job leaves the others running to their end, and the job's name is the area that failed.
-  # Every job loads the one app image the `image` job built (#403), under the tag a source install's compose file names,
-  # and the installer skips its build because the image is already there (GTMWORKS_IMAGE_PREBUILT, tests only). Each
-  # job holds no check of its own: its whole area is one command of the repo, so the same command proves it on a
-  # machine with Docker. Its failure sentences are the job's. The areas become their own jobs through #407–#409;
-  # `install-first` keeps the first four together until then.
-  install-first:
+  # The install proof is one job, one matrix entry per area, each on a fresh isolated Docker machine of its own (#406):
+  # the first install and its repeat with Companies, Agents, backup and restore; the public address behind a proxy; the
+  # update between releases; and the one-line install. A fault in one area cannot hide or cause another's: fail-fast is
+  # off, so one red area leaves the others running to their end, and the job's name is the area that failed. A later area
+  # adds its name to `matrix.area` and a case to scripts/ci-install-check.sh, nothing else (#407–#409).
+  # Every entry loads the one app image the `image` job built (#403), under the tag a source install's compose file names,
+  # and the installer skips its build because the image is already there (GTMWORKS_IMAGE_PREBUILT, tests only). The job
+  # holds no check of its own: its whole area is one command of the repo, so the same command proves it on a machine with
+  # Docker. Its failure sentences are the area's, in scripts/ci-install-check.sh.
+  install:
+    name: install-${{ matrix.area }}
     needs: [changes, image]
     if: ${{ !cancelled() && needs.image.result == 'success' && (needs.changes.result != 'success' || needs.changes.outputs.install != 'false') }}
     runs-on: ubuntu-latest
+    strategy:
+      # Every area runs to its end, so one red area still shows the others' faults (#406).
+      fail-fast: false
+      matrix:
+        area: [first-install, proxy, update, one-line]
     # The proof's own areas add a fresh stack and a real install of this release (#402).
     timeout-minutes: 90
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
-      # One isolated Docker machine for this area alone: the areas of scripts/ci-install-check.sh run one after another on
+        with:
+          # Only the update area builds and installs the previous release from this pull request's base (#378, S2).
+          fetch-depth: ${{ matrix.area == 'update' && '0' || '1' }}
+      # One isolated Docker machine for this area alone: the area of scripts/ci-install-check.sh the matrix names runs on
       # it, and the last step removes it, also after a failure, on a runner that is reused.
       - name: start the isolated Docker machine
         run: |
@@ -551,9 +560,15 @@ jobs:
             -v "$PWD:$PWD" docker:28.5.1-dind
           for attempt in $(seq 1 60); do docker --host tcp://127.0.0.1:2375 info >/dev/null 2>&1 && break; sleep 1; done
           docker --host tcp://127.0.0.1:2375 info >/dev/null || { echo 'install check failed: DinD readiness' >&2; exit 1; }
+      # Only the browser check of the sign-in rate limit, in the proxy area, uses these, inside the Playwright image; the
+      # install itself is Docker only. No install scripts: the image already has the browsers.
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+      - name: test packages for the install browser check
+        if: ${{ matrix.area == 'proxy' }}
+        run: npm ci --ignore-scripts
       # The image the run built once (#403), loaded under the tag the source install's compose file names.
       - name: download the image
         uses: actions/download-artifact@v4
@@ -571,145 +586,13 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           GH_TOKEN: ${{ github.token }}
           GTMWORKS_IMAGE_PREBUILT: "true"
-        run: bash scripts/ci-install-check.sh first-install
-      - name: remove the isolated Docker machine
-        if: ${{ runner.environment != 'github-hosted' }}
-        run: docker rm -fv install-docker || true
-
-  install-proxy:
-    needs: [changes, image]
-    if: ${{ !cancelled() && needs.image.result == 'success' && (needs.changes.result != 'success' || needs.changes.outputs.install != 'false') }}
-    runs-on: ubuntu-latest
-    # The area adds a fresh install behind its own HTTPS proxy, and the sign-in page in a browser.
-    timeout-minutes: 90
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - name: start the isolated Docker machine
-        run: |
-          docker run -d --privileged --name install-docker \
-            -e DOCKER_TLS_CERTDIR= -p 127.0.0.1:2375:2375 \
-            -v "$PWD:$PWD" docker:28.5.1-dind
-          for attempt in $(seq 1 60); do docker --host tcp://127.0.0.1:2375 info >/dev/null 2>&1 && break; sleep 1; done
-          docker --host tcp://127.0.0.1:2375 info >/dev/null || { echo 'install check failed: DinD readiness' >&2; exit 1; }
-      # Only the browser check of the sign-in rate limit uses these, inside the Playwright image; the install itself is
-      # Docker only. No install scripts: the image already has the browsers.
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - name: test packages for the install browser check
-        run: npm ci --ignore-scripts
-      - name: download the image
-        uses: actions/download-artifact@v4
-        with:
-          name: gtmworks-image
-          path: ${{ runner.temp }}
-      - name: load the image
-        run: |
-          docker --host tcp://127.0.0.1:2375 load --input "$RUNNER_TEMP/gtmworks-image.tar"
-          docker --host tcp://127.0.0.1:2375 tag gtmworks:ci gtmworks-local:237
-      - name: the install proof
-        env:
-          DOCKER_HOST: tcp://127.0.0.1:2375
-          INSTALL_REF: ${{ github.event.pull_request.head.sha || github.sha }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          GH_TOKEN: ${{ github.token }}
-          GTMWORKS_IMAGE_PREBUILT: "true"
-        run: bash scripts/ci-install-check.sh proxy
-      - name: remove the isolated Docker machine
-        if: ${{ runner.environment != 'github-hosted' }}
-        run: docker rm -fv install-docker || true
-
-  install-update:
-    needs: [changes, image]
-    if: ${{ !cancelled() && needs.image.result == 'success' && (needs.changes.result != 'success' || needs.changes.outputs.install != 'false') }}
-    runs-on: ubuntu-latest
-    # The area builds the previous release from this pull request's base, installs it, then updates it twice and once
-    # more to a release that pins another Engine image.
-    timeout-minutes: 90
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        # The update area builds and installs the previous release from this pull request's base (#378, S2).
-        with:
-          fetch-depth: 0
-      - name: start the isolated Docker machine
-        run: |
-          docker run -d --privileged --name install-docker \
-            -e DOCKER_TLS_CERTDIR= -p 127.0.0.1:2375:2375 \
-            -v "$PWD:$PWD" docker:28.5.1-dind
-          for attempt in $(seq 1 60); do docker --host tcp://127.0.0.1:2375 info >/dev/null 2>&1 && break; sleep 1; done
-          docker --host tcp://127.0.0.1:2375 info >/dev/null || { echo 'install check failed: DinD readiness' >&2; exit 1; }
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: download the image
-        uses: actions/download-artifact@v4
-        with:
-          name: gtmworks-image
-          path: ${{ runner.temp }}
-      - name: load the image
-        run: |
-          docker --host tcp://127.0.0.1:2375 load --input "$RUNNER_TEMP/gtmworks-image.tar"
-          docker --host tcp://127.0.0.1:2375 tag gtmworks:ci gtmworks-local:237
-      - name: the install proof
-        env:
-          DOCKER_HOST: tcp://127.0.0.1:2375
-          INSTALL_REF: ${{ github.event.pull_request.head.sha || github.sha }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          GH_TOKEN: ${{ github.token }}
-          GTMWORKS_IMAGE_PREBUILT: "true"
-        run: bash scripts/ci-install-check.sh update
-      - name: remove the isolated Docker machine
-        if: ${{ runner.environment != 'github-hosted' }}
-        run: docker rm -fv install-docker || true
-
-  install-one-line:
-    needs: [changes, image]
-    if: ${{ !cancelled() && needs.image.result == 'success' && (needs.changes.result != 'success' || needs.changes.outputs.install != 'false') }}
-    runs-on: ubuntu-latest
-    # The area installs test releases from a registry of its own, updates, fails an update and goes back.
-    timeout-minutes: 90
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - name: start the isolated Docker machine
-        run: |
-          docker run -d --privileged --name install-docker \
-            -e DOCKER_TLS_CERTDIR= -p 127.0.0.1:2375:2375 \
-            -v "$PWD:$PWD" docker:28.5.1-dind
-          for attempt in $(seq 1 60); do docker --host tcp://127.0.0.1:2375 info >/dev/null 2>&1 && break; sleep 1; done
-          docker --host tcp://127.0.0.1:2375 info >/dev/null || { echo 'install check failed: DinD readiness' >&2; exit 1; }
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: download the image
-        uses: actions/download-artifact@v4
-        with:
-          name: gtmworks-image
-          path: ${{ runner.temp }}
-      - name: load the image
-        run: |
-          docker --host tcp://127.0.0.1:2375 load --input "$RUNNER_TEMP/gtmworks-image.tar"
-          docker --host tcp://127.0.0.1:2375 tag gtmworks:ci gtmworks-local:237
-      - name: the install proof
-        env:
-          DOCKER_HOST: tcp://127.0.0.1:2375
-          INSTALL_REF: ${{ github.event.pull_request.head.sha || github.sha }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          GH_TOKEN: ${{ github.token }}
-          GTMWORKS_IMAGE_PREBUILT: "true"
-        run: bash scripts/ci-install-check.sh one-line
+        run: bash scripts/ci-install-check.sh ${{ matrix.area }}
       - name: remove the isolated Docker machine
         if: ${{ runner.environment != 'github-hosted' }}
         run: docker rm -fv install-docker || true
 
   check:
-    needs: [changes, fast, image, database, integration, install-first, install-proxy, install-update, install-one-line]
+    needs: [changes, fast, image, database, integration, install]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     permissions:
@@ -728,12 +611,6 @@ jobs:
           DATABASE_RESULT: ${{ needs.database.result }}
           INTEGRATION_RUN: ${{ needs.changes.outputs.integration }}
           INTEGRATION_RESULT: ${{ needs.integration.result }}
-          INSTALL_FIRST_RUN: ${{ needs.changes.outputs.install }}
-          INSTALL_FIRST_RESULT: ${{ needs['install-first'].result }}
-          INSTALL_PROXY_RUN: ${{ needs.changes.outputs.install }}
-          INSTALL_PROXY_RESULT: ${{ needs['install-proxy'].result }}
-          INSTALL_UPDATE_RUN: ${{ needs.changes.outputs.install }}
-          INSTALL_UPDATE_RESULT: ${{ needs['install-update'].result }}
-          INSTALL_ONE_LINE_RUN: ${{ needs.changes.outputs.install }}
-          INSTALL_ONE_LINE_RESULT: ${{ needs['install-one-line'].result }}
+          INSTALL_RUN: ${{ needs.changes.outputs.install }}
+          INSTALL_RESULT: ${{ needs.install.result }}
         run: node scripts/ci-verdict.mjs
