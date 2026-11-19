@@ -207,7 +207,9 @@ case "${1:-check}" in
     grep -o -h -E '(alpine:[0-9.]+|node:[0-9a-z.-]+|curlimages/curl:[0-9.]+|registry:[0-9.]+|mcr\.microsoft\.com/playwright:[^ "]+)' scripts/ci-install-check.sh scripts/install.sh scripts/get.sh; } | sort -u)
   for image in $images; do DOCKER_HOST=$host_docker docker image inspect "$image" > /dev/null 2>&1 || DOCKER_HOST=$host_docker docker pull -q "$image" > /dev/null; done
   DOCKER_HOST=$host_docker docker save $images | docker load > /dev/null
-  ln -s "$here/node_modules" "$work/src/node_modules"
+  # The job's containers see only the checkout, so the test packages are a hard-linked copy in it, not a link out of it
+  # (CI installs them there with npm ci).
+  cp -al "$(readlink -f "$here/node_modules")" "$work/src/node_modules"
   cd "$work/src"
   # Under rootless Docker this machine's root is the invoking user and its `--user $(id -u)` is another one, unlike a CI
   # runner or a server: files the job makes are left writable to every user, so a container run as the user can write them.
