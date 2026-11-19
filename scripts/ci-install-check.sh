@@ -608,7 +608,16 @@ for path in /api/health /sign-in; do
   status=$(docker run --rm --network host curlimages/curl:8.12.1 -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:3000$path") || fail "$path request after the refusal"
   [[ $status == 200 ]] || fail "$path returned HTTP $status after the refused update (expected 200)"
 done
-db -c "delete from public.companies where id='00000000-0000-4000-8000-000000000239';" || fail 'remove the probe Company'
+# The probe Company goes with every row the previous release made for it (its board stages and the like), in one
+# transaction and with foreign keys held off, so no row is left naming a Company that is gone.
+db -c "begin; set local session_replication_role=replica;
+  do \$\$ declare t record; begin
+   for t in select c.table_name from information_schema.columns c join information_schema.tables b
+     on b.table_schema=c.table_schema and b.table_name=c.table_name and b.table_type='BASE TABLE'
+     where c.table_schema='public' and c.column_name='company_id' and c.table_name<>'companies' loop
+    execute format('delete from public.%I where company_id=%L',t.table_name,'00000000-0000-4000-8000-000000000239');
+   end loop; end \$\$;
+  delete from public.companies where id='00000000-0000-4000-8000-000000000239'; commit;" || fail 'remove the probe Company'
 [[ $(db -c 'select count(*) from public.companies') == 1 ]] || fail 'the previous release install has its one Company again'
 # The update to this release: it applies the migrations (including the Engine records), adopts the Engine the
 # previous release ran, and leaves the Company answering from its record.
