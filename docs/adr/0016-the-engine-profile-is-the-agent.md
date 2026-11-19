@@ -7,6 +7,8 @@ date: 2026-11-16
 
 Omar's decision of 2026-11-16, ticket #119: «هناخد من الجاهز في هيرمز علطول وطرقة اعداداته نحطه في طريقة اعداداتنا». We take what Hermes already has as it is, and its way of setting things up becomes ours. This supersedes [ADR 0014](0014-one-hermes-profile-per-company.md) where they conflict and returns to the rule of [ADR 0011](0011-agents-are-engine-profiles-made-on-the-management-listener.md) that one Agent is one Engine profile. Isolation between Companies stays as ADR 0014 built it. Everything in ADR 0008 to 0013 and ADR 0015 that this record does not name still holds.
 
+Partly superseded by [ADR 0018](0018-an-engine-and-a-work-sandbox-per-company.md): the Sign-in section below is replaced (a Company signs in once on its own Engine's root profile), and Agent levels are removed, so an Agent's toolsets are written from its settings.
+
 ## Context
 
 ADR 0014 put every Agent of a Company on the Company's one profile, so that the team would share memory, Skills and sign-in. Two costs followed. An Agent could not have its own model, soul, memory, Skills or Routines, because the Engine keeps all of them per profile. And gtmworks had to carry an Agent's own instructions itself and send them with every Run.

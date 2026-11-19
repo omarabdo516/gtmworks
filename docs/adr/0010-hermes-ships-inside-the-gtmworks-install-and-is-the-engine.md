@@ -12,6 +12,8 @@ Omar's decision of 2026-11-11, ticket #282. This supersedes the Codex and Claude
 
 [ADR 0016](0016-the-engine-profile-is-the-agent.md) (#119): each Agent now gets its own profile in the bundled Hermes, and on an install with one Company a subscription signed in on `default` is that Company's.
 
+[ADR 0018](0018-an-engine-and-a-work-sandbox-per-company.md): each Company now has its own bundled Hermes, with a work sandbox beside it; one Hermes no longer serves the whole install.
+
 ## Context
 
 ADR 0008 had each person install gtmworks beside their own Hermes and paste its address, profile and key. ADR 0009 then planned Codex and Claude Code drivers so that Hermes would not be required. Hermes already provides memory, routines, several agents, skills, approvals and subscription sign-in. Rebuilding those around other engines would cost more than shipping Hermes, and a person who has never heard of Hermes should be able to install gtmworks alone.

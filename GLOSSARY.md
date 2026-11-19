@@ -25,7 +25,7 @@ A person's place in one company, carrying the role they hold there. One person c
 _Avoid_: user, seat, staff
 
 **Agent / وكيل**:
-A named worker running in Hermes, attached to a Company with a free name and speciality. On the bundled Engine an Agent is one Engine profile, with its own memory, Skills and settings (ADR 0016); the people who talk to the same Agent share its memory. Each Company has one default Agent for new conversations, its main Agent. A profile in the bundled Engine serves one Company only; the bundled Hermes is the only Hermes (ADR 0017). Legacy role agents retain their company grants during the transition. An Agent never approves, rejects, publishes or spends at this stage.
+A named worker running in Hermes, attached to a Company with a free name and speciality. On the bundled Engine an Agent is one Engine profile, with its own memory, Skills and settings (ADR 0016); the people who talk to the same Agent share its memory. Each Company has one default Agent for new conversations, its main Agent. A profile serves one Company only, inside that Company's own Engine (ADR 0018); the bundled Hermes is the only kind of Engine (ADR 0017). Legacy role agents retain their company grants during the transition. An Agent never approves or rejects. Through gtmworks nothing is published or spent without a person's Approval; on its Screen, in an account a person signed in to, an Agent may publish or spend when a Member asks.
 
 **Main Agent / الوكيل الرئيسي**:
 The Company's default Agent, the one people talk to first. The bundled Engine names it Lead; a Company has one at a time, and an Owner may make another of its Agents the main one. The Agent that was main when its Company moved to a profile per Agent keeps the Company's first profile, `co-<company id>`, with everything in it; every other Agent gets `ag-<agent id>`.
@@ -51,8 +51,16 @@ A conversation that a Company's Members and Agents share, where an Agent reads a
 _Avoid_: room, group chat, thread
 
 **Engine / المحرك**:
-The agent program that runs a Conversation's replies, today the Hermes that ships inside the install (ADR 0010). gtmworks talks to every engine through one engine contract (start a run with an idempotency key, read its state, usage and steps, stop it); a driver is the code that speaks the contract for one engine. gtmworks writes no model loop of its own.
+The agent program that runs a Conversation's replies, today the Hermes that ships inside the install (ADR 0010). gtmworks talks to every engine through one engine contract (start a run with an idempotency key, read its state, usage and steps, stop it); a driver is the code that speaks the contract for one engine. gtmworks writes no model loop of its own. Each Company has its own Engine, kept apart from every other Company's.
 _Avoid_: model, provider, backend
+
+**Work sandbox / صندوق الشغل**:
+A Company's own machine for its Agents' work: commands, files, code, a Screen with a browser, and video rendering. Every Agent of the Company works in the same one, so anything in it can be seen by any Member who talks to any of the Company's Agents. It holds no key of any kind. From inside it nothing of another Company, of the Engine or of the install can be reached; it reaches the internet only.
+_Avoid_: container, VM, workspace, environment
+
+**Screen / الشاشة**:
+The desktop inside a Company's Work sandbox where its Agents use a browser. A Member can watch it and take it over, for example to sign in to an account. Whatever a person signs in to there, the Company's Agents can use, within that account's own permissions.
+_Avoid_: bot screen, remote desktop, browser session
 
 **Waiting / في الانتظار**:
 The planned run status `waiting`: the run delivered a version or asked a question and is waiting for a person. An open interrupt blocks progress until answered or abandoned; no answer is never yes.
@@ -80,8 +88,16 @@ One thing a role allows in a company, such as approving a post, sending a commen
 _Avoid_: right, privilege, scope
 
 **Owner / مالك**:
-The role that can do everything in its company; only an Owner can make another member an Owner. The first person through first-run is the first company's Owner. A company always has at least one.
+The role that can do everything in its company; only an Owner can make another member an Owner. The first person through first-run is the first company's Owner; a Company made later gets its first Owner through a first-Owner link from the install owner, which works once. A company always has at least one.
 _Avoid_: admin, super admin
+
+**Install owner / صاحب التثبيت**:
+The person who runs the install from its server: installs and updates it, makes Companies, and sets how people reach it. An install owner enters a Company only as one of its Members.
+_Avoid_: admin, super admin, agency, instance admin
+
+**Invite link / لينك دعوة**:
+A link an Owner makes to bring one new Person into a Company, with the Role they will hold and the Agents they will see. It works once, ends after 7 days, and can be cancelled before it is used. It never gives the Owner role: an Owner makes an existing Member an Owner.
+_Avoid_: invitation email, magic link
 
 **Connection / ربط**:
 A company's link to an outside account or tool, such as Facebook, Google Ads, Odoo or an MCP tool. It belongs to one company and is made by a member allowed to connect accounts. Keys are encrypted and never shown to agents; model credentials stay outside gtmworks.
@@ -141,7 +157,7 @@ One folder of Skills per Company, kept in the Company's shared space (`cs-<compa
 _Avoid_: team skills, global skills
 
 **Install-wide / للتثبيت كله**:
-A setting or sign-in that the Engine holds once for the whole install instead of per Agent, such as a subscription signed in on Hermes's root `default` profile, which every profile with no sign-in of its own for that provider uses. Settings shows such a value as install-wide, because changing it changes it for every Company on the install.
+A setting the install holds once for every Company, such as the address people reach it at. Changing it changes it for every Company. A model sign-in is never install-wide: each Company signs in on its own Engine.
 _Avoid_: global, system-wide, default
 
 **Lesson / درس**:
