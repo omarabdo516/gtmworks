@@ -154,7 +154,7 @@ test('a pull request that changes install files starts the install proof as one 
   const run = started({ event: 'pull_request', draft: false, files: ['scripts/install.sh'] });
   for (const job of installJobs) assert.ok(run.includes(job), job);
   // One matrix job: each entry's name is the area that failed, and one area's fault leaves the rest running.
-  assert.deepEqual(ci.jobs.install.strategy, { 'fail-fast': false, matrix: { area: ['first-install', 'proxy', 'update', 'one-line'] } });
+  assert.deepEqual(ci.jobs.install.strategy, { 'fail-fast': false, matrix: { area: ['first-install', 'companies', 'proxy', 'update', 'one-line'] } });
   assert.equal(ci.jobs.install.name, 'install-${{ matrix.area }}');
 });
 

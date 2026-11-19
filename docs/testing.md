@@ -111,9 +111,9 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   that delivers it. No CI job compares a screen with `design/`, and no animation frame is sampled in CI.
 - `install` is the Docker install, update, backup, restore, release and one-line install. The proof is one job of one
   matrix entry per area of the repo's proof, each on a fresh isolated Docker machine of its own and named for its area
-  (#406): `install-first-install` (the first install and its repeat, Companies and their Engines, Agents on their
-  Engines, backup and restore), `install-proxy`, `install-update` and `install-one-line`. Each entry is one command of the
-  repo — `bash scripts/ci-install-check.sh first-install|proxy|update|one-line`; `./ci.sh install` runs the whole proof
+  (#406): `install-first-install` (the first install and its repeat, Agents on their Engines, backup and restore),
+  `install-companies` (Companies and their Engines, #407), `install-proxy`, `install-update` and `install-one-line`. Each entry is one command of the
+  repo — `bash scripts/ci-install-check.sh first-install|companies|proxy|update|one-line`; `./ci.sh install` runs the whole proof
   here and `./ci.sh install proxy` one area (`docs/agents/checks.md`) — and holds no check of its own, so a red entry's
   name is the area that failed and fail-fast is off: one red area leaves the others running to their end. A later area
   of spec #401 is one more matrix entry and one more case of the script (#407–#409). The three areas that already started

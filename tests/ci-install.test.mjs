@@ -19,7 +19,7 @@ const cases = [...script.matchAll(/^ ([\w-]+)\) (.*);;$/gm)].map(([, name, comma
 
 test('the proof is one job with one matrix entry per area, every entry left to its end', () => {
   assert.equal(job.name, 'install-${{ matrix.area }}', 'the name says which area failed');
-  assert.deepEqual(job.strategy, { 'fail-fast': false, matrix: { area: ['first-install', 'proxy', 'update', 'one-line'] } });
+  assert.deepEqual(job.strategy, { 'fail-fast': false, matrix: { area: ['first-install', 'companies', 'proxy', 'update', 'one-line'] } });
   assert.equal(job['timeout-minutes'], 90);
   assert.equal(job.permissions.contents, 'read');
 });
@@ -34,7 +34,7 @@ test('every area of the matrix is one case of the proof, and every case but all 
     assert.ok(calls.length < seven.length, `${name} runs only its own areas`);
     for (const call of calls) assert.ok(seven.includes(call), `${name}: ${call}`);
   }
-  assert.equal(cases.find(({ name }) => name === 'first-install').commands, 'first_install; companies; agents; backup');
+  assert.equal(cases.find(({ name }) => name === 'first-install').commands, 'first_install; agents; backup');
 });
 
 test('each entry runs its area with one command and holds no check of the proof', () => {
@@ -102,7 +102,7 @@ test('the install proof is the seven areas of the spec, run one after another wh
 
 test('naming one area runs only it, and ./ci.sh install passes the area through', () => {
   const dispatches = Object.fromEntries([...script.matchAll(/^ ([\w-]+)\) (.*);;$/gm)].map(([, name, commands]) => [name, commands]));
-  assert.equal(dispatches['first-install'], 'first_install; companies; agents; backup');
+  assert.equal(dispatches['first-install'], 'first_install; agents; backup');
   assert.equal(dispatches.proxy, 'proxy');
   assert.equal(dispatches.update, 'update');
   assert.equal(dispatches['one-line'], 'one_line');

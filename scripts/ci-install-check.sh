@@ -2,10 +2,11 @@
 # The install proof, one command of the repo (#402): each CI install job runs this file for its area on an isolated
 # Docker machine and holds no check of its own, and `./ci.sh install [area]` starts such a machine here and runs it.
 # Without an area the seven areas of spec #401 run one after another; with one, only that area runs, on a fresh Docker
-# machine: `first-install` (the first install and its repeat, Companies and their Engines, Agents on their Engines,
-# backup and restore — together until #407–#409 split them), `proxy` (the public address behind a proxy), `update` (the
-# update between releases) and `one-line` (the one-line install). The three areas that already started from a fresh
-# install are independent since #406: each makes the install, the local registry and the release files it needs itself.
+# machine: `first-install` (the first install and its repeat, Agents on their Engines, backup and restore — together
+# until #408–#409 split them), `companies` (Companies and their Engines), `proxy` (the public address behind a proxy),
+# `update` (the update between releases) and `one-line` (the one-line install). The three areas that already started
+# from a fresh install are independent since #406, and the Companies area since #407: each makes everything it needs
+# itself, the install and its first run, and the release areas also their local registry and release files.
 # The helpers the areas share are in scripts/ci-install-lib.sh, sourced below, so each is written once.
 # DOCKER_HOST names that machine; RUNNER_TEMP is a scratch folder; INSTALL_REF, BASE_SHA and GH_TOKEN come from CI or
 # ci.sh.
@@ -44,10 +45,8 @@ gateway_id=$(compose ps -q gateway) && [[ -n $gateway_id ]] || fail 'the first i
 [[ $(tail -n 1 repeat-before-setup.log) == "$link" ]] || fail 'a repeat install before setup prints the same setup link'
 # The local install on http://localhost:3000, straight to the gateway, while first run is still open: the emailed
 # sign-in link reaches the Company home, an invitation link returns to the app, and a sign-in request with a forged
-# X-Forwarded-Host still gets a link on APP_ORIGIN (issue #40). The keys pass as an env file, so none is printed.
-docker run --rm -i --network host --env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY)=' .env.install) --env-file <(grep -E '^SETUP_CODE=' .env.install) \
-  -e APP_ORIGIN=http://localhost:3000 -e MAIL_URL=http://127.0.0.1:8025 \
-  node:22.14.0-alpine3.21 node --input-type=module - < scripts/check-install-proxy.mjs || fail 'emailed sign-in and invitation links on the local install'
+# X-Forwarded-Host still gets a link on APP_ORIGIN (issue #40). The Companies area completes the same first run (#407).
+complete_setup || fail 'emailed sign-in and invitation links on the local install'
 # That check opened first run and completed setup with the code in the submit body: the gateway's access log holds
 # those requests and not the code.
 gateway_logs=$(compose logs gateway 2>&1) || fail 'read gateway logs'
@@ -161,9 +160,15 @@ diff -u before restored || fail 'restored migration history'
 
 # companies: Companies and their Engines (#382, ADR 0018): the first Engine answering an Arabic message, `company add`
 # and its refusals, one Company per Engine with its own key, network and volume, the first-Owner link, and the lists and
-# reports a person reads.
+# reports a person reads. The area makes the install it needs itself (#407): a fresh install and its first run completed
+# as first_install does it, so no earlier area is needed or kept.
 companies() {
 cd "$root"
+reset_install
+{ sh scripts/install.sh || fail 'the Companies area install'; } 2>&1 | tee companies-install.log
+complete_setup || fail 'emailed sign-in and invitation links on the local install'
+engine_key=$(first_engine_key)
+[[ $engine_key =~ ^[a-f0-9]{64}$ ]] || fail 'the Engine key is in .engines/first/.env'
 # The first Company's Engine is the template's own container (ADR 0018): no host port, and an Arabic message gets
 # its reply with no manual connection step. A fake model provider served from the web container stands in for a
 # subscription.
@@ -862,9 +867,10 @@ probe 'after the --version run'
 # one area; `./ci.sh install` without one still runs the whole proof.
 case "${1:-all}" in
  all) first_install; companies; agents; backup; proxy; update; one_line;;
- first-install) first_install; companies; agents; backup;;
+ first-install) first_install; agents; backup;;
+ companies) companies;;
  proxy) proxy;;
  update) update;;
  one-line) one_line;;
- *) echo 'usage: bash scripts/ci-install-check.sh [first-install | proxy | update | one-line]' >&2; exit 2;;
+ *) echo 'usage: bash scripts/ci-install-check.sh [first-install | companies | proxy | update | one-line]' >&2; exit 2;;
 esac

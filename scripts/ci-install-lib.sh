@@ -51,6 +51,15 @@ reset_install() {
   if [ -f .env.install ]; then remove_install || return 1; else remove_engine; fi
   rm -f .env.install
 }
+# First run completed the way a browser does it on the local install, straight to the gateway: the setup form's
+# submission with the setup code in its body makes the first Company and signs its Owner in, the invitation and sign-in
+# links stay on APP_ORIGIN, and no key or code is printed (issue #40, #50). first_install proves it, and the Companies
+# area starts from the same first Company (#407). The caller owns the failure sentence.
+complete_setup() {
+  docker run --rm -i --network host --env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY)=' .env.install) --env-file <(grep -E '^SETUP_CODE=' .env.install) \
+    -e APP_ORIGIN=http://localhost:3000 -e MAIL_URL=http://127.0.0.1:8025 \
+    node:22.14.0-alpine3.21 node --input-type=module - < scripts/check-install-proxy.mjs
+}
 publish() { docker push -q "localhost:5000/gtmworks:$1" > /dev/null && docker image inspect --format '{{index .RepoDigests 0}}' "localhost:5000/gtmworks:$1"; }
 # The local registry a release area serves its test releases from: each area that needs one starts its own (#406).
 start_registry() {
