@@ -136,7 +136,7 @@ function sessions(fake,{owner,space=true,extra=[],logFails=false,unfinishedFails
   if(name==='record_unfinished_provider_key') { if(owner) args.missed.length?unfinished.set(args.key_provider,args.missed):unfinished.delete(args.key_provider); return owner?{data:null,error:null}:{data:null,error:{code:'42501'}}; }
   if(name==='company_key_unfinished_profiles') return {data:owner?[...unfinished].map(([provider,profiles])=>({provider,profiles})):[],error:null};
   if(name==='is_company_owner') return {data:owner,error:null};
-  if(name==='company_engine_target') return {data:[{profile:companies[args.c].main,one_company:false,profiles:[]}],error:null};
+  if(name==='company_engine_target') return {data:[{profile:companies[args.c].main,profiles:[]}],error:null};
   if(name==='company_key_profiles') return {data:keyRows(args.c,extra).filter(row=>space||row.kind!=='space').map(row=>noKeeper&&row.kind==='company'?{...row,agent:null,name:null}:row),error:null};
   if(name==='record_provider_key_change') { logged.push(args); return logFails?{data:null,error:{code:'XX000',message:'the database is down'}}:{data:null,error:null}; }
   return {data:null,error:{message:'unexpected'}}; }};
@@ -329,8 +329,9 @@ test('a key change reads in the Company log by its provider, in both languages',
 });
 
 test('the README says a Company\'s API key lives in its own Engine only, never in another Company\'s', () => {
- const sentence='a Company\'s API key lives in its own Engine only: gtmworks passes it to that Company\'s Engine, never to another Company\'s, and never keeps, logs or shows it.';
+ const sentence='Company\'s API key lives in its own Engine only: gtmworks passes it to that Company\'s Engine, never to another Company\'s, and never keeps, logs or shows it.';
  const readme=readFileSync('README.md','utf8').replace(/\s+/g,' ');
+ assert.ok(readme.includes('One account serves one Company, so each Company signs in with its own account or sets its own API key.'));
  assert.ok(readme.includes(sentence),sentence);
 });
 
