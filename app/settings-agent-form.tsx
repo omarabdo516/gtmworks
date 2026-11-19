@@ -5,7 +5,7 @@ import { overlayHref } from '@/lib/settings-overlay.mjs';
 import { toast } from './toast';
 import { SettingsIcon } from './settings-icons';
 import { GuardedSectionLink } from './settings-guard-link';
-import { changedValues, commitDraft, registerFirstField, registerSave, restoreDraft, seedDraft, setDraftValue, useBarFlash, useDraftDirty, useDraftState, useDraftValue } from './settings-draft';
+import { changedValues, commitDraft, draftStamp, isCurrentDraft, registerFirstField, registerSave, restoreDraft, seedDraft, setDraftValue, useBarFlash, useDraftDirty, useDraftState, useDraftValue } from './settings-draft';
 
 // An Agent's page in Settings (#161, #176, #180; design-reference: settingsHTML's About, How it works and Skills, and
 // sovAgentHTML's save bar). The fields hold a draft until Save, and the bar appears at the bottom of the page as soon as
@@ -122,7 +122,10 @@ export function AgentSaveBar({company,agent,name}:{company:string,agent:string,n
  },[flash,dirty]);
  const discard=()=>{ setFailed(false); restoreDraft(); toast(t('settingsBackSaved'),{icon:'x'}); };
  const write=async()=>{
+  // The request belongs to this Agent's draft as it is now: a response that arrives after another Agent was opened, a
+  // newer read or Cancel is dropped, and the values it carried are the snapshot a later edit is compared with.
   const changed=changedValues(agent);
+  const stamp=draftStamp(agent);
   const changes:Record<string,unknown>=Object.fromEntries(Object.entries(changed).filter(([key])=>!key.startsWith('voice.')));
   if(Object.keys(changed).some(key=>key.startsWith('voice.'))) changes.voice={language,speed,...(voice?{voice}:{})};
   if(!Object.keys(changes).length) return;
@@ -130,6 +133,7 @@ export function AgentSaveBar({company,agent,name}:{company:string,agent:string,n
   try {
    const response=await fetch('/api/agent-page',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company,agent,changes})});
    const answer=await response.json().catch(()=>null);
+   if(!isCurrentDraft(stamp)) return;
    const kept=answer?.saved&&typeof answer.saved==='object'?answer.saved as Record<string,unknown>:null;
    if(!response.ok||!kept) { setFailed(true); return; }
    const patch:Record<string,string>={};
@@ -145,9 +149,9 @@ export function AgentSaveBar({company,agent,name}:{company:string,agent:string,n
      patch[key]=kept[key] as string;
     }
    }
-   commitDraft(patch);
+   commitDraft(patch,stamp);
    toast(t('settingsSaved',name));
-  } catch { setFailed(true); } finally { setSaving(false); }
+  } catch { if(isCurrentDraft(stamp)) setFailed(true); } finally { setSaving(false); }
  };
  return <div className="dp-savebar sov-savebar" id="dp-savebar" role="region" aria-label={t('settingsSaveLabel')} hidden={!dirty} ref={bar}>
   <span className="dp-savebar__t">{t('settingsSaveBar')}{failed&&<span className="set-err" role="alert">{t('settingsSaveFailed')}</span>}</span>
