@@ -112,6 +112,13 @@ test('a retry of a stored send whose first upload failed writes the missing imag
  assert.deepEqual(stand.removals,[],'nothing of the stored message is removed');
 });
 
+test('a storage error while repairing a stored send never stops it reaching its message',async()=>{
+ const fake=fakeEngine(); const stand=databases({alreadyStored:true,failUpload:true});
+ const sent=await postChannelMessage(stand.db,stand.service,{company,channel,sendKey:'q',message:'@Faye look',files,hermes,engineFor:fake.engineFor});
+ assert.deepEqual(sent,{message:7},'the send goes on to the message its key stored');
+ assert.deepEqual(stand.removals,[],'nothing of the stored message is removed');
+});
+
 test('an image-only retry of a stored send answers that message, with its images kept',async()=>{
  const fake=fakeEngine(); const stand=databases({alreadyStored:true});
  const sent=await postChannelMessage(stand.db,stand.service,{company,channel,sendKey:'q',message:'',files,hermes,engineFor:fake.engineFor});

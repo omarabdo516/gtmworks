@@ -47,12 +47,11 @@ export async function keepMessageFiles(db:SupabaseClient,service:SupabaseClient,
  if(error) return {error:refusalOf(error.code,words)};
  // -1: the files of this send key are already a stored message's own; the send goes on to its message, which the send key
  // answers with the one it stored. A file whose upload failed the first time is written now, and one already stored is
- // never replaced (no upsert: "already exists" is the file being there). Its rows stay: they are the message's.
+ // never replaced (no upsert: "already exists" is the file being there). Its rows stay: they are the message's. The repair
+ // is best effort: a storage error here never stops the send from reaching the message its key already stored.
  if(typeof data==='number'&&data<0) {
-  for(const [index,file] of files.entries()) {
-   const stored=await service.storage.from(bucket).upload(messageFilePath(place,index),Buffer.from(await file.arrayBuffer()),{contentType:rows[index].content_type,upsert:false});
-   if(stored.error&&!/exist|duplicate/i.test(stored.error.message)) return {error:words.failed};
-  }
+  for(const [index,file] of files.entries())
+   await service.storage.from(bucket).upload(messageFilePath(place,index),Buffer.from(await file.arrayBuffer()),{contentType:rows[index].content_type,upsert:false});
   return {};
  }
  for(const [index,file] of files.entries()) {
