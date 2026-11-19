@@ -8,7 +8,7 @@ select json_build_object(
   and contype='u'),
  'missing_engine_deferred',exists(select 1 from pg_trigger t where t.tgrelid='public.companies'::regclass
   and t.tgname='company_needs_engine' and t.tgdeferrable and t.tginitdeferred),
- 'missing_engine_names_the_record',position('company_engines e where e.id=new.engine_id' in
+ 'missing_engine_names_the_record',position('company_enginesewheree.id=new.engine_id' in
   regexp_replace(pg_get_functiondef('public.company_needs_engine()'::regprocedure),'[[:space:]]','','g'))>0,
  'setup_names_a_free_engine',position('notexists(select1frompublic.companiescwherec.engine_id=e.id)' in
   regexp_replace(pg_get_functiondef('public.complete_setup(uuid,text,text,text)'::regprocedure),'[[:space:]]','','g'))>0,
