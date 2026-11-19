@@ -1,6 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
 import { userEvent } from 'vitest/browser';
+import type { ComponentProps } from 'react';
 import { LanguageProvider } from '@/lib/i18n-client';
 import { AgentEffort } from '@/app/settings-agent-effort';
 import { AgentSaveBar } from '@/app/settings-agent-form';
@@ -11,6 +12,9 @@ import '@/app/globals.css';
 import '@/app/tokens.css';
 import '@/app/shell.css';
 import '@/app/settings.css';
+
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }) }));
+vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'> & { replace?: boolean }) => <a {...Object.fromEntries(Object.entries(props).filter(([name]) => name !== 'replace'))}/> }));
 
 // #179: an Agent's thinking level is the Engine's eight levels and no other, in its own order. The four the reference
 // words carry its line under the control and the other four no line; the arrow keys move the choice forward, left in

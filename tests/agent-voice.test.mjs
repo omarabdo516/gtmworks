@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readConfig, readSavedConfig, writeConfig, readVoices, speakText } from '../lib/hermes.mjs';
-import { readAgentVoice, changeAgentVoice, speakAgentSample, voiceSpeeds, voiceLanguages } from '../lib/agent-voice.mjs';
+import { readAgentVoice, changeAgentVoice, speakAgentSample, voiceSpeeds, voiceLanguages, voiceSample } from '../lib/agent-voice.mjs';
 import { companyProfile } from '../lib/agent-levels.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
@@ -194,4 +194,10 @@ test('a sample a person outside the allowed Roles asks for is refused, and no te
   assert.equal((await speakAgentSample(shared.db,{company,agent:helper,text:'Hello.',driver:driverAt(fake)})).state,'spoken');
   assert.equal(fake.settings.managementRequests.filter(request=>request.path==='/api/audio/speak?profile='+companyProfile(company)).length,1,'one request per sample asked for');
  } finally { await fake.close(); }
+});
+
+test('the sample is the server\'s own sentence: the reader\'s first name, in the reader\'s language', () => {
+ assert.equal(voiceSample('en','Omar Hassan'),'Hi Omar, I finished the December campaign analysis and I have three new angles.');
+ assert.equal(voiceSample('ar','Omar Hassan'),'أهلاً يا Omar، خلصت تحليل حملة ديسمبر وعندي تلات زوايا جديدة.');
+ assert.equal(voiceSample('en','  Sara  '),'Hi Sara, I finished the December campaign analysis and I have three new angles.');
 });

@@ -211,18 +211,35 @@ function SubagentFields({company,owner,agent}:{company:string,owner:boolean,agen
   if(!answer.ok) { setError(answer.error||'settingFailed'); return; }
   toast(t('settingsSubagentsSaved')); router.refresh();
  };
+ // The sub-agent model is two Engine keys: its model id and the provider it runs on (config_defaults.py 1316-1317), so
+ // one choice from the list saves both in one request.
+ const writeMany=async(settings:Record<string,string|number>)=>{
+  if(busy) return;
+  setBusy(true); setError('');
+  const answer=await send('/api/agent-settings',{company,agent:agent.id,settings});
+  setBusy(false);
+  if(!answer.ok) { setError(answer.error||'settingFailed'); return; }
+  toast(t('settingsSubagentsSaved')); router.refresh();
+ };
+ const writeModel=async(value:string)=>{
+  const chosen=agent.options.find(option=>modelOf(option)===value);
+  await writeMany(chosen?{'delegation.provider':chosen.provider,'delegation.model':chosen.model}:{'delegation.provider':'','delegation.model':''});
+ };
  const model=setting('delegation.model'); const provider=setting('delegation.provider');
  const providers=[...new Map(agent.options.map(option=>[option.provider,option.providerName])).entries()];
- const models=[...new Set([...agent.options.map(modelOf),...(typeof model?.value==='string'&&model.value?[model.value]:[])])];
+ const heldModel=typeof model?.value==='string'?model.value:'';
+ const heldProvider=typeof provider?.value==='string'?provider.value:'';
+ const heldChoice=heldModel?agent.options.find(option=>option.model===heldModel&&(!heldProvider||option.provider===heldProvider)):undefined;
+ const modelChoices=[...agent.options, ...(heldModel&&!heldChoice?[{provider:heldProvider,providerName:heldProvider,model:heldModel}]:[])];
  const providerNames=typeof provider?.value==='string'&&provider.value&&!providers.some(([slug])=>slug===provider.value)?[...providers,[provider.value,provider.value]]:providers;
  const effort=setting('delegation.reasoning_effort');
  const numbers:Record<string,ModelSetting|undefined>={max_concurrent_children:setting('delegation.max_concurrent_children'),max_spawn_depth:setting('delegation.max_spawn_depth')};
  return <div className="sub-step md-subagent" id={`mdl-sub-${agent.id}-settings`}>
   <div className="set-field"><label className="set-label" htmlFor={`mdl-sub-${agent.id}-model`}>{t('settingSubagentModel')}</label>
-   {owner?<select className="set-input" id={`mdl-sub-${agent.id}-model`} value={String(model?.value??'')} disabled={busy} onChange={event=>write('delegation.model',event.target.value)}>
+   {owner?<select className="set-input" id={`mdl-sub-${agent.id}-model`} value={heldChoice?modelOf(heldChoice):heldModel?`${heldProvider}/${heldModel}`:''} disabled={busy} onChange={event=>writeModel(event.target.value)}>
     <option value="">{t('settingsModelsFollows')}</option>
-    {models.map(choice=><option key={choice} value={choice}>{choice.split('/').slice(1).join('/')}</option>)}
-   </select>:<p className="ro-text">{String(model?.value??'')||t('settingsModelsFollows')}</p>}
+    {modelChoices.map(choice=><option key={modelOf(choice)} value={modelOf(choice)}>{choice.model}</option>)}
+   </select>:<p className="ro-text">{(heldModel?`${heldProvider}${heldProvider?'/':''}${heldModel}`:'')||t('settingsModelsFollows')}</p>}
   </div>
   <div className="set-field"><label className="set-label" htmlFor={`mdl-sub-${agent.id}-provider`}>{t('settingSubagentProvider')}</label>
    {owner?<select className="set-input" id={`mdl-sub-${agent.id}-provider`} value={String(provider?.value??'')} disabled={busy} onChange={event=>write('delegation.provider',event.target.value)}>

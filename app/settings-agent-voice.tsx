@@ -44,7 +44,7 @@ export function AgentVoice({company,agent,personName,voice}:{company:string,agen
   if(playing) { stop(); return; }
   setMissing(''); setLoading(true);
   try {
-   const response=await fetch('/api/agent-speak',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company,agent,text:sample})});
+   const response=await fetch('/api/agent-speak',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company,agent})});
    const answer=await response.json().catch(()=>null);
    if(!response.ok||typeof answer?.dataUrl!=='string') { setMissing(response.status===503?'unreachable':'noSpeech'); return; }
    const audio=new Audio(answer.dataUrl);

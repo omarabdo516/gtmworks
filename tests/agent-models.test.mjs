@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readProfileModels, writeProfileModel, readModels, readConfig, readSavedConfig, readConfigSchema, readConfigDefaults, writeConfig } from '../lib/hermes.mjs';
-import { readSettings, writeSetting, readCompanyModels, changeCompanySetting } from '../lib/engine-settings.mjs';
+import { readSettings, writeSetting, readCompanyModels, changeCompanySetting, changeCompanySettings } from '../lib/engine-settings.mjs';
 import { readCompanyKeys } from '../lib/provider-keys.mjs';
 import { companyProfile } from '../lib/agent-levels.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
@@ -146,9 +146,9 @@ test('the Company default reaches the shared space and every Agent without its o
   seed(fake); schema(fake);
   const {db,logged}=database();
   const result=await changeCompanySetting(db,{company,setting:'model',value:'openrouter/anthropic/claude-opus-4.6',hermes:install(fake),driver:driver(fake)});
-  assert.equal(result.status,200,JSON.stringify(result));
-  assert.equal(result.body.space,true);
-  assert.deepEqual(result.body.agents.map(agent=>[agent.name,agent.written]),[['Lead',true],['Writer',true],['Critic',false]]);
+  assert.equal(result.state,'written',JSON.stringify(result));
+  assert.equal(result.space,true);
+  assert.deepEqual(result.agents.map(agent=>[agent.name,agent.written]),[['Lead',true],['Writer',true],['Critic',false]]);
   const writes=requestsTo(fake,'/model').map(request=>({path:request.path,body:request.body}));
   assert.deepEqual(writes,[
    {path:`/api/profiles/${space}/model`,body:{provider:'openrouter',model:'anthropic/claude-opus-4.6'}},
@@ -170,7 +170,7 @@ test('one Agent\'s model is written to its own profile and remembered as its cho
   seed(fake); schema(fake);
   const {db,calls,logged}=database();
   const chosen=await changeCompanySetting(db,{company,agent:writer,setting:'model',value:'openrouter/anthropic/claude-opus-4.6',hermes:install(fake),driver:driver(fake)});
-  assert.equal(chosen.status,200,JSON.stringify(chosen));
+  assert.equal(chosen.state,'written',JSON.stringify(chosen));
   assert.deepEqual(requestsTo(fake,'/model').map(request=>request.path),['/api/profiles/'+own(writer)+'/model']);
   assert.deepEqual(calls.filter(call=>call.name==='set_agent_model').map(call=>call.args),[{
    agent:writer,model:'openrouter/anthropic/claude-opus-4.6',
@@ -178,13 +178,16 @@ test('one Agent\'s model is written to its own profile and remembered as its cho
   assert.deepEqual(logged().map(row=>[row.agent,row.new_value]),[[writer,'openrouter/anthropic/claude-opus-4.6']]);
   // Following the default again writes the default to that profile and forgets the choice.
   const follow=await changeCompanySetting(db,{company,agent:writer,setting:'model',value:null,hermes:install(fake),driver:driver(fake)});
-  assert.equal(follow.status,200,JSON.stringify(follow));
+  assert.equal(follow.state,'written',JSON.stringify(follow));
   assert.equal(fake.settings.profiles.get(own(writer)).model,'openai/gpt-5.5');
   assert.deepEqual(calls.filter(call=>call.name==='set_agent_model').at(-1).args,{agent:writer,model:null});
   // An Agent that keeps the Company profile has no model of its own, and one that chose is never overwritten by the default.
   const shared=await changeCompanySetting(db,{company,agent:lead,setting:'model',value:'openrouter/openai/gpt-5.5',hermes:install(fake),driver:driver(fake)});
-  assert.equal(shared.status,409);
-  assert.equal(shared.body.error,'settingAgentShared');
+  assert.equal(shared.state,'shared');
+  // An Agent the worker is still moving holds a record but runs on the Company profile: it is not choosable either.
+  const moving=rows(); moving[1]={...moving[1],own:false};
+  const mid=await changeCompanySetting(database({rowsFor:moving}).db,{company,agent:writer,setting:'model',value:'openrouter/openai/gpt-5.5',hermes:install(fake),driver:driver(fake)});
+  assert.equal(mid.state,'shared');
  } finally { await fake.close(); }
 });
 
@@ -193,11 +196,11 @@ test('only the Owner changes a model, and a refused or unknown Agent changes not
  try {
   seed(fake); schema(fake);
   const refused=await changeCompanySetting(database({owner:false}).db,{company,setting:'model',value:'openrouter/openai/gpt-5.5',hermes:install(fake),driver:driver(fake)});
-  assert.deepEqual(refused,{status:403,body:{error:'settingNotAllowed'}});
+  assert.deepEqual(refused,{state:'notAllowed'});
   const unknown=await changeCompanySetting(database().db,{company,agent:'3a000000-0000-0000-0000-0000000000ff',setting:'model',value:'openrouter/openai/gpt-5.5',hermes:install(fake),driver:driver(fake)});
-  assert.equal(unknown.status,404);
+  assert.equal(unknown.state,'agentUnknown');
   const bad=await changeCompanySetting(database().db,{company,setting:'model',value:'no-slash',hermes:install(fake),driver:driver(fake)});
-  assert.equal(bad.status,400);
+  assert.equal(bad.state,'invalid');
   assert.equal(requestsTo(fake,'/model').length,0);
  } finally { await fake.close(); }
 });
@@ -208,20 +211,20 @@ test('the Owner turns sub-agents on for one Agent, logged, and its settings are 
   seed(fake); schema(fake);
   const {db,calls,logged}=database();
   const on=await changeCompanySetting(db,{company,agent:writer,setting:'subagents',value:true});
-  assert.deepEqual(on,{status:200,body:{setting:'subagents',agent:writer,subagents:true}});
+  assert.deepEqual(on,{state:'written',setting:'subagents',agent:writer,subagents:true});
   assert.deepEqual(calls.filter(call=>call.name==='set_agent_subagents').map(call=>call.args),[{agent:writer,enabled:true}]);
   assert.deepEqual(logged().map(row=>[row.agent,row.setting,row.old_value,row.new_value]),[[writer,'subagents',false,true]]);
   // An Agent on the Company profile has no sub-agents switch of its own; only a boolean is a value.
-  assert.equal((await changeCompanySetting(db,{company,agent:lead,setting:'subagents',value:true})).status,409);
-  assert.equal((await changeCompanySetting(db,{company,agent:writer,setting:'subagents',value:'yes'})).status,400);
-  assert.equal((await changeCompanySetting(database({owner:false}).db,{company,agent:writer,setting:'subagents',value:true})).status,403);
+  assert.equal((await changeCompanySetting(db,{company,agent:lead,setting:'subagents',value:true})).state,'shared');
+  assert.equal((await changeCompanySetting(db,{company,agent:writer,setting:'subagents',value:'yes'})).state,'invalid');
+  assert.equal((await changeCompanySetting(database({owner:false}).db,{company,agent:writer,setting:'subagents',value:true})).state,'notAllowed');
   // A delegation setting is refused while sub-agents are off, and written through #125's route when they are on.
   const off=await changeCompanySetting(db,{company,agent:writer,setting:'delegation.reasoning_effort',value:'high',hermes:install(fake),driver:driver(fake)});
-  assert.deepEqual(off,{status:409,body:{error:'settingSubagentsOff'}});
+  assert.deepEqual(off,{state:'subagentsOff'});
   assert.equal(requestsTo(fake,'/api/config').length,0);
   const enabled=rows(); enabled[1]={...enabled[1],subagents:true};
   const written=await changeCompanySetting(database({rowsFor:enabled}).db,{company,agent:writer,setting:'delegation.max_concurrent_children',value:4,hermes:install(fake),driver:driver(fake)});
-  assert.equal(written.status,200,JSON.stringify(written));
+  assert.equal(written.state,'written',JSON.stringify(written));
   assert.deepEqual(fake.settings.profiles.get(own(writer)).config.delegation,{max_concurrent_children:4});
  } finally { await fake.close(); }
 });
@@ -241,5 +244,23 @@ test('no key, its preview or a token reaches the models page payload or a log li
   await changeCompanySetting(db,{company,setting:'model',value:'openrouter/openai/gpt-5.5',hermes:install(fake),driver:driver(fake)});
   const loggedValues=JSON.stringify([...logged(),...requestsTo(fake,'/model').map(request=>request.body)]);
   for(const value of [secret,secret.slice(-6)]) assert.ok(!loggedValues.includes(value),value);
+ } finally { await fake.close(); }
+});
+
+test('a sub-agent\'s model is one save of the provider and the bare model id the Engine reads apart', async () => {
+ const fake=await fakeHermes();
+ try {
+  seed(fake); schema(fake);
+  enabled: {
+   const on=rows(); on[1]={...on[1],subagents:true};
+   const {db}=database({rowsFor:on});
+   const saved=await changeCompanySettings(db,{company,agent:writer,settings:{'delegation.provider':'openrouter','delegation.model':'anthropic/claude-opus-4.6'},hermes:install(fake),driver:driver(fake)});
+   assert.equal(saved.state,'written',JSON.stringify(saved));
+   assert.deepEqual(fake.settings.profiles.get(own(writer)).config.delegation,{provider:'openrouter',model:'anthropic/claude-opus-4.6'},'the Engine gets the provider and the model id, never provider/model in one key');
+   assert.deepEqual(fake.settings.managementRequests.filter(request=>request.method==='PUT'&&request.path.includes('/api/config')).map(request=>request.body),[
+    {config:{delegation:{provider:'openrouter'}}},
+    {config:{delegation:{model:'anthropic/claude-opus-4.6'}}},
+   ]);
+  }
  } finally { await fake.close(); }
 });

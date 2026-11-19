@@ -51,7 +51,7 @@ export function LearningSection({t,slug,company,canManage,owner,data}:{t:T,slug:
     :<div className="panel-card">{agents.map(agent=><div className="panel-row ln-ag" key={agent.id}>
       <span className="panel-row__text"><span className="panel-row__t" id={`ln-ag-t-${agent.id}`}><bdi>{agent.name}</bdi></span>
        <span className="panel-row__d">{agent.mode?t(modeKey[agent.mode]):t('settingsLearnUnread')}</span></span>
-      {owner&&agent.own&&!agent.shared&&agent.mode?<AgentLearningMode company={company} agent={agent.id} labelId={`ln-ag-t-${agent.id}`} mode={agent.mode}/>:null}
+      {owner&&agent.own&&!agent.shared&&agent.mode?<AgentLearningMode company={company} agent={agent.id} labelId={`ln-ag-t-${agent.id}`} mode={agent.mode} follows={agent.follow}/>:null}
      </div>)}</div>}</section>
   <section className="dp-sec" aria-labelledby="ln-h-rec"><Label id="ln-h-rec">{t('settingsLearnRecent')}{total>0&&<> <span className="muted num">{total}</span></>}</Label>
    {!found?<div className="panel-card"><p className="panel-empty">{t('settingsLearnUnread')}</p></div>

@@ -1,5 +1,6 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
+import type { ComponentProps } from 'react';
 import { LanguageProvider } from '@/lib/i18n-client';
 import { AgentAbout, AgentInstructions, AgentInstructionsReadOnly, AgentSaveBar } from '@/app/settings-agent-form';
 import { ToastHost } from '@/app/toast';
@@ -7,6 +8,9 @@ import '@/app/globals.css';
 import '@/app/tokens.css';
 import '@/app/shell.css';
 import '@/app/settings.css';
+
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }) }));
+vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'> & { replace?: boolean }) => <a {...Object.fromEntries(Object.entries(props).filter(([name]) => name !== 'replace'))}/> }));
 
 // #176: How it works is the Agent's SOUL.md outside the team's rules section. The Owner's field counts the whole file
 // against the limit the Engine loads (the section counts) and refuses more; every other Role reads the text with its line

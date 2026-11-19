@@ -101,6 +101,22 @@ test('while the draft differs, a section, "All agents", the Memory tab, the clos
  await expect(page).toHaveURL(/\/c\/rs-learning\/settings\?section=agents$/);
 });
 
+test('a key pasted into About or How it works, and a body past the page\'s cap, are refused before anything is written',async({page})=>{
+ await agentPage('omar@example.com',page);
+ const before=fake.settings.profiles.get(profile)?.description;
+ const writesBefore=fake.settings.managementRequests.filter(request=>request.method==='PUT'&&request.path?.includes('/description')).length;
+ for(const changes of [{about:'Use sk-or-v1-0123456789abcdefghijklmnop'},{instructions:'token: gtmw_run_0123456789abcdefghijkl'}]) {
+  const refused=await page.request.post('/api/agent-page',{data:{company,agent:lead,changes}});
+  expect(refused.status()).toBe(400);
+  expect(await refused.json()).toEqual({error:'agentPageInvalid'});
+ }
+ const huge=await page.request.post('/api/agent-page',{data:{company,agent:lead,changes:{instructions:'x'.repeat(600001)}}});
+ expect(huge.status()).toBe(400);
+ expect(await huge.json()).toEqual({error:'agentPageInvalid'});
+ expect(fake.settings.profiles.get(profile)?.description).toBe(before);
+ expect(fake.settings.managementRequests.filter(request=>request.method==='PUT'&&request.path?.includes('/description')).length).toBe(writesBefore);
+});
+
 test('a Manager saves About; a Contributor reads it and the server refuses their save',async({page})=>{
  await agentPage('manager@example.com',page);
  await hydrated(page);

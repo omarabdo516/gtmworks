@@ -31,13 +31,13 @@ const rows=[
  {agent:'3a000000-0000-0000-0000-000000000061',name:'Other Writer',connection:'f1000000-0000-0000-0000-000000000041',profile:agentProfile('3a000000-0000-0000-0000-000000000061'),main:false,own:true},
 ];
 const rowsByCompany={[company]:rows.filter(row=>[lead,writer,helper].includes(row.agent)),[other]:rows.filter(row=>![lead,writer,helper].includes(row.agent))};
-function database({agents=rowsByCompany,owner=true}={}) {
+function database({agents=rowsByCompany,owner=true,logFails=false}={}) {
  const logged=[];
  const db={rpc:async(name,args)=>{
   if(name==='is_company_owner') return {data:owner,error:null};
   if(name==='company_engine_target') return {data:[{profile:companyProfile(args.c),one_company:false,profiles:[]}],error:null};
   if(name==='company_app_agents') return {data:agents[args.c]||[],error:null};
-  if(name==='log_engine_setting') { logged.push(args); return {data:null,error:null}; }
+  if(name==='log_engine_setting') { if(logFails) return {data:null,error:{code:'42501',message:'settingNotAllowed'}}; logged.push(args); return {data:null,error:null}; }
   return {data:null,error:{message:`unexpected ${name}`}};
  }};
  return {db,logged};
@@ -181,13 +181,13 @@ test('a Company-wide write reaches every Agent profile and the shared space, nam
   assert.deepEqual(read.agents.map(agent=>[agent.id,agent.settings.length]),[[lead,15]],'the service reads one Agent\'s profile');
   const before=requestsOf(fake,'PUT').length;
   const changed=await changeCompanySetting(db,{company,setting:'memory.memory_char_limit',value:2400,hermes:{address:fake.address,key:fake.settings.key},driver:driver(fake)});
-  assert.equal(changed.status,200,JSON.stringify(changed.body));
-  assert.deepEqual(changed.body.agents,[
+  assert.equal(changed.state,'written',JSON.stringify(changed));
+  assert.deepEqual(changed.agents,[
    {agent:lead,name:'Lead',written:true},
    {agent:writer,name:'Writer',written:false},
    {agent:helper,name:'Helper',written:true},
   ],'the answer names each Agent and whether the write reached it');
-  assert.equal(changed.body.space,true,'the shared space takes the same value');
+  assert.equal(changed.space,true,'the shared space takes the same value');
   assert.equal(fake.settings.profiles.get(companyProfile(company)).config.memory.memory_char_limit,2400);
   assert.equal(fake.settings.profiles.get(space).config.memory.memory_char_limit,2400);
   assert.equal(fake.settings.profiles.get(agentProfile(writer)).config.memory?.memory_char_limit,undefined,'the failing profile keeps its value');
@@ -201,10 +201,26 @@ test('a Company-wide write reaches every Agent profile and the shared space, nam
   ],'one log row per changed Agent, with the setting and both values');
   // A per-Agent write is refused for an Agent sharing another Agent's profile, before the Engine is asked.
   const refused=await changeCompanySetting(db,{company,agent:helper,setting:'memory.memory_char_limit',value:2600,hermes:{address:fake.address,key:fake.settings.key},driver:driver(fake)});
-  assert.deepEqual([refused.status,refused.body.error],[409,'settingAgentShared']);
+  assert.deepEqual(refused.state,'shared');
   assert.equal(requestsOf(fake,'PUT').length,paths.length+before,'no Engine write is sent');
   // A person below Owner changes nothing, before the Engine is asked.
   const denied=await changeCompanySetting(database({owner:false}).db,{company,setting:'memory.memory_char_limit',value:2600,hermes:{address:fake.address,key:fake.settings.key},driver:driver(fake)});
-  assert.deepEqual([denied.status,denied.body.error],[403,'settingNotAllowed']);
+  assert.deepEqual(denied.state,'notAllowed');
+ } finally { await fake.close(); }
+});
+
+test('a change the Engine holds is not called logged when its log row fails, one Agent or the whole Company', async () => {
+ const fake=await fakeHermes();
+ try {
+  setup(fake);
+  for(const row of rows) profileOn(fake,row.profile);
+  profileOn(fake,space);
+  const one=await changeCompanySetting(database({logFails:true}).db,{company,agent:writer,setting:'memory.memory_char_limit',value:2400,hermes:{address:fake.address,key:fake.settings.key},driver:driver(fake)});
+  assert.equal(one.state,'written',JSON.stringify(one));
+  assert.equal(one.logged,false,'the per-Agent path says the row is missing, as the Company-wide path does');
+  assert.equal(fake.settings.profiles.get(agentProfile(writer)).config.memory.memory_char_limit,2400,'the Engine still holds the change');
+  const all=await changeCompanySetting(database({logFails:true}).db,{company,setting:'memory.memory_char_limit',value:2600,hermes:{address:fake.address,key:fake.settings.key},driver:driver(fake)});
+  assert.equal(all.state,'written',JSON.stringify(all));
+  assert.equal(all.logged,false);
  } finally { await fake.close(); }
 });

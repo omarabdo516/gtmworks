@@ -1,6 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
 import { userEvent } from 'vitest/browser';
+import type { ComponentProps } from 'react';
 import { LanguageProvider } from '@/lib/i18n-client';
 import { AgentVoice } from '@/app/settings-agent-voice';
 import { AgentSaveBar } from '@/app/settings-agent-form';
@@ -9,6 +10,9 @@ import '@/app/globals.css';
 import '@/app/tokens.css';
 import '@/app/shell.css';
 import '@/app/settings.css';
+
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }) }));
+vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'> & { replace?: boolean }) => <a {...Object.fromEntries(Object.entries(props).filter(([name]) => name !== 'replace'))}/> }));
 
 // #162: the Voice section is the Agent's own settings held as a draft: Listen plays the sound the agent engine makes with
 // the saved voice, and is off while the section differs; the voice is a list only for ElevenLabs and otherwise the saved
@@ -65,7 +69,7 @@ test('Listen plays the Engine\'s sound, the button reads Stop and stays pressed 
  await expect.poll(() => FakeAudio.made.length).toBe(1);
  expect(FakeAudio.made[0].src).toBe('data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAA');
  const sent = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body));
- expect(sent).toEqual({ company, agent: sent.agent, text: sample });
+ expect(sent).toEqual({ company, agent: sent.agent });
  const stop = screen.getByRole('button', { name: 'Stop' });
  await expect.element(stop).toHaveAttribute('aria-pressed', 'true');
  await expect.element(screen.getByText(`en-US-AriaNeural says: “${sample}” · 1×`)).toBeVisible();
