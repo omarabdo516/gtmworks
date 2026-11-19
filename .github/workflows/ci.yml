@@ -626,7 +626,7 @@ jobs:
           [[ $(compose exec -T worker node -e 'console.log(process.pid>0)') == true ]] || fail 'worker process running'
           worker_logs=$(compose logs worker) || fail 'read worker logs'
           if grep -q 'Conversation runs worker:' <<< "$worker_logs"; then fail 'worker reaches the database'; fi
-          lifecycle() { compose exec -T web node --input-type=module - "$1" < scripts/check-install.mjs; }
+          lifecycle() { ENGINE_KEY="$engine_key" compose exec -T -e ENGINE_KEY web node --input-type=module - "$1" < scripts/check-install.mjs; }
           # seed also writes an Agent's rule and each Company's knowledge through the engine contract, and verify reads
           # both back after the restore: they live only in the Hermes volume the backup now holds (#349).
           lifecycle seed > data.before || fail 'create and read people, companies, cards and files through APIs'
