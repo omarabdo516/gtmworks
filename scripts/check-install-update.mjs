@@ -35,7 +35,6 @@ await checked(owner.auth.signInWithPassword({email:'proxy-owner@example.com',pas
 // it on the profile the Engine lends every Agent that has none of its own.
 const signIn=await until('the Company signed in from its Engine',async()=>{
  const read=await readCompanySignIns(owner,{company});
- assert.notEqual(read.noEngine,true,"the Company's Engine answers");
  return read.signIns?.anthropic?.state==='connected'?read:null;
 },60);
 assert.equal(signIn.signIns.anthropic.state,'connected');

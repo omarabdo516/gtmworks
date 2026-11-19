@@ -193,21 +193,22 @@ makes the install anew with that release, restores the archive and applies that
 release's migrations the archive predates (the Engine's data, now in the archive,
 goes back with it).
 
+An install made before each Company had its own Engine has every Company on the
+one Engine, and this release has no way to give each of them one. With one
+Company the update keeps that Company's Engine — its data volume and its key,
+with its Agents, their memory, Skills, history, sessions and sign-in — now under
+the Engine's own Compose project on a network of its own, with the key moved from
+`.env.install` to `.engines/first/.env`, the only place an Engine key is kept.
+With more than one Company the update stops before it changes anything: each
+Company now needs its own Engine, there is no path for such an install in this
+release, no migration is applied, no container is changed, and the release you
+run keeps serving. Running the install command again on an updated install keeps
+the Engine it adopted.
+
 It refuses a release older than the data: when the database has applied a
 migration the chosen release does not carry, a later release migrated it, and
 the update stops with a plain message before changing anything. Going back past
-a migration is a restore of a backup made before it. An install made before each
-Company had its own Engine has every Company on the one Engine, and this release
-has no way to give each of them one: with one Company the update keeps that
-Company's Engine — its data volume and its key, with its Agents, their memory,
-Skills, history, sessions and sign-in — now under the Engine's own Compose
-project on a network of its own, and with the key moved from `.env.install` to
-`.engines/first/.env`, which is the only place an Engine key is kept. With more
-than one Company the update stops before it changes anything: each Company now
-needs its own Engine, there is no path for such an install in this release, no
-migration is applied, no container is changed, and the release you run keeps
-serving. Running the install command again on an updated install keeps the
-Engine it adopted. If a migration fails, the
+a migration is a restore of a backup made before it. If a migration fails, the
 transaction is rolled back, the previous release's files are put back and it keeps
 serving, and the command exits non-zero naming the migration. If the update fails
 after its migrations ran (while starting the new containers, say), the install

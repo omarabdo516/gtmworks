@@ -789,7 +789,8 @@ jobs:
           [[ -n $company ]] || fail 'first run made the Company'
           profile=co-${company//-/}
           for attempt in $(seq 1 180); do
-            if [[ $(db -c "select count(*) from public.hermes_agents where company_id='$company'") == 1 ]]; then break; fi
+            if docker run --rm --network gtmworks-install_default curlimages/curl:8.12.1 -sf -H "Authorization: Bearer $key" http://hermes:9119/api/profiles \
+              | grep -qF "$profile"; then break; fi
             if [[ $attempt == 180 ]]; then fail 'the worker made the Company profile in the previous release Engine'; fi
             sleep 1
           done
