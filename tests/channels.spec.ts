@@ -86,3 +86,62 @@ test('a channel reply shows its Run\'s steps and its review card to the channel\
  await page.reload();
  await expect(page.locator('.reply-card--review')).toBeVisible();
 });
+
+// #200: a Member named with @ in a channel message finds it at the top of "Waiting on you" under "Mentions of you", with
+// who mentioned them, where and the message; pressing it opens the channel at that message, ringed for a moment, and the
+// item leaves the list and the counts. Opening the channel any other way leaves it waiting. A Viewer is mentioned and
+// reads their own as anyone else does.
+test('a Member mentioned in a channel finds it under "Mentions of you", and pressing it opens the channel at the message and clears it',async({page,context})=>{
+ const count=async()=>Number(await page.locator('.sb-count__n').first().innerText());
+ await signIn(page,'viewer@example.com','/c/rs-learning/approvals');
+ const viewerBefore=await count();
+ await context.clearCookies();
+ await signIn(page,'reviewer@example.com',general);
+ const box=page.getByRole('textbox',{name:'Write your message in the channel',exact:true});
+ for(const text of ['@مشاهد شوف الخطة','@مدير شوف الخطة']) {
+  await box.fill(text); await box.press('Enter');
+  await expect(page.locator('.turn--user .bubble--user').last()).toHaveText(text);
+  await expect(box).toHaveValue('');
+ }
+ expect(rows(`select count(*)::int n from public.waiting_items where kind='channel_mention'`)[0].n).toBe(2);
+
+ // The Viewer's own item: under "Mentions of you", above the Cards, counted in the sidebar.
+ await context.clearCookies();
+ await signIn(page,'viewer@example.com','/c/rs-learning/approvals');
+ await expect.poll(count).toBe(viewerBefore+1);
+ const card=page.locator('a.mcard[data-kind="channel_mention"]');
+ await expect(card).toHaveCount(1);
+ await expect(card.locator('.mcard__who')).toHaveText('مراجع mentioned you in #general');
+ await expect(card.locator('.mcard__q .mention')).toHaveText('@مشاهد');
+ await expect(card.locator('.mcard__q')).toHaveText('@مشاهد شوف الخطة');
+ expect(await card.evaluate(node=>node.closest('.mn-group')?.querySelector('.mn-h')?.textContent)).toBe('Mentions of you 1');
+ // Opening the channel any other way leaves the item waiting.
+ await page.locator('.sidebar .ch-item').click();
+ await expect(page).toHaveURL(general);
+ await page.goto('/c/rs-learning/approvals');
+ await expect(card).toHaveCount(1);
+ expect(await count()).toBe(viewerBefore+1);
+ // Pressing it opens the channel at that message, ringed for a moment.
+ await card.click();
+ await expect(page).toHaveURL(new RegExp(`^${general}`));
+ const bubble=page.locator('.bubble--peer').filter({hasText:'@مشاهد شوف الخطة'});
+ await expect(bubble).toBeInViewport();
+ await expect(bubble).toHaveClass(/is-spot/);
+ await expect(page).not.toHaveURL(/#mention-/);
+ // And it is gone from the list and the counts.
+ await page.goto('/c/rs-learning/approvals');
+ await expect(card).toHaveCount(0);
+ await expect.poll(count).toBe(viewerBefore);
+
+ // The Manager's own item, read and cleared the same way.
+ await context.clearCookies();
+ await signIn(page,'manager@example.com','/c/rs-learning/approvals');
+ const managerCard=page.locator('a.mcard[data-kind="channel_mention"]');
+ await expect(managerCard).toHaveCount(1);
+ await expect(managerCard.locator('.mcard__q .mention')).toHaveText('@مدير');
+ await managerCard.click();
+ await expect(page).toHaveURL(new RegExp(`^${general}`));
+ await expect(page.locator('.bubble--peer').filter({hasText:'@مدير شوف الخطة'})).toBeInViewport();
+ await page.goto('/c/rs-learning/approvals');
+ await expect(managerCard).toHaveCount(0);
+});

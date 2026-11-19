@@ -70,6 +70,9 @@ async function respond(request:NextRequest) {
    const sent=await postChannelMessage(db,service(),{channel:body.channel,sendKey:body.sendKey,message:body.message});
    return 'refused' in sent?refuse(sent.refused,sent.status):reply(sent);
   }
+  // A Member opened the channel from their mention of a message (#200): their own item is done. Opening the channel any
+  // other way leaves it waiting, since reading a channel is not reading a mention.
+  if(typeof body.mention==='string'&&/^\d{1,19}$/.test(body.mention)) await db.rpc('read_channel_mention',{ch:body.channel,message:Number(body.mention)});
   const record=await channelRecord(db,user.id,body.company,body.channel,true,(_agent,session,profile)=>channelSessionTurns(body.company,profile,session));
   if(!record) return refuse('channelNotFound',404);
   if(!record.open) return reply(record);

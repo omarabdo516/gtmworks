@@ -164,6 +164,48 @@ test.each(['en', 'ar'] as const)('in the %s interface, a permission request name
  expect(channel.querySelector('.mcard__q')!.textContent).toBe('delete the old backups');
 });
 
+// #200: a Member named in a channel message waits alone under "Mentions of you": who mentioned them and where on top
+// with their initial, then the message with the reader's own name marked, and it opens the channel at that message.
+test.each(['en', 'ar'] as const)('in the %s interface a mention of the reader names who mentioned them and where, and opens the channel at the message', async language => {
+ const mention = { kind: 'channel_mention', id: 61, title: 'Launch week', body: 'يا @Omar شوف الخطة', asked_by: 'Sara Adel', card_id: null, conversation_id: null,
+  channel_id: 'ch-1', channel_message_id: 42, created_at: '2026-06-10T09:00:00Z' };
+ await showWork(workProps({ waiting: [mention], members: [{ person_id: 'p-1', people: { name: 'Omar Abdo' } }, { person_id: 'p-2', people: { name: 'Sara Adel' } }] }), { language });
+ const item = document.querySelector<HTMLAnchorElement>('a.mcard[data-kind="channel_mention"]')!;
+ expect(item.getAttribute('href')).toBe('/c/rs-learning/channels/ch-1#mention-42');
+ expect(item.closest('.col')!.getAttribute('data-column')).toBe('waiting');
+ expect(item.querySelector('.mcard__top .mcard__av')!.textContent).toBe('S');
+ expect(item.querySelector('.mcard__who b')!.textContent).toBe('Sara Adel');
+ expect(item.querySelector('.mcard__who')!.textContent).toBe(language === 'ar' ? 'Sara Adel ذكرك في #Launch week' : 'Sara Adel mentioned you in #Launch week');
+ expect([...item.querySelectorAll('.mcard__q .mention')].map(mark => mark.textContent)).toEqual(['@Omar']);
+ expect(item.querySelector('.mcard__q')!.className).toContain('od-clamp-3');
+ const group = item.closest('.mn-group')!;
+ expect(group.querySelector('.mn-h')!.textContent).toBe(language === 'ar' ? 'اتذكرت فيها 1' : 'Mentions of you 1');
+});
+
+// #200: a mention in the general channel names it in the reader's language, as the sidebar does.
+test.each([['en', 'Sara Adel mentioned you in #general'], ['ar', 'Sara Adel ذكرك في #عام']] as const)('in the %s interface a mention in the general channel names it in that language', async (language, line) => {
+ const mention = { kind: 'channel_mention', id: 62, title: 'general', body: 'يا @Omar', asked_by: 'Sara Adel', card_id: null, conversation_id: null,
+  channel_id: 'ch-0', channel_message_id: 43, created_at: '2026-06-10T09:00:00Z' };
+ await showWork(workProps({ waiting: [mention], members: [{ person_id: 'p-1', people: { name: 'Omar Abdo' } }] }), { language });
+ expect(document.querySelector('a.mcard[data-kind="channel_mention"] .mcard__who')!.textContent).toBe(line);
+});
+
+// #200: the Inbox ("Waiting on you" as its own list) draws the reader's mentions at the top, under "Mentions of you" with
+// their count, above what needs their reply, as the board's column does.
+test('the Inbox puts the reader\'s mentions under "Mentions of you", above what needs their reply', async () => {
+ const mention = { kind: 'channel_mention', id: 61, title: 'Launch week', body: 'يا @Omar شوف الخطة', asked_by: 'Sara Adel', card_id: null, conversation_id: null,
+  channel_id: 'ch-1', channel_message_id: 42, created_at: '2026-06-10T09:00:00Z' };
+ const step = { kind: 'test_kind', id: 7, title: 'A step that waits', body: '', asked_by: 'Lead', card_id: null, conversation_id: null, created_at: '2026-06-10T09:30:00Z' };
+ await showWork(workProps({ focus: 'waiting', waiting: [step, mention], members: [{ person_id: 'p-1', people: { name: 'Omar Abdo' } }] }));
+ const column = document.querySelector('.col[data-column="waiting"]')!;
+ const group = column.querySelector('.mn-group')!;
+ expect(group.querySelector('.mn-h')!.textContent).toBe('Mentions of you 1');
+ expect(group.querySelector('a.mcard[data-kind="channel_mention"]')).not.toBeNull();
+ expect(group.querySelector('.mn-sep')).not.toBeNull();
+ const entries = [...column.querySelectorAll(':is(.kcard,.mcard)')];
+ expect(entries.map(entry => entry.getAttribute('data-kind'))).toEqual(['channel_mention', 'test_kind']);
+});
+
 // #146: Card 9 is In progress (stage كتابة), tied to Omar's chat with Ads, whose handed step waits on him. Waiting on you
 // draws it once, with the badge and line for whoever reads it (design-reference: kcardHTML's waiting branch, waitTagHTML).
 const members = [{ person_id: 'p-1', people: { name: 'Omar Abdo' } }, { person_id: 'p-2', people: { name: 'Sara' } }];

@@ -329,7 +329,33 @@ test('another Member, and a Viewer, read the team\'s wait line on the request an
   const card = screen.getByRole('group', { name: 'Approval request: delete the old exports' });
   await expect.element(card.getByText('Waiting for someone on the team to approve')).toBeInTheDocument();
   expect(card.getByRole('button').elements()).toEqual([]);
-  screen.unmount();
+  await screen.unmount();
  }
 });
 
+// #200: a Member named with @ in a message is marked as bold as the called Agent's name is, for every reader.
+const namedBoth: ChannelMessage = { id: 8, author: 'person', mine: false, name: 'Omar', role: 'owner', body: '@Sara Adel شوفي الخطة و @Ads راجعها', at,
+ mention: { agent: 'Ads', face: 'c-1', state: 'answered', permissions: [], questions: [] } };
+
+test.each(['en', 'ar'] as const)('in the %s interface a Member\'s name in a message is marked as the called Agent\'s name is', async (language) => {
+ vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
+ const screen = await render(<LanguageProvider language={language}><ChannelView person="p-3" initial={team({ messages: [namedBoth] })}/></LanguageProvider>);
+ expect([...screen.container.querySelectorAll('.bubble .mention')].map(mark => mark.textContent)).toEqual(['@Sara Adel', '@Ads']);
+});
+
+// #200: pressing the item opens the channel at that message, which rings once, and the read names the mention so the list
+// lets it go. Opening the channel any other way sends no mention.
+test('opened from a mention the message rings once and the read names that mention', async () => {
+ const asked: string[] = [];
+ vi.stubGlobal('fetch', (url: string) => { asked.push(url); return new Promise<Response>(() => {}); });
+ history.replaceState(history.state, '', `${location.pathname}${location.search}#mention-42`);
+ const screen = await channel(record([{ ...peer, id: 42 }, called('answered')]));
+ expect(screen.container.querySelector('[data-msg="42"] .bubble')?.classList.contains('is-spot')).toBe(true);
+ expect(screen.container.querySelector('[data-msg="2"] .is-spot')).toBeNull();
+ await expect.poll(() => asked[0]).toBe('/api/channels?company=co-1&channel=ch-1&mention=42');
+ await screen.unmount();
+ history.replaceState(history.state, '', `${location.pathname}${location.search}`);
+ const again = await channel(record([{ ...peer, id: 42 }]));
+ expect(again.container.querySelector('.is-spot')).toBeNull();
+ await expect.poll(() => asked[1]).toBe('/api/channels?company=co-1&channel=ch-1');
+});
