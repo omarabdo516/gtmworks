@@ -27,6 +27,7 @@ function databases(fake,{profile}) {
   if(name==='claim_conversation_turn') return {data:[{company,agent:'a',person:'p',send_key:'q',message:'Draft the offer email',connection:'f9000000-0000-0000-0000-000000000001',profile,note,retry:false}],error:null};
   if(name==='pin_run') return {data:{tools:null,rules:[rule]},error:null};
   if(name==='pin_channel_run') return {data:{tools:null},error:null};
+  if(name==='channel_handover_agents') return {data:[],error:null};
   if(name==='pin_run_history') return {data:null,error:null};
   if(name==='pin_run_model') return {data:null,error:null};
   if(name==='begin_start') return {data:attempt(given.message_key),error:null};

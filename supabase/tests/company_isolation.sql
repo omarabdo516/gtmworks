@@ -23,6 +23,8 @@ insert into isolation_matrix(name) values
 -- Company, as naming the caller would make them a member of RS Learning, and a Contributor, so the Owner-only guard
 -- does not answer before the policy does.
 update isolation_matrix m set fixed = v.fixed::jsonb from (values
+ -- A handover sits in one place: a Conversation's or a channel message's (#150); this row names a Conversation.
+ ('agent_handovers', $${"conversation_id": "gen_random_uuid()"}$$),
  ('agent_profile_leftovers', $${"profile": "'ag-' || md5('isolation')"}$$),
  ('approval_steps', $${"person_id": "'e3370000-0000-0000-0000-000000000001'", "role": "null"}$$),
  ('channel_messages', $${"author": "'person'", "send_key": "gen_random_uuid()"}$$),

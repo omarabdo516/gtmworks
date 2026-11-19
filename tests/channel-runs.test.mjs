@@ -31,6 +31,7 @@ test('a channel Run is started with its pinned draft and review tools, and a ret
   if(name==='channel_runs_due') return {data:[{message:5,run:null,profile:null}],error:null};
   if(name==='begin_channel_start') return {data:[{attempt:++attempts,company:'10000000-0000-0000-0000-000000000001',profile:'ag-faye',session:'s-1',input:'Sara: @Faye draft the teaser',instructions:null}],error:null};
   if(name==='pin_channel_run') { pins.push(pinned); return {data:{tools:pinned},error:null}; }
+  if(name==='channel_handover_agents') return {data:[],error:null};
   if(name==='answer_channel_start') return {data:true,error:null};
   return {data:null,error:{message:`unexpected ${name}`}};
  }};

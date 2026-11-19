@@ -35,6 +35,7 @@ function runDatabase() {
     return { data: [{ attempt: next.attempts, company, profile: next.profile, session: `s-${next.message}`, input: next.input, instructions: null }], error: null };
    }
    if (name === 'pin_channel_run') return { data: { tools: null }, error: null };
+   if (name === 'channel_handover_agents') return { data: [], error: null };
    if (name === 'answer_channel_start') { const next = row(); if (!next) return { data: false, error: null }; next.run_id = args.run; return { data: true, error: null }; }
    if (name === 'track_channel_question') {
     const kept = open(args.run);

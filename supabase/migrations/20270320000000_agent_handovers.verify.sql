@@ -3,14 +3,14 @@
 select json_build_object(
  'table',to_regclass('public.agent_handovers') is not null,
  'offered_to_lead',position('hand_to_agent' in pg_get_functiondef('public.run_tools(uuid,uuid,uuid)'::regprocedure))>0,
- 'worker_only',has_function_privilege('service_role','public.handovers_due(uuid,bigint)','execute')
+ 'worker_only',has_function_privilege('service_role','public.handovers_due(uuid,bigint,uuid)','execute')
   and has_function_privilege('service_role','public.begin_handover(bigint)','execute')
   and has_function_privilege('service_role','public.answer_handover(bigint,integer,text)','execute')
   and has_function_privilege('service_role','public.close_handover_target(bigint,text,text,text)','execute')
   and has_function_privilege('service_role','public.close_handover_follow_up(bigint,text,text,text)','execute')
-  and not has_function_privilege('authenticated','public.handovers_due(uuid,bigint)','execute')
+  and not has_function_privilege('authenticated','public.handovers_due(uuid,bigint,uuid)','execute')
   and not has_function_privilege('authenticated','public.begin_handover(bigint)','execute')
-  and not has_function_privilege('anon','public.handovers_due(uuid,bigint)','execute'),
+  and not has_function_privilege('anon','public.handovers_due(uuid,bigint,uuid)','execute'),
  'call_kept_once',to_regclass('public.agent_handovers') is not null
   and exists(select 1 from pg_constraint where conrelid='public.agent_handovers'::regclass and contype='u'
    and conkey=array(select attnum from pg_attribute where attrelid='public.agent_handovers'::regclass and attname in ('conversation_id','run_id','call_id') order by attnum)),
