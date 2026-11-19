@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(44);
+select plan(50);
 -- #317. RS Learning: Lead on the Company's own profile, Ads and Writer on profiles of their own. The Contributor (…03) is
 -- shown Ads and not Writer; the Viewer (…04) writes nothing. Aleem has its own Lead and Ads.
 insert into public.agent_profiles(agent_id,company_id,tools_level,tools_policy,skills_shared) values
@@ -93,5 +93,26 @@ select is((select outcome from public.conversation_run_ends where run_id='run-re
 select is((select state from public.agent_handovers where run_id='run-owner'),'done','and the handover done');
 select is((select count(*)::int from public.handovers_due(null,0) where id=(select id from public.agent_handovers where run_id='run-owner')),0,'so the worker no longer sees it');
 select is(public.close_handover_follow_up((select id from public.agent_handovers where run_id='run-owner'),'run-return','completed','Again'),false,'closing it again stores nothing');
+
+-- #354: a start answer names the leg it was asked in, and the attempt the leg made. A Run id that arrives after another
+-- leg was claimed records nothing, even when both attempts are numbered 1, since the counters are counted per leg.
+select is(public.answer_handover((select id from public.agent_handovers where run_id='run-contributor' and call_id='call-2'),1,'run-wrong-leg','returning'),false,
+ 'a start answer from another leg records no Run');
+select is(public.answer_handover((select id from public.agent_handovers where run_id='run-contributor' and call_id='call-2'),1,'run-stale-attempt','waiting'),false,
+ 'nor one from an attempt its leg never made');
+select is((select state||':'||coalesce(target_run,'-') from public.agent_handovers where run_id='run-contributor' and call_id='call-2'),'waiting:-',
+ 'so that handover stays where it was, waiting for its own start');
+
+-- #354: the follow-up leg is given up a day after it began, so a start whose answer was lost still ends, and Lead's
+-- follow-up is still asked for within that day.
+insert into public.agent_handovers(company_id,conversation_id,run_id,call_id,from_agent,to_agent,goal,state,target_outcome,summary,return_started_at) values
+ ('10000000-0000-0000-0000-000000000001','c3170000-0000-0000-0000-000000000001','run-late','call-late','a3170000-0000-0000-0000-000000000011','a3170000-0000-0000-0000-000000000012','Plan it again','returning','completed','Done.',now()-interval '2 days'),
+ ('10000000-0000-0000-0000-000000000001','c3170000-0000-0000-0000-000000000001','run-fresh','call-fresh','a3170000-0000-0000-0000-000000000011','a3170000-0000-0000-0000-000000000012','Plan it once more','returning','completed','Done.',now()-interval '1 hour');
+select is((select count(*)::int from public.begin_handover((select id from public.agent_handovers where call_id='call-late'))),0,
+ 'a follow-up leg that could not start for a day ends');
+select is((select state||':'||(closed_at is not null)::text from public.agent_handovers where call_id='call-late'),'failed:true',
+ 'as a failed handover, so the person is still told the job did not reach them');
+select is((select attempt from public.begin_handover((select id from public.agent_handovers where call_id='call-fresh'))),1,
+ 'while one that began an hour ago is asked for again');
 select * from finish();
 rollback;

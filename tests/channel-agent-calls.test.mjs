@@ -88,6 +88,23 @@ test('two Agents named in one message answer one after the other, in the order t
  assert.deepEqual(runs.map(run => run.outcome), ['completed', 'completed']);
 });
 
+test('the start answer names the place of the Run that began, so a stale answer can never close another Agent\'s Run', async () => {
+ // #354: two first attempts of one message are both numbered 1, so the place is what says which Run the Engine answered
+ // for. The worker sends it back with the Run, and the database locks that exact row.
+ const fake = fakeEngine();
+ let replies = 0;
+ fake.settings.reply = () => `Reply ${++replies}`;
+ const db = runDatabase(called('@Ads @SEO two places'));
+ const named = /** @type {{message:number,attempt:number,run:string,ordinal?:number}[]} */([]);
+ const capture = { ...db, rpc: async (/** @type {string} */ name, /** @type {any} */ args) => {
+  if (name === 'answer_channel_start') named.push(args);
+  return db.rpc(name, args);
+ } };
+ await driveChannelRuns(/** @type {any} */(capture), { hermes, engineFor: fake.engineFor });
+ assert.deepEqual(named.map(args => [args.attempt, args.ordinal]), [[1, 1], [1, 2]],
+  'each answer names the place whose Run began, with the attempt that asked for it');
+});
+
 test('an Agent whose Run fails keeps its own failed line, and the other Agents of the message still answer', async () => {
  const fake = fakeEngine();
  let replies = 0;

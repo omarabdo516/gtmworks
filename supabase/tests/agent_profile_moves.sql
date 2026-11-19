@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(66);
+select plan(72);
 -- An install from before #120: RS Learning (1) has Lead, its main Agent, on the Company's own profile, and Aleem (3) has
 -- its Lead and Copy on Aleem's. Aleem's profile is not ready yet. Every message so far is an hour old.
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
@@ -97,6 +97,22 @@ select is(public.move_agent_profile((select agent from named where name='writer'
 select ok(not pg_temp.listed(),'and keeps it off the list');
 update public.note_runs set outcome='failed',closed_at=now() where note_id=-11;
 select ok(pg_temp.listed(),'once the note Run has ended it may move');
+
+-- A handover leg of it that is open (#354): an Agent whose leg's Run would be read on the profile it is leaving may not
+-- move. A leg that never started holds nothing.
+insert into public.agent_handovers(company_id,conversation_id,run_id,call_id,from_agent,to_agent,goal)
+ select '10000000-0000-0000-0000-000000000001','b1200000-0000-0000-0000-000000000002','w-hand','call-hand','b1100000-0000-0000-0000-000000000001',agent,'Write the launch post'
+ from named where name='writer';
+select ok(pg_temp.listed(),'a handover target leg that has started nothing holds nothing');
+update public.agent_handovers set target_attempts=1, attempted_at=now() where call_id='call-hand';
+select is(public.move_agent_profile((select agent from named where name='writer')),false,'a target leg whose start was asked for holds the move');
+select ok(not pg_temp.listed(),'and keeps it off the list');
+update public.agent_handovers set state='target', target_run='run-hand', attempted_at=null where call_id='call-hand';
+select is(public.move_agent_profile((select agent from named where name='writer')),false,'and so does a target Run still open');
+update public.agent_handovers set state='returning', target_outcome='completed', summary='Done.', attempted_at=null where call_id='call-hand';
+select ok(pg_temp.listed(),'once that Run has reported, the leg left is the Lead''s, and the target may move');
+update public.agent_handovers set state='done', closed_at=now() where call_id='call-hand';
+select ok(pg_temp.listed(),'and a finished handover holds nothing either');
 
 set local role service_role;
 select ok(public.move_agent_profile((select agent from named where name='writer')),'with nothing in flight and its tools recorded, the Writer moves');

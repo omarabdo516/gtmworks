@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(37);
+select plan(40);
 -- #148. Ads in RS Learning's general channel, shown to the Manager (2) and Contributor 3; the Owner (1) sees every
 -- Agent and Viewer 4 neither. SEO is in the "scripts" team channel only and hidden from everyone outside it, where
 -- Contributor 3 calls it and Viewer 4 reads. Karim is a Manager of Aleem only, so he is not in these channels.
@@ -142,6 +142,34 @@ select is((select count(*)::int from public.channel_run_sessions('e8140000-0000-
 select set_config('request.jwt.claim.sub','e8149000-0000-0000-0000-000000000001',true);
 select is((select count(*)::int from public.channel_run_sessions('69000000-0000-0000-0000-000000000001'))
  +(select count(*)::int from public.channel_run_sessions('e8140000-0000-0000-0000-000000000001')),0,'and another Company reads none');
+reset role;
+
+-- #354: a card's log row follows its channel. A Manager of the Company who is not in a team channel reads none of its
+-- card's row, even when its Agent is one they see everywhere.
+insert into public.channels(id,company_id,kind,name,created_by,create_key) values
+ ('e8140000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','team','launch','20000000-0000-0000-0000-000000000003','e8147000-0000-0000-0000-000000000002');
+insert into public.channel_people(channel_id,company_id,person_id,added_by) values
+ ('e8140000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','20000000-0000-0000-0000-000000000003');
+insert into public.channel_agents(channel_id,company_id,agent_id,added_by) values
+ ('e8140000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','e8148000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003');
+insert into public.channel_messages(company_id,channel_id,author,person_id,author_name,body,send_key) values
+ ('10000000-0000-0000-0000-000000000001','e8140000-0000-0000-0000-000000000002','person','20000000-0000-0000-0000-000000000003','مراجع','@Ads draft the launch','e8141000-0000-0000-0000-000000000006');
+insert into public.channel_runs(message_id,company_id,channel_id,agent_id,agent_name,session,input,run_id,profile,attempts,attempted_at)
+ values ((select id from public.channel_messages where send_key='e8141000-0000-0000-0000-000000000006'),'10000000-0000-0000-0000-000000000001',
+  'e8140000-0000-0000-0000-000000000002','e8148000-0000-0000-0000-000000000001','Ads',gen_random_uuid(),'مراجع: @Ads draft the launch','run-launch','channel-cards-test',1,now());
+select set_config('test.launch',(select id::text from public.channel_messages where send_key='e8141000-0000-0000-0000-000000000006'),true);
+set local role service_role;
+select is(public.channel_show_card(current_setting('test.launch')::bigint,'run-launch','call-1','draft','خطة الإطلاق',current_setting('test.draft')::jsonb)->>'state','shown',
+ 'a team channel''s card is shown by an Agent the whole Company sees');
+reset role;
+select set_config('test.launchcard',(select id::text from public.reply_cards where channel_message_id=current_setting('test.launch')::bigint),true);
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select is((select count(*)::int from public.company_log where source='reply_cards' and source_id=current_setting('test.launchcard')::bigint),0,
+ 'a Manager outside the team channel reads no log row of its card, though they see its Agent');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+select is((select count(*)::int from public.company_log where source='reply_cards' and source_id=current_setting('test.launchcard')::bigint),1,
+ 'and the Contributor in it reads the row');
 reset role;
 
 select * from finish();

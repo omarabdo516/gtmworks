@@ -1,4 +1,5 @@
 import { afterEach, expect, test, vi } from 'vitest';
+import { act } from 'react';
 import { render } from 'vitest-browser-react';
 import { userEvent } from 'vitest/browser';
 import type { ComponentProps } from 'react';
@@ -286,6 +287,37 @@ test('a message written in the channel\'s Card under Chat goes to that channel',
  const posted = JSON.parse(String(asks.mock.calls.find(([, init]) => init?.method === 'POST')![1]!.body));
  expect(posted).toMatchObject({ company: 'co-1', channel: 'ch-1', message: 'Morning, team' });
  expect(posted.sendKey).toMatch(/^[0-9a-f-]{36}$/);
+});
+
+test('a channel message\'s files are the channel\'s file links under its bubble, so an attachment alone is no empty bubble', async () => {
+ vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
+ const screen = await show(sheet({ chat: { kind: 'channel', record: inChannel({ messages: [
+  { id: 1, author: 'person', mine: false, name: 'Sara Adel', role: 'manager', body: '', at, files: [{ id: 9, name: 'brief.png' }], mention: null },
+ ] }) } }));
+ const file = chatPanel(screen).getByRole('link', { name: 'Open brief.png' });
+ await expect.element(file).toHaveAttribute('href', '/c/rs-learning/files/channel/9');
+ await expect.element(file).toHaveTextContent('brief.png');
+ expect(document.querySelector('[data-author="person"] .bubble')).toBeNull();
+});
+
+test('a file chosen in the channel\'s Card goes with the message, as the channel page sends it', async () => {
+ const asks = vi.fn(async (_: string, init?: RequestInit) => init?.method === 'POST' ? Response.json({ message: 3 }) : Response.json(inChannel()));
+ vi.stubGlobal('fetch', asks);
+ const screen = await show(sheet({ chat: { kind: 'channel', record: inChannel() } }));
+ const input = document.querySelector<HTMLInputElement>('input[type=file]')!;
+ const carried = new DataTransfer();
+ carried.items.add(new File([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])], 'cover.png', { type: 'image/png' }));
+ await act(async () => { input.files = carried.files; input.dispatchEvent(new Event('change', { bubbles: true })); });
+ await expect.element(screen.getByText('cover.png')).toBeVisible();
+ await userEvent.type(screen.getByRole('textbox', { name: 'Write your message in the channel' }), 'Here is the cover{Enter}');
+ await expect.poll(() => asks.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(true);
+ const [url, init] = asks.mock.calls.find(([, init]) => init?.method === 'POST')!;
+ expect(url).toBe('/api/channels');
+ const form = init!.body as FormData;
+ expect(form.get('company')).toBe('co-1');
+ expect(form.get('channel')).toBe('ch-1');
+ expect(form.get('message')).toBe('Here is the cover');
+ expect([...form.getAll('files')].map(file => (file as File).name)).toEqual(['cover.png']);
 });
 
 test('a Viewer in the channel reads its Card under Chat with no composer', async () => {

@@ -49,5 +49,8 @@ select json_build_object(
   and has_function_privilege('authenticated','public.handover_in_channel(bigint)','execute')
   and not has_function_privilege('anon','public.handover_in_channel(bigint)','execute')
   and has_function_privilege('authenticated','public.handover_in_my_channel(bigint)','execute')
-  and not has_function_privilege('anon','public.handover_in_my_channel(bigint)','execute')
+  and not has_function_privilege('anon','public.handover_in_my_channel(bigint)','execute'),
+ 'card_log_follows_its_channel',(select length(qual)-length(replace(qual,'reply_card_in_channel',''))
+   from pg_policies where schemaname='public' and tablename='company_log' and policyname='company_log_read')
+   >= 2*length('reply_card_in_channel')
 );

@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(60);
+select plan(75);
 -- #152. RS Learning's seeded Members: the Owner (1), the Manager (2), a Contributor (3) and the Viewer (4). Lead is the
 -- main Agent, seen by everyone; Faye is shown to the Manager and the Contributor, and SEO, Reach and Lead Writer to the
 -- Contributor only; Secret is shown to nobody but the Owner. The general channel is 69000000-0000-0000-0000-000000000001.
@@ -165,6 +165,53 @@ select is((select array_agg(ordinal||':'||state order by ordinal) from public.ch
  array['1:closed','2:open'],'each request is under its own Agent''s place, and only the ended Run''s request closed');
 select is((select array_agg(run_id order by ordinal) from public.channel_permissions where message_id=(select id from sent where label='perm')),
  array['run-perm-1','run-perm-2'],'each request is linked to the Run that asked, not to the message alone');
+
+-- #354: the answer names the place of the Run that began, and a Run that already closed takes no answer, so a refusal for
+-- one Agent's first attempt never ends another's, whose number is also 1.
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+insert into sent values ('bind',public.post_channel_message('69000000-0000-0000-0000-000000000001',gen_random_uuid(),'@Faye @SEO bind the place'));
+reset role;
+set local role service_role;
+select is((select attempt from public.begin_channel_start((select id from sent where label='bind'))),1,'the first Agent''s Run starts');
+select is(public.answer_channel_start((select id from sent where label='bind'),1,'run-bind-2',2::smallint),false,'an answer naming the second place records nothing on the first Run');
+reset role;
+select is((select run_id from public.channel_runs where message_id=(select id from sent where label='bind') and ordinal=1),null::text,'so the Run it did not name stays without one');
+set local role service_role;
+select is(public.answer_channel_start((select id from sent where label='bind'),1,'run-bind-1',1::smallint),true,'the answer that names the Run that began keeps its id');
+select is(public.answer_channel_start((select id from sent where label='bind'),2,'run-bind-later',1::smallint),false,'and one from a later attempt of that place records nothing');
+select ok(public.close_channel_run((select id from sent where label='bind'),'run-bind-1','completed','Bound reply.',null,null),'the first Run ends');
+select is(public.answer_channel_start((select id from sent where label='bind'),1,null,1::smallint),false,'a refusal for a Run that already closed changes nothing');
+
+-- #354: a later Agent's ten minutes begin when the Agent before it ended, not at the message's own time, and its day of
+-- attempts begins at its own first attempt.
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+insert into sent values ('late',public.post_channel_message('69000000-0000-0000-0000-000000000001',gen_random_uuid(),'@Faye @SEO answer late'));
+reset role;
+update public.channel_runs set created_at=now()-interval '2 hours' where message_id=(select id from sent where label='late');
+set local role service_role;
+select ok(public.close_channel_run((select id from sent where label='late'),null,'completed','First, late.',null,null),'the first Agent answers two hours after the message');
+select is((select count(*)::int from public.begin_channel_start((select id from sent where label='late'))),1,'the Agent after it is started, its ten minutes counted from that end');
+reset role;
+select is((select outcome from public.channel_runs where message_id=(select id from sent where label='late') and ordinal=2),null::text,'and its Run is not given up as never started');
+set local role service_role;
+select is((select count(*)::int from public.begin_channel_start((select id from sent where label='late'))),1,'a retry of that start is still asked for within the day');
+reset role;
+update public.channel_runs set first_attempted_at=now()-interval '2 days' where message_id=(select id from sent where label='late') and ordinal=2;
+set local role service_role;
+select is((select count(*)::int from public.begin_channel_start((select id from sent where label='late'))),0,'but not after a day of its own attempts');
+reset role;
+select is((select outcome from public.channel_runs where message_id=(select id from sent where label='late') and ordinal=2),'lost','when its Run is given up as a lost start');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+insert into sent values ('old',public.post_channel_message('69000000-0000-0000-0000-000000000001',gen_random_uuid(),'@Faye too old'));
+reset role;
+update public.channel_runs set created_at=now()-interval '11 minutes' where message_id=(select id from sent where label='old');
+set local role service_role;
+select is((select count(*)::int from public.begin_channel_start((select id from sent where label='old'))),0,'the first Agent''s ten minutes are still the message''s own');
+reset role;
+select is((select outcome from public.channel_runs where message_id=(select id from sent where label='old')),'failed','and its Run is given up as failed');
 
 select * from finish();
 rollback;

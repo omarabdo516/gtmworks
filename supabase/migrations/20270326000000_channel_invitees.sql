@@ -97,28 +97,33 @@ create trigger member_invitations_note_reopen after update of claimed_at on publ
  for each row when (old.claimed_at is not null and new.claimed_at is null) execute function public.note_member_invitation();
 
 -- One invitation in or out of a team channel, by an Owner or a Manager who is in it, as set_channel_person (#24) does
--- with a Member. The invitation must be open and of this Company; the general channel's invitees are never chosen.
+-- with a Member. The invitation must be open and of this Company; the general channel's invitees are never chosen. It is
+-- locked while it is checked and until the channel's row is written (#354), as claiming it locks it: a claim that wins
+-- first leaves it closed here, and the person who joined is already in every channel it named, so there is nothing to add.
 -- Refusals: P0002 channelNotFound, memberNotFound; 42501 channelNotAllowed; 22023 channelFailed.
 create function public.set_channel_invitee(ch uuid, invitation uuid, present boolean) returns void
 language plpgsql security definer set search_path='' as $$
-declare k public.channels;
+declare k public.channels; open_invite public.member_invitations;
 begin
  select * into k from public.channels where id=ch;
  if k.id is null or not public.in_channel(ch) then raise exception 'channelNotFound' using errcode='P0002'; end if;
  if not public.can_manage_company(k.company_id) or k.kind<>'team' then raise exception 'channelNotAllowed' using errcode='42501'; end if;
  if present is null or invitation is null then raise exception 'channelFailed' using errcode='22023'; end if;
  if not present then delete from public.channel_invitees where channel_id=ch and invitation_id=invitation; return; end if;
- if not exists(select 1 from public.member_invitations v where v.id=invitation and v.company_id=k.company_id and v.claimed_at is null) then
-  raise exception 'memberNotFound' using errcode='P0002'; end if;
+ select * into open_invite from public.member_invitations v
+  where v.id=invitation and v.company_id=k.company_id and v.claimed_at is null for share;
+ if open_invite.id is null then raise exception 'memberNotFound' using errcode='P0002'; end if;
  insert into public.channel_invitees(channel_id, company_id, invitation_id, added_by) values (ch, k.company_id, invitation, auth.uid())
   on conflict (channel_id, invitation_id) do nothing;
 end $$;
 
--- 20261227000000's create_channel, and the invitations chosen with its people: each must be open in this Company. The
--- channel the previous version makes is the same function with no invited people, so its five arguments still work.
+-- 20261227000000's create_channel, and the invitations chosen with its people: each must be open in this Company, and is
+-- locked from its check until the channel's rows are written (#354), as claiming it locks it, so a channel is never made
+-- with an invitation that joined before its row was written. The channel the previous version makes is the same function
+-- with no invited people, so its five arguments still work.
 create function public.create_channel_inviting(c uuid, request_key uuid, channel_name text, people uuid[], agents uuid[], invitees uuid[]) returns uuid
 language plpgsql security definer set search_path='' as $$
-declare made public.channels; called text;
+declare made public.channels; called text; chosen uuid; open_invite public.member_invitations;
 begin
  if auth.uid() is null or not public.can_manage_company(c) or exists(select 1 from public.companies where id=c and work_mode='alone') then
   raise exception 'channelNotAllowed' using errcode='42501'; end if;
@@ -135,9 +140,11 @@ begin
   raise exception 'channelNameTaken' using errcode='23505'; end if;
  if exists(select 1 from unnest(coalesce(people,'{}')) p where not public.channel_person(c, p)) then
   raise exception 'memberNotFound' using errcode='P0002'; end if;
- if exists(select 1 from unnest(coalesce(invitees,'{}')) i where not exists(select 1 from public.member_invitations v
-  where v.id=i and v.company_id=c and v.claimed_at is null)) then
-  raise exception 'memberNotFound' using errcode='P0002'; end if;
+ for chosen in select distinct unnest(coalesce(invitees,'{}')) loop
+  select * into open_invite from public.member_invitations v
+   where v.id=chosen and v.company_id=c and v.claimed_at is null for share;
+  if open_invite.id is null then raise exception 'memberNotFound' using errcode='P0002'; end if;
+ end loop;
  if exists(select 1 from unnest(coalesce(agents,'{}')) a where not exists(select 1 from public.hermes_agents h where h.company_id=c and h.id=a)
   or not public.agent_visible_to(c, auth.uid(), a)) then
   raise exception 'agentNotFound' using errcode='P0002'; end if;

@@ -175,7 +175,7 @@ grant execute on function public.handovers_due(uuid,bigint,uuid) to service_role
 create or replace function public.begin_handover(h bigint)
  returns table(state text, attempt integer, company uuid, profile text, session uuid, input text, instructions text)
  language plpgsql security definer set search_path='' as $$
-declare r public.agent_handovers; talk public.conversations; chan uuid; target public.hermes_agents; lead public.hermes_agents; asking text;
+declare r public.agent_handovers; talk public.conversations; chan uuid; target public.hermes_agents; lead public.hermes_agents; asking text; began timestamptz;
 begin
  perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
  select * into r from public.agent_handovers where id=h for update;
@@ -193,9 +193,9 @@ begin
  if r.state='waiting' then
   if r.target_attempts=0 and r.created_at < now()-interval '10 minutes'
    or r.target_attempts>0 and r.created_at < now()-interval '1 day' then
-   update public.agent_handovers set state='returning', target_outcome='failed', attempted_at=null where id=h; return; end if;
+   update public.agent_handovers set state='returning', target_outcome='failed', attempted_at=null, return_started_at=now() where id=h; return; end if;
   if target.id is null or target.profile is null then
-   update public.agent_handovers set state='returning', target_outcome='failed', attempted_at=null where id=h; return; end if;
+   update public.agent_handovers set state='returning', target_outcome='failed', attempted_at=null, return_started_at=now() where id=h; return; end if;
   -- ADR 0014: a Company profile serves its own Company, and no Run starts while its tools are pending. Waits.
   if target.profile ~ '^co-[0-9a-f]{32}$'
    and (target.profile <> public.company_engine_profile(r.company_id) or not public.company_profile_ready(r.company_id)) then return; end if;
@@ -224,6 +224,14 @@ begin
   return;
  end if;
 
+ -- The follow-up leg is given up a day after it began (#354): a start whose answer was lost keeps being asked for within
+ -- that window, and after it the leg closes as failed, so the person still learns the job did not reach them. A leg that
+ -- began before this column did starts its window now.
+ if r.return_started_at is null then
+  update public.agent_handovers set return_started_at=now() where id=h returning return_started_at into began;
+  r.return_started_at:=began; end if;
+ if r.return_started_at < now()-interval '1 day' then
+  update public.agent_handovers set state='failed', closed_at=now() where id=h; return; end if;
  if lead.id is null or lead.profile is null then
   update public.agent_handovers set state='failed', closed_at=now() where id=h; return; end if;
  if lead.profile ~ '^co-[0-9a-f]{32}$'
@@ -261,7 +269,8 @@ begin
  if run_outcome is null or run_outcome not in ('completed','failed','stopped','lost') or (run_outcome='completed') <> (coalesce(btrim(words),'') <> '')
   then raise exception 'handoverFailed' using errcode='22023'; end if;
  update public.agent_handovers set state='returning', target_outcome=run_outcome,
-  summary=case when run_outcome='completed' then left(btrim(words),8000) end, target_closed_at=now(), attempted_at=null
+  summary=case when run_outcome='completed' then left(btrim(words),8000) end, target_closed_at=now(), attempted_at=null,
+  return_started_at=now()
   where id=h and state='target' and target_run=run and target_outcome is null
   returning * into r;
  -- #150/#151: a channel's Card logs the handed-to Agent's answer as a reply in that channel is logged, so its Log draws it
@@ -331,9 +340,13 @@ grant execute on function public.channel_handovers(uuid) to authenticated;
 
 -- 20270327000000's company_log_read, and a handover made in a channel is read by that channel's members alone, also where
 -- its Agents are hidden from them elsewhere; a Member of the Company outside the channel reads none, an Owner included.
--- Every other row keeps the rule it had.
+-- A channel card's row follows its channel too (#354): a Manager who may manage the Company reads no draft or review title
+-- from a team channel they are not in, though its Agent is one they see. reply_card_in_channel resolves the card's channel
+-- without the reader's own row-level security, which a subquery over reply_cards or channel_messages would not. Every other
+-- row keeps the rule it had.
 alter policy company_log_read on public.company_log using (
  (public.is_member(company_id) and public.can_see_agent(company_id,agent_id) and public.can_see_agent(company_id,actor_id)
+  and not (source='reply_cards' and public.reply_card_in_channel(company_log.source_id))
   and not (source='reply_card_answers' and public.reply_card_in_channel(company_log.source_id))
   and not (source='agent_handovers' and public.handover_in_channel(company_log.source_id))
   and (details->>'private' is null or actor_id=auth.uid() or details->>'teller'=auth.uid()::text

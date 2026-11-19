@@ -41,7 +41,7 @@ export function CardSheetChat({slug,company,card,chat,writer,shown,openLog}:{slu
  const [started,setStarted]=useState<ConversationRecord|null>(null); const [id]=useState(newId);
  const record=chat.kind==='own'?chat.record:started;
  if(record) return <SheetThread key={record.conversation.id} slug={slug} company={company} initial={record} writer={writer} shown={shown}/>;
- if(chat.kind==='channel') return <SheetChannel channel={chat.record} company={company} shown={shown}/>;
+ if(chat.kind==='channel') return <SheetChannel slug={slug} channel={chat.record} company={company} shown={shown}/>;
  if(chat.kind==='theirs') return <>
   <div {...panel}><div className="transcript__col"><div className="empty-chat priv-sheet">
    <span className="priv-sheet__ic" aria-hidden="true"><ShellIcon name="lock"/></span>
@@ -99,8 +99,9 @@ function SheetThread({slug,company,initial,writer,shown}:{slug:string,company:st
 
 // A Card a channel put on the board (#151): the channel under the Chat tab, for the Member reading it, with the channel's
 // own send when they may write. It stays on the newest message while they are there and asks again while it is open, so
-// an Agent's reply lands without a reload. A Viewer in the channel reads it with the view-only line.
-function SheetChannel({channel,company,shown}:{channel:ChannelRecord,company:string,shown:boolean}) {
+// an Agent's reply lands without a reload. A Viewer in the channel reads it with the view-only line. A message's files are
+// the channel page's file links (#156), under its bubble, so an attachment-only message is no empty bubble.
+function SheetChannel({slug,channel,company,shown}:{slug:string,channel:ChannelRecord,company:string,shown:boolean}) {
  const {t,language}=useI18n(); const own:Record<string,string>=language==='ar'?channelAr:channelEn;
  const c:Say=(key,...values)=>own[key].replace(/\{(\d+)\}/g,(_,index)=>String(values[Number(index)] ?? ''));
  const [record,setRecord]=useState(channel); const box=useRef<HTMLDivElement>(null); const stick=useRef(true);
@@ -125,11 +126,13 @@ function SheetChannel({channel,company,shown}:{channel:ChannelRecord,company:str
      ? <li key={message.id} className="turn turn--agent msg" data-author="agent"><div className="sender"><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:message.face,name:message.name}} size={20}/></span><bdi>{message.name}</bdi>{message.to&&<span className="sender__to">{c('channelSenderTo',message.to)}</span>}</div><div className="bubble bubble--agent" dir="auto">{message.body}</div></li>
      : <li key={message.id} className={`turn ${message.mine?'turn--user':'turn--peer'} msg`} data-author="person">
       {!message.mine&&<div className="sender"><span className="me__av lg-av" style={{'--av':'20px'} as CSSProperties} aria-hidden="true">{Array.from(message.name.trim())[0]||'?'}</span><bdi>{firstName(message.name)}</bdi></div>}
-      <div className={`bubble ${message.mine?'bubble--user':'bubble--peer'}`} dir="auto">{message.body}</div></li>)}
+      {!!message.body.trim()&&<div className={`bubble ${message.mine?'bubble--user':'bubble--peer'}`} dir="auto">{message.body}</div>}
+      {!!message.files.length&&<div className="msg-files">{message.files.map(file=><a key={file.id} className="file-chip" href={`/c/${slug}/files/channel/${file.id}`} target="_blank" rel="noreferrer" aria-label={t('attachOpen',file.name)}><ShellIcon name="clip"/><bdi dir="auto">{file.name}</bdi></a>)}</div>}</li>)}
    </ol></div>
   </div>
-  <div className="composer-area">{writer?<MessageBox label={c('channelMessageLabel')} placeholder={c('channelPlaceholder',name)} send={async(message,sendKey)=>{
-    const failure=await postMessage({company,channel:id,message,sendKey},'/api/channels');
+  <div className="composer-area">{writer?<MessageBox label={c('channelMessageLabel')} placeholder={c('channelPlaceholder',name)} send={async(message,sendKey,files)=>{
+    const fields={company,channel:id,message,sendKey};
+    const failure=files.length?await postMessageWithFiles(fields,files,'/api/channels'):await postMessage(fields,'/api/channels');
     if(!failure) await read();
     return failure;
    }}/>:<p className="ro-line" role="note"><ShellIcon name="eye"/><span>{t('viewOnly')}</span></p>}</div>

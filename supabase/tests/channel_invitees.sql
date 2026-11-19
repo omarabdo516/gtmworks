@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(48);
+select plan(51);
 -- #207: an invited person is in the general channel from the invite, with the name made from their email, their Role and
 -- "Invite sent"; the Owner and the Managers see the email, everyone else does not. A team channel holds the invitations it
 -- was given, and they become Members of it when they join.
@@ -95,6 +95,21 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
 select throws_ok($$select public.set_channel_invitee((select id from made where label='launch'),'b2070000-0000-0000-0000-000000000099',true)$$,
  'P0002','memberNotFound','and another Company''s invitation is refused');
+
+-- #354: an invitation claimed before a Manager puts it in a channel takes nothing into it, and no row is kept for it.
+reset role;
+insert into public.member_invitations(id,company_id,email,role,claimed_at) values
+ ('b2070000-0000-0000-0000-000000000098','10000000-0000-0000-0000-000000000001','joined@example.test','viewer',now());
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select throws_ok($$select public.set_channel_invitee((select id from made where label='launch'),'b2070000-0000-0000-0000-000000000098',true)$$,
+ 'P0002','memberNotFound','an invitation claimed first is not put into a team channel');
+select throws_ok($$select public.create_channel_inviting('10000000-0000-0000-0000-000000000001',gen_random_uuid(),'Joined folks',null,null,array['b2070000-0000-0000-0000-000000000098']::uuid[])$$,
+ 'P0002','memberNotFound','nor is a channel made with it');
+reset role;
+select is((select count(*)::int from public.channel_invitees where invitation_id='b2070000-0000-0000-0000-000000000098'),0,'and no row of it reaches one');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
 
 -- A Member of another Company reads none of it.
 select set_config('request.jwt.claim.sub','a2070000-0000-0000-0000-000000000012',true);

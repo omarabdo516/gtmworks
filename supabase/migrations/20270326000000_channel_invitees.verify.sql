@@ -10,6 +10,8 @@ select json_build_object(
  'one_line_per_invitation',exists(select 1 from pg_constraint where conrelid='public.channel_notes'::regclass and contype='u'),
  'note_once_written',(select count(*)::int from pg_trigger where tgfoid='public.note_member_invitation()'::regprocedure and tgrelid='public.member_invitations'::regclass and not tgisinternal)=2,
  'invitee_writes',has_function_privilege('authenticated','public.set_channel_invitee(uuid,uuid,boolean)','execute'),
+ 'invitations_locked',position('for share' in pg_get_functiondef('public.set_channel_invitee(uuid,uuid,boolean)'::regprocedure))>0
+  and position('for share' in pg_get_functiondef('public.create_channel_inviting(uuid,uuid,text,uuid[],uuid[],uuid[])'::regprocedure))>0,
  'create_channel_takes_invitees',position('invitees' in pg_get_functiondef('public.create_channel_inviting(uuid,uuid,text,uuid[],uuid[],uuid[])'::regprocedure))>0,
  'previous_version_still_makes_one',to_regprocedure('public.create_channel(uuid,uuid,text,uuid[],uuid[])') is not null,
  'claiming_joins_their_channels',position('channel_invitees' in pg_get_functiondef('public.claim_invitations()'::regprocedure))>0,

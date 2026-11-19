@@ -95,6 +95,29 @@ function runDatabase() {
 
 const queued = () => { /** @type {Promise<void>[]} */ const work = []; return { later: (/** @type {()=>Promise<void>} */ deliver) => { work.push(deliver()); }, settle: () => Promise.all(work) }; };
 
+test('a question no card can settle is answered empty and keeps no card, so the Run is never held open', async () => {
+ // #354: a card offers one pick among the choices it can show. A question with none, or one the Engine allows several
+ // answers to, leaves the team nothing to press, so it is answered empty as a note's is and no card waits in "Waiting on
+ // you" for an answer no one can give. The Run's next read carries its reply.
+ for (const [what, question] of [
+  ['no choices', { text: 'Which audience?', choices: [] }],
+  ['several at once', { text: 'Which audiences?', choices: ['Parents', 'Students'], multiple: true }],
+  ['no words', { text: '  ', choices: ['One'] }],
+ ]) {
+  const fake = fakeEngine();
+  fake.settings.questions = () => [question];
+  fake.settings.reply = () => 'Done with what I had.';
+  const db = runDatabase();
+  const waited = await driveChannelRuns(/** @type {any} */(db), { hermes, engineFor: fake.engineFor });
+  assert.deepEqual(waited, { started: 1, closed: 0 }, `${what}: the Run is asked and nothing closes it yet`);
+  assert.deepEqual(fake.answers.map(answer => answer.text), [''], `${what}: it is answered with nothing`);
+  assert.deepEqual([...db.cards.values()], [], `${what}: no card waits for the team`);
+  const closed = await driveChannelRuns(/** @type {any} */(db), { hermes, engineFor: fake.engineFor });
+  assert.deepEqual(closed, { started: 0, closed: 1 }, `${what}: the same Run goes on to its reply`);
+  assert.deepEqual(db.replies.map(reply => reply.body), ['Done with what I had.'], `${what}: and the reply lands`);
+ }
+});
+
 test('a channel question is kept as the team card, not answered with nothing, and the first of two Members wins', async () => {
  const fake = fakeEngine();
  fake.settings.questions = () => [{ text: '  Which angle first?\n', choices: ['Graduates', 'Parents'] }];

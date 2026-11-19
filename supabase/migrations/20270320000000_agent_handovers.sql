@@ -41,6 +41,9 @@ create table public.agent_handovers (
  follow_up_run text,
  follow_up_outcome text constraint agent_handovers_follow_up_outcome check (follow_up_outcome in ('completed','failed','stopped','lost')),
  created_at timestamptz not null default now(),
+ -- When the follow-up leg began (#354): its start is retried within a day of this, and closed as failed after it, so a
+ -- start whose answer was lost never leaves the person without Lead's reply or a failure.
+ return_started_at timestamptz,
  closed_at timestamptz,
  foreign key (conversation_id, company_id) references public.conversations(id, company_id),
  unique (conversation_id, run_id, call_id),
@@ -176,13 +179,18 @@ grant execute on function public.begin_handover(bigint) to service_role;
 
 -- The Engine's answer to a leg's attempt. A run id is kept once; null (refused) moves the leg on only for a first
 -- attempt while no later one was made, since only a first start can prove nothing started (ADR 0015). An unknown answer
--- is not reported: the row stays attempted, and the next pass asks again with the same key and body.
-create function public.answer_handover(h bigint, attempt integer, run text) returns boolean
+-- is not reported: the row stays attempted, and the next pass asks again with the same key and body. The answer names the
+-- leg that issued it (#354): the attempt counters are counted per leg, so a start claimed as the target's never records a
+-- Run in the returning leg, even when both are their first attempt. A caller of the previous app version sends no leg and
+-- keeps the rule it had.
+create function public.answer_handover(h bigint, attempt integer, run text, leg text default null) returns boolean
 language plpgsql security definer set search_path='' as $$
 declare r public.agent_handovers;
 begin
  select * into r from public.agent_handovers where id=h for update;
  if r.id is null or r.state not in ('waiting','returning') then return false; end if;
+ if leg is not null and (leg<>r.state or (r.state='waiting' and r.target_attempts is distinct from attempt)
+  or (r.state='returning' and r.return_attempts is distinct from attempt)) then return false; end if;
  if run is not null then
   if r.state='waiting' then
    if r.target_run is not null then return r.target_run=run; end if;
@@ -193,14 +201,14 @@ begin
  end if;
  if r.state='waiting' then
   if attempt=1 and r.target_attempts=1 and r.target_run is null then
-   update public.agent_handovers set state='returning', target_outcome='failed', attempted_at=null where id=h; return true; end if;
+   update public.agent_handovers set state='returning', target_outcome='failed', attempted_at=null, return_started_at=now() where id=h; return true; end if;
  elsif attempt=1 and r.return_attempts=1 and r.follow_up_run is null then
   update public.agent_handovers set state='failed', closed_at=now() where id=h; return true;
  end if;
  return false;
 end $$;
-revoke all on function public.answer_handover(bigint,integer,text) from public,anon,authenticated;
-grant execute on function public.answer_handover(bigint,integer,text) to service_role;
+revoke all on function public.answer_handover(bigint,integer,text,text) from public,anon,authenticated;
+grant execute on function public.answer_handover(bigint,integer,text,text) to service_role;
 
 -- The target's Run ended: its summary is what Lead's follow-up Run is given, and it stays in the record. Only a
 -- completed Run has one.

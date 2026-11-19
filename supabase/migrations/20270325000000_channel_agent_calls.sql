@@ -15,6 +15,9 @@
 -- Two or three Agents per message: `ordinal` is the place the Agent was named in, 1 to 3. The pair is the Run's key, so a
 -- message and an Agent keep one Run; agent_id stays nullable (a removed Agent leaves its replies).
 alter table public.channel_runs add column ordinal smallint not null default 1 check (ordinal between 1 and 3);
+-- When the Run's first start was asked for (#354): a start whose answer was lost is given up a day after this, never after
+-- the message's own time, since a later Agent's turn may begin long after the message.
+alter table public.channel_runs add column first_attempted_at timestamptz;
 -- A request holds its Run by the engine run id from now on, so the link to the message goes first and the wider key
 -- (a message and a place) can take the one message_id alone had.
 alter table public.channel_permissions drop constraint channel_permissions_message_id_fkey;
@@ -176,10 +179,14 @@ begin
  perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
  select * into r from public.channel_runs where message_id=message and outcome is null order by ordinal limit 1 for update;
  if r.message_id is null or r.outcome is not null or r.run_id is not null then return; end if;
- -- Never started: given up after ten minutes. May have started: given up after a day, as ADR 0015 gives up a start
- -- whose answer was lost.
- if r.attempts = 0 and r.created_at < now()-interval '10 minutes' then perform public.close_channel_run(message,null,'failed',null,null,null); return; end if;
- if r.attempts > 0 and r.created_at < now()-interval '1 day' then perform public.close_channel_run(message,null,'lost',null,null,null); return; end if;
+ -- Never started: given up ten minutes after the Run became eligible (#354): the message's own time for the first Agent,
+ -- and the moment the Agent before it ended for a later one, which may have waited on a question meanwhile. May have
+ -- started: given up a day after its own first attempt, as ADR 0015 gives up a start whose answer was lost.
+ if r.attempts = 0 and coalesce((select e.closed_at from public.channel_runs e
+   where e.message_id=r.message_id and e.ordinal<r.ordinal order by e.ordinal desc limit 1), r.created_at) < now()-interval '10 minutes'
+  then perform public.close_channel_run(message,null,'failed',null,null,null); return; end if;
+ if r.attempts > 0 and coalesce(r.first_attempted_at,r.attempted_at,r.created_at) < now()-interval '1 day'
+  then perform public.close_channel_run(message,null,'lost',null,null,null); return; end if;
  if r.attempts = 0 then
   select a.connection_id,a.profile into r.connection_id,r.profile from public.hermes_agents a where a.id=r.agent_id and a.company_id=r.company_id;
   if r.profile is null then perform public.close_channel_run(message,null,'failed',null,null,null); return; end if;
@@ -191,7 +198,8 @@ begin
  if r.profile ~ '^co-[0-9a-f]{32}$' and (r.profile <> public.company_engine_profile(r.company_id) or not public.company_profile_ready(r.company_id)) then return; end if;
  -- ADR 0016: an Agent profile serves its own Agent, on the same terms.
  if public.agent_profile_refusal(r.profile,r.company_id,r.agent_id) is not null then return; end if;
- update public.channel_runs set attempts=attempts+1, attempted_at=now(), connection_id=r.connection_id, profile=r.profile
+ update public.channel_runs set attempts=attempts+1, attempted_at=now(), first_attempted_at=coalesce(first_attempted_at,now()),
+  connection_id=r.connection_id, profile=r.profile
   where message_id=message and public.channel_runs.ordinal=r.ordinal returning attempts into r.attempts;
  return query select r.attempts, r.company_id, r.profile, r.session, r.input, r.instructions, r.rules, r.ordinal,
   exists(select 1 from public.channel_attachments a where a.message_id=message);
@@ -200,8 +208,12 @@ revoke all on function public.begin_channel_start(bigint) from public,anon,authe
 grant execute on function public.begin_channel_start(bigint) to service_role;
 
 -- 20261219000000's answer_channel_start, on the Run the engine answered for. A run id already recorded on another Run of
--- the same message is not this Run's: only a row without one takes it.
-create or replace function public.answer_channel_start(message bigint, attempt integer, run text) returns boolean
+-- the same message is not this Run's: only a row without one takes it. The answer names the place of the Run that began
+-- (#354), and only that row takes it: a refusal that arrives after another driver closed that Run, and one that arrives
+-- for another Agent's first attempt, whose number is also 1, change nothing. A caller of the previous app version sends no
+-- place, and keeps the rule it had.
+drop function public.answer_channel_start(bigint,integer,text);
+create function public.answer_channel_start(message bigint, attempt integer, run text, ordinal smallint default null) returns boolean
 language plpgsql security definer set search_path='' as $$
 declare r public.channel_runs;
 begin
@@ -209,10 +221,22 @@ begin
   select * into r from public.channel_runs where message_id=message and run_id=run for update;
   if found then return r.outcome is null; end if;
  end if;
+ if ordinal is not null then
+  select * into r from public.channel_runs where message_id=message and public.channel_runs.ordinal=answer_channel_start.ordinal for update;
+  if r.message_id is null or r.outcome is not null or r.attempts is distinct from attempt then return false; end if;
+  if run is not null then
+   if r.run_id is not null then return r.run_id=run; end if;
+   update public.channel_runs set run_id=run where message_id=message and public.channel_runs.ordinal=r.ordinal; return true;
+  end if;
+  if attempt = 1 and r.attempts = 1 then
+   return public.close_channel_run(message, null, 'failed', null, null, null);
+  end if;
+  return false;
+ end if;
  select * into r from public.channel_runs where message_id=message and outcome is null and run_id is null order by ordinal limit 1 for update;
  if r.message_id is null or r.outcome is not null then return false; end if;
  if run is not null then
-  update public.channel_runs set run_id=run where message_id=message and ordinal=r.ordinal; return true;
+  update public.channel_runs set run_id=run where message_id=message and public.channel_runs.ordinal=r.ordinal; return true;
  end if;
  -- A refused first start ends the Run only while no later attempt was made: only a first start can prove nothing started.
  if attempt = 1 and r.attempts = 1 then
@@ -245,9 +269,9 @@ begin
  return true;
 end $$;
 
-revoke all on function public.answer_channel_start(bigint,integer,text) from public,anon,authenticated;
+revoke all on function public.answer_channel_start(bigint,integer,text,smallint) from public,anon,authenticated;
 revoke all on function public.close_channel_run(bigint,text,text,text,bigint,bigint) from public,anon,authenticated;
-grant execute on function public.answer_channel_start(bigint,integer,text), public.close_channel_run(bigint,text,text,text,bigint,bigint) to service_role;
+grant execute on function public.answer_channel_start(bigint,integer,text,smallint), public.close_channel_run(bigint,text,text,text,bigint,bigint) to service_role;
 
 -- #148's pin_channel_run, on the first Run of the message still open, which is the Run being started: the draft and
 -- review tools when the Member who called its Agent may write.

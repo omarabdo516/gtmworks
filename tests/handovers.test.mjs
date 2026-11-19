@@ -124,6 +124,25 @@ test('a start whose answer was lost is asked again with the same key, never fail
  assert.equal(calls.filter(([name])=>name==='answer_handover').length,0,'an unknown start is neither recorded nor failed');
 });
 
+test('a leg claimed by begin_handover names the start\'s key and its own answer, though the row read earlier said otherwise',async()=>{
+ // Another driver moved the handover between the read that found it due and this call: the row still reads as waiting, and
+ // the leg claimed is the follow-up. Its key and its answer follow the leg that was claimed (#354), so a retry after a lost
+ // answer keeps the same identity, and an answer from another leg records nothing.
+ const fake=fakeEngine(); const calls=/** @type {[string,any][]} */([]);
+ const service={rpc:async(/** @type {string} */ name,/** @type {any} */ args)=>{
+  calls.push([name,args]);
+  if(name==='handovers_due') return {data:[{id:7,state:'waiting',conversation,run:null,profile:leadProfile,attempt:0}],error:null};
+  if(name==='begin_handover') return {data:[{state:'returning',attempt:1,company:'10000000-0000-0000-0000-000000000001',profile:leadProfile,session:conversation,
+   input:'The job Ads was given did not finish.',instructions:'Lead the team.'}],error:null};
+  if(name==='answer_handover') return {data:true,error:null};
+  return {data:[],error:null};
+ }};
+ await driveHandovers(service,{hermes,engineFor:fake.engineFor});
+ assert.deepEqual(fake.runs.map(run=>run.key),['handover:7:return'],'the key names the follow-up leg that was claimed');
+ assert.deepEqual(calls.filter(([name])=>name==='answer_handover').map(([,args])=>args),
+  [{h:7,attempt:1,leg:'returning',run:fake.runs[0].id}],'and the answer names that leg, and its attempt, with the Run');
+});
+
 test('hand_to_agent reads the Agent, the job and the context, asks the database, and asks the Engine nothing',async()=>{
  const fake=fakeEngine(); const calls=/** @type {[string,any][]} */([]);
  const db={rpc:async(/** @type {string} */ name,/** @type {any} */ args)=>{ calls.push([name,args]); return {data:{state:'created',agent:'Ads'},error:null}; }};

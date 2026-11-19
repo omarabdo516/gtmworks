@@ -33,7 +33,7 @@ select json_build_object(
  'lifecycle_service_only',(select bool_and(has_function_privilege('service_role',f,'execute') and not has_function_privilege('authenticated',f,'execute')
    and not has_function_privilege('anon',f,'execute'))
    from unnest(array['public.channel_runs_due(uuid,bigint,bigint)','public.begin_channel_start(bigint)',
-    'public.answer_channel_start(bigint,integer,text)','public.close_channel_run(bigint,text,text,text,bigint,bigint)',
+    'public.answer_channel_start(bigint,integer,text,smallint)','public.close_channel_run(bigint,text,text,text,bigint,bigint)',
     'public.pin_channel_run(bigint,jsonb)','public.channel_show_card(bigint,text,text,text,text,jsonb)',
     'public.track_channel_permission(bigint,text,jsonb,boolean,timestamptz,timestamptz,text)',
     'public.settle_channel_permission(bigint,text)']) f),
@@ -43,6 +43,12 @@ select json_build_object(
  'sessions_name_the_reply',position('reply' in pg_get_function_result('public.channel_run_sessions(uuid,bigint)'::regprocedure))>0,
  'runs_one_after_another',position('e.ordinal<r.ordinal' in pg_get_functiondef('public.channel_runs_due(uuid,bigint,bigint)'::regprocedure))>0,
  'due_names_the_place',position('ordinal' in pg_get_function_result('public.channel_runs_due(uuid,bigint,bigint)'::regprocedure))>0,
+ 'start_window_follows_the_turn',exists(select 1 from information_schema.columns where table_schema='public' and table_name='channel_runs'
+   and column_name='first_attempted_at')
+  and position('closed_at' in pg_get_functiondef('public.begin_channel_start(bigint)'::regprocedure))>0
+  and position('e.ordinal<r.ordinal' in pg_get_functiondef('public.begin_channel_start(bigint)'::regprocedure))>0,
+ 'answers_name_the_place',position('ordinal' in pg_get_function_arguments('public.answer_channel_start(bigint,integer,text,smallint)'::regprocedure))>0
+  and position('r.ordinal' in pg_get_functiondef('public.answer_channel_start(bigint,integer,text,smallint)'::regprocedure))>0,
  'request_keeps_its_run',position('p.run_id=run' in pg_get_functiondef('public.track_channel_permission(bigint,text,jsonb,boolean,timestamptz,timestamptz,text)'::regprocedure))>0,
  'waits_link_the_run',position('r.run_id=p.run_id' in pg_get_functiondef('public.channel_permission_waits(public.channel_permissions)'::regprocedure))>0
   and position('r.ordinal=p.ordinal' in pg_get_functiondef('public.waiting_list(uuid)'::regprocedure))>0,

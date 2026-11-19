@@ -18,7 +18,7 @@ select json_build_object(
   and not has_column_privilege('authenticated','public.channel_runs','connection_id','select')
   and not has_column_privilege('authenticated','public.channel_runs','run_id','select'),
  'lifecycle_service_only',(select bool_and(has_function_privilege('service_role',f,'execute') and not has_function_privilege('authenticated',f,'execute') and not has_function_privilege('anon',f,'execute'))
-  from unnest(array['public.channel_runs_due(uuid,bigint,bigint)','public.begin_channel_start(bigint)','public.answer_channel_start(bigint,integer,text)','public.close_channel_run(bigint,text,text,text,bigint,bigint)']) f),
+  from unnest(array['public.channel_runs_due(uuid,bigint,bigint)','public.begin_channel_start(bigint)','public.answer_channel_start(bigint,integer,text,smallint)','public.close_channel_run(bigint,text,text,text,bigint,bigint)']) f),
  'internals_uncallable',(select bool_and(not has_function_privilege('authenticated',f,'execute') and not has_function_privilege('anon',f,'execute') and not has_function_privilege('service_role',f,'execute'))
   from unnest(array['public.channel_member(uuid,uuid)','public.channel_mention(uuid,uuid,text)','public.add_general_channel()','public.refuse_channel_change()']) f),
  'members_callable',(select bool_and(has_function_privilege('authenticated',f,'execute') and not has_function_privilege('anon',f,'execute'))
