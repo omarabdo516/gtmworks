@@ -8,8 +8,11 @@ import { createClient } from '@supabase/supabase-js';
 const service=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL||'http://gateway:8080',process.env.SUPABASE_SERVICE_ROLE_KEY,{auth:{persistSession:false,autoRefreshToken:false}});
 const mode=process.argv[2]==='engines'?'engines':'companies';
 const read=async query=>{ const {data,error}=await query; if(error) throw new Error(error.message); return data||[]; };
-const companies=await read(service.from('companies').select('id,name,engine_id,created_at').order('created_at'));
 const engines=await read(service.from('company_engines').select('id,address,created_at').order('created_at'));
+// A Company keeps no time of its own; it is listed in the order its Engine was made, which is the order it was added.
+const made=new Map(engines.map((engine,at)=>[engine.id,at]));
+const companies=(await read(service.from('companies').select('id,name,engine_id')))
+ .sort((a,b)=>(made.get(a.engine_id)??Infinity)-(made.get(b.engine_id)??Infinity));
 // A link whose Company was not made yet names it; the Company itself exists nowhere until the link is used (#383).
 const links=await read(service.from('company_owner_links').select('engine_id,company_name,claimed_at'));
 // The Company names its Engine (#378, T3); a record no Company names waits.

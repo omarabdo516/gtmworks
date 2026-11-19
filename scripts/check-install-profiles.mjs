@@ -98,7 +98,10 @@ const person=await signedIn();
 const {data:{user}}=await person.auth.getUser();
 assert.ok(user,'the first-run Owner signs in');
 const them=user.id;
-const all=await checked(service.from('companies').select('id,name,created_at').order('created_at'));
+// A Company keeps no time of its own: the order its Engine was made is the order it was added, the first-run one first.
+const made=new Map((await checked(service.from('company_engines').select('id').order('created_at'))).map((engine,at)=>[engine.id,at]));
+const all=(await checked(service.from('companies').select('id,name,engine_id')))
+ .sort((a,b)=>(made.get(a.engine_id)??Infinity)-(made.get(b.engine_id)??Infinity));
 // The two Companies on two Engines: a restored install also holds Companies the backup check made on the first Engine,
 // so the second Company of the proof is the first one whose Engine address differs from the first's.
 const pair=[]; const engines=[];

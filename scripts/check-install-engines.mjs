@@ -25,7 +25,7 @@ const until=async(what,read,seconds)=>{
 // Each Company's Engine, from the record the app and the worker answer from: its address and its own key. The code word
 // is the one the install job wrote in the Company's own Engine before the backup; the job derives it the same way.
 const targets=[];
-for(const company of await checked(service.from('companies').select('id,name,created_at').order('created_at'))) {
+for(const company of await checked(service.from('companies').select('id,name').order('name'))) {
  const [agent]=await checked(service.from('hermes_agents').select('id,profile').eq('company_id',company.id).eq('is_default',true));
  const engine=await engineOf(company.id,service);
  if(!agent?.profile||!engine) continue;
