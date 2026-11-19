@@ -164,6 +164,23 @@ test('the Company default reaches the shared space and every Agent without its o
  } finally { await fake.close(); }
 });
 
+test('the default model is written to the shared space before any Agent, so a space the Engine refuses changes none', async () => {
+ const fake=await fakeHermes();
+ try {
+  seed(fake); schema(fake);
+  // The Engine serves the profile list but refuses the shared space's model write.
+  fake.settings.profiles.delete(space);
+  const {db,logged}=database();
+  const before=requestsTo(fake,'/model').length;
+  const result=await changeCompanySetting(db,{company,setting:'model',value:'openrouter/anthropic/claude-opus-4.6',hermes:install(fake),driver:driver(fake)});
+  assert.notEqual(result.state,'written',JSON.stringify(result));
+  assert.deepEqual(requestsTo(fake,'/model').slice(before).map(request=>request.path),[`/api/profiles/${space}/model`],'the shared space is the only write sent');
+  assert.equal(fake.settings.profiles.get(companyProfileName).model,'openai/gpt-5.5','no follower took the new default');
+  assert.equal(fake.settings.profiles.get(own(writer)).model,'openai/gpt-5.5');
+  assert.deepEqual(logged(),[],'nothing changed, so nothing is logged');
+ } finally { await fake.close(); }
+});
+
 test('one Agent\'s model is written to its own profile and remembered as its choice; following the default clears it', async () => {
  const fake=await fakeHermes();
  try {
