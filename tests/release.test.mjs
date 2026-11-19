@@ -363,9 +363,10 @@ test('CI updates a release install on a real database, applying a new migration 
  assert.ok(run.indexOf("update || fail 'release update'")>run.indexOf("|| fail 'the previous release install'"));
 });
 
-test('the install job runs the whole proof on one Docker daemon and removes it only after the last step', () => {
- // The proof's areas share the source install's daemon and its built image (#402); an EXIT trap in a step fires when that
- // step ends, so a step that removes the daemon must be the job's last and run even after a failure.
+test('the install proof runs on one Docker machine per area and a GitHub-hosted runner does not wait for its removal', () => {
+ // Each install job has its own fresh machine (#406); an EXIT trap in a step fires when that step ends, so a step that
+ // removes the machine must be the job's last. A GitHub-hosted runner throws its machine away with the job, so the step
+ // is left for a runner that is reused.
  const steps=installJob().steps;
  const at=test=>steps.findIndex(test);
  const start=at(step=>/run -d --privileged --name install-docker/.test(step.run||''));
@@ -376,7 +377,7 @@ test('the install job runs the whole proof on one Docker daemon and removes it o
  assert.match(steps[start].run,/docker --host tcp:\/\/127\.0\.0\.1:2375 info/,'the start step waits for the daemon');
  assert.equal(steps[proof].env?.DOCKER_HOST,'tcp://127.0.0.1:2375','the proof runs on that daemon');
  assert.deepEqual(removes,[steps.length-1],'only the last step removes the daemon');
- assert.equal(steps.at(-1).if,'${{ always() }}');
+ assert.equal(steps.at(-1).if,"${{ runner.environment != 'github-hosted' }}");
  for(const step of steps.slice(0,-1)) assert.doesNotMatch(step.run||'',/trap .*install-docker/,step.name);
 });
 

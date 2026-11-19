@@ -186,11 +186,13 @@ case "${1:-check}" in
   lane_test --update-snapshots=changed
   ;;
  install)
-  # The whole install proof (scripts/ci-install-check.sh, #402) on an isolated Docker machine of its own, in a throwaway
-  # checkout of HEAD: the proof writes into the checkout it runs in, as it does on a CI runner. Commit first: uncommitted
-  # changes are not run. The work folder sits under the git directory: the Docker machine hides /tmp, so a checkout there
-  # reaches its containers empty.
+  # One area of the install proof (scripts/ci-install-check.sh, #406) on an isolated Docker machine of its own, in a
+  # throwaway checkout of HEAD: `./ci.sh install proxy` runs the proxy area alone; without an area the whole proof runs.
+  # The proof writes into the checkout it runs in, as it does on a CI runner, so commit first: uncommitted changes are
+  # not run. The work folder sits under the git directory: the Docker machine hides /tmp, so a checkout there reaches
+  # its containers empty.
   # The proof is Docker only, so without a daemon say what is missing in one line, before a machine is started.
+  shift
   docker info > /dev/null 2>&1 || { echo 'the install proof needs Docker: docker info cannot reach a daemon' >&2; exit 1; }
   work=$(mktemp -d "$(git rev-parse --absolute-git-dir)/install-lane.XXXXXX"); dind=gtmworks-install-lane; port=${INSTALL_DOCKER_PORT:-2375}; here=$PWD
   git worktree add -q --detach "$work/src" HEAD
@@ -216,7 +218,7 @@ case "${1:-check}" in
   # Under rootless Docker this machine's root is the invoking user and its `--user $(id -u)` is another one, unlike a CI
   # runner or a server: files the job makes are left writable to every user, so a container run as the user can write them.
   umask 0000
-  bash scripts/ci-install-check.sh
+  bash scripts/ci-install-check.sh "$@"
   ;;
- *) echo 'usage: ./ci.sh check | fast | static | components | database | images | integration | visual | visual-update | install' >&2; exit 2;;
+ *) echo 'usage: ./ci.sh check | fast | static | components | database | images | integration | visual | visual-update | install [first-install | proxy | update | one-line]' >&2; exit 2;;
 esac

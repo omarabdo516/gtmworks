@@ -8,8 +8,8 @@ import { load } from 'js-yaml';
 // Which CI jobs an event starts (#405, replacing the draft rule of #333): a draft pull request runs the suites its files
 // need, exactly as a ready one does, and marking it ready starts nothing by itself; a push to main runs every suite
 // unless the change is documents only. The real workflow's job conditions are evaluated against the real area script's
-// answer. The app image is built by one job and loaded by the browser suite (#403), which the guard tests below read
-// from the same file.
+// answer. The app image is built by one job and loaded by the browser suite (#403) and by the four install jobs (#406),
+// which the guard tests below read from the same file.
 const ci = load(readFileSync(resolve('.github/workflows/ci.yml'), 'utf8'));
 const areas = (files, main) => Object.fromEntries(
   execFileSync(process.execPath, [resolve('scripts/ci-areas.mjs'), ...(main ? ['--main'] : []), ...files], { encoding: 'utf8' })
@@ -57,6 +57,8 @@ const configFor = value => JSON.parse(spawnSync(process.execPath, [
 
 const heavyFiles = ['supabase/migrations/0001_example.sql', 'app/api/health/route.ts', 'scripts/install.sh'];
 const heavy = ['database', 'integration', 'install'];
+// The install proof is four jobs, each named for its area (#406).
+const installJobs = ['install-first', 'install-proxy', 'install-update', 'install-one-line'];
 const screenFiles = ['app/c/[slug]/[[...section]]/home.tsx'];
 const documentFiles = ['docs/testing.md', 'README.md'];
 
@@ -72,7 +74,7 @@ test('the change touches database, app and install files', () => {
 
 test('a draft that changes database, app and install files starts the image, database, integration and install jobs', () => {
   assert.deepEqual(started({ event: 'pull_request', draft: true, files: heavyFiles }),
-    ['changes', 'check', 'database', 'fast', 'image', 'install', 'integration', 'supabase-images']);
+    ['changes', 'check', 'database', 'fast', 'image', 'install-first', 'install-one-line', 'install-proxy', 'install-update', 'integration', 'supabase-images']);
 });
 
 test('a draft that changes only screens starts only changes, fast and check', () => {
@@ -99,7 +101,7 @@ test('a draft and a ready pull request start the same jobs for the same files', 
 
 test('a push to main runs every suite for a code change, and none of the heavy ones for documents only', () => {
   const code = started({ event: 'push', files: ['scripts/ci-fast.mjs'] });
-  for (const job of ['changes', 'fast', 'check', 'visual', 'image', ...heavy]) assert.ok(code.includes(job), job);
+  for (const job of ['changes', 'fast', 'check', 'visual', 'image', 'database', 'integration', ...installJobs]) assert.ok(code.includes(job), job);
   assert.deepEqual(started({ event: 'push', files: documentFiles }), ['changes', 'check', 'fast']);
 });
 
@@ -135,14 +137,24 @@ test('exactly one job builds the app image, and the browser suite loads that bui
   assert.match(load.run, /gtmworks-image\.tar/);
 });
 
-test('the image job runs only when the browser suite is asked for, and the suite waits for it (#403)', () => {
+test('the image job runs when the browser suite or the install proof is asked for, and each waits for it (#403, #406)', () => {
   for (const draft of [true, false]) {
     const journeys = started({ event: 'pull_request', draft, files: ['tests/frame.spec.ts'] });
     assert.ok(journeys.includes('image') && journeys.includes('integration'), `a draft=${draft} pull request`);
+    const install = started({ event: 'pull_request', draft, files: ['scripts/install.sh'] });
+    assert.ok(install.includes('image'), `a draft=${draft} install pull request`);
+    for (const job of installJobs) assert.ok(install.includes(job), `a draft=${draft} pull request starts ${job}`);
     assert.equal(started({ event: 'pull_request', draft, files: ['tests/db.sh'] }).includes('image'), false, `a draft=${draft} pull request`);
     assert.equal(started({ event: 'pull_request', draft, files: documentFiles }).includes('image'), false, `a draft=${draft} pull request`);
   }
   assert.equal(started({ event: 'push', files: documentFiles }).includes('image'), false);
+});
+
+test('a pull request that changes install files starts all four install areas, each on its own', () => {
+  const run = started({ event: 'pull_request', draft: false, files: ['scripts/install.sh'] });
+  for (const job of installJobs) assert.ok(run.includes(job), job);
+  // One job per area, not one matrix: each job's name is the area that failed.
+  for (const job of installJobs) assert.equal(ci.jobs[job].strategy, undefined, `${job} is one job`);
 });
 
 // The fast job already linted and type-checked, so the image build does neither; a release or local build keeps both.

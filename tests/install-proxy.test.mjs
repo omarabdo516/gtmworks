@@ -142,9 +142,12 @@ test('the install job runs first run and sign-in through an HTTPS proxy whose or
  assert.ok(at('s#^SUPABASE_PUBLIC_URL=.*#SUPABASE_PUBLIC_URL=$public#') < at("sh scripts/install.sh || fail 'proxied install'"));
  assert.match(run,new RegExp(`'${host.replace('.','\\.')} \\{' '  reverse_proxy 127\\.0\\.0\\.1:3000' '\\}'`));
  assert.match(run,/-e NODE_EXTRA_CA_CERTS=\/ca\.crt -e APP_ORIGIN="\$public" -e MAIL_URL=http:\/\/127\.0\.0\.1:8025/);
- assert.ok(at('node --input-type=module - < scripts/check-install-proxy.mjs') < at('old_web=$(compose ps -q web)'),'before the update check, which the update-log test runs alone');
+ assert.ok(at('node --input-type=module - < scripts/check-install-proxy.mjs') < at('check-install-rate-limit.mjs fresh'),'before the rate-limit checks');
  // The local install on http://localhost:3000 is checked first, as before.
- assert.ok(at("sh scripts/install.sh || fail 'first install'") < at("remove_install || fail 'remove restored install'"));
+ assert.ok(at("sh scripts/install.sh || fail 'first install'") < at("reset_install || fail 'remove restored install'"));
+ // The proxy area makes its own fresh install (#406): no earlier area's install is needed, and the public origin is in
+ // the settings file before the first install runs.
+ assert.ok(at("reset_install || fail 'remove restored install'") < at("s#^APP_ORIGIN=.*#APP_ORIGIN=$public#"));
  // The same links check runs on that local install first, while first run is still open, straight to the gateway.
  const checks=[...run.matchAll(/docker run [^\n]*(?:\\\n[^\n]*)*node --input-type=module - < scripts\/check-install-proxy\.mjs/g)];
  assert.equal(checks.length,2,'the links check runs on the local and on the proxied install');
@@ -152,7 +155,7 @@ test('the install job runs first run and sign-in through an HTTPS proxy whose or
  assert.match(local[0],/-e APP_ORIGIN=http:\/\/localhost:3000 -e MAIL_URL=http:\/\/127\.0\.0\.1:8025/);
  assert.ok(at("sh scripts/install.sh || fail 'first install'") < local.index && local.index < at("cp .env.install .env.install.before"),'on the fresh local install');
  assert.match(proxied[0],/-e APP_ORIGIN="\$public"/);
- assert.ok(at("sh scripts/install.sh || fail 'proxied install'") < proxied.index && proxied.index < at('old_web=$(compose ps -q web)'));
+ assert.ok(at("sh scripts/install.sh || fail 'proxied install'") < proxied.index && proxied.index < at('check-install-rate-limit.mjs fresh'));
  // Both get the anon and service role keys from .env.install as an env file, so neither key is printed.
  for(const {0:command} of checks) assert.ok(command.includes(`--env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY)=' .env.install)`),command);
 });

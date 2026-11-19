@@ -6,11 +6,13 @@ import { resolve } from 'node:path';
 // The required `check` (#76, like Hermes `all-checks-pass`): a suite the first job did not ask for counts as passed only
 // when it was skipped; a suite it asked for, or one whose need is unknown, must succeed; a failed or cancelled stage is
 // always red. The compared screens are not a stage: they run on main only and never judge a pull request (#257).
-// The app image is a stage of its own (#403): it follows the browser suite's own answer and the required check waits for
-// it. The fast job's steps (scripts/ci-fast.mjs, #258) are listed one by one, and each must succeed; its component
-// tests may be skipped only when the first job did not ask for them.
+// The app image is a stage of its own (#403): it follows the browser suite's and the install proof's own answers and the
+// required check waits for it. The install proof is four stages, one per area (#406): the first install with Companies,
+// Agents and backup; the proxy; the update; and the one-line install. The fast job's steps (scripts/ci-fast.mjs, #258)
+// are listed one by one, and each must succeed; its component tests may be skipped only when the first job did not ask
+// for them.
 const script = resolve('scripts/ci-verdict.mjs');
-const stages = ['IMAGE', 'DATABASE', 'INTEGRATION', 'INSTALL'];
+const stages = ['IMAGE', 'DATABASE', 'INTEGRATION', 'INSTALL_FIRST', 'INSTALL_PROXY', 'INSTALL_UPDATE', 'INSTALL_ONE_LINE'];
 const fastSteps = 'discovery=success docs=success i18n=success openapi=success lint=success typecheck=success knip=success node=success components=success';
 const green = {
   CHANGES_RESULT: 'success', FAST_RESULT: 'success', FAST_STEPS: fastSteps, COMPONENTS_RUN: 'true',
@@ -162,11 +164,19 @@ test('ci.yml decides the suites in its first job, gates each suite on it, and ju
   assert.match(classify.run, /node scripts\/ci-areas\.mjs \$main < "\$RUNNER_TEMP\/changed-files"/);
   // The fast job's component step reads this output; without it the step would always run and never be skippable.
   assert.equal(jobs.changes.outputs.components, '${{ steps.classify.outputs.components }}');
-  // The image build follows the browser suite's own answer (#403): its files are the files that need the image.
-  for (const [job, output] of [['image', 'integration'], ['database', 'database'], ['install', 'install']]) {
+  // The image build follows the browser suite's own answer (#403), and now the install proof's too (#406).
+  for (const [job, output] of [['database', 'database']]) {
     assert.equal(jobs.changes.outputs[output], `\${{ steps.classify.outputs.${output} }}`, output);
     assert.deepEqual(jobs[job].needs, ['changes'], job);
     assert.equal(jobs[job].if, `\${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.${output} != 'false') }}`, job);
+  }
+  assert.equal(jobs.changes.outputs.install, '${{ steps.classify.outputs.install }}');
+  assert.equal(jobs.image.if, "${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.integration != 'false' || needs.changes.outputs.install != 'false') }}");
+  // Each install area is one job under today's install condition and a successful image build (#406).
+  const installJobs = ['install-first', 'install-proxy', 'install-update', 'install-one-line'];
+  for (const job of installJobs) {
+    assert.deepEqual(jobs[job].needs, ['changes', 'image'], job);
+    assert.equal(jobs[job].if, "${{ !cancelled() && needs.image.result == 'success' && (needs.changes.result != 'success' || needs.changes.outputs.install != 'false') }}", job);
   }
   // The browser suite takes the image the image job built, and does not start when that build failed (#403).
   assert.deepEqual(jobs.integration.needs, ['changes', 'image']);
@@ -177,10 +187,21 @@ test('ci.yml decides the suites in its first job, gates each suite on it, and ju
   const step = jobs.check.steps.at(-1);
   assert.equal(step.run, 'node scripts/ci-verdict.mjs');
   assert.equal(jobs.check.if, '${{ always() }}');
-  assert.deepEqual(jobs.check.needs, ['changes', 'fast', 'image', 'database', 'integration', 'install']);
-  // The image build is judged by what the browser suite asked for, and by the job's own result (#403).
-  assert.equal(step.env.IMAGE_RUN, '${{ needs.changes.outputs.integration }}');
+  assert.deepEqual(jobs.check.needs, ['changes', 'fast', 'image', 'database', 'integration', ...installJobs]);
+  // The image build is judged by what the browser suite or the install proof asked for, and by the job's own result (#403).
+  assert.equal(step.env.IMAGE_RUN, "${{ needs.changes.outputs.integration != 'false' || needs.changes.outputs.install != 'false' }}");
   assert.equal(step.env.IMAGE_RESULT, '${{ needs.image.result }}');
+  // Each install area is judged by the install proof's own answer and its job's result (#406).
+  const areaStages = {
+    INSTALL_FIRST: 'install-first',
+    INSTALL_PROXY: 'install-proxy',
+    INSTALL_UPDATE: 'install-update',
+    INSTALL_ONE_LINE: 'install-one-line',
+  };
+  for (const [stage, job] of Object.entries(areaStages)) {
+    assert.equal(step.env[`${stage}_RUN`], '${{ needs.changes.outputs.install }}', stage);
+    assert.equal(step.env[`${stage}_RESULT`], `\${{ needs['${job}'].result }}`, stage);
+  }
   for (const key of Object.keys(green)) assert.ok(step.env[key], key);
   assert.deepEqual(Object.keys(step.env).filter(key => /VISUAL|LANE/.test(key)), []);
   // The fast job runs on every change; only its component step follows the first job's answer, and an unknown answer

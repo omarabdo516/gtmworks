@@ -62,12 +62,13 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   archive when it is there and otherwise pull for themselves, without waiting; `visual`, on main only, waits for it. A
   warm cache makes no registry call, the job never fails a run, and each job log ends with how many images the registry
   served.
-- `image` builds the app image once per run, when the browser suite is asked for (#403), with its layers kept between
-  runs (`cache-from: type=gha`, `cache-to: type=gha,mode=max`), so a change that leaves the dependencies alone restores them. It
-  passes `NEXT_SKIP_CHECKS=true`, so `next build` repeats no lint and no type check `fast` already ran
-  (`next.config.mjs`); a release image and a local build keep both. It uploads the image as the `gtmworks-image`
-  artifact, kept for a day and stored uncompressed. `integration` waits for it and loads that image from the artifact:
-  no shard builds an image of its own, and `check` is red when the build failed or was cancelled.
+- `image` builds the app image once per run, when the browser suite or the install proof is asked for (#403, #406),
+  with its layers kept between runs (`cache-from: type=gha`, `cache-to: type=gha,mode=max`), so a change that leaves the
+  dependencies alone restores them. It passes `NEXT_SKIP_CHECKS=true`, so `next build` repeats no lint and no type check
+  `fast` already ran (`next.config.mjs`); a release image and a local build keep both. It uploads the image as the
+  `gtmworks-image` artifact, kept for a day and stored uncompressed. `integration` and the four install jobs wait for it
+  and load that image from the artifact: no shard and no install job builds an image of its own, and `check` is red when
+  the build failed or was cancelled.
 - `integration` is the whole-app browser suite: the production-shaped proxy suite, then the functional journeys and
   first run, on the image the `image` job built, loaded from its artifact (a shard builds nothing, #403). Its dependencies and its browser come from the caches the `fast` job keeps, restored by the same keys (the
   lock file's hash for `node_modules`; Playwright's version and the runner image for the browser), and a miss installs
@@ -108,14 +109,21 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   compares it with its design in `design/` in T3's preview, motions included, at the widths and in the languages the
   design shows, and attaches the evidence (side-by-side images, and a recording for each motion) to the pull request
   that delivers it. No CI job compares a screen with `design/`, and no animation frame is sampled in CI.
-- `install` is the Docker install, update, backup, restore, release and one-line install. The job runs the whole proof
-  as one command of the repo — `./ci.sh install` on a machine with Docker (`docs/agents/checks.md`) — and the proof is
-  seven areas one after another, each on the state the one before it left: the first install and its repeat, Companies
-  and their Engines, Agents on their Engines, backup and restore, the public address behind a proxy, the update between
-  releases, and the one-line install (#402). It runs when the image, its build inputs, the install and release files, the
-  migrations it applies or its own checks change, and when `lib/` outside the catalogues, `worker/`, `next.config.mjs` or
-  `server.js` change: only the install drives that code against the real bundled Hermes. Its profile proof (#126) runs on
-  the pinned Engine: two Companies with a main and a second
+- `install` is the Docker install, update, backup, restore, release and one-line install. The proof is four jobs side
+  by side, one per area of the repo's proof, each on a fresh isolated Docker machine of its own (#406): `install-first`
+  (the first install and its repeat, Companies and their Engines, Agents on their Engines, backup and restore),
+  `install-proxy`, `install-update` and `install-one-line`. Each job is one command of the repo — `bash
+  scripts/ci-install-check.sh first-install|proxy|update|one-line`; `./ci.sh install` runs the whole proof here and
+  `./ci.sh install proxy` one area (`docs/agents/checks.md`) — and holds no check of its own, so a red job's name is the
+  area that failed and one red area leaves the others running to their end. The three areas that already started from a
+  fresh install are independent: each makes the install, its local registry and its release files itself, so no area
+  needs another to have run. Every install job loads the one image the `image` job built, tagged as the source install's
+  own (`gtmworks-local:237`), and the installer skips its build for it (`GTMWORKS_IMAGE_PREBUILT`, tests only); the
+  update area still builds the previous release from the pull request's base, which is a different image (#378). A job on
+  a GitHub-hosted runner does not wait for its Docker machine's removal. It runs when the image, its build inputs, the
+  install and release files, the migrations it applies or its own checks change, and when `lib/` outside the catalogues,
+  `worker/`, `next.config.mjs` or `server.js` change: only the install drives that code against the real bundled Hermes.
+  Its profile proof (#126) runs on the pinned Engine: two Companies with a main and a second
   Agent each, every Agent on its own profile and every Company on its one shared space, the tools off and a Run on a
   shared space refused, memory and a shared Skill reaching only the first Company's Agents, a key set for one Company
   only, and the database refusing a row of one Company that names the other's profile. It then makes twenty more Agent
@@ -126,7 +134,8 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   run only with `-f e2e=true` and `-f install=true`, both off by default (like Hermes `e2e` and `e2e_upgrade`).
 - `check` is the one required check (like Hermes `all-checks-pass`): a suite `changes` did not ask for passes only when
   it was skipped; one it asked for must succeed; a failed or cancelled stage is red; it lists each step of the fast job
-  and every step must succeed (`scripts/ci-verdict.mjs`).
+  and every step must succeed (`scripts/ci-verdict.mjs`). The install proof is four stages, one per area (#406), so a
+  failed or cancelled area keeps `check` red and a skipped one passes only when the install proof was not asked for.
 - Every test runs offline (#266). `tests/offline.mjs` holds one table of what is local: `localhost`, the special-use
   names `.localhost`, `.test`, `.example` and `.invalid` (RFC 6761, never delegated), loopback and unspecified
   addresses, and Unix sockets; everything else is outside, `example.com` and private LAN addresses included. `npm test`

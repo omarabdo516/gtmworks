@@ -60,9 +60,9 @@ test('the public tree deploys nothing of ours', () => {
  assert.deepEqual(offenders(new RegExp(piece('\\benvironment', ':')), inWorkflows), [], 'deployment environment');
  assert.deepEqual(offenders(new RegExp(piece('\\bsecrets', '\\.(?!GITHUB_TOKEN\\b)')), inWorkflows), [], 'secret other than GITHUB_TOKEN');
  const ci = load(texts.get('.github/workflows/ci.yml'));
- for (const job of ['changes', 'fast', 'image', 'database', 'visual', 'integration', 'install', 'check']) assert.ok(ci.jobs[job], job);
- for (const job of ['deploy', 'deploy-db']) assert.equal(ci.jobs[job], undefined, job);
- assert.deepEqual(ci.jobs.check.needs, ['changes', 'fast', 'image', 'database', 'integration', 'install']);
+ for (const job of ['changes', 'fast', 'image', 'database', 'visual', 'integration', 'install-first', 'install-proxy', 'install-update', 'install-one-line', 'check']) assert.ok(ci.jobs[job], job);
+ for (const job of ['deploy', 'deploy-db', 'install']) assert.equal(ci.jobs[job], undefined, job);
+ assert.deepEqual(ci.jobs.check.needs, ['changes', 'fast', 'image', 'database', 'integration', 'install-first', 'install-proxy', 'install-update', 'install-one-line']);
 });
 
 // Playwright's own reporters and retries replace our CI tooling around it (#81).

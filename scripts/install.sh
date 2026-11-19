@@ -600,7 +600,12 @@ if [ "$operation" = install ]; then compose up -d --wait db auth rest storage ma
   printf "notify pgrst, 'reload schema';\n"
 } | compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 --single-transaction
 if [ -z "$release_image" ]; then
-  compose build web
+  # Tests only (#406): CI's install jobs load the one image the `image` job built, under this compose file's own tag,
+  # and set this so no job builds the app image again. GTMWORKS_IMAGE_PREBUILT is read here and nowhere else; a source
+  # install anywhere else builds its image here, as it always has.
+  if [ "${GTMWORKS_IMAGE_PREBUILT:-}" != true ]; then
+    compose build web
+  fi
   # Compose does not recreate a container when only a file it mounts changed. The gateway is recreated when it is not
   # running, when its compose definition differs from the one it runs (its config-hash label), or when its mounted files
   # differ from those it last started with (.install-gateway): a new config (the X-Real-IP the auth rate limit counts by,

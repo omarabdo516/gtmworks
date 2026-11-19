@@ -45,7 +45,32 @@ remove_engine() {
   rm -rf .engines
 }
 remove_install() { compose down -v && remove_engine; }
+# An area starts on a fresh isolated Docker machine (#406): whatever an earlier area or an earlier run left there is
+# removed first, settings and all, so an area never needs another one to have run and never carries its state.
+reset_install() {
+  if [ -f .env.install ]; then remove_install || return 1; else remove_engine; fi
+  rm -f .env.install
+}
 publish() { docker push -q "localhost:5000/gtmworks:$1" > /dev/null && docker image inspect --format '{{index .RepoDigests 0}}' "localhost:5000/gtmworks:$1"; }
+# The local registry a release area serves its test releases from: each area that needs one starts its own (#406).
+start_registry() {
+  docker rm -f install-registry > /dev/null 2>&1 || true
+  docker run -d --name install-registry -p 127.0.0.1:5000:5000 registry:2.8.3 > /dev/null || fail 'local registry'
+  for attempt in $(seq 1 30); do docker run --rm --network host curlimages/curl:8.12.1 -sf http://127.0.0.1:5000/v2/ > /dev/null && break; sleep 1; done
+}
+# This release and the next as registry images and release files, from the app image this checkout built (or CI loaded
+# and tagged): the update and the one-line areas each make what they need from the same steps (#406).
+publish_releases() {
+  docker tag gtmworks-local:237 localhost:5000/gtmworks:0.0.0-ci || fail 'tag the built image'
+  first=$(publish 0.0.0-ci) || fail 'push this release image'
+  node scripts/release-assets.mjs "$first" release-first || fail 'this release files'
+  docker build -q -t localhost:5000/gtmworks:0.0.1-ci - > /dev/null <<'DOCKERFILE' || fail 'build the next release image'
+FROM localhost:5000/gtmworks:0.0.0-ci
+RUN echo 'create table gtmworks_install.release_update_probe(id integer);' > /app/install/supabase/migrations/99999999999998_release_update_probe.sql
+DOCKERFILE
+  next=$(publish 0.0.1-ci) || fail 'push the next release image'
+  node scripts/release-assets.mjs "$next" release-next || fail 'next release files'
+}
 web_image() { docker inspect -f '{{.Image}}' "$(compose ps -q web)"; }
 probe() {
   for path in /api/health /sign-in; do

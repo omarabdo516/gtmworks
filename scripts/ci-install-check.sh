@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# The install proof, one command of the repo (#402): CI's `install` job runs this file on one isolated Docker machine
-# and holds no check of its own, and `./ci.sh install` starts such a machine here and runs it. The proof is the seven
-# areas of spec #401, one after another, each starting from the state the one before it left (the areas become jobs of
-# their own in #406–#409): the first install and its repeat; Companies and their Engines; Agents on their Engines; backup
-# and restore; the public address behind a proxy; the update between releases; and the one-line install. The helpers the
-# areas share are in scripts/ci-install-lib.sh, sourced below, so each is written once. The areas run as functions and
-# their bodies keep the indentation they had as steps of their own, so the move reads line for line.
+# The install proof, one command of the repo (#402): each CI install job runs this file for its area on an isolated
+# Docker machine and holds no check of its own, and `./ci.sh install [area]` starts such a machine here and runs it.
+# Without an area the seven areas of spec #401 run one after another; with one, only that area runs, on a fresh Docker
+# machine: `first-install` (the first install and its repeat, Companies and their Engines, Agents on their Engines,
+# backup and restore — together until #407–#409 split them), `proxy` (the public address behind a proxy), `update` (the
+# update between releases) and `one-line` (the one-line install). The three areas that already started from a fresh
+# install are independent since #406: each makes the install, the local registry and the release files it needs itself.
+# The helpers the areas share are in scripts/ci-install-lib.sh, sourced below, so each is written once.
 # DOCKER_HOST names that machine; RUNNER_TEMP is a scratch folder; INSTALL_REF, BASE_SHA and GH_TOKEN come from CI or
 # ci.sh.
 set -e
@@ -457,11 +458,16 @@ proxy() {
 cd "$root"
 # A remote server (README): a fresh install whose APP_ORIGIN is the https origin of a proxy in front of the gateway.
 # First run and the emailed sign-in link must stay on that origin and reach the Company home, and so must the
-# invitation link and a sign-in link requested with a forged X-Forwarded-Host (issue #40).
+# invitation link and a sign-in link requested with a forged X-Forwarded-Host (issue #40). The area makes its own fresh
+# install (#406): the public origin is in the settings before the first install runs, and no earlier area's install is
+# needed or kept.
 public=https://app.gtmworks.test:4443
-remove_install || fail 'remove restored install'
+reset_install || fail 'remove restored install'
+docker run --rm -v "$root/lib:/code:ro" node:22.14.0-alpine3.21 node /code/install-env.mjs generate > .env.install
+chmod 600 .env.install
 sed -i -e "s#^APP_ORIGIN=.*#APP_ORIGIN=$public#" -e "s#^SUPABASE_PUBLIC_URL=.*#SUPABASE_PUBLIC_URL=$public#" .env.install || fail 'set the public origin'
 { sh scripts/install.sh || fail 'proxied install'; } 2>&1 | tee proxied-install.log
+code=$(sed -n 's/^SETUP_CODE=//p' .env.install)
 [[ $(tail -n 1 proxied-install.log) == "Set up gtmworks with this one-time link: $public/first-run#code=$code" ]] || fail 'the proxied install prints its setup link on the public origin'
 printf '%s\n' '{' '  local_certs' '  auto_https disable_redirects' '}' 'app.gtmworks.test:4443 {' '  reverse_proxy 127.0.0.1:3000' '}' > Caddyfile
 docker run -d --name install-proxy --network host -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2 >/dev/null || fail 'start the HTTPS proxy'
@@ -471,7 +477,6 @@ docker run --rm -i --network host --add-host app.gtmworks.test:127.0.0.1 -v "$PW
   --env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY)=' .env.install) --env-file <(grep -E '^SETUP_CODE=' .env.install) \
   -e NODE_EXTRA_CA_CERTS=/ca.crt -e APP_ORIGIN="$public" -e MAIL_URL=http://127.0.0.1:8025 \
   node:22.14.0-alpine3.21 node --input-type=module - < scripts/check-install-proxy.mjs || { docker logs install-proxy; fail 'first run, sign-in and invitation links through the HTTPS proxy'; }
-old_web=$(compose ps -q web)
 # Repeated wrong passwords for that Owner hit the auth service's own rate limit (issue #41), per visitor behind the
 # proxy. Caddy writes each visitor's address in X-Forwarded-For, replacing any a client sent; the gateway believes
 # it only from the install network's bridge gateway, where every connection from this machine arrives from
@@ -499,6 +504,11 @@ docker run --rm --network host --add-host app.gtmworks.test:127.0.0.1 -v "$PWD/c
 update() {
 cd "$root"
 fail_prefix='install check failed: '
+# The area makes its own source install (#406): the failed update at the start proves this release's installer rolls a
+# failed migration back and leaves the release it was running serving.
+reset_install
+{ sh scripts/install.sh || fail 'source install before the failed update'; } 2>&1 | tee source-install.log
+old_web=$(compose ps -q web)
 cp scripts/install-failing-migration.sql supabase/migrations/99999999999999_failure.sql
 if sh scripts/install.sh update "$INSTALL_REF" > update.log 2>&1; then fail_update 'update must fail'; fi
 grep -Fq 'Applying migration: 99999999999999_failure.sql' update.log || fail_update 'failed migration name'
@@ -513,8 +523,7 @@ set +o pipefail
 fail_prefix='release install check failed: '
 compose down -v || fail 'remove the source install'
 remove_engine
-docker run -d --name install-registry -p 127.0.0.1:5000:5000 registry:2.8.3 > /dev/null || fail 'local registry'
-for attempt in $(seq 1 30); do docker run --rm --network host curlimages/curl:8.12.1 -sf http://127.0.0.1:5000/v2/ > /dev/null && break; sleep 1; done
+start_registry
 # The previous release is origin/main's code at this pull request's base (#378, S2), built as an image of its
 # own and installed from its own two release files: its own schema (no Engine record, no companies.engine_id),
 # its own one `hermes` service, and its own key in .env.install.
@@ -528,15 +537,7 @@ git worktree add "$RUNNER_TEMP/previous-release" "$base" || fail 'the previous r
 docker build -q -t localhost:5000/gtmworks:0.0.0-main "$RUNNER_TEMP/previous-release" > /dev/null || fail 'build the previous release image'
 previous=$(publish 0.0.0-main) || fail 'push the previous release image'
 ( cd "$RUNNER_TEMP/previous-release" && node scripts/release-assets.mjs "$previous" "$root/release-previous" ) || fail 'previous release files'
-docker tag gtmworks-local:237 localhost:5000/gtmworks:0.0.0-ci || fail 'tag the built image'
-first=$(publish 0.0.0-ci) || fail 'push this release image'
-node scripts/release-assets.mjs "$first" release-first || fail 'this release files'
-docker build -q -t localhost:5000/gtmworks:0.0.1-ci - > /dev/null <<'DOCKERFILE' || fail 'build the next release image'
-FROM localhost:5000/gtmworks:0.0.0-ci
-RUN echo 'create table gtmworks_install.release_update_probe(id integer);' > /app/install/supabase/migrations/99999999999998_release_update_probe.sql
-DOCKERFILE
-next=$(publish 0.0.1-ci) || fail 'push the next release image'
-node scripts/release-assets.mjs "$next" release-next || fail 'next release files'
+publish_releases
 echo "previous release: $previous; this release: $first; next release: $next"
 dir="$PWD/release-install"
 mkdir "$dir" && cp release-previous/docker-compose.install.yml release-previous/install.sh "$dir/" || fail 'release install directory'
@@ -721,7 +722,16 @@ cd "$root"
 fail_prefix='one-line install check failed: '
 set -o pipefail
 workspace=$PWD
-(cd release-install && compose down -v && remove_engine) || fail 'remove the release install'
+# The area makes everything it needs itself (#406): the app image the test releases are made from, a local registry,
+# and the two releases' files. CI loads the one image the `image` job built and tags it (GTMWORKS_IMAGE_PREBUILT, tests
+# only); on a fresh Docker machine anywhere else a source install builds it first.
+reset_install
+if [[ ${GTMWORKS_IMAGE_PREBUILT:-} != true ]] && ! docker image inspect gtmworks-local:237 > /dev/null 2>&1; then
+  { sh scripts/install.sh || fail 'source install for the test releases'; } 2>&1 | tee source-install.log
+  reset_install
+fi
+start_registry
+publish_releases
 releases="$workspace/test-releases"
 mkdir -p "$releases/v0.0.0" "$releases/v0.0.1" "$releases/v0.0.2"
 cp release-first/docker-compose.install.yml release-first/install.sh "$releases/v0.0.0/" || fail 'test release v0.0.0'
@@ -848,12 +858,13 @@ cd "$fresh"
 probe 'after the --version run'
 }
 
-# The seven areas run one after another, in the order the proof has always run them; each keeps what it carries from the
-# one before it.
-first_install
-companies
-agents
-backup
-proxy
-update
-one_line
+# The area named by the one argument, or all seven in the order the proof has always run them (#406). A CI job names
+# one area; `./ci.sh install` without one still runs the whole proof.
+case "${1:-all}" in
+ all) first_install; companies; agents; backup; proxy; update; one_line;;
+ first-install) first_install; companies; agents; backup;;
+ proxy) proxy;;
+ update) update;;
+ one-line) one_line;;
+ *) echo 'usage: bash scripts/ci-install-check.sh [first-install | proxy | update | one-line]' >&2; exit 2;;
+esac
