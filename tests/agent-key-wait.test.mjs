@@ -29,7 +29,7 @@ function sessions(fake,{owner=true,extra=[],waits=[],failing=[],failingOnce=[],f
  const asked=[]; const unfinished=new Map(); const waiting=new Set(waits); const failedOnce=new Set();
  const db={rpc:async(name,args)=>{ asked.push({name,args});
   if(name==='is_company_owner') return {data:owner,error:null};
-  if(name==='company_engine_target') return {data:[{profile:main,one_company:false,profiles:[]}],error:null};
+  if(name==='company_engine_target') return {data:[{profile:main,profiles:[]}],error:null};
   if(name==='company_key_profiles') return {data:rowsOf(asked.filter(call=>call.name===name).length>1?[...extra,...joined]:extra),error:null};
   if(name==='record_provider_key_change') return {data:null,error:null};
   if(name==='record_unfinished_provider_key') { if(args.missed.length) unfinished.set(args.key_provider,args.missed); else unfinished.delete(args.key_provider); return {data:null,error:null}; }

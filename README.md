@@ -78,7 +78,7 @@ No SMTP account is needed for it.
 The install starts the web app, worker, Postgres,
 GoTrue, PostgREST, file Storage, an Nginx gateway, the local mail inbox and the
 Hermes agent engine, which is reachable only inside the install.
-Each agent gets its own agent engine profile, with its own memory, once it moves there; until then it shares the company profile with the other agents on it. The agent that was the main agent of a company when the moves began keeps what its agents remembered before, even if another agent is made main later, and an agent moved to its own profile starts with an empty memory. A company still on the shared default profile from an earlier install shares that memory, so an agent can repeat facts from one company to people in another until it moves.
+Each agent gets its own agent engine profile, with its own memory, once it moves there; until then it shares the company profile with the other agents on it. The agent that was the main agent of a company when the moves began keeps what its agents remembered before, even if another agent is made main later, and an agent moved to its own profile starts with an empty memory.
 
 **Company isolation (ADR 0014).** Nothing needs setting up on a fresh server: the
 worker gives every company its own profile in the bundled Hermes
@@ -93,24 +93,20 @@ takes 5136 KiB of disk with the engine's bundled Skills and 1727 KiB without.
 The Owner chooses the Agent level in Settings, Company (read and
 draft, act on approval, or scheduled work); new companies start at read and draft.
 The Owner connects a subscription in Settings, Subscription and models: ChatGPT
-signs in from that page; Claude signs in only from the install's command line,
-with the command shown there, run from this folder.
-On an install with one company, the subscription is signed in once on the bundled
-Hermes's root profile from Settings, Subscription and models, and every agent of
-the company uses it. Claude's command for it is
-`docker compose --env-file .env.install -f docker-compose.install.yml exec -u hermes hermes hermes auth add anthropic --type oauth --no-browser`.
-On an install with several companies, a subscription signed in on the root
-profile is shared by every company on the install, and a company that wants its
-own uses its own API key (#124). So on such an install, do not sign in to a
-subscription on Hermes's own `default` (root) profile: each company signs in on its
-own profile from Settings, and its Claude command adds `-p <profile>` after
-`hermes hermes hermes`. A company's API key lives in the agent engine only:
+signs in from that page, on the root profile of the Company's own Engine, and
+every Agent of the Company uses it. One account serves one Company, so each
+Company signs in with its own account or sets its own API key. Claude signs in
+only from the install's command line, with the command shown there, run from
+this folder:
+`gtmworks sign-in claude --company "<Company id or name>"`.
+A company's API key lives in the agent engine only:
 gtmworks passes it to that company's profiles in the bundled Hermes, never to the
 root profile or another company's, and never keeps, logs or shows it. An install updated
-from before ADR 0014 keeps its companies running on the shared `default` profile
-until a company's own profile holds a sign-in; the worker then moves it there.
-Memory already written on `default` stays there and is not split between companies,
-and earlier conversations do not carry their Hermes context to the new profile.
+from before ADR 0014 keeps its companies running on the old `default` profile
+until its Engine holds a sign-in; the worker then moves it to the company's own
+profile. Memory already written on `default` stays there and is not carried to
+the new profile, and earlier conversations do not carry their Hermes context to
+the new profile.
 A backup includes the agent engine's data: every Agent's profile, its rules and
 memory, its skills, the Company knowledge, and its conversations' history. A backup
 made before this was included holds none of it; restoring one says so in a line, and

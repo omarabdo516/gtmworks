@@ -37,7 +37,7 @@ function database({owner=true,agents=rows,rules=ruleRows,modes=new Map()}={}) {
  const logged=[];
  const db={rpc:async(name,args)=>{
   if(name==='is_company_owner') return {data:owner,error:null};
-  if(name==='company_engine_target') return {data:[{profile:companyProfile(args.c),one_company:false,profiles:[]}],error:null};
+  if(name==='company_engine_target') return {data:[{profile:companyProfile(args.c),profiles:[]}],error:null};
   if(name==='company_app_agents') return {data:agents,error:null};
   if(name==='company_learning_modes') return {data:agents.map(row=>({agent:row.agent,learning_mode_choice:modes.get(row.agent)??null})),error:null};
   if(name==='set_agent_learning_mode') { if(args.mode===null) modes.delete(args.agent); else modes.set(args.agent,args.mode); return {data:null,error:null}; }

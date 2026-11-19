@@ -35,7 +35,7 @@ function database({agents=rowsByCompany,owner=true,logFails=false}={}) {
  const logged=[];
  const db={rpc:async(name,args)=>{
   if(name==='is_company_owner') return {data:owner,error:null};
-  if(name==='company_engine_target') return {data:[{profile:companyProfile(args.c),one_company:false,profiles:[]}],error:null};
+  if(name==='company_engine_target') return {data:[{profile:companyProfile(args.c),profiles:[]}],error:null};
   if(name==='company_app_agents') return {data:agents[args.c]||[],error:null};
   if(name==='log_engine_setting') { if(logFails) return {data:null,error:{code:'42501',message:'settingNotAllowed'}}; logged.push(args); return {data:null,error:null}; }
   return {data:null,error:{message:`unexpected ${name}`}};

@@ -8,7 +8,7 @@
 # into the install folder and runs that install.sh, which pulls the images by digest, applies the migrations from the
 # image and starts gtmworks; nothing is built and no source is downloaded. It keeps a copy of itself in the folder as
 # gtmworks.sh and puts a `gtmworks` command in ~/.local/bin that runs it:
-#   gtmworks status | update | backup | restore <archive> | install
+#   gtmworks status | update | backup | restore <archive> | install | sign-in claude
 #
 # The latest stable release is the highest published vX.Y.Z that GitHub does not mark as a prerelease, the release the
 # stable image tag follows. `--channel main` installs the newest main image instead: main publishes no GitHub Release, so
@@ -47,22 +47,24 @@ Usage:
   gtmworks update [--version vX.Y.Z | --version main@sha256:<digest> | --channel main] [--no-backup]
   gtmworks backup [directory]
   gtmworks restore <archive> [--version vX.Y.Z | --version main@sha256:<digest> [--yes]]
+  gtmworks sign-in claude --company <id-or-name>
   gtmworks install          (repair: the same as running the line again)
 USAGE
   exit "${1:-2}"
 }
 wrong() { printf '%s\n' "$*" >&2; usage; }
 
-command_mode=no operation= archive= version= channel= dir= backup=yes yes=no
+command_mode=no operation= archive= version= channel= dir= backup=yes yes=no provider= company=
 destination=
 while [ $# -gt 0 ]; do
   case "$1" in
     --command) command_mode=yes;;
-    --version|--channel|--dir) [ $# -ge 2 ] || wrong "$1 needs a value."
-      case "$1" in --version) version=$2;; --channel) channel=$2;; --dir) dir=$2;; esac; shift;;
+    --version|--channel|--dir|--company) [ $# -ge 2 ] || wrong "$1 needs a value."
+      case "$1" in --version) version=$2;; --channel) channel=$2;; --dir) dir=$2;; --company) company=$2;; esac; shift;;
     --version=*) version=${1#*=};;
     --channel=*) channel=${1#*=};;
     --dir=*) dir=${1#*=};;
+    --company=*) company=${1#*=};;
     --no-backup) backup=no;;
     --yes) yes=yes;;
     -h|--help|help) usage 0;;
@@ -70,13 +72,14 @@ while [ $# -gt 0 ]; do
     *) if [ -z "$operation" ]; then operation=$1
        elif [ "$operation" = restore ] && [ -z "$archive" ]; then archive=$1
        elif [ "$operation" = backup ] && [ -z "$destination" ]; then destination=$1
+       elif [ "$operation" = sign-in ] && [ -z "$provider" ]; then provider=$1
        else wrong "Unexpected argument: $1"; fi;;
   esac
   shift
 done
 # The line installs; the gtmworks command does what it is told and nothing when told nothing.
 if [ -z "$operation" ]; then [ "$command_mode" = no ] || usage; operation=install; fi
-case "$operation" in install|update|backup|restore|status) ;; *) wrong "Unknown command: $operation";; esac
+case "$operation" in install|update|backup|restore|status|sign-in) ;; *) wrong "Unknown command: $operation";; esac
 if [ -n "$version" ] && ! printf '%s\n' "$version" | grep -Eqx 'v[0-9]+\.[0-9]+\.[0-9]+|main@sha256:[a-f0-9]{64}'; then
   wrong "--version takes a release version such as v1.2.3, not $version."
 fi
@@ -87,6 +90,12 @@ case "$channel" in ''|stable|main) ;; *) wrong "--channel is stable or main, not
 [ -z "$version" ] || [ "$channel" != main ] || wrong '--version names a stable release; it cannot be combined with --channel main.'
 [ "$backup" = yes ] || [ "$operation" = update ] || wrong '--no-backup belongs to gtmworks update.'
 [ "$yes" = no ] || [ "$operation" = restore ] || wrong '--yes belongs to gtmworks restore.'
+if [ "$operation" = sign-in ]; then
+  [ "$provider" = claude ] || wrong "gtmworks sign-in signs in claude. Run: gtmworks sign-in claude --company <id-or-name>"
+  [ -n "$company" ] || wrong 'gtmworks sign-in claude needs --company <id-or-name>.'
+else
+  [ -z "$company" ] || wrong "--company belongs to gtmworks sign-in."
+fi
 [ -z "$channel" ] || [ "$operation" = install ] || [ "$operation" = update ] || wrong "--channel belongs to the install and to gtmworks update."
 case "$operation" in install|update|restore) ;; *) [ -z "$version" ] || wrong "--version does not apply to gtmworks $operation.";; esac
 [ "$operation" != restore ] || [ -n "$archive" ] || wrong 'gtmworks restore needs the backup archive to restore.'
@@ -633,6 +642,33 @@ op_status() {
   say "All $total services are healthy."
 }
 
-"op_$operation"
+# The Company's Engine, read from its Engine record (#384): its id, name and address, by the Company's id or its name.
+# The record is where the app and the worker read the Engine, so the command reaches the same Engine they do.
+engine_row() {
+  printf '%s\n' "select c.id,c.name,e.address from public.companies c join public.company_engines e on e.company_id=c.id where c.id::text=:'company' or lower(c.name)=lower(:'company') order by c.id limit 2;" \
+    | compose exec -T db psql -X -U postgres -d postgres -At -v ON_ERROR_STOP=1 -v company="$1"
+}
+
+# #384, ADR 0018: Claude's sign-in is the Engine's own, run in the Company's Engine on its root profile, which lends it
+# to every Agent of the Company. The Engine's address names its container on the install's network, and the compose
+# service is reached by that same name (today one Engine service, `hermes`).
+op_signin() {
+  in_install
+  rows=$(engine_row "$company") || fail "Could not read $dir's Companies: is gtmworks running? See gtmworks status."
+  count=$(printf '%s\n' "$rows" | grep -c . || true)
+  [ "$count" -ne 0 ] || fail "No Company in $dir is named $company. Pass the Company's id or its exact name."
+  [ "$count" -eq 1 ] || fail "More than one Company in $dir is named $company. Pass the Company's id instead."
+  rest=${rows#*|}
+  name=${rest%%|*} address=${rest#*|}
+  host=${address#*://} host=${host%%/*} host=${host%%:*}
+  [ -n "$host" ] || fail "The Engine record of $name has no address to reach it at. Nothing was changed."
+  say "Signing $name in to Claude on its Engine: $host. One account serves one Company."
+  compose exec -T -u hermes "$host" hermes auth add anthropic --type oauth --no-browser
+}
+
+case "$operation" in
+  sign-in) op_signin;;
+  *) "op_$operation";;
+esac
 }
 main "$@"

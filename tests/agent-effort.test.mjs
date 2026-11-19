@@ -46,7 +46,7 @@ function database({agents=agentRows(),refuse=null,target=true}={}) {
  const calls=[];
  const db={rpc:async(name,args)=>{
   calls.push({name,args});
-  if(name==='company_engine_target') return {data:target?[{profile:co,one_company:false,profiles:[]}]:[],error:null};
+  if(name==='company_engine_target') return {data:target?[{profile:co,profiles:[]}]:[],error:null};
   if(name==='company_app_agents') return {data:agents,error:null};
   if(name==='company_agent_models') return {data:agents,error:null};
   if(name==='check_agent_owner_setting') return {data:null,error:refuse?{message:refuse}:null};

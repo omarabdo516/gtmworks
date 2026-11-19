@@ -47,12 +47,14 @@ async function ask(body:object):Promise<{ok:boolean,body:Record<string,unknown>}
  } catch { return {ok:false,body:{error:'signInFailed'}}; }
 }
 
-// The company's connected AI subscriptions (#3, #123; reference: sovModelsHTML, SUBS). The sign-in lives in the agent
-// engine: on an install with one company in its root profile, otherwise in the company's own profile. This page only
-// shows its state, and for the Owner starts ChatGPT's sign-in (a code and a link), follows it until it is connected, or
+// The Company's connected AI subscriptions (#3; #384, ADR 0018; reference: sovModelsHTML, SUBS). A sign-in lives on the
+// root profile of the Company's own Engine, which lends it to every Agent of the Company. This page only shows its
+// state, and for the Owner starts ChatGPT's sign-in (a code and a link), follows it until it is connected, or
 // disconnects. Claude signs in from the install's command line only.
-const stateText:Record<SubscriptionState,string>={connected:'signInConnected',mainAgentOnly:'signInMainAgentOnly',someAgentsOnly:'signInSomeAgentsOnly',shared:'signInShared',notConnected:'signInNotConnected'};
-export function CompanySubscriptions({company,owner,profile,oneCompany,signIns}:{company:string,owner:boolean,profile:string|null,oneCompany:boolean,signIns:CompanySignIns['signIns']}) {
+const stateText:Record<SubscriptionState,string>={connected:'signInConnected',mainAgentOnly:'signInMainAgentOnly',someAgentsOnly:'signInSomeAgentsOnly',notConnected:'signInNotConnected'};
+// The Company's name in the command as the shell reads it back exactly, with the characters a double quote would expand.
+const quoted=(value:string)=>`"${value.replace(/[\\"$`]/g,char=>`\\${char}`)}"`;
+export function CompanySubscriptions({company,companyName,owner,available,signIns}:{company:string,companyName:string,owner:boolean,available:boolean,signIns:CompanySignIns['signIns']}) {
  const {t}=useI18n(); const router=useRouter();
  const [started,setStarted]=useState<Started|null>(null);
  const [note,setNote]=useState<{provider:Provider,key:string,alert?:boolean}|null>(null);
@@ -88,7 +90,7 @@ export function CompanySubscriptions({company,owner,profile,oneCompany,signIns}:
   if(!answer.ok) { setNote({provider,key:String(answer.body.error||'signInFailed'),alert:true}); return; }
   router.refresh();
  });
- const command=profile?`docker compose --env-file .env.install -f docker-compose.install.yml exec -u hermes hermes hermes${oneCompany?'':` -p ${profile}`} auth add anthropic --type oauth --no-browser`:'';
+ const command=`gtmworks sign-in claude --company ${quoted(companyName)}`;
  const row=(provider:Provider,name:string)=>{
   const state=signIns?.[provider].state; const waiting=started?.provider===provider;
   // A sign-in that serves some agents only can be removed, or replaced by one every agent uses.
@@ -114,9 +116,8 @@ export function CompanySubscriptions({company,owner,profile,oneCompany,signIns}:
   </div>;
  };
  return <section className="dp-sec" aria-labelledby="md-h-sub" id="md-subscriptions"><h4 className="dp-label" id="md-h-sub"><span>{t('settingsModelsSubs')}</span></h4>
-  {signIns&&Object.values(signIns).some(found=>found.state==='shared')&&<p className="ro-note sov-warn" role="note" id="sub-shared"><SettingsIcon name="shield"/><span>{t('signInSharedWarning')}</span></p>}
-  {profile?<div className="panel-card">{row('openai-codex',t('signInChatGPT'))}{row('anthropic',t('signInClaude'))}</div>
+  {available?<div className="panel-card">{row('openai-codex',t('signInChatGPT'))}{row('anthropic',t('signInClaude'))}</div>
    :<div className="panel-card"><p className="panel-empty">{t('signInNoProfile')}</p></div>}
-  <p className="set-hint">{t('signInHint')} {t(oneCompany?'signInOneCompany':'signInOwnSpace')}</p>
+  <p className="set-hint">{t('signInHint')} {t('signInOneAccount')}</p>
  </section>;
 }

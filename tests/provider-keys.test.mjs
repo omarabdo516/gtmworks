@@ -136,7 +136,7 @@ function sessions(fake,{owner,space=true,extra=[],logFails=false,unfinishedFails
   if(name==='record_unfinished_provider_key') { if(owner) args.missed.length?unfinished.set(args.key_provider,args.missed):unfinished.delete(args.key_provider); return owner?{data:null,error:null}:{data:null,error:{code:'42501'}}; }
   if(name==='company_key_unfinished_profiles') return {data:owner?[...unfinished].map(([provider,profiles])=>({provider,profiles})):[],error:null};
   if(name==='is_company_owner') return {data:owner,error:null};
-  if(name==='company_engine_target') return {data:[{profile:companies[args.c].main,one_company:false,profiles:[]}],error:null};
+  if(name==='company_engine_target') return {data:[{profile:companies[args.c].main,profiles:[]}],error:null};
   if(name==='company_key_profiles') return {data:keyRows(args.c,extra).filter(row=>space||row.kind!=='space').map(row=>noKeeper&&row.kind==='company'?{...row,agent:null,name:null}:row),error:null};
   if(name==='record_provider_key_change') { logged.push(args); return logFails?{data:null,error:{code:'XX000',message:'the database is down'}}:{data:null,error:null}; }
   return {data:null,error:{message:'unexpected'}}; }};
@@ -328,10 +328,10 @@ test('a key change reads in the Company log by its provider, in both languages',
  assert.match(i18n('ar').t('logActProviderKeySet'),/مفتاح/);
 });
 
-test('the README says a Company on an install with several Companies uses its own key, which lives in the agent engine only', () => {
+test('the README says each Company has its own model access, including an API key that lives in the agent engine only', () => {
  const sentence='A company\'s API key lives in the agent engine only: gtmworks passes it to that company\'s profiles in the bundled Hermes, never to the root profile or another company\'s, and never keeps, logs or shows it.';
  const readme=readFileSync('README.md','utf8').replace(/\s+/g,' ');
- assert.ok(readme.includes('On an install with several companies, a subscription signed in on the root profile is shared by every company on the install, and a company that wants its own uses its own API key (#124).'));
+ assert.ok(readme.includes('One account serves one Company, so each Company signs in with its own account or sets its own API key.'));
  assert.ok(readme.includes(sentence),sentence);
 });
 

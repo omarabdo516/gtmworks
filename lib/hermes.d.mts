@@ -42,7 +42,7 @@ export function readAgentInstructions(connection:import('./engine.mjs').EngineCo
 export function writeAgentInstructions(connection:import('./engine.mjs').EngineConnection,change:{profile:string,instructions:string}):Promise<{state:'written',instructions:string,sectionChars:number,limit:number}|{state:'tooLong'|'missing'|'refused'|'unreachable'|'failed',instructions:null,sectionChars:number,limit:number}>;
 export type SignInProvider='openai-codex'|'anthropic';
 export const signInProviders:SignInProvider[];
-export type SignIns=Record<SignInProvider,{connected:boolean,shared:boolean,flow:'device_code'|'external'}>;
+export type SignIns=Record<SignInProvider,{connected:boolean,root:boolean,flow:'device_code'|'external'}>;
 export function readSignIns(connection:import('./engine.mjs').EngineConnection):Promise<{state:'found'|'refused'|'unreachable'|'failed',signIns:SignIns|null}>;
 export function startSignIn(connection:import('./engine.mjs').EngineConnection,provider:string):Promise<{state:'started'|'terminal_only'|'refused'|'unreachable'|'failed',session:string|null,code:string|null,link:string|null,expiresIn:number|null,interval:number|null}>;
 export function pollSignIn(connection:import('./engine.mjs').EngineConnection,provider:string,session:string):Promise<{state:'pending'|'approved'|'denied'|'expired'|'error'|'cancelled'|'refused'|'unreachable'|'failed'}>;

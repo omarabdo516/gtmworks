@@ -1,0 +1,1 @@
+| `agent-memory-docs.test.mjs` | The README and the installer's closing words say, in the same words, that each Agent has its own memory, that the main Agent keeps what the Company's Agents remembered before, and that a moved Agent starts with an empty memory (#121). | 0.2 s | the browser journey that reads an Agent's memory | keep, moved |
