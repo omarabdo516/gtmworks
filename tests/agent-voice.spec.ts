@@ -35,9 +35,17 @@ test.beforeAll(async({browser},testInfo)=>{
 test.afterAll(async()=>{ await fake?.close(); });
 
 const agentPage=(email:string,page:Page)=>signIn(page,email,`/c/rs-learning/settings?agent=${lead}`);
+// A click before React hydrated the button does nothing: wait until Listen's handlers are attached.
+const hydrated=(page:Page)=>page.waitForFunction(()=>{
+ const button=document.querySelector('#set-voice-play');
+ return !!button&&Object.getOwnPropertyNames(button).some(name=>name.startsWith('__reactFiber$')||name.startsWith('__reactProps$'));
+});
+// The sample Listen speaks carries the reader's own first name as the database holds it (the seed's Omar is «عمر»).
+const sample='Hi عمر, I finished the December campaign analysis and I have three new angles.';
 
 test('the Owner changes the speaking language and the speed, saves, and the Engine and the log hold them; Listen plays the saved voice',async({page})=>{
  await agentPage('omar@example.com',page);
+ await hydrated(page);
  const overlay=page.getByRole('dialog',{name:'Settings'});
  const language=overlay.locator('#set-voice-lang'), speed=overlay.locator('#set-speed-2'), bar=overlay.locator('#dp-savebar');
  // The profile's real values: English, the Engine's default voice, normal speed, and the line on who speaks the sample.
@@ -51,15 +59,15 @@ test('the Owner changes the speaking language and the speed, saves, and the Engi
  // Listen asks the Engine for the sample with the reader's own first name and plays it; the button reads Stop.
  await overlay.getByRole('button',{name:'Listen',exact:true}).click();
  await expect(overlay.getByRole('button',{name:'Stop',exact:true})).toHaveAttribute('aria-pressed','true');
- await expect(overlay.locator('#set-voice-hint')).toContainText('Hi Omar, I finished the December campaign analysis');
+ await expect(overlay.locator('#set-voice-hint')).toContainText('Hi عمر, I finished the December campaign analysis');
  await overlay.getByRole('button',{name:'Stop',exact:true}).click();
  await expect(overlay.getByRole('button',{name:'Listen',exact:true})).toHaveAttribute('aria-pressed','false');
  // The Engine was given the server's own sentence, the reader's first name in English, not anything the browser chose.
  const spoken=()=>fake.settings.managementRequests.filter(request=>request.path?.startsWith('/api/audio/speak')).at(-1);
- expect(spoken()?.body).toEqual({text:'Hi Omar, I finished the December campaign analysis and I have three new angles.'});
+ expect(spoken()?.body).toEqual({text:sample});
  const direct=await page.request.post('/api/agent-speak',{data:{company,agent:lead,text:'Say something else entirely.'}});
  expect(direct.ok()).toBe(true);
- expect(spoken()?.body.text).toContain('Hi Omar, I finished');
+ expect(spoken()?.body.text).toContain('Hi عمر, I finished');
  expect(spoken()?.body.text).not.toContain('Say something else entirely.');
  // A change of language and of speed, saved with the bar; Listen is off while they are unsaved.
  await language.selectOption('ar');
