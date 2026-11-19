@@ -149,8 +149,8 @@ function sessions(fake,{owner,space=true,extra=[],logFails=false,unfinishedFails
 // The fake's management listener is not on port 9119 of the run address, so the driver is pointed at it.
 const pointedAt=fake=>{ const at=target=>({...target,managementAddress:fake.managementAddress});
  return {read:(target,keys)=>readProviderKeys(at(target),keys),set:(target,key)=>setProviderKey(at(target),key),remove:(target,key)=>removeProviderKey(at(target),key)}; };
-const change=(person,fake,request)=>changeCompanyKey(person.db,person.service,{company:first,provider:'openrouter',driver:pointedAt(fake),...request});
-const read=(person,fake,company=first)=>readCompanyKeys(person.db,person.service,{company,driver:pointedAt(fake)});
+const change=(person,fake,request)=>changeCompanyKey(person.db,person.service,{company:first,provider:'openrouter',driver:pointedAt(fake),hermes:{address:fake.address,key:'test-only-key'},...request});
+const read=(person,fake,company=first)=>readCompanyKeys(person.db,person.service,{company,driver:pointedAt(fake),hermes:{address:fake.address,key:'test-only-key'}});
 const profileOf=path=>new URL(path,'http://engine').searchParams.get('profile')??/^\/api\/profiles\/([^/]+)\/model$/.exec(new URL(path,'http://engine').pathname)?.[1]??null;
 
 test('a set reaches the Company\'s space and its Agent profiles only, key before model, and names each Agent and whether it was written', async () => {
@@ -281,14 +281,14 @@ test('two changes of one Company\'s key run one after the other, and another Com
   const owner=sessions(fake,{owner:true});
   const steps=[]; let open; const gate=new Promise(resolve=>{ open=resolve; });
   const held=name=>({set:async()=>{ steps.push(`${name} starts`); if(name==='A') await gate; steps.push(`${name} ends`); return {state:'written',model:null,profiles:{}}; }});
-  const changeAs=(name,company)=>changeCompanyKey(owner.db,owner.service,{company,provider:'openrouter',intent:'set',value:known,driver:held(name)});
+  const changeAs=(name,company)=>changeCompanyKey(owner.db,owner.service,{company,provider:'openrouter',intent:'set',value:known,driver:held(name),hermes:{address:fake.address,key:'test-only-key'}});
   const a=changeAs('A',first); const b=changeAs('B',first); const other=changeAs('C',second);
   assert.equal((await other).status,200);
   assert.deepEqual(steps,['A starts','C starts','C ends'],'the second change of the first Company waits; the other Company does not');
   open();
   assert.deepEqual([(await a).status,(await b).status],[200,200]);
   assert.deepEqual(steps.slice(3),['A ends','B starts','B ends']);
-  const failing=changeCompanyKey(owner.db,owner.service,{company:first,provider:'openrouter',intent:'set',value:known,driver:{set:async()=>{ throw new Error('down'); }}});
+  const failing=changeCompanyKey(owner.db,owner.service,{company:first,provider:'openrouter',intent:'set',value:known,driver:{set:async()=>{ throw new Error('down'); }},hermes:{address:fake.address,key:'test-only-key'}});
   await assert.rejects(failing);
   assert.equal((await changeAs('D',first)).status,200,'a change that threw does not hold the next');
  } finally { await fake.close(); }

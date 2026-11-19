@@ -51,8 +51,8 @@ function sessions(fake,{owner=true,extra=[],waits=[],failing=[],failingOnce=[],f
 const pointedAt=fake=>{ const at=target=>({...target,managementAddress:fake.managementAddress});
  return {read:(target,keys)=>readProviderKeys(at(target),keys),held:(target,keys)=>readHeldKeys(at(target),keys),
   set:(target,key)=>setProviderKey(at(target),key),remove:(target,key)=>removeProviderKey(at(target),key)}; };
-const change=(person,fake,request)=>changeCompanyKey(person.db,person.service,{company,provider:'openrouter',driver:pointedAt(fake),...request});
-const read=(person,fake)=>readCompanyKeys(person.db,person.service,{company,driver:pointedAt(fake)});
+const change=(person,fake,request)=>changeCompanyKey(person.db,person.service,{company,provider:'openrouter',driver:pointedAt(fake),hermes:{address:fake.address,key:'test-only-key'},...request});
+const read=(person,fake)=>readCompanyKeys(person.db,person.service,{company,driver:pointedAt(fake),hermes:{address:fake.address,key:'test-only-key'}});
 const engineOn=(fake,profile)=>hermesEngine({address:fake.address,managementAddress:fake.managementAddress,profile,key:'test-only-key'});
 
 // Lead's create_agent call on Lead's profile, with the database's answers for a Company whose level is 1, and `answers`
@@ -204,7 +204,7 @@ test('only the Owner\'s read settles the holds to what the space holds, naming o
   await read(owner,fake);
   assert.deepEqual(owner.calls('settle_provider_key_holds').at(-1),{c:company,held:[]});
   const odd={...pointedAt(fake),read:async()=>({state:'found',keys:[{provider:'openrouter',label:'OpenRouter',set:true},{provider:'Not a provider',label:'Odd',set:true},{provider:'deepseek',label:'DeepSeek',set:false}],lacking:[],leftover:[],unread:[]})};
-  await readCompanyKeys(owner.db,owner.service,{company,driver:odd});
+  await readCompanyKeys(owner.db,owner.service,{company,driver:odd,hermes:{address:fake.address,key:'test-only-key'}});
   assert.deepEqual(owner.calls('settle_provider_key_holds').at(-1),{c:company,held:['openrouter']},'a provider name that does not read is never sent');
  } finally { await fake.close(); }
 });

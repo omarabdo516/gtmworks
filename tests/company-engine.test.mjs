@@ -16,7 +16,7 @@ const company='10000000-0000-0000-0000-000000000001';
 const other='10000000-0000-0000-0000-000000000002';
 const agent='3a000000-0000-0000-0000-000000000011';
 const profile=`ag-${agent.replaceAll('-','')}`;
-const engineNames=/BUNDLED_HERMES_URL|HERMES_API_KEY/;
+const engineNames=/BUNDLED_HERMES_URL|ENGINE_ADDRESS|ENGINE_KEY/;
 const encryptionKey='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
 const sources=()=>['app','lib','worker'].flatMap(folder=>readdirSync(folder,{recursive:true})
  .map(file=>join(folder,file)).filter(file=>/\.(mjs|cjs|js|mts|ts|tsx)$/.test(file)));
@@ -28,11 +28,10 @@ const records=rows=>{
 };
 const recordFor=(address,key)=>({address,key_encrypted:encryptSecret(key,encryptionKey)});
 
-test('the install Engine\'s address and key are read only by the module that answers the Engine of a Company', async () => {
- // The installer makes the key once, into `.env.install`; nothing outside the module reads either to call an Engine.
- const named=sources().filter(file=>engineNames.test(readFileSync(file,'utf8')));
- assert.deepEqual(named.sort(),['lib/bundled-hermes.mjs','lib/install-env.mjs']);
- assert.deepEqual(sources().filter(file=>/BUNDLED_HERMES_URL/.test(readFileSync(file,'utf8'))),['lib/bundled-hermes.mjs']);
+test('no app, worker or library module reads an install-wide Engine address or key: the Company\'s record is the only source', async () => {
+ // #378, T1: the fallback to BUNDLED_HERMES_URL/HERMES_API_KEY is gone, so no module outside the installer reads either.
+ assert.deepEqual(sources().filter(file=>engineNames.test(readFileSync(file,'utf8'))).sort(),[]);
+ assert.deepEqual(sources().filter(file=>/BUNDLED_HERMES_URL/.test(readFileSync(file,'utf8'))),[]);
  // The record answers each Company's Engine, with the key decrypted for the driver alone.
  const saved=process.env.WEBHOOK_ENCRYPTION_KEY;
  process.env.WEBHOOK_ENCRYPTION_KEY=encryptionKey;
@@ -43,6 +42,10 @@ test('the install Engine\'s address and key are read only by the module that ans
   assert.equal(await engineOf(other,db),null);
   assert.deepEqual(db.asked,[{table:'company_engines',column:'company_id',value:company},{table:'company_engines',column:'company_id',value:other}]);
   assert.equal(await engineOf(null,db),null);
+  // A module with no database at all (a unit test) has no Engine to answer: no install-wide address or key is read.
+  assert.equal(await engineOf(company,null),null);
+  const api=await import('../lib/bundled-hermes.mjs');
+  assert.equal(Object.hasOwn(api,'hermesAt'),false,'the install-wide environment fallback is gone');
  } finally {
   if(saved===undefined) delete process.env.WEBHOOK_ENCRYPTION_KEY; else process.env.WEBHOOK_ENCRYPTION_KEY=saved;
  }

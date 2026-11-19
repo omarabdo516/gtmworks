@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { load } from 'js-yaml';
 import { generateInstallEnv, generateEngineKey, validateInstallEnv, missingInstallEnv } from '../lib/install-env.mjs';
 import { hermesVersion, isHermesAddressAllowed } from '../lib/hermes.mjs';
-import { hermesAt, onProfile, selfHosted } from '../lib/bundled-hermes.mjs';
+import { onProfile, selfHosted } from '../lib/bundled-hermes.mjs';
 
 // Each Company's Engine is made from the template shipped with the release (ADR 0018): one release of the official Hermes
 // image, pinned by tag and digest, on its own network with its own volume and key. scripts/install.sh makes the first
@@ -249,12 +249,10 @@ test('update recreates the auth service with its password settings and waits unt
 });
 
 test('only a self-hosted install keeps Company and Agent profiles, and no install-wide Engine names one', () => {
- const env={GTMWORKS_SELF_HOSTED:'true',BUNDLED_HERMES_URL:'http://gtmworks-engine-first:8642',HERMES_API_KEY:'k'.repeat(64)};
+ const env={GTMWORKS_SELF_HOSTED:'true'};
  assert.equal(selfHosted(env),true);
  assert.equal(selfHosted({...env,GTMWORKS_SELF_HOSTED:undefined}),false);
  assert.equal(selfHosted({...env,GTMWORKS_SELF_HOSTED:''}),false);
- // The install-wide address and key are an Engine's own for a module with no database, never a Company's Engine.
- assert.deepEqual(hermesAt(env),{address:'http://gtmworks-engine-first:8642',key:'k'.repeat(64)});
 });
 
 test('the Engine gives a company one main agent named Lead, never the Engine name', () => {
@@ -266,9 +264,8 @@ test('the Engine gives a company one main agent named Lead, never the Engine nam
 });
 
 test('every Run goes to its Company\'s Engine on the profile it was pinned to, and a Company profile serves its own Company only', () => {
- const hermes=hermesAt({BUNDLED_HERMES_URL:'http://gtmworks-engine-first:8642',HERMES_API_KEY:'k'.repeat(64)});
- assert.deepEqual(hermes,{address:'http://gtmworks-engine-first:8642',key:'k'.repeat(64)});
- assert.equal(hermesAt({BUNDLED_HERMES_URL:'http://gtmworks-engine-first:8642'}),null);
+ // The Engine a caller names, as the record answers it (#378, T1): no install-wide environment value is read.
+ const hermes={address:'http://gtmworks-engine-first:8642',key:'k'.repeat(64)};
  const company='10000000-0000-0000-0000-000000000001';
  assert.deepEqual(onProfile('co-10000000000000000000000000000001',company,hermes),{...hermes,profile:'co-10000000000000000000000000000001'});
  assert.equal(onProfile('co-10000000000000000000000000000002',company,hermes),null,'another Company\'s profile');
@@ -286,6 +283,14 @@ test('the Engine network probe checks the install services by name and by their 
  const ci=readFileSync('.github/workflows/ci.yml','utf8');
  assert.match(ci,/for service in db auth rest storage gateway; do/);
  assert.equal((ci.match(/-e INSTALL_SERVICE_IPS="\$\(install_service_ips\)"/g)||[]).length,3,'every Engine-network probe passes the addresses');
+});
+
+test('the threat model names every service-role holder the Engine work added (#378, X5)', () => {
+ const doc=readFileSync('docs/threat-model.md','utf8');
+ for(const name of ['lib/bundled-hermes.mjs','app/api/dictation/route.ts','app/first-owner/submit/route.ts','scripts/company-add.mjs','scripts/company-list.mjs','scripts/install-engine.mjs']) {
+  assert.ok(doc.includes(name),name);
+ }
+ assert.match(doc,/service-role call site listed above/);
 });
 
 test('the Engine management listener is on for web and worker with the Engine key, and never public', () => {
