@@ -30,12 +30,14 @@ insert into decisions
   'public.decide_approval(uuid,bigint,text,text,boolean,boolean)','public.edit_card_note(uuid,bigint,text)',
   'public.start_card_conversation(uuid,bigint,uuid)','public.card_chat_person(uuid,bigint)',
   'public.card_wait(public.work_cards)','public.reply_card_waits(public.reply_cards)']) fn
+ union all select 'public.channel_board_card(uuid)','exempt','a channel member reads the one Card their channel put on the board only while they see its Agent (can_see_agent), as the board shows it (#151); anyone else reads nothing'
  union all select 'public.can_see_card_file(text)','checks','a stored file follows each Card it belongs to'
  union all select 'public.can_see_card(uuid,bigint)','exempt','the read rule itself'
  union all select fn,'exempt','a trigger: it runs on a write the table''s own rules admitted, answers no caller, and every row it writes is read under card_agent_visible' from unnest(array[
   'public.approval_card_guard()','public.conversation_reply_card()','public.log_card_activity()','public.log_card_comment()',
   'public.log_company_change()','public.log_member_change()','public.log_member_invitation()','public.log_note_edit()','public.note_mentions()',
-  'public.resolve_waiting_on_card()','public.resolve_waiting_on_reply()','public.schedule_approved_card()','public.work_audit()','public.work_guard()']) fn
+  'public.resolve_waiting_on_card()','public.resolve_waiting_on_reply()','public.schedule_approved_card()','public.work_audit()','public.work_guard()',
+  'public.channel_run_card()','public.channel_reply_card()']) fn
  union all select fn,'exempt','the worker''s, callable by the service role only: it answers the worker, never a Member, and the rows it writes are read under card_agent_visible' from unnest(array[
   'public.add_waiting_item(uuid,uuid,text,text,text,bigint,uuid,text)','public.agent_save_rule(uuid,text,text,text)','public.agent_show_card(uuid,text,text,text,text,jsonb)',
   'public.answer_note_start(bigint,integer,text)','public.begin_note_start(bigint)','public.channel_hand_to_agent(bigint,text,text,text,text,text)','public.channel_show_card(bigint,text,text,text,text,jsonb)','public.close_note_run(bigint,text,text,text,bigint,bigint)',

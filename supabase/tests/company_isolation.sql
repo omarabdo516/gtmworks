@@ -28,6 +28,8 @@ update isolation_matrix m set fixed = v.fixed::jsonb from (values
  ('agent_profile_leftovers', $${"profile": "'ag-' || md5('isolation')"}$$),
  ('approval_steps', $${"person_id": "'e3370000-0000-0000-0000-000000000001'", "role": "null"}$$),
  ('channel_messages', $${"author": "'person'", "send_key": "gen_random_uuid()"}$$),
+ -- A channel's quiet line names its invited person or its Card (#207, #151); this row is an invitation's.
+ ('channel_notes', $${"kind": "'invite'", "invitee_name": "'Mona'"}$$),
  ('channel_permissions', $${"state": "'open'",
    "content": "'{\"choices\": [\"once\", \"deny\"], \"command\": \"ls\", \"description\": \"isolation\"}'"}$$),
  ('channels', $${"kind": "'team'", "created_by": "'e3370000-0000-0000-0000-000000000001'", "create_key": "gen_random_uuid()",
