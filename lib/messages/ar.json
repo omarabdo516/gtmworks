@@ -795,7 +795,7 @@
   "settingsBackupFiles": "ملفات التخزين",
   "settingsBackupFilesD": "الملفات والصور اللي اترفعت على التنصيبة.",
   "settingsBackupKeys": "مفاتيح التنصيبة",
-  "settingsBackupKeysD": "المفاتيح وإعدادات العنوان اللي التنصيبة شغالة بيهم.",
+  "settingsBackupKeysD": "المفاتيح وإعدادات العنوان اللي التنصيبة شغالة بيهم، ومعاها ملف مفتاح كل محرّك.",
   "settingsBackupAgents": "بيانات الوكلاء",
   "settingsBackupAgentsD": "مهاراتهم، ومعرفة الشركة، والقواعد، والذاكرة، والجلسات، والاستهلاك.",
   "settingsBackupExcludeModel": "حساب مزوّد الموديل ومفاتيحه برّه التنصيبة",

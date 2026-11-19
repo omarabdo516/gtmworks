@@ -19,8 +19,8 @@ What a reviewer should protect in gtmworks, read from the code and the ADRs. Eve
 
 ## Secrets and privileged actions
 
-- **Settings.** `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`, `WEBHOOK_ENCRYPTION_KEY` (`lib/settings.mjs`), and the bundled Hermes's `HERMES_API_KEY` (`.env.install`).
-- **Hermes key.** The install-generated `HERMES_API_KEY` stays in the install's environment and is handed only to the driver (`lib/hermes.mjs`); since #342 no Hermes key is stored in the database (the encrypted Connection keys went with `hermes_connections`). No route returns it and no log line names it.
+- **Settings.** `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`, `WEBHOOK_ENCRYPTION_KEY` (`lib/settings.mjs`) in `.env.install`, and each Engine's own key in its own `.engines/<name>/.env` (`lib/install-env.mjs` makes it; #385).
+- **Engine key.** Each Engine's key is install-generated and kept in that Engine's own file, never in the app's or the worker's environment file; the installer passes it only to the Engine record registration (`scripts/install-engine.mjs`) and the checks. Every call reaches an Engine through its Company's record, which holds the key encrypted with the install's encryption key (#380, ADR 0018); since #342 no Hermes key is stored in any other table (the encrypted Connection keys went with `hermes_connections`). No route returns it and no log line names it.
 - **Logs.** `lib/diagnostics.mjs` keeps only the company id and slug from a form and redacts secret settings, bearer tokens, long tokens and 6-8 digit codes. A new `console.*` call bypasses it.
 - **Privileged actions.** First-run setup; inviting members (service key); approving a version (a person only, ADR 0006).
 

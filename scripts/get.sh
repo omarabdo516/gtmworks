@@ -515,7 +515,7 @@ check_archive() {
   entries=$(docker run --rm -i alpine:3.21 tar -tzf - < "$archive") || fail "$archive cannot be read as a gtmworks backup archive. Nothing was changed."
   bad=$(printf '%s\n' "$entries" | while IFS= read -r entry; do
     case "$entry" in /*|*../*|../*|*/..|..) printf 'an unsafe path: %s\n' "$entry"; break;; esac
-    case "$entry" in .env.install|var/lib/postgresql/data/*|etc/postgresql-custom/*|var/lib/storage/*|opt/data|opt/data/*) ;; *) printf 'an entry no backup holds: %s\n' "$entry"; break;; esac
+    case "$entry" in .env.install|var/lib/postgresql/data/*|etc/postgresql-custom/*|var/lib/storage/*|opt/data|opt/data/*|.engines|.engines/*) ;; *) printf 'an entry no backup holds: %s\n' "$entry"; break;; esac
   done)
   [ -z "$bad" ] || fail "$archive is not a gtmworks backup: it holds $bad. Nothing was changed."
   for entry in var/lib/postgresql/data/ etc/postgresql-custom/ var/lib/storage/ .env.install; do
@@ -581,6 +581,10 @@ op_restore() {
   # install.sh first.
   if printf '%s\n' "$entries" | grep -Eq '^opt/data(/|$)' && ! grep -Fq 'opt/data/*' "$stage/install.sh"; then
     fail "gtmworks $version cannot restore $archive: it holds the Agents' data, which releases before it cannot restore. Restore it with a newer release. Nothing was changed."
+  fi
+  # So does a release from before #385, whose restore knows no .engines/ (the Engines' keys).
+  if printf '%s\n' "$entries" | grep -Eq '^\.engines(/|$)' && ! grep -Fq '.engines/*' "$stage/install.sh"; then
+    fail "gtmworks $version cannot restore $archive: it holds the Engines' keys, which releases before it cannot restore. Restore it with a newer release. Nothing was changed."
   fi
   check_archive_settings
   archived=$(archive_migrations)

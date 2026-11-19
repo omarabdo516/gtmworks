@@ -124,10 +124,6 @@ services:
     env_file: .env.install
     environment:
       GTMWORKS_SELF_HOSTED: "true"
-      # The Engine record is the only source of a Company's Engine (#381, ADR 0018): the app never reads the install's
-      # environment for one. Both names are unset here even when an older .env.install holds them.
-      BUNDLED_HERMES_URL:
-      HERMES_API_KEY:
     command: [sh, -c, "node lib/install-env.mjs validate && exec node server.js"]
     healthcheck:
       test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/api/health').then(response=>process.exit(response.ok?0:1)).catch(()=>process.exit(1))"]
@@ -140,9 +136,6 @@ services:
     env_file: .env.install
     environment:
       GTMWORKS_SELF_HOSTED: "true"
-      # As for the app: every Run and every Engine call asks its Company's Engine record (#381, ADR 0018).
-      BUNDLED_HERMES_URL:
-      HERMES_API_KEY:
     command: [sh, -c, "node lib/install-env.mjs validate && exec node worker/index.mjs"]
 volumes:
   database:

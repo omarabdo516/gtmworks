@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { load } from 'js-yaml';
-import { generateInstallEnv, validateInstallEnv, missingInstallEnv } from '../lib/install-env.mjs';
+import { generateInstallEnv, generateEngineKey, validateInstallEnv, missingInstallEnv } from '../lib/install-env.mjs';
 import { hermesVersion, isHermesAddressAllowed } from '../lib/hermes.mjs';
 import { bundledHermes, hermesAt, onProfile } from '../lib/bundled-hermes.mjs';
 
@@ -70,11 +70,11 @@ test('no container of the install mounts the Docker socket', () => {
 
 test('the app and the worker read no install-wide Engine address or key: the Engine record is the only source', () => {
  for(const name of ['web','worker']) {
-  const env=compose.services[name].environment;
-  assert.equal(Object.hasOwn(env,'BUNDLED_HERMES_URL'),true,`${name} unsets BUNDLED_HERMES_URL`);
-  assert.equal(env.BUNDLED_HERMES_URL,null);
-  assert.equal(Object.hasOwn(env,'HERMES_API_KEY'),true,`${name} unsets HERMES_API_KEY`);
-  assert.equal(env.HERMES_API_KEY,null);
+  const env=compose.services[name].environment||{};
+  // Nothing puts an Engine key or address in .env.install any more (#385), so no null entry is needed to mask one.
+  assert.equal(Object.hasOwn(env,'BUNDLED_HERMES_URL'),false,`${name} names no BUNDLED_HERMES_URL`);
+  assert.equal(Object.hasOwn(env,'HERMES_API_KEY'),false,`${name} names no HERMES_API_KEY`);
+  assert.equal(compose.services[name].env_file,'.env.install');
  }
  assert.equal(compose.services.worker.depends_on?.hermes,undefined);
  assert.equal(compose.volumes?.hermes,undefined);
@@ -82,33 +82,34 @@ test('the app and the worker read no install-wide Engine address or key: the Eng
  assert.equal(isHermesAddressAllowed('http://gtmworks-engine-first:9119'),true);
 });
 
-test('the Engine key is install-generated, validated, and an older install gains it on update', () => {
+test('an Engine key is made into the Engine\'s own file, and an install made before it keeps the key it has', () => {
  const env=generateInstallEnv(),other=generateInstallEnv();
- assert.match(env.HERMES_API_KEY,/^[a-f0-9]{64}$/);
- assert.notEqual(env.HERMES_API_KEY,other.HERMES_API_KEY);
- for(const invalid of ['','replace-me','a'.repeat(64)]) {
+ // The app's and the worker's environment file holds no Engine key (#385): it lives in the Engine's own file only.
+ assert.equal(Object.hasOwn(env,'HERMES_API_KEY'),false,'.env.install holds no Engine key');
+ const key=generateEngineKey(),another=generateEngineKey();
+ assert.match(key,/^[a-f0-9]{64}$/);
+ assert.notEqual(key,another);
+ assert.doesNotThrow(()=>validateInstallEnv(env));
+ assert.doesNotThrow(()=>validateInstallEnv(env,{complete:true}));
+ // An install the previous release made still carries its key there until the installer moves it; a present key is
+ // checked as before, so a wrong one is never adopted.
+ assert.doesNotThrow(()=>validateInstallEnv({...env,HERMES_API_KEY:'a1'.repeat(32)},{complete:true}));
+ for(const invalid of ['','replace-me','A'.repeat(64)]) {
   assert.throws(()=>validateInstallEnv({...env,HERMES_API_KEY:invalid}),/HERMES_API_KEY/);
   assert.throws(()=>validateInstallEnv({...env,HERMES_API_KEY:invalid},{complete:true}),/HERMES_API_KEY/);
  }
- const older={...env}; delete older.HERMES_API_KEY;
- // The containers accept an install with no key yet; this installer requires it.
- assert.doesNotThrow(()=>validateInstallEnv(older));
- assert.throws(()=>validateInstallEnv(older,{complete:true}),/HERMES_API_KEY/);
  const cli=(file,...args)=>spawnSync(process.execPath,['lib/install-env.mjs',...args],{env:{...file,PATH:process.env.PATH},encoding:'utf8'});
- assert.equal(cli(older,'validate').status,0);
- const strict=cli(older,'validate','complete');
- assert.equal(strict.status,1);
- assert.match(strict.stderr,/HERMES_API_KEY must be an install-generated secret/);
+ assert.match(cli(env,'engine-key').stdout,/^[a-f0-9]{64}\n$/);
+ assert.equal(cli(env,'validate').status,0);
  assert.equal(cli(env,'validate','complete').status,0);
- for(const args of [['validate'],['validate','complete']]) assert.equal(cli({...env,HERMES_API_KEY:'replace-me'},...args).status,1);
  assert.equal(cli(env,'validate','other').status,1);
- const added=missingInstallEnv(older);
- assert.deepEqual(Object.keys(added),['HERMES_API_KEY']);
- assert.doesNotThrow(()=>validateInstallEnv({...older,...added}));
+ // The only value an older install gains now is the setup code; its Engine key arrives with the Engine's own file.
  assert.deepEqual(missingInstallEnv(env),{});
+ const older={...env}; delete older.SETUP_CODE;
+ assert.deepEqual(Object.keys(missingInstallEnv(older)),['SETUP_CODE']);
  const printed=spawnSync(process.execPath,['lib/install-env.mjs','missing'],{env:{...older,PATH:process.env.PATH},encoding:'utf8'});
  assert.equal(printed.status,0,printed.stderr);
- assert.match(printed.stdout,/^HERMES_API_KEY=[a-f0-9]{64}\n$/);
+ assert.match(printed.stdout,/^SETUP_CODE=[a-f0-9]{64}\n$/);
 });
 
 // A Docker stand-in: records every command, runs lib/install-env.mjs for real with the --env-file it was given, and
@@ -124,11 +125,13 @@ case "$*" in
   file=; previous=; all="$*"
   for argument do [ "$previous" = --env-file ] && file=$argument; previous=$argument; done
   exec env -i PATH="$PATH" sh -c 'set -a; case "$1" in /*) . "$1";; *) . "./$1";; esac; set +a; shift; exec node "$@"' sh "$file" "$INSTALL_ENV" \${all##*install-env.mjs };;
- *'exec -T db psql'*) cat > /dev/null;;
+ *'exec -T db psql'*)
+  case "$*" in *'count(*) from public.companies'*) echo 1;; *) cat > /dev/null;; esac;;
 esac
 `;
 const envText=env=>Object.entries(env).map(([name,value])=>`${name}=${value}`).join('\n');
-const olderEnv=()=>{ const env=generateInstallEnv(); delete env.HERMES_API_KEY; return env; };
+// An install the previous release made: the Engine's key is still in .env.install (#385).
+const previousReleaseEnv=()=>{ const env=generateInstallEnv(); env.HERMES_API_KEY='a1'.repeat(32); return env; };
 function installDirectory(t,installer,env) {
  const directory=mkdtempSync(join(tmpdir(),'gtmworks-bundled-'));
  t.after(()=>rmSync(directory,{recursive:true,force:true}));
@@ -141,42 +144,64 @@ function installDirectory(t,installer,env) {
  const commands=join(directory,'commands');
  const env2={...process.env,PATH:`${directory}/bin:${process.env.PATH}`,COMMANDS:commands,GH_TOKEN:'',
   NEW_INSTALLER:join(process.cwd(),'scripts/install.sh'),INSTALL_ENV:join(process.cwd(),'lib/install-env.mjs')};
- return {run:(...args)=>spawnSync('sh',['scripts/install.sh',...(args.length?args:['update','main'])],{cwd:directory,env:env2,encoding:'utf8'}),
+ return {directory,run:(...args)=>spawnSync('sh',['scripts/install.sh',...(args.length?args:['update','main'])],{cwd:directory,env:env2,encoding:'utf8'}),
   file:()=>readFileSync(join(directory,'.env.install'),'utf8'),commands:()=>readFileSync(commands,'utf8'),
   engineEnv:()=>readFileSync(join(directory,'.engines/first/.env'),'utf8')};
 }
 
-test('install and update add a missing Engine key before validating, start the Engine from the template and pass its key only to registration', t => {
- const older=olderEnv();
- const install=installDirectory(t,'scripts/install.sh',older);
+test('an update moves the Engine key a previous release left in .env.install into the Engine\'s own file, unchanged', t => {
+ const previous=previousReleaseEnv();
+ const install=installDirectory(t,'scripts/install.sh',previous);
  const update=install.run();
  assert.equal(update.status,0,update.stderr);
  const written=install.file();
- const key=/\nHERMES_API_KEY=([a-f0-9]{64})\n$/.exec(written)?.[1];
- assert.ok(key,written.slice(-100));
- assert.ok(written.startsWith(envText(older)));
- assert.ok(!(update.stdout+update.stderr).includes(key));
+ // The key moves, and nothing else in the app's and the worker's environment file changes.
+ assert.doesNotMatch(written,/HERMES_API_KEY=/);
+ const kept=Object.entries(previous).filter(([name])=>name!=='HERMES_API_KEY').map(([name,value])=>`${name}=${value}`).join('\n');
+ assert.ok(written.startsWith(kept),written.slice(-120));
+ assert.ok(!(update.stdout+update.stderr).includes(previous.HERMES_API_KEY),'the key is never printed');
  const run=install.commands();
- assert.ok(run.indexOf('install-env.mjs missing')<run.indexOf('install-env.mjs validate complete'));
- assert.match(run,/up -d --no-deps --wait --wait-timeout 300 auth web worker\n/);
+ assert.ok(run.indexOf('install-env.mjs validate complete')<run.indexOf('engine-template.yml up'));
  // The first Engine is its own Compose project, made from the shipped template with its own key, volume and network.
  assert.match(run,/compose --project-name gtmworks-engine-first --env-file \.engines\/first\/\.env -f scripts\/engine-template\.yml up -d --wait --wait-timeout 300/);
  assert.match(run,/network connect gtmworks-engine-first web-id/);
  assert.match(run,/network connect gtmworks-engine-first worker-id/);
- assert.equal(install.engineEnv(),`ENGINE_NAME=gtmworks-engine-first\nENGINE_KEY=${key}\nENGINE_VOLUME=gtmworks-install_hermes\nENGINE_NETWORK=gtmworks-engine-first\n`);
+ assert.equal(install.engineEnv(),`ENGINE_NAME=gtmworks-engine-first\nENGINE_KEY=${previous.HERMES_API_KEY}\nENGINE_VOLUME=gtmworks-install_hermes\nENGINE_NETWORK=gtmworks-engine-first\n`);
  // The address and key reach the registration script, and no line of the app or the worker carries them.
  const registration=run.split('\n').find(line=>line.includes('scripts/install-engine.mjs'));
  assert.ok(registration,run);
  assert.match(registration,/exec -T -e BUNDLED_HERMES_URL=http:\/\/gtmworks-engine-first:8642 -e HERMES_API_KEY=/);
  assert.doesNotMatch(run,/compose exec -T web node -e .*HERMES_API_KEY/);
- // A complete install file is left byte for byte as it was, and the Engine starts again.
+ // A repeat install keeps the adopted key and leaves both files as they were.
  const repeat=install.run();
  assert.equal(repeat.status,0,repeat.stderr);
  assert.equal(install.file(),written);
+ assert.match(install.engineEnv(),new RegExp(`\\nENGINE_KEY=${previous.HERMES_API_KEY}\\n`));
+});
+
+test('a fresh install makes the Engine\'s key into its own file, never into .env.install', t => {
+ const install=installDirectory(t,'scripts/install.sh',{});
+ rmSync(join(install.directory,'.env.install'));
+ const first=install.run('install');
+ assert.equal(first.status,0,first.stderr);
+ // The installer generates .env.install without an Engine key, and the Engine's own file with one.
+ assert.match(install.file(),/^POSTGRES_PASSWORD=[a-f0-9]{64}$/m);
+ assert.doesNotMatch(install.file(),/HERMES_API_KEY=/);
+ const key=/\nENGINE_KEY=([a-f0-9]{64})\n/.exec(install.engineEnv())?.[1];
+ assert.ok(key,install.engineEnv());
+ assert.ok(!(first.stdout+first.stderr).includes(key),'the key is never printed');
+ const registration=install.commands().split('\n').find(line=>line.includes('scripts/install-engine.mjs'));
+ assert.match(registration,new RegExp(`-e HERMES_API_KEY=${key} `));
+ // A repeat install changes neither file.
+ const written=install.file(),engine=install.engineEnv();
+ const repeat=install.run();
+ assert.equal(repeat.status,0,repeat.stderr);
+ assert.equal(install.file(),written);
+ assert.equal(install.engineEnv(),engine);
 });
 
 test('an install updated by the installer before ADR 0010 keeps running without Hermes, and the next update brings its Engine in', t => {
- const older=olderEnv();
+ const older=generateInstallEnv();
  // The installer as it was before ADR 0010 (scripts/install.sh at 6957e6e), kept beside install-failing-migration.sql.
  const install=installDirectory(t,'scripts/install-before-bundled-hermes.sh',older);
  const first=install.run();
@@ -189,18 +214,17 @@ test('an install updated by the installer before ADR 0010 keeps running without 
  assert.doesNotMatch(run,/hermes web worker/);
  // The worker that update started finds no Engine record or install-wide address, so it never waits on one.
  assert.equal(bundledHermes({...older,GTMWORKS_SELF_HOSTED:'true',BUNDLED_HERMES_URL:'http://gtmworks-engine-first:8642'}),null);
- // A backup taken before the next update starts the whole stack again, so it adds the key first.
+ // A backup taken before the next update starts the whole stack again; the install has no Engine key, and the file
+ // keeps none.
  const backup=install.run('backup');
  assert.equal(backup.status,0,backup.stderr);
- const key=/\nHERMES_API_KEY=([a-f0-9]{64})\n$/.exec(install.file())?.[1];
- assert.ok(key);
- run=install.commands();
- assert.ok(run.lastIndexOf('install-env.mjs missing')<run.lastIndexOf('up -d --wait --wait-timeout 300'));
- // The source it extracted is this installer: the next update keeps that key and starts the Engine.
+ assert.equal(install.file(),envText(older));
+ // The source it extracted is this installer: the next update makes the Engine a key of its own, in its own file.
  const second=install.run();
  assert.equal(second.status,0,second.stderr);
- assert.equal((install.file().match(/HERMES_API_KEY=/g)||[]).length,1);
- assert.match(install.file(),new RegExp(`\\nHERMES_API_KEY=${key}\\n$`));
+ assert.doesNotMatch(install.file(),/HERMES_API_KEY=/);
+ const key=/\nENGINE_KEY=([a-f0-9]{64})\n/.exec(install.engineEnv())?.[1];
+ assert.ok(key,install.engineEnv());
  run=install.commands();
  assert.match(run,/install-env\.mjs validate complete\n/);
  assert.match(run,/up -d --no-deps --wait --wait-timeout 300 auth web worker\n/);
@@ -208,7 +232,7 @@ test('an install updated by the installer before ADR 0010 keeps running without 
 });
 
 test('update recreates the auth service with its password settings and waits until it is healthy (#41)', t => {
- const install=installDirectory(t,'scripts/install.sh',olderEnv());
+ const install=installDirectory(t,'scripts/install.sh',generateInstallEnv());
  const update=install.run();
  assert.equal(update.status,0,update.stderr);
  // compose up recreates a service whose settings changed; --wait needs auth's healthcheck to pass before success.

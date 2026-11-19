@@ -520,7 +520,10 @@ jobs:
           # encrypted only: a node call with the install's environment pointing elsewhere still reaches the record's Engine.
           company_id=$(db -c "select id from public.companies where name='Proxy Company'") || fail 'read the first Company'
           [[ -n $company_id ]] || fail 'first run made the first Company'
-          engine_key=$(sed -n 's/^HERMES_API_KEY=//p' .env.install)
+          engine_key=$(sed -n 's/^ENGINE_KEY=//p' .engines/first/.env)
+          # The Engine's key is in the Engine's own file, owner-only, and never in the install's environment file (#385).
+          [[ $engine_key =~ ^[a-f0-9]{64}$ && $(stat -c %a .engines/first/.env) == 600 ]] || fail 'the Engine key is in .engines/first/.env'
+          if grep -q '^HERMES_API_KEY=' .env.install; then fail '.env.install holds no Engine key'; fi
           engine_address=http://gtmworks-engine-first:8642
           engine_management=http://gtmworks-engine-first:9119
           [[ $(db -c "select key_encrypted from public.company_engines where company_id='$company_id'") != "$engine_key" ]] || fail 'the Engine key is stored in plaintext'
@@ -709,13 +712,19 @@ jobs:
           [[ $status == 200 ]] || fail_update 'old version healthy after failed update'
       # A release install from only its two files, then its update to the next release, on a real database (#49). The
       # images come by digest from a local registry; the next release adds a migration, which psql must read through
-      # the running database's /migrations bind mount after the update replaced the install files in place.
+      # the running database's /migrations bind mount after the update replaced the install files in place. The update is
+      # the one a person runs on an install the previous release made with one Company (#385, ADR 0018): its Engine is
+      # adopted, so the Agent still remembers what it was told and the Company's sign-in still serves; an install with two
+      # Companies is refused before it changes anything.
       - name: release install and update from the two release files
         env:
           DOCKER_HOST: tcp://127.0.0.1:2375
         run: |
           fail() { echo "release install check failed: $1" >&2; exit 1; }
           compose() { docker compose --env-file .env.install -f docker-compose.install.yml "$@"; }
+          db() { compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 -At "$@"; }
+          engine_id() { docker ps -q --filter 'name=^gtmworks-engine-first$'; }
+          engine_key() { sed -n 's/^ENGINE_KEY=//p' .engines/first/.env 2> /dev/null || true; }
           remove_engine() {
             docker rm -f gtmworks-engine-first > /dev/null 2>&1 || true
             docker volume rm gtmworks-install_hermes > /dev/null 2>&1 || true
@@ -743,21 +752,86 @@ jobs:
           [[ $(ls -A "$dir" | wc -l) == 2 ]] || fail 'the release install directory holds only the two release files'
           sh "$dir/install.sh" || fail 'release install'
           cd "$dir"
-          # An install made by the previous release keeps its Engine record across the update (#380): make one Company on
-          # the waiting record the installer registered, and prove after the update that its Engine still answers.
-          compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 -At \
-            -c "insert into public.companies (id,slug,name) values ('00000000-0000-4000-8000-000000000239','release-probe','Release probe');" \
-            || fail 'the release install makes a Company on its Engine record'
-          release_probe=00000000-0000-4000-8000-000000000239
-          compose exec -T web node --input-type=module -e "const {engineOf}=await import('/app/lib/bundled-hermes.mjs'); const at=await engineOf('$release_probe'); console.log(at?.address==='http://gtmworks-engine-first:8642'?'record':'no');" \
-            | grep -qx record || fail "the release install's Company answers from its Engine record"
+          # The Engine's key is in the Engine's own file, never in the app's and the worker's environment file (#385).
+          key=$(engine_key)
+          [[ $key =~ ^[a-f0-9]{64}$ ]] || fail 'the release install keeps the Engine key in .engines/first/.env'
+          if grep -q '^HERMES_API_KEY=' .env.install; then fail '.env.install holds no Engine key'; fi
+          # Put this install back into the shape the previous release made it in: one `hermes` container of the install's
+          # own Compose project holding the Engine's volume, its key in .env.install, and no .engines/. The volume and the
+          # key are the ones the release install just made, so the update below adopts exactly what it was given.
+          docker rm -f gtmworks-engine-first > /dev/null || fail 'stop the first Engine'
+          for service in web worker; do docker network disconnect gtmworks-engine-first "$(compose ps -q "$service")" > /dev/null 2>&1 || true; done
+          docker network rm gtmworks-engine-first > /dev/null 2>&1 || true
+          rm -rf .engines
+          printf 'HERMES_API_KEY=%s\n' "$key" >> .env.install
+          hermes_image=$(sed -n 's/^ *image: //p' scripts/engine-template.yml)
+          docker run -d --name gtmworks-install-hermes-1 \
+            --label com.docker.compose.project=gtmworks-install --label com.docker.compose.service=hermes \
+            --network gtmworks-install_default --network-alias hermes -v gtmworks-install_hermes:/opt/data \
+            -e API_SERVER_HOST=0.0.0.0 -e API_SERVER_PORT=8642 -e API_SERVER_KEY="$key" \
+            -e HERMES_DASHBOARD=1 -e HERMES_DASHBOARD_SESSION_TOKEN="$key" "$hermes_image" \
+            sh -ec 'test -n "$API_SERVER_KEY" || { echo "HERMES_API_KEY is not set" >&2; exit 1; }; exec hermes gateway run' > /dev/null \
+            || fail 'start the Engine the previous release ran'
+          # The app of that install reached it as http://hermes:8642, and its record says so.
+          db -c "update public.company_engines set address='http://hermes:8642'" || fail 'the previous release Engine address'
+          for attempt in $(seq 1 90); do
+            if docker run --rm --network gtmworks-install_default curlimages/curl:8.12.1 -sf http://hermes:8642/health > /dev/null 2>&1; then break; fi
+            if [[ $attempt == 90 ]]; then fail 'the previous release Engine answers'; fi
+            sleep 1
+          done
+          # First run as the person who installed it: the Company and its main Agent, on the previous release's Engine.
+          code=$(sed -n 's/^SETUP_CODE=//p' .env.install)
+          docker run --rm -i --network host --env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY)=' .env.install) \
+            -e SETUP_CODE="$code" -e APP_ORIGIN=http://localhost:3000 -e MAIL_URL=http://127.0.0.1:8025 \
+            node:22.14.0-alpine3.21 node --input-type=module - < "$root/scripts/check-install-proxy.mjs" \
+            || fail 'first run on an install the previous release made'
+          company=$(db -c "select id from public.companies where name='Proxy Company'") || fail 'read the first Company'
+          [[ -n $company ]] || fail 'first run made the Company'
+          profile=co-${company//-/}
+          for attempt in $(seq 1 180); do
+            if [[ $(db -c "select count(*) from public.hermes_agents where company_id='$company'") == 1 ]]; then break; fi
+            if [[ $attempt == 180 ]]; then fail 'the worker made the Company profile in the previous release Engine'; fi
+            sleep 1
+          done
+          # What the Agent was told, and the sign-in the Company made, before the update: both live in the Engine's data,
+          # which the update must carry over (#385, ADR 0018).
+          marker="release-update-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+          docker exec -i gtmworks-install-hermes-1 sh -ec \
+            'mkdir -p "/opt/data/profiles/$1/memories"; printf "%s\n" "The company code word is $2." >> "/opt/data/profiles/$1/memories/MEMORY.md"; chown -R hermes:hermes "/opt/data/profiles/$1"' \
+            sh "$profile" "$marker" || fail "write a memory in the Company's profile"
+          docker exec -i gtmworks-install-hermes-1 sh -ec \
+            'umask 077; printf "%s\n" "{\"accessToken\":\"install-check-token\",\"refreshToken\":\"install-check-refresh\",\"expiresAt\":4102444800000}" > /opt/data/.anthropic_oauth.json; chown hermes:hermes /opt/data/.anthropic_oauth.json' \
+            || fail 'sign the Company in on the Engine before the update'
           cp "$root/release-next/docker-compose.install.yml" "$root/release-next/install.sh" "$dir/" || fail 'next release files in place'
           sh "$dir/install.sh" update || fail 'release update'
-          compose exec -T web node --input-type=module -e "const {engineOf}=await import('/app/lib/bundled-hermes.mjs'); const at=await engineOf('$release_probe'); console.log(at?.address==='http://gtmworks-engine-first:8642'?'record':'no');" \
-            | grep -qx record || fail "the updated install's Company still answers from its Engine record"
-          [[ $(compose exec -T db psql -X -U postgres -d postgres -At -c "select count(*) from public.company_engines e join public.companies c on c.id=e.company_id where c.slug='release-probe'") == 1 ]] \
+          # The Engine the Company ran on was adopted, not made again: the same volume and the same key, now under the
+          # Engine's own Compose project with a network of its own, and the app and the worker join it.
+          [[ $(engine_key) == "$key" ]] || fail 'the update adopted the Engine key'
+          if grep -q '^HERMES_API_KEY=' .env.install; then fail 'the update left no Engine key in .env.install'; fi
+          engine=$(engine_id)
+          [[ -n $engine ]] || fail "the updated install runs the Company's Engine"
+          [[ $(docker inspect -f '{{range .Mounts}}{{.Name}}{{end}}' "$engine") == gtmworks-install_hermes ]] || fail 'the Engine keeps the volume the previous release used'
+          [[ $(docker inspect -f '{{.Config.Image}}' "$engine") == "$hermes_image" ]] || fail 'the Engine runs the template image'
+          [[ $(docker inspect -f '{{json .NetworkSettings.Ports}}' "$engine") != *HostPort* ]] || fail 'the Engine publishes no host port'
+          [[ $(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$engine") == gtmworks-engine-first ]] || fail "the Engine joins its own network only"
+          for service in web worker; do
+            docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$(compose ps -q "$service")" | grep -qx gtmworks-engine-first \
+              || fail "the $service joins the Engine's network"
+          done
+          docker run --rm --network gtmworks-engine-first -v "$PWD/scripts:/check:ro" node:22.14.0-alpine3.21 \
+            node /check/check-install-engine-network.mjs || fail "the adopted Engine's network reaches no install service"
+          if docker ps -aq --filter 'label=com.docker.compose.project=gtmworks-install' --filter 'label=com.docker.compose.service=hermes' | grep -q .; then
+            fail 'the container the previous release ran the Engine in is retired'
+          fi
+          compose exec -T -e EXPECTED_KEY="$key" web node --input-type=module -e "const {engineOf}=await import('/app/lib/bundled-hermes.mjs'); const at=await engineOf('$company'); console.log(at?.address==='http://gtmworks-engine-first:8642'&&at?.key===process.env.EXPECTED_KEY?'record':'no');" \
+            | grep -qx record || fail "the updated install's Company answers from its Engine record with the adopted key"
+          [[ $(db -c "select count(*) from public.company_engines e join public.companies c on c.id=e.company_id where c.id='$company'") == 1 ]] \
             || fail 'the updated install keeps the Company Engine record'
-          [[ $(compose exec -T db psql -X -U postgres -d postgres -At -c "select to_regclass('gtmworks_install.release_update_probe') is not null") == t ]] \
+          # The Agent still remembers what it was told, and the Company's sign-in still serves its Agents, from the
+          # Engine the update adopted.
+          compose exec -T -e HERMES_API_KEY="$key" web node --input-type=module - "$marker" < "$root/scripts/check-install-update.mjs" \
+            || fail "the Agent remembers what it was told and the Company's sign-in still serves"
+          [[ $(db -c "select to_regclass('gtmworks_install.release_update_probe') is not null") == t ]] \
             || fail 'the next release migration applied through the running bind mount'
           compose exec -T db ls /migrations | sort > "$RUNNER_TEMP/seen" || fail 'list the migrations the database sees'
           ls supabase/migrations | sort > "$RUNNER_TEMP/expected"
@@ -767,6 +841,43 @@ jobs:
             status=$(docker run --rm --network host curlimages/curl:8.12.1 -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:3000$path") || fail "$path request"
             [[ $status == 200 ]] || fail "$path returned HTTP $status after the release update (expected 200)"
           done
+          # Running the install command again keeps the adopted Engine: the same key, the same record, the same container.
+          cp .env.install .env.install.before
+          sh install.sh || fail 'the install command again'
+          cmp .env.install .env.install.before || fail 'the install command again leaves .env.install as it was'
+          [[ $(engine_key) == "$key" ]] || fail 'the install command again keeps the adopted Engine key'
+          [[ $(engine_id) == "$engine" ]] || fail 'the install command again leaves the adopted Engine running'
+          # An install with two Companies on the one Engine is refused before it changes anything (#385): a third release
+          # must not migrate, replace or restart anything, and the release it runs keeps serving.
+          db -c "insert into public.company_engines (address,key_encrypted) values ('http://gtmworks-engine-first:8642','second-company-probe'); insert into public.companies (id,slug,name) values ('00000000-0000-4000-8000-000000000239','release-probe','Release probe');" \
+            || fail 'a second Company on the one Engine'
+          [[ $(db -c 'select count(*) from public.companies') == 2 ]] || fail 'the install has two Companies'
+          docker build -q -t localhost:5000/gtmworks:0.0.2-ci - > /dev/null <<'DOCKERFILE' || fail 'build the third release image'
+          FROM localhost:5000/gtmworks:0.0.1-ci
+          RUN echo 'create table gtmworks_install.several_companies_probe(id integer);' > /app/install/supabase/migrations/99999999999997_several_companies_probe.sql
+          DOCKERFILE
+          third=$(publish 0.0.2-ci) || fail 'push the third release image'
+          ( cd "$root" && node scripts/release-assets.mjs "$third" release-third ) || fail 'third release files'
+          cp "$root/release-third/docker-compose.install.yml" "$root/release-third/install.sh" "$dir/" || fail 'third release files in place'
+          web=$(compose ps -q web)
+          serving=$(cat .install-release)
+          if sh install.sh update > "$RUNNER_TEMP/several-companies.log" 2>&1; then
+            cat "$RUNNER_TEMP/several-companies.log"
+            fail 'an update of an install with two Companies must be refused'
+          fi
+          cat "$RUNNER_TEMP/several-companies.log"
+          grep -F 'This install has 2 Companies on one Engine.' "$RUNNER_TEMP/several-companies.log" || fail 'the refusal names how many Companies it found'
+          grep -F 'Each Company now needs its own Engine' "$RUNNER_TEMP/several-companies.log" || fail 'the refusal says each Company needs its own Engine'
+          grep -F 'this release has no path for an install with more than one Company' "$RUNNER_TEMP/several-companies.log" || fail 'the refusal says this release has no path for it'
+          [[ $(compose ps -q web) == "$web" ]] || fail 'the refused update replaced the web container'
+          [[ $(cat .install-release) == "$serving" ]] || fail 'the refused update left the release it runs'
+          [[ $(db -c "select to_regclass('gtmworks_install.several_companies_probe') is null") == t ]] || fail 'the refused update applied no migration'
+          [[ $(db -c 'select count(*) from public.companies') == 2 ]] || fail 'the refused update left the Companies'
+          for path in /api/health /sign-in; do
+            status=$(docker run --rm --network host curlimages/curl:8.12.1 -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:3000$path") || fail "$path request after the refusal"
+            [[ $status == 200 ]] || fail "$path returned HTTP $status after the refused update (expected 200)"
+          done
+
       # The one line (#51) and gtmworks update (#52) against test releases served the way GitHub Releases serves them:
       # releases.json lists the tags and <tag>/ holds each release's two files. GTMWORKS_RELEASES and GTMWORKS_GET are
       # read only by tests (scripts/get.sh). HOME is inside the checkout, the one folder the Docker machine mounts.

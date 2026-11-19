@@ -106,6 +106,7 @@ case "$*" in
   for argument do [ "$previous" = --env-file ] && file=$argument; previous=$argument; done
   if [ -z "$file" ]; then exec node "$INSTALL_ENV" \${all##*install-env.mjs }; fi
   exec env -i PATH="$PATH" sh -c 'set -a; case "$1" in /*) . "$1";; *) . "./$1";; esac; set +a; shift; exec node "$@"' sh "$file" "$INSTALL_ENV" \${all##*install-env.mjs };;
+ *'count(*) from public.companies'*) echo 1;;
  *'exec -T db psql'*) cat > /dev/null;;
  *'exec -T web node'*) echo "$SETUP_STATE";;
  *' config --hash gateway') echo "gateway $(cat "$STATE/compose-hash" 2> /dev/null || echo one)";;

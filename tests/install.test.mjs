@@ -60,6 +60,7 @@ printf '%s\\n' "$*" >> "$COMMANDS"
 case "$*" in
  *alpine:3.21*) while [ "$1" != alpine:3.21 ]; do shift; done; shift; "$@";;
  *validate*) exit "\${VALIDATION_EXIT:-0}";;
+ *'count(*) from public.companies'*) echo 1;;
  *'exec -T db psql'*) cat > "$MIGRATION_SQL"; if [ "\${FAIL_MIGRATION:-1}" = 1 ]; then echo 'ERROR: division by zero' >&2; exit 3; fi;;
 esac
 `,{mode:0o755});
@@ -93,6 +94,11 @@ if [ -n "\${UPDATE_SOURCE:-}" ]; then cp "$UPDATE_SOURCE" scripts/install.sh; fi
  assert.match(readFileSync(env.DOWNLOAD_ARGS,'utf8'),/--header\nAuthorization: Bearer test-github-token\nhttps:\/\/api.github.com\/repos\/omarabdo516\/gtmworks\/tarball\/main/);
  assert.match(readFileSync(commands,'utf8'),/run --rm -e GH_TOKEN -v/);
  assert.doesNotMatch(success.stdout+success.stderr+readFileSync(commands,'utf8'),/test-github-token/);
+ // The successful update moved the previous release's Engine key out of the app's environment file, into the
+ // Engine's own file, and left everything else in it as it was (#385).
+ const moved=readFileSync(join(directory,'.env.install'),'utf8');
+ assert.equal(moved,'existing secrets\n');
+ assert.match(readFileSync(join(directory,'.engines/first/.env'),'utf8'),/^ENGINE_KEY=k{64}$/m);
  for(const [failure,status,lastStage] of [
   [{DOWNLOAD_EXIT:'8'},8,/Downloading update source/],
   [{EXTRACTION_EXIT:'9'},9,/Extracting update source/],
@@ -104,9 +110,9 @@ if [ -n "\${UPDATE_SOURCE:-}" ]; then cp "$UPDATE_SOURCE" scripts/install.sh; fi
   assert.equal(failed.status,status,failed.stderr);
   assert.match(failed.stdout,lastStage);
   assert.equal(existsSync(env.MIGRATION_SQL),false);
-  assert.doesNotMatch(readFileSync(commands,'utf8'),/exec -T db psql|\bstop\b|\bup\b|\bbuild\b/);
+  assert.doesNotMatch(readFileSync(commands,'utf8'),/--single-transaction|\bstop\b|\bup\b|\bbuild\b/);
   assert.equal(existsSync(join(directory,'.install-lock')),false);
-  assert.equal(readFileSync(join(directory,'.env.install'),'utf8'),existing);
+  assert.equal(readFileSync(join(directory,'.env.install'),'utf8'),moved);
  }
 });
 
@@ -127,6 +133,7 @@ printf '%s\\n' "$*" >> "$COMMANDS"
 case "$*" in
  *alpine:3.21*) exit 0;;
  *'nginx -t'*) exit "\${GATEWAY_CONFIG_EXIT:-0}";;
+ *'count(*) from public.companies'*) echo 1;;
  *'exec -T db psql'*) cat > /dev/null; exit "\${MIGRATION_EXIT:-0}";;
 esac
 `,{mode:0o755});
@@ -134,12 +141,15 @@ esac
  const env={...process.env,PATH:`${directory}/bin:${process.env.PATH}`,COMMANDS:commands,GH_TOKEN:''};
  const run=(operation,extra={})=>{ writeFileSync(commands,''); const result=spawnSync('sh',['scripts/install.sh',...operation],{cwd:directory,env:{...env,...extra},encoding:'utf8'}); return {...result,lines:readFileSync(commands,'utf8').split('\n')}; };
  const at=(lines,pattern)=>lines.findIndex(line=>pattern.test(line));
- const check=/ run --rm --no-deps gateway nginx -t$/, migrate=/exec -T db psql/;
+ const check=/ run --rm --no-deps gateway nginx -t$/, migrate=/exec -T db psql .*--single-transaction$/;
+ const companies=/count\(\*\) from public\.companies/;
  const app=/ up -d --no-deps --wait --wait-timeout 300 auth web worker$/;
  const gateway=/ up -d --no-deps --force-recreate --wait --wait-timeout 300 gateway$/;
 
  const updated=run(['update','main']);
  assert.equal(updated.status,0,updated.stderr);
+ // The Companies are read from the running database before the update changes anything (#385).
+ assert.ok(at(updated.lines,companies)>=0&&at(updated.lines,companies)<at(updated.lines,check),`the Companies are counted first: ${updated.lines.join(' | ')}`);
  const order=[check,migrate,gateway,app].map(pattern=>at(updated.lines,pattern));
  assert.ok(order.every(index=>index>=0),`every stage ran: ${updated.lines.join(' | ')}`);
  assert.deepEqual([...order].sort((a,b)=>a-b),order,`config check, migrations, gateway, then app: ${updated.lines.join(' | ')}`);
@@ -165,6 +175,137 @@ esac
  assert.equal(repeated.status,0,repeated.stderr);
  assert.ok(at(repeated.lines,check)>=0 && at(repeated.lines,check)<at(repeated.lines,migrate));
  assert.ok(at(repeated.lines,gateway)>=0 && at(repeated.lines,gateway)<at(repeated.lines,/ up -d --wait --wait-timeout 300$/));
+});
+
+// Each Company now runs on its own Engine (ADR 0018). An install the previous release made keeps every Company on the one
+// Engine, and this release has no path from there: the update refuses it before it changes anything (#385).
+test('an update of an install with more than one Company is refused before it changes anything', t => {
+ // An install the previous release made: its Engine key is in .env.install and one Engine serves every Company.
+ const existing='existing secrets\nHERMES_API_KEY='+'a1'.repeat(32)+'\n';
+ const dockerShim=`#!/bin/sh
+printf '%s\\n' "$*" >> "$COMMANDS"
+case "$*" in
+ *'count(*) from public.companies'*) echo "$COMPANIES";;
+ *'exec -T db psql'*) cat > "$MIGRATION_SQL";;
+ *install-env.mjs*) :;;
+esac
+`;
+ const fixture=(mode)=>{
+  const directory=mkdtempSync(join(tmpdir(),`gtmworks-several-${mode||'source'}-`));
+  t.after(()=>rmSync(directory,{recursive:true,force:true}));
+  for(const folder of ['bin','lib','supabase/migrations']) mkdirSync(join(directory,folder),{recursive:true});
+  for(const name of ['install-env.mjs','setup-code.mjs','setup-link.mjs','settings.mjs','supabase-settings.mjs']) copyFileSync(join('lib',name),join(directory,'lib',name));
+  writeFileSync(join(directory,'.env.install'),existing);
+  writeFileSync(join(directory,'supabase/migrations/001_first.sql'),'select 1;');
+  writeFileSync(join(directory,'bin/docker'),dockerShim,{mode:0o755});
+  const installer=readFileSync('scripts/install.sh','utf8');
+  let command;
+  if(mode==='release') {
+   // A release install runs from its own folder, whose install.sh names its image by digest.
+   const image=`ghcr.io/omarabdo516/gtmworks:1.2.3@sha256:${'a'.repeat(64)}`;
+   writeFileSync(join(directory,'install.sh'),installer.replace('release_image=','release_image='+image));
+   writeFileSync(join(directory,'docker-compose.install.yml'),`name: gtmworks-install\nservices:\n  db:\n    image: ${image}\n`);
+   command=['install.sh','update'];
+  } else {
+   mkdirSync(join(directory,'scripts'));
+   for(const file of ['install.sh','install-nginx.conf','install-gateway-real-ip.sh']) copyFileSync(join('scripts',file),join(directory,'scripts',file));
+   command=['scripts/install.sh','update','main'];
+  }
+  const commands=join(directory,'commands');
+  const env={...process.env,PATH:`${directory}/bin:${process.env.PATH}`,COMMANDS:commands,MIGRATION_SQL:join(directory,'migration.sql'),GH_TOKEN:''};
+  return {directory,run:extra=>{ writeFileSync(commands,''); const result=spawnSync('sh',command,{cwd:directory,env:{...env,...extra},encoding:'utf8'}); return {...result,commands:readFileSync(commands,'utf8'),file:()=>readFileSync(join(directory,'.env.install'),'utf8'),migrated:()=>existsSync(env.MIGRATION_SQL)}; }};
+ };
+ for(const mode of ['source','release']) {
+  const install=fixture(mode);
+  for(const companies of ['2','7']) {
+   const refused=install.run({COMPANIES:companies});
+   assert.equal(refused.status,1,`${mode}: ${refused.stderr}`);
+   // The message says each Company needs its own Engine and that this release has no path for such an install.
+   assert.match(refused.stderr,new RegExp(`This install has ${companies} Companies on one Engine\\. Each Company now needs its own Engine, and this release has no path for an install with more than one Company\\. Nothing was changed: the release you run still serves\\.`),mode);
+   // Nothing changed: the Companies were read from the running database and nothing else ran, so no migration, no
+   // container and no install file was touched.
+   assert.deepEqual(refused.commands.trimEnd().split('\n'),['compose --env-file .env.install -f docker-compose.install.yml exec -T db psql -X -U postgres -d postgres -At -v ON_ERROR_STOP=1 -c select count(*) from public.companies;'],mode);
+   assert.equal(refused.migrated(),false,mode);
+   assert.equal(refused.file(),existing,mode);
+   assert.equal(existsSync(join(install.directory,'.install-lock')),false,mode);
+  }
+  // A count the install cannot read is no guess: the update stops rather than put two Companies on one Engine.
+  const unreadable=install.run({COMPANIES:''});
+  assert.equal(unreadable.status,1,mode);
+  assert.match(unreadable.stderr,/The update reads this install's Companies from its database:/,mode);
+  assert.doesNotMatch(unreadable.commands,/--single-transaction/,mode);
+  assert.equal(unreadable.file(),existing,mode);
+  // One Company, or none, goes on with the update.
+  const one=install.run({COMPANIES:'1'});
+  assert.equal(one.status,0,`${mode}: ${one.stderr}`);
+  assert.match(one.commands,/count\(\*\) from public\.companies[\s\S]*--single-transaction/,mode);
+ }
+});
+
+// The update of an install the previous release made with one Company adopts its Engine (#385, ADR 0018): the volume and
+// the key are the ones it already had, so its Agents' memory and its sign-in stay and its Engine gets a network of its
+// own. An install with more than one Company is refused before anything changes.
+test('the install job updates a previous release install with one Company, and refuses one with two', () => {
+ const run=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install.steps.find(step=>/release install and update/.test(step.name||'')).run;
+ const lines=run.split('\n');
+ const at=text=>lines.findIndex(line=>line.includes(text));
+ // The install is put back into the shape the previous release made: one `hermes` container of the install's Compose
+ // project holding the Engine's volume, its key in .env.install, and no .engines/.
+ const previous=at('docker run -d --name gtmworks-install-hermes-1');
+ assert.ok(previous>=0,run);
+ for(const text of ["printf 'HERMES_API_KEY=%s\\n' \"$key\" >> .env.install",'rm -rf .engines',"set address='http://hermes:8642'"]) {
+  assert.ok(at(text)>=0,text);
+  assert.ok(at(text)<previous+40,text);
+ }
+ // First run on it, then the fact the Agent was told and the sign-in the Company made, both in the Engine's data.
+ const memory=at('/memories/MEMORY.md'),signIn=at('.anthropic_oauth.json'),update=at('sh "$dir/install.sh" update || fail \'release update\'');
+ for(const [index,name] of [[memory,'the memory'],[signIn,'the sign-in']]) assert.ok(index>=0,`the job writes ${name}`);
+ assert.ok(memory<update&&signIn<update,'both are written before the update');
+ // After it: the adopted Engine (its key, its volume, its own network and container), the memory and the sign-in.
+ const adopted=[
+  "[[ $(engine_key) == \"$key\" ]] || fail 'the update adopted the Engine key'",
+  "if grep -q '^HERMES_API_KEY=' .env.install; then fail 'the update left no Engine key in .env.install'; fi",
+  "== gtmworks-install_hermes ]] || fail 'the Engine keeps the volume the previous release used'",
+  "== gtmworks-engine-first ]] || fail \"the Engine joins its own network only\"",
+  'node /check/check-install-engine-network.mjs',
+  "fail 'the container the previous release ran the Engine in is retired'",
+  'check-install-update.mjs',
+  "|| fail \"the Agent remembers what it was told and the Company's sign-in still serves\"",
+  "sh install.sh || fail 'the install command again'",
+  "fail 'the install command again keeps the adopted Engine key'",
+  "fail 'the install command again leaves the adopted Engine running'",
+ ];
+ for(const text of adopted) assert.ok(run.includes(text),text);
+ for(const text of adopted) assert.ok(run.indexOf(text)>update,text);
+ // An install with two Companies: refused, with the reason, and nothing migrated, replaced or restarted.
+ const two=at("insert into public.company_engines (address,key_encrypted) values ('http://gtmworks-engine-first:8642','second-company-probe')");
+ assert.ok(two>update,run);
+ for(const text of [
+  "if sh install.sh update > \"$RUNNER_TEMP/several-companies.log\" 2>&1; then",
+  "fail 'an update of an install with two Companies must be refused'",
+  "grep -F 'This install has 2 Companies on one Engine.'",
+  "grep -F 'Each Company now needs its own Engine'",
+  "grep -F 'this release has no path for an install with more than one Company'",
+  "fail 'the refused update replaced the web container'",
+  "fail 'the refused update left the release it runs'",
+  "fail 'the refused update applied no migration'",
+  "fail \"$path returned HTTP $status after the refused update (expected 200)\"",
+ ]) assert.ok(run.includes(text),text);
+ assert.ok(run.indexOf("several_companies_probe")>two,'the refused update names a migration of its own');
+});
+
+// The update check runs in the installed web container after the update (#385): it reads the Company's sign-in through
+// the product's own reader and runs a Conversation on the adopted Engine. It prints only the proof's named fields.
+test('the update check reads the sign-in and the Agent memory through the product, and prints no key', () => {
+ const script=readFileSync('scripts/check-install-update.mjs','utf8');
+ assert.match(script,/readCompanySignIns\(/);
+ assert.match(script,/sendMessage\(/);
+ assert.match(script,/install-proof\.mjs/);
+ assert.doesNotMatch(script,/\bconsole\.(log|error|warn|info)\(/,'no console call prints a value the proof did not name');
+ assert.doesNotMatch(script,/process\.stdout\.write\(/,'no direct write bypasses the proof');
+ // It names the Engine's management listener, never the key, on its own line.
+ assert.match(script,/HERMES_MANAGEMENT_ADDRESS/);
+ assert.doesNotMatch(script,/writeProof\([^)]*key/);
 });
 
 // A successful update on the real install belongs to issue #52; the install job keeps only the failed-update check, and
@@ -228,16 +369,19 @@ test('backup and restore round-trip the Compose volumes and keys; failed extract
  assert.equal(engine.volumes.data.name,'${ENGINE_VOLUME:?Run scripts/install.sh}');
  const directory=mkdtempSync(join(tmpdir(),'gtmworks-roundtrip-'));
  t.after(()=>rmSync(directory,{recursive:true,force:true}));
- for(const folder of ['scripts','bin',...[...paths,hermesData].map(path=>`volumes/${path}`)]) mkdirSync(join(directory,folder),{recursive:true});
+ for(const folder of ['scripts','bin','.engines/first',...[...paths,hermesData].map(path=>`volumes/${path}`)]) mkdirSync(join(directory,folder),{recursive:true});
  copyFileSync('scripts/install.sh',join(directory,'scripts/install.sh'));
  const secrets=Object.entries(generateInstallEnv()).map(([name,value])=>`${name}=${value}`).join('\n');
  writeFileSync(join(directory,'.env.install'),secrets,{mode:0o600});
+ // Each Engine's key lives in its own file, and travels in the archive (#385).
+ const engineEnv=`ENGINE_NAME=gtmworks-engine-first\nENGINE_KEY=${'a1'.repeat(32)}\nENGINE_VOLUME=gtmworks-install_hermes\nENGINE_NETWORK=gtmworks-engine-first\n`;
+ writeFileSync(join(directory,'.engines/first/.env'),engineEnv,{mode:0o600});
  for(const path of paths) writeFileSync(join(directory,'volumes',path,'saved'),'original',{mode:0o640});
  mkdirSync(join(directory,'volumes',hermesData,'agents'));
  writeFileSync(join(directory,'volumes',hermesData,'agents','SOUL.md'),'the team says this',{mode:0o600});
  writeFileSync(join(directory,'bin/docker'),`#!/usr/bin/env node
 import assert from 'node:assert/strict';
-import { appendFileSync, copyFileSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, copyFileSync, cpSync, readFileSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 const args=process.argv.slice(2),cwd=process.cwd(),root=cwd+'/volumes';
 appendFileSync(cwd+'/commands',JSON.stringify(args)+'\\n');
@@ -264,7 +408,14 @@ if(args[0]==='compose') {
   // BusyBox has one global -C, unlike GNU tar's positional -C options.
   assert.equal(command.filter(arg=>arg==='-C').length,1);
   assert.ok(args.includes(cwd+'/.env.install:/.env.install:ro'));
+  assert.ok(args.includes(cwd+'/.engines:/.engines:ro'),'the Engine keys are archived too');
   copyFileSync(cwd+'/.env.install',root+'/.env.install');
+  cpSync(cwd+'/.engines',root+'/.engines',{recursive:true});
+ }
+ // The Engines' key files come back into the install folder, not into a volume.
+ if(command[0]==='tar' && command[1]==='-xzpf' && command.includes('.engines')) {
+  const child=spawnSync(command[0],[...command.slice(1,command.indexOf('-C')).map(arg=>arg.replaceAll('/backup/',cwd+'/.install-lock/')),'-C',cwd,'.engines'],{stdio:'inherit'});
+  process.exit(child.status ?? 1);
  }
  if(command[0]==='sh') {
   assert.ok(command[2].includes('--numeric-owner'));
@@ -330,7 +481,7 @@ test('an archive made before Hermes data was included restores, says what it lac
  const tree=join(directory,'tree');
  for(const folder of ['scripts','bin','volumes/opt/data',...paths.map(path=>`volumes/${path}`),...paths.map(path=>`tree/${path}`)]) mkdirSync(join(directory,folder),{recursive:true});
  copyFileSync('scripts/install.sh',join(directory,'scripts/install.sh'));
- const secrets=Object.entries(generateInstallEnv()).map(([name,value])=>`${name}=${value}`).join('\n');
+ const secrets=Object.entries({...generateInstallEnv(),HERMES_API_KEY:'a1'.repeat(32)}).map(([name,value])=>`${name}=${value}`).join('\n');
  writeFileSync(join(directory,'.env.install'),'fresh keys',{mode:0o600});
  for(const path of paths) writeFileSync(join(tree,path,'saved'),'original',{mode:0o640});
  writeFileSync(join(tree,'.env.install'),secrets);
@@ -371,7 +522,10 @@ test('an archive made before Hermes data was included restores, says what it lac
  assert.match(lines[0],/The Agents' Hermes data was not in this backup/);
  // Nothing replaced the Engine's running data, and the rest of the archive went in.
  assert.equal(readFileSync(join(directory,'volumes/opt/data/running'),'utf8'),'kept');
- assert.equal(readFileSync(join(directory,'.env.install'),'utf8'),secrets);
+ // This archive holds no .engines/: its Engine key comes back in .env.install and the installer moves it into the
+ // Engine's own file, as an update does (#385).
+ assert.equal(readFileSync(join(directory,'.env.install'),'utf8'),`${secrets.replace(`\nHERMES_API_KEY=${'a1'.repeat(32)}`,'')}\n`);
+ assert.equal(readFileSync(join(directory,'.engines/first/.env'),'utf8'),`ENGINE_NAME=gtmworks-engine-first\nENGINE_KEY=${'a1'.repeat(32)}\nENGINE_VOLUME=gtmworks-install_hermes\nENGINE_NETWORK=gtmworks-engine-first\n`);
  for(const path of paths) assert.equal(readFileSync(join(directory,'volumes',path,'saved'),'utf8'),'original');
  // An entry outside the backup is still refused before anything is replaced.
  writeFileSync(join(directory,'.env.install'),'fresh keys');
@@ -422,15 +576,20 @@ test('installer preserves secrets, tightens permissions and streams ordered tran
  writeFileSync(join(directory,'bin/docker'),`#!/bin/sh
 case "$*" in
  *validate*) exit "\${VALIDATION_EXIT:-0}";;
+ *engine-key*) printf '%s\n' "$ENGINE_KEY";;
  *'exec -T db psql'*) printf '%s\n' "$*" > "$INSTALL_SQL.args"; cat > "$INSTALL_SQL";;
 esac
 `,{mode:0o755});
- const env={...process.env,PATH:`${directory}/bin:${process.env.PATH}`,INSTALL_SQL:join(directory,'migration.sql')};
+ const engineKey='a1'.repeat(32);
+ const env={...process.env,PATH:`${directory}/bin:${process.env.PATH}`,INSTALL_SQL:join(directory,'migration.sql'),ENGINE_KEY:engineKey};
  for(const attempt of [1,2]) {
   const result=spawnSync('sh',['scripts/install.sh'],{cwd:directory,env,encoding:'utf8'});
   assert.equal(result.status,0,`${attempt}: ${result.stderr}`);
   assert.equal(readFileSync(join(directory,'.env.install'),'utf8'),secrets);
   assert.equal(statSync(join(directory,'.env.install')).mode & 0o777,0o600);
+  // The install's own secrets stay in .env.install; the Engine's key is in the Engine's own file, and stays.
+  assert.match(readFileSync(join(directory,'.engines/first/.env'),'utf8'),new RegExp(`^ENGINE_KEY=${engineKey}$`,'m'));
+  assert.equal(statSync(join(directory,'.engines/first/.env')).mode & 0o777,0o600);
   const sql=readFileSync(env.INSTALL_SQL,'utf8');
   assert.match(readFileSync(`${env.INSTALL_SQL}.args`,'utf8'),/ON_ERROR_STOP=1 --single-transaction/);
   assert.match(sql,/pg_advisory_xact_lock/);

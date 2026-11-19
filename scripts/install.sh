@@ -53,7 +53,31 @@ engine_address=http://gtmworks-engine-first:8642
 engine_management=http://gtmworks-engine-first:9119
 engine_folder=.engines/first
 engine_template=scripts/engine-template.yml
-engine_key() { sed -n 's/^HERMES_API_KEY=//p' .env.install; }
+# The Engine's key lives in its own file, never in .env.install, the file the app and the worker read their environment
+# from (#385, ADR 0018). A fresh install makes it; an install the previous release made keeps the key it has, moved here
+# unchanged, so the Engine that already holds the Company's Agents, memory, Skills, history and sign-in keeps answering.
+engine_key() {
+  test -f "$engine_folder/.env" || return 0
+  sed -n 's/^ENGINE_KEY=//p' "$engine_folder/.env"
+}
+adopt_engine_key() {
+  key=$(engine_key)
+  if [ -z "$key" ]; then key=$(sed -n 's/^HERMES_API_KEY=//p' .env.install); fi
+  if [ -z "$key" ]; then
+    key=$(docker run --rm -v "$PWD/lib:/code:ro" "$node_image" node /code/install-env.mjs engine-key) || return 1
+  fi
+  test -n "$key" || { echo 'Could not make an Engine key: run sh scripts/install.sh.' >&2; return 1; }
+  write_engine_env "$key"
+  drop_install_env_key
+}
+# No Engine key sits in .env.install. An install made before ADR 0018 kept it there; its line goes as the key moves into
+# the Engine's own file, and nothing else in the file changes.
+drop_install_env_key() {
+  grep -q '^HERMES_API_KEY=' .env.install || return 0
+  sed '/^HERMES_API_KEY=/d' .env.install > .install-lock/env.tmp
+  chmod 600 .install-lock/env.tmp
+  mv .install-lock/env.tmp .env.install
+}
 engine() { docker compose --project-name "$engine_project" --env-file "$engine_folder/.env" -f "$engine_template" "$@"; }
 write_engine_env() {
   mkdir -p "$engine_folder"
@@ -87,14 +111,29 @@ join_engine_network() {
   done
 }
 engine_up() {
+  adopt_engine_key || return 1
   key=$(engine_key)
   test -n "$key" || { echo 'The install has no Engine key: run sh scripts/install.sh.' >&2; return 1; }
-  write_engine_env "$key"
   retire_old_engine || return 1
   engine up -d --wait --wait-timeout 300 || return 1
   join_engine_network
 }
 engine_stop() { docker stop "$engine_container" > /dev/null 2>&1 || true; }
+# Each Company now runs on its own Engine (ADR 0018). An install the previous release made keeps every Company on the one
+# Engine, and this release has no path from there: refuse the update before it changes anything, so the release that runs
+# keeps serving untouched. The count comes from the install's running database, which an update needs anyway.
+refuse_several_companies() {
+  companies=$(compose exec -T db psql -X -U postgres -d postgres -At -v ON_ERROR_STOP=1 -c \
+    'select count(*) from public.companies;' 2> /dev/null) || companies=
+  case "$companies" in
+    ''|*[!0-9]*)
+      echo "The update reads this install's Companies from its database: start gtmworks (sh scripts/install.sh), then run this again." >&2
+      return 1;;
+    0|1) return 0;;
+  esac
+  echo "This install has $companies Companies on one Engine. Each Company now needs its own Engine, and this release has no path for an install with more than one Company. Nothing was changed: the release you run still serves." >&2
+  return 1
+}
 complete_env() {
   docker run --rm --env-file "$1" -v "$PWD/lib:/code:ro" "$node_image" node /code/install-env.mjs missing > .install-lock/missing
   if [ -s .install-lock/missing ]; then
@@ -132,9 +171,11 @@ if [ "$operation" = backup ]; then
   compose stop
   # BusyBox tar applies the last -C to every entry, so keep all paths under one root. The Agents' profiles, rules,
   # knowledge, skills, memory and history live only in the first Company's Engine volume (#349, ADR 0018), so opt/data
-  # goes with them.
-  volumes -v "$PWD/.env.install:/.env.install:ro" alpine:3.21 tar -czf - \
-    -C / var/lib/postgresql/data etc/postgresql-custom var/lib/storage opt/data .env.install > .install-lock/backup.tgz
+  # goes with them. Each Engine's key lives in .engines/ (#385), so it goes too: a restore brings back an Engine that
+  # answers to the same key. An install that has not run this installer yet has no .engines/; its key is in .env.install.
+  mkdir -p .engines
+  volumes -v "$PWD/.env.install:/.env.install:ro" -v "$PWD/.engines:/.engines:ro" alpine:3.21 tar -czf - \
+    -C / var/lib/postgresql/data etc/postgresql-custom var/lib/storage opt/data .env.install .engines > .install-lock/backup.tgz
   archive="$destination/gtmworks-$(date -u +%Y%m%dT%H%M%SZ)-$$.tgz"
   mv .install-lock/backup.tgz "$archive"
   echo "Backup: $archive"
@@ -146,7 +187,7 @@ elif [ "$operation" = restore ]; then
     tar -tzf /backup/backup.tgz > .install-lock/entries
   while IFS= read -r entry; do
     case "$entry" in /*|*../*|../*|*/..) echo 'Unsafe backup path.' >&2; exit 1;; esac
-    case "$entry" in .env.install|var/lib/postgresql/data/*|etc/postgresql-custom/*|var/lib/storage/*|opt/data|opt/data/*) ;; *) echo 'Unrecognised backup.' >&2; exit 1;; esac
+    case "$entry" in .env.install|var/lib/postgresql/data/*|etc/postgresql-custom/*|var/lib/storage/*|opt/data|opt/data/*|.engines|.engines/*) ;; *) echo 'Unrecognised backup.' >&2; exit 1;; esac
   done < .install-lock/entries
   for entry in var/lib/postgresql/data/ etc/postgresql-custom/ var/lib/storage/ .env.install; do
     grep -Fx "$entry" .install-lock/entries >/dev/null || { echo 'Incomplete backup.' >&2; exit 1; }
@@ -154,6 +195,10 @@ elif [ "$operation" = restore ]; then
   # An archive from before #349 holds no opt/data: the install restores as it did, and says what the backup left out.
   hermes_data=no
   if grep -Eq '^opt/data/?$' .install-lock/entries; then hermes_data=yes; fi
+  # An archive from before #385 holds no .engines/: its key is in .env.install, and this installer moves it into the
+  # Engine's own file below, as an update does.
+  engine_keys=no
+  if grep -Eq '^\.engines/first/\.env$' .install-lock/entries; then engine_keys=yes; fi
   docker run --rm -v "$PWD/.install-lock:/backup:ro" alpine:3.21 \
     tar -xOzf /backup/backup.tgz .env.install > .env.install.tmp
   complete_env "$PWD/.env.install.tmp"
@@ -179,6 +224,15 @@ elif [ "$operation" = restore ]; then
     fi
   ' sh "$hermes_data"
   mv .env.install.tmp .env.install
+  # This empty install's Engine key is its own, made a moment ago; the archive's takes its place, so the Engine whose
+  # data went back answers to the key the archive kept (#385). An archive from before .engines/ keeps it in .env.install,
+  # which engine_up below moves into the Engine's own file.
+  rm -rf .engines
+  if [ "$engine_keys" = yes ]; then
+   mkdir -p .engines
+   docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/.install-lock:/backup:ro" -v "$PWD/.engines:/.engines" alpine:3.21 \
+     tar -xzpf /backup/backup.tgz -C / .engines
+  fi
   compose up -d --force-recreate --wait --wait-timeout 300
   engine_up
   if [ "$hermes_data" = no ]; then
@@ -188,8 +242,10 @@ elif [ "$operation" = restore ]; then
 elif [ "$operation" = update ] && [ -n "$release_image" ]; then
   test -f .env.install || { echo 'Install first.' >&2; exit 1; }
   test -z "${2:-}" || { echo 'A release install updates to the next release: put its docker-compose.install.yml and install.sh here, then run sh install.sh update.' >&2; exit 1; }
+  refuse_several_companies || return 1
 elif [ "$operation" = update ]; then
   test -f .env.install || { echo 'Install first.' >&2; exit 1; }
+  refuse_several_companies || return 1
   ref=${2:-main}
   case "$ref" in ''|*[!a-zA-Z0-9._/-]*) echo 'Invalid version reference.' >&2; exit 1;; esac
   echo "Downloading update source: $ref"

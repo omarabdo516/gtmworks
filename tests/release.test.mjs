@@ -140,7 +140,9 @@ case "$*" in
   # Runs the installer's own extraction script, with the image's /app/install and the mounted /install mapped here.
   eval "script=\\\${$#}"
   umask 022; sh -ec "$(printf '%s' "$script" | sed -e "s#/app/install/#$IMAGE_ROOT/#g" -e 's#/install/#./#g')";;
- *install-env.mjs\\ generate*) printf 'GENERATED=1\\nHERMES_API_KEY=%s\\n' "$(printf 'k%.0s' $(seq 1 64))";;
+ *install-env.mjs\\ engine-key*) printf 'a1%.0s' $(seq 1 32);;
+ *install-env.mjs\\ generate*) printf 'GENERATED=1\\n';;
+ *'count(*) from public.companies'*) echo 1;;
  *'exec -T db psql'*) cat > "$MIGRATION_SQL"; exit "\${MIGRATION_EXIT:-0}";;
 esac
 `;
@@ -200,10 +202,11 @@ test('a release install refuses a compose file from another release and an updat
  const update=release.run('update','main');
  assert.notEqual(update.status,0);
  assert.match(update.stderr,/next release/);
- assert.equal(release.commands(),'');
  const updated=release.run('update');
  assert.equal(updated.status,0,updated.stderr);
- assert.match(release.commands(),/^pull /);
+ // The install's Companies are read from the running database before the update changes anything (#385).
+ assert.match(release.commands(),/^compose .*exec -T db psql .*count\(\*\) from public\.companies;\n/);
+ assert.match(release.commands(),/^pull /m);
  // A release pins every service by digest: update lets compose recreate whatever the new release changed (a database,
  // gateway or mail digest, not only the app), and the gateway reloads the configuration the extraction replaced.
  const commands=release.commands().split('\n');

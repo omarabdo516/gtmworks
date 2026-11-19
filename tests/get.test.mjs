@@ -848,6 +848,12 @@ test('gtmworks restore --version checks the archive and asks before it replaces 
  const older=m.gtmworks(['restore',archive,'--version','v1.2.3','--yes'],{extra:{ARCHIVE_ENTRIES:'var/lib/postgresql/data/\netc/postgresql-custom/\nvar/lib/storage/\n.env.install\nopt/data/'}});
  assert.match(older.stderr,/gtmworks v1\.2\.3 cannot restore .*old\.tgz: it holds the Agents' data, which releases before it cannot restore\./);
  nothingChanged(older,'a release before the Agents\' data');
+ // A release from before #385 knows no .engines/ either, and is asked before the volumes go.
+ writeFileSync(targetInstaller,withAgents.replace(/\.engines\/\*/g,'opt/data'));
+ m.clear();
+ const noKeys=m.gtmworks(['restore',archive,'--version','v1.2.3','--yes'],{extra:{ARCHIVE_ENTRIES:'var/lib/postgresql/data/\netc/postgresql-custom/\nvar/lib/storage/\n.env.install\n.engines/first/.env'}});
+ assert.match(noKeys.stderr,/gtmworks v1\.2\.3 cannot restore .*old\.tgz: it holds the Engines' keys, which releases before it cannot restore\./);
+ nothingChanged(noKeys,'a release before the Engines\' keys');
  writeFileSync(targetInstaller,withAgents);
  // An archive whose migrations cannot be read is not taken for one with none.
  m.clear();

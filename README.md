@@ -129,7 +129,8 @@ follow the [official Supabase self-hosted stack](https://github.com/supabase/sup
 
 Secrets are generated on this machine in **`.env.install`**, with owner-only
 permissions (600), ignored by Git and excluded from image builds. Never commit,
-delete or regenerate this file for an existing database. `.env.install.example`
+delete or regenerate this file for an existing database; each Engine's key is kept
+apart, in that Engine's own `.engines/<name>/.env` (600). `.env.install.example`
 documents the keys but deliberately cannot start the app. Public HTTP is rejected;
 HTTP is allowed only for this install's loopback origin. For a public deployment,
 put HTTPS in front and set `APP_ORIGIN` and `SUPABASE_PUBLIC_URL` to that origin.
@@ -195,7 +196,18 @@ goes back with it).
 It refuses a release older than the data: when the database has applied a
 migration the chosen release does not carry, a later release migrated it, and
 the update stops with a plain message before changing anything. Going back past
-a migration is a restore of a backup made before it. If a migration fails, the
+a migration is a restore of a backup made before it. An install made before each
+Company had its own Engine has every Company on the one Engine, and this release
+has no way to give each of them one: with one Company the update keeps that
+Company's Engine — its data volume and its key, with its Agents, their memory,
+Skills, history, sessions and sign-in — now under the Engine's own Compose
+project on a network of its own, and with the key moved from `.env.install` to
+`.engines/first/.env`, which is the only place an Engine key is kept. With more
+than one Company the update stops before it changes anything: each Company now
+needs its own Engine, there is no path for such an install in this release, no
+migration is applied, no container is changed, and the release you run keeps
+serving. Running the install command again on an updated install keeps the
+Engine it adopted. If a migration fails, the
 transaction is rolled back, the previous release's files are put back and it keeps
 serving, and the command exits non-zero naming the migration. If the update fails
 after its migrations ran (while starting the new containers, say), the install
@@ -226,8 +238,8 @@ gtmworks backup                              # dated archive in backups/
 ```
 
 Backup briefly stops the stack — the first Company's Engine included — for a consistent
-copy of the database and its configuration, the Storage files, the Engine's data volume
-and `.env.install`, then starts it again. The Engine's data holds every Agent's profile,
+copy of the database and its configuration, the Storage files, the Engine's data volume,
+each Engine's key file (`.engines/`) and `.env.install`, then starts it again. The Engine's data holds every Agent's profile,
 rules, memory, skills and history, so a restore brings them back as they were. An
 optional directory after `backup` changes the destination.
 **A backup holds every company's data and the encryption key. Keep it private.**
@@ -243,7 +255,7 @@ gtmworks restore backups/gtmworks-<date>-<number>.tgz
 Restore only accepts an empty install: install the same release as the backup
 first, then restore the trusted archive (or, on a running install, use
 `gtmworks restore <archive> --version vX.Y.Z` as Update describes). It replaces that
-empty install's volumes and `.env.install`, including its keys and origin settings,
+empty install's volumes, each Engine's key (`.engines/`) and `.env.install`, including its keys and origin settings,
 and restarts the stack. This is a full-install backup, not a company export, and it
 includes the first Company's Engine data, so every Agent comes back with its knowledge,
 rules, skills and memory. An archive made before that data was included still restores: the

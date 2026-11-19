@@ -795,7 +795,7 @@
   "settingsBackupFiles": "File storage",
   "settingsBackupFilesD": "The files and images uploaded to the install.",
   "settingsBackupKeys": "The install's keys",
-  "settingsBackupKeysD": "The keys and origin settings this install runs with.",
+  "settingsBackupKeysD": "The keys and origin settings this install runs with, and each Engine's own key file.",
   "settingsBackupAgents": "The Agents' data",
   "settingsBackupAgentsD": "Their skills, company knowledge, rules, memory, sessions and usage.",
   "settingsBackupExcludeModel": "The model provider's account and keys outside the install",
