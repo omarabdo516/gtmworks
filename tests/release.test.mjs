@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { load } from 'js-yaml';
 import { releaseCompose, releaseInstaller, writeReleaseAssets } from '../scripts/release-assets.mjs';
+import { installJob } from './install-job.mjs';
 
 // Every release publishes one tested image and a GitHub Release whose compose file and install script are all an
 // install needs (#49). The source install keeps building from a checkout until a later ticket switches it.
@@ -100,6 +101,7 @@ test('the release install script is the source installer with the released image
 // Every path the source installer and its compose file read from the checkout (relative mounts, the lib folder the
 // install-env helper runs from, and the migrations it streams) must be inside the image, under /app/install.
 function checkoutPaths() {
+ const fixed=['scripts/engine-template.yml'];
  const paths=new Set();
  for(const service of Object.values(load(sourceCompose).services)) for(const volume of service.volumes||[]) {
   const source=volume.split(':')[0];
@@ -107,7 +109,7 @@ function checkoutPaths() {
  }
  for(const match of sourceInstaller.matchAll(/\$PWD\/([\w./-]+):/g)) if(!match[1].startsWith('.')) paths.add(match[1]);
  for(const match of sourceInstaller.matchAll(/for file in ([\w/]+)\/\*\.sql/g)) paths.add(match[1]);
- return [...paths].sort();
+ return [...new Set([...fixed,...paths])].sort();
 }
 
 test('the image carries every file an install reads from a source checkout', () => {
@@ -134,12 +136,15 @@ function imageFolder(t) {
 const dockerShim=`#!/bin/sh
 printf '%s\\n' "$*" >> "$COMMANDS"
 case "$*" in
+  *'.State.Health.Status'*) echo healthy;;
  pull*) echo "Digest: \${2#*@}";;
  *' sh -ec '*/app/install/*)
   # Runs the installer's own extraction script, with the image's /app/install and the mounted /install mapped here.
   eval "script=\\\${$#}"
   umask 022; sh -ec "$(printf '%s' "$script" | sed -e "s#/app/install/#$IMAGE_ROOT/#g" -e 's#/install/#./#g')";;
+ *install-env.mjs\\ engine-key*) printf 'a1%.0s' $(seq 1 32);;
  *install-env.mjs\\ generate*) printf 'GENERATED=1\\n';;
+ *'count(*) from public.companies'*) echo 1;;
  *'exec -T db psql'*) cat > "$MIGRATION_SQL"; exit "\${MIGRATION_EXIT:-0}";;
 esac
 `;
@@ -195,14 +200,15 @@ test('a release install refuses a compose file from another release and an updat
  assert.match(refused.stderr,/docker-compose\.install\.yml/);
  assert.equal(mismatched.commands(),'');
  const release=releaseDirectory(t);
- writeFileSync(join(release.directory,'.env.install'),'GENERATED=1\n');
+ writeFileSync(join(release.directory,'.env.install'),`GENERATED=1\nHERMES_API_KEY=${'k'.repeat(64)}\n`);
  const update=release.run('update','main');
  assert.notEqual(update.status,0);
  assert.match(update.stderr,/next release/);
- assert.equal(release.commands(),'');
  const updated=release.run('update');
  assert.equal(updated.status,0,updated.stderr);
- assert.match(release.commands(),/^pull /);
+ // The install's Companies are read from the running database before the update changes anything (#385).
+ assert.match(release.commands(),/^compose .*exec -T db psql .*count\(\*\) from public\.companies;\n/);
+ assert.match(release.commands(),/^pull /m);
  // A release pins every service by digest: update lets compose recreate whatever the new release changed (a database,
  // gateway or mail digest, not only the app), and the gateway reloads the configuration the extraction replaced.
  const commands=release.commands().split('\n');
@@ -326,7 +332,7 @@ test('a release update replaces the mounted install files in place, so the runni
 });
 
 test('CI updates a release install on a real database, applying a new migration through the running bind mount', () => {
- const install=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install;
+ const install=installJob();
  const source=install.steps.findIndex(step=>step.env?.INSTALL_REF);
  const index=install.steps.findIndex(step=>/release install and update/.test(step.name||''));
  assert.ok(source>=0&&index>source,'runs after the source install checks, which it leaves unchanged');
@@ -337,25 +343,30 @@ test('CI updates a release install on a real database, applying a new migration 
   /compose down -v \|\| fail/,
   /registry:2\.8\.3/,
   /docker tag gtmworks-local:237 localhost:5000\/gtmworks:0\.0\.0-ci/,
-  // The next release carries one migration more, which the update must read through the running db's /migrations.
-  /FROM gtmworks-local:237\nRUN echo .*> \/app\/install\/supabase\/migrations\/99999999999998_release_update_probe\.sql/,
+  // The previous release is origin/main's own code at the pull request's base (#378, S2), built and installed from
+  // its own two release files; the next release carries one migration more, which the update must read through the
+  // running db's /migrations.
+  /git worktree add "\$RUNNER_TEMP\/previous-release" "\$base"/,
+  /docker build -q -t localhost:5000\/gtmworks:0\.0\.0-main "\$RUNNER_TEMP\/previous-release"/,
+  /node scripts\/release-assets\.mjs "\$previous" "\$root\/release-previous"/,
+  /FROM localhost:5000\/gtmworks:0\.0\.0-ci\nRUN echo .*> \/app\/install\/supabase\/migrations\/99999999999998_release_update_probe\.sql/,
   /node scripts\/release-assets\.mjs "\$first" release-first \|\|/,
   /node scripts\/release-assets\.mjs "\$next" release-next \|\|/,
   /\[\[ \$\(ls -A "\$dir" \| wc -l\) == 2 \]\]/,
-  /sh "\$dir\/install\.sh" \|\| fail 'release install'/,
-  /sh "\$dir\/install\.sh" update \|\| fail 'release update'/,
+  /sh "\$dir\/install\.sh" \|\| fail 'the previous release install'/,
+  /sh install\.sh update \|\| fail 'release update'/,
   /to_regclass\('gtmworks_install\.release_update_probe'\)/,
   /exec -T db ls \/migrations/,
   /\.install-release/,
   /\/api\/health \/sign-in/,
  ]) assert.match(run,pattern);
- assert.ok(run.indexOf("update || fail 'release update'")>run.indexOf("|| fail 'release install'"));
+ assert.ok(run.indexOf("update || fail 'release update'")>run.indexOf("|| fail 'the previous release install'"));
 });
 
 test('the install job keeps one Docker daemon for both install steps and removes it only after the last', () => {
  // The release step reuses the source install's daemon and its built image; an EXIT trap in a step fires when that
  // step ends, so a step that removes the daemon must be the job's last and run even after a failure.
- const steps=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install.steps;
+ const steps=installJob().steps;
  const at=test=>steps.findIndex(test);
  const start=at(step=>/run -d --privileged --name install-docker/.test(step.run||''));
  const source=at(step=>step.env?.INSTALL_REF);

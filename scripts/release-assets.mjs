@@ -43,9 +43,18 @@ export function releaseInstaller(text, app) {
  return lines.map(line => line === 'release_image=' ? `release_image=${app}` : line).join('\n');
 }
 
+// Every Company's Engine is made from the template shipped with the release (#381, ADR 0018), so its one image is
+// checked here too: a release never turns its tag into a digest, and an unpinned Engine image stops the release.
+export function releaseEngineTemplate(text) {
+ const image = /^\s*image:\s*(\S+)\s*$/m.exec(text)?.[1];
+ if (!image || !pinnedPattern.test(image)) throw new Error(`${image} is not pinned to a reviewed tag@sha256 digest in scripts/engine-template.yml`);
+ return text;
+}
+
 export function writeReleaseAssets(app, directory) {
  const compose = releaseCompose(readFileSync('docker-compose.install.yml', 'utf8'), app);
  const installer = releaseInstaller(readFileSync('scripts/install.sh', 'utf8'), app);
+ releaseEngineTemplate(readFileSync('scripts/engine-template.yml', 'utf8'));
  mkdirSync(directory, { recursive: true });
  writeFileSync(join(directory, 'docker-compose.install.yml'), compose);
  writeFileSync(join(directory, 'install.sh'), installer);

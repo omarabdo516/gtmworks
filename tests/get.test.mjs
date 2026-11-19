@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync, spawn } from 'node:child_process';
 import { load } from 'js-yaml';
+import { installJob } from './install-job.mjs';
 
 // The one line (#51) and the gtmworks command it leaves (#52), run with docker and curl replaced: GitHub Releases is a
 // fixture folder, and each release's install.sh is a stand-in that records what it was asked to do. install.sh itself is
@@ -45,6 +46,8 @@ assert.ok(installText.includes('opt/data/*'),'install.sh restores opt/data/* ent
 const installerTemplate=`#!/bin/sh
 release_image=@REF@
 # restore accepts opt/data/* (the Agents' data, #349)
+# restore accepts .engines/* (each Engine's key, #385)
+# restore accepts engines|engines/* (each Company's Engine data, #386)
 op=\${1:-install}
 ${lockBlock}printf '%s %s\\n' "\${release_image##*:}" "$*" >> "$INSTALLER_LOG"
 case "$op" in
@@ -78,6 +81,7 @@ case "$*" in
   [ -f "$DB_FILE.created" ] || date +%s%N > "$DB_FILE.created"
   cat "$DB_FILE.created"; exit 0;;
  'run --rm -i alpine:3.21 tar -xzOf - .env.install') cat > /dev/null; printf '%s\\n' "\${ARCHIVE_ENV:-SECRET=archived}"; exit 0;;
+ *'alpine:3.21 tar -xzOf - .engines/'*) printf 'ENGINE_KEY=%s\\n' "\${ARCHIVE_ENGINE_KEY:-${'a'.repeat(64)}}"; exit 0;;
  *'install-env.mjs missing') exit 0;;
  *'install-env.mjs validate complete')
   [ -z "\${ENV_INVALID:-}" ] || { echo 'SUPABASE_PUBLIC_URL must equal APP_ORIGIN' >&2; exit 1; }; exit 0;;
@@ -106,6 +110,7 @@ case "$*" in
  *' ps -aq '*) eval "service=\\\${$#}"; echo "id-$service";;
  inspect\\ *) eval "id=\\\${$#}"; case "$id" in "id-\${UNHEALTHY:-none}") echo exited;; id-worker) echo running;; *) echo 'running healthy';; esac;;
  *'exec -T web node'*) echo 'http://gateway:8080/api/health 200';;
+ *'exec -i -u hermes gtmworks-engine-'*'hermes auth add anthropic'*) echo 'Open this address in a browser: https://claude.example/oauth';;
 esac
 exit 0
 `;
@@ -171,7 +176,8 @@ const ok=(result,label='')=>assert.equal(result.status,0,`${label}\n${result.std
 test('options: each wrong one stops with usage before Docker, curl or any folder is touched', t => {
  const m=machine(t);
  for(const args of [['--version','1.2.3'],['--version','v1.2'],['--version=v1.2.3-rc1'],['--channel','beta'],['--version','v1.2.3','--channel','main'],
-  ['--no-backup'],['status','--version','v1.2.3'],['backup','--channel','main'],['restore'],['frobnicate'],['--dir'],['--bogus'],['update','extra'],['status','--no-backup'],['update','--yes'],['--version',`main@sha256:${mainHex}`],['backup','--version',`main@sha256:${mainHex}`],['update','--version','main@sha256:abc']]) {
+  ['--no-backup'],['status','--version','v1.2.3'],['backup','--channel','main'],['restore'],['frobnicate'],['--dir'],['--bogus'],['update','extra'],['status','--no-backup'],['update','--yes'],['--version',`main@sha256:${mainHex}`],['backup','--version',`main@sha256:${mainHex}`],['update','--version','main@sha256:abc'],
+  ['sign-in','--company','Acme'],['sign-in','gemini','--company','Acme'],['sign-in','claude'],['status','--company','Acme'],['sign-in','claude','--company']]) {
   const result=m.line(args);
   assert.equal(result.status,2,`${args.join(' ')}: ${result.stderr}`);
   assert.match(result.stderr,/Usage:/,args.join(' '));
@@ -182,6 +188,64 @@ test('options: each wrong one stops with usage before Docker, curl or any folder
  assert.equal(m.line(['--command']).status,2);
  assert.equal(m.line(['--help']).status,0);
  assert.equal(m.docker(),'');
+});
+
+test('gtmworks sign-in claude runs the Engine\'s own Claude sign-in in the Company\'s Engine, found by its record (#384)', t => {
+ const m=machine(t);
+ ok(m.line());
+ m.clear();
+ // The sign-in's Engine lookup is the installer's own (#378, T4), as the Company commands are: get.sh only hands it on.
+ assert.doesNotMatch(getText,/engine_row|company_engines/);
+ assert.match(getText,/sh \.\/install\.sh sign-in "\$provider" --company "\$company"/);
+ // The real installer runs here, because it owns the lookup and the container the sign-in runs in.
+ writeFileSync(join(m.dir,'install.sh'),readFileSync('scripts/install.sh','utf8').replace('release_image=',`release_image=${ref('v1.10.0')}`));
+ const row='http://gtmworks-engine-first:8642|RS Learning\n';
+ // By the Company's name: the record names the Engine, and the Engine's own sign-in runs in it on its root profile.
+ writeFileSync(m.env.DB_FILE,row);
+ const named=m.gtmworks(['sign-in','claude','--company','RS Learning']);
+ ok(named,'sign-in by name');
+ assert.match(named.stdout,/Signing RS Learning in to Claude on its Engine: gtmworks-engine-first/);
+ assert.match(named.stdout,/https:\/\/claude\.example\/oauth/);
+ const docker=m.docker();
+ assert.match(docker,/exec -T db psql .*-v company=RS Learning/);
+ assert.match(docker,/exec -i -u hermes gtmworks-engine-first hermes auth add anthropic --type oauth --no-browser/);
+ // By the Company's id, the same Engine.
+ m.clear();
+ ok(m.gtmworks(['sign-in','claude','--company','c-1']),'sign-in by id');
+ assert.match(m.docker(),/exec -i -u hermes gtmworks-engine-first hermes auth add anthropic/);
+ // A Company the install does not have, or a name two Companies share: a plain message, and no Engine is asked.
+ m.clear(); writeFileSync(m.env.DB_FILE,'');
+ const missing=m.gtmworks(['sign-in','claude','--company','Nope']);
+ assert.notEqual(missing.status,0);
+ assert.match(missing.stderr,/No Company in .* is named Nope/);
+ assert.doesNotMatch(m.docker(),/auth add anthropic/);
+ writeFileSync(m.env.DB_FILE,'http://gtmworks-engine-first:8642|Same\nhttp://gtmworks-engine-first:8642|Same\n');
+ const two=m.gtmworks(['sign-in','claude','--company','Same']);
+ assert.notEqual(two.status,0);
+ assert.match(two.stderr,/More than one Company .* is named Same/);
+ assert.doesNotMatch(m.docker(),/auth add anthropic/);
+ // A record whose address names no Engine container of this install: refused, and nothing is run.
+ m.clear(); writeFileSync(m.env.DB_FILE,'http://db:5432|RS Learning\n');
+ const stray=m.gtmworks(['sign-in','claude','--company','RS Learning']);
+ assert.notEqual(stray.status,0);
+ assert.match(stray.stderr,/names no Engine of this install/);
+ assert.doesNotMatch(m.docker(),/auth add anthropic/);
+ // The whole address must name an Engine of this install: no trailing path, port or host part slips past the check.
+ for(const address of ['http://gtmworks-engine-first:9999','http://gtmworks-engine-first:8642/other','http://gtmworks-engine-first.evil:8642','https://gtmworks-engine-first:8642']) {
+  m.clear(); writeFileSync(m.env.DB_FILE,`${address}|RS Learning\n`);
+  const refused=m.gtmworks(['sign-in','claude','--company','RS Learning']);
+  assert.notEqual(refused.status,0,address);
+  assert.match(refused.stderr,/names no Engine of this install/,address);
+  assert.doesNotMatch(m.docker(),/auth add anthropic/,address);
+ }
+ // A Company's name may hold `|`: the address is read first, so the name can never move the sign-in into another
+ // Company's Engine, and the whole address is checked before anything runs.
+ m.clear(); writeFileSync(m.env.DB_FILE,'http://gtmworks-engine-first:8642|Acme|x://gtmworks-engine-other/\n');
+ const hostile=m.gtmworks(['sign-in','claude','--company','Acme|x://gtmworks-engine-other/']);
+ ok(hostile,'a hostile Company name');
+ assert.match(hostile.stdout,/Signing Acme\|x:\/\/gtmworks-engine-other\/ in to Claude on its Engine: gtmworks-engine-first/);
+ assert.match(m.docker(),/exec -i -u hermes gtmworks-engine-first hermes auth add anthropic --type oauth --no-browser/);
+ assert.doesNotMatch(m.docker(),/-u hermes gtmworks-engine-other/);
 });
 
 test('the line installs the highest published vX.Y.Z by default, --version that release, --dir that folder', t => {
@@ -238,13 +302,13 @@ test('--channel main installs the main image by its digest, with the two files w
 test('the main image holds what --channel main runs, and release-assets.mjs writes the two files from it', t => {
  const dockerfile=readFileSync('Dockerfile','utf8');
  assert.match(dockerfile,/^COPY --from=build --chown=node:node \/app\/docker-compose\.install\.yml \.\/release-source\/$/m);
- assert.match(dockerfile,/^COPY --from=build --chown=node:node \/app\/scripts\/install\.sh \/app\/scripts\/release-assets\.mjs \.\/release-source\/scripts\/$/m);
+ assert.match(dockerfile,/^COPY --from=build --chown=node:node \/app\/scripts\/install\.sh \/app\/scripts\/release-assets\.mjs \/app\/scripts\/engine-template\.yml \.\/release-source\/scripts\/$/m);
  // /app/release-source laid out as the image holds it, run as get.sh runs it there.
  const source=mkdtempSync(join(tmpdir(),'gtmworks-release-source-'));
  t.after(()=>rmSync(source,{recursive:true,force:true}));
  mkdirSync(join(source,'scripts'));
  cpSync('docker-compose.install.yml',join(source,'docker-compose.install.yml'));
- for(const file of ['install.sh','release-assets.mjs']) cpSync(join('scripts',file),join(source,'scripts',file));
+ for(const file of ['install.sh','release-assets.mjs','engine-template.yml']) cpSync(join('scripts',file),join(source,'scripts',file));
  const result=spawnSync(process.execPath,['scripts/release-assets.mjs',mainRef,join(source,'out')],{cwd:source,encoding:'utf8'});
  assert.equal(result.status,0,result.stderr);
  assert.match(readFileSync(join(source,'out/install.sh'),'utf8'),new RegExp(`^release_image=${mainRef.replace(/[.]/g,'\\.')}$`,'m'));
@@ -833,6 +897,17 @@ test('gtmworks restore --version checks the archive and asks before it replaces 
   [{ARCHIVE_ENTRIES:'var/lib/postgresql/data/\netc/postgresql-custom/\n.env.install'},['--yes'],/not a complete gtmworks backup: it has no var\/lib\/storage\/\./],
   [{ENV_INVALID:'1'},['--yes'],/SUPABASE_PUBLIC_URL must equal APP_ORIGIN\n.*The settings in .*old\.tgz \(its \.env\.install\) are not valid for gtmworks v1\.2\.3, for the reason above\. Nothing was changed\./],
   [{ARCHIVE_MIGRATIONS:'001.sql 002.sql 003.sql'},['--yes'],/old\.tgz holds migrations that gtmworks v1\.2\.3 does not carry \(002\.sql 003\.sql\): a later release made it\./],
+  // Every Company's Engine is in the archive as one data folder per Engine under engines/ (#386), named as its folder
+  // under .engines/ (its key): an Engine without its data, data without its key, or both layouts at once cannot be
+  // restored.
+  [{ARCHIVE_ENTRIES:'var/lib/postgresql/data/\netc/postgresql-custom/\nvar/lib/storage/\n.env.install\nengines/first/\nengines/second/\n.engines/first/.env'},['--yes'],/not a complete gtmworks backup: it does not hold every Company Engine\./],
+  [{ARCHIVE_ENTRIES:'var/lib/postgresql/data/\netc/postgresql-custom/\nvar/lib/storage/\n.env.install\nengines/first/\n.engines/first/.env\n.engines/second/.env'},['--yes'],/not a complete gtmworks backup: it does not hold every Company Engine\./],
+  [{ARCHIVE_ENTRIES:'var/lib/postgresql/data/\netc/postgresql-custom/\nvar/lib/storage/\n.env.install\nopt/data/\nengines/first/\n.engines/first/.env'},['--yes'],/not a gtmworks backup: it holds one Engine's data at opt\/data and every Engine's data under engines\/\./],
+  [{ARCHIVE_ENTRIES:'var/lib/postgresql/data/\netc/postgresql-custom/\nvar/lib/storage/\n.env.install\nengines/second/\n.engines/second/.env'},['--yes'],/not a complete gtmworks backup: it does not hold the first Engine\./],
+  // An Engine folder's name, and its whole file, are the installer's own (#378, X2): only a name like an Engine and a
+  // 64-hex ENGINE_KEY are trusted, before anything stops.
+  [{ARCHIVE_ENTRIES:'var/lib/postgresql/data/\netc/postgresql-custom/\nvar/lib/storage/\n.env.install\nengines/first/\n.engines/first/.env',ARCHIVE_ENGINE_KEY:'not-a-key'},['--yes'],/the Engine first has no usable key\./],
+  [{ARCHIVE_ENTRIES:'var/lib/postgresql/data/\netc/postgresql-custom/\nvar/lib/storage/\n.env.install\nengines/first/\n.engines/first/.env\nengines/Second_Engine/\n.engines/Second_Engine/.env'},['--yes'],/it names an Engine folder that is not usable \(Second_Engine\)\./],
  ];
  for(const [extra,flags,message] of cases) {
   m.clear();
@@ -848,7 +923,19 @@ test('gtmworks restore --version checks the archive and asks before it replaces 
  const older=m.gtmworks(['restore',archive,'--version','v1.2.3','--yes'],{extra:{ARCHIVE_ENTRIES:'var/lib/postgresql/data/\netc/postgresql-custom/\nvar/lib/storage/\n.env.install\nopt/data/'}});
  assert.match(older.stderr,/gtmworks v1\.2\.3 cannot restore .*old\.tgz: it holds the Agents' data, which releases before it cannot restore\./);
  nothingChanged(older,'a release before the Agents\' data');
+ // A release from before #385 knows no .engines/ either, and is asked before the volumes go.
+ writeFileSync(targetInstaller,withAgents.replace(/\.engines\/\*/g,'opt/data'));
+ m.clear();
+ const noKeys=m.gtmworks(['restore',archive,'--version','v1.2.3','--yes'],{extra:{ARCHIVE_ENTRIES:'var/lib/postgresql/data/\netc/postgresql-custom/\nvar/lib/storage/\n.env.install\n.engines/first/.env'}});
+ assert.match(noKeys.stderr,/gtmworks v1\.2\.3 cannot restore .*old\.tgz: it holds the Engines' keys, which releases before it cannot restore\./);
+ nothingChanged(noKeys,'a release before the Engines\' keys');
  writeFileSync(targetInstaller,withAgents);
+ // A release from before #386 knows no engines/ either: each Company's Engine data is asked about before the volumes go.
+ writeFileSync(targetInstaller,withAgents.replace(/^# restore accepts engines.*\n/m,''));
+ m.clear();
+ const noEngines=m.gtmworks(['restore',archive,'--version','v1.2.3','--yes'],{extra:{ARCHIVE_ENTRIES:'var/lib/postgresql/data/\netc/postgresql-custom/\nvar/lib/storage/\n.env.install\nengines/first/\n.engines/first/.env'}});
+ assert.match(noEngines.stderr,/gtmworks v1\.2\.3 cannot restore .*old\.tgz: it holds each Company's Engine data, which releases before it cannot restore\./);
+ nothingChanged(noEngines,'a release before the Engines\' data');
  // An archive whose migrations cannot be read is not taken for one with none.
  m.clear();
  const unread=m.gtmworks(['restore',archive,'--version','v1.2.3','--yes'],{extra:{ARCHIVE_UNREADABLE:'1'}});
@@ -907,7 +994,7 @@ test('gtmworks status reports every service and fails when one is not healthy', 
 });
 
 test('CI runs the one line twice, gtmworks status from a new shell, an update, a refusal, a failed update and going back', () => {
- const steps=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install.steps;
+ const steps=installJob().steps;
  const at=pattern=>steps.findIndex(step=>pattern.test(step.name||''));
  const index=at(/one-line install/);
  assert.ok(index>at(/release install and update/)&&index<steps.length-1,'after the release step, before the Docker machine is removed');
@@ -958,6 +1045,28 @@ test('CI runs the one line twice, gtmworks status from a new shell, an update, a
  assert.match(run,/migrations \| diff -u "\$RUNNER_TEMP\/updated-migrations" -/);
 });
 
+// #378 (T4): the archive-layout check is the target installer's own `check-restore`, so get.sh and install.sh cannot drift.
+test('gtmworks restore --version asks the target release\'s own installer to check the archive', t => {
+ const m=machine(t);
+ ok(m.line());
+ const archive=join(m.root,'old.tgz');
+ writeFileSync(archive,'archive');
+ const release=join(m.env.FIXTURE,'v1.2.3');
+ writeFileSync(join(release,'install.sh'),`#!/bin/sh
+release_image=${ref('v1.2.3')}
+# check-restore
+if [ "$1" = check-restore ]; then echo 'The backup does not hold an Engine for every Company.' >&2; exit 1; fi
+exit 0
+`);
+ writeFileSync(join(release,'docker-compose.install.yml'),composeTemplate.replaceAll('@REF@',ref('v1.2.3')));
+ m.clear();
+ const refused=m.gtmworks(['restore',archive,'--version','v1.2.3','--yes']);
+ assert.notEqual(refused.status,0);
+ assert.match(refused.stderr,/The backup does not hold an Engine for every Company\. Nothing was changed\./);
+ assert.deepEqual(m.installer(),[],'nothing was restored or backed up');
+ assert.doesNotMatch(m.docker(),/ down$|^volume rm /,'nothing stopped or removed');
+});
+
 test('the README installs with the one line, keeps the source route under From source, and updates with gtmworks update', () => {
  const readme=readFileSync('README.md','utf8');
  const install=readme.split(/^## Install$/m)[1].split(/^## /m)[0];
@@ -974,4 +1083,8 @@ test('the README installs with the one line, keeps the source route under From s
  // The line on the README is the one get.sh documents and prints.
  assert.ok(getText.includes(`curl -fsSL https://raw.githubusercontent.com/${repo}/main/scripts/get.sh | sh`));
  assert.match(getText,/GTMWORKS_RELEASES/);
+ // #378 S4: memory lives in the Company's Engine, so no agent can repeat another Company's facts; the memory figure
+ // names the install job's idle-Engine measurement as where it comes from.
+ assert.doesNotMatch(readme,/repeat facts from one company/);
+ assert.match(readme,/install job prints the memory one idle Engine uses/);
 });

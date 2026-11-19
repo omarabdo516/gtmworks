@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
+import { supabaseConfig } from '@/lib/supabase-config';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
 import { routeAllowed } from '@/lib/route-permissions.mjs';
-import { onProfile } from '@/lib/bundled-hermes.mjs';
+import { engineOf, onProfile } from '@/lib/company-engine.mjs';
 import { engineFor } from '@/lib/engine.mjs';
 import { bodyLengthRefused } from '@/lib/attachments.mjs';
 
@@ -15,6 +17,8 @@ const file = 'app/api/dictation/route.ts';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const reply=(body:object,status=200)=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store'}});
 const maxBody=Math.ceil(25*1024*1024/3)*4+2048;
+// The Engine record is readable by the server role alone (#380).
+const service=()=>createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}});
 
 // The Agent whose profile transcribes: the one named, or the Company's main Agent for a channel. Both are read under the
 // caller's own session, so an Agent or channel they cannot see reads as absent.
@@ -49,7 +53,7 @@ async function respond(request:NextRequest) {
   const agent=await spokenFor(db,body.company,body);
   if(!agent) return reply({error:'dictationNotFound'},404);
   if(!await routeAllowed(db,file,request.method,body.company,user.id)) return reply({error:'dictationNotAllowed'},403);
-  const connection=onProfile(agent.profile,body.company);
+  const connection=onProfile(agent.profile,body.company,await engineOf(body.company,service()));
   if(!connection) return reply({error:'dictationNotFound'},404);
   const engine=engineFor(connection);
   if(!writing) {

@@ -36,9 +36,9 @@ test('an Agent\'s About is read from its own profile, with its name and title, a
  try {
   profileOn(fake,companyProfile(company),{display_name:'Lead',description:'Runs the team.',description_auto:false,bot_title:'Marketing lead'});
   const {db}=sessions(fake);
-  assert.deepEqual(await readAgentAbout(db,{company,agent:lead,driver:driverAt(fake)}),
+  assert.deepEqual(await readAgentAbout(db,{company,agent:lead,driver:driverAt(fake),hermes:{address:fake.address,key:'test-only-key'}}),
    {state:'found',own:true,displayName:'Lead',description:'Runs the team.',descriptionAuto:false,botTitle:'Marketing lead'});
-  assert.deepEqual(await readAgentAbout(db,{company,agent:helper,driver:driverAt(fake)}),
+  assert.deepEqual(await readAgentAbout(db,{company,agent:helper,driver:driverAt(fake),hermes:{address:fake.address,key:'test-only-key'}}),
    {state:'found',own:false,displayName:'Lead',description:'Runs the team.',descriptionAuto:false,botTitle:'Marketing lead'});
  } finally { await fake.close(); }
 });
@@ -48,7 +48,7 @@ test('About is written on the Agent\'s own profile and logged once, with the fie
  try {
   profileOn(fake,companyProfile(company),{description:'Old words.'});
   const {db,logged}=sessions(fake);
-  assert.deepEqual(await changeAgentAbout(db,{company,agent:lead,description:' Plans and runs the Meta ads. ',driver:driverAt(fake)}),
+  assert.deepEqual(await changeAgentAbout(db,{company,agent:lead,description:' Plans and runs the Meta ads. ',driver:driverAt(fake),hermes:{address:fake.address,key:'test-only-key'}}),
    {state:'written',description:'Plans and runs the Meta ads.'});
   assert.equal(fake.settings.profiles.get(companyProfile(company)).description,'Plans and runs the Meta ads.');
   assert.deepEqual(logged,[{c:company,agent:lead,field:'about',old_value:null,new_value:null}],'the row names the field, never the text');
@@ -60,16 +60,16 @@ test('an Agent on the Company profile is refused before the Engine is asked, as 
  try {
   profileOn(fake,companyProfile(company));
   const shared=sessions(fake);
-  assert.deepEqual(await changeAgentAbout(shared.db,{company,agent:helper,description:'Words.',driver:driverAt(fake)}),{state:'notOwn',description:null});
+  assert.deepEqual(await changeAgentAbout(shared.db,{company,agent:helper,description:'Words.',driver:driverAt(fake),hermes:{address:fake.address,key:'test-only-key'}}),{state:'notOwn',description:null});
   assert.deepEqual(shared.logged,[],'nothing is logged for a change that did not happen');
   const refused=sessions(fake,{refuse:'agentSettingNotAllowed'});
-  assert.deepEqual(await changeAgentAbout(refused.db,{company,agent:lead,description:'Words.',driver:driverAt(fake)}),{state:'notAllowed',description:null});
-  assert.deepEqual(await changeAgentAbout(refused.db,{company,agent:lead,description:'Words.',driver:{read:async()=>assert.fail('the Engine is not read'),about:async()=>assert.fail('the Engine is not written')}}),{state:'notAllowed',description:null});
+  assert.deepEqual(await changeAgentAbout(refused.db,{company,agent:lead,description:'Words.',driver:driverAt(fake),hermes:{address:fake.address,key:'test-only-key'}}),{state:'notAllowed',description:null});
+  assert.deepEqual(await changeAgentAbout(refused.db,{company,agent:lead,description:'Words.',hermes:{address:fake.address,key:'test-only-key'},driver:{read:async()=>assert.fail('the Engine is not read'),about:async()=>assert.fail('the Engine is not written')}}),{state:'notAllowed',description:null});
   assert.equal(fake.settings.managementRequests.filter(request=>request.method==='PUT').length,0,'a refused change writes nothing');
   const noEngine=sessions(fake,{target:false});
-  assert.deepEqual(await changeAgentAbout(noEngine.db,{company,agent:lead,description:'Words.',driver:driverAt(fake)}),{state:'noEngine',description:null});
+  assert.deepEqual(await changeAgentAbout(noEngine.db,{company,agent:lead,description:'Words.',driver:driverAt(fake),hermes:{address:fake.address,key:'test-only-key'}}),{state:'noEngine',description:null});
   for(const change of [{company:'',agent:lead,description:'Words.'},{company,agent:'Lead',description:'Words.'},{company,agent:lead,description:7}])
-   assert.deepEqual(await changeAgentAbout(refused.db,{...change,driver:driverAt(fake)}),{state:'invalid',description:null},JSON.stringify(change));
+   assert.deepEqual(await changeAgentAbout(refused.db,{...change,driver:driverAt(fake),hermes:{address:fake.address,key:'test-only-key'}}),{state:'invalid',description:null},JSON.stringify(change));
  } finally { await fake.close(); }
 });
 
@@ -79,9 +79,9 @@ test('a write the Engine fails is that state, and nothing is logged', async () =
   profileOn(fake,companyProfile(company));
   const {db,logged}=sessions(fake);
   fake.settings.managementStatus=500;
-  assert.deepEqual(await changeAgentAbout(db,{company,agent:lead,description:'Words.',driver:driverAt(fake)}),{state:'failed',description:null});
+  assert.deepEqual(await changeAgentAbout(db,{company,agent:lead,description:'Words.',driver:driverAt(fake),hermes:{address:fake.address,key:'test-only-key'}}),{state:'failed',description:null});
   fake.settings.managementStatus=401;
-  assert.deepEqual(await changeAgentAbout(db,{company,agent:lead,description:'Words.',driver:driverAt(fake)}),{state:'refused',description:null});
+  assert.deepEqual(await changeAgentAbout(db,{company,agent:lead,description:'Words.',driver:driverAt(fake),hermes:{address:fake.address,key:'test-only-key'}}),{state:'refused',description:null});
   assert.deepEqual(logged,[]);
  } finally { await fake.close(); }
 });

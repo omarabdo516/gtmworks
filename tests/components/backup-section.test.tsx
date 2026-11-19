@@ -57,7 +57,7 @@ test('the section says what a backup holds, what it leaves out, and the four com
   await expect.element(screen.getByRole('heading', { name: 'What a backup holds' })).toBeVisible();
   for (const text of [
     'Included', 'Not included',
-    'The database', 'File storage', "The install's keys", '.env.install', "The Agents' data",
+    'The database', 'File storage', "The install's keys", '.env.install', "Every Company's Engine",
     "The model provider's account and keys outside the install", "The connected apps' own data", 'The Docker images',
     'Take a backup', 'gtmworks backup',
     'Restore a backup', 'gtmworks restore <archive>',
@@ -90,7 +90,7 @@ test('every command copies on one press, and copy is the only button in the sect
 test('the section speaks Egyptian Arabic as the reference does', async () => {
   const screen = await backup('ar');
   await expect.element(screen.getByRole('heading', { name: 'النسخة فيها إيه' })).toBeVisible();
-  for (const text of ['فيها', 'مش فيها', 'قاعدة البيانات', 'مفاتيح التنصيبة', 'بيانات الوكلاء']) {
+  for (const text of ['فيها', 'مش فيها', 'قاعدة البيانات', 'مفاتيح التنصيبة', 'محرّك كل شركة']) {
     await expect.element(screen.getByText(text, { exact: true })).toBeVisible();
   }
   expect(screen.getByRole('button').elements()).toHaveLength(4);

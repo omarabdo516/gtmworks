@@ -1,4 +1,6 @@
 agents
 companies
+company_engines
+company_owner_links
 people
 setup_claim
