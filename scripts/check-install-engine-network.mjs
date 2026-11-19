@@ -15,11 +15,20 @@ const reachable=(host,port)=>new Promise(resolve=>{
  socket.once('error',()=>done(false));
 });
 
-// The services an Engine must not reach, by the names they have on the install network.
-for(const [host,port] of [['db',5432],['auth',9999],['rest',3000],['storage',5000],['gateway',8080]]) {
+// The services an Engine must not reach, by the names they have on the install network. A name does not resolve from an
+// Engine's network, so the installer also passes each service's own address on the install network (docker inspect in
+// CI): a network that resolves nothing but still routes to an address would be caught here.
+const ports={db:5432,auth:9999,rest:3000,storage:5000,gateway:8080};
+for(const [host,port] of Object.entries(ports)) {
  assert.equal(await reachable(host,port),false,`${host}:${port} is reachable from the Engine's network`);
 }
-console.log('The Engine network reaches none of db, auth, rest, storage or gateway');
+for(const pair of (process.env.INSTALL_SERVICE_IPS||'').split(',').filter(Boolean)) {
+ const [service,address]=pair.split('=');
+ const port=ports[service];
+ assert.ok(address&&port,`the install service address ${pair}`);
+ assert.equal(await reachable(address,port),false,`${service} at ${address}:${port} is reachable from the Engine's network`);
+}
+console.log('The Engine network reaches none of db, auth, rest, storage or gateway, by name or by address');
 
 const app='http://web:3000';
 const forged={'X-Forwarded-For':'203.0.113.10','X-Real-IP':'203.0.113.10','X-Forwarded-Host':'engine.example','Forwarded':'for=203.0.113.10'};

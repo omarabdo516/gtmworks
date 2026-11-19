@@ -274,6 +274,17 @@ test('every Run goes to its Company\'s Engine on the profile it was pinned to, a
  assert.equal(onProfile('default',company,null),null,'no Engine to reach');
 });
 
+test('the Engine network probe checks the install services by name and by their addresses (#378, S5)', () => {
+ const script=readFileSync('scripts/check-install-engine-network.mjs','utf8');
+ // A service name does not resolve from an Engine's network, so the probe also asks each service's own address there;
+ // CI reads those addresses with docker inspect and passes them in.
+ assert.match(script,/INSTALL_SERVICE_IPS/);
+ assert.match(script,/reachable\(address,port\)/);
+ const ci=readFileSync('.github/workflows/ci.yml','utf8');
+ assert.match(ci,/for service in db auth rest storage gateway; do/);
+ assert.equal((ci.match(/-e INSTALL_SERVICE_IPS="\$\(install_service_ips\)"/g)||[]).length,3,'every Engine-network probe passes the addresses');
+});
+
 test('the Engine management listener is on for web and worker with the Engine key, and never public', () => {
  const engine=template.services.engine;
  // Hermes's dashboard (ADR 0011) starts beside the gateway in the same container, on 9119, behind the same Engine key.
