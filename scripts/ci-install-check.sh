@@ -2,13 +2,13 @@
 # The install proof, one command of the repo (#402): each CI install job runs this file for its area on an isolated
 # Docker machine and holds no check of its own, and `./ci.sh install [area]` starts such a machine here and runs it.
 # Without an area the seven areas of spec #401 run one after another, then the profile-size measurement; with one, only
-# that area runs, on a fresh Docker machine: `first-install` (the first install and its repeat, backup and restore —
-# together until #409 splits them), `companies` (Companies and their Engines), `agents` (Agents on their Engines),
-# `proxy` (the public address behind a proxy), `update` (the update between releases), `one-line` (the one-line install)
-# and `measure` (the profile-size measurement, on a push to main and a manual run only, never on a pull request, #408).
-# Every area but first-install's backup makes the install, its first run, the Companies, the local registry and the
-# release files it needs itself (#406, #407, #408), so no area needs another to have run. The helpers the areas share are
-# in scripts/ci-install-lib.sh, sourced below, so each is written once.
+# that area runs, on a fresh Docker machine: `first-install` (the first install and its repeat), `companies` (Companies
+# and their Engines), `agents` (Agents on their Engines), `backup` (backup and restore), `proxy` (the public address
+# behind a proxy), `update` (the update between releases), `one-line` (the one-line install) and `measure` (the
+# profile-size measurement, on a push to main and a manual run only, never on a pull request, #408). Every area makes
+# the install, its first run, the Companies, the archives, the local registry and the release files it needs itself
+# (#406–#409), so no area needs another to have run. The helpers the areas share are in scripts/ci-install-lib.sh,
+# sourced below, so each is written once.
 # DOCKER_HOST names that machine; RUNNER_TEMP is a scratch folder; INSTALL_REF, BASE_SHA and GH_TOKEN come from CI or
 # ci.sh.
 set -e
@@ -24,9 +24,9 @@ fail_prefix='install check failed: '
 # off, as the release and one-line steps never printed it.
 trap 'status=$?; if [ "$status" -ne 0 ]; then bash scripts/install-diagnostics.sh || true; fi; exit "$status"' EXIT
 
-# first-install: the first install and its repeat, and everything the source install proves before a second Company
-# gets an Engine of its own: the setup link, .env.install and its permissions, the first Company and its Engine, health,
-# the database checks, the worker's own reach, the data a restore must bring back, and that restore itself.
+# first-install: the first install and its repeat: the setup link, .env.install and its permissions, the first Company
+# and its Engine, health, the database checks and the worker's own reach. What a backup must bring back and the backup
+# and restore themselves are the backup area's (#409).
 first_install() {
 cd "$root"
 install_source first-install.log || fail 'first install'
@@ -88,28 +88,8 @@ docker run --rm --network gtmworks-engine-first -e INSTALL_SERVICE_IPS="$(instal
 if docker ps -aq | xargs -r docker inspect -f '{{.Name}} {{range .Mounts}}{{.Source}} {{end}}' | grep -q 'docker.sock'; then
   fail 'no container of the install mounts the Docker socket'
 fi
-# An archive in the shape the release before this one made (#385, #386): one Engine, its data at opt/data, its key in
-# .env.install and no .engines/. It is made now, while this install has one Company, from a consistent copy of the
-# stopped stack, and restored at the end of this job.
-sh scripts/install.sh backup || fail 'backup before the Engines are proven'
-before_engines=$(find backups -name '*.tgz' -printf '%T@ %p\n' | sort -n | tail -n 1 | cut -d' ' -f2-)
-[[ -f $before_engines ]] || fail 'the one-Engine backup archive'
-before_dir="$RUNNER_TEMP/before-engines"
-rm -rf "$before_dir" && mkdir -p "$before_dir"
-tar -xzf "$before_engines" -C "$before_dir" || fail 'read the one-Engine backup'
-before_engines_key=$(first_engine_key)
-[[ $before_engines_key =~ ^[a-f0-9]{64}$ ]] || fail 'the first Engine key before the Engines are proven'
-# The archive names the Engine folder it holds; the one-Engine layout puts that data at opt/data. The move's
-# destination folder has to exist for mv, and a listing says what the archive held when it does not.
-first_folder=$(ls -d "$before_dir"/engines/*/ 2> /dev/null | head -n 1)
-if [[ -z $first_folder ]]; then tar -tzf "$before_engines" | sed -n '1,40p'; fail 'the one-Engine archive holds the Engine data'; fi
-mkdir -p "$before_dir/opt"
-mv "${first_folder%/}" "$before_dir/opt/data" || fail 'put the first Engine at opt/data'
-rm -rf "$before_dir/engines" "$before_dir/.engines"
-if [ -n "$(tail -c 1 "$before_dir/.env.install")" ]; then echo >> "$before_dir/.env.install"; fi
-printf 'HERMES_API_KEY=%s\n' "$before_engines_key" >> "$before_dir/.env.install"
-( cd "$before_dir" && tar -czf "$RUNNER_TEMP/before-engines.tgz" .env.install opt/data var/lib/postgresql/data etc/postgresql-custom var/lib/storage ) \
-  || fail 'make the one-Engine archive'
+# The repeat install leaves the settings file as it was, so keep a copy to compare after it. The archive in the shape
+# the release before this one made, and the data a restore must bring back, are the backup area's (#409).
 cp .env.install .env.install.before
 # A Company names its Engine record (#382): the probe makes its own waiting record and the Company on it.
 db -c "with e as (insert into public.company_engines (id,address,key_encrypted) values ('00000000-0000-4000-8000-000000000236','$engine_address','install-probe') returning id) insert into public.companies (id,slug,name,engine_id) select '00000000-0000-4000-8000-000000000237','install-probe','Keep me',id from e;" || fail 'insert persistence probe'
@@ -140,23 +120,6 @@ done
 [[ $(compose exec -T worker node -e 'console.log(process.pid>0)') == true ]] || fail 'worker process running'
 worker_logs=$(compose logs worker) || fail 'read worker logs'
 if grep -q 'Conversation runs worker:' <<< "$worker_logs"; then fail 'worker reaches the database'; fi
-lifecycle() { ENGINE_KEY="$engine_key" compose exec -T -e ENGINE_KEY web node --input-type=module - "$1" < scripts/check-install.mjs; }
-# seed also writes an Agent's rule and each Company's knowledge through the engine contract, and verify reads
-# both back after the restore: they live only in the Hermes volume the backup now holds (#349).
-lifecycle seed > data.before || fail 'create and read people, companies, cards and files through APIs'
-sh scripts/install.sh backup || fail 'backup'
-first_archive=$(find backups -name '*.tgz' -printf '%T@ %p\n' | sort -n | tail -n 1 | cut -d' ' -f2-)
-[[ $(stat -c %a "$first_archive") == 600 ]] || fail 'private backup permissions'
-if sh scripts/install.sh restore "$first_archive"; then fail 'restore must refuse an occupied install'; fi
-remove_install || fail 'remove first install'
-rm .env.install
-sh scripts/install.sh || fail 'fresh empty install'
-sh scripts/install.sh restore "$first_archive" || fail 'restore'
-cmp .env.install.before .env.install || fail 'restore encryption and signing keys'
-lifecycle verify > data.after || fail 'read restored people, companies, cards and files through APIs'
-diff -u data.before data.after || fail 'restored identities match'
-db -c 'select name from gtmworks_install.schema_migrations order by name' > restored
-diff -u before restored || fail 'restored migration history'
 }
 
 # companies: Companies and their Engines (#382, ADR 0018): the first Engine answering an Arabic message, `company add`
@@ -336,23 +299,79 @@ done
 [[ $engines_scanned -ge 2 ]] || fail 'the scan covers every Engine'
 }
 
-# backup: backup and restore (#386, ADR 0018): one archive holding every Company Engine, an archive naming an Engine
-# without its data refused before anything changes, and an archive from before each Company had its own Engine restored
-# as one Company on the first Engine.
+# backup: backup and restore (#386, #409, ADR 0018): a backup of the install's own data and of every Company Engine,
+# restored into a fresh install with identities, keys and migration history intact; an archive naming an Engine without
+# its data refused before anything changes; and an archive made before Engines existed restored as one Company on one
+# Engine. The area makes the install, the Companies and the archives it needs (#409): it starts on a fresh isolated
+# Docker machine, completes first run for the first Company, and adds a second Company on an Engine of its own.
 backup() {
 cd "$root"
+# The area makes its own source install (#409): reset what an earlier run left, install, and complete first run as the
+# person who installed it, which makes the first Company (Proxy Company) and its Owner.
+reset_install || fail 'remove the install before the backup area'
+install_source backup-install.log || fail 'backup area install'
+complete_setup || fail 'first run before the backup'
+# An archive in the shape the release before this one made (#385, #386): one Engine, its data at opt/data, its key in
+# .env.install and no .engines/. It is made now, while this install has one Company, from a consistent copy of the
+# stopped stack, and restored at the end of the area.
+sh scripts/install.sh backup || fail 'backup before the Engines are proven'
+before_engines=$(find backups -name '*.tgz' -printf '%T@ %p\n' | sort -n | tail -n 1 | cut -d' ' -f2-)
+[[ -f $before_engines ]] || fail 'the one-Engine backup archive'
+before_dir="$RUNNER_TEMP/before-engines"
+rm -rf "$before_dir" && mkdir -p "$before_dir"
+tar -xzf "$before_engines" -C "$before_dir" || fail 'read the one-Engine backup'
+before_engines_key=$(first_engine_key)
+[[ $before_engines_key =~ ^[a-f0-9]{64}$ ]] || fail 'the first Engine key before the Engines are proven'
+# The archive names the Engine folder it holds; the one-Engine layout puts that data at opt/data. The move's
+# destination folder has to exist for mv, and a listing says what the archive held when it does not.
+first_folder=$(ls -d "$before_dir"/engines/*/ 2> /dev/null | head -n 1)
+if [[ -z $first_folder ]]; then tar -tzf "$before_engines" | sed -n '1,40p'; fail 'the one-Engine archive holds the Engine data'; fi
+mkdir -p "$before_dir/opt"
+mv "${first_folder%/}" "$before_dir/opt/data" || fail 'put the first Engine at opt/data'
+rm -rf "$before_dir/engines" "$before_dir/.engines"
+if [ -n "$(tail -c 1 "$before_dir/.env.install")" ]; then echo >> "$before_dir/.env.install"; fi
+printf 'HERMES_API_KEY=%s\n' "$before_engines_key" >> "$before_dir/.env.install"
+( cd "$before_dir" && tar -czf "$RUNNER_TEMP/before-engines.tgz" .env.install opt/data var/lib/postgresql/data etc/postgresql-custom var/lib/storage ) \
+  || fail 'make the one-Engine archive'
+cp .env.install .env.install.before
+# The migration history the fresh install must bring back with the archive.
+db -c 'select name from gtmworks_install.schema_migrations order by name' > before || fail 'read the migrations before the backup'
+# The source install's own backup and restore (#402, #409): seed also writes an Agent's rule and each Company's
+# knowledge through the engine contract, and verify reads both back after the restore: they live only in the Hermes
+# volume the backup now holds (#349). Identities, the encryption and signing keys, and the migration history come back
+# into a fresh empty install from the one archive.
+lifecycle seed > data.before || fail 'create and read people, companies, cards and files through APIs'
+sh scripts/install.sh backup || fail 'backup'
+first_archive=$(find backups -name '*.tgz' -printf '%T@ %p\n' | sort -n | tail -n 1 | cut -d' ' -f2-)
+[[ $(stat -c %a "$first_archive") == 600 ]] || fail 'private backup permissions'
+if sh scripts/install.sh restore "$first_archive"; then fail 'restore must refuse an occupied install'; fi
+remove_install || fail 'remove first install'
+rm .env.install
+sh scripts/install.sh || fail 'fresh empty install'
+sh scripts/install.sh restore "$first_archive" || fail 'restore'
+cmp .env.install.before .env.install || fail 'restore encryption and signing keys'
+lifecycle verify > data.after || fail 'read restored people, companies, cards and files through APIs'
+diff -u data.before data.after || fail 'restored identities match'
+db -c 'select name from gtmworks_install.schema_migrations order by name' > restored
+diff -u before restored || fail 'restored migration history'
+# A second Company on an Engine of its own for the every-Engine archive: the first run's Owner is its Owner, and the
+# worker gives it its main Agent by itself.
+sh scripts/install.sh company add --name 'Second Company' --owner proxy-owner@example.com \
+  || fail 'the second Company for the every-Engine backup'
 # Every Company's Engine is in one backup and comes back from it (#386, ADR 0018). Each Company's main Agent is told
 # a code word in its own Engine first; after the restore each Company's Agent answers on its own Engine, with its own
 # code word and never the other Company's.
 engines_memory() {
   db -F ' ' -c "select c.id,a.profile,e.address from public.companies c join public.hermes_agents a on a.company_id=c.id and a.is_default join public.company_engines e on e.id=c.engine_id order by e.created_at"
 }
-# Every Engine the install has holds a Company by now (the first run's, the named Owner's, the link's).
+# Every Engine the install has holds a Company by now (the first run's and the one just made).
 engines_before=$(ls -d .engines/*/ | wc -l)
 [[ $engines_before -ge 2 ]] || fail 'the install has two Engines or more before the backup'
+# The worker gives each Company its main Agent on its own profile, so wait for the profile too before writing into the
+# Engine's volume: the restore must bring back what its own Engine was given.
 for attempt in $(seq 1 240); do
   engines_memory > engines.txt
-  [[ $(grep -c . engines.txt || true) == "$engines_before" ]] && break
+  [[ $(grep -c . engines.txt || true) == "$engines_before" && $(db -c 'select count(*) from public.company_profiles') -ge "$engines_before" ]] && break
   [[ $attempt == 240 ]] && fail 'every Company gets a main Agent on its own Engine'
   sleep 1
 done
@@ -881,12 +900,13 @@ echo "capacity: engine memory $memory_before before and $memory_after after 20 a
 # (#406, #408). A CI job names one area; `./ci.sh install` without one still runs the whole proof.
 case "${1:-all}" in
  all) first_install; companies; agents; backup; proxy; update; one_line; measure;;
- first-install) first_install; backup;;
+ first-install) first_install;;
  companies) companies;;
  agents) agents;;
+ backup) backup;;
  proxy) proxy;;
  update) update;;
  one-line) one_line;;
  measure) measure;;
- *) echo 'usage: bash scripts/ci-install-check.sh [first-install | companies | agents | proxy | update | one-line | measure]' >&2; exit 2;;
+ *) echo 'usage: bash scripts/ci-install-check.sh [first-install | companies | agents | backup | proxy | update | one-line | measure]' >&2; exit 2;;
 esac

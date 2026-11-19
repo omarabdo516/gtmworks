@@ -235,7 +235,10 @@ test('the install job checks the setup link before and after setup, and that no 
  const {load}=await import('js-yaml');
  const run=installJob().steps.find(step=>step.env?.INSTALL_REF).run;
  const at=text=>{ const index=run.indexOf(text); assert.notEqual(index,-1,text); return index; };
- const localCheck=run.indexOf("complete_setup || fail 'emailed sign-in and invitation links on the local install'");
+ // The links check is one helper the areas share (#409); first-install calls it here, while first run is still open.
+ const localCheck=at("complete_setup || fail 'emailed sign-in and invitation links on the local install'");
+ const localRun=run.indexOf('-e APP_ORIGIN=http://localhost:3000 -e MAIL_URL');
+ assert.notEqual(localRun,-1,'the shared first-run helper runs on the local install');
  // The first install ends with the link, its code in no other line; a repeat before setup prints the same link.
  assert.ok(at("install_source first-install.log || fail 'first install'")<at("code=$(sed -n 's/^SETUP_CODE=//p' .env.install)"));
  at('link="Set up gtmworks with this one-time link: http://localhost:3000/first-run#code=$code"');
@@ -260,6 +263,7 @@ test('the install job reads the gateway access log after setup and finds the set
  const {load}=await import('js-yaml');
  const run=installJob().steps.find(step=>step.env?.INSTALL_REF).run;
  const at=text=>{ const index=run.indexOf(text); assert.notEqual(index,-1,text); return index; };
+ // The links check is one helper the areas share (#409); first-install calls it while first run is still open.
  const localCheck=at("complete_setup || fail 'emailed sign-in and invitation links on the local install'");
  const read=at("gateway_logs=$(compose logs gateway 2>&1) || fail 'read gateway logs'");
  assert.ok(localCheck<read,'read after setup is completed');

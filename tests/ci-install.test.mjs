@@ -168,3 +168,13 @@ test('the profile-size measurement is a job of its own, and the required check d
   assert.equal(remove.if, "${{ always() && runner.environment != 'github-hosted' }}", 'removed on a reused runner, also after a failure');
   assert.equal(ci.jobs.check.needs.includes(measureJob), false, 'the required check does not wait for the measurement');
 });
+
+// #409: backup and restore is an area of its own, so the first-install job no longer runs a backup or a restore check,
+// and naming it runs only its area on the machine it makes.
+test('backup and restore is an area of its own and the first-install job no longer runs it', () => {
+  const first = script.split('\n').find(line => /^ first-install\)/.test(line));
+  assert.doesNotMatch(first, /backup/, 'the first-install area runs no backup check');
+  assert.match(script, /^ backup\) backup;;$/m, 'the proof has a backup area of its own');
+  // The area is one command of the repo, and its sentence names it on a failure.
+  assert.match(readFileSync(resolve('ci.sh'), 'utf8'), /install \[first-install \| companies \| agents \| backup \| proxy \| update \| one-line \| measure\]/);
+});

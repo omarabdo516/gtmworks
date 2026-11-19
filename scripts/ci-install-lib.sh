@@ -26,6 +26,10 @@ engine_address=http://gtmworks-engine-first:8642
 engine_management=http://gtmworks-engine-first:9119
 first_engine_id() { docker ps -q --filter 'name=^gtmworks-engine-first$'; }
 first_engine_key() { sed -n 's/^ENGINE_KEY=//p' .engines/first/.env 2> /dev/null || true; }
+# The data a backup must bring back (#349), written and read through the engine contract inside the installed web
+# container: a rule in an Agent's SOUL.md and each Company's knowledge live only in the Engine's volume, not in the
+# database, so the backup area writes them before its archive and reads them back after the restore.
+lifecycle() { ENGINE_KEY=$(first_engine_key) compose exec -T -e ENGINE_KEY web node --input-type=module - "$1" < scripts/check-install.mjs; }
 # Each Engine is its own Compose project (ADR 0018), so removing the install removes every one of them: the first
 # Engine, every Company's Engine under .engines/, and the one container a release before #385 ran an Engine in.
 remove_engine() {
@@ -52,11 +56,11 @@ reset_install() {
   rm -f .env.install
 }
 # The setup an area starts from (#407, #408, #409): the source install, its output kept in the log named by the one
-# argument (its status kept under the proof's pipefail), and first run completed the way a browser does it on the local install, straight to the gateway: the setup
-# form's submission with the setup code in its body makes the first Company and signs its Owner in, the invitation and
-# sign-in links stay on APP_ORIGIN, and no key or code is printed (issue #40, #50). first_install proves both steps, the
-# repeat install still open between them; every other area runs them and carries on. The caller owns each failure
-# sentence, so an area names the step it was in.
+# argument and its status kept under the proof's pipefail, and first run completed the way a browser does it on the
+# local install, straight to the gateway: the setup form's submission with the setup code in its body makes the first
+# Company and signs its Owner in, the invitation and sign-in links stay on APP_ORIGIN, and no key or code is printed
+# (issue #40, #50). first_install proves both steps, the repeat install still open between them; every other area runs
+# them and carries on. The caller owns each failure sentence, so an area names the step it was in.
 install_source() { sh scripts/install.sh 2>&1 | tee "$1"; }
 complete_setup() {
   docker run --rm -i --network host --env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY)=' .env.install) --env-file <(grep -E '^SETUP_CODE=' .env.install) \

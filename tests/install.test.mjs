@@ -366,8 +366,11 @@ test('the install job backs up and restores every Company Engine, refuses an inc
  // in .env.install and no .engines/.
  const early=at('An archive in the shape the release before this one made');
  assert.ok(early>=0,run);
- const probeCompany=at("# A Company names its Engine record (#382): the probe makes its own waiting record");
- assert.ok(early>=0&&early<probeCompany,'the one-Engine archive is made before the probe Company is added');
+ // The area makes the second Company it backs up, after the one-Company archive was made (#409).
+ const start=lines.findIndex(line=>line.startsWith('backup() {'));
+ const secondCompany=lines.findIndex((line,index)=>index>start&&line.includes("company add --name 'Second Company' --owner proxy-owner@example.com"));
+ assert.ok(start>=0&&secondCompany>start,run);
+ assert.ok(early<secondCompany,'the one-Engine archive is made before the second Company is added');
  for(const text of [
   "sh scripts/install.sh backup || fail 'backup before the Engines are proven'",
   'first_folder=$(ls -d "$before_dir"/engines/*/ 2> /dev/null | head -n 1)',
@@ -425,6 +428,30 @@ test('the install job backs up and restores every Company Engine, refuses an inc
   "fail 'the restored install keeps no Engine key in .env.install'",
   "check-install-conversation.mjs || fail 'the one Company answers on its own Engine after the restore'",
  ]) assert.ok(run.includes(text),text);
+});
+
+// #409: backup and restore is an area of its own, so it runs alone on a fresh Docker machine and makes the install, the
+// Companies and the archives it needs: it resets the machine, installs, completes first run for the first Company, makes
+// the one-Company archive, and adds a second Company for the every-Engine archive.
+test('the backup area makes the install, the Companies and the archives it needs itself', () => {
+ const run=installJob().steps.find(step=>step.env?.INSTALL_REF).run;
+ const lines=run.split('\n');
+ const start=lines.findIndex(line=>line.startsWith('backup() {'));
+ const next=lines.findIndex((line,index)=>index>start&&line.startsWith('# proxy:'));
+ assert.ok(start>=0&&next>start,run);
+ const area=lines.slice(start,next).join('\n');
+ const at=text=>{ const index=area.indexOf(text); assert.notEqual(index,-1,`${text}: ${area}`); return index; };
+ // It starts from a fresh machine and a fresh install, and completes first run as first-install does.
+ assert.ok(at('reset_install ||')<at('install_source backup-install.log || fail'));
+ assert.ok(at('install_source backup-install.log || fail')<at('complete_setup ||'));
+ // The one-Company archive is made before the second Company has an Engine of its own.
+ assert.ok(at('complete_setup ||')<at("sh scripts/install.sh backup || fail 'backup before the Engines are proven'"));
+ assert.ok(at('$RUNNER_TEMP/before-engines.tgz')<at("company add --name 'Second Company'"));
+ // The source install's own archive is restored into a fresh install, then the every-Engine one is made and restored.
+ assert.ok(at("company add --name 'Second Company'")<at("sh scripts/install.sh backup || fail 'backup of every Engine'"));
+ assert.ok(at("fail 'backup'")<at('first_archive=$(find backups'));
+ assert.ok(at('sh scripts/install.sh restore "$first_archive"')<at("fail 'backup of every Engine'"));
+ assert.ok(at("fail 'backup of every Engine'")<at('sh scripts/install.sh restore "$every_engine"'));
 });
 
 // #386: a release that pins another Engine image recreates every Company's Engine, and a Run on each answers.
