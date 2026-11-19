@@ -9,11 +9,12 @@ import { generateInstallEnv, validateInstallEnv } from '../lib/install-env.mjs';
 import { checkSettings } from '../lib/settings.mjs';
 import { supabaseSettings } from '../lib/supabase-settings.mjs';
 import { createServerClient, createBrowserClient } from '@supabase/ssr';
+import { installJob } from './install-job.mjs';
 
 test('CI prints the captured update log on every failed-update assertion', t => {
  const directory=mkdtempSync(join(tmpdir(),'gtmworks-update-log-'));
  t.after(()=>rmSync(directory,{recursive:true,force:true}));
- const install=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install;
+ const install=installJob();
  const step=install.steps.find(step=>step.env?.INSTALL_REF);
  assert.equal(install.permissions.contents,'read');
  assert.equal(step.env.GH_TOKEN,'${{ github.token }}');
@@ -58,6 +59,7 @@ test('update preserves the serving containers on migration failure and safely re
  writeFileSync(join(directory,'bin/docker'),`#!/bin/sh
 printf '%s\\n' "$*" >> "$COMMANDS"
 case "$*" in
+  *'.State.Health.Status'*) echo healthy;;
  *alpine:3.21*) while [ "$1" != alpine:3.21 ]; do shift; done; shift; "$@";;
  *validate*) exit "\${VALIDATION_EXIT:-0}";;
  *'count(*) from public.companies'*) echo 1;;
@@ -131,6 +133,7 @@ test('update checks the new gateway config before migrating and recreates the ga
  writeFileSync(join(directory,'bin/docker'),`#!/bin/sh
 printf '%s\\n' "$*" >> "$COMMANDS"
 case "$*" in
+  *'.State.Health.Status'*) echo healthy;;
  *alpine:3.21*) exit 0;;
  *'nginx -t'*) exit "\${GATEWAY_CONFIG_EXIT:-0}";;
  *'count(*) from public.companies'*) echo 1;;
@@ -185,6 +188,7 @@ test('an update of an install with more than one Company is refused before it ch
  const dockerShim=`#!/bin/sh
 printf '%s\\n' "$*" >> "$COMMANDS"
 case "$*" in
+  *'.State.Health.Status'*) echo healthy;;
  *'count(*) from public.companies'*) echo "$COMPANIES";;
  *'exec -T db psql'*) cat > "$MIGRATION_SQL";;
  *install-env.mjs*) :;;
@@ -267,7 +271,7 @@ test('a restore --version asks the target release the same archive check a resto
 });
 
 test('the install job updates a real previous-release install with one Company, and refuses one with two', () => {
- const step=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install.steps.find(step=>/release install and update/.test(step.name||''));
+ const step=installJob().steps.find(step=>/release install and update/.test(step.name||''));
  const run=step.run;
  const lines=run.split('\n');
  const at=text=>lines.findIndex(line=>line.includes(text));
@@ -347,7 +351,7 @@ test('the every-Engine check runs each Company\'s Agent on its own Engine and pr
 // Companies after `company add`, refuses an archive naming an Engine without its data, and restores an archive in the
 // shape the release before this one made.
 test('the install job backs up and restores every Company Engine, refuses an incomplete archive and restores a one-Engine archive', () => {
- const run=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install.steps.find(step=>step.env?.INSTALL_REF).run;
+ const run=installJob().steps.find(step=>step.env?.INSTALL_REF).run;
  const lines=run.split('\n');
  const at=text=>lines.findIndex(line=>line.includes(text));
  // An archive in the previous release's shape, made while the install has one Company: one Engine at opt/data, its key
@@ -417,7 +421,7 @@ test('the install job backs up and restores every Company Engine, refuses an inc
 
 // #386: a release that pins another Engine image recreates every Company's Engine, and a Run on each answers.
 test('the install job updates two Companies to a release pinning another Engine image and proves a Run on each', () => {
- const run=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install.steps.find(step=>/release install and update/.test(step.name||'')).run;
+ const run=installJob().steps.find(step=>/release install and update/.test(step.name||'')).run;
  const lines=run.split('\n');
  const add=lines.findIndex(line=>line.includes("sh install.sh company add --name 'Second Company' --owner proxy-owner@example.com || fail 'company add before the update'"));
  const update=lines.findIndex(line=>line.includes("sh install.sh update || fail 'update every Company Engine'"));
@@ -461,7 +465,7 @@ test('the update check reads the sign-in and the Agent memory through the produc
 // A successful update on the real install belongs to issue #52; the install job keeps only the failed-update check, and
 // that check still proves the rollback: the migration is named, the old web container serves, and nothing is applied.
 test('the install job leaves the successful update to issue 52 and keeps the failed-update rollback check', () => {
- const run=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install.steps.find(step=>step.env?.INSTALL_REF).run;
+ const run=installJob().steps.find(step=>step.env?.INSTALL_REF).run;
  assert.doesNotMatch(run,/update-gateway\.log|old_gateway|sed -i '\/X-Real-IP\/d'/);
  assert.equal([...run.matchAll(/sh scripts\/install\.sh update /g)].length,1,'only the failed update runs');
  for(const text of ["if sh scripts/install.sh update \"$INSTALL_REF\" > update.log 2>&1; then fail_update 'update must fail'; fi",
@@ -473,7 +477,7 @@ test('the install job leaves the successful update to issue 52 and keeps the fai
 // the install job writes a rule and the Company knowledge through the engine contract before the backup and reads both
 // back after the restore: a backup that left the volume out fails there.
 test('the install job writes an Agent rule and the Company knowledge before the backup and reads both back after the restore', () => {
- const run=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install.steps.find(step=>step.env?.INSTALL_REF).run;
+ const run=installJob().steps.find(step=>step.env?.INSTALL_REF).run;
  const lines=run.split('\n');
  const at=pattern=>lines.findIndex(line=>pattern.test(line));
  const seed=at(/^lifecycle seed/),backup=at(/^sh scripts\/install\.sh backup \|\| fail 'backup'$/);
@@ -489,7 +493,7 @@ test('the install job writes an Agent rule and the Company knowledge before the 
 // printed with its secret after `#`, only its hash is kept, the Company exists nowhere, `company list` shows it waiting,
 // a fresh link ends the earlier one, and sending it makes the Company with its sender as Owner on that link's Engine.
 test('the install job proves a first-Owner link holds a Company, a fresh link ends it, and sending it makes the Company', () => {
- const run=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install.steps.find(step=>step.env?.INSTALL_REF).run;
+ const run=installJob().steps.find(step=>step.env?.INSTALL_REF).run;
  const lines=run.split('\n');
  const at=text=>lines.findIndex(line=>line.includes(text));
  const add=at("company add --name 'Linked Company'"),fresh=at("company link 'Linked Company'"),claimed=at('company list after the link is used');
@@ -520,7 +524,7 @@ test('failed backup resumes the install and leaves no archive or secrets behind'
  writeFileSync(join(directory,'.env.install'),'private-key');
  writeFileSync(join(directory,'bin/docker'),`#!/bin/sh
 printf '%s\\n' "$*" >> "$COMMANDS"
-case "$*" in *'tar -czf'*) echo 'partial-private-archive'; exit 9;; esac
+case "$*" in *'.State.Health.Status'*) echo healthy;; *'tar -czf'*) echo 'partial-private-archive'; exit 9;; esac
 `,{mode:0o755});
  const commands=join(directory,'commands');
  const result=spawnSync('sh',['scripts/install.sh','backup'],{cwd:directory,
@@ -573,6 +577,7 @@ import { appendFileSync, copyFileSync, cpSync, existsSync, lstatSync, mkdirSync,
 import { spawnSync } from 'node:child_process';
 const args=process.argv.slice(2),cwd=process.cwd(),root=cwd+'/volumes';
 appendFileSync(cwd+'/commands',JSON.stringify(args)+'\\n');
+if(args.includes('{{.State.Health.Status}}')) { console.log('healthy'); process.exit(0); }
 // Each named volume mounted at /engines/<folder> is the folder of that name in ./volumes (Docker would mount it there);
 // the volume's own folder is a link to it, so a mount is a real directory to tar.
 mkdirSync(root+'/engines',{recursive:true});
@@ -714,6 +719,7 @@ test('restore refuses an archive it cannot fully restore before it changes anyth
  writeFileSync(join(directory,'bin/docker'),`#!/bin/sh
 printf '%s\\n' "$*" >> "$COMMANDS"
 case "$*" in
+  *'.State.Health.Status'*) echo healthy;;
  *'tar -tzf'*) printf '%s\\n' "$ARCHIVE_ENTRIES";;
  *'tar -xOzf'*'.engines/'*) printf 'ENGINE_KEY=%s\\n' "\${ARCHIVE_ENGINE_KEY:-${'a'.repeat(64)}}";;
  *'exec -T db psql'*) echo t;;
@@ -790,6 +796,7 @@ import { appendFileSync, readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 const args=process.argv.slice(2),cwd=process.cwd(),root=cwd+'/volumes';
 appendFileSync(cwd+'/commands',JSON.stringify(args)+'\\n');
+if(args.includes('{{.State.Health.Status}}')) { console.log('healthy'); process.exit(0); }
 if(args[0]==='compose') {
  if(args.includes('ps')) console.log(args.at(-1)+'-id');
  if(args.includes('psql')) console.log('t');
@@ -849,6 +856,7 @@ test('an archive made before Hermes data was included restores, says what it lac
  import { spawnSync } from 'node:child_process';
  const args=process.argv.slice(2),cwd=process.cwd(),root=cwd+'/volumes';
  appendFileSync(cwd+'/commands',JSON.stringify(args)+'\\n');
+if(args.includes('{{.State.Health.Status}}')) { console.log('healthy'); process.exit(0); }
  if(args[0]==='compose') {
   if(args.includes('stop')) writeFileSync(cwd+'/stopped','yes');
   if(args.includes('up')) { writeFileSync(cwd+'/stopped','no'); if(args.includes('--force-recreate')) writeFileSync(cwd+'/env-at-up',readFileSync(cwd+'/.env.install')); }
@@ -906,6 +914,7 @@ test('restore refuses an occupied install before replacing any volume or key', t
  writeFileSync(join(directory,'bin/docker'),`#!/bin/sh
 printf '%s\\n' "$*" >> "$COMMANDS"
 case "$*" in
+  *'.State.Health.Status'*) echo healthy;;
  *'tar -tzf'*) printf '%s\\n' var/lib/postgresql/data/ etc/postgresql-custom/ var/lib/storage/ .env.install;;
  *'exec -T db psql'*) echo f;;
 esac
@@ -931,6 +940,7 @@ test('installer preserves secrets, tightens permissions and streams ordered tran
  writeFileSync(join(directory,'.env.install'),secrets,{mode:0o644});
  writeFileSync(join(directory,'bin/docker'),`#!/bin/sh
 case "$*" in
+  *'.State.Health.Status'*) echo healthy;;
  *validate*) exit "\${VALIDATION_EXIT:-0}";;
  *engine-key*) printf '%s\n' "$ENGINE_KEY";;
  *'exec -T db psql'*) printf '%s\n' "$*" > "$INSTALL_SQL.args"; cat > "$INSTALL_SQL";;
@@ -1074,6 +1084,7 @@ globalThis.setTimeout=(resolve,delay)=>{ appendFileSync(process.env.PROBE_LOG,'p
 const probeShim=`#!/bin/sh
 printf '%s\\n' "$*" >> "$COMMANDS"
 case "$*" in
+  *'.State.Health.Status'*) echo healthy;;
  *install-env.mjs*)
   file=; previous=; all="$*"
   for argument do [ "$previous" = --env-file ] && file=$argument; previous=$argument; done

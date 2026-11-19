@@ -11,6 +11,7 @@ import { changeCompanySignIn, readCompanySignIns } from '../lib/company-sign-in.
 import { describeEntry } from '../lib/activity-log.mjs';
 import { i18n } from '../lib/i18n.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
+import { installJob } from './install-job.mjs';
 
 const install=fake=>({address:fake.address,managementAddress:fake.managementAddress,profile:'default',key:'test-only-key'});
 const [two,three]=['10000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000003'];
@@ -485,7 +486,7 @@ test('a level change and a move read in the company log in both languages', () =
 
 test('the install job proves profiles per company on the pinned release, after the bundled Engine checks', async () => {
  const { load } = await import('js-yaml');
- const install=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install.steps.map(step=>step.run||'').join('\n');
+ const install=installJob().steps.map(step=>step.run||'').join('\n');
  const at=text=>{ const found=install.indexOf(text); assert.ok(found>=0,text); return found; };
  assert.ok(at('scripts/check-install-agent.mjs')<at('- prepare < scripts/check-install-profiles.mjs'));
  assert.ok(at('- prepare < scripts/check-install-profiles.mjs')<at('/opt/data/profiles/$1/memories/MEMORY.md'));

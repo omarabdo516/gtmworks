@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { load } from 'js-yaml';
 import { releaseCompose, releaseInstaller, writeReleaseAssets } from '../scripts/release-assets.mjs';
+import { installJob } from './install-job.mjs';
 
 // Every release publishes one tested image and a GitHub Release whose compose file and install script are all an
 // install needs (#49). The source install keeps building from a checkout until a later ticket switches it.
@@ -135,6 +136,7 @@ function imageFolder(t) {
 const dockerShim=`#!/bin/sh
 printf '%s\\n' "$*" >> "$COMMANDS"
 case "$*" in
+  *'.State.Health.Status'*) echo healthy;;
  pull*) echo "Digest: \${2#*@}";;
  *' sh -ec '*/app/install/*)
   # Runs the installer's own extraction script, with the image's /app/install and the mounted /install mapped here.
@@ -330,7 +332,7 @@ test('a release update replaces the mounted install files in place, so the runni
 });
 
 test('CI updates a release install on a real database, applying a new migration through the running bind mount', () => {
- const install=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install;
+ const install=installJob();
  const source=install.steps.findIndex(step=>step.env?.INSTALL_REF);
  const index=install.steps.findIndex(step=>/release install and update/.test(step.name||''));
  assert.ok(source>=0&&index>source,'runs after the source install checks, which it leaves unchanged');
@@ -364,7 +366,7 @@ test('CI updates a release install on a real database, applying a new migration 
 test('the install job keeps one Docker daemon for both install steps and removes it only after the last', () => {
  // The release step reuses the source install's daemon and its built image; an EXIT trap in a step fires when that
  // step ends, so a step that removes the daemon must be the job's last and run even after a failure.
- const steps=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install.steps;
+ const steps=installJob().steps;
  const at=test=>steps.findIndex(test);
  const start=at(step=>/run -d --privileged --name install-docker/.test(step.run||''));
  const source=at(step=>step.env?.INSTALL_REF);

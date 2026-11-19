@@ -8,6 +8,7 @@ import { load } from 'js-yaml';
 import { generateInstallEnv, generateEngineKey, validateInstallEnv, missingInstallEnv } from '../lib/install-env.mjs';
 import { hermesVersion, isHermesAddressAllowed } from '../lib/hermes.mjs';
 import { onProfile, selfHosted } from '../lib/company-engine.mjs';
+import { installJob } from './install-job.mjs';
 
 // Each Company's Engine is made from the template shipped with the release (ADR 0018): one release of the official Hermes
 // image, pinned by tag and digest, on its own network with its own volume and key. scripts/install.sh makes the first
@@ -119,6 +120,7 @@ test('an Engine key is made into the Engine\'s own file, and an install made bef
 const dockerShim=`#!/bin/sh
 printf '%s\\n' "$*" >> "$COMMANDS"
 case "$*" in
+  *'.State.Health.Status'*) echo healthy;;
  *'tar -xzf /install/.install-lock/source.tgz'*) cp "$NEW_INSTALLER" scripts/install.sh;;
  *alpine:3.21*) exit 0;;
  *'ps -q web'*) echo web-id;;
@@ -280,7 +282,7 @@ test('the Engine network probe checks the install services by name and by their 
  // CI reads those addresses with docker inspect and passes them in.
  assert.match(script,/INSTALL_SERVICE_IPS/);
  assert.match(script,/reachable\(address,port\)/);
- const ci=readFileSync('.github/workflows/ci.yml','utf8');
+ const ci=installJob().steps.map(step=>step.run||'').join('\n');
  assert.match(ci,/for service in db auth rest storage gateway; do/);
  assert.equal((ci.match(/-e INSTALL_SERVICE_IPS="\$\(install_service_ips\)"/g)||[]).length,3,'every Engine-network probe passes the addresses');
 });
@@ -320,7 +322,7 @@ test('the Engine management listener is on for web and worker with the Engine ke
  assert.deepEqual([...gateway.matchAll(/set \$\w+ ([\w-]+):\d+;/g)].map(match=>match[1]),['auth','rest','storage','web']);
  assert.doesNotMatch(gateway,/gtmworks-engine-first|9119|8642/);
  // The install job proves it on the real release: an Agent made through the contract, refused from outside.
- const install=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install.steps.map(step=>step.run||'').join('\n');
+ const install=installJob().steps.map(step=>step.run||'').join('\n');
  assert.match(install,/check-install-agent\.mjs/);
  assert.match(install,/engine_management=http:\/\/gtmworks-engine-first:9119/);
  assert.match(install,/worker node -e .*engine_management\/api\/profiles/);

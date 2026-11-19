@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync, spawn } from 'node:child_process';
 import { load } from 'js-yaml';
+import { installJob } from './install-job.mjs';
 
 // The one line (#51) and the gtmworks command it leaves (#52), run with docker and curl replaced: GitHub Releases is a
 // fixture folder, and each release's install.sh is a stand-in that records what it was asked to do. install.sh itself is
@@ -993,7 +994,7 @@ test('gtmworks status reports every service and fails when one is not healthy', 
 });
 
 test('CI runs the one line twice, gtmworks status from a new shell, an update, a refusal, a failed update and going back', () => {
- const steps=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install.steps;
+ const steps=installJob().steps;
  const at=pattern=>steps.findIndex(step=>pattern.test(step.name||''));
  const index=at(/one-line install/);
  assert.ok(index>at(/release install and update/)&&index<steps.length-1,'after the release step, before the Docker machine is removed');

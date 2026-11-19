@@ -12,6 +12,7 @@ import { spawnSync } from 'node:child_process';
 const fakeDocker=`#!/bin/sh
 printf '%s\\n' "$*" >> "$COMMANDS"
 case "$*" in
+  *'.State.Health.Status'*) echo healthy;;
  *'company-add.mjs check'*) printf '%s\\n' "\${SLUG:-second-company-0000abcd}"; exit "\${CHECK_EXIT:-0}";;
  *'company-add.mjs add'*) exit "\${ADD_EXIT:-0}";;
  *'company-add.mjs drop'*) exit 0;;

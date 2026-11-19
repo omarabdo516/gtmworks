@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { load } from 'js-yaml';
 import { generateInstallEnv } from '../lib/install-env.mjs';
 import { proof, proofName, writeProof, writeName } from '../lib/install-proof.mjs';
+import { installJob } from './install-job.mjs';
 
 // The install job's proof (#126) runs on the pinned Engine, against a real install: four Agents in two Companies, the
 // shared space of each, a key set for one Company, and the capacity of twenty more Agent profiles. It prints names,
@@ -46,7 +47,7 @@ test('the README states the figures the install job measured, and the number of 
 });
 
 test('the install job fills the capacity step and proves the database refuses another Company\'s profile', () => {
- const job=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install.steps.map(step=>step.run||'').join('\n');
+ const job=installJob().steps.map(step=>step.run||'').join('\n');
  assert.ok(job.includes('capacity'),'the capacity step runs');
  assert.match(job,/docker stats --no-stream/);
  assert.match(job,/du -sk/);

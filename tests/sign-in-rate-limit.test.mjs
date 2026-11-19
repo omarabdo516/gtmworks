@@ -11,6 +11,7 @@ import { pathToFileURL } from 'node:url';
 import { load } from 'js-yaml';
 import { signInMessage, signInFailure } from '../lib/sign-in-message.mjs';
 import { FORGED_IDENTITY_HEADERS, forgedIdentity } from '../scripts/forged-identity.mjs';
+import { installJob } from './install-job.mjs';
 
 // Repeated wrong passwords are limited by the auth service's own setting (#41). GoTrue applies its limit per value of
 // the header GOTRUE_RATE_LIMIT_HEADER names, and not at all when that header is missing; the gateway writes it from the
@@ -243,7 +244,7 @@ test('the browser check on the install drives the real sign-in page past the lim
 });
 
 test('the install job proves the limit behind the HTTPS proxy: the page, a second visitor, its forged addresses and the first still limited', () => {
- const job=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install;
+ const job=installJob();
  const index=job.steps.findIndex(step=>step.env?.INSTALL_REF);
  const before=job.steps.slice(0,index);
  assert.ok(before.some(step=>step.uses?.startsWith('actions/setup-node@')),'Node is set up before the install step');

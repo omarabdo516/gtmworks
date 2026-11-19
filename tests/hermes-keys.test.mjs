@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { load } from 'js-yaml';
 import { generateInstallEnv } from '../lib/install-env.mjs';
+import { installJob } from './install-job.mjs';
 
 // An Engine must never receive gtmworks's own secrets (#2): not through its environment, an env file or a mounted file.
 // Only the Engine's own key (ENGINE_KEY, kept in the Engine's own .env) is passed to it.
@@ -55,7 +56,7 @@ test('the runtime scan finds a secret in the environment or a readable file, and
 });
 
 test('the install job runs the scan inside the first Engine with the real secrets, never printing them', () => {
- const install=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install.steps.map(step=>step.run||'').join('\n');
+ const install=installJob().steps.map(step=>step.run||'').join('\n');
  const line=install.split('\n').find(text=>text.includes('check-hermes-keys.py'));
  assert.ok(line,'the scan runs');
  for(const name of ['POSTGRES_PASSWORD','PGSODIUM_ROOT_KEY','SUPABASE_JWT_SECRET','SUPABASE_SERVICE_ROLE_KEY','WEBHOOK_ENCRYPTION_KEY','SETUP_CODE']) assert.ok(line.includes(name),name);

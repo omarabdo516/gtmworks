@@ -146,7 +146,18 @@ join_engine_networks() {
     join_engine_network "$(engine_network_of "$name")" || return 1
   done
 }
-engine_start() { engine "$1" up -d --wait --wait-timeout "${GTMWORKS_ENGINE_WAIT:-300}"; }
+# An Engine counts as started only once its container reports healthy. Compose's --wait is not trusted alone: some Compose
+# releases end it at the timeout with success while the Engine is still starting.
+engine_start() {
+  wait=${GTMWORKS_ENGINE_WAIT:-300}
+  engine "$1" up -d --wait --wait-timeout "$wait" || return 1
+  container=$(engine_project "$1")
+  while [ "$(docker inspect -f '{{.State.Health.Status}}' "$container" 2> /dev/null)" != healthy ]; do
+    wait=$((wait-1))
+    [ "$wait" -gt 0 ] || { echo "The Engine $container did not become healthy." >&2; return 1; }
+    sleep 1
+  done
+}
 # One Engine stopped and removed with everything it made. Its folder and record go too; a record's removal is the caller's
 # (it needs the database) and only ever a record no Company names.
 engine_destroy() {

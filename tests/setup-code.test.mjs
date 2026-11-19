@@ -7,6 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { generateSetupCode, setupCodeMatches } from '../lib/setup-code.mjs';
 import { setupCodeFromHash, setupLink } from '../lib/setup-link.mjs';
 import { generateInstallEnv, validateInstallEnv, missingInstallEnv, readyLine } from '../lib/install-env.mjs';
+import { installJob } from './install-job.mjs';
 
 // First-run setup works only through the one-time link the installer prints (issue #50): whoever runs the installer on
 // the server sets the install up, not whoever reaches /first-run first.
@@ -103,6 +104,7 @@ const dockerShim=`#!/bin/sh
 printf '%s\\n' "$*" >> "$COMMANDS"
 all="$*"
 case "$*" in
+  *'.State.Health.Status'*) echo healthy;;
  *install-env.mjs*)
   file=; previous=
   for argument do [ "$previous" = --env-file ] && file=$argument; previous=$argument; done
@@ -231,7 +233,7 @@ test('the installer asks the app whether setup is open, through the service role
 
 test('the install job checks the setup link before and after setup, and that no container logs the code', async () => {
  const {load}=await import('js-yaml');
- const run=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install.steps.find(step=>step.env?.INSTALL_REF).run;
+ const run=installJob().steps.find(step=>step.env?.INSTALL_REF).run;
  const at=text=>{ const index=run.indexOf(text); assert.notEqual(index,-1,text); return index; };
  const localCheck=run.indexOf('-e APP_ORIGIN=http://localhost:3000 -e MAIL_URL');
  // The first install ends with the link, its code in no other line; a repeat before setup prints the same link.
@@ -256,7 +258,7 @@ test('the install job checks the setup link before and after setup, and that no 
 // and completes setup with the code, never holds the code; it did log those requests, so the search is not of nothing.
 test('the install job reads the gateway access log after setup and finds the setup requests but not the code', async () => {
  const {load}=await import('js-yaml');
- const run=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install.steps.find(step=>step.env?.INSTALL_REF).run;
+ const run=installJob().steps.find(step=>step.env?.INSTALL_REF).run;
  const at=text=>{ const index=run.indexOf(text); assert.notEqual(index,-1,text); return index; };
  const localCheck=at('-e APP_ORIGIN=http://localhost:3000 -e MAIL_URL');
  const read=at("gateway_logs=$(compose logs gateway 2>&1) || fail 'read gateway logs'");
