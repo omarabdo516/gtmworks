@@ -101,16 +101,17 @@ test.each([
  await expect.element(card).toBeVisible();
  expect(card.getByRole('button').elements().map(chip => chip.textContent)).toEqual(['Graduates', 'Parents']);
  expect(card.getByRole('button').elements().every(chip => chip.classList.contains('chip'))).toBe(true);
- await expect.element(card.getByText(language === 'ar' ? 'أو اكتب الإجابة تحت' : 'or type the answer below', { exact: true })).toBeVisible();
+ // A channel takes no typed answer, the general one included (#354 review): the line for it is there but empty.
+ expect(card.element().querySelector('.ask1__or')?.textContent).toBe('');
 });
 
-// #143/#149: in a team channel a typed answer reaches nothing, so the main Agent's chip card is drawn as the reference's
+// #143/#149: in a channel a typed answer reaches nothing, so the main Agent's chip card is drawn as the reference's
 // offer card: the line for what may be typed is there but empty.
 const team = { channel: { id: 'ch-1', company: 'co-1', kind: 'team' as const, name: 'Launch week' } };
 test.each([
  ['en', 'or type the answer below'],
  ['ar', 'أو اكتب الإجابة تحت'],
-] as const)('in the %s interface a team channel\'s chips card offers no typed answer', async (language, orType) => {
+] as const)('in the %s interface a made channel\'s chips card offers no typed answer either', async (language, orType) => {
  held();
  const screen = await channel(record([questionFrom('Lead', true, language === 'ar' ? 'عمر' : 'Omar', true)], team), language);
  const card = screen.getByRole('group', { name: 'Which angle first?' });
