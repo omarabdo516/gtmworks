@@ -27,7 +27,7 @@ const {companyProfile,levelConfig,alwaysOff,riskyToolsets,toolPolicy}=await impo
 const {agentSoul}=await import(`${process.cwd()}/lib/company-profiles.mjs`);
 const {provideProfile}=await import(`${process.cwd()}/lib/hermes.mjs`);
 const {writeProof,writeName}=await import(`${process.cwd()}/lib/install-proof.mjs`);
-const {engineOf}=await import(`${process.cwd()}/lib/bundled-hermes.mjs`);
+const {engineOf}=await import(`${process.cwd()}/lib/company-engine.mjs`);
 
 const [step,marker]=process.argv.slice(2);
 // A message holding this makes the fake model ask the Engine to rewrite the shared Skill.

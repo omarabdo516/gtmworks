@@ -1,4 +1,4 @@
-// CI runs this on stdin inside /app in the installed web container. It proves the bundled Hermes (ADR 0010) answers
+// CI runs this on stdin inside /app in the installed web container. It proves the Company's Engine (ADR 0010, 0018) answers
 // /health on the compose network, and that the first-run Company's Owner's Arabic message gets its reply with no manual
 // connection step: the worker gives the Company its own Hermes profile (ADR 0014) by itself, and closes the run with the
 // reply. The Company's Engine comes from the Engine record the installer wrote and first run attached (#380), so this also
@@ -60,8 +60,8 @@ try {
   for(let left=seconds;left>0;left--) { const found=await read(); if(found) return found; await new Promise(resolve=>setTimeout(resolve,1000)); }
   throw new Error(`${what} within ${seconds}s`);
  };
- // Nobody connects anything: the worker gives the new company its bundled Hermes agent.
- const agent=await until('bundled Hermes agent provided',async()=>(await checked(person.from('hermes_agents').select('id,is_default').eq('company_id',company))).find(found=>found.is_default),120);
+ // Nobody connects anything: the worker gives the new company its main Agent on its Engine.
+ const agent=await until('Engine agent provided',async()=>(await checked(person.from('hermes_agents').select('id,is_default').eq('company_id',company))).find(found=>found.is_default),120);
  // It runs on the company's own profile, never the shared `default` one.
  const profile=companyProfile(company);
  assert.deepEqual((await checked(person.from('hermes_agents').select('profile').eq('company_id',company))).map(found=>found.profile),[profile]);
@@ -77,7 +77,7 @@ try {
  // The worker closes the run from Hermes's own record and stores the reply.
  const answer=await until('reply stored',async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),180);
  assert.ok(answer.body.includes(reply),answer.body);
- assert.ok(asked.length>0,'the bundled Hermes asked the fake model');
+ assert.ok(asked.length>0,'the Engine asked the fake model');
  assert.ok(asked.some(body=>JSON.stringify(body.messages).includes('مرحباً')),'the Arabic message reached the model');
  console.log(JSON.stringify({company,agent:agent.id,conversation}));
 } finally { model.close(); model.closeAllConnections(); }

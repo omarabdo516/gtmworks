@@ -10,7 +10,7 @@ import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { createClient } from '@supabase/supabase-js';
 const { sendMessage }=await import(`${process.cwd()}/lib/conversation-runs.mjs`);
-const { engineOf }=await import(`${process.cwd()}/lib/bundled-hermes.mjs`);
+const { engineOf }=await import(`${process.cwd()}/lib/company-engine.mjs`);
 const { writeProof }=await import(`${process.cwd()}/lib/install-proof.mjs`);
 
 const origin='http://gateway:8080';

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { engineOf, onProfile } from '../lib/bundled-hermes.mjs';
+import { engineOf, onProfile } from '../lib/company-engine.mjs';
 import { engineRecord } from '../lib/engine-record.mjs';
 import { encryptSecret } from '../lib/agent-crypto.mjs';
 import { readAgentMemory } from '../lib/agent-memory.mjs';
@@ -44,7 +44,7 @@ test('no app, worker or library module reads an install-wide Engine address or k
   assert.equal(await engineOf(null,db),null);
   // A module with no database at all (a unit test) has no Engine to answer: no install-wide address or key is read.
   assert.equal(await engineOf(company,null),null);
-  const api=await import('../lib/bundled-hermes.mjs');
+  const api=await import('../lib/company-engine.mjs');
   assert.equal(Object.hasOwn(api,'hermesAt'),false,'the install-wide environment fallback is gone');
  } finally {
   if(saved===undefined) delete process.env.WEBHOOK_ENCRYPTION_KEY; else process.env.WEBHOOK_ENCRYPTION_KEY=saved;

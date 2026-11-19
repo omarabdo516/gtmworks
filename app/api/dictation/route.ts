@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { supabaseConfig } from '@/lib/supabase-config';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
 import { routeAllowed } from '@/lib/route-permissions.mjs';
-import { engineOf, onProfile } from '@/lib/bundled-hermes.mjs';
+import { engineOf, onProfile } from '@/lib/company-engine.mjs';
 import { engineFor } from '@/lib/engine.mjs';
 import { bodyLengthRefused } from '@/lib/attachments.mjs';
 

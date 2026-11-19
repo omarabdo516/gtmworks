@@ -551,7 +551,7 @@ jobs:
           engine_management=http://gtmworks-engine-first:9119
           [[ $(db -c "select key_encrypted from public.company_engines where company_id='$company_id'") != "$engine_key" ]] || fail 'the Engine key is stored in plaintext'
           compose exec -T -e EXPECTED_KEY="$engine_key" web \
-            node --input-type=module -e "const {engineOf}=await import('/app/lib/bundled-hermes.mjs'); const at=await engineOf('$company_id'); console.log(at?.address==='$engine_address'&&at?.key===process.env.EXPECTED_KEY?'record':'no');" \
+            node --input-type=module -e "const {engineOf}=await import('/app/lib/company-engine.mjs'); const at=await engineOf('$company_id'); console.log(at?.address==='$engine_address'&&at?.key===process.env.EXPECTED_KEY?'record':'no');" \
             | grep -qx record || fail "the first Company's Engine is answered from its record"
           if grep -qF "$engine_key" <<< "$logs"; then fail 'the Engine key must not appear in a container log'; fi
           # The first Company's Engine is the template's own Compose project (ADR 0018): its own container, volume and
@@ -1093,7 +1093,7 @@ jobs:
           if docker ps -aq --filter 'label=com.docker.compose.project=gtmworks-install' --filter 'label=com.docker.compose.service=hermes' | grep -q .; then
             fail 'the container the previous release ran the Engine in is retired'
           fi
-          compose exec -T -e EXPECTED_KEY="$key" web node --input-type=module -e "const {engineOf}=await import('/app/lib/bundled-hermes.mjs'); const at=await engineOf('$company'); console.log(at?.address==='http://gtmworks-engine-first:8642'&&at?.key===process.env.EXPECTED_KEY?'record':'no');" \
+          compose exec -T -e EXPECTED_KEY="$key" web node --input-type=module -e "const {engineOf}=await import('/app/lib/company-engine.mjs'); const at=await engineOf('$company'); console.log(at?.address==='http://gtmworks-engine-first:8642'&&at?.key===process.env.EXPECTED_KEY?'record':'no');" \
             | grep -qx record || fail "the updated install's Company answers from its Engine record with the adopted key"
           [[ $(db -c "select count(*) from public.company_engines e join public.companies c on c.id=e.company_id where c.id='$company'") == 1 ]] \
             || fail 'the updated install keeps the Company Engine record'

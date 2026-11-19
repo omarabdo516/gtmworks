@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { load } from 'js-yaml';
 import { generateInstallEnv, generateEngineKey, validateInstallEnv, missingInstallEnv } from '../lib/install-env.mjs';
 import { hermesVersion, isHermesAddressAllowed } from '../lib/hermes.mjs';
-import { onProfile, selfHosted } from '../lib/bundled-hermes.mjs';
+import { onProfile, selfHosted } from '../lib/company-engine.mjs';
 
 // Each Company's Engine is made from the template shipped with the release (ADR 0018): one release of the official Hermes
 // image, pinned by tag and digest, on its own network with its own volume and key. scripts/install.sh makes the first
@@ -210,7 +210,7 @@ test('a fresh install makes the Engine\'s key into its own file, never into .env
 test('an install updated by the installer before ADR 0010 keeps running without Hermes, and the next update brings its Engine in', t => {
  const older=generateInstallEnv();
  // The installer as it was before ADR 0010 (scripts/install.sh at 6957e6e), kept beside install-failing-migration.sql.
- const install=installDirectory(t,'scripts/install-before-bundled-hermes.sh',older);
+ const install=installDirectory(t,'scripts/install-before-company-engine.sh',older);
  const first=install.run();
  assert.equal(first.status,0,first.stderr);
  // The previous installer validates with the downloaded lib and starts the app, never Hermes, and writes no key.
@@ -287,7 +287,7 @@ test('the Engine network probe checks the install services by name and by their 
 
 test('the threat model names every service-role holder the Engine work added (#378, X5)', () => {
  const doc=readFileSync('docs/threat-model.md','utf8');
- for(const name of ['lib/bundled-hermes.mjs','app/api/dictation/route.ts','app/first-owner/submit/route.ts','scripts/company-add.mjs','scripts/company-list.mjs','scripts/install-engine.mjs']) {
+ for(const name of ['lib/company-engine.mjs','app/api/dictation/route.ts','app/first-owner/submit/route.ts','scripts/company-add.mjs','scripts/company-list.mjs','scripts/install-engine.mjs']) {
   assert.ok(doc.includes(name),name);
  }
  assert.match(doc,/service-role call site listed above/);
