@@ -461,13 +461,13 @@ elif [ "$operation" = restore ]; then
   # Engine's data goes back into the volume its own folder names.
   rm -rf .engines
   if [ "$engine_keys" = yes ]; then
-   mkdir -p .engines
-   docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/.install-lock:/backup:ro" -v "$PWD/.engines:/.engines" alpine:3.21 \
-     tar -xzpf /backup/backup.tgz -C / .engines
-   # Only each Engine's key came from the archive (checked above): its own file is written here with this release's
-   # standard names, so a restored Engine always gets its own container, volume and network (#378, X2).
-   for name in $(engine_names); do
-     key=$(sed -n 's/^ENGINE_KEY=//p' "$(engine_folder "$name")/.env")
+   # Only each Engine's key comes from the archive (checked above), read out of it as the archive's .env.install is, never
+   # extracted: its own file is written here with this release's standard names, so a restored Engine always gets its own
+   # container, volume and network (#378, X2). Reading as the container's root also works under rootless Docker, where
+   # the invoking user's own files are root's inside a container.
+   for name in $engine_key_folders; do
+     key=$(docker run --rm -v "$PWD/.install-lock:/backup:ro" alpine:3.21 \
+       tar -xOzf /backup/backup.tgz ".engines/$name/.env" | sed -n 's/^ENGINE_KEY=//p') || exit 1
      if [ "$name" = first ]; then
        write_engine_env first "$key" "$engine_volume" "$(engine_project first)"
      else
