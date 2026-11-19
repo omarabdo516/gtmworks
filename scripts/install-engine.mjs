@@ -8,7 +8,7 @@ import { settleInstallEngine } from '../lib/engine-record.mjs';
 // key and sign-in it had. On a repeat install of this release it writes nothing. It prints counts, never the key or the
 // ciphertext.
 const service=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL,process.env.SUPABASE_SERVICE_ROLE_KEY,{auth:{persistSession:false,autoRefreshToken:false}});
-const address=process.env.BUNDLED_HERMES_URL, key=process.env.HERMES_API_KEY;
+const address=process.env.ENGINE_ADDRESS, key=process.env.ENGINE_KEY;
 if(!address||!key) throw new Error('The install Engine has no address or key');
 const {registered,adopted}=await settleInstallEngine(service,{address,key});
 console.log(`Engine records: ${registered} registered, ${adopted} adopted`);

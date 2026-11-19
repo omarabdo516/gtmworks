@@ -15,7 +15,7 @@ const marker=process.argv[2];
 assert.match(marker||'',/^[a-z0-9-]{8,64}$/,'the marker the job wrote before the update');
 const origin='http://gateway:8080';
 const management=process.env.HERMES_MANAGEMENT_ADDRESS||'http://gtmworks-engine-first:9119';
-const key=process.env.HERMES_API_KEY;
+const key=process.env.ENGINE_KEY;
 assert.ok(key,'the adopted Engine key is given to this check alone');
 const options={auth:{persistSession:false,autoRefreshToken:false}};
 const service=createClient(origin,process.env.SUPABASE_SERVICE_ROLE_KEY,options);

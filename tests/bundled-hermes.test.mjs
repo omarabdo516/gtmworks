@@ -174,7 +174,9 @@ test('an update moves the Engine key a previous release left in .env.install int
  // The address and key reach the registration script, and no line of the app or the worker carries them.
  const registration=run.split('\n').find(line=>line.includes('scripts/install-engine.mjs'));
  assert.ok(registration,run);
- assert.match(registration,/exec -T -e BUNDLED_HERMES_URL=http:\/\/gtmworks-engine-first:8642 -e HERMES_API_KEY=/);
+ assert.match(registration,/exec -T -e ENGINE_ADDRESS -e ENGINE_KEY web node scripts\/install-engine\.mjs/);
+ // The address and key reach the script from the environment, by name: the key is never on a command line (#378, X4).
+ assert.ok(!run.includes(previous.HERMES_API_KEY),'the Engine key is never on a command line');
  assert.doesNotMatch(run,/compose exec -T web node -e .*HERMES_API_KEY/);
  // A repeat install keeps the adopted key and leaves both files as they were.
  const repeat=install.run();
@@ -195,7 +197,8 @@ test('a fresh install makes the Engine\'s key into its own file, never into .env
  assert.ok(key,install.engineEnv());
  assert.ok(!(first.stdout+first.stderr).includes(key),'the key is never printed');
  const registration=install.commands().split('\n').find(line=>line.includes('scripts/install-engine.mjs'));
- assert.match(registration,new RegExp(`-e HERMES_API_KEY=${key} `));
+ assert.match(registration,/-e ENGINE_ADDRESS -e ENGINE_KEY /);
+ assert.ok(!install.commands().includes(key),'the Engine key is never on a command line');
  // A repeat install changes neither file.
  const written=install.file(),engine=install.engineEnv();
  const repeat=install.run();

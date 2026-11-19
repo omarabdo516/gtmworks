@@ -8,7 +8,7 @@ const {readApps,prepareApp,finishAppSignIn,disconnectApp}=await import(`${proces
 const {apps,appByKey}=await import(`${process.cwd()}/lib/app-catalogue.mjs`);
 const {appUrl}=await import(`${process.cwd()}/lib/app-origin.mjs`);
 
-const key=process.env.HERMES_API_KEY;
+const key=process.env.ENGINE_KEY;
 assert.ok(key,'the install key is in the web container');
 const [{profile}]=JSON.parse(readFileSync('/tmp/check-install-profiles.json','utf8'));
 const target={address:process.env.HERMES_ADDRESS||'http://gtmworks-engine-first:8642',managementAddress:process.env.HERMES_MANAGEMENT_ADDRESS||'http://gtmworks-engine-first:9119',profile,key};

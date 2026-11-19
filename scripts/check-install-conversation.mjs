@@ -65,7 +65,7 @@ try {
  // It runs on the company's own profile, never the shared `default` one.
  const profile=companyProfile(company);
  assert.deepEqual((await checked(person.from('hermes_agents').select('profile').eq('company_id',company))).map(found=>found.profile),[profile]);
- const configured=await fetch(`${engineManagement}/api/config?profile=${profile}`,{method:'PUT',headers:{Authorization:`Bearer ${process.env.HERMES_API_KEY}`,'Content-Type':'application/json'},
+ const configured=await fetch(`${engineManagement}/api/config?profile=${profile}`,{method:'PUT',headers:{Authorization:`Bearer ${process.env.ENGINE_KEY}`,'Content-Type':'application/json'},
   body:JSON.stringify({config:{model:{provider:'custom',default:'fake-model',base_url:'http://web:8080/v1',api_key:'fake-model-key',context_length:128000}}})});
  assert.equal(configured.status,200,'the company profile points at the fake model');
  const conversation=randomUUID();

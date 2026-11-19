@@ -550,7 +550,7 @@ jobs:
           engine_address=http://gtmworks-engine-first:8642
           engine_management=http://gtmworks-engine-first:9119
           [[ $(db -c "select key_encrypted from public.company_engines where company_id='$company_id'") != "$engine_key" ]] || fail 'the Engine key is stored in plaintext'
-          compose exec -T -e BUNDLED_HERMES_URL=http://127.0.0.1:9 -e HERMES_API_KEY=wrong -e EXPECTED_KEY="$engine_key" web \
+          compose exec -T -e EXPECTED_KEY="$engine_key" web \
             node --input-type=module -e "const {engineOf}=await import('/app/lib/bundled-hermes.mjs'); const at=await engineOf('$company_id'); console.log(at?.address==='$engine_address'&&at?.key===process.env.EXPECTED_KEY?'record':'no');" \
             | grep -qx record || fail "the first Company's Engine is answered from its record"
           if grep -qF "$engine_key" <<< "$logs"; then fail 'the Engine key must not appear in a container log'; fi
@@ -746,7 +746,7 @@ jobs:
           echo "one idle Engine uses $(docker stats --no-stream --format '{{.MemUsage}}' "$second_container")"
           # Stopping the second Company's Engine leaves the first Company answering, then the second Engine starts again.
           docker stop "$second_container" > /dev/null || fail 'stop the second Engine'
-          compose exec -T -e HERMES_API_KEY="$engine_key" -e HERMES_ADDRESS="$engine_address" -e HERMES_MANAGEMENT_ADDRESS="$engine_management" web \
+          ENGINE_KEY="$engine_key" compose exec -T -e ENGINE_KEY -e HERMES_ADDRESS="$engine_address" -e HERMES_MANAGEMENT_ADDRESS="$engine_management" web \
             node --input-type=module - < scripts/check-install-conversation.mjs || fail 'the first Company still answers while the second Engine is stopped'
           docker start "$second_container" > /dev/null || fail 'start the second Engine'
           for attempt in $(seq 1 120); do
@@ -756,9 +756,9 @@ jobs:
           done
           # The Engine's management listener (ADR 0011): an Agent made through the contract runs, the worker reaches it with
           # the Engine's key, and it is never public: the gateway routes only to the app, and no host port is published.
-          compose exec -T -e HERMES_API_KEY="$engine_key" -e HERMES_ADDRESS="$engine_address" -e HERMES_MANAGEMENT_ADDRESS="$engine_management" web \
+          ENGINE_KEY="$engine_key" compose exec -T -e ENGINE_KEY -e HERMES_ADDRESS="$engine_address" -e HERMES_MANAGEMENT_ADDRESS="$engine_management" web \
             node --input-type=module - < scripts/check-install-agent.mjs || fail 'Agent created in the Engine and a Run started for it'
-          compose exec -T -e HERMES_API_KEY="$engine_key" worker node -e "fetch('$engine_management/api/profiles',{headers:{Authorization:'Bearer '+process.env.HERMES_API_KEY}}).then(response=>process.exit(response.status===200?0:1)).catch(()=>process.exit(1))" || fail 'worker reaches the Engine management listener with its key'
+          ENGINE_KEY="$engine_key" compose exec -T -e ENGINE_KEY worker node -e "fetch('$engine_management/api/profiles',{headers:{Authorization:'Bearer '+process.env.ENGINE_KEY}}).then(response=>process.exit(response.status===200?0:1)).catch(()=>process.exit(1))" || fail 'worker reaches the Engine management listener with its key'
           body=$(docker run --rm --network host curlimages/curl:8.12.1 -sS http://127.0.0.1:3000/api/profiles) || fail 'management path request on install host port 3000'
           status=$(docker run --rm --network host curlimages/curl:8.12.1 -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/api/profiles) || fail 'management path status on install host port 3000'
           [[ $status == 404 && $body != *is_default* ]] || fail "public gateway must not reach the management listener (HTTP $status)"
@@ -768,7 +768,7 @@ jobs:
           # its Runs' toolsets. A run on each answers across the two Engines, and a memory written in the first Engine
           # reaches its run and never an Agent of the other Company. A lesson its Owner approves reaches the runs of the
           # first Company's Agents only, which cannot change it (#122).
-          compose exec -T -e HERMES_API_KEY="$engine_key" -e HERMES_ADDRESS="$engine_address" -e HERMES_MANAGEMENT_ADDRESS="$engine_management" web \
+          ENGINE_KEY="$engine_key" compose exec -T -e ENGINE_KEY -e HERMES_ADDRESS="$engine_address" -e HERMES_MANAGEMENT_ADDRESS="$engine_management" web \
             node --input-type=module - prepare < scripts/check-install-profiles.mjs | tee prepare-profiles.log || fail 'two companies get two profiles on two Engines with terminal, file and code tools off, each with one shared space'
           first=$(tail -n 1 prepare-profiles.log)
           [[ $first =~ ^co-[0-9a-f]{32}$ ]] || fail "the first company's profile name"
@@ -778,17 +778,17 @@ jobs:
           grep -q hermesProfileNotShared profile-refusal.log || { cat profile-refusal.log >&2; fail 'the database refuses a profile of another company, by its guard'; }
           marker="memory-check-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
           docker exec -i "$engine_id" sh -ec 'mkdir -p "/opt/data/profiles/$1/memories"; printf "%s\n" "The company code word is $2." >> "/opt/data/profiles/$1/memories/MEMORY.md"; chown -R hermes:hermes "/opt/data/profiles/$1/memories"' sh "$first" "$marker" || fail "write a memory in the first company's profile"
-          compose exec -T -e HERMES_API_KEY="$engine_key" -e HERMES_ADDRESS="$engine_address" -e HERMES_MANAGEMENT_ADDRESS="$engine_management" web \
+          ENGINE_KEY="$engine_key" compose exec -T -e ENGINE_KEY -e HERMES_ADDRESS="$engine_address" -e HERMES_MANAGEMENT_ADDRESS="$engine_management" web \
             node --input-type=module - verify "$marker" < scripts/check-install-profiles.mjs || fail "runs on each company profile answer, and a company's memory and approved lessons stay in its own runs"
           # Apps (#30), on the first company's profile with no vendor sign-in: the registry's apps are in the pinned
           # catalogue, connecting writes only an app's read tools and the way back to gtmworks, an unknown way back is
           # expired, and disconnecting turns the app off.
-          compose exec -T -e HERMES_API_KEY="$engine_key" -e HERMES_ADDRESS="$engine_address" -e HERMES_MANAGEMENT_ADDRESS="$engine_management" web \
+          ENGINE_KEY="$engine_key" compose exec -T -e ENGINE_KEY -e HERMES_ADDRESS="$engine_address" -e HERMES_MANAGEMENT_ADDRESS="$engine_management" web \
             node --input-type=module - < scripts/check-install-apps.mjs || fail 'apps write only their read tools and come back through gtmworks'
           # What an install holds (#126): twenty more Agent profiles in the first Company, ten with the Engine's bundled
           # Skills and ten without. The script prints each profile's name and the seconds it took to be ready, then runs
           # the first Agent once more; the job prints the Engine container's memory and the volume's disk around them.
-          capacity() { compose exec -T -e HERMES_API_KEY="$engine_key" -e HERMES_ADDRESS="$engine_address" -e HERMES_MANAGEMENT_ADDRESS="$engine_management" web node --input-type=module - capacity "$1" < scripts/check-install-profiles.mjs; }
+          capacity() { ENGINE_KEY="$engine_key" compose exec -T -e ENGINE_KEY -e HERMES_ADDRESS="$engine_address" -e HERMES_MANAGEMENT_ADDRESS="$engine_management" web node --input-type=module - capacity "$1" < scripts/check-install-profiles.mjs; }
           engine_memory() { docker stats --no-stream --format '{{.MemUsage}}' "$engine_id"; }
           engine_disk() { docker run --rm --volumes-from "$engine_id" --entrypoint sh "$(docker inspect -f '{{.Image}}' "$engine_id")" -ec 'du -sk /opt/data | cut -f1'; }
           memory_before=$(engine_memory) || fail 'the Engine memory before the capacity profiles'
@@ -901,7 +901,7 @@ jobs:
             fi
           done
           [[ -n $(docker ps -q --filter 'name=^gtmworks-engine-first$') ]] || fail 'the restored install runs its one Engine'
-          compose exec -T -e HERMES_API_KEY="$before_engines_key" -e HERMES_ADDRESS=http://gtmworks-engine-first:8642 -e HERMES_MANAGEMENT_ADDRESS=http://gtmworks-engine-first:9119 web \
+          ENGINE_KEY="$before_engines_key" compose exec -T -e ENGINE_KEY -e HERMES_ADDRESS=http://gtmworks-engine-first:8642 -e HERMES_MANAGEMENT_ADDRESS=http://gtmworks-engine-first:9119 web \
             node --input-type=module - < scripts/check-install-conversation.mjs || fail 'the one Company answers on its own Engine after the restore'
           # A remote server (README): a fresh install whose APP_ORIGIN is the https origin of a proxy in front of the gateway.
           # First run and the emailed sign-in link must stay on that origin and reach the Company home, and so must the
@@ -1105,7 +1105,7 @@ jobs:
           grep -Eq 'https://(claude\.ai|console\.anthropic\.com)' "$RUNNER_TEMP/sign-in.log" || fail 'gtmworks sign-in prints the provider address'
           # The Agent still remembers what it was told, and the Company's sign-in still serves its Agents, from the
           # Engine the update adopted.
-          compose exec -T -e HERMES_API_KEY="$key" web node --input-type=module - "$marker" < "$root/scripts/check-install-update.mjs" \
+          ENGINE_KEY="$key" compose exec -T -e ENGINE_KEY web node --input-type=module - "$marker" < "$root/scripts/check-install-update.mjs" \
             || fail "the Agent remembers what it was told and the Company's sign-in still serves"
           # The next release's migration is applied through the running database's bind mount.
           cp "$root/release-next/docker-compose.install.yml" "$root/release-next/install.sh" . || fail 'next release files in place'

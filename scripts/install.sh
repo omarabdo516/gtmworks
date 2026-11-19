@@ -237,7 +237,7 @@ company_add() {
     return 1
   fi
   if [ "$has_owner" = yes ]; then
-    if ! compose exec -T -e ENGINE_ADDRESS="$address" -e ENGINE_KEY="$key" web \
+    if ! ENGINE_ADDRESS="$address" ENGINE_KEY="$key" compose exec -T -e ENGINE_ADDRESS -e ENGINE_KEY web \
       node scripts/company-add.mjs add --name "$company_name" --owner "$owner_email" --address "$address" --slug "$slug"; then
       # The record and the Company are removed by the script; a waiting record the script did not reach is removed here.
       compose exec -T web node scripts/company-add.mjs drop --address "$address" > /dev/null 2>&1 || true
@@ -247,7 +247,7 @@ company_add() {
     fi
     echo "Company \"$company_name\" is made on its own Engine ($(engine_container "$slug")). Its Owner is $owner_email."
   else
-    if ! compose exec -T -e ENGINE_ADDRESS="$address" -e ENGINE_KEY="$key" web \
+    if ! ENGINE_ADDRESS="$address" ENGINE_KEY="$key" compose exec -T -e ENGINE_ADDRESS -e ENGINE_KEY web \
       node scripts/company-add.mjs add --name "$company_name" --address "$address" --slug "$slug"; then
       compose exec -T web node scripts/company-add.mjs drop --address "$address" > /dev/null 2>&1 || true
       engine_destroy "$slug" "$volume" "$network"
@@ -472,7 +472,7 @@ elif [ "$operation" = restore ]; then
   # archive taken while a previous release's database was carried over, or before an update registered the record)
   # adopts the Engine this install already runs, in one transaction, as an update does (#378).
   if [ "$(compose exec -T db psql -X -U postgres -d postgres -At -v ON_ERROR_STOP=1 -c "select to_regclass('public.company_engines') is not null;")" = t ]; then
-    compose exec -T -e BUNDLED_HERMES_URL="$engine_address" -e HERMES_API_KEY="$(engine_key)" web node scripts/install-engine.mjs || return 1
+    ENGINE_ADDRESS="$engine_address" ENGINE_KEY="$(engine_key)" compose exec -T -e ENGINE_ADDRESS -e ENGINE_KEY web node scripts/install-engine.mjs || return 1
   fi
   if [ "$hermes_data" = no ]; then
     echo "The Agents' Hermes data was not in this backup: their knowledge, rules, skills and memory were not restored."
@@ -591,7 +591,7 @@ if [ "$operation" = update ] && [ -n "$release_image" ]; then compose exec -T ga
 # first run's first Company; an install made by the release before this one adopts the Engine it already runs as its one
 # Company's Engine (the record written and the Company naming it, in one transaction), so the Company keeps answering. An
 # install this release made is left as it is.
-compose exec -T -e BUNDLED_HERMES_URL="$engine_address" -e HERMES_API_KEY="$(engine_key)" web node scripts/install-engine.mjs
+ENGINE_ADDRESS="$engine_address" ENGINE_KEY="$(engine_key)" compose exec -T -e ENGINE_ADDRESS -e ENGINE_KEY web node scripts/install-engine.mjs
 # Each address must answer 200. Right after the migrations PostgREST reloads its schema cache (and the gateway its
 # configuration), and the app's health answers 503 meanwhile: the probes try again once a second, 60 tries in all, and
 # fail naming the address and its last answer when 200 never comes.

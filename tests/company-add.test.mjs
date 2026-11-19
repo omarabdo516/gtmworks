@@ -46,7 +46,10 @@ test('company add makes one Engine from the template, joins it, then makes the C
  assert.ok(commands.some(line=>/^compose --project-name gtmworks-engine-second-company-0000abcd --env-file \.engines\/second-company-0000abcd\/\.env -f scripts\/engine-template\.yml up -d --wait --wait-timeout 300$/.test(line)),commands.join('\n'));
  assert.ok(commands.includes('network connect --alias web gtmworks-engine-second-company-0000abcd web-id'));
  assert.ok(commands.includes('network connect gtmworks-engine-second-company-0000abcd worker-id'));
- assert.ok(commands.some(line=>line.includes('company-add.mjs add --name Second Company --owner person@example.com')&&line.includes('ENGINE_ADDRESS=http://gtmworks-engine-second-company-0000abcd:8642')));
+ const addLine=commands.find(line=>line.includes('company-add.mjs add --name Second Company --owner person@example.com'));
+ assert.ok(addLine&&addLine.includes('--address http://gtmworks-engine-second-company-0000abcd:8642'),commands.join('\n'));
+ // The Engine's key reaches the script from the environment, by name: it is never on the command line (#378, X4).
+ assert.ok(addLine.includes('-e ENGINE_KEY')&&!addLine.includes('ENGINE_KEY='),addLine);
  // The Engine's own folder holds its own generated key, its volume and its network, readable by its owner alone.
  const env=readFileSync(installDir.envFile('second-company-0000abcd'),'utf8');
  assert.match(env,/^ENGINE_KEY=[a-f0-9]{64}$/m);
@@ -102,7 +105,8 @@ test('company add with no Owner makes the Engine and holds the Company behind th
  assert.ok(commands.some(line=>line.endsWith('company-add.mjs check --name Held Company')),commands.join('\n'));
  const add=commands.find(line=>line.includes('company-add.mjs add --name Held Company'));
  assert.ok(add&&!add.includes('--owner'),commands.join('\n'));
- assert.ok(add.includes('ENGINE_ADDRESS=http://gtmworks-engine-second-company-0000abcd:8642'));
+ assert.ok(add.includes('--address http://gtmworks-engine-second-company-0000abcd:8642'),add);
+ assert.ok(add.includes('-e ENGINE_KEY')&&!add.includes('ENGINE_KEY='),'the key is passed by name, never on the command line');
  // The Engine is the same template the named-Owner path makes, and the closing line says where its link is.
  assert.ok(commands.some(line=>/^compose --project-name gtmworks-engine-second-company-0000abcd --env-file \.engines\/second-company-0000abcd\/\.env -f scripts\/engine-template\.yml up -d --wait --wait-timeout 300$/.test(line)));
  assert.deepEqual(result.stdout.trim().split('\n'),['Company "Held Company" is waiting for its Owner on its own Engine (gtmworks-engine-second-company-0000abcd). Send the first-Owner link above; it works once.']);
