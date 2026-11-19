@@ -74,6 +74,9 @@ test('the Owner gives a provider key and the Engine holds it; the page never dra
 test('the Owner chooses the Company default and one Agent\'s own model, each read back and logged', async({page})=>{
  language(`update public.people set language='en' where id='20000000-0000-0000-0000-000000000001'`);
  await openModels(page,'omar@example.com');
+ // The model rows are drawn by the same section that holds the switch: a click before React has hydrated them does
+ // nothing, so the default model is chosen only once it has its handlers.
+ await hydrated(page);
  // OpenRouter's entry (`anthropic/claude-opus-4.6`), not Anthropic's own `claude-opus-4-6` the same test's key adds.
  await page.getByRole('radio',{name:/^anthropic\/claude-opus-4\.6/}).click();
  await expect.poll(()=>fake.settings.profiles.get(space)?.model).toBe('anthropic/claude-opus-4.6');
