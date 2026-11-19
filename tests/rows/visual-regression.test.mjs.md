@@ -1,0 +1,1 @@
+| `visual-regression.test.mjs` | When the compared screens fail on main, the visual-regression issue names each failed screen with its block and line, the commit, the run and the difference images; a failure with no failed screen still opens it and says to read the run. (#257) | 0.1 s | — | new |

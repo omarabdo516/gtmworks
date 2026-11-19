@@ -1,0 +1,1 @@
+| `components/approvals-count.test.tsx` | The sidebar's approvals pill (#172): given a count still being read, it holds its place empty under the name Approvals and then shows the count; a count read before the page is drawn shows at once, and none waiting reads so. | 0.3 s | — | new |

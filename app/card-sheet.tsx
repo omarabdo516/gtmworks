@@ -1,16 +1,19 @@
 'use client';
-import { useActionState, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useActionState, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from '@/lib/link';
 import { useI18n } from '@/lib/i18n-client';
 import { ShellIcon } from '@/components/shell-icon';
 import { BoardIcon } from '@/components/board-icon';
 import { leave } from '@/lib/motion';
+import { insertToken, tokenAtCaret } from '@/lib/composer-mentions.mjs';
+import { MentionPop, mentionSuggestions, newId, type CallableAgent, type CallablePerson, type Suggestion } from '@/app/conversation-composer';
 import { CardSheetChat, opensOn, type SheetChat } from '@/app/card-sheet-chat';
 import './log.css';
 import './sheet.css';
 
 type SheetTab='chat'|'log';
+type SuggestionList={token:{type:string,q:string,start:number,end:number},items:Suggestion[],index:number};
 // What the server reads for an open Card: its Log tab, drawn there, the number of its rows, whether an Agent called in
 // one of its notes is still working, and its Chat tab (#145).
 export type CardSheetData={id:number,log:ReactNode,count:number,working:boolean,chat:SheetChat};
@@ -22,11 +25,39 @@ const leaveMs=190;
 // dialog at the inline end, so the board behind it is inert, with the Card's head, its Chat and Log tabs and, on Log,
 // the note field. It opens on the tab the Card's chat calls for, with the keyboard in that tab's field. Closing slides it out first; then the board's own address comes back and the keyboard is on the Card.
 // send is the board's note action (work-actions.ts), handed in so this client file never imports the server module.
-export function CardSheet({slug,company,title,face,who,badge,sheet,canWrite,alone,message,send:sendNote}:{slug:string,company:string,title:string,face:ReactNode,who:ReactNode,badge:ReactNode,sheet:CardSheetData,canWrite:boolean,alone:boolean,message?:string,send:(form:FormData)=>Promise<unknown>}) {
+// The note field's "@" offers the Company's other Members and the Agents this Member sees (#154, #22), as a note is
+// written for the team; it offers no Commands, as the reference's note field does not.
+export function CardSheet({slug,company,title,face,who,badge,sheet,canWrite,alone,message,people=[],agents=[],send:sendNote}:{slug:string,company:string,title:string,face:ReactNode,who:ReactNode,badge:ReactNode,sheet:CardSheetData,canWrite:boolean,alone:boolean,message?:string,people?:CallablePerson[],agents?:CallableAgent[],send:(form:FormData)=>Promise<unknown>}) {
  const {t}=useI18n(); const router=useRouter();
  const box=useRef<HTMLDialogElement>(null); const logBox=useRef<HTMLDivElement>(null); const stopLeaving=useRef(()=>{}); const stick=useRef(true);
- const [tab,setTab]=useState<SheetTab>(opensOn(sheet.chat)); const [leaving,setLeaving]=useState(false); const [filled,setFilled]=useState(false);
- const [,send,sending]=useActionState(async(_:null,form:FormData)=>{ await sendNote(form); setFilled(false); return null; },null);
+ const [tab,setTab]=useState<SheetTab>(opensOn(sheet.chat)); const [leaving,setLeaving]=useState(false);
+ // The note and its suggestion list. The caret follows a pick, as the reference's pickPop leaves it.
+ const [note,setNote]=useState(''); const [list,setList]=useState<SuggestionList|null>(null); const [listId]=useState(()=>`mention-note-${newId()}`);
+ const noteField=useRef<HTMLTextAreaElement>(null); const caret=useRef<number|null>(null);
+ const [,send,sending]=useActionState(async(_:null,form:FormData)=>{ await sendNote(form); setNote(''); setList(null); return null; },null);
+ useEffect(()=>{ const field=noteField.current; if(caret.current===null||!field) return; field.focus(); field.setSelectionRange(caret.current,caret.current); caret.current=null; },[note]);
+ function updateList(value:string,at:number) {
+  const token=tokenAtCaret(value,at);
+  if(!token) { setList(null); return; }
+  const items=mentionSuggestions({people,agents},token,false);
+  if(!items.length) { setList(null); return; }
+  setList({token,items,index:0});
+ }
+ function pickEntry(at:number) {
+  if(!list) return;
+  const chosen=list.items[at]; if(!chosen) return;
+  const next=insertToken(note,list.token,chosen.insert);
+  caret.current=next.caret; setNote(next.value); setList(null);
+ }
+ const noteKeys=(event:KeyboardEvent<HTMLTextAreaElement>)=>{
+  if(list) {
+   if(event.key==='ArrowDown') { event.preventDefault(); setList(current=>current&&{...current,index:(current.index+1)%current.items.length}); return; }
+   if(event.key==='ArrowUp') { event.preventDefault(); setList(current=>current&&{...current,index:(current.index-1+current.items.length)%current.items.length}); return; }
+   if(event.key==='Enter'||event.key==='Tab') { event.preventDefault(); pickEntry(list.index); return; }
+   if(event.key==='Escape') { event.preventDefault(); event.stopPropagation(); setList(null); return; }
+  }
+  if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing) { event.preventDefault(); if(note.trim()&&!sending) event.currentTarget.form?.requestSubmit(); }
+ };
  const board=`/c/${slug}/work/board`;
  useLayoutEffect(()=>{
   if(!box.current?.open) box.current?.showModal();
@@ -68,12 +99,13 @@ export function CardSheet({slug,company,title,face,who,badge,sheet,canWrite,alon
     <div className="composer-area">{message&&<p role="alert" className="composer-error">{message}</p>}{canWrite?<>
      <form className="composer note-composer" action={send}>
       <input type="hidden" name="op" value="comment"/><input type="hidden" name="slug" value={slug}/><input type="hidden" name="company" value={company}/><input type="hidden" name="card" value={sheet.id}/><input type="hidden" name="view" value="sheet"/>
+      {list&&<MentionPop listId={listId} label={t('mentionCallSomeone')} items={list.items} index={list.index} pick={pickEntry}/>}
       <div className="composer__row">
        <label className="sr-only" htmlFor="ta-note">{t('sheetNoteLabel')}</label>
-       <textarea className="composer__input" id="ta-note" name="body" rows={1} dir="auto" required readOnly={sending} placeholder={t(alone?'notePlaceholderAlone':'notePlaceholderTeam')} aria-describedby="note-hint"
-        onInput={event=>setFilled(!!event.currentTarget.value.trim())}
-        onKeyDown={event=>{ if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing) { event.preventDefault(); if(filled&&!sending) event.currentTarget.form?.requestSubmit(); } }}/>
-       <button type="submit" className="composer__send" aria-label={t('sheetNoteSend')} disabled={!filled||sending}><ShellIcon name="send"/></button>
+       <textarea ref={noteField} className="composer__input" id="ta-note" name="body" rows={1} dir="auto" required readOnly={sending} placeholder={t(alone?'notePlaceholderAlone':'notePlaceholderTeam')} aria-describedby="note-hint"
+        value={note} aria-autocomplete="list" aria-expanded={!!list} aria-activedescendant={list?`${listId}-${list.index}`:undefined}
+        onChange={event=>{ const value=event.target.value; setNote(value); updateList(value,event.target.selectionStart??value.length); }} onKeyDown={noteKeys}/>
+       <button type="submit" className="composer__send" aria-label={t('sheetNoteSend')} disabled={!note.trim()||sending}><ShellIcon name="send"/></button>
       </div>
      </form>
      <p className="note-hint" id="note-hint"><BoardIcon name="clock"/><span>{t('noteHint')}</span></p>

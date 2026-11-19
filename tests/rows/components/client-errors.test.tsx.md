@@ -1,0 +1,1 @@
+| `components/client-errors.test.tsx` | An error thrown in the page is sent to `/api/client-errors` with its message, stack and page, from the listener its module attaches when it loads, before anything renders. (#218; the app-level reports stay in app.spec.ts) | 0.1 s | unit.test.mjs (what the endpoint logs and answers) | new |

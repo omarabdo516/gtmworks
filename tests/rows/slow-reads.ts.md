@@ -1,0 +1,1 @@
+| `slow-reads.ts` | browser helper: slows a table's reads for signed-in people, holds a page's requests until a click or delivers each one whole, and records each loading placeholder a person saw on every document the page opened (#172) | — | — | helper, new |

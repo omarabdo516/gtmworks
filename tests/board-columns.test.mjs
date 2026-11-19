@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { boardColumns, chatWait, columnOf, keyboardTarget, blockReason, cardAgent, inEdgeBand, onCard, visibleApprovals, waitingCount, chatPlace } from '../lib/board-columns.mjs';
+import { boardColumns, chatWait, columnOf, keyboardTarget, blockReason, cardAgent, inEdgeBand, scrollAxes, onCard, visibleApprovals, waitingCount, chatPlace, orderColumn, placeByOne, placeOrder, placeChanges } from '../lib/board-columns.mjs';
 
 test('the six columns keep the approved order, Waiting on you first', () => {
  assert.deepEqual(boardColumns, ['waiting', 'ideas', 'planned', 'progress', 'live', 'done']);
@@ -85,6 +85,43 @@ test('a card its chat holds in Waiting on you is left by the chat, not by a deci
  assert.equal(blockReason('ideas', 'waiting', true), 'waiting');
 });
 
+// #174: a Card keeps its own place in its column, and "Waiting on you" keeps its own order, newest first (ADR 0013).
+test('a column is drawn in the order each Card was given, Waiting on you newest first', () => {
+ const cards = [
+  { id: 3, column: 'ideas', board_order: 3, created_at: '2026-11-02T09:00:00+00:00' },
+  { id: 1, column: 'ideas', board_order: 1, created_at: '2026-11-01T09:00:00+00:00' },
+  { id: 2, column: 'ideas', board_order: 2, created_at: '2026-11-03T09:00:00+00:00' },
+ ];
+ assert.deepEqual(orderColumn(cards, 'ideas'), [1, 2, 3]);
+ assert.deepEqual(orderColumn([...cards, { id: 9, board_order: 2, created_at: '2026-11-04T09:00:00+00:00' }], 'ideas'), [1, 2, 9, 3], 'the older Card comes first when two share a place');
+ assert.deepEqual(orderColumn(cards, 'waiting'), [2, 3, 1], 'Waiting on you is newest first, whatever places its Cards hold');
+ assert.deepEqual(orderColumn([{ id: 4, board_order: 1 }, { id: 5, board_order: 2 }], 'ideas'), [4, 5], 'a Card with no moment yet is read by its place');
+});
+
+test('Shift with Up or Down moves a Card one place in its column, and nothing happens at either end', () => {
+ assert.deepEqual(orderColumn([], 'ideas'), []);
+ // Moving up lands above the Card before it; moving down above the Card after the next one, or at the end.
+ assert.equal(placeByOne([1, 2, 3], 2, 'ArrowUp'), 1);
+ assert.equal(placeByOne([1, 2, 3], 2, 'ArrowDown'), null);
+ assert.equal(placeByOne([1, 2, 3], 1, 'ArrowUp'), undefined, 'the first Card has nowhere above it');
+ assert.equal(placeByOne([1, 2, 3], 3, 'ArrowDown'), undefined, 'the last Card has nowhere below it');
+ assert.equal(placeByOne([1, 2, 3], 1, 'ArrowDown'), 3);
+ assert.equal(placeByOne([1, 2, 3], 2, 'ArrowLeft'), undefined, 'another key places nothing');
+ assert.equal(placeByOne([1, 2, 3], 7, 'ArrowUp'), undefined, 'a Card the column does not hold');
+});
+
+test('a place before a Card or at the column\'s end gives the column\'s new order, and a drop on its own place changes nothing', () => {
+ assert.deepEqual(placeOrder([1, 2, 3], 3, null), [1, 2, 3]);
+ assert.deepEqual(placeOrder([1, 2, 3], 3, 1), [3, 1, 2], 'carried to the top');
+ assert.deepEqual(placeOrder([1, 2, 3], 1, 3), [2, 1, 3], 'carried above the last Card');
+ assert.deepEqual(placeOrder([1, 2, 3], 1, 2), [1, 2, 3], 'a drop on its own place');
+ assert.deepEqual(placeOrder([1, 2, 3, 4], 4, 2), [1, 4, 2, 3], 'into the middle');
+ assert.equal(placeChanges([1, 2, 3], 1, 2), false);
+ assert.equal(placeChanges([1, 2, 3], 3, null), false);
+ assert.equal(placeChanges([1, 2, 3], 1, null), true);
+ assert.equal(placeChanges([1, 2, 3], 2, 1), true);
+});
+
 test('a card belongs to its first assigned Agent, else to its next actor when that is an Agent', () => {
  const agents = new Set(['writer', 'lead']);
  assert.equal(cardAgent({ id: 1, next_actor: 'lead' }, [{ card_id: 1, person_id: 'person' }, { card_id: 1, person_id: 'writer' }], agents), 'writer');
@@ -106,6 +143,20 @@ test('a drag scrolls a box by itself only while the finger is in the box\'s own 
  assert.equal(inEdgeBand(board, { x: 330, y: 450 }, { x: true, y: false }), true);
  assert.equal(inEdgeBand(board, { x: 20, y: 650 }, { x: false, y: true }), false);
  assert.equal(inEdgeBand(board, { x: 20, y: 850 }, { x: false, y: true }), true);
+});
+
+test('a box scrolls by itself on the axis it has room to scroll, not on the axis it merely spills over', () => {
+ // The board runs sideways; a pixel of spill downward must not hand a held Card the downward axis (#249).
+ const sideways = scrollAxes({ x: 1286, y: 1 });
+ assert.deepEqual(sideways, { x: true, y: false });
+ const board = { left: 0, right: 390, top: 400, bottom: 900, width: 390, height: 500 };
+ assert.equal(inEdgeBand(board, { x: 200, y: 499 }, sideways), false, 'the top band of a box that scrolls sideways');
+ assert.equal(inEdgeBand(board, { x: 330, y: 650 }, sideways), true, 'its own side band');
+ assert.deepEqual(scrollAxes({ x: 0, y: 360 }), { x: false, y: true });
+ assert.deepEqual(scrollAxes({ x: 240, y: 360 }), { x: false, y: true });
+ assert.deepEqual(scrollAxes({ x: 0, y: 0 }), { x: false, y: false });
+ assert.deepEqual(scrollAxes({ x: -2, y: 0 }), { x: false, y: false }, 'past the edge is no room');
+ assert.deepEqual(scrollAxes({ x: 40, y: 40 }), { x: true, y: true }, 'equal room on both axes scrolls on both');
 });
 
 test('an approval on a Card of an Agent hidden from the reader is not counted, nor its waiting item', () => {

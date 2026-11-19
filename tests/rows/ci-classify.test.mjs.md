@@ -1,0 +1,1 @@
+| `ci-classify.test.mjs` | A red job is labelled infrastructure only by the known signature that ended it (a registry rate limit, a runner shutdown or a port in use where the job failed; a browser network change anywhere in the job), and every other red is "your change", over real failed job logs of 2026-11-16 in `ci-logs/`. (#256) | 0.1 s | — | new (#256) |

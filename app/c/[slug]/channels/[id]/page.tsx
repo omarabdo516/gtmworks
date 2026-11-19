@@ -21,6 +21,6 @@ export default async function ChannelPage({params}:{params:Promise<{slug:string,
  const {count:waitingCount}=await approvalQueue(db,company.id,user.id,membership?.role||'');
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  return <Shell company={company} companies={companies||[]} personId={user.id} section="channels" title={channelTitle(t,record.channel)} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={waitingCount} channelId={id}>
-  <main className="convo-page h-full"><ChannelView person={user.id} initial={record}/></main>
+  <main className="convo-page h-full"><ChannelView person={user.id} initial={record} slug={slug}/></main>
  </Shell>;
 }

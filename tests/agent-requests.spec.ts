@@ -22,7 +22,8 @@ let fake:Awaited<ReturnType<typeof fakeHermes>>;
 test.describe.configure({mode:'serial'});
 test.use({actionTimeout:15000});
 test.beforeAll(async({browser},testInfo)=>{
- freshSeed(testInfo.file);
+ // A retry, or a repeat of this serial file, starts it again from the seed, so its rows are inserted once.
+ freshSeed(testInfo.file,testInfo.retry>0||testInfo.repeatEachIndex>0);
  fake=await laneHermes();
  fake.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
  const page=await browser.newPage();
@@ -132,7 +133,8 @@ test('a Manager and a Contributor ask for an agent from the sidebar; a Viewer ha
   await tile.click();
   await expect(page).toHaveURL(/\/c\/rs-learning\/chat\?new=agent$/);
   await expect(page.locator('.new-hint[role="note"] .new-hint__t')).toHaveText('Tell Lead what you need an agent for, and it prepares the request for عمر.');
-  await expect(page.locator('.new-hint__alt')).toHaveCount(0);
+  // #189: every Member who may write reaches the ready-made gallery from the hint line.
+  await expect(page.locator('.new-hint__alt')).toHaveText('or pick a ready-made one');
   await expect(page.getByRole('textbox',{name:'Message'})).toBeFocused();
   await page.context().clearCookies();
  }

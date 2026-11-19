@@ -1,0 +1,1 @@
+| `engine-schema.json` | The pinned Engine v0.23.0's schema and defaults for the settings gtmworks lists, and the two source constants its schema lacks (`agent.reasoning_effort`, `tts.speed`), picked from the dumped image source. `engine-settings.test.mjs` pins the list to it. | — | engine-settings.test.mjs | new |

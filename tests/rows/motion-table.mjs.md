@@ -1,0 +1,1 @@
+| `motion-table.mjs` | data: the parts whose motion is the reference's, as reference rule against built rule, each with the markup the component test draws it in and, for a pressable part, its scale while held (#127, #128) | — | — | data, new |

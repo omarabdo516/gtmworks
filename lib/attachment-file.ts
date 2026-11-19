@@ -3,9 +3,10 @@ import { NextResponse } from 'next/server';
 import { attachmentHeaders } from './attachments.mjs';
 
 // Where a file is named: on a Card's messages, narrowed to one Card when `card` is given (a run key reaches its own Card's
-// files only), or in a Conversation (#21), which only its own person reads.
-export type AttachmentSource={from:'card',card?:number}|{from:'conversation'};
-const tables={card:'work_attachments',conversation:'conversation_attachments'} as const;
+// files only), in a Conversation (#21), which only its own person reads, or in a channel (#156), which every Member of
+// that channel reads.
+export type AttachmentSource={from:'card',card?:number}|{from:'conversation'}|{from:'channel'};
+const tables={card:'work_attachments',conversation:'conversation_attachments',channel:'channel_attachments'} as const;
 
 // The one place an attachment's bytes leave the private bucket. The caller passes a client that acts as the asking person
 // or agent: the attachment row and the storage object are both read through it, so row level security decides who gets here.

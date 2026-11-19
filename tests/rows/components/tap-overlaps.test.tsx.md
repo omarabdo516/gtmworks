@@ -1,0 +1,1 @@
+| `components/tap-overlaps.test.tsx` | The tap-overlap measure used by the phone checks counts what really overlaps: a fixed footer over a list item, an absolute child escaping a parent that clips, a target overflowing a box clipped on the other axis, and nothing for an item its list cuts off. (moved from tap-overlaps.spec.ts, #218) | 0.02 s | — | new |

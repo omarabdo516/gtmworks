@@ -49,9 +49,10 @@ for (const config of readdirSync('.').filter(name => /^playwright(\.[a-z]+)?\.co
  browserFiles(browser.suites);
 }
 
-// Playwright's approved images (`<spec>-snapshots/`), the failed job logs `ci-classify.test.mjs` reads (`tests/ci-logs/`)
-// and the visual lane's screens, images and renderer (`tests/visual-lane/`) are data for a test, not tests.
-const specData = path => /(^|\/)[^/]+-snapshots\//.test(path) || (/^tests\/(ci-logs|visual-lane)\//.test(path) && !/\.(test|spec)\.[^/]+$/.test(path));
+// Playwright's approved images (`<spec>-snapshots/`), the failed job logs `ci-classify.test.mjs` reads (`tests/ci-logs/`),
+// the visual lane's screens, images and renderer (`tests/visual-lane/`) and each test file's row (`tests/rows/`, #229) are
+// data for a test, not tests.
+const specData = path => /(^|\/)[^/]+-snapshots\//.test(path) || /^tests\/rows\//.test(path) || (/^tests\/(ci-logs|visual-lane)\//.test(path) && !/\.(test|spec)\.[^/]+$/.test(path));
 const orphans = files().filter(path =>
  !specData(path) &&
  (/(^|\/)(tests?|__tests__)\//.test(path) || /\.(test|spec)\.[^/]+$/.test(path) || path.endsWith('.verify.sql')) &&

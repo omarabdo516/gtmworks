@@ -11,8 +11,8 @@
 .gw .fr__body { display: flex; flex-direction: column; align-items: center; overflow-y: auto; min-height: 0; overscroll-behavior: contain; padding: 48px 24px 64px; }
 .gw .fr__col { width: min(640px, 100%); margin-block: auto; display: grid; gap: 24px; }
 .gw .fr__col > * { animation: gw-rise var(--gw-dur-slow) var(--gw-ease-out) both; }
-.gw .fr__col > :nth-child(3) { animation-delay: 40ms; }
-.gw .fr__col > :nth-child(4) { animation-delay: 80ms; }
+.gw .fr__col > :nth-child(2) { animation-delay: 40ms; }
+.gw .fr__col > :nth-child(3) { animation-delay: 80ms; }
 .gw .fr__head { display: grid; gap: 8px; }
 .gw .fr__eyebrow { font-size: var(--gw-fs-sm); line-height: 1.5; color: var(--gw-text-3); }
 .gw .fr__title { font-size: var(--gw-fs-xl); line-height: 1.4; font-weight: 600; }
@@ -47,10 +47,43 @@
 .gw .fr .btn--primary { background: var(--gw-primary); color: var(--gw-on-primary); cursor: pointer; }
 .gw .fr .btn--primary:disabled { background: var(--gw-primary-disabled); color: var(--gw-text-4); cursor: default; }
 @media (hover: hover) { .gw .fr .btn--primary:hover:not(:disabled) { background: var(--gw-primary-hover); } }
+.gw .fr .btn--secondary { background: var(--gw-btn2-bg); color: var(--gw-text-1); box-shadow: var(--gw-btn2-ring) 0 0 0 1px inset; cursor: pointer; }
+.gw .fr .btn--secondary:disabled { background: var(--gw-primary-disabled); color: var(--gw-text-4); box-shadow: none; cursor: default; }
+@media (hover: hover) { .gw .fr .btn--secondary:hover:not(:disabled) { background: var(--gw-btn2-hover); } }
+/* Step two (#186; design-reference: .fr__back, .fr-rows, .fr-row, .fr-row__rm, .fr-add, .fr-roles, .set-*). */
+.gw .fr .link-btn { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border: 0; border-radius: var(--gw-r-xs); background: none; font: inherit; font-size: var(--gw-fs-sm); color: var(--gw-text-2); cursor: pointer; }
+.gw .fr .link-btn .gw-icon { width: 14px; height: 14px; }
+@media (hover: hover) { .gw .fr .link-btn:hover { background: var(--gw-bg-hover); color: var(--gw-text-1); } }
+.gw .fr__back { justify-self: start; margin-inline-start: -6px; margin-bottom: 4px; }
+.gw .fr-rows { display: grid; gap: 16px; }
+.gw .fr-row { display: grid; grid-template-columns: minmax(0, 1fr) 168px 36px; gap: 12px; align-items: start; }
+.gw .fr-row__rm { margin-top: 23px; }
+/* The Role keeps the select's own arrow, as the reference's plain select does. */
+.gw .fr-row select.set-input { appearance: auto; }
+.gw .fr-row__rm.od-spacer { display: block; width: 36px; height: 36px; }
+.gw .fr-add { margin-inline-start: -6px; }
+.gw .fr-roles { margin: 0; display: grid; gap: 4px; padding: 12px 16px; border-radius: var(--gw-r-md); background: var(--gw-bg-pane); border: 0.5px solid var(--gw-border-3); }
+.gw .fr-roles__r { display: flex; gap: 12px; font-size: var(--gw-fs-sm); line-height: 1.6; }
+.gw .fr-roles dt { flex: none; min-width: 64px; font-weight: 600; color: var(--gw-text-1); }
+.gw .fr-roles dd { margin: 0; color: var(--gw-text-2); }
+.gw .fr .set-field { display: grid; gap: 6px; }
+.gw .fr .set-label { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-2); }
+.gw .fr .set-input {
+  display: block; width: 100%; height: 34px; min-height: 0; padding: 0 10px; border-radius: var(--gw-r-sm); border: 0.5px solid var(--gw-border-2);
+  background: var(--gw-bg-pane); color: var(--gw-text-1); font: inherit; font-size: var(--gw-fs-sm); outline: none; box-shadow: none;
+  transition: border-color var(--gw-dur-fast) var(--gw-ease-out), box-shadow var(--gw-dur-fast) var(--gw-ease-out);
+}
+.gw .fr .set-input:focus { border-color: var(--gw-border-1); box-shadow: 0 0 0 3px var(--gw-bg-active); }
+.gw .fr .set-input::placeholder { color: var(--gw-text-4); opacity: 1; }
+.gw .fr .set-err { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-danger-text); }
 @media (max-width: 639px) {
   .gw .fr__bar { padding-inline: 16px; }
   .gw .fr__body { padding: 32px 16px 48px; }
   .gw .fr__choices { grid-template-columns: minmax(0, 1fr); }
+  .gw .fr-row { grid-template-columns: minmax(0, 1fr) 36px; }
+  .gw .fr-row > .set-field:first-child { grid-column: 1; grid-row: 1; }
+  .gw .fr-row > .set-field:nth-child(2) { grid-column: 1; grid-row: 2; }
+  .gw .fr-row__rm { grid-column: 2; grid-row: 1; }
   .gw .fr__actions .btn { flex: 1 1 0; min-width: 0; min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) { .gw .fr, .gw .fr__col > * { animation: none; } }
