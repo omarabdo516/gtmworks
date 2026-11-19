@@ -53,7 +53,7 @@ try {
  const company=first.id;
  assert.ok(company,'first run made the Proxy Company');
  // The record, not the install's environment, is where its Engine comes from.
- const record=await checked(service.from('company_engines').select('address').eq('company_id',company).single());
+ const record=await checked(service.from('company_engines').select('address').eq('id',first.engine_id).single());
  assert.equal(record.address,engineAddress,'the first Company has the install Engine record');
 
  const until=async(what,read,seconds)=>{

@@ -549,7 +549,7 @@ jobs:
           if grep -q '^HERMES_API_KEY=' .env.install; then fail '.env.install holds no Engine key'; fi
           engine_address=http://gtmworks-engine-first:8642
           engine_management=http://gtmworks-engine-first:9119
-          [[ $(db -c "select key_encrypted from public.company_engines where company_id='$company_id'") != "$engine_key" ]] || fail 'the Engine key is stored in plaintext'
+          [[ $(db -c "select key_encrypted from public.company_engines where id=(select engine_id from public.companies where id='$company_id')") != "$engine_key" ]] || fail 'the Engine key is stored in plaintext'
           compose exec -T -e EXPECTED_KEY="$engine_key" web \
             node --input-type=module -e "const {engineOf}=await import('/app/lib/company-engine.mjs'); const at=await engineOf('$company_id'); console.log(at?.address==='$engine_address'&&at?.key===process.env.EXPECTED_KEY?'record':'no');" \
             | grep -qx record || fail "the first Company's Engine is answered from its record"
@@ -1095,7 +1095,7 @@ jobs:
           fi
           compose exec -T -e EXPECTED_KEY="$key" web node --input-type=module -e "const {engineOf}=await import('/app/lib/company-engine.mjs'); const at=await engineOf('$company'); console.log(at?.address==='http://gtmworks-engine-first:8642'&&at?.key===process.env.EXPECTED_KEY?'record':'no');" \
             | grep -qx record || fail "the updated install's Company answers from its Engine record with the adopted key"
-          [[ $(db -c "select count(*) from public.company_engines e join public.companies c on c.id=e.company_id where c.id='$company'") == 1 ]] \
+          [[ $(db -c "select count(*) from public.company_engines e join public.companies c on c.engine_id=e.id where c.id='$company'") == 1 ]] \
             || fail 'the updated install keeps the Company Engine record'
           # #384: `gtmworks sign-in claude --company` reaches that Company's Engine and prints the provider's address; no
           # code is pasted, so the sign-in is not finished.

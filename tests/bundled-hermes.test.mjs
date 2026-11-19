@@ -285,6 +285,18 @@ test('the Engine network probe checks the install services by name and by their 
  assert.equal((ci.match(/-e INSTALL_SERVICE_IPS="\$\(install_service_ips\)"/g)||[]).length,3,'every Engine-network probe passes the addresses');
 });
 
+test('a Company names its Engine in one place: the record names no Company (#378, T3)', () => {
+ const migrations=readdirSync('supabase/migrations').filter(file=>file.endsWith('.sql')&&!file.endsWith('.verify.sql')).sort();
+ const oneLink=migrations.map(file=>[file,readFileSync(`supabase/migrations/${file}`,'utf8')]).filter(([,sql])=>sql.includes('drop column company_id')).at(-1);
+ assert.ok(oneLink,'a migration drops company_engines.company_id');
+ assert.match(oneLink[1],/alter table public\.company_engines drop column company_id/);
+ assert.match(oneLink[1],/unique \(engine_id\)/,'one Engine record serves one Company');
+ assert.match(oneLink[1],/not exists\(select 1 from public\.companies c where c\.engine_id=e\.id\)/,'a waiting Engine is one no Company names');
+ // Nothing new writes the dropped column: the seed names each Company's Engine on the Company.
+ assert.doesNotMatch(readFileSync('supabase/seed.sql','utf8'),/company_engines\s*\([^)]*company_id/);
+ assert.match(readFileSync('supabase/seed.sql','utf8'),/insert into public\.companies[\s\S]*engine_id/);
+});
+
 test('the threat model names every service-role holder the Engine work added (#378, X5)', () => {
  const doc=readFileSync('docs/threat-model.md','utf8');
  for(const name of ['lib/company-engine.mjs','app/api/dictation/route.ts','app/first-owner/submit/route.ts','scripts/company-add.mjs','scripts/company-list.mjs','scripts/install-engine.mjs']) {

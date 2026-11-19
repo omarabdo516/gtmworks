@@ -700,7 +700,7 @@ op_status() {
 # another Company's Engine. The record is where the app and the worker read the Engine, so the command reaches the same
 # Engine they do.
 engine_row() {
-  printf '%s\n' "select e.address,c.name from public.companies c join public.company_engines e on e.company_id=c.id where c.id::text=:'company' or lower(c.name)=lower(:'company') order by c.id limit 2;" \
+  printf '%s\n' "select e.address,c.name from public.companies c join public.company_engines e on e.id=c.engine_id where c.id::text=:'company' or lower(c.name)=lower(:'company') order by c.id limit 2;" \
     | compose exec -T db psql -X -U postgres -d postgres -At -v ON_ERROR_STOP=1 -v company="$1"
 }
 

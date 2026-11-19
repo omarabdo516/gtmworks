@@ -48,9 +48,11 @@ const checked=async()=>{
 const printLink=secret=>process.stdout.write(`First-Owner link for "${name}": ${ownerLink(appUrl('/').origin,secret)}\n`);
 const waitingLinks=async()=>{
  const links=await press(service.from('company_owner_links').select('id,company_name,engine_id,created_at').is('claimed_at',null).order('created_at'));
- const waiting=await press(service.from('company_engines').select('id').is('company_id',null));
- const engines=new Set(waiting.map(engine=>engine.id));
- return links.filter(link=>engines.has(link.engine_id));
+ // A waiting Engine is a record no Company names (#378, T3).
+ const named=await press(service.from('companies').select('engine_id').not('engine_id','is',null));
+ const engines=new Set((await press(service.from('company_engines').select('id'))).map(engine=>engine.id));
+ const taken=new Set(named.map(company=>company.engine_id));
+ return links.filter(link=>engines.has(link.engine_id)&&!taken.has(link.engine_id));
 };
 
 try {
@@ -91,9 +93,9 @@ try {
    }
   }
  } else if(mode==='drop') {
-  // A failed add leaves no record waiting for a Company that will never come.
+  // A failed add leaves no record waiting for a Company that will never come; a record a Company names is kept.
   if(!address) { sayError('An Engine address is needed to remove its waiting record.'); }
-  else await press(service.from('company_engines').delete().eq('address',address).is('company_id',null));
+  else for(const record of await press(service.from('company_engines').select('id').eq('address',address))) await removeEngine(service,{id:record.id});
  } else sayError('Usage: company-add.mjs check|add|drop --name <name> [--owner <email>] [--address <url>] | company-add.mjs link --name <name>');
 } catch(error) {
  sayError(`${error.message} Nothing was left behind.`);

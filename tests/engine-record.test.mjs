@@ -12,28 +12,39 @@ const company='10000000-0000-0000-0000-000000000001';
 const other='10000000-0000-0000-0000-000000000002';
 const key='install-engine-key-'.repeat(3);
 
-// A service-role client keeping the rows the database would: insert adds one, update changes it by id, delete removes a
-// waiting one, and a Company's record reads back by company_id as `maybeSingle` does. Naming a record from a Company's
-// row is the database trigger's own work: the store does it as the trigger does.
-const store=(rows=[])=>{
+// A service-role client keeping the rows the database would: insert adds one, update changes it, delete removes one, and
+// a Company names its Engine in `companies.engine_id` (#378, T3). A read is a chain that is awaited (`.limit`) or ends in
+// `.maybeSingle()`.
+const store=(rows=[],companies=[])=>{
  let next=0;
+ const list=name=>name==='companies'?companies:rows;
+ const query=name=>{
+  let column,value,is,limit;
+  const filter=row=>is?row[is[0]]===is[1]:row[column]===value;
+  const q={
+   select:()=>q,
+   eq:(c,v)=>{column=c;value=v;return q;},
+   is:(c,v)=>{is=[c,v];return q;},
+   limit:n=>{limit=n;return q;},
+   maybeSingle:async()=>({data:list(name).find(filter)??null,error:null}),
+   then:resolve=>{ let found=list(name).filter(filter); if(limit!==undefined) found=found.slice(0,limit); resolve({data:found,error:null}); },
+  };
+  return q;
+ };
  const table=name=>({
-  select:()=>({eq:(column,value)=>({maybeSingle:async()=>({data:rows.find(row=>row[column]===value)??null,error:null})})}),
+  ...query(name),
   insert:written=>({select:()=>({single:async()=>{ const row={...written,id:`engine-${++next}`}; rows.push(row); return {data:row,error:null}; }})}),
-  update:change=>({eq:async(column,value)=>{
-   if(name==='companies') { const row=rows.find(found=>found.id===change.engine_id); if(row) row.company_id=value; return {error:null}; }
-   const row=rows.find(found=>found[column]===value); if(row) Object.assign(row,change); return {error:null};
-  }}),
-  delete:()=>({eq:(column,value)=>({is:async(column2,value2)=>{ const at=rows.findIndex(row=>row[column]===value&&row[column2]===value2); if(at>=0) rows.splice(at,1); return {error:null}; }})}),
+  update:change=>({eq:async(column,value)=>{ const row=list(name).find(found=>found[column]===value); if(row) Object.assign(row,change); return {error:null}; }}),
+  delete:()=>({eq:async(column,value)=>{ const at=rows.findIndex(row=>row[column]===value); if(at>=0) rows.splice(at,1); return {error:null}; }}),
  });
- return {rows,from:table};
+ return {rows,companies,from:table};
 };
 
 test('an Engine is stored with its key encrypted, and its record answers only the address and the key', async () => {
  const saved=process.env.WEBHOOK_ENCRYPTION_KEY;
  process.env.WEBHOOK_ENCRYPTION_KEY=encryptionKey;
  try {
-  const db=store();
+  const db=store([],[{id:company,engine_id:null}]);
   const waiting=await registerEngine(db,{address:'http://hermes:8642',key});
   assert.equal(waiting.company,null,'a fresh install leaves the record waiting for first run');
   await attachEngine(db,{id:waiting.id,company});
@@ -55,7 +66,7 @@ test('a Company names the one record it is made on, and a failed add removes onl
  const saved=process.env.WEBHOOK_ENCRYPTION_KEY;
  process.env.WEBHOOK_ENCRYPTION_KEY=encryptionKey;
  try {
-  const db=store();
+  const db=store([],[{id:company,engine_id:null}]);
   const waiting=await registerEngine(db,{address:'http://hermes:8642',key});
   assert.equal(await engineRecord(db,company),null);
   await attachEngine(db,{id:waiting.id,company});
@@ -104,7 +115,8 @@ test('an install made before the Engine records adopts its one Company\'s Engine
   const freshRows=[];
   assert.deepEqual(await settleInstallEngine(database([],freshRows),{address:'http://gtmworks-engine-first:8642',key}),{registered:1,adopted:0});
   assert.equal(freshRows.length,1);
-  assert.equal(freshRows[0].company_id,null);
+  assert.equal(freshRows[0].address,'http://gtmworks-engine-first:8642');
+  assert.equal('company_id' in freshRows[0],false,'the record names no Company (#378, T3)');
   // An install of this release: every Company names its Engine and a record exists, so nothing is written.
   const attachedRows=[{id:'engine-1'}];
   assert.deepEqual(await settleInstallEngine(database([{id:company,engine_id:'engine-1'}],attachedRows),{address:'http://gtmworks-engine-first:8642',key}),{registered:0,adopted:0});

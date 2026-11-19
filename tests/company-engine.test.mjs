@@ -20,11 +20,15 @@ const engineNames=/BUNDLED_HERMES_URL|ENGINE_ADDRESS|ENGINE_KEY/;
 const encryptionKey='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
 const sources=()=>['app','lib','worker'].flatMap(folder=>readdirSync(folder,{recursive:true})
  .map(file=>join(folder,file)).filter(file=>/\.(mjs|cjs|js|mts|ts|tsx)$/.test(file)));
-// A service-role client that answers the Engine record: one row per Company, its key encrypted as the installer writes it.
+// A service-role client that answers the Engine record: the Company names its record (#378, T3), and the record holds
+// its address and key, encrypted as the installer writes it. `rows` is one entry per Company id.
 const records=rows=>{
  const asked=[];
+ const engineId=id=>`engine-${id}`;
  return {asked,from:table=>({select:()=>({eq:(column,value)=>({maybeSingle:async()=>{ asked.push({table,column,value});
-  return {data:rows[value]??null,error:null}; }})})})};
+  if(table==='companies') return {data:rows[value]?{engine_id:engineId(value)}:null,error:null};
+  const owner=Object.keys(rows).find(id=>engineId(id)===value);
+  return {data:owner?rows[owner]:null,error:null}; }})})})};
 };
 const recordFor=(address,key)=>({address,key_encrypted:encryptSecret(key,encryptionKey)});
 
@@ -40,7 +44,7 @@ test('no app, worker or library module reads an install-wide Engine address or k
   assert.deepEqual(await engineOf(company,db),{address:'http://hermes:8642',key:'k'.repeat(64)});
   // Another Company's record is its own: this one has none, so the module answers null, never the other's.
   assert.equal(await engineOf(other,db),null);
-  assert.deepEqual(db.asked,[{table:'company_engines',column:'company_id',value:company},{table:'company_engines',column:'company_id',value:other}]);
+  assert.deepEqual(db.asked,[{table:'companies',column:'id',value:company},{table:'company_engines',column:'id',value:`engine-${company}`},{table:'companies',column:'id',value:other}]);
   assert.equal(await engineOf(null,db),null);
   // A module with no database at all (a unit test) has no Engine to answer: no install-wide address or key is read.
   assert.equal(await engineOf(company,null),null);
