@@ -45,6 +45,8 @@ insert into decisions
  union all select 'public.settle_channel_permission(bigint,text)','exempt','the worker''s, callable by the service role only: it settles a channel''s permission request it was handed and writes its log row, private to the Member who decided it; it answers no Member'
  union all select 'public.mark_hand_done(uuid,uuid,bigint)','exempt','the Conversation''s own person marks a hand card of that Conversation done and writes its log row, on the chat''s Card when it has one (read under card_agent_visible), else private to that person; it answers no Card'
  union all select 'public.log_agent_event(uuid,uuid,text,uuid,text,jsonb)','exempt','callable inside the database only; it writes an Agent''s log row, which names no Card'
+ union all select fn,'exempt','an Owner or a Manager saves a field of an Agent''s settings page and writes that Agent''s log row, which names no Card; the caller is checked by check_agent_setting or check_agent_owner_setting' from unnest(array[
+  'public.log_agent_setting(uuid,uuid,text,text,text)','public.log_agent_instructions(uuid,uuid)']) fn
  union all select 'public.pin_run_history(uuid,uuid)','exempt','the worker''s, callable by the service role only: it reads when an Agent last moved from that Agent''s log rows, which name no Card, and answers the Conversation''s own messages'
  union all select 'public.agent_move_blocked(uuid)','exempt','callable inside the database only; it answers whether an Agent has running work, and names no Card'
  union all select fn,'exempt','reads only the waiting items of rule suggestions, which name no Card; the rule''s Agent is checked with can_see_agent' from unnest(array[
