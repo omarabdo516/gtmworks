@@ -14,7 +14,7 @@ const companyName = 'RS Learning';
 const command = `gtmworks sign-in claude --company "${companyName}"`;
 const signIns = (chatgpt: SubscriptionState, claude: SubscriptionState): CompanySignIns['signIns'] =>
   ({ 'openai-codex': { state: chatgpt, flow: 'device_code' }, anthropic: { state: claude, flow: 'external' } });
-const section = (props: { owner: boolean, available: boolean, signIns: CompanySignIns['signIns'] }, language: 'en' | 'ar' = 'en') =>
+const section = (props: { owner: boolean, available: boolean, signIns: CompanySignIns['signIns'], noEngine?: boolean }, language: 'en' | 'ar' = 'en') =>
   render(<LanguageProvider language={language}><CompanySubscriptions company="c-1" companyName={companyName} {...props}/></LanguageProvider>);
 const stateOf = (provider: string) => document.querySelector(`#sub-${provider}-state`)?.textContent;
 const buttons = () => [...document.querySelectorAll('#md-subscriptions button')].map(button => button.getAttribute('aria-label'));
@@ -59,6 +59,18 @@ test('a Company with no reachable Engine offers no sign-in control and says so',
     await expect.element(screen.getByText(language === 'en' ? en.signInNoProfile : ar.signInNoProfile)).toBeVisible();
     expect(buttons()).toEqual([]);
     expect(document.querySelector('#md-subscriptions code')).toBeNull();
+    await screen.unmount();
+  }
+});
+
+test('when the company\'s engine is not running, one notice says so in both languages and no sign-in action is offered', async () => {
+  for (const [language, text] of [['en', en.noEngine], ['ar', ar.noEngine]] as const) {
+    const screen = await section({ owner: true, available: false, signIns: null, noEngine: true }, language);
+    await expect.element(screen.getByRole('note')).toHaveTextContent(text);
+    expect(buttons()).toEqual([]);
+    expect(document.querySelector('#sub-openai-codex')).toBeNull();
+    expect(document.querySelector('#md-subscriptions code')).toBeNull();
+    expect(document.querySelector('#md-subscriptions > .set-hint')).toBeNull();
     await screen.unmount();
   }
 });

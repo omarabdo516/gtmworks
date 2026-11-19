@@ -335,5 +335,5 @@ function SoonSection({t,section,ro,subscriptions,keys,defaultModel,eachAgent,def
 // Engine (#384, ADR 0018): the state is read on the server from that Engine, and the Owner's buttons call
 // /api/company-sign-in, which checks the Owner again.
 function ModelsSubscriptions({company,companyName,owner,subscriptions}:{company:string,companyName:string,owner:boolean,subscriptions:Awaited<ReturnType<typeof readCompanySignIns>>|null}) {
- return <CompanySubscriptions company={company} companyName={companyName} owner={owner} available={subscriptions?.profiles!=null} signIns={subscriptions?.signIns??null}/>;
+ return <CompanySubscriptions company={company} companyName={companyName} owner={owner} available={subscriptions?.profiles!=null} signIns={subscriptions?.signIns??null} noEngine={subscriptions?.noEngine===true}/>;
 }

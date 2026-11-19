@@ -122,7 +122,7 @@ test('when the server cannot reach the agent engine the box keeps the text and s
  const screen = await box({ send: (message, sendKey) => postMessage({ company: 'co-1', conversation: 'cv-1', message, sendKey }) });
  await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), 'Are you there?');
  await screen.getByRole('button', { name: 'Send' }).click();
- await expect.element(screen.getByRole('alert')).toHaveTextContent('The agent engine could not be reached. Your message was not sent; it is still in the box.');
+ await expect.element(screen.getByRole('alert')).toHaveTextContent('The agent engine could not be reached. Your message was not sent; it is still in the box. Ask the install owner to start it.');
  await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('Are you there?');
 });
 

@@ -54,7 +54,7 @@ async function ask(body:object):Promise<{ok:boolean,body:Record<string,unknown>}
 const stateText:Record<SubscriptionState,string>={connected:'signInConnected',mainAgentOnly:'signInMainAgentOnly',someAgentsOnly:'signInSomeAgentsOnly',notConnected:'signInNotConnected'};
 // The Company's name in the command as the shell reads it back exactly, with the characters a double quote would expand.
 const quoted=(value:string)=>`"${value.replace(/[\\"$`]/g,char=>`\\${char}`)}"`;
-export function CompanySubscriptions({company,companyName,owner,available,signIns}:{company:string,companyName:string,owner:boolean,available:boolean,signIns:CompanySignIns['signIns']}) {
+export function CompanySubscriptions({company,companyName,owner,available,signIns,noEngine=false}:{company:string,companyName:string,owner:boolean,available:boolean,signIns:CompanySignIns['signIns'],noEngine?:boolean}) {
  const {t}=useI18n(); const router=useRouter();
  const [started,setStarted]=useState<Started|null>(null);
  const [note,setNote]=useState<{provider:Provider,key:string,alert?:boolean}|null>(null);
@@ -116,8 +116,9 @@ export function CompanySubscriptions({company,companyName,owner,available,signIn
   </div>;
  };
  return <section className="dp-sec" aria-labelledby="md-h-sub" id="md-subscriptions"><h4 className="dp-label" id="md-h-sub"><span>{t('settingsModelsSubs')}</span></h4>
-  {available?<div className="panel-card">{row('openai-codex',t('signInChatGPT'))}{row('anthropic',t('signInClaude'))}</div>
+  {noEngine?<p className="ro-note sov-warn" role="note" id="sub-no-engine"><SettingsIcon name="shield"/><span>{t('noEngine')}</span></p>
+   :available?<div className="panel-card">{row('openai-codex',t('signInChatGPT'))}{row('anthropic',t('signInClaude'))}</div>
    :<div className="panel-card"><p className="panel-empty">{t('signInNoProfile')}</p></div>}
-  <p className="set-hint">{t('signInHint')} {t('signInOneAccount')}</p>
+  {!noEngine&&<p className="set-hint">{t('signInHint')} {t('signInOneAccount')}</p>}
  </section>;
 }
