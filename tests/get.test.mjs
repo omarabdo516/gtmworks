@@ -80,6 +80,7 @@ case "$*" in
   [ -f "$DB_FILE.created" ] || date +%s%N > "$DB_FILE.created"
   cat "$DB_FILE.created"; exit 0;;
  'run --rm -i alpine:3.21 tar -xzOf - .env.install') cat > /dev/null; printf '%s\\n' "\${ARCHIVE_ENV:-SECRET=archived}"; exit 0;;
+ *'alpine:3.21 tar -xzOf - .engines/'*) printf 'ENGINE_KEY=%s\\n' "\${ARCHIVE_ENGINE_KEY:-${'a'.repeat(64)}}"; exit 0;;
  *'install-env.mjs missing') exit 0;;
  *'install-env.mjs validate complete')
   [ -z "\${ENV_INVALID:-}" ] || { echo 'SUPABASE_PUBLIC_URL must equal APP_ORIGIN' >&2; exit 1; }; exit 0;;
@@ -897,6 +898,10 @@ test('gtmworks restore --version checks the archive and asks before it replaces 
   [{ARCHIVE_ENTRIES:'var/lib/postgresql/data/\netc/postgresql-custom/\nvar/lib/storage/\n.env.install\nengines/first/\n.engines/first/.env\n.engines/second/.env'},['--yes'],/not a complete gtmworks backup: it does not hold every Company Engine\./],
   [{ARCHIVE_ENTRIES:'var/lib/postgresql/data/\netc/postgresql-custom/\nvar/lib/storage/\n.env.install\nopt/data/\nengines/first/\n.engines/first/.env'},['--yes'],/not a gtmworks backup: it holds one Engine's data at opt\/data and every Engine's data under engines\/\./],
   [{ARCHIVE_ENTRIES:'var/lib/postgresql/data/\netc/postgresql-custom/\nvar/lib/storage/\n.env.install\nengines/second/\n.engines/second/.env'},['--yes'],/not a complete gtmworks backup: it does not hold the first Engine\./],
+  // An Engine folder's name, and its whole file, are the installer's own (#378, X2): only a name like an Engine and a
+  // 64-hex ENGINE_KEY are trusted, before anything stops.
+  [{ARCHIVE_ENTRIES:'var/lib/postgresql/data/\netc/postgresql-custom/\nvar/lib/storage/\n.env.install\nengines/first/\n.engines/first/.env',ARCHIVE_ENGINE_KEY:'not-a-key'},['--yes'],/the Engine first has no usable key\./],
+  [{ARCHIVE_ENTRIES:'var/lib/postgresql/data/\netc/postgresql-custom/\nvar/lib/storage/\n.env.install\nengines/first/\n.engines/first/.env\nengines/Second_Engine/\n.engines/Second_Engine/.env'},['--yes'],/it names an Engine folder that is not usable \(Second_Engine\)\./],
  ];
  for(const [extra,flags,message] of cases) {
   m.clear();

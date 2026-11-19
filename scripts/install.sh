@@ -305,16 +305,15 @@ complete_env() {
 volumes() {
   mode=$1
   shift
-  engine_mounts=
+  set -- "$@"
   for name in $(engine_names); do
     volume=$(sed -n 's/^ENGINE_VOLUME=//p' "$(engine_folder "$name")/.env")
     test -n "$volume" || { echo "The Engine $name names no data volume: run sh scripts/install.sh." >&2; return 1; }
     if [ "$mode" = rw ]; then docker volume create "$volume" > /dev/null || return 1; fi
-    engine_mounts="$engine_mounts -v $volume:/engines/$name:$mode"
+    set -- -v "$volume:/engines/$name:$mode" "$@"
   done
-  # shellcheck disable=SC2086
   docker run --rm --volumes-from "$(compose ps -aq db)" --volumes-from "$(compose ps -aq storage)" \
-    --tmpfs /engines $engine_mounts "$@"
+    --tmpfs /engines "$@"
 }
 operation=${1:-install}
 if [ -n "$release_image" ]; then
@@ -391,6 +390,18 @@ elif [ "$operation" = restore ]; then
     test -z "$(printf '%s\n' "$engine_key_folders" | grep -vx first | grep .)" \
       || { echo 'The backup does not hold an Engine for every Company.' >&2; exit 1; }
   fi
+  # An archive is not trusted with an Engine folder's name or its whole file (#378, X2): each Engine folder is named like
+  # an Engine, and only its ENGINE_KEY is taken (64 hex characters), which this installer writes from below with this
+  # release's own ENGINE_NAME/ENGINE_VOLUME/ENGINE_NETWORK. A file that could point the install network or the database's
+  # volume at something else is never used.
+  for name in $engine_key_folders; do
+    printf '%s\n' "$name" | grep -Eq '^[a-z0-9-]+$' \
+      || { echo "The backup names an Engine folder that is not usable: $name" >&2; exit 1; }
+    key=$(docker run --rm -v "$PWD/.install-lock:/backup:ro" alpine:3.21 \
+      tar -xOzf /backup/backup.tgz ".engines/$name/.env" | sed -n 's/^ENGINE_KEY=//p') || exit 1
+    printf '%s\n' "$key" | grep -Eq '^[a-f0-9]{64}$' \
+      || { echo "The backup's Engine $name has no usable key." >&2; exit 1; }
+  done
   docker run --rm -v "$PWD/.install-lock:/backup:ro" alpine:3.21 \
     tar -xOzf /backup/backup.tgz .env.install > .env.install.tmp
   complete_env "$PWD/.env.install.tmp"
@@ -413,6 +424,16 @@ elif [ "$operation" = restore ]; then
    mkdir -p .engines
    docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/.install-lock:/backup:ro" -v "$PWD/.engines:/.engines" alpine:3.21 \
      tar -xzpf /backup/backup.tgz -C / .engines
+   # Only each Engine's key came from the archive (checked above): its own file is written here with this release's
+   # standard names, so a restored Engine always gets its own container, volume and network (#378, X2).
+   for name in $(engine_names); do
+     key=$(sed -n 's/^ENGINE_KEY=//p' "$(engine_folder "$name")/.env")
+     if [ "$name" = first ]; then
+       write_engine_env first "$key" "$engine_volume" "$(engine_container first)"
+     else
+       write_engine_env "$name" "$key" "$(engine_container "$name")" "$(engine_container "$name")"
+     fi
+   done
   fi
   if [ "$engines_layout" = yes ]; then
     # One folder per Engine (#386): each Engine's volume is mounted under its folder's name, emptied, and the archive's
@@ -441,6 +462,10 @@ elif [ "$operation" = restore ]; then
     ' sh "$hermes_data"
   fi
   mv .env.install.tmp .env.install
+  # The Engine's key is adopted before web and the worker are recreated (#378, X3): an archive made before #385 holds its
+  # key in .env.install, which the containers read their environment from, so the key moves into the Engine's own file
+  # first and the containers never start with it in their environment.
+  adopt_engine_key || return 1
   compose up -d --force-recreate --wait --wait-timeout 300
   engines_up
   # An archive made by this release already holds each Company's Engine record; one whose Companies name no Engine (an

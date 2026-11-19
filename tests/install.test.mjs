@@ -333,6 +333,7 @@ test('the install job backs up and restores every Company Engine, refuses an inc
   "printf 'HERMES_API_KEY=%s\\n' \"$before_engines_key\" >> \"$before_dir/.env.install\"",
   'rm -rf "$before_dir/engines" "$before_dir/.engines"',
   'tar -czf "$RUNNER_TEMP/before-engines.tgz" .env.install opt/data var/lib/postgresql/data etc/postgresql-custom var/lib/storage',
+  "fail \"the $service starts with no Engine key in its environment\"",
  ]) assert.ok(run.includes(text),text);
  // The two-Company proof starts from the profiles the job has just proven on two Engines, writes a code word into each
  // Company's own Engine, and backs up once.
@@ -683,14 +684,15 @@ test('restore refuses an archive it cannot fully restore before it changes anyth
 printf '%s\\n' "$*" >> "$COMMANDS"
 case "$*" in
  *'tar -tzf'*) printf '%s\\n' "$ARCHIVE_ENTRIES";;
+ *'tar -xOzf'*'.engines/'*) printf 'ENGINE_KEY=%s\\n' "\${ARCHIVE_ENGINE_KEY:-${'a'.repeat(64)}}";;
  *'exec -T db psql'*) echo t;;
 esac
 `,{mode:0o755});
  const commands=join(directory,'commands');
- const run=entries=>{
+ const run=(entries,key)=>{
   writeFileSync(commands,'');
   return {...spawnSync('sh',['scripts/install.sh','restore','backup.tgz'],{cwd:directory,
-   env:{...process.env,PATH:`${directory}/bin:${process.env.PATH}`,COMMANDS:commands,ARCHIVE_ENTRIES:entries},encoding:'utf8'}),
+   env:{...process.env,PATH:`${directory}/bin:${process.env.PATH}`,COMMANDS:commands,ARCHIVE_ENTRIES:entries,...(key?{ARCHIVE_ENGINE_KEY:key}:{})},encoding:'utf8'}),
    commands:readFileSync(commands,'utf8'),file:readFileSync(join(directory,'.env.install'),'utf8')};
  };
  const base='var/lib/postgresql/data/\netc/postgresql-custom/\nvar/lib/storage/\n.env.install';
@@ -713,6 +715,18 @@ esac
   assert.deepEqual(refused.commands.trimEnd().split('\n'),['run --rm -v '+join(directory,'.install-lock')+':/backup:ro alpine:3.21 tar -tzf /backup/backup.tgz'],label);
   assert.equal(refused.file,'original-private-key',label);
  }
+ // A key folder or key the installer will not trust is refused the same way, before anything stops or changes (#378,
+ // X2): a name that is not an Engine folder, and a key that is not 64 hex characters.
+ for(const [label,extra,key,message] of [
+  ['an Engine folder name that is not usable','.engines/first/.env\nengines/first/data\n.engines/Second_Engine/.env\nengines/Second_Engine/data',undefined,/not usable/],
+  ['an Engine key that is not usable','.engines/first/.env\nengines/first/data','not-a-key',/has no usable key/],
+ ]) {
+  const refused=run(`${base}\n${extra}`,key);
+  assert.equal(refused.status,1,`${label}: ${refused.stderr}`);
+  assert.match(refused.stderr,message,label);
+  assert.doesNotMatch(refused.commands,/stop|force-recreate|--volumes-from/,label);
+  assert.equal(refused.file,'original-private-key',label);
+ }
  assert.equal(existsSync(join(directory,'.install-lock')),false);
 });
 
@@ -730,7 +744,9 @@ test('an archive from before every Company had its own Engine restores as one En
  writeFileSync(join(directory,'.env.install'),'fresh keys',{mode:0o600});
  writeFileSync(join(tree,'.env.install'),secrets);
  const engineEnv=`ENGINE_NAME=gtmworks-engine-first\nENGINE_KEY=${'a1'.repeat(32)}\nENGINE_VOLUME=gtmworks-install_hermes\nENGINE_NETWORK=gtmworks-engine-first\n`;
- writeFileSync(join(tree,'.engines/first/.env'),engineEnv,{mode:0o600});
+ // The archived Engine file names the install's own database volume and network: only its key is taken, and the file is
+ // written again with this release's standard names (#378, X2).
+ writeFileSync(join(tree,'.engines/first/.env'),`ENGINE_NAME=gtmworks-engine-evil\nENGINE_KEY=${'a1'.repeat(32)}\nENGINE_VOLUME=gtmworks-install_database\nENGINE_NETWORK=gtmworks-install_default\n`,{mode:0o600});
  for(const path of paths) writeFileSync(join(tree,path,'saved'),'original',{mode:0o640});
  writeFileSync(join(tree,'opt/data/agents/SOUL.md'),'the team says this',{mode:0o600});
  const archive=join(directory,'before-engines.tgz');
@@ -804,7 +820,7 @@ test('an archive made before Hermes data was included restores, says what it lac
  appendFileSync(cwd+'/commands',JSON.stringify(args)+'\\n');
  if(args[0]==='compose') {
   if(args.includes('stop')) writeFileSync(cwd+'/stopped','yes');
-  if(args.includes('up')) writeFileSync(cwd+'/stopped','no');
+  if(args.includes('up')) { writeFileSync(cwd+'/stopped','no'); if(args.includes('--force-recreate')) writeFileSync(cwd+'/env-at-up',readFileSync(cwd+'/.env.install')); }
   if(args.includes('ps')) console.log(args.at(-1)+'-stopped');
   if(args.includes('psql')) console.log('t');
  } else if(args.includes('alpine:3.21')) {
@@ -832,6 +848,9 @@ test('an archive made before Hermes data was included restores, says what it lac
  // Engine's own file, as an update does (#385).
  assert.equal(readFileSync(join(directory,'.env.install'),'utf8'),`${secrets.replace(`\nHERMES_API_KEY=${'a1'.repeat(32)}`,'')}\n`);
  assert.equal(readFileSync(join(directory,'.engines/first/.env'),'utf8'),`ENGINE_NAME=gtmworks-engine-first\nENGINE_KEY=${'a1'.repeat(32)}\nENGINE_VOLUME=gtmworks-install_hermes\nENGINE_NETWORK=gtmworks-engine-first\n`);
+ // The key had left .env.install before web and the worker were recreated (#378, X3): a pre-#385 archive's key is
+ // never in their environment for even one start.
+ assert.doesNotMatch(readFileSync(join(directory,'env-at-up'),'utf8'),/HERMES_API_KEY=/, 'the containers start with no Engine key in their environment');
  for(const path of paths) assert.equal(readFileSync(join(directory,'volumes',path,'saved'),'utf8'),'original');
  // An entry outside the backup is still refused before anything is replaced.
  writeFileSync(join(directory,'.env.install'),'fresh keys');

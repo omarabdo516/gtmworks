@@ -556,6 +556,17 @@ check_archive() {
     [ -z "$other" ] \
       || fail "$archive is not a complete gtmworks backup: it names an Engine without its data (${other//$'\n'/ }). Nothing was changed."
   fi
+  # An Engine folder in the archive is named like an Engine and holds only its ENGINE_KEY (64 hex characters) (#378, X2).
+  # install.sh writes each Engine's own file from that key with this release's standard names; a name or a line that
+  # could point the install network or the database's volume at something else is refused before anything changes.
+  for name in $key_engines; do
+    printf '%s\n' "$name" | grep -Eq '^[a-z0-9-]+$' \
+      || fail "$archive is not a gtmworks backup: it names an Engine folder that is not usable ($name). Nothing was changed."
+    key=$(docker run --rm -i alpine:3.21 tar -xzOf - ".engines/$name/.env" < "$archive" 2> /dev/null | sed -n 's/^ENGINE_KEY=//p') \
+      || fail "$archive is not a gtmworks backup: the Engine $name cannot be read. Nothing was changed."
+    printf '%s\n' "$key" | grep -Eq '^[a-f0-9]{64}$' \
+      || fail "$archive is not a gtmworks backup: the Engine $name has no usable key. Nothing was changed."
+  done
 }
 # The archive's settings, checked as install.sh restore checks them (completed, then validated) but with the tool of the
 # release that will run them, before anything stops: a restore that refused them later would leave an empty install.

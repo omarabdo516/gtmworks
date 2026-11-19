@@ -880,6 +880,13 @@ jobs:
           [[ $(db -c 'select count(*) from public.companies') == 1 ]] || fail 'the one-Engine archive restores its one Company'
           [[ $(sed -n 's/^ENGINE_KEY=//p' .engines/first/.env) == "$before_engines_key" ]] || fail 'the one-Engine archive keeps the key it held in .env.install'
           if grep -q '^HERMES_API_KEY=' .env.install; then fail 'the restored install keeps no Engine key in .env.install'; fi
+          # The key left the app's and the worker's environment before they were recreated (#378, X3): a pre-#385
+          # archive's key is never in their environment for even one start.
+          for service in web worker; do
+            if docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$(compose ps -q "$service")" | grep -q '^HERMES_API_KEY='; then
+              fail "the $service starts with no Engine key in its environment"
+            fi
+          done
           [[ -n $(docker ps -q --filter 'name=^gtmworks-engine-first$') ]] || fail 'the restored install runs its one Engine'
           compose exec -T -e HERMES_API_KEY="$before_engines_key" -e HERMES_ADDRESS=http://gtmworks-engine-first:8642 -e HERMES_MANAGEMENT_ADDRESS=http://gtmworks-engine-first:9119 web \
             node --input-type=module - < scripts/check-install-conversation.mjs || fail 'the one Company answers on its own Engine after the restore'
