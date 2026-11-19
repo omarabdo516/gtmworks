@@ -80,12 +80,18 @@ export function isCurrentDraft(stamp: {agent:string,generation:number}|null) {
  return !!stamp && !!state && state.agent === stamp.agent && generation === stamp.generation;
 }
 
-// The Engine holds these values now: they are what was saved, and nothing is unsaved. A response to a draft that moved on
+// The Engine holds these values now: they are what was saved, and the submitted fields nothing changed since are unsaved
+// no more. A field the person edited while the save waited keeps that edit and the bar stays; `sent` is the snapshot the
+// request carried, so only a field whose draft still equals it takes the read-back. A response to a draft that moved on
 // (a stamp that is no longer current) changes nothing.
-/** @param {Values} saved @param {{agent:string,generation:number}|null} [stamp] */
-export function commitDraft(saved: Values, stamp: {agent:string,generation:number}|null = state ? { agent: state.agent, generation } : null) {
+/** @param {Values} saved @param {Values} [sent] @param {{agent:string,generation:number}|null} [stamp] */
+export function commitDraft(saved: Values, sent: Values = {}, stamp: {agent:string,generation:number}|null = state ? { agent: state.agent, generation } : null) {
  if (!state || !isCurrentDraft(stamp)) return;
- state = { agent: state.agent, saved: { ...state.saved, ...saved }, draft: { ...state.draft, ...saved } };
+ const draft = { ...state.draft };
+ for (const [key, value] of Object.entries(saved)) {
+  if (!Object.prototype.hasOwnProperty.call(sent, key) || state.draft[key] === sent[key]) draft[key] = value;
+ }
+ state = { agent: state.agent, saved: { ...state.saved, ...saved }, draft };
  emit();
 }
 

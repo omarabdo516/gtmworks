@@ -124,6 +124,24 @@ function DraftProbe({ agent }: { agent: string }) {
  return <p>{useDraftValue(agent, 'about', '')}</p>;
 }
 
+test('an edit made while Save waits survives the read-back and keeps the bar', async () => {
+ let respond!: (response: Response) => void;
+ const fetchSpy = vi.spyOn(window, 'fetch').mockImplementation(() => new Promise<Response>(resolve => { respond = resolve; }));
+ const screen = await agentPage('Runs the Meta ads.');
+ const field = screen.getByRole('textbox', { name: 'What Lead does' });
+ await field.fill('first');
+ await screen.getByRole('button', { name: 'Save', exact: true }).click();
+ await expect.poll(() => fetchSpy.mock.calls.length).toBe(1);
+ await field.fill('second');
+ respond(new Response(JSON.stringify({ saved: { about: 'first' } }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+ // The read-back is what was saved, so Cancel goes back to it; the later edit stays in the draft and the bar stays open.
+ await expect.element(field).toHaveValue('second');
+ await expect.poll(() => bar().hidden).toBe(false);
+ await screen.getByRole('button', { name: 'Cancel' }).click();
+ await expect.element(field).toHaveValue('first');
+ await expect.poll(() => bar().hidden).toBe(true);
+});
+
 for (const way of ['a section', 'All agents', 'the close button', 'Escape', 'the Memory tab'] as const) test(`leaving by ${way} while the draft differs keeps the page, flashes the bar and puts the focus on Save`, async () => {
  const screen = await agentPage();
  await screen.getByRole('textbox', { name: 'What Lead does' }).fill('Something else.');

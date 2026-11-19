@@ -137,19 +137,26 @@ export function AgentSaveBar({company,agent,name}:{company:string,agent:string,n
    const kept=answer?.saved&&typeof answer.saved==='object'?answer.saved as Record<string,unknown>:null;
    if(!response.ok||!kept) { setFailed(true); return; }
    const patch:Record<string,string>={};
+   const sent:Record<string,string>={};
    for(const key of Object.keys(changes)) {
     if(key==='voice') {
      const keptVoice=kept.voice as {language?:unknown,speed?:unknown,voice?:unknown}|null|undefined;
      if(!keptVoice||typeof keptVoice.language!=='string'||typeof keptVoice.speed!=='number') { setFailed(true); return; }
      patch['voice.language']=keptVoice.language;
      patch['voice.speed']=String(keptVoice.speed);
-     if(typeof keptVoice.voice==='string') patch['voice.voice']=keptVoice.voice;
+     sent['voice.language']=language;
+     sent['voice.speed']=speed;
+     if(typeof keptVoice.voice==='string') {
+      patch['voice.voice']=keptVoice.voice;
+      if(voice) sent['voice.voice']=voice;
+     }
     } else {
      if(typeof kept[key]!=='string') { setFailed(true); return; }
      patch[key]=kept[key] as string;
+     sent[key]=changed[key];
     }
    }
-   commitDraft(patch,stamp);
+   commitDraft(patch,sent,stamp);
    toast(t('settingsSaved',name));
   } catch { if(isCurrentDraft(stamp)) setFailed(true); } finally { setSaving(false); }
  };
