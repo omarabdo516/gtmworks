@@ -96,6 +96,10 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   // path a link points at, which is the entry itself unless it leaves the folder), and `fileBytes` holds the bytes
   // `/api/fs/download?path=` serves, by absolute file path. A folder not in `files` is not found.
   files:/** @type {Map<string,{name:string,isFolder?:boolean,size?:number,mtime?:number,resolves?:string,broken?:boolean}[]>} */(new Map()),
+  // The pictures a profile generated (#353), as the Engine's own folder `<profile home>/cache/generated/images`
+  // (agent/provider_media.py, GENERATED_SUBDIR, cache_dir) holds them. The Engine makes that folder when the first
+  // image lands and not before, so a profile with no entry here has no folder and `/api/files?path=` answers it 404.
+  images:/** @type {Map<string,{name:string,isFolder?:boolean,size?:number,mtime?:number,resolves?:string,broken?:boolean}[]>} */(new Map()),
   fileBytes:/** @type {Map<string,{body:string|Uint8Array,type?:string}>} */(new Map()),
   filesUnreadable:/** @type {Set<string>} */(new Set()),
   // The path `/api/files?path=` and `/api/fs/read-text?path=` answer with, when it is not the one asked for: a folder or
@@ -122,6 +126,10 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
  // The type the pinned release gives a managed file (mimetypes.guess_type, files.py _fs_mime_type).
  const mimeOf=name=>{const ext=(/\.([a-z0-9]+)$/i.exec(name)?.[1]||'').toLowerCase();
   return {png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',gif:'image/gif',webp:'image/webp',csv:'text/csv',md:'text/markdown',txt:'text/plain',json:'application/json'}[ext]||'application/octet-stream';};
+  // The entries of one folder: those a test set for it, or a profile's generated images folder (#353), which the Engine
+  // makes when its first image lands and not before — a profile with none has no such folder at all.
+  const generatedRoot=/^\/opt\/data\/profiles\/([^/]+)\/cache\/generated\/images$/;
+  const entriesAt=path=>{ const generated=generatedRoot.exec(path); return settings.files.get(path)??(generated?settings.images.get(generated[1]):undefined); };
  // The memory an Agent's profile holds (#350): MEMORY.md's entries first, then USER.md's, each named by its position in
  // the combined list and a digest of its text (agent/learning_graph.py memory_node_id, memory_fingerprint).
  const memoryCards=name=>{
@@ -262,7 +270,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     const path=(url.searchParams.get('path')||'').replace(/\/+$/,'');
     if(!path.startsWith('/opt/data/')) return send(response,403,{detail:'Path outside managed files root'});
     if(settings.filesUnreadable.has(path)) return send(response,500,{detail:'Could not read directory'});
-    const entries=settings.files.get(path);
+    const entries=entriesAt(path);
     if(!entries) return send(response,404,{detail:'Path not found'});
     return send(response,200,{path:settings.resolved.get(path)??path,parent:null,root:'/opt/data',locked_root:'/opt/data',can_change_path:false,entries:entries.map(entry=>{
      const folder=entry.isFolder===true;
@@ -277,7 +285,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     const path=url.searchParams.get('path')||'';
     if(!path.startsWith('/opt/data/')) return send(response,403,{detail:'Path outside managed files root'});
     const cut=path.lastIndexOf('/');
-    const entry=(settings.files.get(path.slice(0,cut))||[]).find(item=>item.name===path.slice(cut+1));
+    const entry=(entriesAt(path.slice(0,cut))||[]).find(item=>item.name===path.slice(cut+1));
     if(!entry||entry.broken) return send(response,404,{detail:'File not found'});
     if(entry.isFolder===true) return send(response,400,{detail:'Path points to a directory'});
     const file=settings.fileBytes.get(path)||{body:`the bytes of ${entry.name}`,type:mimeOf(entry.name)};
@@ -288,7 +296,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
    if(url.pathname==='/api/fs/download'&&['GET','HEAD'].includes(request.method)) {
     const path=url.searchParams.get('path')||'';
     const cut=path.lastIndexOf('/');
-    const entry=(settings.files.get(path.slice(0,cut))||[]).find(item=>item.name===path.slice(cut+1));
+    const entry=(entriesAt(path.slice(0,cut))||[]).find(item=>item.name===path.slice(cut+1));
     if(!entry||entry.broken) return send(response,404,{detail:'File not found'});
     if(entry.isFolder===true) return send(response,400,{detail:'Path points to a directory'});
     const file=settings.fileBytes.get(path)||{body:`the bytes of ${entry.name}`,type:mimeOf(entry.name)};

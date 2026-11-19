@@ -16,8 +16,9 @@ import './shell.css';
 // Download. The Engine reads the text and says whether more follows; the picture is drawn through the download route,
 // which serves inline only the raster types. A vector image or a page is never drawn. The foot says it is read-only and
 // carries Download, which is where the keyboard starts. Closing — the button, Escape or a press on the backdrop — runs
-// the reference's 190 ms leave and then hands the keyboard back to the file's row.
-export type PreviewFile={name:string,folder:string,size:number|null,time:string|null};
+// the reference's 190 ms leave and then hands the keyboard back to the file's row. A generated image is read by its own
+// Library root (#353), and the work folder by none.
+export type PreviewFile={name:string,folder:string,size:number|null,time:string|null,root?:'work'|'images'};
 type Body={kind:'image'|'text'|'table'|'none',type:string,byteSize:number,truncated:boolean,text:string|null};
 type Read={state:'loading'}|{state:'failed'}|{state:'found',body:Body};
 
@@ -32,13 +33,13 @@ export function AgentFilePreview({company,slug,agent,agentName,file,onClosed}:{c
 
  useEffect(()=>{
   let live=true;
-  const query=new URLSearchParams({company,agent,name:file.name,...(file.folder?{folder:file.folder}:{})});
+  const query=new URLSearchParams({company,agent,name:file.name,...(file.root==='images'?{root:'images'}:{}),...(file.folder?{folder:file.folder}:{})});
   void fetch(`/api/agent-files/preview?${query}`,{cache:'no-store'})
    .then(response=>response.ok?response.json():null)
    .then(body=>{ if(live) setRead(typeof body?.kind==='string'?{state:'found',body:body as Body}:{state:'failed'}); })
    .catch(()=>{ if(live) setRead({state:'failed'}); });
   return ()=>{ live=false; };
- },[company,agent,file.name,file.folder]);
+ },[company,agent,file.name,file.folder,file.root]);
 
  // The dialog is modal, so the page behind it is inert; the keyboard starts on Download, as the reference puts it.
  useLayoutEffect(()=>{
@@ -46,7 +47,7 @@ export function AgentFilePreview({company,slug,agent,agentName,file,onClosed}:{c
   downloadButton.current?.focus();
   return ()=>stopLeaving.current();
  },[]);
- const download=`/c/${encodeURIComponent(slug)}/agent-files/${encodeURIComponent(agent)}?${new URLSearchParams({...(file.folder?{folder:file.folder}:{}),name:file.name})}`;
+ const download=`/c/${encodeURIComponent(slug)}/agent-files/${encodeURIComponent(agent)}?${new URLSearchParams({...(file.root==='images'?{root:'images'}:{}),...(file.folder?{folder:file.folder}:{}),name:file.name})}`;
  const close=()=>{
   const dialog=box.current; if(!dialog?.open||leaving) return;
   stopLeaving.current=leave(leaveMs,()=>setLeaving(true),()=>dialog.close());

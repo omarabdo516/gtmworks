@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
-import { downloadAgentFile, listAgentFiles, readAgentFile, workSegments } from '../lib/hermes.mjs';
+import { downloadAgentFile, libraryRoot, listAgentFiles, readAgentFile, workSegments } from '../lib/hermes.mjs';
 import { agentFileDownload, agentLibrary } from '../lib/agent-files.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
@@ -20,6 +20,8 @@ const profile=`ag-${agent.replaceAll('-','')}`;
 const otherProfile=`ag-${otherAgent.replaceAll('-','')}`;
 const home=`/opt/data/profiles/${profile}`;
 const work=`${home}/workspace`;
+// The folder the Engine writes a generated image into (#353; agent/provider_media.py, GENERATED_SUBDIR, cache_dir).
+const images=`${home}/cache/generated/images`;
 const mtime=1763500000;
 const clock=new Date(mtime*1000).toISOString();
 const hermes=()=>({address:process.env.BUNDLED_HERMES_URL,key:process.env.HERMES_API_KEY});
@@ -161,6 +163,85 @@ test('one file of the work folder is fetched through gtmworks, with its type and
  } finally { await fake.close(); }
 });
 
+test('the generated images folder is the Library\'s second root, listed, downloaded and previewed from the Agent\'s own profile', async () => {
+ const {fake,at}=await engine();
+ try {
+  const png=new Uint8Array([137,80,78,71,0,1,2,3]);
+  fake.settings.images.set(profile,[{name:'promo.png',size:png.length,mtime}]);
+  fake.settings.fileBytes.set(`${images}/promo.png`,{body:png,type:'image/png'});
+  // The root is a name gtmworks chooses, never a path a browser sent: it builds `<profile home>/cache/generated/images`.
+  assert.deepEqual(await listAgentFiles(at,'','images'),{state:'found',entries:[{name:'promo.png',isFolder:false,size:png.length,time:clock}]});
+  assert.ok(fake.settings.managementRequests.some(request=>request.path===`/api/files?path=${encodeURIComponent(images)}`));
+  assert.ok(!JSON.stringify(await listAgentFiles(at,'','images')).includes('/opt/'),'no Engine path in the answer');
+  // One image is fetched through gtmworks, with its type and size, from the same guarded listing.
+  const file=await downloadAgentFile(at,{root:'images',name:'promo.png'});
+  assert.equal(file.state,'found');
+  if(file.state!=='found') return;
+  assert.equal(file.name,'promo.png');
+  assert.equal(file.type,'image/png');
+  assert.equal(file.size,png.length);
+  assert.deepEqual([...file.body], [...png]);
+  assert.ok(fake.settings.managementRequests.some(request=>request.path===`/api/fs/download?path=${encodeURIComponent(`${images}/promo.png`)}&profile=${profile}`));
+  // A picture has no text to preview: its bytes are the Engine's and its answer carries none of them as text.
+  assert.deepEqual(await readAgentFile(at,{root:'images',name:'promo.png'}),{state:'found',name:'promo.png',type:'image/png',byteSize:png.length,truncated:false,text:null});
+  // The two roots are read apart: the work folder never carries the generated image.
+  fake.settings.files.set(work,[{name:'brief.md',size:2,mtime}]);
+  assert.deepEqual((await listAgentFiles(at)).entries?.map(entry=>entry.name),['brief.md']);
+ } finally { await fake.close(); }
+});
+
+test('a profile with no generated image has an empty generated images folder, not a missing one', async () => {
+ const {fake,at}=await engine();
+ try {
+  // The Engine makes `<profile home>/cache/generated/images` when its first image lands, and `/api/files` answers a
+  // profile with none 404; the Library still reads it as the empty folder it is.
+  assert.equal(fake.settings.images.get(profile),undefined);
+  assert.deepEqual(await listAgentFiles(at,'','images'),{state:'found',entries:[]});
+  assert.ok(fake.settings.managementRequests.some(request=>request.path===`/api/files?path=${encodeURIComponent(images)}`),'the Engine was asked, and answered 404');
+  // A folder inside it is not made for it: only the generated images root itself is empty rather than missing.
+  assert.deepEqual(await listAgentFiles(at,'gone','images'),{state:'missing',entries:null});
+ } finally { await fake.close(); }
+});
+
+test('an unknown Library root is refused before the Engine is asked, and a work folder named images stays in the work folder', async () => {
+ const {fake,at}=await engine();
+ try {
+  for(const bad of ['workspace','/etc/passwd','Images','cache/generated/images','..','work/../images',42,null,{}]) {
+   assert.equal(libraryRoot(bad),null,`${String(bad)} is not a Library root`);
+   assert.deepEqual(await listAgentFiles(at,'',/** @type {any} */(bad)),{state:'invalid',entries:null});
+   assert.deepEqual(await downloadAgentFile(at,{root:/** @type {any} */(bad),name:'promo.png'}),{state:'invalid'});
+   assert.deepEqual(await readAgentFile(at,{root:/** @type {any} */(bad),name:'promo.png'}),{state:'invalid'});
+  }
+  assert.equal(fake.settings.managementRequests.length,0,'the Engine was never asked');
+  assert.equal(libraryRoot(undefined),'work','the work folder is the Library the reader opens first');
+  assert.equal(libraryRoot('work'),'work');
+  assert.equal(libraryRoot('images'),'images');
+  // The root is a parameter of its own, never a path segment: a work folder called `images` is read as that folder.
+  fake.settings.files.set(work,[{name:'images',isFolder:true}]);
+  fake.settings.files.set(`${work}/images`,[{name:'brief.md',size:2,mtime}]);
+  assert.deepEqual((await listAgentFiles(at,'images')).entries?.map(entry=>entry.name),['brief.md']);
+  assert.ok(fake.settings.managementRequests.some(request=>request.path===`/api/files?path=${encodeURIComponent(`${work}/images`)}`));
+  assert.ok(!fake.settings.managementRequests.some(request=>request.path===`/api/files?path=${encodeURIComponent(images)}`),'the generated images folder was never asked about');
+ } finally { await fake.close(); }
+});
+
+test('a generated images folder that is a link somewhere else is missing for the list, the download and the preview', async () => {
+ const {fake,at}=await engine();
+ try {
+  fake.settings.images.set(profile,[{name:'promo.png',size:8,mtime}]);
+  fake.settings.fileBytes.set(`${images}/promo.png`,{body:new Uint8Array(8),type:'image/png'});
+  fake.settings.resolved.set(images,'/etc');
+  assert.deepEqual(await listAgentFiles(at,'','images'),{state:'missing',entries:null});
+  assert.deepEqual(await downloadAgentFile(at,{root:'images',name:'promo.png'}),{state:'missing'});
+  assert.deepEqual(await readAgentFile(at,{root:'images',name:'promo.png'}),{state:'missing'});
+  assert.equal(downloaded(fake).length,0,'no bytes were asked for');
+  assert.ok(!fake.settings.managementRequests.some(request=>String(request.path).startsWith('/api/fs/read-text')),'no text was asked for');
+  // A folder the Engine does not have is still empty rather than missing once the link is gone, and not before.
+  fake.settings.resolved.delete(images);
+  assert.deepEqual(await listAgentFiles(at,'','images'),{state:'found',entries:[{name:'promo.png',isFolder:false,size:8,time:clock}]});
+ } finally { await fake.close(); }
+});
+
 test('the list route answers an Owner and a Manager, refuses a Contributor and a Viewer, and does not find a hidden Agent or another Company\'s', async () => {
  const {fake}=await engine();
  try {
@@ -198,8 +279,16 @@ test('the list route answers an Owner and a Manager, refuses a Contributor and a
   }
   // A signed-out reader, a bad folder name and a missing parameter are refused before any Engine call.
   assert.equal((await ask(route(database({signedIn:null}).db),{company,agent})).status,401);
+  // The generated images folder (#353) is asked for by its own root, and it lists like any other folder.
+  fake.settings.images.set(profile,[{name:'promo.png',size:8,mtime}]);
+  const generated=await ask(route(database().db),{company,agent,root:'images'});
+  assert.equal(generated.status,200);
+  assert.deepEqual(await generated.json(),{folder:'',entries:[{name:'promo.png',isFolder:false,size:8,time:clock,files:null,latest:null}]});
+  assert.ok(!JSON.stringify(await (await ask(route(database().db),{company,agent,root:'images'})).json()).includes('/opt/'),'no path in the images answer');
   const before=fake.settings.managementRequests.length;
   assert.equal((await ask(route(database().db),{company,agent,folder:'../secret'})).status,400);
+  assert.equal((await ask(route(database().db),{company,agent,root:'elsewhere'})).status,400,'a root that is neither work nor images');
+  assert.equal((await ask(route(database().db),{company,agent,root:'cache/generated/images'})).status,400,'a path is never a root');
   assert.equal((await ask(route(database().db),{agent})).status,400);
   assert.equal(fake.settings.managementRequests.length,before,'the Engine was never asked');
  } finally { await fake.close(); }
@@ -238,6 +327,18 @@ test('the download route serves the bytes as an attachment to an Owner and a Man
   assert.equal((await ask(route(database({role:'viewer'}).db),{name:'brief.md'})).status,403);
   assert.equal((await ask(route(database({role:null}).db),{name:'brief.md'})).status,404);
   assert.equal((await ask(route(database({agents:[]}).db),{name:'brief.md'})).status,404);
+  // A generated image downloads through the same route, inline as a raster is, and only by its own root (#353).
+  fake.settings.images.set(profile,[{name:'promo.png',size:3,mtime}]);
+  fake.settings.fileBytes.set(`${images}/promo.png`,{body:new Uint8Array([1,2,3]),type:'image/png'});
+  const shot=await ask(route(database().db),{name:'promo.png',root:'images'});
+  assert.equal(shot.status,200);
+  assert.equal(shot.headers.get('content-type'),'image/png');
+  assert.equal(shot.headers.get('content-disposition'),"inline; filename*=UTF-8''promo.png");
+  assert.deepEqual([...new Uint8Array(await shot.arrayBuffer())],[1,2,3]);
+  // A root that is neither work nor images is refused, and no bytes are asked for.
+  const imagesBefore=downloaded(fake).length;
+  assert.equal((await ask(route(database().db),{name:'promo.png',root:'elsewhere'})).status,400);
+  assert.equal(downloaded(fake).length,imagesBefore);
   // Another Company's Agent is not found: its Company answers for its own Agents only.
   const elsewhere=database({companyRow:{id:otherCompany},agents:[{agent,name:'Elsewhere',connection:'c',profile:otherProfile,main:true,own:true}]});
   assert.equal((await ask(route(elsewhere.db),{name:'brief.md'})).status,404);
@@ -268,5 +369,13 @@ test('the Library service reads one Agent\'s folder for the Company that sees it
   const file=await agentFileDownload(database().db,{company,agent,hermes:at,name:'brief.md'});
   assert.equal(file.state,'found');
   assert.deepEqual(await agentFileDownload(database({agents:[]}).db,{company,agent,hermes:at,name:'brief.md'}),{state:'missing'});
+  // The generated images folder (#353) is the Library's second root, read for the Company that sees the Agent and only
+  // there: it lists its images, and one of them downloads.
+  fake.settings.images.set(profile,[{name:'promo.png',size:8,mtime}]);
+  assert.deepEqual(await agentLibrary(database().db,{company,agent,root:'images',hermes:at}),{state:'found',entries:[{name:'promo.png',isFolder:false,size:8,time:clock,files:null,latest:null}]});
+  const before=fake.settings.managementRequests.length;
+  assert.deepEqual(await agentLibrary(database().db,{company,agent,root:'elsewhere',hermes:at}),{state:'invalid',entries:null});
+  assert.deepEqual(await agentFileDownload(database().db,{company,agent,root:'elsewhere',name:'promo.png',hermes:at}),{state:'invalid'});
+  assert.equal(fake.settings.managementRequests.length,before,'a root that is not one of the Library\'s never reaches the Engine');
  } finally { await fake.close(); }
 });

@@ -41,7 +41,7 @@ const engine = () => vi.stubGlobal('fetch', vi.fn(async (input: string | URL | R
   return body ? new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
    : new Response(JSON.stringify({ error: 'agentLibraryMissing' }), { status: 404 });
  }
- return new Response(JSON.stringify({ folder: '', entries: rows }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+ return new Response(JSON.stringify({ folder: '', entries: url.searchParams.get('root') === 'images' ? [] : rows }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 }));
 afterEach(() => { vi.unstubAllGlobals(); toast.mockClear(); });
 

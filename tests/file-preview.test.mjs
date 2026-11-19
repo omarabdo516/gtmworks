@@ -22,6 +22,8 @@ const profile=`ag-${agent.replaceAll('-','')}`;
 const otherProfile=`ag-${otherAgent.replaceAll('-','')}`;
 const home=`/opt/data/profiles/${profile}`;
 const work=`${home}/workspace`;
+// The folder the Engine writes a generated image into (#353; agent/provider_media.py, GENERATED_SUBDIR, cache_dir).
+const images=`${home}/cache/generated/images`;
 const mtime=1763500000;
 const clock=new Date(mtime*1000).toISOString();
 const hermes=()=>({address:process.env.BUNDLED_HERMES_URL,key:process.env.HERMES_API_KEY});
@@ -168,6 +170,13 @@ test('the preview service reads one Agent\'s file for the Company that sees it, 
   assert.deepEqual(await agentFilePreview(database({agents:[]}).db,{company,agent,hermes:at,name:'brief.md'}),{state:'missing',preview:null});
   assert.deepEqual(await agentFilePreview(database().db,{company:otherCompany,agent,hermes:at,name:'brief.md'}),{state:'missing',preview:null});
   assert.deepEqual(await agentFilePreview(database().db,{company,agent,hermes:null,name:'brief.md'}),{state:'missing',preview:null});
+  // A generated image (#353) previews from its own root as any other raster does, with no read of its bytes.
+  fake.settings.images.set(profile,[{name:'promo.png',size:8,mtime}]);
+  const reads=texts(fake).length;
+  assert.deepEqual((await agentFilePreview(database().db,{company,agent,root:'images',hermes:at,name:'promo.png'})).preview,{name:'promo.png',kind:'image',type:'image/png',byteSize:8,truncated:false,text:null});
+  assert.equal(texts(fake).length,reads,'a picture is answered from the listing');
+  // A root that is neither work nor images is refused before the Engine is asked.
+  assert.deepEqual(await agentFilePreview(database().db,{company,agent,root:'elsewhere',hermes:at,name:'promo.png'}),{state:'invalid',preview:null});
  } finally { await fake.close(); }
 });
 
@@ -210,6 +219,15 @@ test('the read route answers an Owner and a Manager, and a Contributor, a Viewer
   assert.equal((await ask(route(elsewhere.db),{company:otherCompany,agent,name:'brief.md'})).status,404);
   // A missing name, a name that could leave the folder and a folder that could too are refused with no text read.
   const before=texts(fake).length;
+  // A generated image (#353) previews by its own root, and a root that is neither of the Library's is refused with no
+  // Engine answer and no text read.
+  fake.settings.images.set(profile,[{name:'promo.png',size:8,mtime}]);
+  const generated=await ask(route(database().db),{company,agent,root:'images',name:'promo.png'});
+  assert.equal(generated.status,200);
+  assert.deepEqual(await generated.json(),{name:'promo.png',kind:'image',type:'image/png',byteSize:8,truncated:false,text:null});
+  assert.equal(texts(fake).length,before,'a picture is answered from the listing');
+  assert.equal((await ask(route(database().db),{company,agent,root:'elsewhere',name:'promo.png'})).status,400);
+  assert.equal(texts(fake).length,before);
   assert.equal((await ask(route(database().db),{company,agent})).status,400);
   assert.equal((await ask(route(database().db),{company,agent,name:'../../etc/passwd'})).status,400);
   assert.equal((await ask(route(database().db),{company,agent,folder:'../secret',name:'brief.md'})).status,400);
