@@ -33,7 +33,7 @@ select is((select count(*)::int from public.company_engines e join public.compan
 select throws_ok($$insert into public.companies(id,slug,name,engine_id) values ('1fed0000-0000-0000-0000-000000000003','engine-shared','Same Engine','e3820000-0000-4000-8000-000000000001')$$,
  '55000','companyEngineTaken','a record already serving a Company is not taken by another');
 select throws_ok($$insert into public.companies(id,slug,name,engine_id) values ('1fed0000-0000-0000-0000-000000000004','engine-unknown','Unknown','e3820000-0000-4000-8000-000000000099')$$,
- '55000','companyEngineUnknown','a Company cannot name an Engine record that does not exist');
+ '23503',null,'a Company cannot name an Engine record that does not exist: its foreign key refuses it');
 select ok(position('company_id' in pg_get_function_result('public.agent_profile_work()'::regprocedure))>0
  and position('company_id' in pg_get_function_result('public.engine_tools_due()'::regprocedure))>0
  and position('company_id' in pg_get_function_result('public.agent_soul_rules_work()'::regprocedure))>0,
