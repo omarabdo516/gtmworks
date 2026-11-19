@@ -124,14 +124,14 @@ draft, act on approval, or scheduled work); new Companies start at read and draf
 Each agent gets its own agent engine profile, with its own memory, once it moves there; until then it shares the company profile with the other agents on it. The agent that was the main agent of a company when the moves began keeps what its agents remembered before, even if another agent is made main later, and an agent moved to its own profile starts with an empty memory. A company still on the shared default profile from an earlier install shares that memory, so an agent can repeat facts from one company to people in another until it moves.
 
 The Owner connects a subscription in Settings, Subscription and models: ChatGPT
-signs in from that page; Claude signs in only from the install's command line,
-with the command shown there, run from this folder. A Company's subscription is
-signed in once on its own Engine's root profile, and every Agent of that Company
-uses it. Another Company's Engine and its Agents never see it, and a Company's API
-key lives in its own Engine only: gtmworks passes it to that Company's Engine,
-never to another Company's, and never keeps, logs or shows it. Claude's command for
-the first Company is
-`docker exec -it -u hermes gtmworks-engine-first hermes auth add anthropic --type oauth --no-browser`.
+signs in from that page. A Company's subscription is signed in once on its own
+Engine's root profile, and every Agent of that Company uses it. Another
+Company's Engine and its Agents never see it. One account serves one Company, so
+each Company signs in with its own account or sets its own API key. Claude signs in
+only from the install's command line, with the command shown there, run from this
+folder:
+`gtmworks sign-in claude --company "<Company id or name>"`.
+A Company's API key lives in its own Engine only: gtmworks passes it to that Company's Engine, never to another Company's, and never keeps, logs or shows it.
 An install updated from before ADR 0014 keeps a Company's agents on the shared
 `default` profile until its own profile holds a sign-in; the worker then moves it
 there. Memory already written on `default` stays there, and earlier conversations

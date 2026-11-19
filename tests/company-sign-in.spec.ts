@@ -3,10 +3,13 @@ import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { laneHermes } from './lane-hermes';
 import { signIn } from './sign-in';
+import en from '../lib/messages/en.json';
+import ar from '../lib/messages/ar.json';
 
-// A company connects its own ChatGPT subscription in its own Hermes profile (#3, ADR 0014). Against a fake Hermes,
-// the Owner sees the code and the link, the page says Connected once the sign-in finishes, and Disconnect removes it
-// from that profile; a member sees the state only, with no button, and the server refuses them too.
+// A company connects its own ChatGPT subscription on the root profile of its own Engine (#384, ADR 0018), and every
+// Agent of the Company uses it. Against a fake Hermes, the Owner sees the code and the link, the page says Connected
+// once the sign-in finishes, and Disconnect removes it from that Engine; a member sees the state only, with no button,
+// and the server refuses them too. Claude is the install's command, and the page says one account serves one Company.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const aleem='10000000-0000-0000-0000-000000000003';
 const omar='20000000-0000-0000-0000-000000000001';
@@ -22,7 +25,7 @@ test('the Owner signs the company in to ChatGPT and out again; a member only see
  try {
   query(`update public.people set language='en' where id in ('${omar}','${member}')`);
   await signIn(page,'omar@example.com','/c/aleem/settings?section=models');
-  // Lead on the company's own profile of the bundled Hermes, with the profile recorded, as the worker leaves them.
+  // Lead on the company's own profile of the bundled Hermes, with the profile recorded, as the worker leaves it.
   query(`insert into public.hermes_agents(id,company_id,name,speciality,profile) values ('${agent}','${aleem}','Lead','General','${profile}')`);
   query(`insert into public.company_profiles(company_id,profile,tools_level) values ('${aleem}','${profile}',1)`);
 
@@ -37,27 +40,36 @@ test('the Owner signs the company in to ChatGPT and out again; a member only see
   expect(fake.settings.signInSessions.size).toBe(0);
   await context.close();
 
-  // The Owner: the code and the link, then Connected.
+  // The Owner: the code and the link, then Connected on the Company's own Engine's root profile.
   await page.goto('/c/aleem/settings?section=models');
   const chatgpt=page.locator('#sub-openai-codex');
   await expect(chatgpt.getByText('Not connected')).toBeVisible();
+  // The sign-in page says, in one line, that one account serves one Company.
+  await expect(page.locator('#md-subscriptions')).toContainText(`${en.signInHint} ${en.signInOneAccount}`);
   await chatgpt.getByRole('button',{name:'Connect ChatGPT'}).click();
   await expect(chatgpt.getByText('ABCD-1234')).toBeVisible();
   await expect(chatgpt.getByRole('link',{name:'Open the sign-in page'})).toHaveAttribute('href','https://auth.provider.test/codex/device');
   const [session]=[...fake.settings.signInSessions.keys()];
-  expect(fake.settings.signInSessions.get(session)?.profile).toBe(profile);
+  expect(fake.settings.signInSessions.get(session)?.profile).toBe('default');
   fake.settings.approve(session);
   await expect(chatgpt.getByText('Connected',{exact:true})).toBeVisible({timeout:20000});
-  // The credential is in that company's profile only, and the page never shows it.
-  const credential=fake.settings.profiles.get(profile)!.credentials['openai-codex'];
+  // The credential is on the Engine's root profile only, and the page never shows it.
+  const credential=fake.settings.defaultCredentials['openai-codex'];
   expect(credential).toBeTruthy();
-  expect(await page.content()).not.toContain(credential.slice(-6));
-  // Claude signs in from the install's command line, in this company's profile.
-  await expect(page.locator('#sub-anthropic code')).toContainText(`-p ${profile} auth add anthropic`);
+  expect(fake.settings.profiles.get(profile)!.credentials['openai-codex']).toBeUndefined();
+  expect(await page.content()).not.toContain(credential!.slice(-6));
+  // Claude signs in from the install's command line, for this Company.
+  await expect(page.locator('#sub-anthropic code')).toContainText('gtmworks sign-in claude --company "Aleem"');
 
   await chatgpt.getByRole('button',{name:'Disconnect ChatGPT'}).click();
   await expect(chatgpt.getByText('Not connected')).toBeVisible();
-  expect(fake.settings.profiles.get(profile)!.credentials['openai-codex']).toBeUndefined();
+  expect(fake.settings.defaultCredentials['openai-codex']).toBeUndefined();
+
+  // The same one line in Arabic.
+  query(`update public.people set language='ar' where id='${omar}'`);
+  await page.goto('/c/aleem/settings?section=models');
+  await expect(page.locator('html')).toHaveAttribute('lang','ar');
+  await expect(page.locator('#md-subscriptions')).toContainText(`${ar.signInHint} ${ar.signInOneAccount}`);
  } finally {
   query(`delete from public.company_profiles where company_id='${aleem}'`);
   query(`delete from public.hermes_agents where id='${agent}'`);

@@ -1,10 +1,11 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(24);
--- #123, ADR 0016 (Sign-in). RS Learning (1): Lead on the Company's own profile through its bundled Connection, and the
--- profile record of one more Agent; RS Consultations (2) has an Agent profile of its own. The seed has three Companies.
--- Only the Owner records a subscription's connect and disconnect, each once, in the Company's log by its provider.
-insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('e1230000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','e1230000-0000-0000-0000-000000000001','Lead','General',true,'co-10000000000000000000000000000001');
+select plan(20);
+-- #384, ADR 0018 (Sign-in). A subscription is signed in once on the root profile of the Company's own Engine, and
+-- the database answers which Engine profiles are that Company's, so the app can remove an older sign-in an earlier
+-- version left in one of them and no other Company's. RS Learning (1): a Company profile, and the profile record of one
+-- Agent; R&S Consultations (2): a Company with an Agent profile and no Company profile yet. Only the Owner records a
+-- subscription's connect and disconnect, each once, in the Company's log by its provider.
 insert into public.company_profiles(company_id,profile,tools_level,tools_policy) values ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',1,public.engine_tool_policy());
 -- The profile records alone, without their Agents: the target reads only which profile is whose.
 set local session_replication_role=replica;
@@ -13,12 +14,17 @@ insert into public.agent_profiles(agent_id,company_id) values
  ('e1240000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000002');
 set local session_replication_role=origin;
 
-select is(public.install_has_one_company(),false,'the seed''s install has several Companies');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select is((select profile from public.company_engine_target('10000000-0000-0000-0000-000000000001')),
+ 'co-10000000000000000000000000000001','the target names the Company''s own profile');
 select is((select profiles from public.company_engine_target('10000000-0000-0000-0000-000000000001')),
- array['co-10000000000000000000000000000001','ag-e1240000000000000000000000000001'],'the target names every profile of the Company, and no other Company''s');
-select is((select one_company from public.company_engine_target('10000000-0000-0000-0000-000000000001')),false,'and says the install has several Companies');
+ array['co-10000000000000000000000000000001','ag-e1240000000000000000000000000001'],'and every profile of the Company, and no other Company''s');
+-- A Company with no Company profile yet still has a target: its sign-in is on its Engine's root profile, and the
+-- profiles it names are the ones an older version could have left a sign-in in.
+select is((select profile from public.company_engine_target('10000000-0000-0000-0000-000000000002')),null,'a Company with no profile of its own has a null profile');
+select is((select profiles from public.company_engine_target('10000000-0000-0000-0000-000000000002')),
+ array['ag-e1240000000000000000000000000002'],'and names the Agent profiles it does have');
 
 select lives_ok($$select public.record_subscription_change('10000000-0000-0000-0000-000000000001','openai-codex',true,'session-owner-0001')$$,'the Owner records a finished sign-in');
 select lives_ok($$select public.record_subscription_change('10000000-0000-0000-0000-000000000001','openai-codex',true,'session-owner-0001')$$,'the same sign-in again');
@@ -38,6 +44,8 @@ select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004'
 select throws_ok($$select public.record_subscription_change('10000000-0000-0000-0000-000000000001','openai-codex',true,'session-viewer-001')$$,'42501','signInNotAllowed','a Viewer cannot connect');
 select throws_ok($$select public.record_subscription_change('10000000-0000-0000-0000-000000000001','openai-codex',false)$$,'42501','signInNotAllowed','a Viewer cannot disconnect');
 select is((select count(*)::int from public.company_engine_target('10000000-0000-0000-0000-000000000001')),1,'a Viewer still reads where the sign-in is');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select is((select count(*)::int from public.company_engine_target('10000000-0000-0000-0000-000000000002')),0,'a person outside the Company learns nothing');
 reset role;
 set local role anon;
 select throws_ok($$select public.record_subscription_change('10000000-0000-0000-0000-000000000001','openai-codex',false)$$,'42501',null,'a visitor cannot record a change');
@@ -47,25 +55,5 @@ select is((select jsonb_agg(jsonb_build_array(actor_id,actor_kind,action,details
  jsonb_build_array(jsonb_build_array('20000000-0000-0000-0000-000000000001','person','subscription_connected',jsonb_build_object('provider','openai-codex')),
   jsonb_build_array('20000000-0000-0000-0000-000000000001','person','subscription_disconnected',jsonb_build_object('provider','openai-codex'))),
  'one log row per connect and disconnect, naming who did it and the provider; a sign-in is logged once and a refusal not at all');
-
--- The other two Companies go, and the install has one; then a second Company is made.
-set local session_replication_role=replica;
-delete from public.companies where id<>'10000000-0000-0000-0000-000000000001';
-set local session_replication_role=origin;
-select is(public.install_has_one_company(),true,'an install with one Company');
-set local role authenticated;
-select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
-select is((select one_company from public.company_engine_target('10000000-0000-0000-0000-000000000001')),true,'its Company''s target says so');
-select is((select profiles from public.company_engine_target('10000000-0000-0000-0000-000000000001')),
- array['co-10000000000000000000000000000001','ag-e1240000000000000000000000000001'],'and names the same profiles');
-reset role;
-insert into public.company_engines(id,address,key_encrypted) values ('e3821000-0000-4000-8000-000000000005','http://engine:8642','cipher');
-insert into public.companies(id,slug,name,engine_id) values ('e1250000-0000-0000-0000-000000000001','second-company','Second Company','e3821000-0000-4000-8000-000000000005');
-select is(public.install_has_one_company(),false,'a second Company ends it');
-set local role authenticated;
-select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
-select is((select one_company from public.company_engine_target('10000000-0000-0000-0000-000000000001')),false,'and the first Company''s target says so on its next read');
-reset role;
-select ok(not has_function_privilege('authenticated','public.install_has_one_company()','execute'),'no client asks the database directly');
 select * from finish();
 rollback;

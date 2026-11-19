@@ -16,7 +16,7 @@ const hermesOf=fake=>({address:fake.address,managementAddress:fake.managementAdd
 function databases() {
  const calls=[];
  const rpc=async(name,args)=>{ calls.push({name,args});
-  if(name==='company_engine_target') return {data:[{profile,one_company:false,profiles:[profile]}],error:null};
+  if(name==='company_engine_target') return {data:[{profile,profiles:[profile]}],error:null};
   if(name==='conversation_agent') return {data:null,error:null};
   if(name==='reserve_conversation_turn') return {data:{state:'reserved',connection,profile,note:null},error:null};
   if(name==='pin_run') return {data:{tools:null},error:null};
@@ -37,9 +37,9 @@ test('an Engine that does not answer reads as noEngine, and a message to it is r
  const {db,service,calls}=databases();
  try {
   // Both the record's address (engineOf answered null) and an Engine that does not answer are the same one state.
-  assert.deepEqual(await readCompanySignIns(db,{company,hermes:null}),{profile:null,oneCompany:false,signIns:null,noEngine:true});
+  assert.deepEqual(await readCompanySignIns(db,{company,hermes:null}),{profile:null,profiles:null,signIns:null,noEngine:true});
   fake.settings.managementStatus=500;
-  assert.deepEqual(await readCompanySignIns(db,{company,hermes:hermesOf(fake)}),{profile:null,oneCompany:false,signIns:null,noEngine:true});
+  assert.deepEqual(await readCompanySignIns(db,{company,hermes:hermesOf(fake)}),{profile:null,profiles:null,signIns:null,noEngine:true});
 
   fake.settings.status=500;
   const refused=await sendMessage(db,service,{company,conversation:'c',sendKey:'k-1',message:'Are you there?',hermes:hermesOf(fake)});

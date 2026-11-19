@@ -70,12 +70,11 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  // Open invitations are rows of the same table (#185), with their own switches, until the person joins.
  const invitations:Invitation[]=section==='company'&&canManage?((await db.from('member_invitations').select('id,email,role').eq('company_id',company.id).is('claimed_at',null).order('created_at')).data||[]):[];
  const invitedAllowed=new Set(invitations.length?((await db.from('invitation_agent_access').select('invitation_id,agent_id').eq('company_id',company.id)).data||[]).map(row=>`${row.invitation_id}:${row.agent_id}`):[]);
- const sharedEngine=section==='company'&&owner?(await db.rpc('bundled_engine_shared',{c:company.id})).data===true:false;
+ // The Company's model sign-in, read from the root profile of its own Engine (#384, ADR 0018), with that Engine's key,
+ // after the database said the person is a member (company_engine_target).
+ const subscriptions=section==='models'?await (async()=>{ try { return await readCompanySignIns(db,{company:company.id}); } catch { return {profile:null,profiles:null,signIns:null}; } })():null;
  // The Company's Agent level.
  const agentLevel=section==='company'?Number((await db.from('companies').select('agent_level').eq('id',company.id).maybeSingle()).data?.agent_level)||1:1;
- // The Company's model sign-in, read from its own profile in the agent engine (#3), with the install's key, after the
- // database said the person is a member (company_engine_target).
- const subscriptions=section==='models'?await (async()=>{ try { return await readCompanySignIns(db,{company:company.id}); } catch { return {profile:null,oneCompany:false,signIns:null}; } })():null;
  // The Company's default model, each Agent's own and the Owner's model choices (#29), and the providers the Engine takes a
  // key for with whether each has one. Both are read on the server; no key value is ever one of the fields.
  const models=section==='models'?await (async()=>{ try { return await readCompanyModels(db,{company:company.id,owner}); } catch { return {models:null}; } })():null;
@@ -115,7 +114,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  const rules:Rule[]=agent?(((await db.from('agent_rules').select('id,body,said_by,said_at,teller:people!said_by(name)').eq('agent_id',agent.id).is('removed_at',null).or('suggestion.is.null,suggestion.eq.approved').order('said_at',{ascending:false})).data||[]) as unknown as Rule[]):[];
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  const ro=!canManage&&<p className="ro-note"><SettingsIcon name="shield"/><span>{t('settingsRO')}</span></p>;
- const page=section==='company'?<CompanySection t={t} company={company} solo={workMode==='alone'} members={members} invitations={invitations} agents={agents} allowed={allowed} invitedAllowed={invitedAllowed} userId={userId} slug={slug} owner={owner} canManage={canManage} sharedEngine={sharedEngine} agentLevel={agentLevel} roleNames={roleNames} ro={ro}/>
+ const page=section==='company'?<CompanySection t={t} company={company} solo={workMode==='alone'} members={members} invitations={invitations} agents={agents} allowed={allowed} invitedAllowed={invitedAllowed} userId={userId} slug={slug} owner={owner} canManage={canManage} agentLevel={agentLevel} roleNames={roleNames} ro={ro}/>
   :section==='agents'?(agent?<AgentPage t={t} rtl={rtl} slug={slug} company={company.id} userId={userId} personName={personName} agent={agent} tab={tab} memory={memory} about={about} skills={skills} how={how} voice={voice} status={stateOf(agent.id)} main={agents[0]} rules={rules} agentModel={agentModel} owner={owner} canManage={canManage} canWrite={canWrite} learning={role!=='viewer'}/>:<AgentsSection t={t} rtl={rtl} slug={slug} agents={agents} stateOf={stateOf} canManage={canManage} canWrite={canWrite} owner={owner}/>)
   :section==='apps'?<AppsSection slug={slug} company={company.id} owner={owner} rtl={rtl} app={query.app} failed={query.signin==='failed'}/>
   :section==='usage'?<UsageSection t={t} locale={locale} slug={slug} company={company.id} rows={usageRows} period={query.period==='30'?30:7}/>
@@ -124,7 +123,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
   :section==='knowledge'?<><Head title={t('settingsKnowledge')} sub={t('settingsKnowledgeSub')}/>{ro}<CompanyKnowledge slug={slug} company={company.id} canManage={canManage} part={query.part}/></>
   // Backup is the Owner's alone (#33): pickSection never opens it for another Role, and the server renders it only here.
   :section==='backup'&&owner?<BackupSection t={t}/>
-  :<SoonSection t={t} section={section} ro={ro} subscriptions={<ModelsSubscriptions company={company.id} owner={owner} subscriptions={subscriptions}/>}
+  :<SoonSection t={t} section={section} ro={ro} subscriptions={<ModelsSubscriptions company={company.id} companyName={company.name} owner={owner} subscriptions={subscriptions}/>}
     keys={<ProviderKeys company={company.id} owner={owner} data={keys}/>}
     defaultModel={models?.models?<DefaultModel company={company.id} owner={owner} models={models.models.default}/>:null}
     eachAgent={models?.models?<EachAgent company={company.id} owner={owner} models={models.models}/>:null}
@@ -137,7 +136,7 @@ const Soon=({t}:{t:T})=><div className="panel-card sov-soon" aria-disabled="true
 const SoonSec=({t,id,label}:{t:T,id:string,label:string})=><section className="dp-sec" aria-labelledby={id}><Label id={id}>{label}</Label><Soon t={t}/></section>;
 const initial=(name:string)=>name.trim().slice(0,1).toUpperCase()||'?';
 
-function CompanySection({t,company,solo,members,invitations,agents,allowed,invitedAllowed,userId,slug,owner,canManage,sharedEngine,agentLevel,roleNames,ro}:{t:T,company:{id:string,name:string},solo:boolean,members:Member[],invitations:Invitation[],agents:Agent[],allowed:Set<string>,invitedAllowed:Set<string>,userId:string,slug:string,owner:boolean,canManage:boolean,sharedEngine:boolean,agentLevel:number,roleNames:Record<string,string>,ro:ReactNode}) {
+function CompanySection({t,company,solo,members,invitations,agents,allowed,invitedAllowed,userId,slug,owner,canManage,agentLevel,roleNames,ro}:{t:T,company:{id:string,name:string},solo:boolean,members:Member[],invitations:Invitation[],agents:Agent[],allowed:Set<string>,invitedAllowed:Set<string>,userId:string,slug:string,owner:boolean,canManage:boolean,agentLevel:number,roleNames:Record<string,string>,ro:ReactNode}) {
  const count=members.length;
  const name=<section className="dp-sec" aria-labelledby="co-h-name"><Label id="co-h-name">{t('settingsCompanyName')}</Label>
   <div className="panel-card set-card">{owner?<div className="set-field"><label className="set-label" htmlFor="co-name">{t('settingsCompanyNameHint')}</label>
@@ -157,7 +156,6 @@ function CompanySection({t,company,solo,members,invitations,agents,allowed,invit
  const list=<section className="dp-sec" aria-labelledby="co-h-mem"><Label id="co-h-mem">{t('members')} <span className="muted num">{count}</span></Label>
   <div className="panel-card">{members.map(member=><div className="panel-row" key={member.person_id}><span className="me__av pp-av" aria-hidden="true">{initial(member.people?.name||t('member'))}</span><span className="panel-row__text"><span className="panel-row__t"><bdi>{member.people?.name||t('member')}</bdi>{member.person_id===userId&&<> <span className="ch-you">{t('settingsYouMark')}</span></>}</span><span className="panel-row__d">{roleNames[member.role]||''}</span></span></div>)}</div></section>;
  return <><Head title={t('settingsCompany')} sub={t('settingsCompanySub')}/>{ro}
-  {sharedEngine&&<p className="ro-note sov-warn" role="note"><SettingsIcon name="shield"/><span>{t('sharedEngineWarning')}</span></p>}
   {name}{mode}<AgentLevel company={company.id} level={agentLevel} owner={owner}/>{solo?invite:canManage?table:list}</>;
 }
 
@@ -333,9 +331,9 @@ function SoonSection({t,section,ro,subscriptions,keys,defaultModel,eachAgent,def
  return null;
 }
 
-// The company's connected AI subscriptions. A company signs in to its subscription through the Hermes inside gtmworks
-// (#3, ADR 0014; #123, ADR 0016): the state is read on the server from the agent engine, and the Owner's buttons call
+// The Company's connected AI subscriptions. A Company signs its subscription in once on the root profile of its own
+// Engine (#384, ADR 0018): the state is read on the server from that Engine, and the Owner's buttons call
 // /api/company-sign-in, which checks the Owner again.
-function ModelsSubscriptions({company,owner,subscriptions}:{company:string,owner:boolean,subscriptions:Awaited<ReturnType<typeof readCompanySignIns>>|null}) {
- return <CompanySubscriptions company={company} owner={owner} profile={subscriptions?.profile??null} oneCompany={subscriptions?.oneCompany??false} signIns={subscriptions?.signIns??null} noEngine={subscriptions?.noEngine===true}/>;
+function ModelsSubscriptions({company,companyName,owner,subscriptions}:{company:string,companyName:string,owner:boolean,subscriptions:Awaited<ReturnType<typeof readCompanySignIns>>|null}) {
+ return <CompanySubscriptions company={company} companyName={companyName} owner={owner} available={subscriptions?.profiles!=null} signIns={subscriptions?.signIns??null} noEngine={subscriptions?.noEngine===true}/>;
 }
