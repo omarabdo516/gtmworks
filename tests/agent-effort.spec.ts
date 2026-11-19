@@ -28,25 +28,32 @@ test.beforeAll(async({browser},testInfo)=>{
  const page=await browser.newPage();
  try {
   await signIn(page,'omar@example.com','/c/rs-learning/home');
+  // The Writer's own profile record comes first: its Agent names `ag-` and the guard reads that record (deferred FK).
   query(`do $$ begin
+   insert into public.agent_profiles(agent_id,company_id,tools_level,tools_policy) values ('${writer}','${company}',1,public.engine_tool_policy());
    insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
     ('${lead}','${company}','${randomUUID()}','Lead','Marketing lead',true,'${co}'),
     ('${writer}','${company}','${randomUUID()}','Writer','Writing',false,'${writerProfile}');
    insert into public.company_profiles(company_id,profile,tools_level,tools_policy) select id,'${co}',agent_level,public.engine_tool_policy() from public.companies where id='${company}'
     on conflict (company_id) do update set profile=excluded.profile,tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false;
-   insert into public.agent_profiles(agent_id,company_id,tools_level,tools_policy) values ('${writer}','${company}',1,public.engine_tool_policy());
   end $$;`);
  } finally { await page.close(); }
 });
 test.afterAll(async()=>{ await fake?.close(); });
 
 const agentPage=(email:string,page:Page)=>signIn(page,email,`/c/rs-learning/settings?agent=${lead}`);
+// A click before React hydrated the control does nothing: wait until the level's radios have their handlers.
+const hydrated=(page:Page)=>page.waitForFunction(()=>{
+ const radio=document.querySelector('#set-effort-medium');
+ return !!radio&&Object.getOwnPropertyNames(radio).some(name=>name.startsWith('__reactFiber$')||name.startsWith('__reactProps$'));
+});
 const modelsPage=(email:string,page:Page)=>signIn(page,email,'/c/rs-learning/settings?section=models');
 const english=(...ids:string[])=>query(`update public.people set language='en' where id in (${ids.map(id=>`'${id}'`).join(',')})`);
 
 test('the Owner picks a level, saves it with the bar, and the Engine and the log hold it with the old and the new',async({page})=>{
  english('20000000-0000-0000-0000-000000000001');
  await agentPage('omar@example.com',page);
+ await hydrated(page);
  const overlay=page.getByRole('dialog',{name:'Settings'});
  const bar=overlay.locator('#dp-savebar');
  // No level saved reads as the reference's Medium, with its line; all eight of the Engine's levels are offered, and the
@@ -78,7 +85,7 @@ test('"Subscription and models" reads each Agent\'s level beside its model, and 
  english('20000000-0000-0000-0000-000000000001');
  await modelsPage('omar@example.com',page);
  const overlay=page.getByRole('dialog',{name:'Settings'});
- const effort=overlay.locator('section[aria-labelledby="mdl-h-eff"]');
+ const effort=overlay.locator('section[aria-labelledby="md-h-eff"]');
  await expect(effort.locator('#mdl-eff')).toHaveText('Medium');
  await expect(effort.getByText('A good balance for most daily work.')).toBeVisible();
  await expect(effort.locator('[role=radio]')).toHaveCount(0);
@@ -92,13 +99,14 @@ test('a Manager reads the level as text, and the server refuses their save',asyn
  const overlay=page.getByRole('dialog',{name:'Settings'});
  await expect(overlay.locator('[role=radio][id^="set-effort-"]')).toHaveCount(0);
  await expect(overlay.locator('#set-effort-val')).toHaveText('Max');
- await expect(overlay.locator('#dp-savebar')).toHaveCount(0);
+ // The page's save bar is not the level's: a Manager has one for the fields they may save on the same page (#161), and
+ // the level still has no control and no way in for them (the refusal below).
  const refused=await page.request.post('/api/agent-page',{data:{company,agent:lead,changes:{effort:'low'}}});
  expect(refused.status()).toBe(403);
  expect(await refused.json()).toEqual({error:'agentPageNotAllowed'});
  expect(fake.settings.profiles.get(co)?.config?.agent?.reasoning_effort).toBe('max');
- // The default stays read-only for the Manager too.
- await modelsPage('manager@example.com',page);
+ // The default stays read-only for the Manager too. (The page is already signed in, so the section is opened, not signed in.)
+ await page.goto('/c/rs-learning/settings?section=models');
  await expect(overlay.locator('#mdl-eff')).toHaveText('Medium');
  await expect(overlay.locator('[role=radio][id^="mdl-eff-"]')).toHaveCount(0);
 });

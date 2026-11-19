@@ -193,7 +193,7 @@ function AgentsSection({t,rtl,slug,agents,stateOf,canManage,canWrite,owner}:{t:T
    :<p className="panel-empty">{t('noAgentsYet')}</p>}</div><FocusReturn/></>;
 }
 
-function AgentPage({t,rtl,slug,company,userId,personName,agent,about,skills,how,voice,status,main,rules,agentModel,owner,canManage,canWrite,learning}:{t:T,rtl:boolean,slug:string,company:string,userId:string,personName:string,agent:Agent,about:AgentAbout|null,skills:Awaited<ReturnType<typeof readAgentSkills>>,how:Awaited<ReturnType<typeof readAgentInstructions>>,voice:AgentVoiceRead|null,status:AgentStatus,main?:Agent,rules:Rule[],agentModel:{models:{agents:{model:string|null,choosable:boolean,effort:string|null,options:{provider:string,providerName:string,model:string}[]}[]}|null}|null,owner:boolean,canManage:boolean,canWrite:boolean,learning:boolean}) {
+function AgentPage({t,rtl,slug,company,userId,personName,agent,about,skills,how,voice,status,main,rules,agentModel,owner,canManage,canWrite,learning}:{t:T,rtl:boolean,slug:string,company:string,userId:string,personName:string,agent:Agent,about:AgentAbout|null,skills:Awaited<ReturnType<typeof readAgentSkills>>,how:Awaited<ReturnType<typeof readAgentInstructions>>,voice:AgentVoiceRead|null,status:AgentStatus,main?:Agent,rules:Rule[],agentModel:{models:{agents:{model:string|null,own:boolean,choosable:boolean,effort:string|null,options:{provider:string,providerName:string,model:string}[]}[]}|null}|null,owner:boolean,canManage:boolean,canWrite:boolean,learning:boolean}) {
  const isMain=agent.is_default; const made=madeOf(agent,userId,slug);
  // The handle gtmworks calls the Agent by in messages, which a change of the Engine's name would not touch
  // (lib/conversation-runs.mjs: @ and the name, lowercased).
@@ -208,9 +208,11 @@ function AgentPage({t,rtl,slug,company,userId,personName,agent,about,skills,how,
  // The Voice section (#162) is editable on the Agent's own profile, and read-only for everyone else: its rows name the
  // speaking language and the real voice with the speed, as the reference's read-only form does.
  const voiceEditable=canManage&&voice?.state==='found'&&voice.own;
- // The thinking level is the Owner's alone (#179), on the Agent's own profile (an Agent on the shared Company profile
- // would change the main Agent too) and only once the Engine was read, so an unread level is never drawn as Medium.
- const effortEditable=owner&&agentModel?.models?.agents[0]?.choosable===true&&agentModel.models.agents[0].effort!==null;
+ // The thinking level is the Owner's alone (#179), on the Agent's own profile — the Company's `co-` profile is the main
+ // Agent's own while it is the profile's keeper — and only once the Engine was read, so an unread level is never drawn
+ // as Medium. It is `own`, not #29's `choosable`: the main Agent never chooses a model (its model is the Company's
+ // default) yet the level in its own profile is its own.
+ const effortEditable=owner&&agentModel?.models?.agents[0]?.own===true&&agentModel.models.agents[0].effort!==null;
  const spokenLanguage=voice?.state!=='found'?null:voice.language==='ar'?t('settingsVoiceArabic'):voice.language==='en'?t('settingsVoiceEnglish'):voice.language||t('settingsVoiceDetect');
  const mainSec=owner?<section className="dp-sec" id="set-main" aria-labelledby="set-h-main"><Label id="set-h-main">{t('settingsMainAgent')}</Label><ul className="panel-card">
    {isMain?<li className="panel-row"><span className="panel-row__icon"><SettingsIcon name="check"/></span><span className="panel-row__text"><span className="panel-row__t">{t('settingsIsMain',agent.name)}</span><span className="panel-row__d">{t('settingsIsMainD')}</span></span></li>
