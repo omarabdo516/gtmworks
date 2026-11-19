@@ -16,7 +16,7 @@ const checked=async query=>{const {data,error}=await query; assert.equal(error,n
 // rule and the Company knowledge are written through the engine contract before the backup and read back after the
 // restore, so a backup that left the volume out fails here.
 assert.ok(process.env.HERMES_API_KEY,'the install key is in the web container');
-const engine={address:process.env.BUNDLED_HERMES_URL,profile:'default',key:process.env.HERMES_API_KEY};
+const engine={address:process.env.HERMES_ADDRESS||'http://gtmworks-engine-first:8642',profile:'default',key:process.env.HERMES_API_KEY};
 // An Agent profile the worker writes no rules into, so only the Engine's volume can give the rule back after a restore.
 const ruleProfile='ag-00000000000000000000000000000349';
 const rule='Always close the install check with the line keep this rule.';

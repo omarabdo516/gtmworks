@@ -626,7 +626,7 @@ op_status() {
     printf '%-8s %s\n' "$service" "$shown"
   done
   if [ -z "$unhealthy" ]; then
-    compose exec -T web node --input-type=module -e "for(const url of ['http://gateway:8080/api/health','http://gateway:8080/sign-in','http://hermes:8642/health']) { const response=await fetch(url); console.log(url+' '+response.status); if(response.status!==200) process.exitCode=1; }" < /dev/null \
+    compose exec -T web node --input-type=module -e "for(const url of ['http://gateway:8080/api/health','http://gateway:8080/sign-in','http://gtmworks-engine-first:8642/health']) { const response=await fetch(url); console.log(url+' '+response.status); if(response.status!==200) process.exitCode=1; }" < /dev/null \
       || unhealthy=' the app'
   fi
   [ -z "$unhealthy" ] || fail "Not healthy:$unhealthy. Repair with: gtmworks install"

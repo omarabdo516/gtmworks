@@ -33,7 +33,7 @@ const [step,marker]=process.argv.slice(2);
 const trigger='Change the team lessons now.';
 const state='/tmp/check-install-profiles.json';
 const origin='http://gateway:8080';
-const engine={address:'http://hermes:8642',managementAddress:'http://hermes:9119'};
+const engine={address:process.env.HERMES_ADDRESS||'http://gtmworks-engine-first:8642',managementAddress:process.env.HERMES_MANAGEMENT_ADDRESS||'http://gtmworks-engine-first:9119'};
 const options={auth:{persistSession:false,autoRefreshToken:false}};
 const service=createClient(origin,process.env.SUPABASE_SERVICE_ROLE_KEY,options);
 const checked=async query=>{const {data,error}=await query; assert.equal(error,null,JSON.stringify(error)); return data;};
@@ -43,7 +43,7 @@ const until=async(what,read,seconds)=>{
 };
 const key=process.env.HERMES_API_KEY;
 assert.ok(key,'the install key is in the web container');
-const manage=(path,init={})=>fetch(`http://hermes:9119${path}`,{...init,headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'}});
+const manage=(path,init={})=>fetch(`${engine.managementAddress}${path}`,{...init,headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'}});
 const pointAtFakeModel=async profile=>{
  const pointed=await manage(`/api/config?profile=${encodeURIComponent(profile)}`,{method:'PUT',body:JSON.stringify({config:{model:{provider:'custom',default:'fake-model',base_url:'http://web:8080/v1',api_key:'fake-model-key',context_length:128000}}})});
  assert.equal(pointed.status,200);
@@ -54,7 +54,7 @@ const profileOf=async(person,agent)=>{ const [found]=await checked(person.from('
 const checkProfile=async profile=>{
  const config=await (await manage(`/api/config?profile=${encodeURIComponent(profile)}`)).json();
  for(const off of ['terminal','file','code_execution']) assert.ok(config.agent?.disabled_toolsets?.includes(off),`${profile} disables ${off}`);
- const toolsets=await (await fetch(`http://hermes:8642/p/${encodeURIComponent(profile)}/v1/toolsets`,{headers:{Authorization:`Bearer ${key}`}})).json();
+ const toolsets=await (await fetch(`${engine.address}/p/${encodeURIComponent(profile)}/v1/toolsets`,{headers:{Authorization:`Bearer ${key}`}})).json();
  const enabled=toolsets.data.filter(toolset=>toolset.enabled).map(toolset=>toolset.name);
  assert.deepEqual(riskyToolsets.filter(name=>enabled.includes(name)),[],`${profile} offers no terminal, file or code tools`);
  assert.ok(enabled.includes('web')&&enabled.includes('memory'),`${profile} keeps its marketing tools`);
@@ -95,7 +95,7 @@ if(step==='prepare') {
   await checked(service.from('people').insert({id:user.id,name}));
   const company=randomUUID();
   // A Company is made only onto a waiting Engine record (#380); each check Company gets the install's Engine.
-  await registerEngine(service,{address:'http://hermes:8642',key});
+  await registerEngine(service,{address:engine.address,key});
   await checked(service.from('companies').insert({id:company,slug:`profiles-${company.slice(0,8)}`,name}));
   await checked(service.from('members').insert({company_id:company,person_id:user.id,role:'owner'}));
   companies.push({company,person:user.id,credentials});
@@ -260,7 +260,7 @@ if(step==='prepare') {
   // A Run on a shared space is refused: the Engine serves the space but gives it no Run API key.
   for(const entry of companies) {
    const before=asked.length;
-   const refusedRun=await fetch(`http://hermes:8642/p/${encodeURIComponent(entry.space)}/v1/runs`,{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify({input:'مرحباً'})});
+   const refusedRun=await fetch(`${engine.address}/p/${encodeURIComponent(entry.space)}/v1/runs`,{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify({input:'مرحباً'})});
    assert.ok([401,403].includes(refusedRun.status),`a Run on ${entry.space} is refused (HTTP ${refusedRun.status})`);
    assert.equal(asked.length,before,`${entry.space} reaches no model`);
   }

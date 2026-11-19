@@ -7,32 +7,32 @@ import { spawnSync } from 'node:child_process';
 import { load } from 'js-yaml';
 import { generateInstallEnv } from '../lib/install-env.mjs';
 
-// Hermes must never receive gtmworks's own secrets (#2): not through its environment, an env file or a mounted file.
-// Only the install key it serves with (HERMES_API_KEY) is passed to it.
+// An Engine must never receive gtmworks's own secrets (#2): not through its environment, an env file or a mounted file.
+// Only the Engine's own key (ENGINE_KEY, made from HERMES_API_KEY) is passed to it.
 const secretNames=Object.keys(generateInstallEnv()).filter(name=>name!=='HERMES_API_KEY');
-function hermesSecretLeaks(compose) {
- const hermes=compose.services.hermes; const leaks=[];
- if(hermes.env_file!==undefined) leaks.push('env_file');
- for(const [key,value] of Object.entries(hermes.environment||{})) {
+function engineSecretLeaks(template) {
+ const engine=template.services.engine; const leaks=[];
+ if(engine.env_file!==undefined) leaks.push('env_file');
+ for(const [key,value] of Object.entries(engine.environment||{})) {
   if(secretNames.includes(key)) leaks.push(key);
   for(const [,name] of String(value).matchAll(/\$\{?([A-Z0-9_]+)/g)) if(secretNames.includes(name)) leaks.push(name);
  }
- for(const volume of hermes.volumes||[]) if(!/^hermes:\/opt\/data$/.test(String(volume))) leaks.push(`volume ${volume}`);
+ for(const volume of engine.volumes||[]) if(!/^data:\/opt\/data$/.test(String(volume))) leaks.push(`volume ${volume}`);
  return leaks;
 }
 
-test('the compose file passes none of gtmworks\'s secrets to Hermes, and the check sees one injected', () => {
- const compose=load(readFileSync('docker-compose.install.yml','utf8'));
- assert.deepEqual(hermesSecretLeaks(compose),[]);
+test('the Engine template passes none of gtmworks\'s secrets to an Engine, and the check sees one injected', () => {
+ const template=load(readFileSync('scripts/engine-template.yml','utf8'));
+ assert.deepEqual(engineSecretLeaks(template),[]);
  for(const name of ['SUPABASE_SERVICE_ROLE_KEY','WEBHOOK_ENCRYPTION_KEY','SUPABASE_JWT_SECRET','POSTGRES_PASSWORD','SETUP_CODE']) {
-  const injected=structuredClone(compose);
-  injected.services.hermes.environment.EXTRA=`\${${name}}`;
-  assert.deepEqual(hermesSecretLeaks(injected),[name]);
+  const injected=structuredClone(template);
+  injected.services.engine.environment.EXTRA=`\${${name}}`;
+  assert.deepEqual(engineSecretLeaks(injected),[name]);
  }
- const mounted=structuredClone(compose); mounted.services.hermes.volumes.push('./.env.install:/opt/data/.env:ro');
- assert.equal(hermesSecretLeaks(mounted).length,1);
- const filed=structuredClone(compose); filed.services.hermes.env_file='.env.install';
- assert.deepEqual(hermesSecretLeaks(filed),['env_file']);
+ const mounted=structuredClone(template); mounted.services.engine.volumes.push('./.env.install:/opt/data/.env:ro');
+ assert.equal(engineSecretLeaks(mounted).length,1);
+ const filed=structuredClone(template); filed.services.engine.env_file='.env.install';
+ assert.deepEqual(engineSecretLeaks(filed),['env_file']);
 });
 
 test('the runtime scan finds a secret in the environment or a readable file, and prints no value', t => {
@@ -54,12 +54,12 @@ test('the runtime scan finds a secret in the environment or a readable file, and
  assert.equal(spawnSync('python3',['scripts/check-hermes-keys.py',root],{input:'',encoding:'utf8'}).status,2,'an empty list never passes');
 });
 
-test('the install job runs the scan inside the bundled Hermes with the real secrets, never printing them', () => {
+test('the install job runs the scan inside the first Engine with the real secrets, never printing them', () => {
  const install=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install.steps.map(step=>step.run||'').join('\n');
  const line=install.split('\n').find(text=>text.includes('check-hermes-keys.py'));
  assert.ok(line,'the scan runs');
  for(const name of ['POSTGRES_PASSWORD','PGSODIUM_ROOT_KEY','SUPABASE_JWT_SECRET','SUPABASE_SERVICE_ROLE_KEY','WEBHOOK_ENCRYPTION_KEY','SETUP_CODE']) assert.ok(line.includes(name),name);
- assert.match(line,/\.env\.install \| compose exec -T -u hermes hermes/);
+ assert.match(line,/\.env\.install \| docker exec -i -u hermes "\$engine_id"/);
 });
 
 test('the runtime scan reads large files in chunks, also finding a value split across two chunks', t => {

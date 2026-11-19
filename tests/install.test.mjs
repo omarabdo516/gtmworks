@@ -52,7 +52,8 @@ test('update preserves the serving containers on migration failure and safely re
  for(const folder of ['scripts','bin','supabase/migrations']) mkdirSync(join(directory,folder),{recursive:true});
  copyFileSync('scripts/install.sh',join(directory,'scripts/install.sh'));
  for(const file of ['install-nginx.conf','install-gateway-real-ip.sh']) copyFileSync(join('scripts',file),join(directory,'scripts',file));
- writeFileSync(join(directory,'.env.install'),'existing secrets');
+ const existing='existing secrets\nHERMES_API_KEY='+'k'.repeat(64);
+ writeFileSync(join(directory,'.env.install'),existing);
  writeFileSync(join(directory,'supabase/migrations/999_failure.sql'),"select 1/0;");
  writeFileSync(join(directory,'bin/docker'),`#!/bin/sh
 printf '%s\\n' "$*" >> "$COMMANDS"
@@ -105,7 +106,7 @@ if [ -n "\${UPDATE_SOURCE:-}" ]; then cp "$UPDATE_SOURCE" scripts/install.sh; fi
   assert.equal(existsSync(env.MIGRATION_SQL),false);
   assert.doesNotMatch(readFileSync(commands,'utf8'),/exec -T db psql|\bstop\b|\bup\b|\bbuild\b/);
   assert.equal(existsSync(join(directory,'.install-lock')),false);
-  assert.equal(readFileSync(join(directory,'.env.install'),'utf8'),'existing secrets');
+  assert.equal(readFileSync(join(directory,'.env.install'),'utf8'),existing);
  }
 });
 
@@ -119,7 +120,7 @@ test('update checks the new gateway config before migrating and recreates the ga
  for(const folder of ['scripts','bin','supabase/migrations']) mkdirSync(join(directory,folder),{recursive:true});
  copyFileSync('scripts/install.sh',join(directory,'scripts/install.sh'));
  for(const file of ['install-nginx.conf','install-gateway-real-ip.sh']) copyFileSync(join('scripts',file),join(directory,'scripts',file));
- writeFileSync(join(directory,'.env.install'),'existing secrets');
+ writeFileSync(join(directory,'.env.install'),'existing secrets\nHERMES_API_KEY='+'k'.repeat(64));
  writeFileSync(join(directory,'supabase/migrations/001_first.sql'),'select 1;');
  writeFileSync(join(directory,'bin/docker'),`#!/bin/sh
 printf '%s\\n' "$*" >> "$COMMANDS"
@@ -134,7 +135,7 @@ esac
  const run=(operation,extra={})=>{ writeFileSync(commands,''); const result=spawnSync('sh',['scripts/install.sh',...operation],{cwd:directory,env:{...env,...extra},encoding:'utf8'}); return {...result,lines:readFileSync(commands,'utf8').split('\n')}; };
  const at=(lines,pattern)=>lines.findIndex(line=>pattern.test(line));
  const check=/ run --rm --no-deps gateway nginx -t$/, migrate=/exec -T db psql/;
- const app=/ up -d --no-deps --wait --wait-timeout 300 auth hermes web worker$/;
+ const app=/ up -d --no-deps --wait --wait-timeout 300 auth web worker$/;
  const gateway=/ up -d --no-deps --force-recreate --wait --wait-timeout 300 gateway$/;
 
  const updated=run(['update','main']);
@@ -215,14 +216,16 @@ case "$*" in *'tar -czf'*) echo 'partial-private-archive'; exit 9;; esac
 
 test('backup and restore round-trip the Compose volumes and keys; failed extraction stays offline', t => {
  const compose=load(readFileSync('docker-compose.install.yml','utf8'));
+ const engine=load(readFileSync('scripts/engine-template.yml','utf8'));
  const paths=['var/lib/postgresql/data','etc/postgresql-custom','var/lib/storage'];
- // The Agents' profiles, rules, knowledge, skills, memory and history live only in the bundled Engine's volume (#349).
+ // The Agents' profiles, rules, knowledge, skills, memory and history live only in the first Engine's volume (#349).
  const hermesData='opt/data';
  assert.ok(compose.services.db.volumes.includes(`database:/${paths[0]}`));
  assert.ok(compose.services.db.volumes.includes(`database-config:/${paths[1]}`));
  assert.ok(compose.services.storage.volumes.includes(`files:/${paths[2]}`));
  assert.equal(compose.services.storage.environment.FILE_STORAGE_BACKEND_PATH,`/${paths[2]}`);
- assert.ok(compose.services.hermes.volumes.includes(`hermes:/${hermesData}`));
+ assert.ok(engine.services.engine.volumes.includes(`data:/${hermesData}`));
+ assert.equal(engine.volumes.data.name,'${ENGINE_VOLUME:?Run scripts/install.sh}');
  const directory=mkdtempSync(join(tmpdir(),'gtmworks-roundtrip-'));
  t.after(()=>rmSync(directory,{recursive:true,force:true}));
  for(const folder of ['scripts','bin',...[...paths,hermesData].map(path=>`volumes/${path}`)]) mkdirSync(join(directory,folder),{recursive:true});
@@ -242,9 +245,11 @@ if(args[0]==='compose') {
  if(args.includes('stop')) writeFileSync(cwd+'/stopped','yes');
  if(args.includes('up')) writeFileSync(cwd+'/stopped','no');
  if(args.includes('ps')) {
-  assert.ok(args.includes('-aq'));
-  assert.equal(readFileSync(cwd+'/stopped','utf8'),'yes');
-  console.log(args.at(-1)+'-stopped');
+  if(!args.includes('-aq')) console.log(args.at(-1)+'-id');
+  else {
+   assert.equal(readFileSync(cwd+'/stopped','utf8'),'yes');
+   console.log(args.at(-1)+'-stopped');
+  }
  }
  if(args.includes('psql')) console.log('t');
 } else if(args.includes('alpine:3.21')) {
@@ -252,8 +257,8 @@ if(args[0]==='compose') {
  if(args.includes('--volumes-from')) {
   assert.equal(readFileSync(cwd+'/stopped','utf8'),'yes');
   assert.equal(args[args.indexOf('--volumes-from')+1],'db-stopped');
-  assert.equal(args[args.lastIndexOf('--volumes-from')+1],'hermes-stopped');
   assert.ok(args.includes('storage-stopped'),'the files volume is archived too');
+  assert.ok(args.includes('gtmworks-install_hermes:/opt/data'),'the Engine volume is archived too');
  }
  if(command[0]==='tar' && command[1]==='-czf') {
   // BusyBox has one global -C, unlike GNU tar's positional -C options.
@@ -347,7 +352,7 @@ test('an archive made before Hermes data was included restores, says what it lac
   if(args.includes('psql')) console.log('t');
  } else if(args.includes('alpine:3.21')) {
   const command=args.slice(args.indexOf('alpine:3.21')+1);
-  if(args.includes('--volumes-from')) assert.equal(args[args.lastIndexOf('--volumes-from')+1],'hermes-stopped');
+  if(args.includes('--volumes-from')) assert.ok(args.includes('gtmworks-install_hermes:/opt/data'),'the Engine volume is restored too');
   const mapped=command.map(arg=>arg==='/' ? root : arg
    .replaceAll('/backup/',cwd+'/.install-lock/')
    .replaceAll('/var/lib/',root+'/var/lib/')
@@ -584,7 +589,7 @@ test('the installer waits for every address to answer 200, and fails naming the 
  const waited=run('503,refused,503,200');
  assert.equal(waited.status,0,waited.stderr);
  assert.deepEqual(readFileSync(log,'utf8').trimEnd().split('\n'),
-  [health,'pause 1000',health,'pause 1000',health,'pause 1000',health,'http://gateway:8080/sign-in','http://hermes:8642/health']);
+  [health,'pause 1000',health,'pause 1000',health,'pause 1000',health,'http://gateway:8080/sign-in','http://gtmworks-engine-first:8642/health']);
  assert.match(waited.stdout,/^http:\/\/gateway:8080\/api\/health 200$/m);
  assert.equal(waited.stdout.trimEnd().split('\n').at(-1),'gtmworks is ready: http://localhost:3000/sign-in');
  // Never 200: 60 tries, then the install fails naming the address and its last answer, and prints no ready line.

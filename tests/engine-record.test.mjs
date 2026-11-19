@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { engineRecord, registerEngine, attachEngine } from '../lib/engine-record.mjs';
+import { engineRecord, registerEngine, attachEngine, readdressEngine } from '../lib/engine-record.mjs';
 import { decryptSecret } from '../lib/agent-crypto.mjs';
 
 // The Engine record's module (#380, ADR 0018): it writes an Engine's key encrypted with the install's
@@ -55,6 +55,11 @@ test('a waiting Engine record is attached to the Company an existing install mak
   assert.equal(await engineRecord(db,company),null);
   await attachEngine(db,{id:waiting.id,company});
   assert.deepEqual(await engineRecord(db,company),{address:'http://hermes:8642',key});
+  // The template's first Engine gives the same record a new address; its encrypted key is untouched.
+  const before=db.rows[0].key_encrypted;
+  await readdressEngine(db,{id:waiting.id,address:'http://gtmworks-engine-first:8642'});
+  assert.equal(db.rows[0].key_encrypted,before);
+  assert.deepEqual(await engineRecord(db,company),{address:'http://gtmworks-engine-first:8642',key});
  } finally {
   if(saved===undefined) delete process.env.WEBHOOK_ENCRYPTION_KEY; else process.env.WEBHOOK_ENCRYPTION_KEY=saved;
  }

@@ -328,10 +328,9 @@ test('a key change reads in the Company log by its provider, in both languages',
  assert.match(i18n('ar').t('logActProviderKeySet'),/مفتاح/);
 });
 
-test('the README says a Company on an install with several Companies uses its own key, which lives in the agent engine only', () => {
- const sentence='A company\'s API key lives in the agent engine only: gtmworks passes it to that company\'s profiles in the bundled Hermes, never to the root profile or another company\'s, and never keeps, logs or shows it.';
+test('the README says a Company\'s API key lives in its own Engine only, never in another Company\'s', () => {
+ const sentence='a Company\'s API key lives in its own Engine only: gtmworks passes it to that Company\'s Engine, never to another Company\'s, and never keeps, logs or shows it.';
  const readme=readFileSync('README.md','utf8').replace(/\s+/g,' ');
- assert.ok(readme.includes('On an install with several companies, a subscription signed in on the root profile is shared by every company on the install, and a company that wants its own uses its own API key (#124).'));
  assert.ok(readme.includes(sentence),sentence);
 });
 

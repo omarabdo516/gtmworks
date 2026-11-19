@@ -88,7 +88,7 @@ export function CompanySubscriptions({company,owner,profile,oneCompany,signIns}:
   if(!answer.ok) { setNote({provider,key:String(answer.body.error||'signInFailed'),alert:true}); return; }
   router.refresh();
  });
- const command=profile?`docker compose --env-file .env.install -f docker-compose.install.yml exec -u hermes hermes hermes${oneCompany?'':` -p ${profile}`} auth add anthropic --type oauth --no-browser`:'';
+ const command=profile?`docker exec -it -u hermes gtmworks-engine-first hermes${oneCompany?'':` -p ${profile}`} auth add anthropic --type oauth --no-browser`:'';
  const row=(provider:Provider,name:string)=>{
   const state=signIns?.[provider].state; const waiting=started?.provider===provider;
   // A sign-in that serves some agents only can be removed, or replaced by one every agent uses.

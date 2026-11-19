@@ -8,7 +8,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 const {engineFor}=await import(`${process.cwd()}/lib/engine.mjs`);
 
 assert.ok(process.env.HERMES_API_KEY,'the install key is in the web container');
-const connection={address:'http://hermes:8642',profile:'default',key:process.env.HERMES_API_KEY};
+const connection={address:process.env.HERMES_ADDRESS||'http://gtmworks-engine-first:8642',profile:'default',key:process.env.HERMES_API_KEY};
 const engine=engineFor(connection);
 const name=`install-check-${randomBytes(4).toString('hex')}`;
 const instructions='You write short launch posts for the install check.';

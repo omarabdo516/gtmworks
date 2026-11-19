@@ -482,6 +482,13 @@ jobs:
           { sh scripts/install.sh || fail 'first install'; } 2>&1 | tee first-install.log
           compose() { docker compose --env-file .env.install -f docker-compose.install.yml "$@"; }
           db() { compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 -At "$@"; }
+          # The first Engine is its own Compose project (ADR 0018), so removing the install removes it too.
+          remove_engine() {
+            docker rm -f gtmworks-engine-first > /dev/null 2>&1 || true
+            docker volume rm gtmworks-install_hermes > /dev/null 2>&1 || true
+            docker network rm gtmworks-engine-first > /dev/null 2>&1 || true
+          }
+          remove_install() { compose down -v && remove_engine; }
           [[ $(stat -c %a .env.install) == 600 ]] || fail '.env.install permissions (expected 600)'
           # First run opens only through the setup link (issue #50): the first install ends with it, its code is in no
           # other line, and a repeat install while setup is still open prints the same link. The code travels after `#`
@@ -514,13 +521,34 @@ jobs:
           company_id=$(db -c "select id from public.companies where name='Proxy Company'") || fail 'read the first Company'
           [[ -n $company_id ]] || fail 'first run made the first Company'
           engine_key=$(sed -n 's/^HERMES_API_KEY=//p' .env.install)
+          engine_address=http://gtmworks-engine-first:8642
+          engine_management=http://gtmworks-engine-first:9119
           [[ $(db -c "select key_encrypted from public.company_engines where company_id='$company_id'") != "$engine_key" ]] || fail 'the Engine key is stored in plaintext'
           compose exec -T -e BUNDLED_HERMES_URL=http://127.0.0.1:9 -e HERMES_API_KEY=wrong -e EXPECTED_KEY="$engine_key" web \
-            node --input-type=module -e "const {engineOf}=await import('/app/lib/bundled-hermes.mjs'); const at=await engineOf('$company_id'); console.log(at?.address==='http://hermes:8642'&&at?.key===process.env.EXPECTED_KEY?'record':'no');" \
+            node --input-type=module -e "const {engineOf}=await import('/app/lib/bundled-hermes.mjs'); const at=await engineOf('$company_id'); console.log(at?.address==='$engine_address'&&at?.key===process.env.EXPECTED_KEY?'record':'no');" \
             | grep -qx record || fail "the first Company's Engine is answered from its record"
           if grep -qF "$engine_key" <<< "$logs"; then fail 'the Engine key must not appear in a container log'; fi
+          # The first Company's Engine is the template's own Compose project (ADR 0018): its own container, volume and
+          # network, no host port, and the pinned image. The app and the worker join its network; it joins nothing else.
+          engine_id=$(docker ps -q --filter 'name=^gtmworks-engine-first$') || fail 'the first Engine container'
+          [[ -n $engine_id ]] || fail 'the first Engine container'
+          [[ $(docker inspect -f '{{.Config.Image}}' "$engine_id") == $(sed -n 's/^ *image: //p' scripts/engine-template.yml) ]] || fail 'the Engine runs the template image'
+          [[ $(docker inspect -f '{{json .NetworkSettings.Ports}}' "$engine_id") != *HostPort* ]] || fail 'the Engine publishes no host port'
+          [[ $(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$engine_id") == gtmworks-engine-first ]] || fail 'the Engine joins its own network only'
+          for service in web worker; do
+            docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$(compose ps -q "$service")" | grep -qx gtmworks-engine-first \
+              || fail "the $service joins the Engine's network"
+          done
+          # From the Engine's network nothing else of the install is reachable (db, auth, REST, storage, the gateway), and a
+          # request to the app there buys nothing with a forged visitor address.
+          docker run --rm --network gtmworks-engine-first -v "$PWD/scripts:/check:ro" node:22.14.0-alpine3.21 \
+            node /check/check-install-engine-network.mjs || fail "the Engine network reaches no install service and trusts no forged address"
+          # No container of the install mounts the server's Docker socket: the Engine cannot take the server.
+          if docker ps -aq | xargs -r docker inspect -f '{{.Name}} {{range .Mounts}}{{.Source}} {{end}}' | grep -q 'docker.sock'; then
+            fail 'no container of the install mounts the Docker socket'
+          fi
           cp .env.install .env.install.before
-          db -c "insert into public.company_engines (address,key_encrypted) values ('http://hermes:8642','install-probe'); insert into public.companies (id,slug,name) values ('00000000-0000-4000-8000-000000000237','install-probe','Keep me');" || fail 'insert persistence probe'
+          db -c "insert into public.company_engines (address,key_encrypted) values ('$engine_address','install-probe'); insert into public.companies (id,slug,name) values ('00000000-0000-4000-8000-000000000237','install-probe','Keep me');" || fail 'insert persistence probe'
           db -c 'select name from gtmworks_install.schema_migrations order by name' > before || fail 'read initial migrations'
           find supabase/migrations -name '*.sql' ! -name '*.verify.sql' -printf '%f\n' | sort > expected
           diff -u expected before || fail 'applied migrations match migration files'
@@ -556,7 +584,7 @@ jobs:
           backup=$(find backups -name '*.tgz' -print -quit)
           [[ $(stat -c %a "$backup") == 600 ]] || fail 'private backup permissions'
           if sh scripts/install.sh restore "$backup"; then fail 'restore must refuse an occupied install'; fi
-          compose down -v || fail 'remove first install'
+          remove_install || fail 'remove first install'
           rm .env.install
           sh scripts/install.sh || fail 'fresh empty install'
           sh scripts/install.sh restore "$backup" || fail 'restore'
@@ -565,11 +593,12 @@ jobs:
           diff -u data.before data.after || fail 'restored identities match'
           db -c 'select name from gtmworks_install.schema_migrations order by name' > restored
           diff -u before restored || fail 'restored migration history'
-          # Hermes ships inside the install (ADR 0010): no host port, and an Arabic message gets its reply with no manual
-          # connection step. A fake model provider served from the web container stands in for a subscription.
-          hermes=$(compose ps -q hermes) || fail 'bundled Hermes container'
-          [[ -n $hermes && $(docker inspect -f '{{json .NetworkSettings.Ports}}' "$hermes") != *HostPort* ]] || fail 'bundled Hermes publishes no host port'
-          compose exec -T hermes sh -ec 'cat > /opt/data/config.yaml; chown hermes:hermes /opt/data/config.yaml' <<'YAML' || fail 'point the bundled Hermes at the fake model'
+          # The first Company's Engine is the template's own container (ADR 0018): no host port, and an Arabic message gets
+          # its reply with no manual connection step. A fake model provider served from the web container stands in for a
+          # subscription.
+          engine_id=$(docker ps -q --filter 'name=^gtmworks-engine-first$') || fail 'the Engine container'
+          [[ -n $engine_id && $(docker inspect -f '{{json .NetworkSettings.Ports}}' "$engine_id") != *HostPort* ]] || fail 'the Engine publishes no host port'
+          docker exec -i "$engine_id" sh -ec 'cat > /opt/data/config.yaml; chown hermes:hermes /opt/data/config.yaml' <<'YAML' || fail 'point the Engine at the fake model'
           model:
             provider: custom
             default: fake-model
@@ -577,21 +606,29 @@ jobs:
             api_key: fake-model-key
             context_length: 128000
           YAML
-          compose restart hermes && compose up -d --wait --wait-timeout 300 hermes || fail 'bundled Hermes healthy after configuration'
-          compose exec -T web node --input-type=module - < scripts/check-install-conversation.mjs || fail 'Arabic conversation answered by the bundled Hermes'
+          docker restart "$engine_id" > /dev/null || fail 'restart the Engine'
+          for attempt in $(seq 1 60); do
+            [[ $(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$engine_id") == healthy ]] && break
+            [[ $attempt == 60 ]] && fail 'the Engine is healthy after configuration'
+            sleep 1
+          done
+          compose exec -T -e HERMES_API_KEY="$engine_key" -e HERMES_ADDRESS="$engine_address" -e HERMES_MANAGEMENT_ADDRESS="$engine_management" web \
+            node --input-type=module - < scripts/check-install-conversation.mjs || fail 'Arabic conversation answered by the Engine'
           # The Engine's management listener (ADR 0011): an Agent made through the contract runs, the worker reaches it with
-          # the install key, and it is never public: the gateway routes only to the app, and no host port is published.
-          compose exec -T web node --input-type=module - < scripts/check-install-agent.mjs || fail 'Agent created in the bundled Engine and a Run started for it'
-          compose exec -T worker node -e "fetch('http://hermes:9119/api/profiles',{headers:{Authorization:'Bearer '+process.env.HERMES_API_KEY}}).then(response=>process.exit(response.status===200?0:1)).catch(()=>process.exit(1))" || fail 'worker reaches the Engine management listener with the install key'
+          # the Engine's key, and it is never public: the gateway routes only to the app, and no host port is published.
+          compose exec -T -e HERMES_API_KEY="$engine_key" -e HERMES_ADDRESS="$engine_address" -e HERMES_MANAGEMENT_ADDRESS="$engine_management" web \
+            node --input-type=module - < scripts/check-install-agent.mjs || fail 'Agent created in the Engine and a Run started for it'
+          compose exec -T -e HERMES_API_KEY="$engine_key" worker node -e "fetch('$engine_management/api/profiles',{headers:{Authorization:'Bearer '+process.env.HERMES_API_KEY}}).then(response=>process.exit(response.status===200?0:1)).catch(()=>process.exit(1))" || fail 'worker reaches the Engine management listener with its key'
           body=$(docker run --rm --network host curlimages/curl:8.12.1 -sS http://127.0.0.1:3000/api/profiles) || fail 'management path request on install host port 3000'
           status=$(docker run --rm --network host curlimages/curl:8.12.1 -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/api/profiles) || fail 'management path status on install host port 3000'
           [[ $status == 404 && $body != *is_default* ]] || fail "public gateway must not reach the management listener (HTTP $status)"
           if docker run --rm --network host curlimages/curl:8.12.1 -sS -o /dev/null --max-time 5 http://127.0.0.1:9119/api/profiles; then fail 'management listener must not be published on the host'; fi
-          # One profile per company (ADR 0014): two new companies get two different profiles in the bundled Engine, each
-          # with terminal, files and code execution off in its config and absent from its Runs' toolsets. A run on each
+          # One profile per company (ADR 0014): two new companies get two different profiles in the Engine, each with
+          # terminal, files and code execution off in its config and absent from its Runs' toolsets. A run on each
           # answers, and a memory written in the first company's profile reaches its run and never the second's. A lesson
           # its Owner approves reaches the runs of the first company's Agents only, which cannot change it (#122).
-          compose exec -T web node --input-type=module - prepare < scripts/check-install-profiles.mjs | tee prepare-profiles.log || fail 'two companies get two profiles with terminal, file and code tools off, each with one shared space'
+          compose exec -T -e HERMES_API_KEY="$engine_key" -e HERMES_ADDRESS="$engine_address" -e HERMES_MANAGEMENT_ADDRESS="$engine_management" web \
+            node --input-type=module - prepare < scripts/check-install-profiles.mjs | tee prepare-profiles.log || fail 'two companies get two profiles with terminal, file and code tools off, each with one shared space'
           first=$(tail -n 1 prepare-profiles.log)
           [[ $first =~ ^co-[0-9a-f]{32}$ ]] || fail "the first company's profile name"
           # One Company cannot name another's profile (#126): the database refuses the row, whoever writes it.
@@ -599,19 +636,20 @@ jobs:
           if db -c "insert into public.hermes_agents(company_id,profile,name,speciality) values ('$company_b','$first','Other company agent','Writes the install check.')" 2> profile-refusal.log; then fail 'the database refuses a profile of another company'; fi
           grep -q hermesProfileNotShared profile-refusal.log || { cat profile-refusal.log >&2; fail 'the database refuses a profile of another company, by its guard'; }
           marker="memory-check-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
-          compose exec -T hermes sh -ec 'mkdir -p "/opt/data/profiles/$1/memories"; printf "%s\n" "The company code word is $2." >> "/opt/data/profiles/$1/memories/MEMORY.md"; chown -R hermes:hermes "/opt/data/profiles/$1/memories"' sh "$first" "$marker" || fail "write a memory in the first company's profile"
-          compose exec -T web node --input-type=module - verify "$marker" < scripts/check-install-profiles.mjs || fail "runs on each company profile answer, and a company's memory and approved lessons stay in its own runs"
+          docker exec -i "$engine_id" sh -ec 'mkdir -p "/opt/data/profiles/$1/memories"; printf "%s\n" "The company code word is $2." >> "/opt/data/profiles/$1/memories/MEMORY.md"; chown -R hermes:hermes "/opt/data/profiles/$1/memories"' sh "$first" "$marker" || fail "write a memory in the first company's profile"
+          compose exec -T -e HERMES_API_KEY="$engine_key" -e HERMES_ADDRESS="$engine_address" -e HERMES_MANAGEMENT_ADDRESS="$engine_management" web \
+            node --input-type=module - verify "$marker" < scripts/check-install-profiles.mjs || fail "runs on each company profile answer, and a company's memory and approved lessons stay in its own runs"
           # Apps (#30), on the first company's profile with no vendor sign-in: the registry's apps are in the pinned
           # catalogue, connecting writes only an app's read tools and the way back to gtmworks, an unknown way back is
           # expired, and disconnecting turns the app off.
-          compose exec -T web node --input-type=module - < scripts/check-install-apps.mjs || fail 'apps write only their read tools and come back through gtmworks'
+          compose exec -T -e HERMES_API_KEY="$engine_key" -e HERMES_ADDRESS="$engine_address" -e HERMES_MANAGEMENT_ADDRESS="$engine_management" web \
+            node --input-type=module - < scripts/check-install-apps.mjs || fail 'apps write only their read tools and come back through gtmworks'
           # What an install holds (#126): twenty more Agent profiles in the first Company, ten with the Engine's bundled
           # Skills and ten without. The script prints each profile's name and the seconds it took to be ready, then runs
           # the first Agent once more; the job prints the Engine container's memory and the volume's disk around them.
-          capacity() { compose exec -T web node --input-type=module - capacity "$1" < scripts/check-install-profiles.mjs; }
-          hermes_id=$(compose ps -q hermes) || fail 'the Engine container'
-          engine_memory() { docker stats --no-stream --format '{{.MemUsage}}' "$hermes_id"; }
-          engine_disk() { docker run --rm --volumes-from "$hermes_id" --entrypoint sh "$(docker inspect -f '{{.Image}}' "$hermes_id")" -ec 'du -sk /opt/data | cut -f1'; }
+          capacity() { compose exec -T -e HERMES_API_KEY="$engine_key" -e HERMES_ADDRESS="$engine_address" -e HERMES_MANAGEMENT_ADDRESS="$engine_management" web node --input-type=module - capacity "$1" < scripts/check-install-profiles.mjs; }
+          engine_memory() { docker stats --no-stream --format '{{.MemUsage}}' "$engine_id"; }
+          engine_disk() { docker run --rm --volumes-from "$engine_id" --entrypoint sh "$(docker inspect -f '{{.Image}}' "$engine_id")" -ec 'du -sk /opt/data | cut -f1'; }
           memory_before=$(engine_memory) || fail 'the Engine memory before the capacity profiles'
           disk_before=$(engine_disk) || fail 'the Engine disk before the capacity profiles'
           capacity with-skills | tee capacity-with-skills.log || fail 'ten more Agent profiles with the bundled Skills'
@@ -622,14 +660,14 @@ jobs:
           per_with=$(( (disk_with-disk_before)/10 )) || fail 'the disk one profile with Skills takes'
           per_without=$(( (disk_without-disk_with)/10 )) || fail 'the disk one profile without Skills takes'
           echo "capacity: engine memory $memory_before before and $memory_after after 20 agent profiles; $per_with KiB per profile with the bundled Skills, $per_without KiB without"
-          # Hermes holds none of gtmworks's own keys and passwords (#2): its environment and every file its user can read
-          # are scanned for the real values in .env.install, passed on stdin; only names and paths are printed.
-          { grep -E '^(POSTGRES_PASSWORD|PGSODIUM_ROOT_KEY|SUPABASE_JWT_SECRET|SUPABASE_SERVICE_ROLE_KEY|WEBHOOK_ENCRYPTION_KEY|SETUP_CODE)=' .env.install | compose exec -T -u hermes hermes /opt/hermes/.venv/bin/python -c "$(cat scripts/check-hermes-keys.py)"; } || fail "the bundled Hermes holds none of gtmworks's keys and passwords"
+          # The Engine holds none of gtmworks's own keys and passwords (#2): its environment and every file its user can
+          # read are scanned for the real values in .env.install, passed on stdin; only names and paths are printed.
+          { grep -E '^(POSTGRES_PASSWORD|PGSODIUM_ROOT_KEY|SUPABASE_JWT_SECRET|SUPABASE_SERVICE_ROLE_KEY|WEBHOOK_ENCRYPTION_KEY|SETUP_CODE)=' .env.install | docker exec -i -u hermes "$engine_id" /opt/hermes/.venv/bin/python -c "$(cat scripts/check-hermes-keys.py)"; } || fail "the Engine holds none of gtmworks's keys and passwords"
           # A remote server (README): a fresh install whose APP_ORIGIN is the https origin of a proxy in front of the gateway.
           # First run and the emailed sign-in link must stay on that origin and reach the Company home, and so must the
           # invitation link and a sign-in link requested with a forged X-Forwarded-Host (issue #40).
           public=https://app.gtmworks.test:4443
-          compose down -v || fail 'remove restored install'
+          remove_install || fail 'remove restored install'
           sed -i -e "s#^APP_ORIGIN=.*#APP_ORIGIN=$public#" -e "s#^SUPABASE_PUBLIC_URL=.*#SUPABASE_PUBLIC_URL=$public#" .env.install || fail 'set the public origin'
           { sh scripts/install.sh || fail 'proxied install'; } 2>&1 | tee proxied-install.log
           [[ $(tail -n 1 proxied-install.log) == "Set up gtmworks with this one-time link: $public/first-run#code=$code" ]] || fail 'the proxied install prints its setup link on the public origin'
@@ -678,8 +716,15 @@ jobs:
         run: |
           fail() { echo "release install check failed: $1" >&2; exit 1; }
           compose() { docker compose --env-file .env.install -f docker-compose.install.yml "$@"; }
+          remove_engine() {
+            docker rm -f gtmworks-engine-first > /dev/null 2>&1 || true
+            docker volume rm gtmworks-install_hermes > /dev/null 2>&1 || true
+            docker network rm gtmworks-engine-first > /dev/null 2>&1 || true
+          }
+          remove_install() { compose down -v && remove_engine; }
           root=$PWD
           compose down -v || fail 'remove the source install'
+          remove_engine
           docker run -d --name install-registry -p 127.0.0.1:5000:5000 registry:2.8.3 > /dev/null || fail 'local registry'
           for attempt in $(seq 1 30); do docker run --rm --network host curlimages/curl:8.12.1 -sf http://127.0.0.1:5000/v2/ > /dev/null && break; sleep 1; done
           publish() { docker push -q "localhost:5000/gtmworks:$1" > /dev/null && docker image inspect --format '{{index .RepoDigests 0}}' "localhost:5000/gtmworks:$1"; }
@@ -704,11 +749,11 @@ jobs:
             -c "insert into public.companies (id,slug,name) values ('00000000-0000-4000-8000-000000000239','release-probe','Release probe');" \
             || fail 'the release install makes a Company on its Engine record'
           release_probe=00000000-0000-4000-8000-000000000239
-          compose exec -T web node --input-type=module -e "const {engineOf}=await import('/app/lib/bundled-hermes.mjs'); const at=await engineOf('$release_probe'); console.log(at?.address==='http://hermes:8642'?'record':'no');" \
+          compose exec -T web node --input-type=module -e "const {engineOf}=await import('/app/lib/bundled-hermes.mjs'); const at=await engineOf('$release_probe'); console.log(at?.address==='http://gtmworks-engine-first:8642'?'record':'no');" \
             | grep -qx record || fail "the release install's Company answers from its Engine record"
           cp "$root/release-next/docker-compose.install.yml" "$root/release-next/install.sh" "$dir/" || fail 'next release files in place'
           sh "$dir/install.sh" update || fail 'release update'
-          compose exec -T web node --input-type=module -e "const {engineOf}=await import('/app/lib/bundled-hermes.mjs'); const at=await engineOf('$release_probe'); console.log(at?.address==='http://hermes:8642'?'record':'no');" \
+          compose exec -T web node --input-type=module -e "const {engineOf}=await import('/app/lib/bundled-hermes.mjs'); const at=await engineOf('$release_probe'); console.log(at?.address==='http://gtmworks-engine-first:8642'?'record':'no');" \
             | grep -qx record || fail "the updated install's Company still answers from its Engine record"
           [[ $(compose exec -T db psql -X -U postgres -d postgres -At -c "select count(*) from public.company_engines e join public.companies c on c.id=e.company_id where c.slug='release-probe'") == 1 ]] \
             || fail 'the updated install keeps the Company Engine record'
@@ -733,6 +778,11 @@ jobs:
           set -o pipefail
           compose() { docker compose --env-file .env.install -f docker-compose.install.yml "$@"; }
           db() { compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 -At "$@"; }
+          remove_engine() {
+            docker rm -f gtmworks-engine-first > /dev/null 2>&1 || true
+            docker volume rm gtmworks-install_hermes > /dev/null 2>&1 || true
+            docker network rm gtmworks-engine-first > /dev/null 2>&1 || true
+          }
           migrations() { db -c 'select name from gtmworks_install.schema_migrations order by name'; }
           web_image() { docker inspect -f '{{.Image}}' "$(compose ps -q web)"; }
           probe() {
@@ -744,7 +794,7 @@ jobs:
           }
           publish() { docker push -q "localhost:5000/gtmworks:$1" > /dev/null && docker image inspect --format '{{index .RepoDigests 0}}' "localhost:5000/gtmworks:$1"; }
           workspace=$PWD
-          (cd release-install && compose down -v) || fail 'remove the release install'
+          (cd release-install && compose down -v && remove_engine) || fail 'remove the release install'
           releases="$workspace/test-releases"
           mkdir -p "$releases/v0.0.0" "$releases/v0.0.1" "$releases/v0.0.2"
           cp release-first/docker-compose.install.yml release-first/install.sh "$releases/v0.0.0/" || fail 'test release v0.0.0'
@@ -859,6 +909,7 @@ jobs:
           (cd "$dir" && [[ $(cat .install-release) == "$first" ]] && compose ps --status running -q web | grep -q .) || fail 'the first install still runs after the refusal'
           # --version installs that release and not the latest: v0.0.0 into a fresh folder while v0.0.1 is the latest.
           (cd "$dir" && compose down -v) || fail 'remove the one-line install'
+          remove_engine
           echo '[{"tag_name":"v0.0.0"},{"tag_name":"v0.0.1"}]' > "$releases/releases.json"
           { line --version v0.0.0 --dir "$fresh" || fail 'the one line with --version'; } 2>&1 | tee "$RUNNER_TEMP/one-line-version.log"
           grep -Fx "Installing gtmworks v0.0.0 into $fresh." "$RUNNER_TEMP/one-line-version.log" || fail 'the --version run names v0.0.0'

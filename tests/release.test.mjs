@@ -100,6 +100,7 @@ test('the release install script is the source installer with the released image
 // Every path the source installer and its compose file read from the checkout (relative mounts, the lib folder the
 // install-env helper runs from, and the migrations it streams) must be inside the image, under /app/install.
 function checkoutPaths() {
+ const fixed=['scripts/engine-template.yml'];
  const paths=new Set();
  for(const service of Object.values(load(sourceCompose).services)) for(const volume of service.volumes||[]) {
   const source=volume.split(':')[0];
@@ -107,7 +108,7 @@ function checkoutPaths() {
  }
  for(const match of sourceInstaller.matchAll(/\$PWD\/([\w./-]+):/g)) if(!match[1].startsWith('.')) paths.add(match[1]);
  for(const match of sourceInstaller.matchAll(/for file in ([\w/]+)\/\*\.sql/g)) paths.add(match[1]);
- return [...paths].sort();
+ return [...new Set([...fixed,...paths])].sort();
 }
 
 test('the image carries every file an install reads from a source checkout', () => {
@@ -139,7 +140,7 @@ case "$*" in
   # Runs the installer's own extraction script, with the image's /app/install and the mounted /install mapped here.
   eval "script=\\\${$#}"
   umask 022; sh -ec "$(printf '%s' "$script" | sed -e "s#/app/install/#$IMAGE_ROOT/#g" -e 's#/install/#./#g')";;
- *install-env.mjs\\ generate*) printf 'GENERATED=1\\n';;
+ *install-env.mjs\\ generate*) printf 'GENERATED=1\\nHERMES_API_KEY=%s\\n' "$(printf 'k%.0s' $(seq 1 64))";;
  *'exec -T db psql'*) cat > "$MIGRATION_SQL"; exit "\${MIGRATION_EXIT:-0}";;
 esac
 `;
@@ -195,7 +196,7 @@ test('a release install refuses a compose file from another release and an updat
  assert.match(refused.stderr,/docker-compose\.install\.yml/);
  assert.equal(mismatched.commands(),'');
  const release=releaseDirectory(t);
- writeFileSync(join(release.directory,'.env.install'),'GENERATED=1\n');
+ writeFileSync(join(release.directory,'.env.install'),`GENERATED=1\nHERMES_API_KEY=${'k'.repeat(64)}\n`);
  const update=release.run('update','main');
  assert.notEqual(update.status,0);
  assert.match(update.stderr,/next release/);

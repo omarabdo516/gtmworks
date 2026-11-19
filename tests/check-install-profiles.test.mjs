@@ -15,7 +15,7 @@ test('the install proof prints no value from .env.install, only the fields it na
  const env=generateInstallEnv();
  const output=proof({step:'verify',companies:[{company:'c0000000-0000-4000-8000-000000000001',profile:'co-c0000000000040008000000000000001'}],
   memory:[true,false,false,false],skills:[true,true,false,false],keys:[true,true,false,false,false,false],...env,
-  apiKey:env.HERMES_API_KEY,connection:`http://hermes:8642`});
+  apiKey:env.HERMES_API_KEY,connection:`http://gtmworks-engine-first:8642`});
  for(const [name,value] of Object.entries(env)) assert.ok(!output.includes(value),`${name} is not printed`);
  const kept=JSON.parse(output);
  assert.equal(kept.step,'verify');
@@ -37,7 +37,7 @@ test('the proof script never prints on its own, so every line goes through the p
 // Engine's memory around them, and the disk one profile takes with and without its bundled Skills (CI run 44398966783).
 // The sentence's shape is pinned here so a rewrite cannot drop one, and no figure is left a placeholder.
 const figure=String.raw`\d+(?:\.\d+)?(?: to \d+(?:\.\d+)?)?(?: ?(?:KiB|MiB|GiB))?`;
-const sentence=new RegExp(String.raw`An install was proven with four Agents across two companies, and twenty more Agent profiles for capacity: each of the 20 took ${figure} seconds to be ready, the engine held ${figure} before and ${figure} after making them, and one profile takes ${figure} KiB of disk with the engine's bundled Skills and ${figure} KiB without\.`);
+const sentence=new RegExp(String.raw`An install was proven with four Agents across two Companies, and twenty more Agent profiles for capacity: each of the 20 took ${figure} seconds to be ready, the Engine held ${figure} before and ${figure} after making them, and one profile takes ${figure} KiB of disk with the Engine's bundled Skills and ${figure} KiB without\.`);
 
 test('the README states the figures the install job measured, and the number of Agents proven', () => {
  const readme=readFileSync('README.md','utf8').replace(/\s+/g,' ');

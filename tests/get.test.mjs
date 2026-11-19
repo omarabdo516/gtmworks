@@ -238,13 +238,13 @@ test('--channel main installs the main image by its digest, with the two files w
 test('the main image holds what --channel main runs, and release-assets.mjs writes the two files from it', t => {
  const dockerfile=readFileSync('Dockerfile','utf8');
  assert.match(dockerfile,/^COPY --from=build --chown=node:node \/app\/docker-compose\.install\.yml \.\/release-source\/$/m);
- assert.match(dockerfile,/^COPY --from=build --chown=node:node \/app\/scripts\/install\.sh \/app\/scripts\/release-assets\.mjs \.\/release-source\/scripts\/$/m);
+ assert.match(dockerfile,/^COPY --from=build --chown=node:node \/app\/scripts\/install\.sh \/app\/scripts\/release-assets\.mjs \/app\/scripts\/engine-template\.yml \.\/release-source\/scripts\/$/m);
  // /app/release-source laid out as the image holds it, run as get.sh runs it there.
  const source=mkdtempSync(join(tmpdir(),'gtmworks-release-source-'));
  t.after(()=>rmSync(source,{recursive:true,force:true}));
  mkdirSync(join(source,'scripts'));
  cpSync('docker-compose.install.yml',join(source,'docker-compose.install.yml'));
- for(const file of ['install.sh','release-assets.mjs']) cpSync(join('scripts',file),join(source,'scripts',file));
+ for(const file of ['install.sh','release-assets.mjs','engine-template.yml']) cpSync(join('scripts',file),join(source,'scripts',file));
  const result=spawnSync(process.execPath,['scripts/release-assets.mjs',mainRef,join(source,'out')],{cwd:source,encoding:'utf8'});
  assert.equal(result.status,0,result.stderr);
  assert.match(readFileSync(join(source,'out/install.sh'),'utf8'),new RegExp(`^release_image=${mainRef.replace(/[.]/g,'\\.')}$`,'m'));

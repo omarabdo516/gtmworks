@@ -12,7 +12,10 @@ import { createClient } from '@supabase/supabase-js';
 const {sendMessage}=await import(`${process.cwd()}/lib/conversation-runs.mjs`);
 const {companyProfile}=await import(`${process.cwd()}/lib/agent-levels.mjs`);
 
-const health=await fetch('http://hermes:8642/health');
+const engineAddress=process.env.HERMES_ADDRESS||'http://gtmworks-engine-first:8642';
+const engineManagement=process.env.HERMES_MANAGEMENT_ADDRESS||'http://gtmworks-engine-first:9119';
+
+const health=await fetch(`${engineAddress}/health`);
 assert.equal(health.status,200);
 assert.equal((await health.json()).platform,'hermes-agent');
 
@@ -49,7 +52,7 @@ try {
  assert.ok(company,'the first-run Owner owns a Company');
  // The record, not the install's environment, is where its Engine comes from.
  const record=await checked(service.from('company_engines').select('address').eq('company_id',company).single());
- assert.equal(record.address,'http://hermes:8642','the first Company has the install Engine record');
+ assert.equal(record.address,engineAddress,'the first Company has the install Engine record');
 
  const until=async(what,read,seconds)=>{
   for(let left=seconds;left>0;left--) { const found=await read(); if(found) return found; await new Promise(resolve=>setTimeout(resolve,1000)); }
@@ -60,7 +63,7 @@ try {
  // It runs on the company's own profile, never the shared `default` one.
  const profile=companyProfile(company);
  assert.deepEqual((await checked(person.from('hermes_agents').select('profile').eq('company_id',company))).map(found=>found.profile),[profile]);
- const configured=await fetch(`http://hermes:9119/api/config?profile=${profile}`,{method:'PUT',headers:{Authorization:`Bearer ${process.env.HERMES_API_KEY}`,'Content-Type':'application/json'},
+ const configured=await fetch(`${engineManagement}/api/config?profile=${profile}`,{method:'PUT',headers:{Authorization:`Bearer ${process.env.HERMES_API_KEY}`,'Content-Type':'application/json'},
   body:JSON.stringify({config:{model:{provider:'custom',default:'fake-model',base_url:'http://web:8080/v1',api_key:'fake-model-key',context_length:128000}}})});
  assert.equal(configured.status,200,'the company profile points at the fake model');
  const conversation=randomUUID();

@@ -11,7 +11,7 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh, replace: vi.fn(
 afterEach(() => { refresh.mockReset(); vi.unstubAllGlobals(); });
 
 const profile = 'co-10000000000000000000000000000001';
-const command = 'docker compose --env-file .env.install -f docker-compose.install.yml exec -u hermes hermes hermes';
+const command = 'docker exec -it -u hermes gtmworks-engine-first hermes';
 const signIns = (chatgpt: SubscriptionState, claude: SubscriptionState): CompanySignIns['signIns'] =>
   ({ 'openai-codex': { state: chatgpt, flow: 'device_code' }, anthropic: { state: claude, flow: 'external' } });
 const section = (props: { owner: boolean, oneCompany: boolean, signIns: CompanySignIns['signIns'] }, language: 'en' | 'ar' = 'en') =>

@@ -29,7 +29,7 @@ worker_stopped=no
 cleanup() {
   status=$?
   trap - EXIT
-  if [ "$resume" = yes ]; then compose up -d --wait --wait-timeout 300 || status=1; fi
+  if [ "$resume" = yes ]; then compose up -d --wait --wait-timeout 300 || status=1; engine_up || status=1; fi
   # A run that stopped the worker for a gateway change and failed before the app started leaves it running again.
   if [ "$worker_stopped" = yes ]; then compose start worker || status=1; fi
   rm -f .env.install.tmp
@@ -40,6 +40,61 @@ trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
 node_image=node:22.14.0-alpine3.21
 compose() { docker compose --env-file .env.install -f docker-compose.install.yml "$@"; }
+# The first Company's Engine (ADR 0018) is made from the template shipped with the release, as its own Compose project:
+# the pinned official Hermes image, its own data volume, its own key and its own network. The app and the worker join
+# that network; the Engine joins nothing else. An install made before ADR 0018 keeps its existing `hermes` volume, now
+# under this Engine's name, so its Agents' memory, Skills and history stay. `gtmworks company add` (#382) uses the same
+# template and naming for later Companies.
+engine_project=gtmworks-engine-first
+engine_container=gtmworks-engine-first
+engine_network=gtmworks-engine-first
+engine_volume=gtmworks-install_hermes
+engine_address=http://gtmworks-engine-first:8642
+engine_management=http://gtmworks-engine-first:9119
+engine_folder=.engines/first
+engine_template=scripts/engine-template.yml
+engine_key() { sed -n 's/^HERMES_API_KEY=//p' .env.install; }
+engine() { docker compose --project-name "$engine_project" --env-file "$engine_folder/.env" -f "$engine_template" "$@"; }
+write_engine_env() {
+  mkdir -p "$engine_folder"
+  {
+    printf 'ENGINE_NAME=%s\n' "$engine_container"
+    printf 'ENGINE_KEY=%s\n' "$1"
+    printf 'ENGINE_VOLUME=%s\n' "$engine_volume"
+    printf 'ENGINE_NETWORK=%s\n' "$engine_network"
+  } > "$engine_folder/.env"
+  chmod 600 "$engine_folder/.env"
+}
+# A container from the one-Hermes install (before ADR 0018) is not part of this compose file any more. It must stop
+# before the Engine template uses the same volume, and its volume is the first Engine's data.
+retire_old_engine() {
+  old=$(docker ps -aq --filter 'label=com.docker.compose.project=gtmworks-install' \
+    --filter 'label=com.docker.compose.service=hermes') || return 1
+  [ -z "$old" ] || docker rm -f $old > /dev/null
+}
+# The app and the worker reach every Engine by its container name. Compose recreates them on an update, which drops the
+# extra network, so the connection is made again after every start of the stack.
+join_engine_network() {
+  for service in web worker; do
+    id=$(compose ps -q "$service") || return 1
+    [ -n "$id" ] || continue
+    name=$(docker inspect -f '{{.Name}}' "$id") || return 1
+    name=${name#/}
+    if docker network inspect "$engine_network" -f '{{range .Containers}}{{println .Name}}{{end}}' | grep -qx "$name"; then
+      continue
+    fi
+    docker network connect "$engine_network" "$id" || return 1
+  done
+}
+engine_up() {
+  key=$(engine_key)
+  test -n "$key" || { echo 'The install has no Engine key: run sh scripts/install.sh.' >&2; return 1; }
+  write_engine_env "$key"
+  retire_old_engine || return 1
+  engine up -d --wait --wait-timeout 300 || return 1
+  join_engine_network
+}
+engine_stop() { docker stop "$engine_container" > /dev/null 2>&1 || true; }
 complete_env() {
   docker run --rm --env-file "$1" -v "$PWD/lib:/code:ro" "$node_image" node /code/install-env.mjs missing > .install-lock/missing
   if [ -s .install-lock/missing ]; then
@@ -50,7 +105,7 @@ complete_env() {
 }
 volumes() {
   docker run --rm --volumes-from "$(compose ps -aq db)" --volumes-from "$(compose ps -aq storage)" \
-    --volumes-from "$(compose ps -aq hermes)" "$@"
+    -v "$engine_volume:/opt/data" "$@"
 }
 operation=${1:-install}
 if [ -n "$release_image" ]; then
@@ -73,9 +128,11 @@ if [ "$operation" = backup ]; then
   # The stack starts again after the copy, Hermes included, so an install the installer before ADR 0010 updated gains its key.
   complete_env "$PWD/.env.install"
   resume=yes
+  engine_stop
   compose stop
   # BusyBox tar applies the last -C to every entry, so keep all paths under one root. The Agents' profiles, rules,
-  # knowledge, skills, memory and history live only in the bundled Engine's volume (#349), so opt/data goes with them.
+  # knowledge, skills, memory and history live only in the first Company's Engine volume (#349, ADR 0018), so opt/data
+  # goes with them.
   volumes -v "$PWD/.env.install:/.env.install:ro" alpine:3.21 tar -czf - \
     -C / var/lib/postgresql/data etc/postgresql-custom var/lib/storage opt/data .env.install > .install-lock/backup.tgz
   archive="$destination/gtmworks-$(date -u +%Y%m%dT%H%M%SZ)-$$.tgz"
@@ -102,7 +159,8 @@ elif [ "$operation" = restore ]; then
   complete_env "$PWD/.env.install.tmp"
   docker run --rm --env-file .env.install.tmp -v "$PWD/lib:/code:ro" "$node_image" node /code/install-env.mjs validate complete
   resume=yes
-  compose stop web worker gateway auth rest storage mail hermes
+  engine_stop
+  compose stop web worker gateway auth rest storage mail
   empty=$(compose exec -T db psql -X -U postgres -d postgres -At -v ON_ERROR_STOP=1 -c \
     'select not exists(select 1 from public.companies) and not exists(select 1 from auth.users) and not exists(select 1 from storage.objects);')
   test "$empty" = t || { echo 'Restore requires an empty install.' >&2; exit 1; }
@@ -122,6 +180,7 @@ elif [ "$operation" = restore ]; then
   ' sh "$hermes_data"
   mv .env.install.tmp .env.install
   compose up -d --force-recreate --wait --wait-timeout 300
+  engine_up
   if [ "$hermes_data" = no ]; then
     echo "The Agents' Hermes data was not in this backup: their knowledge, rules, skills and memory were not restored."
   fi
@@ -208,24 +267,30 @@ if [ -z "$release_image" ]; then
     mv .install-lock/gateway .install-gateway
   fi
 fi
+# The first Engine is made from the template before the app and the worker start, recreated when the release pins a new
+# image, and left running otherwise.
+engine_up
 if [ "$operation" = update ] && [ -z "$release_image" ]; then
   # auth is recreated when its settings changed (password rules, reset-link lifetime, session length) and must be healthy.
-  compose up -d --no-deps --wait --wait-timeout 300 auth hermes web worker
+  compose up -d --no-deps --wait --wait-timeout 300 auth web worker
 else
   # A release pins every service by digest: compose recreates each one the release changed and leaves the rest running.
   compose up -d --wait --wait-timeout 300
 fi
 worker_stopped=no
+# The app and the worker join the Engine's network once they exist, and again after every recreation.
+join_engine_network
 # The extraction replaced the gateway configuration in place; Nginx reads it again without dropping connections.
 if [ "$operation" = update ] && [ -n "$release_image" ]; then compose exec -T gateway nginx -s reload; fi
 # The install's Engine record (#380, ADR 0018): its address and key, the key encrypted with WEBHOOK_ENCRYPTION_KEY, kept in
-# the database for the app and the worker to answer from. A fresh install leaves one record waiting for first run's first
-# Company; an install made before it attaches every Company it already has, so nothing stops working.
-compose exec -T web node scripts/install-engine.mjs
+# the database for the app and the worker to answer from. The installer passes the Engine's own address and key to this
+# script alone; they are not in the app's or the worker's environment. A fresh install leaves one record waiting for
+# first run's first Company; an install made before it attaches every Company it already has, so nothing stops working.
+compose exec -T -e BUNDLED_HERMES_URL="$engine_address" -e HERMES_API_KEY="$(engine_key)" web node scripts/install-engine.mjs
 # Each address must answer 200. Right after the migrations PostgREST reloads its schema cache (and the gateway its
 # configuration), and the app's health answers 503 meanwhile: the probes try again once a second, 60 tries in all, and
 # fail naming the address and its last answer when 200 never comes.
-compose exec -T web node -e "let tries=60; for(const url of ['http://gateway:8080/api/health','http://gateway:8080/sign-in','http://hermes:8642/health']) { for(;;) { let answer; try { answer=(await fetch(url)).status; } catch(error) { answer=error.message; } if(answer===200) { console.log(url+' 200'); break; } if(--tries<=0) throw new Error(url+' returned '+answer); await new Promise(resolve=>setTimeout(resolve,1000)); } }" --input-type=module
+compose exec -T web node -e "let tries=60; for(const url of ['http://gateway:8080/api/health','http://gateway:8080/sign-in','$engine_address/health']) { for(;;) { let answer; try { answer=(await fetch(url)).status; } catch(error) { answer=error.message; } if(answer===200) { console.log(url+' 200'); break; } if(--tries<=0) throw new Error(url+' returned '+answer); await new Promise(resolve=>setTimeout(resolve,1000)); } }" --input-type=module
 if [ -n "$release_image" ]; then printf '%s\n' "$release_image" > .install-release; fi
 # Whether first run is still open, asked through the app's service role; it answers open or closed and nothing else.
 setup=$(compose exec -T web node -e "const key=process.env.SUPABASE_SERVICE_ROLE_KEY; const response=await fetch('http://gateway:8080/rest/v1/rpc/setup_is_open',{method:'POST',headers:{apikey:key,authorization:'Bearer '+key}}); if(!response.ok) throw new Error('setup_is_open returned '+response.status); console.log(await response.json()===true?'open':'closed');" --input-type=module)
