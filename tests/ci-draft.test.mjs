@@ -150,12 +150,27 @@ test('the image job runs when the browser suite or the install proof is asked fo
   assert.equal(started({ event: 'push', files: documentFiles }).includes('image'), false);
 });
 
-test('a pull request that changes install files starts the install proof as one job of four areas, each on its own', () => {
+test('a pull request that changes install files starts the install proof as one job of seven areas, each on its own', () => {
   const run = started({ event: 'pull_request', draft: false, files: ['scripts/install.sh'] });
   for (const job of installJobs) assert.ok(run.includes(job), job);
   // One matrix job: each entry's name is the area that failed, and one area's fault leaves the rest running.
-  assert.deepEqual(ci.jobs.install.strategy, { 'fail-fast': false, matrix: { area: ['first-install', 'companies', 'proxy', 'update', 'one-line'] } });
+  assert.deepEqual(ci.jobs.install.strategy, { 'fail-fast': false, matrix: { area: ['first-install', 'companies', 'agents', 'backup', 'proxy', 'update', 'one-line'] } });
   assert.equal(ci.jobs.install.name, 'install-${{ matrix.area }}');
+});
+
+// #408: the profile-size measurement is no check a pull request needs. It runs on a push to main and on a manual run
+// only, like the visual lane, and a documents-only push starts none of it.
+test('the profile-size measurement starts on a push to main and on a manual run, never on a pull request', () => {
+  for (const draft of [true, false]) {
+    assert.equal(started({ event: 'pull_request', draft, files: heavyFiles }).includes('install-measure'), false, `a draft=${draft} pull request`);
+  }
+  const push = started({ event: 'push', files: ['scripts/ci-fast.mjs'] });
+  assert.ok(push.includes('install-measure'), 'a push to main with a code change');
+  assert.ok(push.includes('image'), 'the push builds the image the measurement loads');
+  const manual = started({ event: 'workflow_dispatch', files: ['scripts/ci-fast.mjs'] });
+  assert.ok(manual.includes('install-measure'), 'a manual run');
+  assert.ok(manual.includes('image'), 'the manual run builds the image the measurement loads');
+  assert.equal(started({ event: 'push', files: documentFiles }).includes('install-measure'), false, 'a documents-only push');
 });
 
 // The fast job already linted and type-checked, so the image build does neither; a release or local build keeps both.

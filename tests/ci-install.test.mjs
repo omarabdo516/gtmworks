@@ -5,12 +5,14 @@ import { resolve } from 'node:path';
 import { load } from 'js-yaml';
 
 // The install proof is one job (#406): a matrix entry per area, each on a fresh isolated Docker machine of its own. The
-// areas are the first install and its repeat with Companies, Agents, backup and restore (`first-install`); the public
-// address behind a proxy (`proxy`); the update between releases (`update`); and the one-line install (`one-line`). Each
-// entry is one command of the repo, holds no check of its own, and loads the one app image the run built (#403): no step
-// of the job builds an image.
+// areas are the first install and its repeat (`first-install`); Companies and their Engines (`companies`, #407); Agents
+// on their Engines (`agents`, #408); backup and restore (`backup`, #409); the public address behind a proxy (`proxy`);
+// the update between releases (`update`); and the one-line install (`one-line`). Each entry is one command of the repo,
+// holds no check of its own, and loads the one app image the run built (#403): no step of the job builds an image. The
+// profile-size measurement is a job of its own that no pull request runs (#408).
 const ci = load(readFileSync(resolve('.github/workflows/ci.yml'), 'utf8'));
 const job = ci.jobs.install;
+const measureJob = 'install-measure';
 const proof = ['scripts/ci-install-check.sh', 'scripts/ci-install-lib.sh'];
 const script = readFileSync(proof[0], 'utf8');
 const matrix = job.strategy.matrix.area;
@@ -19,22 +21,23 @@ const cases = [...script.matchAll(/^ ([\w-]+)\) (.*);;$/gm)].map(([, name, comma
 
 test('the proof is one job with one matrix entry per area, every entry left to its end', () => {
   assert.equal(job.name, 'install-${{ matrix.area }}', 'the name says which area failed');
-  assert.deepEqual(job.strategy, { 'fail-fast': false, matrix: { area: ['first-install', 'companies', 'proxy', 'update', 'one-line'] } });
+  assert.deepEqual(job.strategy, { 'fail-fast': false, matrix: { area: ['first-install', 'companies', 'agents', 'backup', 'proxy', 'update', 'one-line'] } });
   assert.equal(job['timeout-minutes'], 90);
   assert.equal(job.permissions.contents, 'read');
 });
 
 const seven = ['first_install', 'companies', 'agents', 'backup', 'proxy', 'update', 'one_line'];
 
-test('every area of the matrix is one case of the proof, and every case but all is in the matrix', () => {
-  assert.deepEqual(cases.map(({ name }) => name), ['all', ...matrix], 'the matrix and the dispatch name the same areas');
-  // A matrix entry runs its own areas only: every command of it is one of the seven, and never all seven.
+test('every area of the matrix is one case of the proof, and every case but all and the measurement is in the matrix', () => {
+  // The measurement is the one case outside the matrix: it is the `install-measure` job's (#408).
+  assert.deepEqual(cases.map(({ name }) => name), ['all', ...matrix, 'measure'], 'the matrix and the dispatch name the same areas');
+  // A case runs its own area only: one command of the seven or the measurement, never more.
   for (const { name, commands } of cases) if (name !== 'all') {
     const calls = commands.split('; ');
-    assert.ok(calls.length < seven.length, `${name} runs only its own areas`);
-    for (const call of calls) assert.ok(seven.includes(call), `${name}: ${call}`);
+    assert.equal(calls.length, 1, `${name} runs only its own area`);
+    for (const call of calls) assert.ok([...seven, 'measure'].includes(call), `${name}: ${call}`);
   }
-  assert.equal(cases.find(({ name }) => name === 'first-install').commands, 'first_install; agents; backup');
+  assert.equal(cases.find(({ name }) => name === 'first-install').commands, 'first_install');
 });
 
 test('each entry runs its area with one command and holds no check of the proof', () => {
@@ -91,20 +94,77 @@ test('no helper function is defined twice in the proof or its lib', () => {
 });
 
 // The proof is the spec's seven areas in the order it has always run them, all of them when no area is named, and one
-// area when one is (#406): the first-install entries' four, then the proxy, the update and the one-line install.
-test('the install proof is the seven areas of the spec, run one after another when named all', () => {
-  for (const area of seven) assert.match(script, new RegExp(`^${area}\\(\\) \\{$`, 'm'), area);
+// area when one is (#406): the first install, Companies, Agents, backup, then the proxy, the update and the one-line
+// install. The profile-size measurement runs last of all, for a full run on a machine here; no pull request's job runs
+// it (#408).
+const allAreas = [...seven, 'measure'];
+test('the install proof is the seven areas of the spec, run one after another when named all, then the measurement', () => {
+  for (const area of allAreas) assert.match(script, new RegExp(`^${area}\\(\\) \\{$`, 'm'), area);
   const all = script.split('\n').find(line => /^ all\)/.test(line));
   assert.ok(all, 'no argument runs every area');
   const calls = all.match(/[a-z][a-z0-9_]*(?=;|;;)/g);
-  assert.deepEqual(calls, seven, 'all seven run in their order');
+  assert.deepEqual(calls, allAreas, 'all seven run in their order, and the measurement last');
 });
 
 test('naming one area runs only it, and ./ci.sh install passes the area through', () => {
   const dispatches = Object.fromEntries([...script.matchAll(/^ ([\w-]+)\) (.*);;$/gm)].map(([, name, commands]) => [name, commands]));
-  assert.equal(dispatches['first-install'], 'first_install; agents; backup');
+  assert.equal(dispatches['first-install'], 'first_install');
+  assert.equal(dispatches.companies, 'companies');
+  assert.equal(dispatches.agents, 'agents');
+  assert.equal(dispatches.backup, 'backup');
   assert.equal(dispatches.proxy, 'proxy');
   assert.equal(dispatches.update, 'update');
   assert.equal(dispatches['one-line'], 'one_line');
+  assert.equal(dispatches.measure, 'measure');
+  // `./ci.sh install proxy` passes the area through to the same command.
   assert.match(readFileSync(resolve('ci.sh'), 'utf8'), /bash scripts\/ci-install-check\.sh "\$@"/);
+});
+
+// #408: the agents area runs on its own machine and makes everything it reads itself — its install, the first run that
+// makes the first Company, and the second Company on its own Engine — and first-install no longer runs it.
+test('the agents area makes its own install, first run and second Company, and first-install no longer runs it', () => {
+  const text = readFileSync(proof[0], 'utf8');
+  const agents = text.slice(text.indexOf('\nagents() {'), text.indexOf('\nbackup() {'));
+  assert.ok(agents, 'the agents area');
+  for (const step of ['reset_install', 'install_source', 'complete_setup', "company add --name 'Second Company'"]) {
+    assert.ok(agents.includes(step), `the agents area makes ${step} itself`);
+  }
+  assert.equal(agents.includes('capacity'), false, 'the measurement left the agents area');
+  assert.match(script, /^ first-install\) first_install;;$/m, 'first-install no longer runs the agents area');
+});
+
+// #408: the measurement is an area of its own, with a fresh install and whatever Company it reads, and it prints the
+// same line of numbers it printed inside the agents area.
+test('the measurement is an area of its own and prints the same line of numbers', () => {
+  const text = readFileSync(proof[0], 'utf8');
+  const measure = text.slice(text.indexOf('\nmeasure() {'), text.indexOf('\ncase "${1:-all}"'));
+  assert.ok(measure, 'the measure area');
+  for (const step of ['reset_install', 'install_source', 'complete_setup', "company add --name 'Second Company'", 'capacity with-skills', 'capacity no-skills']) {
+    assert.ok(measure.includes(step), `the measurement makes ${step}`);
+  }
+  assert.match(measure, /capacity: engine memory \$memory_before before and \$memory_after after 20 agent profiles; \$per_with KiB per profile with the bundled Skills, \$per_without KiB without/);
+});
+
+// #408: the measurement is no check a pull request needs. It runs as one job of its own on a push to main and on a
+// manual run, loads the run's one image as the install areas do, and the required check does not wait for it.
+test('the profile-size measurement is a job of its own, and the required check does not need it', () => {
+  const job = ci.jobs[measureJob];
+  assert.ok(job, `${measureJob} exists`);
+  assert.deepEqual(job.needs, ['changes', 'image']);
+  assert.doesNotMatch(String(job.if), /pull_request/);
+  assert.match(String(job.if), /github\.event_name == 'push'/);
+  assert.match(String(job.if), /github\.event_name == 'workflow_dispatch'/);
+  assert.match(String(job.if), /needs\.image\.result == 'success'/);
+  const calls = job.steps.filter(step => (step.run ?? '').trim() === 'bash scripts/ci-install-check.sh measure');
+  assert.equal(calls.length, 1, 'one command of the repo runs the measurement');
+  assert.equal(calls[0].env.GTMWORKS_IMAGE_PREBUILT, 'true');
+  const download = job.steps.find(step => (step.uses ?? '').startsWith('actions/download-artifact@'));
+  assert.equal(download.with.name, 'gtmworks-image');
+  const load = job.steps.find(step => /docker --host tcp:\/\/127\.0\.0\.1:2375 load/.test(step.run ?? ''));
+  assert.match(load.run, /gtmworks-image\.tar/);
+  assert.match(load.run, /docker --host tcp:\/\/127\.0\.0\.1:2375 tag gtmworks:ci gtmworks-local:237/);
+  const remove = job.steps.at(-1);
+  assert.match(remove.run, /docker rm -fv install-docker/);
+  assert.equal(remove.if, "${{ always() && runner.environment != 'github-hosted' }}", 'removed on a reused runner, also after a failure');
+  assert.equal(ci.jobs.check.needs.includes(measureJob), false, 'the required check does not wait for the measurement');
 });

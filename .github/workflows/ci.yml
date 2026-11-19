@@ -5,9 +5,10 @@
 # what a ready pull request runs (Omar, 2026-11-19, #405): the suites start on a draft as on a ready one, and marking a
 # draft ready starts nothing by itself. The app image is built once per run by its own job, and the browser suite and the
 # install proof load that build instead of building their own (#403, #406). The install proof is one job, one matrix
-# entry per area, each on a fresh isolated Docker machine of its own (#406). The visual lane's key screens and the measured
-# navigation budgets (`visual`) run on a push to main and on a manual run only, never on a pull request, and `check` does
-# not wait for them
+# entry per area, each on a fresh isolated Docker machine of its own (#406). The profile-size measurement
+# (`install-measure`) is no check a pull request needs: it runs on a push to main and on a manual run only, like the
+# visual lane (#408). The visual lane's key screens and the measured navigation budgets (`visual`) run on a push to main
+# and on a manual run only, never on a pull request, and `check` does not wait for them
 # (Omar, 2026-11-17, #257): a failure on main opens or updates one issue labelled visual-regression. A push to main runs
 # every suite unless every file is a document; a manual run starts the browser and install suites only through inputs that
 # default to off. Required `check` (scripts/ci-verdict.mjs) counts a suite nobody asked for as passed when it was
@@ -360,14 +361,15 @@ jobs:
             gh issue create -R "$GITHUB_REPOSITORY" --label visual-regression --title "$title" --body "$body"
           fi
 
-  # The app image, built once per run with its own layer cache (#403). The browser suite's shards and the install job
-  # load this archive instead of each building the image again, so one run pays for one build; a change that leaves
-  # the dependencies alone restores them from the cache. Next's build repeats no lint and no type check the fast job
-  # already ran (NEXT_SKIP_CHECKS, next.config.mjs). It follows the answers of the suites that load it — the browser suite
-  # and the install proof — so no job ever waits for an image it did not ask for (#406).
+  # The app image, built once per run with its own layer cache (#403). The browser suite's shards, the install job and
+  # the measurement load this archive instead of each building the image again, so one run pays for one build; a change
+  # that leaves the dependencies alone restores them from the cache. Next's build repeats no lint and no type check the
+  # fast job already ran (NEXT_SKIP_CHECKS, next.config.mjs). It follows the answers of the suites that load it — the
+  # browser suite and the install proof, and the measurement on a manual run, which runs even with nothing asked (#408) —
+  # so no job ever waits for an image it did not ask for (#406).
   image:
     needs: [changes]
-    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.integration != 'false' || needs.changes.outputs.install != 'false') }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.integration != 'false' || needs.changes.outputs.install != 'false' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -524,10 +526,11 @@ jobs:
           retention-days: 14
 
   # The install proof is one job, one matrix entry per area, each on a fresh isolated Docker machine of its own (#406):
-  # the first install and its repeat with Companies, Agents, backup and restore; the public address behind a proxy; the
-  # update between releases; and the one-line install. A fault in one area cannot hide or cause another's: fail-fast is
-  # off, so one red area leaves the others running to their end, and the job's name is the area that failed. A later area
-  # adds its name to `matrix.area` and a case to scripts/ci-install-check.sh, nothing else (#407–#409).
+  # the first install and its repeat; Companies and their Engines; Agents on their Engines; backup and restore; the
+  # public address behind a proxy; the update between releases; and the one-line install. A fault in one area cannot
+  # hide or cause another's: fail-fast is off, so one red area leaves the others running to their end, and the job's name
+  # is the area that failed. An area adds its name to `matrix.area` and a case to scripts/ci-install-check.sh, nothing
+  # else (#407–#409).
   # Every entry loads the one app image the `image` job built (#403), under the tag a source install's compose file names,
   # and the installer skips its build because the image is already there (GTMWORKS_IMAGE_PREBUILT, tests only). The job
   # holds no check of its own: its whole area is one command of the repo, so the same command proves it on a machine with
@@ -541,7 +544,7 @@ jobs:
       # Every area runs to its end, so one red area still shows the others' faults (#406).
       fail-fast: false
       matrix:
-        area: [first-install, companies, proxy, update, one-line]
+        area: [first-install, companies, agents, backup, proxy, update, one-line]
     # The proof's own areas add a fresh stack and a real install of this release (#402).
     timeout-minutes: 90
     permissions:
@@ -587,6 +590,51 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GTMWORKS_IMAGE_PREBUILT: "true"
         run: bash scripts/ci-install-check.sh ${{ matrix.area }}
+      - name: remove the isolated Docker machine
+        if: ${{ always() && runner.environment != 'github-hosted' }}
+        run: docker rm -fv install-docker || true
+
+  # The profile-size measurement (#126, #400) is no check a pull request needs: twenty Agent profiles took 85 seconds,
+  # and their numbers are for the README. It runs on a push to main and on a manual run only, easy to find beside the
+  # install proof (#408, Omar, 2026-11-19), on a fresh isolated Docker machine of its own and with the run's one image.
+  # `check` does not wait for it.
+  install-measure:
+    needs: [changes, image]
+    if: ${{ !cancelled() && needs.image.result == 'success' && ((github.event_name == 'push' && (needs.changes.result != 'success' || needs.changes.outputs.install != 'false')) || github.event_name == 'workflow_dispatch') }}
+    runs-on: ubuntu-latest
+    # The measurement installs the stack and makes twenty more Agent profiles.
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: start the isolated Docker machine
+        run: |
+          docker run -d --privileged --name install-docker \
+            -e DOCKER_TLS_CERTDIR= -p 127.0.0.1:2375:2375 \
+            -v "$PWD:$PWD" docker:28.5.1-dind
+          for attempt in $(seq 1 60); do docker --host tcp://127.0.0.1:2375 info >/dev/null 2>&1 && break; sleep 1; done
+          docker --host tcp://127.0.0.1:2375 info >/dev/null || { echo 'install check failed: DinD readiness' >&2; exit 1; }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: download the image
+        uses: actions/download-artifact@v4
+        with:
+          name: gtmworks-image
+          path: ${{ runner.temp }}
+      - name: load the image
+        run: |
+          docker --host tcp://127.0.0.1:2375 load --input "$RUNNER_TEMP/gtmworks-image.tar"
+          docker --host tcp://127.0.0.1:2375 tag gtmworks:ci gtmworks-local:237
+      - name: the profile-size measurement
+        env:
+          DOCKER_HOST: tcp://127.0.0.1:2375
+          INSTALL_REF: ${{ github.event.pull_request.head.sha || github.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          GH_TOKEN: ${{ github.token }}
+          GTMWORKS_IMAGE_PREBUILT: "true"
+        run: bash scripts/ci-install-check.sh measure
       - name: remove the isolated Docker machine
         if: ${{ always() && runner.environment != 'github-hosted' }}
         run: docker rm -fv install-docker || true

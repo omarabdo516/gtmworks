@@ -144,7 +144,7 @@ test('the install job runs first run and sign-in through an HTTPS proxy whose or
  assert.match(run,/-e NODE_EXTRA_CA_CERTS=\/ca\.crt -e APP_ORIGIN="\$public" -e MAIL_URL=http:\/\/127\.0\.0\.1:8025/);
  assert.ok(at('node --input-type=module - < scripts/check-install-proxy.mjs') < at('check-install-rate-limit.mjs fresh'),'before the rate-limit checks');
  // The local install on http://localhost:3000 is checked first, as before.
- assert.ok(at("sh scripts/install.sh || fail 'first install'") < at("reset_install || fail 'remove restored install'"));
+ assert.ok(at("install_source first-install.log || fail 'first install'") < at("reset_install || fail 'remove restored install'"));
  // The proxy area makes its own fresh install (#406): no earlier area's install is needed, and the public origin is in
  // the settings file before the first install runs.
  assert.ok(at("reset_install || fail 'remove restored install'") < at("s#^APP_ORIGIN=.*#APP_ORIGIN=$public#"));
@@ -154,7 +154,7 @@ test('the install job runs first run and sign-in through an HTTPS proxy whose or
  const [local,proxied]=checks;
  assert.match(local[0],/-e APP_ORIGIN=http:\/\/localhost:3000 -e MAIL_URL=http:\/\/127\.0\.0\.1:8025/);
  const setup=at("complete_setup || fail 'emailed sign-in and invitation links on the local install'");
- assert.ok(at("sh scripts/install.sh || fail 'first install'") < setup && setup < at("cp .env.install .env.install.before"),'on the fresh local install');
+ assert.ok(at("install_source first-install.log || fail 'first install'") < setup && setup < at("cp .env.install .env.install.before"),'on the fresh local install');
  assert.match(proxied[0],/-e APP_ORIGIN="\$public"/);
  assert.ok(at("sh scripts/install.sh || fail 'proxied install'") < proxied.index && proxied.index < at('check-install-rate-limit.mjs fresh'));
  // Both get the anon and service role keys from .env.install as an env file, so neither key is printed.

@@ -51,14 +51,35 @@ reset_install() {
   if [ -f .env.install ]; then remove_install || return 1; else remove_engine; fi
   rm -f .env.install
 }
-# First run completed the way a browser does it on the local install, straight to the gateway: the setup form's
-# submission with the setup code in its body makes the first Company and signs its Owner in, the invitation and sign-in
-# links stay on APP_ORIGIN, and no key or code is printed (issue #40, #50). first_install proves it, and the Companies
-# area starts from the same first Company (#407). The caller owns the failure sentence.
+# The setup an area starts from (#407, #408, #409): the source install, its output kept in the log named by the one
+# argument (its status kept under the proof's pipefail), and first run completed the way a browser does it on the local install, straight to the gateway: the setup
+# form's submission with the setup code in its body makes the first Company and signs its Owner in, the invitation and
+# sign-in links stay on APP_ORIGIN, and no key or code is printed (issue #40, #50). first_install proves both steps, the
+# repeat install still open between them; every other area runs them and carries on. The caller owns each failure
+# sentence, so an area names the step it was in.
+install_source() { sh scripts/install.sh 2>&1 | tee "$1"; }
 complete_setup() {
   docker run --rm -i --network host --env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY)=' .env.install) --env-file <(grep -E '^SETUP_CODE=' .env.install) \
     -e APP_ORIGIN=http://localhost:3000 -e MAIL_URL=http://127.0.0.1:8025 \
     node:22.14.0-alpine3.21 node --input-type=module - < scripts/check-install-proxy.mjs
+}
+# A fake model provider served from the web container stands in for a subscription (#382, #408): companies and agents
+# both point the first Engine at it, so an Arabic message gets its reply with no sign-in.
+point_engine_at_fake_model() {
+  docker exec -i "$1" sh -ec 'cat > /opt/data/config.yaml; chown hermes:hermes /opt/data/config.yaml' <<'YAML' || fail 'point the Engine at the fake model'
+model:
+  provider: custom
+  default: fake-model
+  base_url: http://web:8080/v1
+  api_key: fake-model-key
+  context_length: 128000
+YAML
+  docker restart "$1" > /dev/null || fail 'restart the Engine'
+  for attempt in $(seq 1 60); do
+    [[ $(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$1") == healthy ]] && break
+    [[ $attempt == 60 ]] && fail 'the Engine is healthy after configuration'
+    sleep 1
+  done
 }
 publish() { docker push -q "localhost:5000/gtmworks:$1" > /dev/null && docker image inspect --format '{{index .RepoDigests 0}}' "localhost:5000/gtmworks:$1"; }
 # The local registry a release area serves its test releases from: each area that needs one starts its own (#406).

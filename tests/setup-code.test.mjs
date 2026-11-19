@@ -237,7 +237,7 @@ test('the install job checks the setup link before and after setup, and that no 
  const at=text=>{ const index=run.indexOf(text); assert.notEqual(index,-1,text); return index; };
  const localCheck=run.indexOf("complete_setup || fail 'emailed sign-in and invitation links on the local install'");
  // The first install ends with the link, its code in no other line; a repeat before setup prints the same link.
- assert.ok(at("{ sh scripts/install.sh || fail 'first install'; } 2>&1 | tee first-install.log")<at("code=$(sed -n 's/^SETUP_CODE=//p' .env.install)"));
+ assert.ok(at("install_source first-install.log || fail 'first install'")<at("code=$(sed -n 's/^SETUP_CODE=//p' .env.install)"));
  at('link="Set up gtmworks with this one-time link: http://localhost:3000/first-run#code=$code"');
  at('[[ $(tail -n 1 first-install.log) == "$link" ]]');
  at('[[ $(grep -cF "$code" first-install.log) == 1 ]]');
