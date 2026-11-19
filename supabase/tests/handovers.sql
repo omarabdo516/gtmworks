@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(50);
+select plan(53);
 -- #317. RS Learning: Lead on the Company's own profile, Ads and Writer on profiles of their own. The Contributor (…03) is
 -- shown Ads and not Writer; the Viewer (…04) writes nothing. Aleem has its own Lead and Ads.
 insert into public.agent_profiles(agent_id,company_id,tools_level,tools_policy,skills_shared) values
@@ -114,5 +114,20 @@ select is((select state||':'||(closed_at is not null)::text from public.agent_ha
  'as a failed handover, so the person is still told the job did not reach them');
 select is((select attempt from public.begin_handover((select id from public.agent_handovers where call_id='call-fresh'))),1,
  'while one that began an hour ago is asked for again');
+
+-- #354: a queued handover re-checks that its target is still the person's to call. One hidden from them after the job
+-- was kept starts no Run: the leg ends as failed, so Lead still tells them the job did not happen.
+insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values
+ ('c3170000-0000-0000-0000-000000000005','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','a3170000-0000-0000-0000-000000000011','Lead');
+insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id) values
+ ('10000000-0000-0000-0000-000000000001','c3170000-0000-0000-0000-000000000005','person','20000000-0000-0000-0000-000000000003','Contributor','Plan the August intake',gen_random_uuid(),'run-hidden');
+select is(public.lead_hand_to_agent('c3170000-0000-0000-0000-000000000005','run-hidden','call-1','Ads','Plan the August intake',null),
+ '{"state":"created","agent":"Ads"}'::jsonb,'a job is kept for an Agent the sender sees');
+delete from public.member_agent_access where company_id='10000000-0000-0000-0000-000000000001'
+ and person_id='20000000-0000-0000-0000-000000000003' and agent_id='a3170000-0000-0000-0000-000000000012';
+select is((select count(*)::int from public.begin_handover((select id from public.agent_handovers where run_id='run-hidden'))),0,
+ 'a target hidden since the job was kept starts no Run');
+select is((select state||':'||target_outcome||':'||target_attempts from public.agent_handovers where run_id='run-hidden'),'returning:failed:0',
+ 'the leg ends as failed, so Lead still reports it to the person');
 select * from finish();
 rollback;

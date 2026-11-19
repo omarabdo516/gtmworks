@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(19);
+select plan(22);
 -- #147. RS Learning: Lead on the Company's profile, Ads and Writer on profiles of their own. The Contributor (…03) is
 -- shown Ads and not Writer; the Manager (…02) is shown Writer; the Viewer (…04) writes nothing.
 insert into public.agent_profiles(agent_id,company_id,tools_level,tools_policy,skills_shared) values
@@ -72,5 +72,31 @@ select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003'
 select is((select string_agg(l.details->>'to_name',',' order by l.id) from public.company_log l where l.action='agent_handed_to'),'Ads,Ads','the Contributor reads the rows of the Agents they see, not the hidden one');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select is((select string_agg(l.details->>'to_name',',' order by l.id) from public.company_log l where l.action='agent_handed_to'),'Ads,Ads,Writer,Writer','the Owner reads every row of the Agents the row is about');
+reset role;
+
+-- #354: two handovers race for a chat that had no Card. The second's insert finds the first's Card and does nothing:
+-- it still gives that Card its own Agent, keeping the Card's stage and title.
+insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values
+ ('c1470000-0000-0000-0000-000000000005','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','a1470000-0000-0000-0000-000000000011','Lead');
+insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id) values
+ ('10000000-0000-0000-0000-000000000001','c1470000-0000-0000-0000-000000000005','person','20000000-0000-0000-0000-000000000001','عمر','Plan the September intake',gen_random_uuid(),'run-race');
+-- The other handover's Card lands between this call's read and its insert, as a racing transaction's committed card would.
+create function pg_temp.race_card() returns trigger language plpgsql as $$
+begin
+ if pg_trigger_depth()=1 then
+  insert into public.work_cards(company_id,stage_id,title,agent_id,conversation_id)
+   values(new.company_id,new.stage_id,'The other handover''s card',(select id from public.hermes_agents where company_id=new.company_id and name='Writer'),new.conversation_id);
+ end if;
+ return new;
+end $$;
+create trigger race_card before insert on public.work_cards for each row execute function pg_temp.race_card();
+select is(public.lead_hand_to_agent('c1470000-0000-0000-0000-000000000005','run-race','call-1','Ads','Plan the September intake',null),
+ '{"state":"created","agent":"Ads"}'::jsonb,'a handover whose Card raced another keeps its handover');
+drop trigger race_card on public.work_cards;
+select is((select w.title||':'||w.agent_id||':'||s.board_column||':'||s.kind from public.work_cards w join public.work_stages s on s.id=w.stage_id and s.company_id=w.company_id
+ where w.conversation_id='c1470000-0000-0000-0000-000000000005'),
+ 'The other handover''s card:a1470000-0000-0000-0000-000000000012:progress:before_review','the raced Card keeps its title and stage, and takes the Agent handed the work');
+select is((select count(*)::int from public.company_log l join public.work_cards w on w.id=l.card_id
+ where w.conversation_id='c1470000-0000-0000-0000-000000000005' and l.action='agent_handed_to'),1,'and its row lands on that one Card');
 select * from finish();
 rollback;

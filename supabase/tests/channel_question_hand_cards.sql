@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(55);
+select plan(63);
 -- #149. Ads in RS Learning's general channel, shown to the Manager (2) and the Contributors (3, 5); the Owner (1) sees
 -- every Agent and Viewer 4 none. Lead is the main Agent. A team channel "scripts" holds Contributor 3 and Viewer 4 and
 -- the hidden Ads; the Manager and another Contributor are outside it, and Karim is a Manager of Aleem only.
@@ -154,6 +154,24 @@ select is((select count(*)::int from public.channel_runs r join public.channel_m
 select results_eq($$select actor_id,action from public.company_log where source='reply_card_answers' and action='agent_hand_done'$$,
  $$values ('20000000-0000-0000-0000-000000000005'::uuid,'agent_hand_done')$$,'the press is logged once, as the Member who did it');
 
+-- #354: the quiet message "Done it" writes is never new: the transcript draws nothing of it, so it raises no badge. The
+-- Agent's reply that follows it is an ordinary message, and counts.
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select public.read_channel('69000000-0000-0000-0000-000000000001',
+ (select max(id) from public.channel_messages where channel_id='69000000-0000-0000-0000-000000000001' and hand_card is null));
+select is((select unread from public.channel_sidebar('10000000-0000-0000-0000-000000000001') where id='69000000-0000-0000-0000-000000000001'),0,
+ 'the quiet pickup message is not new to another Member');
+reset role;
+set local role service_role;
+select ok(public.close_channel_run(current_setting('test.ads')::bigint,'run-ads','completed','Ads picked it up.',null,null),'the Agent answers the message the quiet one asked about');
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select is((select unread from public.channel_sidebar('10000000-0000-0000-0000-000000000001') where id='69000000-0000-0000-0000-000000000001'),1,
+ 'while its reply is a message the channel shows, and counts');
+reset role;
+
 -- What one Member acts on leaves every Member's list.
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
@@ -203,6 +221,20 @@ select results_eq($$select who,cards from readers where who in ('member','viewer
  $$values ('elsewhere',0),('member',1),('outside',0),('viewer',1)$$,'the channel''s Members read its question, a Viewer included, and a Member outside it and another Company read none');
 select results_eq($$select who,cards from readers where who in ('viewer_log','outside_log','elsewhere_log') order by who$$,
  $$values ('elsewhere_log',0),('outside_log',0),('viewer_log',1)$$,'the answer''s log row is read by the channel''s Viewer, and by no one outside the channel');
+
+-- #354: whether an id is a channel card is not a fact a caller outside that channel learns. reply_card_in_channel answers
+-- false for every caller outside the card's channel; the log's general branch leaves a channel card's row out through
+-- reply_card_in_other_channel, which is false to anyone outside the Company and to any id that is no channel card.
+set local role authenticated;
+select set_config('request.jwt.claim.sub','e9159000-0000-0000-0000-000000000001',true);
+select is(public.reply_card_in_channel(current_setting('test.teamcard')::bigint),false,'a Manager of another Company cannot tell a channel card from any id');
+select is(public.reply_card_in_other_channel(current_setting('test.teamcard')::bigint),false,'nor is it told the card belongs to a channel at all');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select is(public.reply_card_in_channel(current_setting('test.teamcard')::bigint),false,'a Manager of the Company outside the channel is answered false too');
+select is(public.reply_card_in_other_channel(current_setting('test.teamcard')::bigint),true,'so the log''s general branch leaves the row out for them');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+select is(public.reply_card_in_channel(current_setting('test.teamcard')::bigint),true,'and only its own Member reads the card');
+reset role;
 
 -- A Run's end closes its own questions, and an answer the Engine took still wins over the card it closed.
 set local role service_role;

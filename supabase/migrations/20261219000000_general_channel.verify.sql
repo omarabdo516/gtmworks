@@ -24,7 +24,11 @@ select json_build_object(
  'members_callable',(select bool_and(has_function_privilege('authenticated',f,'execute') and not has_function_privilege('anon',f,'execute'))
   from unnest(array['public.post_channel_message(uuid,uuid,text)','public.in_channel(uuid)','public.channel_members(uuid)']) f),
  'append_only',exists(select 1 from pg_trigger where tgrelid='public.channel_messages'::regclass and tgname='channel_messages_append_only' and not tgisinternal),
- 'one_run_one_reply',exists(select 1 from pg_indexes where schemaname='public' and indexname='channel_messages_one_reply' and indexdef like 'CREATE UNIQUE INDEX%')
+ 'one_run_one_reply',exists(select 1 from pg_index i
+   where i.indexrelid='public.channel_messages_one_reply'::regclass
+    and i.indrelid='public.channel_messages'::regclass
+    and i.indisunique and i.indisvalid and i.indpred is null
+    and pg_get_indexdef(i.indexrelid) like '%(reply_to, reply_ordinal)%')
   and exists(select 1 from information_schema.columns where table_schema='public' and table_name='channel_messages'
    and column_name='reply_ordinal' and column_default='1')
   and exists(select 1 from pg_constraint where conrelid='public.channel_messages'::regclass and conname='channel_messages_reply_place')

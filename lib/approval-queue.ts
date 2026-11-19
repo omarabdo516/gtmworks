@@ -83,9 +83,11 @@ const queue=cache(async(db:Awaited<ReturnType<typeof supabase>>,company:string,p
  const mentionedMessageIds=[...new Set([...mentioned.values()].flatMap(id=>id??[]))];
  // A mention in a channel opens it at the message it points at (#200), and names its channel: a team channel its own name,
  // the general one no name at all, so a reader draws the general channel's word in the language it reads.
- const mentionedMessages=mentionedMessageIds.length?((await db.from('channel_messages').select('id,channel_id').in('id',mentionedMessageIds)).data||[]) as {id:number,channel_id:string}[]:[];
+ const mentionedMessageResult=mentionedMessageIds.length?await db.from('channel_messages').select('id,channel_id').in('id',mentionedMessageIds):{data:[],error:null};
+ const mentionedMessages=(mentionedMessageResult.data||[]) as {id:number,channel_id:string}[];
  const mentionedChannels=[...new Set(mentionedMessages.map(row=>row.channel_id))];
- const channelNames=mentionedChannels.length?((await db.from('channels').select('id,kind,name').eq('company_id',company).in('id',mentionedChannels)).data||[]) as {id:string,kind:string,name:string|null}[]:[];
+ const channelNameResult=mentionedChannels.length?await db.from('channels').select('id,kind,name').eq('company_id',company).in('id',mentionedChannels):{data:[],error:null};
+ const channelNames=(channelNameResult.data||[]) as {id:string,kind:string,name:string|null}[];
  const messageChannel=new Map(mentionedMessages.map(row=>[row.id,row.channel_id]));
  const channelName=new Map(channelNames.map(row=>[row.id,row.kind==='team'?row.name??'':'']));
  const items=visible.items.map(item=>{
@@ -100,5 +102,5 @@ const queue=cache(async(db:Awaited<ReturnType<typeof supabase>>,company:string,p
   const mention=item.kind==='mention'?mentions.get(item.id):undefined;
   return mention?{...item,note_id:mention.note_id,body:mention.work_comments?.body??item.body}:item;
  });
- return {steps:(stepResult.data || []) as Step[],cards,visible:visible.cards,items,count:waitingCount(visible.items),available:!stepResult.error&&!listResult.error&&!cardResult.error&&!agentResult.error&&!ruleResult.error&&!requestResult.error&&!mentionResult.error&&!chatResult.error&&!channelResult.error&&!channelCardResult.error&&!channelMentionResult.error&&!cardRunError&&!permissionRunError&&!faceError};
+ return {steps:(stepResult.data || []) as Step[],cards,visible:visible.cards,items,count:waitingCount(visible.items),available:!stepResult.error&&!listResult.error&&!cardResult.error&&!agentResult.error&&!ruleResult.error&&!requestResult.error&&!mentionResult.error&&!chatResult.error&&!channelResult.error&&!channelCardResult.error&&!channelMentionResult.error&&!cardRunError&&!permissionRunError&&!faceError&&!mentionedMessageResult.error&&!channelNameResult.error};
 });

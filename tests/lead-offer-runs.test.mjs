@@ -74,11 +74,16 @@ test('a Viewer\'s Run is told the team and no offer at all',async()=>{
 });
 
 test('a retry sends the same pinned brief, read again from the database for the same Run',async()=>{
- const fake=fakeEngine(); const store=database({brief:briefs.owner});
- await send(store,fake); const first=fake.runs[0].instructions;
- await send(store,fake);
+ const fake=fakeEngine(); const store=database({brief:briefs.owner}); const started=[];
+ // Every start of the fake Engine is recorded before it deduplicates a key, so a retry's own instructions are read.
+ const engineFor=(/** @type {object} */ connection)=>{ const engine=fake.engineFor(connection);
+  return {...engine,start:async(/** @type {any} */ args)=>{ started.push(args); return engine.start(args); }}; };
+ const sendNow=()=>sendMessage(store.db,store.service,{company,conversation,sendKey,agent,message:'Do the Meta ads',hermes,engineFor});
+ await sendNow(); const first=fake.runs[0].instructions;
+ await sendNow();
+ assert.equal(started.length,2,'each attempt asks the Engine to start the Run');
+ assert.deepEqual(started.map(start=>start.instructions),[first,first],'and both carry the same pinned brief');
  assert.equal(fake.runs.length,1,'the same send key is the same Run');
- assert.equal(fake.runs[0].instructions,first);
  assert.equal(store.calls.filter(([name])=>name==='pin_lead_brief').length,2,'each attempt reads the Run\'s one pinned brief');
 });
 

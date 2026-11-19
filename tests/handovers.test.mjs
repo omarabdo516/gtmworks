@@ -117,11 +117,18 @@ test('a Target Run that fails still brings Lead back to say the job did not fini
 
 test('a start whose answer was lost is asked again with the same key, never failed, and nothing is reported to Lead yet',async()=>{
  const {row,service,calls}=handover();
- const lost=()=>({start:async()=>({state:'unknown'}),read:async()=>({state:'lost'})});
+ const fake=fakeEngine(); const asked=/** @type {{idempotencyKey:string,input:string}[]} */([]);
+ // The first start makes the Run and loses its answer; the next pass asks again with the same key.
+ const lost=()=>({start:async(/** @type {any} */ args)=>{ asked.push(args); await fake.engineFor({}).start(args); return {state:'unknown'}; }});
  await driveHandovers(service,{hermes,engineFor:lost});
  assert.equal(row.state,'waiting','the next pass asks again');
  assert.equal(row.target_attempts,1);
  assert.equal(calls.filter(([name])=>name==='answer_handover').length,0,'an unknown start is neither recorded nor failed');
+ await driveHandovers(service,{hermes,engineFor:()=>({start:async(/** @type {any} */ args)=>{ asked.push(args); return fake.engineFor({}).start(args); }})});
+ assert.equal(row.state,'target','the retried start records the Run it made');
+ assert.deepEqual(asked.map(start=>start.idempotencyKey),[`handover:${row.id}:target`,`handover:${row.id}:target`],'both starts ask for the same key');
+ assert.equal(asked[0].input,asked[1].input,'and send the same job');
+ assert.equal(fake.runs.filter(run=>run.key===`handover:${row.id}:target`).length,1,'so the target runs once');
 });
 
 test('a leg claimed by begin_handover names the start\'s key and its own answer, though the row read earlier said otherwise',async()=>{
@@ -150,6 +157,14 @@ test('hand_to_agent reads the Agent, the job and the context, asks the database,
  for(const args of /** @type {unknown[]} */([null,'Ads',{agent:'Ads'},{agent:' ',goal:'Plan'},{agent:'Ads',goal:'  '},{agent:'x'.repeat(101),goal:'Plan'},{agent:'Ads',goal:'y'.repeat(501)},{agent:7,goal:'Plan'}]))
   assert.deepEqual(await call(args),{state:'ignored'},JSON.stringify(args)?.slice(0,60));
  assert.deepEqual(await call({agent:' Ads ',goal:' Plan the Meta ads for the March intake\n',context:' EGP 9,000 for 30 days. '}),{state:'created',agent:'Ads'});
- assert.deepEqual(calls,[['lead_hand_to_agent',{conversation,run:'run-1',call:'call-1',agent_name:'Ads',goal:'Plan the Meta ads for the March intake',context:'EGP 9,000 for 30 days.'}]]);
+ // #354: a context the model left blank is none, and one past its length is cut, so the job still reaches its Agent and
+ // Lead never says it handed the job over while nothing was kept.
+ assert.deepEqual(await call({agent:'Ads',goal:'Plan the Meta ads',context:''}),{state:'created',agent:'Ads'});
+ assert.deepEqual(await call({agent:'Ads',goal:'Plan the Meta ads',context:'   '}),{state:'created',agent:'Ads'});
+ assert.deepEqual(await call({agent:'Ads',goal:'Plan the Meta ads',context:` ${'x'.repeat(2500)} `}),{state:'created',agent:'Ads'});
+ assert.deepEqual(calls,[['lead_hand_to_agent',{conversation,run:'run-1',call:'call-1',agent_name:'Ads',goal:'Plan the Meta ads for the March intake',context:'EGP 9,000 for 30 days.'}],
+  ['lead_hand_to_agent',{conversation,run:'run-1',call:'call-1',agent_name:'Ads',goal:'Plan the Meta ads',context:null}],
+  ['lead_hand_to_agent',{conversation,run:'run-1',call:'call-1',agent_name:'Ads',goal:'Plan the Meta ads',context:null}],
+  ['lead_hand_to_agent',{conversation,run:'run-1',call:'call-1',agent_name:'Ads',goal:'Plan the Meta ads',context:`${'x'.repeat(1999)}…`}]]);
  assert.deepEqual(fake.runs,[],'the Target runs later, never during Lead\'s Run');
 });

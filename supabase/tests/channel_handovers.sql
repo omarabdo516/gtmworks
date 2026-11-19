@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(59);
+select plan(62);
 -- #150. RS Learning: Lead on the Company's own profile, Ads and Writer on profiles of their own. The "scripts" team
 -- channel holds the Owner (1), the Manager (2), the Contributor (3) and the Viewer (4), and only Lead and Ads: Writer is
 -- the Company's third Agent, outside it. Member 5 is in the Company but not in the channel; Karim belongs to Aleem only.
@@ -192,5 +192,21 @@ select is(has_function_privilege('authenticated','public.handover_in_channel(big
  and not has_function_privilege('anon','public.handover_in_channel(bigint)','execute')
  and has_function_privilege('authenticated','public.handover_in_my_channel(bigint)','execute')
  and not has_function_privilege('anon','public.handover_in_my_channel(bigint)','execute'),true,'the log''s rules answer a signed-in reader');
+
+-- #354: a queued channel handover re-checks that its target is still callable in the channel when its Run would start.
+-- One since removed from the channel starts no Run: the leg ends as failed, so Lead still tells the team.
+insert into public.channel_messages(company_id,channel_id,author,person_id,author_name,body,send_key) values
+ ('10000000-0000-0000-0000-000000000001','c1500000-0000-0000-0000-000000000001','person','20000000-0000-0000-0000-000000000001','عمر','@Lead plan the July ads',gen_random_uuid());
+select set_config('test.removed',(select max(id)::text from public.channel_messages where channel_id='c1500000-0000-0000-0000-000000000001'),true);
+insert into public.channel_runs(message_id,ordinal,company_id,channel_id,agent_id,agent_name,session,input,run_id,profile,attempts,attempted_at)
+ values (current_setting('test.removed')::bigint,1,'10000000-0000-0000-0000-000000000001','c1500000-0000-0000-0000-000000000001',
+  'a1500000-0000-0000-0000-000000000011','Lead',gen_random_uuid(),'@Lead plan the July ads','run-removed','co-10000000000000000000000000000001',1,now());
+select is(public.channel_hand_to_agent(current_setting('test.removed')::bigint,'run-removed','call-1','Ads','Plan the July ads',null),
+ '{"state":"created","agent":"Ads"}'::jsonb,'a job is kept for an Agent callable in the channel');
+delete from public.channel_agents where channel_id='c1500000-0000-0000-0000-000000000001' and agent_id='a1500000-0000-0000-0000-000000000012';
+select is((select count(*)::int from public.begin_handover((select id from public.agent_handovers where run_id='run-removed'))),0,
+ 'an Agent since removed from the channel starts no Run');
+select is((select state||':'||target_outcome||':'||target_attempts from public.agent_handovers where run_id='run-removed'),'returning:failed:0',
+ 'the leg ends as failed, so Lead still reports it to the team');
 select * from finish();
 rollback;

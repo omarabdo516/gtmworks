@@ -26,13 +26,13 @@ alter table public.channel_runs add primary key (message_id, ordinal);
 create unique index channel_runs_one_agent on public.channel_runs(message_id, agent_id) where agent_id is not null;
 
 -- A reply names the place of the Run that wrote it, so a message keeps one reply per Agent. A reply stored before this
--- migration has no place and is still the one reply its message had, so it takes the first place's. Every reply carries
--- a place from here, which the one-reply rule needs: two replies of one message are refused even when neither names a
--- place. The default keeps the previous app version working, since it inserts its replies without one.
-alter table public.channel_messages add column reply_ordinal smallint check (reply_ordinal between 1 and 3);
+-- migration has no place and is still the one reply its message had, so it takes the first place's, from the constant
+-- default itself: the table refuses every update (channel_messages_append_only), so nothing backfills it with one.
+-- Every reply carries a place from here, which the one-reply rule needs: two replies of one message are refused even
+-- when neither names a place. The default keeps the previous app version working, since it inserts its replies without
+-- one.
+alter table public.channel_messages add column reply_ordinal smallint default 1 check (reply_ordinal between 1 and 3);
 alter table public.channel_messages drop constraint channel_messages_reply_to_key;
-update public.channel_messages set reply_ordinal=1 where author='agent' and reply_to is not null and reply_ordinal is null;
-alter table public.channel_messages alter column reply_ordinal set default 1;
 alter table public.channel_messages add constraint channel_messages_reply_place check (reply_to is null or reply_ordinal is not null);
 create unique index channel_messages_one_reply on public.channel_messages(reply_to, reply_ordinal);
 -- Every member reads which of a message's Agents a reply is, so each reply draws its own cards and steps.
@@ -42,9 +42,10 @@ grant select (reply_ordinal) on public.channel_messages to authenticated;
 alter table public.reply_cards add column channel_ordinal smallint check (channel_ordinal between 1 and 3);
 
 -- A request belongs to one Run, not to its message: the engine run id is the link (it is already unique on the Run), and
--- `ordinal` names the Agent whose turn it is drawn under, which every member of the channel reads.
-alter table public.channel_permissions add column ordinal smallint;
-update public.channel_permissions set ordinal=1 where ordinal is null;
+-- `ordinal` names the Agent whose turn it is drawn under, which every member of the channel reads. The column's default
+-- is the first place, so a row stored before this migration and one the previous app version inserts without a place
+-- both read as the first Agent's, and neither is rewritten here (#354).
+alter table public.channel_permissions add column ordinal smallint default 1;
 alter table public.channel_permissions add constraint channel_permissions_run_fkey foreign key (run_id) references public.channel_runs(run_id);
 alter table public.channel_permissions add constraint channel_permissions_ordinal check (ordinal is null or ordinal between 1 and 3);
 alter table public.channel_permissions drop constraint channel_permissions_message_id_request_id_key;
@@ -150,7 +151,9 @@ grant execute on function public.post_channel_message(uuid,uuid,text) to authent
 
 -- 20270213000000's channel_runs_due, now one row per Run: a Run is due only when no earlier Run of its message is still
 -- open, so the Agents answer one after another. A Run after the first is due as soon as the one before it ended (its
--- sender's request ended with that Run), and a page of 500 still runs after the message `after`.
+-- sender's request ended with that Run) while nothing has been asked of it yet; once an attempt was made, its own retry
+-- interval holds (#354), so two drivers never send the same later Agent's start in one moment. A page of 500 still runs
+-- after the message `after`.
 drop function public.channel_runs_due(uuid,bigint,bigint);
 create function public.channel_runs_due(just_channel uuid default null, just_message bigint default null, after bigint default 0)
  returns table(message bigint, run text, profile text, ordinal smallint)
@@ -158,7 +161,7 @@ create function public.channel_runs_due(just_channel uuid default null, just_mes
  select r.message_id, r.run_id, r.profile, r.ordinal from public.channel_runs r
  where r.outcome is null and r.message_id > coalesce(after, 0)
   and (just_channel is null or r.channel_id=just_channel) and (just_message is null or r.message_id=just_message)
-  and (r.run_id is not null or r.message_id=just_message or r.ordinal > 1
+  and (r.run_id is not null or r.message_id=just_message or (r.ordinal > 1 and r.attempts = 0)
    or (r.attempts = 0 and r.created_at < now()-interval '1 minute') or (r.attempts > 0 and r.attempted_at < now()-interval '30 seconds'))
   and not exists(select 1 from public.channel_runs e where e.message_id=r.message_id and e.ordinal<r.ordinal and e.outcome is null)
  order by r.message_id, r.ordinal limit 500;
@@ -246,7 +249,9 @@ begin
 end $$;
 
 -- 20270212000000's close_channel_run, on one Run of the message: the one its engine run id names, or the first still
--- open (a start given up before it named one). Its reply carries the place of that Run.
+-- open (a start given up before it named one). Its reply carries the place of that Run. The Run is read FOR NO KEY
+-- UPDATE (#354): closing changes only non-key columns, and a request's insert waiting on the Run's key share is never
+-- held behind it while this transaction waits for the permission lock.
 create or replace function public.close_channel_run(message bigint, run text, run_outcome text, reply text, used_input bigint, used_output bigint)
 returns boolean language plpgsql security definer set search_path='' as $$
 declare r public.channel_runs;
@@ -254,9 +259,9 @@ begin
  if run_outcome is null or run_outcome not in ('completed','failed','stopped','lost') or (run_outcome='completed') <> (coalesce(btrim(reply),'') <> '') then
   raise exception 'channelFailed' using errcode='22023'; end if;
  if run is null then
-  select * into r from public.channel_runs where message_id=message and outcome is null order by ordinal limit 1 for update;
+  select * into r from public.channel_runs where message_id=message and outcome is null order by ordinal limit 1 for no key update;
  else
-  select * into r from public.channel_runs where message_id=message and outcome is null and run_id=run for update;
+  select * into r from public.channel_runs where message_id=message and outcome is null and run_id=run for no key update;
  end if;
  if r.message_id is null then return false; end if;
  update public.channel_runs set outcome=run_outcome, closed_at=now()

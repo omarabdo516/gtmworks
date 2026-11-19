@@ -64,6 +64,19 @@ test('the channel a mention opens is read within the caller\'s Company only',asy
  expect(seen).toEqual(['channels:company_id=company-a']);
 });
 
+// #354: a mention's own message or channel that could not be read leaves the queue unavailable, so its link never
+// falls back to a board URL with no id.
+test.each(['channel_messages','channels'])('a mention whose %s read failed leaves the queue unavailable',async(failed)=>{
+ const listed=[{kind:'channel_mention',id:11,title:'general',body:'@Sara شوفوا ده',asked_by:'Omar',card_id:null,conversation_id:null,created_at:'2026-06-01T00:00:00Z'}];
+ const rows=(name:string)=>name==='waiting_items'?[{id:11,channel_message_id:42}]:name==='channel_messages'?[{id:42,channel_id:'ch-1'}]:[{id:'ch-1',kind:'team',name:'Launch week'}];
+ const from=(name:string)=>{
+  const query:Record<string,unknown>={then:(resolve:(value:unknown)=>unknown)=>resolve(name===failed?{data:null,error:{message:`${name} down`}}:{data:rows(name),error:null})};
+  for(const method of ['select','is','order','in','eq']) query[method]=()=>query;
+  return query; };
+ const {available}=await approvalQueue({from,rpc:async()=>({data:listed,error:null})} as unknown as Parameters<typeof approvalQueue>[0],'company','person','contributor');
+ expect(available).toBe(false);
+});
+
 // #152/#149: a message that called two Agents keeps one question or handed step per Agent, at its Run's place. Each item's
 // Agent is the one whose Run asked it, never the other Agent the same message called.
 test('a channel card names the Agent whose Run asked it, not the other Agent the same message called',async()=>{

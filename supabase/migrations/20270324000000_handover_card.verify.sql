@@ -7,6 +7,8 @@ select json_build_object(
  'card_follows',position('work_cards' in pg_get_functiondef('public.lead_hand_to_agent(uuid,text,text,text,text,text)'::regprocedure))>0
   and position('progress' in pg_get_functiondef('public.lead_hand_to_agent(uuid,text,text,text,text,text)'::regprocedure))>0
   and position('chat_card_title' in pg_get_functiondef('public.lead_hand_to_agent(uuid,text,text,text,text,text)'::regprocedure))>0,
+ 'raced_card_takes_the_target',position('on conflict (conversation_id) where conversation_id is not null do nothing' in pg_get_functiondef('public.lead_hand_to_agent(uuid,text,text,text,text,text)'::regprocedure))>0
+  and position('agent_id is distinct from target.id' in pg_get_functiondef('public.lead_hand_to_agent(uuid,text,text,text,text,text)'::regprocedure))>0,
  'logged_on_the_card',position('agent_handed_to' in pg_get_functiondef('public.lead_hand_to_agent(uuid,text,text,text,text,text)'::regprocedure))>0
   and position('''agent_handovers''' in pg_get_constraintdef((select oid from pg_constraint where conrelid='public.company_log'::regclass and conname='company_log_source_check')))>0,
  'one_card_a_chat',(select indisunique and pg_get_expr(indpred,indrelid) like '%conversation_id IS NOT NULL%' from pg_index where indexrelid='public.work_cards_one_per_conversation'::regclass),

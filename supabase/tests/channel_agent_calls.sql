@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(75);
+select plan(79);
 -- #152. RS Learning's seeded Members: the Owner (1), the Manager (2), a Contributor (3) and the Viewer (4). Lead is the
 -- main Agent, seen by everyone; Faye is shown to the Manager and the Contributor, and SEO, Reach and Lead Writer to the
 -- Contributor only; Secret is shown to nobody but the Owner. The general channel is 69000000-0000-0000-0000-000000000001.
@@ -212,6 +212,33 @@ set local role service_role;
 select is((select count(*)::int from public.begin_channel_start((select id from sent where label='old'))),0,'the first Agent''s ten minutes are still the message''s own');
 reset role;
 select is((select outcome from public.channel_runs where message_id=(select id from sent where label='old')),'failed','and its Run is given up as failed');
+
+-- #354: a later Agent's own retry interval still holds. Once a driver has attempted its start, another driver is given
+-- it only after that interval, so two drivers never send its start in one moment.
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+insert into sent values ('retry',public.post_channel_message('69000000-0000-0000-0000-000000000001',gen_random_uuid(),'@Faye @SEO retry the exports'));
+reset role;
+update public.channel_runs set created_at=now()-interval '1 minute' where message_id=(select id from sent where label='retry');
+set local role service_role;
+select ok(public.close_channel_run((select id from sent where label='retry'),null,'completed','First, retry.',null,null),'the first Agent answers');
+reset role;
+update public.channel_runs set attempts=1, attempted_at=now() where message_id=(select id from sent where label='retry') and ordinal=2;
+set local role service_role;
+select is((select count(*)::int from public.channel_runs_due(null,null,0) where message=(select id from sent where label='retry')),0,'a later Agent whose start was just attempted is not due again at once');
+reset role;
+update public.channel_runs set attempted_at=now()-interval '31 seconds' where message_id=(select id from sent where label='retry') and ordinal=2;
+set local role service_role;
+select is((select array_agg(ordinal order by ordinal) from public.channel_runs_due(null,null,0) where message=(select id from sent where label='retry')),array[2]::smallint[],'and is due again once its own interval passed');
+reset role;
+
+-- #354: the previous app version inserts a request without a place, and the column's constant default gives it the
+-- first Agent's, so its own app still reads the request where it always did.
+insert into public.channel_permissions(company_id,channel_id,message_id,run_id,request_id,title,content,state)
+ values ('10000000-0000-0000-0000-000000000001','69000000-0000-0000-0000-000000000001',(select id from sent where label='perm'),'run-perm-2','old-app-1','An old app request',
+  '{"command":"rm -r exports","description":"delete the exports","choices":["once","deny"]}'::jsonb,'open');
+select is((select ordinal from public.channel_permissions where request_id='old-app-1'),1::smallint,
+ 'a request inserted without a place, as the previous app version inserts it, reads as the first Agent''s');
 
 select * from finish();
 rollback;

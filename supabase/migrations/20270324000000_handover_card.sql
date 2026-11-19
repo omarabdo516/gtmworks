@@ -43,7 +43,14 @@ begin
     insert into public.work_cards(company_id,stage_id,title,agent_id,conversation_id)
      values(talk.company_id,stage,public.chat_card_title(first_words,target.name),target.id,conversation)
      on conflict (conversation_id) where conversation_id is not null do nothing returning id into card;
-    if card is null then select w.id into card from public.work_cards w where w.company_id=talk.company_id and w.conversation_id=conversation; end if;
+    -- #354: when two handovers race, the second insert finds the first's Card and takes it, giving it the Agent it
+    -- handed the work to as a later handover does, and keeping that Card's stage and title.
+    if card is null then
+     select w.id into card from public.work_cards w where w.company_id=talk.company_id and w.conversation_id=conversation;
+     if card is not null then
+      update public.work_cards set agent_id=target.id
+       where company_id=talk.company_id and id=card and agent_id is distinct from target.id; end if;
+    end if;
    end if;
   elsif card_agent is distinct from target.id then
    update public.work_cards set agent_id=target.id where company_id=talk.company_id and id=card;

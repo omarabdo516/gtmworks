@@ -16,7 +16,7 @@ select json_build_object(
    and indexdef like 'CREATE UNIQUE INDEX%')
   and not exists(select 1 from pg_constraint where conrelid='public.channel_messages'::regclass and conname='channel_messages_reply_to_key'),
  'request_per_run',exists(select 1 from information_schema.columns where table_schema='public' and table_name='channel_permissions'
-   and column_name='ordinal')
+   and column_name='ordinal' and column_default='1')
   and exists(select 1 from pg_constraint where conrelid='public.channel_permissions'::regclass and conname='channel_permissions_run_fkey'
    and confrelid='public.channel_runs'::regclass)
   and exists(select 1 from pg_constraint where conrelid='public.channel_permissions'::regclass and conname='channel_permissions_run_request'
@@ -42,6 +42,9 @@ select json_build_object(
   and not has_function_privilege('service_role','public.channel_run_sessions(uuid,bigint)','execute'),
  'sessions_name_the_reply',position('reply' in pg_get_function_result('public.channel_run_sessions(uuid,bigint)'::regprocedure))>0,
  'runs_one_after_another',position('e.ordinal<r.ordinal' in pg_get_functiondef('public.channel_runs_due(uuid,bigint,bigint)'::regprocedure))>0,
+ 'later_agent_keeps_its_retry',position('r.ordinal > 1 and r.attempts = 0' in pg_get_functiondef('public.channel_runs_due(uuid,bigint,bigint)'::regprocedure))>0,
+ 'closing_takes_no_key_lock',position('for no key update' in pg_get_functiondef('public.close_channel_run(bigint,text,text,text,bigint,bigint)'::regprocedure))>0
+  and position('for update' in pg_get_functiondef('public.close_channel_run(bigint,text,text,text,bigint,bigint)'::regprocedure))=0,
  'due_names_the_place',position('ordinal' in pg_get_function_result('public.channel_runs_due(uuid,bigint,bigint)'::regprocedure))>0,
  'start_window_follows_the_turn',exists(select 1 from information_schema.columns where table_schema='public' and table_name='channel_runs'
    and column_name='first_attempted_at')

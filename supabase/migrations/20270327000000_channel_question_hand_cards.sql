@@ -28,6 +28,20 @@ alter table public.reply_cards add constraint reply_cards_addressed check
 alter table public.channel_messages add column hand_card bigint references public.reply_cards(id) on delete set null;
 grant select (hand_card) on public.channel_messages to authenticated;
 
+-- 20261227000000's channel_sidebar, and the quiet message "Done it" writes (#140) is never new: the transcript draws
+-- nothing of it, so a badge that counted it would point at no message. The Agent's reply that follows it is an ordinary
+-- message and still counts.
+create or replace function public.channel_sidebar(c uuid) returns table(id uuid, kind text, name text, unread integer)
+language sql stable security definer set search_path='' as $$
+ select k.id, k.kind, k.name, (select count(*)::int from public.channel_messages m where m.channel_id=k.id
+   and m.person_id is distinct from auth.uid() and m.hand_card is null
+   and m.id > greatest(coalesce((select r.read_through from public.channel_reads r where r.channel_id=k.id and r.person_id=auth.uid()),0),
+                       coalesce((select p.joined_through from public.channel_people p where p.channel_id=k.id and p.person_id=auth.uid()),0)))
+ from public.channels k
+ where k.company_id=c and auth.uid() is not null and public.in_channel(k.id)
+ order by k.kind='general' desc, k.created_at, k.id;
+$$;
+
 -- A channel Run's question, kept once as a reply card linked to the message whose Run asks it, with the place of that
 -- Run: the card is drawn under the Member's message, before the Agent's reply, as its requests are (#165). `asking` is
 -- the Engine's question ({id,text,choices,multiple}) or null. A read that began after the card was kept and no longer
@@ -238,14 +252,31 @@ end $$;
 revoke all on function public.channel_show_card(bigint,text,text,text,text,jsonb) from public,anon,authenticated;
 grant execute on function public.channel_show_card(bigint,text,text,text,text,jsonb) to service_role;
 
--- Whether a reply card waits in a channel (#149), read without the reader's own row-level security: a log row's policy
--- asks it about a card the reader may not see, and it answers only that the card is a channel's, never which.
+-- Whether a channel reply card is one the caller may read (#354): true only for a Member of the card's channel. A caller
+-- outside the Company, and a Manager of it outside that channel, are answered false, so the id of a channel card tells
+-- them nothing; the log's policy reads a channel card's row by this alone.
 create function public.reply_card_in_channel(card bigint) returns boolean
 language sql stable security definer set search_path='' as $$
- select exists(select 1 from public.reply_cards c where c.id=card and c.channel_message_id is not null);
+ select auth.uid() is not null and exists(select 1 from public.reply_cards c
+  join public.channel_messages m on m.id=c.channel_message_id
+  where c.id=card and c.channel_message_id is not null and public.in_channel(m.channel_id));
 $$;
 revoke all on function public.reply_card_in_channel(bigint) from public,anon,service_role;
 grant execute on function public.reply_card_in_channel(bigint) to authenticated;
+
+-- Whether a reply card belongs to a channel of the caller's Company that they are not in: what the log's general branch
+-- needs to leave such a card's row out. It is false for anyone outside the Company, and for every id that is no channel
+-- card, so the caller never learns which ids are channel cards from it either.
+create function public.reply_card_in_other_channel(card bigint) returns boolean
+language sql stable security definer set search_path='' as $$
+ select exists(select 1 from public.reply_cards c
+  join public.channel_messages m on m.id=c.channel_message_id
+  join public.channels k on k.id=m.channel_id
+  where c.id=card and c.channel_message_id is not null and c.company_id=k.company_id
+   and public.is_member(k.company_id) and not public.in_channel(m.channel_id));
+$$;
+revoke all on function public.reply_card_in_other_channel(bigint) from public,anon,service_role;
+grant execute on function public.reply_card_in_other_channel(bigint) to authenticated;
 
 -- The log rows of a channel's answer and its "Done it" are read by the channel's members alone, also where the Agent is
 -- hidden from them elsewhere, as a channel card's row is (#148). A Member of the Company outside that channel reads
@@ -253,11 +284,10 @@ grant execute on function public.reply_card_in_channel(bigint) to authenticated;
 -- it had.
 alter policy company_log_read on public.company_log using (
  (public.is_member(company_id) and public.can_see_agent(company_id,agent_id) and public.can_see_agent(company_id,actor_id)
-  and not (source='reply_card_answers' and public.reply_card_in_channel(company_log.source_id))
+  and not (source='reply_card_answers' and public.reply_card_in_other_channel(company_log.source_id))
   and (details->>'private' is null or actor_id=auth.uid() or details->>'teller'=auth.uid()::text
    or case when details->>'private'='owners' then public.is_company_owner(company_id) else public.can_manage_company(company_id) end))
- or (source in ('reply_cards','reply_card_answers') and exists(select 1 from public.reply_cards c join public.channel_messages m on m.id=c.channel_message_id
-  where c.id=company_log.source_id and c.company_id=company_log.company_id and public.in_channel(m.channel_id))));
+ or (source in ('reply_cards','reply_card_answers') and public.reply_card_in_channel(company_log.source_id)));
 
 -- #152's waiting_list, and a channel's open question or handed step is one item for every Member of that channel who may
 -- write, the main Agent's question for the Member it was addressed to alone. It leaves every list when one of them acts,

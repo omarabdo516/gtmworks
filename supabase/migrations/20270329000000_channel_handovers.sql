@@ -171,11 +171,13 @@ grant execute on function public.handovers_due(uuid,bigint,uuid) to service_role
 -- Lead's follow-up in Lead's own, so a channel's memory follows each Agent. A channel's job names the channel and the
 -- team Lead reports to; a Conversation's is worded as before. The pinned Engine cannot switch the target's toolsets for
 -- its Run, so the target's own profile keeps Hermes's memory and cronjob tools: its input says plainly not to save
--- anything to memory, not to schedule anything and not to hand the job on.
+-- anything to memory, not to schedule anything and not to hand the job on. The target is re-checked as the person's to
+-- call when its Run would start (#354): one hidden from them since the job was kept, or since removed from the channel,
+-- starts no Run, and the leg ends as failed so Lead still tells them so.
 create or replace function public.begin_handover(h bigint)
  returns table(state text, attempt integer, company uuid, profile text, session uuid, input text, instructions text)
  language plpgsql security definer set search_path='' as $$
-declare r public.agent_handovers; talk public.conversations; chan uuid; target public.hermes_agents; lead public.hermes_agents; asking text; began timestamptz;
+declare r public.agent_handovers; talk public.conversations; chan uuid; person uuid; target public.hermes_agents; lead public.hermes_agents; asking text; began timestamptz;
 begin
  perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
  select * into r from public.agent_handovers where id=h for update;
@@ -185,8 +187,9 @@ begin
  if r.conversation_id is not null then
   select * into talk from public.conversations where id=r.conversation_id;
   select * into lead from public.hermes_agents where id=talk.agent_id and talk.company_id=r.company_id;
+  person := talk.person_id;
  else
-  select m.channel_id into chan from public.channel_messages m where m.id=r.channel_message_id;
+  select m.channel_id, m.person_id into chan, person from public.channel_messages m where m.id=r.channel_message_id;
   select * into lead from public.hermes_agents where id=r.from_agent and r.company_id=r.company_id;
  end if;
 
@@ -195,6 +198,11 @@ begin
    or r.target_attempts>0 and r.created_at < now()-interval '1 day' then
    update public.agent_handovers set state='returning', target_outcome='failed', attempted_at=null, return_started_at=now() where id=h; return; end if;
   if target.id is null or target.profile is null then
+   update public.agent_handovers set state='returning', target_outcome='failed', attempted_at=null, return_started_at=now() where id=h; return; end if;
+  -- #354: the target must still be the person's to call when its Run is started. One hidden from them since the job was
+  -- kept, or since removed from the channel, does not start: the leg ends as failed and Lead tells the person so.
+  if (r.conversation_id is not null and not public.agent_visible_to(r.company_id, person, target.id))
+   or (r.conversation_id is null and not public.channel_agent(chan, person, target.id)) then
    update public.agent_handovers set state='returning', target_outcome='failed', attempted_at=null, return_started_at=now() where id=h; return; end if;
   -- ADR 0014: a Company profile serves its own Company, and no Run starts while its tools are pending. Waits.
   if target.profile ~ '^co-[0-9a-f]{32}$'
@@ -341,16 +349,16 @@ grant execute on function public.channel_handovers(uuid) to authenticated;
 -- 20270327000000's company_log_read, and a handover made in a channel is read by that channel's members alone, also where
 -- its Agents are hidden from them elsewhere; a Member of the Company outside the channel reads none, an Owner included.
 -- A channel card's row follows its channel too (#354): a Manager who may manage the Company reads no draft or review title
--- from a team channel they are not in, though its Agent is one they see. reply_card_in_channel resolves the card's channel
--- without the reader's own row-level security, which a subquery over reply_cards or channel_messages would not. Every other
--- row keeps the rule it had.
+-- from a team channel they are not in, though its Agent is one they see. reply_card_in_other_channel and
+-- handover_in_channel resolve the row's own place without the reader's own row-level security, which a subquery over
+-- reply_cards or channel_messages would not, and each answers false to anyone outside the Company; reply_card_in_channel
+-- reads a channel card's row for its channel's members alone. Every other row keeps the rule it had.
 alter policy company_log_read on public.company_log using (
  (public.is_member(company_id) and public.can_see_agent(company_id,agent_id) and public.can_see_agent(company_id,actor_id)
-  and not (source='reply_cards' and public.reply_card_in_channel(company_log.source_id))
-  and not (source='reply_card_answers' and public.reply_card_in_channel(company_log.source_id))
+  and not (source='reply_cards' and public.reply_card_in_other_channel(company_log.source_id))
+  and not (source='reply_card_answers' and public.reply_card_in_other_channel(company_log.source_id))
   and not (source='agent_handovers' and public.handover_in_channel(company_log.source_id))
   and (details->>'private' is null or actor_id=auth.uid() or details->>'teller'=auth.uid()::text
    or case when details->>'private'='owners' then public.is_company_owner(company_id) else public.can_manage_company(company_id) end))
- or (source in ('reply_cards','reply_card_answers') and exists(select 1 from public.reply_cards c join public.channel_messages m on m.id=c.channel_message_id
-  where c.id=company_log.source_id and c.company_id=company_log.company_id and public.in_channel(m.channel_id)))
+ or (source in ('reply_cards','reply_card_answers') and public.reply_card_in_channel(company_log.source_id))
  or (source in ('agent_handovers','channel_handover_replies') and public.handover_in_my_channel(company_log.source_id)));

@@ -43,5 +43,11 @@ select json_build_object(
   and position('reply_card_in_channel' in (select qual from pg_policies where schemaname='public'
    and tablename='company_log' and policyname='company_log_read'))>0
   and has_function_privilege('authenticated','public.reply_card_in_channel(bigint)','execute')
-  and not has_function_privilege('anon','public.reply_card_in_channel(bigint)','execute')
+  and not has_function_privilege('anon','public.reply_card_in_channel(bigint)','execute'),
+ 'card_channel_tells_outsiders_nothing',position('reply_card_in_other_channel' in (select qual from pg_policies where schemaname='public'
+   and tablename='company_log' and policyname='company_log_read'))>0
+  and has_function_privilege('authenticated','public.reply_card_in_other_channel(bigint)','execute')
+  and not has_function_privilege('anon','public.reply_card_in_other_channel(bigint)','execute')
+  and not has_function_privilege('service_role','public.reply_card_in_other_channel(bigint)','execute'),
+ 'quiet_pickup_is_not_new',position('hand_card is null' in pg_get_functiondef('public.channel_sidebar(uuid)'::regprocedure))>0
 );
