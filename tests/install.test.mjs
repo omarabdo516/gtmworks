@@ -224,7 +224,8 @@ esac
    assert.match(refused.stderr,new RegExp(`This install has ${companies} Companies on one Engine\\. Each Company now needs its own Engine, and this release has no path for an install with more than one Company\\. Nothing was changed: the release you run still serves\\.`),mode);
    // Nothing changed: the Companies were read from the running database and nothing else ran, so no migration, no
    // container and no install file was touched.
-   assert.deepEqual(refused.commands.trimEnd().split('\n'),['compose --env-file .env.install -f docker-compose.install.yml exec -T db psql -X -U postgres -d postgres -At -v ON_ERROR_STOP=1 -c select count(*) from public.companies;'],mode);
+   assert.deepEqual(refused.commands.trimEnd().split('\n'),['compose --env-file .env.install -f docker-compose.install.yml exec -T db psql -X -U postgres -d postgres -At -v ON_ERROR_STOP=1 -c select count(*) from public.companies where to_regclass(\'public.company_engines\') is null;'],mode);
+   // Only an install from before the Engine record is counted: one made since has an Engine per Company and goes on.
    assert.equal(refused.migrated(),false,mode);
    assert.equal(refused.file(),existing,mode);
    assert.equal(existsSync(join(install.directory,'.install-lock')),false,mode);

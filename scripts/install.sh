@@ -121,10 +121,12 @@ engine_up() {
 engine_stop() { docker stop "$engine_container" > /dev/null 2>&1 || true; }
 # Each Company now runs on its own Engine (ADR 0018). An install the previous release made keeps every Company on the one
 # Engine, and this release has no path from there: refuse the update before it changes anything, so the release that runs
-# keeps serving untouched. The count comes from the install's running database, which an update needs anyway.
+# keeps serving untouched. The count comes from the install's running database, which an update needs anyway. Only an
+# install from before the Engine record (no public.company_engines) is counted: one made since gives every Company its own
+# Engine, so its Companies, however many, go on.
 refuse_several_companies() {
   companies=$(compose exec -T db psql -X -U postgres -d postgres -At -v ON_ERROR_STOP=1 -c \
-    'select count(*) from public.companies;' 2> /dev/null) || companies=
+    "select count(*) from public.companies where to_regclass('public.company_engines') is null;" 2> /dev/null) || companies=
   case "$companies" in
     ''|*[!0-9]*)
       echo "The update reads this install's Companies from its database: start gtmworks (sh scripts/install.sh), then run this again." >&2
