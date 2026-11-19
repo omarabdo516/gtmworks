@@ -655,7 +655,7 @@ jobs:
           [[ $(ls -d .engines/* | wc -l) == 1 ]] || fail 'the refused add made no Engine folder'
           [[ $(db -c "select count(*) from public.companies where name='No Owner'") == 0 ]] || fail 'the refused add made no Company'
           [[ $(db -c "select count(*) from public.company_engines where address like '%no-owner%'") == 0 ]] || fail 'the refused add made no Engine record'
-          if ENGINE_IMAGE=alpine:3.21 sh scripts/install.sh company add --name 'Second Company' --owner proxy-owner@example.com > company-failed.log 2>&1; then
+          if GTMWORKS_ENGINE_WAIT=1 sh scripts/install.sh company add --name 'Second Company' --owner proxy-owner@example.com > company-failed.log 2>&1; then
             fail 'company add with an Engine that never becomes healthy must fail'
           fi
           cat company-failed.log

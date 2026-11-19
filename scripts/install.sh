@@ -113,7 +113,10 @@ retire_old_engine() {
   [ -z "$old" ] || docker rm -f $old > /dev/null
 }
 # The app and the worker reach every Engine by its container name. Compose recreates them on an update, which drops the
-# extra networks, so each connection is made again after every start of the stack.
+# extra networks, so each connection is made again after every start of the stack. The app answers on each Engine's
+# network as `web`, the name its own scripts use there (`http://web:8080/v1`), so a probe or a model server on that
+# network reaches it without a second address; the worker needs no name there. An install made before this name keeps
+# its connection and joins again with it.
 join_engine_network() {
   network=$1
   test -n "$network" || return 0
@@ -122,10 +125,19 @@ join_engine_network() {
     [ -n "$id" ] || continue
     container_name=$(docker inspect -f '{{.Name}}' "$id") || return 1
     container_name=${container_name#/}
+    alias=
+    [ "$service" = web ] && alias=web
     if docker network inspect "$network" -f '{{range .Containers}}{{println .Name}}{{end}}' | grep -qx "$container_name"; then
-      continue
+      [ -z "$alias" ] && continue
+      docker inspect -f "{{range \$network,\$settings := .NetworkSettings.Networks}}{{if eq \$network \"$network\"}}{{range .Aliases}}{{println .}}{{end}}{{end}}{{end}}" "$id" \
+        | grep -qx "$alias" && continue
+      docker network disconnect "$network" "$id" || return 1
     fi
-    docker network connect "$network" "$id" || return 1
+    if [ -n "$alias" ]; then
+      docker network connect --alias "$alias" "$network" "$id" || return 1
+    else
+      docker network connect "$network" "$id" || return 1
+    fi
   done
 }
 engine_network_of() { sed -n 's/^ENGINE_NETWORK=//p' "$(engine_folder "$1")/.env"; }
