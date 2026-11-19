@@ -60,7 +60,7 @@ const ruleRow=(page:import('@playwright/test').Page,text:string)=>page.locator('
 test('the Owner switches the Company\'s mode and one Agent\'s, and each profile reads back its two values', async ({page}) => {
  await learning('omar@example.com',page);
  const overlay=page.getByRole('dialog',{name:'Settings'});
- await expect(overlay.getByRole('heading',{name:'Learning'})).toBeVisible();
+ await expect(overlay.getByRole('heading',{name:'Learning',exact:true})).toBeVisible();
  // Every Agent reads "Learns on its own" from its own profile.
  await expect(group(page,'For the whole company').getByRole('radio',{name:/^Learns on its own/})).toHaveAttribute('aria-checked','true');
  await expect(overlay.locator('.ln-ag').filter({hasText:'Lead'})).toContainText('Learns on its own');
@@ -83,11 +83,14 @@ test('the Owner switches the Company\'s mode and one Agent\'s, and each profile 
  await expect(overlay.locator('.ln-ag').filter({hasText:'Writer'})).toContainText('Learns on its own');
  await expect(overlay.locator('.ln-ag').filter({hasText:'Lead'})).toContainText('Asks first');
  expect(JSON.parse(query(`select learning_mode_choice as choice from public.agent_profiles where agent_id='${writer}'`))[0].choice).toBe('auto');
- // The Writer pins "Asks first", then the Company turns by itself: the Writer's own choice stands.
+ // The Writer pins "Asks first", then the Company turns by itself: the Writer's own choice stands. The group reads
+ // mixed once the page has re-read the profiles, and only then do the Engine's profiles hold the Company's turn.
  await writerModes.getByRole('radio',{name:'Asks first',exact:true}).click();
  await expect(writerModes.getByRole('radio',{name:'Asks first',exact:true})).toHaveAttribute('aria-checked','true');
  await group(page,'For the whole company').getByRole('radio',{name:/^Learns on its own/}).click();
- await expect(group(page,'For the whole company').getByRole('radio',{name:/^Learns on its own/})).toHaveAttribute('aria-checked','false');
+ await expect(group(page,'For the whole company').getByRole('radio',{name:/^Asks first/})).toHaveAttribute('aria-checked','false');
+ await expect(overlay.locator('.ln-ag').filter({hasText:'Lead'})).toContainText('Learns on its own');
+ await expect(overlay.locator('.ln-ag').filter({hasText:'Writer'})).toContainText('Asks first');
  expect(fake.settings.profiles.get(writerProfile)!.config.memory?.write_approval).toBe(true);
  expect(fake.settings.profiles.get(profile)!.config.memory?.write_approval).toBe(false);
  expect(fake.settings.profiles.get(space)!.config.memory?.write_approval).toBe(false);

@@ -51,7 +51,9 @@ export async function POST(request:NextRequest) {
   const body=JSON.parse(raw);
   if(typeof body?.company!=='string'||!uuid.test(body.company)) return reply({error:'settingInvalid'},400);
   if(body.agent!==undefined&&(typeof body.agent!=='string'||!uuid.test(body.agent))) return reply({error:'settingInvalid'},400);
-  if(body.mode!==undefined&&body.mode!=='ask'&&body.mode!=='auto') return reply({error:'settingInvalid'},400);
+  // A learning mode is "ask" or "auto" for the Company or one Agent; "follow" gives one Agent back to the Company's own
+  // mode (#28), so it names that Agent.
+  if(body.mode!==undefined&&body.mode!=='ask'&&body.mode!=='auto'&&!(body.mode==='follow'&&typeof body.agent==='string')) return reply({error:'settingInvalid'},400);
   if(body.mode===undefined&&body.settings!==undefined) {
    if(typeof body.settings!=='object'||Array.isArray(body.settings)||!Object.keys(body.settings).length) return reply({error:'settingInvalid'},400);
    for(const [setting,value] of Object.entries(body.settings)) {
