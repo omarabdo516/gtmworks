@@ -235,7 +235,9 @@ test('the install job checks the setup link before and after setup, and that no 
  const {load}=await import('js-yaml');
  const run=installJob().steps.find(step=>step.env?.INSTALL_REF).run;
  const at=text=>{ const index=run.indexOf(text); assert.notEqual(index,-1,text); return index; };
- const localCheck=run.indexOf('-e APP_ORIGIN=http://localhost:3000 -e MAIL_URL');
+ // The shared first-run step (complete_setup, scripts/ci-install-lib.sh) completes setup with the code; its call in
+ // first-install stands where the command ran before the areas shared it (#408).
+ const localCheck=run.indexOf('complete_setup', run.indexOf('first_install() {'));
  // The first install ends with the link, its code in no other line; a repeat before setup prints the same link.
  assert.ok(at("{ sh scripts/install.sh || fail 'first install'; } 2>&1 | tee first-install.log")<at("code=$(sed -n 's/^SETUP_CODE=//p' .env.install)"));
  at('link="Set up gtmworks with this one-time link: http://localhost:3000/first-run#code=$code"');

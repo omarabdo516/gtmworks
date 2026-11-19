@@ -187,7 +187,8 @@ case "${1:-check}" in
   ;;
  install)
   # One area of the install proof (scripts/ci-install-check.sh, #406) on an isolated Docker machine of its own, in a
-  # throwaway checkout of HEAD: `./ci.sh install proxy` runs the proxy area alone; without an area the whole proof runs.
+  # throwaway checkout of HEAD: `./ci.sh install proxy` runs the proxy area alone; without an area the whole proof and
+  # the profile-size measurement (#408) run.
   # The proof writes into the checkout it runs in, as it does on a CI runner, so commit first: uncommitted changes are
   # not run. The work folder sits under the git directory: the Docker machine hides /tmp, so a checkout there reaches
   # its containers empty.
@@ -220,5 +221,5 @@ case "${1:-check}" in
   umask 0000
   bash scripts/ci-install-check.sh "$@"
   ;;
- *) echo 'usage: ./ci.sh check | fast | static | components | database | images | integration | visual | visual-update | install [first-install | proxy | update | one-line]' >&2; exit 2;;
+ *) echo 'usage: ./ci.sh check | fast | static | components | database | images | integration | visual | visual-update | install [first-install | agents | measure | proxy | update | one-line]' >&2; exit 2;;
 esac

@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # The install proof, one command of the repo (#402): each CI install job runs this file for its area on an isolated
 # Docker machine and holds no check of its own, and `./ci.sh install [area]` starts such a machine here and runs it.
-# Without an area the seven areas of spec #401 run one after another; with one, only that area runs, on a fresh Docker
-# machine: `first-install` (the first install and its repeat, Companies and their Engines, Agents on their Engines,
-# backup and restore — together until #407–#409 split them), `proxy` (the public address behind a proxy), `update` (the
-# update between releases) and `one-line` (the one-line install). The three areas that already started from a fresh
-# install are independent since #406: each makes the install, the local registry and the release files it needs itself.
-# The helpers the areas share are in scripts/ci-install-lib.sh, sourced below, so each is written once.
+# Without an area the seven areas of spec #401 run one after another, then the profile-size measurement; with one, only
+# that area runs, on a fresh Docker machine: `first-install` (the first install and its repeat, Companies and their
+# Engines — backup and restore run with them until #407–#409 split them), `agents` (Agents on their Engines), `measure`
+# (the profile-size measurement, on a push to main and a manual run only, never on a pull request, #408), `proxy` (the
+# public address behind a proxy), `update` (the update between releases) and `one-line` (the one-line install). Every
+# area makes the install, the Companies, the local registry and the release files it needs itself (#406, #408), so no
+# area needs another to have run. The helpers the areas share are in scripts/ci-install-lib.sh, sourced below, so each
+# is written once.
 # DOCKER_HOST names that machine; RUNNER_TEMP is a scratch folder; INSTALL_REF, BASE_SHA and GH_TOKEN come from CI or
 # ci.sh.
 set -e
@@ -27,7 +29,7 @@ trap 'status=$?; if [ "$status" -ne 0 ]; then bash scripts/install-diagnostics.s
 # the database checks, the worker's own reach, the data a restore must bring back, and that restore itself.
 first_install() {
 cd "$root"
-{ sh scripts/install.sh || fail 'first install'; } 2>&1 | tee first-install.log
+install_source
 [[ $(stat -c %a .env.install) == 600 ]] || fail '.env.install permissions (expected 600)'
 # First run opens only through the setup link (issue #50): the first install ends with it, its code is in no
 # other line, and a repeat install while setup is still open prints the same link. The code travels after `#`
@@ -42,12 +44,9 @@ gateway_id=$(compose ps -q gateway) && [[ -n $gateway_id ]] || fail 'the first i
 { sh scripts/install.sh || fail 'repeat install before setup'; } 2>&1 | tee repeat-before-setup.log
 [[ $(compose ps -q gateway) == "$gateway_id" ]] || fail 'a repeat install before setup keeps the unchanged gateway container'
 [[ $(tail -n 1 repeat-before-setup.log) == "$link" ]] || fail 'a repeat install before setup prints the same setup link'
-# The local install on http://localhost:3000, straight to the gateway, while first run is still open: the emailed
-# sign-in link reaches the Company home, an invitation link returns to the app, and a sign-in request with a forged
-# X-Forwarded-Host still gets a link on APP_ORIGIN (issue #40). The keys pass as an env file, so none is printed.
-docker run --rm -i --network host --env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY)=' .env.install) --env-file <(grep -E '^SETUP_CODE=' .env.install) \
-  -e APP_ORIGIN=http://localhost:3000 -e MAIL_URL=http://127.0.0.1:8025 \
-  node:22.14.0-alpine3.21 node --input-type=module - < scripts/check-install-proxy.mjs || fail 'emailed sign-in and invitation links on the local install'
+# The local install on http://localhost:3000, straight to the gateway, completes first run with the code (issue #40,
+# #50): complete_setup signs the Owner in and makes the first Company. The keys pass as an env file, so none is printed.
+complete_setup
 # That check opened first run and completed setup with the code in the submit body: the gateway's access log holds
 # those requests and not the code.
 gateway_logs=$(compose logs gateway 2>&1) || fail 'read gateway logs'
@@ -169,20 +168,7 @@ cd "$root"
 # subscription.
 engine_id=$(first_engine_id) || fail 'the Engine container'
 [[ -n $engine_id && $(docker inspect -f '{{json .NetworkSettings.Ports}}' "$engine_id") != *HostPort* ]] || fail 'the Engine publishes no host port'
-docker exec -i "$engine_id" sh -ec 'cat > /opt/data/config.yaml; chown hermes:hermes /opt/data/config.yaml' <<'YAML' || fail 'point the Engine at the fake model'
-model:
-  provider: custom
-  default: fake-model
-  base_url: http://web:8080/v1
-  api_key: fake-model-key
-  context_length: 128000
-YAML
-docker restart "$engine_id" > /dev/null || fail 'restart the Engine'
-for attempt in $(seq 1 60); do
-  [[ $(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$engine_id") == healthy ]] && break
-  [[ $attempt == 60 ]] && fail 'the Engine is healthy after configuration'
-  sleep 1
-done
+point_engine_at_fake_model "$engine_id"
 # `gtmworks company add` (#382, ADR 0018): an email no Person has is refused before anything is made; an Engine
 # that never becomes healthy leaves nothing behind and says so in one line; the same command again makes the
 # second Company on its own Engine, with the existing Person as its Owner.
@@ -283,11 +269,21 @@ for attempt in $(seq 1 120); do
 done
 }
 
-# agents: Agents on their Engines (#378): an Agent made and run through the contract, the Engine management listener
-# never public, the profile of each Company with terminal, file and code tools off, the apps, and the profile-size
-# measurement, which stays here for now (#400 moves it to main).
+# agents: Agents on their Engines (#378, #408): an Agent made and run through the contract, the Engine management listener
+# never public, the profile of each Company with terminal, file and code tools off, the apps, and the scan that the
+# Engine holds no key of gtmworks. The area makes the install it starts from, its first run and its second Company
+# itself, so first-install no longer runs it (#408).
 agents() {
 cd "$root"
+reset_install
+install_source
+complete_setup
+engine_id=$(first_engine_id) || fail 'the Engine container'
+engine_key=$(first_engine_key)
+# The Engine answers a Run with no subscription through the fake model provider served from the web container (#378).
+point_engine_at_fake_model "$engine_id"
+# The second Company on its own Engine, for the profile and memory checks that need two (#382).
+sh scripts/install.sh company add --name 'Second Company' --owner proxy-owner@example.com || fail 'company add makes the second Company'
 # The Engine's management listener (ADR 0011): an Agent made through the contract runs, the worker reaches it with
 # the Engine's key, and it is never public: the gateway routes only to the app, and no host port is published.
 ENGINE_KEY="$engine_key" compose exec -T -e ENGINE_KEY -e HERMES_ADDRESS="$engine_address" -e HERMES_MANAGEMENT_ADDRESS="$engine_management" web \
@@ -319,22 +315,6 @@ ENGINE_KEY="$engine_key" compose exec -T -e ENGINE_KEY -e HERMES_ADDRESS="$engin
 # expired, and disconnecting turns the app off.
 ENGINE_KEY="$engine_key" compose exec -T -e ENGINE_KEY -e HERMES_ADDRESS="$engine_address" -e HERMES_MANAGEMENT_ADDRESS="$engine_management" web \
   node --input-type=module - < scripts/check-install-apps.mjs || fail 'apps write only their read tools and come back through gtmworks'
-# What an install holds (#126): twenty more Agent profiles in the first Company, ten with the Engine's bundled
-# Skills and ten without. The script prints each profile's name and the seconds it took to be ready, then runs
-# the first Agent once more; the job prints the Engine container's memory and the volume's disk around them.
-capacity() { ENGINE_KEY="$engine_key" compose exec -T -e ENGINE_KEY -e HERMES_ADDRESS="$engine_address" -e HERMES_MANAGEMENT_ADDRESS="$engine_management" web node --input-type=module - capacity "$1" < scripts/check-install-profiles.mjs; }
-engine_memory() { docker stats --no-stream --format '{{.MemUsage}}' "$engine_id"; }
-engine_disk() { docker run --rm --volumes-from "$engine_id" --entrypoint sh "$(docker inspect -f '{{.Image}}' "$engine_id")" -ec 'du -sk /opt/data | cut -f1'; }
-memory_before=$(engine_memory) || fail 'the Engine memory before the capacity profiles'
-disk_before=$(engine_disk) || fail 'the Engine disk before the capacity profiles'
-capacity with-skills | tee capacity-with-skills.log || fail 'ten more Agent profiles with the bundled Skills'
-disk_with=$(engine_disk) || fail 'the Engine disk after the capacity profiles'
-capacity no-skills | tee capacity-no-skills.log || fail 'ten more Agent profiles without the bundled Skills'
-disk_without=$(engine_disk) || fail 'the Engine disk after the profiles without Skills'
-memory_after=$(engine_memory) || fail 'the Engine memory after the capacity profiles'
-per_with=$(( (disk_with-disk_before)/10 )) || fail 'the disk one profile with Skills takes'
-per_without=$(( (disk_without-disk_with)/10 )) || fail 'the disk one profile without Skills takes'
-echo "capacity: engine memory $memory_before before and $memory_after after 20 agent profiles; $per_with KiB per profile with the bundled Skills, $per_without KiB without"
 # The Engine holds none of gtmworks's own keys and passwords (#2): its environment and every file its user can
 # read are scanned for the real values in .env.install, passed on stdin; only names and paths are printed. Every
 # Engine of the install is scanned, the first and each Company's own (#382).
@@ -858,13 +838,47 @@ cd "$fresh"
 probe 'after the --version run'
 }
 
-# The area named by the one argument, or all seven in the order the proof has always run them (#406). A CI job names
-# one area; `./ci.sh install` without one still runs the whole proof.
+# measure: how much disk and memory twenty Agent profiles take (#126, #400, #408): ten more profiles in the first
+# Company with the Engine's bundled Skills and ten without. It is no check a pull request needs, and its numbers are for
+# the README: it runs on a push to main and on a manual run only (Omar, 2026-11-19). The area makes the install and the
+# two Companies its prepare step reads, then prints each profile's seconds and the Engine's memory and disk around them,
+# and the one line of numbers the README states. `all` runs it last, for a full run on a machine here.
+measure() {
+cd "$root"
+reset_install
+install_source
+complete_setup
+# The second Company on its own Engine: the agents area's prepare step, which records the first Company's profile the
+# measurement reads, looks for two Companies on two Engines (scripts/check-install-profiles.mjs).
+sh scripts/install.sh company add --name 'Second Company' --owner proxy-owner@example.com || fail 'company add makes the second Company'
+engine_id=$(first_engine_id) || fail 'the Engine container'
+engine_key=$(first_engine_key)
+ENGINE_KEY="$engine_key" compose exec -T -e ENGINE_KEY -e HERMES_ADDRESS="$engine_address" -e HERMES_MANAGEMENT_ADDRESS="$engine_management" web \
+  node --input-type=module - prepare < scripts/check-install-profiles.mjs > prepare-profiles.log || fail 'two companies get two profiles on two Engines with terminal, file and code tools off, each with one shared space'
+capacity() { ENGINE_KEY="$engine_key" compose exec -T -e ENGINE_KEY -e HERMES_ADDRESS="$engine_address" -e HERMES_MANAGEMENT_ADDRESS="$engine_management" web node --input-type=module - capacity "$1" < scripts/check-install-profiles.mjs; }
+engine_memory() { docker stats --no-stream --format '{{.MemUsage}}' "$engine_id"; }
+engine_disk() { docker run --rm --volumes-from "$engine_id" --entrypoint sh "$(docker inspect -f '{{.Image}}' "$engine_id")" -ec 'du -sk /opt/data | cut -f1'; }
+memory_before=$(engine_memory) || fail 'the Engine memory before the capacity profiles'
+disk_before=$(engine_disk) || fail 'the Engine disk before the capacity profiles'
+capacity with-skills | tee capacity-with-skills.log || fail 'ten more Agent profiles with the bundled Skills'
+disk_with=$(engine_disk) || fail 'the Engine disk after the capacity profiles'
+capacity no-skills | tee capacity-no-skills.log || fail 'ten more Agent profiles without the bundled Skills'
+disk_without=$(engine_disk) || fail 'the Engine disk after the profiles without Skills'
+memory_after=$(engine_memory) || fail 'the Engine memory after the capacity profiles'
+per_with=$(( (disk_with-disk_before)/10 )) || fail 'the disk one profile with Skills takes'
+per_without=$(( (disk_without-disk_with)/10 )) || fail 'the disk one profile without Skills takes'
+echo "capacity: engine memory $memory_before before and $memory_after after 20 agent profiles; $per_with KiB per profile with the bundled Skills, $per_without KiB without"
+}
+
+# The area named by the one argument, or all seven in the order the proof has always run them, then the measurement
+# (#406, #408). A CI job names one area; `./ci.sh install` without one still runs the whole proof.
 case "${1:-all}" in
- all) first_install; companies; agents; backup; proxy; update; one_line;;
- first-install) first_install; companies; agents; backup;;
+ all) first_install; companies; agents; backup; proxy; update; one_line; measure;;
+ first-install) first_install; companies; backup;;
+ agents) agents;;
+ measure) measure;;
  proxy) proxy;;
  update) update;;
  one-line) one_line;;
- *) echo 'usage: bash scripts/ci-install-check.sh [first-install | proxy | update | one-line]' >&2; exit 2;;
+ *) echo 'usage: bash scripts/ci-install-check.sh [first-install | agents | measure | proxy | update | one-line]' >&2; exit 2;;
 esac

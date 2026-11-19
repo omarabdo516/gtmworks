@@ -51,6 +51,34 @@ reset_install() {
   if [ -f .env.install ]; then remove_install || return 1; else remove_engine; fi
   rm -f .env.install
 }
+# The setup every area after first-install starts from (#408): the source install, and the first run that makes the first
+# Company and its Owner. first-install proves both steps, the repeat install still open between them; an area that needs
+# only a ready install runs them and carries on.
+install_source() { { sh scripts/install.sh || fail 'first install'; } 2>&1 | tee first-install.log; }
+complete_setup() {
+  docker run --rm -i --network host \
+    --env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY)=' .env.install) --env-file <(grep -E '^SETUP_CODE=' .env.install) \
+    -e APP_ORIGIN=http://localhost:3000 -e MAIL_URL=http://127.0.0.1:8025 \
+    node:22.14.0-alpine3.21 node --input-type=module - < scripts/check-install-proxy.mjs || fail 'emailed sign-in and invitation links on the local install'
+}
+# A fake model provider served from the web container stands in for a subscription (#382, #408): companies and agents
+# both point the first Engine at it, so an Arabic message gets its reply with no sign-in.
+point_engine_at_fake_model() {
+  docker exec -i "$1" sh -ec 'cat > /opt/data/config.yaml; chown hermes:hermes /opt/data/config.yaml' <<'YAML' || fail 'point the Engine at the fake model'
+model:
+  provider: custom
+  default: fake-model
+  base_url: http://web:8080/v1
+  api_key: fake-model-key
+  context_length: 128000
+YAML
+  docker restart "$1" > /dev/null || fail 'restart the Engine'
+  for attempt in $(seq 1 60); do
+    [[ $(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$1") == healthy ]] && break
+    [[ $attempt == 60 ]] && fail 'the Engine is healthy after configuration'
+    sleep 1
+  done
+}
 publish() { docker push -q "localhost:5000/gtmworks:$1" > /dev/null && docker image inspect --format '{{index .RepoDigests 0}}' "localhost:5000/gtmworks:$1"; }
 # The local registry a release area serves its test releases from: each area that needs one starts its own (#406).
 start_registry() {

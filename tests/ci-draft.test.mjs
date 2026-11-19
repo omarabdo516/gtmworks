@@ -157,6 +157,21 @@ test('a pull request that changes install files starts all four install areas, e
   for (const job of installJobs) assert.equal(ci.jobs[job].strategy, undefined, `${job} is one job`);
 });
 
+// #408: the profile-size measurement is no check a pull request needs. It runs on a push to main and on a manual run
+// only, like the visual lane, and a documents-only push starts none of it.
+test('the profile-size measurement starts on a push to main and on a manual run, never on a pull request', () => {
+  for (const draft of [true, false]) {
+    assert.equal(started({ event: 'pull_request', draft, files: heavyFiles }).includes('install-measure'), false, `a draft=${draft} pull request`);
+  }
+  const push = started({ event: 'push', files: ['scripts/ci-fast.mjs'] });
+  assert.ok(push.includes('install-measure'), 'a push to main with a code change');
+  assert.ok(push.includes('image'), 'the push builds the image the measurement loads');
+  const manual = started({ event: 'workflow_dispatch', files: ['scripts/ci-fast.mjs'] });
+  assert.ok(manual.includes('install-measure'), 'a manual run');
+  assert.ok(manual.includes('image'), 'the manual run builds the image the measurement loads');
+  assert.equal(started({ event: 'push', files: documentFiles }).includes('install-measure'), false, 'a documents-only push');
+});
+
 // The fast job already linted and type-checked, so the image build does neither; a release or local build keeps both.
 test('the image build skips the lint and type check the fast job ran, and only it (#403)', () => {
   const build = ci.jobs.image.steps.find(usesBuildPush);

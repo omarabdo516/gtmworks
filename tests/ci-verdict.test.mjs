@@ -171,7 +171,8 @@ test('ci.yml decides the suites in its first job, gates each suite on it, and ju
     assert.equal(jobs[job].if, `\${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.${output} != 'false') }}`, job);
   }
   assert.equal(jobs.changes.outputs.install, '${{ steps.classify.outputs.install }}');
-  assert.equal(jobs.image.if, "${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.integration != 'false' || needs.changes.outputs.install != 'false') }}");
+  // A manual run builds the image even with nothing asked: the measurement runs on every manual run (#408).
+  assert.equal(jobs.image.if, "${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.integration != 'false' || needs.changes.outputs.install != 'false' || github.event_name == 'workflow_dispatch') }}");
   // Each install area is one job under today's install condition and a successful image build (#406).
   const installJobs = ['install-first', 'install-proxy', 'install-update', 'install-one-line'];
   for (const job of installJobs) {
@@ -214,6 +215,16 @@ test('ci.yml decides the suites in its first job, gates each suite on it, and ju
   const fast = jobs.fast.steps.find(entry => entry.id === 'fast');
   assert.equal(fast.run, './ci.sh fast');
   assert.equal(jobs.fast.env.COMPONENTS, "${{ needs.changes.result == 'success' && needs.changes.outputs.components || 'true' }}");
+});
+
+// #408: the profile-size measurement is not a stage: it runs on main and on a manual run only, and no pull request
+// waits for it.
+test('check waits for no measurement: the profile-size measurement is no stage of the verdict (#408)', async () => {
+  const { load } = await import('js-yaml');
+  const { readFileSync } = await import('node:fs');
+  const { jobs } = load(readFileSync('.github/workflows/ci.yml', 'utf8'));
+  assert.equal(jobs.check.needs.includes('install-measure'), false, 'check needs no measurement job');
+  assert.deepEqual(Object.keys(jobs.check.steps.at(-1).env).filter(key => /MEASURE/.test(key)), [], 'the verdict reads no measurement');
 });
 
 test('the fast job restores its dependencies by lock-file hash and the browser by version, never the bundler cache (#218, #258)', async () => {
