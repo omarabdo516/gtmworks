@@ -1,0 +1,1 @@
+| `queued-turns.test.mjs` | Queued starts (#68): a slow engine start on one Conversation does not delay another Conversation's start, and the queue is read page by page behind a stable cursor so a page of waiting Conversations never hides the next one. | 0.1 s | supabase/tests/queued_pages.sql (the page and the unready profiles in the database) | new |

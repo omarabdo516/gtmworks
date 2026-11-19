@@ -228,6 +228,7 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
  // A Card opened over the board (#116; design-reference: renderSheetHead): its Agent, else its channel, and where it stands.
  const sheetView=(c:Card,sheet:CardSheetData)=>{ const agent=agentOfCard(c); const own=cardAgentOf(c); const column=columnOfCard(c); const chat=chatOf(c);
   return <CardSheet key={c.id} send={workAction} slug={p.slug} company={p.company} title={c.title} sheet={sheet} canWrite={p.canCreate} alone={!!p.alone} message={p.message}
+   people={p.members.filter(member=>member.person_id!==p.me&&member.people?.name).map(member=>({id:member.person_id,name:member.people!.name,role:member.role}))} agents={companyAgents}
    face={own?<span aria-hidden="true"><CompanyAgentFace agent={own} size={28}/></span>:agent?<span aria-hidden="true"><AgentFace id={agent} role={agentRole(agent)} name={agentName(agent)} size={28}/></span>:null}
    who={own?<bdi>{own.name}</bdi>:agent?<bdi>{agentName(agent)}</bdi>:c.channel?<bdi>{c.channel}</bdi>:null}
    badge={column==='waiting'?<span className="badge badge--wait"><span className="dot dot--waiting" aria-hidden="true"/>{chat?chatBadge(chat):p.approvableIds.includes(c.id)?t('boardWaitingYou'):p.canCreate?waitingOn(c.next_actor):t('boardWaitingTeam')}</span>:<span className="badge">{columnName(column)}</span>}/>; };
