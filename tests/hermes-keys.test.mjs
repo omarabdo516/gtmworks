@@ -8,8 +8,8 @@ import { load } from 'js-yaml';
 import { generateInstallEnv } from '../lib/install-env.mjs';
 
 // An Engine must never receive gtmworks's own secrets (#2): not through its environment, an env file or a mounted file.
-// Only the Engine's own key (ENGINE_KEY, made from HERMES_API_KEY) is passed to it.
-const secretNames=Object.keys(generateInstallEnv()).filter(name=>name!=='HERMES_API_KEY');
+// Only the Engine's own key (ENGINE_KEY, kept in the Engine's own .env) is passed to it.
+const secretNames=Object.keys(generateInstallEnv());
 function engineSecretLeaks(template) {
  const engine=template.services.engine; const leaks=[];
  if(engine.env_file!==undefined) leaks.push('env_file');

@@ -123,6 +123,8 @@ services:
     restart: unless-stopped
     env_file: .env.install
     environment:
+      # No Engine address or key here (#385, ADR 0018): the app asks its Company's Engine record, and each Engine's key
+      # is in that Engine's own file (.engines/<name>/.env), never in .env.install.
       GTMWORKS_SELF_HOSTED: "true"
     command: [sh, -c, "node lib/install-env.mjs validate && exec node server.js"]
     healthcheck:

@@ -164,7 +164,8 @@ if [ "$operation" = backup ]; then
   test -f .env.install || { echo 'Install first.' >&2; exit 1; }
   destination=${2:-backups}
   mkdir -p "$destination"
-  # The stack starts again after the copy, Hermes included, so an install the installer before ADR 0010 updated gains its key.
+  # The stack starts again after the copy, the first Engine included, and an install the previous release made has its
+  # Engine key moved into the Engine's own file then (#385).
   complete_env "$PWD/.env.install"
   resume=yes
   engine_stop

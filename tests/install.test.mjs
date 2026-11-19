@@ -253,10 +253,10 @@ test('the install job updates a previous release install with one Company, and r
  // project holding the Engine's volume, its key in .env.install, and no .engines/.
  const previous=at('docker run -d --name gtmworks-install-hermes-1');
  assert.ok(previous>=0,run);
- for(const text of ["printf 'HERMES_API_KEY=%s\\n' \"$key\" >> .env.install",'rm -rf .engines',"set address='http://hermes:8642'"]) {
-  assert.ok(at(text)>=0,text);
-  assert.ok(at(text)<previous+40,text);
- }
+ // The key goes back into .env.install and .engines/ goes away before the Engine runs from the install's own Compose
+ // project; its record names the address the previous release's app reached it at.
+ for(const text of ["printf 'HERMES_API_KEY=%s\\n' \"$key\" >> .env.install",'rm -rf .engines']) assert.ok(at(text)>=0&&at(text)<previous,text);
+ assert.ok(at("set address='http://hermes:8642'")>previous&&at("set address='http://hermes:8642'")<at('check-install-proxy.mjs'));
  // First run on it, then the fact the Agent was told and the sign-in the Company made, both in the Engine's data.
  const memory=at('/memories/MEMORY.md'),signIn=at('.anthropic_oauth.json'),update=at('sh "$dir/install.sh" update || fail \'release update\'');
  for(const [index,name] of [[memory,'the memory'],[signIn,'the sign-in']]) assert.ok(index>=0,`the job writes ${name}`);
