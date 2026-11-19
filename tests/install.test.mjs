@@ -386,7 +386,7 @@ test('the install job backs up and restores every Company Engine, refuses an inc
  // Each Engine comes back as its own container, on its own volume and network, named by its Company's record.
  for(const text of [
   "[[ -n $engine ]] || fail \"the restored install runs the Engine $name\"",
-  "== 1 ]] || fail \"a Company's record names the Engine $name\"",
+  "-ge 1 ]] || fail \"a Company's record names the Engine $name\"",
   "|| fail \"the $service joins the network of the Engine $name\"",
   "[[ $(ls -d .engines/*/ | wc -l) == \"$engines_before\" ]] || fail 'the every-Engine restore brings every Engine back'",
  ]) assert.ok(run.includes(text),text);

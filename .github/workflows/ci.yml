@@ -865,7 +865,8 @@ jobs:
             [[ -n $engine ]] || fail "the restored install runs the Engine $name"
             [[ $(docker inspect -f '{{range .Mounts}}{{.Name}}{{end}}' "$engine") == "$volume" ]] || fail "the Engine $name keeps its own volume"
             [[ $(docker inspect -f '{{range $network, $_ := .NetworkSettings.Networks}}{{println $network}}{{end}}' "$engine") == "$network" ]] || fail "the Engine $name joins its own network only"
-            [[ $(db -c "select count(*) from public.company_engines where address='http://$name:8642'") == 1 ]] || fail "a Company's record names the Engine $name"
+            # The lifecycle seed's two Companies (restore-one, restore-two) hold records of their own at the first Engine's address.
+            [[ $(db -c "select count(*) from public.companies c join public.company_engines e on e.id=c.engine_id where e.address='http://$name:8642'") -ge 1 ]] || fail "a Company's record names the Engine $name"
             for service in web worker; do
               docker inspect -f '{{range $network, $_ := .NetworkSettings.Networks}}{{println $network}}{{end}}' "$(compose ps -q "$service")" | grep -qx "$network" \
                 || fail "the $service joins the network of the Engine $name"
