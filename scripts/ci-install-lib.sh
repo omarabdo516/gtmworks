@@ -12,6 +12,15 @@ fail_update() { cat update.log >&2; fail "$1"; }
 compose() { docker compose --env-file .env.install -f docker-compose.install.yml "$@"; }
 db() { compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 -At "$@"; }
 migrations() { db -c 'select name from gtmworks_install.schema_migrations order by name'; }
+# First run as the person who installed gtmworks (issue #40): the emailed sign-in link reaches the Company home, an
+# invitation link returns to the app, and a sign-in request with a forged X-Forwarded-Host still gets a link on
+# APP_ORIGIN; completing setup with the install's own code makes the first Company and its Owner. The keys pass as an
+# env file, so none is printed. The areas that need a completed first install call it (first-install, backup, #409).
+complete_first_run() {
+  docker run --rm -i --network host --env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY)=' .env.install) --env-file <(grep -E '^SETUP_CODE=' .env.install) \
+    -e APP_ORIGIN=http://localhost:3000 -e MAIL_URL=http://127.0.0.1:8025 \
+    node:22.14.0-alpine3.21 node --input-type=module - < scripts/check-install-proxy.mjs
+}
 # Each install service's own address on the install network, so the Engine-network probe checks addresses as well
 # as names, which do not resolve there (#378, S5).
 install_service_ips() {
@@ -26,6 +35,10 @@ engine_address=http://gtmworks-engine-first:8642
 engine_management=http://gtmworks-engine-first:9119
 first_engine_id() { docker ps -q --filter 'name=^gtmworks-engine-first$'; }
 first_engine_key() { sed -n 's/^ENGINE_KEY=//p' .engines/first/.env 2> /dev/null || true; }
+# The data a backup must bring back (#349), written and read through the engine contract inside the installed web
+# container: a rule in an Agent's SOUL.md and each Company's knowledge live only in the Engine's volume, not in the
+# database, so the backup area writes them before its archive and reads them back after the restore.
+lifecycle() { ENGINE_KEY=$(first_engine_key) compose exec -T -e ENGINE_KEY web node --input-type=module - "$1" < scripts/check-install.mjs; }
 # Each Engine is its own Compose project (ADR 0018), so removing the install removes every one of them: the first
 # Engine, every Company's Engine under .engines/, and the one container a release before #385 ran an Engine in.
 remove_engine() {
